@@ -42,6 +42,7 @@
     suggestions,
   } from "../suggest.svelte";
   import type { ComposerDraft, PendingImage } from "./composer-draft.svelte";
+  import { stand } from "./composer-presence.svelte";
   import SuggestionChips from "./SuggestionChips.svelte";
 
   let {
@@ -133,6 +134,14 @@
   $effect(() => {
     if (!paneVisible) {
       draft.editorOpen = false;
+    }
+  });
+
+  // On screen, this composer is what the desk's toasts rise above.
+  const presence = {};
+  $effect(() => {
+    if (paneVisible) {
+      return stand(presence, height);
     }
   });
   let fileInput = $state<HTMLInputElement>();

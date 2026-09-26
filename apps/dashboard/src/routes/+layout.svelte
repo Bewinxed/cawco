@@ -18,6 +18,8 @@
   import { enableLongPressMenus } from "$lib/utils/longpress";
   import { ensureConnected } from "$lib/whiffle/client.svelte";
   import Shell from "$lib/whiffle/Shell.svelte";
+  import { tallestComposer } from "$lib/whiffle/transcript/composer-presence.svelte";
+  import { workspace } from "$lib/whiffle/workspace/workspace.svelte";
   import type { LayoutServerData } from "./$types";
 
   let { children, data }: { children: Snippet; data: LayoutServerData } =
@@ -29,6 +31,23 @@
    * the narrow placement. A desk keeps the corner.
    */
   const narrowToasts = new MediaQuery("(max-width: 640px)");
+
+  /**
+   * On a desk the corner is shared with the composer's Send, so the toasts
+   * stand on top of the tallest composer showing: its bottom inset, its
+   * measured height, and a step of air. The fleet board keeps its panes
+   * mounted under it, so it counts as no composer, like a page with none.
+   */
+  const composerLift = $derived(
+    workspace.activeSessionId === null ? 0 : tallestComposer()
+  );
+  const toastOffset = $derived(
+    composerLift > 0
+      ? {
+          bottom: `calc(var(--space-4) + env(safe-area-inset-bottom) + ${composerLift}px + var(--space-3))`,
+        }
+      : undefined
+  );
 
   // One socket for the whole app; routes only read the state it fills in.
   onMount(ensureConnected);
@@ -101,5 +120,8 @@
   >
 </svelte:head>
 
-<Toaster position={narrowToasts.current ? "top-center" : "bottom-right"} />
+<Toaster
+  offset={toastOffset}
+  position={narrowToasts.current ? "top-center" : "bottom-right"}
+/>
 <Shell railWidth={data.railWidth}> {@render children()} </Shell>
