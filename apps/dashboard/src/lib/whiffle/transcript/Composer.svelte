@@ -870,8 +870,15 @@
     padding: calc((var(--cin-ctl) - 1lh) / 2) 0;
     min-width: 0;
   }
+  /* One line, always. Under field-sizing:content Chromium sizes an empty
+     field to its placeholder and WebKit sizes it to its (empty) value, so a
+     placeholder that wraps made the two disagree and WebKit clipped the
+     second line. A placeholder that cannot wrap gives both one line. */
   textarea::placeholder {
     color: var(--ink-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .hidden-file {
     display: none;
