@@ -260,13 +260,3 @@
     </ul>
   </Card>
 {/if}
-
-<style>
-  /* Coarse pointers get the 44px floor DESIGN.md asks for at every width. */
-  @media (pointer: coarse) {
-    li :global([data-slot="button"]) {
-      min-height: 44px;
-      min-width: 44px;
-    }
-  }
-</style>

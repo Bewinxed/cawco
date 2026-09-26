@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { createDeck } from "./deck.svelte";
   /**
    * The phone's groups, as a vertical stack of cards.
    *
@@ -17,6 +16,7 @@
    * in the same frame as the lift, and both the transition and the first
    * few drag frames went with it.
    */
+  import { createDeck } from "./deck.svelte";
   import PaneLeaf from "./PaneLeaf.svelte";
   import { workspace } from "./workspace.svelte";
 
@@ -45,7 +45,7 @@
     >
       <div class="lift">
         <div class="clip">
-          <PaneLeaf {leaf} swipeable={focused} />
+          <PaneLeaf docked {leaf} swipeable={focused} />
         </div>
       </div>
     </div>

@@ -114,9 +114,11 @@ test("delegate catalog tool reads current mappings each time, without spawning",
 
 test("an existing delegate handler dispatches the current model and effort instead of its startup snapshot", async () => {
   const sent: Envelope[] = [];
-  const original = DEFAULT_DELEGATE_TYPES.find((type) => type.name === "code");
+  const original = DEFAULT_DELEGATE_TYPES.find(
+    (type) => type.name === "medium"
+  );
   if (!original) {
-    throw new Error("Missing code fixture");
+    throw new Error("Missing medium fixture");
   }
   const handler = handoffTools({
     instanceId: "self",
@@ -133,10 +135,11 @@ test("an existing delegate handler dispatches the current model and effort inste
             harness: "opencode",
             model: "openai/gpt-5.6-terra",
             effort: "medium",
+            denyTools: undefined,
           },
         ],
       });
-    await handler({ type: "code", prompt: "first" }, {});
+    await handler({ type: "medium", prompt: "first" }, {});
     expect(sent[0].payload).toMatchObject({
       model: "openai/gpt-5.6-terra",
       effort: "medium",
@@ -151,10 +154,11 @@ test("an existing delegate handler dispatches the current model and effort inste
             harness: "opencode",
             model: "openai/gpt-5.6-sol",
             effort: "high",
+            denyTools: undefined,
           },
         ],
       });
-    await handler({ type: "code", prompt: "second" }, {});
+    await handler({ type: "medium", prompt: "second" }, {});
     expect(sent[0].payload).toMatchObject({
       model: "openai/gpt-5.6-sol",
       effort: "high",
@@ -162,7 +166,7 @@ test("an existing delegate handler dispatches the current model and effort inste
     sent.length = 0;
     catalogResponse = () => new Response("unavailable", { status: 503 });
     await expect(
-      handler({ type: "code", prompt: "third" }, {})
+      handler({ type: "medium", prompt: "third" }, {})
     ).rejects.toThrow("HTTP 503");
     expect(sent).toEqual([]);
   } finally {
@@ -334,7 +338,9 @@ test("startup instructions expose routing and catalog before tool discovery", ()
   expect(instructions).toContain(
     'ToolSearch(query="select:mcp__whiffle__delegate")'
   );
-  expect(instructions).toContain("Native harness subagents are a separate mechanism");
+  expect(instructions).toContain(
+    "Native harness subagents are a separate mechanism"
+  );
   expect(instructions).toContain("Delegate substantial bounded work");
   for (const type of DEFAULT_DELEGATE_TYPES) {
     expect(instructions).toContain(`'${type.name}'`);
@@ -425,15 +431,15 @@ test("an initially unavailable catalog recovers a named route without model over
     throw new Error("Expected delegate tool");
   }
   await (delegate.handler as unknown as Handler)(
-    { prompt: "Inspect the parser", type: "explore" },
+    { prompt: "Inspect the parser", type: "low" },
     {}
   );
   expect(sent.map((envelope) => envelope.verb)).toEqual(["spawn", "send"]);
   expect(sent[0].payload).toMatchObject({
     harness: "claude",
-    model: "sonnet",
+    model: "claude-opus-5-5",
     effort: "low",
     canDelegate: false,
-    denyTools: ["Write", "Edit", "NotebookEdit"],
+    denyTools: ["mcp__claude-in-chrome__*"],
   });
 });

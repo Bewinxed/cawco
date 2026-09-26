@@ -48,6 +48,15 @@ export type PermissionMode =
  */
 export type EffortLevel = "low" | "medium" | "high" | "xhigh" | "max";
 
+/** Every {@link EffortLevel}, low to max: the one runtime list validators and pickers read. */
+export const EFFORT_LEVELS: readonly EffortLevel[] = [
+  "low",
+  "medium",
+  "high",
+  "xhigh",
+  "max",
+];
+
 /** A session's own word on what it is doing right now. */
 export type NeutralStatus = "compacting" | "requesting" | null;
 

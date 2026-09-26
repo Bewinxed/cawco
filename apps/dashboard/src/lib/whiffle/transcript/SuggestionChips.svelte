@@ -212,7 +212,7 @@
     <legend class="sr-only">Suggested skills, tools and MCP servers</legend>
     {#each shown as { candidate, noul }, i (candidate.id)}
       <button
-        class="chip"
+        class="chip touch-hit"
         onclick={() => choose(candidate)}
         title={`Likely needed · ${Math.round(noul * 100)}%${candidate.description ? `\n${candidate.description}` : ''}`}
         type="button"
@@ -280,6 +280,8 @@
     flex-wrap: wrap;
     align-items: center;
     gap: var(--space-2);
+    --hit-gap-x: var(--space-2);
+    --hit-gap-y: var(--space-2);
     padding-block: 0;
     padding-inline: var(--space-1);
 
@@ -363,10 +365,6 @@
       block-size: 14px;
       flex: none;
       color: var(--ink-muted);
-    }
-
-    @media (pointer: coarse) {
-      min-block-size: 44px;
     }
   }
 

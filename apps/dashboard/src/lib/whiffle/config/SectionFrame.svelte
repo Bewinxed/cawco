@@ -131,8 +131,5 @@
     .ground {
       padding: 7px;
     }
-    .actions :global([data-slot="button"]) {
-      min-height: 44px;
-    }
   }
 </style>

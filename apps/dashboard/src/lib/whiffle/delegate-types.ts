@@ -1,4 +1,4 @@
-import type { DelegateEffort, DelegateType } from "@whiffle/core";
+import type { DelegateType } from "@whiffle/core";
 import { HARNESSES } from "@whiffle/core";
 
 /**
@@ -13,20 +13,12 @@ import { HARNESSES } from "@whiffle/core";
 
 // biome-ignore lint/performance/noBarrelFile: re-exporting @whiffle/core's validator keeps the hub's own delegate-type rules the single source of truth
 export {
-  type DelegateEffort,
   type DelegateType,
   delegateTypeProblem,
 } from "@whiffle/core";
 
 /** `DelegateType['harness']` is the same three-value union `HARNESSES` already is. */
 export const DELEGATE_HARNESSES = HARNESSES;
-
-export const DELEGATE_EFFORTS: DelegateEffort[] = [
-  "low",
-  "medium",
-  "high",
-  "max",
-];
 
 export interface DelegateTypesPayload {
   types: DelegateType[];

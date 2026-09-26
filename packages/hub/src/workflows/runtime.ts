@@ -7,6 +7,7 @@
  * scheduler.
  */
 import type {
+  EffortLevel,
   Envelope,
   PermissionResult,
   Problem,
@@ -70,7 +71,7 @@ export type PublicRun = WorkflowRunRow & Pick<WorkflowRun, "edges" | "loops">;
 interface StepArgs {
   continueFrom?: string;
   denyTools?: string[];
-  effort?: "low" | "medium" | "high" | "max";
+  effort?: EffortLevel;
   harness: "claude" | "opencode" | "pi";
   model: string;
   node?: string;

@@ -6,8 +6,7 @@
  * builds a `SpawnPayload`.
  */
 
-/** How hard the model should think — the same vocabulary `effort` already uses elsewhere. */
-export type DelegateEffort = "low" | "medium" | "high" | "max";
+import { EFFORT_LEVELS, type EffortLevel } from "./harness";
 
 /** One named preset. `name` is the key a `delegate` call's `type` asks for. */
 export interface DelegateType {
@@ -21,7 +20,8 @@ export interface DelegateType {
   denyTools?: string[];
   /** What the calling model reads to decide whether this is the right type. */
   description: string;
-  effort?: DelegateEffort;
+  /** How hard the model thinks: the same {@link EffortLevel} scale every other effort control uses. */
+  effort?: EffortLevel;
   harness: "claude" | "opencode" | "pi";
   model: string;
   /** Unique across the fleet; what a `delegate` call's `type` param names. */
@@ -53,10 +53,7 @@ export const delegateTypeProblem = (
   if (!draft.model?.trim()) {
     return "a delegate type needs a model";
   }
-  if (
-    draft.effort &&
-    !["low", "medium", "high", "max"].includes(draft.effort)
-  ) {
+  if (draft.effort && !EFFORT_LEVELS.includes(draft.effort)) {
     return `“${draft.effort}” is not an effort level`;
   }
   // denyTools is enforced by the claude adapter alone — it writes into the
@@ -70,51 +67,54 @@ export const delegateTypeProblem = (
 };
 
 /**
- * The fleet's seed set (inserted once, only when the table is empty): the
- * five routing decisions already made for whiffle's own delegation surface.
+ * The fleet's seed set (inserted once, only when the table is empty): one type
+ * per effort level, each description saying which tasks that level fits, so a
+ * caller routes by how much verification and judgement the work needs.
  */
 export const DEFAULT_DELEGATE_TYPES: DelegateType[] = [
   {
-    name: "explore",
+    name: "low",
     description:
-      "Read-only codebase exploration and fan-out search; returns conclusions, not file dumps.",
+      "Fastest pass: the leaf does what the brief says, checks it against a case or two, and stops. Use it when the brief leaves nothing to decide or you want a draft to react to: mechanical edits across many files (renames, copy or config sweeps, a listed set of replacements), inventories and where-is sweeps, log and evidence pulls, quick sketches and prototypes. Not for bug fixes, reviews, security, parsers, migrations, or anything where a missed edge case ships.",
     harness: "claude",
-    model: "sonnet",
+    model: "claude-opus-5-5",
     effort: "low",
-    denyTools: ["Write", "Edit", "NotebookEdit"],
+    denyTools: ["mcp__claude-in-chrome__*"],
   },
   {
-    name: "plan",
+    name: "medium",
     description:
-      "Architecture and implementation planning; returns a step-by-step plan with file paths and tradeoffs.",
+      "The default for most delegated work: carrying out a complete spec (new features, multi-file changes, UI built from a spec, doc rewrites, deploys with known steps) and wide research sweeps that return a cited report. It runs the brief's build, lint, type-check and verification command, but does not hunt edge cases beyond the brief. Given a complete spec, the higher levels write much the same code more slowly and add assumptions of their own. Not for bugs with an unknown cause, reviews, verification passes, or security: use `high`.",
     harness: "claude",
-    model: "opus",
-    effort: "high",
-    denyTools: ["Write", "Edit", "NotebookEdit"],
-  },
-  {
-    name: "code",
-    description:
-      "Implementation from a clear spec: write/edit code, run tests, report with evidence.",
-    harness: "claude",
-    model: "sonnet",
-    effort: "high",
-  },
-  {
-    name: "review",
-    description:
-      "Fresh-eyes code review of a diff or change set; returns ranked findings with file:line.",
-    harness: "claude",
-    model: "opus",
-    effort: "high",
-    denyTools: ["Write", "Edit", "NotebookEdit"],
-  },
-  {
-    name: "research",
-    description: "Web and docs research; returns a cited factual brief.",
-    harness: "claude",
-    model: "sonnet",
+    model: "claude-opus-5-5",
     effort: "medium",
-    canDelegate: true,
+    denyTools: ["mcp__claude-in-chrome__*"],
+  },
+  {
+    name: "high",
+    description:
+      "For work where verification and hidden edge cases decide the result: fixing a bug in an existing codebase, reviewing a diff into ranked file:line findings, the verification pass after a `low` or `medium` build, browser verification of a flow, a security review of a change, and performance work. Also architecture plans and analyses where the method chosen changes the answer. Takes about 1.5–3x as long as `medium`. Code whose edge cases are the whole job goes to `xhigh`. More effort does not fix a wrong approach: rewrite the brief instead.",
+    harness: "claude",
+    model: "claude-opus-5-5",
+    effort: "high",
+    denyTools: ["mcp__claude-in-chrome__*"],
+  },
+  {
+    name: "xhigh",
+    description:
+      "Between `high` and `max`, for code whose edge cases are the whole job and where one missed case ships as a defect: sanitizers, parsers, storage engines, concurrency, auth, data migrations, or a fix `high` got only partly right. In Anthropic's storage-engine bug task the xhigh runs reproduced the crash before editing and went from 0/5 at low to 4/5, at about 11 min a run. It stays on one problem, so it costs far less than `max`. Not for spec-complete builds (`medium`) or ordinary reviews (`high`).",
+    harness: "claude",
+    model: "claude-opus-5-5",
+    effort: "xhigh",
+    denyTools: ["mcp__claude-in-chrome__*"],
+  },
+  {
+    name: "max",
+    description:
+      "For long, fully autonomous runs on hard problems: building and verifying a whole app or subsystem end to end, a vulnerability hunt in critical code, or a problem an `xhigh` leaf failed on by missing edge cases. The slowest and most expensive level by far (one spec'd build took 79 min at max against 22 at medium), and the one that makes the most assumptions on your behalf, so the brief must settle every product decision. Not for routine features, work you plan to iterate on, or a leaf that took the wrong approach.",
+    harness: "claude",
+    model: "claude-opus-5-5",
+    effort: "max",
+    denyTools: ["mcp__claude-in-chrome__*"],
   },
 ];

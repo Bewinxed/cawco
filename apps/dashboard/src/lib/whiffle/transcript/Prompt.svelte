@@ -272,6 +272,7 @@
           <button
             aria-keyshortcuts={live ? String(i + 1) : undefined}
             aria-pressed={isSelected(q.question, opt.label)}
+            class="touch-hit"
             onclick={() => toggle(qi, opt.label)}
             type="button"
             class:sel={isSelected(q.question, opt.label)}
@@ -551,6 +552,8 @@
     font-size: var(--text-label);
   }
   .qopts {
+    --hit-gap-x: var(--space-2);
+    --hit-gap-y: var(--space-2);
     display: flex;
     gap: var(--space-2);
     flex-wrap: wrap;
@@ -617,14 +620,5 @@
   .qact {
     display: flex;
     gap: var(--space-2);
-  }
-  @media (pointer: coarse) {
-    .qopts button {
-      min-height: 44px;
-    }
-    .choice > :global(*) {
-      min-height: 44px;
-      min-width: 44px;
-    }
   }
 </style>

@@ -10,7 +10,7 @@
 </script>
 
 <PopoverPrimitive.Trigger
-  class={cn("", className)}
+  class={cn("touch-hit", className)}
   data-slot="popover-trigger"
   bind:ref
   {...restProps}

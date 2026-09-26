@@ -103,6 +103,13 @@ The kit is `apps/dashboard/src/lib/components/ui`; shared recipes are the
   `--ease-drawer` from `--pop-scale` and `--pop-rise`; exit 160ms. Items
   (`kit-item`) are `--radius-sm`, 32px tall (44px on a coarse pointer), hover
   `--surface-hover`.
+- **Touch targets**: on a coarse pointer a control keeps its drawn size and
+  `.touch-hit` grows only its tappable area to 44×44 (a transparent `::after`),
+  stopping at the midpoint where neighbours sit closer (`--hit-gap-x/-y`).
+  An input draws no `::after`: it sits in a `<label class="touch-hit">`,
+  whose area focuses it. Text truncates in an inner span, never on the control.
+  A scroll container that would clip the areas pads into an equal negative
+  margin.
 - **Input, textarea, select trigger, native select**: 36px, `--radius-md`,
   `--type-body`, 1px `--border-control`, `--shadow-xs`; focus is the solid
   outline.

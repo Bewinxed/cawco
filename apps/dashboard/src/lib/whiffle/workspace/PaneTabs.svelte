@@ -285,7 +285,7 @@
                     aria-expanded={detailsOpen && detailId === tab.id}
                     aria-haspopup="dialog"
                     aria-label="Session details for {tab.label}"
-                    class="tdetails"
+                    class="tdetails touch-hit"
                     onclick={(event) => clickTab(tab.id, event)}
                     type="button"
                   >
@@ -294,7 +294,7 @@
                 {/if}
                 <button
                   aria-label="Close {tab.label}"
-                  class="tclose"
+                  class="tclose touch-hit"
                   onclick={() => { closeDetails(); workspace.close(tab.id); }}
                   type="button"
                 >
@@ -480,7 +480,31 @@
     max-height: calc(88dvh - 24px - env(safe-area-inset-bottom));
     overflow: hidden;
   }
+  /* The two trailing controls sit 2px apart and their touch areas meet
+     between them. On a coarse pointer the close button stands 24px off the
+     chevron and 8px off the tab's end, so each 44px area reaches its full
+     width before meeting a neighbour's. The chevron's leading half falls on
+     its own tab's label, which opens the same details. */
+  .tdetails,
+  .tclose {
+    --hit-gap-x: 2px;
+
+    @media (pointer: coarse) {
+      --hit-gap-x: 24px;
+    }
+  }
+  /* The session track scrolls sideways, and a scroll container clips on both
+     axes; its transparent padding grows into an equal negative margin on a
+     coarse pointer, so the controls' touch areas above and below the 32px
+     tabs sit inside its clip and nothing moves. */
+  :global(.session-tabs .ff-tabs-list.scrollable) {
+    @media (pointer: coarse) {
+      padding-block: calc(var(--pad) + 10px) 10px;
+      margin-block: -10px;
+    }
+  }
   .tdetails {
+    flex: none;
     display: grid;
     place-items: center;
     width: 22px;
@@ -506,18 +530,6 @@
   @media (hover: hover) {
     .tdetails:hover {
       background: var(--surface-fill);
-    }
-  }
-  @media (pointer: coarse) {
-    :global(.session-tabs .ff-tabs-list) {
-      --item: 44px;
-    }
-    .tdetails {
-      width: 44px;
-      height: 44px;
-    }
-    .tclose {
-      display: none;
     }
   }
   .details-morph {
@@ -583,6 +595,13 @@
        the page it opens. */
     background: var(--surface-shelf);
     view-transition-class: tabs;
+
+    /* The tab controls' touch areas reach 6px past the row's bottom edge:
+       on a coarse pointer the row stacks above the transcript beneath it. */
+    @media (pointer: coarse) {
+      position: relative;
+      z-index: 1;
+    }
   }
   :global(.session-tabs.hosted) {
     flex: 1 1 0;
@@ -649,11 +668,11 @@
     flex: 0 0 auto;
     inline-size: 20px;
     block-size: 20px;
-    /* Its own size, not the page-wide touch floor: a 44px button does
-       not fit a 32px tab. 24px on a coarse pointer is the WCAG floor. */
-    min-inline-size: 0;
-    min-block-size: 0;
     margin-inline-start: 2px;
+
+    @media (pointer: coarse) {
+      margin-inline: 24px 8px;
+    }
     border: 0;
     padding: 0;
     background: none;
@@ -671,10 +690,6 @@
         background: var(--surface-fill);
         color: var(--ink-strong);
       }
-    }
-    @media (pointer: coarse) {
-      inline-size: 24px;
-      block-size: 24px;
     }
     @media (prefers-reduced-motion: no-preference) {
       transition:

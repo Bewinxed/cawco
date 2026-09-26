@@ -121,10 +121,14 @@
     }
   });
   const RAIL_PAD = 6;
-  const RAIL_STEP = 40;
   function railMove(event: MouseEvent) {
-    const box = (event.currentTarget as HTMLElement).getBoundingClientRect();
-    const at = Math.floor((event.clientY - box.top - RAIL_PAD) / RAIL_STEP);
+    const rail = event.currentTarget as HTMLElement;
+    const box = rail.getBoundingClientRect();
+    // One radio plus its gap; the rail's CSS owns it (--rail-step).
+    const step = Number.parseFloat(
+      getComputedStyle(rail).getPropertyValue("--rail-step")
+    );
+    const at = Math.floor((event.clientY - box.top - RAIL_PAD) / step);
     tip = at >= 0 && at < TABS.length ? at : -1;
   }
   let toolsWidth = $state(0);
@@ -282,7 +286,7 @@
         <span
           aria-hidden="true"
           class="thumb"
-          style={`transform:translateY(${harnessIdx * RAIL_STEP}px)`}
+          style={`transform:translateY(calc(${harnessIdx} * var(--rail-step)))`}
         ></span>
         {#each TABS as tab, i (tab.id)}
           {@const available = !tab.soon && installed.includes(tab.id as HarnessKind)}
@@ -291,7 +295,7 @@
             aria-checked={tab.id === harness}
             aria-describedby={available ? undefined : `harness-${tab.id}-why`}
             aria-label={tab.name}
-            class="tab ns-in"
+            class="tab ns-in touch-hit"
             data-harness={tab.id}
             disabled={!available}
             onclick={() => onharness(tab.id as HarnessKind)}
@@ -317,7 +321,7 @@
         <span
           aria-hidden="true"
           class="tip"
-          style={`transform:translateY(${shownTip * RAIL_STEP}px);width:${tipWidth}px;opacity:${tip >= 0 ? 1 : 0}`}
+          style={`transform:translateY(calc(${shownTip} * var(--rail-step)));width:${tipWidth}px;opacity:${tip >= 0 ? 1 : 0}`}
         >
           {#key shownTip}
             <span class="tip-text" bind:offsetWidth={tipWidth}
@@ -494,11 +498,21 @@
     display: grid;
     min-width: 0;
   }
+  /* One 36px radio plus its gap, which the thumb and the tip travel by. On
+     a coarse pointer the gap opens to 8px, so each radio's touch area
+     reaches 44px before meeting its neighbour's. */
   .rail {
+    --rail-step: 40px;
+    --hit-gap-x: calc(var(--rail-step) - 36px);
+    --hit-gap-y: calc(var(--rail-step) - 36px);
     position: relative;
     display: grid;
     align-content: start;
-    gap: 4px;
+    gap: calc(var(--rail-step) - 36px);
+
+    @media (pointer: coarse) {
+      --rail-step: 44px;
+    }
     padding: 6px;
     border-right: 1px solid var(--border-hairline);
     background: var(--surface-recess);

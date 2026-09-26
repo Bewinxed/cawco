@@ -562,7 +562,9 @@
         </div>
       {:else}
         <div class="bar">
-          <div class="search">
+          <!-- A label, so its touch area around the 36px field focuses it. -->
+          <!-- biome-ignore lint/a11y/noLabelWithoutControl: the kit Input renders the native <input> this label wraps -->
+          <label class="search touch-hit">
             <span class="lead"><IconSearch /></span>
             <Input
               aria-label="Search sessions"
@@ -573,7 +575,7 @@
               placeholder="Search sessions…"
               bind:value={search}
             />
-          </div>
+          </label>
 
           <Select.Root
             onValueChange={(v) => {
@@ -666,7 +668,9 @@
                       <span aria-hidden="true" class="mark m{row.hue}">
                         <HarnessGlyph harness={row.harness} />
                       </span>
-                      <a href={row.href}>{row.title}</a>
+                      <a class="touch-hit" href={row.href}
+                        ><span class="nm-title">{row.title}</span></a
+                      >
                     </div>
                   </Table.Cell>
                   <Table.Cell class="mut c-mach">{row.machine}</Table.Cell>
@@ -963,6 +967,7 @@
   }
   .search {
     position: relative;
+    display: block;
     width: 237px;
   }
   .search .lead {
@@ -1113,10 +1118,17 @@
     gap: var(--space-3);
     min-width: 0;
   }
+  /* The title span carries the ellipsis, so the link itself does not clip
+     its touch area. */
   .nm a {
+    display: flex;
+    min-width: 0;
     font-weight: var(--weight-strong);
     color: var(--ink-strong);
     text-decoration: none;
+  }
+  .nm-title {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1137,10 +1149,18 @@
     height: 13px;
     flex: 0 0 auto;
   }
+  /* 30px buttons: on a coarse pointer the gap opens to 14px, so each touch
+     area reaches 44px before meeting its neighbour's. */
   .act {
+    --hit-gap-x: var(--space-2);
     display: flex;
     align-items: center;
     gap: var(--space-2);
+
+    @media (pointer: coarse) {
+      --hit-gap-x: 14px;
+      gap: 14px;
+    }
   }
 
   .sentinel {

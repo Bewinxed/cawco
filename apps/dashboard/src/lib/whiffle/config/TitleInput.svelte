@@ -19,19 +19,27 @@
   } = $props();
 </script>
 
-<input
-  aria-invalid={invalid ? 'true' : undefined}
-  aria-label={label}
-  autocomplete="off"
-  class={["title-input", mono && "mono"]}
-  {disabled}
-  {onblur}
-  {placeholder}
-  spellcheck="false"
-  bind:value
->
+<!-- A label, so its touch area around the 24px title focuses the field. -->
+<label class="title touch-hit">
+  <input
+    aria-invalid={invalid ? 'true' : undefined}
+    aria-label={label}
+    autocomplete="off"
+    class={["title-input", mono && "mono"]}
+    {disabled}
+    {onblur}
+    {placeholder}
+    spellcheck="false"
+    bind:value
+  >
+</label>
 
 <style>
+  .title {
+    display: block;
+    width: 100%;
+    min-width: 0;
+  }
   .title-input {
     width: 100%;
     min-width: 0;

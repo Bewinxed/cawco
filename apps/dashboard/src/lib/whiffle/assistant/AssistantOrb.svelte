@@ -20,7 +20,7 @@
 <button
   aria-expanded={open}
   aria-label={open ? 'Close assistant' : 'Open assistant'}
-  class="orb"
+  class="orb touch-hit"
   {onclick}
   title="Assistant"
   type="button"
@@ -32,8 +32,8 @@
   .orb {
     display: grid;
     place-items: center;
-    width: 44px;
-    height: 44px;
+    width: 28px;
+    height: 28px;
     border: 1px solid var(--border-hairline);
     border-radius: var(--radius-sm);
     background: var(--surface-raised);
@@ -42,8 +42,8 @@
     transition: background var(--dur-control) var(--ease-in-out);
   }
   .orb :global(svg) {
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
   }
   .orb[aria-expanded="true"] {
     background: var(--surface-hover);

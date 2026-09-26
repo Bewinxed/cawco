@@ -12,9 +12,11 @@
  *
  * - It must be mostly horizontal. A transcript scrolls vertically, and a
  *   thumb travelling down the screen must never take the page with it.
- * - It must not start on a control, in the composer, or inside something
- *   that scrolls sideways. Code blocks and tool output scroll horizontally;
- *   stealing that is worse than having no gesture at all.
+ * - It must not start on a control, or inside something that scrolls
+ *   sideways. Code blocks and tool output scroll horizontally; stealing
+ *   that is worse than having no gesture at all. (The composer is never
+ *   under it: a swiping group draws its composer outside the panes it
+ *   moves.)
  * - Ownership is settled at touchstart and never revisited. The browser
  *   cannot be told half way through a gesture that someone else wants it,
  *   so asking later would mean asking after the answer stopped mattering.
@@ -77,7 +79,7 @@ function fenced(target: EventTarget | null, fence: HTMLElement): boolean {
   if (
     target.closest(
       'button, a, input, textarea, select, [contenteditable="true"], ' +
-        '[role="button"], [role="link"], [role="tab"], [role="slider"], .composer'
+        '[role="button"], [role="link"], [role="tab"], [role="slider"]'
     )
   ) {
     return true;
@@ -121,6 +123,13 @@ export function createSwipe(
    */
   let toward = $state<string | null>(null);
   let fraction = $state(0);
+  /**
+   * Whether the conversations are moving: from the moment a finger claims
+   * the drag until the settle lands, or snaps back. The group's composer
+   * holds Send on it, so a message never goes to a chat on its way off
+   * screen.
+   */
+  let moving = $state(false);
 
   // Not reactive: the finger writes the transforms itself, straight onto the
   // panes in view, and writing state per touchmove would schedule a render
@@ -212,6 +221,7 @@ export function createSwipe(
   const land = () => {
     stopSettle();
     clear();
+    moving = false;
     offset = 0;
     toward = null;
     fraction = 0;
@@ -413,6 +423,9 @@ export function createSwipe(
     get targetId() {
       return targetId;
     },
+    get moving() {
+      return moving;
+    },
     /**
      * The conversation the header should be NAMING right now — the target
      * once the drag has passed the point it would commit at, the current one
@@ -517,6 +530,7 @@ export function createSwipe(
           width = node.clientWidth;
           panes = gather();
           phase = "decided";
+          moving = true;
         }
 
         // Claimed: the page owns this gesture now, so the browser must not

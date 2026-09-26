@@ -10,6 +10,12 @@
    * alive once and docks it into the slot here, so a split, a move or a
    * change of grid rearranges the DOM without rebuilding a transcript.
    *
+   * Where a finger can swipe between the tabs (`docked`), the group also
+   * draws the composer: one, outside the panes the swipe moves, over
+   * whichever conversation is the active tab. A swipe then carries only the
+   * transcripts; the box being typed in, its focus and its keyboard stay,
+   * and when the swipe lands the same box shows the new conversation's
+   * draft and sends to its session. Under a cursor each pane draws its own.
    */
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
@@ -17,6 +23,11 @@
   import { page } from "$app/state";
   import type { HistorySource } from "../client.svelte";
   import SessionPane from "../SessionPane.svelte";
+  import Composer from "../transcript/Composer.svelte";
+  import {
+    composerBindings,
+    groupComposerHeights,
+  } from "./composer-dock.svelte";
   import { dropHint, paneDropTarget } from "./dnd.svelte";
   import { slot } from "./dock.svelte";
   import { createSwipe } from "./gesture.svelte";
@@ -27,15 +38,35 @@
     leaf,
     swipeable = false,
     hosted = false,
+    docked = false,
   }: {
     leaf: LeafNode;
     /** Only the phone's single group takes the swipe. */
     swipeable?: boolean;
     /** The top bar is drawing this group's tabs; the group draws none of its own. */
     hosted?: boolean;
+    /** Tabs here can be swiped under a finger: the group draws the composer, not its panes. */
+    docked?: boolean;
   } = $props();
 
   const swipe = createSwipe(() => leaf.id);
+
+  /** The active conversation, as this group's composer writes to it; none when it cannot be written to. */
+  const bound = $derived(
+    docked && leaf.active ? composerBindings.get(leaf.active) : undefined
+  );
+  let composerHeight = $state(0);
+  // What this group's panes keep clear at their foot. No composer, no entry.
+  $effect(() => {
+    if (!bound) {
+      return;
+    }
+    const { id } = leaf;
+    groupComposerHeights.set(id, composerHeight);
+    return () => {
+      groupComposerHeights.delete(id);
+    };
+  });
 
   /** What a drop hovering this group would do, if anything. */
   const splitEdge = $derived(dropHint.splits(leaf.id));
@@ -209,12 +240,15 @@
       >
         <!-- The server paints the conversation here so a reload shows it
              before the bundle runs; on hydration this branch is dropped and
-             PaneHost mounts the live pane into the slot. -->
+             PaneHost mounts the live pane into the slot. The server has no
+             deck composer to lend a session to, so its pane paints its own
+             in the same place. -->
         {#if !browser}
           <SessionPane
             browsing={ctx?.machine ?? null}
             browsingCwd={ctx?.cwd ?? ''}
             browsingHarness={ctx?.harness ?? 'claude'}
+            docked={false}
             focused={false}
             serverHistory={paneId === page.params.id
               ? ((page.data as { history?: Promise<HistorySource | null> | null }).history ?? null)
@@ -229,6 +263,31 @@
       </div>
     {/each}
   </div>
+
+  <!-- Outside the stack the swipe moves, over the transcript's share of the
+       group: a side preview beside the transcript keeps the rest. -->
+  {#if bound}
+    <div class="dock" style:width="{bound.transcriptShare * 100}%">
+      <Composer
+        busy={bound.busy}
+        commands={bound.commands}
+        draft={bound.draft}
+        held={swipe.moving}
+        leading={bound.leading}
+        mentions={bound.mentions}
+        oninterruptsend={bound.oninterruptsend}
+        onmenu={bound.onmenu}
+        onstop={bound.onstop}
+        onsubmit={bound.onsubmit}
+        paneVisible={bound.paneVisible}
+        previewPhone={bound.previewPhone}
+        prompts={bound.prompts}
+        sending={bound.sending}
+        suggest={bound.suggest}
+        bind:height={composerHeight}
+      />
+    </div>
+  {/if}
 </section>
 
 <style>
@@ -289,6 +348,16 @@
   }
   .drop-bottom {
     inset: 50% 0 0 0;
+  }
+
+  /* The composer's box: it positions itself at the foot of this, and lets
+     every touch outside itself through to the transcript. Above the panes,
+     under a drop preview, as a pane's own composer was. */
+  .dock {
+    position: absolute;
+    inset: 0 auto 0 0;
+    z-index: 1;
+    pointer-events: none;
   }
 
   .stack {

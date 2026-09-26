@@ -34,25 +34,23 @@
   import { IconClose, IconPlus, IconSend, IconStop } from "$lib/icons";
   import type { SendExtras } from "../client.svelte";
   import { cleanDetail } from "../command-detail";
-  import { newId } from "../id";
   import SelectionChip from "../preview/SelectionChip.svelte";
   import SelectionPopover from "../preview/SelectionPopover.svelte";
-  import type {
-    CapturedSelection,
-    PendingSelection,
-  } from "../preview/selection";
   import {
     loadSuggestSetting,
     type SuggestCandidate,
     suggestions,
   } from "../suggest.svelte";
+  import type { ComposerDraft, PendingImage } from "./composer-draft.svelte";
+  import { stand } from "./composer-presence.svelte";
   import SuggestionChips from "./SuggestionChips.svelte";
 
   let {
-    value = $bindable(""),
+    draft,
     height = $bindable(0),
     busy = false,
     sending = false,
+    held = false,
     paneVisible = true,
     previewPhone = false,
     commands = [],
@@ -65,7 +63,12 @@
     leading,
     suggest,
   }: {
-    value?: string;
+    /**
+     * The conversation's half-written message. The composer draws it and
+     * writes into it; the conversation owns it, so a composer pointed at
+     * another draft shows that conversation's words.
+     */
+    draft: ComposerDraft;
     /**
      * The floating column's measured height, published upward. The transcript
      * behind it reserves exactly this much foot-room, so a permission card
@@ -81,6 +84,12 @@
      * second send from a duplicate of the first.
      */
     sending?: boolean;
+    /**
+     * A swipe is carrying the conversations under this composer. The action
+     * button waits until one has landed, so nothing is sent to a chat that
+     * is on its way off screen.
+     */
+    held?: boolean;
     paneVisible?: boolean;
     previewPhone?: boolean;
     /** What this session offers behind `/`. */
@@ -115,83 +124,26 @@
 
   /** A chip's sentence goes on the end of the draft, caret after it. */
   async function insertSuggestion(line: string) {
-    const draft = value.trimEnd();
-    value = draft ? `${draft} ${line}` : line;
+    const typed = draft.text.trimEnd();
+    draft.text = typed ? `${typed} ${line}` : line;
     await tick();
     field?.focus();
-    field?.setSelectionRange(value.length, value.length);
+    field?.setSelectionRange(draft.text.length, draft.text.length);
   }
 
-  interface PendingImage {
-    data: string;
-    mediaType: string;
-    name: string;
-  }
-  interface PendingText {
-    content: string;
-    kind: "text";
-    name: string;
-  }
-
-  let images = $state<PendingImage[]>([]);
-  let texts = $state<PendingText[]>([]);
-  // Chips belong to this session's composer and survive preview visibility changes.
-  // The outbox restores the structured notes when a submitted turn fails.
-  let selections = $state<PendingSelection[]>([]);
-  export function acceptSelections(selectionIds: string[]) {
-    selections = selections.filter(({ id }) => !selectionIds.includes(id));
-  }
-  let editing = $state<PendingSelection | null>(null);
-  let editorOpen = $state(false);
   $effect(() => {
     if (!paneVisible) {
-      editorOpen = false;
+      draft.editorOpen = false;
     }
   });
-  let anchors = $state<Record<string, HTMLButtonElement | undefined>>({});
 
-  export function attach(
-    selection: CapturedSelection
-  ): "added" | "duplicate" | "full" {
-    editorOpen = false;
-    if (
-      selections.some(
-        ({ element }) =>
-          element.url === selection.element.url &&
-          element.selector === selection.element.selector
-      )
-    ) {
-      return "duplicate";
+  // On screen, this composer is what the desk's toasts rise above.
+  const presence = {};
+  $effect(() => {
+    if (paneVisible) {
+      return stand(presence, height);
     }
-    if (selections.length === 12) {
-      return "full";
-    }
-    selections.push({ ...selection, id: newId() });
-    editing = selections.at(-1) ?? null;
-    editorOpen = true;
-    return "added";
-  }
-
-  export function closeSelectionEditor(): boolean {
-    if (!editorOpen) {
-      return false;
-    }
-    editorOpen = false;
-    if (editing) {
-      anchors[`${editing.element.url}:${editing.element.selector}`]?.focus({
-        preventScroll: true,
-      });
-    }
-    return true;
-  }
-
-  function removeSelection(selection: PendingSelection) {
-    if (editing === selection) {
-      editorOpen = false;
-      editing = null;
-    }
-    selections = selections.filter((item) => item !== selection);
-  }
+  });
   let fileInput = $state<HTMLInputElement>();
   let field = $state<HTMLTextAreaElement>();
   /** The suggestion row, for Tab and Shift+Tab. */
@@ -203,12 +155,13 @@
   /** A `/` or `@` token stops being typed as one the moment it holds whitespace. */
   const TOKEN_WHITESPACE = /\s/;
 
-  const hasContent = $derived(
-    value.trim().length > 0 ||
-      images.length > 0 ||
-      texts.length > 0 ||
-      selections.length > 0
-  );
+  /** The words put back from outside (Edit on a failed send) land with focus. */
+  $effect(() => {
+    if (draft.focusWanted) {
+      field?.focus();
+      draft.focusWanted = false;
+    }
+  });
 
   /* ---- the `/` and `@` menu ------------------------------------------- */
 
@@ -305,6 +258,18 @@
   let highlight = $state("");
 
   /**
+   * A composer handed another conversation's draft starts that draft with
+   * its menu closed: the caret this one last noted was in the other text.
+   */
+  $effect.pre(() => {
+    // biome-ignore lint/complexity/noVoid: read-only dependency — re-runs when the composer is pointed at another conversation's draft
+    void draft;
+    untrack(() => {
+      dismissed = true;
+    });
+  });
+
+  /**
    * The `/…` or `@…` the caret sits in the middle of, or null.
    *
    * A sigil only opens a menu at the start of a word — mid-token it is a path
@@ -313,8 +278,8 @@
    */
   const token = $derived.by(
     (): { sigil: "/" | "@"; query: string; from: number } | null => {
-      const at = Math.min(caret, value.length);
-      const before = value.slice(0, at);
+      const at = Math.min(caret, draft.text.length);
+      const before = draft.text.slice(0, at);
       const start =
         Math.max(before.lastIndexOf(" "), before.lastIndexOf("\n")) + 1;
       const word = before.slice(start);
@@ -468,8 +433,8 @@
     if (!active) {
       return;
     }
-    const end = Math.min(caret, value.length);
-    value = `${value.slice(0, active.from)}${entry.insert} ${value.slice(end)}`;
+    const end = Math.min(caret, draft.text.length);
+    draft.text = `${draft.text.slice(0, active.from)}${entry.insert} ${draft.text.slice(end)}`;
     const next = active.from + entry.insert.length + 1;
     dismissed = true;
     // After the value lands, so the caret is set on the text that is there now.
@@ -492,61 +457,15 @@
   function submit(
     via: (text: string, extras: SendExtras) => void = onsubmit
   ): void {
-    // Nothing to send, or the last one is still unanswered. The draft is left
-    // exactly as it is — a refused send must never eat what was typed.
-    if (!hasContent || sending) {
+    // Nothing to send, the last one is still unanswered, or a swipe is
+    // still carrying the conversation. The draft is left exactly as it is —
+    // a refused send must never eat what was typed.
+    if (!draft.hasContent || sending || held) {
       return;
     }
-    const extras: SendExtras = {};
-    if (selections.length) {
-      extras.selections = $state.snapshot(selections);
-    }
-    if (texts.length) {
-      extras.attachments = texts.map((t) => ({ ...t }));
-    }
-    if (images.length) {
-      extras.images = images.map((i) => ({
-        mediaType: i.mediaType,
-        data: i.data,
-      }));
-    }
-    const text = value.trim();
-    value = "";
-    images = [];
-    texts = [];
-    editorOpen = false;
-    editing = null;
+    const { text, extras } = draft.take();
     dismissed = true;
     via(text, extras);
-  }
-
-  /**
-   * Puts a message that never left back into the composer, attachments and all.
-   *
-   * The optimistic clear above stays exactly as it is — clearing on Enter is
-   * the right feel, and the promise "a refused send must never eat what was
-   * typed" is kept downstream instead: the store holds the full payload in its
-   * outbox and hands it back through here. The text itself arrives by the
-   * `value` binding the pane already owns; this is for everything the binding
-   * cannot carry.
-   *
-   * Image filenames do not survive the wire — `SendPayload.images` carries
-   * `mediaType` and `data` only — so restored images are numbered rather than
-   * given a name they never had.
-   */
-  export function restore(extras: SendExtras = {}): void {
-    selections = extras.selections ?? [];
-    texts = (extras.attachments ?? []).map((attachment) => ({
-      kind: "text",
-      name: attachment.name,
-      content: attachment.content,
-    }));
-    images = (extras.images ?? []).map((image, at) => ({
-      mediaType: image.mediaType,
-      data: image.data,
-      name: `Image ${at + 1}`,
-    }));
-    field?.focus();
   }
 
   /**
@@ -612,6 +531,9 @@
   }
 
   function onaction(): void {
+    if (held) {
+      return;
+    }
     if (busy) {
       onstop();
     } else {
@@ -640,10 +562,10 @@
     for (const file of files) {
       if (file.type.startsWith("image/")) {
         // biome-ignore lint/performance/noAwaitInLoops: sequential by intent — each attachment must append in the order it was picked, not the order its read happens to settle.
-        images = [...images, await readImage(file)];
+        draft.images = [...draft.images, await readImage(file)];
       } else {
-        texts = [
-          ...texts,
+        draft.texts = [
+          ...draft.texts,
           { kind: "text", name: file.name, content: await file.text() },
         ];
       }
@@ -653,8 +575,11 @@
   function onpick(event: Event): void {
     const input = event.currentTarget as HTMLInputElement;
     if (input.files?.length) {
+      // Copied first: `input.files` is live, and clearing the input below
+      // empties it while the reads are still walking it — a pick of several
+      // files kept only the first.
       // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — the file input clears synchronously below, independent of the read.
-      void addFiles(input.files);
+      void addFiles([...input.files]);
     }
     input.value = "";
   }
@@ -677,8 +602,8 @@
     const text = data.getData("text/plain");
     if (text.length > LARGE_PASTE) {
       event.preventDefault();
-      texts = [
-        ...texts,
+      draft.texts = [
+        ...draft.texts,
         {
           kind: "text",
           name: `Pasted text · ${text.length.toLocaleString()} chars`,
@@ -689,10 +614,10 @@
   }
 
   const removeImage = (i: number) => {
-    images = images.filter((_, n) => n !== i);
+    draft.images = draft.images.filter((_, n) => n !== i);
   };
   const removeText = (i: number) => {
-    texts = texts.filter((_, n) => n !== i);
+    draft.texts = draft.texts.filter((_, n) => n !== i);
   };
 </script>
 
@@ -701,22 +626,23 @@
   {#if prompts}
     <div class="prompts">{@render prompts()}</div>
   {/if}
-  {#if images.length || texts.length || selections.length}
+  {#if draft.images.length || draft.texts.length || draft.selections.length}
     <div class="atts">
-      {#each selections as selection (`${selection.element.url}:${selection.element.selector}`)}
+      {#each draft.selections as selection (`${selection.element.url}:${selection.element.selector}`)}
         <SelectionChip
-          onedit={() => { editing = selection; editorOpen = true; }}
-          onremove={() => removeSelection(selection)}
+          onedit={() => { draft.editing = selection; draft.editorOpen = true; }}
+          onremove={() => draft.removeSelection(selection)}
           {selection}
-          bind:anchor={anchors[`${selection.element.url}:${selection.element.selector}`]}
+          bind:anchor={draft.anchors[`${selection.element.url}:${selection.element.selector}`]}
         />
       {/each}
-      {#each images as img, i (img.name + i)}
+      {#each draft.images as img, i (img.name + i)}
         <span class="att">
           <img alt="" src="data:{img.mediaType};base64,{img.data}">
-          {img.name}
+          <span class="att-name">{img.name}</span>
           <button
             aria-label="Remove"
+            class="touch-hit"
             onclick={() => removeImage(i)}
             type="button"
           >
@@ -724,11 +650,12 @@
           </button>
         </span>
       {/each}
-      {#each texts as t, i (t.name + i)}
+      {#each draft.texts as t, i (t.name + i)}
         <span class="att">
-          {t.name}
+          <span class="att-name">{t.name}</span>
           <button
             aria-label="Remove"
+            class="touch-hit"
             onclick={() => removeText(i)}
             type="button"
           >
@@ -743,18 +670,18 @@
     <SuggestionChips
       candidates={suggest.candidates}
       oninsert={insertSuggestion}
-      text={value}
+      text={draft.text}
       bind:this={chips}
     />
   {/if}
 
-  {#if editing}
+  {#if draft.editing}
     <SelectionPopover
-      anchor={anchors[`${editing.element.url}:${editing.element.selector}`]}
-      onremove={() => { if (editing) { removeSelection(editing); } }}
+      anchor={draft.anchors[`${draft.editing.element.url}:${draft.editing.element.selector}`]}
+      onremove={() => { if (draft.editing) { draft.removeSelection(draft.editing); } }}
       phone={previewPhone}
-      selection={editing}
-      bind:open={editorOpen}
+      selection={draft.editing}
+      bind:open={draft.editorOpen}
     />
   {/if}
 
@@ -807,32 +734,36 @@
       </div>
     {/if}
 
-    <textarea
-      aria-activedescendant={activeDescendant}
-      aria-autocomplete="list"
-      aria-controls="composer-menu"
-      aria-expanded={menuOpen}
-      aria-label="Message the agent"
-      onblur={() => {
+    <!-- A label, so the pill's padding above and below the 34px field
+         focuses it: its touch area is the field's. -->
+    <label class="field touch-hit">
+      <textarea
+        aria-activedescendant={activeDescendant}
+        aria-autocomplete="list"
+        aria-controls="composer-menu"
+        aria-expanded={menuOpen}
+        aria-label="Message the agent"
+        onblur={() => {
         dismissed = true;
       }}
-      onclick={noteCaret}
-      oninput={noteCaret}
-      {onkeydown}
-      onkeyup={noteCaret}
-      {onpaste}
-      onselect={noteCaret}
-      placeholder="Message the agent…  /  for commands, @ to mention"
-      role="combobox"
-      bind:this={field}
-      bind:value
-    ></textarea>
+        onclick={noteCaret}
+        oninput={noteCaret}
+        {onkeydown}
+        onkeyup={noteCaret}
+        {onpaste}
+        onselect={noteCaret}
+        placeholder="Message the agent…  /  for commands, @ to mention"
+        role="combobox"
+        bind:this={field}
+        bind:value={draft.text}
+      ></textarea>
+    </label>
 
     <div class="ctrls">
       {@render leading?.()}
       <button
         aria-label="Attach a file or image"
-        class="att-btn"
+        class="att-btn touch-hit"
         onclick={() => fileInput?.click()}
         type="button"
       >
@@ -841,8 +772,8 @@
       <button
         aria-disabled={!busy && sending ? 'true' : undefined}
         aria-label={busy ? 'Stop the agent' : 'Send message'}
-        class="stop"
-        disabled={!(busy || hasContent)}
+        class="stop touch-hit"
+        disabled={held || !(busy || draft.hasContent)}
         onclick={onaction}
         type="button"
       >
@@ -924,6 +855,11 @@
     gap: var(--space-2);
     box-shadow: var(--shadow-tile);
   }
+  .field {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+  }
   textarea {
     flex: 1 1 auto;
     border: 0;
@@ -943,8 +879,15 @@
     padding: calc((var(--cin-ctl) - 1lh) / 2) 0;
     min-width: 0;
   }
+  /* One line, always. Under field-sizing:content Chromium sizes an empty
+     field to its placeholder and WebKit sizes it to its (empty) value, so a
+     placeholder that wraps made the two disagree and WebKit clipped the
+     second line. A placeholder that cannot wrap gives both one line. */
   textarea::placeholder {
     color: var(--ink-muted);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .hidden-file {
     display: none;
@@ -1057,12 +1000,20 @@
   }
 
   /* Attach + send, together and bottom-aligned, so they hold their box as the
-     text above them runs on. */
+     text above them runs on. On a coarse pointer the gap opens to 10px, so
+     each 34px control's touch area reaches 44px before meeting its
+     neighbour's. */
   .ctrls {
+    --hit-gap-x: var(--space-2);
     display: flex;
     align-items: center;
     gap: var(--space-2);
     flex: 0 0 auto;
+
+    @media (pointer: coarse) {
+      --hit-gap-x: 10px;
+      gap: 10px;
+    }
   }
   .att-btn,
   .stop {
@@ -1142,14 +1093,23 @@
     outline-offset: 2px;
   }
 
-  /* Pending attachment chips, above the input pill. */
+  /* Pending attachment chips, above the input pill. The row scrolls, so on
+     a coarse pointer it takes 8px more padding into an equal negative margin:
+     the remove buttons' touch areas fit inside its clip, nothing moves. */
   .atts {
+    --hit-gap-x: var(--space-2);
+    --hit-gap-y: var(--space-2);
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-2);
     max-height: 180px;
     overflow-y: auto;
     padding: var(--space-1);
+
+    @media (pointer: coarse) {
+      padding: calc(var(--space-1) + 8px);
+      margin: -8px;
+    }
   }
   .att {
     display: inline-flex;
@@ -1163,9 +1123,6 @@
     box-shadow: var(--shadow-tile);
     font-size: var(--text-label);
     color: var(--ink-strong);
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
     /* A chip appearing under the input is a small confirmation, so it gets a
        small one: 2px of travel and one --dur-control. Removal stays instant — the
        reader who clicked × has already decided. */
@@ -1180,6 +1137,14 @@
       opacity: 1;
       transform: translateY(0);
     }
+  }
+  /* The name carries the ellipsis, so the chip itself does not clip its
+     remove button's touch area. */
+  .att-name {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
   .att img {
     width: 20px;
@@ -1207,14 +1172,6 @@
   .att button:hover {
     background: var(--surface-recess);
     color: var(--ink-strong);
-  }
-
-  /* A thumb gets the platform's 44px floor; the shell's inset grows with the
-     controls so the curves stay concentric at both sizes. */
-  @media (pointer: coarse) {
-    .cin {
-      --cin-ctl: 44px;
-    }
   }
 
   /* Mobile: the composer goes full-width, edge to edge. It stays absolute

@@ -45,6 +45,7 @@
     {#if data?.remove}
       <button
         aria-label="Delete edge"
+        class="touch-hit"
         onclick={() => { if (typeof data?.remove === 'function') { data.remove(id); } }}
         type="button"
         class:visible={selected}
@@ -86,8 +87,6 @@
   @media (pointer: coarse) {
     button {
       opacity: 1;
-      width: 44px;
-      height: 44px;
     }
   }
 </style>

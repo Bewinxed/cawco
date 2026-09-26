@@ -1,5 +1,6 @@
 <script lang="ts" module>
-  import { tv, type VariantProps } from "tailwind-variants";
+  import type { VariantProps } from "tailwind-variants";
+  import { tv } from "$lib/utils.js";
 
   export const badgeVariants = tv({
     base: "group/badge focus-ring inline-flex h-5 w-fit shrink-0 items-center justify-center gap-1 overflow-hidden whitespace-nowrap rounded-xs bg-[var(--surface-recess)] px-1.5 font-medium text-[var(--ink-strong)] text-meta leading-none transition-colors has-data-[icon=inline-end]:pr-1 has-data-[icon=inline-start]:pl-1 [&>svg]:pointer-events-none [&>svg]:size-3!",

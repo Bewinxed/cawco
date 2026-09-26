@@ -25,7 +25,11 @@
   import { browser } from "$app/environment";
   import { afterNavigate } from "$app/navigation";
   import { page } from "$app/state";
-  import { IsMobile, IsTouchPortrait } from "$lib/hooks/is-mobile.svelte";
+  import {
+    IsCoarsePointer,
+    IsMobile,
+    IsTouchPortrait,
+  } from "$lib/hooks/is-mobile.svelte";
   import {
     type HistorySource,
     preloadHistory,
@@ -76,6 +80,14 @@
    */
   const deck = $derived(mobile.current || touchPortrait.current);
   const narrow = $derived(browser ? deck : (page.data.narrow as boolean));
+  /**
+   * Whether the groups draw the composers. The deck always does, and so
+   * does a grid under a finger: wherever conversations can be swiped, the
+   * composer belongs to the group, outside the panes the swipe moves. Must
+   * match what `PaneDeck` and `PaneGrid` hand their groups.
+   */
+  const coarse = new IsCoarsePointer();
+  const docked = $derived(narrow || coarse.current);
 
   $effect(() => {
     // The Cookie Store API is async and unsupported in Safari; this write must
@@ -280,6 +292,7 @@
     <!-- After the groups on purpose: their slots register first, so a pane
          is born straight into the group that asked for it. -->
     <PaneHost
+      {docked}
       entryHistory={entry.history}
       entryId={entry.id}
       entryTail={entry.tail}

@@ -198,6 +198,7 @@
     </div>
     <button
       aria-pressed={selecting}
+      class="touch-hit"
       disabled={!connected}
       onclick={() => select(!selecting)}
       title="Select"
@@ -207,7 +208,7 @@
     </button>
     <button
       aria-label="Reload"
-      class="other"
+      class="other touch-hit"
       onclick={() => { reload += 1; }}
       title="Reload"
       type="button"
@@ -216,7 +217,7 @@
     </button>
     <a
       aria-label="Open in new tab"
-      class="other"
+      class="other touch-hit"
       href={url}
       rel="noopener noreferrer"
       target="_blank"
@@ -225,7 +226,7 @@
     >
     <button
       aria-label="Close"
-      class="other"
+      class="other touch-hit"
       onclick={close}
       title="Close"
       type="button"
@@ -268,6 +269,7 @@
     box-shadow: var(--shadow-drawer);
   }
   header {
+    --hit-gap-x: var(--space-1);
     display: flex;
     align-items: center;
     gap: var(--space-1);
@@ -404,13 +406,6 @@
     button:hover,
     a:hover {
       background: var(--surface-hover);
-    }
-  }
-  @media (pointer: coarse) {
-    button,
-    a {
-      min-width: 44px;
-      height: 44px;
     }
   }
 </style>

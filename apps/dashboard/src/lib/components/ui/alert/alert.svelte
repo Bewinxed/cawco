@@ -1,5 +1,6 @@
 <script lang="ts" module>
-  import { tv, type VariantProps } from "tailwind-variants";
+  import type { VariantProps } from "tailwind-variants";
+  import { tv } from "$lib/utils.js";
 
   export const alertVariants = tv({
     base: "group/alert relative grid w-full gap-0.5 rounded-md px-3 py-2.5 text-left text-body has-data-[slot=alert-action]:relative has-[>svg]:grid-cols-[auto_1fr] has-[>svg]:gap-x-2.5 has-data-[slot=alert-action]:pr-18 *:[svg:not([class*='size-'])]:size-4 *:[svg]:row-span-2 *:[svg]:translate-y-0.5 *:[svg]:text-current",

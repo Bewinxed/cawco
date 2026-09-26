@@ -19,10 +19,12 @@
 </script>
 
 <div class="footer" data-ns-footer>
-  <button class="ns-btn" onclick={oncancel} type="button">Cancel</button>
+  <button class="ns-btn touch-hit" onclick={oncancel} type="button">
+    Cancel
+  </button>
   <button
     aria-busy={busy}
-    class="ns-btn primary"
+    class="ns-btn primary touch-hit"
     {disabled}
     id="session-start"
     onclick={onstart}
@@ -48,10 +50,6 @@
   @media (max-width: 640px) {
     .footer {
       padding-bottom: max(10px, env(safe-area-inset-bottom));
-    }
-    .ns-btn {
-      height: 44px;
-      flex: 1;
     }
   }
 </style>

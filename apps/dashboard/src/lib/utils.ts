@@ -1,5 +1,16 @@
 import { type ClassValue, clsx } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { extendTailwindMerge } from "tailwind-merge";
+import { createTV } from "tailwind-variants";
+
+/** The theme's type scale (app.css `--text-*`). Unknown, tailwind-merge reads
+ *  `text-label` as a colour and drops the colour class beside it. */
+const twMergeConfig = {
+  extend: { theme: { text: ["meta", "label", "body", "title", "kpi"] } },
+};
+const twMerge = extendTailwindMerge(twMergeConfig);
+
+/** `tv` for kit recipes, merging with the same type scale as `cn`. */
+export const tv = createTV({ twMergeConfig });
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));

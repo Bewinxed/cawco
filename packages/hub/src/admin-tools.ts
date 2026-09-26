@@ -116,7 +116,7 @@ export function adminTools() {
           .optional()
           .describe("Model id for the harness. Required for put."),
         effort: z
-          .enum(["low", "medium", "high", "max"])
+          .enum(["low", "medium", "high", "xhigh", "max"])
           .optional()
           .describe("Reasoning effort. Optional for put."),
         skills: z

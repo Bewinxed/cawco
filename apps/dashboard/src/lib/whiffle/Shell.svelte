@@ -396,7 +396,10 @@
   </aside>
 
   <Sheet.Root bind:open={railOpen}>
-    <Sheet.Content class="w-[284px] p-0 min-[900px]:hidden" side="left">
+    <Sheet.Content
+      class="rail-sheet w-[284px] p-0 min-[900px]:hidden"
+      side="left"
+    >
       <Sheet.Header class="sr-only">
         <Sheet.Title>Navigation</Sheet.Title>
       </Sheet.Header>
@@ -456,7 +459,7 @@
         </Button>
         {#if whiffle.blockedCount > 0}
           <a
-            class="icobtn"
+            class="icobtn touch-hit"
             href="/session"
             title="{whiffle.blockedCount} waiting on you"
           >
@@ -547,6 +550,13 @@
        while the content area cross-fades on spoke navigation. */
     view-transition-name: sidebar;
   }
+  /* In the sheet the close button sits in the brand row's corner (16px in,
+     30px wide, and 7px of touch area around it): the brand row stops short of
+     it, so neither one's area lies under the other. */
+  :global(.rail-sheet [aria-label="Workspace"]) {
+    width: auto;
+    margin-inline-end: 46px;
+  }
   .grip {
     position: absolute;
     top: 0;
@@ -576,13 +586,9 @@
 
   .top {
     /* The tabs' own height plus a breath above them: 32px folder tabs on
-       a 4px track pad, 8px of air. Touch keeps the taller bar so every
-       control in it can take the 44px thumb floor. */
-    height: 44px;
-
-    @media (pointer: coarse) {
-      height: 57px;
-    }
+       a 4px track pad, 8px of air. `--c-top-bar-h` carries it, so what
+       floats under the bar lands under it. */
+    height: var(--c-top-bar-h);
     flex-shrink: 0;
     display: flex;
     align-items: center;
@@ -652,11 +658,20 @@
     width: 19px;
     height: 19px;
   }
+  /* The cluster's controls sit a --space-2 gap apart and their touch areas
+     meet in it; on a coarse pointer the gap opens to 16px, so a 28px control's
+     area reaches 44px. */
   .right {
+    --hit-gap-x: var(--space-2);
     margin-left: auto;
     display: flex;
     align-items: center;
     gap: var(--space-2);
+
+    @media (pointer: coarse) {
+      --hit-gap-x: 16px;
+      gap: 16px;
+    }
     min-width: 0;
   }
   .top.hosting .right {
@@ -726,21 +741,6 @@
     .icobtn:active,
     .burger:active {
       transform: none;
-    }
-  }
-  @media (pointer: coarse) {
-    .icobtn {
-      width: 44px;
-      height: 44px;
-    }
-    /* Every affordance in the right cluster takes the 44px thumb floor —
-       the Jump button, the usage meter's pill and the theme toggle included,
-       so a phone tap never lands on a 32px target. */
-    .right :global(.jump),
-    .right :global(button),
-    .right :global(a) {
-      min-height: 44px;
-      min-width: 44px;
     }
   }
   .badge {

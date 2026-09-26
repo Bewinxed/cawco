@@ -162,7 +162,7 @@
           {...props}
           aria-label={active ? 'Autopilot enabled' : 'Autopilot'}
           aria-pressed={active}
-          class="ap-trigger"
+          class="ap-trigger touch-hit"
           title={presence ?? (active ? 'Autopilot enabled' : 'Autopilot')}
           type="button"
           class:ap-active={active}
@@ -199,7 +199,7 @@
           {...props}
           aria-label={active ? 'Autopilot enabled' : 'Autopilot'}
           aria-pressed={active}
-          class="ap-trigger"
+          class="ap-trigger touch-hit"
           title={presence ?? (active ? 'Autopilot enabled' : 'Autopilot')}
           type="button"
           class:ap-active={active}

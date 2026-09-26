@@ -512,7 +512,6 @@
   --pop-rise: 8px;
 
   /* component dimension ramp. */
-  --c-btn-h: 44px;
   --c-btn-pad: 16px;
   --c-btn-gap: 8px;
   --c-mark: 26px;
@@ -521,6 +520,9 @@
   --c-pill-gap: 6px;
   --c-pill-fs: var(--text-label);
   --c-nav-h: 40px;
+  /* The shell's top bar: its 32px tabs and a breath. Whatever floats under
+     the bar (the phone's toasts) reads this rather than repeating it. */
+  --c-top-bar-h: 44px;
   --c-card-pad: 14px;
   --c-card-gap: 10px;
 }
@@ -1025,67 +1027,12 @@
   }
 }
 
-/* ---- Coarse pointer (touch) relaxation ---------------------------------
-   The comps are desktop-only. Compact density is a fine-pointer affordance;
-   under pointer:coarse or narrow viewports, interactive rows grow to the
-   44×44px touch minimum (WCAG 2.5.8) and text floors at readable sizes.
-   This is the overhaul plan's stated rule: "compact is a fine-pointer
-   affordance only."  */
-@media (pointer: coarse) {
-  :root {
-    --c-nav-h: 44px;
-    --c-btn-h: 48px;
-    --c-pill-h: 28px;
-    --c-mark: 30px;
-  }
-
-  /* A 44px floor for tappable elements. Wrapped in :where() so it has
-     zero specificity: any component that sizes its own controls — a
-     tab strip, a toolbar, a segmented control — wins with a single
-     class, without a specificity war. */
-  :where(
-    button,
-    a,
-    [role="button"],
-    [role="tab"],
-    [role="menuitem"],
-    input:not([type="hidden"]),
-    select,
-    textarea,
-    summary
-  ) {
-    min-height: 44px;
-    min-width: 44px;
-  }
-
-  /* A switch keeps its 44px target but not a 44px track: the padding is the
-     target, the content box is the track, and the thumb rides inside it. */
-  [data-slot="switch"] {
-    width: 48px;
-    padding: 12.8px 8px;
-    background-clip: content-box;
-  }
-
-  /* Inline links flow with text. */
-  :where(.prose a, p a, li a, span a) {
-    min-height: unset;
-    min-width: unset;
-  }
-
-  /* Icon-only buttons meet the target through padding. */
-  :where(button:has(> svg:only-child), a:has(> svg:only-child)) {
-    padding: 10px;
-    min-height: 44px;
-    min-width: 44px;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-  }
-}
-
-/* Small viewports also get the relaxation even with a fine pointer (laptop trackpads
-   on narrow windows still benefit from larger targets). */
-@media (max-width: 639px) {
+/* ---- Coarse pointer (touch) --------------------------------------------
+   A control keeps its drawn size on a touch screen; only its tappable area
+   grows, through `.touch-hit` (kit recipes, below). The one visual step up
+   is the nav row: full-width rows in the rail take the 44px row height, on
+   a narrow window too. */
+@media (pointer: coarse), (max-width: 639px) {
   :root {
     --c-nav-h: 44px;
   }
@@ -1156,7 +1103,7 @@
    zoom. `max()` makes it a floor, so intentionally-large inputs keep their
    size via `--control-font`. Unlayered so it beats Tailwind's layered
    `text-*` utilities. */
-@media (max-width: 639px) {
+@media (max-width: 639px), (pointer: coarse) {
   input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
   textarea,
   select {
@@ -1183,6 +1130,31 @@
 /* ---- Kit recipes. The kit components in lib/components/ui name these;
    utilities passed by a consumer still win (components layer). */
 @layer components {
+  /* Touch hit area. On a coarse pointer the control's tappable area grows to
+     44×44 (WCAG 2.5.8) through a transparent ::after centred on it; the drawn
+     box and the layout do not change. A cluster whose controls sit closer
+     than that sets --hit-gap-x / --hit-gap-y to the gap between them, and
+     each extension stops at the midpoint, so neighbours never overlap.
+     `position: relative` has zero specificity: a positioned host keeps its
+     own position and is already the ::after's containing block. */
+  @media (pointer: coarse) {
+    :where(.touch-hit) {
+      position: relative;
+    }
+    .touch-hit::after {
+      content: "";
+      position: absolute;
+      inset-inline: max(
+        min(0px, calc(50% - 22px)),
+        calc(var(--hit-gap-x, 44px) / -2)
+      );
+      inset-block: max(
+        min(0px, calc(50% - 22px)),
+        calc(var(--hit-gap-y, 44px) / -2)
+      );
+    }
+  }
+
   /* Floating surfaces: popover, dropdown, select, context menu. */
   .kit-pop {
     --kit-rise: 0 calc(-1 * var(--pop-rise));
