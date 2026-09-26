@@ -12,6 +12,7 @@
 import type { SendExtras } from "../client.svelte";
 import { newId } from "../id";
 import type { CapturedSelection, PendingSelection } from "../preview/selection";
+import { readJson, writeJson } from "../storage";
 
 export interface PendingImage {
   data: string;
@@ -27,6 +28,33 @@ export interface PendingText {
 
 /** The most element notes one message carries. */
 const MAX_SELECTIONS = 12;
+
+/**
+ * Every conversation's unsent words, by session id. A reload — the "Whiffle
+ * updated" toast asks for one — used to throw a half-written message away;
+ * this is what brings it back. Text only: attachments and element notes are
+ * in-memory and do not survive a reload.
+ */
+const DRAFTS_KEY = "whiffle.drafts";
+
+/** The words stored for a conversation, or nothing. */
+export function storedDraft(sessionId: string): string {
+  return readJson<Record<string, string>>(DRAFTS_KEY, {})[sessionId] ?? "";
+}
+
+/** Stores a conversation's words; empty words drop its entry. */
+export function storeDraft(sessionId: string, text: string): void {
+  const drafts = readJson<Record<string, string>>(DRAFTS_KEY, {});
+  if ((drafts[sessionId] ?? "") === text) {
+    return;
+  }
+  if (text) {
+    drafts[sessionId] = text;
+  } else {
+    delete drafts[sessionId];
+  }
+  writeJson(DRAFTS_KEY, drafts);
+}
 
 export class ComposerDraft {
   text = $state("");
@@ -44,6 +72,10 @@ export class ComposerDraft {
    * clears the flag.
    */
   focusWanted = $state(false);
+
+  constructor(text: string) {
+    this.text = text;
+  }
 
   hasContent = $derived(
     this.text.trim().length > 0 ||

@@ -53,7 +53,11 @@
   import PreviewSheet from "./preview/PreviewSheet.svelte";
   import { clip, type SuggestCandidate } from "./suggest.svelte";
   import Composer, { type Mention } from "./transcript/Composer.svelte";
-  import { ComposerDraft } from "./transcript/composer-draft.svelte";
+  import {
+    ComposerDraft,
+    storeDraft,
+    storedDraft,
+  } from "./transcript/composer-draft.svelte";
   import Prompt from "./transcript/Prompt.svelte";
   import Transcript from "./transcript/Transcript.svelte";
   import TranscriptSkeleton from "./transcript/TranscriptSkeleton.svelte";
@@ -612,8 +616,33 @@
     (session?.pending ?? []).filter((p) => !routedToParent(p))
   );
 
-  /** What this conversation has half-written, whichever composer draws it. */
-  const draft = new ComposerDraft();
+  /**
+   * What this conversation has half-written, whichever composer draws it,
+   * picked up from where the last visit left it. A pane is mounted once per
+   * conversation (PaneHost keys it by id), so the id read here is the pane's.
+   */
+  const draft = new ComposerDraft(storedDraft(untrack(() => viewId)));
+
+  /**
+   * The words of a send the hub has not taken yet. The composer empties on
+   * Enter, but until the hub accepts the message these stay stored: a reload
+   * in that gap, or after a failed send, brings them back rather than losing
+   * them.
+   */
+  let unsent = $state("");
+
+  $effect(() => {
+    storeDraft(viewId, draft.text || unsent);
+  });
+
+  $effect(() => {
+    const stage = latestCommandFor(viewId, "send")?.stage;
+    if (stage === "accepted" || stage === "applied") {
+      untrack(() => {
+        unsent = "";
+      });
+    }
+  });
 
   $effect(() => {
     for (const { selectionIds, stage } of selectionCommands(viewId)) {
@@ -673,6 +702,9 @@
     text: string,
     extras: SendExtras = {}
   ): Promise<string | undefined> {
+    // The composer has already emptied; these words stay stored until the
+    // hub takes them, whatever happens below.
+    unsent = text;
     if (!machineId) {
       // A tripwire, not a guard anybody should hit: a pane with no machine
       // renders no composer at all. A render race can still land one keystroke
