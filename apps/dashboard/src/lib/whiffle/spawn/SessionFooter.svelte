@@ -51,9 +51,5 @@
     .footer {
       padding-bottom: max(10px, env(safe-area-inset-bottom));
     }
-    .ns-btn {
-      height: 44px;
-      flex: 1;
-    }
   }
 </style>

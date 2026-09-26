@@ -668,7 +668,9 @@
                       <span aria-hidden="true" class="mark m{row.hue}">
                         <HarnessGlyph harness={row.harness} />
                       </span>
-                      <a href={row.href}>{row.title}</a>
+                      <a class="touch-hit" href={row.href}
+                        ><span class="nm-title">{row.title}</span></a
+                      >
                     </div>
                   </Table.Cell>
                   <Table.Cell class="mut c-mach">{row.machine}</Table.Cell>
@@ -1116,25 +1118,23 @@
     gap: var(--space-3);
     min-width: 0;
   }
+  /* The title span carries the ellipsis, so the link itself does not clip
+     its touch area. */
   .nm a {
+    display: flex;
+    min-width: 0;
     font-weight: var(--weight-strong);
     color: var(--ink-strong);
     text-decoration: none;
+  }
+  .nm-title {
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
   }
   .nm a:hover {
     text-decoration: underline;
-  }
-  /* The link clips for its ellipsis, so `.touch-hit`'s ::after cannot reach
-     past it: on a coarse pointer its padding grows to a 44px box and an equal
-     negative margin keeps the row where it was. */
-  @media (pointer: coarse) {
-    .nm a {
-      padding-block: 13px;
-      margin-block: -13px;
-    }
   }
   .when {
     display: inline-flex;

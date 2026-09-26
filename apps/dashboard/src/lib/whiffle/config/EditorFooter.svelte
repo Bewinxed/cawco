@@ -105,6 +105,7 @@
     }
     .inner {
       flex-wrap: wrap;
+      justify-content: flex-end;
     }
     .inner :global(.delete),
     .spacer {
@@ -112,9 +113,6 @@
     }
     .down {
       flex-basis: 100%;
-    }
-    .inner :global(.footer-btn) {
-      flex: 1;
     }
   }
 </style>

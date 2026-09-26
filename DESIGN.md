@@ -104,8 +104,9 @@ The kit is `apps/dashboard/src/lib/components/ui`; shared recipes are the
   `.touch-hit` grows only its tappable area to 44×44 (a transparent `::after`),
   stopping at the midpoint where neighbours sit closer (`--hit-gap-x/-y`).
   An input draws no `::after`: it sits in a `<label class="touch-hit">`,
-  whose area focuses it. A link that clips for its ellipsis grows its padding
-  into an equal negative margin instead.
+  whose area focuses it. Text truncates in an inner span, never on the control.
+  A scroll container that would clip the areas pads into an equal negative
+  margin.
 - **Input, textarea, select trigger, native select**: 36px, `--radius-md`,
   `--type-body`, 1px `--border-control`, `--shadow-xs`; focus is the solid
   outline.
