@@ -575,8 +575,11 @@
   function onpick(event: Event): void {
     const input = event.currentTarget as HTMLInputElement;
     if (input.files?.length) {
+      // Copied first: `input.files` is live, and clearing the input below
+      // empties it while the reads are still walking it — a pick of several
+      // files kept only the first.
       // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — the file input clears synchronously below, independent of the read.
-      void addFiles(input.files);
+      void addFiles([...input.files]);
     }
     input.value = "";
   }

@@ -7,12 +7,13 @@
  * draws ONE composer for the whole deck and points it at the draft of
  * whichever conversation is in front, so a swipe between chats changes the
  * words in the box without the box moving. `SessionPane` holds one of these
- * per conversation for as long as the conversation is open.
+ * per conversation for as long as the conversation is open, and keeps it
+ * across a reload through `draft-store.ts`.
  */
 import type { SendExtras } from "../client.svelte";
 import { newId } from "../id";
 import type { CapturedSelection, PendingSelection } from "../preview/selection";
-import { readJson, writeJson } from "../storage";
+import type { DraftContent } from "./draft-store";
 
 export interface PendingImage {
   data: string;
@@ -28,33 +29,6 @@ export interface PendingText {
 
 /** The most element notes one message carries. */
 const MAX_SELECTIONS = 12;
-
-/**
- * Every conversation's unsent words, by session id. A reload — the "Whiffle
- * updated" toast asks for one — used to throw a half-written message away;
- * this is what brings it back. Text only: attachments and element notes are
- * in-memory and do not survive a reload.
- */
-const DRAFTS_KEY = "whiffle.drafts";
-
-/** The words stored for a conversation, or nothing. */
-export function storedDraft(sessionId: string): string {
-  return readJson<Record<string, string>>(DRAFTS_KEY, {})[sessionId] ?? "";
-}
-
-/** Stores a conversation's words; empty words drop its entry. */
-export function storeDraft(sessionId: string, text: string): void {
-  const drafts = readJson<Record<string, string>>(DRAFTS_KEY, {});
-  if ((drafts[sessionId] ?? "") === text) {
-    return;
-  }
-  if (text) {
-    drafts[sessionId] = text;
-  } else {
-    delete drafts[sessionId];
-  }
-  writeJson(DRAFTS_KEY, drafts);
-}
 
 export class ComposerDraft {
   text = $state("");
@@ -72,9 +46,44 @@ export class ComposerDraft {
    * clears the flag.
    */
   focusWanted = $state(false);
+  /**
+   * The message last emptied into a send, kept whole until the hub takes it
+   * (`settle`). A reload in that gap, or after the send failed, brings it
+   * back rather than losing it.
+   */
+  unsent = $state<DraftContent | null>(null);
 
-  constructor(text: string) {
-    this.text = text;
+  /**
+   * What should survive a reload right now: the message being written, or,
+   * while nothing new is being written, the one sent and not yet taken.
+   * Element notes are not "new writing": they stay in the draft through a
+   * send until the hub accepts them.
+   */
+  get keep(): DraftContent {
+    const writing =
+      this.text.length > 0 || this.images.length > 0 || this.texts.length > 0;
+    if (!writing && this.unsent) {
+      return this.unsent;
+    }
+    return {
+      text: this.text,
+      images: this.images,
+      texts: $state.snapshot(this.texts),
+      selections: $state.snapshot(this.selections),
+    };
+  }
+
+  /** Takes back a stored message, as it was: names, notes and all. */
+  fill(content: DraftContent): void {
+    this.text = content.text;
+    this.images = content.images;
+    this.texts = content.texts;
+    this.selections = content.selections;
+  }
+
+  /** The hub took the last send: nothing of it needs keeping. */
+  settle(): void {
+    this.unsent = null;
   }
 
   hasContent = $derived(
@@ -155,6 +164,12 @@ export class ComposerDraft {
       }));
     }
     const text = this.text.trim();
+    this.unsent = {
+      text,
+      images: this.images,
+      texts: $state.snapshot(this.texts),
+      selections: $state.snapshot(this.selections),
+    };
     this.text = "";
     this.images = [];
     this.texts = [];

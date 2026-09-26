@@ -53,11 +53,12 @@
   import PreviewSheet from "./preview/PreviewSheet.svelte";
   import { clip, type SuggestCandidate } from "./suggest.svelte";
   import Composer, { type Mention } from "./transcript/Composer.svelte";
+  import { ComposerDraft } from "./transcript/composer-draft.svelte";
   import {
-    ComposerDraft,
-    storeDraft,
-    storedDraft,
-  } from "./transcript/composer-draft.svelte";
+    type DraftContent,
+    loadDraft,
+    saveDraft,
+  } from "./transcript/draft-store";
   import Prompt from "./transcript/Prompt.svelte";
   import Transcript from "./transcript/Transcript.svelte";
   import TranscriptSkeleton from "./transcript/TranscriptSkeleton.svelte";
@@ -617,31 +618,68 @@
     (session?.pending ?? []).filter((p) => !routedToParent(p))
   );
 
-  /**
-   * What this conversation has half-written, whichever composer draws it,
-   * picked up from where the last visit left it. A pane is mounted once per
-   * conversation (PaneHost keys it by id), so the id read here is the pane's.
-   */
-  const draft = new ComposerDraft(storedDraft(untrack(() => viewId)));
+  /** What this conversation has half-written, whichever composer draws it. */
+  const draft = new ComposerDraft();
 
-  /**
-   * The words of a send the hub has not taken yet. The composer empties on
-   * Enter, but until the hub accepts the message these stay stored: a reload
-   * in that gap, or after a failed send, brings them back rather than losing
-   * them.
-   */
-  let unsent = $state("");
+  /* ---- the draft across a reload ---------------------------------------
+     Read back once when the pane opens, then written as it changes, at most
+     every 250ms, and at once when the page goes away or the pane closes. A
+     pane is mounted once per conversation (PaneHost keys it by id), so the
+     id is fixed for its life. Nothing is written until the read has landed:
+     the empty draft the pane starts with must not replace the stored one. */
+  let draftLoaded = $state(false);
+  $effect(() => {
+    const id = viewId;
+    untrack(() => {
+      // biome-ignore lint/complexity/noVoid: fire-and-forget — the read lands in the draft, and a refused read leaves the draft unstored rather than overwritten
+      void loadDraft(id).then((stored) => {
+        // Words typed while the read was in flight are the newer ones.
+        if (stored && !draft.hasContent) {
+          draft.fill(stored);
+        }
+        draftLoaded = true;
+      });
+    });
+  });
+
+  /** The draft as it should be stored, waiting for the next write. */
+  let unwritten: DraftContent | null = null;
+  let draftTimer: ReturnType<typeof setTimeout> | undefined;
+  function writeDraft(): void {
+    clearTimeout(draftTimer);
+    draftTimer = undefined;
+    if (!unwritten) {
+      return;
+    }
+    const next = unwritten;
+    unwritten = null;
+    // biome-ignore lint/complexity/noVoid: fire-and-forget — the next change writes again
+    void saveDraft(viewId, next);
+  }
 
   $effect(() => {
-    storeDraft(viewId, draft.text || unsent);
+    if (!draftLoaded) {
+      return;
+    }
+    // `keep` reads every stored piece, notes and attachments deeply, so any
+    // change to them lands here and schedules a write.
+    unwritten = draft.keep;
+    draftTimer ??= setTimeout(writeDraft, 250);
   });
 
   $effect(() => {
+    window.addEventListener("pagehide", writeDraft);
+    return () => {
+      window.removeEventListener("pagehide", writeDraft);
+      writeDraft();
+    };
+  });
+
+  // The hub took the send: the message it carried needs no keeping.
+  $effect(() => {
     const stage = latestCommandFor(viewId, "send")?.stage;
     if (stage === "accepted" || stage === "applied") {
-      untrack(() => {
-        unsent = "";
-      });
+      untrack(() => draft.settle());
     }
   });
 
@@ -709,9 +747,6 @@
     text: string,
     extras: SendExtras = {}
   ): Promise<string | undefined> {
-    // The composer has already emptied; these words stay stored until the
-    // hub takes them, whatever happens below.
-    unsent = text;
     if (!machineId) {
       // A tripwire, not a guard anybody should hit: a pane with no machine
       // renders no composer at all. A render race can still land one keystroke
