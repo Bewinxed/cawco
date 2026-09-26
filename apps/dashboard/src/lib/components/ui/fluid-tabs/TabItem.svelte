@@ -86,7 +86,7 @@
 >
   <svelte:element
     aria-selected={selected}
-    class="hit"
+    class="hit touch-hit"
     draggable={href ? 'false' : undefined}
     {href}
     onclick={choose}

@@ -496,22 +496,24 @@
 
     <!-- Search + New session row — one visual block -->
     <div class="flex flex-col gap-0.5">
-      <div class="group/search relative">
-        <span
-          class="{SLOT} pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-        >
-          <IconSearch class={SLOT_GLYPH} />
-        </span>
+      <div class="group/search relative pointer-coarse:mb-1.5">
         <!-- A button dressed as the field: it opens the palette, which has
              the real input. A bare input here took typing and did nothing. -->
         <button
           aria-label="Jump to session"
-          class="focus-ring touch-hit flex h-9 w-full items-center rounded-md border border-[var(--border-control)] bg-[var(--surface-raised)] pr-14 pl-[38px] text-left text-body text-muted-foreground shadow-xs outline-none [transition:var(--transition-control)]"
+          class="focus-ring touch-hit flex h-9 w-full [--hit-gap-y:8px] items-center rounded-md border border-[var(--border-control)] bg-[var(--surface-raised)] pr-14 pl-[38px] text-left text-body text-muted-foreground shadow-xs outline-none [transition:var(--transition-control)]"
           onclick={onjump}
           type="button"
         >
           Jump…
         </button>
+        <!-- After the button: the button is positioned on a coarse pointer (its
+             touch area), and a glyph before it would paint beneath it. -->
+        <span
+          class="{SLOT} pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
+        >
+          <IconSearch class={SLOT_GLYPH} />
+        </span>
         <kbd
           class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 font-sans
                   text-[length:var(--text-label)] text-muted-foreground opacity-0 transition-opacity duration-75

@@ -734,26 +734,30 @@
       </div>
     {/if}
 
-    <textarea
-      aria-activedescendant={activeDescendant}
-      aria-autocomplete="list"
-      aria-controls="composer-menu"
-      aria-expanded={menuOpen}
-      aria-label="Message the agent"
-      onblur={() => {
+    <!-- A label, so the pill's padding above and below the 34px field
+         focuses it: its touch area is the field's. -->
+    <label class="field touch-hit">
+      <textarea
+        aria-activedescendant={activeDescendant}
+        aria-autocomplete="list"
+        aria-controls="composer-menu"
+        aria-expanded={menuOpen}
+        aria-label="Message the agent"
+        onblur={() => {
         dismissed = true;
       }}
-      onclick={noteCaret}
-      oninput={noteCaret}
-      {onkeydown}
-      onkeyup={noteCaret}
-      {onpaste}
-      onselect={noteCaret}
-      placeholder="Message the agent…  /  for commands, @ to mention"
-      role="combobox"
-      bind:this={field}
-      bind:value={draft.text}
-    ></textarea>
+        onclick={noteCaret}
+        oninput={noteCaret}
+        {onkeydown}
+        onkeyup={noteCaret}
+        {onpaste}
+        onselect={noteCaret}
+        placeholder="Message the agent…  /  for commands, @ to mention"
+        role="combobox"
+        bind:this={field}
+        bind:value={draft.text}
+      ></textarea>
+    </label>
 
     <div class="ctrls">
       {@render leading?.()}
@@ -850,6 +854,11 @@
     align-items: flex-end;
     gap: var(--space-2);
     box-shadow: var(--shadow-tile);
+  }
+  .field {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
   }
   textarea {
     flex: 1 1 auto;

@@ -396,7 +396,10 @@
   </aside>
 
   <Sheet.Root bind:open={railOpen}>
-    <Sheet.Content class="w-[284px] p-0 min-[900px]:hidden" side="left">
+    <Sheet.Content
+      class="rail-sheet w-[284px] p-0 min-[900px]:hidden"
+      side="left"
+    >
       <Sheet.Header class="sr-only">
         <Sheet.Title>Navigation</Sheet.Title>
       </Sheet.Header>
@@ -546,6 +549,13 @@
     /* Exclude from view transitions so the sidebar stays rock-still
        while the content area cross-fades on spoke navigation. */
     view-transition-name: sidebar;
+  }
+  /* In the sheet the close button sits in the brand row's corner (16px in,
+     30px wide, and 7px of touch area around it): the brand row stops short of
+     it, so neither one's area lies under the other. */
+  :global(.rail-sheet [aria-label="Workspace"]) {
+    width: auto;
+    margin-inline-end: 46px;
   }
   .grip {
     position: absolute;
