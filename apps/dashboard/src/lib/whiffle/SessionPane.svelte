@@ -11,11 +11,11 @@
    * scroll offset and half-typed message survive a switch — nothing here
    * unmounts on navigation.
    *
-   * On the phone's deck the composer is not drawn here: the deck draws one
-   * for every conversation, so a swipe moves the transcript and never the box
-   * being typed in. This pane then lends that composer its session instead
-   * (`composer-dock.svelte.ts`). The half-typed message is this pane's either
-   * way — `draft` below.
+   * Where a finger can swipe between a group's conversations, the composer
+   * is not drawn here: the group draws one for all of them, so a swipe moves
+   * the transcript and never the box being typed in. This pane then lends
+   * that composer its session instead (`composer-dock.svelte.ts`). The
+   * half-typed message is this pane's either way — `draft` below.
    */
   import { untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
@@ -64,8 +64,9 @@
   import {
     type ComposerBinding,
     composerBindings,
-    dockedComposer,
+    groupComposerHeights,
   } from "./workspace/composer-dock.svelte";
+  import { workspace } from "./workspace/workspace.svelte";
 
   let {
     viewId,
@@ -80,8 +81,8 @@
   }: {
     viewId: string;
     /**
-     * The phone's deck draws the composer for every conversation; this pane
-     * lends it this session rather than drawing one of its own.
+     * The group draws the composer (its tabs can be swiped under a finger);
+     * this pane lends it this session rather than drawing one of its own.
      */
     docked: boolean;
     browsing: string | null;
@@ -682,8 +683,14 @@
    * row that raised a permission is never the row the permission covers.
    */
   let composerHeight = $state(0);
-  /** The composer column this pane's transcript makes room for: its own, or the deck's. */
-  const clearance = $derived(docked ? dockedComposer.height : composerHeight);
+  /** The composer column this pane's transcript makes room for: its own, or its group's. */
+  const clearance = $derived.by(() => {
+    if (!docked) {
+      return composerHeight;
+    }
+    const group = workspace.leafOf(viewId);
+    return (group && groupComposerHeights.get(group.id)) ?? 0;
+  });
 
   /**
    * The gap in front of the send command: a dead session is revived before the

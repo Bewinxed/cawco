@@ -1,14 +1,15 @@
 /**
- * The phone's one composer, and the conversations that lend it their
+ * A group's one composer, and the conversations that lend it their
  * sessions.
  *
- * On a desk every pane draws its own composer. On the deck the composer is
- * not part of a pane at all: a swipe between chats moves the transcripts,
- * and the box being typed in stays exactly where it is, keyboard up. So a
- * pane on the deck draws no composer; it publishes what its composer would
- * have been given — its draft, its send, its parked prompts, its controls —
- * under its id, and the deck draws one composer over whichever id is in
- * front.
+ * Under a cursor every pane draws its own composer. Wherever a finger can
+ * swipe between a group's conversations — the phone's deck, a tablet's
+ * grid — the composer is not part of a pane at all: the swipe moves the
+ * transcripts, and the box being typed in stays exactly where it is,
+ * keyboard up. So such a pane draws no composer; it publishes what its
+ * composer would have been given — its draft, its send, its parked
+ * prompts, its controls — under its id, and its group (`PaneLeaf`) draws
+ * one composer over whichever id is its active tab.
  */
 import type { AvailableCommand } from "@whiffle/core";
 import type { Snippet } from "svelte";
@@ -42,11 +43,12 @@ export interface ComposerBinding {
   readonly transcriptShare: number;
 }
 
-/** The conversations on the deck that can be written to, by id. */
+/** The conversations drawn by their group's composer that can be written to, by id. */
 export const composerBindings = new SvelteMap<string, ComposerBinding>();
 
 /**
- * The one composer's measured height. Every pane on the deck reserves it at
- * the foot of its transcript, so the last row is never under the box.
+ * Each group's composer height, by group id. Every pane in the group
+ * reserves it at the foot of its transcript, so the last row is never under
+ * the box. A group drawing no composer has no entry.
  */
-export const dockedComposer = $state({ height: 0 });
+export const groupComposerHeights = new SvelteMap<string, number>();

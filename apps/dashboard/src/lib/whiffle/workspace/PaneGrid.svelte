@@ -35,12 +35,18 @@
    * mounts and builds the neighbouring tabs so a swipe reveals a transcript
    * instead of a blank frame (PaneLeaf). That work is worth paying for where
    * the swipe exists, and is pure waste where it cannot happen.
+   *
+   * The same line decides who draws the composer. Where a finger can swipe
+   * a group's conversations, the group draws one composer outside them
+   * (`PaneLeaf`), so the box never travels with a transcript; under a cursor
+   * each pane keeps its own.
    */
   const coarse = new IsCoarsePointer();
 </script>
 
 {#if node.t === 'l'}
   <PaneLeaf
+    docked={coarse.current}
     hosted={workspace.root.id === node.id}
     leaf={node}
     swipeable={coarse.current && workspace.focusedLeafId === node.id}

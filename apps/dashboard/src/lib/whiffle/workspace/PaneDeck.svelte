@@ -15,17 +15,8 @@
    * frame instead was the stutter: a whole transcript's first paint landed
    * in the same frame as the lift, and both the transition and the first
    * few drag frames went with it.
-   *
-   * The composer is the deck's, not a card's: one, over whichever
-   * conversation is in front. The cards and the transcripts in them move
-   * under it; the box being typed in never does, so a keyboard that is up
-   * stays up across a swipe. When the swipe lands on another conversation
-   * the same box shows that conversation's draft and answers to its session.
    */
-  import Composer from "../transcript/Composer.svelte";
-  import { composerBindings, dockedComposer } from "./composer-dock.svelte";
   import { createDeck } from "./deck.svelte";
-  import { swipeMotion } from "./gesture.svelte";
   import PaneLeaf from "./PaneLeaf.svelte";
   import { workspace } from "./workspace.svelte";
 
@@ -37,19 +28,6 @@
   const focusedIndex = $derived(
     workspace.leaves.findIndex((leaf) => leaf.id === workspace.focusedLeafId)
   );
-
-  /** The conversation in front, if it can be written to from here. */
-  const bound = $derived.by(() => {
-    const id = workspace.activeOf(workspace.focusedLeafId);
-    return id ? composerBindings.get(id) : undefined;
-  });
-
-  // No composer, no room to keep for one.
-  $effect(() => {
-    if (!bound) {
-      dockedComposer.height = 0;
-    }
-  });
 </script>
 
 <!-- The card's place in the stack is its delta, and the stylesheet parks it
@@ -67,37 +45,11 @@
     >
       <div class="lift">
         <div class="clip">
-          <PaneLeaf {leaf} swipeable={focused} />
+          <PaneLeaf docked {leaf} swipeable={focused} />
         </div>
       </div>
     </div>
   {/each}
-
-  <!-- Over the transcript's share of the card, as the pane's own composer
-       was: a side preview (a tablet held upright is wide enough for one)
-       keeps the rest. -->
-  {#if bound}
-    <div class="dock" style:width="{bound.transcriptShare * 100}%">
-      <Composer
-        busy={bound.busy}
-        commands={bound.commands}
-        draft={bound.draft}
-        held={swipeMotion.moving}
-        leading={bound.leading}
-        mentions={bound.mentions}
-        oninterruptsend={bound.oninterruptsend}
-        onmenu={bound.onmenu}
-        onstop={bound.onstop}
-        onsubmit={bound.onsubmit}
-        paneVisible={bound.paneVisible}
-        previewPhone={bound.previewPhone}
-        prompts={bound.prompts}
-        sending={bound.sending}
-        suggest={bound.suggest}
-        bind:height={dockedComposer.height}
-      />
-    </div>
-  {/if}
 
   <!-- Graphite, never the accent: a page control is position, and the one
        loud colour in this product means a session is asking for something. -->
@@ -218,14 +170,6 @@
      paints through a hidden ancestor. */
   .card-hidden {
     visibility: hidden;
-    pointer-events: none;
-  }
-
-  /* The composer's box: it positions itself at the foot of this, and lets
-     every touch outside itself through to the transcript. */
-  .dock {
-    position: absolute;
-    inset: 0 auto 0 0;
     pointer-events: none;
   }
 
