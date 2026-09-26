@@ -480,13 +480,31 @@
     max-height: calc(88dvh - 24px - env(safe-area-inset-bottom));
     overflow: hidden;
   }
-  /* The two trailing controls sit 2px apart: their touch areas meet
-     between them. */
+  /* The two trailing controls sit 2px apart and their touch areas meet
+     between them. On a coarse pointer the close button stands 24px off the
+     chevron and 8px off the tab's end, so each 44px area reaches its full
+     width before meeting a neighbour's. The chevron's leading half falls on
+     its own tab's label, which opens the same details. */
   .tdetails,
   .tclose {
     --hit-gap-x: 2px;
+
+    @media (pointer: coarse) {
+      --hit-gap-x: 24px;
+    }
+  }
+  /* The session track scrolls sideways, and a scroll container clips on both
+     axes; its transparent padding grows into an equal negative margin on a
+     coarse pointer, so the controls' touch areas above and below the 32px
+     tabs sit inside its clip and nothing moves. */
+  :global(.session-tabs .ff-tabs-list.scrollable) {
+    @media (pointer: coarse) {
+      padding-block: calc(var(--pad) + 10px) 10px;
+      margin-block: -10px;
+    }
   }
   .tdetails {
+    flex: none;
     display: grid;
     place-items: center;
     width: 22px;
@@ -576,6 +594,13 @@
        transcript's own surface — reads as the page it opens. */
     background: var(--surface-recess);
     view-transition-class: tabs;
+
+    /* The tab controls' touch areas reach 6px past the row's bottom edge:
+       on a coarse pointer the row stacks above the transcript beneath it. */
+    @media (pointer: coarse) {
+      position: relative;
+      z-index: 1;
+    }
   }
   :global(.session-tabs.hosted) {
     flex: 1 1 0;
@@ -643,6 +668,10 @@
     inline-size: 20px;
     block-size: 20px;
     margin-inline-start: 2px;
+
+    @media (pointer: coarse) {
+      margin-inline: 24px 8px;
+    }
     border: 0;
     padding: 0;
     background: none;
