@@ -155,7 +155,7 @@
       inset: 0;
       z-index: 0;
       border-radius: var(--radius) var(--radius) 0 0;
-      background: var(--surface-recess, transparent);
+      background: var(--surface-recess-deep);
 
       @media (prefers-reduced-motion: no-preference) {
         transition:

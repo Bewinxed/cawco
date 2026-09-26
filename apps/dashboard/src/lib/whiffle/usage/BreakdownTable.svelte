@@ -155,14 +155,14 @@
     <!-- biome-ignore lint/a11y/useSemanticElements: a fieldset's default border/padding and legend semantics don't fit this toolbar; role="group" already conveys it to AT -->
     <div
       aria-label="Harness"
-      class="flex gap-1 rounded-[var(--radius-sm)] bg-muted p-0.5"
+      class="flex gap-1 rounded-[var(--radius-sm)] bg-[var(--surface-recess-deep)] p-0.5"
       role="group"
     >
       <button
         aria-pressed={harness === 'claude'}
         class="rounded-[var(--radius-xs)] px-2.5 py-1 text-label transition-colors duration-150 ease-out
                {harness === 'claude'
-          ? 'bg-card text-foreground shadow-sm'
+          ? 'bg-[var(--surface-lift)] text-foreground shadow-[var(--shadow-raised)]'
           : 'text-muted-foreground hover:text-foreground'}"
         onclick={() => {
           harness = 'claude';
@@ -175,7 +175,7 @@
         aria-pressed={harness === 'opencode'}
         class="rounded-[var(--radius-xs)] px-2.5 py-1 text-label transition-colors duration-150 ease-out
                {harness === 'opencode'
-          ? 'bg-card text-foreground shadow-sm'
+          ? 'bg-[var(--surface-lift)] text-foreground shadow-[var(--shadow-raised)]'
           : 'text-muted-foreground hover:text-foreground'}"
         onclick={() => {
           harness = 'opencode';

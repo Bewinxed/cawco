@@ -594,10 +594,11 @@
     border-bottom: 1px solid var(--border-hairline);
     view-transition-name: topbar;
   }
-  /* Hosting the tabs, the bar is the shelf they stand on: one step darker
-     than the transcript, so the chosen tab — a sheet in the transcript's
-     own surface — reads as the page it opens. The hairline sits in the
-     bar's bottom pixel, where the sheet ends and covers it. */
+  /* Hosting the tabs, the bar is the shelf they stand on: two steps below
+     the transcript and one below an unchosen tab, so the chosen tab — a
+     sheet in the transcript's own surface — reads as the page it opens.
+     The hairline sits in the bar's bottom pixel, where the sheet ends and
+     covers it. */
   /* Hosting the tabs on a wide screen, the bar gives the first tab no
      extra inset: the track's own flare room is the margin. Narrower, the
      menu button leads and keeps its inset. */
@@ -611,7 +612,7 @@
     background:
       linear-gradient(var(--border-hairline), var(--border-hairline)) bottom /
       100% 1px no-repeat,
-      var(--surface-recess);
+      var(--surface-shelf);
   }
   .back {
     display: inline-flex;

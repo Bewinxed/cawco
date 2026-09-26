@@ -303,6 +303,9 @@
   --surface-raised: var(--neutral-1);
   --surface-recess: var(--neutral-3);
   --surface-recess-deep: var(--neutral-4);
+  /* The bar folder tabs stand on: a step below recess-deep, so bar,
+     unselected tab (recess-deep) and chosen sheet (recess) are three steps. */
+  --surface-shelf: var(--neutral-5);
   --surface-lift: var(--neutral-1);
   --surface-fill: var(--neutral-3);
   --surface-hover: var(--neutral-2);
@@ -526,6 +529,7 @@
   --surface-raised: var(--neutral-3);
   --surface-recess: var(--neutral-2);
   --surface-recess-deep: var(--neutral-1);
+  --surface-shelf: oklch(from var(--neutral-1) calc(l - 0.03) c h);
   --surface-lift: var(--neutral-6);
   --surface-fill: var(--neutral-5);
   --surface-hover: var(--neutral-4);

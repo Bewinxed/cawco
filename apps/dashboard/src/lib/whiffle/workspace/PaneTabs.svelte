@@ -578,9 +578,10 @@
     min-inline-size: 0;
     padding-block: 4px 0;
     padding-inline: var(--space-7) var(--space-4);
-    /* One step darker than the transcript, so the chosen tab — in the
-       transcript's own surface — reads as the page it opens. */
-    background: var(--surface-recess);
+    /* The shelf: two steps below the transcript, one below an unchosen
+       tab, so the chosen tab — in the transcript's own surface — reads as
+       the page it opens. */
+    background: var(--surface-shelf);
     view-transition-class: tabs;
   }
   :global(.session-tabs.hosted) {

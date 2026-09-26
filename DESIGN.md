@@ -20,9 +20,12 @@ raised on it. A value is never put in a sunken well.
 | `--surface-raised` | n-1 | n-3 | cards, menus, popovers, dialog body |
 | `--surface-recess` | n-3 | n-2 | the frame: field, top bar, dialog tray, badges, table heads |
 | `--surface-recess-deep` | n-4 | n-1 | groove of tabs, toggle groups, progress |
+| `--surface-shelf` | n-5 | n-1 − 0.03 L | the bar folder tabs stand on (session tab row, hosted top bar) |
 | `--surface-lift` | n-1 | n-6 | the thumb in a groove |
 | `--surface-fill` | n-3 | n-5 | a pressed or selected item |
 | `--surface-hover` | n-2 | n-4 | hover on any control or row |
+
+Folder tabs are a three-step ladder: `--surface-shelf` bar, `--surface-recess-deep` unchosen tab, `--surface-recess` chosen sheet (the pane body's own surface), hover `--surface-hover`.
 
 `n-*` is the `--neutral-*` ramp. Dark flips the polarity: a groove goes below the
 card, a lift goes above it.

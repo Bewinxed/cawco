@@ -135,13 +135,15 @@
         Tokens per day, stacked by harness.
       </p>
     </div>
-    <div class="flex gap-1 rounded-[var(--radius-sm)] bg-muted p-0.5">
+    <div
+      class="flex gap-1 rounded-[var(--radius-sm)] bg-[var(--surface-recess-deep)] p-0.5"
+    >
       {#each RANGES as r (r.id)}
         <button
           aria-pressed={range === r.id}
           class="rounded-[var(--radius-xs)] px-2.5 py-1 text-label tabular-nums transition-colors duration-150 ease-out
                  {range === r.id
-            ? 'bg-card text-foreground shadow-sm'
+            ? 'bg-[var(--surface-lift)] text-foreground shadow-[var(--shadow-raised)]'
             : 'text-muted-foreground hover:text-foreground'}"
           onclick={() => {
             range = r.id;
