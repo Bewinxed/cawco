@@ -562,7 +562,9 @@
         </div>
       {:else}
         <div class="bar">
-          <div class="search">
+          <!-- A label, so its touch area around the 36px field focuses it. -->
+          <!-- biome-ignore lint/a11y/noLabelWithoutControl: the kit Input renders the native <input> this label wraps -->
+          <label class="search touch-hit">
             <span class="lead"><IconSearch /></span>
             <Input
               aria-label="Search sessions"
@@ -573,7 +575,7 @@
               placeholder="Search sessions…"
               bind:value={search}
             />
-          </div>
+          </label>
 
           <Select.Root
             onValueChange={(v) => {
@@ -963,6 +965,7 @@
   }
   .search {
     position: relative;
+    display: block;
     width: 237px;
   }
   .search .lead {
