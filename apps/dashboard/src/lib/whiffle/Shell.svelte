@@ -577,12 +577,9 @@
   .top {
     /* The tabs' own height plus a breath above them: 32px folder tabs on
        a 4px track pad, 8px of air. Touch keeps the taller bar so every
-       control in it can take the 44px thumb floor. */
-    height: 44px;
-
-    @media (pointer: coarse) {
-      height: 57px;
-    }
+       control in it can take the 44px thumb floor. `--c-top-bar-h` carries
+       both, so what floats under the bar lands under it. */
+    height: var(--c-top-bar-h);
     flex-shrink: 0;
     display: flex;
     align-items: center;

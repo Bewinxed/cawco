@@ -518,6 +518,9 @@
   --c-pill-gap: 6px;
   --c-pill-fs: var(--text-label);
   --c-nav-h: 40px;
+  /* The shell's top bar: its 32px tabs and a breath. Whatever floats under
+     the bar (the phone's toasts) reads this rather than repeating it. */
+  --c-top-bar-h: 44px;
   --c-card-pad: 14px;
   --c-card-gap: 10px;
 }
@@ -1030,6 +1033,8 @@
 @media (pointer: coarse) {
   :root {
     --c-nav-h: 44px;
+    /* Taller under a finger, so every control in the bar takes the 44px floor. */
+    --c-top-bar-h: 57px;
     --c-btn-h: 48px;
     --c-pill-h: 28px;
     --c-mark: 30px;
