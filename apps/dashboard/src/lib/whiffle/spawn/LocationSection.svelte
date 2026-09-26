@@ -261,7 +261,11 @@
           </div>
           <div class="use">
             <span class="path" title={path}>{path}</span>
-            <button class="ns-btn sm primary" onclick={useFolder} type="button">
+            <button
+              class="ns-btn sm primary touch-hit"
+              onclick={useFolder}
+              type="button"
+            >
               Use this folder
             </button>
           </div>

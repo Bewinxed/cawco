@@ -1,8 +1,9 @@
 <script lang="ts" module>
-  import { tv, type VariantProps } from "tailwind-variants";
+  import type { VariantProps } from "tailwind-variants";
+  import { tv } from "$lib/utils.js";
 
   export const toggleVariants = tv({
-    base: "group/toggle focus-ring inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-sm font-medium text-[var(--ink-strong)] text-label outline-none [transition:var(--transition-control),transform_160ms_var(--ease-out)] hover:bg-[var(--surface-hover)] disabled:pointer-events-none disabled:opacity-50 aria-pressed:bg-[var(--surface-fill)] data-[state=on]:bg-[var(--surface-fill)] active:not-disabled:[transform:scale(var(--press-scale))] [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    base: "group/toggle focus-ring touch-hit inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-sm font-medium text-[var(--ink-strong)] text-label outline-none [transition:var(--transition-control),transform_160ms_var(--ease-out)] hover:bg-[var(--surface-hover)] disabled:pointer-events-none disabled:opacity-50 aria-pressed:bg-[var(--surface-fill)] data-[state=on]:bg-[var(--surface-fill)] active:not-disabled:[transform:scale(var(--press-scale))] [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
     variants: {
       variant: {
         default: "bg-transparent",
@@ -11,6 +12,7 @@
       size: {
         default:
           "h-9 min-w-9 px-3 has-data-[icon=inline-end]:pr-2.5 has-data-[icon=inline-start]:pl-2.5",
+        xs: "h-6 min-w-6 gap-1.5 px-2 text-meta has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
         sm: "h-[30px] min-w-[30px] px-2.5 has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
         lg: "h-11 min-w-11 px-4 has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
       },

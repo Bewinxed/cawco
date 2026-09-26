@@ -44,6 +44,14 @@
     color: var(--ink-strong);
     outline: none;
   }
+  /* An input draws no ::after, so on a coarse pointer its padding grows to a
+     44px box and an equal negative margin keeps the layout still. */
+  @media (pointer: coarse) {
+    .title-input {
+      padding-block: 12px;
+      margin-block: -10px;
+    }
+  }
   .title-input.mono {
     font-family: var(--font-mono);
   }

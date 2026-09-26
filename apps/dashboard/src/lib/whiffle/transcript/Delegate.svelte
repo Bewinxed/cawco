@@ -371,7 +371,7 @@
       {#if id}
         <a
           aria-label="Open {label} in its own view"
-          class="jump"
+          class="jump touch-hit"
           href={conversationHref(id, whiffle.instanceIndex)}
           title="Open {label} in its own view"
         >
@@ -477,6 +477,7 @@
      its own 26px so a click on it never toggles. The trigger is a bits-ui
      element, so it is addressed globally on purpose. */
   .head {
+    --hit-gap-x: var(--space-1);
     display: flex;
     align-items: center;
     gap: var(--space-1);
@@ -823,12 +824,8 @@
     }
   }
   @media (pointer: coarse) {
-    :global(.delegate .bhead),
-    .jump {
+    :global(.delegate .bhead) {
       min-height: 44px;
-    }
-    .jump {
-      width: 44px;
     }
   }
   @media (prefers-reduced-motion: reduce) {

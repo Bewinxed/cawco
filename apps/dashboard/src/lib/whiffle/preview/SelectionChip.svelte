@@ -20,7 +20,7 @@
 <span class="selection-chip">
   <button
     aria-label={`Edit selection… ${label}`}
-    class="body"
+    class="body touch-hit"
     onclick={onedit}
     type="button"
     bind:this={anchor}
@@ -39,7 +39,7 @@
   </button>
   <button
     aria-label="Remove selection"
-    class="remove"
+    class="remove touch-hit"
     onclick={onremove}
     type="button"
   >
@@ -48,7 +48,10 @@
 </span>
 
 <style>
+  /* The body and the remove button touch: their touch areas meet at the
+     seam. */
   .selection-chip {
+    --hit-gap-x: 0px;
     display: inline-flex;
     align-items: center;
     max-width: 100%;
@@ -130,14 +133,6 @@
   @media (hover: hover) {
     button:hover {
       background: var(--surface-hover);
-    }
-  }
-  @media (pointer: coarse) {
-    button {
-      min-height: 44px;
-    }
-    .remove {
-      min-width: 44px;
     }
   }
 </style>

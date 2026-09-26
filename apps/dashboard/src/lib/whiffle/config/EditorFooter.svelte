@@ -115,7 +115,6 @@
     }
     .inner :global(.footer-btn) {
       flex: 1;
-      height: 44px;
     }
   }
 </style>

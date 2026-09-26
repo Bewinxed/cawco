@@ -312,7 +312,7 @@
         </h2>
         <button
           aria-label="Copy link"
-          class="icon-action"
+          class="icon-action touch-hit"
           onclick={() => copyToClipboard('Link', new URL(href, location.origin).href)}
           type="button"
         >
@@ -705,12 +705,6 @@
     .cwd:hover,
     .tools:hover {
       color: var(--ink-strong);
-    }
-  }
-  @media (pointer: coarse) {
-    .icon-action {
-      width: 44px;
-      height: 44px;
     }
   }
   @media (max-width: 640px) {

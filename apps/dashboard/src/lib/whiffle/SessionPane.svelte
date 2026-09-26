@@ -974,7 +974,9 @@
                 : "This transcript couldn't be read"}
                   </h2>
                   <p>{fault.message}</p>
-                  <button onclick={retry} type="button">Try again</button>
+                  <button class="touch-hit" onclick={retry} type="button">
+                    Try again
+                  </button>
                 </div>
               {:else if unaddressable}
                 <div class="stateful">
@@ -985,7 +987,7 @@
                     live on a machine that is offline, or it may have been
                     deleted.
                   </p>
-                  <a href="/session">Back to the fleet</a>
+                  <a class="touch-hit" href="/session">Back to the fleet</a>
                 </div>
               {:else if empty && session.messages.length === 0}
                 <div class="stateful">
@@ -1252,12 +1254,6 @@
   .stateful button:active,
   .stateful a:active {
     transform: scale(0.96);
-  }
-  @media (pointer: coarse) {
-    .stateful button,
-    .stateful a {
-      height: 44px;
-    }
   }
   @media (prefers-reduced-motion: reduce) {
     .stateful button,

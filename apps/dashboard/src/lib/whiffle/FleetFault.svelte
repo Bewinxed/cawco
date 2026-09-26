@@ -173,7 +173,7 @@
     {#if compact}
       <button
         aria-expanded={expanded}
-        class="disclose more-toggle"
+        class="disclose more-toggle touch-hit"
         onclick={() => {
           expanded = !expanded;
         }}
@@ -237,7 +237,7 @@
       {:else}
         <button
           aria-expanded={disclosureOpen}
-          class="disclose"
+          class="disclose touch-hit"
           onclick={() => { disclosureOpen = !disclosureOpen; }}
           type="button"
         >
@@ -449,11 +449,6 @@
   }
   .more-toggle {
     margin-inline-start: auto;
-  }
-  @media (pointer: coarse) {
-    .disclose {
-      min-height: 44px;
-    }
   }
   .said {
     max-height: 10rem;

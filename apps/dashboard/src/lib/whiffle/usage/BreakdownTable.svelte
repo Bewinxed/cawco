@@ -160,7 +160,7 @@
     >
       <button
         aria-pressed={harness === 'claude'}
-        class="rounded-[var(--radius-xs)] px-2.5 py-1 text-label transition-colors duration-150 ease-out
+        class="touch-hit rounded-[var(--radius-xs)] px-2.5 py-1 [--hit-gap-x:4px] text-label transition-colors duration-150 ease-out
                {harness === 'claude'
           ? 'bg-card text-foreground shadow-sm'
           : 'text-muted-foreground hover:text-foreground'}"
@@ -173,7 +173,7 @@
       </button>
       <button
         aria-pressed={harness === 'opencode'}
-        class="rounded-[var(--radius-xs)] px-2.5 py-1 text-label transition-colors duration-150 ease-out
+        class="touch-hit rounded-[var(--radius-xs)] px-2.5 py-1 [--hit-gap-x:4px] text-label transition-colors duration-150 ease-out
                {harness === 'opencode'
           ? 'bg-card text-foreground shadow-sm'
           : 'text-muted-foreground hover:text-foreground'}"
@@ -208,7 +208,7 @@
             <Table.Head class="num">
               <button
                 aria-pressed={sortBy === column.key}
-                class="sortbtn"
+                class="sortbtn touch-hit"
                 onclick={() => sort(column.key)}
                 type="button"
               >

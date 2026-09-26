@@ -306,12 +306,6 @@
   border-color: transparent;
   cursor: default;
 }
-@media (max-width: 640px) {
-  .ns-theme .ns-chip-btn {
-    height: 44px;
-    padding: 0 12px;
-  }
-}
 /* A button at chip scale, for actions that sit among chips. */
 .ns-theme .ns-btn.xs {
   gap: 6px;

@@ -218,6 +218,9 @@
       --crepe-color-hover: transparent;
     }
   }
+  /* Milkdown renders its own toolbar and menus, so they cannot carry
+     `.touch-hit`; on a coarse pointer they keep a 44px box. Links in the
+     text flow with it. */
   @media (pointer: coarse) {
     .crepe-host
       :global(
@@ -226,17 +229,12 @@
             button,
             input,
             [role="button"],
-            a,
             .operation-item,
             .milkdown-slash-menu li
           )
       ) {
-      min-width: var(--c-btn-h);
-      min-height: var(--c-btn-h);
-    }
-    .crepe-host :global(.milkdown a) {
-      display: inline-flex;
-      align-items: center;
+      min-width: 44px;
+      min-height: 44px;
     }
   }
 </style>

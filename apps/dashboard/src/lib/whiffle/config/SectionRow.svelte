@@ -201,13 +201,21 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  /* A 30px ⋯ and a 32px switch: on a coarse pointer the gap opens to 14px,
+     so each touch area reaches 44px before meeting its neighbour's. */
   .controls {
+    --hit-gap-x: 8px;
     position: relative;
     z-index: 1;
     display: flex;
     flex: none;
     align-items: center;
     gap: 8px;
+
+    @media (pointer: coarse) {
+      --hit-gap-x: 14px;
+      gap: 14px;
+    }
   }
   .below:empty {
     display: none;

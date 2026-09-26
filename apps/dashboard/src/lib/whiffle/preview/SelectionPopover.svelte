@@ -130,9 +130,11 @@
     ></label
   >
   <div class="actions">
-    <button onclick={onremove} type="button">Remove selection</button>
+    <button class="touch-hit" onclick={onremove} type="button">
+      Remove selection
+    </button>
     {#if phone}
-      <button onclick={close} type="button">Done</button>
+      <button class="touch-hit" onclick={close} type="button">Done</button>
     {/if}
   </div>
 {/snippet}
@@ -281,16 +283,6 @@
   button:focus-visible {
     outline: 2px solid var(--focus-ring);
     outline-offset: 2px;
-  }
-  @media (pointer: coarse) {
-    input {
-      font-size: 16px;
-    }
-    button,
-    input {
-      min-height: 44px;
-      min-width: 44px;
-    }
   }
   :global(.selection-note-sheet) input {
     font-size: 16px;

@@ -128,14 +128,14 @@
       <div class="actions">
         <span class="error" role="alert">{createError}</span>
         <button
-          class="ns-btn sm"
+          class="ns-btn sm touch-hit"
           onclick={() => { draft = null; }}
           type="button"
         >
           Back
         </button>
         <button
-          class="ns-btn sm primary"
+          class="ns-btn sm primary touch-hit"
           disabled={creating || !(draft.name.trim() && draft.path.trim())}
           onclick={create}
           type="button"

@@ -22,12 +22,12 @@
   import { page } from "$app/state";
   import WorkflowRail from "$lib/components/features/workflows/WorkflowRail.svelte";
   import { Button } from "$lib/components/ui/button";
-  import { Checkbox } from "$lib/components/ui/checkbox";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Sidebar from "$lib/components/ui/sidebar";
   import ThemeSwitcher from "$lib/components/ui/ThemeSwitcher.svelte";
+  import { Toggle } from "$lib/components/ui/toggle";
   import {
     IconAssistantDuo,
     IconBoxDuo,
@@ -128,6 +128,10 @@
    *  24px of nothing between every section; the label already separates them. */
   const GROUP = "px-2 py-1";
   const GROUP_LABEL = "px-2.5 text-[length:var(--text-label)]";
+  /** A label carrying a control (the sort, the delegates toggle): on a coarse
+   *  pointer it takes a 44px row, so the control's touch area stays inside
+   *  it, clear of the session row below. */
+  const CONTROL_LABEL = "pr-1 pointer-coarse:h-11";
   /** 2px, not 4: these are rows of one list, not six unrelated buttons. */
   const MENU = "gap-0.5";
   /**
@@ -419,28 +423,25 @@
 <!-- When a session last moved, in the ~28px a rail can spare. Every session
      row in the rail renders this, so "which one was I just in" is answered by
      looking down one column instead of opening six of them. -->
-<!-- The delegates checkbox, on the label of every section it filters. One
+<!-- The delegates toggle, on the label of every section it filters. One
      switch behind both: "do I want the work I handed off in this rail" is a
      single question, and a reader who asks it of the running list means it of
      the sleeping one too. The number is what the section is not showing. -->
-{#snippet delegates(id: string, hidden: number)}
-  <label
-    class="-mr-1 ml-auto flex cursor-pointer items-center gap-1.5 font-normal text-muted-foreground hover:text-foreground"
-    for={id}
+{#snippet delegates(hidden: number)}
+  <Toggle
+    class="-mr-1 ml-auto border border-transparent font-normal aria-pressed:border-[var(--border-control)] data-[state=off]:text-muted-foreground"
+    onPressedChange={(value) => rail.setDelegates(value)}
+    pressed={rail.delegates}
+    size="xs"
     title={rail.delegates
       ? 'Listing delegate sessions, nested under the session that spawned them'
       : 'Delegate sessions are hidden — this lists only sessions nobody delegated'}
   >
-    <Checkbox
-      checked={rail.delegates}
-      {id}
-      onCheckedChange={(value) => rail.setDelegates(value === true)}
-    />
-    <span>Delegates</span>
+    Delegates
     {#if hidden > 0}
       <span class="tabular-nums opacity-70">{hidden}</span>
     {/if}
-  </label>
+  </Toggle>
 {/snippet}
 
 {#snippet age(row: InstanceRow)}
@@ -505,7 +506,7 @@
              the real input. A bare input here took typing and did nothing. -->
         <button
           aria-label="Jump to session"
-          class="focus-ring flex h-9 w-full items-center rounded-md border border-[var(--border-control)] bg-[var(--surface-raised)] pr-14 pl-[38px] text-left text-body text-muted-foreground shadow-xs outline-none [transition:var(--transition-control)]"
+          class="focus-ring touch-hit flex h-9 w-full items-center rounded-md border border-[var(--border-control)] bg-[var(--surface-raised)] pr-14 pl-[38px] text-left text-body text-muted-foreground shadow-xs outline-none [transition:var(--transition-control)]"
           onclick={onjump}
           type="button"
         >
@@ -702,7 +703,7 @@
 
     <!-- Projects -->
     <Sidebar.Group class={GROUP}>
-      <Sidebar.GroupLabel class="{GROUP_LABEL} pr-1">
+      <Sidebar.GroupLabel class="{GROUP_LABEL} {CONTROL_LABEL}">
         <span>Projects</span>
         <!-- The sort lives here rather than once per list because it governs all
            of them at once: a rail whose projects were ordered by recency and
@@ -869,10 +870,9 @@
     <!-- Running now (ungrouped sessions) -->
     {#if ungroupedAll.length > 0}
       <Sidebar.Group class={GROUP}>
-        <Sidebar.GroupLabel class="{GROUP_LABEL} pr-1">
+        <Sidebar.GroupLabel class="{GROUP_LABEL} {CONTROL_LABEL}">
           <span>Running now</span>
           {@render delegates(
-            'rail-delegates-running',
             ungroupedAll.length - ungrouped.length
           )}
         </Sidebar.GroupLabel>
@@ -918,13 +918,12 @@
     <!-- Not running -->
     {#if notRunningAll.length > 0}
       <Sidebar.Group class="{GROUP} min-h-0 flex-1">
-        <Sidebar.GroupLabel class="{GROUP_LABEL} pr-1">
+        <Sidebar.GroupLabel class="{GROUP_LABEL} {CONTROL_LABEL}">
           <span>Not running</span>
           <span class="ml-1.5 tabular-nums opacity-70"
             >{notRunning.length}</span
           >
           {@render delegates(
-            'rail-delegates-stored',
             notRunningAll.length - notRunning.length
           )}
         </Sidebar.GroupLabel>

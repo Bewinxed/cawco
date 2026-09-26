@@ -1098,7 +1098,7 @@
     </div>
     <button
       aria-label="Close"
-      class="close"
+      class="close touch-hit"
       data-vaul-no-drag
       onclick={close}
       title="Close"
@@ -1413,12 +1413,21 @@
     outline: 2px solid var(--focus-ring);
     outline-offset: 1px;
   }
+  /* 30px chips that wrap: on a coarse pointer the rows open to 14px apart,
+     so each chip's touch area reaches 44px tall. */
   .chips {
+    --hit-gap-x: 6px;
+    --hit-gap-y: 6px;
     display: flex;
     align-items: center;
     gap: 6px;
     flex-wrap: wrap;
     padding: 8px 10px 10px;
+
+    @media (pointer: coarse) {
+      --hit-gap-y: 14px;
+      row-gap: 14px;
+    }
   }
   @media (max-width: 640px) {
     /* Page-sized containment keeps the sheet clear of iOS fixed-overlay clipping. */

@@ -235,10 +235,6 @@
     flex: 1 1 auto;
     gap: calc(var(--gap) + 4px);
     min-inline-size: 0;
-    /* The item's height is the hit's. The page-wide touch floor on
-       [role=tab] is for a control standing alone; one inside a sized
-       track takes the track's ladder. */
-    min-block-size: 0;
     padding-block: 0;
     padding-inline: var(--px);
     border: 0;

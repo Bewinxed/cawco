@@ -285,7 +285,7 @@
                     aria-expanded={detailsOpen && detailId === tab.id}
                     aria-haspopup="dialog"
                     aria-label="Session details for {tab.label}"
-                    class="tdetails"
+                    class="tdetails touch-hit"
                     onclick={(event) => clickTab(tab.id, event)}
                     type="button"
                   >
@@ -294,7 +294,7 @@
                 {/if}
                 <button
                   aria-label="Close {tab.label}"
-                  class="tclose"
+                  class="tclose touch-hit"
                   onclick={() => { closeDetails(); workspace.close(tab.id); }}
                   type="button"
                 >
@@ -480,6 +480,12 @@
     max-height: calc(88dvh - 24px - env(safe-area-inset-bottom));
     overflow: hidden;
   }
+  /* The two trailing controls sit 2px apart: their touch areas meet
+     between them. */
+  .tdetails,
+  .tclose {
+    --hit-gap-x: 2px;
+  }
   .tdetails {
     display: grid;
     place-items: center;
@@ -506,18 +512,6 @@
   @media (hover: hover) {
     .tdetails:hover {
       background: var(--surface-fill);
-    }
-  }
-  @media (pointer: coarse) {
-    :global(.session-tabs .ff-tabs-list) {
-      --item: 44px;
-    }
-    .tdetails {
-      width: 44px;
-      height: 44px;
-    }
-    .tclose {
-      display: none;
     }
   }
   .details-morph {
@@ -648,10 +642,6 @@
     flex: 0 0 auto;
     inline-size: 20px;
     block-size: 20px;
-    /* Its own size, not the page-wide touch floor: a 44px button does
-       not fit a 32px tab. 24px on a coarse pointer is the WCAG floor. */
-    min-inline-size: 0;
-    min-block-size: 0;
     margin-inline-start: 2px;
     border: 0;
     padding: 0;
@@ -670,10 +660,6 @@
         background: var(--surface-fill);
         color: var(--ink-strong);
       }
-    }
-    @media (pointer: coarse) {
-      inline-size: 24px;
-      block-size: 24px;
     }
     @media (prefers-reduced-motion: no-preference) {
       transition:

@@ -1124,6 +1124,15 @@
   .nm a:hover {
     text-decoration: underline;
   }
+  /* The link clips for its ellipsis, so `.touch-hit`'s ::after cannot reach
+     past it: on a coarse pointer its padding grows to a 44px box and an equal
+     negative margin keeps the row where it was. */
+  @media (pointer: coarse) {
+    .nm a {
+      padding-block: 13px;
+      margin-block: -13px;
+    }
+  }
   .when {
     display: inline-flex;
     align-items: center;
@@ -1137,10 +1146,18 @@
     height: 13px;
     flex: 0 0 auto;
   }
+  /* 30px buttons: on a coarse pointer the gap opens to 14px, so each touch
+     area reaches 44px before meeting its neighbour's. */
   .act {
+    --hit-gap-x: var(--space-2);
     display: flex;
     align-items: center;
     gap: var(--space-2);
+
+    @media (pointer: coarse) {
+      --hit-gap-x: 14px;
+      gap: 14px;
+    }
   }
 
   .sentinel {

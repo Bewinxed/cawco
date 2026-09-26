@@ -150,7 +150,7 @@
           {#snippet child({ props })}
             <!-- Lands on the section that owns the first failure, where the
                  row carries its fault and its remedy. -->
-            <a {...props} class={warnPill} href={faultHref(first)}>
+            <a {...props} class="{warnPill} touch-hit" href={faultHref(first)}>
               <IconWarningTriangle class="size-3" />
               Fleet sync failed{failures.length > 1 ? ` (${failures.length})` : ''}
             </a>
