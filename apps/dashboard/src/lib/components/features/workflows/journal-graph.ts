@@ -8,6 +8,7 @@
 
 import dagre from "@dagrejs/dagre";
 import type {
+  EffortLevel,
   WorkflowEffect,
   WorkflowEffectKind,
   WorkflowNode,
@@ -75,7 +76,7 @@ export interface JournalLogLine {
 interface StepSpec {
   continueFrom?: string;
   denyTools?: string[];
-  effort?: "low" | "medium" | "high" | "max";
+  effort?: EffortLevel;
   harness: "claude" | "opencode" | "pi";
   model: string;
   node?: string;

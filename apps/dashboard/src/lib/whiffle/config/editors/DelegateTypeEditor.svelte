@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { EFFORT_LEVELS } from "@whiffle/core";
   import { untrack } from "svelte";
   import { toast } from "svelte-sonner";
   import { goto } from "$app/navigation";
@@ -10,7 +11,6 @@
   import { confirm } from "../../confirm.svelte";
   import {
     blankDelegateType,
-    DELEGATE_EFFORTS,
     DELEGATE_HARNESSES,
     type DelegateType,
     delegateTypeProblem,
@@ -236,7 +236,7 @@
       }}
       options={[
         { value: 'unset', label: 'Unset' },
-        ...DELEGATE_EFFORTS.map((effort) => ({ value: effort, label: effort })),
+        ...EFFORT_LEVELS.map((effort) => ({ value: effort, label: effort })),
       ]}
       value={draft.effort ?? 'unset'}
     />

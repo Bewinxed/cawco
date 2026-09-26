@@ -6,6 +6,7 @@
  * the hub thread, is journaled, and replays from the journal after a restart.
  */
 import type { ZodTypeAny, z } from "zod";
+import type { EffortLevel } from "./harness";
 import type { WorkflowFailure } from "./workflow";
 
 /** Captured at load: the sandbox removes `Bun` before a program runs. */
@@ -15,7 +16,7 @@ const Hasher = Bun.CryptoHasher;
 export interface StepSpec<Output extends ZodTypeAny = ZodTypeAny> {
   continueFrom?: StepHandle<ZodTypeAny>;
   denyTools?: string[];
-  effort?: "low" | "medium" | "high" | "max";
+  effort?: EffortLevel;
   harness: "claude" | "opencode" | "pi";
   model: string;
   /**

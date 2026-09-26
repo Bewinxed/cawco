@@ -1,3 +1,5 @@
+import type { EffortLevel } from "./harness";
+
 export type WorkflowRunStatus =
   | "running"
   | "waiting"
@@ -190,7 +192,7 @@ export type WorkflowNode = WorkflowNodeBase &
         kind: "step";
         harness: "claude" | "opencode" | "pi";
         model: string;
-        effort?: "low" | "medium" | "high" | "max";
+        effort?: EffortLevel;
         delegateType?: string;
         skills?: string[];
         denyTools?: string[];

@@ -182,6 +182,7 @@ export const delegateTypesRoutes = (store: DelegateTypesShape) =>
               t.Literal("low"),
               t.Literal("medium"),
               t.Literal("high"),
+              t.Literal("xhigh"),
               t.Literal("max"),
             ])
           ),

@@ -9,7 +9,7 @@
     WorkflowInput,
     WorkflowNode,
   } from "@whiffle/core";
-  import { workflowPorts } from "@whiffle/core";
+  import { EFFORT_LEVELS, workflowPorts } from "@whiffle/core";
   import { whiffle } from "$lib/whiffle/client.svelte";
   import { newId } from "$lib/whiffle/id";
   import JsonField from "./JsonField.svelte";
@@ -221,7 +221,7 @@
             value={node.effort ?? ''}
           >
             <option value="">Harness default</option>
-            {#each ['low','medium','high','max'] as effort (effort)}
+            {#each EFFORT_LEVELS as effort (effort)}
               <option>{effort}</option>
             {/each}
           </select></label
