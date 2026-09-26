@@ -430,9 +430,9 @@
                   <button
                     aria-selected={open?.path === doc.path}
                     class="truncate rounded-[var(--radius-sm)] px-3 py-1.5 text-left font-mono text-label transition-colors
-                      hover:bg-accent
+                      hover:bg-[var(--surface-hover)]
                       {open?.path === doc.path
-                        ? 'bg-accent text-accent-foreground font-medium'
+                        ? 'bg-[var(--surface-fill)] text-[var(--ink-strong)] font-medium'
                         : 'text-muted-foreground'}"
                     onclick={() => openDoc(doc)}
                     role="option"
@@ -462,9 +462,9 @@
                     <button
                       aria-selected={open?.path === doc.path}
                       class="shrink-0 truncate rounded-[var(--radius-sm)] px-3 py-1.5 font-mono text-label transition-colors
-                        hover:bg-accent
+                        hover:bg-[var(--surface-hover)]
                         {open?.path === doc.path
-                          ? 'bg-accent text-accent-foreground font-medium'
+                          ? 'bg-[var(--surface-fill)] text-[var(--ink-strong)] font-medium'
                           : 'text-muted-foreground'}"
                       onclick={() => openDoc(doc)}
                       role="option"

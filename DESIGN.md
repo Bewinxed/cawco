@@ -22,7 +22,7 @@ raised on it. A value is never put in a sunken well.
 | `--surface-recess-deep` | n-4 | n-1 | groove of tabs, toggle groups, progress |
 | `--surface-shelf` | n-5 | n-1 − 0.03 L | the bar folder tabs stand on (session tab row, hosted top bar) |
 | `--surface-lift` | n-1 | n-6 | the thumb in a groove |
-| `--surface-fill` | n-3 | n-5 | a pressed or selected item |
+| `--surface-fill` | n-4 | n-5 | a pressed or selected item (on raised or recess; not on a recess-deep groove, which it equals in light) |
 | `--surface-hover` | n-2 | n-4 | hover on any control or row |
 
 Folder tabs are a three-step ladder: `--surface-shelf` bar, `--surface-recess-deep` unchosen tab, `--surface-recess` chosen sheet (the pane body's own surface), hover `--surface-hover`.

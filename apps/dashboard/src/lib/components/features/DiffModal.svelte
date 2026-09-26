@@ -199,13 +199,13 @@
                 <!-- biome-ignore lint/a11y/useSemanticElements: a <fieldset> here would bring browser-default border/padding into this toggle group; it isn't a form control -->
                 <div
                   aria-label="Diff layout"
-                  class="flex items-center bg-muted rounded-[var(--radius-sm)] p-0.5 border border-border"
+                  class="flex items-center bg-[var(--surface-recess-deep)] rounded-[var(--radius-sm)] p-0.5 border border-border"
                   role="group"
                 >
                   <Button
                     aria-pressed={diffStyle === 'unified'}
                     class="h-7 rounded-[14px] text-meta {diffStyle === 'unified'
-                      ? 'bg-background border-border shadow-sm'
+                      ? 'bg-[var(--surface-lift)] border-border shadow-[var(--shadow-raised)]'
                       : ''}"
                     onclick={() => {
                       diffStyle = 'unified';
@@ -220,7 +220,7 @@
                   <Button
                     aria-pressed={diffStyle === 'split'}
                     class="h-7 rounded-[14px] text-meta {diffStyle === 'split'
-                      ? 'bg-background border-border shadow-sm'
+                      ? 'bg-[var(--surface-lift)] border-border shadow-[var(--shadow-raised)]'
                       : ''}"
                     onclick={() => {
                       diffStyle = 'split';

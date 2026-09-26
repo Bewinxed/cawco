@@ -307,7 +307,7 @@
      unselected tab (recess-deep) and chosen sheet (recess) are three steps. */
   --surface-shelf: var(--neutral-5);
   --surface-lift: var(--neutral-1);
-  --surface-fill: var(--neutral-3);
+  --surface-fill: var(--neutral-4);
   --surface-hover: var(--neutral-2);
 
   /* borders — graded, never flattened to one value */
