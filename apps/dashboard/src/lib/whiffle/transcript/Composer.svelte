@@ -639,9 +639,10 @@
       {#each draft.images as img, i (img.name + i)}
         <span class="att">
           <img alt="" src="data:{img.mediaType};base64,{img.data}">
-          {img.name}
+          <span class="att-name">{img.name}</span>
           <button
             aria-label="Remove"
+            class="touch-hit"
             onclick={() => removeImage(i)}
             type="button"
           >
@@ -651,9 +652,10 @@
       {/each}
       {#each draft.texts as t, i (t.name + i)}
         <span class="att">
-          {t.name}
+          <span class="att-name">{t.name}</span>
           <button
             aria-label="Remove"
+            class="touch-hit"
             onclick={() => removeText(i)}
             type="button"
           >
@@ -757,7 +759,7 @@
       {@render leading?.()}
       <button
         aria-label="Attach a file or image"
-        class="att-btn"
+        class="att-btn touch-hit"
         onclick={() => fileInput?.click()}
         type="button"
       >
@@ -766,7 +768,7 @@
       <button
         aria-disabled={!busy && sending ? 'true' : undefined}
         aria-label={busy ? 'Stop the agent' : 'Send message'}
-        class="stop"
+        class="stop touch-hit"
         disabled={held || !(busy || draft.hasContent)}
         onclick={onaction}
         type="button"
@@ -982,12 +984,20 @@
   }
 
   /* Attach + send, together and bottom-aligned, so they hold their box as the
-     text above them runs on. */
+     text above them runs on. On a coarse pointer the gap opens to 10px, so
+     each 34px control's touch area reaches 44px before meeting its
+     neighbour's. */
   .ctrls {
+    --hit-gap-x: var(--space-2);
     display: flex;
     align-items: center;
     gap: var(--space-2);
     flex: 0 0 auto;
+
+    @media (pointer: coarse) {
+      --hit-gap-x: 10px;
+      gap: 10px;
+    }
   }
   .att-btn,
   .stop {
@@ -1067,14 +1077,23 @@
     outline-offset: 2px;
   }
 
-  /* Pending attachment chips, above the input pill. */
+  /* Pending attachment chips, above the input pill. The row scrolls, so on
+     a coarse pointer it takes 8px more padding into an equal negative margin:
+     the remove buttons' touch areas fit inside its clip, nothing moves. */
   .atts {
+    --hit-gap-x: var(--space-2);
+    --hit-gap-y: var(--space-2);
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-2);
     max-height: 180px;
     overflow-y: auto;
     padding: var(--space-1);
+
+    @media (pointer: coarse) {
+      padding: calc(var(--space-1) + 8px);
+      margin: -8px;
+    }
   }
   .att {
     display: inline-flex;
@@ -1088,9 +1107,6 @@
     box-shadow: var(--shadow-tile);
     font-size: var(--text-label);
     color: var(--ink-strong);
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
     /* A chip appearing under the input is a small confirmation, so it gets a
        small one: 2px of travel and one --dur-control. Removal stays instant — the
        reader who clicked × has already decided. */
@@ -1105,6 +1121,14 @@
       opacity: 1;
       transform: translateY(0);
     }
+  }
+  /* The name carries the ellipsis, so the chip itself does not clip its
+     remove button's touch area. */
+  .att-name {
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
   }
   .att img {
     width: 20px;
@@ -1132,14 +1156,6 @@
   .att button:hover {
     background: var(--surface-recess);
     color: var(--ink-strong);
-  }
-
-  /* A thumb gets the platform's 44px floor; the shell's inset grows with the
-     controls so the curves stay concentric at both sizes. */
-  @media (pointer: coarse) {
-    .cin {
-      --cin-ctl: 44px;
-    }
   }
 
   /* Mobile: the composer goes full-width, edge to edge. It stays absolute
