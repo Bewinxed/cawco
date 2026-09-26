@@ -209,12 +209,15 @@
       >
         <!-- The server paints the conversation here so a reload shows it
              before the bundle runs; on hydration this branch is dropped and
-             PaneHost mounts the live pane into the slot. -->
+             PaneHost mounts the live pane into the slot. The server has no
+             deck composer to lend a session to, so its pane paints its own
+             in the same place. -->
         {#if !browser}
           <SessionPane
             browsing={ctx?.machine ?? null}
             browsingCwd={ctx?.cwd ?? ''}
             browsingHarness={ctx?.harness ?? 'claude'}
+            docked={false}
             focused={false}
             serverHistory={paneId === page.params.id
               ? ((page.data as { history?: Promise<HistorySource | null> | null }).history ?? null)

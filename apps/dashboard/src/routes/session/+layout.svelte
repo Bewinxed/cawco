@@ -280,6 +280,7 @@
     <!-- After the groups on purpose: their slots register first, so a pane
          is born straight into the group that asked for it. -->
     <PaneHost
+      docked={narrow}
       entryHistory={entry.history}
       entryId={entry.id}
       entryTail={entry.tail}

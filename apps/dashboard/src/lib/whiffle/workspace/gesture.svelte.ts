@@ -50,6 +50,14 @@ const STEP = 1 / 120;
 const MAX_SETTLE = 1.5;
 const KEYFRAME_MS = 8;
 
+/**
+ * Whether a tab swipe is moving conversations: from the moment a finger
+ * claims the drag until the settle lands, or snaps back. One flag for the
+ * page, since only the focused group takes the swipe. The phone's composer
+ * holds Send on it, so a message never goes to a chat on its way off screen.
+ */
+export const swipeMotion = $state({ moving: false });
+
 type Phase = "idle" | "tracking" | "decided";
 /** One point of the integrated settle: seconds since release, px, px/s. */
 interface Sample {
@@ -212,6 +220,7 @@ export function createSwipe(
   const land = () => {
     stopSettle();
     clear();
+    swipeMotion.moving = false;
     offset = 0;
     toward = null;
     fraction = 0;
@@ -517,6 +526,7 @@ export function createSwipe(
           width = node.clientWidth;
           panes = gather();
           phase = "decided";
+          swipeMotion.moving = true;
         }
 
         // Claimed: the page owns this gesture now, so the browser must not
@@ -564,6 +574,7 @@ export function createSwipe(
         },
         destroy() {
           stopSettle();
+          swipeMotion.moving = false;
           root = null;
           node.removeEventListener("touchstart", onStart);
           node.removeEventListener("touchmove", onMove);

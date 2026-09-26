@@ -10,6 +10,12 @@
    * question stacked above it. Held per open tab by the session layout, so its
    * scroll offset and half-typed message survive a switch — nothing here
    * unmounts on navigation.
+   *
+   * On the phone's deck the composer is not drawn here: the deck draws one
+   * for every conversation, so a swipe moves the transcript and never the box
+   * being typed in. This pane then lends that composer its session instead
+   * (`composer-dock.svelte.ts`). The half-typed message is this pane's either
+   * way — `draft` below.
    */
   import { untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
@@ -47,9 +53,15 @@
   import PreviewSheet from "./preview/PreviewSheet.svelte";
   import { clip, type SuggestCandidate } from "./suggest.svelte";
   import Composer, { type Mention } from "./transcript/Composer.svelte";
+  import { ComposerDraft } from "./transcript/composer-draft.svelte";
   import Prompt from "./transcript/Prompt.svelte";
   import Transcript from "./transcript/Transcript.svelte";
   import TranscriptSkeleton from "./transcript/TranscriptSkeleton.svelte";
+  import {
+    type ComposerBinding,
+    composerBindings,
+    dockedComposer,
+  } from "./workspace/composer-dock.svelte";
 
   let {
     viewId,
@@ -58,10 +70,16 @@
     browsingHarness,
     visible,
     focused,
+    docked,
     serverTail = null,
     serverHistory = null,
   }: {
     viewId: string;
+    /**
+     * The phone's deck draws the composer for every conversation; this pane
+     * lends it this session rather than drawing one of its own.
+     */
+    docked: boolean;
     browsing: string | null;
     browsingCwd: string;
     browsingHarness: string;
@@ -92,6 +110,12 @@
   let content = $state<HTMLDivElement>();
   let previewPane = $state<ReturnType<typeof Resizable.Pane>>();
   let savedWidth = 45;
+  /**
+   * The side preview's share of this pane's width, in percent, as the layout
+   * has it this moment: 0 while it is closed or a sheet. What is left is the
+   * transcript's, and the deck's composer sits over exactly that much.
+   */
+  let previewShare = $state(0);
   let resizing = $state(false);
   const phone = $derived(paneWidth > 0 && paneWidth < 900);
   const previewOpen = $derived(whiffle.previews[viewId]?.state === "open");
@@ -588,14 +612,13 @@
     (session?.pending ?? []).filter((p) => !routedToParent(p))
   );
 
-  let draft = $state("");
-  /** The composer instance, for the one thing a binding cannot hand back. */
-  let composer = $state<ReturnType<typeof Composer> | null>(null);
+  /** What this conversation has half-written, whichever composer draws it. */
+  const draft = new ComposerDraft();
 
   $effect(() => {
     for (const { selectionIds, stage } of selectionCommands(viewId)) {
       if (stage === "accepted" || stage === "applied") {
-        untrack(() => composer?.acceptSelections(selectionIds));
+        untrack(() => draft.acceptSelections(selectionIds));
       }
     }
   });
@@ -605,10 +628,9 @@
 
   /**
    * "Edit" on a message that never sent: the store parks the whole payload in
-   * this session's restore slot and the pane spends it here — text into the
-   * draft the composer is bound to, attachments into the composer itself. The
-   * row offering Edit is two components away from `draft`, so the store is the
-   * channel; this is the far end of it.
+   * this session's restore slot and the pane spends it here, back into the
+   * draft. The row offering Edit is two components away from `draft`, so the
+   * store is the channel; this is the far end of it.
    */
   $effect(() => {
     const slot = pendingRestore(viewId);
@@ -617,8 +639,7 @@
     }
     const id = viewId;
     untrack(() => {
-      draft = slot.text;
-      composer?.restore(slot.extras);
+      draft.restore(slot.text, slot.extras);
       clearRestore(id);
     });
   });
@@ -632,6 +653,8 @@
    * row that raised a permission is never the row the permission covers.
    */
   let composerHeight = $state(0);
+  /** The composer column this pane's transcript makes room for: its own, or the deck's. */
+  const clearance = $derived(docked ? dockedComposer.height : composerHeight);
 
   /**
    * The gap in front of the send command: a dead session is revived before the
@@ -707,6 +730,70 @@
     }
   }
 
+  /** The `/` menu opened: ask the session again what it offers. */
+  function refreshMenu(): void {
+    if (machineId) {
+      // biome-ignore lint/complexity/noVoid: fire-and-forget command menu refresh
+      void refreshCommands(viewId, machineId);
+    }
+  }
+
+  /** Whether this conversation takes messages from here at all. */
+  const writable = $derived(
+    !!session && !fault && !(unaddressable || readOnly)
+  );
+
+  /**
+   * This conversation, as the deck's composer sees it. Read through getters,
+   * so the composer follows the session live while it is in front.
+   */
+  const binding: ComposerBinding = {
+    draft,
+    get busy() {
+      return session?.busy ?? false;
+    },
+    get sending() {
+      return sending;
+    },
+    get commands() {
+      return commands;
+    },
+    get mentions() {
+      return mentions;
+    },
+    get suggest() {
+      return suggest;
+    },
+    get paneVisible() {
+      return visible;
+    },
+    get previewPhone() {
+      return phone;
+    },
+    get transcriptShare() {
+      return (100 - previewShare) / 100;
+    },
+    onsubmit,
+    oninterruptsend,
+    onmenu: refreshMenu,
+    onstop,
+    prompts: parkedPrompts,
+    leading: autopilot,
+  };
+
+  $effect(() => {
+    if (!(docked && writable)) {
+      return;
+    }
+    const id = viewId;
+    composerBindings.set(id, binding);
+    return () => {
+      if (composerBindings.get(id) === binding) {
+        composerBindings.delete(id);
+      }
+    };
+  });
+
   /* ---- the parked prompt's exit --------------------------------------- */
 
   const reduceMotionQuery =
@@ -773,6 +860,20 @@
   }
 </script>
 
+<!-- The composer's two slots, drawn by whichever composer is writing to this
+     conversation: the one below on a desk, the deck's on a phone. -->
+{#snippet autopilot()}
+  <AutopilotToggle instance={instanceRow} instanceId={viewId} />
+{/snippet}
+
+{#snippet parkedPrompts()}
+  {#each parked as request (request.requestId)}
+    <div class="parked" out:promptExit>
+      <Prompt onanswer={(result) => onanswer(request, result)} {request} />
+    </div>
+  {/each}
+{/snippet}
+
 <div class="pane" bind:clientWidth={paneWidth}>
   {#if session}
     <div
@@ -785,7 +886,7 @@
         <Resizable.Pane class="transcript-pane" defaultSize={100} minSize={30}>
           <div
             class="body"
-            style="--composer-clearance: calc({composerHeight + (phone && previewOpen ? 106 : 0)}px + var(--space-4) + var(--space-4))"
+            style="--composer-clearance: calc({clearance + (phone && previewOpen ? 106 : 0)}px + var(--space-4) + var(--space-4))"
           >
             <!-- The transcript area. Movement between conversations is owned by the
            pane above this one, so nothing here animates on a switch — this is
@@ -831,48 +932,31 @@
               {/if}
             </div>
 
-            <!-- Composer stays outside the slide — it's shared structure. -->
+            <!-- Composer stays outside the slide — it's shared structure. On
+                 the deck it is not here at all: the deck draws it. -->
             {#if !fault && (unaddressable || readOnly)}
               <p class="readonly">
                 This transcript is stored; the session isn't reachable from
                 here.
               </p>
-            {:else if !fault}
+            {:else if writable && !docked}
               <Composer
                 busy={session.busy}
                 {commands}
+                {draft}
+                leading={autopilot}
                 {mentions}
                 {oninterruptsend}
-                onmenu={() => {
-                  if (machineId) {
-                    // biome-ignore lint/complexity/noVoid: fire-and-forget command menu refresh
-                    void refreshCommands(viewId, machineId);
-                  }
-                }}
+                onmenu={refreshMenu}
                 {onstop}
                 {onsubmit}
                 paneVisible={visible}
                 previewPhone={phone}
+                prompts={parkedPrompts}
                 {sending}
                 {suggest}
-                bind:this={composer}
                 bind:height={composerHeight}
-                bind:value={draft}
-              >
-                {#snippet leading()}
-                  <AutopilotToggle instance={instanceRow} instanceId={viewId} />
-                {/snippet}
-                {#snippet prompts()}
-                  {#each parked as request (request.requestId)}
-                    <div class="parked" out:promptExit>
-                      <Prompt
-                        onanswer={(result) => onanswer(request, result)}
-                        {request}
-                      />
-                    </div>
-                  {/each}
-                {/snippet}
-              </Composer>
+              />
             {/if}
 
             <p aria-live="polite" class="announce" role="status">
@@ -891,15 +975,15 @@
           defaultSize={0}
           maxSize={70}
           minSize={paneWidth ? Math.min(70, 320 / paneWidth * 100) : 30}
-          onResize={(size) => { if (size > 0 && desktopPreview) { savedWidth = size; localStorage.setItem(`whiffle.preview.width.${viewId}`, String(size)); } }}
+          onResize={(size) => { previewShare = size; if (size > 0 && desktopPreview) { savedWidth = size; localStorage.setItem(`whiffle.preview.width.${viewId}`, String(size)); } }}
           bind:this={previewPane}
         >
           {#if previewMounted && !phone}
             <div class="artifact-surface" class:shown={desktopPreview}>
               <PreviewPane
                 instanceId={viewId}
-                onescape={() => composer?.closeSelectionEditor() ?? false}
-                onselect={(selection) => composer?.attach(selection)}
+                onescape={() => draft.closeSelectionEditor()}
+                onselect={(selection) => draft.attach(selection)}
               />
             </div>
           {/if}
@@ -907,11 +991,11 @@
       </Resizable.PaneGroup>
       {#if sheetMounted && phone && visible}
         <PreviewSheet
-          {composerHeight}
+          composerHeight={clearance}
           {content}
           instanceId={viewId}
-          onescape={() => composer?.closeSelectionEditor() ?? false}
-          onselect={(selection) => composer?.attach(selection)}
+          onescape={() => draft.closeSelectionEditor()}
+          onselect={(selection) => draft.attach(selection)}
           open={previewOpen}
         />
       {/if}

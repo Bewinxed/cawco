@@ -17,10 +17,13 @@
   import { contextOf, workspace } from "./workspace.svelte";
 
   let {
+    docked,
     entryId = "",
     entryTail = null,
     entryHistory = null,
   }: {
+    /** The phone's deck is showing, and draws the one composer. */
+    docked: boolean;
     /** Which conversation this page's server data belongs to, if any. */
     entryId?: string;
     entryTail?: unknown;
@@ -59,6 +62,7 @@
         browsing={ctx?.machine ?? null}
         browsingCwd={ctx?.cwd ?? ''}
         browsingHarness={ctx?.harness ?? 'claude'}
+        {docked}
         focused={isActive && leaf?.id === workspace.focusedLeafId}
         serverHistory={id === entryId ? entryHistory : null}
         serverTail={id === entryId ? entryTail : null}
