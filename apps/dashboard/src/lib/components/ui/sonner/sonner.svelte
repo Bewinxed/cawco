@@ -17,15 +17,13 @@
   /**
    * Toasts paint above everything on the page, a modal dialog included.
    *
-   * The layer is a manual popover, so it lives in the browser's top layer
-   * and the viewport is what its toasts are positioned against. Being in
-   * the top layer is not enough on its own: a modal `<dialog>` (the image
-   * viewer) enters it later, so it paints above the layer, and it makes
-   * everything outside itself inert — a toast raised over it would show
-   * but take no tap, no Reload, no swipe. So while a modal dialog is open
-   * the layer moves inside it, where nothing is inert, and is shown again
-   * so it is above the dialog's own content. When the dialog closes the
-   * layer goes home and is shown again there.
+   * The layer is a fixed, full-viewport sheet stacked above all app chrome
+   * that lets taps through everywhere but on the toasts. A modal `<dialog>`
+   * (the image viewer) sits in the browser's top layer, above any z-index,
+   * and makes everything outside itself inert: a toast left outside would be
+   * hidden under it and take no tap. So while a modal dialog is open the
+   * layer moves inside the topmost one, and when it closes the layer goes
+   * back home.
    */
   let home = $state<HTMLDivElement>();
   let layer = $state<HTMLDivElement>();
@@ -36,19 +34,16 @@
     }
     const base = home;
     const toasts = layer;
-    /** Moves the layer to where it should be now, and puts it on top there. */
+    /** Moves the layer into the topmost modal dialog, or home when there is none. */
     const settle = () => {
+      // Every <dialog> here opens with showModal(), so an open one is modal.
       const modals = [
-        ...document.querySelectorAll<HTMLDialogElement>("dialog:modal"),
+        ...document.querySelectorAll<HTMLDialogElement>("dialog[open]"),
       ];
       const into = modals.at(-1) ?? base;
       if (toasts.parentElement !== into) {
         into.append(toasts);
       }
-      if (toasts.matches(":popover-open")) {
-        toasts.hidePopover();
-      }
-      toasts.showPopover();
     };
     settle();
     const watcher = new MutationObserver((changes) => {
@@ -77,7 +72,7 @@
      under it showed through, and its text and buttons read as painted over
      the toast even though the toast was on top and taking the taps. -->
 <div class="toast-home" bind:this={home}>
-  <div class="toast-layer" popover="manual" bind:this={layer}>
+  <div class="toast-layer" bind:this={layer}>
     <Sonner
       class="toaster group"
       style="--normal-bg: var(--surface-raised); --normal-text: var(--ink-strong); --normal-border: var(--border-control);"
@@ -109,19 +104,16 @@
     display: contents;
   }
 
-  /* A popover's UA box — centred, bordered, padded, painted, scrolling —
-     undone to nothing: a zero-size point at the viewport's corner that
-     clips nothing. The toaster inside keeps its own fixed placement. */
+  /* A sheet over the viewport, above the app chrome (the highest is the
+     shell's 100), that takes no taps itself; the toasts take their own. */
   .toast-layer {
-    inset: 0 auto auto 0;
-    width: 0;
-    height: 0;
-    margin: 0;
-    border: 0;
-    padding: 0;
-    background: none;
-    color: inherit;
-    overflow: visible;
+    position: fixed;
+    inset: 0;
+    z-index: 1000;
+    pointer-events: none;
+  }
+  .toast-layer :global([data-sonner-toast]) {
+    pointer-events: auto;
   }
 
   /* The kit's floating surface, over sonner's own box. One attribute more

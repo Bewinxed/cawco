@@ -632,13 +632,18 @@
     const id = viewId;
     untrack(() => {
       // biome-ignore lint/complexity/noVoid: fire-and-forget — the read lands in the draft, and a refused read leaves the draft unstored rather than overwritten
-      void loadDraft(id).then((stored) => {
-        // Words typed while the read was in flight are the newer ones.
-        if (stored && !draft.hasContent) {
-          draft.fill(stored);
+      void loadDraft(id).then(
+        (stored) => {
+          // Words typed while the read was in flight are the newer ones.
+          if (stored && !draft.hasContent) {
+            draft.fill(stored);
+          }
+          draftLoaded = true;
+        },
+        () => {
+          // No database: drafts do not start, so nothing is ever written.
         }
-        draftLoaded = true;
-      });
+      );
     });
   });
 
