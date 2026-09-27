@@ -315,7 +315,7 @@
                       >{machineLabel(machine.hostname)}</span
                     >
                     <span
-                      class="size-2 shrink-0 rounded-full {online ? 'bg-success' : 'bg-muted-foreground/40'}"
+                      class="size-2 shrink-0 rounded-full {online ? 'bg-success' : 'bg-muted-foreground-a40'}"
                     ></span>
                   </span>
                   <span class="text-label text-muted-foreground"

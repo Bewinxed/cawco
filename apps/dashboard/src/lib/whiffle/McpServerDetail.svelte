@@ -88,7 +88,7 @@
 
   <div class="mt-2 flex items-center gap-1.5">
     <span
-      class="size-2 shrink-0 rounded-full {DOT[server.status] ?? 'bg-muted-foreground/40'}"
+      class="size-2 shrink-0 rounded-full {DOT[server.status] ?? 'bg-muted-foreground-a40'}"
     ></span>
     <span class="text-meta {WORD[server.status] ?? 'text-muted-foreground'}"
       >{server.status}</span
@@ -102,7 +102,7 @@
 
   {#if server.error}
     <p
-      class="mt-2 max-h-24 overflow-y-auto rounded-[var(--radius-sm)] bg-destructive/10 p-2.5 font-mono text-label text-destructive"
+      class="mt-2 max-h-24 overflow-y-auto rounded-[var(--radius-sm)] bg-destructive-a10 p-2.5 font-mono text-label text-destructive"
     >
       {server.error}
     </p>

@@ -69,7 +69,7 @@
     idle: "bg-success",
     blocked: "bg-error",
     failed: "bg-error",
-    sleeping: "bg-muted-foreground/60",
+    sleeping: "bg-muted-foreground-a60",
   };
 
   /* `providerOf` finding nothing means nobody here has that lab's mark, and the

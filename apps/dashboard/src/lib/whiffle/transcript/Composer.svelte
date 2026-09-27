@@ -807,7 +807,7 @@
     background: linear-gradient(
       to top,
       var(--surface-recess) 22%,
-      var(--surface-recess-clear)
+      var(--surface-recess-a0)
     );
   }
   .composer {
@@ -845,7 +845,7 @@
     --cin-ctl: 34px;
     position: relative;
     border: 1px solid var(--border-control);
-    background: var(--surface-raised-82);
+    background: var(--surface-raised-a82);
     -webkit-backdrop-filter: blur(16px) saturate(1.6);
     backdrop-filter: blur(16px) saturate(1.6);
     border-radius: var(--radius-lg);

@@ -58,7 +58,7 @@
     {
       blocked: "bg-warning",
       working: "bg-info animate-pulse motion-reduce:animate-none",
-      idle: "bg-muted-foreground/40",
+      idle: "bg-muted-foreground-a40",
     }[activity]
   );
 
@@ -93,14 +93,14 @@
          alone, not only by colour — the honest rendering of "the hub does
          not know", never flattened into idle's quiet fill. -->
     <span
-      class="absolute inset-0 rounded-full border border-muted-foreground/60"
+      class="absolute inset-0 rounded-full border border-muted-foreground-a60"
     ></span>
   {:else if sleeping}
     <!-- A glyph, not a tint: distinguishable from idle's plain dot by shape
          even with colour vision switched off, and named for what it means —
          resumable, not merely quiet. -->
     <IconMoonSleepBold
-      class="absolute inset-0 size-full text-muted-foreground/70"
+      class="absolute inset-0 size-full text-muted-foreground-a70"
     />
   {:else}
     <!-- Blocked is the only state waiting on a human, so it is the loudest one. -->

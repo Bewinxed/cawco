@@ -276,7 +276,7 @@
     background: conic-gradient(
       from 0deg,
       transparent 0 62%,
-      var(--accent-solid-60) 78%,
+      var(--accent-solid-a60) 78%,
       var(--accent-solid) 92%,
       transparent 100%
     );
@@ -302,7 +302,7 @@
   @media (prefers-reduced-motion: reduce) {
     .ap-halo-spin {
       animation: none;
-      background: var(--accent-solid-45);
+      background: var(--accent-solid-a45);
     }
     .ap-halo-pulse {
       animation: none;
@@ -375,7 +375,7 @@
   }
   .ap-prompt:focus {
     border-color: var(--ring);
-    box-shadow: 0 0 0 2px var(--ring-15);
+    box-shadow: 0 0 0 2px var(--ring-a15);
   }
   .ap-prompt::placeholder {
     color: var(--ink-muted);

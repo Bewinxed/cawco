@@ -254,7 +254,7 @@
 
       {#if note}
         <p
-          class="border-t border-foreground/5 px-3 py-2 text-meta {models.error
+          class="border-t border-foreground-a5 px-3 py-2 text-meta {models.error
             ? 'text-error'
             : 'text-muted-foreground'}"
           role={models.error ? 'alert' : undefined}

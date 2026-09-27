@@ -29,7 +29,7 @@
   data-slot="native-select-wrapper"
 >
   <select
-    class="rounded-md shadow-xs [transition:var(--transition-control)] h-9 data-[size=sm]:h-[30px] w-full min-w-0 appearance-none border border-[var(--border-control)] bg-[var(--surface-raised)] text-[var(--ink-strong)] pr-8 pl-3 text-body select-none selection:bg-primary selection:text-primary-foreground placeholder:text-muted-foreground aria-invalid:border-destructive dark:aria-invalid:border-destructive/50 outline-none disabled:pointer-events-none disabled:cursor-not-allowed focus-ring"
+    class="rounded-md shadow-xs [transition:var(--transition-control)] h-9 data-[size=sm]:h-[30px] w-full min-w-0 appearance-none border border-[var(--border-control)] bg-[var(--surface-raised)] text-[var(--ink-strong)] pr-8 pl-3 text-body select-none selection:bg-primary selection:text-primary-foreground placeholder:text-muted-foreground aria-invalid:border-destructive dark:aria-invalid:border-destructive-a50 outline-none disabled:pointer-events-none disabled:cursor-not-allowed focus-ring"
     data-size={size}
     data-slot="native-select"
     bind:this={ref}

@@ -266,7 +266,7 @@
       background: linear-gradient(
         to top,
         var(--surface-recess) 55%,
-        var(--surface-recess-clear)
+        var(--surface-recess-a0)
       );
     }
   }
@@ -403,7 +403,7 @@
       background: linear-gradient(
           90deg,
           transparent 0%,
-          var(--surface-raised-70) 50%,
+          var(--surface-raised-a70) 50%,
           transparent 100%
         )
         var(--surface-recess);

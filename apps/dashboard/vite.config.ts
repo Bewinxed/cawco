@@ -3,7 +3,7 @@ import path from "node:path";
 import { sveltekit } from "@sveltejs/kit/vite";
 import tailwindcss from "@tailwindcss/vite";
 import Icons from "unplugin-icons/vite";
-import { defineConfig, type Plugin } from "vite";
+import { defineConfig, type Plugin, type Rolldown } from "vite";
 
 /**
  * Lookbehind, patched out of the dependencies that would compile it.
@@ -283,6 +283,221 @@ const hubProxy = (): Plugin => ({
   },
 });
 
+/**
+ * Safari 15.6 is the floor, and CSS gets no lowering for it where it matters.
+ * These reach the iPad as they were written, and a value the engine cannot
+ * parse paints nothing — no border, no shadow, no scrim, no gradient:
+ *
+ * - `color-mix()`: Safari 16.2. Tailwind's `/N` opacity modifier compiles to
+ *   it, with a full-opacity fallback.
+ * - relative colour, `oklch(from …)`: Safari 16.4 (partial), 18.
+ * - `light-dark()`: Safari 17.5.
+ * - a colour space in a gradient, `linear-gradient(to bottom in oklab, …)`:
+ *   Safari 16.2. Tailwind's gradient utilities all emit one.
+ * - a bare-number lightness in `oklch()`/`oklab()`/`lab()`/`lch()`,
+ *   `oklch(0.5 0.1 200)`: mixing numbers and percentages is Safari 16.2, so
+ *   15.6 wants `oklch(50% 0.1 200)`.
+ *
+ * (Versions: @mdn/browser-compat-data — css.types.color.*, and
+ * css.types.gradient.linear-gradient.interpolation_color_space.)
+ *
+ * So the built CSS is read, and every declaration using one of them fails the
+ * build — unless it is listed below with the reason it is safe. The list is
+ * only for dependency CSS this app cannot edit; our own colours are literal
+ * tokens (app.css). A listed declaration that is no longer emitted fails the
+ * build too, so the list cannot go stale: a dependency upgrade that changes
+ * its CSS is re-read, not waved through.
+ */
+const CSS_BEYOND_FLOOR = new RegExp(
+  [
+    String.raw`color-mix\(`,
+    String.raw`light-dark\(`,
+    String.raw`\b(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color)\(\s*from\b`,
+    String.raw`\bin\s+(?:srgb(?:-linear)?|display-p3|a98-rgb|prophoto-rgb|rec2020|xyz(?:-d50|-d65)?|lab|oklab|lch|oklch|hsl|hwb)\b`,
+    String.raw`\b(?:ok)?(?:lab|lch)\(\s*-?(?:\d*\.)?\d+(?:e-?\d+)?(?=[\s,/)])`,
+  ].join("|")
+);
+
+const CHART_OVERRIDE = "overridden in ui/chart/chart-container.svelte";
+const CHART_DEBUG = "layerchart debug mode only; no chart sets `debug`";
+const CREPE_OVERRIDE = "overridden in features/MarkdownEditor.svelte";
+const PLACEHOLDER =
+  "Tailwind preflight; its @supports is false on Safari < 17, which keeps the UA placeholder colour";
+
+/** `at-rules | selector | property` (Svelte scoping hashes removed) → why it is safe. */
+const CSS_FLOOR_ALLOWED: Record<string, string> = {
+  "@layer base | @supports (not ((-webkit-appearance:-apple-pay-button))) or (contain-intrinsic-size:1px) | @supports (color:color-mix(in lab, red, red)) | ::placeholder | color":
+    PLACEHOLDER,
+  "@layer components | :where(.lc-tooltip-context).debug | background-color":
+    CHART_DEBUG,
+  "@layer components | :where(.lc-tooltip-voronoi-path).debug | fill":
+    CHART_DEBUG,
+  "@layer components | :where(.lc-tooltip-rect).debug | fill": CHART_DEBUG,
+  "@layer components | :where(.lc-tooltip-quadtree-rect).debug | fill":
+    CHART_DEBUG,
+  "@layer components | :where(.lc-debug-frame) | --fill-color": CHART_DEBUG,
+  "@layer components | :where(.lc-axis-rule),:where(.lc-axis-tick) | --stroke-color":
+    CHART_OVERRIDE,
+  "@layer components | :where(.lc-axis-grid) | --stroke-color": CHART_OVERRIDE,
+  "@layer components | :where(.lc-rule-x-line,.lc-rule-y-line,.lc-rule-x-radial-line,.lc-rule-y-radial-circle):not([class*=lc-axis],[class*=lc-grid]) | --stroke-color":
+    CHART_OVERRIDE,
+  "@layer components | :where(.lc-grid-x-rule,.lc-grid-x-end-rule,.lc-grid-x-radial-line,.lc-grid-y-rule,.lc-grid-y-end-rule,.lc-grid-y-radial-line) | --stroke-color":
+    CHART_OVERRIDE,
+  "@layer components | :where(.lc-grid-y-radial-circle) | --stroke-color":
+    CHART_OVERRIDE,
+  "@layer components | :where(.lc-highlight-area) | --fill-color":
+    CHART_OVERRIDE,
+  "@layer components | :where(.lc-highlight-line) | --stroke-color":
+    CHART_OVERRIDE,
+  "@layer base | :where(.lc-brush-range) | background": CHART_OVERRIDE,
+  "@layer components | :where(.lc-tooltip-header) | border-bottom":
+    CHART_OVERRIDE,
+  "@layer components | :where(.lc-tooltip-separator) | background-color":
+    CHART_OVERRIDE,
+  ".milkdown .ProseMirror .ProseMirror-selectednode | background":
+    CREPE_OVERRIDE,
+  ".milkdown .ProseMirror code | background": CREPE_OVERRIDE,
+  ".milkdown .ProseMirror pre | background": CREPE_OVERRIDE,
+  ".milkdown .ProseMirror hr | background-color": CREPE_OVERRIDE,
+  ".milkdown .ProseMirror hr.ProseMirror-selectednode | background-color":
+    CREPE_OVERRIDE,
+  ".milkdown .ProseMirror hr.ProseMirror-selectednode:before | background-color":
+    CREPE_OVERRIDE,
+  ".milkdown .milkdown-slash-menu .tab-group | border-bottom": CREPE_OVERRIDE,
+  ".milkdown .milkdown-slash-menu .menu-groups .menu-group h6 | color":
+    CREPE_OVERRIDE,
+  ".milkdown .milkdown-slash-menu .menu-groups .menu-group+.menu-group:before | background":
+    CREPE_OVERRIDE,
+  ".milkdown .milkdown-code-block .preview-panel .preview-label | color":
+    CREPE_OVERRIDE,
+  ".milkdown .crepe-drop-cursor | background-color": CREPE_OVERRIDE,
+  ".milkdown .milkdown-image-inline .empty-image-inline .link-importer .placeholder | color":
+    CREPE_OVERRIDE,
+  ".milkdown .milkdown-image-block.selected>.image-edit:not(:has(input:focus)):before | background":
+    CREPE_OVERRIDE,
+  ".milkdown .milkdown-image-block.selected>.image-wrapper:before | background":
+    CREPE_OVERRIDE,
+  ".milkdown .milkdown-image-block .image-edit .link-importer .placeholder | color":
+    CREPE_OVERRIDE,
+  ".milkdown .crepe-placeholder:before | color": CREPE_OVERRIDE,
+  ".milkdown .milkdown-toolbar .divider | background": CREPE_OVERRIDE,
+  ".milkdown .milkdown-table-block th,.milkdown .milkdown-table-block td | border":
+    CREPE_OVERRIDE,
+  "@layer components | :where(.lc-tooltip-container)[data-variant=default] | background-color":
+    CHART_OVERRIDE,
+  "@layer components | :where(.lc-tooltip-container)[data-variant=default] .label | color":
+    CHART_OVERRIDE,
+  "@layer components | :where(.lc-tooltip-container)[data-variant=invert] | background-color":
+    CHART_OVERRIDE,
+  "@layer components | :where(.lc-tooltip-container)[data-variant=invert] .label | color":
+    CHART_OVERRIDE,
+};
+
+/** Every declaration in a stylesheet, keyed as CSS_FLOOR_ALLOWED keys it. */
+function cssDeclarations(css: string): { key: string; value: string }[] {
+  const out: { key: string; value: string }[] = [];
+  const stack: string[] = [];
+  let start = 0;
+  const flush = (text: string) => {
+    let paren = 0;
+    let from = 0;
+    const parts: string[] = [];
+    for (let i = 0; i < text.length; i += 1) {
+      const ch = text[i];
+      if (ch === "(") {
+        paren += 1;
+      } else if (ch === ")") {
+        paren -= 1;
+      } else if (ch === ";" && paren === 0) {
+        parts.push(text.slice(from, i));
+        from = i + 1;
+      }
+    }
+    parts.push(text.slice(from));
+    for (const part of parts) {
+      const colon = part.indexOf(":");
+      if (colon < 0) {
+        continue;
+      }
+      const atRules = stack.slice(0, -1).filter((s) => s.startsWith("@"));
+      out.push({
+        key: [...atRules, stack.at(-1) ?? "", part.slice(0, colon).trim()]
+          .join(" | ")
+          .replace(/\.svelte-[a-z0-9]+/g, "")
+          .replace(/\s+/g, " "),
+        value: part.slice(colon + 1).trim(),
+      });
+    }
+  };
+  for (let i = 0; i < css.length; i += 1) {
+    const ch = css[i];
+    if (ch === "{") {
+      stack.push(css.slice(start, i).trim());
+      start = i + 1;
+    } else if (ch === "}") {
+      flush(css.slice(start, i));
+      stack.pop();
+      start = i + 1;
+    } else if (ch === ";" && stack.length === 0) {
+      start = i + 1;
+    }
+  }
+  return out;
+}
+
+/** The CSS declarations in a bundle that are beyond the floor, and which were not listed. */
+function floorFindings(bundle: Rolldown.OutputBundle): {
+  refused: string[];
+  seen: Set<string>;
+} {
+  const seen = new Set<string>();
+  const refused: string[] = [];
+  for (const file of Object.values(bundle)) {
+    if (file.type !== "asset" || !file.fileName.endsWith(".css")) {
+      continue;
+    }
+    for (const { key, value } of cssDeclarations(String(file.source))) {
+      if (!CSS_BEYOND_FLOOR.test(value)) {
+        continue;
+      }
+      seen.add(key);
+      if (!(key in CSS_FLOOR_ALLOWED)) {
+        refused.push(`  ${file.fileName}: ${key}: ${value}`);
+      }
+    }
+  }
+  return { refused, seen };
+}
+
+const cssFloor = (): Plugin => ({
+  name: "whiffle:css-floor",
+  apply: "build",
+  // The client bundle's CSS is what reaches a browser.
+  applyToEnvironment: (environment) => environment.name === "client",
+  generateBundle(_options, bundle) {
+    const { refused, seen } = floorFindings(bundle);
+    const stale = Object.keys(CSS_FLOOR_ALLOWED).filter(
+      (key) => !seen.has(key)
+    );
+    if (refused.length === 0 && stale.length === 0) {
+      return;
+    }
+    this.error(
+      [
+        "CSS below the Safari 15.6 floor (color-mix, relative colour, light-dark, gradient colour space, number lightness):",
+        ...refused,
+        ...(stale.length > 0
+          ? [
+              "Listed in CSS_FLOOR_ALLOWED but no longer emitted:",
+              ...stale.map((k) => `  ${k}`),
+            ]
+          : []),
+        "Use a literal token from app.css (see its alpha steps), or, for dependency CSS, override it and list it with the reason.",
+      ].join("\n")
+    );
+  },
+});
+
 export default defineConfig({
   plugins: [
     lookbehindShims(),
@@ -290,6 +505,7 @@ export default defineConfig({
     tailwindcss(),
     sveltekit(),
     Icons({ compiler: "svelte" }),
+    cssFloor(),
   ],
   server: {
     port: 3000,
