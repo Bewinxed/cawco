@@ -25,6 +25,7 @@
   import { Input } from "$lib/components/ui/input";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Select from "$lib/components/ui/select";
+  import { Skeleton } from "$lib/components/ui/skeleton";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Table from "$lib/components/ui/table";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
@@ -284,6 +285,36 @@
   );
   /** The blocked list only means "nothing needs you" while the socket is live. */
   const hubLive = $derived(whiffle.hub === "connected");
+  /** Why the count is unknown, short enough for one line of a phone's tile. */
+  const hubNote = $derived(
+    whiffle.hub === "unreachable" ? "hub unreachable" : "connecting"
+  );
+
+  /**
+   * How much of the board has been read, top down: 0 nothing yet; 1 the
+   * machines, the live sessions and the queue above the table, with the
+   * socket up; 2 every online machine's stored sessions too, which the
+   * table sorts in among the live ones by time. Each part stands only once
+   * its read is back, over a placeholder of its own that goes when it
+   * arrives, so nothing already drawn is pushed down on a cold load. It
+   * only rises: a reconnect later does not take the board away.
+   */
+  const stageNow = () => {
+    if (whiffle.hub === "unreachable") {
+      return 2;
+    }
+    if (!(whiffle.fleetRead && workflowState.loaded && hubLive)) {
+      return 0;
+    }
+    return whiffle.catalogsRead ? 2 : 1;
+  };
+  let stage = $state(untrack(stageNow));
+  $effect(() => {
+    const next = stageNow();
+    if (next > stage) {
+      stage = next;
+    }
+  });
   const sortName = $derived(
     SORTS.find((s) => s.value === sortBy)?.label ?? "Last active"
   );
@@ -509,7 +540,7 @@
       <button
         aria-label={hubLive
           ? `Needs you: ${whiffle.blockedCount}. Show sessions and workflow runs that need you.`
-          : 'Needs you: unknown while reconnecting. Show only sessions that need you.'}
+          : `Needs you: unknown while ${hubNote}. Show only sessions that need you.`}
         aria-pressed={stateFilter === 'attn'}
         class="attn-tile"
         onclick={() => {
@@ -518,9 +549,11 @@
         }}
         type="button"
       >
+        <!-- The unit's line stays when the count is live, empty, so the tile
+             and its row stand at one height across the connect. -->
         <StatTile
           label="Needs you"
-          unit={hubLive ? undefined : 'unknown while reconnecting'}
+          unit={hubLive ? '' : hubNote}
           value={hubLive ? String(whiffle.blockedCount) : '—'}
         />
       </button>
@@ -538,315 +571,347 @@
          the Mac's 21-day silence is what happens when nothing renders it.
          Shown above the queue for the same reason the queue sits above the
          roster — this is a fact about the fleet, not about one session. -->
-    {#if whiffle.machines.length > 0}
-      <!-- MachineCard's badges carry tooltips (Tooltip.Root needs an ancestor
+    {#if stage >= 1}
+      {#if whiffle.machines.length > 0}
+        <!-- MachineCard's badges carry tooltips (Tooltip.Root needs an ancestor
            Provider or it throws on mount — see tools/+page.svelte's own note);
            the board otherwise never needed one, so it is scoped to here. -->
-      <Tooltip.Provider>
-        <Card.Root class={machinesPanelClass}>
-          <ul class="machine-list">
-            {#each whiffle.machines as machine (machine.machineId)}
-              <MachineCard hubBuild={whiffle.hubBuild} {machine} />
-            {/each}
-          </ul>
-        </Card.Root>
-      </Tooltip.Provider>
-    {/if}
+        <Tooltip.Provider>
+          <Card.Root class={machinesPanelClass}>
+            <ul class="machine-list">
+              {#each whiffle.machines as machine (machine.machineId)}
+                <MachineCard hubBuild={whiffle.hubBuild} {machine} />
+              {/each}
+            </ul>
+          </Card.Root>
+        </Tooltip.Provider>
+      {/if}
 
-    <!-- JOURNEY §1 block 3. Everything parked on a human sits above the roster,
+      <!-- JOURNEY §1 block 3. Everything parked on a human sits above the roster,
          longest wait first, with the answer one tap away — the roster below is
          for choosing a session, this is for unblocking one. It renders itself
          away when nothing is waiting. -->
-    <div class="queue">
-      <AttentionQueue />
-      {#each Object.values(workflowState.runs).filter((run) => run.status === 'waiting') as run (run.id)}
-        <a
-          class="flex min-h-11 flex-wrap items-center justify-between gap-3 rounded-[var(--radius-sm)] bg-[var(--surface-raised)] p-3"
-          href="/workflows/{run.workflowId}/runs/{run.id}"
-          ><span
-            >{workflowState.workflows.find((entry) => entry.id === run.workflowId)?.name ?? 'Workflow'}
-            · run {run.id.slice(0, 8)}</span
-          ><WorkflowStatus status={run.status} /></a
-        >
-      {/each}
-    </div>
-
-    <div class="panel">
-      {#if whiffle.hub === 'unreachable'}
-        <div class="empty">
-          <b>Can't reach the hub</b>
-          <p>Nothing on the fleet can be read until the connection is back.</p>
-          <Button onclick={() => reconnectNow()} variant="outline"
-            >Retry</Button
+      <div class="queue">
+        <AttentionQueue />
+        {#each Object.values(workflowState.runs).filter((run) => run.status === 'waiting') as run (run.id)}
+          <a
+            class="flex min-h-11 flex-wrap items-center justify-between gap-3 rounded-[var(--radius-sm)] bg-[var(--surface-raised)] p-3"
+            href="/workflows/{run.workflowId}/runs/{run.id}"
+            ><span
+              >{workflowState.workflows.find((entry) => entry.id === run.workflowId)?.name ?? 'Workflow'}
+              · run {run.id.slice(0, 8)}</span
+            ><WorkflowStatus status={run.status} /></a
           >
-        </div>
-      {:else if whiffle.machines.length === 0}
-        <div class="empty">
-          <b>No machines yet</b>
-          <p>
-            Run <code>whiffle</code> on a machine and it joins this board by
-            itself.
-          </p>
-        </div>
-      {:else if rows.length === 0}
-        <div class="empty">
-          <b
-            >{whiffle.onlineMachines.length}
-            machines online, no sessions running.</b
-          >
-          <Button onclick={startSession}>
-            <IconPlus />
-            Start session
-          </Button>
-        </div>
-      {:else}
-        <div class="bar">
-          <!-- A label, so its touch area around the 36px field focuses it. -->
-          <!-- biome-ignore lint/a11y/noLabelWithoutControl: the kit Input renders the native <input> this label wraps -->
-          <label class="search touch-hit">
-            <span class="lead"><IconSearch /></span>
-            <Input
-              aria-label="Search sessions"
-              class="search-input"
-              oninput={searchTyped}
-              placeholder="Search sessions…"
-              bind:value={search}
-            />
-          </label>
+        {/each}
+      </div>
+    {:else}
+      {@render pending(true)}
+    {/if}
 
-          <Select.Root
-            onValueChange={(v) => {
+    {#if stage >= 2}
+      <div class="panel">
+        {#if whiffle.hub === 'unreachable'}
+          <div class="empty">
+            <b>Can't reach the hub</b>
+            <p>
+              Nothing on the fleet can be read until the connection is back.
+            </p>
+            <Button onclick={() => reconnectNow()} variant="outline"
+              >Retry</Button
+            >
+          </div>
+        {:else if whiffle.machines.length === 0}
+          <div class="empty">
+            <b>No machines yet</b>
+            <p>
+              Run <code>whiffle</code> on a machine and it joins this board by
+              itself.
+            </p>
+          </div>
+        {:else if rows.length === 0}
+          <div class="empty">
+            <b
+              >{whiffle.onlineMachines.length}
+              machines online, no sessions running.</b
+            >
+            <Button onclick={startSession}>
+              <IconPlus />
+              Start session
+            </Button>
+          </div>
+        {:else}
+          <div class="bar">
+            <!-- A label, so its touch area around the 36px field focuses it. -->
+            <!-- biome-ignore lint/a11y/noLabelWithoutControl: the kit Input renders the native <input> this label wraps -->
+            <label class="search touch-hit">
+              <span class="lead"><IconSearch /></span>
+              <Input
+                aria-label="Search sessions"
+                class="search-input"
+                oninput={searchTyped}
+                placeholder="Search sessions…"
+                bind:value={search}
+              />
+            </label>
+
+            <Select.Root
+              onValueChange={(v) => {
               machineFilter = v === 'all' ? '' : v;
               shown = PAGE_SIZE;
             }}
-            type="single"
-            value={machineFilter || 'all'}
-          >
-            <Select.Trigger class="min-w-[168px]">{machineName}</Select.Trigger>
-            <Select.Content>
-              <Select.Item label="All machines" value="all"
-                >All machines</Select.Item
+              type="single"
+              value={machineFilter || 'all'}
+            >
+              <Select.Trigger class="min-w-[168px]"
+                >{machineName}</Select.Trigger
               >
-              {#each whiffle.machines as m (m.machineId)}
-                <Select.Item
-                  label={machineLabel(m.hostname)}
-                  value={m.machineId}
+              <Select.Content>
+                <Select.Item label="All machines" value="all"
+                  >All machines</Select.Item
                 >
-                  {machineLabel(m.hostname)}
-                </Select.Item>
-              {/each}
-            </Select.Content>
-          </Select.Root>
+                {#each whiffle.machines as m (m.machineId)}
+                  <Select.Item
+                    label={machineLabel(m.hostname)}
+                    value={m.machineId}
+                  >
+                    {machineLabel(m.hostname)}
+                  </Select.Item>
+                {/each}
+              </Select.Content>
+            </Select.Root>
 
-          <Select.Root
-            onValueChange={(v) => {
+            <Select.Root
+              onValueChange={(v) => {
               stateFilter = (v === 'all' ? '' : v) as PillStatus | '';
               shown = PAGE_SIZE;
             }}
-            type="single"
-            value={stateFilter || 'all'}
-          >
-            <Select.Trigger class="min-w-[140px]">{stateName}</Select.Trigger>
-            <Select.Content>
-              {#each STATES as s (s.label)}
-                <Select.Item label={s.label} value={s.value || 'all'}
-                  >{s.label}</Select.Item
-                >
-              {/each}
-            </Select.Content>
-          </Select.Root>
+              type="single"
+              value={stateFilter || 'all'}
+            >
+              <Select.Trigger class="min-w-[140px]">{stateName}</Select.Trigger>
+              <Select.Content>
+                {#each STATES as s (s.label)}
+                  <Select.Item label={s.label} value={s.value || 'all'}
+                    >{s.label}</Select.Item
+                  >
+                {/each}
+              </Select.Content>
+            </Select.Root>
 
-          <Select.Root
-            onValueChange={(v) => {
+            <Select.Root
+              onValueChange={(v) => {
               sortBy = v as 'recent' | 'name';
             }}
-            type="single"
-            value={sortBy}
-          >
-            <Select.Trigger class="min-w-[150px]">{sortName}</Select.Trigger>
-            <Select.Content>
-              {#each SORTS as s (s.value)}
-                <Select.Item label={s.label} value={s.value}
-                  >{s.label}</Select.Item
-                >
-              {/each}
-            </Select.Content>
-          </Select.Root>
+              type="single"
+              value={sortBy}
+            >
+              <Select.Trigger class="min-w-[150px]">{sortName}</Select.Trigger>
+              <Select.Content>
+                {#each SORTS as s (s.value)}
+                  <Select.Item label={s.label} value={s.value}
+                    >{s.label}</Select.Item
+                  >
+                {/each}
+              </Select.Content>
+            </Select.Root>
 
-          <Button
-            class="ml-auto max-[900px]:ml-0"
-            onclick={exportCsv}
-            variant="outline"
-          >
-            <IconDownload />
-            Export CSV
-          </Button>
-        </div>
+            <Button
+              class="ml-auto max-[900px]:ml-0"
+              onclick={exportCsv}
+              variant="outline"
+            >
+              <IconDownload />
+              Export CSV
+            </Button>
+          </div>
 
-        <div class="tbl">
-          <div aria-hidden="true" class="exits" bind:this={exitLayer}></div>
-          <Table.Root class="live" ghostRows="tbody tr">
-            <Table.Header>
-              <Table.Row>
-                <Table.Head class="c-name">Session</Table.Head>
-                <Table.Head class="c-mach">Machine</Table.Head>
-                <Table.Head class="c-harn">Harness</Table.Head>
-                <Table.Head class="num c-turns">Turns</Table.Head>
-                <Table.Head class="num c-ctx">Context</Table.Head>
-                <Table.Head class="c-when">Last activity</Table.Head>
-                <Table.Head class="c-state">State</Table.Head>
-                <Table.Head class="c-act">Action</Table.Head>
-              </Table.Row>
-            </Table.Header>
-            <Table.Body>
-              {#each visible as row (row.key)}
-                <!-- A session that changes state re-sorts; it slides to its new place
+          <div class="tbl">
+            <div aria-hidden="true" class="exits" bind:this={exitLayer}></div>
+            <Table.Root class="live" ghostRows="tbody tr">
+              <Table.Header>
+                <Table.Row>
+                  <Table.Head class="c-name">Session</Table.Head>
+                  <Table.Head class="c-mach">Machine</Table.Head>
+                  <Table.Head class="c-harn">Harness</Table.Head>
+                  <Table.Head class="num c-turns">Turns</Table.Head>
+                  <Table.Head class="num c-ctx">Context</Table.Head>
+                  <Table.Head class="c-when">Last activity</Table.Head>
+                  <Table.Head class="c-state">State</Table.Head>
+                  <Table.Head class="c-act">Action</Table.Head>
+                </Table.Row>
+              </Table.Header>
+              <Table.Body>
+                {#each visible as row (row.key)}
+                  <!-- A session that changes state re-sorts; it slides to its new place
                      rather than swapping rows under the reader's eye. A row a
                      filter brings back opens as the rows below make room. -->
-                <tr
-                  class="border-b transition-colors"
-                  data-key={row.key}
-                  data-share="pane:{sessionOf(row.href)}"
-                  data-slot="table-row"
-                >
-                  <Table.Cell class="c-name">
-                    <div class="nm">
-                      <span aria-hidden="true" class="mark m{row.hue}">
-                        <HarnessGlyph harness={row.harness} />
-                      </span>
-                      <a class="touch-hit" href={row.href}
-                        ><span class="nm-title">{row.title}</span></a
-                      >
-                    </div>
-                  </Table.Cell>
-                  <Table.Cell class="mut c-mach">{row.machine}</Table.Cell>
-                  <Table.Cell class="mut c-harn">{row.harnessLabel}</Table.Cell>
-                  <Table.Cell class="num c-turns"
-                    >{row.turns ?? '—'}</Table.Cell
+                  <tr
+                    class="border-b transition-colors"
+                    data-key={row.key}
+                    data-share="pane:{sessionOf(row.href)}"
+                    data-slot="table-row"
                   >
-                  <Table.Cell
-                    class={cn('num c-ctx', contextClass(row.contextPct))}
-                  >
-                    {row.contextPct === null ? '—' : `${Math.round(row.contextPct)}%`}
-                  </Table.Cell>
-                  <Table.Cell class="c-when">
-                    <span class="when">
-                      <IconHistory />
-                      {row.at ? formatDistanceToNow(new Date(row.at)) : '—'}
-                    </span>
-                  </Table.Cell>
-                  <Table.Cell class="c-state">
-                    <Badge class={cn(pillBase, pillTint[row.status])}
-                      >{row.stateLabel}</Badge
+                    <Table.Cell class="c-name">
+                      <div class="nm">
+                        <span aria-hidden="true" class="mark m{row.hue}">
+                          <HarnessGlyph harness={row.harness} />
+                        </span>
+                        <a class="touch-hit" href={row.href}
+                          ><span class="nm-title">{row.title}</span></a
+                        >
+                      </div>
+                    </Table.Cell>
+                    <Table.Cell class="mut c-mach">{row.machine}</Table.Cell>
+                    <Table.Cell class="mut c-harn"
+                      >{row.harnessLabel}</Table.Cell
                     >
-                  </Table.Cell>
-                  <Table.Cell class="c-act">
-                    <div class="act">
-                      <Button
-                        aria-label="Open {row.title}"
-                        href={row.href}
-                        size="icon-sm"
-                        variant="outline"
+                    <Table.Cell class="num c-turns"
+                      >{row.turns ?? '—'}</Table.Cell
+                    >
+                    <Table.Cell
+                      class={cn('num c-ctx', contextClass(row.contextPct))}
+                    >
+                      {row.contextPct === null ? '—' : `${Math.round(row.contextPct)}%`}
+                    </Table.Cell>
+                    <Table.Cell class="c-when">
+                      <span class="when">
+                        <IconHistory />
+                        {row.at ? formatDistanceToNow(new Date(row.at)) : '—'}
+                      </span>
+                    </Table.Cell>
+                    <Table.Cell class="c-state">
+                      <Badge class={cn(pillBase, pillTint[row.status])}
+                        >{row.stateLabel}</Badge
                       >
-                        <IconExternal />
-                      </Button>
-                      {#if row.instance}
-                        {@const instance = row.instance}
+                    </Table.Cell>
+                    <Table.Cell class="c-act">
+                      <div class="act">
                         <Button
-                          aria-label="Peek {row.title}"
-                          onclick={() => setPeeked(instance.id)}
+                          aria-label="Open {row.title}"
+                          href={row.href}
                           size="icon-sm"
                           variant="outline"
                         >
-                          <IconMaximize />
+                          <IconExternal />
                         </Button>
-                      {/if}
-                      {#if row.stored || (row.instance && isResumable(row.instance))}
-                        <Button
-                          aria-label="Resume {row.title}"
-                          onclick={() => resume(row)}
-                          size="icon-sm"
-                          variant="outline"
-                        >
-                          <IconPlay />
-                        </Button>
-                      {/if}
-                    </div>
-                  </Table.Cell>
-                </tr>
-              {/each}
-            </Table.Body>
-          </Table.Root>
-          <!-- The scroll target. It sits after the table but inside the
+                        {#if row.instance}
+                          {@const instance = row.instance}
+                          <Button
+                            aria-label="Peek {row.title}"
+                            onclick={() => setPeeked(instance.id)}
+                            size="icon-sm"
+                            variant="outline"
+                          >
+                            <IconMaximize />
+                          </Button>
+                        {/if}
+                        {#if row.stored || (row.instance && isResumable(row.instance))}
+                          <Button
+                            aria-label="Resume {row.title}"
+                            onclick={() => resume(row)}
+                            size="icon-sm"
+                            variant="outline"
+                          >
+                            <IconPlay />
+                          </Button>
+                        {/if}
+                      </div>
+                    </Table.Cell>
+                  </tr>
+                {/each}
+              </Table.Body>
+            </Table.Root>
+            <!-- The scroll target. It sits after the table but inside the
                scroller, so reaching it means the last row has been reached. It
                is kept in the tree even when the list is fully shown: removing it
                would tear down the observer, and the next filter that widens the
                list would have nothing left to watch. It is inside the table's
                box, so while that box morphs to a new height it is clipped with
                the rows and does not read as reached before they are laid out. -->
-          <div class="sentinel" bind:this={sentinelEl}>
-            {#if more}
-              <span class="sr-only" role="status">Loading more sessions</span>
-            {/if}
+            <div class="sentinel" bind:this={sentinelEl}>
+              {#if more}
+                <span class="sr-only" role="status">Loading more sessions</span>
+              {/if}
+            </div>
           </div>
-        </div>
 
-        <div class="foot">Showing {visible.length} of {filtered.length}</div>
-      {/if}
-    </div>
+          <div class="foot">Showing {visible.length} of {filtered.length}</div>
+        {/if}
+      </div>
 
-    <!-- Asleep and unreachable rows never reach the roster above (it is
+      <!-- Asleep and unreachable rows never reach the roster above (it is
          `runningInstances` only, by design — see the Sessions stat), so a
          sleeping or unknown session would otherwise be absent from the whole
          board. Shown apart, never folded into live work or its counts. -->
-    {#if notRunning.length > 0}
-      {@const CAP = 20}
-      {@const capped = showAllNotRunning ? notRunning : notRunning.slice(0, CAP)}
-      <div class="not-running">
-        <div class="nr-head">
-          <span class="nr-count">Not running · {notRunning.length}</span>
-          {#if latestNotRunning}
-            <span class="nr-hint">
-              {latestTitle}
-              {#if rowTime(latestNotRunning) > 0}
-                · {formatDistanceToNow(new Date(rowTime(latestNotRunning)))}
-              {/if}
-            </span>
-          {/if}
-          <Button
-            aria-expanded={notRunningOpen}
-            class="ml-auto"
-            onclick={toggleNotRunning}
-            size="sm"
-            variant="outline"
-          >
-            {notRunningOpen ? 'Hide' : 'Show'}
-          </Button>
-        </div>
-        {#if notRunningOpen}
-          <div class="not-running-rows" {@attach highlight({ rows: "a" })}>
-            {#each capped as row (row.id)}
-              <div class="nr-row">
-                <LiveSessionRow instance={row} />
-              </div>
-            {/each}
+      {#if notRunning.length > 0}
+        {@const CAP = 20}
+        {@const capped = showAllNotRunning ? notRunning : notRunning.slice(0, CAP)}
+        <div class="not-running">
+          <div class="nr-head">
+            <span class="nr-count">Not running · {notRunning.length}</span>
+            {#if latestNotRunning}
+              <span class="nr-hint">
+                {latestTitle}
+                {#if rowTime(latestNotRunning) > 0}
+                  · {formatDistanceToNow(new Date(rowTime(latestNotRunning)))}
+                {/if}
+              </span>
+            {/if}
+            <Button
+              aria-expanded={notRunningOpen}
+              class="ml-auto"
+              onclick={toggleNotRunning}
+              size="sm"
+              variant="outline"
+            >
+              {notRunningOpen ? 'Hide' : 'Show'}
+            </Button>
           </div>
-          {#if !showAllNotRunning && notRunning.length > CAP}
-            <button
-              class="show-all"
-              onclick={() => {
+          {#if notRunningOpen}
+            <div class="not-running-rows" {@attach highlight({ rows: "a" })}>
+              {#each capped as row (row.id)}
+                <div class="nr-row">
+                  <LiveSessionRow instance={row} />
+                </div>
+              {/each}
+            </div>
+            {#if !showAllNotRunning && notRunning.length > CAP}
+              <button
+                class="show-all"
+                onclick={() => {
                 showAllNotRunning = true;
               }}
-              type="button"
-            >
-              Show all {notRunning.length} sessions
-            </button>
+                type="button"
+              >
+                Show all {notRunning.length} sessions
+              </button>
+            {/if}
           {/if}
-        {/if}
-      </div>
+        </div>
+      {/if}
+    {:else if stage === 1}
+      {@render pending(false)}
     {/if}
   </div>
 </div>
+
+{#snippet pending(machines: boolean)}
+  <!-- Where the parts still being read will stand: the machines and the
+       table while nothing is back, the table alone once the machines are. -->
+  <div aria-busy="true" aria-label="Loading the fleet" role="status">
+    {#if machines}
+      <Skeleton
+        class="mt-[var(--space-8)] h-[88px] w-full rounded-[var(--radius-lg)]"
+      />
+    {/if}
+    <div class="panel pending-table">
+      <Skeleton class="h-9 w-[237px] max-w-full" />
+      {#each [0, 1, 2, 3, 4, 5, 6, 7] as row (row)}
+        <Skeleton class="h-10 w-full" />
+      {/each}
+    </div>
+  </div>
+{/snippet}
 
 <NewSessionDialog
   onclose={() => {
@@ -925,6 +990,12 @@
   }
   .queue > :global(*) {
     margin-top: var(--space-8);
+  }
+
+  .pending-table {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
   }
 
   .panel {

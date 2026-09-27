@@ -1,4 +1,4 @@
-import type { InstanceRow } from "@whiffle/core";
+import type { ClaudeLimits, InstanceRow } from "@whiffle/core";
 import type { LayoutServerLoad } from "./$types";
 
 /**
@@ -136,6 +136,32 @@ function currentId(pathname: string): string {
   return match ? decodeURIComponent(match[1]) : "";
 }
 
+/**
+ * The account's Claude limits, as the sidebar's usage meter shows them: read
+ * here so the first paint draws the meter at the size it will have, not an
+ * empty footer that grows when the live reading arrives. Limits belong to the
+ * account, so it is the first reading without an error, else the first.
+ */
+async function usageLimits(
+  fetch: typeof globalThis.fetch
+): Promise<ClaudeLimits | null> {
+  try {
+    const response = await fetch("/api/usage/limits");
+    if (!response.ok) {
+      return null;
+    }
+    const { machines } = (await response.json()) as {
+      machines: { limits: ClaudeLimits }[];
+    };
+    const readings = machines.map((reading) => reading.limits);
+    return (
+      readings.find((reading) => reading.error === null) ?? readings[0] ?? null
+    );
+  } catch {
+    return null;
+  }
+}
+
 export const load: LayoutServerLoad = async ({
   cookies,
   fetch,
@@ -150,6 +176,8 @@ export const load: LayoutServerLoad = async ({
     Number.isFinite(stored) && stored > 0
       ? Math.min(RAIL_MAX, Math.max(RAIL_MIN, Math.round(stored)))
       : RAIL_DEFAULT;
+
+  const usage = await usageLimits(fetch);
 
   let workspace = parse(cookies.get(WORKSPACE_KEY));
 
@@ -190,12 +218,12 @@ export const load: LayoutServerLoad = async ({
 
   const names: Record<string, string> = {};
   if (!workspace) {
-    return { railWidth, narrow, workspace, names };
+    return { railWidth, narrow, workspace, names, usage };
   }
 
   const open = leavesOf(workspace.root).flatMap((leaf) => leaf.tabs);
   if (open.length === 0) {
-    return { railWidth, narrow, workspace, names };
+    return { railWidth, narrow, workspace, names, usage };
   }
 
   // What the fleet calls these conversations. A machine that cannot answer just
@@ -254,5 +282,5 @@ export const load: LayoutServerLoad = async ({
     }
   }
 
-  return { railWidth, narrow, workspace, names };
+  return { railWidth, narrow, workspace, names, usage };
 };

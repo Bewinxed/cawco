@@ -19,6 +19,8 @@ export const workflowState = $state({
   /** The effect journal per run: the code-origin graph, checkpoints and log. */
   effects: {} as Record<string, WorkflowEffect[]>,
   error: "",
+  /** The first read of every workflow and its runs has come back, or failed. */
+  loaded: false,
 });
 const revisions = new Map<string, number>();
 export function acceptWorkflowFrame(frame: WorkflowFrame) {
@@ -90,5 +92,7 @@ export async function refreshWorkflows() {
   } catch (error) {
     workflowState.error =
       error instanceof Error ? error.message : String(error);
+  } finally {
+    workflowState.loaded = true;
   }
 }
