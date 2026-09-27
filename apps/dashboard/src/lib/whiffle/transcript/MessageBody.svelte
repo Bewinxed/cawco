@@ -49,6 +49,17 @@
       color: var(--ink-strong);
     }
 
+    /* A turn's words wrap `stable`, streamed or settled: the page's running
+       text is `pretty` and its headings `balance`, and both re-wrap the
+       lines already drawn when a streamed chunk lands — words on screen hop
+       between lines as new ones arrive. Stable keeps every earlier line where
+       it is (MDN: "the lines that come before the lines they are editing
+       remain static"), and the settled turn wraps the same way, so settling
+       moves nothing. */
+    & :global(:is(p, li, h1, h2, h3, h4, h5, h6)) {
+      text-wrap-style: stable;
+    }
+
     /* ---- Block rhythm. The plugin's em-scaled margins are off the --space
        ladder; one gap between every pair of blocks puts them back on it, and
        `* + *` means a turn never opens or closes with dead space. */

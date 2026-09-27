@@ -80,6 +80,19 @@
     descriptionDetail: { base: "" },
   };
 
+  /**
+   * What is drawn of a streaming message: everything up to its last whole
+   * word. A word still arriving ("crac" → "cracked") grows in place, and a
+   * word that grows at the end of a line wraps to the next one — the last
+   * word of a line dropping a line on every other chunk — and fades only its
+   * first half in. Held back until the whitespace after it lands, a word is
+   * drawn once, whole, and never changes width; a word still held when the
+   * message settles is drawn then, faded in by the carry below.
+   */
+  const drawn = $derived(
+    streaming ? source.slice(0, source.search(/\S*$/)) : source
+  );
+
   /** A word Streamdown renders as a span of its own while streaming. */
   const TOKEN = 'span[style*="sd-"]';
   let host = $state<HTMLElement>();
@@ -134,7 +147,7 @@
 
   $effect(() => {
     // biome-ignore lint/complexity/noVoid: a new chunk is what re-runs this.
-    void source;
+    void drawn;
     const root = host;
     if (!(root && streaming)) {
       shown = -1;
@@ -241,7 +254,7 @@
       tokenize: 'word',
     }}
     class="{PROSE} {invert ? 'prose-invert' : ''}"
-    content={source}
+    content={drawn}
     controls={{ mermaid: false, table: false }}
     mergeTheme={false}
     static={!tokens}
