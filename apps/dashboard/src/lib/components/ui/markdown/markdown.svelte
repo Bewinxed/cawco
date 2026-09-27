@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import {
     Streamdown,
     theme as streamdownTheme,
@@ -7,12 +8,15 @@
   import OutputBlock from "$lib/components/features/tool-cards/OutputBlock.svelte";
   import { PROSE } from "$lib/prose";
   import { motionOk } from "$lib/whiffle/motion/curves.svelte";
+  import type { Trail } from "./trail";
 
   let {
     source,
     invert = false,
     streaming = false,
     fades = false,
+    trail,
+    carry = null,
   }: {
     source: string;
     invert?: boolean;
@@ -23,6 +27,15 @@
      * mid-answer, a row the virtualiser remounted — is never replayed.
      */
     fades?: boolean;
+    /** While streaming: where each chunk's fade, and how much text is drawn, is recorded. */
+    trail?: Trail;
+    /**
+     * Settled from a stream that is still fading in its last words: those
+     * fades play on here from where they had got to, instead of being cut
+     * when the streaming render goes, and whatever the stream never drew
+     * fades in like one more chunk.
+     */
+    carry?: Trail | null;
   } = $props();
 
   // Streamdown's stock themes hardcode a Tailwind palette (bg-gray-100,
@@ -85,7 +98,7 @@
    * moves. A word the chunk only EXTENDS ("wor" → "world") is not new, and
    * keeps its place.
    */
-  function fadeFrom(root: HTMLElement, mark: number): void {
+  function fadeFrom(root: HTMLElement, mark: number): boolean {
     const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     const fresh = new Set<Element>();
     let offset = 0;
@@ -101,16 +114,22 @@
       }
     }
     if (fresh.size === 0) {
-      return;
+      return false;
     }
+    const { duration, easing } = fadeTiming(root);
+    for (const element of fresh) {
+      element.animate([{ opacity: 0 }, { opacity: 1 }], { duration, easing });
+    }
+    return true;
+  }
+
+  /** A chunk's fade: --dur-menu, --ease-out. */
+  function fadeTiming(root: HTMLElement): { duration: number; easing: string } {
     const style = getComputedStyle(root);
-    const timing = {
+    return {
       duration: Number.parseFloat(style.getPropertyValue("--dur-menu")),
       easing: style.getPropertyValue("--ease-out"),
     };
-    for (const element of fresh) {
-      element.animate([{ opacity: 0 }, { opacity: 1 }], timing);
-    }
   }
 
   $effect(() => {
@@ -122,10 +141,86 @@
       return;
     }
     const length = root.textContent?.length ?? 0;
-    if (shown >= 0 && length > shown && fades && motionOk.current) {
-      fadeFrom(root, shown);
+    if (
+      shown >= 0 &&
+      length > shown &&
+      fades &&
+      motionOk.current &&
+      fadeFrom(root, shown)
+    ) {
+      trail?.chunks.push({
+        from: shown,
+        start: document.timeline.currentTime as number,
+      });
     }
     shown = length;
+    if (trail) {
+      trail.drawn = length;
+    }
+  });
+
+  /**
+   * Held in word spans while fades carried over from the stream play out,
+   * then plain text like any settled message — the same layout either way.
+   */
+  let carrying = $state(untrack(() => carry !== null && motionOk.current));
+  const tokens = $derived(streaming || carrying);
+
+  $effect(() => {
+    const root = host;
+    const from = untrack(() => carry);
+    if (!(root && carrying && from)) {
+      return;
+    }
+    const { duration, easing } = fadeTiming(root);
+    const now = document.timeline.currentTime as number;
+    // The words the stream never drew arrive now, as one more chunk.
+    const chunks = [...from.chunks, { from: from.drawn, start: now }].filter(
+      (chunk) => chunk.start + duration > now
+    );
+    const running = new Set<Animation>();
+    const played = new WeakSet<Element>();
+    const finish = (animation: Animation) => {
+      running.delete(animation);
+      if (running.size === 0) {
+        carrying = false;
+      }
+    };
+    // Streamdown may draw a word's span again; a span drawn again takes the
+    // same chunk's fade at the same point in it, so this runs as often as the
+    // spans change and never restarts a fade.
+    const resume = () => {
+      const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+      let offset = 0;
+      for (let node = walk.nextNode(); node; node = walk.nextNode()) {
+        const start = offset;
+        offset += node.nodeValue?.length ?? 0;
+        const token = node.parentElement;
+        const chunk = chunks.findLast((c) => c.from <= start);
+        if (!(chunk && token?.matches(TOKEN)) || played.has(token)) {
+          continue;
+        }
+        played.add(token);
+        const animation = token.animate([{ opacity: 0 }, { opacity: 1 }], {
+          duration,
+          easing,
+          delay: chunk.start - (document.timeline.currentTime as number),
+        });
+        running.add(animation);
+        animation.finished.then(
+          () => finish(animation),
+          () => finish(animation)
+        );
+      }
+    };
+    resume();
+    if (running.size === 0) {
+      carrying = false;
+      return;
+    }
+    const watch = new MutationObserver(resume);
+    watch.observe(root, { childList: true, subtree: true });
+    return () => watch.disconnect();
   });
 </script>
 
@@ -136,11 +231,12 @@
      words be told from the ones already on screen. Streamdown's own per-word
      animation is switched off below, so mounting with spans replays nothing;
      the chunk fade above is the only motion text has. Settled text renders
-     static: plain text nodes, the same layout. -->
+     static: plain text nodes, the same layout — once any fades it carried
+     over from the stream have played out. -->
 <div class="md" bind:this={host}>
   <Streamdown
     animation={{
-      enabled: streaming,
+      enabled: tokens,
       animateOnMount: true,
       tokenize: 'word',
     }}
@@ -148,7 +244,7 @@
     content={source}
     controls={{ mermaid: false, table: false }}
     mergeTheme={false}
-    static={!streaming}
+    static={!tokens}
     theme={PLAIN}
   >
     <!-- A fence is code, and the console has one surface for code: the same well a

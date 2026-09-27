@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Badge } from "$lib/components/ui/badge";
+  import type { Trail } from "$lib/components/ui/markdown/trail";
   import {
     canResend,
     commandRecord,
@@ -26,11 +27,14 @@
     message,
     agentName,
     folding = false,
+    carry = null,
   }: {
     message: Message;
     agentName: string;
     /** A thinking message that is the live reasoning, settled: it folds shut. */
     folding?: boolean;
+    /** An answer that is the live stream, settled: the chunk fades it carries on. */
+    carry?: Trail | null;
   } = $props();
 
   const kind = $derived(message.type);
@@ -201,7 +205,7 @@
 {:else if kind === 'assistant'}
   <section class="turn">
     <Who name={agentName} timestamp={message.timestamp} />
-    <MessageBody source={message.content} />
+    <MessageBody {carry} source={message.content} />
   </section>
 {:else if kind === 'thinking'}
   {#if message.content.trim()}

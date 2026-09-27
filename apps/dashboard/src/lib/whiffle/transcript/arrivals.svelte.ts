@@ -1,4 +1,5 @@
 import { getContext, setContext } from "svelte";
+import type { Trail } from "$lib/components/ui/markdown/trail";
 
 /**
  * THE ARRIVAL RULE — one gate for every piece of transcript motion.
@@ -43,21 +44,27 @@ export type Motion =
   /** A tool call opening its own line in the run it belongs to. */
   | "open";
 
-export interface Ticket {
+export type Ticket =
+  /**
+   * A new row, playing its entrance. `lead` is its place in a burst: rows
+   * that land together cascade, 30ms apart, five deep. `start` is when the
+   * arrival started (document timeline, ms): set by the first mount, read by
+   * any later one, which plays on from there instead of again.
+   */
+  | { kind: "arrive"; lead: number; start: number | null }
   /**
    * A reasoning block that has just settled into its row: the row is the same
    * object the live block was, so it arrives open and folds shut, rather than
    * arriving at all.
    */
-  fold: boolean;
-  /** Its place in a burst: rows that land together cascade, 30ms apart, five deep. */
-  lead: number;
+  | { kind: "fold" }
   /**
-   * When the arrival started (document timeline, ms): set by the first mount,
-   * read by any later one, which plays on from there instead of again.
+   * A streamed answer that has just settled into its row: the same object the
+   * live row was, so it does not arrive. The chunk fades the live row had
+   * running play on in it, from where they had got to, and whatever the live
+   * row never drew fades in like one more chunk.
    */
-  start: number | null;
-}
+  | { kind: "carry"; trail: Trail };
 
 export interface Ledger {
   /** The composer this transcript's reader writes in — where their own turn starts. */
@@ -66,9 +73,11 @@ export interface Ledger {
   done: (id: string) => void;
   /**
    * The ticket for `id` while its arrival is still playing, or null. A fold
-   * is spent as it is taken: it has no entrance to resume.
+   * or a carry is spent as it is taken: neither has an entrance to resume.
    */
   take: (id: string) => Ticket | null;
+  /** The trail the live row `key` keeps of its streamed chunks. */
+  trail: (key: string) => Trail;
   /**
    * Whether motion may run in this view right now: it has landed, it is the
    * one being worked in, it is on screen and the page is visible. What decides

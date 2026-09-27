@@ -24,6 +24,7 @@
   import { Virtualizer, type VirtualizerHandle } from "virtua/svelte";
   import { browser } from "$app/environment";
   import { describeTool } from "$lib/components/features/tool-cards/descriptors";
+  import type { Trail } from "$lib/components/ui/markdown/trail";
   import { motionOk } from "$lib/whiffle/motion/curves.svelte";
   import type { SessionState } from "../client.svelte";
   import { rebuildScheduler } from "../workspace/scheduler.svelte";
@@ -181,6 +182,8 @@
   const known = new Set<string>();
   /** Arrivals decided and not yet mounted. A row takes its own, once. */
   const tickets = new Map<string, Ticket>();
+  /** The live rows' streamed chunks, by live row: handed to the row each settles into. */
+  const trails = new Map<string, Trail>();
   /** The array the last build folded. Live frames push onto it; history replaces it. */
   let lastArray: unknown = null;
   /** Whether the ledger has seen a build: the first one is everything already there. */
@@ -1088,6 +1091,12 @@
     const open = seeded && untrack(() => watched);
     seeded = true;
     const fresh = unheld(fold.rows);
+    // The live row that ended is gone: its trail goes to the row it settled
+    // into, or nowhere.
+    const trail = fold.ended ? trails.get(fold.ended.key) : undefined;
+    if (fold.ended) {
+      trails.delete(fold.ended.key);
+    }
     if (!open) {
       tickets.clear();
       return;
@@ -1097,10 +1106,10 @@
       if (!(live || LIVE_KINDS.has(row.kind))) {
         continue;
       }
-      const ticket = ticketFor(row, fold.ended, slot);
+      const ticket = ticketFor(row, fold.ended, trail, slot);
       if (ticket) {
         tickets.set(id, ticket);
-        slot += ticket.fold ? 0 : 1;
+        slot += ticket.kind === "arrive" ? 1 : 0;
       }
     }
   }
@@ -1121,24 +1130,27 @@
 
   /**
    * What a new row gets. The live row settling into its own row is the same
-   * object, so it does not arrive; reasoning that settles folds shut from
-   * where it was open. Everything else arrives in its place in the burst.
+   * object, so it does not arrive: reasoning that settles folds shut from
+   * where it was open, and an answer carries on the chunk fades it had
+   * running. Everything else arrives in its place in the burst.
    */
   function ticketFor(
     row: Row,
     ended: Fold["ended"],
+    trail: Trail | undefined,
     slot: number
   ): Ticket | null {
     if (row.key !== ended?.into) {
       return {
+        kind: "arrive",
         lead: Math.min(slot, STAGGER_ROWS - 1) * STAGGER_MS,
-        fold: false,
         start: null,
       };
     }
-    return ended.as === "reasoning"
-      ? { lead: 0, fold: true, start: null }
-      : null;
+    if (ended.as === "reasoning") {
+      return { kind: "fold" };
+    }
+    return trail ? { kind: "carry", trail } : null;
   }
 
   /** How a row arrives, by what it is. */
@@ -1173,7 +1185,7 @@
     composer,
     take(id) {
       const ticket = tickets.get(id) ?? null;
-      if (ticket?.fold) {
+      if (ticket && ticket.kind !== "arrive") {
         tickets.delete(id);
       } else if (ticket && ticket.start === null) {
         ticket.start = document.timeline.currentTime as number;
@@ -1182,6 +1194,14 @@
     },
     done(id) {
       tickets.delete(id);
+    },
+    trail(key) {
+      let trail = trails.get(key);
+      if (!trail) {
+        trail = { chunks: [], drawn: 0 };
+        trails.set(key, trail);
+      }
+      return trail;
     },
     get watched() {
       return watched;
@@ -1397,7 +1417,8 @@
             {#if row.kind === 'single'}
               <MessageRow
                 {agentName}
-                folding={ticket?.fold ?? false}
+                carry={ticket?.kind === 'carry' ? ticket.trail : null}
+                folding={ticket?.kind === 'fold'}
                 message={row.message}
               />
             {:else if row.kind === 'tools'}

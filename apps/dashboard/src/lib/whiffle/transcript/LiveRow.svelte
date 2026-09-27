@@ -16,6 +16,7 @@
    * the turn goes on, arrives as a row of its own.
    */
   import { untrack } from "svelte";
+  import type { Trail } from "$lib/components/ui/markdown/trail";
   import { motionOk } from "$lib/whiffle/motion/curves.svelte";
   import { useLedger } from "./arrivals.svelte";
   import MessageBody from "./MessageBody.svelte";
@@ -77,6 +78,14 @@
             { ...current, leaving: drawn, entering: false },
             { id: serial, phase, leaving: null, entering: true },
           ];
+          if (phase === "answer" && ledger) {
+            // The face fading in is the fade of the words it opens with: if
+            // the answer settles before it ends, its row plays it on.
+            ledger.trail(next.key).chunks.push({
+              from: 0,
+              start: document.timeline.currentTime as number,
+            });
+          }
         } else {
           faces = [{ id: serial, phase, leaving: null, entering: false }];
         }
@@ -128,7 +137,7 @@
   }
 </script>
 
-{#snippet body(live: Live, phase: Phase)}
+{#snippet body(live: Live, phase: Phase, trail: Trail | undefined)}
   {#if phase === 'answer'}
     <section class="turn">
       <Who name={agentName} />
@@ -136,6 +145,7 @@
         fades={ledger?.watched ?? false}
         source={live.text}
         streaming
+        {trail}
       />
     </section>
   {:else}
@@ -158,7 +168,8 @@
       class:entering={face.entering}
       class:leaving={face.leaving !== null}
     >
-      {@render body(face.leaving ?? row, face.phase)}
+      <!-- Only the answer on screen to stay records its chunks. -->
+      {@render body(face.leaving ?? row, face.phase, face.leaving || face.phase !== 'answer' ? undefined : ledger?.trail(row.key))}
     </div>
   {/each}
 </div>

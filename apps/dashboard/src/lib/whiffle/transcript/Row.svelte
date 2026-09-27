@@ -58,15 +58,18 @@
   const ledger = useLedger();
   /** Taken at mount. See the component note. */
   const ticket = untrack(() => (id && ledger ? ledger.take(id) : null));
-  /** Until its entrance has run. A reasoning block folding shut does not arrive. */
-  let arriving = $state(ticket !== null && !ticket.fold);
+  /**
+   * Until its entrance has run. A reasoning block folding shut, or an answer
+   * settling, is a row already on screen: it does not arrive.
+   */
+  let arriving = $state(ticket?.kind === "arrive");
   /**
    * Where the entrance starts: its place in the burst, less however long the
    * arrival has already been playing on an earlier mount — a negative delay
    * resumes it mid-way instead of restarting it.
    */
   const lead =
-    ticket && ticket.start !== null
+    ticket?.kind === "arrive" && ticket.start !== null
       ? ticket.lead - ((document.timeline.currentTime as number) - ticket.start)
       : 0;
   let node = $state<HTMLElement>();
@@ -78,7 +81,7 @@
       ledger?.done(id);
     }
   }
-  if (ticket && !ticket.fold && !motionOk.current) {
+  if (ticket?.kind === "arrive" && !motionOk.current) {
     spent();
   }
 
