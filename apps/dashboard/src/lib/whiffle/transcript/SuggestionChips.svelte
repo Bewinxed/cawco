@@ -267,7 +267,7 @@
       background: linear-gradient(
         to top,
         var(--surface-recess) 55%,
-        var(--surface-recess-a0)
+        oklch(from var(--surface-recess) l c h / 0)
       );
     }
   }
@@ -293,9 +293,8 @@
 
   /* Tinted by confidence: `--conf` runs 0 → 1 across the shown range (noul
      0.6 → 1), and the accent's share of the fill runs 8% → 32% with it. The
-     border takes the same share at 1.5×. The accent is laid over the surface
-     as a translucent inset shadow (and the border as a translucent colour),
-     since Safari 15.6 has no colour mixing; a shadow also still animates. */
+     border takes the same share at 1.5×. Mixed in sRGB: the accent reads as
+     if laid over the surface. */
   .chip {
     --tint: calc(8% + var(--conf) * 24%);
     display: inline-flex;
@@ -304,12 +303,19 @@
     max-inline-size: 100%;
     padding-block: var(--space-1);
     padding-inline: var(--space-2) var(--space-3);
-    border: 1px solid oklch(var(--accent-solid-lch) / calc(var(--tint) * 1.5));
+    border: 1px solid
+      color-mix(
+        in srgb,
+        var(--accent-solid) calc(var(--tint) * 1.5),
+        var(--surface-raised)
+      );
     border-radius: var(--radius-sm);
-    background: var(--surface-raised);
-    box-shadow:
-      inset 0 0 0 100vmax oklch(var(--accent-solid-lch) / var(--tint)),
-      var(--shadow-tile);
+    background: color-mix(
+      in srgb,
+      var(--accent-solid) var(--tint),
+      var(--surface-raised)
+    );
+    box-shadow: var(--shadow-tile);
     color: var(--ink-strong);
     font-size: var(--text-label);
     white-space: nowrap;
@@ -318,7 +324,7 @@
     @media (prefers-reduced-motion: no-preference) {
       transition:
         transform 160ms var(--ease-out),
-        box-shadow var(--dur-panel) var(--ease-out),
+        background-color var(--dur-panel) var(--ease-out),
         border-color var(--dur-panel) var(--ease-out),
         color var(--dur-control) var(--ease-out);
 
@@ -328,10 +334,11 @@
     }
 
     &:hover {
-      box-shadow:
-        inset 0 0 0 100vmax
-        oklch(var(--accent-solid-lch) / calc(var(--tint) + 6%)),
-        var(--shadow-tile);
+      background: color-mix(
+        in srgb,
+        var(--accent-solid) calc(var(--tint) + 6%),
+        var(--surface-raised)
+      );
       color: var(--ink-strong);
     }
 
@@ -383,7 +390,7 @@
       background: linear-gradient(
           90deg,
           transparent 0%,
-          var(--surface-raised-a70) 50%,
+          oklch(from var(--surface-raised) l c h / 0.7) 50%,
           transparent 100%
         )
         var(--surface-recess);

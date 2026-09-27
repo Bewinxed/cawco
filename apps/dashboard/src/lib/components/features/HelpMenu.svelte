@@ -32,7 +32,7 @@
     "data-[state=active]:border data-[state=active]:bg-background data-[state=active]:shadow-2xs",
     // Outranks the flat active background, the way `outline`'s hover outranked its own.
     "data-[state=active]:hover:bg-accent data-[state=active]:hover:text-accent-foreground",
-    "dark:data-[state=active]:border-input dark:data-[state=active]:bg-input-a30 dark:data-[state=active]:hover:bg-input-a50"
+    "dark:data-[state=active]:border-input dark:data-[state=active]:bg-input/30 dark:data-[state=active]:hover:bg-input/50"
   );
 
   function handleKeydown(e: KeyboardEvent) {
@@ -91,7 +91,7 @@
           {tabLabels[tab]}
         </Tabs.Trigger>
         {#if i < tabs.length - 1}
-          <span class="text-muted-foreground-a50">|</span>
+          <span class="text-muted-foreground/50">|</span>
         {/if}
       {/each}
     </Tabs.List>
@@ -140,7 +140,7 @@
           </div>
 
           <!-- vim mode indicator (if applicable) -->
-          <div class="pt-2 border-t border-border-a50">
+          <div class="pt-2 border-t border-border/50">
             <span class="text-muted-foreground text-meta">? for shortcuts</span>
           </div>
         </div>
@@ -171,7 +171,7 @@
           </div>
 
           {#if skillCommands.length > 0}
-            <div class="pt-2 mt-2 border-t border-border-a50">
+            <div class="pt-2 mt-2 border-t border-border/50">
               <h3
                 class="text-muted-foreground text-meta uppercase tracking-wide mb-2"
               >
@@ -194,7 +194,7 @@
           {/if}
 
           {#if mcpCommands.length > 0}
-            <div class="pt-2 mt-2 border-t border-border-a50">
+            <div class="pt-2 mt-2 border-t border-border/50">
               <h3
                 class="text-muted-foreground text-meta uppercase tracking-wide mb-2"
               >
@@ -269,7 +269,7 @@
 
   <!-- Footer -->
   <div
-    class="px-4 py-2 border-t border-border bg-accent-a50 text-foreground text-meta flex items-center justify-between"
+    class="px-4 py-2 border-t border-border bg-accent/50 text-foreground text-meta flex items-center justify-between"
   >
     <span>
       Press

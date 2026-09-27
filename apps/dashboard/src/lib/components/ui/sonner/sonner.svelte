@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { mode } from "mode-watcher";
   import {
     Toaster as Sonner,
     type ToasterProps as SonnerProps,
@@ -11,6 +10,7 @@
     IconSuccess,
     IconWarningTriangle,
   } from "$lib/icons";
+  import { theme } from "$lib/theme.svelte";
 
   let { ...restProps }: SonnerProps = $props();
 
@@ -76,7 +76,7 @@
     <Sonner
       class="toaster group"
       style="--normal-bg: var(--surface-raised); --normal-text: var(--ink-strong); --normal-border: var(--border-control);"
-      theme={mode.current}
+      theme={theme.current}
       {...restProps}
     >
       {#snippet loadingIcon()}

@@ -52,7 +52,7 @@
   });
 
   const _FILL: Record<string, string> = {
-    calm: "bg-muted-foreground-a60",
+    calm: "bg-muted-foreground/60",
     warn: "bg-warning",
     critical: "bg-destructive",
   };

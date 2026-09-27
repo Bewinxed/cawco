@@ -152,13 +152,12 @@
   a.name {
     padding-block: 4px;
     text-decoration: underline;
-    text-decoration-color: var(--ink-strong-a35);
+    text-decoration-color: color-mix(in oklab, currentColor 35%, transparent);
     text-underline-offset: 0.2em;
   }
   @media (hover: hover) and (pointer: fine) {
     a.name:hover {
       color: var(--accent-text);
-      text-decoration-color: var(--accent-text-a35);
     }
   }
   @media (hover: hover) and (pointer: fine) and (

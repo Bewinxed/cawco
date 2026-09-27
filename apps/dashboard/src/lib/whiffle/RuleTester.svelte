@@ -89,7 +89,7 @@
       {#each segments as segment, index (index)}
         {#if segment.hit}
           <mark
-            class="rounded-[var(--radius-xs)] bg-success-a25 px-0.5 text-foreground"
+            class="rounded-[var(--radius-xs)] bg-success/25 px-0.5 text-foreground"
             >{segment.text}</mark
           >
         {:else}

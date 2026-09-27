@@ -11,7 +11,7 @@
 </script>
 
 <tfoot
-  class={cn("border-t bg-muted-a50 font-medium [&>tr]:last:border-b-0", className)}
+  class={cn("border-t bg-muted/50 font-medium [&>tr]:last:border-b-0", className)}
   data-slot="table-footer"
   bind:this={ref}
   {...restProps}

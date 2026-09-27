@@ -198,7 +198,7 @@
   {#if loadError}
     <p class="text-meta text-error" role="alert">{loadError}</p>
   {:else if loading}
-    <div class="h-40 w-full rounded-[var(--radius-md)] bg-muted-a40"></div>
+    <div class="h-40 w-full rounded-[var(--radius-md)] bg-muted/40"></div>
   {:else}
     <Table.Root class="q-break" ghostRows="tbody tr.clickable">
       <Table.Header>
