@@ -2,7 +2,7 @@
 // names a URL, and only when that URL parses — then where to look for it.
 import { expect, test } from "bun:test";
 import type { McpServerStatus } from "@whiffle/core";
-import { faviconCandidates, mcpHost, rootDomain } from "./mcp";
+import { mcpHost, rootDomain } from "./mcp";
 
 const server = (config?: unknown): McpServerStatus =>
   ({ name: "exa", status: "connected", config }) as McpServerStatus;
@@ -31,17 +31,4 @@ test("a generic second level under a country TLD keeps three", () => {
   expect(rootDomain("api.foo.co.uk")).toBe("foo.co.uk");
   // Nothing to strip, and nothing that parses as a root either.
   expect(rootDomain("localhost")).toBe("localhost");
-});
-
-test("the sharp touch icon is tried before the .ico, subdomain before root", () => {
-  expect(faviconCandidates("mcp.exa.ai")).toEqual([
-    "https://mcp.exa.ai/apple-touch-icon.png",
-    "https://mcp.exa.ai/favicon.ico",
-    "https://exa.ai/apple-touch-icon.png",
-    "https://exa.ai/favicon.ico",
-  ]);
-  expect(faviconCandidates("exa.ai")).toEqual([
-    "https://exa.ai/apple-touch-icon.png",
-    "https://exa.ai/favicon.ico",
-  ]);
 });

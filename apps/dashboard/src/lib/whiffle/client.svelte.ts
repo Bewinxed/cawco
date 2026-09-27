@@ -4493,8 +4493,9 @@ function askMcp(
 }
 
 /**
- * Which MCP servers this session runs, for the header's chips. `mcpServerStatus`
- * is a Query method, so only a live session answers. A failed ask stores `[]`
+ * Which MCP servers this session runs, so a tool card can name the server a
+ * call went to (transcript/ToolGroup). `mcpServerStatus` is a Query method, so
+ * only a live session answers. A failed ask stores `[]`
  * rather than staying null: null is what re-triggers the asking effect, and a
  * machine that cannot answer must not be asked in a loop.
  */
@@ -4521,72 +4522,6 @@ export async function loadMcpServers(
   } finally {
     target.mcpPending = false;
   }
-}
-
-/** The same question again after a restart or a stop, cache ignored. */
-export async function refreshMcpServers(
-  instanceId: string,
-  machineId: string
-): Promise<void> {
-  const target = session(instanceId);
-  if (target.mcpPending) {
-    return;
-  }
-  target.mcpPending = true;
-
-  try {
-    target.mcp = await askMcp(instanceId, machineId);
-  } catch (error) {
-    // A failed refresh keeps the stale list: blanking chips that were fine is a
-    // worse answer than showing the reading from a moment ago.
-    if (!isCustodyRefusal(error)) {
-      console.error(
-        `[whiffle] mcpServerStatus on ${instanceId} failed:`,
-        error
-      );
-    }
-  } finally {
-    target.mcpPending = false;
-  }
-}
-
-/** Connects one MCP server again — what a `failed` or `needs-auth` chip offers. */
-export async function restartMcpServer(
-  instanceId: string,
-  machineId: string,
-  name: string
-): Promise<void> {
-  const requestId = newId();
-  const payload: ControlPayload = {
-    instanceId,
-    requestId,
-    method: "reconnectMcpServer",
-    args: [name],
-  };
-  await ask<void>(requestId, "reconnectMcpServer", CONTROL_TIMEOUT_MS, () =>
-    send({ verb: "control", machineId, instanceId, requestId, payload })
-  );
-  await refreshMcpServers(instanceId, machineId);
-}
-
-/** Takes one MCP server out of this session's tool set, or puts it back. */
-export async function setMcpServerEnabled(
-  instanceId: string,
-  machineId: string,
-  name: string,
-  enabled: boolean
-): Promise<void> {
-  const requestId = newId();
-  const payload: ControlPayload = {
-    instanceId,
-    requestId,
-    method: "toggleMcpServer",
-    args: [name, enabled],
-  };
-  await ask<void>(requestId, "toggleMcpServer", CONTROL_TIMEOUT_MS, () =>
-    send({ verb: "control", machineId, instanceId, requestId, payload })
-  );
-  await refreshMcpServers(instanceId, machineId);
 }
 
 /**
