@@ -518,7 +518,9 @@
   .tdetails :global(svg) {
     width: 12px;
     height: 12px;
-    transition: transform var(--dur-control) var(--ease-out);
+    @media (prefers-reduced-motion: no-preference) {
+      transition: transform var(--dur-control) var(--ease-out);
+    }
   }
   .tdetails[aria-expanded="true"] :global(svg) {
     transform: rotate(180deg);

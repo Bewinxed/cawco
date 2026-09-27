@@ -114,9 +114,12 @@
     border-radius: var(--radius-sm);
     color: var(--ink-strong);
     text-decoration: none;
-    transition:
-      var(--transition-control),
-      transform 160ms var(--ease-out);
+    transition: var(--transition-control);
+    @media (prefers-reduced-motion: no-preference) {
+      transition:
+        var(--transition-control),
+        transform 160ms var(--ease-out);
+    }
   }
   .row:active {
     transform: scale(var(--press-scale));

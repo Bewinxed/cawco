@@ -4,13 +4,17 @@
  * three curves as app.css, as functions of t, and the one reduced-motion
  * query every piece of JS motion reads.
  *
- * Svelte 5 runs `in:`/`out:` through the Web Animations API, so CSS media
- * rules never shorten them; each transition asks `reduced` itself, keeps its
- * opacity and drops its travel.
+ * Motion is opt-in, as in the stylesheet: it runs where the reader has not
+ * asked for less (`prefers-reduced-motion: no-preference`). Svelte 5 runs
+ * `in:`/`out:` through the Web Animations API, which CSS media rules never
+ * reach, so each transition asks `motionOk` itself; without it a transition
+ * keeps its opacity and drops its travel.
  */
 import { MediaQuery } from "svelte/reactivity";
 
-export const reduced = new MediaQuery("(prefers-reduced-motion: reduce)");
+export const motionOk = new MediaQuery(
+  "(prefers-reduced-motion: no-preference)"
+);
 
 /** A CSS `cubic-bezier(x1, y1, x2, y2)` as a function of progress. */
 export function bezier(
@@ -79,8 +83,8 @@ export const CURVE = {
 
 /**
  * Something that appears in place — a problem under a field, a notice in a
- * footer — fades up rather than popping in. Opacity only, so reduced motion
- * keeps it.
+ * footer — fades up rather than popping in. Opacity only, so it runs with or
+ * without motion.
  */
 export function appear(_node: Element) {
   return {

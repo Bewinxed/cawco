@@ -605,7 +605,9 @@
     display: grid;
     place-items: center;
     color: var(--ink-muted);
-    transition: transform var(--dur-control) var(--ease-out);
+    @media (prefers-reduced-motion: no-preference) {
+      transition: transform var(--dur-control) var(--ease-out);
+    }
   }
   .chev :global(svg) {
     width: 14px;
@@ -658,11 +660,6 @@
   .field .more {
     font-size: var(--text-meta);
     color: var(--ink-muted);
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .chev {
-      transition: none;
-    }
   }
   @media (max-width: 900px) {
     .tools {

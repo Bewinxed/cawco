@@ -12,7 +12,7 @@
  * tween's length the children hold their natural size (no flex shrink), so
  * the container clips them instead of squashing a scrolling list inside it.
  */
-import { CURVE, reduced } from "./curves.svelte";
+import { CURVE, motionOk } from "./curves.svelte";
 
 export function morph({ width = false, ms = 220 } = {}) {
   return (node: HTMLElement) => {
@@ -30,7 +30,7 @@ export function morph({ width = false, ms = 220 } = {}) {
         Math.abs(next.h - natural.h) > 0.5 ||
         (width && Math.abs(next.w - natural.w) > 0.5);
       natural = next;
-      if (!moved || reduced.current || drawn.height === 0 || next.h === 0) {
+      if (!(moved && motionOk.current) || drawn.height === 0 || next.h === 0) {
         return;
       }
       const frames: Keyframe[] = [

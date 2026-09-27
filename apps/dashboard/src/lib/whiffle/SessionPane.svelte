@@ -21,7 +21,7 @@
   import type { TransitionConfig } from "svelte/transition";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group.
   import * as Resizable from "$lib/components/ui/resizable";
-  import { easeOut, reduced } from "$lib/whiffle/motion/curves.svelte";
+  import { easeOut, motionOk } from "$lib/whiffle/motion/curves.svelte";
   import AutopilotToggle from "./AutopilotToggle.svelte";
   import {
     blankSession,
@@ -139,7 +139,7 @@
       () => {
         sheetMounted = false;
       },
-      reduced.current ? 1 : 300
+      motionOk.current ? 300 : 1
     );
     return () => clearTimeout(timer);
   });
@@ -171,7 +171,7 @@
           () => {
             previewMounted = false;
           },
-          reduced.current ? 1 : 300
+          motionOk.current ? 300 : 1
         );
     return () => {
       cancelAnimationFrame(frame);
@@ -889,7 +889,7 @@
     if (!desktopPreview) {
       return { duration: 0 };
     }
-    const still = reduced.current;
+    const still = !motionOk.current;
     return {
       duration: 280,
       easing: easeOut,
@@ -901,7 +901,7 @@
   }
 
   function promptExit(_node: Element): TransitionConfig {
-    if (reduced.current) {
+    if (!motionOk.current) {
       return { duration: 0 };
     }
     return {
@@ -1081,7 +1081,9 @@
        split's size change is the information. Opening decelerates into
        place; closing is a morph on --ease-in-out. A drag follows the
        pointer. */
-    transition: flex-grow 300ms var(--ease-in-out);
+    @media (prefers-reduced-motion: no-preference) {
+      transition: flex-grow 300ms var(--ease-in-out);
+    }
   }
   .preview-shown :global(.transcript-pane),
   .preview-shown :global(.artifact-pane) {
@@ -1097,9 +1099,12 @@
     padding: var(--space-3);
     opacity: 0;
     transform: translateX(var(--space-7));
-    transition:
-      opacity var(--dur-panel) var(--ease-out),
-      transform var(--dur-panel) var(--ease-out);
+    transition: opacity var(--dur-panel) var(--ease-out);
+    @media (prefers-reduced-motion: no-preference) {
+      transition:
+        opacity var(--dur-panel) var(--ease-out),
+        transform var(--dur-panel) var(--ease-out);
+    }
   }
   .artifact-surface.shown {
     opacity: 1;
@@ -1230,9 +1235,12 @@
     place-items: center;
     text-decoration: none;
     cursor: pointer;
-    transition:
-      background-color var(--dur-control) var(--ease-out),
-      transform var(--dur-control) var(--ease-out);
+    transition: background-color var(--dur-control) var(--ease-out);
+    @media (prefers-reduced-motion: no-preference) {
+      transition:
+        background-color var(--dur-control) var(--ease-out),
+        transform var(--dur-control) var(--ease-out);
+    }
   }
   @media (hover: hover) and (pointer: fine) {
     .stateful button:hover,
@@ -1243,15 +1251,5 @@
   .stateful button:active,
   .stateful a:active {
     transform: scale(0.96);
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .stateful button,
-    .stateful a {
-      transition: none;
-    }
-    .stateful button:active,
-    .stateful a:active {
-      transform: none;
-    }
   }
 </style>

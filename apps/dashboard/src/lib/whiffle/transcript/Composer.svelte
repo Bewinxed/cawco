@@ -879,9 +879,11 @@
     height: var(--cin-ctl);
     min-height: var(--cin-ctl);
     max-height: 200px;
-    transition: height var(--dur-control) var(--ease-out);
     padding: calc((var(--cin-ctl) - 1lh) / 2) 0;
     min-width: 0;
+    @media (prefers-reduced-motion: no-preference) {
+      transition: height var(--dur-control) var(--ease-out);
+    }
   }
   /* One line, always: the field is sized from its value, so a placeholder
      that wrapped would be clipped to the first line. */
@@ -910,7 +912,9 @@
     /* It floats above the input, so it settles UPWARD into place — 4px of
        travel, one --dur-control, and then it is still. Dismissal is instant: a menu
        that lingers on the way out sits over the sentence being written. */
-    animation: menu-open var(--dur-control) var(--ease-out) both;
+    @media (prefers-reduced-motion: no-preference) {
+      animation: menu-open var(--dur-control) var(--ease-out) both;
+    }
   }
   @keyframes menu-open {
     from {
@@ -920,11 +924,6 @@
     to {
       opacity: 1;
       transform: translateY(0);
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .menu {
-      animation: none;
     }
   }
 
@@ -1029,8 +1028,13 @@
     border-radius: calc(var(--radius-lg) - var(--cin-pad));
     transition:
       background-color var(--dur-control) var(--ease-out),
-      color var(--dur-control) var(--ease-out),
-      transform var(--dur-control) var(--ease-out);
+      color var(--dur-control) var(--ease-out);
+    @media (prefers-reduced-motion: no-preference) {
+      transition:
+        background-color var(--dur-control) var(--ease-out),
+        color var(--dur-control) var(--ease-out),
+        transform var(--dur-control) var(--ease-out);
+    }
   }
   .att-btn {
     border: 1px solid var(--border-control);
@@ -1061,7 +1065,9 @@
   .stop .swap {
     display: grid;
     place-items: center;
-    animation: icon-swap var(--dur-control) var(--ease-out) both;
+    @media (prefers-reduced-motion: no-preference) {
+      animation: icon-swap var(--dur-control) var(--ease-out) both;
+    }
   }
   @keyframes icon-swap {
     from {
@@ -1128,7 +1134,9 @@
     /* A chip appearing under the input is a small confirmation, so it gets a
        small one: 2px of travel and one --dur-control. Removal stays instant — the
        reader who clicked × has already decided. */
-    animation: att-in var(--dur-control) var(--ease-out) both;
+    @media (prefers-reduced-motion: no-preference) {
+      animation: att-in var(--dur-control) var(--ease-out) both;
+    }
   }
   @keyframes att-in {
     from {
@@ -1189,21 +1197,6 @@
       /* Clear the home indicator / gesture bar — the resting gap plus the safe
          area inset, so the composer never sits under the rounded-screen chrome. */
       bottom: calc(var(--space-2) + env(safe-area-inset-bottom));
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .att-btn,
-    .stop {
-      transition: none;
-    }
-    .att-btn:active,
-    .stop:active:not(:disabled) {
-      transform: none;
-    }
-    .stop .swap,
-    .att {
-      animation: none;
     }
   }
 </style>

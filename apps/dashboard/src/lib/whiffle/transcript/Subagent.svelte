@@ -183,7 +183,9 @@
     display: grid;
     place-items: center;
     color: var(--ink-muted);
-    transition: transform var(--dur-control) var(--ease-out);
+    @media (prefers-reduced-motion: no-preference) {
+      transition: transform var(--dur-control) var(--ease-out);
+    }
   }
   :global(.branch .bhead[data-state="open"]) .chev {
     transform: rotate(90deg);
@@ -361,18 +363,6 @@
   @media (pointer: coarse) {
     :global(.branch .bhead) {
       min-height: 44px;
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    :global(.branch .bhead),
-    .chev {
-      transition: none;
-    }
-    :global(.branch .bhead:active) {
-      transform: none;
-    }
-    .beat {
-      animation: none;
     }
   }
 </style>

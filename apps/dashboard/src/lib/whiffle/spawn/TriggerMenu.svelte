@@ -71,8 +71,10 @@
     height: 36px;
     background: var(--surface-fill);
     border-radius: var(--radius-sm);
-    transition: transform 120ms var(--ease-in-out);
     pointer-events: none;
+    @media (prefers-reduced-motion: no-preference) {
+      transition: transform 120ms var(--ease-in-out);
+    }
   }
   .row {
     position: relative;

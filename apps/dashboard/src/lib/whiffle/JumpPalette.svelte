@@ -17,6 +17,7 @@
     IconSearch,
     IconUser,
   } from "$lib/icons";
+  import { motionOk } from "$lib/whiffle/motion/curves.svelte";
   import { ACTIVITY_LABEL } from "./activity";
   import { whiffle } from "./client.svelte";
   import JumpMatch from "./JumpMatch.svelte";
@@ -81,21 +82,8 @@
    * Motion is opt-out at the source, not only in CSS: `animate:` and
    * `transition:` run in JS and ignore the media query on their own.
    */
-  const reduced =
-    typeof matchMedia === "function"
-      ? matchMedia("(prefers-reduced-motion: reduce)")
-      : null;
-  let still = $state(reduced?.matches ?? false);
-  $effect(() => {
-    if (!reduced) {
-      return;
-    }
-    const sync = () => {
-      still = reduced.matches;
-    };
-    reduced.addEventListener("change", sync);
-    return () => reduced.removeEventListener("change", sync);
-  });
+  /** Motion is opt-in: without it, lists land in place. */
+  const still = $derived(!motionOk.current);
   /** Rows settle into their new rank; they never slide in from nowhere. */
   const settle = $derived({ duration: still ? 0 : 180, easing: expoOut });
   const arrive = $derived({ duration: still ? 0 : 140 });
@@ -522,7 +510,11 @@
     height: 7px;
     border-radius: var(--radius-pill);
     background: var(--border-hairline);
-    animation: jump-breathe var(--breath) var(--ease-in-out) infinite;
+    opacity: 0.6;
+
+    @media (prefers-reduced-motion: no-preference) {
+      animation: jump-breathe var(--breath) var(--ease-in-out) infinite;
+    }
   }
   .jump-skeleton:nth-child(2) .jump-skeleton-bar {
     animation-delay: 120ms;
@@ -549,11 +541,5 @@
     border-top: 1px solid var(--border-hairline);
     color: var(--ink-muted);
     font-size: var(--text-label);
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .jump-skeleton-bar {
-      animation: none;
-      opacity: 0.6;
-    }
   }
 </style>

@@ -1083,8 +1083,13 @@
   grid-area: 1 / 1;
   transition:
     opacity var(--icon-swap-dur, 240ms) var(--ease-out),
-    scale var(--icon-swap-dur, 240ms) var(--ease-out),
     filter var(--icon-swap-dur, 240ms) var(--ease-out);
+  @media (prefers-reduced-motion: no-preference) {
+    transition:
+      opacity var(--icon-swap-dur, 240ms) var(--ease-out),
+      scale var(--icon-swap-dur, 240ms) var(--ease-out),
+      filter var(--icon-swap-dur, 240ms) var(--ease-out);
+  }
 }
 
 .icon-swap > [data-active="true"] {
@@ -1111,12 +1116,13 @@
 .kit-highlight {
   isolation: isolate;
 }
+/* Placed from measured client rects, which are physical: the layers anchor
+   to the physical top-left corner the measurements are taken from. */
 .kit-ghost,
 .kit-pill,
 .kit-pill-trail {
   position: absolute;
-  top: 0;
-  left: 0;
+  inset: 0 auto auto 0;
   z-index: -1;
   pointer-events: none;
   opacity: 0;
@@ -1125,20 +1131,21 @@
   display: none;
   background: var(--surface-hover);
   transition: opacity var(--dur-control) ease;
-}
-.kit-ghost.kit-glide {
-  transition:
-    transform var(--dur-ghost) var(--ease-in-out),
-    width var(--dur-ghost) var(--ease-in-out),
-    height var(--dur-ghost) var(--ease-in-out),
-    opacity var(--dur-control) ease;
-}
-.kit-ghost[data-follow] {
-  display: block;
-}
-@media (hover: hover) {
-  .kit-ghost {
+
+  &[data-follow] {
     display: block;
+  }
+  @media (hover: hover) {
+    display: block;
+  }
+  &.kit-glide {
+    @media (prefers-reduced-motion: no-preference) {
+      transition:
+        transform var(--dur-ghost) var(--ease-in-out),
+        width var(--dur-ghost) var(--ease-in-out),
+        height var(--dur-ghost) var(--ease-in-out),
+        opacity var(--dur-control) ease;
+    }
   }
 }
 .kit-pill,
@@ -1146,10 +1153,12 @@
   background: var(--surface-fill);
 }
 .kit-pill.kit-glide {
-  transition:
-    transform var(--dur-control) var(--ease-drawer),
-    width var(--dur-control) var(--ease-drawer),
-    height var(--dur-control) var(--ease-drawer);
+  @media (prefers-reduced-motion: no-preference) {
+    transition:
+      transform var(--dur-control) var(--ease-drawer),
+      width var(--dur-control) var(--ease-drawer),
+      height var(--dur-control) var(--ease-drawer);
+  }
 }
 .kit-pill-trail.kit-fade {
   transition: opacity var(--dur-control) var(--ease-out);
@@ -1166,35 +1175,11 @@
   }
 }
 
-/* Reduced motion, for the stylesheet's own motion: comprehension keeps its
-   fades, nothing travels. What the setting asks for is stillness, not
-   instant swaps, so transitions keep running on opacity and colour only: a
-   state still fades from one to the next while anything that slides, scales
-   or grows lands at once. Keyframe animations, which cannot be split by
-   property, run for 1ms, and presses stop scaling. Motion driven from
-   JavaScript (Svelte transitions, `element.animate()`) is not reached by
-   CSS; it reads `reduced` in motion/curves.svelte.ts and makes the same
-   trade.
-
-   `data-motion-loop` opts one element out. It is for indicators whose
-   looping *is* the information: an indeterminate spinner held on a single
-   frame reads as a progress fraction it cannot know. */
-@media (prefers-reduced-motion: reduce) {
-  *:not([data-motion-loop]),
-  *::before,
-  *::after {
-    animation-duration: 1ms !important;
-    animation-delay: 0ms !important;
-    animation-iteration-count: 1 !important;
-    transition-property:
-      opacity, color, background-color, border-color, outline-color,
-      text-decoration-color, fill, stroke !important;
-    transition-delay: 0ms !important;
-  }
-  .pressable:active {
-    transform: none;
-  }
-}
+/* Motion is opt-in: every travelling transition and keyframe animation in
+   this sheet and in the components sits under
+   `@media (prefers-reduced-motion: no-preference)`, and motion driven from
+   JavaScript asks `motionOk` (motion/curves.svelte.ts). Opacity and colour
+   fades that carry state run either way. */
 
 /* Scrollbars belong to the palette. */
 .custom-scrollbar::-webkit-scrollbar,
@@ -1314,10 +1299,14 @@
     --kit-rise: calc(-1 * var(--pop-rise)) 0;
   }
   .kit-pop[data-state="open"] {
-    animation: kit-pop-in var(--dur-pop) var(--ease-drawer) both;
+    @media (prefers-reduced-motion: no-preference) {
+      animation: kit-pop-in var(--dur-pop) var(--ease-drawer) both;
+    }
   }
   .kit-pop[data-state="closed"] {
-    animation: kit-pop-out var(--dur-exit) var(--ease-drawer) both;
+    @media (prefers-reduced-motion: no-preference) {
+      animation: kit-pop-out var(--dur-exit) var(--ease-drawer) both;
+    }
   }
 
   /* A row inside a floating surface. */
@@ -1368,9 +1357,12 @@
     white-space: nowrap;
     font: 500 var(--text-label) / 1 var(--font-body);
     color: var(--ink-muted);
-    transition:
-      var(--transition-control),
-      transform 160ms var(--ease-out);
+    transition: var(--transition-control);
+    @media (prefers-reduced-motion: no-preference) {
+      transition:
+        var(--transition-control),
+        transform 160ms var(--ease-out);
+    }
   }
   .kit-segment:active:not(:disabled) {
     transform: scale(var(--press-scale));
@@ -1389,10 +1381,14 @@
   }
   .kit-tip[data-state="delayed-open"],
   .kit-tip[data-state="instant-open"] {
-    animation: kit-tip-in var(--dur-menu) var(--ease-out) both;
+    @media (prefers-reduced-motion: no-preference) {
+      animation: kit-tip-in var(--dur-menu) var(--ease-out) both;
+    }
   }
   .kit-tip[data-state="closed"] {
-    animation: kit-tip-out var(--dur-menu) var(--ease-out) both;
+    @media (prefers-reduced-motion: no-preference) {
+      animation: kit-tip-out var(--dur-menu) var(--ease-out) both;
+    }
   }
 
   /* Dialog: a recessed tray holding a raised body; 6 + 12 = 18, so the
@@ -1409,10 +1405,14 @@
     padding: 18px;
   }
   .kit-dialog[data-state="open"] {
-    animation: kit-dialog-in var(--dur-panel) var(--ease-out) both;
+    @media (prefers-reduced-motion: no-preference) {
+      animation: kit-dialog-in var(--dur-panel) var(--ease-out) both;
+    }
   }
   .kit-dialog[data-state="closed"] {
-    animation: kit-dialog-out var(--dur-exit) var(--ease-out) both;
+    @media (prefers-reduced-motion: no-preference) {
+      animation: kit-dialog-out var(--dur-exit) var(--ease-out) both;
+    }
   }
   .kit-scrim {
     background: var(--scrim);

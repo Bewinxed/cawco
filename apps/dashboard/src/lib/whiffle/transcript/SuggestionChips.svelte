@@ -4,7 +4,7 @@
   import { fade } from "svelte/transition";
   import { Kbd } from "$lib/components/ui/kbd";
   import { IconToolGeneric, IconToolMcp, IconToolSkill } from "$lib/icons";
-  import { bezier, easeOut, reduced } from "$lib/whiffle/motion/curves.svelte";
+  import { bezier, easeOut, motionOk } from "$lib/whiffle/motion/curves.svelte";
   import {
     askSuggestions,
     SUGGEST_PAUSE_MS,
@@ -52,9 +52,9 @@
       duration: 280,
       easing: easeOut,
       css: (t: number, u: number) =>
-        reduced.current
-          ? `opacity: ${t}`
-          : `opacity: ${t}; transform: translateY(${4 * u}px) scale(${0.96 + 0.04 * t})`,
+        motionOk.current
+          ? `opacity: ${t}; transform: translateY(${4 * u}px) scale(${0.96 + 0.04 * t})`
+          : `opacity: ${t}`,
     };
   }
 
@@ -191,9 +191,9 @@
       duration: LEAVE_MS,
       easing: easeOut,
       css: (t: number) =>
-        reduced.current
-          ? `opacity: ${t}`
-          : `opacity: ${t}; transform: scale(${0.96 + 0.04 * t});`,
+        motionOk.current
+          ? `opacity: ${t}; transform: scale(${0.96 + 0.04 * t});`
+          : `opacity: ${t}`,
     };
   }
 </script>
@@ -210,7 +210,7 @@
         style:--conf={confidence(noul)}
         in:arrive={{ i }}
         out:leave
-        animate:flip={{ duration: reduced.current ? 0 : GLIDE_MS, easing: glide }}
+        animate:flip={{ duration: motionOk.current ? GLIDE_MS : 0, easing: glide }}
       >
         {#if candidate.kind === 'skill'}
           <IconToolSkill aria-hidden="true" class="glyph" />

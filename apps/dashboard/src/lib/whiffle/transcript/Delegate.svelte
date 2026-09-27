@@ -510,7 +510,9 @@
     display: grid;
     place-items: center;
     color: var(--ink-muted);
-    transition: transform var(--dur-control) var(--ease-out);
+    @media (prefers-reduced-motion: no-preference) {
+      transition: transform var(--dur-control) var(--ease-out);
+    }
   }
   :global(.delegate .bhead[data-state="open"]) .chev {
     transform: rotate(90deg);
@@ -800,20 +802,6 @@
   @media (pointer: coarse) {
     :global(.delegate .bhead) {
       min-height: 44px;
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    :global(.delegate .bhead),
-    .chev,
-    .jump {
-      transition: none;
-    }
-    /* biome-ignore lint/style/noDescendingSpecificity: cascade order is load-bearing — .tk's base transition must lose to the :hover rule above it. */
-    .tk {
-      transition: none;
-    }
-    .beat {
-      animation: none;
     }
   }
 </style>

@@ -69,9 +69,12 @@
     background: var(--surface-raised);
     font: var(--type-label);
     color: var(--ink-strong);
-    transition:
-      var(--transition-control),
-      transform 160ms var(--ease-out);
+    transition: var(--transition-control);
+    @media (prefers-reduced-motion: no-preference) {
+      transition:
+        var(--transition-control),
+        transform 160ms var(--ease-out);
+    }
   }
   :global(.picker:active) {
     transform: scale(var(--press-scale));

@@ -9,7 +9,7 @@
  * Distances are percentages of the page's own box, so a phone and a desk
  * travel the same share of the screen.
  */
-import { easeDrawer, reduced } from "./curves.svelte";
+import { easeDrawer, motionOk } from "./curves.svelte";
 
 interface End {
   opacity: number;
@@ -134,14 +134,14 @@ const STILL_MS = 120;
 
 export function pageOut(node: HTMLElement) {
   const { leave, ms, leavingOnTop } = route.travel;
-  const to = reduced.current ? STILL : leave;
+  const to = motionOk.current ? leave : STILL;
   // The page going away takes no input and, on a pop, stays on top.
   node.inert = true;
   if (leavingOnTop) {
     node.style.zIndex = "1";
   }
   return {
-    duration: reduced.current ? STILL_MS : ms,
+    duration: motionOk.current ? ms : STILL_MS,
     easing: easeDrawer,
     css: (_t: number, u: number) =>
       `transform: translate(${to.x * u}%, ${to.y * u}%); opacity: ${1 - (1 - to.opacity) * u}`,
@@ -150,9 +150,9 @@ export function pageOut(node: HTMLElement) {
 
 export function pageIn(_node: HTMLElement) {
   const { enter, ms } = route.travel;
-  const from = reduced.current ? STILL : enter;
+  const from = motionOk.current ? enter : STILL;
   return {
-    duration: reduced.current ? STILL_MS : ms,
+    duration: motionOk.current ? ms : STILL_MS,
     easing: easeDrawer,
     css: (t: number, u: number) =>
       `transform: translate(${from.x * u}%, ${from.y * u}%); opacity: ${from.opacity + (1 - from.opacity) * t}`,

@@ -173,9 +173,12 @@
     font: var(--type-meta);
     color: var(--ink-muted);
     white-space: nowrap;
-    transition:
-      var(--transition-control),
-      transform 160ms var(--ease-out);
+    transition: var(--transition-control);
+    @media (prefers-reduced-motion: no-preference) {
+      transition:
+        var(--transition-control),
+        transform 160ms var(--ease-out);
+    }
   }
   :global(.rollout:active) {
     transform: scale(var(--press-scale));
@@ -234,9 +237,12 @@
     font: var(--type-meta);
     font-weight: 500;
     color: var(--ink-strong);
-    transition:
-      var(--transition-control),
-      transform 160ms var(--ease-out);
+    transition: var(--transition-control);
+    @media (prefers-reduced-motion: no-preference) {
+      transition:
+        var(--transition-control),
+        transform 160ms var(--ease-out);
+    }
   }
   .sync:active:not(:disabled) {
     transform: scale(var(--press-scale));

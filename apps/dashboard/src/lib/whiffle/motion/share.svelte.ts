@@ -16,7 +16,7 @@
  * destination out of a small source by clipping instead of scaling, so a
  * transcript never squashes.
  */
-import { CURVE, reduced } from "./curves.svelte";
+import { CURVE, motionOk } from "./curves.svelte";
 
 interface Departure {
   at: number;
@@ -134,7 +134,7 @@ export function land(key: () => string | undefined, options: LandOptions = {}) {
         return;
       }
       departures.delete(name);
-      if (reduced.current || performance.now() - from.at > from.ttl) {
+      if (!motionOk.current || performance.now() - from.at > from.ttl) {
         return;
       }
       fly(node, from, options);

@@ -868,7 +868,9 @@
     color: inherit;
     cursor: pointer;
     border-radius: var(--radius-lg);
-    transition: transform 160ms var(--ease-out);
+    @media (prefers-reduced-motion: no-preference) {
+      transition: transform 160ms var(--ease-out);
+    }
   }
   .attn-tile:active {
     transform: scale(var(--press-scale));
@@ -884,13 +886,6 @@
   }
   .attn-tile[aria-pressed="true"] :global(.st-value) {
     color: var(--status-attn-ink);
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .attn-tile,
-    .attn-tile:active {
-      transition: none;
-      transform: none;
-    }
   }
 
   /* The wrapper is layout-transparent, so an empty queue leaves no gap behind:

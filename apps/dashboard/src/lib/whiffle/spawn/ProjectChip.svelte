@@ -210,7 +210,9 @@
     }
   }
   .swap {
-    animation: ns-in 200ms var(--ease-out) both;
+    @media (prefers-reduced-motion: no-preference) {
+      animation: ns-in 200ms var(--ease-out) both;
+    }
   }
   .row {
     position: relative;
@@ -226,9 +228,12 @@
     cursor: pointer;
     text-align: left;
     color: var(--ink-strong);
-    transition:
-      background-color 160ms ease,
-      transform 160ms var(--ease-out);
+    transition: background-color 160ms ease;
+    @media (prefers-reduced-motion: no-preference) {
+      transition:
+        background-color 160ms ease,
+        transform 160ms var(--ease-out);
+    }
   }
   .row.on {
     background: var(--surface-fill);

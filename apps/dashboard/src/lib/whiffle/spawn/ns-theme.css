@@ -31,9 +31,12 @@
 .ns-theme button {
   font: inherit;
   color: inherit;
-  transition:
-    var(--transition-control),
-    transform 160ms var(--ease-out);
+  transition: var(--transition-control);
+  @media (prefers-reduced-motion: no-preference) {
+    transition:
+      var(--transition-control),
+      transform 160ms var(--ease-out);
+  }
 }
 .ns-theme button:not(:disabled):active {
   transform: scale(var(--press-scale));
@@ -182,14 +185,20 @@
   }
 }
 .ns-theme .ns-in {
-  animation: ns-in var(--ns-row-ms) var(--ease-out) both;
-  animation-delay: var(--delay, 0ms);
+  @media (prefers-reduced-motion: no-preference) {
+    animation: ns-in var(--ns-row-ms) var(--ease-out) both;
+    animation-delay: var(--delay, 0ms);
+  }
 }
 .ns-theme .ns-check {
-  animation: ns-check var(--ns-check-ms) var(--ease-out) both;
+  @media (prefers-reduced-motion: no-preference) {
+    animation: ns-check var(--ns-check-ms) var(--ease-out) both;
+  }
 }
 .ns-theme .ns-panel {
-  animation: ns-panel 200ms var(--ease-out) both;
+  @media (prefers-reduced-motion: no-preference) {
+    animation: ns-panel 200ms var(--ease-out) both;
+  }
 }
 
 /* DS Button (§5.1). */
@@ -253,8 +262,14 @@
   transition:
     background-color var(--ns-chip-ms) ease,
     border-color var(--ns-chip-ms) ease,
-    color var(--ns-chip-ms) ease,
-    transform 160ms var(--ease-out);
+    color var(--ns-chip-ms) ease;
+  @media (prefers-reduced-motion: no-preference) {
+    transition:
+      background-color var(--ns-chip-ms) ease,
+      border-color var(--ns-chip-ms) ease,
+      color var(--ns-chip-ms) ease,
+      transform 160ms var(--ease-out);
+  }
 }
 .ns-theme .ns-chip-btn > svg {
   width: 15px;
@@ -313,15 +328,20 @@
   scale: 1;
   translate: 0 0;
   transform-origin: var(--bits-popover-content-transform-origin, top left);
-  transition:
-    opacity var(--dur-pop) var(--ease-drawer),
-    scale var(--dur-pop) var(--ease-drawer),
-    translate var(--dur-pop) var(--ease-drawer);
+  transition: opacity var(--dur-pop) var(--ease-drawer);
+  @media (prefers-reduced-motion: no-preference) {
+    transition:
+      opacity var(--dur-pop) var(--ease-drawer),
+      scale var(--dur-pop) var(--ease-drawer),
+      translate var(--dur-pop) var(--ease-drawer);
+  }
 }
 /* Exit: shorter than the entrance, fading and settling back to --pop-scale.
    bits-ui keeps the content mounted until this animation ends. */
 .ns-theme.ns-pop[data-state="closed"] {
-  animation: ns-pop-out var(--dur-exit) var(--ease-out) both;
+  @media (prefers-reduced-motion: no-preference) {
+    animation: ns-pop-out var(--dur-exit) var(--ease-out) both;
+  }
 }
 @keyframes ns-pop-out {
   to {
@@ -334,7 +354,9 @@
    exists; gliding between siblings keeps the content open and never
    replays it. */
 .ns-theme.ns-pop[data-state="open"] {
-  animation: ns-pop-in var(--dur-pop) var(--ease-drawer) both;
+  @media (prefers-reduced-motion: no-preference) {
+    animation: ns-pop-in var(--dur-pop) var(--ease-drawer) both;
+  }
 }
 @keyframes ns-pop-in {
   from {
@@ -360,15 +382,20 @@
   align-content: start;
 }
 .ns-theme.ns-pop[data-morph] {
-  transition:
-    opacity var(--dur-pop) var(--ease-drawer),
-    scale var(--dur-pop) var(--ease-drawer),
-    translate var(--dur-pop) var(--ease-drawer),
-    width var(--dur-pop) var(--ease-drawer);
+  transition: opacity var(--dur-pop) var(--ease-drawer);
+  @media (prefers-reduced-motion: no-preference) {
+    transition:
+      opacity var(--dur-pop) var(--ease-drawer),
+      scale var(--dur-pop) var(--ease-drawer),
+      translate var(--dur-pop) var(--ease-drawer),
+      width var(--dur-pop) var(--ease-drawer);
+  }
 }
 .ns-pop[data-morph] .ns-morph {
   overflow: hidden;
-  transition: height var(--dur-pop) var(--ease-drawer);
+  @media (prefers-reduced-motion: no-preference) {
+    transition: height var(--dur-pop) var(--ease-drawer);
+  }
 }
 @media (prefers-reduced-motion: no-preference) {
   [data-bits-floating-content-wrapper]:has(> .ns-pop[data-morph]) {

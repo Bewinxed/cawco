@@ -715,7 +715,9 @@
     border-radius: var(--radius-pill);
     width: 100%;
     transform-origin: left;
-    transition: transform var(--dur-panel) var(--ease-out);
+    @media (prefers-reduced-motion: no-preference) {
+      transition: transform var(--dur-panel) var(--ease-out);
+    }
   }
   .hero-fill.ok {
     background: var(--data-ok);
@@ -923,7 +925,9 @@
       border-radius: var(--radius-pill);
       width: 100%;
       transform-origin: left;
-      transition: transform var(--dur-panel) var(--ease-out);
+      @media (prefers-reduced-motion: no-preference) {
+        transition: transform var(--dur-panel) var(--ease-out);
+      }
     }
     .q-table .fill.ok {
       background: var(--data-ok);

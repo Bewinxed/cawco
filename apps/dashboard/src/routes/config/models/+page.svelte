@@ -411,7 +411,9 @@
      the lines cross-fade over each other in one grid cell. */
   .morph {
     overflow: hidden;
-    transition: block-size 300ms cubic-bezier(0.16, 1, 0.3, 1);
+    @media (prefers-reduced-motion: no-preference) {
+      transition: block-size 300ms cubic-bezier(0.16, 1, 0.3, 1);
+    }
   }
   .stack {
     display: grid;
@@ -421,7 +423,9 @@
   }
   /* The switch's knob travels on the toggle curve. */
   .group :global([data-slot="switch-thumb"]) {
-    transition: transform 300ms cubic-bezier(0.65, 0, 0.35, 1);
+    @media (prefers-reduced-motion: no-preference) {
+      transition: transform 300ms cubic-bezier(0.65, 0, 0.35, 1);
+    }
   }
   /* Connected: the tick draws itself in. */
   .check {
@@ -442,7 +446,9 @@
     stroke-width: 1.8;
     stroke-dasharray: 12;
     stroke-dashoffset: 0;
-    animation: draw 500ms cubic-bezier(0.16, 1, 0.3, 1) 100ms both;
+    @media (prefers-reduced-motion: no-preference) {
+      animation: draw 500ms cubic-bezier(0.16, 1, 0.3, 1) 100ms both;
+    }
   }
   @keyframes draw {
     from {

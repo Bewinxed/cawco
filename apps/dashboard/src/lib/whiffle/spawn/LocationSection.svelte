@@ -587,9 +587,12 @@
   .repo {
     display: grid;
     gap: 8px;
-    transition:
-      transform 280ms var(--ease-in-out),
-      opacity 280ms ease;
+    transition: opacity 280ms ease;
+    @media (prefers-reduced-motion: no-preference) {
+      transition:
+        transform 280ms var(--ease-in-out),
+        opacity 280ms ease;
+    }
   }
   .note {
     display: flex;

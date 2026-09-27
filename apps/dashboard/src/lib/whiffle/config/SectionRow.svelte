@@ -156,9 +156,12 @@
     min-height: 44px;
     padding: 6px 8px;
     border-radius: var(--radius-sm);
-    transition:
-      var(--transition-control),
-      transform 160ms var(--ease-out);
+    transition: var(--transition-control);
+    @media (prefers-reduced-motion: no-preference) {
+      transition:
+        var(--transition-control),
+        transform 160ms var(--ease-out);
+    }
   }
   /* The whole row is the link's hit area, so the whole row takes the press. */
   .row:has(.link:active) {

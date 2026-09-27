@@ -261,7 +261,9 @@
   .hchev {
     display: inline-flex;
     flex: 0 0 auto;
-    transition: transform var(--dur-control) var(--ease-out);
+    @media (prefers-reduced-motion: no-preference) {
+      transition: transform var(--dur-control) var(--ease-out);
+    }
   }
   .hchev.open {
     transform: rotate(90deg);
@@ -271,11 +273,6 @@
      at the same width as every turn above it rather than running the full pane. */
   .hbody {
     margin-top: var(--space-3);
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .hchev {
-      transition: none;
-    }
   }
 
   /* The ledger's rail column is narrower on a phone, and every other rail

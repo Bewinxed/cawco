@@ -759,12 +759,6 @@
   .burger:active {
     transform: scale(0.96);
   }
-  @media (prefers-reduced-motion: reduce) {
-    .icobtn:active,
-    .burger:active {
-      transform: none;
-    }
-  }
   .badge {
     position: absolute;
     top: -5px;

@@ -13,7 +13,7 @@ export function slideThumb(
 ): () => void {
   let last: { x: number; y: number; w: number; h: number } | undefined;
   let run: Animation | undefined;
-  const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+  const motion = window.matchMedia("(prefers-reduced-motion: no-preference)");
 
   /** Where the thumb is drawn right now, in the group's offset space. */
   const onScreen = () => {
@@ -48,7 +48,7 @@ export function slideThumb(
     thumb.style.width = `${next.w}px`;
     thumb.style.height = `${next.h}px`;
     thumb.style.transform = `translate(${next.x}px, ${next.y}px)`;
-    if (glide && from && !reduce.matches) {
+    if (glide && from && motion.matches) {
       run = thumb.animate(
         [
           {

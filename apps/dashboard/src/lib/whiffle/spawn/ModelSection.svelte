@@ -524,8 +524,10 @@
     background: var(--surface-lift);
     border-radius: var(--radius-sm);
     box-shadow: var(--shadow-raised);
-    transition: transform 180ms var(--ease-in-out);
     pointer-events: none;
+    @media (prefers-reduced-motion: no-preference) {
+      transition: transform 180ms var(--ease-in-out);
+    }
   }
   .tab {
     position: relative;
@@ -573,10 +575,13 @@
     border-radius: var(--radius-sm);
     box-shadow: var(--shadow-raised);
     pointer-events: none;
-    transition:
-      transform 180ms var(--ease-in-out),
-      width 180ms var(--ease-in-out),
-      opacity 120ms ease;
+    transition: opacity 120ms ease;
+    @media (prefers-reduced-motion: no-preference) {
+      transition:
+        transform 180ms var(--ease-in-out),
+        width 180ms var(--ease-in-out),
+        opacity 120ms ease;
+    }
   }
   .tip-text {
     display: inline-flex;
@@ -585,7 +590,9 @@
     padding: 0 10px;
     font: 500 var(--text-meta) / 1 var(--font-body);
     white-space: nowrap;
-    animation: ns-in 160ms var(--ease-out) both;
+    @media (prefers-reduced-motion: no-preference) {
+      animation: ns-in 160ms var(--ease-out) both;
+    }
   }
   .soon {
     font: 500 0.5625rem / 1 var(--font-body);
@@ -672,10 +679,13 @@
     height: 44px;
     background: var(--surface-fill);
     border-radius: var(--radius-sm);
-    transition:
-      transform 160ms var(--ease-in-out),
-      opacity 120ms ease;
+    transition: opacity 120ms ease;
     pointer-events: none;
+    @media (prefers-reduced-motion: no-preference) {
+      transition:
+        transform 160ms var(--ease-in-out),
+        opacity 120ms ease;
+    }
   }
   /* The chosen row's run settings: effort and permission chips, riding the
      selection fill's transform so they slide to whichever model is picked. */
@@ -688,9 +698,12 @@
     align-items: center;
     gap: 4px;
     height: 44px;
-    transition:
-      transform 160ms var(--ease-in-out),
-      opacity 120ms ease;
+    transition: opacity 120ms ease;
+    @media (prefers-reduced-motion: no-preference) {
+      transition:
+        transform 160ms var(--ease-in-out),
+        opacity 120ms ease;
+    }
   }
   .tools :global(.ns-chip-btn.tool) {
     height: 28px;

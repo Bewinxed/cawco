@@ -5,7 +5,7 @@
  * turns back from where it is; open, the element is left at its natural
  * height, so content that arrives later is never clipped to a measurement.
  */
-import { reduced } from "./curves.svelte";
+import { motionOk } from "./curves.svelte";
 
 export interface FoldOptions {
   easing: string;
@@ -59,7 +59,7 @@ export function fold(
   };
   // Reduced motion is stillness, not an instant swap: the height lands at
   // once and only a fade, where there is one, still runs.
-  const still = reduced.current;
+  const still = !motionOk.current;
   if (still && !fade) {
     settle();
     return;

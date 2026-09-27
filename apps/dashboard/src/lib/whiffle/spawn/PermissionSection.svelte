@@ -103,8 +103,10 @@
     height: var(--permission-row-height, 44px);
     background: var(--surface-fill);
     border-radius: var(--radius-sm);
-    transition: transform 160ms var(--ease-in-out);
     pointer-events: none;
+    @media (prefers-reduced-motion: no-preference) {
+      transition: transform 160ms var(--ease-in-out);
+    }
   }
   .embedded .fill {
     inset-inline: 0;

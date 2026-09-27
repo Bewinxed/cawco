@@ -265,8 +265,10 @@
     top: 0;
     bottom: 0;
     background: var(--surface-recess-deep);
-    transition: width var(--ns-fill-ms) var(--ease-in-out);
     pointer-events: none;
+    @media (prefers-reduced-motion: no-preference) {
+      transition: width var(--ns-fill-ms) var(--ease-in-out);
+    }
   }
   .pip {
     position: absolute;
@@ -276,10 +278,13 @@
     margin-top: -2.5px;
     border-radius: var(--radius-pill);
     background: var(--ink-strong);
-    transition:
-      left var(--ns-fill-ms) var(--ease-in-out),
-      opacity 120ms ease;
+    transition: opacity 120ms ease;
     pointer-events: none;
+    @media (prefers-reduced-motion: no-preference) {
+      transition:
+        left var(--ns-fill-ms) var(--ease-in-out),
+        opacity 120ms ease;
+    }
   }
   .knob {
     flex-shrink: 0;
@@ -317,9 +322,12 @@
     border-radius: 1px;
     background: var(--ink-strong);
     opacity: 0.22;
-    transition:
-      opacity 160ms ease,
-      height 160ms var(--ease-in-out);
+    transition: opacity 160ms ease;
+    @media (prefers-reduced-motion: no-preference) {
+      transition:
+        opacity 160ms ease,
+        height 160ms var(--ease-in-out);
+    }
   }
   .bar.lit {
     opacity: 1;
