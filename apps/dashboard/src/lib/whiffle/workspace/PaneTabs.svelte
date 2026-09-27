@@ -496,8 +496,11 @@
   /* The session track scrolls sideways, and a scroll container clips on both
      axes; its transparent padding grows into an equal negative margin on a
      coarse pointer, so the controls' touch areas above and below the 32px
-     tabs sit inside its clip and nothing moves. */
-  :global(.session-tabs .ff-tabs-list.scrollable) {
+     tabs sit inside its clip and nothing moves. The root's data-slot is
+     in the selector to outrank the component's own folder padding at any
+     stylesheet order: dev draws the first paint with the sheets in another
+     order than the build, and a tie would flip once the page hydrates. */
+  :global(.session-tabs[data-slot="tabs"] .ff-tabs-list.scrollable) {
     @media (pointer: coarse) {
       padding-block: calc(var(--pad) + 10px) 10px;
       margin-block: -10px;
@@ -619,8 +622,10 @@
 
   /* The strip takes one step taller than the component's default in a
      bar with room, with the component's own text size and a tighter
-     horizontal pad. The shape and the sheet are the component's. */
-  :global(.session-tabs .ff-tabs-list) {
+     horizontal pad. The shape and the sheet are the component's. The
+     data-slot outranks the component's defaults by specificity, not by
+     which stylesheet comes last. */
+  :global(.session-tabs[data-slot="tabs"] .ff-tabs-list) {
     --px: 10px;
     --text: var(--text-label);
     --item: 32px;

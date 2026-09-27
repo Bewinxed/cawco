@@ -627,15 +627,10 @@
      sheet in the transcript's own surface — reads as the page it opens.
      The hairline sits in the bar's bottom pixel, where the sheet ends and
      covers it. */
-  /* Hosting the tabs on a wide screen, the bar gives the first tab no
-     extra inset: the track's own flare room is the margin. Narrower, the
-     menu button leads and keeps its inset. */
+  /* Hosting the tabs, the bar gives the first tab no extra inset: the
+     track's own flare room is the margin. */
   .top.hosting {
-    padding-inline-start: var(--space-4);
-
-    @media (width >= 900px) {
-      padding-inline-start: 0;
-    }
+    padding-inline-start: 0;
     border-bottom: 0;
     background:
       linear-gradient(var(--border-hairline), var(--border-hairline)) bottom /
@@ -699,6 +694,27 @@
   .top.hosting .right {
     flex: 0 0 auto;
     padding-left: var(--space-3);
+  }
+  /* The client hosts the tabs only where NARROW_QUERY (hooks/is-mobile)
+     says wide. The server has only a guess on a first visit, before the
+     width cookie: a browser whose user agent reads as a desktop is drawn
+     hosting at any width, and where the query says narrow the client swaps
+     the tabs for the crumb as it hydrates. The same query here makes that
+     first paint the narrow bar already, its inset and ground, the hosted
+     tabs not drawn, so nothing in the bar moves in the swap. */
+  @media (max-width: 899px), (pointer: coarse) and (orientation: portrait) {
+    .top.hosting {
+      padding-inline-start: var(--space-7);
+      border-bottom: 1px solid var(--border-hairline);
+      background: var(--surface-raised);
+    }
+    .top.hosting .right {
+      flex: 0 1 auto;
+      padding-left: 0;
+    }
+    .top.hosting > :global(.session-tabs) {
+      display: none;
+    }
   }
   /* One family: every control in the cluster is the same 28px box — the
      hairline, the raised surface, the control radius, the same type — so
