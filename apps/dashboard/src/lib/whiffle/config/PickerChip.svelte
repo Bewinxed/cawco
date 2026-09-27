@@ -4,6 +4,8 @@
    * for the narrowings — machine, project, harness, model — where "every" is
    * the usual answer and the list can be long.
    */
+  import { TextMorph } from "torph/svelte";
+  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "$lib/components/ui/popover";
   import { IconCheck, IconChevronDown } from "$lib/icons";
@@ -31,28 +33,39 @@
 <Popover.Root bind:open={expanded}>
   <Popover.Trigger aria-label="{label}: {chosen}" class="picker focus-ring">
     <span class="k">{label}</span>
-    <span class="v">{chosen}</span>
+    <span class="v"><TextMorph text={chosen} /></span>
     <IconChevronDown />
   </Popover.Trigger>
   <Popover.Content align="start" class="max-h-80 w-64 gap-0 overflow-y-auto">
-    {#each options as option, index (option.value)}
-      {#if option.group && option.group !== options[index - 1]?.group}
-        <span class="group">{option.group}</span>
-      {/if}
-      <button
-        class="kit-item item focus-ring"
-        onclick={() => {
+    <!-- The kit's ghost and pill: the pill is the choice, and a pick takes
+         the ghost's place under the pointer while the popover closes. -->
+    <div
+      aria-label={label}
+      class="options"
+      role="listbox"
+      {@attach highlight({ rows: '.item', selected: '[aria-selected="true"]' })}
+    >
+      {#each options as option, index (option.value)}
+        {#if option.group && option.group !== options[index - 1]?.group}
+          <span class="group">{option.group}</span>
+        {/if}
+        <button
+          aria-selected={option.value === value}
+          class="kit-item item focus-ring"
+          onclick={() => {
           onpick(option.value);
           expanded = false;
         }}
-        type="button"
-      >
-        <span class="label">{option.label}</span>
-        {#if option.value === value}
-          <IconCheck />
-        {/if}
-      </button>
-    {/each}
+          role="option"
+          type="button"
+        >
+          <span class="label">{option.label}</span>
+          {#if option.value === value}
+            <IconCheck />
+          {/if}
+        </button>
+      {/each}
+    </div>
   </Popover.Content>
 </Popover.Root>
 
@@ -97,6 +110,10 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+  }
+  .options {
+    display: flex;
+    flex-direction: column;
   }
   .item {
     display: flex;

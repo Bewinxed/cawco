@@ -4,12 +4,15 @@
    * until a plugin is picked from it.
    */
   import type { FleetMarketplace } from "@whiffle/core";
+  import { tick } from "svelte";
+  import { TextMorph } from "torph/svelte";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "$lib/components/ui/popover";
   import { IconShopDuo } from "$lib/icons";
-  import { appear } from "$lib/whiffle/motion/curves.svelte";
+  import { unfold } from "$lib/whiffle/motion/fold.svelte";
+  import { closeInto } from "$lib/whiffle/motion/share.svelte";
   import { saveMarketplace } from "../fleet";
   import Field from "./Field.svelte";
 
@@ -28,6 +31,7 @@
   let source = $state("");
   let busy = $state(false);
   let failed = $state<string | undefined>(undefined);
+  let surface = $state<HTMLElement | null>(null);
 
   const clash = $derived(taken.includes(name.trim()));
   const ready = $derived(name.trim() !== "" && source.trim() !== "" && !clash);
@@ -46,7 +50,15 @@
     busy = true;
     failed = undefined;
     try {
-      onsaved(await saveMarketplace(name.trim(), source.trim()));
+      const row = await saveMarketplace(name.trim(), source.trim());
+      onsaved(row);
+      // The form closes into the row it made.
+      await tick();
+      const made = document.querySelector<HTMLElement>(
+        `[data-row-name="${CSS.escape(row.name)}"]`
+      );
+      const closing = surface && made ? closeInto(surface, made) : undefined;
+      await closing?.finished.catch(() => undefined);
       expanded = false;
       reset();
     } catch (error) {
@@ -76,6 +88,7 @@
   <Popover.Content
     align="start"
     class="w-[380px] max-w-[calc(100vw-2rem)] gap-3 p-3"
+    bind:ref={surface}
   >
     <form class="form" onsubmit={link}>
       <Field id="market-source" label="Source">
@@ -114,10 +127,10 @@
         />
       </Field>
       {#if failed}
-        <p class="problem" role="alert" in:appear>{failed}</p>
+        <p class="problem" role="alert" transition:unfold>{failed}</p>
       {/if}
       <Button class="self-end" disabled={busy || !ready} type="submit">
-        {busy ? 'Linking…' : 'Link'}
+        <TextMorph text={busy ? 'Linking…' : 'Link'} />
       </Button>
     </form>
   </Popover.Content>

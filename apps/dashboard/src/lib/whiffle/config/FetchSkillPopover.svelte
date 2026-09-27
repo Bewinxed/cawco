@@ -5,13 +5,16 @@
    * files once and every machine writes them into ~/.claude/skills.
    */
   import type { FleetSkillMeta } from "@whiffle/core";
+  import { tick } from "svelte";
   import { toast } from "svelte-sonner";
+  import { TextMorph } from "torph/svelte";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "$lib/components/ui/popover";
   import { IconPlus } from "$lib/icons";
-  import { appear } from "$lib/whiffle/motion/curves.svelte";
+  import { unfold } from "$lib/whiffle/motion/fold.svelte";
+  import { closeInto } from "$lib/whiffle/motion/share.svelte";
   import {
     formatBytes,
     normalizeSkillSource,
@@ -39,6 +42,7 @@
   let busy = $state(false);
   let failed = $state<string | undefined>(undefined);
   let choices = $state<string[]>([]);
+  let surface = $state<HTMLElement | null>(null);
 
   const source = $derived(normalizeSkillSource(typed));
   const nameProblem = $derived(skillNameProblem(skillName, taken));
@@ -65,6 +69,13 @@
         ({ choices } = row);
         return;
       }
+      // The form closes into the row it made.
+      await tick();
+      const made = document.querySelector<HTMLElement>(
+        `[data-row-name="${CSS.escape(row.name)}"]`
+      );
+      const closing = surface && made ? closeInto(surface, made) : undefined;
+      await closing?.finished.catch(() => undefined);
       expanded = false;
       reset();
       if (!row.error) {
@@ -108,6 +119,7 @@
   <Popover.Content
     align="end"
     class="w-[380px] max-w-[calc(100vw-2rem)] gap-3 p-3"
+    bind:ref={surface}
   >
     <form
       class="form"
@@ -170,7 +182,7 @@
         />
       </Field>
       {#if choices.length > 0}
-        <div class="choices">
+        <div class="choices" transition:unfold>
           <span class="note"
             >That repo holds several skills. Pick the one to fetch.</span
           >
@@ -187,10 +199,10 @@
         </div>
       {/if}
       {#if failed}
-        <p class="problem" role="alert" in:appear>{failed}</p>
+        <p class="problem" role="alert" transition:unfold>{failed}</p>
       {/if}
       <Button class="self-end" disabled={busy || !ready} type="submit">
-        {busy ? 'Fetching…' : 'Fetch skill'}
+        <TextMorph text={busy ? 'Fetching…' : 'Fetch skill'} />
       </Button>
     </form>
   </Popover.Content>

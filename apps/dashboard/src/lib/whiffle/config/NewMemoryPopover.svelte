@@ -5,13 +5,14 @@
    * seen is how a document comes into being.
    */
   import { memoryDocProblem } from "@whiffle/core";
+  import { TextMorph } from "torph/svelte";
   import { goto } from "$app/navigation";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "$lib/components/ui/popover";
   import { IconPlus } from "$lib/icons";
-  import { appear } from "$lib/whiffle/motion/curves.svelte";
+  import { unfold } from "$lib/whiffle/motion/fold.svelte";
   import { type FleetMemoryDocRow, saveMemoryDoc } from "../fleet";
   import Field from "./Field.svelte";
   import { fileHref } from "./memory";
@@ -113,10 +114,10 @@
         />
       </Field>
       {#if failed}
-        <p class="problem" role="alert" in:appear>{failed}</p>
+        <p class="problem" role="alert" transition:unfold>{failed}</p>
       {/if}
       <Button class="self-end" disabled={busy} type="submit">
-        {busy ? 'Creating…' : 'Create and open'}
+        <TextMorph text={busy ? 'Creating…' : 'Create and open'} />
       </Button>
     </form>
   </Popover.Content>

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { onMount } from "svelte";
-  import { blur, fade } from "svelte/transition";
-  import { toast } from "svelte-sonner";
+  import { blur } from "svelte/transition";
+  import { TextMorph } from "torph/svelte";
   import { replaceState } from "$app/navigation";
   import { page } from "$app/state";
   import { Button } from "$lib/components/ui/button";
@@ -13,7 +13,7 @@
   import SectionFrame from "$lib/whiffle/config/SectionFrame.svelte";
   import SwitchField from "$lib/whiffle/config/SwitchField.svelte";
   import { sectionOf } from "$lib/whiffle/config/sections";
-  import { bezier } from "$lib/whiffle/motion/curves.svelte";
+  import { unfold } from "$lib/whiffle/motion/fold.svelte";
   import {
     type OpenRouterState,
     saveSuggestSetting,
@@ -81,8 +81,8 @@
       body: JSON.stringify({ code }),
     });
     if (response.ok) {
+      // The status line above says so: "Connected just now".
       await readOpenRouter();
-      toast.success("OpenRouter is connected.");
     } else {
       openrouterError = `${response.status} ${await response.text()}`;
     }
@@ -124,6 +124,16 @@
   let model = $state("");
   let apiKey = $state("");
   let saving = $state(false);
+  /** The save just went through: the button says so, where it was pressed. */
+  let saved = $state(false);
+  let savedTimer: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => () => clearTimeout(savedTimer));
+  const saveLabel = $derived.by(() => {
+    if (saving) {
+      return "Saving…";
+    }
+    return saved ? "Saved" : "Save supervisor";
+  });
 
   async function readSupervisor() {
     try {
@@ -149,8 +159,12 @@
         ...(apiKey === "" ? {} : { apiKey }),
       });
       apiKey = "";
-      toast.success("Supervisor settings saved.");
       await readSupervisor();
+      saved = true;
+      clearTimeout(savedTimer);
+      savedTimer = setTimeout(() => {
+        saved = false;
+      }, 1600);
     } catch (error) {
       supervisorError = error instanceof Error ? error.message : String(error);
     }
@@ -175,7 +189,6 @@
     }
   );
   /** A problem fades in over 300ms on the settle-in curve. */
-  const PROBLEM_IN = { duration: 300, easing: bezier(0.16, 1, 0.3, 1) };
   let openrouterHeight = $state(0);
   let reachHeight = $state(0);
 
@@ -302,7 +315,7 @@
       onchange={setSuggest}
     />
     {#if openrouterError}
-      <p class="problem" role="alert" in:fade={PROBLEM_IN}>{openrouterError}</p>
+      <p class="problem" role="alert" transition:unfold>{openrouterError}</p>
     {/if}
   </div>
 
@@ -310,7 +323,7 @@
     <SectionHeader hue={HUE} icon={IconRuleDuo} label="Supervisor">
       {#snippet right()}
         <Button disabled={saving} size="sm" type="submit">
-          {saving ? 'Saving…' : 'Save supervisor'}
+          <TextMorph text={saveLabel} />
         </Button>
       {/snippet}
     </SectionHeader>
@@ -377,7 +390,7 @@
       </div>
     </div>
     {#if supervisorError}
-      <p class="problem" role="alert" in:fade={PROBLEM_IN}>{supervisorError}</p>
+      <p class="problem" role="alert" transition:unfold>{supervisorError}</p>
     {/if}
   </form>
 </SectionFrame>

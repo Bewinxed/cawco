@@ -95,15 +95,34 @@ export function highlight(options: HighlightOptions) {
     }
     container.prepend(...(withGhost ? [ghost] : []), trail, pill);
 
-    /** A row's box in the container's padding box, scroll included. */
+    /**
+     * A row's box in the container's padding box, scroll included, in the
+     * container's own untransformed pixels: a list inside a popover that is
+     * still scaling in is measured at its real size, not its drawn one.
+     */
     const boxOf = (row: HTMLElement): Box => {
       const frame = container.getBoundingClientRect();
       const rect = row.getBoundingClientRect();
+      // Drawn size over laid-out size; the laid-out size is the resolved
+      // one, fractional, so an untransformed list is exactly 1.
+      const styles = getComputedStyle(container);
+      const across = (drawn: number, laid: string) => {
+        const size = Number.parseFloat(laid);
+        return size > 0 && Math.abs(drawn - size) > 0.01 ? drawn / size : 1;
+      };
+      const sx = across(frame.width, styles.width);
+      const sy = across(frame.height, styles.height);
       return {
-        x: rect.left - frame.left - container.clientLeft + container.scrollLeft,
-        y: rect.top - frame.top - container.clientTop + container.scrollTop,
-        w: rect.width,
-        h: rect.height,
+        x:
+          (rect.left - frame.left) / sx -
+          container.clientLeft +
+          container.scrollLeft,
+        y:
+          (rect.top - frame.top) / sy -
+          container.clientTop +
+          container.scrollTop,
+        w: rect.width / sx,
+        h: rect.height / sy,
         r: getComputedStyle(row).borderRadius,
       };
     };
