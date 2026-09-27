@@ -34,6 +34,10 @@ export function fold(
   { ms, easing, fade = false, gap = 0 }: FoldOptions,
   from?: number
 ): Animation | undefined {
+  // Clipped from the first measurement to the last frame: a clipped box holds
+  // its children's margins, so the start, the end and every frame between are
+  // read in the same geometry.
+  node.style.overflow = "hidden";
   const start = from ?? drawn(node);
   const startOpacity = fade ? Number(getComputedStyle(node).opacity) : 1;
   const startGap = gap
@@ -41,7 +45,6 @@ export function fold(
     : 0;
   running.get(node)?.cancel();
   running.delete(node);
-  node.style.overflow = "hidden";
   node.style.height = "";
   node.style.marginBottom = "";
   node.style.opacity = "";
@@ -51,6 +54,10 @@ export function fold(
     if (open) {
       node.style.overflow = "";
     } else {
+      // Written again: the clip set at the start may have been dropped by a
+      // `style` rewrite, and a shut box that does not clip lets its first
+      // child's margin through.
+      node.style.overflow = "hidden";
       node.style.height = "0px";
       if (gap) {
         node.style.marginBottom = `${-gap}px`;
@@ -67,8 +74,12 @@ export function fold(
     settle();
     return;
   }
-  const from_: Keyframe = {};
-  const to: Keyframe = {};
+  // The clip rides in the keyframes as well as the inline style: a component
+  // that rewrites its `style` attribute mid-fold (bits-ui's Collapsible, when
+  // it publishes its size) drops the inline one, and an unclipped fold paints
+  // its whole body over the rows below while its box is still growing.
+  const from_: Keyframe = { overflow: "hidden" };
+  const to: Keyframe = { overflow: "hidden" };
   if (!still) {
     from_.height = `${start}px`;
     to.height = `${end}px`;
