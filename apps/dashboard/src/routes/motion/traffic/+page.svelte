@@ -231,7 +231,7 @@
     display: flex;
     flex-direction: column;
     height: 100dvh;
-    background: var(--surface-canvas);
+    background: var(--surface-recess);
   }
   header {
     padding: var(--space-4) var(--space-5);

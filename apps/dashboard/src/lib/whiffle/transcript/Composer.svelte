@@ -869,7 +869,7 @@
     background: transparent;
     resize: none;
     font-family: var(--font-body);
-    font-size: var(--a-input-fs, 16px);
+    font-size: 16px;
     line-height: var(--leading-ui);
     color: var(--ink-strong);
     /* Grows with what is in it (motion/autosize.svelte.ts), a line at a time
