@@ -2696,14 +2696,17 @@ let lastSubscriptionKey = "";
 /**
  * Re-sends the whole subscription set. Replace-whole-set on every change; a
  * no-op when the set is unchanged since the last send, and nothing at all when
- * the socket is not open — the reconnect path re-sends.
+ * the socket is not open — the reconnect path re-sends. The ids are read before
+ * the socket is checked: the route layout's effect calls this, and a first run
+ * that found the socket still connecting would otherwise track no tabs at all,
+ * so closing one never sent the smaller set.
  */
 export function syncSubscriptions(): void {
+  const ids = subscriptionIds().sort();
   const socket = globalThis.__whiffleSocket;
   if (!socket || socket.readyState !== WebSocket.OPEN) {
     return;
   }
-  const ids = subscriptionIds().sort();
   const key = ids.join("\u0000");
   if (key === lastSubscriptionKey) {
     return;

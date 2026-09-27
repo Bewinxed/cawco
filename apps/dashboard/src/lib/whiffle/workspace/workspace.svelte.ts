@@ -12,10 +12,10 @@
  * render path reads the URL back. A deep link still works, because the URL is
  * read exactly once per real navigation to seed this store, and never again.
  *
- * Phase 1 runs the tree in its degenerate shape: one leaf, whose tab list is
- * still owned by `workingSet`. The node types are the finished ones so the
- * grid can grow into them without a rewrite; only the ownership of `tabs`
- * moves later.
+ * The tabs in its leaves are also what is live: the dashboard subscribes to
+ * frames for every id `openIds` names, so a tab is streaming exactly when it
+ * is open. `workingSet` only remembers what a conversation is called and
+ * where a stored one lives.
  */
 import { browser } from "$app/environment";
 import { pushState, replaceState } from "$app/navigation";
@@ -161,22 +161,7 @@ function load(): WorkspaceV1 {
   } catch {
     // A browser that will not read storage still has the cookie.
   }
-  const held = parse(stored) ?? parse(fromCookie());
-  if (held) {
-    return held;
-  }
-  // Migration: a reader who already has open tabs keeps them, in one leaf.
-  const carried = browser ? workingSet.order : [];
-  if (carried.length > 0) {
-    const leaf: LeafNode = {
-      t: "l",
-      id: nodeId(),
-      tabs: [...carried],
-      active: null,
-    };
-    return { v: 1, root: leaf, focusedLeaf: leaf.id };
-  }
-  return blank();
+  return parse(stored) ?? parse(fromCookie()) ?? blank();
 }
 
 const held = $state<WorkspaceV1>(load());
@@ -671,8 +656,7 @@ export const workspace = {
    * nowhere to go. Wraps, because on a phone there is no edge to see and
    * continuing round is the shortest way back to the other end.
    *
-   * Unlike the working set's old `step`, the reachable set is exactly this
-   * group's open tabs — a swipe can never land on a conversation that is not
+   * The reachable set is exactly this group's open tabs — a swipe can never land on a conversation that is not
    * in the strip in front of you.
    */
   step(from: string | null, by: number, leafId?: string): string | null {
