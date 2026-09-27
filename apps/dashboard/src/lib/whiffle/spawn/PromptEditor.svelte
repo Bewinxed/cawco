@@ -357,6 +357,7 @@
     color: var(--ink-strong);
     white-space: pre-wrap;
     word-break: break-word;
+    transition: height var(--ns-prompt-ms) var(--ease-in-out);
   }
   .placeholder {
     position: absolute;

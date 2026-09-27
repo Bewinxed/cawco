@@ -1095,6 +1095,13 @@
     display: flex;
     min-width: 0;
     min-height: 0;
+    /* Opening or closing the preview grows one side into the other: the
+       split's size change is the information. A drag follows the pointer. */
+    transition: flex-grow var(--dur-panel) var(--ease-out);
+  }
+  .resizing :global(.transcript-pane),
+  .resizing :global(.artifact-pane) {
+    transition: none;
   }
   .artifact-surface {
     width: 100%;

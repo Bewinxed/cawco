@@ -12,6 +12,7 @@
   --ns-swap-in-stagger: 32ms;
   --ns-swap-distance: 18px;
   --ns-check-ms: 200ms;
+  --ns-prompt-ms: 240ms;
   --ns-chip-ms: 120ms;
   --ns-thumb-ms: 240ms;
   --ns-harness-thumb-ms: 160ms;
@@ -120,6 +121,8 @@
   pointer-events: none;
   transition:
     transform var(--ns-ghost-ms) var(--ease-in-out),
+    width var(--ns-ghost-ms) var(--ease-in-out),
+    height var(--ns-ghost-ms) var(--ease-in-out),
     opacity 120ms ease;
 }
 @media (hover: hover) {
@@ -380,7 +383,12 @@
   transition:
     opacity var(--dur-pop) var(--ease-drawer),
     scale var(--dur-pop) var(--ease-drawer),
-    translate var(--dur-pop) var(--ease-drawer);
+    translate var(--dur-pop) var(--ease-drawer),
+    width var(--dur-pop) var(--ease-drawer);
+}
+.ns-pop[data-morph] .ns-morph {
+  overflow: hidden;
+  transition: height var(--dur-pop) var(--ease-drawer);
 }
 @media (prefers-reduced-motion: no-preference) {
   [data-bits-floating-content-wrapper]:has(> .ns-pop[data-morph]) {

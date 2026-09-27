@@ -198,7 +198,6 @@
     </div>
     <div
       class="panel"
-      data-open={browsing}
       inert={!browsing}
       style={`grid-template-rows:${browsing ? "1fr" : "0fr"}`}
     >
@@ -276,7 +275,6 @@
 
   <div
     class="panel"
-    data-open={mode === "repo"}
     style={`grid-template-rows:${mode === "repo" ? "1fr" : "0fr"}`}
   >
     <div class="clip">
@@ -435,17 +433,13 @@
       background: var(--surface-hover);
     }
   }
-  /* The row opens at once; its content fades in over it. */
   .panel {
     display: grid;
+    transition: grid-template-rows 280ms var(--ease-in-out);
   }
   .clip {
     min-height: 0;
     overflow: hidden;
-    transition: opacity var(--dur-panel) var(--ease-out);
-  }
-  .panel[data-open="false"] > .clip {
-    opacity: 0;
   }
   .browser {
     border-top: 1px solid var(--border-hairline);

@@ -141,9 +141,14 @@
   });
 
   /* ── The switch ────────────────────────────────────────────────────
-     On a desktop a tab switch fades the arriving transcript up in place.
-     The phone's group is left alone: its swipe already slides the
-     transcripts. */
+     On a desktop a tab switch glides the arriving transcript in from the
+     side it came from and fades it up, on the strip's own --wipe (260ms)
+     and --wipe-ease (--ease-drawer), so the eye reads which way it went.
+     Only the showing transcript is painted there, so it alone moves. The
+     phone's group is left alone: its swipe already slides the transcripts. */
+  /** How far the arriving transcript travels: a cue, not a page turn. */
+  const NUDGE_PX = 40;
+  const SWITCH_MS = 260;
   const motion = new MediaQuery("(prefers-reduced-motion: no-preference)");
   let stack = $state<HTMLElement>();
   let shownIndex = untrack(() => activeIndex);
@@ -163,14 +168,21 @@
       ) {
         return;
       }
+      const dir = Math.sign(index - fromIndex);
       stack
         .querySelector<HTMLElement>(
           `:scope > .pane[data-pane="${CSS.escape(id)}"]`
         )
-        ?.animate([{ opacity: 0.4 }, { opacity: 1 }], {
-          duration: 120,
-          easing: getComputedStyle(stack).getPropertyValue("--ease-out"),
-        });
+        ?.animate(
+          [
+            { transform: `translateX(${dir * NUDGE_PX}px)`, opacity: 0.4 },
+            { transform: "none", opacity: 1 },
+          ],
+          {
+            duration: SWITCH_MS,
+            easing: getComputedStyle(stack).getPropertyValue("--ease-drawer"),
+          }
+        );
     });
   });
 

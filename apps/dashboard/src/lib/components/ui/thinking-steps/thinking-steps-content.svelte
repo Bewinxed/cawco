@@ -25,17 +25,21 @@
   }
   @keyframes thinking-open-reserve {
     from {
+      height: 0;
       opacity: 0;
     }
     to {
+      height: var(--bits-collapsible-content-height);
       opacity: 1;
     }
   }
   @keyframes thinking-close-reserve {
     from {
+      height: var(--bits-collapsible-content-height);
       opacity: 1;
     }
     to {
+      height: 0;
       opacity: 0;
     }
   }

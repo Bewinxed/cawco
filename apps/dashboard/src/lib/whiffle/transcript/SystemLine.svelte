@@ -291,18 +291,18 @@
   }
   @keyframes note-down {
     from {
-      opacity: 0;
+      height: 0;
     }
     to {
-      opacity: 1;
+      height: var(--bits-collapsible-content-height);
     }
   }
   @keyframes note-up {
     from {
-      opacity: 1;
+      height: var(--bits-collapsible-content-height);
     }
     to {
-      opacity: 0;
+      height: 0;
     }
   }
   @media (prefers-reduced-motion: reduce) {

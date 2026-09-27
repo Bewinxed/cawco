@@ -151,7 +151,7 @@
     >
       <div
         class="fill"
-        style={`transform:translateX(calc(${p - 1} * (100% - var(--kw))))`}
+        style={`width:calc(var(--kw) + ${p} * (100% - var(--kw)))`}
       >
         <div
           class="knob"
@@ -265,8 +265,7 @@
     top: 0;
     bottom: 0;
     background: var(--surface-recess-deep);
-    width: 100%;
-    transition: transform var(--ns-fill-ms) var(--ease-in-out);
+    transition: width var(--ns-fill-ms) var(--ease-in-out);
     pointer-events: none;
   }
   .pip {

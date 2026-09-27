@@ -514,18 +514,18 @@
   }
   @keyframes delegate-down {
     from {
-      opacity: 0;
+      height: 0;
     }
     to {
-      opacity: 1;
+      height: var(--bits-collapsible-content-height);
     }
   }
   @keyframes delegate-up {
     from {
-      opacity: 1;
+      height: var(--bits-collapsible-content-height);
     }
     to {
-      opacity: 0;
+      height: 0;
     }
   }
 

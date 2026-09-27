@@ -676,8 +676,10 @@
     }
   }
 
-  /* The disclosure fades in place: the content mounts at its own height and
-     only opacity animates. The exit is shorter than the entrance. */
+  /* The disclosure opens as a reveal, not a pop — bits-ui measures the content
+     into --bits-collapsible-content-height; these keyframes grow and shrink to
+     it. The entrance takes 240ms, the exit a shorter --dur-exit (160ms),
+     inside the 220ms collapsible-lazy holds unmounting children for. */
   .tools :global([data-slot="collapsible-content"]) {
     overflow: hidden;
   }
@@ -689,18 +691,18 @@
   }
   @keyframes tool-down {
     from {
-      opacity: 0;
+      height: 0;
     }
     to {
-      opacity: 1;
+      height: var(--bits-collapsible-content-height);
     }
   }
   @keyframes tool-up {
     from {
-      opacity: 1;
+      height: var(--bits-collapsible-content-height);
     }
     to {
-      opacity: 0;
+      height: 0;
     }
   }
   @media (prefers-reduced-motion: reduce) {
