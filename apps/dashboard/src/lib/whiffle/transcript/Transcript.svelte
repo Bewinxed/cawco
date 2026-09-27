@@ -632,18 +632,23 @@
   let listing = $state<HTMLElement>();
   let atBottom = $state(true);
 
+  /**
+   * Where the reader was, as the scroll handler last saw it. A pane hides
+   * inside whatever task hid it — a finger lifting off a swipe between tabs
+   * — and reading the scroller there forced a layout into that task; what the
+   * landing keeps is already known without asking.
+   */
+  let lastTop = 0;
+
   function saveLanding(): void {
-    if (!(list && scroller && landed)) {
+    if (!(list && landed)) {
       return;
     }
-    const cache = list.getCache();
     landings.set(session.instanceId, {
-      cache,
-      offset: scroller.scrollTop,
+      cache: list.getCache(),
+      offset: lastTop,
       count: built.rows.length,
-      tail:
-        scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight <
-        120,
+      tail: atBottom,
     });
   }
 
@@ -660,6 +665,7 @@
     if (!(scroller && landed)) {
       return;
     }
+    lastTop = scroller.scrollTop;
     const height = scroller.scrollHeight;
     const shrank = height < lastHeight;
     lastHeight = height;
@@ -986,28 +992,18 @@
 
   const FOLLOW_SPEED = 360; // px/s — a calm reading pace
   function followBottom(): void {
-    if (!scroller || opening > 0) {
-      return;
+    if (!scroller || opening > 0 || following !== null) {
+      return; // one loop; it reads the live target
     }
     const target = () =>
       scroller ? scroller.scrollHeight - scroller.clientHeight : 0;
-    const gap = target() - scroller.scrollTop;
-    if (gap <= 0) {
-      return;
-    }
-    if (!motionOk.current || gap > scroller.clientHeight * 2) {
-      scroller.scrollTop = scroller.scrollHeight;
-      lastWrite = scroller.scrollTop;
-      return;
-    }
-    if (following !== null) {
-      return; // one loop; it reads the live target
-    }
-    const span = Number.parseFloat(
-      getComputedStyle(scroller).getPropertyValue("--dur-panel")
-    );
-    // Both are set by the loop's first frame, not here: a loop armed while
-    // the page was hidden runs when the reader is back, and glides from there.
+    // Nothing is read until the loop's first frame. This is called from the
+    // list's observers, and those fire inside whatever task changed the list
+    // — a finger lifting off a swipe between tabs among them — where reading
+    // the scroller forced a layout into that task. The first frame reads it
+    // anyway, and a loop armed while the page was hidden starts from there
+    // when the reader is back.
+    let span = 0;
     let last = 0;
     let ends = 0;
     const step = (now: number): void => {
@@ -1016,6 +1012,20 @@
         return;
       }
       if (ends === 0) {
+        const gap = target() - scroller.scrollTop;
+        if (gap <= 0) {
+          stopFollow();
+          return;
+        }
+        if (!motionOk.current || gap > scroller.clientHeight * 2) {
+          scroller.scrollTop = scroller.scrollHeight;
+          lastWrite = scroller.scrollTop;
+          stopFollow();
+          return;
+        }
+        span = Number.parseFloat(
+          getComputedStyle(scroller).getPropertyValue("--dur-panel")
+        );
         last = now;
         ends = now + span;
       }
