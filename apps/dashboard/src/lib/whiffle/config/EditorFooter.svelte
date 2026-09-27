@@ -8,6 +8,7 @@
   import { Button } from "$lib/components/ui/button";
   import { IconTrash } from "$lib/icons";
   import { appear } from "$lib/whiffle/motion/curves.svelte";
+  import { hubDownNote } from "./hub.svelte";
 
   let {
     saving,
@@ -29,6 +30,9 @@
     ondelete?: () => void;
     oncancel: () => void;
   } = $props();
+
+  /** Printed only once the hub is known to be down (hub.svelte). */
+  const note = $derived(hubDownNote());
 </script>
 
 <footer class="footer">
@@ -49,8 +53,8 @@
         />
       </Button>
     {/if}
-    {#if down}
-      <span class="down" in:appear>{down}</span>
+    {#if note}
+      <span class="down" in:appear>{note}</span>
     {/if}
     <span class="spacer"></span>
     <Button

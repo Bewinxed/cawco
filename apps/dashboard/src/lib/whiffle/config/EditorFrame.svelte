@@ -3,16 +3,27 @@
    * The one editor template: a scrolling raised body on the recess, and the
    * commit row under it. The header holds the name as a title input; the
    * sections below are divided by a line each.
+   *
+   * An editor whose parts arrive after it opens (`settling`: a document
+   * editor still drawing, a history still read) stands at the height it
+   * settled at last time (cards) with skeleton rows over its sections, and
+   * shows them, all at once and in place, when they are all in: nothing in
+   * it moves while it assembles.
    */
-  import type { Snippet } from "svelte";
+  import { type Snippet, untrack } from "svelte";
+  import { fade } from "svelte/transition";
   import { page } from "$app/state";
   import { buttonVariants } from "$lib/components/ui/button";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import { IconMore, IconTrash } from "$lib/icons";
+  import { CURVE, easeOut, motionOk } from "$lib/whiffle/motion/curves.svelte";
   import { land } from "$lib/whiffle/motion/share.svelte";
+  import { whiffle } from "../client.svelte";
+  import { type Cards, rememberCard } from "./cards";
   import EditorFooter from "./EditorFooter.svelte";
   import { hubDown } from "./hub.svelte";
+  import SkeletonRows from "./SkeletonRows.svelte";
   import { SECTIONS } from "./sections";
 
   let {
@@ -27,6 +38,7 @@
     deleteLabel,
     deleting = false,
     ondelete,
+    settling = false,
   }: {
     /** The document title. */
     title: string;
@@ -40,7 +52,40 @@
     deleteLabel?: string;
     deleting?: boolean;
     ondelete?: () => void;
+    /** Parts of the editor are still arriving. */
+    settling?: boolean;
   } = $props();
+
+  /** Held at the kept height from opening until the parts are in. */
+  let holding = $state(untrack(() => settling));
+  const card = $derived(
+    holding
+      ? ((page.data.cards as Cards | undefined)?.[page.url.pathname] ?? null)
+      : null
+  );
+  let body = $state<HTMLElement | null>(null);
+  // Let go once everything is in: any difference from the kept height is
+  // tweened, not jumped.
+  $effect(() => {
+    if (settling || !holding || !body) {
+      return;
+    }
+    const from = body.getBoundingClientRect().height;
+    holding = false;
+    const node = body;
+    requestAnimationFrame(() => {
+      const to = node.getBoundingClientRect().height;
+      if (motionOk.current && Math.abs(to - from) > 0.5) {
+        node.animate(
+          [
+            { height: `${from}px`, overflow: "hidden" },
+            { height: `${to}px`, overflow: "hidden" },
+          ],
+          { duration: 220, easing: CURVE.drawer }
+        );
+      }
+    });
+  });
 
   const down = $derived(hubDown());
   /** The section this editor belongs to: its tile heads the editor, the same tile its row carries in the list. */
@@ -59,7 +104,12 @@
   }}
 >
   <div class="scroll">
-    <div class="body">
+    <div
+      class="body"
+      bind:this={body}
+      style:min-height={card === null ? undefined : `${card}px`}
+      {@attach whiffle.hub === 'connected' && !settling ? rememberCard(page.url.pathname) : undefined}
+    >
       <header class="head">
         {#if section}
           <span
@@ -95,7 +145,18 @@
           </span>
         {/if}
       </header>
-      {@render children()}
+      <div class="content" class:fill={settling && card !== null}>
+        <div class="slot" class:veiled={settling}>{@render children()}</div>
+        {#if settling}
+          <div
+            aria-hidden="true"
+            class="slot"
+            out:fade={{ duration: 120, easing: easeOut }}
+          >
+            <SkeletonRows fill={card !== null} />
+          </div>
+        {/if}
+      </div>
     </div>
   </div>
   <EditorFooter
@@ -139,6 +200,34 @@
     display: flex;
     align-items: flex-start;
     gap: 8px;
+  }
+  /* The sections and the skeleton over them share one cell. While the parts
+     arrive the sections lay out unseen under it, and at the kept height the
+     cell takes the room the card has left, so they cannot push it. */
+  .content {
+    display: grid;
+    min-width: 0;
+
+    &.fill {
+      flex: 1 1 0;
+      min-height: 0;
+      grid-template-rows: minmax(0, 1fr);
+    }
+  }
+  .slot {
+    grid-area: 1 / 1;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    min-width: 0;
+
+    &.veiled {
+      visibility: hidden;
+      opacity: 0;
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      transition: opacity 200ms var(--ease-out);
+    }
   }
   /* The section's tile, the one its row carries in the list: 26px, raised,
      centred on the title's 29px line. */

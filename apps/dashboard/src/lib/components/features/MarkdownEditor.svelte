@@ -34,13 +34,31 @@
   let {
     value = $bindable(),
     label,
+    onready,
   }: {
     /** The markdown. Bound both ways: typing in the editor writes it back. */
     value: string;
     label?: string;
+    /** Called once the editor has drawn the document and keeps still, or failed to load. */
+    onready?: () => void;
   } = $props();
 
   let host = $state<HTMLElement | null>(null);
+
+  /** Resolves once `node` has not changed size for 150ms. */
+  const still = (node: HTMLElement) =>
+    new Promise<void>((resolve) => {
+      let timer = setTimeout(done, 150);
+      const sizes = new ResizeObserver(() => {
+        clearTimeout(timer);
+        timer = setTimeout(done, 150);
+      });
+      sizes.observe(node);
+      function done() {
+        sizes.disconnect();
+        resolve();
+      }
+    });
   let failed = $state<string | null>(null);
 
   onMount(() => {
@@ -68,8 +86,13 @@
           return;
         }
         editor = instance;
+        // Crepe draws in steps after it is created (the document, then the
+        // blocks inside it), so "drawn" is the host keeping still.
+        await still(host);
+        onready?.();
       } catch (caught) {
         failed = caught instanceof Error ? caught.message : String(caught);
+        onready?.();
       }
     };
     load();
