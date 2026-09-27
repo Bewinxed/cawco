@@ -16,6 +16,7 @@
    * pushed number.
    */
   import { onMount } from "svelte";
+  import { page } from "$app/state";
   import { Badge } from "$lib/components/ui/badge";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "$lib/components/ui/popover";
@@ -40,8 +41,15 @@
 
   let { machineId }: Props = $props();
 
+  // Until the live reading arrives, the one the page was served with
+  // (routes/+layout.server.ts): the meter is drawn at its size from the
+  // first paint instead of growing the footer when the socket catches up.
   const limits: ClaudeLimits | null = $derived(
-    machineId ? whiffle.usageLimitsFor(machineId) : whiffle.usageLimitsAny()
+    machineId
+      ? whiffle.usageLimitsFor(machineId)
+      : (whiffle.usageLimitsAny() ??
+          (page.data.usage as ClaudeLimits | null | undefined) ??
+          null)
   );
 
   const windows = $derived(limits?.windows ?? []);

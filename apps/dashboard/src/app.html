@@ -8,15 +8,21 @@
       name="viewport"
     >
     <title>Whiffle — mission control for Claude Code</title>
-    <!-- Preload TX-02; Geist is preloaded from the root layout (hashed URL). -->
-    <link
-      as="font"
-      crossorigin
-      href="%sveltekit.assets%/fonts/TX-02-Regular.woff2"
-      rel="preload"
-      type="font/woff2"
-    >
     %sveltekit.head%
+    <!--
+      The faces the first paint sets its text in, decoded before it. The build
+      inlines Geist's latin face and TX-02's regular into the stylesheet above
+      (vite.config.ts), but a browser decodes a face only once text asks for
+      it, and off to one side: the first frame could still be laid out in the
+      fallback and re-set a moment later. This script runs once the stylesheet
+      is in and before the body is parsed, so both are ready by the first
+      layout.
+    -->
+    <script>
+      "use strict";
+      document.fonts.load('1em "Geist Variable"');
+      document.fonts.load('1em "TX-02"');
+    </script>
   </head>
   <body data-sveltekit-preload-data="hover">
     <!--

@@ -415,6 +415,8 @@ export interface SessionState {
  * paid for, with nothing ever mutating a row in place.
  */
 let catalog = $state.raw<Record<string, SDKSessionInfo[]>>({});
+/** The machines whose stored sessions have been asked for and answered, or failed. */
+const catalogsTried = $state<Record<string, true>>({});
 
 /**
  * Every instance the hub knows, as immutable rows replaced whole — never
@@ -457,6 +459,8 @@ const state = $state({
   failed: false,
   /** When the next reconnect attempt fires, so the banner can count it down. */
   retryAt: null as number | null,
+  /** The first REST read of the fleet (machines, sessions, projects) is in. */
+  fleetRead: false,
   machines: [] as Machine[],
   /**
    * What the hub itself is running, carried on `instances` frames (C2 reads
@@ -981,6 +985,9 @@ async function refresh(): Promise<void> {
     for (const envelope of pending) {
       handleFrame(envelope.payload);
     }
+  }
+  if (machines && rows && projects) {
+    state.fleetRead = true;
   }
 }
 
@@ -3566,6 +3573,8 @@ export async function loadCatalog(machineId: string): Promise<void> {
     catalog = { ...catalog, [machineId]: listed };
   } catch (error) {
     console.error(`[whiffle] listSessions on ${machineId} failed:`, error);
+  } finally {
+    catalogsTried[machineId] = true;
   }
 }
 
@@ -5048,6 +5057,19 @@ const branchOrder = (a: SubagentState, b: SubagentState): number => {
 };
 
 export const whiffle = {
+  /** The first REST read of machines, sessions and projects is in. */
+  get fleetRead() {
+    return state.fleetRead;
+  },
+  /** Every online machine's stored sessions have been read, or failed to be. */
+  get catalogsRead() {
+    return (
+      state.fleetRead &&
+      state.machines
+        .filter((machine) => machine.status === "online")
+        .every((machine) => catalogsTried[machine.machineId])
+    );
+  },
   get status() {
     return state.status;
   },

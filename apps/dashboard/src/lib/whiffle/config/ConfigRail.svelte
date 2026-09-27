@@ -56,7 +56,13 @@
                 >
               {/if}
               {#if section.slug !== 'models'}
-                <span class="count">{count ?? '—'}</span>
+                <!-- The figure is its own element, not the dash's text
+                     rewritten: it arrives in place rather than moving in. -->
+                {#if count === null}
+                  <span class="count">—</span>
+                {:else}
+                  <span class="count">{count}</span>
+                {/if}
               {/if}
             </a>
           </li>
@@ -159,8 +165,13 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
+  /* Three digits wide from the first paint, the figure set to its end, so
+     the dash that stands in until the count is read and the count that
+     replaces it hold the same box. */
   .count {
     flex: none;
+    min-inline-size: 3ch;
+    text-align: end;
     font: var(--type-meta);
     font-variant-numeric: tabular-nums;
     color: var(--ink-muted);

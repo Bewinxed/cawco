@@ -1,5 +1,9 @@
 <script lang="ts">
-  /** A flat card holding one figure: label, value in the KPI role, unit. */
+  /**
+   * A flat card holding one figure: label, value in the KPI role, unit. An
+   * empty `unit` still keeps its line, so a tile whose unit comes and goes
+   * stands at one height and its figure does not move when it changes.
+   */
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Card from "$lib/components/ui/card";
 
@@ -15,7 +19,7 @@
 <Card.Root class="st-card">
   <span class="st-label">{label}</span>
   <span class="st-value">{value}</span>
-  {#if unit}
+  {#if unit !== undefined}
     <span class="st-unit">{unit}</span>
   {/if}
 </Card.Root>
@@ -37,6 +41,7 @@
     color: var(--ink-strong);
   }
   .st-unit {
+    min-height: 1lh;
     font: var(--type-meta);
     color: var(--ink-muted);
   }

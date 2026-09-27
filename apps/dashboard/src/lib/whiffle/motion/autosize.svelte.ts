@@ -13,6 +13,14 @@ export function autosize(value: () => unknown) {
     const twin = node.cloneNode() as HTMLTextAreaElement;
     twin.removeAttribute("id");
     twin.removeAttribute("name");
+    // The field is sized from its value alone. A placeholder is one line by
+    // design, but a textarea counts a wrapped placeholder in scrollHeight,
+    // so an empty field measured with one would grow a line after load.
+    twin.removeAttribute("placeholder");
+    // One row, so an empty field measures one line: without `rows` a
+    // textarea stands two rows tall, and scrollHeight never reads less than
+    // the box it scrolls in.
+    twin.rows = 1;
     twin.setAttribute("aria-hidden", "true");
     twin.tabIndex = -1;
     twin.style.cssText =

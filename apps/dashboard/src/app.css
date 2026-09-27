@@ -13,10 +13,13 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
-/* TX-02 is the mono: code, paths, IDs and measurements. */
+/* TX-02 is the mono: code, paths, IDs and measurements. The regular face
+   is inlined into this stylesheet by the build (vite.config.ts), like
+   Geist's latin face, so the first paint sets code in it; the medium face
+   loads by URL. */
 @font-face {
   font-family: "TX-02";
-  src: url("/fonts/TX-02-Regular.woff2") format("woff2");
+  src: url("./lib/fonts/TX-02-Regular.woff2") format("woff2");
   font-weight: 400;
   font-style: normal;
   font-display: swap;
@@ -24,7 +27,7 @@
 
 @font-face {
   font-family: "TX-02";
-  src: url("/fonts/TX-02-Medium.woff2") format("woff2");
+  src: url("./lib/fonts/TX-02-Medium.woff2") format("woff2");
   font-weight: 500;
   font-style: normal;
   font-display: swap;

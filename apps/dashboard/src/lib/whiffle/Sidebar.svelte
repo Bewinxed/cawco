@@ -28,6 +28,7 @@
   import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Sidebar from "$lib/components/ui/sidebar";
+  import { Skeleton } from "$lib/components/ui/skeleton";
   import ThemeSwitcher from "$lib/components/ui/ThemeSwitcher.svelte";
   import { Toggle } from "$lib/components/ui/toggle";
   import {
@@ -136,6 +137,28 @@
   /** `Sidebar.Group`'s own `p-2` plus `Sidebar.Content`'s `gap-2` stacked to
    *  24px of nothing between every section; the label already separates them. */
   const GROUP = "px-2 py-1";
+
+  /**
+   * How far the fleet's first read has come: 1 workflow runs, 2 machines and
+   * sessions, 3 every online machine's stored sessions (or the hub is known
+   * to be unreachable). It only climbs: a machine coming online later is a
+   * live change, not part of the first read.
+   */
+  let stage = $state(0);
+  $effect(() => {
+    let next = 0;
+    if (whiffle.hub === "unreachable") {
+      next = 3;
+    } else if (workflowState.loaded) {
+      next = 1;
+      if (whiffle.fleetRead) {
+        next = whiffle.catalogsRead ? 3 : 2;
+      }
+    }
+    if (next > stage) {
+      stage = next;
+    }
+  });
   const GROUP_LABEL = "px-2.5 text-[length:var(--text-label)]";
   /** A label carrying a control (the sort, the delegates toggle): on a coarse
    *  pointer it takes a 44px row, so the control's touch area stays inside
@@ -433,6 +456,22 @@
   );
 </script>
 
+{#snippet pending()}
+  <!-- Rows where the next groups will stand, while their read is out. Each
+       stage has its own, gone when that stage's groups arrive, so nothing
+       drawn is ever pushed down. -->
+  <Sidebar.Group aria-busy="true" aria-label="Loading" class={GROUP}>
+    <div class="flex flex-col gap-1 px-2.5 py-1">
+      <!-- The kit's tint is the rail's own ground; the fill tone shows. -->
+      {#each [0, 1, 2, 3, 4, 5] as row (row)}
+        <Skeleton
+          class="h-[22px] w-full rounded-[var(--radius-sm)] bg-[var(--surface-fill)]"
+        />
+      {/each}
+    </div>
+  </Sidebar.Group>
+{/snippet}
+
 <!-- The sidebar primitives (Header, Content, Footer) expect a flex-column
      parent — the old `.rail` class provided this; now it's an explicit wrapper
      since the Shell's own `<aside>` doesn't set the direction. -->
@@ -662,308 +701,324 @@
       </Sidebar.Menu>
     </Sidebar.Group>
 
-    {#if Object.keys(workflowState.runs).length}
-      <Sidebar.Group class={GROUP}>
-        <Sidebar.GroupLabel class={GROUP_LABEL}
-          >Workflow runs</Sidebar.GroupLabel
-        >
-        <Sidebar.Menu class={MENU}>
-          {#each Object.values(workflowState.runs).filter((run) => !run.parentRunId).sort((a, b) => +new Date(b.startedAt) - +new Date(a.startedAt)) as run (run.id)}
-            <WorkflowRail {activeSession} {run} />
-          {/each}
-        </Sidebar.Menu>
-      </Sidebar.Group>
+    <!-- The groups built from the fleet come in top-down, each once its own
+         read and every read above it are in (`stage`): runs, then machines,
+         then projects and sessions once every machine's stored sessions are
+         read. So a group only ever arrives below everything already drawn;
+         arriving each on its own, they pushed the ones before them down.
+         Until the last, rows standing where the rest will be. -->
+    {#if stage >= 1}
+      {#if Object.keys(workflowState.runs).length}
+        <Sidebar.Group class={GROUP}>
+          <Sidebar.GroupLabel class={GROUP_LABEL}
+            >Workflow runs</Sidebar.GroupLabel
+          >
+          <Sidebar.Menu class={MENU}>
+            {#each Object.values(workflowState.runs).filter((run) => !run.parentRunId).sort((a, b) => +new Date(b.startedAt) - +new Date(a.startedAt)) as run (run.id)}
+              <WorkflowRail {activeSession} {run} />
+            {/each}
+          </Sidebar.Menu>
+        </Sidebar.Group>
+      {/if}
+    {:else}
+      {@render pending()}
     {/if}
-    <!-- Machines -->
-    {#if whiffle.machines.length > 0}
-      <Sidebar.Group class={GROUP}>
-        <Sidebar.GroupLabel class={GROUP_LABEL}>Machines</Sidebar.GroupLabel>
-        <Sidebar.Menu class={MENU}>
-          {#each whiffle.machines as machine (machine.machineId)}
-            <Sidebar.MenuItem>
-              <MachineMenu {machine}>
-                <Sidebar.MenuButton class="{LIST_ROW} cursor-default">
-                  {#snippet child({ props })}
-                    <div {...props}>
-                      <span class={SLOT}>
-                        <OsMark
-                          class="{SLOT_GLYPH} text-muted-foreground"
-                          os={machine.os}
-                        />
-                      </span>
-                      <span class="min-w-0 flex-1 truncate"
-                        >{machineLabel(machine.hostname)}</span
-                      >
-                      {#if online.has(machine.machineId)}
-                        <span class={TRAIL} title="Online">
-                          <span
-                            class="size-2 rounded-full bg-[var(--hue-green-500)]"
-                          ></span>
-                          <span class="sr-only">Online</span>
-                        </span>
-                      {:else}
-                        <span class={TRAIL} title={MACHINE_UNREACHABLE_HINT}>
-                          <IconWarningTriangle
-                            aria-hidden="true"
-                            class="size-3.5 text-warning"
+    {#if stage >= 2}
+      <!-- Machines -->
+      {#if whiffle.machines.length > 0}
+        <Sidebar.Group class={GROUP}>
+          <Sidebar.GroupLabel class={GROUP_LABEL}>Machines</Sidebar.GroupLabel>
+          <Sidebar.Menu class={MENU}>
+            {#each whiffle.machines as machine (machine.machineId)}
+              <Sidebar.MenuItem>
+                <MachineMenu {machine}>
+                  <Sidebar.MenuButton class="{LIST_ROW} cursor-default">
+                    {#snippet child({ props })}
+                      <div {...props}>
+                        <span class={SLOT}>
+                          <OsMark
+                            class="{SLOT_GLYPH} text-muted-foreground"
+                            os={machine.os}
                           />
-                          <span class="sr-only">Unreachable</span>
                         </span>
-                      {/if}
-                    </div>
-                  {/snippet}
-                </Sidebar.MenuButton>
-              </MachineMenu>
-            </Sidebar.MenuItem>
-          {/each}
-        </Sidebar.Menu>
-      </Sidebar.Group>
+                        <span class="min-w-0 flex-1 truncate"
+                          >{machineLabel(machine.hostname)}</span
+                        >
+                        {#if online.has(machine.machineId)}
+                          <span class={TRAIL} title="Online">
+                            <span
+                              class="size-2 rounded-full bg-[var(--hue-green-500)]"
+                            ></span>
+                            <span class="sr-only">Online</span>
+                          </span>
+                        {:else}
+                          <span class={TRAIL} title={MACHINE_UNREACHABLE_HINT}>
+                            <IconWarningTriangle
+                              aria-hidden="true"
+                              class="size-3.5 text-warning"
+                            />
+                            <span class="sr-only">Unreachable</span>
+                          </span>
+                        {/if}
+                      </div>
+                    {/snippet}
+                  </Sidebar.MenuButton>
+                </MachineMenu>
+              </Sidebar.MenuItem>
+            {/each}
+          </Sidebar.Menu>
+        </Sidebar.Group>
+      {/if}
+    {:else if stage === 1}
+      {@render pending()}
     {/if}
-
-    <!-- Projects -->
-    <Sidebar.Group class={GROUP}>
-      <Sidebar.GroupLabel class="{GROUP_LABEL} {CONTROL_LABEL}">
-        <span>Projects</span>
-        <!-- The sort lives here rather than once per list because it governs all
+    {#if stage >= 3}
+      <!-- Projects -->
+      <Sidebar.Group class={GROUP}>
+        <Sidebar.GroupLabel class="{GROUP_LABEL} {CONTROL_LABEL}">
+          <span>Projects</span>
+          <!-- The sort lives here rather than once per list because it governs all
            of them at once: a rail whose projects were ordered by recency and
            whose "Not running" was ordered by name would be two rails. -->
-        <div class="-mr-1 ml-auto flex items-center gap-0.5">
-          <DropdownMenu.Root>
-            <DropdownMenu.Trigger>
-              {#snippet child({ props })}
-                <Button
-                  {...props}
-                  aria-label="Sort sessions — currently {SORT_LABEL[rail.sort]}"
-                  size="icon-sm"
-                  title="Sort sessions — {SORT_LABEL[rail.sort]}"
-                  variant="ghost"
-                >
-                  <IconSort />
-                </Button>
-              {/snippet}
-            </DropdownMenu.Trigger>
-            <DropdownMenu.Content align="start" class="w-44">
-              <DropdownMenu.Group>
-                <DropdownMenu.GroupHeading
-                  >Sort sessions by</DropdownMenu.GroupHeading
-                >
-                <DropdownMenu.RadioGroup
-                  onValueChange={(value) => rail.setSort(value as RailSort)}
-                  value={rail.sort}
-                >
-                  <DropdownMenu.RadioItem value="recent"
-                    >Last activity</DropdownMenu.RadioItem
+          <div class="-mr-1 ml-auto flex items-center gap-0.5">
+            <DropdownMenu.Root>
+              <DropdownMenu.Trigger>
+                {#snippet child({ props })}
+                  <Button
+                    {...props}
+                    aria-label="Sort sessions — currently {SORT_LABEL[rail.sort]}"
+                    size="icon-sm"
+                    title="Sort sessions — {SORT_LABEL[rail.sort]}"
+                    variant="ghost"
                   >
-                  <DropdownMenu.RadioItem value="name"
-                    >Name</DropdownMenu.RadioItem
+                    <IconSort />
+                  </Button>
+                {/snippet}
+              </DropdownMenu.Trigger>
+              <DropdownMenu.Content align="start" class="w-44">
+                <DropdownMenu.Group>
+                  <DropdownMenu.GroupHeading
+                    >Sort sessions by</DropdownMenu.GroupHeading
                   >
-                  <DropdownMenu.RadioItem value="state"
-                    >State</DropdownMenu.RadioItem
+                  <DropdownMenu.RadioGroup
+                    onValueChange={(value) => rail.setSort(value as RailSort)}
+                    value={rail.sort}
                   >
-                </DropdownMenu.RadioGroup>
-              </DropdownMenu.Group>
-            </DropdownMenu.Content>
-          </DropdownMenu.Root>
-          <NewProjectPopover />
-        </div>
-      </Sidebar.GroupLabel>
-      {#if orderedProjects.length === 0}
-        <p
-          class="px-2.5 text-[length:var(--text-label)] leading-relaxed text-muted-foreground"
-        >
-          {#if whiffle.machines.length === 0}
-            Run
-            <code
-              class="font-mono text-[length:var(--text-label)] text-foreground"
-              >whiffle</code
-            >
-            on a machine, then group its checkouts here.
-          {:else}
-            No projects yet — name a checkout to group its sessions.
-          {/if}
-        </p>
-      {:else}
-        <Sidebar.Menu class={MENU} {@attach highlight(PILL)}>
-          {#each orderedProjects as project (project.id)}
-            {@const sessions = sessionsOf(project)}
-            {@const expanded = !collapsed.has(project.id)}
-            <li
-              class="group/menu-item relative"
-              data-sidebar="menu-item"
-              data-slot="sidebar-menu-item"
-              animate:flip={{ duration: 200, easing: cubicOut }}
-            >
-              <FolderMenu
-                cwd={project.cwd}
-                name={project.name}
-                oncollapseothers={() => collapseOthers(project.id)}
-                onnew={() =>
-                newSession({ projectId: project.id, machineId: project.machineId, cwd: project.cwd })}
-                {project}
-              >
-                <Sidebar.MenuButton
-                  class={LIST_ROW}
-                  onclick={() => toggle(project.id)}
-                >
-                  <span
-                    aria-hidden="true"
-                    class="-ml-1 inline-flex size-[14px] shrink-0 items-center justify-center transition-transform duration-150"
-                    class:rotate-90={expanded}
-                  >
-                    <IconChevronRight class="size-3 text-muted-foreground" />
-                  </span>
-                  <span
-                    class={MARK}
-                    style="background-image: var(--mark-overlay); background-color: var(--mark-{markHue(project.cwd)});"
-                  >
-                    <IconFolderDuo
-                      class={MARK_GLYPH}
-                      style="color: var(--mark-glyph);"
-                    />
-                  </span>
-                  <span class="min-w-0 truncate">{project.name}</span>
-                  {#if sessions.length > 0}
-                    <span
-                      class="ml-auto shrink-0 text-[length:var(--text-label)] tabular-nums text-muted-foreground"
-                      >{sessions.length}</span
+                    <DropdownMenu.RadioItem value="recent"
+                      >Last activity</DropdownMenu.RadioItem
                     >
-                  {/if}
-                </Sidebar.MenuButton>
-              </FolderMenu>
+                    <DropdownMenu.RadioItem value="name"
+                      >Name</DropdownMenu.RadioItem
+                    >
+                    <DropdownMenu.RadioItem value="state"
+                      >State</DropdownMenu.RadioItem
+                    >
+                  </DropdownMenu.RadioGroup>
+                </DropdownMenu.Group>
+              </DropdownMenu.Content>
+            </DropdownMenu.Root>
+            <NewProjectPopover />
+          </div>
+        </Sidebar.GroupLabel>
+        {#if orderedProjects.length === 0}
+          <p
+            class="px-2.5 text-[length:var(--text-label)] leading-relaxed text-muted-foreground"
+          >
+            {#if whiffle.machines.length === 0}
+              Run
+              <code
+                class="font-mono text-[length:var(--text-label)] text-foreground"
+                >whiffle</code
+              >
+              on a machine, then group its checkouts here.
+            {:else}
+              No projects yet — name a checkout to group its sessions.
+            {/if}
+          </p>
+        {:else}
+          <Sidebar.Menu class={MENU} {@attach highlight(PILL)}>
+            {#each orderedProjects as project (project.id)}
+              {@const sessions = sessionsOf(project)}
+              {@const expanded = !collapsed.has(project.id)}
+              <li
+                class="group/menu-item relative"
+                data-sidebar="menu-item"
+                data-slot="sidebar-menu-item"
+                animate:flip={{ duration: 200, easing: cubicOut }}
+              >
+                <FolderMenu
+                  cwd={project.cwd}
+                  name={project.name}
+                  oncollapseothers={() => collapseOthers(project.id)}
+                  onnew={() =>
+                newSession({ projectId: project.id, machineId: project.machineId, cwd: project.cwd })}
+                  {project}
+                >
+                  <Sidebar.MenuButton
+                    class={LIST_ROW}
+                    onclick={() => toggle(project.id)}
+                  >
+                    <span
+                      aria-hidden="true"
+                      class="-ml-1 inline-flex size-[14px] shrink-0 items-center justify-center transition-transform duration-150"
+                      class:rotate-90={expanded}
+                    >
+                      <IconChevronRight class="size-3 text-muted-foreground" />
+                    </span>
+                    <span
+                      class={MARK}
+                      style="background-image: var(--mark-overlay); background-color: var(--mark-{markHue(project.cwd)});"
+                    >
+                      <IconFolderDuo
+                        class={MARK_GLYPH}
+                        style="color: var(--mark-glyph);"
+                      />
+                    </span>
+                    <span class="min-w-0 truncate">{project.name}</span>
+                    {#if sessions.length > 0}
+                      <span
+                        class="ml-auto shrink-0 text-[length:var(--text-label)] tabular-nums text-muted-foreground"
+                        >{sessions.length}</span
+                      >
+                    {/if}
+                  </Sidebar.MenuButton>
+                </FolderMenu>
 
-              <!-- Sub-items: sessions under this project -->
-              {#if expanded}
-                <!-- The rail's one piece of choreography: the sub-list opens by
+                <!-- Sub-items: sessions under this project -->
+                {#if expanded}
+                  <!-- The rail's one piece of choreography: the sub-list opens by
                    growing rather than appearing, so a folder toggled by mistake
                    is legible as the thing that just moved. `cubicOut` and 180ms
                    match the chevron rotating above it. -->
-                <div transition:slide={{ duration: 180, easing: cubicOut }}>
-                  <Sidebar.MenuSub>
-                    {#each nested(sessions) as { row, depth } (row.id)}
-                      {@const Sprite = sessionSprite(row.id)}
-                      {@const activity = whiffle.activityOf(row.id)}
-                      <li
-                        class="group/menu-sub-item relative"
-                        data-sidebar="menu-sub-item"
-                        data-slot="sidebar-menu-sub-item"
-                        animate:flip={{ duration: 200, easing: cubicOut }}
-                      >
-                        <Sidebar.MenuSubButton
-                          class={SUB_ROW}
-                          data-share="session:{row.id}"
-                          href={conversationHref(row.id, whiffle.instanceIndex)}
-                          isActive={activeSession === row.id}
-                          style={indent(depth)}
+                  <div transition:slide={{ duration: 180, easing: cubicOut }}>
+                    <Sidebar.MenuSub>
+                      {#each nested(sessions) as { row, depth } (row.id)}
+                        {@const Sprite = sessionSprite(row.id)}
+                        {@const activity = whiffle.activityOf(row.id)}
+                        <li
+                          class="group/menu-sub-item relative"
+                          data-sidebar="menu-sub-item"
+                          data-slot="sidebar-menu-sub-item"
+                          animate:flip={{ duration: 200, easing: cubicOut }}
                         >
-                          <span
-                            class={MARK}
-                            style="background-image: var(--mark-overlay); background-color: var(--mark-{markHue(row.cwd || row.machineId)});"
+                          <Sidebar.MenuSubButton
+                            class={SUB_ROW}
+                            data-share="session:{row.id}"
+                            href={conversationHref(row.id, whiffle.instanceIndex)}
+                            isActive={activeSession === row.id}
+                            style={indent(depth)}
                           >
-                            <Sprite
-                              aria-hidden="true"
-                              class={MARK_GLYPH}
-                              style="color: var(--mark-glyph);"
-                            />
-                          </span>
-                          <span class="min-w-0 flex-1 truncate"
-                            >{sessionName(row)}</span
-                          >
-                          {@render age(row)}
-                          <span class={TRAIL}><ActivityDot {activity} /></span>
-                        </Sidebar.MenuSubButton>
-                      </li>
-                    {:else}
-                      {@const recent = recentCountOf(project)}
-                      <Sidebar.MenuSubItem>
-                        <Sidebar.MenuSubButton
-                          class="{SUB_ROW} text-muted-foreground"
-                          onclick={() =>
+                            <span
+                              class={MARK}
+                              style="background-image: var(--mark-overlay); background-color: var(--mark-{markHue(row.cwd || row.machineId)});"
+                            >
+                              <Sprite
+                                aria-hidden="true"
+                                class={MARK_GLYPH}
+                                style="color: var(--mark-glyph);"
+                              />
+                            </span>
+                            <span class="min-w-0 flex-1 truncate"
+                              >{sessionName(row)}</span
+                            >
+                            {@render age(row)}
+                            <span class={TRAIL}
+                              ><ActivityDot {activity} /></span
+                            >
+                          </Sidebar.MenuSubButton>
+                        </li>
+                      {:else}
+                        {@const recent = recentCountOf(project)}
+                        <Sidebar.MenuSubItem>
+                          <Sidebar.MenuSubButton
+                            class="{SUB_ROW} text-muted-foreground"
+                            onclick={() =>
                         newSession({
                           projectId: project.id,
                           machineId: project.machineId,
                           cwd: project.cwd,
                         })}
-                        >
-                          {recent > 0 ? `${recent} recent — none running` : 'No sessions — start one'}
-                        </Sidebar.MenuSubButton>
-                      </Sidebar.MenuSubItem>
-                    {/each}
-                  </Sidebar.MenuSub>
-                </div>
-              {/if}
-            </li>
-          {/each}
-        </Sidebar.Menu>
-      {/if}
-    </Sidebar.Group>
+                          >
+                            {recent > 0 ? `${recent} recent — none running` : 'No sessions — start one'}
+                          </Sidebar.MenuSubButton>
+                        </Sidebar.MenuSubItem>
+                      {/each}
+                    </Sidebar.MenuSub>
+                  </div>
+                {/if}
+              </li>
+            {/each}
+          </Sidebar.Menu>
+        {/if}
+      </Sidebar.Group>
 
-    <!-- Running now (ungrouped sessions) -->
-    {#if ungroupedAll.length > 0}
-      <Sidebar.Group class={GROUP}>
-        <Sidebar.GroupLabel class="{GROUP_LABEL} {CONTROL_LABEL}">
-          <span>Running now</span>
-          {@render delegates(
+      <!-- Running now (ungrouped sessions) -->
+      {#if ungroupedAll.length > 0}
+        <Sidebar.Group class={GROUP}>
+          <Sidebar.GroupLabel class="{GROUP_LABEL} {CONTROL_LABEL}">
+            <span>Running now</span>
+            {@render delegates(
             ungroupedAll.length - ungrouped.length
           )}
-        </Sidebar.GroupLabel>
-        <Sidebar.Menu class={MENU} {@attach highlight(PILL)}>
-          {#each nested(ungrouped) as { row, depth } (row.id)}
-            {@const activity = whiffle.activityOf(row.id)}
-            {@const Sprite = sessionSprite(row.id)}
-            <li
-              class="group/menu-item relative"
-              data-sidebar="menu-item"
-              data-slot="sidebar-menu-item"
-              animate:flip={{ duration: 200, easing: cubicOut }}
-            >
-              <Sidebar.MenuButton
-                class={LIST_ROW}
-                isActive={activeSession === row.id}
+          </Sidebar.GroupLabel>
+          <Sidebar.Menu class={MENU} {@attach highlight(PILL)}>
+            {#each nested(ungrouped) as { row, depth } (row.id)}
+              {@const activity = whiffle.activityOf(row.id)}
+              {@const Sprite = sessionSprite(row.id)}
+              <li
+                class="group/menu-item relative"
+                data-sidebar="menu-item"
+                data-slot="sidebar-menu-item"
+                animate:flip={{ duration: 200, easing: cubicOut }}
               >
-                {#snippet child({ props })}
-                  <a
-                    data-share="session:{row.id}"
-                    href={conversationHref(row.id, whiffle.instanceIndex)}
-                    style={indent(depth)}
-                    {...props}
-                  >
-                    <span
-                      class={MARK}
-                      style="background-image: var(--mark-overlay); background-color: var(--mark-{markHue(row.cwd || row.machineId)});"
+                <Sidebar.MenuButton
+                  class={LIST_ROW}
+                  isActive={activeSession === row.id}
+                >
+                  {#snippet child({ props })}
+                    <a
+                      data-share="session:{row.id}"
+                      href={conversationHref(row.id, whiffle.instanceIndex)}
+                      style={indent(depth)}
+                      {...props}
                     >
-                      <Sprite
-                        aria-hidden="true"
-                        class={MARK_GLYPH}
-                        style="color: var(--mark-glyph);"
-                      />
-                    </span>
-                    <span class="min-w-0 flex-1 truncate"
-                      >{sessionName(row)}</span
-                    >
-                    {@render age(row)}
-                    <span class={TRAIL}><ActivityDot {activity} /></span>
-                  </a>
-                {/snippet}
-              </Sidebar.MenuButton>
-            </li>
-          {/each}
-        </Sidebar.Menu>
-      </Sidebar.Group>
-    {/if}
+                      <span
+                        class={MARK}
+                        style="background-image: var(--mark-overlay); background-color: var(--mark-{markHue(row.cwd || row.machineId)});"
+                      >
+                        <Sprite
+                          aria-hidden="true"
+                          class={MARK_GLYPH}
+                          style="color: var(--mark-glyph);"
+                        />
+                      </span>
+                      <span class="min-w-0 flex-1 truncate"
+                        >{sessionName(row)}</span
+                      >
+                      {@render age(row)}
+                      <span class={TRAIL}><ActivityDot {activity} /></span>
+                    </a>
+                  {/snippet}
+                </Sidebar.MenuButton>
+              </li>
+            {/each}
+          </Sidebar.Menu>
+        </Sidebar.Group>
+      {/if}
 
-    <!-- Not running -->
-    {#if notRunningAll.length > 0}
-      <Sidebar.Group class="{GROUP} min-h-0 flex-1">
-        <Sidebar.GroupLabel class="{GROUP_LABEL} {CONTROL_LABEL}">
-          <span>Not running</span>
-          <span class="ml-1.5 tabular-nums opacity-70"
-            >{notRunning.length}</span
-          >
-          {@render delegates(
+      <!-- Not running -->
+      {#if notRunningAll.length > 0}
+        <Sidebar.Group class="{GROUP} min-h-0 flex-1">
+          <Sidebar.GroupLabel class="{GROUP_LABEL} {CONTROL_LABEL}">
+            <span>Not running</span>
+            <span class="ml-1.5 tabular-nums opacity-70"
+              >{notRunning.length}</span
+            >
+            {@render delegates(
             notRunningAll.length - notRunning.length
           )}
-        </Sidebar.GroupLabel>
-        <!-- Virtualized rather than capped. This list is the whole history of the
+          </Sidebar.GroupLabel>
+          <!-- Virtualized rather than capped. This list is the whole history of the
            fleet — two hundred rows on this machine today — and "15 more…" is
            not a shorter list, it is the same list with the interesting part
            hidden behind a click. `LIST_ROW` is a fixed 30px, so `itemSize` is
@@ -977,59 +1032,62 @@
            correct, and it earns its keep anyway: the fleet's whole history
            scrolls without pushing the nav, the machines and the projects off
            the top of the rail. -->
-        <div class="no-scrollbar min-h-40 flex-1 overflow-y-auto">
-          <Virtualizer
-            as="ul"
-            bufferSize={12}
-            data={nestedNotRunning}
-            getKey={({ row }: Nested) => row.id}
-            item="li"
-            itemProps={() => ({ class: 'group/menu-item relative' })}
-            itemSize={30}
-          >
-            {#snippet children({ row, depth }: Nested)}
-              {@const Sprite = sessionSprite(row.id)}
-              {@const rowStale = isStale(row)}
-              <Sidebar.MenuButton
-                class={LIST_ROW}
-                isActive={activeSession === row.id}
-              >
-                {#snippet child({ props })}
-                  <a
-                    data-share="session:{row.id}"
-                    href={conversationHref(row.id, whiffle.instanceIndex)}
-                    style={indent(depth)}
-                    title={notRunningHint(row)}
-                    {...props}
-                  >
-                    <span
-                      class="{MARK} opacity-60"
-                      style="background-image: var(--mark-overlay); background-color: var(--mark-{markHue(row.cwd || row.machineId)});"
+          <div class="no-scrollbar min-h-40 flex-1 overflow-y-auto">
+            <Virtualizer
+              as="ul"
+              bufferSize={12}
+              data={nestedNotRunning}
+              getKey={({ row }: Nested) => row.id}
+              item="li"
+              itemProps={() => ({ class: 'group/menu-item relative' })}
+              itemSize={30}
+            >
+              {#snippet children({ row, depth }: Nested)}
+                {@const Sprite = sessionSprite(row.id)}
+                {@const rowStale = isStale(row)}
+                <Sidebar.MenuButton
+                  class={LIST_ROW}
+                  isActive={activeSession === row.id}
+                >
+                  {#snippet child({ props })}
+                    <a
+                      data-share="session:{row.id}"
+                      href={conversationHref(row.id, whiffle.instanceIndex)}
+                      style={indent(depth)}
+                      title={notRunningHint(row)}
+                      {...props}
                     >
-                      <Sprite
-                        aria-hidden="true"
-                        class={MARK_GLYPH}
-                        style="color: var(--mark-glyph);"
-                      />
-                    </span>
-                    <span class="min-w-0 flex-1 truncate"
-                      >{sessionName(row)}</span
-                    >
-                    {@render age(row)}
-                    <span class={TRAIL}
-                      ><ActivityDot
-                        activity="idle"
-                        sleeping={!rowStale}
-                        stale={rowStale}
-                      /></span
-                    >
-                  </a>
-                {/snippet}
-              </Sidebar.MenuButton>
-            {/snippet}
-          </Virtualizer>
-        </div>
-      </Sidebar.Group>
+                      <span
+                        class="{MARK} opacity-60"
+                        style="background-image: var(--mark-overlay); background-color: var(--mark-{markHue(row.cwd || row.machineId)});"
+                      >
+                        <Sprite
+                          aria-hidden="true"
+                          class={MARK_GLYPH}
+                          style="color: var(--mark-glyph);"
+                        />
+                      </span>
+                      <span class="min-w-0 flex-1 truncate"
+                        >{sessionName(row)}</span
+                      >
+                      {@render age(row)}
+                      <span class={TRAIL}
+                        ><ActivityDot
+                          activity="idle"
+                          sleeping={!rowStale}
+                          stale={rowStale}
+                        /></span
+                      >
+                    </a>
+                  {/snippet}
+                </Sidebar.MenuButton>
+              {/snippet}
+            </Virtualizer>
+          </div>
+        </Sidebar.Group>
+      {/if}
+    {:else if stage === 2}
+      {@render pending()}
     {/if}
   </Sidebar.Content>
 

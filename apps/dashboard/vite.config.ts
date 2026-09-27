@@ -47,6 +47,19 @@ function previewMatch(req: http.IncomingMessage): {
 const HUB_URL = new URL(process.env.WHIFFLE_HUB_URL || "http://localhost:3456");
 
 /**
+ * The faces the first paint sets its text in: Geist's latin subset and
+ * TX-02's regular. The build inlines them into the stylesheet, which the
+ * page waits for anyway, so the first frame is laid out in them. Fetched by
+ * URL, a face that lands after the first paint re-sets every line in it:
+ * with the font 600ms late, the phone board re-wrapped and moved 20px
+ * (0.027 CLS), and no fallback face can match Geist's widths, its kerning
+ * alone moves a name 3px. app.html starts their decode before the body is
+ * parsed. Every other asset keeps Vite's limit: the other Geist subsets and
+ * TX-02's medium load by URL when a page uses them.
+ */
+const INLINE_FACES = /\/(?:geist-latin-wght-normal|TX-02-Regular)\.woff2$/;
+
+/**
  * Proxies the dashboard's `/preview/` paths to the hub. The hub's `/ws` socket
  * goes through `server.proxy` below.
  *
@@ -208,6 +221,7 @@ export default defineConfig({
    */
   build: {
     cssTarget: ["chrome131", "edge131", "firefox146", "safari18", "ios18"],
+    assetsInlineLimit: (file) => INLINE_FACES.test(file) || undefined,
   },
   resolve: {
     alias: {

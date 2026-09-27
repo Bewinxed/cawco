@@ -147,6 +147,50 @@
   });
   let fileInput = $state<HTMLInputElement>();
   let field = $state<HTMLTextAreaElement>();
+
+  /** The field's hint in full, and its first part, which fits any field. */
+  const HINT = "Message the agent…  /  for commands, @ to mention";
+  const HINT_SHORT = "Message the agent…";
+  /**
+   * The hint the field shows: in full wherever the field's own width holds
+   * it on one line, else its first part. The server draws the short one,
+   * so no first paint shows a hint cut off, and the field's measured width
+   * brings in the full one once it is on the page. It is the field that is
+   * measured, not the viewport: a narrow pane on a wide screen is narrow.
+   */
+  let hint = $state(HINT_SHORT);
+  const fitHint = (node: HTMLTextAreaElement) => {
+    const probe = document.createElement("span");
+    probe.setAttribute("aria-hidden", "true");
+    probe.style.cssText =
+      "position:absolute;visibility:hidden;pointer-events:none;white-space:nowrap;inset-block-start:0;inset-inline-start:-9999px";
+    probe.textContent = HINT;
+    node.after(probe);
+    const fit = () => {
+      const style = getComputedStyle(node);
+      probe.style.font = style.font;
+      probe.style.letterSpacing = style.getPropertyValue("--hint-track");
+      const room =
+        node.clientWidth -
+        Number.parseFloat(style.paddingInlineStart) -
+        Number.parseFloat(style.paddingInlineEnd);
+      hint = probe.getBoundingClientRect().width <= room ? HINT : HINT_SHORT;
+    };
+    const sizes = new ResizeObserver(fit);
+    sizes.observe(node);
+    // The body face may land after the first measure, at a new width.
+    let live = true;
+    document.fonts.ready.then(() => {
+      if (live) {
+        fit();
+      }
+    });
+    return () => {
+      live = false;
+      sizes.disconnect();
+      probe.remove();
+    };
+  };
   /** The suggestion row, for Tab and Shift+Tab. */
   let chips = $state<ReturnType<typeof SuggestionChips>>();
 
@@ -770,11 +814,12 @@
         onkeyup={noteCaret}
         {onpaste}
         onselect={noteCaret}
-        placeholder="Message the agent…  /  for commands, @ to mention"
+        placeholder={hint}
         role="combobox"
         bind:this={field}
         bind:value={draft.text}
         {@attach autosize(() => draft.text)}
+        {@attach fitHint}
       ></textarea>
     </label>
 
@@ -916,12 +961,17 @@
       transition: height var(--dur-control) var(--ease-out);
     }
   }
-  /* One line, always: the field is sized from its value, so a placeholder
-     that wrapped would be clipped to the first line. */
+  /* One line, always: the field is sized from its value, so a hint that
+     wrapped would be clipped to its first line. The hint shown is one the
+     field's width holds (fitHint, which measures with this tracking). The
+     title's tracking, so the short hint fits the narrowest phone's field:
+     at 320px the field is 149px and the hint 150px at the field's own. */
+  textarea {
+    --hint-track: -0.01em;
+  }
   textarea::placeholder {
     color: var(--ink-muted);
-    overflow: hidden;
-    text-overflow: ellipsis;
+    letter-spacing: var(--hint-track);
     white-space: nowrap;
   }
   .hidden-file {
