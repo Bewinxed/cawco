@@ -10,13 +10,14 @@
    *
    * So this route mounts `Transcript` itself — not a copy of it, not a mock of
    * its rows — against a `blankSession` it drives directly. Everything the
-   * arrival logic reads is real: the fold in `rows.ts`, the virtualizer, the
-   * gates in `enter()`, the cascade. Only the sender is synthetic.
+   * arrival logic reads is real: the fold in `rows.ts`, the virtualizer, and
+   * the transcript's arrival ledger (`transcript/arrivals.svelte.ts`: a row
+   * animates only when its id is new to a watched view and it came in on the
+   * live stream). Only the sender is synthetic.
    *
    * It is driven from `window.__traffic`, so a script can sequence a scenario
-   * and record what Chrome actually animated (see
-   * `scripts/arrival-traffic.mjs`). The controls below are the same primitives
-   * for driving it by hand.
+   * and record what Chrome actually animated. The controls below are the same
+   * primitives for driving it by hand.
    *
    * WHY A ROUTE AND NOT A FIXTURE: the defect this was built for — a run of
    * tool calls animating only its first call — lived in the seam between the
@@ -275,9 +276,9 @@
     color: var(--ink-muted);
     font-variant-numeric: tabular-nums;
   }
-  /* A bounded scroller, because the arrival gates read one: `nearTail` is
-     measured against `clientHeight`, and a transcript that cannot scroll
-     cannot reproduce what the operator sees. */
+  /* A bounded scroller: scroll position decides whether the transcript
+     follows the tail, and a transcript that cannot scroll cannot reproduce
+     what the operator sees. */
   .pane {
     flex: 1 1 auto;
     min-height: 0;
