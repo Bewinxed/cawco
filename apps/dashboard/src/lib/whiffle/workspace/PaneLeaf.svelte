@@ -331,7 +331,7 @@
     z-index: 3;
     pointer-events: none;
     background: var(--surface-hover);
-    border: 1px solid var(--border-strong);
+    border: 1px solid var(--border-control);
     opacity: 0.9;
   }
   .drop-whole {

@@ -76,7 +76,7 @@
    rides the surface and the edge, never a hue. */
 .wf .wf-btn[aria-pressed="true"] {
   background: var(--surface-fill);
-  border-color: var(--border-strong);
+  border-color: var(--border-control);
   color: var(--ink-strong);
 }
 .wf button:disabled {

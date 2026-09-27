@@ -739,7 +739,7 @@
      transitions, and it is suppressed for reduced-motion. */
   .icobtn,
   .burger {
-    transition: background var(--motion-fast) var(--ease-in-out);
+    transition: background var(--dur-control) var(--ease-in-out);
   }
   .icobtn:active,
   .burger:active {
