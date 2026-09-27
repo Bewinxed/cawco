@@ -1008,20 +1008,19 @@
     });
     await exitTo(last.result.targetInstanceId, current);
   }
+  /**
+   * Leave for the new session as the dialog starts to close, not after: the
+   * dialog is portaled, so its exit plays out over the page arriving, and the
+   * new tab rises from where Start was pressed (motion/share, `session:new`)
+   * while the dialog fades around it. Waiting for the exit left a moment with
+   * neither on screen.
+   */
   async function exitTo(instanceId: string, current: () => boolean) {
     if (!current()) {
       return;
     }
-    const panel = card;
     close();
     await tick();
-    const request = submission;
-    await Promise.allSettled(
-      panel?.getAnimations().map((animation) => animation.finished) ?? []
-    );
-    if (open || request !== submission) {
-      return;
-    }
     await goto(conversationHref(instanceId, whiffle.instanceIndex));
   }
   function keydown(event: KeyboardEvent) {

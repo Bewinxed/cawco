@@ -20,6 +20,8 @@ import { CURVE, motionOk } from "./curves.svelte";
 
 interface Departure {
   at: number;
+  /** A click on the source took it, or a navigation sweeping the page did. */
+  by: "click" | "navigation";
   radius: string;
   rect: DOMRect;
   source: HTMLElement;
@@ -31,12 +33,28 @@ const departures = new Map<string, Departure>();
 /** A departure waits this long for its destination to mount. */
 const TTL = 1200;
 
-export function depart(source: HTMLElement): void {
+export function depart(
+  source: HTMLElement,
+  by: Departure["by"] = "click"
+): void {
   const key = source.dataset.share;
   if (!key) {
     return;
   }
+  // A source clicked on its way out was taken where it stood when it was
+  // clicked. By the time the navigation it caused starts, it may be inside
+  // a surface that has already left (a dialog after its exit): that later,
+  // drawn-anywhere box does not replace the one the click took.
+  const waiting = departures.get(key);
+  if (
+    by === "navigation" &&
+    waiting?.by === "click" &&
+    performance.now() - waiting.at < waiting.ttl
+  ) {
+    return;
+  }
   departures.set(key, {
+    by,
     rect: source.getBoundingClientRect(),
     radius: getComputedStyle(source).borderRadius,
     source,
@@ -49,7 +67,7 @@ export function depart(source: HTMLElement): void {
 export function departAll(): void {
   for (const source of document.querySelectorAll<HTMLElement>("[data-share]")) {
     if (source.offsetParent !== null) {
-      depart(source);
+      depart(source, "navigation");
     }
   }
 }
