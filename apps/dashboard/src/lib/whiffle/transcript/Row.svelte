@@ -136,6 +136,7 @@
       return;
     }
     const row = node;
+    let fold: Animation | null = null;
     untrack(() => {
       if (!(motionOk.current && ledger?.watched)) {
         onleft?.();
@@ -143,28 +144,32 @@
       }
       const style = getComputedStyle(row);
       row.style.overflow = "hidden";
-      row
-        .animate(
-          [
-            {
-              blockSize: `${row.getBoundingClientRect().height}px`,
-              opacity: 1,
-            },
-            { blockSize: "0px", opacity: 0 },
-          ],
+      fold = row.animate(
+        [
           {
-            duration: ms(style, "--dur-exit"),
-            easing: style.getPropertyValue("--ease-out"),
-            fill: "forwards",
-          }
-        )
-        .finished.then(
-          () => onleft?.(),
-          () => {
-            /* the row was taken down before its fold finished */
-          }
-        );
+            blockSize: `${row.getBoundingClientRect().height}px`,
+            opacity: 1,
+          },
+          { blockSize: "0px", opacity: 0 },
+        ],
+        {
+          duration: ms(style, "--dur-exit"),
+          easing: style.getPropertyValue("--ease-out"),
+          fill: "forwards",
+        }
+      );
+      fold.finished.then(
+        () => onleft?.(),
+        () => {
+          /* taken down before its fold finished: see the cleanup */
+        }
+      );
     });
+    // A fold outlives nothing. The row taken down mid-fold — virtua dropping
+    // the item, the tail changing under it — cancels it rather than letting
+    // it finish on a detached element and report a row that no longer
+    // exists; a row still leaving when it is drawn again folds again.
+    return () => fold?.cancel();
   });
 </script>
 
