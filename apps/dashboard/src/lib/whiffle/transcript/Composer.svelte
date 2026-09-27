@@ -12,8 +12,8 @@
   import type { AvailableCommand } from "@whiffle/core";
   /**
    * The floating composer — a lifted shell holding the text input, the attach
-   * and send controls, and any inline permission / question prompts stacked
-   * above it. Home, this input and Stop are the surface's fixed anchors; the
+   * and send controls, with any inline permission / question prompts stacked
+   * above it in a box of their own. Home, this input and Stop are the surface's fixed anchors; the
    * action button is a single box that sends when idle and interrupts while a
    * turn is in flight. Ported from the mock's `.composer` / `.cin`.
    *
@@ -614,6 +614,15 @@
     }
   }
 
+  /** The panel's own height, and the prompt stack's standing on it. */
+  let panel = $state(0);
+  let stack = $state(0);
+  // The column the transcript makes room for is both of them, as it was
+  // when the prompts stood inside the panel.
+  $effect(() => {
+    height = panel + stack;
+  });
+
   const removeImage = (i: number) => {
     draft.images = draft.images.filter((_, n) => n !== i);
   };
@@ -623,10 +632,18 @@
 </script>
 
 <div class="fade"></div>
-<div class="composer" bind:clientHeight={height}>
-  {#if prompts}
-    <div class="prompts">{@render prompts()}</div>
-  {/if}
+<!-- Parked prompts stand in their own box on top of the composer, so a card
+     arriving or leaving never moves the composer itself. -->
+{#if prompts}
+  <div
+    class="prompts"
+    style:bottom="calc(var(--space-4) + env(safe-area-inset-bottom) + {panel}px)"
+    bind:clientHeight={stack}
+  >
+    {@render prompts()}
+  </div>
+{/if}
+<div class="composer" bind:clientHeight={panel}>
   {#if draft.images.length || draft.texts.length || draft.selections.length}
     <div class="atts">
       {#each draft.selections as selection (`${selection.element.url}:${selection.element.selector}`)}
@@ -827,14 +844,28 @@
   .composer > :global(*) {
     pointer-events: auto;
   }
+  /* Placed like the panel, bottom edge on the panel's top; the gap to the
+     panel is its own bottom padding, so its measured height carries it. */
   .prompts {
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
+    z-index: 20;
+    width: min(720px, calc(100% - 50px));
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
+    padding-bottom: var(--space-3);
+    pointer-events: none;
+
+    & > :global(*) {
+      pointer-events: auto;
+    }
   }
   /* The snippet is always passed; with nothing parked it renders only its
-     anchors, and an empty wrapper would still take a flex gap in the measured
-     composer. A leaving prompt keeps it open until its exit has played. */
+     anchors, and an empty box would still carry its padding into the
+     measured column. A leaving prompt keeps it open until its exit has
+     played. */
   .prompts:empty {
     display: none;
   }
