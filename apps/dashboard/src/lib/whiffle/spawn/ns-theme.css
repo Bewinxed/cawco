@@ -12,6 +12,7 @@
   --ns-swap-in-stagger: 32ms;
   --ns-swap-distance: 18px;
   --ns-check-ms: 200ms;
+  --ns-prompt-ms: 240ms;
   --ns-chip-ms: 120ms;
   --ns-thumb-ms: 240ms;
   --ns-harness-thumb-ms: 160ms;
