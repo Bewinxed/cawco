@@ -130,6 +130,16 @@ export function createSwipe(
    * screen.
    */
   let moving = $state(false);
+  /**
+   * The conversation a committed release brings into reach on the far side
+   * of the new tab. It stays unpainted until the settle is running on the
+   * compositor: revealing a transcript styles and lays out the whole of it,
+   * and in the release task that work held the pane still under the lifted
+   * finger (WebKit: 28ms of a 35ms release). It sits a width or more off
+   * screen for the whole settle, so a frame or two later nobody sees it
+   * arrive, and the work lands while the compositor moves the panes.
+   */
+  let veiled = $state<string | null>(null);
 
   // Not reactive: the finger writes the transforms itself, straight onto the
   // panes in view, and writing state per touchmove would schedule a render
@@ -387,6 +397,7 @@ export function createSwipe(
     phase = "idle";
     targetId = null;
     past = false;
+    let beyond: string | null = null;
     if (allowed && target && (far || flicked)) {
       // Flip first, then compensate in the same synchronous step: every
       // pane's parking place is derived from the active tab, so the flip
@@ -394,16 +405,23 @@ export function createSwipe(
       // leaves the picture exactly where the finger left it. The flush puts
       // the new deltas on the panes before they are gathered again; the old
       // set is cleared first so the pane that left the view drops its inline
-      // transform with it.
+      // transform with it. The tab beyond the target is veiled before the
+      // flush, so the flush never paints it.
+      const tabs = workspace.leaves.find((node) => node.id === leafOf())?.tabs;
+      beyond = tabs?.[tabs.indexOf(target) + (left ? 1 : -1)] ?? null;
+      veiled = beyond;
+      // The indicator is on the new tab now, drawn the rest of the way back
+      // toward the old one, and settles home from there with the pane. Set
+      // before the flush, so the strip never draws the new tab both chosen
+      // and still travelled toward.
+      toward = here;
+      fraction = 1 - travelled();
       workspace.activate(target, leafOf());
       flushSync();
       clear();
       panes = gather();
       offset += left ? width : -width;
       paint(offset);
-      // The indicator is on the new tab now, drawn the rest of the way back
-      // toward the old one, and settles home from there with the pane.
-      toward = here;
     } else {
       toward = target;
     }
@@ -411,9 +429,20 @@ export function createSwipe(
 
     if (reduced()) {
       land();
-      return;
+    } else {
+      spring(velocity * 1000);
     }
-    spring(velocity * 1000);
+    // The first frame after this task hands the settle to the compositor;
+    // the one after it paints the veiled neighbour.
+    if (beyond) {
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => {
+          if (veiled === beyond) {
+            veiled = null;
+          }
+        })
+      );
+    }
   }
 
   return {
@@ -425,6 +454,10 @@ export function createSwipe(
     },
     get moving() {
       return moving;
+    },
+    /** A pane in reach that is not painted yet (see `veiled` above). */
+    get veiled() {
+      return veiled;
     },
     /**
      * The conversation the header should be NAMING right now — the target

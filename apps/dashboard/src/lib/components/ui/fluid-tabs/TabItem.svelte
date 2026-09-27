@@ -58,6 +58,30 @@
   });
 
   const selected = $derived(tabs.value === value);
+  /**
+   * A folder sheet carried by a gesture (the root's `travel`): the chosen
+   * tab's sheet gives up the fraction the gesture has travelled, on the side
+   * away from the tab it is heading to, and that tab's sheet takes it on the
+   * side facing the chosen one, so the two meet where the sheet has got to
+   * and land with the pane on the same frame. The track's `data-ride` holds
+   * their transitions off while it does.
+   */
+  const ride = $derived.by(() => {
+    const { travel } = tabs;
+    if (!travel || travel.toward === tabs.value) {
+      return null;
+    }
+    const from = tabs.order.indexOf(tabs.value ?? "");
+    const to = tabs.order.indexOf(travel.toward);
+    const f = Math.min(1, Math.max(0, travel.fraction));
+    if (selected) {
+      return { size: 1 - f, at: to > from ? "right" : "left" };
+    }
+    if (value === travel.toward) {
+      return { size: f, at: to > from ? "left" : "right" };
+    }
+    return null;
+  });
   // The list's props land on the hit, not the box; `class` is the box's.
 
   function choose(event: MouseEvent): void {
@@ -79,9 +103,11 @@
 </script>
 
 <span
-  class={cn("ff-tab", selected && "selected", className)}
+  class={cn("ff-tab", selected && "selected", ride && "riding", className)}
   data-tab-index={index}
   bind:this={node}
+  style:--ride={ride ? `${ride.size * 100}%` : undefined}
+  style:--ride-at={ride?.at}
 >
   <svelte:element
     aria-selected={selected}
@@ -226,6 +252,21 @@
        slides the chosen one over from the tab it left. */
     :global([data-leap]) &::after {
       transition: none;
+    }
+    /* Under a gesture the sheets are where its fraction puts them, frame by
+       frame, and the chosen tab keeps its tint under a sheet that no longer
+       covers it; the track's data-ride stays a frame past the gesture, so
+       handing back to the rules above starts no transition. */
+    :global([data-ride]) &::before,
+    :global([data-ride]) &::after {
+      transition: none;
+    }
+    &.riding::before {
+      opacity: 1;
+    }
+    &.riding::after {
+      mask-size: var(--ride) 100%;
+      mask-position: var(--ride-at);
     }
   }
   .hit {

@@ -96,6 +96,27 @@
     return () => slide.cancel();
   });
 
+  /**
+   * A gesture carrying the indicator (the root's `travel`), and two frames
+   * past it: the folder sheets it drew are handed back to their resting
+   * rules with transitions still off, so the hand-back starts none. One
+   * frame is not enough — a frame's callbacks run before its style, so the
+   * attribute would go in the same style pass as the carried sheets.
+   */
+  let ride = $state(false);
+  $effect(() => {
+    if (tabs.travel) {
+      ride = true;
+      return;
+    }
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => {
+        ride = false;
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  });
+
   const selectedRect = $derived(
     list.optimisticIndex === null
       ? undefined
@@ -294,6 +315,7 @@
   class={cn("ff-tabs-list", scrollable && "scrollable", className)}
   data-direction={direction}
   data-leap={leap ? '' : undefined}
+  data-ride={ride ? '' : undefined}
   {onfocusin}
   {onfocusout}
   {onkeydown}

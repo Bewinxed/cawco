@@ -230,7 +230,9 @@
   <!-- Every open conversation has a slot, built in the background. Where
        the strip can be swiped, the two neighbours are also painted, parked
        either side, so a swipe reveals a current transcript; a pointer
-       cannot swipe, so elsewhere only the active pane is shown. -->
+       cannot swipe, so elsewhere only the active pane is shown. The one a
+       committed swipe brings into reach is painted once its settle runs
+       (gesture.svelte.ts, `veiled`). -->
   <div
     class="stack"
     bind:this={stack}
@@ -241,7 +243,9 @@
     {#each mounted as paneId (paneId)}
       {@const isActive = paneId === viewId}
       {@const delta = deltaOf(paneId)}
-      {@const shown = isActive || (swipeable && Math.abs(delta) <= 1)}
+      {@const shown =
+        isActive ||
+        (swipeable && Math.abs(delta) <= 1 && paneId !== swipe.veiled)}
       {@const ctx = contextOf(paneId)}
       <div
         class="pane"

@@ -9,7 +9,8 @@
  *   --ease-in-out) and fades in place when the pointer leaves, or, with
  *   `hovered`, follows the row carrying that attribute (a menu's
  *   `data-highlighted`, set by pointer and arrow keys alike). Keyboard focus
- *   moves it too. Where nothing hovers (touch), it never shows (app.css).
+ *   moves it too. Where nothing hovers (touch), it never shows (app.css)
+ *   and a touch never aims it.
  * - The pill sits under the selected row and glides to the next one
  *   (120ms, --ease-drawer). A row picked with the pointer is already under
  *   the ghost: there the pill takes the ghost's place at once and the old
@@ -241,6 +242,18 @@ export function highlight(options: HighlightOptions) {
         showGhost(best);
       }
     };
+    /**
+     * A hovering pointer only. A touch has nothing to hover, and a tap's
+     * compatibility mousemove would leave the ghost aimed at the tapped row
+     * with no mouseleave to end it — every later scroll of the list, a
+     * swipe's tab strip following the gesture frame by frame, re-measured
+     * the rows for a ghost that is never shown.
+     */
+    const onPointer = (event: PointerEvent) => {
+      if (event.pointerType !== "touch") {
+        onMove(event);
+      }
+    };
     const onLeave = () => {
       pointer = null;
       if (!hovered) {
@@ -272,8 +285,8 @@ export function highlight(options: HighlightOptions) {
         showGhost(null);
       }
     };
-    container.addEventListener("mousemove", onMove);
-    container.addEventListener("mouseleave", onLeave);
+    container.addEventListener("pointermove", onPointer);
+    container.addEventListener("pointerleave", onLeave);
     container.addEventListener("focusin", onFocus);
     container.addEventListener("focusout", onBlur);
     container.addEventListener("scroll", onScroll, {
@@ -345,8 +358,8 @@ export function highlight(options: HighlightOptions) {
     return () => {
       cancelAnimationFrame(pendingResize);
       cancelAnimationFrame(pendingHide);
-      container.removeEventListener("mousemove", onMove);
-      container.removeEventListener("mouseleave", onLeave);
+      container.removeEventListener("pointermove", onPointer);
+      container.removeEventListener("pointerleave", onLeave);
       container.removeEventListener("focusin", onFocus);
       container.removeEventListener("focusout", onBlur);
       container.removeEventListener("scroll", onScroll, { capture: true });
