@@ -816,11 +816,21 @@
     if (following !== null) {
       return; // one loop; it reads the live target
     }
-    let last = performance.now();
+    const span = Number.parseFloat(
+      getComputedStyle(scroller).getPropertyValue("--dur-panel")
+    );
+    // Both are set by the loop's first frame, not here: a loop armed while
+    // the page was hidden runs when the reader is back, and glides from there.
+    let last = 0;
+    let ends = 0;
     const step = (now: number): void => {
       if (!(scroller && atBottom)) {
         stopFollow();
         return;
+      }
+      if (ends === 0) {
+        last = now;
+        ends = now + span;
       }
       const dt = Math.min(64, now - last);
       last = now;
@@ -833,13 +843,18 @@
         stopFollow();
         return;
       }
-      // Duration-bounded, not distance-bounded: any engagement finishes in
-      // ≤400ms (remaining/0.4 px/s closes the whole gap in 0.4s, recomputed
-      // per frame so it decelerates into place). Only a genuinely small hop —
-      // one message's worth — rides at the reading pace. Without this bound
-      // the loop trod water at 360px/s for the whole duration of a long
-      // stream it was chasing: a five-second crawl nobody asked for.
-      const speed = Math.max(FOLLOW_SPEED, remaining / 0.4);
+      // Duration-bounded, not distance-bounded: an engagement lands within
+      // one --dur-panel however far it has to go. The speed is three times
+      // what the distance left needs in the time left, so it eases out along
+      // a cubic and arrives as the time runs out, and reads the live target
+      // every frame, so a tail that keeps growing is absorbed without a jump.
+      // Past the deadline the time left holds at a quarter span: whatever
+      // still grows is caught up with quickly, never snapped to. A hop of a
+      // line or two rides at the reading pace instead. Without the bound the
+      // loop trod water behind a long stream or a return from elsewhere: a
+      // crawl of a second or more nobody asked for.
+      const timeLeft = Math.max(ends - now, span / 4) / 1000;
+      const speed = Math.max(FOLLOW_SPEED, (3 * remaining) / timeLeft);
       scroller.scrollTop += Math.min(remaining, (speed * dt) / 1000);
       lastWrite = scroller.scrollTop;
       following = requestAnimationFrame(step);
