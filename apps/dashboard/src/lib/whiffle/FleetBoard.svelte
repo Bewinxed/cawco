@@ -343,12 +343,15 @@
 
   /* A filter, a search or a re-sort reflows the table: rows that leave close where
      they were, rows that arrive open, the rest slide, and the table's
-     height follows, so nothing under the table jumps (motion/rows). */
+     height follows, so nothing under the table jumps (motion/rows). A page
+     the scroll brings in does not: its rows land below the reader, in the
+     headroom under the board, already laid out. */
   let exitLayer = $state<HTMLElement | null>(null);
+  let paging = false;
   const reflow = tableReflow({
     layer: () => exitLayer,
     rows: "tbody tr[data-key]",
-    enabled: () => active,
+    enabled: () => active && !paging,
   });
 
   // The list is where the leaving rows are caught: it is recomputed as the
@@ -356,6 +359,7 @@
   const visible = $derived.by(() => {
     const next = sorted.slice(0, shown);
     untrack(() => reflow(next.map((row) => row.key)));
+    paging = false;
     return next;
   });
   const more = $derived(sorted.length > visible.length);
@@ -367,15 +371,19 @@
    */
   let boardEl = $state<HTMLElement | null>(null);
   let sentinelEl = $state<HTMLElement | null>(null);
+  /** A page of headroom, so the next block is already there by the time the
+   *  last row is read rather than arriving after a visible stop. */
+  const HEADROOM = 400;
 
   $effect(() => {
     // `from` captures the count this observer was built against, which is what
     // makes it depend on `shown` and re-arm after every growth. An
-    // IntersectionObserver reports CROSSINGS, not states: a sentinel still
-    // intersecting once the new rows are in place never fires a second time,
-    // so one long-lived observer would stop after a single block on a tall
-    // window. A fresh one delivers an initial callback for its target, which
-    // carries the run on until the sentinel is pushed out of range.
+    // IntersectionObserver reports CROSSINGS, not states, and only a frame
+    // after it is built, so a sentinel already in range is paged here, in the
+    // same update: the table the board first draws, and the one each page
+    // leaves, already reaches past the board by the headroom, and no page
+    // lands under the foot just after it is painted. Each page re-runs this
+    // until the sentinel is out of range; from there the observer carries it.
     const from = shown;
     // Not while the board is put away. It keeps its layout there
     // (`visibility: hidden`, so measurements survive), so the sentinel is
@@ -384,15 +392,26 @@
     if (!(active && more && boardEl && sentinelEl)) {
       return;
     }
+    const nextPage = () => {
+      paging = true;
+      shown = from + PAGE_SIZE;
+    };
+    const room = boardEl.getBoundingClientRect();
+    const mark = sentinelEl.getBoundingClientRect();
+    if (
+      mark.top <= room.bottom + HEADROOM &&
+      mark.bottom >= room.top - HEADROOM
+    ) {
+      nextPage();
+      return;
+    }
     const io = new IntersectionObserver(
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting)) {
-          shown = from + PAGE_SIZE;
+          nextPage();
         }
       },
-      // A page of headroom, so the next block is already there by the time the
-      // last row is read rather than arriving after a visible stop.
-      { root: boardEl, rootMargin: "400px 0px" }
+      { root: boardEl, rootMargin: `${HEADROOM}px 0px` }
     );
     io.observe(sentinelEl);
     return () => io.disconnect();
