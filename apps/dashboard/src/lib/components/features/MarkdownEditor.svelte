@@ -12,6 +12,7 @@
    * inside `onMount`: this editor never runs on the server.
    */
   import { onMount } from "svelte";
+  import { morph } from "$lib/whiffle/motion/morph.svelte";
   // Structure only, and only for the features Crepe runs by default (top-bar,
   // ai and the ai diff stay off, so their sheets are not shipped). Crepe's own
   // theme files are nothing but a palette, and the palette this app already
@@ -33,13 +34,31 @@
   let {
     value = $bindable(),
     label,
+    onready,
   }: {
     /** The markdown. Bound both ways: typing in the editor writes it back. */
     value: string;
     label?: string;
+    /** Called once the editor has drawn the document and keeps still, or failed to load. */
+    onready?: () => void;
   } = $props();
 
   let host = $state<HTMLElement | null>(null);
+
+  /** Resolves once `node` has not changed size for 150ms. */
+  const still = (node: HTMLElement) =>
+    new Promise<void>((resolve) => {
+      let timer = setTimeout(done, 150);
+      const sizes = new ResizeObserver(() => {
+        clearTimeout(timer);
+        timer = setTimeout(done, 150);
+      });
+      sizes.observe(node);
+      function done() {
+        sizes.disconnect();
+        resolve();
+      }
+    });
   let failed = $state<string | null>(null);
 
   onMount(() => {
@@ -67,8 +86,13 @@
           return;
         }
         editor = instance;
+        // Crepe draws in steps after it is created (the document, then the
+        // blocks inside it), so "drawn" is the host keeping still.
+        await still(host);
+        onready?.();
       } catch (caught) {
         failed = caught instanceof Error ? caught.message : String(caught);
+        onready?.();
       }
     };
     load();
@@ -88,7 +112,12 @@
     The editor did not load: {failed}
   </p>
 {/if}
-<section aria-label={label} class="crepe-host" bind:this={host}></section>
+<section
+  aria-label={label}
+  class="crepe-host"
+  bind:this={host}
+  {@attach morph()}
+></section>
 
 <style>
   /* Crepe's structural CSS reads these off `.milkdown` itself, so they are set
@@ -129,72 +158,6 @@
   }
   .crepe-host {
     min-height: 100%;
-  }
-  /* Crepe tints these by mixing its palette with transparent, which Safari
-     15.6 cannot do; the same tints, as app alpha steps. Each selector is
-     Crepe's own, one class more specific. */
-  .crepe-host :global(.milkdown .ProseMirror .ProseMirror-selectednode),
-  .crepe-host
-    :global(
-      .milkdown
-        .milkdown-image-block.selected
-        > .image-edit:not(:has(input:focus))::before
-    ),
-  .crepe-host
-    :global(.milkdown .milkdown-image-block.selected > .image-wrapper::before) {
-    background: var(--surface-fill-a40);
-  }
-  .crepe-host :global(.milkdown .ProseMirror code),
-  .crepe-host :global(.milkdown .ProseMirror pre) {
-    background: var(--surface-recess-a60);
-  }
-  .crepe-host :global(.milkdown .ProseMirror hr),
-  .crepe-host
-    :global(.milkdown .ProseMirror hr.ProseMirror-selectednode::before),
-  .crepe-host
-    :global(
-      .milkdown
-        .milkdown-slash-menu
-        .menu-groups
-        .menu-group
-        + .menu-group::before
-    ),
-  .crepe-host :global(.milkdown .milkdown-toolbar .divider) {
-    background-color: var(--ink-muted-a20);
-  }
-  .crepe-host :global(.milkdown .ProseMirror hr.ProseMirror-selectednode) {
-    background-color: var(--ink-muted-a80);
-  }
-  .crepe-host :global(.milkdown .milkdown-slash-menu .tab-group) {
-    border-bottom-color: var(--ink-muted-a20);
-  }
-  .crepe-host :global(.milkdown .milkdown-table-block th),
-  .crepe-host :global(.milkdown .milkdown-table-block td) {
-    border-color: var(--ink-muted-a20);
-  }
-  .crepe-host :global(.milkdown .crepe-drop-cursor) {
-    background-color: var(--ink-muted-a50);
-  }
-  .crepe-host
-    :global(.milkdown .milkdown-slash-menu .menu-groups .menu-group h6),
-  .crepe-host
-    :global(.milkdown .milkdown-code-block .preview-panel .preview-label) {
-    color: var(--ink-strong-a60);
-  }
-  .crepe-host
-    :global(
-      .milkdown
-        .milkdown-image-inline
-        .empty-image-inline
-        .link-importer
-        .placeholder
-    ),
-  .crepe-host
-    :global(
-      .milkdown .milkdown-image-block .image-edit .link-importer .placeholder
-    ),
-  .crepe-host :global(.milkdown .crepe-placeholder::before) {
-    color: var(--ink-strong-a40);
   }
   /* Crepe's common stylesheet includes theme typography and motion. Keep its
      structural selectors while enforcing the ledger contract on every widget. */

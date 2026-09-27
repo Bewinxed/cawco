@@ -13,9 +13,9 @@ export interface PopoverMember {
   readonly id: string;
   readonly label?: string;
   readonly onchange: (open: boolean) => void;
-  readonly onmouseleave?: (event: MouseEvent) => void;
-  readonly onmousemove?: (event: MouseEvent) => void;
   readonly open: boolean;
+  /** The rows the surface's hover ghost glides between (components/ui/highlight). */
+  readonly rows?: string;
   readonly trapFocus: boolean;
   readonly trigger: HTMLElement | null;
   readonly width: number;

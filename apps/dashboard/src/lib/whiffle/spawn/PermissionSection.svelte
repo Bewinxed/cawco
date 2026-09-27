@@ -39,7 +39,7 @@
   <span
     aria-hidden="true"
     class="fill"
-    style={`transform:translateY(calc(${index} * (var(--permission-row-height, 44px) + 2px)));opacity:${rows.some(row => row.value === value) ? 1 : 0}`}
+    style={`transform:translateY(calc(${index} * (var(--row-h) + 2px)));opacity:${rows.some(row => row.value === value) ? 1 : 0}`}
   ></span>
   {#each rows as row, i (row.value)}
     {@const Icon = row.icon}
@@ -80,6 +80,8 @@
 
 <style>
   .perms {
+    /* One row's height: the rows and the fill that slides under them. */
+    --row-h: 44px;
     position: relative;
     display: grid;
     gap: 2px;
@@ -100,7 +102,7 @@
     left: 4px;
     right: 4px;
     top: 4px;
-    height: var(--permission-row-height, 44px);
+    height: var(--row-h);
     background: var(--surface-fill);
     border-radius: var(--radius-sm);
     pointer-events: none;
@@ -118,7 +120,7 @@
     align-items: center;
     gap: 10px;
     width: 100%;
-    height: var(--permission-row-height, 44px);
+    height: var(--row-h);
     padding: 6px 8px;
     background: transparent;
     border: 1px solid transparent;

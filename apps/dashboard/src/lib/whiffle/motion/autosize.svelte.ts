@@ -50,3 +50,44 @@ export function autosize(value: () => unknown) {
     };
   };
 }
+
+/**
+ * An input as wide as what is typed in it, tweening a character at a time
+ * (a CSS width transition carries it). It only sizes where its stylesheet
+ * asks for it with `--autowidth: 1`, so one field can be content-sized in
+ * one place and fill its row in another.
+ */
+export function autowidth(value: () => unknown) {
+  return (node: HTMLInputElement) => {
+    const twin = document.createElement("span");
+    twin.setAttribute("aria-hidden", "true");
+    twin.style.cssText =
+      "position:absolute;visibility:hidden;pointer-events:none;white-space:pre;inset-block-start:0;inset-inline-start:-9999px";
+    node.after(twin);
+    const fit = () => {
+      const style = getComputedStyle(node);
+      if (style.getPropertyValue("--autowidth").trim() !== "1") {
+        node.style.width = "";
+        return;
+      }
+      twin.style.font = style.font;
+      twin.style.letterSpacing = style.letterSpacing;
+      twin.textContent = node.value || node.placeholder || " ";
+      const pad =
+        Number.parseFloat(style.paddingInlineStart) +
+        Number.parseFloat(style.paddingInlineEnd) +
+        Number.parseFloat(style.borderInlineStartWidth) +
+        Number.parseFloat(style.borderInlineEndWidth);
+      node.style.width = `${Math.ceil(twin.getBoundingClientRect().width + pad + 2)}px`;
+    };
+    $effect(() => {
+      value();
+      fit();
+    });
+    node.addEventListener("input", fit);
+    return () => {
+      node.removeEventListener("input", fit);
+      twin.remove();
+    };
+  };
+}

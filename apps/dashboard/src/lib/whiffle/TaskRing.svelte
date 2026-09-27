@@ -65,7 +65,6 @@
         class="spin"
         cx={box / 2}
         cy={box / 2}
-        data-motion-loop
         fill="none"
         r={radius}
         stroke="currentColor"

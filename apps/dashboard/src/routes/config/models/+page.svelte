@@ -272,11 +272,7 @@
             out:blur={{ duration: 100, amount: 2 }}
           >
             {#if phase === 'exchanging'}
-              <span
-                aria-hidden="true"
-                class="dot pulse"
-                data-motion-loop
-              ></span>
+              <span aria-hidden="true" class="dot pulse"></span>
               Finishing the connection with OpenRouter…
             {:else if phase === 'checking'}
               <span aria-hidden="true" class="dot"></span>

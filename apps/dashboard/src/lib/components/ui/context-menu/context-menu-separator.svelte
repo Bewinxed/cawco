@@ -10,7 +10,7 @@
 </script>
 
 <ContextMenuPrimitive.Separator
-  class={cn("-mx-1 my-1 h-px bg-border-a50", className)}
+  class={cn("-mx-1 my-1 h-px bg-border/50", className)}
   data-slot="context-menu-separator"
   bind:ref
   {...restProps}

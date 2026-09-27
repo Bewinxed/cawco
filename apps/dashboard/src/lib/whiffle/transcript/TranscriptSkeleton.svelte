@@ -131,7 +131,7 @@
      square held at a whisper of that colour, so the placeholder says "an
      answer goes here" without lighting up. */
   .mark:not(.raised) {
-    background: var(--brand-solid-a28);
+    background: oklch(from var(--brand-solid) l c h / 0.28);
   }
   .mark.raised {
     background: var(--surface-raised);
@@ -200,7 +200,7 @@
     background: linear-gradient(
       90deg,
       transparent 0 35%,
-      var(--surface-raised-a55) 50%,
+      oklch(from var(--surface-raised) l c h / 0.55) 50%,
       transparent 65% 100%
     );
     display: none;

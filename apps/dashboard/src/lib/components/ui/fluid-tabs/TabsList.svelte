@@ -1,10 +1,10 @@
 <script lang="ts">
   /**
-   * The segmented control's track. Three overlays travel under the items —
-   * the active segment, the hover field and the focus ring — positioned from
-   * measurements, which is what lets one element slide between tabs rather
-   * than each tab drawing its own. The hover field enters from the active
-   * segment and leaves to it, at the faster tier: it is following a hand.
+   * The segmented control's track. Two overlays travel under the items —
+   * the active segment and the focus ring — positioned from measurements,
+   * which is what lets one element slide between tabs rather than each tab
+   * drawing its own. The hover layer is the kit's ghost (components/ui/
+   * highlight), the same one every list in the app has.
    *
    * `scrollable` lets a track that overflows scroll sideways: the chosen
    * item is kept in view and a wheel over the track, which has no vertical
@@ -12,9 +12,11 @@
    */
   import type { Snippet } from "svelte";
   import type { HTMLAttributes } from "svelte/elements";
-  import { ProximityHover } from "$lib/hooks/proximity-hover.svelte";
+  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   import { cn } from "$lib/utils";
+  import { motionOk } from "$lib/whiffle/motion/curves.svelte";
   import { provideList, TabsListState, useTabs } from "./context.svelte";
+  import { TabRects } from "./rects.svelte";
 
   let {
     class: className,
@@ -27,8 +29,8 @@
   } = $props();
 
   const tabs = useTabs();
-  const hover = new ProximityHover("x");
-  const list = new TabsListState(hover);
+  const rects = new TabRects();
+  const list = new TabsListState(rects);
   provideList(list);
 
   const selectedIndex = $derived(
@@ -61,14 +63,11 @@
   });
   $effect(() => {
     const jump = leap;
-    if (
-      !(jump && node) ||
-      window.matchMedia("(prefers-reduced-motion: reduce)").matches
-    ) {
+    if (!(jump && node && motionOk.current)) {
       return;
     }
     const tab = (i: number) =>
-      node?.querySelector<HTMLElement>(`[data-proximity-index="${i}"]`);
+      node?.querySelector<HTMLElement>(`[data-tab-index="${i}"]`);
     const from = tab(jump.from);
     const to = tab(jump.to);
     if (!(from && to)) {
@@ -100,16 +99,11 @@
   const selectedRect = $derived(
     list.optimisticIndex === null
       ? undefined
-      : hover.rects[list.optimisticIndex]
-  );
-  const hoverRect = $derived(
-    hover.activeIndex === null ? undefined : hover.rects[hover.activeIndex]
+      : rects.rects[list.optimisticIndex]
   );
   const focusRect = $derived(
-    list.focusedIndex === null ? undefined : hover.rects[list.focusedIndex]
+    list.focusedIndex === null ? undefined : rects.rects[list.focusedIndex]
   );
-  const hoveringSelected = $derived(hover.activeIndex === list.optimisticIndex);
-  const hovering = $derived(hoverRect !== undefined && !hoveringSelected);
 
   const lerp = (a: number, b: number, f: number) => a + (b - a) * f;
   /**
@@ -120,7 +114,7 @@
   const travelRect = $derived.by(() => {
     const { travel } = tabs;
     const from = selectedRect;
-    const to = travel && hover.rects[tabs.order.indexOf(travel.toward)];
+    const to = travel && rects.rects[tabs.order.indexOf(travel.toward)];
     if (!(from && to)) {
       return;
     }
@@ -133,21 +127,18 @@
     };
   });
   const segmentRect = $derived(travelRect ?? selectedRect);
-  /** The field rests under the active segment: that is where it comes from and goes back to. */
-  const fieldRect = $derived(hovering ? hoverRect : segmentRect);
 
   let node = $state<HTMLElement | undefined>();
 
   function onfocusin(event: FocusEvent): void {
-    const trigger = (event.target as HTMLElement).closest<HTMLElement>(
-      "[data-proximity-index]"
-    );
+    const target = event.target as HTMLElement;
+    const trigger = target.closest<HTMLElement>("[data-tab-index]");
     if (!trigger) {
       return;
     }
-    const index = Number(trigger.dataset.proximityIndex);
-    hover.activeIndex = index;
-    list.focusedIndex = trigger.matches(":focus-visible") ? index : null;
+    list.focusedIndex = target.matches(":focus-visible")
+      ? Number(trigger.dataset.tabIndex)
+      : null;
   }
   function onfocusout(event: FocusEvent): void {
     if (
@@ -157,9 +148,6 @@
       return;
     }
     list.focusedIndex = null;
-    if (!hover.inside) {
-      hover.leave();
-    }
   }
 
   /** Arrow keys move AND choose — Base UI's `activateOnFocus`. */
@@ -175,7 +163,7 @@
       return;
     }
     const items = [
-      ...node.querySelectorAll<HTMLElement>("[data-proximity-index] > .hit"),
+      ...node.querySelectorAll<HTMLElement>("[data-tab-index] > .hit"),
     ];
     if (items.length === 0) {
       return;
@@ -197,7 +185,7 @@
   // resize, so the scroll lands on where the item ends up.
   $effect(() => {
     const rect = segmentRect;
-    const { width } = hover.viewport;
+    const { width } = rects.viewport;
     if (!(scrollable && node && rect && width > 0)) {
       return;
     }
@@ -270,7 +258,7 @@
       } else if (event.deltaMode === WheelEvent.DOM_DELTA_PAGE) {
         delta *= el.clientWidth;
       }
-      if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      if (!motionOk.current) {
         el.scrollLeft += delta;
         return;
       }
@@ -311,23 +299,16 @@
   {onkeydown}
   role="tablist"
   bind:this={node}
-  use:hover.container
+  use:rects.container
   use:sideways
+  {@attach highlight({ rows: ".ff-tab", axis: "x", covered: ".ff-tab.selected" })}
   {...rest}
 >
   {#if selectedRect}
     <div
       aria-hidden="true"
-      class="field"
-      style={px(fieldRect ?? selectedRect)}
-      class:shown={hovering}
-      class:travelling={travelRect !== undefined}
-    ></div>
-    <div
-      aria-hidden="true"
       class="segment"
       style={px(segmentRect ?? selectedRect)}
-      class:dim={hovering}
       class:travelling={travelRect !== undefined}
     ></div>
   {/if}
@@ -454,7 +435,6 @@
      compositor-only translate. Only the width change lays out, and it lays
      out one empty absolutely-positioned box. */
   .segment,
-  .field,
   .ring {
     position: absolute;
     inset-block-start: 0;
@@ -464,14 +444,17 @@
   }
   /* The active segment: raised, at the moderate tier — critically
      damped, lands without overshoot. Steps back a little while another
-     tab is hovered, so the field reads as the thing about to take over. */
+     tab is under the hover ghost, so the ghost reads as the thing about
+     to take over. */
   .segment {
     z-index: 1;
     background: var(--sheet);
     box-shadow: var(--shadow-tile);
 
-    &.dim {
-      opacity: 0.85;
+    @media (hover: hover) {
+      .ff-tabs-list:has(:global(.ff-tab[data-ghosted]:not(.selected))) > & {
+        opacity: 0.85;
+      }
     }
     /* Under a hand, or riding a settle read off its clock each frame: the
        position is the motion, and an easing on top would lag the finger. */
@@ -493,41 +476,18 @@
   :global([data-variant="folder"]) .segment {
     display: none;
   }
-  /* The hover field, one register down and one tier quicker. */
-  .field {
-    z-index: 0;
-    background: var(--surface-hover);
-    opacity: 0;
-
-    &.shown {
-      opacity: 0.4;
-    }
-    &.travelling {
-      transition: none;
-    }
-
-    /* The same glide as every list's hover ghost (app.css .kit-ghost). */
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        transform var(--dur-ghost) var(--ease-in-out),
-        width var(--dur-ghost) var(--ease-in-out),
-        height var(--dur-ghost) var(--ease-in-out),
-        opacity 80ms linear;
-    }
+  /* The hover ghost is the kit's (app.css .kit-ghost), cut to the tab's
+     own shape; in a well it sits one register down from the segment. */
+  .ff-tabs-list > :global(.kit-ghost) {
+    background: color-mix(in oklch, var(--surface-hover) 40%, transparent);
   }
-  /* Folder tabs: the hover field glides over the unchosen tabs' tints and
-     under the chosen sheet (TabItem: tint 0, field 1, sheet 2, contents
-     3), cut to a folder tab's rounded top, in the tabs' own hover tint.
-     Clicking the tab under it, the sheet wipes in over the field, so the
-     hover becomes the selection. */
-  :global([data-variant="folder"]) .field {
+  /* Folder tabs: the ghost glides over the unchosen tabs' tints and under
+     the chosen sheet (TabItem: tint 0, ghost 1, sheet 2, contents 3), in
+     the tabs' own hover tint. Clicking the tab under it, the sheet wipes
+     in over the ghost, so the hover becomes the selection. */
+  :global([data-variant="folder"]) .ff-tabs-list > :global(.kit-ghost) {
     z-index: 1;
-    border-radius: var(--radius) var(--radius) 0 0;
     background: var(--tab-hover, var(--surface-hover));
-
-    &.shown {
-      opacity: 1;
-    }
   }
   .ring {
     z-index: 4;

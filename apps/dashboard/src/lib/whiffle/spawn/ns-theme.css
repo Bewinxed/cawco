@@ -391,8 +391,12 @@
       width var(--dur-pop) var(--ease-drawer);
   }
 }
-.ns-pop[data-morph] .ns-morph {
-  overflow: hidden;
+/* The surface is held at its content's measured height and tweens to the
+   next one, whether it is gliding to a sibling or its own list is
+   filtering; clipped with a margin so focus rings at the edges survive. */
+.ns-pop .ns-morph {
+  overflow: clip;
+  overflow-clip-margin: 4px;
   @media (prefers-reduced-motion: no-preference) {
     transition: height var(--dur-pop) var(--ease-drawer);
   }

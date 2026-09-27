@@ -433,7 +433,7 @@
     display: grid;
     place-items: center;
     cursor: pointer;
-    transition: background var(--motion-fast) var(--ease-in-out);
+    transition: background var(--dur-control) var(--ease-in-out);
   }
   .a-x svg {
     width: 14px;

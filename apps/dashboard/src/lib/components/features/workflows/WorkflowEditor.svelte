@@ -8,6 +8,7 @@
   import { validateWorkflow } from "@whiffle/core";
   import { onMount } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
+  import { fade } from "svelte/transition";
   import { beforeNavigate, goto } from "$app/navigation";
   import { page } from "$app/state";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
@@ -18,6 +19,8 @@
   import { whiffle } from "$lib/whiffle/client.svelte";
   import { loadDelegateTypes, message } from "$lib/whiffle/delegate-types";
   import { newId } from "$lib/whiffle/id";
+  import { appear, easeOut } from "$lib/whiffle/motion/curves.svelte";
+  import { unfold } from "$lib/whiffle/motion/fold.svelte";
   import {
     refreshWorkflows,
     workflowState,
@@ -564,7 +567,12 @@
   {:else}
     <div class="runs" {@attach highlight({ rows: ".run-entry" })}>
       <aside class="run-list wf-stack">
-        <div class="wf-row">
+        <!-- The kit's ghost and pill: hover glides, and the pill follows the
+             choice (the chips draw no fill of their own here). -->
+        <div
+          class="wf-row filters"
+          {@attach highlight({ rows: '.wf-btn', selected: '[aria-pressed="true"]', axis: 'x' })}
+        >
           {#each [{ value: 'all', label: 'All' }, { value: 'waiting', label: 'Needs you' }, { value: 'failed', label: 'Failed' }] as item (item.value)}
             <button
               aria-pressed={filter === item.value}
@@ -584,6 +592,7 @@
             class="run-entry wf-stack"
             onclick={() => { runId = run.id; }}
             type="button"
+            transition:unfold
           >
             <div class="wf-row wf-spread">
               <span>{run.id.slice(0, 8)}</span>
@@ -602,8 +611,15 @@
       </aside>
       <div class="run-preview">
         {#if runId}
+          <!-- One run gives way to the next in place: they cross-fade in one cell. -->
           {#key runId}
-            <WorkflowRunView onprogram={() => { tab = 'program'; }} {runId} />
+            <div
+              class="run-swap"
+              in:appear
+              out:fade={{ duration: 120, easing: easeOut }}
+            >
+              <WorkflowRunView onprogram={() => { tab = 'program'; }} {runId} />
+            </div>
           {/key}
         {:else}
           <p class="wf-muted">Select a workflow run to inspect its steps.</p>
@@ -750,8 +766,20 @@
     border-bottom: 1px solid var(--border-hairline);
   }
   .run-preview {
+    display: grid;
+    grid-template: minmax(0, 1fr) / minmax(0, 1fr);
     min-width: 0;
     flex: 1;
+  }
+  .run-swap {
+    grid-area: 1 / 1;
+    min-width: 0;
+    min-height: 0;
+  }
+  .filters :global(.wf-btn),
+  .filters :global(.wf-btn[aria-pressed="true"]) {
+    background: transparent;
+    filter: none;
   }
   @media (pointer: coarse) {
     .breadcrumb a {

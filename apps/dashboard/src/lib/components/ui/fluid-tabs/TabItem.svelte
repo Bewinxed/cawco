@@ -47,7 +47,7 @@
     if (!node) {
       return;
     }
-    return list.hover.register(index, node);
+    return list.rects.register(index, node);
   });
 
   // The root learns the order from the items themselves, in mount order.
@@ -58,7 +58,6 @@
   });
 
   const selected = $derived(tabs.value === value);
-  const active = $derived(list.hover.activeIndex === index || selected);
   // The list's props land on the hit, not the box; `class` is the box's.
 
   function choose(event: MouseEvent): void {
@@ -80,8 +79,8 @@
 </script>
 
 <span
-  class={cn("ff-tab", active && "active", selected && "selected", className)}
-  data-proximity-index={index}
+  class={cn("ff-tab", selected && "selected", className)}
+  data-tab-index={index}
   bind:this={node}
 >
   <svelte:element
@@ -115,7 +114,7 @@
   /* The measured box: the hit and whatever trails it. The overlays are
      aimed at this, so a trailing control sits inside the segment. */
   /* The tab box makes no stacking context of its own: its contents rise
-     above the overlays (the sheet is z-index 2, the list's hover field 1),
+     above the overlays (the sheet is z-index 2, the list's hover ghost 1),
      while anything the box paints behind them — a folder tab's tint —
      stays under both. */
   .ff-tab {
@@ -132,8 +131,15 @@
     &:has(.hit:last-child) {
       padding-inline-end: 0;
     }
-    &.active {
+    /* Chosen, or under the list's hover ghost (the kit highlight marks
+       the row it stands under). A tap leaves no ghost behind to ink. */
+    &.selected {
       color: var(--ink-strong);
+    }
+    @media (hover: hover) {
+      &[data-ghosted] {
+        color: var(--ink-strong);
+      }
     }
 
     @media (prefers-reduced-motion: no-preference) {
@@ -179,7 +185,7 @@
        that box. It is part of the tab, so it is wherever the tab is laid
        out, in the same frame, with nothing to travel or catch up. The
        tab box makes no stacking context, so the sheet (z-index 2) sits
-       above every tab's tint and the list's hover field, and below every
+       above every tab's tint and the list's hover ghost, and below every
        tab's contents. */
     &::after {
       content: "";
@@ -259,8 +265,13 @@
       transition: stroke-width 80ms linear;
     }
   }
-  .ff-tab.active :global(.ff-tab-icon) {
+  .ff-tab.selected :global(.ff-tab-icon) {
     stroke-width: 2;
+  }
+  @media (hover: hover) {
+    .ff-tab[data-ghosted] :global(.ff-tab-icon) {
+      stroke-width: 2;
+    }
   }
 
   /* Two labels in one cell: the hidden one is set at the strong weight

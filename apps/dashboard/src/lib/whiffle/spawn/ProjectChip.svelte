@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   /** Project chip + popover (§1.4, §2.7): pick, clear, or create a project. */
   import Add from "~icons/solar/add-circle-linear";
   import Down from "~icons/solar/alt-arrow-down-linear";
@@ -73,9 +72,9 @@
   label="Project"
   {onchange}
   {open}
+  rows="[data-fh]"
   triggerClass="ns-chip-btn"
   triggerStyle={project ? "" : "color:var(--ink-muted)"}
-  {@attach highlight({ rows: "[data-fh]" })}
 >
   {#snippet trigger()}
     <Files style="color:var(--hue-amber-500)" />

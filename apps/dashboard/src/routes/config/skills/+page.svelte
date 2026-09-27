@@ -18,6 +18,7 @@
   } from "$lib/icons";
   import { whiffle } from "$lib/whiffle/client.svelte";
   import FetchSkillPopover from "$lib/whiffle/config/FetchSkillPopover.svelte";
+  import { hubDown } from "$lib/whiffle/config/hub.svelte";
   import LinkMarketplacePopover from "$lib/whiffle/config/LinkMarketplacePopover.svelte";
   import RolloutChip from "$lib/whiffle/config/RolloutChip.svelte";
   import RowFaults from "$lib/whiffle/config/RowFaults.svelte";
@@ -294,16 +295,6 @@
   title={section.label}
 >
   {#snippet actions(down)}
-    {#if hubBroken.length > 0}
-      <Button
-        disabled={down || refetching}
-        onclick={refetchAll}
-        variant="outline"
-      >
-        <IconRefresh />
-        {refetching ? 'Fetching…' : `Fetch all ${hubBroken.length} again`}
-      </Button>
-    {/if}
     <FetchSkillPopover
       disabled={down}
       onsaved={landedSkill}
@@ -311,6 +302,18 @@
     />
   {/snippet}
   {#snippet toolbar()}
+    <!-- Acts on the rows below, so it arrives with them, not in the header. -->
+    {#if hubBroken.length > 0}
+      <Button
+        disabled={hubDown() !== null || refetching}
+        onclick={refetchAll}
+        size="sm"
+        variant="outline"
+      >
+        <IconRefresh />
+        {refetching ? 'Fetching…' : `Fetch all ${hubBroken.length} again`}
+      </Button>
+    {/if}
     <LinkMarketplacePopover
       disabled={whiffle.status !== 'connected'}
       onsaved={(row) => fleet?.config.marketplaces.push(row)}

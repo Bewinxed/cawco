@@ -208,6 +208,8 @@
   // ── history ──────────────────────────────────────────────────────────
   let versions = $state<FleetMemoryVersion[] | null>(null);
   let historyError = $state<string | null>(null);
+  /** The contents editor has drawn the document. */
+  let drawn = $state(false);
   let allVersions = $state(false);
   let shown = $state<number | null>(null);
   let contents = $state<Record<number, string>>({});
@@ -368,6 +370,7 @@
   onsubmit={() => save()}
   saveLabel="Save"
   saving={busy}
+  settling={!drawn || (versions === null && historyError === null)}
   title={fileLabel(path)}
 >
   {#snippet header()}
@@ -437,7 +440,13 @@
     {/if}
     <div class="well">
       {#key path}
-        <MarkdownEditor label={fileLabel(path)} bind:value={text} />
+        <MarkdownEditor
+          label={fileLabel(path)}
+          onready={() => {
+            drawn = true;
+          }}
+          bind:value={text}
+        />
       {/key}
     </div>
   </EditorSection>

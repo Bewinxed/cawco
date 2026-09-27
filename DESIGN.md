@@ -76,8 +76,11 @@ IDs; Geist is everything else.
 | `--press-scale` | .97 |
 | `--pop-scale` / `--pop-rise` | .92 / 8px |
 
-No ease-in curve exists. Exits are shorter than entrances. Under reduced motion every animation and transition runs for 1ms, the
-new-session dialog included; `data-motion-loop` keeps an indeterminate spinner
+No ease-in curve exists. Exits are shorter than entrances. Motion is opt-in:
+travelling transitions and animations run only under
+`prefers-reduced-motion: no-preference`, and motion driven from JavaScript
+asks the same query (`motionOk`). With reduced motion, opacity and colour fades
+still run, pages cross-fade in place, and an indeterminate spinner keeps
 turning.
 
 ## Components

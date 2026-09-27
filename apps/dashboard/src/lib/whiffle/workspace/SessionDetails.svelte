@@ -606,8 +606,13 @@
     box-shadow: none;
     background: transparent;
   }
+  /* The search is as wide as what is typed in it (motion/autosize.svelte.ts
+     autowidth), and tweens there a character at a time. */
   .model-pop :global(.search input) {
-    field-sizing: content;
+    --autowidth: 1;
+    @media (prefers-reduced-motion: no-preference) {
+      transition: width var(--dur-control) var(--ease-out);
+    }
   }
   .model-pop :global(.list) {
     height: auto;

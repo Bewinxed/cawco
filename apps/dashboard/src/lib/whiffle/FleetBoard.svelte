@@ -13,9 +13,7 @@
    * whose transcript is already running somewhere is dropped — the live row is
    * the same conversation, and it is the one that can still be spoken to.
    */
-  import { flip } from "svelte/animate";
-  import { cubicOut } from "svelte/easing";
-  import { fade } from "svelte/transition";
+  import { untrack } from "svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import WorkflowStatus from "$lib/components/features/workflows/WorkflowStatus.svelte";
@@ -45,6 +43,7 @@
   import AttentionQueue from "$lib/whiffle/AttentionQueue.svelte";
   import LiveSessionRow from "$lib/whiffle/LiveSessionRow.svelte";
   import MachineCard from "$lib/whiffle/MachineCard.svelte";
+  import { tableReflow } from "$lib/whiffle/motion/rows.svelte";
   import StatTile from "$lib/whiffle/StatTile.svelte";
   import NewSessionDialog from "$lib/whiffle/spawn/NewSessionDialog.svelte";
   import { workflowState } from "$lib/whiffle/workflow-state.svelte";
@@ -202,6 +201,21 @@
   /* ---- filters ------------------------------------------------------- */
 
   let search = $state("");
+  /**
+   * What the list is filtered by: the field's text, 80ms after the last
+   * keystroke, so a burst of typing reflows the table once rather than
+   * once per letter.
+   */
+  let query = $state("");
+  let searchTimer: ReturnType<typeof setTimeout> | undefined;
+  function searchTyped() {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(() => {
+      query = search;
+      shown = PAGE_SIZE;
+    }, 80);
+  }
+  $effect(() => () => clearTimeout(searchTimer));
   let showAllNotRunning = $state(false);
 
   /* Not running starts folded to one summary row; the choice is this
@@ -276,7 +290,7 @@
 
   const filtered = $derived(
     rows.filter((row) => {
-      const needle = search.trim().toLowerCase();
+      const needle = query.trim().toLowerCase();
       if (needle && !row.title.toLowerCase().includes(needle)) {
         return false;
       }
@@ -296,7 +310,23 @@
       : [...filtered].sort((a, b) => (b.at ?? 0) - (a.at ?? 0))
   );
 
-  const visible = $derived(sorted.slice(0, shown));
+  /* A filter, a search or a re-sort reflows the table: rows that leave close where
+     they were, rows that arrive open, the rest slide, and the table's
+     height follows, so nothing under the table jumps (motion/rows). */
+  let exitLayer = $state<HTMLElement | null>(null);
+  const reflow = tableReflow({
+    layer: () => exitLayer,
+    rows: "tbody tr[data-key]",
+    enabled: () => active,
+  });
+
+  // The list is where the leaving rows are caught: it is recomputed as the
+  // table starts to update, the one moment they are still on screen.
+  const visible = $derived.by(() => {
+    const next = sorted.slice(0, shown);
+    untrack(() => reflow(next.map((row) => row.key)));
+    return next;
+  });
   const more = $derived(sorted.length > visible.length);
 
   /**
@@ -578,9 +608,7 @@
             <Input
               aria-label="Search sessions"
               class="search-input"
-              oninput={() => {
-                shown = PAGE_SIZE;
-              }}
+              oninput={searchTyped}
               placeholder="Search sessions…"
               bind:value={search}
             />
@@ -656,6 +684,7 @@
         </div>
 
         <div class="tbl">
+          <div aria-hidden="true" class="exits" bind:this={exitLayer}></div>
           <Table.Root class="live" ghostRows="tbody tr">
             <Table.Header>
               <Table.Row>
@@ -672,13 +701,13 @@
             <Table.Body>
               {#each visible as row (row.key)}
                 <!-- A session that changes state re-sorts; it slides to its new place
-                     rather than swapping rows under the reader's eye. -->
+                     rather than swapping rows under the reader's eye. A row a
+                     filter brings back opens as the rows below make room. -->
                 <tr
                   class="border-b transition-colors"
+                  data-key={row.key}
                   data-share="pane:{sessionOf(row.href)}"
                   data-slot="table-row"
-                  in:fade={{ duration: 160 }}
-                  animate:flip={{ duration: 200, easing: cubicOut }}
                 >
                   <Table.Cell class="c-name">
                     <div class="nm">
@@ -748,17 +777,18 @@
               {/each}
             </Table.Body>
           </Table.Root>
-        </div>
-
-        <!-- The scroll target. It sits after the table but inside the
-             scroller, so reaching it means the last row has been reached. It
-             is kept in the tree even when the list is fully shown: removing it
-             would tear down the observer, and the next filter that widens the
-             list would have nothing left to watch. -->
-        <div class="sentinel" bind:this={sentinelEl}>
-          {#if more}
-            <span class="sr-only" role="status">Loading more sessions</span>
-          {/if}
+          <!-- The scroll target. It sits after the table but inside the
+               scroller, so reaching it means the last row has been reached. It
+               is kept in the tree even when the list is fully shown: removing it
+               would tear down the observer, and the next filter that widens the
+               list would have nothing left to watch. It is inside the table's
+               box, so while that box morphs to a new height it is clipped with
+               the rows and does not read as reached before they are laid out. -->
+          <div class="sentinel" bind:this={sentinelEl}>
+            {#if more}
+              <span class="sr-only" role="status">Loading more sessions</span>
+            {/if}
+          </div>
         </div>
 
         <div class="foot">Showing {visible.length} of {filtered.length}</div>
@@ -1000,6 +1030,24 @@
     padding-left: calc(var(--space-3) + 16px + var(--space-2));
   }
 
+  /* The table's box: the layer rows fold away in (motion/rows) sits at its
+     corner, and its height morphs as rows come and go. */
+  .tbl {
+    position: relative;
+  }
+  /* The table never outgrows its panel (fixed layout, below), so its box
+     does not scroll sideways; left to the kit's overflow-x it would clip
+     the rows sliding in from past its new end. While the table's height
+     morphs, .tbl clips at the height it is drawn at. */
+  .tbl :global([data-slot="table-container"]) {
+    overflow: visible;
+  }
+  .exits {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-start: 0;
+  }
+
   /* ui/table, dressed as the ledger grid */
   .tbl :global([data-slot="table-head"]) {
     height: var(--space-8);
@@ -1025,6 +1073,11 @@
   .tbl :global(table.live) {
     table-layout: fixed;
     width: 100%;
+    /* Separate borders: each cell draws its own hairline, so the rule
+       travels with its row when the row slides. Collapsed borders are
+       drawn by the table and stay behind. */
+    border-collapse: separate;
+    border-spacing: 0;
   }
   .tbl :global(.c-name) {
     width: 100%;

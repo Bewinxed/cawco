@@ -25,6 +25,12 @@ type Axis = "x" | "y" | "xy";
 export interface HighlightOptions {
   /** How nearness to the pointer is measured: `xy` for a grid. */
   axis?: Axis;
+  /**
+   * Rows whose own surface covers the ghost — a chosen tab's sheet. The
+   * ghost glides beneath one and fades there, instead of showing through
+   * its anti-aliased edge, and glides back out from under it.
+   */
+  covered?: string;
   /** `false` for a pill alone, under a list that an outer ghost covers. */
   ghost?: boolean;
   /** A row attribute that says which row is hovered, instead of the pointer. */
@@ -71,6 +77,7 @@ export function highlight(options: HighlightOptions) {
       rows,
       hovered,
       selected,
+      covered,
       axis = "y",
       ghost: withGhost = true,
     } = options;
@@ -118,6 +125,9 @@ export function highlight(options: HighlightOptions) {
     let pillBox: Box | null = null;
     let pillRow: HTMLElement | null = null;
 
+    const showOrCover = () => {
+      ghost.style.opacity = covered && ghostRow?.matches(covered) ? "0" : "1";
+    };
     const showGhost = (row: HTMLElement | null) => {
       if (!withGhost) {
         return;
@@ -134,12 +144,13 @@ export function highlight(options: HighlightOptions) {
         return;
       }
       const box = boxOf(row);
-      // Out of view, the ghost lands where it is going without a glide.
-      ghost.classList.toggle("kit-glide", ghost.style.opacity === "1");
+      // Out of view, the ghost lands where it is going without a glide;
+      // from under a covering row it glides out as it would from view.
+      ghost.classList.toggle("kit-glide", ghostRow !== null);
       place(ghost, box);
-      ghost.style.opacity = "1";
       ghostBox = box;
       ghostRow = row;
+      showOrCover();
     };
 
     /** The pill onto the selected row: from the ghost, or gliding. */
@@ -182,7 +193,10 @@ export function highlight(options: HighlightOptions) {
 
     /** Where the pointer last was, to re-aim when a list scrolls under it. */
     let pointer: { x: number; y: number } | null = null;
-    const onMove = (event: { clientX: number; clientY: number }) => {
+    const onMove = (
+      event: { clientX: number; clientY: number },
+      again = false
+    ) => {
       if (hovered) {
         return;
       }
@@ -203,7 +217,7 @@ export function highlight(options: HighlightOptions) {
           best = row;
         }
       }
-      if (best && !(best === ghostRow && ghost.style.opacity === "1")) {
+      if (best && (again || best !== ghostRow)) {
         ghostBy = "pointer";
         showGhost(best);
       }
@@ -215,10 +229,8 @@ export function highlight(options: HighlightOptions) {
       }
     };
     const onScroll = () => {
-      if (pointer && ghost.style.opacity === "1") {
-        const at = { clientX: pointer.x, clientY: pointer.y };
-        ghostRow = null;
-        onMove(at);
+      if (pointer && ghostRow) {
+        onMove({ clientX: pointer.x, clientY: pointer.y }, true);
       }
     };
     const onFocus = (event: FocusEvent) => {
@@ -251,6 +263,11 @@ export function highlight(options: HighlightOptions) {
     });
 
     const watch = new MutationObserver(() => {
+      // A row under the ghost can come to cover it (a tab chosen under
+      // the pointer), or stop covering it.
+      if (covered && ghostRow) {
+        showOrCover();
+      }
       if (hovered) {
         const row = container.querySelector<HTMLElement>(hovered);
         cancelAnimationFrame(pendingHide);
@@ -276,6 +293,7 @@ export function highlight(options: HighlightOptions) {
       attributes: true,
       attributeFilter: [
         "aria-current",
+        "aria-pressed",
         "aria-selected",
         "aria-checked",
         "data-state",

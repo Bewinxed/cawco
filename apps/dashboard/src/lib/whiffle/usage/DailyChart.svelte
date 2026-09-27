@@ -159,7 +159,7 @@
   {#if loadError}
     <p class="text-meta text-error" role="alert">{loadError}</p>
   {:else if loading}
-    <div class="h-56 w-full rounded-[var(--radius-md)] bg-muted-a40"></div>
+    <div class="h-56 w-full rounded-[var(--radius-md)] bg-muted/40"></div>
   {:else}
     <ChartContainer class="h-56 w-full" config={chartConfig}>
       <BarChart
