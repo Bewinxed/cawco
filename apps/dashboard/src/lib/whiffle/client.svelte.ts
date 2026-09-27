@@ -115,7 +115,7 @@ import {
   refreshWorkflows,
   workflowState,
 } from "./workflow-state.svelte";
-import { workingSet } from "./working-set.svelte";
+import { workspace } from "./workspace/workspace.svelte";
 
 export type ConnectionStatus =
   | "connecting"
@@ -811,7 +811,7 @@ export function openSession(instanceId: string): void {
   // biome-ignore lint/complexity/noVoid: fire-and-forget — the view is already hydrated, delegate events fill in when they land
   void loadDelegateEvents(instanceId);
   // Opening a view is the moment its frames become this browser's to render.
-  // (The working-set effect in the route layout already names it; this makes
+  // (The subscription effect in the route layout already names its tab; this makes
   // the direct route the only trigger the store needs to know about.)
   syncSubscriptions();
 }
@@ -2660,21 +2660,27 @@ let peekedId = $state<string | null>(null);
 
 /**
  * Delegates whose cards are expanded. A delegate is a full instance, but its
- * parent's transcript is what the reader is in — so it is not in the working
- * set, and without this it receives no frames and its expanded card stays empty.
+ * parent's transcript is what the reader is in — so it is not an open tab,
+ * and without this it receives no frames and its expanded card stays empty.
  * Watching on expand (and stopping on collapse) is what feeds the card its
  * transcript without opening the session as a tab.
  */
 const watchedDelegates = new Set<string>();
 
-/** A session is "open" when a tab or the peek pane is actively watching it. */
+/**
+ * A session is "open" when a tab the workspace holds or the peek pane is
+ * watching it. The workspace's tabs, not the working set: the working set
+ * keeps ten and lets the coldest go, while the tab it let go stays in its
+ * strip — and a tab that is not subscribed never streams, however often it
+ * is clicked (activating a tab does not visit it).
+ */
 function isSubscribed(instanceId: string): boolean {
-  return workingSet.order.includes(instanceId) || peekedId === instanceId;
+  return workspace.openIds.includes(instanceId) || peekedId === instanceId;
 }
 
 /** The full set of instance ids this dashboard wants `frame` frames for. */
 function subscriptionIds(): string[] {
-  const ids = new Set(workingSet.order);
+  const ids = new Set(workspace.openIds);
   if (peekedId) {
     ids.add(peekedId);
   }
@@ -2684,7 +2690,7 @@ function subscriptionIds(): string[] {
   return [...ids];
 }
 
-/** The last subscription set sent, so an unchanged working set stays quiet. */
+/** The last subscription set sent, so an unchanged set of tabs stays quiet. */
 let lastSubscriptionKey = "";
 
 /**

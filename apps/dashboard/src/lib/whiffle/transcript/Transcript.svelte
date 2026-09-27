@@ -727,6 +727,15 @@
     const height = scroller.scrollHeight;
     const shrank = height < lastHeight;
     lastHeight = height;
+    // Until the reveal the list is laid out but not painted: nothing on it
+    // is the reader's to have scrolled. virtua's own writes land here while
+    // it measures the rows the store's read brings in — untagged, and at a
+    // cold load on a phone one of them left 5,400px of tail under the
+    // landing, read as the reader scrolling up, and the transcript opened
+    // stranded there with the follow let go.
+    if (!shown) {
+      return;
+    }
     // Every write this component makes is tagged with the position it wrote.
     // An event that matches the tag is our OWN motion — the paced follow, or
     // the pin holding the bottom while a row opens — and says nothing about
