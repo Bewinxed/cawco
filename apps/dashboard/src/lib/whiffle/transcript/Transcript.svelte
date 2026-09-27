@@ -171,11 +171,31 @@
   let rebuildTick = $state(0);
   /**
    * The switch flush, and the frame it paints: while this holds, the rows
-   * are the frozen ones whatever the session says. Set on the rising edge of
-   * `visible` / `focused` when there is something to catch up on, cleared
-   * once that flush has painted.
+   * are the frozen ones whatever the session says. Raised by the build that
+   * first sees the rising edge of `visible` / `focused` with something to
+   * catch up on (see `hold`), let go once that flush has painted.
    */
-  let held = $state(false);
+  let held = false;
+  /** Bumped when the hold lets go: the build's dependency on the release. */
+  let released = $state(0);
+  /**
+   * How many times `visible` or `focused` has risen. A count rather than the
+   * two flags, so the build it feeds is invalidated by a rising edge alone: a
+   * pane leaving view is no reason to rebuild it inside that flush.
+   */
+  let seenVisible = false;
+  let seenFocused = false;
+  let rises = 0;
+  const risen = $derived.by(() => {
+    if ((visible && !seenVisible) || (isFocused && !seenFocused)) {
+      rises += 1;
+    }
+    seenVisible = visible;
+    seenFocused = isFocused;
+    return rises;
+  });
+  /** The count the last build saw: a build that sees a higher one is the switch's. */
+  let builtRises = 0;
   /**
    * From the switch until the append lands — what the tail indicator shows.
    * Distinct from `held` because the fold itself happens after the hold is
@@ -311,7 +331,15 @@
       return { rows: next, shifted: frontOnly(frozen, next), ended: null };
     }
     // The switch flush paints what is already there; the catch-up comes
-    // after the paint, through `held` clearing.
+    // after the paint, through the hold letting go.
+    if (risen !== builtRises) {
+      builtRises = risen;
+      if (primed && !held && untrack(() => printOf() !== builtPrint)) {
+        hold();
+      }
+    }
+    // biome-ignore lint/complexity/noVoid: the release is what re-runs a held build.
+    void released;
     if (held) {
       return STILL_BUILD();
     }
@@ -335,10 +363,19 @@
   });
 
   /**
-   * The switch itself, before the DOM updates: on the rising edge of
-   * `visible` or `focused`, hold the rows for this flush and schedule the
-   * catch-up behind its paint. `$effect.pre` because the hold has to be in
-   * place before the Virtualizer reads `built` in the same flush.
+   * The switch itself: the build that meets the rising edge of `visible` or
+   * `focused` holds the rows for this flush and schedules the catch-up behind
+   * its paint. It is the build that decides, not an `$effect.pre` ahead of
+   * it: in async mode Svelte runs a flush's dirty block effects (`{#if}`,
+   * `{#each}`) as it walks the tree and every `$effect.pre` after the walk,
+   * and those blocks read the rows. A pre-effect's hold came after the build
+   * it was meant to stop — a tab's whole history folded and shifted in
+   * front, and virtua's 4767px scroll correction written, inside the
+   * release of the swipe that opened it.
+   *
+   * `catching` is state, and a build may not write state: it goes up in the
+   * microtask behind this flush, before the paint. `returning` is a plain
+   * flag the land reads later, so it is raised here.
    *
    * The delay is `requestAnimationFrame` THEN `setTimeout(0)`, not either
    * alone. A rAF callback runs at the top of the next frame, before that
@@ -351,31 +388,19 @@
    * Nothing is held when the print already matches: a pane whose rows are
    * current simply becomes visible, with no indicator to flash.
    */
-  let wasVisible = false;
-  let wasFocused = false;
-  $effect.pre(() => {
-    const nowVisible = visible;
-    const nowFocused = isFocused;
-    const rising = (nowVisible && !wasVisible) || (nowFocused && !wasFocused);
-    wasVisible = nowVisible;
-    wasFocused = nowFocused;
-    if (!(rising && primed)) {
-      return;
-    }
-    untrack(() => {
-      if (held || printOf() === builtPrint) {
-        return;
-      }
-      held = true;
+  function hold(): void {
+    held = true;
+    returning = true;
+    queueMicrotask(() => {
       catching = true;
-      returning = true;
-      requestAnimationFrame(() => {
-        setTimeout(() => {
-          held = false;
-        }, 0);
-      });
     });
-  });
+    requestAnimationFrame(() => {
+      setTimeout(() => {
+        held = false;
+        released += 1;
+      }, 0);
+    });
+  }
 
   function run(): Built {
     countBuild();
@@ -500,7 +525,7 @@
     primed = true;
     // The append has landed: the rows on screen are the session's again, and
     // the indicator under them has nothing left to wait for.
-    if (untrack(() => catching && !held)) {
+    if (!held && untrack(() => catching)) {
       catching = false;
     }
   });
