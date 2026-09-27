@@ -26,7 +26,7 @@
   import { describeTool } from "$lib/components/features/tool-cards/descriptors";
   import type { Trail } from "$lib/components/ui/markdown/trail";
   import { motionOk } from "$lib/whiffle/motion/curves.svelte";
-  import type { SessionState } from "../client.svelte";
+  import { type SessionState, whiffle } from "../client.svelte";
   import { rebuildScheduler } from "../workspace/scheduler.svelte";
   import {
     type Motion,
@@ -150,6 +150,12 @@
     shifted: false,
     ended: null,
   });
+  /**
+   * The second step of a change virtua has to take in two (see `build`):
+   * the rows it ends on, and the bump that hands them over.
+   */
+  let pending: Row[] | null = null;
+  let secondStep = $state(0);
   /** What `frozen` was folded from — the incremental fold's memory. */
   let memo: FoldMemo | null = null;
   /** Whether `frozen` holds a real build yet — the first one is unconditional. */
@@ -176,6 +182,12 @@
   // Declared up here because the build reads it, and the server evaluates the
   // rows before the scroller's own state is declared.
   let landed = $state(false);
+  /**
+   * Whether the list is drawn. Until the first landing has put the rows where
+   * they will stay, it is laid out and measured but not painted: see the
+   * reveal below. Declared up here with `landed`, which the build reads.
+   */
+  let shown = $state(false);
   // ── The arrival ledger's state. Read by every build, so declared before
   // the first one (the server evaluates the rows during init).
   /** Every id this view has held: rows, the calls inside runs, the live tail's rows. */
@@ -204,12 +216,13 @@
   });
 
   /**
-   * Whether this view is being watched: landed, the transcript being worked
-   * in, on screen, not replaying a catch-up, on a visible page. A build
-   * outside this window is history for this view, whatever it contains.
+   * Whether this view is being watched: landed and drawn, the transcript
+   * being worked in, on screen, not replaying a catch-up, on a visible page.
+   * A build outside this window is history for this view, whatever it
+   * contains.
    */
   const watched = $derived(
-    landed && active && visible && !catching && !pageHidden
+    landed && shown && active && visible && !catching && !pageHidden
   );
 
   $effect(() => {
@@ -264,6 +277,13 @@
     w.__transcriptBuilds[key] = (w.__transcriptBuilds[key] ?? 0) + 1;
   };
   const built = $derived.by<Built>(() => {
+    // biome-ignore lint/complexity/noVoid: the bump that hands over a two-step change's second step.
+    void secondStep;
+    if (pending) {
+      const next = pending;
+      pending = null;
+      return { rows: next, shifted: frontOnly(frozen, next), ended: null };
+    }
     // The switch flush paints what is already there; the catch-up comes
     // after the paint, through `held` clearing.
     if (held) {
@@ -342,11 +362,15 @@
     const { rows: next } = folded;
     ({ memo } = folded);
     ledger(folded);
-    // PREPEND DETECTION for virtua's `shift` mode: an older history chunk
+    // FRONT-CHANGE DETECTION for virtua's `shift` mode: an older history chunk
     // arriving puts new rows ABOVE everything on screen — without `shift`,
     // virtua keeps the scroll OFFSET and the content lurches toward the top
-    // (the post-SSR "jumps to the top then back" flash). A prepend is exact:
-    // the tail row is unchanged and the old first row now sits deeper.
+    // (the post-SSR "jumps to the top then back" flash). The read that
+    // replaces the server's tail can also START later than it did, dropping
+    // rows in front: virtua keeps its sizes by index, so without `shift` every
+    // row on screen landed on an index with no size, hid, and reappeared
+    // measured somewhere else (0.66 at 1440). Either is exact: the rows on
+    // screen are the same, in the same order, to the end of the list.
     // Returned WITH the rows so the Virtualizer reads both in the same flush.
     //
     // Only once LANDED. Before the first landing there is no position to
@@ -357,16 +381,66 @@
     // maximum. Applied on top of that, the jump is clamped, fires no scroll
     // event, and virtua's range stays latched at empty until the reader
     // scrolls — a switched-to pane with a sized box and not one row in it.
-    const oldFirst = frozen[0]?.key;
-    const oldLast = frozen.at(-1)?.key;
-    const shifted =
-      untrack(() => landed) &&
-      frozen.length > 0 &&
-      next.length > frozen.length &&
-      next.at(-1)?.key === oldLast &&
-      oldFirst !== undefined &&
-      next.findIndex((row) => row.key === oldFirst) > 0;
+    const landedNow = untrack(() => landed);
+    const shifted = landedNow && frontOnly(frozen, next);
+    // TWO STEPS. The read that replaces the server's tail with the live
+    // session's can change both ends at once: rows dropped or added in
+    // front, and the live row arriving at the end. virtua's `shift` moves
+    // its sizes at ONE end per update, and with neither the rows on screen
+    // lost their sizes, hid, and reappeared measured somewhere else (0.66
+    // mid-turn at 1440). So the end goes first — the rows before it
+    // untouched, their sizes where they were — and the front a microtask
+    // later, as the shift it is. Both land before the paint.
+    if (landedNow && !shifted) {
+      const was = tailStart(frozen);
+      const now = tailStart(next);
+      if (frontOnly(frozen.slice(0, was), next.slice(0, now))) {
+        pending = next;
+        queueMicrotask(() => {
+          secondStep += 1;
+        });
+        return {
+          rows: [...frozen.slice(0, was), ...next.slice(now)],
+          shifted: false,
+          ended: folded.ended,
+        };
+      }
+    }
     return { rows: next, shifted, ended: folded.ended };
+  }
+
+  /** Where a build's own tail — the live row, the tool in flight, the queue — begins. */
+  function tailStart(sequence: Row[]): number {
+    let start = sequence.length;
+    while (start > 0 && LIVE_KINDS.has(sequence[start - 1].kind)) {
+      start -= 1;
+    }
+    return start;
+  }
+
+  /**
+   * Whether `next` differs from `prior` only in front: rows added before the
+   * first one that survives, or dropped before it, and from that row on the
+   * same rows in the same order to the end of both.
+   */
+  function frontOnly(prior: Row[], next: Row[]): boolean {
+    if (
+      prior.length === 0 ||
+      next.length === prior.length ||
+      next.at(-1)?.key !== prior.at(-1)?.key
+    ) {
+      return false;
+    }
+    const index = new Map(next.map((row, i) => [row.key, i]));
+    const from = prior.findIndex((row) => index.has(row.key));
+    if (from < 0) {
+      return false;
+    }
+    const to = index.get(prior[from].key) as number;
+    return (
+      next.length - to === prior.length - from &&
+      prior.slice(from).every((row, i) => next[to + i].key === row.key)
+    );
   }
 
   /**
@@ -794,6 +868,102 @@
     return () => {
       grew.disconnect();
       box.disconnect();
+    };
+  });
+
+  /**
+   * THE REVEAL. A transcript opening draws its rows once, where they stay.
+   *
+   * virtua renders a row it has not measured yet under `visibility: hidden`,
+   * at an estimated offset, and shows it the moment it is measured — at its
+   * real offset, in the same frame as the landing's scroll. Chrome counts a
+   * hidden box that moves and appears in one frame as a layout shift, from
+   * wherever it was laid out while hidden: on a cold load that was the whole
+   * tail jumping from the top of the list to its place (CLS 0.62 at 1440).
+   *
+   * So the list's own box stays unpainted until the transcript has landed
+   * and every row in the viewport is drawn and measured, and is drawn a
+   * frame later — any change to the rows in between starts the wait again —
+   * so the frame that shows the rows is never the frame that moved them. The
+   * server's render is unpainted too: it is the same rows, at estimated
+   * offsets. It waits out a history read in flight as well. What arrives
+   * after the reveal — the read replacing the server's tail, older chunks in
+   * front — keeps the rows on screen measured and in place: see `frontOnly`
+   * and the two steps in `build`.
+   */
+  $effect(() => {
+    const node = scroller;
+    const container = listing?.firstElementChild;
+    // A read of the history under way is about to put rows in front of
+    // these: drawn first, they would be moved under the reader. virtua
+    // renders the indexes it was showing for a frame after such a shift,
+    // rows far above the viewport now, and measures them there. That counts
+    // the store's own read when these rows are the server's stand-in for it
+    // (see `SessionPane`): the store's session replaces them the moment its
+    // read is in, with the turn in flight on the end.
+    const store = whiffle.session(session.instanceId);
+    const reading =
+      session.loading ||
+      session.hydrating ||
+      (store !== null &&
+        store !== session &&
+        (store.loading || store.hydrating));
+    if (shown || reading || !(landed && node && container)) {
+      return;
+    }
+    let frame: number | null = null;
+    /**
+     * Every row in the viewport is drawn and measured: virtua has rendered
+     * the rows the scroll offset covers — they abut, with no gap, from the
+     * top of the viewport down — and none of them is still hidden awaiting
+     * its size.
+     */
+    const measured = (): boolean => {
+      const view = node.getBoundingClientRect();
+      const boxes: DOMRect[] = [];
+      for (const item of container.children) {
+        const box = item.getBoundingClientRect();
+        if (box.bottom > view.top && box.top < view.bottom) {
+          if ((item as HTMLElement).style.visibility === "hidden") {
+            return false;
+          }
+          boxes.push(box);
+        }
+      }
+      boxes.sort((a, b) => a.top - b.top);
+      if (node.scrollTop > 0 && (boxes[0]?.top ?? view.bottom) > view.top + 1) {
+        return false;
+      }
+      return boxes.every(
+        (box, i) => i === 0 || box.top <= boxes[i - 1].bottom + 1
+      );
+    };
+    const wait = (): void => {
+      if (frame !== null) {
+        cancelAnimationFrame(frame);
+        frame = null;
+      }
+      if (!measured()) {
+        return;
+      }
+      frame = requestAnimationFrame(() => {
+        frame = null;
+        shown = true;
+      });
+    };
+    const changes = new MutationObserver(wait);
+    changes.observe(container, {
+      attributes: true,
+      attributeFilter: ["style"],
+      childList: true,
+      subtree: true,
+    });
+    wait();
+    return () => {
+      changes.disconnect();
+      if (frame !== null) {
+        cancelAnimationFrame(frame);
+      }
     };
   });
 
@@ -1405,7 +1575,7 @@
   {/if}
 
   <!-- The list's own box: what the pin reads virtua's container off. -->
-  <div class="listing" bind:this={listing}>
+  <div class="listing" bind:this={listing} class:shown>
     <Virtualizer
       cache={snapshot?.cache}
       data={renderedRows}
@@ -1487,6 +1657,9 @@
 </div>
 
 <style>
+  .listing:not(.shown) {
+    visibility: hidden;
+  }
   .tr {
     flex: 1 1 auto;
     overflow-y: auto;
