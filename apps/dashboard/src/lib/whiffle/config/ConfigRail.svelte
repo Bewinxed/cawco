@@ -14,9 +14,42 @@
   }: { current?: SectionSlug; variant?: "rail" | "list" } = $props();
 
   const store = configStore();
+
+  /**
+   * The chosen row's highlight is one pill that glides to the next section
+   * (120ms, --ease-drawer), the way the old memory rail's selection moved,
+   * so a section change reads as a move down or up the rail. The rail sits
+   * outside Configure's keyed pane and holds still while the section slides
+   * (routes/config/+layout.svelte).
+   */
+  let nav = $state<HTMLElement>();
+  let pill = $state<{ y: number; h: number } | null>(null);
+  let glide = $state(false);
+  $effect(() => {
+    if (!nav || variant !== "rail" || current === undefined) {
+      pill = null;
+      return;
+    }
+    const row = nav.querySelector<HTMLElement>(`a[href="/config/${current}"]`);
+    pill = row ? { y: row.offsetTop, h: row.offsetHeight } : null;
+    if (!glide) {
+      requestAnimationFrame(() => {
+        glide = true;
+      });
+    }
+  });
 </script>
 
-<nav aria-label="Configure" class="rail" data-variant={variant}>
+<nav aria-label="Configure" class="rail" data-variant={variant} bind:this={nav}>
+  {#if pill}
+    <span
+      aria-hidden="true"
+      class="pill"
+      style:height="{pill.h}px"
+      style:transform="translateY({pill.y}px)"
+      class:glide
+    ></span>
+  {/if}
   {#each GROUPS as { group, sections } (group)}
     <div class="group">
       <h2 class="label">{group}</h2>
@@ -62,6 +95,7 @@
   /* Raised, not recessed: in light the fill a chosen row takes is the recess's
      own step (n-3), so on the recess the selection would not show at all. */
   .rail[data-variant="rail"] {
+    position: relative;
     width: 232px;
     flex: none;
     overflow-y: auto;
@@ -90,6 +124,7 @@
     list-style: none;
   }
   .row {
+    position: relative;
     display: flex;
     align-items: center;
     gap: 9px;
@@ -98,7 +133,12 @@
     border-radius: var(--radius-sm);
     color: var(--ink-strong);
     text-decoration: none;
-    transition: var(--transition-control);
+    transition:
+      var(--transition-control),
+      transform 160ms var(--ease-out);
+  }
+  .row:active {
+    transform: scale(var(--press-scale));
   }
   [data-variant="list"] .row {
     height: 48px;
@@ -116,8 +156,19 @@
       background: var(--surface-hover);
     }
   }
-  .row[aria-current="page"] {
+  .pill {
+    position: absolute;
+    top: 0;
+    right: 8px;
+    left: 12px;
+    border-radius: var(--radius-sm);
     background: var(--surface-fill);
+    pointer-events: none;
+  }
+  .pill.glide {
+    transition:
+      transform 120ms var(--ease-drawer),
+      height 120ms var(--ease-drawer);
   }
   .tile {
     display: inline-flex;

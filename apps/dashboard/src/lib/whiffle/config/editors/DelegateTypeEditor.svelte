@@ -8,6 +8,7 @@
   import { Input } from "$lib/components/ui/input";
   import { Textarea } from "$lib/components/ui/textarea";
   import { IconCpuDuo, IconDocumentDuo, IconKeyDuo } from "$lib/icons";
+  import { appear } from "$lib/whiffle/motion/curves.svelte";
   import { confirm } from "../../confirm.svelte";
   import {
     blankDelegateType,
@@ -163,9 +164,9 @@
         : "Lowercase letters, digits and hyphens — the exact string a delegate call's type param names."}
     </p>
     {#if problemFor('name')}
-      <p class="problem">{problem}</p>
+      <p class="problem" in:appear>{problem}</p>
     {:else if duplicate}
-      <p class="problem">{duplicate}</p>
+      <p class="problem" in:appear>{duplicate}</p>
     {/if}
     <Alert.Root>
       <Alert.Description>
@@ -174,7 +175,7 @@
       </Alert.Description>
     </Alert.Root>
     {#if failed}
-      <p class="problem" role="alert">{failed}</p>
+      <p class="problem" role="alert" in:appear>{failed}</p>
     {/if}
   {/snippet}
 

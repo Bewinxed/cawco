@@ -13,6 +13,9 @@
    * whose transcript is already running somewhere is dropped — the live row is
    * the same conversation, and it is the one that can still be spoken to.
    */
+  import { flip } from "svelte/animate";
+  import { cubicOut } from "svelte/easing";
+  import { fade } from "svelte/transition";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
   import WorkflowStatus from "$lib/components/features/workflows/WorkflowStatus.svelte";
@@ -662,7 +665,14 @@
             </Table.Header>
             <Table.Body>
               {#each visible as row (row.key)}
-                <Table.Row>
+                <!-- A session that changes state re-sorts; it slides to its new place
+                     rather than swapping rows under the reader's eye. -->
+                <tr
+                  class="border-b transition-colors hover:bg-muted/50"
+                  data-slot="table-row"
+                  in:fade={{ duration: 160 }}
+                  animate:flip={{ duration: 200, easing: cubicOut }}
+                >
                   <Table.Cell class="c-name">
                     <div class="nm">
                       <span aria-hidden="true" class="mark m{row.hue}">
@@ -727,7 +737,7 @@
                       {/if}
                     </div>
                   </Table.Cell>
-                </Table.Row>
+                </tr>
               {/each}
             </Table.Body>
           </Table.Root>

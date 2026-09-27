@@ -15,6 +15,7 @@
     type SectionSlug,
   } from "$lib/whiffle/config/sections";
   import { ConfigStore, provideConfig } from "$lib/whiffle/config/store.svelte";
+  import { pageIn, pageOut } from "$lib/whiffle/motion/route.svelte";
 
   let { children } = $props();
 
@@ -41,7 +42,14 @@
     {#if slug}
       <div class="side"><ConfigRail current={slug} /></div>
     {/if}
-    <div class="pane">{@render children()}</div>
+    <!-- Keyed on the path, so a section change or a drill into an editor
+         swaps only this pane (motion/route.svelte.ts) while the rail beside
+         it holds still and its pill glides to the new section. -->
+    <div class="pane">
+      {#key page.url.pathname}
+        <div class="page" in:pageIn out:pageOut>{@render children()}</div>
+      {/key}
+    </div>
   </div>
 </Tooltip.Provider>
 
@@ -57,12 +65,24 @@
     display: flex;
     min-height: 0;
   }
+  /* The two pages of a swap stand in one cell; a phone's push slides the
+     new one in from off the pane's edge, so the pane clips it. */
   .pane {
-    display: flex;
+    display: grid;
+    grid-template: minmax(0, 1fr) / minmax(0, 1fr);
     flex: 1 1 auto;
+    min-width: 0;
+    min-height: 0;
+    overflow: hidden;
+  }
+  /* Opaque, so a page pushed over another hides it. */
+  .page {
+    grid-area: 1 / 1;
+    display: flex;
     flex-direction: column;
     min-width: 0;
     min-height: 0;
+    background: var(--surface-recess);
   }
   @media (max-width: 900px) {
     .side {

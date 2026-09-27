@@ -6,6 +6,7 @@
    * the raw string the machine printed.
    */
   import { toast } from "svelte-sonner";
+  import { TextMorph } from "torph/svelte";
   import {
     MachineRow,
     machineHue,
@@ -89,7 +90,13 @@
     {:else if machines.length > 0 && applied === machines.length}
       <IconCheck />
     {/if}
-    <span class="count">{applied}/{machines.length}</span>
+    <!-- A machine catching up ticks the count over rather than swapping it. -->
+    <TextMorph
+      as="span"
+      class="count"
+      duration={150}
+      text="{applied}/{machines.length}"
+    />
     <span class="unit">machines</span>
   </Popover.Trigger>
   <Popover.Content align="end" class="w-[360px] max-w-[calc(100vw-2rem)] gap-1">
@@ -166,7 +173,12 @@
     font: var(--type-meta);
     color: var(--ink-muted);
     white-space: nowrap;
-    transition: var(--transition-control);
+    transition:
+      var(--transition-control),
+      transform 160ms var(--ease-out);
+  }
+  :global(.rollout:active) {
+    transform: scale(var(--press-scale));
   }
   :global(.rollout:hover) {
     background: var(--surface-hover);
@@ -180,7 +192,7 @@
     height: 13px;
     flex: none;
   }
-  .count {
+  :global(.rollout .count) {
     font-weight: 500;
     font-variant-numeric: tabular-nums;
     color: inherit;
@@ -222,7 +234,12 @@
     font: var(--type-meta);
     font-weight: 500;
     color: var(--ink-strong);
-    transition: var(--transition-control);
+    transition:
+      var(--transition-control),
+      transform 160ms var(--ease-out);
+  }
+  .sync:active:not(:disabled) {
+    transform: scale(var(--press-scale));
   }
   .sync:hover:not(:disabled) {
     background: var(--surface-hover);

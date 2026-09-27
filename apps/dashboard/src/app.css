@@ -971,62 +971,6 @@
   pointer-events: none;
 }
 
-/* ========================================
-   View Transitions
-   ======================================== */
-
-/* Suppress the root group — it captures every unnamed element and runs the
-   browser's DEFAULT crossfade, which clashes with our named content group.
-   Without this, the tab strip and other unnamed elements do their own
-   animation overlapping the content slide. */
-/* Every VT group's default animation is 250ms — override them all to
-   match the content animation (120ms) so `finished` resolves promptly. */
-::view-transition-group(*) {
-  animation-duration: 120ms;
-}
-::view-transition-old(root),
-::view-transition-new(root) {
-  animation: none;
-}
-
-/* Sidebar and topbar stay rock-still during every transition. */
-/* biome-ignore lint/correctness/noUnknownTypeSelector: view-transition-old/new take the named view-transition-name as their argument, not an HTML type selector — Biome's CSS grammar doesn't yet know the View Transitions pseudo-element syntax */
-::view-transition-old(sidebar),
-/* biome-ignore lint/correctness/noUnknownTypeSelector: view-transition-old/new take the named view-transition-name as their argument, not an HTML type selector — Biome's CSS grammar doesn't yet know the View Transitions pseudo-element syntax */
-::view-transition-new(sidebar),
-/* biome-ignore lint/correctness/noUnknownTypeSelector: view-transition-old/new take the named view-transition-name as their argument, not an HTML type selector — Biome's CSS grammar doesn't yet know the View Transitions pseudo-element syntax */
-::view-transition-old(topbar),
-/* biome-ignore lint/correctness/noUnknownTypeSelector: view-transition-old/new take the named view-transition-name as their argument, not an HTML type selector — Biome's CSS grammar doesn't yet know the View Transitions pseudo-element syntax */
-::view-transition-new(topbar) {
-  animation: none;
-}
-/* The session tab strips too — one group per pane group, named by the
-   pane and classed here — since they are chrome as much as the bar is. */
-::view-transition-old(.tabs),
-::view-transition-new(.tabs) {
-  animation: none;
-}
-
-/* Session pane and content swaps cross-fade in place; nothing travels. */
-::view-transition-old(session-pane),
-::view-transition-old(content) {
-  animation: var(--dur-control) var(--ease-drawer) both vt-fade-out;
-}
-::view-transition-new(session-pane),
-::view-transition-new(content) {
-  animation: var(--dur-control) var(--ease-drawer) both vt-fade-in;
-}
-@keyframes vt-fade-out {
-  to {
-    opacity: 0;
-  }
-}
-@keyframes vt-fade-in {
-  from {
-    opacity: 0;
-  }
-}
-
 /* ---- Coarse pointer (touch) --------------------------------------------
    A control keeps its drawn size on a touch screen; only its tappable area
    grows, through `.touch-hit` (kit recipes, below). The one visual step up
@@ -1038,21 +982,33 @@
   }
 }
 
-/* Reduced motion: every animation and transition, the new-session dialog
-   included, runs for 1ms. `data-motion-loop` opts out an indicator whose
-   looping is the information (an indeterminate spinner). */
+/* Reduced motion, for the stylesheet's own motion: comprehension keeps its
+   fades, nothing travels. What the setting asks for is stillness, not
+   instant swaps, so transitions keep running on opacity and colour only: a
+   state still fades from one to the next while anything that slides, scales
+   or grows lands at once. Keyframe animations, which cannot be split by
+   property, run for 1ms, and presses stop scaling. Motion driven from
+   JavaScript (Svelte transitions, `element.animate()`) is not reached by
+   CSS; it reads `reduced` in motion/curves.svelte.ts and makes the same
+   trade.
+
+   `data-motion-loop` opts one element out. It is for indicators whose
+   looping *is* the information: an indeterminate spinner held on a single
+   frame reads as a progress fraction it cannot know. */
 @media (prefers-reduced-motion: reduce) {
   *:not([data-motion-loop]),
   *::before,
-  *::after,
-  ::view-transition-group(*),
-  ::view-transition-old(*),
-  ::view-transition-new(*) {
+  *::after {
     animation-duration: 1ms !important;
     animation-delay: 0ms !important;
     animation-iteration-count: 1 !important;
-    transition-duration: 1ms !important;
+    transition-property:
+      opacity, color, background-color, border-color, outline-color,
+      text-decoration-color, fill, stroke !important;
     transition-delay: 0ms !important;
+  }
+  .pressable:active {
+    transform: none;
   }
 }
 
@@ -1236,7 +1192,12 @@
     white-space: nowrap;
     font: 500 var(--text-label) / 1 var(--font-body);
     color: var(--ink-muted);
-    transition: var(--transition-control);
+    transition:
+      var(--transition-control),
+      transform 160ms var(--ease-out);
+  }
+  .kit-segment:active:not(:disabled) {
+    transform: scale(var(--press-scale));
   }
   .kit-segment[data-state="active"],
   .kit-segment[data-state="on"] {

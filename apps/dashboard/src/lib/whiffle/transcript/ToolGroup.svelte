@@ -318,7 +318,7 @@
               {@render line()}
               <span class="chev"><IconChevronRight /></span>
             </Collapsible.Trigger>
-            <Collapsible.Content>
+            <Collapsible.Content reveal>
               {#if d.expanded === 'memory' && !failed}
                 <MemoryBody input={toolInput} result={m.metadata?.toolResult} />
               {:else if d.expanded === 'memory' && result}
@@ -673,42 +673,6 @@
     .trow,
     .row :global(.trow) {
       min-height: 44px;
-    }
-  }
-
-  /* The disclosure opens as a reveal, not a pop — bits-ui measures the content
-     into --bits-collapsible-content-height; these keyframes grow and shrink to
-     it. The entrance takes 240ms, the exit a shorter --dur-exit (160ms),
-     inside the 220ms collapsible-lazy holds unmounting children for. */
-  .tools :global([data-slot="collapsible-content"]) {
-    overflow: hidden;
-  }
-  .tools :global([data-slot="collapsible-content"][data-state="open"]) {
-    animation: tool-down calc(var(--dur-control) * 2) var(--ease-out);
-  }
-  .tools :global([data-slot="collapsible-content"][data-state="closed"]) {
-    animation: tool-up var(--dur-exit) var(--ease-out);
-  }
-  @keyframes tool-down {
-    from {
-      height: 0;
-    }
-    to {
-      height: var(--bits-collapsible-content-height);
-    }
-  }
-  @keyframes tool-up {
-    from {
-      height: var(--bits-collapsible-content-height);
-    }
-    to {
-      height: 0;
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .tools :global([data-slot="collapsible-content"][data-state="open"]),
-    .tools :global([data-slot="collapsible-content"][data-state="closed"]) {
-      animation: none;
     }
   }
 </style>

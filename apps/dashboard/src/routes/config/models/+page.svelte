@@ -1,5 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
+  import { blur, fade } from "svelte/transition";
   import { toast } from "svelte-sonner";
   import { replaceState } from "$app/navigation";
   import { page } from "$app/state";
@@ -12,6 +13,7 @@
   import SectionFrame from "$lib/whiffle/config/SectionFrame.svelte";
   import SwitchField from "$lib/whiffle/config/SwitchField.svelte";
   import { sectionOf } from "$lib/whiffle/config/sections";
+  import { bezier } from "$lib/whiffle/motion/curves.svelte";
   import {
     type OpenRouterState,
     saveSuggestSetting,
@@ -155,6 +157,28 @@
     saving = false;
   }
 
+  /**
+   * Which line the OpenRouter status shows. Each change cross-fades in place
+   * (300ms in, 100ms out) while the box tweens to the new line's height.
+   */
+  const phase = $derived.by(
+    (): "exchanging" | "checking" | "connected" | "off" => {
+      if (exchanging) {
+        return "exchanging";
+      }
+      if (openrouter === null) {
+        return "checking";
+      }
+      return openrouter.connected && openrouter.connectedAt !== null
+        ? "connected"
+        : "off";
+    }
+  );
+  /** A problem fades in over 300ms on the settle-in curve. */
+  const PROBLEM_IN = { duration: 300, easing: bezier(0.16, 1, 0.3, 1) };
+  let openrouterHeight = $state(0);
+  let reachHeight = $state(0);
+
   const reach = $derived.by(
     (): { tone: "wait" | "off" | "bad" | "ok"; text: string } => {
       if (!supervisor) {
@@ -234,22 +258,43 @@
     <p class="note">
       Used to ask Jev yes/no questions for meaning-based rules.
     </p>
-    <p
-      aria-live="polite"
-      class="status"
-      data-tone={openrouter?.connected ? 'ok' : 'off'}
+    <div
+      class="morph"
+      style:block-size={openrouterHeight ? `${openrouterHeight}px` : undefined}
     >
-      <span aria-hidden="true" class="dot"></span>
-      {#if exchanging}
-        Finishing the connection with OpenRouter…
-      {:else if openrouter === null}
-        Checking the connection…
-      {:else if openrouter.connected && openrouter.connectedAt !== null}
-        Connected {formatDistanceToNow(new Date(openrouter.connectedAt))}
-      {:else}
-        Not connected
-      {/if}
-    </p>
+      <div class="stack" bind:clientHeight={openrouterHeight}>
+        {#key phase}
+          <p
+            aria-live="polite"
+            class="status"
+            data-tone={phase === 'connected' ? 'ok' : 'off'}
+            in:blur={{ duration: 300, amount: 2 }}
+            out:blur={{ duration: 100, amount: 2 }}
+          >
+            {#if phase === 'exchanging'}
+              <span
+                aria-hidden="true"
+                class="dot pulse"
+                data-motion-loop
+              ></span>
+              Finishing the connection with OpenRouter…
+            {:else if phase === 'checking'}
+              <span aria-hidden="true" class="dot"></span>
+              Checking the connection…
+            {:else if phase === 'connected' && openrouter?.connectedAt}
+              <svg aria-hidden="true" class="check" viewBox="0 0 20 20">
+                <circle cx="10" cy="10" r="10"></circle>
+                <path d="M6.2 10.4l2.5 2.5 5.1-5.6"></path>
+              </svg>
+              Connected {formatDistanceToNow(new Date(openrouter.connectedAt))}
+            {:else}
+              <span aria-hidden="true" class="dot"></span>
+              Not connected
+            {/if}
+          </p>
+        {/key}
+      </div>
+    </div>
     <SwitchField
       checked={openrouter?.suggestWhileTyping ?? false}
       disabled={!openrouter?.connected || savingSuggest}
@@ -261,7 +306,7 @@
       onchange={setSuggest}
     />
     {#if openrouterError}
-      <p class="problem" role="alert">{openrouterError}</p>
+      <p class="problem" role="alert" in:fade={PROBLEM_IN}>{openrouterError}</p>
     {/if}
   </div>
 
@@ -316,12 +361,27 @@
         bind:value={apiKey}
       />
     </Field>
-    <p aria-live="polite" class="status" data-tone={reach.tone}>
-      <span aria-hidden="true" class="dot"></span>
-      {reach.text}
-    </p>
+    <div
+      class="morph"
+      style:block-size={reachHeight ? `${reachHeight}px` : undefined}
+    >
+      <div class="stack" bind:clientHeight={reachHeight}>
+        {#key reach.text}
+          <p
+            aria-live="polite"
+            class="status"
+            data-tone={reach.tone}
+            in:blur={{ duration: 300, amount: 2 }}
+            out:blur={{ duration: 100, amount: 2 }}
+          >
+            <span aria-hidden="true" class="dot"></span>
+            {reach.text}
+          </p>
+        {/key}
+      </div>
+    </div>
     {#if supervisorError}
-      <p class="problem" role="alert">{supervisorError}</p>
+      <p class="problem" role="alert" in:fade={PROBLEM_IN}>{supervisorError}</p>
     {/if}
   </form>
 </SectionFrame>
@@ -346,6 +406,58 @@
     color: var(--status-fail-ink);
     white-space: pre-wrap;
     overflow-wrap: anywhere;
+  }
+  /* A status line that swaps: the box tweens to the new line's height while
+     the lines cross-fade over each other in one grid cell. */
+  .morph {
+    overflow: hidden;
+    transition: block-size 300ms cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .stack {
+    display: grid;
+  }
+  .stack > :global(*) {
+    grid-area: 1 / 1;
+  }
+  /* The switch's knob travels on the toggle curve. */
+  .group :global([data-slot="switch-thumb"]) {
+    transition: transform 300ms cubic-bezier(0.65, 0, 0.35, 1);
+  }
+  /* Connected: the tick draws itself in. */
+  .check {
+    width: 18px;
+    height: 18px;
+    flex: none;
+    align-self: center;
+    fill: none;
+    stroke-linecap: round;
+    stroke-linejoin: round;
+  }
+  .check circle {
+    fill: var(--status-live-bg);
+    stroke: none;
+  }
+  .check path {
+    stroke: var(--status-live-ink);
+    stroke-width: 1.8;
+    stroke-dasharray: 12;
+    stroke-dashoffset: 0;
+    animation: draw 500ms cubic-bezier(0.16, 1, 0.3, 1) 100ms both;
+  }
+  @keyframes draw {
+    from {
+      stroke-dashoffset: 12;
+    }
+  }
+  /* Finishing the connection: the dot breathes while the hub works. */
+  .pulse {
+    opacity: 0.6;
+    animation: breathe 2000ms cubic-bezier(0.65, 0, 0.35, 1) infinite;
+  }
+  @keyframes breathe {
+    50% {
+      opacity: 0.2;
+    }
   }
   .fields {
     display: grid;

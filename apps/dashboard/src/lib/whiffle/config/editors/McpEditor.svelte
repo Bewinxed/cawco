@@ -5,6 +5,7 @@
   import { goto } from "$app/navigation";
   import { Input } from "$lib/components/ui/input";
   import { IconKeyDuo, IconPlayDuo } from "$lib/icons";
+  import { appear } from "$lib/whiffle/motion/curves.svelte";
   import { confirm } from "../../confirm.svelte";
   import {
     isRemoteMcp,
@@ -181,7 +182,7 @@
       bind:value={serverName}
     />
     {#if serverName !== '' && nameProblem}
-      <p class="problem">{nameProblem}</p>
+      <p class="problem" in:appear>{nameProblem}</p>
     {:else}
       <p class="note">
         What sessions call its tools —
@@ -191,7 +192,7 @@
       </p>
     {/if}
     {#if failed}
-      <p class="problem" role="alert">{failed}</p>
+      <p class="problem" role="alert" in:appear>{failed}</p>
     {/if}
   {/snippet}
 

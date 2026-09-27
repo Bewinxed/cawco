@@ -6,6 +6,7 @@
    * line.
    */
   import type { Component, Snippet } from "svelte";
+  import { cubicOut } from "svelte/easing";
   import { Switch } from "$lib/components/ui/switch";
   import RowMenu, { type RowAction } from "./RowMenu.svelte";
 
@@ -49,9 +50,28 @@
     below?: Snippet;
     flash?: boolean;
   } = $props();
+
+  /**
+   * A row added or removed grows or folds its own height as it fades, so
+   * the rows around it slide to their new places instead of jumping. Only a
+   * row the operator just made grows in; the list's first paint does not.
+   */
+  function collapse(node: HTMLElement, { duration }: { duration: number }) {
+    const height = node.offsetHeight;
+    return {
+      duration,
+      easing: cubicOut,
+      css: (t: number) =>
+        `opacity: ${t}; height: ${t * height}px; overflow: hidden;`,
+    };
+  }
 </script>
 
-<li class={["item", flash && "flash"]}>
+<li
+  class={["item", flash && "flash"]}
+  in:collapse={{ duration: flash ? 240 : 0 }}
+  out:collapse={{ duration: 200 }}
+>
   <div class="row" class:off={enabled === false} class:two={meta !== undefined}>
     <span class="tile" style={hue ? `color:${hue}` : undefined}>
       {#if tile}
@@ -124,7 +144,13 @@
     min-height: 44px;
     padding: 6px 8px;
     border-radius: var(--radius-sm);
-    transition: var(--transition-control);
+    transition:
+      var(--transition-control),
+      transform 160ms var(--ease-out);
+  }
+  /* The whole row is the link's hit area, so the whole row takes the press. */
+  .row:has(.link:active) {
+    transform: scale(var(--press-scale));
   }
   .row.two {
     min-height: 56px;
@@ -164,6 +190,7 @@
     flex-direction: column;
     gap: 1px;
     min-width: 0;
+    transition: opacity 300ms ease-out;
   }
   .off .text {
     opacity: 0.55;

@@ -20,6 +20,7 @@
     IconPlayDuo,
     IconTuningDuo,
   } from "$lib/icons";
+  import { appear } from "$lib/whiffle/motion/curves.svelte";
   import { whiffle } from "../../client.svelte";
   import { confirm } from "../../confirm.svelte";
   import HookTester from "../../HookTester.svelte";
@@ -290,9 +291,9 @@
       bind:value={draft.name}
     />
     {#if shown('name')}
-      <p class="problem">{wrong.name}</p>
+      <p class="problem" in:appear>{wrong.name}</p>
     {:else if duplicate}
-      <p class="problem">{duplicate}</p>
+      <p class="problem" in:appear>{duplicate}</p>
     {/if}
     <ReadingWell>{hookSentence(draft)}</ReadingWell>
     <SwitchField
@@ -302,7 +303,7 @@
       bind:checked={draft.enabled}
     />
     {#if failed}
-      <p class="problem" role="alert">{failed}</p>
+      <p class="problem" role="alert" in:appear>{failed}</p>
     {/if}
   {/snippet}
 
@@ -323,7 +324,7 @@
       />
     </div>
     {#if shown('event')}
-      <p class="problem">{wrong.event}</p>
+      <p class="problem" in:appear>{wrong.event}</p>
     {:else if eventInfo}
       <p class="note">Runs {eventInfo.blurb}.</p>
     {/if}
@@ -582,7 +583,7 @@
       />
     </div>
     {#if shown('scope')}
-      <p class="problem">{wrong.scope}</p>
+      <p class="problem" in:appear>{wrong.scope}</p>
     {/if}
   </EditorSection>
 

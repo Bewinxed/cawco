@@ -356,8 +356,15 @@
     scale: var(--pop-scale);
   }
 }
-@starting-style {
-  .ns-theme.ns-pop {
+/* Entrance: rising out of --pop-scale, on the same curve as the glide. A
+   keyframe, not a transition, so it plays on the first frame the content
+   exists; gliding between siblings keeps the content open and never
+   replays it. */
+.ns-theme.ns-pop[data-state="open"] {
+  animation: ns-pop-in var(--dur-pop) var(--ease-drawer) both;
+}
+@keyframes ns-pop-in {
+  from {
     opacity: 0;
     scale: var(--pop-scale);
     translate: 0 calc(-1 * var(--pop-rise));

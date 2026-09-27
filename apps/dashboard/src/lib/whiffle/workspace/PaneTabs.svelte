@@ -227,13 +227,10 @@
 </script>
 
 <!-- `''` when the board is showing: a value no segment carries, so nothing
-     is drawn as chosen. The name is per group: two groups' strips in one
-     navigation must be two transition groups, or the transition is
-     abandoned. -->
+     is drawn as chosen. -->
 <Tabs
   class="session-tabs {hosted ? 'hosted' : ''}"
   onValueChange={(id) => workspace.activate(id, leaf.id)}
-  style="view-transition-name: tabs-{leaf.id}"
   {travel}
   value={leaf.active ?? ''}
   variant="folder"
@@ -582,10 +579,8 @@
      pixel, so the chosen tab's sheet — which ends on that same pixel —
      covers it and runs on into the header below. In a group the row is
      the group's own; hosted, it fills the top bar and the bar draws the
-     shelf. The row is its own view-transition group and, like the bar
-     and the rail, holds still while a spoke navigation slides the
-     content under it: it is chrome. (A tab switch is not a navigation
-     at all — the segment simply slides.) */
+     shelf. (A tab switch is not a navigation at all — the segment
+     simply slides.) */
   :global(.session-tabs) {
     display: flex;
     align-items: flex-end;
@@ -597,7 +592,6 @@
        tab, so the chosen tab — in the transcript's own surface — reads as
        the page it opens. */
     background: var(--surface-shelf);
-    view-transition-class: tabs;
 
     /* The tab controls' touch areas reach 6px past the row's bottom edge:
        on a coarse pointer the row stacks above the transcript beneath it. */

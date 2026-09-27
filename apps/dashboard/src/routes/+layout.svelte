@@ -15,8 +15,11 @@
   import { MediaQuery } from "svelte/reactivity";
   import { onNavigate } from "$app/navigation";
   import { Toaster } from "$lib/components/ui/sonner";
+  import { NARROW_QUERY } from "$lib/hooks/is-mobile.svelte";
   import { enableLongPressMenus } from "$lib/utils/longpress";
   import { ensureConnected } from "$lib/whiffle/client.svelte";
+  import { GROUPS } from "$lib/whiffle/config/sections";
+  import { plan, route } from "$lib/whiffle/motion/route.svelte";
   import Shell from "$lib/whiffle/Shell.svelte";
   import { tallestComposer } from "$lib/whiffle/transcript/composer-presence.svelte";
   import { workspace } from "$lib/whiffle/workspace/workspace.svelte";
@@ -54,58 +57,30 @@
   // iOS has no right-click; a held press is its context menu.
   onMount(enableLongPressMenus);
 
-  /**
-   * Everything the tab strip reaches: the conversations, and the fleet board
-   * that leads them. One surface with several things stacked in it, not several
-   * pages — `session/+layout.svelte` keeps all of them mounted at once.
-   */
-  const SESSION = /^\/session(\/|$)/;
+  /** Configure's sections in the rail's order, top to bottom. */
+  const SECTION_ORDER = GROUPS.flatMap(({ sections }) =>
+    sections.map((section) => section.slug as string)
+  );
+  const narrow = new MediaQuery(NARROW_QUERY);
 
-  // Route changes cross-fade (app.css `content`); same-page param changes and
-  // session tab switches are instant.
-  //
-  // Moving between conversations never arrives here at all: the workspace
-  // store shows the pane and writes the URL with `pushState`, which runs no
-  // navigation.
+  // Every route change moves the page the way the navigation went; the
+  // sidebar, the top bar and the tab strips sit outside the keyed page and
+  // hold still. The plan is written here, before the DOM changes, and read
+  // by the page's own transitions (motion/route.svelte.ts). Same-page param
+  // changes and moves between conversations re-key nothing, so they are
+  // instant: the workspace store shows a pane and writes the URL with
+  // `pushState`, which runs no navigation at all.
   onNavigate((navigation) => {
-    if (!document.startViewTransition) {
-      return;
-    }
     if (!(navigation.from && navigation.to)) {
       return;
     }
-
-    const from = navigation.from.url.pathname;
-    const to = navigation.to.url.pathname;
-
-    // Same page, different params — instant.
-    if (from === to) {
-      return;
-    }
-
-    // Session tab switches skip VT entirely. The panes are visibility-toggled
-    // with their own CSS crossfade (opacity transition in session/+layout), so
-    // a VT here only adds ~300ms of capture/animate overhead on top of the
-    // transition that already runs. The DOM swap is 4ms; don't gate it.
-    if (SESSION.test(from) && SESSION.test(to)) {
-      return;
-    }
-
-    // Hidden or reduced motion — instant.
-    if (document.hidden) {
-      return;
-    }
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      return;
-    }
-
-    return new Promise((resolve) => {
-      document.startViewTransition(async () => {
-        resolve();
-        await navigation.complete.catch(() => {
-          /* the transition still finishes on a cancelled navigation */
-        });
-      });
+    route.travel = plan({
+      from: navigation.from.url.pathname,
+      to: navigation.to.url.pathname,
+      history: navigation.type === "popstate" ? Math.sign(navigation.delta) : 0,
+      rtl: getComputedStyle(document.documentElement).direction === "rtl",
+      narrow: narrow.current,
+      sections: SECTION_ORDER,
     });
   });
 </script>

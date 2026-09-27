@@ -1,8 +1,10 @@
 <script lang="ts">
-  import { onMount, untrack } from "svelte";
+  import { untrack } from "svelte";
   import { flip } from "svelte/animate";
+  import { fade } from "svelte/transition";
   import { Kbd } from "$lib/components/ui/kbd";
   import { IconToolGeneric, IconToolMcp, IconToolSkill } from "$lib/icons";
+  import { bezier, easeOut, reduced } from "$lib/whiffle/motion/curves.svelte";
   import {
     askSuggestions,
     SUGGEST_PAUSE_MS,
@@ -37,37 +39,24 @@
   const LEAVE_MS = 100;
 
   /** A cubic-bezier easing, so the JS motion runs on the house curves. */
-  function bezier(x1: number, y1: number, x2: number, y2: number) {
-    const at = (a: number, b: number, t: number) =>
-      3 * a * (1 - t) ** 2 * t + 3 * b * (1 - t) * t ** 2 + t ** 3;
-    return (x: number): number => {
-      let lo = 0;
-      let hi = 1;
-      for (let i = 0; i < 24; i += 1) {
-        const mid = (lo + hi) / 2;
-        if (at(x1, x2, mid) < x) {
-          lo = mid;
-        } else {
-          hi = mid;
-        }
-      }
-      return at(y1, y2, (lo + hi) / 2);
+  /** The glide in place: the settle-in curve the flip has always used. */
+  const glide = bezier(0.16, 1, 0.3, 1);
+
+  /**
+   * A chip arrives rising 4px out of 0.96, one after another 30ms apart;
+   * reduced motion keeps only its fade.
+   */
+  function arrive(_node: HTMLElement, { i }: { i: number }) {
+    return {
+      delay: i * 30,
+      duration: 280,
+      easing: easeOut,
+      css: (t: number, u: number) =>
+        reduced.current
+          ? `opacity: ${t}`
+          : `opacity: ${t}; transform: translateY(${4 * u}px) scale(${0.96 + 0.04 * t})`,
     };
   }
-  /** `--ease-out` and `--ease-out` from app.css. */
-  const easeIn = bezier(0.16, 1, 0.3, 1);
-  const easeOut = bezier(0.7, 0, 0.84, 0);
-
-  let still = $state(false);
-  onMount(() => {
-    const query = matchMedia("(prefers-reduced-motion: reduce)");
-    still = query.matches;
-    const follow = () => {
-      still = query.matches;
-    };
-    query.addEventListener("change", follow);
-    return () => query.removeEventListener("change", follow);
-  });
 
   let ranked = $state<{ id: string; noul: number }[]>([]);
   let failure = $state<string | null>(null);
@@ -199,10 +188,12 @@
     node.style.insetBlockStart = `${box.top - (frame?.top ?? 0)}px`;
     node.style.inlineSize = `${box.width}px`;
     return {
-      duration: still ? 0 : LEAVE_MS,
+      duration: LEAVE_MS,
       easing: easeOut,
       css: (t: number) =>
-        `opacity: ${t}; transform: scale(${0.96 + 0.04 * t});`,
+        reduced.current
+          ? `opacity: ${t}`
+          : `opacity: ${t}; transform: scale(${0.96 + 0.04 * t});`,
     };
   }
 </script>
@@ -217,9 +208,9 @@
         title={`Likely needed · ${Math.round(noul * 100)}%${candidate.description ? `\n${candidate.description}` : ''}`}
         type="button"
         style:--conf={confidence(noul)}
-        style:--i={i}
+        in:arrive={{ i }}
         out:leave
-        animate:flip={{ duration: still ? 0 : GLIDE_MS, easing: easeIn }}
+        animate:flip={{ duration: reduced.current ? 0 : GLIDE_MS, easing: glide }}
       >
         {#if candidate.kind === 'skill'}
           <IconToolSkill aria-hidden="true" class="glyph" />
@@ -241,10 +232,20 @@
       <span aria-hidden="true" class="all"><Kbd>⇧ Tab</Kbd> all</span>
     {/if}
     {#if slow && shown.length === 0}
-      <span aria-hidden="true" class="shimmer"></span>
+      <span
+        aria-hidden="true"
+        class="shimmer"
+        in:fade={{ duration: 280, easing: easeOut }}
+      ></span>
     {/if}
     {#if failure}
-      <p class="fail" role="status">Suggestions failed: {failure}</p>
+      <p
+        class="fail"
+        role="status"
+        in:fade={{ duration: 280, easing: easeOut }}
+      >
+        Suggestions failed: {failure}
+      </p>
     {/if}
   </fieldset>
   <p aria-live="polite" class="sr-only">{announced}</p>
@@ -318,31 +319,16 @@
     font-size: var(--text-label);
     white-space: nowrap;
     cursor: pointer;
-    opacity: 1;
-    transform: none;
-    transition: opacity var(--dur-panel) var(--ease-out);
-
-    @starting-style {
-      opacity: 0;
-    }
-
     /* A confidence that moves in place re-tints over --dur-panel. */
     @media (prefers-reduced-motion: no-preference) {
       transition:
-        opacity var(--dur-panel) var(--ease-out) calc(var(--i) * 30ms),
-        transform var(--dur-panel) var(--ease-out) calc(var(--i) * 30ms),
+        transform 160ms var(--ease-out),
         background-color var(--dur-panel) var(--ease-out),
         border-color var(--dur-panel) var(--ease-out),
         color var(--dur-control) var(--ease-out);
 
-      @starting-style {
-        opacity: 0;
-        transform: translateY(4px) scale(0.96);
-      }
-
       &:active {
-        transform: scale(0.97);
-        transition-delay: 0ms;
+        transform: scale(var(--press-scale));
       }
     }
 
@@ -399,12 +385,6 @@
     background: var(--surface-recess);
     opacity: 0.8;
 
-    @starting-style {
-      opacity: 0;
-    }
-
-    transition: opacity var(--dur-panel) var(--ease-out);
-
     @media (prefers-reduced-motion: no-preference) {
       background: linear-gradient(
           90deg,
@@ -432,11 +412,5 @@
     color: var(--ink-muted);
     font-size: var(--text-label);
     text-wrap: pretty;
-    opacity: 1;
-    transition: opacity var(--dur-panel) var(--ease-out);
-
-    @starting-style {
-      opacity: 0;
-    }
   }
 </style>

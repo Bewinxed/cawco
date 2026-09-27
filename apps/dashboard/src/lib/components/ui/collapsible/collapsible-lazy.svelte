@@ -17,12 +17,12 @@
     }
   });
 
-  // Keep content through the collapsible-up animation (200ms + slack), then drop it.
+  // Keep content through the 240ms collapse (app.css `[data-reveal]`) plus slack, then drop it.
   $effect(() => {
     if (!open && rendered) {
       const timer = setTimeout(() => {
         rendered = false;
-      }, 220);
+      }, 260);
       return () => clearTimeout(timer);
     }
   });

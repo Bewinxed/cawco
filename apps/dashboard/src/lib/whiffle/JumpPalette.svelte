@@ -99,10 +99,10 @@
   /** Rows settle into their new rank; they never slide in from nowhere. */
   const settle = $derived({ duration: still ? 0 : 180, easing: expoOut });
   const arrive = $derived({ duration: still ? 0 : 140 });
-  /** The chip lands rather than pops: it grows the last tenth into place. */
+  /** The chip lands rather than pops: it grows the last twentieth into place. */
   const chipMotion = $derived({
     duration: still ? 0 : 190,
-    start: 0.86,
+    start: 0.95,
     easing: expoOut,
   });
 

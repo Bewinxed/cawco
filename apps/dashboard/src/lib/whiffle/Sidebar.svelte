@@ -16,6 +16,7 @@
    * space-efficient and less noisy. Idle sessions are capped per project with a
    * "+ N more" disclosure.
    */
+  import { flip } from "svelte/animate";
   import { cubicOut } from "svelte/easing";
   import { slide } from "svelte/transition";
   import { Virtualizer } from "virtua/svelte";
@@ -777,7 +778,12 @@
           {#each orderedProjects as project (project.id)}
             {@const sessions = sessionsOf(project)}
             {@const expanded = !collapsed.has(project.id)}
-            <Sidebar.MenuItem>
+            <li
+              class="group/menu-item relative"
+              data-sidebar="menu-item"
+              data-slot="sidebar-menu-item"
+              animate:flip={{ duration: 200, easing: cubicOut }}
+            >
               <FolderMenu
                 cwd={project.cwd}
                 name={project.name}
@@ -827,7 +833,12 @@
                     {#each nested(sessions) as { row, depth } (row.id)}
                       {@const Sprite = sessionSprite(row.id)}
                       {@const activity = whiffle.activityOf(row.id)}
-                      <Sidebar.MenuSubItem>
+                      <li
+                        class="group/menu-sub-item relative"
+                        data-sidebar="menu-sub-item"
+                        data-slot="sidebar-menu-sub-item"
+                        animate:flip={{ duration: 200, easing: cubicOut }}
+                      >
                         <Sidebar.MenuSubButton
                           class={SUB_ROW}
                           href={conversationHref(row.id, whiffle.instanceIndex)}
@@ -850,7 +861,7 @@
                           {@render age(row)}
                           <span class={TRAIL}><ActivityDot {activity} /></span>
                         </Sidebar.MenuSubButton>
-                      </Sidebar.MenuSubItem>
+                      </li>
                     {:else}
                       {@const recent = recentCountOf(project)}
                       <Sidebar.MenuSubItem>
@@ -870,7 +881,7 @@
                   </Sidebar.MenuSub>
                 </div>
               {/if}
-            </Sidebar.MenuItem>
+            </li>
           {/each}
         </Sidebar.Menu>
       {/if}
@@ -889,7 +900,12 @@
           {#each nested(ungrouped) as { row, depth } (row.id)}
             {@const activity = whiffle.activityOf(row.id)}
             {@const Sprite = sessionSprite(row.id)}
-            <Sidebar.MenuItem>
+            <li
+              class="group/menu-item relative"
+              data-sidebar="menu-item"
+              data-slot="sidebar-menu-item"
+              animate:flip={{ duration: 200, easing: cubicOut }}
+            >
               <Sidebar.MenuButton
                 class={LIST_ROW}
                 isActive={activeSession === row.id}
@@ -918,7 +934,7 @@
                   </a>
                 {/snippet}
               </Sidebar.MenuButton>
-            </Sidebar.MenuItem>
+            </li>
           {/each}
         </Sidebar.Menu>
       </Sidebar.Group>

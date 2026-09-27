@@ -103,7 +103,7 @@
       <p class="now">{headline(view.report)}</p>
     {/if}
 
-    <Collapsible.Content>
+    <Collapsible.Content reveal>
       <div class="inner">
         {#each rows as row (row.key)}
           {#if row.kind === 'tools'}
@@ -171,45 +171,6 @@
   @media (hover: hover) and (pointer: fine) {
     :global(.branch .bhead:hover) .tk {
       color: var(--ink-strong);
-    }
-  }
-
-  /* Animate the disclosure open/close. bits-ui exposes the measured content
-     height on the content element; shadcn's bare Collapsible.Content never got
-     the CSS to use it, so it opened instantly. */
-  :global(.branch [data-slot="collapsible-content"]) {
-    overflow: hidden;
-  }
-  /* 200ms, matched to collapsible-lazy's 220ms unmount hold — at the old
-     var(--dur-panel) the content vanished at 220ms, mid-collapse, and the last
-     80ms animated an emptying box. Entry decelerates (--ease-out), exit
-     accelerates (--ease-out): the rail's one collapsible vocabulary. */
-  :global(.branch [data-slot="collapsible-content"][data-state="open"]) {
-    animation: branch-down calc(var(--dur-control) * 2) var(--ease-out);
-  }
-  :global(.branch [data-slot="collapsible-content"][data-state="closed"]) {
-    animation: branch-up var(--dur-exit) var(--ease-out);
-  }
-  @keyframes branch-down {
-    from {
-      height: 0;
-    }
-    to {
-      height: var(--bits-collapsible-content-height);
-    }
-  }
-  @keyframes branch-up {
-    from {
-      height: var(--bits-collapsible-content-height);
-    }
-    to {
-      height: 0;
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    :global(.branch [data-slot="collapsible-content"][data-state="open"]),
-    :global(.branch [data-slot="collapsible-content"][data-state="closed"]) {
-      animation: none;
     }
   }
 

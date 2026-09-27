@@ -24,6 +24,8 @@
     IconPlainDuo,
     IconSparklesDuo,
   } from "$lib/icons";
+  import { appear } from "$lib/whiffle/motion/curves.svelte";
+  import { folds } from "$lib/whiffle/motion/fold.svelte";
   import { whiffle } from "../../client.svelte";
   import { confirm } from "../../confirm.svelte";
   import RuleActivity from "../../RuleActivity.svelte";
@@ -263,6 +265,14 @@
       deleting = false;
     }
   }
+
+  /** Text-matching options fold away for a meaning rule: 300ms, settling in. */
+  const FOLD = {
+    ms: 300,
+    easing: "cubic-bezier(0.16, 1, 0.3, 1)",
+    fade: true,
+    gap: 8,
+  };
 </script>
 
 <EditorFrame
@@ -286,9 +296,9 @@
       bind:value={draft.name}
     />
     {#if shown('name')}
-      <p class="problem">{wrong.name}</p>
+      <p class="problem" in:appear>{wrong.name}</p>
     {:else if duplicate}
-      <p class="problem">{duplicate}</p>
+      <p class="problem" in:appear>{duplicate}</p>
     {/if}
     <ReadingWell>{ruleSentence(draft)}</ReadingWell>
     <SwitchField
@@ -298,7 +308,7 @@
       bind:checked={draft.enabled}
     />
     {#if failed}
-      <p class="problem" role="alert">{failed}</p>
+      <p class="problem" role="alert" in:appear>{failed}</p>
     {/if}
   {/snippet}
 
@@ -345,7 +355,7 @@
       value={draft.trigger}
     />
     {#if shown('trigger')}
-      <p class="problem">{wrong.trigger}</p>
+      <p class="problem" in:appear>{wrong.trigger}</p>
     {/if}
     {#if draft.trigger === 'every-turn'}
       <p class="note">
@@ -412,7 +422,12 @@
           />
         {/if}
       </Field>
-      {#if draft.matchKind !== 'meaning'}
+      <!-- Text-matching options fold away for a meaning rule rather than popping. -->
+      <div
+        class="fold"
+        inert={draft.matchKind === 'meaning'}
+        {@attach folds(() => draft.matchKind !== 'meaning', FOLD)}
+      >
         <SwitchField
           id="rule-case"
           label="Case sensitive"
@@ -425,7 +440,7 @@
             bind:checked={draft.wholeWord}
           />
         {/if}
-      {/if}
+      </div>
       <Choice
         label="Read"
         onchange={(next) => {
@@ -440,9 +455,13 @@
           the message or the moment instead.
         </p>
       {/if}
-      {#if draft.matchKind !== 'meaning'}
+      <div
+        class="fold"
+        inert={draft.matchKind === 'meaning'}
+        {@attach folds(() => draft.matchKind !== 'meaning', FOLD)}
+      >
         <RuleTester {draft} bind:sample />
-      {/if}
+      </div>
     {/if}
   </EditorSection>
 
@@ -522,7 +541,7 @@
         />
       </Field>
       {#if shown('timing')}
-        <p class="problem">{wrong.timing}</p>
+        <p class="problem" in:appear>{wrong.timing}</p>
       {/if}
     {/if}
   </EditorSection>
@@ -618,6 +637,13 @@
   .caution {
     font: var(--type-meta);
     color: var(--status-attn-ink);
+  }
+  /* Folds shut to nothing, taking the section's 8px gap with it, then opens
+     back to its content's height (motion/fold.svelte.ts). */
+  .fold {
+    display: flex;
+    flex-direction: column;
+    gap: inherit;
   }
   .pickers {
     display: flex;

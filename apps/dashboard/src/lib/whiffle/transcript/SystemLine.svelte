@@ -82,7 +82,7 @@
           {/if}
           <span class="hchev" class:open><IconChevronRight /></span>
         </Collapsible.Trigger>
-        <Collapsible.Content>
+        <Collapsible.Content reveal>
           <div class="hbody"><MessageBody source={harness.body} /></div>
         </Collapsible.Content>
       </Collapsible.Root>
@@ -137,7 +137,7 @@
         <span class="hchev" class:open><IconChevronRight /></span>
         <span class="ftitle">{foldTitle}</span>
       </Collapsible.Trigger>
-      <Collapsible.Content>
+      <Collapsible.Content reveal>
         {#if foldCommand}
           <pre class="well">{foldCommand}</pre>
         {:else if foldBody}
@@ -275,40 +275,6 @@
   @media (prefers-reduced-motion: reduce) {
     .hchev {
       transition: none;
-    }
-  }
-
-  /* Same reveal as the tool rows: one 200ms collapsible vocabulary for the
-     whole rail — entry on --ease-out, exit on --ease-out. */
-  .note :global([data-slot="collapsible-content"]) {
-    overflow: hidden;
-  }
-  .note :global([data-slot="collapsible-content"][data-state="open"]) {
-    animation: note-down calc(var(--dur-control) * 2) var(--ease-out);
-  }
-  .note :global([data-slot="collapsible-content"][data-state="closed"]) {
-    animation: note-up var(--dur-exit) var(--ease-out);
-  }
-  @keyframes note-down {
-    from {
-      height: 0;
-    }
-    to {
-      height: var(--bits-collapsible-content-height);
-    }
-  }
-  @keyframes note-up {
-    from {
-      height: var(--bits-collapsible-content-height);
-    }
-    to {
-      height: 0;
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .note :global([data-slot="collapsible-content"][data-state="open"]),
-    .note :global([data-slot="collapsible-content"][data-state="closed"]) {
-      animation: none;
     }
   }
 

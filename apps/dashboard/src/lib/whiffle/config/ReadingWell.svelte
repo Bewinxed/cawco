@@ -15,5 +15,8 @@
     background: var(--surface-recess);
     font: var(--type-body);
     color: var(--ink-strong);
+    transition:
+      background-color 240ms cubic-bezier(0.16, 1, 0.3, 1),
+      color 240ms cubic-bezier(0.16, 1, 0.3, 1);
   }
 </style>

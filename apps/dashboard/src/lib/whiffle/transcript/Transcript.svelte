@@ -636,30 +636,53 @@
     glued.observe(row);
   }
 
-  /** Svelte scopes keyframe names, so the row's opening is matched by suffix. */
+  /** Svelte scopes keyframe names, so an arriving row's reserve is matched by suffix. */
   const isOpening = (name: string): boolean => name.endsWith("reserve");
 
-  function onanimationstart(event: AnimationEvent): void {
-    if (!isOpening(event.animationName)) {
-      return;
-    }
-    resizing.add(event.target as Element);
+  /** A thinking row opening or closing on the kit's reveal. */
+  const isThinking = (event: Event): boolean =>
+    (event.target as Element).matches('[data-slot="thinking-steps-content"]');
+
+  function startResizing(row: Element): void {
+    resizing.add(row);
     opening = resizing.size;
     // The paced loop and the glue must never both be writing scrollTop.
     stopFollow();
-    glue(event.target as Element);
+    glue(row);
+  }
+
+  function endResizing(row: Element): void {
+    resizing.delete(row);
+    opening = resizing.size;
+    if (opening === 0) {
+      unglue();
+      if (atBottom) {
+        followBottom();
+      }
+    }
+  }
+
+  function onanimationstart(event: AnimationEvent): void {
+    if (isOpening(event.animationName)) {
+      startResizing(event.target as Element);
+    }
   }
 
   function onanimationend(event: AnimationEvent): void {
     if (isOpening(event.animationName)) {
-      resizing.delete(event.target as Element);
-      opening = resizing.size;
-      if (opening === 0) {
-        unglue();
-        if (atBottom) {
-          followBottom();
-        }
-      }
+      endResizing(event.target as Element);
+    }
+  }
+
+  function onrevealstart(event: Event): void {
+    if (isThinking(event)) {
+      startResizing(event.target as Element);
+    }
+  }
+
+  function onrevealend(event: Event): void {
+    if (isThinking(event)) {
+      endResizing(event.target as Element);
     }
   }
 
@@ -669,6 +692,8 @@
       return;
     }
     node.addEventListener("animationcancel", onanimationend);
+    node.addEventListener("revealstart", onrevealstart);
+    node.addEventListener("revealend", onrevealend);
     const removed = new MutationObserver(() => {
       const before = resizing.size;
       for (const element of resizing) {
@@ -691,6 +716,8 @@
     return () => {
       removed.disconnect();
       node.removeEventListener("animationcancel", onanimationend);
+      node.removeEventListener("revealstart", onrevealstart);
+      node.removeEventListener("revealend", onrevealend);
       if (landingFrame !== null) {
         cancelAnimationFrame(landingFrame);
       }

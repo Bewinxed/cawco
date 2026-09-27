@@ -409,7 +409,7 @@
       </ul>
     {/if}
 
-    <Collapsible.Content>
+    <Collapsible.Content reveal>
       <CollapsibleLazy {open}>
         <div class="inner">
           {#if loading}
@@ -503,32 +503,6 @@
       color: var(--accent-text);
     }
   }
-  :global(.delegate [data-slot="collapsible-content"]) {
-    overflow: hidden;
-  }
-  :global(.delegate [data-slot="collapsible-content"][data-state="open"]) {
-    animation: delegate-down calc(var(--dur-control) * 2) var(--ease-out);
-  }
-  :global(.delegate [data-slot="collapsible-content"][data-state="closed"]) {
-    animation: delegate-up var(--dur-exit) var(--ease-out);
-  }
-  @keyframes delegate-down {
-    from {
-      height: 0;
-    }
-    to {
-      height: var(--bits-collapsible-content-height);
-    }
-  }
-  @keyframes delegate-up {
-    from {
-      height: var(--bits-collapsible-content-height);
-    }
-    to {
-      height: 0;
-    }
-  }
-
   .chev {
     width: 13px;
     height: 13px;
@@ -837,10 +811,6 @@
     /* biome-ignore lint/style/noDescendingSpecificity: cascade order is load-bearing — .tk's base transition must lose to the :hover rule above it. */
     .tk {
       transition: none;
-    }
-    :global(.delegate [data-slot="collapsible-content"][data-state="open"]),
-    :global(.delegate [data-slot="collapsible-content"][data-state="closed"]) {
-      animation: none;
     }
     .beat {
       animation: none;

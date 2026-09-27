@@ -21,6 +21,7 @@
   import type { TransitionConfig } from "svelte/transition";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group.
   import * as Resizable from "$lib/components/ui/resizable";
+  import { easeOut, reduced } from "$lib/whiffle/motion/curves.svelte";
   import AutopilotToggle from "./AutopilotToggle.svelte";
   import {
     blankSession,
@@ -139,7 +140,7 @@
       () => {
         sheetMounted = false;
       },
-      reduceMotionQuery?.matches ? 1 : 300
+      reduced.current ? 1 : 300
     );
     return () => clearTimeout(timer);
   });
@@ -171,7 +172,7 @@
           () => {
             previewMounted = false;
           },
-          reduceMotionQuery?.matches ? 1 : 300
+          reduced.current ? 1 : 300
         );
     return () => {
       cancelAnimationFrame(frame);
@@ -870,47 +871,6 @@
 
   /* ---- the parked prompt's exit --------------------------------------- */
 
-  const reduceMotionQuery =
-    typeof window === "undefined"
-      ? null
-      : window.matchMedia("(prefers-reduced-motion: reduce)");
-
-  /**
-   * `cubic-bezier(x1, y1, x2, y2)` as a JS easing, so a Svelte transition rides
-   * the exact curve the CSS token names rather than a look-alike from
-   * `svelte/easing`. Svelte samples the `css` function through this and bakes
-   * linear keyframes, so the curve has to live here to survive the trip.
-   */
-  function cubicBezier(
-    x1: number,
-    y1: number,
-    x2: number,
-    y2: number
-  ): (t: number) => number {
-    const at = (a: number, b: number, t: number): number =>
-      3 * (1 - t) ** 2 * t * a + 3 * (1 - t) * t ** 2 * b + t ** 3;
-    return (t) => {
-      // Newton–Raphson for the parameter whose x is t, then read that point's y
-      // — the same solve the compositor does for a CSS timing function.
-      let g = t;
-      for (let i = 0; i < 8; i += 1) {
-        const err = at(x1, x2, g) - t;
-        const slope =
-          3 * (1 - g) ** 2 * x1 +
-          6 * (1 - g) * g * (x2 - x1) +
-          3 * g ** 2 * (1 - x2);
-        if (Math.abs(err) < 1e-5 || slope === 0) {
-          break;
-        }
-        g -= err / slope;
-      }
-      return at(y1, y2, g);
-    };
-  }
-
-  /** --ease-out, the doctrine's exit curve. */
-  const easeOut = cubicBezier(0.7, 0, 0.84, 0);
-
   /**
    * An answered prompt leaves DOWNWARD and fast — it is dismissed, not
    * withdrawn upward toward the transcript it came from — at 120ms on --ease-out,
@@ -922,8 +882,29 @@
    * one step when the node is actually gone. Under reduced motion the node is
    * simply removed.
    */
+  /**
+   * The side preview mounting already open slides 25px in from the edge it
+   * opens against and fades up (--dur-panel, --ease-out), the same move its
+   * class transition makes when it opens later. Mounted closed, it waits for
+   * that class. Reduced motion keeps the fade.
+   */
+  function surfaceIn(_node: Element): TransitionConfig {
+    if (!desktopPreview) {
+      return { duration: 0 };
+    }
+    const still = reduced.current;
+    return {
+      duration: 280,
+      easing: easeOut,
+      css: (t, u) =>
+        still
+          ? `opacity: ${t}`
+          : `opacity: ${t}; transform: translateX(${u * 25}px);`,
+    };
+  }
+
   function promptExit(_node: Element): TransitionConfig {
-    if (reduceMotionQuery?.matches) {
+    if (reduced.current) {
       return { duration: 0 };
     }
     return {
@@ -1055,7 +1036,11 @@
           bind:this={previewPane}
         >
           {#if previewMounted && !phone}
-            <div class="artifact-surface" class:shown={desktopPreview}>
+            <div
+              class="artifact-surface"
+              class:shown={desktopPreview}
+              in:surfaceIn
+            >
               <PreviewPane
                 instanceId={viewId}
                 onescape={() => draft.closeSelectionEditor()}
@@ -1096,8 +1081,14 @@
     min-width: 0;
     min-height: 0;
     /* Opening or closing the preview grows one side into the other: the
-       split's size change is the information. A drag follows the pointer. */
-    transition: flex-grow var(--dur-panel) var(--ease-out);
+       split's size change is the information. Opening decelerates into
+       place; closing is a morph on --ease-in-out. A drag follows the
+       pointer. */
+    transition: flex-grow 300ms var(--ease-in-out);
+  }
+  .preview-shown :global(.transcript-pane),
+  .preview-shown :global(.artifact-pane) {
+    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
   }
   .resizing :global(.transcript-pane),
   .resizing :global(.artifact-pane) {
@@ -1117,12 +1108,6 @@
     opacity: 1;
     transform: translateX(0);
     transition-timing-function: var(--ease-out);
-  }
-  @starting-style {
-    .artifact-surface.shown {
-      opacity: 0;
-      transform: translateX(var(--space-7));
-    }
   }
   .session-content :global(.preview-divider) {
     z-index: 2;

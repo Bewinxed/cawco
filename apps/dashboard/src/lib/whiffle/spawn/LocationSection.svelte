@@ -6,6 +6,8 @@
    */
   import type { FsEntry } from "@whiffle/core";
   import { SectionHeader } from "$lib/components/ui/section-header";
+  import { CURVE } from "$lib/whiffle/motion/curves.svelte";
+  import { folds } from "$lib/whiffle/motion/fold.svelte";
   import GitHub from "~icons/logos/github-icon";
   import Up from "~icons/solar/alt-arrow-up-linear";
   import Left from "~icons/solar/arrow-left-linear";
@@ -119,6 +121,9 @@
       browsing = false;
     }
   });
+
+  /** The browser and the clone field open under their controls. */
+  const PANEL = { ms: 280, easing: CURVE.inOut };
 </script>
 
 <section class="loc" class:embedded={embedded}>
@@ -196,11 +201,7 @@
         </button>
       {/if}
     </div>
-    <div
-      class="panel"
-      inert={!browsing}
-      style={`grid-template-rows:${browsing ? "1fr" : "0fr"}`}
-    >
+    <div class="panel" inert={!browsing} {@attach folds(() => browsing, PANEL)}>
       <div class="clip">
         <div class="browser">
           <div class="crumbs">
@@ -273,10 +274,7 @@
     </div>
   </div>
 
-  <div
-    class="panel"
-    style={`grid-template-rows:${mode === "repo" ? "1fr" : "0fr"}`}
-  >
+  <div class="panel" {@attach folds(() => mode === "repo", PANEL)}>
     <div class="clip">
       <div
         class="repo"
@@ -433,13 +431,10 @@
       background: var(--surface-hover);
     }
   }
-  .panel {
-    display: grid;
-    transition: grid-template-rows 280ms var(--ease-in-out);
-  }
+  /* A panel opens by growing to its content's height and folds shut the
+     same way (280ms, --ease-in-out; motion/fold.svelte.ts). */
   .clip {
     min-height: 0;
-    overflow: hidden;
   }
   .browser {
     border-top: 1px solid var(--border-hairline);

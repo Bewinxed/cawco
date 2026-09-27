@@ -1,7 +1,10 @@
 /**
  * Slides the thumb of a segmented group (tabs, single toggle group) under
- * its selected item. Only `transform` animates: the thumb takes the new size
- * at once and a FLIP scale from the old size covers the change.
+ * its selected item, gliding its position and its size together over 240ms
+ * on --ease-in-out, the way the new-session ghost follows the hover. A
+ * change caught mid-glide starts from where the thumb is on screen, not
+ * from where it was headed, and width and height tween rather than scale,
+ * so the thumb's corners never stretch.
  */
 export function slideThumb(
   group: HTMLElement,
@@ -9,11 +12,25 @@ export function slideThumb(
   selector: string
 ): () => void {
   let last: { x: number; y: number; w: number; h: number } | undefined;
+  let run: Animation | undefined;
   const reduce = window.matchMedia("(prefers-reduced-motion: reduce)");
+
+  /** Where the thumb is drawn right now, in the group's offset space. */
+  const onScreen = () => {
+    const box = group.getBoundingClientRect();
+    const at = thumb.getBoundingClientRect();
+    return {
+      x: at.left - box.left - group.clientLeft,
+      y: at.top - box.top - group.clientTop,
+      w: at.width,
+      h: at.height,
+    };
+  };
 
   const place = (animate: boolean) => {
     const on = group.querySelector<HTMLElement>(selector);
     if (!on) {
+      run?.cancel();
       thumb.style.opacity = "0";
       last = undefined;
       return;
@@ -24,17 +41,26 @@ export function slideThumb(
       w: on.offsetWidth,
       h: on.offsetHeight,
     };
+    const glide = animate && last && (last.x !== next.x || last.y !== next.y);
+    const from = glide && run?.playState === "running" ? onScreen() : last;
+    run?.cancel();
     thumb.style.opacity = "1";
     thumb.style.width = `${next.w}px`;
     thumb.style.height = `${next.h}px`;
     thumb.style.transform = `translate(${next.x}px, ${next.y}px)`;
-    if (animate && last && last.x !== next.x && !reduce.matches) {
-      thumb.animate(
+    if (glide && from && !reduce.matches) {
+      run = thumb.animate(
         [
           {
-            transform: `translate(${last.x}px, ${last.y}px) scale(${last.w / next.w}, ${last.h / next.h})`,
+            transform: `translate(${from.x}px, ${from.y}px)`,
+            width: `${from.w}px`,
+            height: `${from.h}px`,
           },
-          { transform: `translate(${next.x}px, ${next.y}px)` },
+          {
+            transform: `translate(${next.x}px, ${next.y}px)`,
+            width: `${next.w}px`,
+            height: `${next.h}px`,
+          },
         ],
         {
           duration: 240,

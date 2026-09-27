@@ -25,6 +25,7 @@
     IconSidebar,
   } from "$lib/icons";
   import { isTyping } from "$lib/utils/typing";
+  import { pageIn, pageOut } from "$lib/whiffle/motion/route.svelte";
   import AssistantOrb from "./assistant/AssistantOrb.svelte";
   import AssistantPanel from "./assistant/AssistantPanel.svelte";
   import ConfirmDialog from "./ConfirmDialog.svelte";
@@ -251,6 +252,14 @@
   }
 
   const onSession = $derived(page.url.pathname.startsWith("/session"));
+  /** What a page swap is keyed on: every conversation and all of Configure are one page each here. */
+  const pageKey = $derived.by(() => {
+    const path = page.url.pathname;
+    if (onSession) {
+      return "session";
+    }
+    return path.startsWith("/config") ? "config" : path;
+  });
 
   /* ── The tabs, in the bar ──────────────────────────────────────────
      A workspace that is one group has one strip, and the bar is where it
@@ -514,7 +523,16 @@
          the scroll region pads the home-indicator safe area itself so the last
          row is never tucked under it. -->
     <main class="content" id="main-content" class:safe={!onSession}>
-      {@render children()}
+      <!-- The page is keyed on its route, so a navigation swaps one page for
+           the next through their own transitions (motion/route.svelte.ts):
+           both stand in this one grid cell while they overlap. Every
+           conversation is one key, and so is Configure, which keys its own
+           pane so its rail holds still. -->
+      <div class="swap">
+        {#key pageKey}
+          <div class="page" in:pageIn out:pageOut>{@render children()}</div>
+        {/key}
+      </div>
     </main>
   </div>
 </div>
@@ -554,9 +572,6 @@
     flex: 0 0 var(--sidebar-width);
     min-width: 0;
     border-right: 1px solid var(--border-hairline);
-    /* Exclude from view transitions so the sidebar stays rock-still
-       while the content area cross-fades on spoke navigation. */
-    view-transition-name: sidebar;
   }
   /* In the sheet the close button sits in the brand row's corner (16px in,
      30px wide, and 7px of touch area around it): the brand row stops short of
@@ -606,7 +621,6 @@
     padding: 0 calc((44px - 28px) / 2) 0 var(--space-7);
     background: var(--surface-raised);
     border-bottom: 1px solid var(--border-hairline);
-    view-transition-name: topbar;
   }
   /* Hosting the tabs, the bar is the shelf they stand on: two steps below
      the transcript and one below an unchosen tab, so the chosen tab — a
@@ -794,11 +808,27 @@
     min-height: 0;
     display: flex;
     flex-direction: column;
-    overflow: auto;
-    /* Only the content slot transitions — everything above it (sidebar,
-       top bar, session tabs) stays still because they have their own
-       view-transition-name or are outside this element. */
-    view-transition-name: content;
+    /* A page sliding in sideways must not open a horizontal scrollbar for
+       the length of its travel; wide content scrolls in its own box. */
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+  /* One grid cell, a page's height: an outgoing and an incoming page stand
+     in it together while they overlap, and a page taller than the screen
+     overflows it into the content's scroll exactly as it did as a flex
+     child of the content. */
+  .swap {
+    display: grid;
+    grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  .page {
+    grid-area: 1 / 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
   }
   /* Own the home-indicator inset where no composer is present to own it. */
   @media (pointer: coarse) {

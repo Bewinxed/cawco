@@ -69,7 +69,12 @@
     background: var(--surface-raised);
     font: var(--type-label);
     color: var(--ink-strong);
-    transition: var(--transition-control);
+    transition:
+      var(--transition-control),
+      transform 160ms var(--ease-out);
+  }
+  :global(.picker:active) {
+    transform: scale(var(--press-scale));
   }
   :global(.picker:hover) {
     background: var(--surface-hover);

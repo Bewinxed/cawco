@@ -9,6 +9,7 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "$lib/components/ui/popover";
   import { IconShopDuo } from "$lib/icons";
+  import { appear } from "$lib/whiffle/motion/curves.svelte";
   import { saveMarketplace } from "../fleet";
   import Field from "./Field.svelte";
 
@@ -113,7 +114,7 @@
         />
       </Field>
       {#if failed}
-        <p class="problem" role="alert">{failed}</p>
+        <p class="problem" role="alert" in:appear>{failed}</p>
       {/if}
       <Button class="self-end" disabled={busy || !ready} type="submit">
         {busy ? 'Linking…' : 'Link'}
