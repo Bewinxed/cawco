@@ -21,6 +21,7 @@
   import { branchRows } from "./rows";
   import Thinking from "./Thinking.svelte";
   import ToolGroup from "./ToolGroup.svelte";
+  import Unfold from "./Unfold.svelte";
 
   let { branch, spawn }: { branch: SubagentState; spawn: Message } = $props();
 
@@ -103,7 +104,7 @@
       <p class="now">{headline(view.report)}</p>
     {/if}
 
-    <Collapsible.Content reveal>
+    <Unfold>
       <div class="inner">
         {#each rows as row (row.key)}
           {#if row.kind === 'tools'}
@@ -128,7 +129,7 @@
           </section>
         {/if}
       </div>
-    </Collapsible.Content>
+    </Unfold>
   </Collapsible.Root>
 </div>
 
@@ -143,16 +144,17 @@
   /* The spine: a structural 2px rail, the same indent every rail block uses. */
   .branch {
     --glyph: calc(13px + var(--space-2));
-    margin: var(--rail-gap, var(--space-4)) 0 0 var(--space-2);
-    padding-left: var(--space-3);
+    margin-block: var(--rail-gap, var(--space-4)) 0;
+    margin-inline: var(--space-2) 0;
+    padding-inline-start: var(--space-3);
     background: var(--rail-head, var(--rail)) left top / 2px 100% no-repeat;
   }
 
   /* The trigger is a component's element, so the scoped selector cannot reach
      it — everything under `.branch` here is addressed globally on purpose. */
   :global(.branch .bhead) {
-    min-height: 26px;
-    width: 100%;
+    min-block-size: 26px;
+    inline-size: 100%;
     display: flex;
     align-items: center;
     gap: var(--space-2);
@@ -162,7 +164,7 @@
     padding: 0;
     color: inherit;
     cursor: pointer;
-    text-align: left;
+    text-align: start;
     /* A disclosure header toggles content — it is not a press-action, so it does
        NOT scale on click (that read as the whole card shrinking). It reacts with
        ink only; the chevron rotation and the panel opening are the feedback. */
@@ -177,8 +179,8 @@
   /* The disclosure affordance: one glyph in currentColor, rotated by its own
      state rather than swapped for a second asset. */
   .chev {
-    width: 13px;
-    height: 13px;
+    inline-size: 13px;
+    block-size: 13px;
     flex: 0 0 auto;
     display: grid;
     place-items: center;
@@ -191,15 +193,15 @@
     transform: rotate(90deg);
   }
   .chev :global(svg) {
-    width: 13px;
-    height: 13px;
+    inline-size: 13px;
+    block-size: 13px;
     display: block;
   }
 
   /* The per-session identity sprite, on its --mark-N hue square. */
   .mark {
-    width: 17px;
-    height: 17px;
+    inline-size: 17px;
+    block-size: 17px;
     border-radius: var(--radius-xs);
     flex: 0 0 auto;
     display: grid;
@@ -208,8 +210,8 @@
     background-color: var(--mark-1);
   }
   .mark :global(svg) {
-    width: 11px;
-    height: 11px;
+    inline-size: 11px;
+    block-size: 11px;
     display: block;
     color: var(--mark-glyph);
   }
@@ -244,7 +246,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    max-width: 40%;
+    max-inline-size: 40%;
   }
   .arg {
     color: var(--ink-muted);
@@ -252,7 +254,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    min-width: 0;
+    min-inline-size: 0;
     flex: 1 1 auto;
   }
   .model {
@@ -262,7 +264,7 @@
     white-space: nowrap;
   }
   .pill {
-    margin-left: auto;
+    margin-inline-start: auto;
     flex: 0 0 auto;
     font-size: var(--text-meta);
     font-variant-numeric: tabular-nums;
@@ -289,11 +291,12 @@
     display: flex;
     align-items: baseline;
     gap: var(--space-2);
-    margin: var(--space-1) 0 0 var(--glyph);
+    margin-block: var(--space-1) 0;
+    margin-inline: var(--glyph) 0;
     font-size: var(--text-label);
     color: var(--ink-strong);
     line-height: var(--leading-body);
-    max-width: 68ch;
+    max-inline-size: 68ch;
   }
   .now.err {
     color: var(--status-fail-ink);
@@ -301,12 +304,15 @@
   /* The beat is the second cue, never the only one: the pill already says
      "running" in words beside it. */
   .beat {
-    width: 5px;
-    height: 5px;
+    inline-size: 5px;
+    block-size: 5px;
     flex: 0 0 auto;
     border-radius: 50%;
     background: var(--status-live-ink);
-    animation: beat var(--breath) var(--ease-in-out) infinite;
+
+    @media (prefers-reduced-motion: no-preference) {
+      animation: beat var(--breath) var(--ease-in-out) infinite;
+    }
   }
   @keyframes beat {
     50% {
@@ -318,16 +324,17 @@
      --radius-sm (8px) less its --space-1 (4px) padding is the --radius-xs
      the report inside it carries, so no two nested corners share a radius. */
   .inner {
-    margin: var(--space-2) 0 0 var(--glyph);
+    margin-block: var(--space-2) 0;
+    margin-inline: var(--glyph) 0;
     padding: var(--space-1);
     border-radius: var(--radius-sm);
     background: var(--surface-recess);
   }
   .say {
-    margin-top: var(--space-4);
+    margin-block-start: var(--space-4);
   }
   .report {
-    margin-top: var(--space-4);
+    margin-block-start: var(--space-4);
     padding: var(--space-3);
     border-radius: var(--radius-xs);
     background: var(--surface-raised);
@@ -339,10 +346,10 @@
     letter-spacing: 0.02em;
     text-transform: uppercase;
     color: var(--ink-muted);
-    margin-bottom: var(--space-2);
+    margin-block-end: var(--space-2);
   }
   .fail {
-    margin-top: var(--space-4);
+    margin-block-start: var(--space-4);
     padding: var(--space-3);
     border-radius: var(--radius-xs);
     font-size: var(--text-label);
@@ -352,9 +359,9 @@
     white-space: pre-wrap;
   }
 
-  @media (max-width: 900px) {
+  @media (width <= 900px) {
     .branch {
-      margin-left: 0;
+      margin-inline-start: 0;
     }
   }
   /* The head is the only control on the card, so on a touch screen it is a real
@@ -362,7 +369,7 @@
      the old card carried, written so it applies. */
   @media (pointer: coarse) {
     :global(.branch .bhead) {
-      min-height: 44px;
+      min-block-size: 44px;
     }
   }
 </style>

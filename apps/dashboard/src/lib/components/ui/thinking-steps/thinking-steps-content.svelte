@@ -1,17 +1,25 @@
 <script lang="ts">
   import type { Collapsible } from "bits-ui";
-  import CollapsibleContent from "../collapsible/collapsible-content.svelte";
+  import type { Snippet } from "svelte";
+  import Unfold from "$lib/whiffle/transcript/Unfold.svelte";
 
-  let { class: className = "", ...rest }: Collapsible.ContentProps = $props();
+  let {
+    class: className = "",
+    children,
+    ...rest
+  }: { children: Snippet } & Omit<
+    Collapsible.ContentProps,
+    "children"
+  > = $props();
 </script>
 
-<!-- Grows open and folds shut on the kit's reveal, fading as it goes. The
-     transcript keeps its bottom pinned while it runs (Transcript.svelte,
+<!-- Grows open and folds shut on its own height, fading as it goes (`Unfold`).
+     The transcript keeps its bottom pinned while it runs (Transcript.svelte,
      `revealstart` / `revealend`). -->
-<CollapsibleContent
+<Unfold
   {...rest}
   class="thinking-content {className}"
   data-slot="thinking-steps-content"
-  fade
-  reveal
-/>
+>
+  {@render children()}
+</Unfold>
