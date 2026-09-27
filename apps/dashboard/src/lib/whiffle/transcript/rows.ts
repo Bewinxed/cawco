@@ -653,6 +653,21 @@ export function called(session: SessionState, toolId: string): boolean {
 }
 
 /**
+ * Whether the queued message `text` has been sent: it is the reader's last
+ * turn now. What was queued is what was typed; the turn may carry pastes or
+ * images folded into it as well.
+ */
+export function sent(session: SessionState, text: string): boolean {
+  const { messages } = session;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i].type === "user") {
+      return messages[i].content.includes(text);
+    }
+  }
+  return false;
+}
+
+/**
  * The rows that ride after the settled transcript, re-derived every time.
  */
 function tailRows(

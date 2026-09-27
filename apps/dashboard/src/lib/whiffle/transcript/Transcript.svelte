@@ -48,6 +48,7 @@
     type Fold,
     type FoldMemo,
     type Row,
+    sent,
   } from "./rows";
   import Subagent from "./Subagent.svelte";
   import SystemLine from "./SystemLine.svelte";
@@ -525,11 +526,16 @@
     const present = new Set(next.map((row) => row.key));
     for (const [key, row] of tail) {
       // A live row that became its settled row, or a tool's glance whose call
-      // has landed: either is already on screen in its new form.
+      // has landed: either is already on screen in its new form. A queued
+      // message that was sent is not its turn, which arrives as a row of its
+      // own — but that turn lands above anything folding at the end, and
+      // would push the fold down under the reader; the placeholder just goes.
       const settled =
         (ended?.key === key && ended.into !== null) ||
         (row.kind === "livetool" &&
-          untrack(() => called(session, row.glance.toolId)));
+          untrack(() => called(session, row.glance.toolId))) ||
+        (row.kind === "queued" &&
+          untrack(() => sent(session, row.queued.text)));
       if (!(present.has(key) || settled || leaving.includes(row))) {
         leaving.push(row);
       }
