@@ -76,9 +76,7 @@ IDs; Geist is everything else.
 | `--press-scale` | .97 |
 | `--pop-scale` / `--pop-rise` | .92 / 8px |
 
-Only `transform` and `opacity` animate. No ease-in curve exists. Exits are
-shorter than entrances. Route changes and tab switches cross-fade in place for
-120ms. Under reduced motion every animation and transition runs for 1ms, the
+No ease-in curve exists. Exits are shorter than entrances. Under reduced motion every animation and transition runs for 1ms, the
 new-session dialog included; `data-motion-loop` keeps an indeterminate spinner
 turning.
 
