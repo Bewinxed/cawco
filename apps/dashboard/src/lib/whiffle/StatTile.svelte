@@ -18,9 +18,15 @@
 
 <Card.Root class="st-card">
   <span class="st-label">{label}</span>
-  <span class="st-value">{value}</span>
+  <!-- Keyed, so a new figure pops in over the old one leaving where a
+       `reflow` container holds the tile (the board); elsewhere it is set. -->
+  {#key value}
+    <span class="st-value" data-flip="pop">{value}</span>
+  {/key}
   {#if unit !== undefined}
-    <span class="st-unit">{unit}</span>
+    {#key unit}
+      <span class="st-unit" data-flip="pop">{unit}</span>
+    {/key}
   {/if}
 </Card.Root>
 

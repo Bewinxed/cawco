@@ -40,11 +40,16 @@
   };
   const Glyph = $derived(icons[tone]);
 </script>
-<span
-  class="wf-status"
-  style="--chip-bg: var(--status-{tone}-bg); --chip-ink: var(--status-{tone}-ink)"
-  ><Glyph aria-hidden="true" class="size-3" />{label}</span
->
+<!-- Keyed: in a `reflow` list (the rail, the board's queue) a new status
+     pops in over the old one leaving (motion/rows); elsewhere it is set. -->
+{#key status}
+  <span
+    class="wf-status"
+    data-flip="pop"
+    style="--chip-bg: var(--status-{tone}-bg); --chip-ink: var(--status-{tone}-ink)"
+    ><Glyph aria-hidden="true" class="size-3" />{label}</span
+  >
+{/key}
 <style>
   .wf-status {
     display: inline-flex;

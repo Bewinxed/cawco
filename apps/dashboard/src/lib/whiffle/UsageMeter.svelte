@@ -186,26 +186,30 @@
       <span class="rows">
         {#each visible as window (window.kind)}
           {@const tone = band(window.percent)}
-          <span aria-hidden="true" class="label">{compactLabel(window)}</span>
+          <span aria-hidden="true" class="label" data-flip
+            >{compactLabel(window)}</span
+          >
           <UsageRail
             compact
             label={compactLabel(window)}
             value={window.percent}
           />
-          <span aria-hidden="true" class="pct {tone}"
-            >{Math.round(window.percent)}%</span
-          >
+          {#key Math.round(window.percent)}
+            <span aria-hidden="true" class="pct {tone}" data-flip="pop"
+              >{Math.round(window.percent)}%</span
+            >
+          {/key}
         {/each}
       </span>
       {#if tightest?.resetsAt}
-        <span class="note {band(tightest.percent)}">
+        <span class="note {band(tightest.percent)}" data-flip>
           {compactLabel(tightest)} {resetsIn(tightest.resetsAt, now)}
         </span>
       {:else if staleNote}
-        <span class="note">{staleNote}</span>
+        <span class="note" data-flip>{staleNote}</span>
       {/if}
     {:else}
-      <span class="note">{emptyReason}</span>
+      <span class="note" data-flip>{emptyReason}</span>
     {/if}
   </Popover.Trigger>
 
@@ -358,7 +362,7 @@
     font-weight: var(--weight-medium);
     color: var(--ink-strong);
     text-decoration: none;
-    transition: background-color 150ms ease-out;
+    transition: background-color var(--dur-control) var(--ease-out);
 
     @media (hover: hover) and (pointer: fine) {
       &:hover {
@@ -388,7 +392,7 @@
     font-variant-numeric: tabular-nums;
     color: var(--ink-muted);
     cursor: pointer;
-    transition: background-color 150ms ease-out;
+    transition: background-color var(--dur-control) var(--ease-out);
 
     @media (hover: hover) and (pointer: fine) {
       &:hover {

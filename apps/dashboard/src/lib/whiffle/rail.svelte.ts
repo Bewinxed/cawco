@@ -6,7 +6,6 @@
  */
 import { browser } from "$app/environment";
 import type { Machine } from "./client.svelte";
-import { flipDurationMs } from "./motion.svelte";
 
 export const RAIL_LAYOUT_KEY = "whiffle-rail-layout";
 
@@ -101,9 +100,6 @@ export const rail = {
   setDelegates(show: boolean): void {
     layout.delegates = show;
     save();
-  },
-  get flipDurationMs(): number {
-    return flipDurationMs();
   },
   isPinned: (kind: PinKind, id: string): boolean =>
     layout.pins.some((pin) => pin.kind === kind && pin.id === id),

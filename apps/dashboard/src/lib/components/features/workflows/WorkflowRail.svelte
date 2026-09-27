@@ -11,7 +11,7 @@
     activeSession,
   }: { run: WorkflowRun; activeSession: string | null } = $props();
 </script>
-<li>
+<li data-flip>
   <a class="run" href="/workflows/{run.workflowId}/runs/{run.id}"
     ><IconWorkflow class="size-4 shrink-0" />
     <span
@@ -21,7 +21,7 @@
   >
   <ul>
     {#each whiffle.instances.filter((entry) => entry.workflowRunId === run.id) as instance (instance.id)}
-      <li>
+      <li data-flip>
         <a
           aria-current={instance.id === activeSession ? 'page' : undefined}
           class="session"

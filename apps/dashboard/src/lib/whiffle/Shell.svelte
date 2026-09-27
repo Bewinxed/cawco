@@ -25,8 +25,8 @@
     IconSidebar,
   } from "$lib/icons";
   import { isTyping } from "$lib/utils/typing";
-  import { appear } from "$lib/whiffle/motion/curves.svelte";
   import { pageIn, pageOut } from "$lib/whiffle/motion/route.svelte";
+  import { reflow } from "$lib/whiffle/motion/rows.svelte";
   import AssistantOrb from "./assistant/AssistantOrb.svelte";
   import AssistantPanel from "./assistant/AssistantPanel.svelte";
   import ConfirmDialog from "./ConfirmDialog.svelte";
@@ -460,18 +460,23 @@
         <TextMorph as="span" class="crumb" duration={150} text={crumb} />
       {/if}
 
-      <div class="right">
+      <div class="right" {@attach reflow()}>
         <!-- First, so the order read is the order drawn: below 900px it stands
-             left of the cluster rather than in it (the style below). -->
+             left of the cluster rather than in it (the style below). It pops
+             in and out, and its count pops over the old one (motion/rows). -->
         {#if whiffle.blockedCount > 0}
           <a
             class="icobtn touch-hit"
+            data-flip="pop"
             href="/session"
             title="{whiffle.blockedCount} waiting on you"
-            transition:appear
           >
             <IconShield />
-            <span class="badge">{whiffle.blockedCount}</span>
+            <span class="badge" data-flip="box"
+              >{#key whiffle.blockedCount}
+                <span data-flip="pop">{whiffle.blockedCount}</span>
+              {/key}</span
+            >
           </a>
         {/if}
         <!-- Jump is a single entry: the one command surface the top bar opens.
@@ -506,25 +511,29 @@
 
     <!-- Server-side there is no socket to have lost, so the banner would render
          into every first paint and flash away on hydration. -->
-    {#if browser && showBanner}
-      <div
-        class="banner {everConnected ? 'warn' : 'bad'}"
-        role="status"
-        transition:appear
-      >
-        {#if everConnected}
-          <span>Hub connection lost — retrying in {retryIn}s</span>
-          <Button onclick={reconnectNow} size="sm" variant="outline"
-            >Reconnect</Button
-          >
-        {:else}
-          <span>Can't reach the hub at <code>{hubSocketUrl()}</code></span>
-          <Button onclick={reconnectNow} size="sm" variant="outline"
-            >Retry</Button
-          >
-        {/if}
-      </div>
-    {/if}
+    <!-- The banner is uncovered from under the bar and closes back into it
+         (motion/rows); its slot floats over the page, so it moves nothing. -->
+    <div class="banner-slot" {@attach reflow()}>
+      {#if browser && showBanner}
+        <div
+          class="banner {everConnected ? 'warn' : 'bad'}"
+          data-flip
+          role="status"
+        >
+          {#if everConnected}
+            <span>Hub connection lost — retrying in {retryIn}s</span>
+            <Button onclick={reconnectNow} size="sm" variant="outline"
+              >Reconnect</Button
+            >
+          {:else}
+            <span>Can't reach the hub at <code>{hubSocketUrl()}</code></span>
+            <Button onclick={reconnectNow} size="sm" variant="outline"
+              >Retry</Button
+            >
+          {/if}
+        </div>
+      {/if}
+    </div>
 
     <!-- The old thumb bar is gone, so this region reclaims its height. On a
          session route the composer owns its own bottom inset; everywhere else
@@ -818,11 +827,13 @@
      taking a row of its own: it comes and goes with the socket, often for a
      second while the hub restarts, and a row pushed the whole page down and
      back each time (0.52 CLS on the board for one restart). */
-  .banner {
+  .banner-slot {
     position: absolute;
     inset-inline: 0;
     top: var(--c-top-bar-h);
     z-index: 10;
+  }
+  .banner {
     box-shadow: var(--shadow-tile);
     display: flex;
     align-items: center;

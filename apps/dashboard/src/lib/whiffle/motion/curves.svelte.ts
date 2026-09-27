@@ -74,6 +74,20 @@ export const easeInOut = bezier(0.77, 0, 0.175, 1);
 /** `--ease-drawer`: popovers, drawers, pages. */
 export const easeDrawer = bezier(0.32, 0.72, 0, 1);
 
+/**
+ * A motion token as the stylesheet defines it (app.css), read where it is
+ * used, so JS motion and CSS motion stand on one scale: `--dur-*` as
+ * milliseconds, `--ease-*` as the easing string `element.animate()` takes,
+ * `--pop-scale` as a number.
+ */
+const rootToken = (name: string) =>
+  getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+export const dur = (name: `--dur-${string}`): number =>
+  Number.parseFloat(rootToken(name));
+export const ease = (name: `--ease-${string}`): string => rootToken(name);
+export const popScale = (): number =>
+  Number.parseFloat(rootToken("--pop-scale"));
+
 /** The CSS strings of the same curves, for `element.animate()`. */
 export const CURVE = {
   out: "cubic-bezier(0.23, 1, 0.32, 1)",

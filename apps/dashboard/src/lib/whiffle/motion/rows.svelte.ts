@@ -11,8 +11,9 @@
  *   table's height uncovers them;
  * - when no row stays at all, the old rows fade where they are as the new
  *   ones fade in over them;
- * - the table's box tweens its height, so whatever sits under the table
- *   moves with the rows. Nothing below jumps.
+ * - the table's box takes its new height at once, in the same update: a
+ *   `reflow` container around it (below) carries that change, tweening the
+ *   card it stands in and sliding what sits under it. Nothing below jumps.
  *
  * Every piece starts in the same task, so every edge is on the same frame
  * of the same curve as the edge next to it.
@@ -39,10 +40,8 @@
  * the first child of the table's box, which is the element that styles the
  * table and is `position: relative`.
  */
-import { CURVE, easeDrawer, motionOk } from "./curves.svelte";
+import { dur, ease, easeInOut, motionOk, popScale } from "./curves.svelte";
 
-/** The length of the whole reflow. */
-const REFLOW_MS = 220;
 /** Samples for the one piece whose value is not a straight line in the curve. */
 const STEPS = 48;
 
@@ -58,8 +57,6 @@ interface Leaving {
 }
 
 interface Before {
-  /** The box's height as drawn. */
-  height: number;
   leaving: Leaving[];
   /** Each row's drawn top, by key, in the layer's frame. */
   tops: Map<string, number>;
@@ -155,8 +152,9 @@ function leavingRows(
   return leaving;
 }
 
+/** Movement on screen: --dur-panel, easing in-out (app.css). */
 const timing = (easing: string): KeyframeAnimationOptions => ({
-  duration: REFLOW_MS,
+  duration: dur("--dur-panel"),
   easing,
 });
 
@@ -203,7 +201,7 @@ export function tableReflow(options: {
       play(
         row,
         [{ transform: `translateY(${dy}px)` }, { transform: "none" }],
-        timing(CURVE.drawer)
+        timing(ease("--ease-in-out"))
       );
     }
   };
@@ -220,8 +218,8 @@ export function tableReflow(options: {
       const above = rowOf(host, item.above);
       layer.append(item.wrap);
       const fading = item.body.animate([{ opacity: 1 }, { opacity: 0 }], {
-        duration: 120,
-        easing: CURVE.out,
+        duration: dur("--dur-exit"),
+        easing: ease("--ease-out"),
         fill: "forwards",
       });
       const done = () => item.wrap.remove();
@@ -239,7 +237,7 @@ export function tableReflow(options: {
             { height: `${item.height}px`, transform: "none" },
             { height: "0px", transform: `translateY(${to - item.top}px)` },
           ],
-          { ...timing(CURVE.drawer), fill: "forwards" }
+          { ...timing(ease("--ease-in-out")), fill: "forwards" }
         )
         .finished.then(done, done);
     }
@@ -264,7 +262,7 @@ export function tableReflow(options: {
       const height = row.offsetHeight;
       const frames: Keyframe[] = [];
       for (let i = 0; i <= STEPS; i += 1) {
-        const e = easeDrawer(i / STEPS);
+        const e = easeInOut(i / STEPS);
         const frame: Keyframe = {
           offset: i / STEPS,
           transform: `translateY(${(prev * (1 - e)).toFixed(2)}px)`,
@@ -304,23 +302,6 @@ export function tableReflow(options: {
     }
   };
 
-  /** The box, from the height it was drawn at to its new one. */
-  const resize = (host: HTMLElement, from: number) => {
-    running.get(host)?.cancel();
-    const to = host.offsetHeight;
-    if (Math.abs(to - from) < 0.5 || from === 0 || to === 0) {
-      return;
-    }
-    play(
-      host,
-      [
-        { height: `${from}px`, overflow: "hidden" },
-        { height: `${to}px`, overflow: "hidden" },
-      ],
-      timing(CURVE.drawer)
-    );
-  };
-
   /** The list as last shown: the same keys in the same order move nothing. */
   let shown = "";
 
@@ -349,7 +330,10 @@ export function tableReflow(options: {
       queueMicrotask(() => {
         for (const row of host.querySelectorAll<HTMLElement>(options.rows)) {
           if (!tops.has(row.dataset.key ?? "")) {
-            row.animate([{ opacity: 0 }, { opacity: 1 }], timing(CURVE.out));
+            row.animate([{ opacity: 0 }, { opacity: 1 }], {
+              duration: dur("--dur-pop"),
+              easing: ease("--ease-out"),
+            });
           }
         }
       });
@@ -357,7 +341,6 @@ export function tableReflow(options: {
     }
     const before: Before = {
       tops,
-      height: host.getBoundingClientRect().height,
       leaving: leavingRows(rows, new Set(keys), base),
     };
     queueMicrotask(() => {
@@ -365,7 +348,524 @@ export function tableReflow(options: {
       slide(host, now, before);
       arrive(host, now, before);
       close(layer, host, before.leaving);
-      resize(host, before.height);
     });
+  };
+}
+
+/**
+ * Every other list moves the same way when what it shows changes, whatever
+ * changed it: a machine coming back, a badge a deploy raises, a count, a
+ * toggle, a re-sort. Attach to the container, `{@attach reflow()}`, and mark
+ * what travels with `data-flip`:
+ *
+ * - `data-flip` (a row): arriving, it is uncovered top to bottom as it fades
+ *   in, while what follows it slides down to make its room; leaving, a copy
+ *   of it closes and fades where it stood while what follows slides up into
+ *   the space;
+ * - `data-flip="pop"` (a chip, a badge, a count): it scales in from
+ *   --pop-scale as it fades, and out the same way reversed, while its
+ *   neighbours slide aside or together;
+ * - `data-flip="box"` (a card whose edge is drawn): a row too, and when what
+ *   is inside it grows or shrinks, its edge travels to the new size; with
+ *   "pop" as well (`data-flip="pop box"`, a count's pill) it pops in and out
+ *   and its width travels as the count grows a digit.
+ *
+ * Layout changes once, in the update that changes the DOM, and everything
+ * marked that moved starts, in that same update, on a transform that holds
+ * it where it was drawn, then slides home. So nothing is ever painted where
+ * it jumped to: a MutationObserver hears the change in the microtask after
+ * the DOM is written, before the frame is painted. Places are layout boxes
+ * (offsets, which transforms never move), each read against its nearest
+ * marked ancestor, so a group that slides carries its rows and a row that
+ * moves inside it adds only its own step. A box takes its new room in the
+ * layout from the first frame and only its edge travels (`edgeOf`), so
+ * nothing after it moves except on its own transform. A container inside
+ * another with its own `reflow` owns its marks. `data-flip-anchor` marks a
+ * box someone else moves (a table's row, which `tableReflow` slides): the
+ * marks inside it are read against it, so they travel only for what moves
+ * inside it, and it is never slid, uncovered or copied here.
+ *
+ * Movement eases in-out over --dur-panel; entrances ease out over
+ * --dur-pop and exits over --dur-exit (app.css). With reduced motion nothing
+ * travels: arrivals and departures only fade.
+ */
+interface Box {
+  h: number;
+  w: number;
+  x: number;
+  y: number;
+}
+
+interface Placed extends Box {
+  /** Against the container, where a copy of it would stand. */
+  cx: number;
+  cy: number;
+  /** The nearest marked ancestor `x` and `y` are read against, or the container. */
+  ref: HTMLElement;
+}
+
+interface Move {
+  /** The slide, once it has taken over from the hold. */
+  animation?: Animation;
+  /** The frame request while a style still holds the element. */
+  hold?: number;
+  x: number;
+  y: number;
+}
+
+/** It pops (scales in and out) rather than being uncovered like a row. */
+const pops = (element: HTMLElement) =>
+  (element.dataset.flip ?? "").includes("pop");
+/** Its edges travel when it changes size. */
+const hasEdges = (element: HTMLElement) =>
+  (element.dataset.flip ?? "").includes("box");
+
+/** Marked, and this container's rather than a nested one's. */
+const ownedBy = (node: HTMLElement, element: HTMLElement) =>
+  element.parentElement?.closest("[data-reflow]") === node;
+
+/** The layout box against the container, or null where it is not laid out in it. */
+function boxIn(node: HTMLElement, element: HTMLElement): Box | null {
+  let x = 0;
+  let y = 0;
+  let at: HTMLElement | null = element;
+  while (at && at !== node) {
+    x += at.offsetLeft;
+    y += at.offsetTop;
+    const parent = at.offsetParent as HTMLElement | null;
+    if (parent && parent !== node) {
+      x += parent.clientLeft;
+      y += parent.clientTop;
+    }
+    at = parent;
+  }
+  return at === node
+    ? { x, y, w: element.offsetWidth, h: element.offsetHeight }
+    : null;
+}
+
+function referenceIn(node: HTMLElement, element: HTMLElement): HTMLElement {
+  let at = element.parentElement;
+  while (at && at !== node) {
+    if (
+      (at.hasAttribute("data-flip") || at.hasAttribute("data-flip-anchor")) &&
+      ownedBy(node, at)
+    ) {
+      return at;
+    }
+    at = at.parentElement;
+  }
+  return node;
+}
+
+/** Every marked element the container lays out, placed against its reference. */
+function placesIn(node: HTMLElement): Map<HTMLElement, Placed> {
+  const boxes = new Map<HTMLElement, Box>();
+  for (const element of node.querySelectorAll<HTMLElement>(
+    "[data-flip], [data-flip-anchor]"
+  )) {
+    const box = ownedBy(node, element) ? boxIn(node, element) : null;
+    if (box) {
+      boxes.set(element, box);
+    }
+  }
+  const places = new Map<HTMLElement, Placed>();
+  for (const [element, box] of boxes) {
+    const ref = referenceIn(node, element);
+    const origin = ref === node ? { x: 0, y: 0 } : boxes.get(ref);
+    if (origin) {
+      places.set(element, {
+        ...box,
+        x: box.x - origin.x,
+        y: box.y - origin.y,
+        cx: box.x,
+        cy: box.y,
+        ref,
+      });
+    }
+  }
+  return places;
+}
+
+/** How far a slide in flight still holds its element from its place. */
+function heldBy(move: Move | undefined) {
+  if (!move) {
+    return { x: 0, y: 0 };
+  }
+  if (move.hold !== undefined) {
+    return { x: move.x, y: move.y };
+  }
+  if (move.animation?.playState !== "running") {
+    return { x: 0, y: 0 };
+  }
+  const progress = move.animation.effect?.getComputedTiming().progress ?? 1;
+  return { x: move.x * (1 - progress), y: move.y * (1 - progress) };
+}
+
+/** An element's own `translate`, offset by a step: composed, never replaced. */
+function offsetTranslate(own: string, x: number, y: number): string {
+  if (own === "none" || own === "") {
+    return `${x}px ${y}px`;
+  }
+  const [ownX = "0px", ownY = "0px"] = own.split(" ");
+  return `calc(${ownX} + ${x}px) calc(${ownY} + ${y}px)`;
+}
+
+const entrance = () => ({
+  duration: dur("--dur-pop"),
+  easing: ease("--ease-out"),
+});
+const exit = () => ({
+  duration: dur("--dur-exit"),
+  easing: ease("--ease-out"),
+});
+const travel = () => ({
+  duration: dur("--dur-panel"),
+  easing: ease("--ease-in-out"),
+});
+
+function arrival(element: HTMLElement, still: boolean) {
+  if (still) {
+    element.animate([{ opacity: 0 }, { opacity: 1 }], entrance());
+  } else if (pops(element)) {
+    element.animate(
+      [
+        { opacity: 0, transform: `scale(${popScale()})` },
+        { opacity: 1, transform: "none" },
+      ],
+      entrance()
+    );
+  } else {
+    // Uncovered on the curve the rows after it slide down on, so its bottom
+    // edge is their top edge all the way.
+    element.animate(
+      [{ clipPath: "inset(0 0 100% 0)" }, { clipPath: "inset(0 0 0 0)" }],
+      travel()
+    );
+    element.animate([{ opacity: 0 }, { opacity: 1 }], entrance());
+  }
+}
+
+/** A copy of what left, where it was drawn, closing or shrinking away. */
+function departure(
+  node: HTMLElement,
+  element: HTMLElement,
+  was: Placed,
+  at: { x: number; y: number },
+  still: boolean
+) {
+  const copy = element.cloneNode(true) as HTMLElement;
+  for (const marked of [copy, ...copy.querySelectorAll("[data-flip]")]) {
+    marked.removeAttribute("data-flip");
+  }
+  copy.setAttribute("data-reflow-ghost", "");
+  copy.setAttribute("aria-hidden", "true");
+  copy.inert = true;
+  Object.assign(copy.style, {
+    position: "absolute",
+    left: `${was.cx + at.x}px`,
+    top: `${was.cy + at.y}px`,
+    width: `${was.w}px`,
+    height: `${was.h}px`,
+    margin: "0",
+    boxSizing: "border-box",
+    pointerEvents: "none",
+    transform: "none",
+  });
+  node.append(copy);
+  const done = () => copy.remove();
+  let last: Animation;
+  if (still) {
+    last = copy.animate([{ opacity: 1 }, { opacity: 0 }], exit());
+  } else if (pops(element)) {
+    last = copy.animate(
+      [
+        { opacity: 1, transform: "none" },
+        { opacity: 0, transform: `scale(${popScale()})` },
+      ],
+      { ...exit(), fill: "forwards" }
+    );
+  } else {
+    copy.animate([{ opacity: 1 }, { opacity: 0 }], {
+      ...exit(),
+      fill: "forwards",
+    });
+    last = copy.animate(
+      [{ clipPath: "inset(0 0 0 0)" }, { clipPath: "inset(0 0 100% 0)" }],
+      { ...travel(), fill: "forwards" }
+    );
+  }
+  last.finished.then(done, done);
+}
+
+/** The room a box's shadow takes past its edge, kept inside the clip. */
+const SHADOW_ROOM = 12;
+/** A growing box's clip, read for how much of it is still hidden. */
+const CLIP_BOTTOM = /^inset\(\S+ \S+ ([\d.]+)px/;
+
+/**
+ * A box's edge, from where it is drawn to its new size, while the room it
+ * takes in the layout is the new size throughout, so nothing after it moves
+ * on its account. Growing, the box is laid out at its new height at once and
+ * a clip uncovers the new strip, the clip's corners rounded as the box's.
+ * Shrinking, the box holds its drawn height over an equal and opposite
+ * bottom margin: negative, it sums with a following margin instead of
+ * collapsing into it (a positive one would collapse, and the room would not
+ * add up).
+ */
+function edgeOf(element: HTMLElement, from: number, to: number): Animation {
+  const styles = getComputedStyle(element);
+  if (to > from) {
+    const round = styles.borderBottomLeftRadius;
+    const out = `${-SHADOW_ROOM}px`;
+    return element.animate(
+      [
+        {
+          clipPath: `inset(${out} ${out} ${to - from}px ${out} round ${round})`,
+        },
+        { clipPath: `inset(${out} ${out} ${out} ${out} round ${round})` },
+      ],
+      travel()
+    );
+  }
+  const margin = Number.parseFloat(styles.marginBottom);
+  return element.animate(
+    [
+      {
+        height: `${from}px`,
+        marginBottom: `${margin + to - from}px`,
+        overflow: "hidden",
+      },
+      { height: `${to}px`, marginBottom: `${margin}px`, overflow: "hidden" },
+    ],
+    travel()
+  );
+}
+
+/**
+ * A box's width, from where it is drawn to its new width. In the flow, an
+ * equal and opposite right margin keeps its room at the new width throughout
+ * (inline margins never collapse); placed absolutely, nothing follows it and
+ * only the width travels.
+ */
+function spanOf(element: HTMLElement, from: number, to: number): Animation {
+  const styles = getComputedStyle(element);
+  if (styles.position === "absolute" || styles.position === "fixed") {
+    return element.animate(
+      [{ width: `${from}px` }, { width: `${to}px` }],
+      travel()
+    );
+  }
+  const margin = Number.parseFloat(styles.marginRight);
+  return element.animate(
+    [
+      { width: `${from}px`, marginRight: `${margin + to - from}px` },
+      { width: `${to}px`, marginRight: `${margin}px` },
+    ],
+    travel()
+  );
+}
+
+/** One container's marked elements: where each was last laid out, and what is moving. */
+class Reflow {
+  readonly #node: HTMLElement;
+  readonly #moves = new Map<HTMLElement, Move>();
+  readonly #edges = new Map<HTMLElement, Animation>();
+  readonly #spans = new Map<HTMLElement, Animation>();
+  #placed: Map<HTMLElement, Placed>;
+
+  constructor(node: HTMLElement) {
+    this.#node = node;
+    this.#placed = placesIn(node);
+  }
+
+  /** Every place is new and none of it is a change to animate (the container resized). */
+  reread() {
+    this.#placed = placesIn(this.#node);
+  }
+
+  change() {
+    const still = !motionOk.current;
+    const drawn = this.#releaseEdges();
+    const now = placesIn(this.#node);
+    for (const [element, place] of now) {
+      if (element.hasAttribute("data-flip-anchor")) {
+        continue;
+      }
+      const was = this.#placed.get(element);
+      if (was && !still) {
+        this.#travel(element, was, place, drawn.get(element));
+      } else if (
+        !was &&
+        (place.ref === this.#node || this.#placed.has(place.ref))
+      ) {
+        arrival(element, still);
+      }
+    }
+    for (const [element, was] of this.#placed) {
+      const gone = !(
+        now.has(element) ||
+        element.isConnected ||
+        element.hasAttribute("data-flip-anchor")
+      );
+      if (gone && (was.ref === this.#node || now.has(was.ref))) {
+        departure(
+          this.#node,
+          element,
+          was,
+          heldBy(this.#moves.get(element)),
+          still
+        );
+      }
+    }
+    this.#placed = now;
+  }
+
+  /** Where each box mid-tween is drawn; its tween is dropped so it reads at its natural size. */
+  #releaseEdges() {
+    const drawn = new Map<HTMLElement, { h?: number; w?: number }>();
+    for (const [element, animation] of this.#edges) {
+      // A growing box is laid out whole and clipped: its edge is drawn where
+      // the clip's bottom inset leaves it.
+      const clip = CLIP_BOTTOM.exec(getComputedStyle(element).clipPath);
+      const hidden = clip ? Number.parseFloat(clip[1]) : 0;
+      drawn.set(element, {
+        h: element.getBoundingClientRect().height - hidden,
+      });
+      animation.cancel();
+    }
+    for (const [element, animation] of this.#spans) {
+      drawn.set(element, {
+        ...drawn.get(element),
+        w: element.getBoundingClientRect().width,
+      });
+      animation.cancel();
+    }
+    this.#edges.clear();
+    this.#spans.clear();
+    return drawn;
+  }
+
+  #travel(
+    element: HTMLElement,
+    was: Placed,
+    place: Placed,
+    drawn: { h?: number; w?: number } | undefined
+  ) {
+    const step = heldBy(this.#moves.get(element));
+    const x = was.x + step.x - place.x;
+    const y = was.y + step.y - place.y;
+    const moved =
+      was.ref === place.ref && (was.x !== place.x || was.y !== place.y);
+    if (moved && (Math.abs(x) > 0.5 || Math.abs(y) > 0.5)) {
+      this.#slide(element, x, y);
+    }
+    if (!hasEdges(element)) {
+      return;
+    }
+    const tall = drawn?.h ?? was.h;
+    if (Math.abs(tall - place.h) > 0.5) {
+      this.#keep(this.#edges, element, edgeOf(element, tall, place.h));
+    }
+    const wide = drawn?.w ?? was.w;
+    if (Math.abs(wide - place.w) > 0.5) {
+      this.#keep(this.#spans, element, spanOf(element, wide, place.w));
+    }
+  }
+
+  #keep(
+    running: Map<HTMLElement, Animation>,
+    element: HTMLElement,
+    animation: Animation
+  ) {
+    running.set(element, animation);
+    animation.finished.then(
+      () => {
+        if (running.get(element) === animation) {
+          running.delete(element);
+        }
+      },
+      () => {
+        /* superseded by the next change */
+      }
+    );
+  }
+
+  #slide(element: HTMLElement, x: number, y: number) {
+    this.#stop(element);
+    // The first frame holds it with a style, which that frame's layout reads.
+    // An animation started in the same update runs off the main thread, and
+    // the frame is drawn, and counted as a layout shift, as though it had
+    // jumped. The slide takes over from the same place two frames on. It is
+    // on `translate`, composed with the element's own, so a chip's scale and
+    // a control's centring are left alone.
+    element.style.translate = offsetTranslate(
+      getComputedStyle(element).translate,
+      x,
+      y
+    );
+    const move: Move = { x, y };
+    this.#moves.set(element, move);
+    move.hold = requestAnimationFrame(() => {
+      move.hold = requestAnimationFrame(() => {
+        move.hold = undefined;
+        element.style.translate = "";
+        const animation = element.animate(
+          [{ translate: `${x}px ${y}px` }, { translate: "0px 0px" }],
+          { ...travel(), composite: "add" }
+        );
+        move.animation = animation;
+        animation.finished.then(
+          () => {
+            if (this.#moves.get(element) === move) {
+              this.#moves.delete(element);
+            }
+          },
+          () => {
+            /* superseded by the next slide */
+          }
+        );
+      });
+    });
+  }
+
+  /** Whatever slide or hold the element is under, dropped where it stands. */
+  #stop(element: HTMLElement) {
+    const move = this.#moves.get(element);
+    if (!move) {
+      return;
+    }
+    if (move.hold !== undefined) {
+      cancelAnimationFrame(move.hold);
+      element.style.translate = "";
+    }
+    move.animation?.cancel();
+    this.#moves.delete(element);
+  }
+}
+
+export function reflow() {
+  return (node: HTMLElement) => {
+    node.setAttribute("data-reflow", "");
+    if (getComputedStyle(node).position === "static") {
+      node.style.position = "relative";
+    }
+    const state = new Reflow(node);
+    const watcher = new MutationObserver(() => state.change());
+    watcher.observe(node, {
+      subtree: true,
+      childList: true,
+      characterData: true,
+      attributes: true,
+      attributeFilter: ["class", "hidden", "data-state", "open"],
+    });
+    // The container resized (a window, the rail's width): every place is new,
+    // and none of it is a change to animate.
+    const sizes = new ResizeObserver(() => state.reread());
+    sizes.observe(node);
+    return () => {
+      watcher.disconnect();
+      sizes.disconnect();
+    };
   };
 }
