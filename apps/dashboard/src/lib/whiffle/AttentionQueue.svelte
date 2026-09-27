@@ -1,6 +1,4 @@
 <script lang="ts">
-  import { quintOut } from "svelte/easing";
-  import { fly } from "svelte/transition";
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
   import { Card } from "$lib/components/ui/card";
@@ -38,7 +36,6 @@
     whiffle,
   } from "./client.svelte";
   import { conversationHref } from "./links";
-  import { reducedMotion } from "./motion.svelte";
   import { permissionSummary } from "./permission-summary";
   import { questionsOf } from "./question";
 
@@ -155,9 +152,12 @@
 </script>
 
 {#if total > 0}
+  <!-- Inside the board's `reflow`: the card's edge travels as items come
+       and go, each arriving and leaving in place (motion/rows). -->
   <Card
     aria-labelledby="attention-queue-heading"
     class="flex flex-col gap-0 rounded-[var(--radius-lg)] py-0 shadow-[var(--shadow-tile)] [--card-spacing:var(--space-4)]"
+    data-flip="box"
   >
     <header
       class="flex flex-wrap items-center gap-[var(--space-2)] px-[var(--space-4)] pt-[var(--space-4)] pb-[var(--space-2)]"
@@ -173,11 +173,16 @@
       <Badge
         aria-label="{total} {total === 1 ? 'session needs' : 'sessions need'} you"
         class="min-w-5 bg-[var(--status-attn-bg)] px-1.5 !text-[color:var(--status-attn-ink)] tabular-nums"
+        data-flip="box"
         variant="secondary"
       >
-        {total}
+        {#key total}
+          <span data-flip="pop">{total}</span>
+        {/key}
       </Badge>
-      <span class="text-label text-muted-foreground">Longest wait first</span>
+      <span class="text-label text-muted-foreground" data-flip
+        >Longest wait first</span
+      >
     </header>
 
     <ul class="flex flex-col">
@@ -185,8 +190,8 @@
         {@const item = entry.item}
         <li
           class="flex flex-wrap items-start gap-x-[var(--space-3)] gap-y-[var(--space-2)] border-t border-border/60 px-[var(--space-4)] py-[var(--space-3)] first:border-t-0"
+          data-flip
           data-share="pane:{item.instanceId}"
-          in:fly={{ y: -8, duration: reducedMotion.current ? 0 : 240, easing: quintOut }}
         >
           <span class="mt-1 shrink-0">
             <ActivityDot activity="blocked" />

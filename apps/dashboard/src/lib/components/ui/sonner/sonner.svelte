@@ -125,6 +125,31 @@
     font: var(--type-body);
   }
 
+  /* Motion on the kit's scale (app.css). A toast rises in and the stack
+     restacks on a transform, easing in-out over --dur-panel; it fades in over
+     --dur-pop and out over --dur-exit, inside sonner's 200ms before unmount.
+     No height tween: the stack stands expanded (`expand`, in the root layout),
+     every toast at its own height, so an arrival grows nothing. Collapsed,
+     sonner matched each toast behind the front one to the front one's height,
+     and that tween moved their edges in the layout. A toast under a finger
+     keeps sonner's own "no transition" while it is swiped. */
+  :global(
+    [data-sonner-toaster] [data-sonner-toast]:not([data-swiping="true"])
+  ) {
+    transition:
+      transform var(--dur-panel) var(--ease-in-out),
+      opacity var(--dur-pop) var(--ease-out),
+      box-shadow var(--dur-control) var(--ease-out);
+  }
+  :global(
+    [data-sonner-toaster]
+      [data-sonner-toast][data-removed="true"]:not([data-swiping="true"])
+  ) {
+    transition:
+      transform var(--dur-exit) var(--ease-out),
+      opacity var(--dur-exit) var(--ease-out);
+  }
+
   /* A phone's toast sits at the top, under the top bar: at the bottom it
      lands on the composer, which is exactly where the reader is typing.
      Full width less 12px a side. The bar does not pad for the notch, so the

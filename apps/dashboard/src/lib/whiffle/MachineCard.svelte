@@ -64,7 +64,10 @@
   const commitOf = (info: BuildInfo | undefined) => info?.commit ?? "?";
 </script>
 
-<li class="row">
+<!-- A row per machine, keyed by its id where it is listed: one that drops
+     and re-registers keeps its row, and only its dot and badges change, each
+     badge popping in or out while the others slide aside (motion/rows). -->
+<li class="row" data-flip>
   <span class="who">
     <OsMark class="size-4 shrink-0" os={machine.os} />
     <span class="nm">{machineLabel(machine.hostname)}</span>
@@ -74,7 +77,7 @@
     ></span>
   </span>
 
-  <span class="badges">
+  <span class="badges" data-flip>
     {#if !online}
       <!-- The fact every "unknown" session on this box used to repeat on its
            own row, said once here instead (leaf Y1 — 176 identical copies of
@@ -82,7 +85,7 @@
       <Tooltip.Root>
         <Tooltip.Trigger>
           {#snippet child({ props })}
-            <Badge {...props} class={warnPill}>
+            <Badge {...props} class={warnPill} data-flip="pop">
               <IconWarningTriangle class="size-3" />
               Unreachable
             </Badge>
@@ -96,7 +99,12 @@
       <Tooltip.Root>
         <Tooltip.Trigger>
           {#snippet child({ props })}
-            <Badge {...props} class={outlinePill} variant="outline">
+            <Badge
+              {...props}
+              class={outlinePill}
+              data-flip="pop"
+              variant="outline"
+            >
               <IconWarningTriangle class="size-3" />
               Build unknown
             </Badge>
@@ -112,7 +120,7 @@
       <Tooltip.Root>
         <Tooltip.Trigger>
           {#snippet child({ props })}
-            <Badge {...props} class={warnPill}>
+            <Badge {...props} class={warnPill} data-flip="pop">
               <IconWarningTriangle class="size-3" />
               Behind hub
             </Badge>
@@ -124,14 +132,20 @@
         </Tooltip.Content>
       </Tooltip.Root>
     {:else}
-      <span class="ok"><IconCheck class="size-3" />Up to date</span>
+      <span class="ok" data-flip="pop"
+        ><IconCheck class="size-3" />Up to date</span
+      >
     {/if}
 
     {#if deploy && DEPLOY_LABEL[deploy.kind]}
       <Tooltip.Root>
         <Tooltip.Trigger>
           {#snippet child({ props })}
-            <Badge {...props} class={diverged ? failPill : warnPill}>
+            <Badge
+              {...props}
+              class={diverged ? failPill : warnPill}
+              data-flip="pop"
+            >
               <IconWarningTriangle class="size-3" />
               {DEPLOY_LABEL[deploy.kind]}
             </Badge>
@@ -150,7 +164,12 @@
           {#snippet child({ props })}
             <!-- Lands on the section that owns the first failure, where the
                  row carries its fault and its remedy. -->
-            <a {...props} class="{warnPill} touch-hit" href={faultHref(first)}>
+            <a
+              {...props}
+              class="{warnPill} touch-hit"
+              data-flip="pop"
+              href={faultHref(first)}
+            >
               <IconWarningTriangle class="size-3" />
               Fleet sync failed{failures.length > 1 ? ` (${failures.length})` : ''}
             </a>
@@ -211,6 +230,13 @@
     border-radius: 999px;
     background: var(--ink-muted);
     opacity: 0.5;
+
+    /* Going offline and coming back is a change of colour, not a new dot. */
+    @media (prefers-reduced-motion: no-preference) {
+      transition:
+        background-color var(--dur-pop) var(--ease-out),
+        opacity var(--dur-pop) var(--ease-out);
+    }
   }
   .dot.up {
     background: var(--status-live-ink);

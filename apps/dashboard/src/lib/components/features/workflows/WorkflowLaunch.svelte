@@ -170,9 +170,6 @@
         {#if errorMessage}
           <p class="wf-error" role="alert">{errorMessage}</p>
         {/if}
-        {#if whiffle.hub !== 'connected'}
-          <p class="wf-muted">Reconnect to the hub to start a workflow run.</p>
-        {/if}
         <div class="wf-row wf-spread">
           <button
             class="wf-btn"
@@ -184,6 +181,9 @@
           </button><button
             class="wf-btn wf-primary"
             disabled={busy || !online || !workspace || whiffle.hub !== 'connected'}
+            title={whiffle.hub === 'connected'
+              ? undefined
+              : "Can't start a run while the hub is unreachable"}
             type="submit"
           >
             {busy ? 'Starting workflow run…' : 'Start run'}

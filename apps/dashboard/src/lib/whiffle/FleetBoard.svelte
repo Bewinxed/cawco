@@ -44,7 +44,7 @@
   import AttentionQueue from "$lib/whiffle/AttentionQueue.svelte";
   import LiveSessionRow from "$lib/whiffle/LiveSessionRow.svelte";
   import MachineCard from "$lib/whiffle/MachineCard.svelte";
-  import { tableReflow } from "$lib/whiffle/motion/rows.svelte";
+  import { reflow, tableReflow } from "$lib/whiffle/motion/rows.svelte";
   import StatTile from "$lib/whiffle/StatTile.svelte";
   import NewSessionDialog from "$lib/whiffle/spawn/NewSessionDialog.svelte";
   import { workflowState } from "$lib/whiffle/workflow-state.svelte";
@@ -348,7 +348,7 @@
      headroom under the board, already laid out. */
   let exitLayer = $state<HTMLElement | null>(null);
   let paging = false;
-  const reflow = tableReflow({
+  const tableRows = tableReflow({
     layer: () => exitLayer,
     rows: "tbody tr[data-key]",
     enabled: () => active && !paging,
@@ -358,7 +358,7 @@
   // table starts to update, the one moment they are still on screen.
   const visible = $derived.by(() => {
     const next = sorted.slice(0, shown);
-    untrack(() => reflow(next.map((row) => row.key)));
+    untrack(() => tableRows(next.map((row) => row.key)));
     paging = false;
     return next;
   });
@@ -533,7 +533,10 @@
 </script>
 
 <div class="board" bind:this={boardEl}>
-  <div class="inner">
+  <!-- What live data moves here (a machine's badges, the queue, the table's
+       height, the not-running card) arrives, leaves and slides in place: the
+       cards are `data-flip="box"`, so their edges travel too (motion/rows). -->
+  <div class="inner" {@attach reflow()}>
     <div class="head">
       <p>Every agent across your machines, and what needs you.</p>
       <Button onclick={startSession}>
@@ -596,7 +599,7 @@
            Provider or it throws on mount — see tools/+page.svelte's own note);
            the board otherwise never needed one, so it is scoped to here. -->
         <Tooltip.Provider>
-          <Card.Root class={machinesPanelClass}>
+          <Card.Root class={machinesPanelClass} data-flip="box">
             <ul class="machine-list">
               {#each whiffle.machines as machine (machine.machineId)}
                 <MachineCard hubBuild={whiffle.hubBuild} {machine} />
@@ -615,6 +618,7 @@
         {#each Object.values(workflowState.runs).filter((run) => run.status === 'waiting') as run (run.id)}
           <a
             class="flex min-h-11 flex-wrap items-center justify-between gap-3 rounded-[var(--radius-sm)] bg-[var(--surface-raised)] p-3"
+            data-flip
             href="/workflows/{run.workflowId}/runs/{run.id}"
             ><span
               >{workflowState.workflows.find((entry) => entry.id === run.workflowId)?.name ?? 'Workflow'}
@@ -628,9 +632,13 @@
     {/if}
 
     {#if stage >= 2}
-      <div class="panel">
-        {#if whiffle.hub === 'unreachable'}
-          <div class="empty">
+      <div class="panel" data-flip="box">
+        <!-- Only for a load that never read the fleet. Once it has, an outage
+             keeps the last-known table here, under the reconnect banner that
+             says the hub is gone: swapping the table out and back moved the
+             page twice for a state the banner already names. -->
+        {#if whiffle.hub === 'unreachable' && !whiffle.fleetRead}
+          <div class="empty" data-flip>
             <b>Can't reach the hub</b>
             <p>
               Nothing on the fleet can be read until the connection is back.
@@ -640,7 +648,7 @@
             >
           </div>
         {:else if whiffle.machines.length === 0}
-          <div class="empty">
+          <div class="empty" data-flip>
             <b>No machines yet</b>
             <p>
               Run <code>whiffle</code> on a machine and it joins this board by
@@ -648,7 +656,7 @@
             </p>
           </div>
         {:else if rows.length === 0}
-          <div class="empty">
+          <div class="empty" data-flip>
             <b
               >{whiffle.onlineMachines.length}
               machines online, no sessions running.</b
@@ -659,7 +667,7 @@
             </Button>
           </div>
         {:else}
-          <div class="bar">
+          <div class="bar" data-flip>
             <!-- A label, so its touch area around the 36px field focuses it. -->
             <!-- biome-ignore lint/a11y/noLabelWithoutControl: the kit Input renders the native <input> this label wraps -->
             <label class="search touch-hit">
@@ -744,7 +752,7 @@
             </Button>
           </div>
 
-          <div class="tbl">
+          <div class="tbl" data-flip>
             <div aria-hidden="true" class="exits" bind:this={exitLayer}></div>
             <Table.Root class="live" ghostRows="tbody tr">
               <Table.Header>
@@ -766,6 +774,7 @@
                      filter brings back opens as the rows below make room. -->
                   <tr
                     class="border-b transition-colors"
+                    data-flip-anchor
                     data-key={row.key}
                     data-share="pane:{sessionOf(row.href)}"
                     data-slot="table-row"
@@ -798,10 +807,17 @@
                         {row.at ? formatDistanceToNow(new Date(row.at)) : '—'}
                       </span>
                     </Table.Cell>
-                    <Table.Cell class="c-state">
-                      <Badge class={cn(pillBase, pillTint[row.status])}
-                        >{row.stateLabel}</Badge
-                      >
+                    <!-- A session changing state pops its new chip in over the
+                         old; on a phone the cell sits after the name and
+                         slides as its width changes (motion/rows). -->
+                    <Table.Cell class="c-state" data-flip>
+                      {#key row.stateLabel}
+                        <Badge
+                          class={cn(pillBase, pillTint[row.status])}
+                          data-flip="pop"
+                          >{row.stateLabel}</Badge
+                        >
+                      {/key}
                     </Table.Cell>
                     <Table.Cell class="c-act">
                       <div class="act">
@@ -854,7 +870,9 @@
             </div>
           </div>
 
-          <div class="foot">Showing {visible.length} of {filtered.length}</div>
+          <div class="foot" data-flip>
+            Showing {visible.length} of {filtered.length}
+          </div>
         {/if}
       </div>
 
@@ -865,9 +883,14 @@
       {#if notRunning.length > 0}
         {@const CAP = 20}
         {@const capped = showAllNotRunning ? notRunning : notRunning.slice(0, CAP)}
-        <div class="not-running">
+        <div class="not-running" data-flip="box">
           <div class="nr-head">
-            <span class="nr-count">Not running · {notRunning.length}</span>
+            <span class="nr-count"
+              >Not running ·
+              {#key notRunning.length}
+                <span data-flip="pop">{notRunning.length}</span>
+              {/key}</span
+            >
             {#if latestNotRunning}
               <span class="nr-hint">
                 {latestTitle}
@@ -887,9 +910,13 @@
             </Button>
           </div>
           {#if notRunningOpen}
-            <div class="not-running-rows" {@attach highlight({ rows: "a" })}>
+            <div
+              class="not-running-rows"
+              data-flip
+              {@attach highlight({ rows: "a" })}
+            >
               {#each capped as row (row.id)}
-                <div class="nr-row">
+                <div class="nr-row" data-flip>
                   <LiveSessionRow instance={row} />
                 </div>
               {/each}
@@ -897,6 +924,7 @@
             {#if !showAllNotRunning && notRunning.length > CAP}
               <button
                 class="show-all"
+                data-flip
                 onclick={() => {
                 showAllNotRunning = true;
               }}
@@ -917,7 +945,7 @@
 {#snippet pending(machines: boolean)}
   <!-- Where the parts still being read will stand: the machines and the
        table while nothing is back, the table alone once the machines are. -->
-  <div aria-busy="true" aria-label="Loading the fleet" role="status">
+  <div aria-busy="true" aria-label="Loading the fleet" data-flip role="status">
     {#if machines}
       <Skeleton
         class="mt-[var(--space-8)] h-[88px] w-full rounded-[var(--radius-lg)]"

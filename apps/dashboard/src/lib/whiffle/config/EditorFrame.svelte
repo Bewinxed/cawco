@@ -135,6 +135,7 @@
                 <DropdownMenu.Item
                   disabled={down !== null || deleting || saving}
                   onSelect={ondelete}
+                  title={down ?? undefined}
                   variant="destructive"
                 >
                   <IconTrash />

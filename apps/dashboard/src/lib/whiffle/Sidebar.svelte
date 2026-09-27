@@ -16,9 +16,6 @@
    * space-efficient and less noisy. Idle sessions are capped per project with a
    * "+ N more" disclosure.
    */
-  import { flip } from "svelte/animate";
-  import { cubicOut } from "svelte/easing";
-  import { slide } from "svelte/transition";
   import { Virtualizer } from "virtua/svelte";
   import { page } from "$app/state";
   import WorkflowRail from "$lib/components/features/workflows/WorkflowRail.svelte";
@@ -66,6 +63,7 @@
   import MachineMenu from "./MachineMenu.svelte";
   import { machineLabel } from "./machine";
   import { markHue, sessionSprite } from "./mark";
+  import { reflow } from "./motion/rows.svelte";
   import NewProjectPopover from "./NewProjectPopover.svelte";
   import OsMark from "./OsMark.svelte";
   import { type RailSort, rail } from "./rail.svelte";
@@ -460,7 +458,7 @@
   <!-- Rows where the next groups will stand, while their read is out. Each
        stage has its own, gone when that stage's groups arrive, so nothing
        drawn is ever pushed down. -->
-  <Sidebar.Group aria-busy="true" aria-label="Loading" class={GROUP}>
+  <Sidebar.Group aria-busy="true" aria-label="Loading" class={GROUP} data-flip>
     <div class="flex flex-col gap-1 px-2.5 py-1">
       <!-- The kit's tint is the rail's own ground; the fill tone shows. -->
       {#each [0, 1, 2, 3, 4, 5] as row (row)}
@@ -631,7 +629,11 @@
 
   <!-- ────────────────────── content ──────────────────────── -->
 
-  <Sidebar.Content class="gap-0 py-1">
+  <!-- Live data comes and goes here all day: a machine re-registering, a
+       session starting, a count moving. Every group, row, count and status
+       mark is `data-flip`, so it arrives and leaves in place and what it moves
+       slides instead of jumping (motion/rows `reflow`). -->
+  <Sidebar.Content class="gap-0 py-1" {@attach reflow()}>
     <!-- Fleet nav -->
     <Sidebar.Group class={GROUP}>
       <Sidebar.GroupLabel class={GROUP_LABEL}>Fleet</Sidebar.GroupLabel>
@@ -653,8 +655,11 @@
               class={whiffle.blockedCount > 0
               ? 'bg-[var(--status-attn-bg)] text-[var(--status-attn-ink)]'
               : 'bg-[var(--status-live-bg)] text-[var(--status-live-ink)]'}
+              data-flip="pop box"
             >
-              {fleetCount}
+              {#key fleetCount}
+                <span data-flip="pop">{fleetCount}</span>
+              {/key}
             </Sidebar.MenuBadge>
           {/if}
         </Sidebar.MenuItem>
@@ -709,7 +714,7 @@
          Until the last, rows standing where the rest will be. -->
     {#if stage >= 1}
       {#if Object.keys(workflowState.runs).length}
-        <Sidebar.Group class={GROUP}>
+        <Sidebar.Group class={GROUP} data-flip>
           <Sidebar.GroupLabel class={GROUP_LABEL}
             >Workflow runs</Sidebar.GroupLabel
           >
@@ -726,11 +731,13 @@
     {#if stage >= 2}
       <!-- Machines -->
       {#if whiffle.machines.length > 0}
-        <Sidebar.Group class={GROUP}>
+        <Sidebar.Group class={GROUP} data-flip>
           <Sidebar.GroupLabel class={GROUP_LABEL}>Machines</Sidebar.GroupLabel>
           <Sidebar.Menu class={MENU}>
+            <!-- Keyed by machine: one coming back keeps its row, and only its
+                 mark changes. -->
             {#each whiffle.machines as machine (machine.machineId)}
-              <Sidebar.MenuItem>
+              <Sidebar.MenuItem data-flip>
                 <MachineMenu {machine}>
                   <Sidebar.MenuButton class="{LIST_ROW} cursor-default">
                     {#snippet child({ props })}
@@ -745,14 +752,18 @@
                           >{machineLabel(machine.hostname)}</span
                         >
                         {#if online.has(machine.machineId)}
-                          <span class={TRAIL} title="Online">
+                          <span class={TRAIL} data-flip="pop" title="Online">
                             <span
                               class="size-2 rounded-full bg-[var(--hue-green-500)]"
                             ></span>
                             <span class="sr-only">Online</span>
                           </span>
                         {:else}
-                          <span class={TRAIL} title={MACHINE_UNREACHABLE_HINT}>
+                          <span
+                            class={TRAIL}
+                            data-flip="pop"
+                            title={MACHINE_UNREACHABLE_HINT}
+                          >
                             <IconWarningTriangle
                               aria-hidden="true"
                               class="size-3.5 text-warning"
@@ -774,7 +785,7 @@
     {/if}
     {#if stage >= 3}
       <!-- Projects -->
-      <Sidebar.Group class={GROUP}>
+      <Sidebar.Group class={GROUP} data-flip>
         <Sidebar.GroupLabel class="{GROUP_LABEL} {CONTROL_LABEL}">
           <span>Projects</span>
           <!-- The sort lives here rather than once per list because it governs all
@@ -823,6 +834,7 @@
         {#if orderedProjects.length === 0}
           <p
             class="px-2.5 text-[length:var(--text-label)] leading-relaxed text-muted-foreground"
+            data-flip
           >
             {#if whiffle.machines.length === 0}
               Run
@@ -842,9 +854,9 @@
               {@const expanded = !collapsed.has(project.id)}
               <li
                 class="group/menu-item relative"
+                data-flip
                 data-sidebar="menu-item"
                 data-slot="sidebar-menu-item"
-                animate:flip={{ duration: 200, easing: cubicOut }}
               >
                 <FolderMenu
                   cwd={project.cwd}
@@ -876,30 +888,33 @@
                     </span>
                     <span class="min-w-0 truncate">{project.name}</span>
                     {#if sessions.length > 0}
-                      <span
-                        class="ml-auto shrink-0 text-[length:var(--text-label)] tabular-nums text-muted-foreground"
-                        >{sessions.length}</span
-                      >
+                      {#key sessions.length}
+                        <span
+                          class="ml-auto shrink-0 text-[length:var(--text-label)] tabular-nums text-muted-foreground"
+                          data-flip="pop"
+                          >{sessions.length}</span
+                        >
+                      {/key}
                     {/if}
                   </Sidebar.MenuButton>
                 </FolderMenu>
 
                 <!-- Sub-items: sessions under this project -->
                 {#if expanded}
-                  <!-- The rail's one piece of choreography: the sub-list opens by
-                   growing rather than appearing, so a folder toggled by mistake
-                   is legible as the thing that just moved. `cubicOut` and 180ms
-                   match the chevron rotating above it. -->
-                  <div transition:slide={{ duration: 180, easing: cubicOut }}>
+                  <!-- The sub-list opens by growing rather than appearing, so a
+                   folder toggled by mistake is legible as the thing that just
+                   moved: it is uncovered top to bottom while the rows under it
+                   slide down to make its room, and closes the same way. -->
+                  <div data-flip>
                     <Sidebar.MenuSub>
                       {#each nested(sessions) as { row, depth } (row.id)}
                         {@const Sprite = sessionSprite(row.id)}
                         {@const activity = whiffle.activityOf(row.id)}
                         <li
                           class="group/menu-sub-item relative"
+                          data-flip
                           data-sidebar="menu-sub-item"
                           data-slot="sidebar-menu-sub-item"
-                          animate:flip={{ duration: 200, easing: cubicOut }}
                         >
                           <Sidebar.MenuSubButton
                             class={SUB_ROW}
@@ -929,7 +944,7 @@
                         </li>
                       {:else}
                         {@const recent = recentCountOf(project)}
-                        <Sidebar.MenuSubItem>
+                        <Sidebar.MenuSubItem data-flip>
                           <Sidebar.MenuSubButton
                             class="{SUB_ROW} text-muted-foreground"
                             onclick={() =>
@@ -954,7 +969,7 @@
 
       <!-- Running now (ungrouped sessions) -->
       {#if ungroupedAll.length > 0}
-        <Sidebar.Group class={GROUP}>
+        <Sidebar.Group class={GROUP} data-flip>
           <Sidebar.GroupLabel class="{GROUP_LABEL} {CONTROL_LABEL}">
             <span>Running now</span>
             {@render delegates(
@@ -967,9 +982,9 @@
               {@const Sprite = sessionSprite(row.id)}
               <li
                 class="group/menu-item relative"
+                data-flip
                 data-sidebar="menu-item"
                 data-slot="sidebar-menu-item"
-                animate:flip={{ duration: 200, easing: cubicOut }}
               >
                 <Sidebar.MenuButton
                   class={LIST_ROW}
@@ -1008,12 +1023,14 @@
 
       <!-- Not running -->
       {#if notRunningAll.length > 0}
-        <Sidebar.Group class="{GROUP} min-h-0 flex-1">
+        <Sidebar.Group class="{GROUP} min-h-0 flex-1" data-flip>
           <Sidebar.GroupLabel class="{GROUP_LABEL} {CONTROL_LABEL}">
             <span>Not running</span>
-            <span class="ml-1.5 tabular-nums opacity-70"
-              >{notRunning.length}</span
-            >
+            {#key notRunning.length}
+              <span class="ml-1.5 tabular-nums opacity-70" data-flip="pop"
+                >{notRunning.length}</span
+              >
+            {/key}
             {@render delegates(
             notRunningAll.length - notRunning.length
           )}
@@ -1093,9 +1110,9 @@
 
   <!-- ────────────────────── footer ──────────────────────── -->
 
-  <Sidebar.Footer>
+  <Sidebar.Footer {@attach reflow()}>
     <UsageMeter />
-    <div class="flex items-center gap-1">
+    <div class="flex items-center gap-1" data-flip>
       <Sidebar.Menu aria-label="User" class="min-w-0 flex-1">
         <Sidebar.MenuItem>
           <Sidebar.MenuButton class={NAV_ROW}>
@@ -1110,7 +1127,9 @@
             <span
               class="shrink-0 text-[length:var(--text-label)] text-muted-foreground"
             >
-              {whiffle.machines.length}
+              {#key whiffle.machines.length}
+                <span data-flip="pop">{whiffle.machines.length}</span>
+              {/key}
               machine{whiffle.machines.length === 1 ? '' : 's'}
             </span>
           </Sidebar.MenuButton>

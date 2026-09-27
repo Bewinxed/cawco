@@ -94,7 +94,11 @@
   title={section.label}
 >
   {#snippet actions(down)}
-    <Button disabled={down} href="/config/hooks/new">
+    <Button
+      disabled={down !== null}
+      href="/config/hooks/new"
+      title={down ?? undefined}
+    >
       <IconPlus />
       New hook
     </Button>

@@ -296,7 +296,7 @@
 >
   {#snippet actions(down)}
     <FetchSkillPopover
-      disabled={down}
+      {down}
       onsaved={landedSkill}
       taken={skills.map((row) => row.name)}
     />
@@ -308,6 +308,7 @@
         disabled={hubDown() !== null || refetching}
         onclick={refetchAll}
         size="sm"
+        title={hubDown() ?? undefined}
         variant="outline"
       >
         <IconRefresh />
@@ -315,7 +316,7 @@
       </Button>
     {/if}
     <LinkMarketplacePopover
-      disabled={whiffle.status !== 'connected'}
+      down={hubDown()}
       onsaved={(row) => fleet?.config.marketplaces.push(row)}
       taken={marketplaces.map((row) => row.name)}
     />

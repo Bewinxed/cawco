@@ -20,7 +20,7 @@
   import { morph } from "$lib/whiffle/motion/morph.svelte";
   import { whiffle } from "../client.svelte";
   import { type Cards, rememberCard } from "./cards";
-  import { hubDown, hubDownNote } from "./hub.svelte";
+  import { hubDown } from "./hub.svelte";
   import SkeletonRows from "./SkeletonRows.svelte";
 
   let {
@@ -38,8 +38,9 @@
     /** False until the section's rows have been read once. */
     ready?: boolean;
     problem?: string | null;
-    /** Receives whether writes are blocked, to disable the primary with. */
-    actions?: Snippet<[boolean]>;
+    /** Receives why writes are blocked, or null: the primary is disabled on it
+        and says it as its title. */
+    actions?: Snippet<[string | null]>;
     toolbar?: Snippet;
     children: Snippet;
     /** Rows are read, and more are still arriving (each machine's, say). */
@@ -47,7 +48,6 @@
   } = $props();
 
   const down = $derived(hubDown());
-  const note = $derived(hubDownNote());
   /**
    * The card holds the height it settled at last time from the moment the
    * page loads until its rows have stopped arriving (a section can read in
@@ -101,12 +101,9 @@
       <div class="titles">
         <h1 class="title">{title}</h1>
         <p class="purpose">{purpose}</p>
-        {#if note}
-          <p class="down">{note}</p>
-        {/if}
       </div>
       {#if actions}
-        <div class="actions">{@render actions(down !== null)}</div>
+        <div class="actions">{@render actions(down)}</div>
       {/if}
     </header>
     {#if !ready && problem}
@@ -196,14 +193,6 @@
     color: var(--ink-strong);
   }
   .purpose,
-  .down {
-    max-width: 72ch;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .down {
-    color: var(--status-attn-ink);
-  }
   .actions {
     display: flex;
     flex-wrap: wrap;

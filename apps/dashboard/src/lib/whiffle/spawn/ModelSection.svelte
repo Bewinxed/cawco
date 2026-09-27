@@ -22,7 +22,7 @@
     providerOf,
     rememberModel,
   } from "../models.svelte";
-  import { reducedMotion } from "../motion.svelte";
+  import { motionOk } from "../motion/curves.svelte";
   import {
     deriveModelEntries,
     groupModelEntries,
@@ -160,7 +160,7 @@
       () => {
         leaving = [];
       },
-      reducedMotion.current ? 0 : OUT_MS + OUT_STAGGER * LEAVING
+      motionOk.current ? OUT_MS + OUT_STAGGER * LEAVING : 0
     );
     return () => clearTimeout(clear);
   });
@@ -172,7 +172,7 @@
       () => {
         phase = "idle";
       },
-      reducedMotion.current ? 0 : IN_LEAD + STAGGER_CAP * IN_STAGGER + IN_MS
+      motionOk.current ? IN_LEAD + STAGGER_CAP * IN_STAGGER + IN_MS : 0
     );
     return () => clearTimeout(idle);
   });

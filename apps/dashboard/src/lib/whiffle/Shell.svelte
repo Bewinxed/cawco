@@ -26,6 +26,7 @@
   } from "$lib/icons";
   import { isTyping } from "$lib/utils/typing";
   import { pageIn, pageOut } from "$lib/whiffle/motion/route.svelte";
+  import { reflow } from "$lib/whiffle/motion/rows.svelte";
   import AssistantOrb from "./assistant/AssistantOrb.svelte";
   import AssistantPanel from "./assistant/AssistantPanel.svelte";
   import ConfirmDialog from "./ConfirmDialog.svelte";
@@ -459,7 +460,25 @@
         <TextMorph as="span" class="crumb" duration={150} text={crumb} />
       {/if}
 
-      <div class="right">
+      <div class="right" {@attach reflow()}>
+        <!-- First, so the order read is the order drawn: below 900px it stands
+             left of the cluster rather than in it (the style below). It pops
+             in and out, and its count pops over the old one (motion/rows). -->
+        {#if whiffle.blockedCount > 0}
+          <a
+            class="icobtn touch-hit"
+            data-flip="pop"
+            href="/session"
+            title="{whiffle.blockedCount} waiting on you"
+          >
+            <IconShield />
+            <span class="badge" data-flip="box"
+              >{#key whiffle.blockedCount}
+                <span data-flip="pop">{whiffle.blockedCount}</span>
+              {/key}</span
+            >
+          </a>
+        {/if}
         <!-- Jump is a single entry: the one command surface the top bar opens.
              The old phone thumb bar duplicated it; that bar is gone. -->
         <Button
@@ -474,16 +493,6 @@
           <IconSearch />
           <span class="hidden sm:inline">Jump</span>
         </Button>
-        {#if whiffle.blockedCount > 0}
-          <a
-            class="icobtn touch-hit"
-            href="/session"
-            title="{whiffle.blockedCount} waiting on you"
-          >
-            <IconShield />
-            <span class="badge">{whiffle.blockedCount}</span>
-          </a>
-        {/if}
         <!-- The phone's summon; on a desktop the rail carries it as a row. -->
         <span class="min-[900px]:hidden">
           <AssistantOrb
@@ -502,21 +511,29 @@
 
     <!-- Server-side there is no socket to have lost, so the banner would render
          into every first paint and flash away on hydration. -->
-    {#if browser && showBanner}
-      <div class="banner {everConnected ? 'warn' : 'bad'}" role="status">
-        {#if everConnected}
-          <span>Hub connection lost — retrying in {retryIn}s</span>
-          <Button onclick={reconnectNow} size="sm" variant="outline"
-            >Reconnect</Button
-          >
-        {:else}
-          <span>Can't reach the hub at <code>{hubSocketUrl()}</code></span>
-          <Button onclick={reconnectNow} size="sm" variant="outline"
-            >Retry</Button
-          >
-        {/if}
-      </div>
-    {/if}
+    <!-- The banner is uncovered from under the bar and closes back into it
+         (motion/rows); its slot floats over the page, so it moves nothing. -->
+    <div class="banner-slot" {@attach reflow()}>
+      {#if browser && showBanner}
+        <div
+          class="banner {everConnected ? 'warn' : 'bad'}"
+          data-flip
+          role="status"
+        >
+          {#if everConnected}
+            <span>Hub connection lost — retrying in {retryIn}s</span>
+            <Button onclick={reconnectNow} size="sm" variant="outline"
+              >Reconnect</Button
+            >
+          {:else}
+            <span>Can't reach the hub at <code>{hubSocketUrl()}</code></span>
+            <Button onclick={reconnectNow} size="sm" variant="outline"
+              >Retry</Button
+            >
+          {/if}
+        </div>
+      {/if}
+    </div>
 
     <!-- The old thumb bar is gone, so this region reclaims its height. On a
          session route the composer owns its own bottom inset; everywhere else
@@ -600,6 +617,7 @@
   }
 
   .main {
+    position: relative;
     flex: 1 1 auto;
     min-width: 0;
     display: flex;
@@ -680,6 +698,7 @@
      area reaches 44px. */
   .right {
     --hit-gap-x: var(--space-2);
+    position: relative;
     margin-left: auto;
     display: flex;
     align-items: center;
@@ -790,15 +809,45 @@
     display: grid;
     place-items: center;
   }
+  /* The attention control comes and goes with the queue. Below 900px, where
+     the cluster also holds Jump and the assistant, it stands the cluster's
+     gap to the left of them and out of the row's flow: arriving, it widens
+     nothing, so nothing already drawn moves (it pushed the cluster aside
+     before, 0.0008 CLS at 390). Wider, it is the cluster's only control. */
+  @media (max-width: 899px) {
+    .right > .icobtn {
+      position: absolute;
+      top: 50%;
+      right: calc(100% + var(--hit-gap-x));
+      translate: 0 -50%;
+    }
+  }
 
+  /* The banner floats over the page's top edge, under the bar, rather than
+     taking a row of its own: it comes and goes with the socket, often for a
+     second while the hub restarts, and a row pushed the whole page down and
+     back each time (0.52 CLS on the board for one restart). */
+  .banner-slot {
+    position: absolute;
+    inset-inline: 0;
+    top: var(--c-top-bar-h);
+    z-index: 10;
+  }
   .banner {
-    flex-shrink: 0;
+    box-shadow: var(--shadow-tile);
     display: flex;
     align-items: center;
     gap: var(--space-3);
+    font-variant-numeric: tabular-nums;
     padding: var(--space-2) var(--space-6) var(--space-2) var(--space-7);
     font-size: var(--text-label);
     border-bottom: 1px solid var(--border-hairline);
+  }
+  /* The sentence takes the room, so the countdown ticking in it never moves
+     the button at the end. */
+  .banner > span {
+    flex: 1 1 auto;
+    min-width: 0;
   }
   .banner.warn {
     background: var(--status-attn-bg);

@@ -68,6 +68,9 @@ export async function refreshWorkflowEffects(runId: string) {
   return effects;
 }
 export async function refreshWorkflows() {
+  // A read under way answers for itself: an error left by a read that failed
+  // while the hub was away must not stand while the fresh one is out.
+  workflowState.error = "";
   try {
     const { workflows } = await loadWorkflows();
     workflowState.workflows = workflows;

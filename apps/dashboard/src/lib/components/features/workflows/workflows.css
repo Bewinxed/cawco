@@ -136,11 +136,6 @@
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-3);
 }
-.wf .wf-band {
-  padding: var(--space-2) var(--space-4);
-  background: var(--surface-recess);
-  color: var(--ink-muted);
-}
 .wf .wf-skeleton {
   height: 80px;
   background: var(--surface-recess);

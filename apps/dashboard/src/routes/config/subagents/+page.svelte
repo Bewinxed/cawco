@@ -164,13 +164,18 @@
 >
   {#snippet actions(down)}
     <Button
-      disabled={down || pushing || agents.length === 0}
+      disabled={down !== null || pushing || agents.length === 0}
       onclick={push}
+      title={down ?? undefined}
       variant="outline"
     >
       {pushing ? 'Pushing…' : 'Push to machines'}
     </Button>
-    <Button disabled={down} href="/config/subagents/new">
+    <Button
+      disabled={down !== null}
+      href="/config/subagents/new"
+      title={down ?? undefined}
+    >
       <IconPlus />
       Add subagent
     </Button>

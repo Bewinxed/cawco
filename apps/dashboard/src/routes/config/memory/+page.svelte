@@ -115,7 +115,7 @@
 >
   {#snippet actions(down)}
     <NewMemoryPopover
-      disabled={down}
+      {down}
       onsaved={created}
       taken={docs.map((doc) => doc.path)}
     />

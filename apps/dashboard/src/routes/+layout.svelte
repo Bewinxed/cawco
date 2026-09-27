@@ -81,6 +81,7 @@
 </script>
 
 <Toaster
+  expand
   offset={toastOffset}
   position={narrowToasts.current ? "top-center" : "bottom-right"}
 />

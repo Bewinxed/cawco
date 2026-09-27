@@ -66,7 +66,14 @@
   <DropdownMenu.Root>
     <DropdownMenu.Trigger disabled={!live || busy}>
       {#snippet child({ props })}
-        <button {...props} class="wf-btn wf-primary" type="button">
+        <button
+          {...props}
+          class="wf-btn wf-primary"
+          title={live
+            ? undefined
+            : "Can't create a workflow while the hub is unreachable"}
+          type="button"
+        >
           New workflow
         </button>
       {/snippet}
@@ -92,25 +99,25 @@
     </div>
     <div class="wf-row">{@render newMenu(false)}</div>
   </header>
-  {#if !live}
-    <p class="wf-band">
-      The hub is {whiffle.hub}. Reconnect to create or run a workflow.
-    </p>
-  {/if}
-  {#if errorMessage || workflowState.error}
+  <!-- An outage is said once, by the reconnect banner over the page: a read
+       that failed for it adds no line while there are rows to keep showing,
+       and a list that was never read says why it is empty. -->
+  {#if errorMessage || (workflowState.error && (live || !rows.length))}
     <p class="wf-error" role="alert">{errorMessage || workflowState.error}</p>
   {/if}
   {#if loading}
     <p class="wf-muted" role="status">Loading workflows…</p>
   {:else if !rows.length}
-    <section class="empty">
-      <h2>No workflows yet.</h2>
-      <p>
-        A workflow is a graph of steps that run one after another across your
-        fleet.
-      </p>
-      {@render newMenu(true)}
-    </section>
+    {#if !workflowState.error}
+      <section class="empty">
+        <h2>No workflows yet.</h2>
+        <p>
+          A workflow is a graph of steps that run one after another across your
+          fleet.
+        </p>
+        {@render newMenu(true)}
+      </section>
+    {/if}
   {:else}
     <table aria-label="Workflows" class="table">
       <thead>
@@ -150,6 +157,7 @@
                 class="wf-btn desktop"
                 disabled={!live}
                 onclick={() => { launch = workflow; }}
+                title={live ? undefined : "Can't run while the hub is unreachable"}
                 type="button"
               >
                 Run
@@ -162,6 +170,7 @@
                   class="wf-btn"
                   disabled={!live}
                   onclick={() => { launch = workflow; }}
+                  title={live ? undefined : "Can't run while the hub is unreachable"}
                   type="button"
                 >
                   Run
