@@ -149,10 +149,13 @@
       />
     </section>
   {:else}
+    <!-- Live for as long as this row is: a block that has closed keeps its
+         label until its settled row takes its place. Relabelled here, the
+         narrower label pulled the chevron after it 16px across. -->
     <Thinking
       {announce}
       fades={ledger?.watched ?? false}
-      live={live.indicating}
+      live
       text={live.thinking ?? ''}
     />
   {/if}
