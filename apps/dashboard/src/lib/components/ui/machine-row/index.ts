@@ -26,6 +26,4 @@ export const MACHINE_HUES = [
   "var(--hue-cyan-400)",
 ];
 export const machineHue = (index: number, online: boolean): string =>
-  online
-    ? MACHINE_HUES[index % MACHINE_HUES.length]
-    : "color-mix(in oklab, var(--neutral-8) 62%, var(--neutral-11))";
+  online ? MACHINE_HUES[index % MACHINE_HUES.length] : "var(--machine-offline)";

@@ -270,16 +270,8 @@
     min-height: 100%;
     --diffs-font-size: 0.8125rem;
     --diffs-line-height: 1.6;
-    --diffs-bg-addition-override: color-mix(
-      in srgb,
-      var(--color-success) 15%,
-      transparent
-    );
-    --diffs-bg-deletion-override: color-mix(
-      in srgb,
-      var(--color-error) 15%,
-      transparent
-    );
+    --diffs-bg-addition-override: var(--diff-add-bg);
+    --diffs-bg-deletion-override: var(--diff-del-bg);
     --diffs-bg-separator-override: var(--muted);
   }
 </style>

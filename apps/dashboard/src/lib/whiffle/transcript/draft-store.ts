@@ -42,6 +42,10 @@ function database(): Promise<IDBDatabase> {
     request.onsuccess = () => resolve(request.result);
     request.onerror = () => reject(request.error);
   });
+  // A browser that refuses the database (private mode) keeps no drafts; said once here.
+  opening.catch((error: unknown) => {
+    console.warn("[drafts] IndexedDB refused to open; drafts are off", error);
+  });
   return opening;
 }
 

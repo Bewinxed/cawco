@@ -214,11 +214,7 @@
         await preloadHistory(id);
       }
       await new Promise<void>((resolve) => {
-        if ("requestIdleCallback" in window) {
-          window.requestIdleCallback(() => resolve());
-        } else {
-          setTimeout(resolve, 0);
-        }
+        setTimeout(resolve, 0);
       });
     }
     preloading = false;
