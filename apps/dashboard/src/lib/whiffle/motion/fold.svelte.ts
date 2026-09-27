@@ -135,11 +135,12 @@ export function folds(open: () => boolean, options: FoldOptions) {
  * transition: `in:unfold` grows it from nothing to its measured height
  * (240ms), `out:unfold` folds it back (160ms), fading with the height, so
  * what sits below slides instead of jumping. In a column with a gap, the
- * gap it brings folds with it. With reduced motion, a fade in place.
+ * gap it brings folds with it. `ms` overrides the length (0: no motion).
+ * With reduced motion, a fade in place.
  */
 export function unfold(
   node: HTMLElement,
-  _params?: unknown,
+  { ms }: { ms?: number } = {},
   { direction }: { direction?: "in" | "out" | "both" } = {}
 ): TransitionConfig {
   if (!motionOk.current) {
@@ -163,7 +164,7 @@ export function unfold(
       ? Number.parseFloat(getComputedStyle(parent).rowGap) || 0
       : 0;
   return {
-    duration: direction === "out" ? 160 : 240,
+    duration: ms ?? (direction === "out" ? 160 : 240),
     easing: easeOut,
     css: (t) =>
       [

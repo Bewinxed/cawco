@@ -141,3 +141,38 @@ export function land(key: () => string | undefined, options: LandOptions = {}) {
     });
   };
 }
+
+/**
+ * The other direction: a floating surface closes into what it just made
+ * (a popover's form into the row it added). The surface shrinks onto the
+ * made thing's box — its full box, even while that box is still opening —
+ * and fades as it goes, on the same curve as a landing; the returned
+ * animation finishes when the surface is gone, so the caller closes it
+ * then. With reduced motion there is no travel and nothing to wait for.
+ */
+export function closeInto(
+  surface: HTMLElement,
+  target: HTMLElement,
+  ms = 280
+): Animation | undefined {
+  if (!motionOk.current) {
+    return;
+  }
+  const from = surface.getBoundingClientRect();
+  const to = target.getBoundingClientRect();
+  if (from.width === 0 || from.height === 0 || to.width === 0) {
+    return;
+  }
+  const height = Math.max(to.height, target.scrollHeight);
+  return surface.animate(
+    [
+      { transformOrigin: "0 0", transform: "none", opacity: 1 },
+      {
+        transformOrigin: "0 0",
+        transform: `translate(${to.left - from.left}px, ${to.top - from.top}px) scale(${to.width / from.width}, ${height / from.height})`,
+        opacity: 0,
+      },
+    ],
+    { duration: ms, easing: CURVE.drawer, fill: "forwards" }
+  );
+}

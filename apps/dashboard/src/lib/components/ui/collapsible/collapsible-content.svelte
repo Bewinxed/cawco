@@ -44,16 +44,24 @@
         node.dispatchEvent(new CustomEvent("revealend", { bubbles: true }));
       animation.finished.then(end, end);
     };
-    // bits-ui marks content it has just opened with data-starting-style for
-    // one frame; content mounted already open (a first render, a row the
-    // virtualiser rebuilt) carries no mark and does not animate.
-    if (node.hasAttribute("data-starting-style")) {
-      run(true, 0);
-    }
+    // bits-ui keeps this element mounted and removes `hidden` a flush after
+    // `data-state` turns open: open is read off both, so the fold starts from
+    // nothing once the body is open and laid out. Content mounted already
+    // open (a first render, a row the virtualiser rebuilt) does not animate.
+    const openNow = () =>
+      node.getAttribute("data-state") === "open" && !node.hidden;
+    let shown = openNow();
     const watch = new MutationObserver(() => {
-      run(node.getAttribute("data-state") === "open");
+      const open = openNow();
+      if (open !== shown) {
+        shown = open;
+        run(open, open ? 0 : undefined);
+      }
     });
-    watch.observe(node, { attributes: true, attributeFilter: ["data-state"] });
+    watch.observe(node, {
+      attributes: true,
+      attributeFilter: ["data-state", "hidden"],
+    });
     return () => watch.disconnect();
   });
 </script>

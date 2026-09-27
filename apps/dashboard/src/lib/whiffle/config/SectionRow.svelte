@@ -6,8 +6,8 @@
    * line.
    */
   import type { Component, Snippet } from "svelte";
-  import { cubicOut } from "svelte/easing";
   import { Switch } from "$lib/components/ui/switch";
+  import { unfold } from "$lib/whiffle/motion/fold.svelte";
   import { land } from "$lib/whiffle/motion/share.svelte";
   import RowMenu, { type RowAction } from "./RowMenu.svelte";
 
@@ -51,27 +51,16 @@
     below?: Snippet;
     flash?: boolean;
   } = $props();
-
-  /**
-   * A row added or removed grows or folds its own height as it fades, so
-   * the rows around it slide to their new places instead of jumping. Only a
-   * row the operator just made grows in; the list's first paint does not.
-   */
-  function collapse(node: HTMLElement, { duration }: { duration: number }) {
-    const height = node.offsetHeight;
-    return {
-      duration,
-      easing: cubicOut,
-      css: (t: number) =>
-        `opacity: ${t}; height: ${t * height}px; overflow: hidden;`,
-    };
-  }
 </script>
 
+<!-- A row added or removed grows or folds its own height as it fades, so
+     the rows around it slide to their new places instead of jumping. Only
+     a row the operator just made grows in; the list's first paint does not. -->
 <li
   class={["item", flash && "flash"]}
-  in:collapse={{ duration: flash ? 240 : 0 }}
-  out:collapse={{ duration: 200 }}
+  data-row-name={name}
+  in:unfold={{ ms: flash ? 240 : 0 }}
+  out:unfold
 >
   <div class="row" class:off={enabled === false} class:two={meta !== undefined}>
     <span
