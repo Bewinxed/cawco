@@ -176,8 +176,7 @@
   }
   @media (prefers-reduced-motion: no-preference) {
     .copy {
-      animation: step-in var(--c-200, 200ms) var(--ease-out) var(--step-delay)
-        backwards;
+      animation: step-in 200ms var(--ease-out) var(--step-delay) backwards;
     }
     .shimmer {
       color: transparent;
