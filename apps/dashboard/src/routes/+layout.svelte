@@ -1,15 +1,6 @@
 <script lang="ts">
   import "../app.css";
   import "$lib/theme.svelte";
-  /**
-   * The UI face, by the name the build gives it. `app.css` reaches this same
-   * file through @fontsource's `@font-face`, but only once the stylesheet has
-   * parsed — so on a cold load the page painted in the system fallback and
-   * reflowed every line ~100ms later when Geist arrived. Importing the asset
-   * gets Vite's resolved (hashed) URL, which is the one the CSS will ask for,
-   * so the preload below is a head start rather than a second download.
-   */
-  import geistLatin from "@fontsource-variable/geist/files/geist-latin-wght-normal.woff2?url";
   import type { Snippet } from "svelte";
   import { onMount } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
@@ -88,16 +79,6 @@
     });
   });
 </script>
-
-<svelte:head>
-  <link
-    as="font"
-    crossorigin="anonymous"
-    href={geistLatin}
-    rel="preload"
-    type="font/woff2"
-  >
-</svelte:head>
 
 <Toaster
   offset={toastOffset}
