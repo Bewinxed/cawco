@@ -7,8 +7,6 @@
   import { TextMorph } from "torph/svelte";
   import { Button } from "$lib/components/ui/button";
   import { IconTrash } from "$lib/icons";
-  import { appear } from "$lib/whiffle/motion/curves.svelte";
-  import { hubDownNote } from "./hub.svelte";
 
   let {
     saving,
@@ -23,16 +21,14 @@
     saving: boolean;
     saveLabel: string;
     canSave?: boolean;
-    /** Why writes are blocked, or null. */
+    /** Why writes are blocked, or null: Save and Delete are disabled on it and
+        say it as their title. */
     down: string | null;
     deleteLabel?: string;
     deleting?: boolean;
     ondelete?: () => void;
     oncancel: () => void;
   } = $props();
-
-  /** Printed only once the hub is known to be down (hub.svelte). */
-  const note = $derived(hubDownNote());
 </script>
 
 <footer class="footer">
@@ -42,6 +38,7 @@
         class="delete"
         disabled={down !== null || deleting || saving}
         onclick={ondelete}
+        title={down ?? undefined}
         type="button"
         variant="ghost"
       >
@@ -52,9 +49,6 @@
           text={deleting ? 'Deleting…' : deleteLabel}
         />
       </Button>
-    {/if}
-    {#if note}
-      <span class="down" in:appear>{note}</span>
     {/if}
     <span class="spacer"></span>
     <Button
@@ -69,6 +63,7 @@
     <Button
       class="footer-btn save"
       disabled={down !== null || saving || deleting || !canSave}
+      title={down ?? undefined}
       type="submit"
     >
       <TextMorph
@@ -95,12 +90,6 @@
   .spacer {
     flex: 1 1 auto;
   }
-  .down {
-    min-width: 0;
-
-    font: var(--type-meta);
-    color: var(--status-attn-ink);
-  }
   .inner :global(.save) {
     min-width: 96px;
   }
@@ -125,9 +114,6 @@
     .inner :global(.delete),
     .spacer {
       display: none;
-    }
-    .down {
-      flex-basis: 100%;
     }
   }
 </style>

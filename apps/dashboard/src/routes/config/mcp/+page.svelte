@@ -110,7 +110,11 @@
   title={section.label}
 >
   {#snippet actions(down)}
-    <Button disabled={down} href="/config/mcp/new">
+    <Button
+      disabled={down !== null}
+      href="/config/mcp/new"
+      title={down ?? undefined}
+    >
       <IconPlus />
       Add server
     </Button>

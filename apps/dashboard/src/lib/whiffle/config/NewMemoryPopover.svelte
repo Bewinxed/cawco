@@ -19,11 +19,13 @@
 
   let {
     taken,
-    disabled,
+    down,
     onsaved,
   }: {
     taken: string[];
-    disabled: boolean;
+    /** Why the hub cannot take a write, or null: the trigger and the submit
+        are disabled on it and say it as their title. */
+    down: string | null;
     onsaved: (row: FleetMemoryDocRow) => void;
   } = $props();
 
@@ -85,9 +87,9 @@
   }}
   bind:open={expanded}
 >
-  <Popover.Trigger {disabled}>
+  <Popover.Trigger disabled={down !== null}>
     {#snippet child({ props })}
-      <Button {...props} {disabled}>
+      <Button {...props} disabled={down !== null} title={down ?? undefined}>
         <IconPlus />
         New document
       </Button>
@@ -116,7 +118,12 @@
       {#if failed}
         <p class="problem" role="alert" transition:unfold>{failed}</p>
       {/if}
-      <Button class="self-end" disabled={busy} type="submit">
+      <Button
+        class="self-end"
+        disabled={down !== null || busy}
+        title={down ?? undefined}
+        type="submit"
+      >
         <TextMorph text={busy ? 'Creating…' : 'Create and open'} />
       </Button>
     </form>

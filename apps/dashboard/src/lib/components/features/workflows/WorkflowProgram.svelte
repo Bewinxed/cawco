@@ -25,10 +25,8 @@
   <p class="wf-muted note">
     {#if origin === 'editor'}
       Compiled from this graph on save. Edit the graph to change it.
-    {:else if live}
-      The program is the workflow. It saves as you type.
     {:else}
-      The program is the workflow. Reconnect to the hub to save an edit.
+      The program is the workflow. It saves as you type.
     {/if}
   </p>
   <div class="code">

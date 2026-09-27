@@ -103,7 +103,11 @@
   title={section.label}
 >
   {#snippet actions(down)}
-    <Button disabled={down} href="/config/rules/new">
+    <Button
+      disabled={down !== null}
+      href="/config/rules/new"
+      title={down ?? undefined}
+    >
       <IconPlus />
       New rule
     </Button>

@@ -437,6 +437,7 @@
           class="wf-btn"
           disabled={!(workflow && live) || saving}
           onclick={() => { inspectorOpen = narrow.current; selected = undefined; persist(serial); }}
+          title={live ? undefined : "Can't save while the hub is unreachable"}
           type="button"
         >
           Validate
@@ -444,6 +445,7 @@
           class="wf-btn wf-primary"
           disabled={!(workflow && live) || !!errorMessage || dirty || saving || problems.length > 0}
           onclick={() => { inspectorOpen = false; paletteOpen = false; launch = true; }}
+          title={live ? undefined : "Can't run while the hub is unreachable"}
           type="button"
         >
           Run workflow
@@ -509,11 +511,6 @@
       >
     </div>
   </header>
-  {#if !live}
-    <p class="wf-band">
-      Hub {whiffle.hub}. Reconnect to save, validate or run.
-    </p>
-  {/if}
   {#if errorMessage}
     <div class="wf-error" role="alert">
       {errorMessage}

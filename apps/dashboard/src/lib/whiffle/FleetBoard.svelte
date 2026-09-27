@@ -629,7 +629,11 @@
 
     {#if stage >= 2}
       <div class="panel">
-        {#if whiffle.hub === 'unreachable'}
+        <!-- Only for a load that never read the fleet. Once it has, an outage
+             keeps the last-known table here, under the reconnect banner that
+             says the hub is gone: swapping the table out and back moved the
+             page twice for a state the banner already names. -->
+        {#if whiffle.hub === 'unreachable' && !whiffle.fleetRead}
           <div class="empty">
             <b>Can't reach the hub</b>
             <p>

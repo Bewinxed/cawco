@@ -343,6 +343,7 @@
           class="wf-btn"
           disabled={busy || !live}
           onclick={rerun}
+          title={live ? undefined : "Can't re-run while the hub is unreachable"}
           type="button"
         >
           Re-run from step
@@ -394,6 +395,7 @@
               class="wf-btn"
               disabled={busy || !live}
               onclick={cancel}
+              title={live ? undefined : "Can't cancel while the hub is unreachable"}
               type="button"
             >
               Cancel run
@@ -420,11 +422,6 @@
         {/if}
       </div>
     </header>
-    {#if !live}
-      <p class="wf-band">
-        Hub {whiffle.hub}. Showing the last reported state; reconnect to act.
-      </p>
-    {/if}
     {#if logLines.length}
       <details class="log" bind:open={logOpen}>
         <summary>Log · {logLines.length}</summary>
@@ -451,6 +448,7 @@
               class="wf-btn"
               disabled={busy || !live}
               onclick={() => act(() => answerWorkflow(runId, ask.stepId, option.label, note))}
+              title={live ? undefined : "Can't answer while the hub is unreachable"}
               type="button"
             >
               <span>{option.label}</span>
@@ -468,6 +466,7 @@
               class="wf-btn"
               disabled={!other || busy || !live}
               onclick={() => act(() => answerWorkflow(runId, ask.stepId, other, note))}
+              title={live ? undefined : "Can't answer while the hub is unreachable"}
               type="button"
             >
               Send answer

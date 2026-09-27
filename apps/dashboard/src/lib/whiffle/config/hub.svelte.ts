@@ -2,19 +2,13 @@ import { whiffle } from "../client.svelte";
 
 /**
  * Why a write cannot happen right now, or null when it can. Every section's
- * primary action and every Delete reads this, so a hub that is down disables
- * them with the same sentence everywhere.
+ * primary action, every Save and every Delete is disabled on it and carries
+ * it as its title, so a hub that is down says the same sentence everywhere.
+ * It is not printed on the page: the reconnect banner is the one place an
+ * outage is said out loud, and a line that came and went with the socket
+ * moved everything under it.
  */
 export const hubDown = (): string | null =>
   whiffle.status === "connected"
     ? null
-    : "The hub is not connected, so nothing here can be saved until it is.";
-
-/**
- * The same sentence, to print: only once the hub is known to be down. A
- * cold load passes through connecting, which is never a fault (HubState);
- * writes are blocked then all the same, but the page does not print a line
- * it takes back a moment later, moving everything under it twice.
- */
-export const hubDownNote = (): string | null =>
-  whiffle.hub === "unreachable" ? hubDown() : null;
+    : "Can't save while the hub is unreachable";

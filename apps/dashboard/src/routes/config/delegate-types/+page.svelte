@@ -77,7 +77,11 @@
   title={section.label}
 >
   {#snippet actions(down)}
-    <Button disabled={down} href="/config/delegate-types/new">
+    <Button
+      disabled={down !== null}
+      href="/config/delegate-types/new"
+      title={down ?? undefined}
+    >
       <IconPlus />
       New delegate type
     </Button>
