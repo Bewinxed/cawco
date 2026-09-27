@@ -9,6 +9,7 @@
   import ProviderLogo from "$lib/components/features/ProviderLogo.svelte";
   import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   import { SectionHeader } from "$lib/components/ui/section-header";
+  import { autowidth } from "$lib/whiffle/motion/autosize.svelte";
   import OpenAiMark from "~icons/logos/openai-icon";
   import Clear from "~icons/solar/close-square-linear";
   import Code from "~icons/solar/code-square-bold-duotone";
@@ -351,6 +352,7 @@
           placeholder={`Search ${harnessName(listHarness)} models or paste a model id…`}
           spellcheck="false"
           value={query}
+          {@attach autowidth(() => query)}
         >
         {#if query}
           <button

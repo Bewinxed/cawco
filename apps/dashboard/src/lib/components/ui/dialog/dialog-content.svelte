@@ -4,6 +4,7 @@
   import { Button } from "$lib/components/ui/button/index.js";
   import { IconClose } from "$lib/icons";
   import { cn, type WithoutChildrenOrChild } from "$lib/utils.js";
+  import { morph } from "$lib/whiffle/motion/morph.svelte";
   import DialogPortal from "./dialog-portal.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for importing a component group
   import * as Dialog from "./index.js";
@@ -23,6 +24,15 @@
     /** Classes for the raised body inside the tray. */
     bodyClass?: string;
   } = $props();
+
+  // A dialog whose body changes (a step, an error, a result) tweens to its
+  // new height; it is centred, so it grows from the middle.
+  const resize = morph();
+  $effect(() => {
+    if (ref) {
+      return resize(ref);
+    }
+  });
 </script>
 
 <DialogPortal {...portalProps}>

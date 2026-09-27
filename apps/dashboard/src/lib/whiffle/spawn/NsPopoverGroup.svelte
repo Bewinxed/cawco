@@ -112,7 +112,7 @@
             >
               <div
                 class="ns-morph"
-                style:height={morphing && height ? `${height}px` : undefined}
+                style:height={height ? `${height}px` : undefined}
               >
                 <div class="ns-measure" bind:offsetHeight={height}>
                   {#key shown?.id}

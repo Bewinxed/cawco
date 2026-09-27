@@ -12,6 +12,7 @@
    * inside `onMount`: this editor never runs on the server.
    */
   import { onMount } from "svelte";
+  import { morph } from "$lib/whiffle/motion/morph.svelte";
   // Structure only, and only for the features Crepe runs by default (top-bar,
   // ai and the ai diff stay off, so their sheets are not shipped). Crepe's own
   // theme files are nothing but a palette, and the palette this app already
@@ -88,7 +89,12 @@
     The editor did not load: {failed}
   </p>
 {/if}
-<section aria-label={label} class="crepe-host" bind:this={host}></section>
+<section
+  aria-label={label}
+  class="crepe-host"
+  bind:this={host}
+  {@attach morph()}
+></section>
 
 <style>
   /* Crepe's structural CSS reads these off `.milkdown` itself, so they are set
