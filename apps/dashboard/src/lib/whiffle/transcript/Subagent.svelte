@@ -21,7 +21,6 @@
   import { branchRows } from "./rows";
   import Thinking from "./Thinking.svelte";
   import ToolGroup from "./ToolGroup.svelte";
-  import Unfold from "./Unfold.svelte";
 
   let { branch, spawn }: { branch: SubagentState; spawn: Message } = $props();
 
@@ -104,7 +103,7 @@
       <p class="now">{headline(view.report)}</p>
     {/if}
 
-    <Unfold>
+    <Collapsible.Content reveal>
       <div class="inner">
         {#each rows as row (row.key)}
           {#if row.kind === 'tools'}
@@ -129,7 +128,7 @@
           </section>
         {/if}
       </div>
-    </Unfold>
+    </Collapsible.Content>
   </Collapsible.Root>
 </div>
 

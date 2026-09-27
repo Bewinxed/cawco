@@ -11,7 +11,6 @@
   import type { Message } from "../types";
   import MessageBody from "./MessageBody.svelte";
   import type { HarnessNote } from "./rows";
-  import Unfold from "./Unfold.svelte";
 
   let {
     message,
@@ -81,9 +80,9 @@
           {/if}
           <span class="hchev" class:open><IconChevronRight /></span>
         </Collapsible.Trigger>
-        <Unfold>
+        <Collapsible.Content reveal>
           <div class="hbody"><MessageBody source={harness.body} /></div>
-        </Unfold>
+        </Collapsible.Content>
       </Collapsible.Root>
     {:else}
       <!-- Nothing to open, so nothing that looks openable: a chevron over an
@@ -136,13 +135,13 @@
         <span class="hchev" class:open><IconChevronRight /></span>
         <span class="ftitle">{foldTitle}</span>
       </Collapsible.Trigger>
-      <Unfold>
+      <Collapsible.Content reveal>
         {#if foldCommand}
           <pre class="well">{foldCommand}</pre>
         {:else if foldBody}
           <div class="hbody"><MessageBody source={foldBody} /></div>
         {/if}
-      </Unfold>
+      </Collapsible.Content>
     </Collapsible.Root>
   </div>
 {:else}

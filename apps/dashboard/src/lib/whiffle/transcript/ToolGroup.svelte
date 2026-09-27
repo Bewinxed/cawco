@@ -42,7 +42,6 @@
   import { openCalls } from "./disclosure.svelte";
   import TranscriptRow from "./Row.svelte";
   import Shot from "./Shot.svelte";
-  import Unfold from "./Unfold.svelte";
 
   const machine = getContext<(() => string) | undefined>("whiffle:machine");
 
@@ -369,7 +368,7 @@
                 {@render line()}
                 <span class="chev"><IconChevronRight /></span>
               </Collapsible.Trigger>
-              <Unfold>
+              <Collapsible.Content reveal>
                 {#if d.expanded === 'memory' && !failed}
                   <MemoryBody
                     input={toolInput}
@@ -407,7 +406,7 @@
                     {/if}
                   </div>
                 {/if}
-              </Unfold>
+              </Collapsible.Content>
             </Collapsible.Root>
           {:else}
             <div class="trow flat">{@render line()}</div>

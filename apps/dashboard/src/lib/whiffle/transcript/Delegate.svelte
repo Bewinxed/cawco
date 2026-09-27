@@ -41,7 +41,6 @@
   import Subagent from "./Subagent.svelte";
   import Thinking from "./Thinking.svelte";
   import ToolGroup from "./ToolGroup.svelte";
-  import Unfold from "./Unfold.svelte";
 
   let { message }: { message: Message } = $props();
 
@@ -410,7 +409,7 @@
       </ul>
     {/if}
 
-    <Unfold>
+    <Collapsible.Content reveal>
       <CollapsibleLazy {open}>
         <div class="inner">
           {#if loading}
@@ -451,7 +450,7 @@
           {/if}
         </div>
       </CollapsibleLazy>
-    </Unfold>
+    </Collapsible.Content>
   </Collapsible.Root>
 </div>
 
