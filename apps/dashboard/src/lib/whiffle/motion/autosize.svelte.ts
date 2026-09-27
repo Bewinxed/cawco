@@ -8,18 +8,24 @@
  */
 export function autosize(value: () => unknown) {
   return (node: HTMLTextAreaElement) => {
+    // Measured on a hidden twin, never on the field: collapsing the field to
+    // measure it would cancel the height transition it is running.
+    const twin = node.cloneNode() as HTMLTextAreaElement;
+    twin.removeAttribute("id");
+    twin.removeAttribute("name");
+    twin.setAttribute("aria-hidden", "true");
+    twin.tabIndex = -1;
+    twin.style.cssText =
+      "position:absolute;visibility:hidden;pointer-events:none;height:auto;min-height:0;max-height:none;overflow:hidden;inset-block-start:0;inset-inline-start:-9999px;transition:none";
+    node.after(twin);
     const fit = () => {
-      const was = node.style.height;
-      // Measure at the natural height with no transition in the way, then
-      // put the old height back so the change to the new one animates.
-      node.style.transition = "none";
-      node.style.height = "auto";
+      twin.style.width = `${node.offsetWidth}px`;
+      twin.value = node.value;
       const border = node.offsetHeight - node.clientHeight;
-      const next = node.scrollHeight + border;
-      node.style.height = was;
-      node.getBoundingClientRect();
-      node.style.transition = "";
-      node.style.height = `${next}px`;
+      const next = `${twin.scrollHeight + border}px`;
+      if (node.style.height !== next) {
+        node.style.height = next;
+      }
     };
     $effect(() => {
       value();
@@ -40,6 +46,7 @@ export function autosize(value: () => unknown) {
     return () => {
       node.removeEventListener("input", fit);
       sizes.disconnect();
+      twin.remove();
     };
   };
 }

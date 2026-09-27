@@ -20,25 +20,27 @@ export function morph({ width = false, ms = 220 } = {}) {
     let running: Animation | undefined;
 
     const tween = () => {
-      // Where the box is drawn now (mid-tween, if one runs), then its new
-      // natural size with no tween holding it.
-      const drawn = node.getBoundingClientRect();
+      // The size to start from: where a tween in flight has the box right
+      // now, else the size it last settled at (layout already holds the new
+      // one by the time an observer hears of the change).
+      const drawn = running ? node.getBoundingClientRect() : null;
+      const from = drawn ? { w: drawn.width, h: drawn.height } : natural;
       running?.cancel();
       running = undefined;
       const next = { w: node.offsetWidth, h: node.offsetHeight };
       const moved =
-        Math.abs(next.h - natural.h) > 0.5 ||
-        (width && Math.abs(next.w - natural.w) > 0.5);
+        Math.abs(next.h - from.h) > 0.5 ||
+        (width && Math.abs(next.w - from.w) > 0.5);
       natural = next;
-      if (!(moved && motionOk.current) || drawn.height === 0 || next.h === 0) {
+      if (!(moved && motionOk.current) || from.h === 0 || next.h === 0) {
         return;
       }
       const frames: Keyframe[] = [
-        { height: `${drawn.height}px`, overflow: "hidden" },
+        { height: `${from.h}px`, overflow: "hidden" },
         { height: `${next.h}px`, overflow: "hidden" },
       ];
       if (width) {
-        frames[0].width = `${drawn.width}px`;
+        frames[0].width = `${from.w}px`;
         frames[1].width = `${next.w}px`;
       }
       const held = [...node.children].filter(
