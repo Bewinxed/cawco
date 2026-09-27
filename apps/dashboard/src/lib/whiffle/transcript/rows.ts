@@ -605,11 +605,19 @@ function liveContent(session: SessionState): LiveContent | null {
   const reasoning =
     (session.openBlock === "thinking" || session.thinkingClosing) &&
     !session.streaming;
+  const last = session.messages.at(-1);
   const indicating =
     session.busy &&
+    // The agent's own words are the latest thing. Whatever it does next opens
+    // a block of its own — reasoning, text, a tool — which this row or a tool
+    // row shows the moment it starts; a turn it has finished ends a frame
+    // later. A "working" row between the two would only flash: arrive, and
+    // fold away before it could be read.
+    last?.type !== "assistant" &&
+    last?.type !== "thinking" &&
     session.pending.length === 0 &&
     session.sdkStatus !== "compacting" &&
-    !session.messages.at(-1)?.metadata?.sendFailed &&
+    !last?.metadata?.sendFailed &&
     !session.streaming &&
     !session.currentTool &&
     session.openBlock !== "tool" &&
