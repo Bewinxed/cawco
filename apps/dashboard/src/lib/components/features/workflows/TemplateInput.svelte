@@ -1,5 +1,6 @@
 <script lang="ts">
   import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
+  import { popOut } from "$lib/whiffle/motion/pop.svelte";
 
   let {
     label,
@@ -19,6 +20,36 @@
   const closingBraces = /^\}\}/;
   let cursor = $state(0);
   let open = $state(false);
+  let template = $state<HTMLElement>();
+  /** Where the list grows from: the caret, on the field's top edge below. */
+  let origin = $state("0 0");
+  let measure: CanvasRenderingContext2D | null = null;
+  function aimAtCaret(target: HTMLTextAreaElement | HTMLInputElement) {
+    measure ??= document.createElement("canvas").getContext("2d");
+    if (!(measure && template)) {
+      return;
+    }
+    const styles = getComputedStyle(target);
+    measure.font = `${styles.fontStyle} ${styles.fontWeight} ${styles.fontSize} ${styles.fontFamily}`;
+    const line =
+      target.value
+        .slice(0, target.selectionStart ?? 0)
+        .split("\n")
+        .at(-1) ?? "";
+    const left = Number.parseFloat(styles.paddingLeft);
+    // A textarea wraps a long line: the caret sits on its last row.
+    const room =
+      target.clientWidth - left - Number.parseFloat(styles.paddingRight);
+    const { width } = measure.measureText(line);
+    const along = multiline && room > 0 ? width % room : width;
+    const x =
+      target.getBoundingClientRect().left -
+      template.getBoundingClientRect().left +
+      left +
+      along -
+      target.scrollLeft;
+    origin = `${Math.min(template.clientWidth, Math.max(0, x)).toFixed(1)}px 0`;
+  }
   let active = $state(0);
   const prefix = $derived(value.slice(0, cursor));
   const start = $derived(prefix.lastIndexOf("{{"));
@@ -33,6 +64,7 @@
   function changed(event: Event) {
     const target = event.target as HTMLTextAreaElement;
     cursor = target.selectionStart;
+    aimAtCaret(target);
     open = true;
     active = 0;
     onchange(target.value);
@@ -72,7 +104,7 @@
     }
   }
 </script>
-<div class="template">
+<div class="template" bind:this={template}>
   <label for={fieldId}
     >{label}
     {#if multiline}
@@ -101,8 +133,11 @@
   {#if matches.length}
     <div
       aria-label="Template paths"
-      class="completer"
+      class="completer kit-pop"
+      data-state="open"
       role="listbox"
+      style:transform-origin={origin}
+      out:popOut
       {@attach highlight({ rows: "button", hovered: '[aria-selected="true"]' })}
     >
       {#each matches as path, index (path)}
@@ -131,11 +166,6 @@
     max-height: 240px;
     overflow-y: auto;
     z-index: 30;
-    background: var(--surface-raised);
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-sm);
-    box-shadow: var(--shadow-overlay);
-    padding: var(--space-1);
   }
   button {
     display: block;

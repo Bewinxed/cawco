@@ -5,7 +5,8 @@
  * turns back from where it is; open, the element is left at its natural
  * height, so content that arrives later is never clipped to a measurement.
  */
-import { motionOk } from "./curves.svelte";
+import type { TransitionConfig } from "svelte/transition";
+import { easeOut, motionOk } from "./curves.svelte";
 
 export interface FoldOptions {
   easing: string;
@@ -17,6 +18,8 @@ export interface FoldOptions {
 }
 
 const running = new WeakMap<HTMLElement, Animation>();
+/** Layouts whose gap an unfolding child brings with it. */
+const STACKS = /flex|grid/;
 
 /** The drawn height now, including a fold in flight. */
 const drawn = (node: HTMLElement) => node.getBoundingClientRect().height;
@@ -124,5 +127,53 @@ export function folds(open: () => boolean, options: FoldOptions) {
       }
       fold(node, next, options);
     });
+  };
+}
+
+/**
+ * The same fold for content an `{#if}` mounts and unmounts, as a Svelte
+ * transition: `in:unfold` grows it from nothing to its measured height
+ * (240ms), `out:unfold` folds it back (160ms), fading with the height, so
+ * what sits below slides instead of jumping. In a column with a gap, the
+ * gap it brings folds with it. With reduced motion, a fade in place.
+ */
+export function unfold(
+  node: HTMLElement,
+  _params?: unknown,
+  { direction }: { direction?: "in" | "out" | "both" } = {}
+): TransitionConfig {
+  if (!motionOk.current) {
+    return { duration: 120, css: (t) => `opacity: ${t}` };
+  }
+  const { height } = node.getBoundingClientRect();
+  const styles = getComputedStyle(node);
+  // Padding and borders fold with the height: a box cannot be drawn shorter
+  // than them, so left alone they would pop in and out at the ends.
+  const edges = [
+    "padding-top",
+    "padding-bottom",
+    "border-top-width",
+    "border-bottom-width",
+  ].map((edge) => [edge, Number.parseFloat(styles.getPropertyValue(edge))]);
+  const { parentElement: parent } = node;
+  const column =
+    parent !== null &&
+    parent.childElementCount > 1 &&
+    STACKS.test(getComputedStyle(parent).display)
+      ? Number.parseFloat(getComputedStyle(parent).rowGap) || 0
+      : 0;
+  return {
+    duration: direction === "out" ? 160 : 240,
+    easing: easeOut,
+    css: (t) =>
+      [
+        "overflow: hidden",
+        `height: ${(t * height).toFixed(2)}px`,
+        ...edges.map(
+          ([edge, px]) => `${edge}: ${(t * Number(px)).toFixed(2)}px`
+        ),
+        `margin-block-end: ${((t - 1) * column).toFixed(2)}px`,
+        `opacity: ${t}`,
+      ].join("; "),
   };
 }

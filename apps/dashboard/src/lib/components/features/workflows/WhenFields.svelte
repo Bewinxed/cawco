@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { WorkflowWhen } from "@whiffle/core";
+  import { unfold } from "$lib/whiffle/motion/fold.svelte";
   import JsonField from "./JsonField.svelte";
 
   let {
@@ -20,26 +21,41 @@
   </select></label
 >
 {#if value}
-  <label
-    >Path<input
-      oninput={(event) => value && onchange({ ...value, path: event.currentTarget.value })}
-      value={value.path}
-    ></label
-  ><label
-    >Operator<select
-      onchange={(event) => value && onchange({ ...value, op: event.currentTarget.value as WorkflowWhen['op'] })}
-      value={value.op}
+  <!-- The condition's fields open and fold as one: the rows below slide. -->
+  <div class="when" transition:unfold>
+    <label
+      >Path<input
+        oninput={(event) => value && onchange({ ...value, path: event.currentTarget.value })}
+        value={value.path}
+      ></label
+    ><label
+      >Operator<select
+        onchange={(event) => value && onchange({ ...value, op: event.currentTarget.value as WorkflowWhen['op'] })}
+        value={value.op}
+      >
+        {#each ['eq','neq','gt','lt','contains','matches','truthy','falsy'] as op (op)}
+          <option>{op}</option>
+        {/each}
+      </select></label
     >
-      {#each ['eq','neq','gt','lt','contains','matches','truthy','falsy'] as op (op)}
-        <option>{op}</option>
-      {/each}
-    </select></label
-  >
-  {#if value.op !== 'truthy' && value.op !== 'falsy'}
-    <JsonField
-      label="Compare with (JSON)"
-      onchange={(next) => value && onchange({ ...value, value: next })}
-      value={value.value ?? ''}
-    />
-  {/if}
+    {#if value.op !== 'truthy' && value.op !== 'falsy'}
+      <div class="when" transition:unfold>
+        <JsonField
+          label="Compare with (JSON)"
+          onchange={(next) => value && onchange({ ...value, value: next })}
+          value={value.value ?? ''}
+        />
+      </div>
+    {/if}
+  </div>
 {/if}
+
+<style>
+  /* One item of the column it sits in, spacing its own fields the same. */
+  .when {
+    display: flex;
+    flex-direction: column;
+    gap: inherit;
+    min-width: 0;
+  }
+</style>

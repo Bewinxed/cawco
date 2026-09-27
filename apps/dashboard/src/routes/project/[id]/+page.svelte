@@ -5,6 +5,7 @@
    * Whiffle's own.
    */
   import { untrack } from "svelte";
+  import { fade } from "svelte/transition";
   import { goto } from "$app/navigation";
   import MemoryCard from "$lib/components/features/MemoryCard.svelte";
   import { Alert, AlertDescription } from "$lib/components/ui/alert";
@@ -32,6 +33,8 @@
   import { conversationHref } from "$lib/whiffle/links";
   import MachineInventory from "$lib/whiffle/MachineInventory.svelte";
   import { machineLabel } from "$lib/whiffle/machine";
+  import { appear, easeOut } from "$lib/whiffle/motion/curves.svelte";
+  import { morph } from "$lib/whiffle/motion/morph.svelte";
   import OsMark from "$lib/whiffle/OsMark.svelte";
   import StoredSessionRow from "$lib/whiffle/StoredSessionRow.svelte";
   import { rememberSpawn, spawnPrefs } from "$lib/whiffle/spawnPrefs.svelte";
@@ -49,6 +52,8 @@
   let docs = $state<Doc[]>([]);
   let open = $state<Doc | null>(null);
   let content = $state("");
+  /** The document whose content is on screen: the open one, once it is read. */
+  let shown = $state<string | null>(null);
   let draft = $state<string | null>(null);
   let docsError = $state<string | null>(null);
   let docError = $state<string | null>(null);
@@ -107,13 +112,22 @@
     open = doc;
     draft = null;
     docError = null;
-    content = "";
-    expanded = false;
+    // The document on screen stays until the next one is read, then the two
+    // cross-fade: no blank card between them.
+    let next = "";
     try {
-      content = await machineFs<string>(project.machineId, "read", doc.path);
+      next = await machineFs<string>(project.machineId, "read", doc.path);
     } catch (error) {
-      docError = message(error);
+      if (open === doc) {
+        docError = message(error);
+      }
     }
+    if (open !== doc) {
+      return;
+    }
+    content = next;
+    shown = doc.path;
+    expanded = false;
   }
 
   async function save() {
@@ -534,17 +548,30 @@
                     <!-- Read to a line boundary and stop: the collapsed height is
                          a whole number of prose lines, and the last one fades out
                          rather than being sliced through by the card's edge. -->
-                    <div class="relative border-t border-border">
-                      <div
-                        class="overflow-y-auto px-[var(--space-6)] py-[var(--space-4)] md:px-[var(--space-7)]"
-                        style="max-height: {expanded ? '70vh' : COLLAPSED_DOC}"
-                        bind:this={docBody}
-                      >
-                        <div
-                          class="prose prose-sm dark:prose-invert max-w-[72ch]"
-                        >
-                          <Markdown source={content} />
-                        </div>
+                    <div
+                      class="relative border-t border-border"
+                      {@attach morph()}
+                    >
+                      <div class="grid">
+                        {#key shown}
+                          <div
+                            class="col-start-1 row-start-1 min-w-0"
+                            in:appear
+                            out:fade={{ duration: 120, easing: easeOut }}
+                          >
+                            <div
+                              class="overflow-y-auto px-[var(--space-6)] py-[var(--space-4)] md:px-[var(--space-7)]"
+                              style="max-height: {expanded ? '70vh' : COLLAPSED_DOC}"
+                              bind:this={docBody}
+                            >
+                              <div
+                                class="prose prose-sm dark:prose-invert max-w-[72ch]"
+                              >
+                                <Markdown source={content} />
+                              </div>
+                            </div>
+                          </div>
+                        {/key}
                       </div>
                       {#if !expanded && clipped}
                         <div

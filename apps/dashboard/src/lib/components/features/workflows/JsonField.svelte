@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { unfold } from "$lib/whiffle/motion/fold.svelte";
+
   let {
     label,
     value,
@@ -38,7 +40,7 @@
   ></textarea></label
 >
 {#if errorMessage}
-  <p class="wf-error" role="alert">
+  <p class="wf-error" role="alert" transition:unfold>
     {errorMessage}
     Changes are not applied until the JSON is valid.
   </p>

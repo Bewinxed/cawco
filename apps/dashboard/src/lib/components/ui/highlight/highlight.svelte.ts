@@ -293,6 +293,7 @@ export function highlight(options: HighlightOptions) {
       attributes: true,
       attributeFilter: [
         "aria-current",
+        "aria-pressed",
         "aria-selected",
         "aria-checked",
         "data-state",
