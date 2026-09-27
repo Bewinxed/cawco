@@ -130,7 +130,7 @@
     0 24px 64px var(--shadow-tint-3), 0 6px 16px var(--shadow-tint-2);
 
   /* Chrome materials. */
-  --material-panel: color-mix(in oklab, var(--neutral-1) 72%, transparent);
+  --material-panel: oklch(99.33% 0.0011 197.14 / 0.72);
   --material-blur: 20px;
   --material-saturate: 1.6;
 
@@ -221,8 +221,8 @@
   --destructive-foreground: var(--neutral-1);
 
   /* At night the hairline recedes to a seam; controls take their edge from input. */
-  --border: color-mix(in oklab, var(--neutral-12) 8%, transparent);
-  --input: color-mix(in oklab, var(--neutral-12) 14%, transparent);
+  --border: oklch(93.06% 0.0058 264.53 / 0.08);
+  --input: oklch(93.06% 0.0058 264.53 / 0.14);
   --ring: var(--focus-ring);
 
   --success: var(--success-9);
@@ -240,7 +240,7 @@
   --sidebar-primary-foreground: var(--neutral-1);
   --sidebar-accent: var(--neutral-3);
   --sidebar-accent-foreground: var(--neutral-12);
-  --sidebar-border: color-mix(in oklab, var(--neutral-12) 8%, transparent);
+  --sidebar-border: oklch(93.06% 0.0058 264.53 / 0.08);
   --sidebar-ring: var(--focus-ring);
 
   /* The Tailwind-facing ladder is an alias of the doctrine elevation set, not
@@ -253,7 +253,7 @@
   --shadow-xl: var(--shadow-drawer);
   --shadow-2xl: var(--shadow-drawer);
 
-  --material-panel: color-mix(in oklab, var(--neutral-2) 68%, transparent);
+  --material-panel: oklch(21.38% 0.0019 286.23 / 0.68);
 
   --chart-1: var(--accent-9);
   --chart-2: var(--info-9);
@@ -311,19 +311,15 @@
   --surface-hover: var(--neutral-2);
 
   /* borders — graded, never flattened to one value */
-  --border-hairline: color-mix(
-    in oklab,
-    var(--neutral-4) 34%,
-    var(--neutral-3)
-  );
+  --border-hairline: oklch(94.69% 0.0047 268.5);
   --border-control: var(--neutral-4);
 
   /* Inks. Subtle is the weakest mix that holds 4.5:1 on the fill and hover
      surfaces (15.2% light / 33.3% dark; 15.3% / 33.4% fail). */
   --ink-strong: var(--neutral-12);
   --ink-muted: var(--neutral-11);
-  --ink-subtle: color-mix(in oklab, var(--neutral-8) 15.2%, var(--neutral-11));
-  --ink-hover: oklch(from var(--ink-strong) calc(l - 0.05) c h);
+  --ink-subtle: oklch(53.6% 0.0121 266.4);
+  --ink-hover: oklch(25.03% 0.0061 258.35);
 
   /* accent aliases (graphite is the action; blue is reserved for focus) */
   --accent-solid: var(--accent-9);
@@ -352,54 +348,22 @@
 
   /* status — four functional hues + a hueless idle (idle carries NO fill) */
   --tint-depth: 76%;
-  --status-live-bg: color-mix(
-    in oklab,
-    var(--info-3) var(--tint-depth),
-    var(--info-9)
-  );
-  --status-attn-bg: color-mix(
-    in oklab,
-    var(--warning-3) var(--tint-depth),
-    var(--warning-9)
-  );
-  --status-done-bg: color-mix(
-    in oklab,
-    var(--success-3) var(--tint-depth),
-    var(--success-9)
-  );
-  --status-fail-bg: color-mix(
-    in oklab,
-    var(--error-3) var(--tint-depth),
-    var(--error-9)
-  );
+  --status-live-bg: oklch(78.75% 0.0521 243.84);
+  --status-attn-bg: oklch(84.66% 0.0969 90.84);
+  --status-done-bg: oklch(74.98% 0.1065 117.73);
+  --status-fail-bg: oklch(79.13% 0.088 32.54);
   --status-idle-bg: transparent;
   --ink-depth: 76%;
-  --status-live-ink: color-mix(
-    in oklab,
-    var(--info-11) var(--ink-depth),
-    var(--neutral-12)
-  );
-  --status-attn-ink: color-mix(
-    in oklab,
-    var(--warning-11) var(--ink-depth),
-    var(--neutral-12)
-  );
-  --status-done-ink: color-mix(
-    in oklab,
-    var(--success-11) var(--ink-depth),
-    var(--neutral-12)
-  );
-  --status-fail-ink: color-mix(
-    in oklab,
-    var(--error-11) var(--ink-depth),
-    var(--neutral-12)
-  );
+  --status-live-ink: oklch(30.46% 0.0539 253.63);
+  --status-attn-ink: oklch(35.33% 0.0548 88.67);
+  --status-done-ink: oklch(32.9% 0.0567 122.92);
+  --status-fail-ink: oklch(31% 0.0652 25.29);
   --status-idle-ink: var(--neutral-11);
 
   /* data colour — solid hue darkened so chroma survives in numerals */
-  --data-ok: oklch(from var(--success-9) 0.46 0.125 h);
-  --data-warn: oklch(from var(--warning-9) 0.46 0.125 h);
-  --data-bad: oklch(from var(--error-9) 0.46 0.135 h);
+  --data-ok: oklch(46% 0.125 122.9);
+  --data-warn: oklch(46% 0.125 85.8);
+  --data-bad: oklch(46% 0.135 27.8);
 
   /* identity marks — eight Flexoki accent hues, one lightness, white glyph */
   --mark-1: oklch(0.51 0.168 27.9);
@@ -410,13 +374,13 @@
   --mark-6: oklch(0.51 0.14 251.4);
   --mark-7: oklch(0.51 0.15 292.5);
   --mark-8: oklch(0.51 0.165 349.8);
-  --mark-glyph: oklch(from var(--neutral-1) 0.99 0 h);
+  --mark-glyph: oklch(99% 0 0);
 
   --mark-overlay: linear-gradient(
-    oklch(from var(--neutral-1) l c h / 0.22),
-    oklch(from var(--neutral-12) l c h / 0.06)
+    oklch(99.33% 0.0011 197.14 / 0.22),
+    oklch(30.03% 0.0061 258.35 / 0.06)
   );
-  --scrim: oklch(from var(--neutral-2) l c h / 0.72);
+  --scrim: oklch(98.16% 0.0017 247.84 / 0.72);
   --scrim-blur: 2px;
 
   /* Identity hues for duotone icon tiles (new-session modal). Light: the
@@ -436,24 +400,24 @@
      to 0.06 left every block invisible at its foot and the next one starting
      dark again — one line read as a stack of disconnected stubs. */
   --rail: linear-gradient(
-    oklch(from var(--neutral-11) l c h / 0.58),
-    oklch(from var(--neutral-11) l c h / 0.28)
+    oklch(49.95% 0.0117 267.27 / 0.58),
+    oklch(49.95% 0.0117 267.27 / 0.28)
   );
   /* What a row paints when it CONTINUES the line above it: flat, at the weight
      the head settles to, so the seam between two rail rows is not a seam. */
   --rail-body: linear-gradient(
-    oklch(from var(--neutral-11) l c h / 0.28),
-    oklch(from var(--neutral-11) l c h / 0.28)
+    oklch(49.95% 0.0117 267.27 / 0.28),
+    oklch(49.95% 0.0117 267.27 / 0.28)
   );
 
   /* elevation — hue-shifted cool graphite, never rgba(0,0,0,·) */
-  --shadow-tint: oklch(from var(--neutral-12) l c h / 0.09);
-  --shadow-tint-2: oklch(from var(--neutral-12) l c h / 0.14);
-  --shadow-tint-3: oklch(from var(--neutral-12) l c h / 0.2);
+  --shadow-tint: oklch(30.03% 0.0061 258.35 / 0.09);
+  --shadow-tint-2: oklch(30.03% 0.0061 258.35 / 0.14);
+  --shadow-tint-3: oklch(30.03% 0.0061 258.35 / 0.2);
   --shadow-hairline: 0 3px 7px -2px var(--shadow-tint-2);
   --shadow-tile:
-    0 1px 2px oklch(from var(--neutral-12) l c h / 0.07),
-    0 0 0 1px oklch(from var(--neutral-12) l c h / 0.035);
+    0 1px 2px oklch(30.03% 0.0061 258.35 / 0.07),
+    0 0 0 1px oklch(30.03% 0.0061 258.35 / 0.035);
   --shadow-raised: 0 1px 3px var(--shadow-tint), 0 1px 1px var(--shadow-tint);
   --shadow-overlay:
     0 18px 48px var(--shadow-tint-3), 0 2px 6px var(--shadow-tint);
@@ -525,28 +489,44 @@
   --c-top-bar-h: 44px;
   --c-card-pad: 14px;
   --c-card-gap: 10px;
+
+  /* Alpha and mix steps of the tokens above, written out as oklch() literals: Safari 15.6 has neither relative colour nor colour mixing */
+  --surface-recess-clear: oklch(95.52% 0.0041 271.37 / 0);
+  --surface-raised-82: oklch(99.33% 0.0011 197.14 / 0.82);
+  --surface-raised-70: oklch(99.33% 0.0011 197.14 / 0.7);
+  --surface-raised-55: oklch(99.33% 0.0011 197.14 / 0.55);
+  --brand-solid-28: oklch(30.03% 0.0061 258.35 / 0.28);
+  --accent-solid-60: oklch(51.88% 0.1179 263.31 / 0.6);
+  --accent-solid-45: oklch(51.88% 0.1179 263.31 / 0.45);
+  --accent-solid-18: oklch(51.88% 0.1179 263.31 / 0.18);
+  --ring-15: oklch(51.88% 0.1179 263.31 / 0.15);
+  --ink-strong-35: oklch(30.03% 0.0061 258.35 / 0.35);
+  --accent-text-35: oklch(50.02% 0.0707 263.21 / 0.35);
+  --machine-offline: oklch(64.86% 0.0132 264.02);
+  --diff-add-bg: oklch(55.9% 0.134 122.9 / 0.15);
+  --diff-del-bg: oklch(50.4% 0.165 27.8 / 0.15);
+  --scrollbar-thumb: oklch(49.95% 0.0117 267.27 / 0.35);
+  --scrollbar-thumb-hover: oklch(49.95% 0.0117 267.27 / 0.6);
+  --accent-solid-lch: 51.88% 0.1179 263.31;
+  --prose-bullets: oklch(49.95% 0.0117 267.27 / 0.55);
 }
 
 .dark {
   --surface-raised: var(--neutral-3);
   --surface-recess: var(--neutral-2);
   --surface-recess-deep: var(--neutral-1);
-  --surface-shelf: oklch(from var(--neutral-1) calc(l - 0.03) c h);
+  --surface-shelf: oklch(15.56% 0.0016 197.02);
   --surface-lift: var(--neutral-6);
   --surface-fill: var(--neutral-5);
   --surface-hover: var(--neutral-4);
 
-  --border-hairline: color-mix(
-    in oklab,
-    var(--neutral-5) 40%,
-    var(--neutral-4)
-  );
+  --border-hairline: oklch(29.78% 0.0064 268.01);
   --border-control: var(--neutral-6);
 
   --ink-strong: var(--neutral-12);
   --ink-muted: var(--neutral-11);
-  --ink-subtle: color-mix(in oklab, var(--neutral-8) 33.3%, var(--neutral-11));
-  --ink-hover: oklch(from var(--ink-strong) calc(l + 0.05) c h);
+  --ink-subtle: oklch(68.32% 0.0117 264.3);
+  --ink-hover: oklch(98.06% 0.0058 264.53);
 
   --focus-ring: var(--accent-11);
   --brand-solid: var(--neutral-12);
@@ -566,13 +546,13 @@
   --info-11: oklch(78.2% 0.062 235.9);
 
   --tint-depth: 76%;
-  --status-attn-bg: color-mix(in oklab, var(--warning-3) 68%, var(--warning-9));
-  --status-fail-bg: color-mix(in oklab, var(--error-3) 68%, var(--error-9));
+  --status-attn-bg: oklch(47.02% 0.0945 87.65);
+  --status-fail-bg: oklch(38.88% 0.1129 27.06);
   --status-idle-bg: transparent;
   --status-idle-ink: var(--neutral-11);
-  --data-ok: oklch(from var(--success-9) 0.78 0.135 h);
-  --data-warn: oklch(from var(--warning-9) 0.8 0.13 h);
-  --data-bad: oklch(from var(--error-9) 0.81 0.13 h);
+  --data-ok: oklch(78% 0.135 121.2);
+  --data-warn: oklch(80% 0.13 86.8);
+  --data-bad: oklch(81% 0.13 27.9);
 
   --mark-1: oklch(0.7 0.17 27.9);
   --mark-2: oklch(0.7 0.15 47.4);
@@ -583,32 +563,61 @@
   --mark-7: oklch(0.7 0.155 292.5);
   --mark-8: oklch(0.7 0.17 349.8);
 
-  --shadow-tint: oklch(from var(--neutral-1) l c h / 0.55);
-  --shadow-tint-2: oklch(from var(--neutral-1) l c h / 0.66);
-  --shadow-tint-3: oklch(from var(--neutral-1) l c h / 0.76);
-  --scrim: oklch(from var(--neutral-1) l c h / 0.72);
-  --shadow-raised: inset 0 0 0 1px oklch(from var(--neutral-7) l c h / 0.7);
+  --shadow-tint: oklch(18.56% 0.0016 197.02 / 0.55);
+  --shadow-tint-2: oklch(18.56% 0.0016 197.02 / 0.66);
+  --shadow-tint-3: oklch(18.56% 0.0016 197.02 / 0.76);
+  --scrim: oklch(18.56% 0.0016 197.02 / 0.72);
+  --shadow-raised: inset 0 0 0 1px oklch(40.52% 0.0124 267.22 / 0.7);
   --mark-glyph: var(--neutral-1);
 
   /* Dark: same chroma, lightness raised so the tiles read on the dark surface. */
-  --hue-cyan-400: oklch(from #38bdf8 0.8 c h);
-  --hue-cyan-500: oklch(from #14b0e0 0.78 c h);
-  --hue-amber-500: oklch(from #f0ad1f 0.82 c h);
-  --hue-orange-500: oklch(from #f97316 0.76 c h);
-  --hue-green-500: oklch(from #22c55e 0.76 c h);
-  --hue-green-600: oklch(from #16a34a 0.74 c h);
-  --hue-blue-500: oklch(from #3b7bff 0.74 c h);
-  --hue-blue-600: oklch(from #2f5ce6 0.72 c h);
-  --hue-red-500: oklch(from #ef4444 0.72 c h);
-  --hue-red-600: oklch(from #dc2626 0.7 c h);
+  --hue-cyan-400: oklch(80% 0.139 232.66);
+  --hue-cyan-500: oklch(78% 0.1331 226.72);
+  --hue-amber-500: oklch(82% 0.1577 79.28);
+  --hue-orange-500: oklch(76% 0.1867 47.6);
+  --hue-green-500: oklch(76% 0.192 149.58);
+  --hue-green-600: oklch(74% 0.1699 149.21);
+  --hue-blue-500: oklch(74% 0.2076 262.53);
+  --hue-blue-600: oklch(72% 0.2148 265.52);
+  --hue-red-500: oklch(72% 0.2078 25.33);
+  --hue-red-600: oklch(70% 0.2152 27.33);
   --rail: linear-gradient(
-    oklch(from var(--neutral-11) l c h / 0.55),
-    oklch(from var(--neutral-11) l c h / 0.3)
+    oklch(77.92% 0.0104 267.34 / 0.55),
+    oklch(77.92% 0.0104 267.34 / 0.3)
   );
   --rail-body: linear-gradient(
-    oklch(from var(--neutral-11) l c h / 0.3),
-    oklch(from var(--neutral-11) l c h / 0.3)
+    oklch(77.92% 0.0104 267.34 / 0.3),
+    oklch(77.92% 0.0104 267.34 / 0.3)
   );
+
+  /* Alpha and mix steps of the tokens above, written out as oklch() literals: Safari 15.6 has neither relative colour nor colour mixing */
+  --status-live-bg: oklch(36.19% 0.0815 252.75);
+  --status-done-bg: oklch(40.21% 0.0894 121.65);
+  --status-live-ink: oklch(81.77% 0.0483 236.69);
+  --status-attn-ink: oklch(86.93% 0.0982 92.41);
+  --status-done-ink: oklch(83.89% 0.0733 116.06);
+  --status-fail-ink: oklch(89.37% 0.0477 35.15);
+  --mark-overlay: linear-gradient(
+    oklch(18.56% 0.0016 197.02 / 0.22),
+    oklch(93.06% 0.0058 264.53 / 0.06)
+  );
+  --shadow-tile:
+    0 1px 2px oklch(93.06% 0.0058 264.53 / 0.07),
+    0 0 0 1px oklch(93.06% 0.0058 264.53 / 0.035);
+  --surface-recess-clear: oklch(21.38% 0.0019 286.23 / 0);
+  --surface-raised-82: oklch(25.17% 0.004 264.49 / 0.82);
+  --surface-raised-70: oklch(25.17% 0.004 264.49 / 0.7);
+  --surface-raised-55: oklch(25.17% 0.004 264.49 / 0.55);
+  --brand-solid-28: oklch(93.06% 0.0058 264.53 / 0.28);
+  --ring-15: oklch(78.07% 0.0711 263.25 / 0.15);
+  --ink-strong-35: oklch(93.06% 0.0058 264.53 / 0.35);
+  --accent-text-35: oklch(78.07% 0.0711 263.25 / 0.35);
+  --machine-offline: oklch(60.05% 0.0128 262.15);
+  --diff-add-bg: oklch(60.5% 0.132 121.2 / 0.15);
+  --diff-del-bg: oklch(55% 0.168 27.9 / 0.15);
+  --scrollbar-thumb: oklch(77.92% 0.0104 267.34 / 0.35);
+  --scrollbar-thumb-hover: oklch(77.92% 0.0104 267.34 / 0.6);
+  --prose-bullets: oklch(77.92% 0.0104 267.34 / 0.55);
 }
 
 @theme inline {
@@ -761,10 +770,10 @@
 
   /* Browser surfaces carry the design too. */
   ::selection {
-    background: color-mix(in oklab, var(--accent-9) 22%, transparent);
+    background: oklch(51.88% 0.1179 263.31 / 0.22);
   }
   .dark ::selection {
-    background: color-mix(in oklab, var(--accent-9) 32%, transparent);
+    background: oklch(51.88% 0.1179 263.31 / 0.32);
   }
 
   input,
@@ -805,11 +814,7 @@
   --tw-prose-links: var(--primary);
   --tw-prose-bold: var(--foreground);
   --tw-prose-counters: var(--muted-foreground);
-  --tw-prose-bullets: color-mix(
-    in oklch,
-    var(--muted-foreground) 55%,
-    transparent
-  );
+  --tw-prose-bullets: var(--prose-bullets);
   --tw-prose-hr: var(--border);
   --tw-prose-quotes: var(--muted-foreground);
   --tw-prose-quote-borders: var(--border);
@@ -1070,7 +1075,7 @@
 
 .custom-scrollbar::-webkit-scrollbar-thumb,
 *::-webkit-scrollbar-thumb {
-  background: color-mix(in oklch, var(--muted-foreground) 35%, transparent);
+  background: var(--scrollbar-thumb);
   border-radius: 4px;
   background-clip: padding-box;
   border: 2px solid transparent;
@@ -1078,15 +1083,14 @@
 
 .custom-scrollbar::-webkit-scrollbar-thumb:hover,
 *::-webkit-scrollbar-thumb:hover {
-  background: color-mix(in oklch, var(--muted-foreground) 60%, transparent);
+  background: var(--scrollbar-thumb-hover);
   background-clip: padding-box;
   border: 2px solid transparent;
 }
 
 * {
   scrollbar-width: thin;
-  scrollbar-color: color-mix(in oklch, var(--muted-foreground) 35%, transparent)
-    transparent;
+  scrollbar-color: var(--scrollbar-thumb) transparent;
 }
 
 .no-scrollbar {

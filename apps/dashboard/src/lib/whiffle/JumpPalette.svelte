@@ -381,7 +381,7 @@
     cursor: pointer;
   }
   .jump-chip-off:hover {
-    background: color-mix(in oklab, var(--accent-solid) 18%, transparent);
+    background: var(--accent-solid-18);
     color: var(--accent-text);
   }
 

@@ -81,6 +81,9 @@
     white-space: pre;
   }
   .ln span {
-    color: light-dark(var(--l), var(--d));
+    color: var(--l);
+  }
+  :global(.dark) .ln span {
+    color: var(--d);
   }
 </style>
