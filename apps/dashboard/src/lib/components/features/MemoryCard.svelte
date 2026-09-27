@@ -188,7 +188,7 @@
        screenful above the caret, so the way out of the editor scrolled away
        from the person using it. -->
   <header
-    class="sticky top-0 z-10 flex items-center gap-3 border-b border-border-a50 bg-card px-[var(--space-4)] py-[var(--space-2)]"
+    class="sticky top-0 z-10 flex items-center gap-3 border-b border-border/50 bg-card px-[var(--space-4)] py-[var(--space-2)]"
   >
     <span
       class="min-w-0 truncate font-mono text-label text-muted-foreground"
