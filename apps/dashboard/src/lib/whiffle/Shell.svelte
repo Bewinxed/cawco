@@ -507,7 +507,11 @@
     <!-- Server-side there is no socket to have lost, so the banner would render
          into every first paint and flash away on hydration. -->
     {#if browser && showBanner}
-      <div class="banner {everConnected ? 'warn' : 'bad'}" role="status">
+      <div
+        class="banner {everConnected ? 'warn' : 'bad'}"
+        role="status"
+        transition:appear
+      >
         {#if everConnected}
           <span>Hub connection lost — retrying in {retryIn}s</span>
           <Button onclick={reconnectNow} size="sm" variant="outline"
@@ -604,6 +608,7 @@
   }
 
   .main {
+    position: relative;
     flex: 1 1 auto;
     min-width: 0;
     display: flex;
@@ -809,14 +814,29 @@
     }
   }
 
+  /* The banner floats over the page's top edge, under the bar, rather than
+     taking a row of its own: it comes and goes with the socket, often for a
+     second while the hub restarts, and a row pushed the whole page down and
+     back each time (0.52 CLS on the board for one restart). */
   .banner {
-    flex-shrink: 0;
+    position: absolute;
+    inset-inline: 0;
+    top: var(--c-top-bar-h);
+    z-index: 10;
+    box-shadow: var(--shadow-tile);
     display: flex;
     align-items: center;
     gap: var(--space-3);
+    font-variant-numeric: tabular-nums;
     padding: var(--space-2) var(--space-6) var(--space-2) var(--space-7);
     font-size: var(--text-label);
     border-bottom: 1px solid var(--border-hairline);
+  }
+  /* The sentence takes the room, so the countdown ticking in it never moves
+     the button at the end. */
+  .banner > span {
+    flex: 1 1 auto;
+    min-width: 0;
   }
   .banner.warn {
     background: var(--status-attn-bg);

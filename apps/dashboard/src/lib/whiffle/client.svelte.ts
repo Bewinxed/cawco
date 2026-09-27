@@ -126,10 +126,24 @@ export type ConnectionStatus =
 /**
  * What to *tell a reader* about the hub, which is coarser than the socket's own
  * state on purpose. `connecting` is the transient every cold load passes
- * through and is never a fault; `unreachable` is one — the hub is a process on
- * somebody's machine, and it being off is the ordinary case, not the exotic one.
+ * through, and a dropped socket's first seconds of retrying, and is never a
+ * fault; `unreachable` is one — the hub is a process on somebody's machine,
+ * and it being off is the ordinary case, not the exotic one. It holds from
+ * {@link OUTAGE_GRACE} after the socket went until the hub is back, through
+ * every retry in between.
  */
 export type HubState = "connected" | "connecting" | "unreachable";
+
+/**
+ * How long the hub is gone before the dashboard calls it unreachable. A drop
+ * is most often a restart or a blip that the first retries answer within a
+ * second or two, and surfaces that speak of an unreachable hub (the board's
+ * empty state, a section's note) took a row each and gave it back, moving the
+ * page twice for a hub that was never really away. The reconnect banner says
+ * the socket is down from the first moment, over the page.
+ */
+const OUTAGE_GRACE = 4000;
+let outageTimer: ReturnType<typeof setTimeout> | undefined;
 
 /** A machine from the hub registry (`GET /api/agents`, and `instances` frames). */
 export type Machine = AgentRow;
@@ -444,19 +458,18 @@ const state = $state({
   previewRequests: {} as Record<string, number>,
   status: "disconnected" as ConnectionStatus,
   /**
-   * Whether a socket has ever been opened for this document. A dashboard that
-   * has not tried yet reads `disconnected` off the socket exactly like one whose
-   * attempt failed, and only the second of those is a fault worth shouting.
-   */
-  attempted: false,
-  /**
    * Whether an attempt has actually FAILED — the socket errored, or closed
-   * without ever opening. `attempted` says a socket was made; this says one came
-   * back empty-handed, which is the only thing that justifies telling the reader
-   * the hub cannot be reached. Cleared on every open, so a healthy load never
-   * carries a fault forward.
+   * without ever opening. A dashboard that has not tried yet reads
+   * `disconnected` off the socket exactly like one whose attempt failed; this
+   * says one came back empty-handed. Cleared on every open, so a healthy load
+   * never carries a fault forward.
    */
   failed: false,
+  /**
+   * The hub has been gone for {@link OUTAGE_GRACE}: set by a timer the first
+   * close starts, cleared on the next open. Retries in between leave it set.
+   */
+  outage: false,
   /** When the next reconnect attempt fires, so the banner can count it down. */
   retryAt: null as number | null,
   /** The first REST read of the fleet (machines, sessions, projects) is in. */
@@ -2804,7 +2817,6 @@ function connect(): void {
   globalThis.__whiffleDisposing = false;
   teardown();
   state.status = "connecting";
-  state.attempted = true;
 
   const socket = new WebSocket(hubSocketUrl());
 
@@ -2812,6 +2824,9 @@ function connect(): void {
     state.status = "connected";
     state.retryAt = null;
     state.failed = false;
+    clearTimeout(outageTimer);
+    outageTimer = undefined;
+    state.outage = false;
     globalThis.__whiffleReconnectAttempts = 0;
     // biome-ignore lint/complexity/noVoid: fire-and-forget — the socket is already marked connected, the fleet state fills in when it lands
     void refresh().then(refreshCatalogs);
@@ -2871,6 +2886,12 @@ function bind(socket: WebSocket): void {
     state.status = "disconnected";
     // A socket that closed is an attempt that is over, one way or the other.
     state.failed = true;
+    if (!(state.outage || outageTimer)) {
+      outageTimer = setTimeout(() => {
+        outageTimer = undefined;
+        state.outage = true;
+      }, OUTAGE_GRACE);
+    }
     abandonInflight("The connection to the hub dropped before that finished.");
     // Subscriptions, resumes and unanswered commands all died with the socket;
     // the cursors do not — resuming from them is what the hub's ring is for.
@@ -2905,7 +2926,6 @@ export function ensureConnected(): void {
     // has already fired for an open socket and will never fire again, so the
     // status has to be read off the socket instead of waited for.
     claimed = true;
-    state.attempted = true;
     bind(socket);
     if (socket.readyState === WebSocket.OPEN) {
       state.status = "connected";
@@ -5078,10 +5098,7 @@ export const whiffle = {
     if (state.status === "connected") {
       return "connected";
     }
-    if (state.status === "connecting" || !state.attempted) {
-      return "connecting";
-    }
-    return "unreachable";
+    return state.outage ? "unreachable" : "connecting";
   },
   /**
    * Whether the last attempt to reach the hub came back empty-handed. What
