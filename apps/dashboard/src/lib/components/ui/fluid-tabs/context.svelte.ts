@@ -1,10 +1,10 @@
 /**
  * Shared state for the Fluid Functionalism tabs: which value is chosen and
- * in what order the items sit (the root), and which item the pointer is
- * nearest (the list). Set by the root and the list, read by the items.
+ * in what order the items sit (the root), and where each item sits in the
+ * track (the list). Set by the root and the list, read by the items.
  */
 import { getContext, setContext } from "svelte";
-import type { ProximityHover } from "$lib/hooks/proximity-hover.svelte";
+import type { TabRects } from "./rects.svelte";
 
 export type TabsSize = "default" | "compact";
 /** A segmented control in a well, or folder tabs standing on a shelf. */
@@ -67,14 +67,14 @@ export class TabsState {
 }
 
 export class TabsListState {
-  hover: ProximityHover;
+  rects: TabRects;
   /** Where the indicator is drawn — moved on click, ahead of the value. */
   optimisticIndex = $state<number | null>(null);
   focusedIndex = $state<number | null>(null);
   #next = 0;
 
-  constructor(hover: ProximityHover) {
-    this.hover = hover;
+  constructor(rects: TabRects) {
+    this.rects = rects;
   }
 
   /** Items take an index in mount order. */

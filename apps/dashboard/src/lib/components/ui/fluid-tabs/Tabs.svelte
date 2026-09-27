@@ -1,7 +1,7 @@
 <script lang="ts">
   /**
    * Fluid Functionalism's Tabs, the root: a segmented control with a sliding
-   * active indicator, proximity hover and a weight that animates. Controlled
+   * active indicator, the kit hover ghost and a weight that animates. Controlled
    * by `value` or `selectedIndex`, uncontrolled by `defaultValue`; without
    * either, the first item is chosen so the indicator has somewhere to be
    * from the first paint.
