@@ -41,7 +41,7 @@
     height: 18px;
     flex: 0 0 auto;
     border-radius: var(--radius-xs);
-    background: var(--brand-solid-a28);
+    background: oklch(from var(--brand-solid) l c h / 0.28);
   }
   .name {
     width: 64px;
@@ -70,7 +70,7 @@
     background: linear-gradient(
       90deg,
       transparent 0 35%,
-      var(--surface-raised-a55) 50%,
+      oklch(from var(--surface-raised) l c h / 0.55) 50%,
       transparent 65% 100%
     );
     transform: translateX(-100%);

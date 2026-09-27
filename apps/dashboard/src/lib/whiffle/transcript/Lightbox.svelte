@@ -69,12 +69,8 @@
     background: var(--surface-recess);
     color: var(--ink-muted);
   }
-  /* Literal --scrim values: before Safari 17, ::backdrop inherits no custom properties. */
   dialog::backdrop {
-    background: oklch(98.16% 0.0017 247.84 / 0.72);
-  }
-  :global(.dark) dialog::backdrop {
-    background: oklch(18.56% 0.0016 197.02 / 0.72);
+    background: var(--scrim);
   }
   img {
     display: block;

@@ -369,7 +369,7 @@
     cursor: pointer;
   }
   .jump-chip-off:hover {
-    background: var(--accent-solid-a18);
+    background: oklch(from var(--accent-solid) l c h / 0.18);
     color: var(--accent-text);
   }
 

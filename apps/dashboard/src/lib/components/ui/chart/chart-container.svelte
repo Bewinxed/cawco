@@ -34,7 +34,7 @@
 		// Stroke around dots/marks when hovering
 		"[&_.lc-highlight-point]:stroke-transparent",
 		// override the default stroke color of lines
-		"[&_.lc-line]:stroke-border-a50",
+		"[&_.lc-line]:stroke-border/50",
 
 		// by default, layerchart shows a line intersecting the point when hovering, this hides that
 		"[&_.lc-highlight-line]:stroke-0",
@@ -80,68 +80,12 @@
 </div>
 
 <style>
-  /* layerchart tints its lines and surfaces by mixing the chart ink with
-     transparent, which Safari 15.6 cannot do. The chart ink here is
-     --ink-strong (layerchart falls back to currentColor), so these are the
-     same tints as app alpha steps. layerchart's selectors are all :where(),
-     so one class wins. Its .debug styles are left alone: no chart here sets
-     `debug`. */
-  [data-slot="chart"] :global(:is(.lc-axis-rule, .lc-axis-tick)) {
-    --stroke-color: var(--ink-strong-a50);
-  }
-  [data-slot="chart"]
-    :global(
-      :is(
-        .lc-rule-x-line,
-        .lc-rule-y-line,
-        .lc-rule-x-radial-line,
-        .lc-rule-y-radial-circle
-      ):not([class*="lc-axis"], [class*="lc-grid"])
-    ) {
-    --stroke-color: var(--ink-strong-a50);
-  }
-  [data-slot="chart"]
-    :global(
-      :is(
-        .lc-axis-grid,
-        .lc-grid-x-rule,
-        .lc-grid-x-end-rule,
-        .lc-grid-x-radial-line,
-        .lc-grid-y-rule,
-        .lc-grid-y-end-rule,
-        .lc-grid-y-radial-line,
-        .lc-grid-y-radial-circle
-      )
-    ) {
-    --stroke-color: var(--ink-strong-a10);
-  }
-  [data-slot="chart"] :global(.lc-highlight-area) {
-    --fill-color: var(--ink-strong-a5);
-  }
-  [data-slot="chart"] :global(.lc-highlight-line) {
-    --stroke-color: var(--ink-strong-a20);
-  }
-  [data-slot="chart"] :global(.lc-brush-range) {
-    background: var(--ink-strong-a10);
-  }
-  [data-slot="chart"] :global(.lc-tooltip-header) {
-    border-bottom-color: var(--ink-strong-a20);
-  }
-  [data-slot="chart"] :global(.lc-tooltip-separator) {
-    background-color: var(--ink-strong-a20);
-  }
-  [data-slot="chart"] :global(.lc-tooltip-container[data-variant="default"]) {
-    background-color: var(--surface-raised-a90);
-  }
-  [data-slot="chart"]
-    :global(.lc-tooltip-container[data-variant="default"] .label) {
-    color: var(--ink-strong-a75);
-  }
-  [data-slot="chart"] :global(.lc-tooltip-container[data-variant="invert"]) {
-    background-color: var(--ink-strong-a90);
-  }
-  [data-slot="chart"]
-    :global(.lc-tooltip-container[data-variant="invert"] .label) {
-    color: var(--surface-raised-a50);
+  /* layerchart paints its axis, grid, rule, highlight, brush and tooltip
+     tints from its own theme variables; these hand it the app's ink and
+     raised surface, so every tint it mixes is an app colour. */
+  [data-slot="chart"] {
+    --color-surface-content: var(--ink-strong);
+    --color-surface-100: var(--surface-raised);
+    --color-surface-300: var(--surface-raised);
   }
 </style>
