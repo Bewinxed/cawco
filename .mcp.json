@@ -2,16 +2,11 @@
   "mcpServers": {
     "playwriter": {
       "command": "npx",
-      "args": ["playwriter@latest"],
+      "args": [
+        "playwriter@latest"
+      ],
       "env": {
         "PLAYWRITER_AUTO_ENABLE": "1"
-      }
-    },
-    "firecrawl": {
-      "type": "http",
-      "url": "https://flare.bewinxed.com/mcp",
-      "headers": {
-        "Authorization": "Bearer ${FIRECRAWL_MCP_KEY}"
       }
     }
   }
