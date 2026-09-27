@@ -325,11 +325,6 @@
   const built = $derived.by<Built>(() => {
     // biome-ignore lint/complexity/noVoid: the bump that hands over a two-step change's second step.
     void secondStep;
-    if (pending) {
-      const next = pending;
-      pending = null;
-      return { rows: next, shifted: frontOnly(frozen, next), ended: null };
-    }
     // The switch flush paints what is already there; the catch-up comes
     // after the paint, through the hold letting go.
     if (risen !== builtRises) {
@@ -351,16 +346,35 @@
       // the print, in place of the tracked reads `untrack` below hides.
       // biome-ignore lint/complexity/noVoid: see comment above — a bare reference would look unused and get "cleaned up".
       void rebuildTick;
-      return untrack(() => (printOf() === builtPrint ? STILL_BUILD() : run()));
+      return untrack(rebuild);
     }
-    // Reading the print tracks exactly the handful of fields that mean "there
-    // is something new to draw", so an unchanged session cannot invalidate
-    // this at all — and a changed one still rebuilds on the very next frame.
-    if (primed && printOf() === builtPrint) {
+    return rebuild();
+  });
+
+  /**
+   * What the build returns once the switch and the tier have had their say.
+   *
+   * Reading the print tracks exactly the handful of fields that mean "there
+   * is something new to draw", so an unchanged session cannot invalidate
+   * this at all — and a changed one still rebuilds on the very next frame.
+   * It is read BEFORE the second step of a two-step change is handed over:
+   * a build that returned the second step without it depended on the bump
+   * alone, and nothing the session wrote after that rebuilt the rows. A
+   * session that moved between the two steps drops the second one and is
+   * built afresh from the first.
+   */
+  function rebuild(): Built {
+    const current = printOf() === builtPrint;
+    const next = pending;
+    pending = null;
+    if (next && current) {
+      return { rows: next, shifted: frontOnly(frozen, next), ended: null };
+    }
+    if (primed && current) {
       return STILL_BUILD();
     }
     return run();
-  });
+  }
 
   /**
    * The switch itself: the build that meets the rising edge of `visible` or
