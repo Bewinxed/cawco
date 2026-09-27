@@ -818,7 +818,10 @@
         role="combobox"
         bind:this={field}
         bind:value={draft.text}
-        {@attach autosize(() => draft.text)}
+        {@attach autosize(
+          () => draft.text,
+          () => draft
+        )}
         {@attach fitHint}
       ></textarea>
     </label>

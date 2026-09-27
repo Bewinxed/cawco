@@ -1,12 +1,60 @@
 /**
+ * A fit that measures in the next frame's callbacks, once however often it
+ * is asked for before then. A change of state — a mount, a value swapped
+ * in — never measures in the task that made it: that task has just written
+ * the page, and reading layout back there makes the browser lay it out
+ * mid-task (a swipe's release paid 30ms for it). A frame's callbacks run
+ * before its style and layout, so the first frame painted is already the
+ * fitted one. A `still` fit lands with the field's own transition off: the
+ * size is the text's, not a change to watch. The transition comes back a
+ * frame later, once that frame's style has taken the new size.
+ */
+function nextFrame(node: HTMLElement, fit: () => void) {
+  let frame = 0;
+  let unstill = 0;
+  let still = false;
+  return {
+    request(instant: boolean) {
+      still ||= instant;
+      if (frame) {
+        return;
+      }
+      frame = requestAnimationFrame(() => {
+        frame = 0;
+        if (still) {
+          still = false;
+          node.style.transition = "none";
+          unstill = requestAnimationFrame(() => {
+            node.style.transition = "";
+          });
+        }
+        fit();
+      });
+    },
+    cancel() {
+      cancelAnimationFrame(frame);
+      cancelAnimationFrame(unstill);
+    },
+  };
+}
+
+/**
  * A textarea that grows with what is in it, the same way on every engine:
  * its height is measured from the text (scrollHeight) and set in pixels, so
  * a CSS height transition carries each new line in instead of the field
  * jumping. `min-height` and `max-height` in CSS still bound it; past the
  * ceiling it scrolls. Attach with the value it shows:
  * `{@attach autosize(() => value)}`.
+ *
+ * `source` is where the value comes from, for a field that is handed a
+ * different text wholesale (a group's one composer, lent to whichever
+ * conversation its swipe lands on): a new source's text is not an edit, so
+ * the field takes its size without the tween — as it does on mount.
  */
-export function autosize(value: () => unknown) {
+export function autosize(
+  value: () => unknown,
+  source: () => unknown = () => undefined
+) {
   return (node: HTMLTextAreaElement) => {
     // Measured on a hidden twin, never on the field: collapsing the field to
     // measure it would cancel the height transition it is running.
@@ -26,8 +74,10 @@ export function autosize(value: () => unknown) {
     twin.style.cssText =
       "position:absolute;visibility:hidden;pointer-events:none;height:auto;min-height:0;max-height:none;overflow:hidden;inset-block-start:0;inset-inline-start:-9999px;transition:none";
     node.after(twin);
+    let width = 0;
     const fit = () => {
-      twin.style.width = `${node.offsetWidth}px`;
+      width = node.offsetWidth;
+      twin.style.width = `${width}px`;
       twin.value = node.value;
       const border = node.offsetHeight - node.clientHeight;
       const next = `${twin.scrollHeight + border}px`;
@@ -35,25 +85,33 @@ export function autosize(value: () => unknown) {
         node.style.height = next;
       }
     };
+    const later = nextFrame(node, fit);
+    let first = true;
+    let from: unknown;
     $effect(() => {
       value();
-      fit();
+      const next = source();
+      later.request(first || next !== from);
+      first = false;
+      from = next;
     });
+    // Typing fits at once: the keystroke that adds a line grows the field
+    // in the frame it paints.
     node.addEventListener("input", fit);
     // A narrower field wraps into more lines. Refit on the next frame:
     // resizing the field inside its own observer's callback would report
-    // the resize back to that observer in the same frame.
-    let width = node.offsetWidth;
-    const sizes = new ResizeObserver(() => {
-      if (Math.abs(node.offsetWidth - width) > 0.5) {
-        width = node.offsetWidth;
-        requestAnimationFrame(fit);
+    // the resize back to that observer in the same frame. The observer's
+    // own box says how wide it is; asking the field would lay it out again.
+    const sizes = new ResizeObserver(([entry]) => {
+      if (Math.abs(entry.borderBoxSize[0].inlineSize - width) > 0.5) {
+        later.request(false);
       }
     });
     sizes.observe(node);
     return () => {
       node.removeEventListener("input", fit);
       sizes.disconnect();
+      later.cancel();
       twin.remove();
     };
   };
@@ -88,13 +146,15 @@ export function autowidth(value: () => unknown) {
         Number.parseFloat(style.borderInlineEndWidth);
       node.style.width = `${Math.ceil(twin.getBoundingClientRect().width + pad + 2)}px`;
     };
+    const later = nextFrame(node, fit);
     $effect(() => {
       value();
-      fit();
+      later.request(false);
     });
     node.addEventListener("input", fit);
     return () => {
       node.removeEventListener("input", fit);
+      later.cancel();
       twin.remove();
     };
   };

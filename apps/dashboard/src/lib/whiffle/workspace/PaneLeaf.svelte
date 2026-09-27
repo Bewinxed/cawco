@@ -154,15 +154,22 @@
   let stack = $state<HTMLElement>();
   let shownIndex = untrack(() => activeIndex);
 
+  // Started in the next frame's callbacks, never in the task that made the
+  // switch: the curve is read off the stylesheet, and reading style there
+  // restyles the page mid-task. The callbacks run before that frame's
+  // style, so the first frame the arriving transcript paints is already
+  // the glide's first.
   $effect(() => {
     const index = activeIndex;
     const id = viewId;
+    let frame = 0;
     untrack(() => {
       const fromIndex = shownIndex;
       shownIndex = index;
+      const track = stack;
       if (
         swipeable ||
-        !(stack && motion.current) ||
+        !(track && motion.current) ||
         index < 0 ||
         fromIndex < 0 ||
         index === fromIndex
@@ -170,21 +177,24 @@
         return;
       }
       const dir = Math.sign(index - fromIndex);
-      stack
-        .querySelector<HTMLElement>(
-          `:scope > .pane[data-pane="${CSS.escape(id)}"]`
-        )
-        ?.animate(
-          [
-            { transform: `translateX(${dir * NUDGE_PX}px)`, opacity: 0.4 },
-            { transform: "none", opacity: 1 },
-          ],
-          {
-            duration: SWITCH_MS,
-            easing: getComputedStyle(stack).getPropertyValue("--ease-drawer"),
-          }
-        );
+      frame = requestAnimationFrame(() => {
+        track
+          .querySelector<HTMLElement>(
+            `:scope > .pane[data-pane="${CSS.escape(id)}"]`
+          )
+          ?.animate(
+            [
+              { transform: `translateX(${dir * NUDGE_PX}px)`, opacity: 0.4 },
+              { transform: "none", opacity: 1 },
+            ],
+            {
+              duration: SWITCH_MS,
+              easing: getComputedStyle(track).getPropertyValue("--ease-drawer"),
+            }
+          );
+      });
     });
+    return () => cancelAnimationFrame(frame);
   });
 
   $effect(() => {

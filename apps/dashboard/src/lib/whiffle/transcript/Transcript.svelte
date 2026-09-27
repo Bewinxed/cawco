@@ -980,17 +980,20 @@
         (box, i) => i === 0 || box.top <= boxes[i - 1].bottom + 1
       );
     };
+    // Measured in the next frame's callbacks, never in the task that
+    // changed the rows (a tab switch landing a pane among them): reading
+    // the rows there lays the page out mid-task. The callbacks run before
+    // that frame's layout, so the rows are shown in the frame they are
+    // found measured, as before.
     const wait = (): void => {
       if (frame !== null) {
         cancelAnimationFrame(frame);
-        frame = null;
-      }
-      if (!measured()) {
-        return;
       }
       frame = requestAnimationFrame(() => {
         frame = null;
-        shown = true;
+        if (measured()) {
+          shown = true;
+        }
       });
     };
     const changes = new MutationObserver(wait);
@@ -1078,20 +1081,11 @@
     following = requestAnimationFrame(step);
   }
 
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: first landing and streaming follow share the scroll ownership state
   function land(): void {
     if (landed && opening > 0) {
       return;
     }
-    // `scrollToIndex` is virtua's far-row measuring power — needed for the
-    // first landing and for catching up from a real distance. For the
-    // message-sized follow it was the hard jump per stream batch that read as
-    // jitter, so a followable gap goes to the loop untouched.
-    const gap = scroller
-      ? scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop
-      : 0;
-    const instant = !landed;
-    if (instant) {
+    if (!landed) {
       if (snapshot && scroller) {
         scroller.scrollTop = snapshot.tail
           ? scroller.scrollHeight
@@ -1106,13 +1100,36 @@
       settle();
       return;
     }
-    // A tab-return whose catch-up has just appended: the reader left at the
-    // tail, so the new turns ride in from where they were. A gap past the
-    // followable bound is first closed to within it in one silent write, and
-    // the loop rides the rest — the same arrival at any distance, rather than
-    // a teleport for a long absence. virtua measures the rows the ride
-    // crosses as they enter the viewport; the loop reads the live target
-    // every frame, so an estimate that firms up mid-ride is absorbed.
+    // Measured in the next frame's callbacks, never in the task that called
+    // for the land: that can be a finger lifting off a switch between
+    // groups, and reading the scroller there forced a layout into it. The
+    // callbacks run before that frame's layout, so what they write is what
+    // the frame paints.
+    if (landingFrame !== null) {
+      cancelAnimationFrame(landingFrame);
+    }
+    landingFrame = requestAnimationFrame(landInFrame);
+    atBottom = true;
+  }
+
+  /** The already-landed half of `land`, in the frame after it was called for. */
+  function landInFrame(): void {
+    landingFrame = null;
+    // `scrollToIndex` is virtua's far-row measuring power — needed for the
+    // first landing and for catching up from a real distance. For the
+    // message-sized follow it was the hard jump per stream batch that read
+    // as jitter, so a followable gap goes to the loop untouched.
+    const gap = scroller
+      ? scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop
+      : 0;
+    // A tab-return whose catch-up has just appended: the reader left at
+    // the tail, so the new turns ride in from where they were. A gap past
+    // the followable bound is first closed to within it in one silent
+    // write, and the loop rides the rest — the same arrival at any
+    // distance, rather than a teleport for a long absence. virtua measures
+    // the rows the ride crosses as they enter the viewport; the loop reads
+    // the live target every frame, so an estimate that firms up mid-ride
+    // is absorbed.
     const riding = returning && gap > 0;
     // Consumed by the land that has somewhere to go: the rising edge lands
     // once on the frozen rows (gap 0) before the append does.
@@ -1128,37 +1145,29 @@
         scroller.scrollTop = scroller.scrollHeight;
       }
     }
-    if (landingFrame !== null) {
-      cancelAnimationFrame(landingFrame);
+    if (!(scroller && active && atBottom)) {
+      return;
     }
-    landingFrame = requestAnimationFrame(() => {
-      landingFrame = null;
-      if (!(scroller && active && atBottom)) {
-        return;
+    // The live follow and the catch-up ride the loop. The closing write sits inside
+    // the same frame as the loop's start, so the scroll event it raises
+    // carries the loop's own tag and is not read as the reader scrolling.
+    if (followable) {
+      if (
+        riding &&
+        scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop >
+          bound
+      ) {
+        // One pixel inside the bound: `followBottom` teleports past it,
+        // and a scrollTop the browser rounds must not land on the far side.
+        scroller.scrollTop =
+          scroller.scrollHeight - scroller.clientHeight - bound + 1;
+        lastWrite = scroller.scrollTop;
       }
-      // The live follow and the catch-up ride the loop. The closing write sits inside
-      // the same frame as the loop's start, so the scroll event it raises
-      // carries the loop's own tag and is not read as the reader scrolling.
-      if (followable) {
-        if (
-          riding &&
-          scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop >
-            bound
-        ) {
-          // One pixel inside the bound: `followBottom` teleports past it,
-          // and a scrollTop the browser rounds must not land on the far side.
-          scroller.scrollTop =
-            scroller.scrollHeight - scroller.clientHeight - bound + 1;
-          lastWrite = scroller.scrollTop;
-        }
-        followBottom();
-      } else {
-        scroller.scrollTop = scroller.scrollHeight;
-      }
-      settle();
-    });
-    atBottom = true;
-    landed = true;
+      followBottom();
+    } else {
+      scroller.scrollTop = scroller.scrollHeight;
+    }
+    settle();
   }
 
   /** Fire `onlanded` once, the first time the transcript has content. */

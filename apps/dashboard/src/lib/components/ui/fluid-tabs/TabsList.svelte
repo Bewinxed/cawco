@@ -61,39 +61,50 @@
     }
     lastIndex = index;
   });
+  // Measured and started in the next frame's callbacks, never in the task
+  // that made the switch (reading layout there lays the page out mid-task).
+  // The callbacks run before that frame's style, so the slide is already
+  // under way in the first frame the new choice paints.
   $effect(() => {
     const jump = leap;
-    if (!(jump && node && motionOk.current)) {
+    const track = node;
+    if (!(jump && track && motionOk.current)) {
       return;
     }
-    const tab = (i: number) =>
-      node?.querySelector<HTMLElement>(`[data-tab-index="${i}"]`);
-    const from = tab(jump.from);
-    const to = tab(jump.to);
-    if (!(from && to)) {
-      return;
-    }
-    const dx =
-      from.getBoundingClientRect().left - to.getBoundingClientRect().left;
-    const slide = to.animate(
-      [{ transform: `translateX(${dx}px)` }, { transform: "none" }],
-      {
-        duration: 260,
-        easing: getComputedStyle(to).getPropertyValue("--ease-drawer"),
-        pseudoElement: "::after",
+    let slide: Animation | undefined;
+    const frame = requestAnimationFrame(() => {
+      const tab = (i: number) =>
+        track.querySelector<HTMLElement>(`[data-tab-index="${i}"]`);
+      const from = tab(jump.from);
+      const to = tab(jump.to);
+      if (!(from && to)) {
+        return;
       }
-    );
-    slide.finished.then(
-      () => {
-        if (leap === jump) {
-          leap = null;
+      const dx =
+        from.getBoundingClientRect().left - to.getBoundingClientRect().left;
+      slide = to.animate(
+        [{ transform: `translateX(${dx}px)` }, { transform: "none" }],
+        {
+          duration: 260,
+          easing: getComputedStyle(to).getPropertyValue("--ease-drawer"),
+          pseudoElement: "::after",
         }
-      },
-      () => {
-        /* a newer switch cancelled it and owns `leap` now */
-      }
-    );
-    return () => slide.cancel();
+      );
+      slide.finished.then(
+        () => {
+          if (leap === jump) {
+            leap = null;
+          }
+        },
+        () => {
+          /* a newer switch cancelled it and owns `leap` now */
+        }
+      );
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      slide?.cancel();
+    };
   });
 
   /**
@@ -203,24 +214,33 @@
 
   // Keep the chosen item in view — or, mid-gesture, the segment on its way
   // to the next one. The rect, not the element: it is re-read as items
-  // resize, so the scroll lands on where the item ends up.
+  // resize, so the scroll lands on where the item ends up. The scroll is
+  // read and written in the next frame's callbacks, never in the task that
+  // moved the choice: reading it there lays the page out mid-task, and a
+  // swipe's release paid 30ms for it. The callbacks run before that frame's
+  // layout, so it paints already scrolled.
   $effect(() => {
     const rect = segmentRect;
     const { width } = rects.viewport;
-    if (!(scrollable && node && rect && width > 0)) {
+    const track = node;
+    if (!(scrollable && track && rect && width > 0)) {
       return;
     }
-    // An instant write, not a smooth one: a smooth scroll is an animation the
-    // browser abandons when the track's content changes under it, and the
-    // segment sliding into place is the motion here.
-    const pad = 8;
-    if (rect.left - pad < node.scrollLeft) {
-      stopGlide();
-      node.scrollLeft = rect.left - pad;
-    } else if (rect.left + rect.width + pad > node.scrollLeft + width) {
-      stopGlide();
-      node.scrollLeft = rect.left + rect.width + pad - width;
-    }
+    const frame = requestAnimationFrame(() => {
+      // An instant write, not a smooth one: a smooth scroll is an animation
+      // the browser abandons when the track's content changes under it, and
+      // the segment sliding into place is the motion here.
+      const pad = 8;
+      const at = track.scrollLeft;
+      if (rect.left - pad < at) {
+        stopGlide();
+        track.scrollLeft = rect.left - pad;
+      } else if (rect.left + rect.width + pad > at + width) {
+        stopGlide();
+        track.scrollLeft = rect.left + rect.width + pad - width;
+      }
+    });
+    return () => cancelAnimationFrame(frame);
   });
 
   /**
