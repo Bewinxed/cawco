@@ -32,7 +32,6 @@
     interrupt,
     latestCommandFor,
     loadMcpServers,
-    loadPreview,
     openSession,
     type PendingPermission,
     pendingRestore,
@@ -178,13 +177,6 @@
       cancelAnimationFrame(frame);
       clearTimeout(timer);
     };
-  });
-  $effect(() => {
-    const id = viewId;
-    const connected = whiffle.status === "connected";
-    if (connected) {
-      untrack(() => loadPreview(id).catch(console.error));
-    }
   });
 
   /** The newest turns the server read back, and the identity that names them. */

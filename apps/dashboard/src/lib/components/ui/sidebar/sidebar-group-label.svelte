@@ -15,7 +15,7 @@
 
   const mergedProps = $derived({
     class: cn(
-      "focus-ring flex h-8 shrink-0 items-center rounded-[var(--radius-sm)] px-3 font-medium text-meta text-sidebar-foreground/70 outline-hidden ring-sidebar-ring transition-[margin,opacity] duration-200 ease-[var(--ease-out)] group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0 [&>svg]:size-4 [&>svg]:shrink-0",
+      "focus-ring flex h-8 shrink-0 items-center rounded-[var(--radius-sm)] px-3 font-medium text-meta text-sidebar-foreground-a70 outline-hidden ring-sidebar-ring transition-[margin,opacity] duration-200 ease-[var(--ease-out)] group-data-[collapsible=icon]:-mt-8 group-data-[collapsible=icon]:opacity-0 [&>svg]:size-4 [&>svg]:shrink-0",
       className
     ),
     "data-slot": "sidebar-group-label",

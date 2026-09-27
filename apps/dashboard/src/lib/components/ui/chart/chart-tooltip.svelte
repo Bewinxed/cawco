@@ -117,7 +117,7 @@
 <TooltipPrimitive.Root variant="none">
   <div
     class={cn(
-			"grid min-w-[9rem] items-start gap-1.5 rounded-[var(--radius-sm)] border border-border/50 bg-background px-2.5 py-1.5 text-meta shadow-[var(--shadow-tile)]",
+			"grid min-w-[9rem] items-start gap-1.5 rounded-[var(--radius-sm)] border border-border-a50 bg-background px-2.5 py-1.5 text-meta shadow-[var(--shadow-tile)]",
 			className
 		)}
     bind:this={ref}

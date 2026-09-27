@@ -12,10 +12,23 @@
    * inside `onMount`: this editor never runs on the server.
    */
   import { onMount } from "svelte";
-  // Structure only. Crepe's own theme files are nothing but a palette, and the
-  // palette this app already has is the one below — so none is imported, and
-  // there is no second light/dark theme to keep in step with the first.
-  import "@milkdown/crepe/theme/common/style.css";
+  // Structure only, and only for the features Crepe runs by default (top-bar,
+  // ai and the ai diff stay off, so their sheets are not shipped). Crepe's own
+  // theme files are nothing but a palette, and the palette this app already
+  // has is the one below — so none is imported, and there is no second
+  // light/dark theme to keep in step with the first.
+  import "@milkdown/crepe/theme/common/prosemirror.css";
+  import "@milkdown/crepe/theme/common/reset.css";
+  import "@milkdown/crepe/theme/common/block-edit.css";
+  import "@milkdown/crepe/theme/common/code-mirror.css";
+  import "@milkdown/crepe/theme/common/cursor.css";
+  import "@milkdown/crepe/theme/common/image-block.css";
+  import "@milkdown/crepe/theme/common/link-tooltip.css";
+  import "@milkdown/crepe/theme/common/list-item.css";
+  import "@milkdown/crepe/theme/common/placeholder.css";
+  import "@milkdown/crepe/theme/common/toolbar.css";
+  import "@milkdown/crepe/theme/common/table.css";
+  import "@milkdown/crepe/theme/common/latex.css";
 
   let {
     value = $bindable(),
@@ -116,6 +129,72 @@
   }
   .crepe-host {
     min-height: 100%;
+  }
+  /* Crepe tints these by mixing its palette with transparent, which Safari
+     15.6 cannot do; the same tints, as app alpha steps. Each selector is
+     Crepe's own, one class more specific. */
+  .crepe-host :global(.milkdown .ProseMirror .ProseMirror-selectednode),
+  .crepe-host
+    :global(
+      .milkdown
+        .milkdown-image-block.selected
+        > .image-edit:not(:has(input:focus))::before
+    ),
+  .crepe-host
+    :global(.milkdown .milkdown-image-block.selected > .image-wrapper::before) {
+    background: var(--surface-fill-a40);
+  }
+  .crepe-host :global(.milkdown .ProseMirror code),
+  .crepe-host :global(.milkdown .ProseMirror pre) {
+    background: var(--surface-recess-a60);
+  }
+  .crepe-host :global(.milkdown .ProseMirror hr),
+  .crepe-host
+    :global(.milkdown .ProseMirror hr.ProseMirror-selectednode::before),
+  .crepe-host
+    :global(
+      .milkdown
+        .milkdown-slash-menu
+        .menu-groups
+        .menu-group
+        + .menu-group::before
+    ),
+  .crepe-host :global(.milkdown .milkdown-toolbar .divider) {
+    background-color: var(--ink-muted-a20);
+  }
+  .crepe-host :global(.milkdown .ProseMirror hr.ProseMirror-selectednode) {
+    background-color: var(--ink-muted-a80);
+  }
+  .crepe-host :global(.milkdown .milkdown-slash-menu .tab-group) {
+    border-bottom-color: var(--ink-muted-a20);
+  }
+  .crepe-host :global(.milkdown .milkdown-table-block th),
+  .crepe-host :global(.milkdown .milkdown-table-block td) {
+    border-color: var(--ink-muted-a20);
+  }
+  .crepe-host :global(.milkdown .crepe-drop-cursor) {
+    background-color: var(--ink-muted-a50);
+  }
+  .crepe-host
+    :global(.milkdown .milkdown-slash-menu .menu-groups .menu-group h6),
+  .crepe-host
+    :global(.milkdown .milkdown-code-block .preview-panel .preview-label) {
+    color: var(--ink-strong-a60);
+  }
+  .crepe-host
+    :global(
+      .milkdown
+        .milkdown-image-inline
+        .empty-image-inline
+        .link-importer
+        .placeholder
+    ),
+  .crepe-host
+    :global(
+      .milkdown .milkdown-image-block .image-edit .link-importer .placeholder
+    ),
+  .crepe-host :global(.milkdown .crepe-placeholder::before) {
+    color: var(--ink-strong-a40);
   }
   /* Crepe's common stylesheet includes theme typography and motion. Keep its
      structural selectors while enforcing the ledger contract on every widget. */

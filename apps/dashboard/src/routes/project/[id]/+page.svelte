@@ -291,7 +291,7 @@
                 {machineLabel(machine.hostname)}
               </span>
               <span
-                class="size-2 shrink-0 rounded-full {machine.status === 'online' ? 'bg-success' : 'bg-muted-foreground/40'}"
+                class="size-2 shrink-0 rounded-full {machine.status === 'online' ? 'bg-success' : 'bg-muted-foreground-a40'}"
                 title={machine.status}
               ></span>
             </span>
@@ -548,7 +548,7 @@
                       </div>
                       {#if !expanded && clipped}
                         <div
-                          class="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-gradient-to-b from-transparent to-card"
+                          class="pointer-events-none absolute inset-x-0 bottom-0 h-16 bg-[linear-gradient(to_bottom,transparent,var(--card))]"
                         ></div>
                       {/if}
                     </div>

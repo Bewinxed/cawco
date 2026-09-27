@@ -11,7 +11,7 @@
 </script>
 
 <Separator
-  class={cn("pointer-events-none -mx-1 my-1 h-px bg-border/50", className)}
+  class={cn("pointer-events-none -mx-1 my-1 h-px bg-border-a50", className)}
   data-slot="select-separator"
   bind:ref
   {...restProps}

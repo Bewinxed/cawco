@@ -381,7 +381,7 @@
     cursor: pointer;
   }
   .jump-chip-off:hover {
-    background: var(--accent-solid-18);
+    background: var(--accent-solid-a18);
     color: var(--accent-text);
   }
 

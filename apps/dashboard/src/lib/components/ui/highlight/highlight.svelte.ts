@@ -112,12 +112,21 @@ export function highlight(options: HighlightOptions) {
 
     let ghostBox: Box | null = null;
     let ghostRow: HTMLElement | null = null;
+    /** What put the ghost where it is: a blur only takes back its own. */
+    let ghostBy: "pointer" | "focus" | "attribute" | null = null;
+    let pendingHide = 0;
     let pillBox: Box | null = null;
     let pillRow: HTMLElement | null = null;
 
     const showGhost = (row: HTMLElement | null) => {
       if (!withGhost) {
         return;
+      }
+      // The row under the ghost says so, for a pill in a nested list (a
+      // sidebar's) that has no ghost of its own to take over from.
+      if (ghostRow !== row) {
+        ghostRow?.removeAttribute("data-ghosted");
+        row?.setAttribute("data-ghosted", "");
       }
       if (!row) {
         ghost.style.opacity = "0";
@@ -150,7 +159,9 @@ export function highlight(options: HighlightOptions) {
         return;
       }
       const fromGhost =
-        row !== pillRow && row === ghostRow && same(box, ghostBox);
+        row !== pillRow &&
+        ((row === ghostRow && same(box, ghostBox)) ||
+          row.hasAttribute("data-ghosted"));
       if (fromGhost && pillBox) {
         // Hover becomes selection: the old selection fades where it was.
         trail.classList.remove("kit-fade");
@@ -193,6 +204,7 @@ export function highlight(options: HighlightOptions) {
         }
       }
       if (best && !(best === ghostRow && ghost.style.opacity === "1")) {
+        ghostBy = "pointer";
         showGhost(best);
       }
     };
@@ -212,11 +224,20 @@ export function highlight(options: HighlightOptions) {
     const onFocus = (event: FocusEvent) => {
       const target = event.target as Element;
       if (!hovered && target.matches(":focus-visible")) {
+        ghostBy = "focus";
         showGhost(rowOf(target));
       }
     };
+    // Focus leaving the list takes back a ghost that focus put there. A
+    // ghost under the pointer stays: a click that navigates moves focus,
+    // and the ghost under the pointer is the one that becomes the pill.
     const onBlur = (event: FocusEvent) => {
-      if (!(hovered || container.contains(event.relatedTarget as Node))) {
+      if (
+        !hovered &&
+        ghostBy === "focus" &&
+        !container.contains(event.relatedTarget as Node)
+      ) {
+        ghostBy = null;
         showGhost(null);
       }
     };
@@ -231,7 +252,21 @@ export function highlight(options: HighlightOptions) {
 
     const watch = new MutationObserver(() => {
       if (hovered) {
-        showGhost(container.querySelector<HTMLElement>(hovered));
+        const row = container.querySelector<HTMLElement>(hovered);
+        cancelAnimationFrame(pendingHide);
+        if (row) {
+          ghostBy = "attribute";
+          showGhost(row);
+        } else {
+          // A highlight moving from one row to the next can clear the old
+          // row a task before it marks the new one: wait a frame before
+          // taking the ghost away, so it glides instead of blinking.
+          pendingHide = requestAnimationFrame(() => {
+            if (!container.querySelector(hovered)) {
+              showGhost(null);
+            }
+          });
+        }
       }
       syncPill(true);
     });
@@ -272,6 +307,7 @@ export function highlight(options: HighlightOptions) {
 
     return () => {
       cancelAnimationFrame(pendingResize);
+      cancelAnimationFrame(pendingHide);
       container.removeEventListener("mousemove", onMove);
       container.removeEventListener("mouseleave", onLeave);
       container.removeEventListener("focusin", onFocus);
@@ -279,6 +315,7 @@ export function highlight(options: HighlightOptions) {
       container.removeEventListener("scroll", onScroll, { capture: true });
       watch.disconnect();
       sizes.disconnect();
+      ghostRow?.removeAttribute("data-ghosted");
       ghost.remove();
       trail.remove();
       pill.remove();
