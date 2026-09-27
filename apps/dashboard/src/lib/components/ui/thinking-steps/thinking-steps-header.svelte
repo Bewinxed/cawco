@@ -33,49 +33,61 @@
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    min-height: 26px;
-    max-width: 100%;
+    min-block-size: 26px;
+    max-inline-size: 100%;
     margin: 0;
     padding: 0;
     border: 0;
     background: none;
     font: inherit;
     color: inherit;
-    text-align: left;
+    text-align: start;
     cursor: pointer;
-  }
-  :global(.thinking-header:disabled) {
-    cursor: default;
-  }
-  :global(.thinking-header:hover:not(:disabled)) {
-    color: var(--ink-strong);
-  }
-  :global(.thinking-header:focus-visible) {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 2px;
-    border-radius: var(--radius-xs);
+
+    &:disabled {
+      cursor: default;
+    }
+    &:hover:not(:disabled) {
+      color: var(--ink-strong);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--focus-ring);
+      outline-offset: 2px;
+      border-radius: var(--radius-xs);
+    }
+
+    /* A 44px target for a finger, without the header growing to it: the
+       live header turns enabled as its first words land, and a header that
+       grew then dropped its re-centred label 9px under the reader. The
+       target reaches past the header instead of the header being taller. */
+    @media (pointer: coarse) {
+      &:not(:disabled) {
+        position: relative;
+
+        &::before {
+          content: "";
+          position: absolute;
+          inset-block: -9px;
+          inset-inline: 0;
+        }
+      }
+    }
   }
   .chevron {
     display: grid;
     flex: 0 0 auto;
-    transition: transform var(--dur-control) var(--ease-out);
-  }
-  .chevron :global(svg) {
-    width: 14px;
-    height: 14px;
+
+    & :global(svg) {
+      inline-size: 14px;
+      block-size: 14px;
+    }
+
+    @media (prefers-reduced-motion: no-preference) {
+      transition: transform var(--dur-control) var(--ease-out);
+    }
   }
   :global(.thinking-header[data-state="open"]) .chevron {
     transform: rotate(90deg);
-  }
-  @media (pointer: coarse) {
-    :global(.thinking-header:not(:disabled)) {
-      min-height: 44px;
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .chevron {
-      transition: none;
-    }
   }
   :global(.thinking-header:disabled) .chevron {
     visibility: hidden;
