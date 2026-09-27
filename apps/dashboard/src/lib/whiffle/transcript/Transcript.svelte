@@ -42,7 +42,13 @@
   import QuestionCard from "./QuestionCard.svelte";
   import Queued from "./Queued.svelte";
   import TranscriptRow from "./Row.svelte";
-  import { buildRowsFrom, type Fold, type FoldMemo, type Row } from "./rows";
+  import {
+    buildRowsFrom,
+    called,
+    type Fold,
+    type FoldMemo,
+    type Row,
+  } from "./rows";
   import Subagent from "./Subagent.svelte";
   import SystemLine from "./SystemLine.svelte";
   import Thinking from "./Thinking.svelte";
@@ -518,7 +524,12 @@
     const { rows: next, ended } = built;
     const present = new Set(next.map((row) => row.key));
     for (const [key, row] of tail) {
-      const settled = ended?.key === key && ended.into !== null;
+      // A live row that became its settled row, or a tool's glance whose call
+      // has landed: either is already on screen in its new form.
+      const settled =
+        (ended?.key === key && ended.into !== null) ||
+        (row.kind === "livetool" &&
+          untrack(() => called(session, row.glance.toolId)));
       if (!(present.has(key) || settled || leaving.includes(row))) {
         leaving.push(row);
       }
@@ -1287,8 +1298,17 @@
       return;
     }
     let slot = 0;
+    // The calls whose glance the last build drew: each is that glance, landed.
+    const glanced = new Set(
+      frozen.flatMap((row) =>
+        row.kind === "livetool" ? [row.glance.toolId] : []
+      )
+    );
     for (const { id, row } of fresh) {
       if (!(live || LIVE_KINDS.has(row.kind))) {
+        continue;
+      }
+      if (row.kind === "tools" && wasGlanced(row, id, glanced)) {
         continue;
       }
       const ticket = ticketFor(row, fold.ended, trail, slot);
@@ -1297,6 +1317,22 @@
         slot += ticket.kind === "arrive" ? 1 : 0;
       }
     }
+  }
+
+  /**
+   * Whether the call `id` in this run is one the reader already had on screen
+   * as its glance: its line opened then, and this is that line settling.
+   */
+  function wasGlanced(
+    row: Extract<Row, { kind: "tools" }>,
+    id: string,
+    glanced: Set<string>
+  ): boolean {
+    return row.messages.some(
+      (m) =>
+        callId(m) === id &&
+        glanced.has(m.metadata?.toolId ?? m.toolCallId ?? "")
+    );
   }
 
   /** The ids this build holds that this view never has — recorded as held now. */
@@ -1346,7 +1382,12 @@
       // already, as a queued row; it arrives like any other.
       return row.message.metadata?.queuedLocally ? "emerge" : "rise";
     }
-    return row.kind === "question" ? "settle" : "rise";
+    if (row.kind === "question") {
+      return "settle";
+    }
+    // A tool's glance is the call's own line, opening before its message
+    // lands: it opens as a call does, and the call it becomes does not.
+    return row.kind === "livetool" ? "open" : "rise";
   }
 
   /**

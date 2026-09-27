@@ -634,6 +634,25 @@ function liveContent(session: SessionState): LiveContent | null {
 }
 
 /**
+ * Whether the call `toolId` has its message in the conversation yet. A call in
+ * flight is always among the last messages: the scan stops at the reader's
+ * last turn, before which no call of this turn can be.
+ */
+export function called(session: SessionState, toolId: string): boolean {
+  const { messages } = session;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const message = messages[i];
+    if (message.type === "user") {
+      return false;
+    }
+    if ((message.metadata?.toolId ?? message.toolCallId) === toolId) {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * The rows that ride after the settled transcript, re-derived every time.
  */
 function tailRows(
@@ -646,8 +665,10 @@ function tailRows(
     rows.push({ kind: "live", key: liveKey(gen), ...content });
   }
   // One row per call in flight, keyed by the call: the next tool is a new
-  // row arriving, not this one changing its words.
-  if (session.currentTool) {
+  // row arriving, not this one changing its words. It is the call before its
+  // message lands; once the message is in, the call's own line in its run is
+  // this row, settled, and drawing both showed the same call twice.
+  if (session.currentTool && !called(session, session.currentTool.toolId)) {
     rows.push({
       kind: "livetool",
       key: `tool:${session.currentTool.toolId}`,
