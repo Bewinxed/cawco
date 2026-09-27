@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   import { MachineRow } from "$lib/components/ui/machine-row";
   /**
    * Machines chip + popover (§1.4, §2.5): multi-select rows. The design's
@@ -51,9 +50,9 @@
   label="Machines"
   {onchange}
   {open}
+  rows="[data-fh]"
   triggerClass="ns-chip-btn"
   triggerStyle={picked.length ? "" : "color:var(--status-fail-ink);border-color:var(--status-fail-ink)"}
-  {@attach highlight({ rows: "[data-fh]" })}
 >
   {#snippet trigger()}
     <Server style="color:var(--hue-cyan-500)" />

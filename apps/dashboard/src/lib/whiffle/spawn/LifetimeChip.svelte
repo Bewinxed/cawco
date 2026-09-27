@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   /**
    * Session lifetime as a composer chip. Choosing between keeping a session
    * and letting it end with its task is a decision worth a look at both
@@ -49,9 +48,9 @@
   label="Session lifetime"
   {onchange}
   {open}
+  rows="[data-fh]"
   triggerClass="ns-chip-btn"
   width={300}
-  {@attach highlight({ rows: "[data-fh]" })}
 >
   {#snippet trigger()}
     {@const Icon = current.icon}

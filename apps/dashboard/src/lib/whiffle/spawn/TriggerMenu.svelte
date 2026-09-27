@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   /** The `@` / `/` menu (§2.3): caret-anchored, keyboard-driven, 300px wide. */
   import NsPopover from "./NsPopover.svelte";
   import type { MenuItem } from "./ns-types";
@@ -30,9 +29,9 @@
   {id}
   {onchange}
   {open}
+  rows="[data-fh]"
   trapFocus={false}
   width={300}
-  {@attach highlight({ rows: "[data-fh]" })}
 >
   <span
     aria-hidden="true"

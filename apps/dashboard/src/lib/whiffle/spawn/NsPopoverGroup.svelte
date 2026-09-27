@@ -10,6 +10,7 @@
   import { cubicOut } from "svelte/easing";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
+  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   import {
     type PopoverMember,
     providePopoverGroup,
@@ -54,8 +55,6 @@
       css: (t) => `opacity: ${t}`,
     };
   }
-  const onmousemove = (event: MouseEvent) => shown?.onmousemove?.(event);
-  const onmouseleave = (event: MouseEvent) => shown?.onmouseleave?.(event);
   /** A retargeted surface focuses its new content the way a fresh open does. */
   function focusFirst(node: HTMLElement) {
     if (morphing && shown?.trapFocus) {
@@ -106,9 +105,8 @@
             <div
               {...props}
               id={`${shown?.id}-popover`}
-              {onmouseleave}
-              {onmousemove}
               role="presentation"
+              {@attach shown?.rows ? highlight({ rows: shown.rows }) : undefined}
             >
               <div
                 class="ns-morph"

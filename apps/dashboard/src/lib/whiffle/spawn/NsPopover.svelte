@@ -7,6 +7,8 @@
    */
   import { Popover as PopoverPrimitive } from "bits-ui";
   import type { Snippet } from "svelte";
+  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
+  import { morph } from "$lib/whiffle/motion/morph.svelte";
   import { popoverGroup } from "./popover-group.svelte";
 
   let {
@@ -24,8 +26,7 @@
     triggerClass = "",
     triggerStyle,
     haspopup,
-    onmousemove,
-    onmouseleave,
+    rows,
     ...rest
   }: {
     id: string;
@@ -43,8 +44,8 @@
     triggerStyle?: string;
     /** What the trigger opens, when it is not a dialog. */
     haspopup?: "listbox" | "menu";
-    onmousemove?: (event: MouseEvent) => void;
-    onmouseleave?: (event: MouseEvent) => void;
+    /** The rows the hover ghost glides between (components/ui/highlight). */
+    rows?: string;
     "aria-label"?: string;
   } = $props();
 
@@ -73,8 +74,9 @@
           return label;
         },
         onchange: (value) => onchange(value),
-        onmouseleave: (event) => onmouseleave?.(event),
-        onmousemove: (event) => onmousemove?.(event),
+        get rows() {
+          return rows;
+        },
         get open() {
           return open;
         },
@@ -146,9 +148,9 @@
             <div
               {...props}
               id={`${id}-popover`}
-              {onmouseleave}
-              {onmousemove}
               role="presentation"
+              {@attach rows ? highlight({ rows }) : undefined}
+              {@attach morph()}
             >
               {@render children()}
             </div>
