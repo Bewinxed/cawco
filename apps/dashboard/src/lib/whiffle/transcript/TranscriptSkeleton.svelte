@@ -61,14 +61,22 @@
     position: relative;
     overflow: hidden;
     flex: 1 1 auto;
-    min-height: 0;
-    padding: 0 var(--space-6) var(--space-8) var(--space-7);
+    min-block-size: 0;
+    padding-block: 0 var(--space-8);
+    padding-inline: var(--space-7) var(--space-6);
+    /* Without motion the blocks sit still, a step quieter — the placeholder
+       still says "loading", it just does not move. */
+    opacity: 0.6;
+
     /* The placeholder enters as one thing: DESIGN.md rules out staggered
        page-load fades, so the blocks sit still inside a single fade. */
-    animation: sk-in var(--dur-panel) var(--ease-out) both;
+    @media (prefers-reduced-motion: no-preference) {
+      opacity: 1;
+      animation: sk-in var(--dur-panel) var(--ease-out) both;
+    }
   }
   .block {
-    margin-top: var(--space-4);
+    margin-block-start: var(--space-4);
   }
   @keyframes sk-in {
     from {
@@ -93,7 +101,7 @@
   .block.you .name {
     background: var(--surface-fill);
   }
-  @media (max-width: 900px) {
+  @media (width <= 900px) {
     .skeleton {
       padding-inline: var(--space-5);
     }
@@ -109,12 +117,12 @@
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    height: 18px;
-    margin-bottom: var(--space-2);
+    block-size: 18px;
+    margin-block-end: var(--space-2);
   }
   .mark {
-    width: 18px;
-    height: 18px;
+    inline-size: 18px;
+    block-size: 18px;
     flex: 0 0 auto;
     border-radius: var(--radius-xs);
     background: var(--surface-fill);
@@ -131,8 +139,8 @@
   }
   /* biome-ignore lint/style/noDescendingSpecificity: cascade order is load-bearing — .name's base fill must lose to .block.you .name above it. */
   .name {
-    width: 64px;
-    height: 12px;
+    inline-size: 64px;
+    block-size: 12px;
     border-radius: var(--radius-xs);
     background: var(--surface-hover);
   }
@@ -141,7 +149,7 @@
      an 11px bar with 5px above and below keeps the prose pitch exactly. */
   /* biome-ignore lint/style/noDescendingSpecificity: cascade order is load-bearing — .ln's base fill must lose to .block.you .ln above it. */
   .ln {
-    height: 11px;
+    block-size: 11px;
     margin-block: 5px;
     border-radius: var(--radius-xs);
     background: var(--surface-hover);
@@ -150,32 +158,32 @@
   /* The tool rail, as ToolGroup draws it: the rail's indent and hairline,
      26px rows, a 15px glyph, the verb, then the mono argument. */
   .block.tools {
-    margin-left: var(--space-2);
-    padding-left: var(--space-3);
+    margin-inline-start: var(--space-2);
+    padding-inline-start: var(--space-3);
     background: var(--rail) left top / 2px 100% no-repeat;
   }
   .trow {
-    min-height: 26px;
+    min-block-size: 26px;
     display: flex;
     align-items: center;
     gap: var(--space-2);
   }
   .ic {
-    width: 15px;
-    height: 15px;
+    inline-size: 15px;
+    block-size: 15px;
     flex: 0 0 auto;
     border-radius: var(--radius-xs);
     background: var(--surface-hover);
   }
   .tk {
-    width: 40px;
-    height: 11px;
+    inline-size: 40px;
+    block-size: 11px;
     flex: 0 0 auto;
     border-radius: var(--radius-xs);
     background: var(--surface-hover);
   }
   .arg {
-    height: 11px;
+    block-size: 11px;
     border-radius: var(--radius-xs);
     background: var(--surface-hover);
   }
@@ -195,25 +203,18 @@
       var(--surface-raised-a55) 50%,
       transparent 65% 100%
     );
-    transform: translateX(-100%);
-    will-change: transform;
-    animation: sk-sweep var(--breath) linear infinite;
+    display: none;
+    translate: -100% 0;
+
+    @media (prefers-reduced-motion: no-preference) {
+      display: block;
+      will-change: translate;
+      animation: sk-sweep var(--breath) linear infinite;
+    }
   }
   @keyframes sk-sweep {
     to {
-      transform: translateX(100%);
-    }
-  }
-
-  /* Under reduced motion the band goes and the blocks sit still, a step
-     quieter — the placeholder still says "loading", it just stops moving. */
-  @media (prefers-reduced-motion: reduce) {
-    .skeleton::after {
-      display: none;
-    }
-    .skeleton {
-      animation: none;
-      opacity: 0.6;
+      translate: 100% 0;
     }
   }
 
@@ -221,8 +222,8 @@
      tech skips entirely. */
   .spoken {
     position: absolute;
-    width: 1px;
-    height: 1px;
+    inline-size: 1px;
+    block-size: 1px;
     margin: -1px;
     padding: 0;
     border: 0;

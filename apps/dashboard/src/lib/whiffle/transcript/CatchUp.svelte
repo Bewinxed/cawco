@@ -18,8 +18,13 @@
   .catchup {
     position: relative;
     overflow: hidden;
-    margin-top: var(--space-4);
-    animation: cu-in var(--dur-panel) var(--ease-out) both;
+    margin-block-start: var(--space-4);
+    opacity: 0.6;
+
+    @media (prefers-reduced-motion: no-preference) {
+      opacity: 1;
+      animation: cu-in var(--dur-panel) var(--ease-out) both;
+    }
   }
   @keyframes cu-in {
     from {
@@ -33,19 +38,19 @@
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    height: 18px;
-    margin-bottom: var(--space-2);
+    block-size: 18px;
+    margin-block-end: var(--space-2);
   }
   .mark {
-    width: 18px;
-    height: 18px;
+    inline-size: 18px;
+    block-size: 18px;
     flex: 0 0 auto;
     border-radius: var(--radius-xs);
     background: var(--brand-solid-a28);
   }
   .name {
-    width: 64px;
-    height: 12px;
+    inline-size: 64px;
+    block-size: 12px;
     border-radius: var(--radius-xs);
     background: var(--surface-hover);
   }
@@ -53,8 +58,8 @@
      above and below keeps the prose pitch. Short, the way a line that is
      still arriving is. */
   .ln {
-    width: 38%;
-    height: 11px;
+    inline-size: 38%;
+    block-size: 11px;
     margin-block: 5px;
     border-radius: var(--radius-xs);
     background: var(--surface-hover);
@@ -73,23 +78,18 @@
       var(--surface-raised-a55) 50%,
       transparent 65% 100%
     );
-    transform: translateX(-100%);
-    will-change: transform;
-    animation: cu-sweep var(--breath) linear infinite;
+    display: none;
+    translate: -100% 0;
+
+    @media (prefers-reduced-motion: no-preference) {
+      display: block;
+      will-change: translate;
+      animation: cu-sweep var(--breath) linear infinite;
+    }
   }
   @keyframes cu-sweep {
     to {
-      transform: translateX(100%);
-    }
-  }
-
-  @media (prefers-reduced-motion: reduce) {
-    .catchup::after {
-      display: none;
-    }
-    .catchup {
-      animation: none;
-      opacity: 0.6;
+      translate: 100% 0;
     }
   }
 
@@ -97,8 +97,8 @@
      tech skips entirely. */
   .spoken {
     position: absolute;
-    width: 1px;
-    height: 1px;
+    inline-size: 1px;
+    block-size: 1px;
     margin: -1px;
     padding: 0;
     border: 0;

@@ -61,8 +61,8 @@
 <style>
   dialog {
     margin: auto;
-    max-width: 96vw;
-    max-height: 96dvh;
+    max-inline-size: 96vw;
+    max-block-size: 96dvh;
     padding: var(--space-2);
     border: 1px solid var(--border-hairline);
     border-radius: var(--radius-sm);
@@ -78,27 +78,29 @@
   }
   img {
     display: block;
-    max-width: 92vw;
-    max-height: 86vh;
+    max-inline-size: 92vw;
+    max-block-size: 86vh;
     object-fit: contain;
     margin-inline: auto;
   }
-  dialog[open],
-  dialog[open] img {
-    animation: enter calc(var(--dur-control) * 2) var(--ease-out);
+  @media (prefers-reduced-motion: no-preference) {
+    dialog[open],
+    dialog[open] img {
+      animation: enter calc(var(--dur-control) * 2) var(--ease-out);
+    }
   }
   .bar {
     display: flex;
     align-items: center;
     gap: var(--space-3);
-    padding-top: var(--space-2);
+    padding-block-start: var(--space-2);
     font-size: var(--text-meta);
   }
   .description {
     display: flex;
     flex-direction: column;
     flex: 1;
-    min-width: 0;
+    min-inline-size: 0;
     overflow-wrap: anywhere;
   }
   .path {
@@ -111,8 +113,8 @@
   button {
     display: grid;
     place-items: center;
-    min-width: 44px;
-    min-height: 44px;
+    min-inline-size: 44px;
+    min-block-size: 44px;
     padding: var(--space-2);
     border: 0;
     border-radius: var(--radius-sm);
@@ -121,17 +123,13 @@
     cursor: pointer;
   }
   button :global(svg) {
-    width: 16px;
-    height: 16px;
+    inline-size: 16px;
+    block-size: 16px;
   }
   @keyframes enter {
     from {
       opacity: 0;
-      transform: scale(0.98);
-    }
-    to {
-      opacity: 1;
-      transform: scale(1);
+      scale: 0.98;
     }
   }
 </style>
