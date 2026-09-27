@@ -266,8 +266,27 @@
    * component re-renders, and the pane simply becomes visible again.
    */
   let builtPrint = "";
+  /**
+   * Each message array this view folds gets a number. The ledger reads a new
+   * array as history and a grown one as live, so a build must see every new
+   * array: the store's read replacing the server's stand-in with a list of
+   * the same length printed the same, was never built, and the first turn
+   * pushed onto the store's list was taken for history — the reader's own
+   * message arriving still.
+   */
+  const arrays = new WeakMap<object, number>();
+  let arraySerial = 0;
+  const arrayOf = (messages: object): number => {
+    let serial = arrays.get(messages);
+    if (serial === undefined) {
+      arraySerial += 1;
+      serial = arraySerial;
+      arrays.set(messages, serial);
+    }
+    return serial;
+  };
   const printOf = (): string =>
-    `${session.messages.length}:${session.queued.length}:${session.streaming.length}:` +
+    `${arrayOf(session.messages)}:${session.messages.length}:${session.queued.length}:${session.streaming.length}:` +
     `${session.thinkingStream.length}:${session.busy ? 1 : 0}:${session.pending.length}:` +
     `${session.openBlock}:${session.thinkingClosing}:${session.currentTool?.toolId ?? ""}:${session.sdkStatus}:` +
     `${session.messages.at(-1)?.metadata?.sendFailed ?? ""}`;
