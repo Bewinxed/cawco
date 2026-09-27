@@ -3411,27 +3411,6 @@ export function hidePreview(instanceId: string): void {
     (state.previewRequests[instanceId] ?? 0) + 1;
 }
 
-export async function loadPreview(instanceId: string): Promise<void> {
-  const previous = state.previews[instanceId];
-  const response = await fetch(
-    `/api/instances/${encodeURIComponent(instanceId)}/preview`
-  );
-  // A frame received during the read is newer than its REST snapshot.
-  if (state.previews[instanceId] !== previous) {
-    return;
-  }
-  if (response.status === 404) {
-    if (previous) {
-      state.previews[instanceId] = { ...previous, state: "closed" };
-    }
-    return;
-  }
-  if (!response.ok) {
-    throw new Error(await response.text());
-  }
-  handleFrame(await response.json());
-}
-
 export async function openPreview(
   instanceId: string,
   source: PreviewSource

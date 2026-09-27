@@ -4185,12 +4185,6 @@ export const createServer = ({
           });
         }
       )
-      .get("/api/instances/:id/preview", ({ params, status }) => {
-        const target = previewTargets.get(params.id);
-        return target
-          ? previewFrame(params.id, "open", target.source)
-          : status(404, "No preview for this session.");
-      })
       .post(
         "/api/instances/:id/preview",
         {
