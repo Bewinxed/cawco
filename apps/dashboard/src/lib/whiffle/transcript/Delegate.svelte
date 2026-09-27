@@ -364,7 +364,8 @@
             report{report.count === 1 ? '' : 's'}
           {/if}
           {#if elapsed}
-            {' · '}{elapsed}
+            {' · '}
+            <span class="elapsed" class:ticking={inFlight}>{elapsed}</span>
           {/if}
         </span>
       </Collapsible.Trigger>
@@ -612,6 +613,14 @@
   .pill.live {
     background: var(--status-live-bg);
     color: var(--status-live-ink);
+  }
+  /* A clock that ticks holds its width: every reading up to "59m 59s" or
+     "23h 59m" fits seven digit-widths, so the pill, pushed to the end of the
+     head, never steps sideways as the seconds change. */
+  .elapsed.ticking {
+    display: inline-block;
+    min-inline-size: 7ch;
+    text-align: end;
   }
   .pill.attn {
     background: var(--status-attn-bg);
