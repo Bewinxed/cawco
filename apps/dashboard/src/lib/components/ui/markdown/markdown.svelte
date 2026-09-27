@@ -67,6 +67,8 @@
     descriptionDetail: { base: "" },
   };
 
+  /** A word Streamdown renders as a span of its own while streaming. */
+  const TOKEN = 'span[style*="sd-"]';
   let host = $state<HTMLElement>();
   /**
    * How much text was on screen after the last update. A chunk's words are
@@ -90,8 +92,12 @@
     for (let node = walk.nextNode(); node; node = walk.nextNode()) {
       const start = offset;
       offset += node.nodeValue?.length ?? 0;
-      if (start >= mark && node.parentElement) {
-        fresh.add(node.parentElement);
+      // Only a word's own span fades. Text Streamdown writes straight into a
+      // block has no span of its own, and fading its block would fade every
+      // word already in it.
+      const token = node.parentElement;
+      if (start >= mark && token?.matches(TOKEN)) {
+        fresh.add(token);
       }
     }
     if (fresh.size === 0) {
