@@ -1,6 +1,7 @@
 <script lang="ts">
   import { Select as SelectPrimitive } from "bits-ui";
   import type { ComponentProps } from "svelte";
+  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   import type { WithoutChildrenOrChild } from "$lib/utils.js";
   import { cn, type WithoutChild } from "$lib/utils.js";
   import SelectPortal from "./select-portal.svelte";
@@ -18,6 +19,15 @@
   }: WithoutChild<SelectPrimitive.ContentProps> & {
     portalProps?: WithoutChildrenOrChild<ComponentProps<typeof SelectPortal>>;
   } = $props();
+
+  // One ghost glides from item to item under the pointer and arrow keys.
+  $effect(() => {
+    if (ref) {
+      return highlight({ rows: ".kit-item", hovered: "[data-highlighted]" })(
+        ref
+      );
+    }
+  });
 </script>
 
 <SelectPortal {...portalProps}>

@@ -1,6 +1,6 @@
 <script lang="ts">
+  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   /** The `@` / `/` menu (§2.3): caret-anchored, keyboard-driven, 300px wide. */
-  import { FollowHover } from "./follow-hover.svelte";
   import NsPopover from "./NsPopover.svelte";
   import type { MenuItem } from "./ns-types";
 
@@ -21,7 +21,6 @@
     onpick: (item: MenuItem) => void;
     onchange: (open: boolean) => void;
   } = $props();
-  const ghost = new FollowHover("y");
 </script>
 
 <NsPopover
@@ -30,13 +29,11 @@
   gap={2}
   {id}
   {onchange}
-  onmouseleave={ghost.leave}
-  onmousemove={ghost.move}
   {open}
   trapFocus={false}
   width={300}
+  {@attach highlight({ rows: "[data-fh]" })}
 >
-  <span aria-hidden="true" class="ns-ghost" style={ghost.style}></span>
   <span
     aria-hidden="true"
     class="hi"

@@ -20,7 +20,7 @@
    * The shell does not change shape when it is focused. It used to grow and
    * re-round on click, which moved one of the three fixed anchors every time
    * the reader touched it; now there is one radius and one padding, and the
-   * only thing that grows is the textarea itself, under `field-sizing:content`.
+   * only thing that grows is the textarea itself (motion/autosize.svelte.ts).
    * Attach and send stay bottom-aligned, so they hold their position as the
    * text runs to a second and a third line.
    *
@@ -32,6 +32,7 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Command from "$lib/components/ui/command";
   import { IconClose, IconPlus, IconSend, IconStop } from "$lib/icons";
+  import { autosize } from "$lib/whiffle/motion/autosize.svelte";
   import type { SendExtras } from "../client.svelte";
   import { cleanDetail } from "../command-detail";
   import SelectionChip from "../preview/SelectionChip.svelte";
@@ -756,6 +757,7 @@
         role="combobox"
         bind:this={field}
         bind:value={draft.text}
+        {@attach autosize(() => draft.text)}
       ></textarea>
     </label>
 
@@ -870,19 +872,19 @@
     font-size: var(--a-input-fs, 16px);
     line-height: var(--leading-ui);
     color: var(--ink-strong);
-    /* Grows with what is in it, from one line's worth of the control height to
-       a ceiling, and scrolls past that. The control row sets the resting height
-       so a single line sits on the buttons' midline. */
-    field-sizing: content;
+    /* Grows with what is in it (motion/autosize.svelte.ts), a line at a time
+       over 120ms, from one line's worth of the control height to a ceiling,
+       and scrolls past that. The control row sets the resting height so a
+       single line sits on the buttons' midline. */
+    height: var(--cin-ctl);
     min-height: var(--cin-ctl);
     max-height: 200px;
+    transition: height var(--dur-control) var(--ease-out);
     padding: calc((var(--cin-ctl) - 1lh) / 2) 0;
     min-width: 0;
   }
-  /* One line, always. Under field-sizing:content Chromium sizes an empty
-     field to its placeholder and WebKit sizes it to its (empty) value, so a
-     placeholder that wraps made the two disagree and WebKit clipped the
-     second line. A placeholder that cannot wrap gives both one line. */
+  /* One line, always: the field is sized from its value, so a placeholder
+     that wrapped would be clipped to the first line. */
   textarea::placeholder {
     color: var(--ink-muted);
     overflow: hidden;

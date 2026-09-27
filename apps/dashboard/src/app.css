@@ -467,6 +467,8 @@
   --dur-pop: 260ms;
   --dur-panel: 280ms;
   --dur-exit: 160ms;
+  /* The hover ghost following the pointer from row to row. */
+  --dur-ghost: 80ms;
   --c-500: 500ms;
   --breath: calc(var(--c-500) * 4);
   --transition-control:
@@ -976,6 +978,61 @@
   pointer-events: none;
 }
 
+/* ---- One hover ghost and one selection pill per list -------------------
+   (components/ui/highlight). Drawn under the rows: the list isolates and
+   the layers sit at -1, so a row's text and icons are always above them.
+   The ghost glides 80ms on --ease-in-out and fades in place; the pill
+   glides 120ms on --ease-drawer, in step with the row's ink turning to
+   the selected colour. Where nothing hovers (a touch screen: a tap fires a
+   synthetic mousemove and no mouseleave, so a ghost would park on the
+   last tap as a second selection) there is no ghost at all. */
+.kit-highlight {
+  isolation: isolate;
+}
+.kit-ghost,
+.kit-pill,
+.kit-pill-trail {
+  position: absolute;
+  top: 0;
+  left: 0;
+  z-index: -1;
+  pointer-events: none;
+  opacity: 0;
+}
+.kit-ghost {
+  display: none;
+  background: var(--surface-hover);
+  transition: opacity var(--dur-control) ease;
+}
+.kit-ghost.kit-glide {
+  transition:
+    transform var(--dur-ghost) var(--ease-in-out),
+    width var(--dur-ghost) var(--ease-in-out),
+    height var(--dur-ghost) var(--ease-in-out),
+    opacity var(--dur-control) ease;
+}
+.kit-ghost[data-follow] {
+  display: block;
+}
+@media (hover: hover) {
+  .kit-ghost {
+    display: block;
+  }
+}
+.kit-pill,
+.kit-pill-trail {
+  background: var(--surface-fill);
+}
+.kit-pill.kit-glide {
+  transition:
+    transform var(--dur-control) var(--ease-drawer),
+    width var(--dur-control) var(--ease-drawer),
+    height var(--dur-control) var(--ease-drawer);
+}
+.kit-pill-trail.kit-fade {
+  transition: opacity var(--dur-control) var(--ease-out);
+}
+
 /* ---- Coarse pointer (touch) --------------------------------------------
    A control keeps its drawn size on a touch screen; only its tappable area
    grows, through `.touch-hit` (kit recipes, below). The one visual step up
@@ -1142,19 +1199,12 @@
   }
 
   /* A row inside a floating surface. */
+  /* An item's highlight is the menu's one ghost (components/ui/highlight),
+     gliding from item to item under pointer and arrow keys alike. */
   .kit-item {
     min-height: 32px;
     border-radius: var(--radius-sm);
     transition: var(--transition-control);
-  }
-  .kit-item[data-highlighted],
-  .kit-item:focus-visible {
-    background: var(--surface-hover);
-  }
-  @media (hover: hover) {
-    .kit-item:not([data-disabled]):hover {
-      background: var(--surface-hover);
-    }
   }
   @media (pointer: coarse) {
     .kit-item {

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   import { MachineRow } from "$lib/components/ui/machine-row";
   /**
    * Machines chip + popover (§1.4, §2.5): multi-select rows. The design's
@@ -8,7 +9,6 @@
   import Down from "~icons/solar/alt-arrow-down-linear";
   import Check from "~icons/solar/check-circle-bold";
   import Server from "~icons/solar/server-square-bold-duotone";
-  import { FollowHover } from "./follow-hover.svelte";
   import NsPopover from "./NsPopover.svelte";
   import type { MachineItem } from "./ns-types";
 
@@ -38,7 +38,6 @@
     }
     return row.load === "Idle" ? "online" : "away";
   };
-  const ghost = new FollowHover("y");
   const radius = (index: number, on: boolean) => {
     const prev = index > 0 && selected.includes(machines[index - 1].id);
     const next =
@@ -51,18 +50,16 @@
   id="session-machines"
   label="Machines"
   {onchange}
-  onmouseleave={ghost.leave}
-  onmousemove={ghost.move}
   {open}
   triggerClass="ns-chip-btn"
   triggerStyle={picked.length ? "" : "color:var(--status-fail-ink);border-color:var(--status-fail-ink)"}
+  {@attach highlight({ rows: "[data-fh]" })}
 >
   {#snippet trigger()}
     <Server style="color:var(--hue-cyan-500)" />
     <span class="chip-label">{label}</span>
     <Down class="chevron" />
   {/snippet}
-  <span aria-hidden="true" class="ns-ghost" style={ghost.style}></span>
   {#each machines as row, index (row.id)}
     {@const on = selected.includes(row.id)}
     <button

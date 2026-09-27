@@ -240,7 +240,7 @@
   <div class="matrix">
     <Table.Root class="border-collapse text-left">
       <Table.Header>
-        <Table.Row class="align-top hover:bg-transparent">
+        <Table.Row class="align-top">
           <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
           <Table.Head
             class="sticky left-0 z-10 h-auto bg-[var(--surface-raised)] px-[var(--space-4)] py-[var(--space-3)] text-meta text-muted-foreground"

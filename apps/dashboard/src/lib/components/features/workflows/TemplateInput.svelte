@@ -1,4 +1,6 @@
 <script lang="ts">
+  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
+
   let {
     label,
     value,
@@ -97,18 +99,25 @@
     {/if}
   </label>
   {#if matches.length}
-    <section aria-label="Template paths" class="completer">
+    <div
+      aria-label="Template paths"
+      class="completer"
+      role="listbox"
+      {@attach highlight({ rows: "button", hovered: '[aria-selected="true"]' })}
+    >
       {#each matches as path, index (path)}
         <button
+          aria-selected={active === index}
           onclick={() => choose(path)}
           onmousedown={(event) => { event.preventDefault(); }}
+          onmousemove={() => { active = index; }}
+          role="option"
           type="button"
-          class:active={active === index}
         >
           {path}
         </button>
       {/each}
-    </section>
+    </div>
   {/if}
 </div>
 <style>
@@ -137,10 +146,6 @@
     font-family: var(--font-mono);
     font-size: var(--text-label);
     min-height: 36px;
-  }
-  button.active,
-  button:hover {
-    background: var(--surface-hover);
   }
   @media (max-width: 1023px) {
     button {

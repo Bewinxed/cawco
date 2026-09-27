@@ -23,6 +23,7 @@
   import { Button } from "$lib/components/ui/button";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Card from "$lib/components/ui/card";
+  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   import { Input } from "$lib/components/ui/input";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Select from "$lib/components/ui/select";
@@ -444,6 +445,11 @@
     fail: "bg-[var(--status-fail-bg)] text-[var(--status-fail-ink)]",
     idle: "bg-transparent px-0 text-[var(--ink-muted)] [font-weight:var(--weight-medium)]",
   };
+
+  /** The conversation a row opens: the id its link carries. */
+  const QUERY_OR_HASH = /[?#]/;
+  const sessionOf = (href: string) =>
+    href.split("/session/")[1]?.split(QUERY_OR_HASH)[0] ?? "";
 </script>
 
 <div class="board" bind:this={boardEl}>
@@ -650,7 +656,7 @@
         </div>
 
         <div class="tbl">
-          <Table.Root class="live">
+          <Table.Root class="live" ghostRows="tbody tr">
             <Table.Header>
               <Table.Row>
                 <Table.Head class="c-name">Session</Table.Head>
@@ -668,7 +674,8 @@
                 <!-- A session that changes state re-sorts; it slides to its new place
                      rather than swapping rows under the reader's eye. -->
                 <tr
-                  class="border-b transition-colors hover:bg-muted/50"
+                  class="border-b transition-colors"
+                  data-share="pane:{sessionOf(row.href)}"
                   data-slot="table-row"
                   in:fade={{ duration: 160 }}
                   animate:flip={{ duration: 200, easing: cubicOut }}
@@ -787,7 +794,7 @@
           </Button>
         </div>
         {#if notRunningOpen}
-          <div class="not-running-rows">
+          <div class="not-running-rows" {@attach highlight({ rows: "a" })}>
             {#each capped as row (row.id)}
               <div class="nr-row">
                 <LiveSessionRow instance={row} />

@@ -18,7 +18,6 @@
   --ns-harness-thumb-ms: 160ms;
   --ns-fill-ms: 160ms;
   --ns-row-ms: 200ms;
-  --ns-ghost-ms: 80ms;
 
   font: var(--type-body);
   color: var(--ink-strong);
@@ -103,32 +102,6 @@
   background: var(--ink-strong);
   color: var(--on-brand);
   box-shadow: none;
-}
-
-/*
- * Follow-hover ghost. Hidden wherever the pointer cannot hover: a tap fires a
- * synthetic mousemove and no matching mouseleave, so on a phone the ghost
- * parked on whatever was tapped last and read as a second selection sitting
- * beside the real one.
- */
-.ns-theme .ns-ghost {
-  display: none;
-  position: absolute;
-  left: 0;
-  top: 0;
-  border-radius: var(--radius-sm);
-  background: var(--surface-hover);
-  pointer-events: none;
-  transition:
-    transform var(--ns-ghost-ms) var(--ease-in-out),
-    width var(--ns-ghost-ms) var(--ease-in-out),
-    height var(--ns-ghost-ms) var(--ease-in-out),
-    opacity 120ms ease;
-}
-@media (hover: hover) {
-  .ns-theme .ns-ghost {
-    display: block;
-  }
 }
 
 /* One-shot entrance for rows/badges (the design's `nsIn`); interruptible

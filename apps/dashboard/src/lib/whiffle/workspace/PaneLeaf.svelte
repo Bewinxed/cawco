@@ -21,6 +21,7 @@
   import { MediaQuery } from "svelte/reactivity";
   import { browser } from "$app/environment";
   import { page } from "$app/state";
+  import { land } from "$lib/whiffle/motion/share.svelte";
   import type { HistorySource } from "../client.svelte";
   import SessionPane from "../SessionPane.svelte";
   import Composer from "../transcript/Composer.svelte";
@@ -249,6 +250,9 @@
         inert={!isActive}
         class:pane-hidden={!shown}
         use:slot={{ id: paneId, shown }}
+        {@attach land(() => (isActive ? `pane:${paneId}` : undefined), {
+          mode: 'clip',
+        })}
       >
         <!-- The server paints the conversation here so a reload shows it
              before the bundle runs; on hydration this branch is dropped and

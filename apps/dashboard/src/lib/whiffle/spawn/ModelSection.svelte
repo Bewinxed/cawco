@@ -7,6 +7,7 @@
   import { HARNESSES, type HarnessKind } from "@whiffle/core";
   import { untrack } from "svelte";
   import ProviderLogo from "$lib/components/features/ProviderLogo.svelte";
+  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   import { SectionHeader } from "$lib/components/ui/section-header";
   import OpenAiMark from "~icons/logos/openai-icon";
   import Clear from "~icons/solar/close-square-linear";
@@ -21,7 +22,6 @@
     rememberModel,
   } from "../models.svelte";
   import { reducedMotion } from "../motion.svelte";
-  import { FollowHover } from "./follow-hover.svelte";
   import {
     deriveModelEntries,
     groupModelEntries,
@@ -132,7 +132,6 @@
     tip = at >= 0 && at < TABS.length ? at : -1;
   }
   let toolsWidth = $state(0);
-  const fhModels = new FollowHover("y");
 
   $effect(() => {
     const next = harness;
@@ -369,14 +368,12 @@
         aria-label={`${harnessName(listHarness)} models`}
         class="list fai-scroll"
         id={`${uid}-models`}
-        onmouseleave={fhModels.leave}
-        onmousemove={fhModels.move}
         role="listbox"
         style={`--tools-w:${tools && hiOpacity ? toolsWidth : 0}px`}
         tabindex="-1"
         bind:this={list}
+        {@attach highlight({ rows: "[data-fh]" })}
       >
-        <span aria-hidden="true" class="ns-ghost" style={fhModels.style}></span>
         <span
           aria-hidden="true"
           class="fill"

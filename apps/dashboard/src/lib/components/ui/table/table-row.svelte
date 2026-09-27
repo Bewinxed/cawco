@@ -11,7 +11,7 @@
 </script>
 
 <tr
-  class={cn("border-b transition-colors hover:bg-muted/50 data-[state=selected]:bg-muted", className)}
+  class={cn("border-b transition-colors data-[state=selected]:bg-muted", className)}
   data-slot="table-row"
   bind:this={ref}
   {...restProps}

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   /** Project chip + popover (§1.4, §2.7): pick, clear, or create a project. */
   import Add from "~icons/solar/add-circle-linear";
   import Down from "~icons/solar/alt-arrow-down-linear";
@@ -6,7 +7,6 @@
   import Clear from "~icons/solar/close-square-linear";
   import Folder from "~icons/solar/folder-bold-duotone";
   import Files from "~icons/solar/folder-with-files-bold-duotone";
-  import { FollowHover } from "./follow-hover.svelte";
   import NsPopover from "./NsPopover.svelte";
   import type { ProjectItem } from "./ns-types";
 
@@ -31,7 +31,6 @@
   let draft = $state<{ name: string; path: string } | null>(null);
   let creating = $state(false);
   let createError = $state("");
-  const ghost = new FollowHover("y");
   const slug = (value: string) =>
     value.trim().toLowerCase().replace(/\s+/g, "-");
   $effect(() => {
@@ -73,11 +72,10 @@
   id="session-project"
   label="Project"
   {onchange}
-  onmouseleave={ghost.leave}
-  onmousemove={ghost.move}
   {open}
   triggerClass="ns-chip-btn"
   triggerStyle={project ? "" : "color:var(--ink-muted)"}
+  {@attach highlight({ rows: "[data-fh]" })}
 >
   {#snippet trigger()}
     <Files style="color:var(--hue-amber-500)" />
@@ -99,7 +97,6 @@
       <Down class="chevron" />
     {/if}
   {/snippet}
-  <span aria-hidden="true" class="ns-ghost" style={ghost.style}></span>
   {#if draft}
     <div class="ns-panel form">
       <label class="field">

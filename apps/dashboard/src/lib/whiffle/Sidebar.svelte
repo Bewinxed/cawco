@@ -25,6 +25,7 @@
   import { Button } from "$lib/components/ui/button";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Sidebar from "$lib/components/ui/sidebar";
   import ThemeSwitcher from "$lib/components/ui/ThemeSwitcher.svelte";
@@ -142,6 +143,13 @@
   const CONTROL_LABEL = "pr-1 pointer-coarse:h-11";
   /** 2px, not 4: these are rows of one list, not six unrelated buttons. */
   const MENU = "gap-0.5";
+  /**
+   * Every row in the rail shares one hover ghost that glides from row to row
+   * across the groups; the nav and each session list carry their own
+   * selection pill under it (components/ui/highlight).
+   */
+  const ROWS = '[data-sidebar="menu-button"], [data-sidebar="menu-sub-button"]';
+  const PILL = { rows: ROWS, selected: '[data-active="true"]', ghost: false };
   /**
    * The lead column, 18px, on EVERY row in the rail — nav, machines, projects,
    * sessions, the brand tile and the footer avatar alike. What sits in it
@@ -465,6 +473,7 @@
 
 <div
   class="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-sidebar text-sidebar-foreground"
+  {@attach highlight({ rows: ROWS })}
 >
   <!-- ────────────────────── header ──────────────────────── -->
 
@@ -587,7 +596,7 @@
     <!-- Fleet nav -->
     <Sidebar.Group class={GROUP}>
       <Sidebar.GroupLabel class={GROUP_LABEL}>Fleet</Sidebar.GroupLabel>
-      <Sidebar.Menu class={MENU}>
+      <Sidebar.Menu class={MENU} {@attach highlight(PILL)}>
         <Sidebar.MenuItem>
           <Sidebar.MenuButton
             class={NAV_ROW}
@@ -774,7 +783,7 @@
           {/if}
         </p>
       {:else}
-        <Sidebar.Menu class={MENU}>
+        <Sidebar.Menu class={MENU} {@attach highlight(PILL)}>
           {#each orderedProjects as project (project.id)}
             {@const sessions = sessionsOf(project)}
             {@const expanded = !collapsed.has(project.id)}
@@ -841,6 +850,7 @@
                       >
                         <Sidebar.MenuSubButton
                           class={SUB_ROW}
+                          data-share="session:{row.id}"
                           href={conversationHref(row.id, whiffle.instanceIndex)}
                           isActive={activeSession === row.id}
                           style={indent(depth)}
@@ -896,7 +906,7 @@
             ungroupedAll.length - ungrouped.length
           )}
         </Sidebar.GroupLabel>
-        <Sidebar.Menu class={MENU}>
+        <Sidebar.Menu class={MENU} {@attach highlight(PILL)}>
           {#each nested(ungrouped) as { row, depth } (row.id)}
             {@const activity = whiffle.activityOf(row.id)}
             {@const Sprite = sessionSprite(row.id)}
@@ -912,6 +922,7 @@
               >
                 {#snippet child({ props })}
                   <a
+                    data-share="session:{row.id}"
                     href={conversationHref(row.id, whiffle.instanceIndex)}
                     style={indent(depth)}
                     {...props}
@@ -985,6 +996,7 @@
               >
                 {#snippet child({ props })}
                   <a
+                    data-share="session:{row.id}"
                     href={conversationHref(row.id, whiffle.instanceIndex)}
                     style={indent(depth)}
                     title={notRunningHint(row)}

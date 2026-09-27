@@ -1,5 +1,13 @@
 <script lang="ts">
-  /** The name of the thing being edited, typed where its title reads. */
+  /**
+   * The name of the thing being edited, typed where its title reads. It is
+   * the same object as the row's name in the section list: drilling in, the
+   * row's name flies up into it; going back, it flies down into the row
+   * (motion/share.svelte.ts, keyed on the editor's path).
+   */
+  import { page } from "$app/state";
+  import { land } from "$lib/whiffle/motion/share.svelte";
+
   let {
     value = $bindable(""),
     label,
@@ -20,7 +28,11 @@
 </script>
 
 <!-- A label, so its touch area around the 24px title focuses the field. -->
-<label class="title touch-hit">
+<label
+  class="title touch-hit"
+  data-share="title:{page.url.pathname}"
+  {@attach land(() => `title:${page.url.pathname}`, { uniform: true })}
+>
   <input
     aria-invalid={invalid ? 'true' : undefined}
     aria-label={label}

@@ -12,6 +12,7 @@
   import { page } from "$app/state";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
   import * as Dialog from "$lib/components/ui/dialog";
+  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
   import * as Resizable from "$lib/components/ui/resizable";
   import { whiffle } from "$lib/whiffle/client.svelte";
@@ -322,7 +323,7 @@
 </script>
 <svelte:window onkeydown={keys} />
 {#snippet palette()}
-  <div class="palette wf-stack">
+  <div class="palette wf-stack" {@attach highlight({ rows: ".palette-item" })}>
     <div class="wf-row wf-spread">
       <h2>{paletteCollapsed ? 'Add' : 'Nodes'}</h2>
       {#if !narrow.current}
@@ -561,7 +562,7 @@
       >
     {/if}
   {:else}
-    <div class="runs">
+    <div class="runs" {@attach highlight({ rows: ".run-entry" })}>
       <aside class="run-list wf-stack">
         <div class="wf-row">
           {#each [{ value: 'all', label: 'All' }, { value: 'waiting', label: 'Needs you' }, { value: 'failed', label: 'Failed' }] as item (item.value)}
@@ -678,9 +679,6 @@
     border-radius: var(--radius-sm);
     padding: var(--space-2);
   }
-  .palette-item:hover {
-    background: var(--surface-hover);
-  }
   .palette-item span {
     min-width: 0;
     overflow-wrap: anywhere;
@@ -750,9 +748,6 @@
     padding: var(--space-3);
     text-align: left;
     border-bottom: 1px solid var(--border-hairline);
-  }
-  .run-entry:hover {
-    background: var(--surface-hover);
   }
   .run-preview {
     min-width: 0;

@@ -10,6 +10,7 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Alert from "$lib/components/ui/alert";
   import { IconWarningTriangle } from "$lib/icons";
+  import { morph } from "$lib/whiffle/motion/morph.svelte";
   import { hubDown } from "./hub.svelte";
   import SkeletonRows from "./SkeletonRows.svelte";
 
@@ -39,7 +40,7 @@
 <svelte:head><title>{title} · Configure · Whiffle</title></svelte:head>
 
 <div class="ground">
-  <div class="body">
+  <div class="body" {@attach morph()}>
     <header class="head">
       <div class="titles">
         <h1 class="title">{title}</h1>

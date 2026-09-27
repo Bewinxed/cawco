@@ -25,6 +25,8 @@
   <button
     aria-busy={busy}
     class="ns-btn primary touch-hit"
+    data-share="session:new"
+    data-share-ttl="8000"
     {disabled}
     id="session-start"
     onclick={onstart}

@@ -1,8 +1,8 @@
 <script lang="ts">
   import type { PermissionMode } from "@whiffle/core";
+  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   /** Permission-mode rows (§1.8, §2.11): sliding fill + mounted check. */
   import Check from "~icons/solar/check-circle-bold";
-  import { FollowHover } from "./follow-hover.svelte";
   import { permissionLook } from "./permission-look";
 
   let {
@@ -26,19 +26,16 @@
       rows.findIndex((row) => row.value === value)
     )
   );
-  const ghost = new FollowHover("y");
 </script>
 
 <div
   aria-label="Permission mode"
   class="perms"
-  onmouseleave={ghost.leave}
-  onmousemove={ghost.move}
   role="radiogroup"
   tabindex="-1"
   class:embedded={embedded}
+  {@attach highlight({ rows: "[data-fh]" })}
 >
-  <span aria-hidden="true" class="ns-ghost" style={ghost.style}></span>
   <span
     aria-hidden="true"
     class="fill"

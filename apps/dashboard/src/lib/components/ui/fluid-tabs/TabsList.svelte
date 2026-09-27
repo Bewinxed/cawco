@@ -493,11 +493,6 @@
   :global([data-variant="folder"]) .segment {
     display: none;
   }
-  /* Each folder tab tints itself on hover; a field sliding under the row
-     would be a second shape crossing the sheet. */
-  :global([data-variant="folder"]) .field {
-    display: none;
-  }
   /* The hover field, one register down and one tier quicker. */
   .field {
     z-index: 0;
@@ -511,16 +506,31 @@
       transition: none;
     }
 
+    /* The same glide as every list's hover ghost (app.css .kit-ghost). */
     @media (prefers-reduced-motion: no-preference) {
       transition:
-        transform 80ms var(--ease-out),
-        width 80ms var(--ease-out),
-        height 80ms var(--ease-out),
+        transform var(--dur-ghost) var(--ease-in-out),
+        width var(--dur-ghost) var(--ease-in-out),
+        height var(--dur-ghost) var(--ease-in-out),
         opacity 80ms linear;
     }
   }
+  /* Folder tabs: the hover field glides over the unchosen tabs' tints and
+     under the chosen sheet (TabItem: tint 0, field 1, sheet 2, contents
+     3), cut to a folder tab's rounded top, in the tabs' own hover tint.
+     Clicking the tab under it, the sheet wipes in over the field, so the
+     hover becomes the selection. */
+  :global([data-variant="folder"]) .field {
+    z-index: 1;
+    border-radius: var(--radius) var(--radius) 0 0;
+    background: var(--tab-hover, var(--surface-hover));
+
+    &.shown {
+      opacity: 1;
+    }
+  }
   .ring {
-    z-index: 3;
+    z-index: 4;
     border: 1px solid var(--focus-ring);
     border-radius: calc(var(--radius) - var(--pad) + 2px);
 

@@ -8,6 +8,7 @@
   import type { Component, Snippet } from "svelte";
   import { cubicOut } from "svelte/easing";
   import { Switch } from "$lib/components/ui/switch";
+  import { land } from "$lib/whiffle/motion/share.svelte";
   import RowMenu, { type RowAction } from "./RowMenu.svelte";
 
   let {
@@ -73,7 +74,12 @@
   out:collapse={{ duration: 200 }}
 >
   <div class="row" class:off={enabled === false} class:two={meta !== undefined}>
-    <span class="tile" style={hue ? `color:${hue}` : undefined}>
+    <span
+      class="tile"
+      data-share={href ? `icon:${href}` : undefined}
+      style={hue ? `color:${hue}` : undefined}
+      {@attach land(() => (href ? `icon:${href}` : undefined))}
+    >
       {#if tile}
         {@render tile()}
       {:else if Icon}
@@ -83,7 +89,13 @@
     <span class="text">
       <span class={["name", mono && "mono"]}>
         {#if href}
-          <a class="link" {href}>{name}</a>
+          <a
+            class="link"
+            data-share="title:{href}"
+            {href}
+            {@attach land(() => `title:${href}`, { uniform: true })}
+            >{name}</a
+          >
         {:else}
           {name}
         {/if}
@@ -157,11 +169,6 @@
   }
   .row:has(.link) {
     cursor: pointer;
-  }
-  @media (hover: hover) {
-    .row:hover {
-      background: var(--surface-hover);
-    }
   }
   .row:has(.link:focus-visible) {
     outline: 2px solid var(--focus-ring);

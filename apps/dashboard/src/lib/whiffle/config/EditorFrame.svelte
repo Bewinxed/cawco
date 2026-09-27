@@ -5,12 +5,15 @@
    * sections below are divided by a line each.
    */
   import type { Snippet } from "svelte";
+  import { page } from "$app/state";
   import { buttonVariants } from "$lib/components/ui/button";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import { IconMore, IconTrash } from "$lib/icons";
+  import { land } from "$lib/whiffle/motion/share.svelte";
   import EditorFooter from "./EditorFooter.svelte";
   import { hubDown } from "./hub.svelte";
+  import { SECTIONS } from "./sections";
 
   let {
     title,
@@ -40,6 +43,10 @@
   } = $props();
 
   const down = $derived(hubDown());
+  /** The section this editor belongs to: its tile heads the editor, the same tile its row carries in the list. */
+  const section = $derived(
+    SECTIONS.find((entry) => entry.slug === page.url.pathname.split("/")[2])
+  );
 </script>
 
 <svelte:head><title>{title} · Configure · Whiffle</title></svelte:head>
@@ -54,6 +61,16 @@
   <div class="scroll">
     <div class="body">
       <header class="head">
+        {#if section}
+          <span
+            class="tile"
+            data-share="icon:{page.url.pathname}"
+            style="color:{section.hue}"
+            {@attach land(() => `icon:${page.url.pathname}`)}
+          >
+            <section.icon />
+          </span>
+        {/if}
         <div class="lead">{@render header()}</div>
         {#if ondelete && deleteLabel}
           <span class="narrow-menu">
@@ -122,6 +139,24 @@
     display: flex;
     align-items: flex-start;
     gap: 8px;
+  }
+  /* The section's tile, the one its row carries in the list: 26px, raised,
+     centred on the title's 29px line. */
+  .tile {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex: none;
+    width: 26px;
+    height: 26px;
+    margin-top: 2px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-raised);
+    box-shadow: var(--shadow-tile);
+  }
+  .tile :global(svg) {
+    width: 15px;
+    height: 15px;
   }
   .lead {
     display: flex;

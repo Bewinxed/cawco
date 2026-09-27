@@ -11,6 +11,7 @@
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as ContextMenu from "$lib/components/ui/context-menu";
+  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   import {
     IconAlignLeft,
     IconChevronUp,
@@ -137,13 +138,16 @@
             </button>
           {/if}
         </div>
-        <div class="grid grid-cols-6 gap-1.5">
+        <div
+          class="grid grid-cols-6 gap-1.5"
+          {@attach highlight({ rows: "button", axis: "xy" })}
+        >
           {#each HUES as hue (hue)}
             {@const on = folderPrefs.hue(cwd) === hue}
             <button
               aria-pressed={on}
               class="flex size-8 items-center justify-center rounded-full transition-colors
-                     duration-150 hover:bg-accent"
+                     duration-150"
               onclick={() => folderPrefs.setHue(cwd, hue)}
               title="Hue {hue}{pickedHue === undefined && on ? ' (automatic)' : ''}"
               type="button"

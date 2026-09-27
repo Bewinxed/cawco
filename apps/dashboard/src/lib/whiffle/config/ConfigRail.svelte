@@ -4,6 +4,7 @@
    * and how many of them are failing somewhere. As `list` it is the whole
    * screen under 900px — the same entries at a touch height.
    */
+  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   import { countOf, faultsIn } from "./counts.svelte";
   import { GROUPS, type SectionSlug } from "./sections";
   import { configStore } from "./store.svelte";
@@ -16,40 +17,20 @@
   const store = configStore();
 
   /**
-   * The chosen row's highlight is one pill that glides to the next section
-   * (120ms, --ease-drawer), the way the old memory rail's selection moved,
-   * so a section change reads as a move down or up the rail. The rail sits
-   * outside Configure's keyed pane and holds still while the section slides
-   * (routes/config/+layout.svelte).
+   * One ghost follows the pointer down the rail and one pill sits under the
+   * chosen section, gliding to the next when the section changes; a section
+   * picked with the pointer turns the ghost under it into the pill
+   * (components/ui/highlight). The rail sits outside Configure's keyed pane,
+   * so it holds still while the section slides beside it.
    */
-  let nav = $state<HTMLElement>();
-  let pill = $state<{ y: number; h: number } | null>(null);
-  let glide = $state(false);
-  $effect(() => {
-    if (!nav || variant !== "rail" || current === undefined) {
-      pill = null;
-      return;
-    }
-    const row = nav.querySelector<HTMLElement>(`a[href="/config/${current}"]`);
-    pill = row ? { y: row.offsetTop, h: row.offsetHeight } : null;
-    if (!glide) {
-      requestAnimationFrame(() => {
-        glide = true;
-      });
-    }
-  });
 </script>
 
-<nav aria-label="Configure" class="rail" data-variant={variant} bind:this={nav}>
-  {#if pill}
-    <span
-      aria-hidden="true"
-      class="pill"
-      style:height="{pill.h}px"
-      style:transform="translateY({pill.y}px)"
-      class:glide
-    ></span>
-  {/if}
+<nav
+  aria-label="Configure"
+  class="rail"
+  data-variant={variant}
+  {@attach highlight({ rows: ".row", selected: '[aria-current="page"]' })}
+>
   {#each GROUPS as { group, sections } (group)}
     <div class="group">
       <h2 class="label">{group}</h2>
@@ -150,25 +131,6 @@
     [data-variant="list"] .row {
       height: 48px;
     }
-  }
-  @media (hover: hover) {
-    .row:hover {
-      background: var(--surface-hover);
-    }
-  }
-  .pill {
-    position: absolute;
-    top: 0;
-    right: 8px;
-    left: 12px;
-    border-radius: var(--radius-sm);
-    background: var(--surface-fill);
-    pointer-events: none;
-  }
-  .pill.glide {
-    transition:
-      transform 120ms var(--ease-drawer),
-      height 120ms var(--ease-drawer);
   }
   .tile {
     display: inline-flex;

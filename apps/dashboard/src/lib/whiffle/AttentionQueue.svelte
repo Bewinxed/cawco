@@ -185,6 +185,7 @@
         {@const item = entry.item}
         <li
           class="flex flex-wrap items-start gap-x-[var(--space-3)] gap-y-[var(--space-2)] border-t border-border/60 px-[var(--space-4)] py-[var(--space-3)] first:border-t-0"
+          data-share="pane:{item.instanceId}"
           in:fly={{ y: -8, duration: reducedMotion.current ? 0 : 240, easing: quintOut }}
         >
           <span class="mt-1 shrink-0">

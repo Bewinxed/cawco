@@ -200,7 +200,7 @@
   {:else if loading}
     <div class="h-40 w-full rounded-[var(--radius-md)] bg-muted/40"></div>
   {:else}
-    <Table.Root class="q-break">
+    <Table.Root class="q-break" ghostRows="tbody tr.clickable">
       <Table.Header>
         <Table.Row>
           <Table.Head>Name</Table.Head>
@@ -370,14 +370,8 @@
     .q-break tbody tr:last-child td {
       border-bottom: 0;
     }
-    .q-break tbody tr:hover {
-      background: transparent;
-    }
     .q-break tbody tr.clickable {
       cursor: pointer;
-    }
-    .q-break tbody tr.clickable:hover {
-      background: var(--surface-hover);
     }
     .q-break td.num {
       text-align: right;

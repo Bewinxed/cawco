@@ -12,6 +12,7 @@
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import { Button } from "$lib/components/ui/button";
   import { Card } from "$lib/components/ui/card";
+  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   import { Input } from "$lib/components/ui/input";
   import { Markdown } from "$lib/components/ui/markdown";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
@@ -257,6 +258,12 @@
         [prev]?.focus();
     }
   }
+
+  /** The docs list: a ghost under the pointer, a pill under the open doc. */
+  const DOC_LIST = {
+    rows: '[role="option"]',
+    selected: '[aria-selected="true"]',
+  };
 </script>
 
 <svelte:head>
@@ -425,14 +432,14 @@
                 onkeydown={docListKeydown}
                 role="listbox"
                 tabindex="0"
+                {@attach highlight(DOC_LIST)}
               >
                 {#each docs as doc (doc.path)}
                   <button
                     aria-selected={open?.path === doc.path}
                     class="truncate rounded-[var(--radius-sm)] px-3 py-1.5 text-left font-mono text-label transition-colors
-                      hover:bg-[var(--surface-hover)]
                       {open?.path === doc.path
-                        ? 'bg-[var(--surface-fill)] text-[var(--ink-strong)] font-medium'
+                        ? 'text-[var(--ink-strong)] font-medium'
                         : 'text-muted-foreground'}"
                     onclick={() => openDoc(doc)}
                     role="option"
@@ -457,14 +464,14 @@
                   onkeydown={docListKeydown}
                   role="listbox"
                   tabindex="0"
+                  {@attach highlight({ ...DOC_LIST, axis: 'x' })}
                 >
                   {#each docs as doc (doc.path)}
                     <button
                       aria-selected={open?.path === doc.path}
                       class="shrink-0 truncate rounded-[var(--radius-sm)] px-3 py-1.5 font-mono text-label transition-colors
-                        hover:bg-[var(--surface-hover)]
                         {open?.path === doc.path
-                          ? 'bg-[var(--surface-fill)] text-[var(--ink-strong)] font-medium'
+                          ? 'text-[var(--ink-strong)] font-medium'
                           : 'text-muted-foreground'}"
                       onclick={() => openDoc(doc)}
                       role="option"
@@ -585,6 +592,7 @@
           </header>
           <div
             class="flex flex-col gap-1.5 px-[var(--space-3)] pb-[var(--space-3)]"
+            {@attach highlight({ rows: 'a' })}
           >
             {#each live as instance (instance.id)}
               <LiveSessionRow groupCwd={project.cwd} {instance} />

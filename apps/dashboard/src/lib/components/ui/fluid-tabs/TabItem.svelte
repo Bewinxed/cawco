@@ -115,8 +115,9 @@
   /* The measured box: the hit and whatever trails it. The overlays are
      aimed at this, so a trailing control sits inside the segment. */
   /* The tab box makes no stacking context of its own: its contents rise
-     above the overlays (the sheet is z-index 1), while anything the box
-     paints behind them — a folder tab's tint — stays under the sheet. */
+     above the overlays (the sheet is z-index 2, the list's hover field 1),
+     while anything the box paints behind them — a folder tab's tint —
+     stays under both. */
   .ff-tab {
     position: relative;
     display: flex;
@@ -141,7 +142,7 @@
   }
   .ff-tab > :global(*) {
     position: relative;
-    z-index: 2;
+    z-index: 3;
   }
   /* Folder tabs stand behind the sheet in their own tint: a rounded-top
      card the size of the tab, under the sheet's layer, so the chosen
@@ -177,14 +178,15 @@
        on a box one flare wider than the tab each side, in percentages of
        that box. It is part of the tab, so it is wherever the tab is laid
        out, in the same frame, with nothing to travel or catch up. The
-       tab box makes no stacking context, so the sheet (z-index 1) sits
-       above every tab's tint and below every tab's contents. */
+       tab box makes no stacking context, so the sheet (z-index 2) sits
+       above every tab's tint and the list's hover field, and below every
+       tab's contents. */
     &::after {
       content: "";
       position: absolute;
       inset-block: 0;
       inset-inline: calc(-1 * var(--flare));
-      z-index: 1;
+      z-index: 2;
       background: var(--sheet);
       clip-path: shape(
         from 0 100%,
@@ -218,14 +220,6 @@
        slides the chosen one over from the tab it left. */
     :global([data-leap]) &::after {
       transition: none;
-    }
-    /* The chosen tab keeps its hover tint while its sheet covers it: were
-       the tint to fall back to rest on the click, it would dim for a beat
-       under the incoming sheet — two motions where there should be one. */
-    @media (hover: hover) and (pointer: fine) {
-      &:hover::before {
-        background: var(--tab-hover, transparent);
-      }
     }
   }
   .hit {

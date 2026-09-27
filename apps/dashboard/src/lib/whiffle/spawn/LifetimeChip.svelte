@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   /**
    * Session lifetime as a composer chip. Choosing between keeping a session
    * and letting it end with its task is a decision worth a look at both
@@ -8,7 +9,6 @@
   import Check from "~icons/solar/check-circle-bold";
   import Database from "~icons/solar/database-bold-duotone";
   import Fire from "~icons/solar/fire-bold-duotone";
-  import { FollowHover } from "./follow-hover.svelte";
   import NsPopover from "./NsPopover.svelte";
 
   let {
@@ -41,7 +41,6 @@
   const current = $derived(
     OPTIONS.find((option) => option.ephemeral === ephemeral) ?? OPTIONS[0]
   );
-  const ghost = new FollowHover("y");
 </script>
 
 <NsPopover
@@ -49,11 +48,10 @@
   id="session-lifetime"
   label="Session lifetime"
   {onchange}
-  onmouseleave={ghost.leave}
-  onmousemove={ghost.move}
   {open}
   triggerClass="ns-chip-btn"
   width={300}
+  {@attach highlight({ rows: "[data-fh]" })}
 >
   {#snippet trigger()}
     {@const Icon = current.icon}
@@ -65,7 +63,6 @@
     {/key}
     <Down class="chevron" />
   {/snippet}
-  <span aria-hidden="true" class="ns-ghost" style={ghost.style}></span>
   {#each OPTIONS as option, index (option.name)}
     {@const Icon = option.icon}
     {@const on = option.ephemeral === ephemeral}

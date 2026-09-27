@@ -862,10 +862,6 @@
       vertical-align: middle;
       white-space: normal;
     }
-    /* the primitive row ships a hover tint; these tables are read-only ledgers */
-    .q-table tbody tr:hover {
-      background: transparent;
-    }
     .q-table tbody:last-child tr:last-child td {
       border-bottom: 0;
     }
