@@ -242,6 +242,7 @@ const GREP_FOUND_COUNT = /^Found (\d+) (\w+)/i;
 const GREP_TALLY = /:(\d+)\s*$/;
 const NO_FILES_FOUND = /^no files found/i;
 const LEADING_WWW = /^www\./;
+const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/;
 const SERVER_LABEL_SEPARATORS = /[_\-.]+/;
 const TRAILING_SLASH = /\/$/;
 const ERROR_LINE =
@@ -469,9 +470,34 @@ const hostOf = (url: string | undefined): string | undefined => {
   }
 };
 
-/** The site's icon at chip scale. One URL, because s2 answers for every host. */
-const faviconUrl = (host: string): string =>
-  `https://www.google.com/s2/favicons?domain=${host}&sz=32`;
+/**
+ * Names only this network resolves: the machine's own (`localhost`, a bare
+ * hostname), an address, mDNS, the tailnet's MagicDNS, private zones, and the
+ * reserved test names. The favicon service cannot fetch them and answers each
+ * with a 404, so they get no favicon rather than a failed one.
+ */
+const LOCAL_ZONES = [
+  "localhost",
+  "local",
+  "internal",
+  "lan",
+  "home.arpa",
+  "ts.net",
+  "test",
+  "example",
+  "invalid",
+];
+const reachable = (host: string): boolean =>
+  host.includes(".") &&
+  !host.includes(":") &&
+  !IPV4.test(host) &&
+  !LOCAL_ZONES.some((zone) => host === zone || host.endsWith(`.${zone}`));
+
+/** The site's icon at chip scale: one URL, s2 answers for every public host. */
+const faviconUrl = (host: string): string | undefined =>
+  reachable(host)
+    ? `https://www.google.com/s2/favicons?domain=${host}&sz=32`
+    : undefined;
 
 /**
  * `mcp__claude_ai_Gmail__…` carries the server's domain with the dots beaten

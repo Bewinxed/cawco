@@ -25,6 +25,7 @@
     IconSidebar,
   } from "$lib/icons";
   import { isTyping } from "$lib/utils/typing";
+  import { appear } from "$lib/whiffle/motion/curves.svelte";
   import { pageIn, pageOut } from "$lib/whiffle/motion/route.svelte";
   import AssistantOrb from "./assistant/AssistantOrb.svelte";
   import AssistantPanel from "./assistant/AssistantPanel.svelte";
@@ -460,6 +461,19 @@
       {/if}
 
       <div class="right">
+        <!-- First, so the order read is the order drawn: below 900px it stands
+             left of the cluster rather than in it (the style below). -->
+        {#if whiffle.blockedCount > 0}
+          <a
+            class="icobtn touch-hit"
+            href="/session"
+            title="{whiffle.blockedCount} waiting on you"
+            transition:appear
+          >
+            <IconShield />
+            <span class="badge">{whiffle.blockedCount}</span>
+          </a>
+        {/if}
         <!-- Jump is a single entry: the one command surface the top bar opens.
              The old phone thumb bar duplicated it; that bar is gone. -->
         <Button
@@ -474,16 +488,6 @@
           <IconSearch />
           <span class="hidden sm:inline">Jump</span>
         </Button>
-        {#if whiffle.blockedCount > 0}
-          <a
-            class="icobtn touch-hit"
-            href="/session"
-            title="{whiffle.blockedCount} waiting on you"
-          >
-            <IconShield />
-            <span class="badge">{whiffle.blockedCount}</span>
-          </a>
-        {/if}
         <!-- The phone's summon; on a desktop the rail carries it as a row. -->
         <span class="min-[900px]:hidden">
           <AssistantOrb
@@ -680,6 +684,7 @@
      area reaches 44px. */
   .right {
     --hit-gap-x: var(--space-2);
+    position: relative;
     margin-left: auto;
     display: flex;
     align-items: center;
@@ -789,6 +794,19 @@
     font-weight: var(--weight-strong);
     display: grid;
     place-items: center;
+  }
+  /* The attention control comes and goes with the queue. Below 900px, where
+     the cluster also holds Jump and the assistant, it stands the cluster's
+     gap to the left of them and out of the row's flow: arriving, it widens
+     nothing, so nothing already drawn moves (it pushed the cluster aside
+     before, 0.0008 CLS at 390). Wider, it is the cluster's only control. */
+  @media (max-width: 899px) {
+    .right > .icobtn {
+      position: absolute;
+      top: 50%;
+      right: calc(100% + var(--hit-gap-x));
+      translate: 0 -50%;
+    }
   }
 
   .banner {
