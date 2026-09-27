@@ -37,3 +37,11 @@ export class IsTouchPortrait extends MediaQuery {
     super("(pointer: coarse) and (orientation: portrait)");
   }
 }
+
+/**
+ * The app's one narrow line: under 900px wide, or a touch device held
+ * upright. The Shell, the session deck and `/config` all ask this, and the
+ * Shell mirrors the answer into the `whiffle-narrow` cookie the server reads.
+ */
+export const NARROW_QUERY =
+  "(max-width: 899px), ((pointer: coarse) and (orientation: portrait))";

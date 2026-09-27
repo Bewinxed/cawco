@@ -76,19 +76,26 @@
     onjump,
     onassistant,
     assistantOpen,
+    narrow,
   }: {
     onjump: () => void;
     /** Toggles the assistant, which Shell owns so ⌘J and this row share it. */
     onassistant: () => void;
     assistantOpen: boolean;
+    /** The Shell's live narrow answer: a phone opens Configure on its list. */
+    narrow: boolean;
   } = $props();
 
   const path = $derived(page.url.pathname);
   /**
-   * Configure opens on the section last visited, re-read on every navigation
-   * so leaving one section for the board and coming back returns to it.
+   * On a phone Configure opens on its section list, every time. A wide
+   * screen opens the section last visited, re-read on every navigation so
+   * leaving one section for the board and coming back returns to it.
    */
   const configureHref = $derived.by(() => {
+    if (narrow) {
+      return "/config";
+    }
     let last: string | null = null;
     if (path.startsWith("/config/")) {
       [, , last] = path.split("/");

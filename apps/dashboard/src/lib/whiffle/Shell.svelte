@@ -8,6 +8,7 @@
    * resizable column whose width is this browser's, not the fleet's.
    */
   import { onMount, untrack } from "svelte";
+  import { MediaQuery } from "svelte/reactivity";
   import { TextMorph } from "torph/svelte";
   import { browser } from "$app/environment";
   import { afterNavigate } from "$app/navigation";
@@ -16,7 +17,7 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Sheet from "$lib/components/ui/sheet";
   import { setSidebar } from "$lib/components/ui/sidebar/context.svelte";
-  import { IsMobile, IsTouchPortrait } from "$lib/hooks/is-mobile.svelte";
+  import { NARROW_QUERY } from "$lib/hooks/is-mobile.svelte";
   import {
     IconChevronLeft,
     IconSearch,
@@ -264,13 +265,18 @@
       (page.data as { workspace?: WorkspaceV1 | null }).workspace ?? null
     );
   }
-  const mobile = new IsMobile(900);
-  const touchPortrait = new IsTouchPortrait();
+  const narrowQuery = new MediaQuery(NARROW_QUERY);
   const narrow = $derived(
-    browser
-      ? mobile.current || touchPortrait.current
-      : (page.data.narrow as boolean)
+    browser ? narrowQuery.current : (page.data.narrow as boolean)
   );
+  $effect(() => {
+    // The Cookie Store API is async and unsupported in Safari; this write must
+    // land synchronously before the next SSR request reads it back. Written
+    // here, on every route, so the server's answer is the one the page last
+    // used, orientation included — `/config` decides list-or-section by it.
+    // biome-ignore lint/suspicious/noDocumentCookie: needs the synchronous write; Cookie Store API is async and Safari lacks it
+    document.cookie = `whiffle-narrow=${narrow ? 1 : 0};path=/;max-age=31536000;samesite=lax`;
+  });
   const hostedLeaf = $derived(
     onSession && !narrow && workspace.root.t === "l" ? workspace.root : null
   );
@@ -374,6 +380,7 @@
   <aside class="rail hidden min-[900px]:flex">
     <Sidebar
       {assistantOpen}
+      {narrow}
       onassistant={() => {
         assistantOpen = !assistantOpen;
       }}
@@ -405,6 +412,7 @@
       </Sheet.Header>
       <Sidebar
         {assistantOpen}
+        {narrow}
         onassistant={() => {
           railOpen = false;
           assistantOpen = true;

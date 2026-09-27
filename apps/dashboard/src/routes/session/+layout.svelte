@@ -89,15 +89,6 @@
   const coarse = new IsCoarsePointer();
   const docked = $derived(narrow || coarse.current);
 
-  $effect(() => {
-    // The Cookie Store API is async and unsupported in Safari; this write must
-    // land synchronously before the next SSR request reads it back. It carries
-    // the answer the page actually used, orientation included, so a reload on
-    // a tablet is served the layout it was already showing.
-    // biome-ignore lint/suspicious/noDocumentCookie: needs the synchronous write; Cookie Store API is async and Safari lacks it
-    document.cookie = `whiffle-narrow=${deck ? 1 : 0};path=/;max-age=31536000;samesite=lax`;
-  });
-
   const onBoard = $derived(workspace.activeSessionId === null);
 
   /* ── The server's answer, claimed once ───────────────────────────────
