@@ -2,77 +2,85 @@
  * A container whose content changes size tweens to the new size instead of
  * jumping: when the content inside it reflows (a popover's list arrives, an
  * error line appears, a card switches what it shows), the container is held
- * at the size it had and animated to the new one on the Web Animations API,
- * 220ms on --ease-drawer. Attach to the container: `{@attach morph()}`.
+ * at the size it is drawn at and animated to its new natural size on the
+ * Web Animations API, 220ms on --ease-drawer. Attach to the container:
+ * `{@attach morph()}`.
  *
- * While a tween runs, the sizes the container reports are the tween's own,
- * so they are ignored; when it ends, the container's natural size is read
- * again and, if the content moved on meanwhile, it tweens on from there.
+ * What is observed is the content (the container's children), never the
+ * container: the tween resizes the container, and an observer watching the
+ * box it resizes would report its own animation back to itself. For the
+ * tween's length the children hold their natural size (no flex shrink), so
+ * the container clips them instead of squashing a scrolling list inside it.
  */
 import { CURVE, reduced } from "./curves.svelte";
 
-interface Size {
-  h: number;
-  w: number;
-}
-
 export function morph({ width = false, ms = 220 } = {}) {
   return (node: HTMLElement) => {
-    const measure = (): Size => ({ w: node.offsetWidth, h: node.offsetHeight });
-    let target = measure();
+    let natural = { w: node.offsetWidth, h: node.offsetHeight };
     let running: Animation | undefined;
 
-    const differs = (a: Size, b: Size) =>
-      Math.abs(a.h - b.h) > 0.5 || (width && Math.abs(a.w - b.w) > 0.5);
-
-    const tween = (from: Size, to: Size) => {
-      if (reduced.current || from.h === 0 || to.h === 0) {
+    const tween = () => {
+      // Where the box is drawn now (mid-tween, if one runs), then its new
+      // natural size with no tween holding it.
+      const drawn = node.getBoundingClientRect();
+      running?.cancel();
+      running = undefined;
+      const next = { w: node.offsetWidth, h: node.offsetHeight };
+      const moved =
+        Math.abs(next.h - natural.h) > 0.5 ||
+        (width && Math.abs(next.w - natural.w) > 0.5);
+      natural = next;
+      if (!moved || reduced.current || drawn.height === 0 || next.h === 0) {
         return;
       }
       const frames: Keyframe[] = [
-        { height: `${from.h}px`, overflow: "hidden" },
-        { height: `${to.h}px`, overflow: "hidden" },
+        { height: `${drawn.height}px`, overflow: "hidden" },
+        { height: `${next.h}px`, overflow: "hidden" },
       ];
       if (width) {
-        frames[0].width = `${from.w}px`;
-        frames[1].width = `${to.w}px`;
+        frames[0].width = `${drawn.width}px`;
+        frames[1].width = `${next.w}px`;
+      }
+      const held = [...node.children].filter(
+        (child): child is HTMLElement => child instanceof HTMLElement
+      );
+      for (const child of held) {
+        child.style.flexShrink = "0";
       }
       const animation = node.animate(frames, {
         duration: ms,
         easing: CURVE.drawer,
       });
       running = animation;
-      const settle = () => {
-        if (running !== animation) {
-          return;
+      const done = () => {
+        for (const child of held) {
+          child.style.flexShrink = "";
         }
-        running = undefined;
-        const now = measure();
-        if (differs(now, target)) {
-          const from_ = target;
-          target = now;
-          tween(from_, now);
+        if (running === animation) {
+          running = undefined;
         }
       };
-      animation.finished.then(settle, settle);
+      animation.finished.then(done, done);
     };
 
-    const sizes = new ResizeObserver(() => {
-      if (running) {
-        return;
+    const sizes = new ResizeObserver(tween);
+    const watchChildren = () => {
+      sizes.disconnect();
+      for (const child of node.children) {
+        sizes.observe(child);
       }
-      const next = measure();
-      if (!differs(next, target)) {
-        return;
-      }
-      const from = target;
-      target = next;
-      tween(from, next);
+    };
+    watchChildren();
+    // Content added or removed: a new child to watch, and a new size.
+    const children = new MutationObserver(() => {
+      watchChildren();
+      tween();
     });
-    sizes.observe(node);
+    children.observe(node, { childList: true });
     return () => {
       running?.cancel();
       sizes.disconnect();
+      children.disconnect();
     };
   };
 }

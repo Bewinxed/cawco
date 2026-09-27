@@ -26,12 +26,14 @@ export function autosize(value: () => unknown) {
       fit();
     });
     node.addEventListener("input", fit);
-    // A narrower field wraps into more lines.
+    // A narrower field wraps into more lines. Refit on the next frame:
+    // resizing the field inside its own observer's callback would report
+    // the resize back to that observer in the same frame.
     let width = node.offsetWidth;
     const sizes = new ResizeObserver(() => {
       if (Math.abs(node.offsetWidth - width) > 0.5) {
         width = node.offsetWidth;
-        fit();
+        requestAnimationFrame(fit);
       }
     });
     sizes.observe(node);

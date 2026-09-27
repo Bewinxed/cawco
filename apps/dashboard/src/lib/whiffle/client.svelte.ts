@@ -4110,6 +4110,12 @@ export async function streamHistory({
       skipSeen: boolean
     ): Promise<boolean> => {
       const reader = body.getReader();
+      // A stream torn down mid-read (the page navigated away) rejects both
+      // `read()` and `closed`. `read()` is where that is handled, below; the
+      // `closed` promise would otherwise reject with nobody listening.
+      reader.closed.catch(() => {
+        /* reported through read() */
+      });
       const decoder = new TextDecoder();
       let carry = "";
       const take = async (line: string): Promise<void> => {

@@ -249,8 +249,15 @@ export function highlight(options: HighlightOptions) {
         "data-selected",
       ],
     });
-    // A resize moves every row at once: the layers follow without a glide.
+    // A resize moves every row at once: the layers follow without a glide,
+    // on the next frame, so placing them (which can toggle a scrollbar on a
+    // scrolling list) never resizes the list inside its own observer.
+    let pendingResize = 0;
     const sizes = new ResizeObserver(() => {
+      cancelAnimationFrame(pendingResize);
+      pendingResize = requestAnimationFrame(onResize);
+    });
+    const onResize = () => {
       pillRow = null;
       pillBox = null;
       pill.classList.remove("kit-glide");
@@ -259,11 +266,12 @@ export function highlight(options: HighlightOptions) {
         ghost.classList.remove("kit-glide");
         place(ghost, boxOf(ghostRow));
       }
-    });
+    };
     sizes.observe(container);
     syncPill(false);
 
     return () => {
+      cancelAnimationFrame(pendingResize);
       container.removeEventListener("mousemove", onMove);
       container.removeEventListener("mouseleave", onLeave);
       container.removeEventListener("focusin", onFocus);

@@ -72,11 +72,20 @@ export async function refreshWorkflows() {
     const batches = await Promise.all(
       workflows.map((workflow) => loadWorkflowRuns(workflow.id))
     );
-    await Promise.all(
+    // Every run's read is waited on and every failure is kept: with
+    // Promise.all the first failure ends the wait and the rest reject with
+    // nobody listening (a navigation away aborts all of them at once).
+    const reads = await Promise.allSettled(
       batches
         .flatMap((batch) => batch.runs)
         .map((run) => refreshWorkflowRun(run.id))
     );
+    const failed = reads.find(
+      (read): read is PromiseRejectedResult => read.status === "rejected"
+    );
+    if (failed) {
+      throw failed.reason;
+    }
     workflowState.error = "";
   } catch (error) {
     workflowState.error =
