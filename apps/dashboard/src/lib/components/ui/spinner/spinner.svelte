@@ -18,9 +18,9 @@
 <IconSpinner
   aria-label={ariaLabel}
   class={cn("size-4 animate-spin", className)}
+  color={color === null ? undefined : color}
   name={name === null ? undefined : name}
   {role}
   stroke={stroke === null ? undefined : stroke}
-  style:color={color === null ? undefined : color}
   {...(restProps as Record<string, unknown>)}
 />
