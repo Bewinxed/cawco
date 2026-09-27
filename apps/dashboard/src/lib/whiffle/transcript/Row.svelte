@@ -137,6 +137,7 @@
     }
     const row = node;
     let fold: Animation | null = null;
+    let standing = true;
     untrack(() => {
       if (!(motionOk.current && ledger?.watched)) {
         onleft?.();
@@ -159,7 +160,11 @@
         }
       );
       fold.finished.then(
-        () => onleft?.(),
+        () => {
+          if (standing) {
+            onleft?.();
+          }
+        },
         () => {
           /* taken down before its fold finished: see the cleanup */
         }
@@ -168,8 +173,13 @@
     // A fold outlives nothing. The row taken down mid-fold — virtua dropping
     // the item, the tail changing under it — cancels it rather than letting
     // it finish on a detached element and report a row that no longer
-    // exists; a row still leaving when it is drawn again folds again.
-    return () => fold?.cancel();
+    // exists; a row still leaving when it is drawn again folds again. One
+    // that finished just before it was taken down has its report already
+    // queued: `standing` answers that one.
+    return () => {
+      standing = false;
+      fold?.cancel();
+    };
   });
 </script>
 
