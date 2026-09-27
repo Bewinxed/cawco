@@ -24,7 +24,7 @@
    * command whose stages this card's wait line reads. Ported from the mock's
    * `.hitl`.
    */
-  import { onMount } from "svelte";
+  import { onMount, untrack } from "svelte";
   import { Button } from "$lib/components/ui/button";
   import {
     IconArrowUp,
@@ -42,6 +42,7 @@
   } from "../client.svelte";
   import { permissionSummary, suggestedRule } from "../permission-summary";
   import { questionAnswer, questionsOf } from "../question";
+  import { watchedSessions } from "./arrivals.svelte";
 
   let {
     request,
@@ -141,6 +142,19 @@
   // where the answer would resolve into nothing and leave the turn wedged.
   let sent = $state(false);
   const answerable = $derived(!sent && whiffle.hub === "connected");
+
+  /**
+   * The card arrives — settles in — only when it comes in while the reader is
+   * watching its session: the same rule every transcript row follows. A card
+   * that was already waiting when the page opened, or that came in on a
+   * hidden page or behind another pane, is simply there.
+   */
+  const arriving = untrack(
+    () =>
+      watchedSessions.has(request.instanceId) &&
+      typeof document !== "undefined" &&
+      !document.hidden
+  );
 
   /**
    * The command this card's answer went out as. The card reads its OWN id
@@ -258,6 +272,7 @@
 <section
   aria-label={questions ? 'Question from the agent' : 'Permission request'}
   class="hitl"
+  class:arriving={arriving}
 >
   {#if questions}
     <h2>
@@ -283,21 +298,27 @@
         {/each}
       </div>
     {/each}
-    <div class="qact">
-      <Button
-        class={primary}
-        disabled={!(allAnswered && answerable)}
-        onclick={submitQuestion}
-      >
-        <IconCheck />Answer
-      </Button>
-      <Button
-        class={dismiss}
-        disabled={!answerable}
-        onclick={() => answer('deny')}
-        variant="outline"
-        >Dismiss</Button
-      >
+    <!-- Answered, the card morphs where it stands: its actions fold shut and
+         the line under them says the answer is out. -->
+    <div class="controls" class:folded={sent}>
+      <div class="controls-inner">
+        <div class="qact">
+          <Button
+            class={primary}
+            disabled={!(allAnswered && answerable)}
+            onclick={submitQuestion}
+          >
+            <IconCheck />Answer
+          </Button>
+          <Button
+            class={dismiss}
+            disabled={!answerable}
+            onclick={() => answer('deny')}
+            variant="outline"
+            >Dismiss</Button
+          >
+        </div>
+      </div>
     </div>
     <!-- One line, three truths: the answer is out, the socket cannot carry it
          yet, or the hub called it off and said why. A live region, so the last
@@ -320,35 +341,39 @@
          Edit/Write/WebFetch shows one sentence and hides the file, the diff, the
          URL it is actually about. Every field of the tool input is here, one
          disclosure away, so the grant is informed. -->
-    <details class="disclose">
-      <summary>What this touches</summary>
-      <div class="fields">
-        {#each Object.entries(input) as [key, value]}
-          {@const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2)}
-          <div class="field">
-            <span class="k">{key}</span>
-            <pre class="v">{text}</pre>
+    <div class="controls" class:folded={sent}>
+      <div class="controls-inner">
+        <details class="disclose">
+          <summary>What this touches</summary>
+          <div class="fields">
+            {#each Object.entries(input) as [key, value]}
+              {@const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2)}
+              <div class="field">
+                <span class="k">{key}</span>
+                <pre class="v">{text}</pre>
+              </div>
+            {/each}
           </div>
-        {/each}
+        </details>
+        <div class="choice">
+          <Button
+            class={grant}
+            disabled={!answerable}
+            onclick={() => answer('allow')}
+            variant="secondary"
+          >
+            <IconTick />Approve
+          </Button>
+          <Button
+            class={refuse}
+            disabled={!answerable}
+            onclick={() => answer('deny')}
+            variant="secondary"
+          >
+            <IconClose />Deny
+          </Button>
+        </div>
       </div>
-    </details>
-    <div class="choice">
-      <Button
-        class={grant}
-        disabled={!answerable}
-        onclick={() => answer('allow')}
-        variant="secondary"
-      >
-        <IconTick />Approve
-      </Button>
-      <Button
-        class={refuse}
-        disabled={!answerable}
-        onclick={() => answer('deny')}
-        variant="secondary"
-      >
-        <IconClose />Deny
-      </Button>
     </div>
     <!-- One line, three truths: the answer is out, the socket cannot carry it
          yet, or the hub called it off and said why. A live region, so the last
@@ -359,20 +384,24 @@
       </p>
     {/if}
     {#if rule}
-      <div class="widen">
-        <p>
-          This would allow <span class="mono">{rule.full}</span> for
-          {rule.scope}
-          — a wider grant than the request above.
-        </p>
-        <Button
-          class={widen}
-          disabled={!answerable}
-          onclick={() => answer('always')}
-          variant="outline"
-        >
-          <IconShield />Always allow {rule.short}
-        </Button>
+      <div class="controls" class:folded={sent}>
+        <div class="controls-inner">
+          <div class="widen">
+            <p>
+              This would allow <span class="mono">{rule.full}</span> for
+              {rule.scope}
+              — a wider grant than the request above.
+            </p>
+            <Button
+              class={widen}
+              disabled={!answerable}
+              onclick={() => answer('always')}
+              variant="outline"
+            >
+              <IconShield />Always allow {rule.short}
+            </Button>
+          </div>
+        </div>
       </div>
     {/if}
   {/if}
@@ -381,18 +410,14 @@
 <style>
   /* The focal moment: the card arrives with ONE settle and is then completely
      still. No pulse, no attention loop — the arrival is the whole signal, and a
-     card that keeps moving after it has landed is asking twice. 200ms is written
-     on the token scale (--dur-control × 2) so it moves with the scale if the scale
-     moves. `both` holds the from-frame before the first tick, so the card never
-     flashes at full opacity for a frame before it settles. */
+     card that keeps moving after it has landed is asking twice. Two
+     --dur-control, so it moves with the scale if the scale moves. `backwards`
+     holds the from-frame before the first tick, so the card never flashes at
+     full opacity for a frame before it settles. */
   @keyframes hitl-settle {
     from {
       opacity: 0;
-      transform: translateY(8px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
+      translate: 0 8px;
     }
   }
   .hitl {
@@ -401,11 +426,36 @@
     background: var(--surface-raised);
     padding: var(--space-3);
     box-shadow: var(--shadow-hairline, var(--shadow-tile));
-    animation: hitl-settle calc(var(--dur-control) * 2) var(--ease-out) both;
+
+    @media (prefers-reduced-motion: no-preference) {
+      &.arriving {
+        animation: hitl-settle calc(var(--dur-control) * 2) var(--ease-out)
+          backwards;
+      }
+    }
   }
-  @media (prefers-reduced-motion: reduce) {
-    .hitl {
-      animation: none;
+  /* Answered: the controls fold shut in place (grid rows 1fr → 0fr, fading
+     as they go, --dur-pop on the on-screen curve) and the card is its
+     question and its outcome. */
+  .controls {
+    display: grid;
+    grid-template-rows: 1fr;
+
+    &.folded {
+      grid-template-rows: 0fr;
+      opacity: 0;
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      transition:
+        grid-template-rows var(--dur-pop) var(--ease-in-out),
+        opacity var(--dur-exit) var(--ease-out);
+    }
+  }
+  .controls-inner {
+    min-block-size: 0;
+
+    .folded > & {
+      overflow: hidden;
     }
   }
   h2 {
@@ -414,14 +464,15 @@
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    margin-bottom: var(--space-2);
+    margin-block-end: var(--space-2);
   }
   .pill {
     display: inline-flex;
     align-items: center;
     gap: var(--space-1);
-    height: 20px;
-    padding: 0 var(--space-2);
+    block-size: 20px;
+    padding-block: 0;
+    padding-inline: var(--space-2);
     border-radius: var(--radius-pill);
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
@@ -429,12 +480,12 @@
     color: var(--status-attn-ink);
   }
   .pill :global(svg) {
-    width: 9px;
-    height: 9px;
+    inline-size: 9px;
+    block-size: 9px;
     flex: 0 0 auto;
   }
   .wait {
-    margin-top: var(--space-2);
+    margin-block-start: var(--space-2);
     font-size: var(--text-meta);
     color: var(--ink-muted);
   }
@@ -442,40 +493,39 @@
     font-size: var(--text-label);
     line-height: var(--leading-body);
     color: var(--ink-strong);
-    margin-bottom: var(--space-2);
-    max-width: 72ch;
+    margin-block-end: var(--space-2);
+    max-inline-size: 72ch;
   }
   .cmd {
     font-family: var(--font-mono);
     font-size: var(--text-label);
     color: var(--ink-strong);
-    border-left: 2px solid var(--border-hairline);
-    padding: 3px 0 3px var(--space-3);
-    margin-bottom: var(--space-2);
+    border-inline-start: 2px solid var(--border-hairline);
+    padding-block: 3px;
+    padding-inline: var(--space-3) 0;
+    margin-block-end: var(--space-2);
     white-space: pre-wrap;
   }
 
   /* The disclosed payload — collapsed by default, every tool-input field inside. */
   .disclose {
-    margin-bottom: var(--space-3);
+    margin-block-end: var(--space-3);
   }
   .disclose > summary {
     display: inline-flex;
     align-items: center;
-    width: fit-content;
+    inline-size: fit-content;
     cursor: pointer;
     list-style: none;
     font-size: var(--text-meta);
     color: var(--ink-muted);
-    transition: color var(--dur-control) var(--ease-out);
   }
   .disclose > summary::-webkit-details-marker {
     display: none;
   }
   .disclose > summary::before {
     content: "▸";
-    margin-right: var(--space-2);
-    transition: transform var(--dur-control) var(--ease-out);
+    margin-inline-end: var(--space-2);
   }
   .disclose[open] > summary::before {
     transform: rotate(90deg);
@@ -487,7 +537,7 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
-    margin-top: var(--space-2);
+    margin-block-start: var(--space-2);
     padding: var(--space-3);
     border-radius: var(--radius-sm);
     background: var(--surface-recess);
@@ -496,7 +546,7 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-1);
-    min-width: 0;
+    min-inline-size: 0;
   }
   .field .k {
     font-size: var(--text-meta);
@@ -505,7 +555,7 @@
   }
   .field .v {
     margin: 0;
-    max-height: 200px;
+    max-block-size: 200px;
     overflow: auto;
     font-family: var(--font-mono);
     font-size: var(--text-meta);
@@ -513,10 +563,12 @@
     white-space: pre-wrap;
     word-break: break-word;
   }
-  @media (prefers-reduced-motion: reduce) {
-    .disclose > summary,
+  @media (prefers-reduced-motion: no-preference) {
+    .disclose > summary {
+      transition: color var(--dur-control) var(--ease-out);
+    }
     .disclose > summary::before {
-      transition: none;
+      transition: transform var(--dur-control) var(--ease-out);
     }
   }
   /* JOURNEY §Triage: the full row width sits between grant and refusal. At
@@ -528,22 +580,22 @@
     display: flex;
     justify-content: space-between;
     gap: var(--space-8);
-    margin-top: var(--space-2);
+    margin-block-start: var(--space-2);
   }
   .choice > :global(*) {
     flex: 0 0 auto;
   }
   .widen {
     /* a clear break from the gate above, on the scale (--space-8 / --space-5) */
-    margin-top: var(--space-8);
-    padding-top: var(--space-5);
-    border-top: 1px solid var(--border-hairline);
+    margin-block-start: var(--space-8);
+    padding-block-start: var(--space-5);
+    border-block-start: 1px solid var(--border-hairline);
   }
   .widen > p {
     font-size: var(--text-label);
     color: var(--ink-muted);
-    margin-bottom: var(--space-2);
-    max-width: 66ch;
+    margin-block-end: var(--space-2);
+    max-inline-size: 66ch;
   }
   /* The permission scope actually being granted is consequential text — it
      reads at --text-label, never the 10.25px micro-label step. */
@@ -557,11 +609,12 @@
     display: flex;
     gap: var(--space-2);
     flex-wrap: wrap;
-    margin: 2px 0 var(--space-2);
+    margin-block: 2px var(--space-2);
   }
   .qopts button {
-    min-height: 30px;
-    padding: var(--space-2) var(--space-3);
+    min-block-size: 30px;
+    padding-block: var(--space-2);
+    padding-inline: var(--space-3);
     border: 1px solid var(--border-control);
     border-radius: var(--radius-sm);
     background: var(--surface-raised);
@@ -573,8 +626,8 @@
     align-items: center;
     gap: var(--space-2);
     cursor: pointer;
-    text-align: left;
-    max-width: 100%;
+    text-align: start;
+    max-inline-size: 100%;
   }
   .qopts button:not(.sel):hover {
     background: var(--surface-hover);
@@ -606,9 +659,10 @@
   .kc {
     display: inline-grid;
     place-items: center;
-    min-width: 17px;
-    height: 17px;
-    padding: 0 4px;
+    min-inline-size: 17px;
+    block-size: 17px;
+    padding-block: 0;
+    padding-inline: 4px;
     border-radius: var(--radius-xs);
     background: var(--surface-recess);
     font-family: var(--font-mono);

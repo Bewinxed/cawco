@@ -22,8 +22,16 @@
     "px-[var(--space-2)] py-px text-[length:var(--text-meta)] font-[var(--weight-body)] " +
     "!text-[color:var(--ink-muted)]";
 
-  let { message, agentName }: { message: Message; agentName: string } =
-    $props();
+  let {
+    message,
+    agentName,
+    folding = false,
+  }: {
+    message: Message;
+    agentName: string;
+    /** A thinking message that is the live reasoning, settled: it folds shut. */
+    folding?: boolean;
+  } = $props();
 
   const kind = $derived(message.type);
   const hidden = $derived(
@@ -39,24 +47,20 @@
    *
    *    0ms   ghost is on screen: presence 0.7, Who reads "sending…", no clock
    *  tACK    the command leaves `submitted` (well under a second, on a live hub)
-   *  +0ms    presence 0.7 → 1.0; Who's note slot swaps to the real clock —
-   *          same slot Queued.svelte already uses, so settling moves nothing
-   * +180ms   at rest. No translation, no scale: arrival is subtraction.
+   *  +0ms    presence 0.7 → 1.0 over --dur-menu; Who's note slot swaps to
+   *          the real clock — same slot Queued.svelte already uses, so
+   *          settling moves nothing. No translation, no scale: arrival is
+   *          subtraction.
    *
    * fail (from the same ghost, instead of settling):
    *    0ms   presence 0.7 → 1.0 — the words matter MORE on failure, not less
    *    0ms   Who's note becomes "not sent"
-   *  +40ms   the reason line and its actions unfold (grid-rows 0fr → 1fr)
-   * +240ms   at rest. The unfold is the one layout change, and it is the
-   *          information: something new must be read.
+   *  +⅓ --dur-control   the reason line and its actions unfold (grid-rows
+   *          0fr → 1fr) over --dur-pop: the chip flips first, the reason
+   *          follows — cause, then effect. The unfold is the one layout
+   *          change, and it is the information: something new must be read.
    * ───────────────────────────────────────────────────────────────────────
    */
-  const GHOST = {
-    presence: 0.7, // Queued.svelte's own number — shared on purpose: same tense
-    settleMs: 180, // ms — our choice: quiet, inside app.css's ≤320ms doctrine
-    failDelayMs: 40, // ms — the chip flips first, the reason follows: cause → effect
-    failRevealMs: 200, // ms — delay + reveal = 240ms, the one animation allowed to be noticed
-  };
 
   /**
    * The command this turn went out as, read straight off the ledger — the
@@ -135,12 +139,7 @@
        it is the one thing that carries a surface: a sunken well. User messages
        are sparse, so filling them makes the operator's own instructions the
        landmarks. The agent's turns stay bare on the field. -->
-  <section
-    class="turn you"
-    style="--ghost-presence: {GHOST.presence}; --ghost-settle: {GHOST.settleMs}ms; --ghost-fail-delay: {GHOST.failDelayMs}ms; --ghost-fail-reveal: {GHOST.failRevealMs}ms"
-    class:failed
-    class:ghost
-  >
+  <section class="turn you" class:failed class:ghost>
     <Who
       name="You"
       note={whoNote}
@@ -206,7 +205,7 @@
   </section>
 {:else if kind === 'thinking'}
   {#if message.content.trim()}
-    <Thinking text={message.content} />
+    <Thinking {folding} text={message.content} />
   {/if}
 {:else if kind === 'user.peer' || kind === 'user.rule' || kind === 'user.delegate_ask'}
   <Peer {message} />
@@ -216,45 +215,46 @@
 
 <style>
   .turn {
-    margin-top: var(--space-4);
+    margin-block-start: var(--space-4);
   }
   /* The well bleeds back out by exactly its own padding, so the reader's words
      sit on the same ledger column as the agent's and only the wash widens.
-     --space-4 (14px) fits inside the transcript's gutters (25 left / 21 right)
+     --space-4 (14px) fits inside the transcript's gutters (25 start / 21 end)
      with room to spare; the narrow breakpoint clamps it below. */
   .turn.you {
     margin-inline: calc(var(--space-4) * -1);
-    padding: var(--space-3) var(--space-4);
+    padding-block: var(--space-3);
+    padding-inline: var(--space-4);
     background: var(--surface-recess);
     border-radius: var(--radius-sm);
     /* The only property a ghost or a failure ever animates on the well
        itself — nothing translates or scales, so the row never reflows
        against its neighbours while it settles. */
     opacity: 1;
-    transition: opacity var(--ghost-settle) var(--ease-out);
-  }
-  /* Third tense of Queued.svelte's grammar: same well, same 0.7, a note chip
-     instead of a clock. Not color alone — the note text and the missing
-     clock carry the state too, so it survives grayscale and reduced motion. */
-  .turn.you.ghost {
-    opacity: var(--ghost-presence);
+
+    /* Third tense of Queued.svelte's grammar: same well, same 0.7, a note
+       chip instead of a clock. Not color alone — the note text and the
+       missing clock carry the state too, so it survives grayscale and
+       reduced motion. */
+    /* Queued.svelte's own presence — shared on purpose: same tense. */
+    &.ghost {
+      opacity: 0.7;
+    }
+    /* At the narrow breakpoint the transcript's gutters drop to --space-5
+       (18px), where a --space-4 bleed would leave 4px of air. Padding and
+       bleed step down together so they stay equal — the columns stay flush
+       and the gutter keeps 7px. */
+    @media (width <= 900px) {
+      margin-inline: calc(var(--space-3) * -1);
+      padding-inline: var(--space-3);
+    }
   }
   .chips {
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: var(--space-2);
-    margin-top: var(--space-2);
-  }
-  /* At the narrow breakpoint the transcript's gutters drop to --space-5 (18px),
-     where a --space-4 bleed would leave 4px of air. Padding and bleed step down
-     together so they stay equal — the columns stay flush and the gutter keeps
-     7px. */
-  @media (max-width: 900px) {
-    .turn.you {
-      margin-inline: calc(var(--space-3) * -1);
-      padding-inline: var(--space-3);
-    }
+    margin-block-start: var(--space-2);
   }
 
   /* The reason + actions unfold on a `grid-template-rows` track rather than
@@ -265,21 +265,30 @@
     display: grid;
     grid-template-rows: 0fr;
     opacity: 0;
-    transition:
-      grid-template-rows var(--ghost-fail-reveal) var(--ease-out)
-      var(--ghost-fail-delay),
-      opacity var(--ghost-fail-reveal) var(--ease-out) var(--ghost-fail-delay),
-      margin-top var(--ghost-fail-reveal) var(--ease-out)
-      var(--ghost-fail-delay);
+
+    .turn.you.failed & {
+      grid-template-rows: 1fr;
+      opacity: 1;
+      margin-block-start: var(--space-2);
+    }
   }
-  .turn.you.failed .failure {
-    grid-template-rows: 1fr;
-    opacity: 1;
-    margin-top: var(--space-2);
+  /* Motion is opt-in. Without it every state above still lands — the note,
+     the reason line — it simply lands at once. */
+  @media (prefers-reduced-motion: no-preference) {
+    .turn.you {
+      transition: opacity var(--dur-menu) var(--ease-out);
+    }
+    .failure {
+      --fail-delay: calc(var(--dur-control) / 3);
+      transition:
+        grid-template-rows var(--dur-pop) var(--ease-out) var(--fail-delay),
+        opacity var(--dur-pop) var(--ease-out) var(--fail-delay),
+        margin-block-start var(--dur-pop) var(--ease-out) var(--fail-delay);
+    }
   }
   .failure-inner {
     overflow: hidden;
-    min-height: 0;
+    min-block-size: 0;
   }
   .reason {
     font-size: var(--text-meta);
@@ -288,7 +297,7 @@
   .actions {
     display: flex;
     gap: var(--space-2);
-    margin-top: var(--space-2);
+    margin-block-start: var(--space-2);
   }
   /* Text actions in the chip vocabulary MessageRow already speaks (radius-mark,
      text-meta, space-2) rather than a new button style — a failed send reads as
@@ -297,16 +306,14 @@
     border-radius: var(--radius-xs);
     border: 1px solid var(--border-hairline);
     background: transparent;
-    padding: var(--space-1) var(--space-2);
+    padding-block: var(--space-1);
+    padding-inline: var(--space-2);
     font-size: var(--text-meta);
     font-weight: var(--weight-medium);
     color: var(--ink-strong);
+
+    &:hover {
+      background: var(--surface-hover);
+    }
   }
-  .action:hover {
-    background: var(--surface-hover);
-  }
-  /* No per-component prefers-reduced-motion block: app.css's global clamp
-     already forces every animation/transition duration here to 1ms, and every
-     state above is carried by Who's note text and the reason line regardless
-     of motion, so the clamp loses no information. */
 </style>

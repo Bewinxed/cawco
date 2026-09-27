@@ -24,10 +24,7 @@
   import { fleetMcpServers } from "$lib/whiffle/fleet-mcp.svelte";
   import { SHOW_IMAGE_TOOLS, SHOW_PREVIEW_TOOLS } from "$lib/whiffle/frames";
   import { mcpServerHost } from "$lib/whiffle/mcp";
-  import Arrival from "$lib/whiffle/motion/Arrival.svelte";
-  import { ARRIVAL } from "$lib/whiffle/motion/arrival";
-  import Reveal from "$lib/whiffle/motion/Reveal.svelte";
-  import Stream from "$lib/whiffle/motion/Stream.svelte";
+  import { easeOut, motionOk } from "$lib/whiffle/motion/curves.svelte";
   /**
    * A run of tool calls as rail-led rows — never a nested card. The rail is a
    * 2px stripe; each row is a glyph, the verb, a mono argument, and whatever the
@@ -41,33 +38,74 @@
    * as one idea.
    */
   import type { Message } from "../types";
+  import { useLedger } from "./arrivals.svelte";
+  import { openCalls } from "./disclosure.svelte";
+  import TranscriptRow from "./Row.svelte";
   import Shot from "./Shot.svelte";
+  import Unfold from "./Unfold.svelte";
 
   const machine = getContext<(() => string) | undefined>("whiffle:machine");
 
-  let {
-    messages,
-    /**
-     * Whether a given call is ARRIVING, and where it sits in the stagger
-     * queue.
-     *
-     * A run of calls is one row, created when the first of them lands, so the
-     * row cannot be the unit that animates — every later call in the run would
-     * be appended into something that had already arrived. The CALL is the
-     * unit, and the answer comes from the transcript rather than from here so
-     * that it survives this component being unmounted and remounted as the
-     * virtualizer scrolls.
-     *
-     * The three nested surfaces that render tool rows — a subagent branch, a
-     * delegate's report, the static tail — are not following a live tail and
-     * decide no arrivals, so the default is the honest one: nothing here is
-     * landing.
-     */
-    landing = () => ({ fresh: false, lead: 0 }),
-  }: {
-    messages: Message[];
-    landing?: (m: Message) => { fresh: boolean; lead: number };
-  } = $props();
+  let { messages }: { messages: Message[] } = $props();
+
+  /**
+   * Each call arrives on its own line. A run of calls is one row, created
+   * when the first of them lands, so the row cannot be what arrives — every
+   * later call would be appended into something that had already arrived.
+   * The CALL is the unit: the transcript's ledger decides each one (by this
+   * id), and the call's own row plays it. The surfaces that nest tool rows —
+   * a subagent's branch, a delegate's report — are not in the ledger, and
+   * nothing in them arrives.
+   */
+  const callId = (m: Message): string => `call:${m.id ?? m.toolCallId}`;
+  /** Where the reader's disclosure of this call is kept (see `disclosure.svelte.ts`). */
+  const openKey = (m: Message): string =>
+    `${m.instanceId}:${m.id ?? m.toolCallId}`;
+
+  const ledger = useLedger();
+  /** A duration token, in ms, for Svelte's transition config. */
+  const ms = (node: Element, token: string): number =>
+    Number.parseFloat(getComputedStyle(node).getPropertyValue(token));
+  /** Only a change the reader is watching is shown moving. */
+  const moving = (): boolean => motionOk.current && !!ledger?.watched;
+
+  /**
+   * A call's status changing is a crossfade on its glyph: the outgoing glyph
+   * fades while the new one fades up out of a slight shrink, both on one
+   * cell, over --dur-control. Svelte plays these only when the status
+   * changes under a mounted row — never on a row's first render.
+   */
+  function glyphIn(node: Element) {
+    if (!moving()) {
+      return { duration: 0 };
+    }
+    return {
+      duration: ms(node, "--dur-control"),
+      easing: easeOut,
+      css: (t: number) => `opacity: ${t}; scale: ${0.8 + 0.2 * t}`,
+    };
+  }
+  function glyphOut(node: Element) {
+    if (!moving()) {
+      return { duration: 0 };
+    }
+    return {
+      duration: ms(node, "--dur-control"),
+      easing: easeOut,
+      css: (t: number) => `opacity: ${t}`,
+    };
+  }
+  /** What a call measured out, arriving with its result. */
+  function factIn(node: Element) {
+    if (!moving()) {
+      return { duration: 0 };
+    }
+    return {
+      duration: ms(node, "--dur-menu"),
+      easing: easeOut,
+      css: (t: number) => `opacity: ${t}`,
+    };
+  }
 
   /** shadcn Badge, dressed on the DESIGN.md scale rather than the stock ladder. */
   const chipClass =
@@ -230,159 +268,176 @@
     {@const toolInput = (m.metadata?.toolInput ?? undefined) as Record<string, unknown> | undefined}
     {@const hasBody = bodyFor(d.expanded, failed, toolInput, fields, result, m.metadata?.toolResult)}
     {#snippet line()}
-      <span class="ic" class:err={failed}
-        ><Reveal
-          >{#if d.favicon && !brokenIcons.has(d.favicon)}
-            {@const src = d.favicon}
-            <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: onerror is an image-load callback — a site with no icon keeps the tool's glyph -->
-            <img alt="" class="fav" onerror={() => brokenIcons.add(src)} {src}>
-          {:else}
-            <Icon />
-          {/if}</Reveal
-        ></span
-      >
+      <span class="ic">
+        {#key m.metadata?.toolStatus}
+          <span class="glyph" class:err={failed} in:glyphIn out:glyphOut
+            >{#if d.favicon && !brokenIcons.has(d.favicon)}
+              {@const src = d.favicon}
+              <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: onerror is an image-load callback — a site with no icon keeps the tool's glyph -->
+              <img
+                alt=""
+                class="fav"
+                onerror={() => brokenIcons.add(src)}
+                {src}
+              >
+            {:else}
+              <Icon />
+            {/if}</span
+          >
+        {/key}
+      </span>
       {#if d.label}
-        <span class="tk"><Stream text={d.label} /></span>
+        <span class="tk">{d.label}</span>
       {/if}
       <span
         class="arg"
         title={[d.object, d.detail].filter(Boolean).join(' ') || undefined}
       >
         {#if d.object}
-          <Stream text={d.object} />
+          {d.object}
         {/if}
         {#if d.detail}
-          <span class="tail"><Stream text=" {d.detail}" /></span>
+          <span class="tail">{` ${d.detail}`}</span>
         {/if}
       </span>
       {#if d.chip}
         <Badge class={chipClass} variant="secondary">{d.chip}</Badge>
       {/if}
-      {#if d.fact}
-        {#if d.factTone === 'diff'}
-          <span class="d"
-            >{#each factParts(d.fact) as part, i (i)}
-              <span class:add={part.add} class:del={part.del}>{part.text}</span>
-            {/each}</span
-          >
-        {:else}
-          <span class="d" class:bad={d.factTone === 'error'}>{d.fact}</span>
-        {/if}
+      <!-- One chain, so a fact arriving with its result fades in (Svelte plays
+           a local intro only when a block that already ran switches). -->
+      {#if d.fact && d.factTone === 'diff'}
+        <span class="d" in:factIn
+          >{#each factParts(d.fact) as part, i (i)}
+            <span class:add={part.add} class:del={part.del}>{part.text}</span>
+          {/each}</span
+        >
+      {:else if d.fact}
+        <span class="d" class:bad={d.factTone === 'error'} in:factIn
+          >{d.fact}</span
+        >
       {/if}
     {/snippet}
-    {@const land = landing(m)}
-    <!-- The call reserves its own space, so a run's rail grows one call at a
-         time — which is the storyboard the row-level wrapper used to play once
-         for the whole run and never again. -->
-    <Arrival
-      lead={land.lead}
-      opens
-      owns={false}
-      params={ARRIVAL}
-      still={!land.fresh}
-    >
-      <div class="row" class:err={failed}>
-        {#if SHOW_PREVIEW_TOOLS.has(m.metadata?.toolName ?? '')}
-          {@const input = m.metadata?.toolInput as PreviewSource}
-          {@const current = whiffle.previews[m.instanceId]}
-          {@const preview = sameSource(current, input) ? current : undefined}
-          {@const opened = preview?.state === 'open'}
-          <div class="preview-tool" class:closed={!opened}>
-            <button
-              aria-label={preview?.title || 'Preview'}
-              class="artifact-open"
-              onclick={() => opened ? revealPreview(m.instanceId) : openPreview(m.instanceId, input).then(() => revealPreview(m.instanceId)).catch((error) => toast.error(error.message))}
-              type="button"
-            >
-              <span class="mark"><IconWindow /></span>
-              <span class="artifact-label"
-                ><span>{preview?.title || 'Preview'}</span
-                ><span class="artifact-path"
-                  >{preview?.path || ('dir' in input ? pathLeaf(input.dir) : '')}</span
-                ></span
+    <!-- The call opens its own line, so a run's rail grows one call at a time. -->
+    <TranscriptRow id={callId(m)} motion="open">
+      {#snippet children()}
+        <div class="row" class:err={failed}>
+          {#if SHOW_PREVIEW_TOOLS.has(m.metadata?.toolName ?? '')}
+            {@const input = m.metadata?.toolInput as PreviewSource}
+            {@const current = whiffle.previews[m.instanceId]}
+            {@const preview = sameSource(current, input) ? current : undefined}
+            {@const opened = preview?.state === 'open'}
+            <div class="preview-tool" class:closed={!opened}>
+              <button
+                aria-label={preview?.title || 'Preview'}
+                class="artifact-open"
+                onclick={() => opened ? revealPreview(m.instanceId) : openPreview(m.instanceId, input).then(() => revealPreview(m.instanceId)).catch((error) => toast.error(error.message))}
+                type="button"
               >
-            </button>
-            {#if preview?.thumbnail}
-              <div aria-hidden="true" class="artifact-thumb" inert>
-                <Shot
-                  alt="Preview"
-                  size="thumb"
-                  src={`data:image/png;base64,${preview.thumbnail}`}
-                />
-              </div>
-            {/if}
-          </div>
-        {:else if hasBody}
-          <Collapsible.Root>
-            <Collapsible.Trigger class="trow">
-              {@render line()}
-              <span class="chev"><IconChevronRight /></span>
-            </Collapsible.Trigger>
-            <Collapsible.Content reveal>
-              {#if d.expanded === 'memory' && !failed}
-                <MemoryBody input={toolInput} result={m.metadata?.toolResult} />
-              {:else if d.expanded === 'memory' && result}
-                <div class="fields">
-                  <div class="field">
-                    <span class="k">result</span>
-                    <pre class="v">{result.text}</pre>
-                  </div>
+                <span class="mark"><IconWindow /></span>
+                <span class="artifact-label"
+                  ><span>{preview?.title || 'Preview'}</span
+                  ><span class="artifact-path"
+                    >{preview?.path || ('dir' in input ? pathLeaf(input.dir) : '')}</span
+                  ></span
+                >
+              </button>
+              {#if preview?.thumbnail}
+                <div aria-hidden="true" class="artifact-thumb" inert>
+                  <Shot
+                    alt="Preview"
+                    size="thumb"
+                    src={`data:image/png;base64,${preview.thumbnail}`}
+                  />
                 </div>
-              {:else if d.expanded === 'skill' && !failed}
-                <div class="skill-args">
-                  <ToolProse source={skillArgs(toolInput) ?? ''} />
-                </div>
-              {:else}
-                <div class="fields">
-                  {#each fields as f (f.key)}
-                    <div class="field">
-                      <span class="k">{f.key}</span>
-                      <pre class="v">{f.text}</pre>
-                    </div>
-                  {/each}
-                  {#if result}
+              {/if}
+            </div>
+          {:else if hasBody}
+            {@const key = openKey(m)}
+            <Collapsible.Root
+              bind:open={
+                () => openCalls.has(key),
+                (next) => {
+                  if (next) {
+                    openCalls.add(key);
+                  } else {
+                    openCalls.delete(key);
+                  }
+                }
+              }
+            >
+              <Collapsible.Trigger class="trow">
+                {@render line()}
+                <span class="chev"><IconChevronRight /></span>
+              </Collapsible.Trigger>
+              <Unfold>
+                {#if d.expanded === 'memory' && !failed}
+                  <MemoryBody
+                    input={toolInput}
+                    result={m.metadata?.toolResult}
+                  />
+                {:else if d.expanded === 'memory' && result}
+                  <div class="fields">
                     <div class="field">
                       <span class="k">result</span>
                       <pre class="v">{result.text}</pre>
-                      {#if result.more}
-                        <span class="more"
-                          >… {result.more.toLocaleString()} more chars</span
-                        >
-                      {/if}
                     </div>
-                  {/if}
-                </div>
-              {/if}
-            </Collapsible.Content>
-          </Collapsible.Root>
-        {:else}
-          <div class="trow flat">{@render line()}</div>
-        {/if}
-        {#if SHOW_IMAGE_TOOLS.has(m.metadata?.toolName ?? '') && machine}
-          {@const input = m.metadata?.toolInput as { path: string; caption?: string }}
-          <div class="shots">
-            <Shot
-              alt={input.caption ?? pathLeaf(input.path)}
-              caption={input.caption}
-              path={input.path}
-              size="card"
-              src={`/api/agents/${encodeURIComponent(machine())}/image?path=${encodeURIComponent(input.path)}`}
-            />
-          </div>
-        {/if}
-        {#if m.metadata?.resultImages?.length}
-          <div class="shots">
-            {#each m.metadata.resultImages as image, i (i)}
+                  </div>
+                {:else if d.expanded === 'skill' && !failed}
+                  <div class="skill-args">
+                    <ToolProse source={skillArgs(toolInput) ?? ''} />
+                  </div>
+                {:else}
+                  <div class="fields">
+                    {#each fields as f (f.key)}
+                      <div class="field">
+                        <span class="k">{f.key}</span>
+                        <pre class="v">{f.text}</pre>
+                      </div>
+                    {/each}
+                    {#if result}
+                      <div class="field">
+                        <span class="k">result</span>
+                        <pre class="v">{result.text}</pre>
+                        {#if result.more}
+                          <span class="more"
+                            >… {result.more.toLocaleString()} more chars</span
+                          >
+                        {/if}
+                      </div>
+                    {/if}
+                  </div>
+                {/if}
+              </Unfold>
+            </Collapsible.Root>
+          {:else}
+            <div class="trow flat">{@render line()}</div>
+          {/if}
+          {#if SHOW_IMAGE_TOOLS.has(m.metadata?.toolName ?? '') && machine}
+            {@const input = m.metadata?.toolInput as { path: string; caption?: string }}
+            <div class="shots">
               <Shot
-                alt="Image {i + 1} from {m.metadata.toolName}"
+                alt={input.caption ?? pathLeaf(input.path)}
+                caption={input.caption}
+                path={input.path}
                 size="card"
-                src={image.src}
+                src={`/api/agents/${encodeURIComponent(machine())}/image?path=${encodeURIComponent(input.path)}`}
               />
-            {/each}
-          </div>
-        {/if}
-      </div>
-    </Arrival>
+            </div>
+          {/if}
+          {#if m.metadata?.resultImages?.length}
+            <div class="shots">
+              {#each m.metadata.resultImages as image, i (i)}
+                <Shot
+                  alt="Image {i + 1} from {m.metadata.toolName}"
+                  size="card"
+                  src={image.src}
+                />
+              {/each}
+            </div>
+          {/if}
+        </div>
+      {/snippet}
+    </TranscriptRow>
   {/each}
 </div>
 
@@ -392,128 +447,140 @@
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    max-width: 440px;
-    min-height: 80px;
+    max-inline-size: 440px;
+    min-block-size: 80px;
     padding: var(--space-2);
-    margin: var(--space-2) 0;
+    margin-block: var(--space-2);
     border: 1px solid var(--border-hairline);
     border-radius: var(--radius-md);
     background: var(--surface-raised);
     box-shadow: var(--shadow-tile);
-  }
-  .preview-tool.closed {
-    opacity: 0.5;
-  }
-  .preview-tool:not(:has(.artifact-thumb)) {
-    width: fit-content;
+
+    &.closed {
+      opacity: 0.5;
+    }
+    &:not(:has(.artifact-thumb)) {
+      inline-size: fit-content;
+    }
+    @media (hover: hover) {
+      &:has(.artifact-open:hover) {
+        background: var(--surface-hover);
+      }
+    }
+    @media (pointer: coarse) {
+      & button {
+        min-block-size: 44px;
+      }
+    }
   }
   .artifact-open {
     display: flex;
     align-items: center;
     gap: var(--space-2);
     flex: 1;
-    min-width: 0;
+    min-inline-size: 0;
     border: 0;
     padding: var(--space-2);
     background: transparent;
     color: var(--ink-strong);
     font-size: var(--text-label);
-    text-align: left;
+    text-align: start;
     cursor: pointer;
-  }
-  .artifact-open::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    border-radius: var(--radius-md);
-  }
-  .artifact-open:focus-visible {
-    outline: none;
-  }
-  .artifact-open:focus-visible::after {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 2px;
+
+    &::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      border-radius: var(--radius-md);
+    }
+    &:focus-visible {
+      outline: none;
+
+      &::after {
+        outline: 2px solid var(--focus-ring);
+        outline-offset: 2px;
+      }
+    }
   }
   .artifact-label {
     display: flex;
     flex-direction: column;
-    min-width: 0;
-  }
-  .artifact-label > span {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    min-inline-size: 0;
+
+    & > span {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
   }
   .artifact-path {
     color: var(--ink-muted);
     font: var(--text-meta) var(--font-mono);
   }
   .mark {
-    width: 17px;
-    height: 17px;
+    inline-size: 17px;
+    block-size: 17px;
     flex-shrink: 0;
     display: grid;
     place-items: center;
     border-radius: var(--radius-xs);
     background: var(--mark-overlay), var(--mark-6);
     color: var(--mark-glyph);
-  }
-  .mark :global(svg) {
-    width: 13px;
-    height: 13px;
+
+    & :global(svg) {
+      inline-size: 13px;
+      block-size: 13px;
+    }
   }
   .artifact-thumb {
-    width: 90px;
-    height: 64px;
+    inline-size: 90px;
+    block-size: 64px;
     flex-shrink: 0;
     overflow: hidden;
     border: 1px solid var(--border-hairline);
     border-radius: var(--radius-sm);
     background: var(--surface-recess);
-  }
-  .artifact-thumb :global(.box) {
-    height: 64px;
-    min-height: 0;
-  }
-  .artifact-thumb :global(img) {
-    width: 100%;
-    height: 64px;
-    object-fit: cover;
-    object-position: top;
-  }
-  @media (hover: hover) {
-    .preview-tool:has(.artifact-open:hover) {
-      background: var(--surface-hover);
+
+    & :global(.box) {
+      block-size: 64px;
+      min-block-size: 0;
     }
-  }
-  @media (pointer: coarse) {
-    .preview-tool button {
-      min-height: 44px;
+    & :global(img) {
+      inline-size: 100%;
+      block-size: 64px;
+      object-fit: cover;
+      object-position: top;
     }
   }
   .shots {
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-2);
-    margin-left: calc(15px + var(--space-2));
-    margin-top: var(--space-2);
-  }
-  .shots > :global(*) {
-    flex: 1 1 240px;
-    min-width: 0;
-    max-width: 100%;
+    margin-inline-start: calc(15px + var(--space-2));
+    margin-block-start: var(--space-2);
+
+    & > :global(*) {
+      flex: 1 1 240px;
+      min-inline-size: 0;
+      max-inline-size: 100%;
+    }
   }
   .tools {
-    margin: var(--rail-gap, var(--space-4)) 0 0 var(--space-2);
-    padding-left: var(--space-3);
+    margin-block-start: var(--rail-gap, var(--space-4));
+    margin-inline-start: var(--space-2);
+    padding-inline-start: var(--space-3);
     background: var(--rail-head, var(--rail)) left top / 2px 100% no-repeat;
+
+    @media (width <= 900px) {
+      margin-inline-start: 0;
+    }
   }
   /* The row's shape is shared by the plain <div> and the Collapsible trigger
      (a <button>, so it needs its chrome stripped back to the ledger's). */
   .trow,
   .row :global(.trow) {
-    width: 100%;
-    min-height: 26px;
+    inline-size: 100%;
+    min-block-size: 26px;
     display: flex;
     align-items: center;
     gap: var(--space-2);
@@ -524,39 +591,60 @@
     border: 0;
     padding: 0;
     margin: 0;
-    text-align: left;
+    text-align: start;
+
+    @media (pointer: coarse) {
+      min-block-size: 44px;
+    }
   }
-  .row :global(button.trow) {
-    cursor: pointer;
+  .row {
+    & :global(button.trow) {
+      cursor: pointer;
+    }
+    & :global(.trow:focus-visible) {
+      outline: 2px solid var(--focus-ring);
+      outline-offset: 2px;
+      border-radius: var(--radius-xs);
+    }
+    & :global([data-slot="badge"]) {
+      flex: 0 0 auto;
+    }
+    & :global(.trow[data-state="open"] .chev) {
+      transform: rotate(90deg);
+    }
   }
-  .row :global(.trow:focus-visible) {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 2px;
-    border-radius: var(--radius-xs);
-  }
+  /* The glyph sits in one cell, so a status change can cross-fade two of
+     them on the same spot. */
   .ic {
-    width: 15px;
-    height: 15px;
+    inline-size: 15px;
+    block-size: 15px;
     flex: 0 0 auto;
     display: grid;
     place-items: center;
-    color: var(--ink-muted);
   }
-  .ic :global(svg) {
-    width: 15px;
-    height: 15px;
-    display: block;
+  .glyph {
+    grid-area: 1 / 1;
+    display: grid;
+    place-items: center;
+    color: var(--ink-muted);
+
+    & :global(svg) {
+      inline-size: 15px;
+      block-size: 15px;
+      display: block;
+    }
+    /* A failed call carries its state on the glyph — the completed row's
+       done/failed cue, next to the running row's breathing glyph in the live
+       tool. */
+    &.err {
+      color: var(--data-bad);
+    }
   }
   .fav {
-    width: 14px;
-    height: 14px;
+    inline-size: 14px;
+    block-size: 14px;
     display: block;
     border-radius: 3px;
-  }
-  /* A failed call carries its state on the glyph — the completed row's done/failed
-     cue, next to the running row's breathing glyph in the live tool. */
-  .ic.err {
-    color: var(--data-bad);
   }
   .tk {
     font-weight: var(--weight-strong);
@@ -570,15 +658,12 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    min-width: 0;
+    min-inline-size: 0;
     flex: 1 1 auto;
   }
   .tail {
     color: var(--ink-muted);
     opacity: 0.7;
-  }
-  .row :global([data-slot="badge"]) {
-    flex: 0 0 auto;
   }
   /* A fact is a measurement, not a verdict: it reads in --ink-strong, the ink
      that gives a number presence without passing judgement on it. Green is
@@ -589,9 +674,10 @@
     color: var(--ink-strong);
     font-variant-numeric: tabular-nums;
     flex: 0 0 auto;
-  }
-  .d.bad {
-    color: var(--data-bad);
+
+    &.bad {
+      color: var(--data-bad);
+    }
   }
   .add {
     color: var(--data-ok);
@@ -605,17 +691,15 @@
     display: grid;
     place-items: center;
     color: var(--ink-muted);
+
     @media (prefers-reduced-motion: no-preference) {
       transition: transform var(--dur-control) var(--ease-out);
     }
-  }
-  .chev :global(svg) {
-    width: 14px;
-    height: 14px;
-    display: block;
-  }
-  .row :global(.trow[data-state="open"] .chev) {
-    transform: rotate(90deg);
+    & :global(svg) {
+      inline-size: 14px;
+      block-size: 14px;
+      display: block;
+    }
   }
 
   /* The disclosed payload — same anatomy as Prompt.svelte's "What this touches",
@@ -624,52 +708,44 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
-    margin: var(--space-2) 0 var(--space-3) calc(15px + var(--space-2));
+    margin-block: var(--space-2) var(--space-3);
+    margin-inline-start: calc(15px + var(--space-2));
     padding: var(--space-3);
     border-radius: var(--radius-sm);
     background: var(--surface-recess);
   }
   /* A skill's arguments are the agent's own words to it: prose at the fields'
-     left edge, with no well around them. */
+     inline-start edge, with no well around them. */
   .skill-args {
-    margin: var(--space-1) 0 var(--space-3) calc(15px + var(--space-2));
-    max-width: 70ch;
+    margin-block: var(--space-1) var(--space-3);
+    margin-inline-start: calc(15px + var(--space-2));
+    max-inline-size: 70ch;
   }
   .field {
     display: flex;
     flex-direction: column;
     gap: var(--space-1);
-    min-width: 0;
-  }
-  .field .k {
-    font-size: var(--text-meta);
-    font-weight: var(--weight-medium);
-    color: var(--ink-muted);
-  }
-  .field .v {
-    margin: 0;
-    max-height: 300px;
-    overflow: auto;
-    font-family: var(--font-mono);
-    font-size: var(--text-label);
-    line-height: var(--leading-body);
-    color: var(--ink-strong);
-    white-space: pre-wrap;
-    word-break: break-word;
-  }
-  .field .more {
-    font-size: var(--text-meta);
-    color: var(--ink-muted);
-  }
-  @media (max-width: 900px) {
-    .tools {
-      margin-left: 0;
+    min-inline-size: 0;
+
+    & .k {
+      font-size: var(--text-meta);
+      font-weight: var(--weight-medium);
+      color: var(--ink-muted);
     }
-  }
-  @media (pointer: coarse) {
-    .trow,
-    .row :global(.trow) {
-      min-height: 44px;
+    & .v {
+      margin: 0;
+      max-block-size: 300px;
+      overflow: auto;
+      font-family: var(--font-mono);
+      font-size: var(--text-label);
+      line-height: var(--leading-body);
+      color: var(--ink-strong);
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    & .more {
+      font-size: var(--text-meta);
+      color: var(--ink-muted);
     }
   }
 </style>

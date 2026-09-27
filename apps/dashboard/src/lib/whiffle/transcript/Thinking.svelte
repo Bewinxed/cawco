@@ -13,7 +13,21 @@
     text,
     live = false,
     announce = false,
-  }: { text: string; live?: boolean; announce?: boolean } = $props();
+    fades = false,
+    folding = false,
+  }: {
+    text: string;
+    live?: boolean;
+    announce?: boolean;
+    /** New reasoning is shown arriving: each new step, each streamed chunk. */
+    fades?: boolean;
+    /**
+     * This block is the live reasoning the reader just watched, settled into
+     * its row. It is the same object, so it arrives as it was — open — and
+     * then folds shut, with the fold's own height tween.
+     */
+    folding?: boolean;
+  } = $props();
   const FENCE = /^\s*(```|~~~)/;
   /** Emphasis, code ticks and heading marks: noise in a three-line glimpse. */
   const MARKUP = /[*_`#>]/g;
@@ -48,7 +62,21 @@
 
   const paragraphs = $derived(splitBlocks(text));
   /** A running block starts open; a finished one folds to its tail. */
-  let expanded = $state(untrack(() => live));
+  let expanded = $state(untrack(() => live || folding));
+  $effect(() => {
+    if (untrack(() => folding)) {
+      expanded = false;
+    }
+  });
+  /**
+   * Steps drawn in the first render are the block as it was when it mounted —
+   * history, or the live block a reader just opened. Only steps that appear
+   * after that are new reasoning, and only those are shown arriving.
+   */
+  let drawn = $state(false);
+  $effect(() => {
+    drawn = true;
+  });
   /**
    * What a folded block shows past its chevron: the end of its last thought on
    * one line. The line is pinned to its right edge and fades out on the left,
@@ -90,6 +118,8 @@
       {#each paragraphs as paragraph, i (i)}
         <ThinkingStep
           description={paragraph}
+          enters={drawn && fades}
+          {fades}
           isLast={i === paragraphs.length - 1}
           markdown
           status={live && i === paragraphs.length - 1 ? "active" : "complete"}
@@ -101,10 +131,24 @@
 
 <style>
   .think {
-    margin: var(--rail-gap, var(--space-4)) 0 0 var(--space-2);
-    padding-left: var(--space-3);
+    margin-block-start: var(--rail-gap, var(--space-4));
+    margin-inline-start: var(--space-2);
+    padding-inline-start: var(--space-3);
     background: var(--rail-head, var(--rail)) left top / 2px 100% no-repeat;
-    max-width: 70ch;
+    max-inline-size: 70ch;
+
+    @media (width <= 900px) {
+      margin-inline-start: 0;
+    }
+    & :global(.rail-indicator) {
+      padding: 0;
+      gap: var(--space-2);
+      --thinking-icon-size: 15px;
+    }
+    /* The header spans the row so the tail has the width to read into. */
+    & :global(.thinking-header) {
+      inline-size: 100%;
+    }
   }
   .identity {
     display: flex;
@@ -114,42 +158,30 @@
   .icon {
     display: grid;
     place-items: center;
-    width: 15px;
-    height: 15px;
+    inline-size: 15px;
+    block-size: 15px;
+
+    & :global(svg) {
+      inline-size: 15px;
+      block-size: 15px;
+    }
   }
-  .icon :global(svg) {
-    width: 15px;
-    height: 15px;
-  }
-  .think :global(.rail-indicator) {
-    padding: 0;
-    gap: var(--space-2);
-    --thinking-icon-size: 15px;
-  }
-  /* One line past the chevron, pinned right so the newest words show; the
-     start fades out rather than cutting. Quieter than a tool row's text, so
-     the fold reads as an aside and not as the next step. */
+  /* One line past the chevron, pinned to its end so the newest words show;
+     the start fades out rather than cutting. Quieter than a tool row's text,
+     so the fold reads as an aside and not as the next step. */
   .tail {
     display: flex;
     justify-content: flex-end;
     flex: 1 1 auto;
-    min-width: 0;
+    min-inline-size: 0;
     overflow: hidden;
     color: var(--ink-muted);
     font-size: var(--text-meta);
     white-space: nowrap;
-    mask-image: linear-gradient(to right, transparent, #000 30%);
-  }
-  /* The header spans the row so the tail has the width to read into. */
-  .think :global(.thinking-header) {
-    width: 100%;
-  }
-  .tail > span {
-    flex: 0 0 auto;
-  }
-  @media (max-width: 900px) {
-    .think {
-      margin-left: 0;
+    mask-image: linear-gradient(to right, transparent, oklch(0% 0 0) 30%);
+
+    & > span {
+      flex: 0 0 auto;
     }
   }
 </style>

@@ -318,9 +318,26 @@ export function branchRows(branch: SubagentState): Row[] {
 export function buildRows(session: SessionState): Row[] {
   return [
     ...foldMessages(session.messages, session.subagents),
-    ...liveTail(session),
+    ...tailRows(session, liveContent(session), NO_LIVE.gen + 1),
   ];
 }
+
+/**
+ * The live row the last fold ended on — what tells the next fold whether its
+ * live row is the SAME row, still being written, or a new one.
+ */
+export interface LiveMemo {
+  /** Its answer so far; empty while it reasons or only indicates. */
+  answer: string;
+  /** Which generation of the tail it is: the `live:<gen>` in its key. */
+  gen: number;
+  /** Whether the last fold had a live row at all. */
+  on: boolean;
+  /** Its reasoning so far; empty while it answers or only indicates. */
+  reasoning: string;
+}
+
+const NO_LIVE: LiveMemo = { gen: 0, on: false, answer: "", reasoning: "" };
 
 /**
  * What the last fold was folded from, so the next one can tell whether it is
@@ -333,10 +350,36 @@ export interface FoldMemo {
   count: number;
   first: Message | undefined;
   last: Message | undefined;
+  /** The live row this fold ended on. */
+  live: LiveMemo;
   noted: Set<string>;
   /** The settled rows — everything before the live tail — and where each begins. */
   rows: Row[];
   starts: number[];
+}
+
+/**
+ * A fold, and what happened to the live row since the last one.
+ *
+ * `settled` is the one fact the transcript cannot read off the rows: a live
+ * row that has just become a settled one. The streamed answer ends as an
+ * assistant message and the streamed reasoning as a thinking message, each
+ * under a key of its own — but on screen it is the same object, and the
+ * transcript must treat it as one: no arrival, no replay, not a pixel moved.
+ */
+export interface Fold {
+  appended: boolean;
+  /**
+   * The last fold's live row, when this fold ended it: its key, and the
+   * settled row that continues it — or null when nothing does, and it leaves.
+   */
+  ended: {
+    key: string;
+    into: string | null;
+    as: "answer" | "reasoning";
+  } | null;
+  memo: FoldMemo;
+  rows: Row[];
 }
 
 /**
@@ -411,52 +454,22 @@ function cutFor(messages: Message[], memo: FoldMemo, branches: number): number {
 export function buildRowsFrom(
   session: SessionState,
   memo: FoldMemo | null
-): { rows: Row[]; memo: FoldMemo; appended: boolean } {
+): Fold {
   const { messages } = session;
   const branches = Object.keys(session.subagents).length;
   const cut = memo ? cutFor(messages, memo, branches) : -1;
+  const appended = memo !== null && cut >= 0;
+  const { rows, starts, noted } =
+    memo && appended
+      ? foldOnto(session, memo, cut)
+      : foldAll(messages, session.subagents);
 
-  if (memo === null || cut < 0) {
-    const noted = notedTasks(messages);
-    const { rows, starts } = foldRange(messages, session.subagents, 0, noted);
-    return {
-      rows: [...rows, ...liveTail(session)],
-      memo: {
-        rows,
-        starts,
-        count: messages.length,
-        first: messages[0],
-        last: messages.at(-1),
-        branches,
-        noted,
-      },
-      appended: false,
-    };
-  }
-
-  const kept = memo;
-  // Nothing new: the settled rows are the last fold's, untouched.
-  if (messages.length === kept.count) {
-    return {
-      rows: [...kept.rows, ...liveTail(session)],
-      memo: kept,
-      appended: true,
-    };
-  }
-  // The first row at or past the cut: an opener always begins a row, so the
-  // rows before it cover exactly the messages before it.
-  let keep = kept.starts.length;
-  for (let r = kept.starts.length - 1; r >= 0; r -= 1) {
-    if (kept.starts[r] < cut) {
-      break;
-    }
-    keep = r;
-  }
-  const tail = foldRange(messages, session.subagents, cut, kept.noted);
-  const rows = kept.rows.slice(0, keep).concat(tail.rows);
-  const starts = kept.starts.slice(0, keep).concat(tail.starts);
+  const prior = memo?.live ?? NO_LIVE;
+  const content = liveContent(session);
+  const same = prior.on && content !== null && continues(prior, content);
+  const gen = same ? prior.gen : prior.gen + 1;
   return {
-    rows: [...rows, ...liveTail(session)],
+    rows: [...rows, ...tailRows(session, content, gen)],
     memo: {
       rows,
       starts,
@@ -464,25 +477,134 @@ export function buildRowsFrom(
       first: messages[0],
       last: messages.at(-1),
       branches,
-      noted: kept.noted,
+      noted,
+      live: content
+        ? {
+            gen,
+            on: true,
+            answer: content.text,
+            reasoning: content.thinking ?? "",
+          }
+        : { ...NO_LIVE, gen },
     },
-    appended: true,
+    appended,
+    ended: prior.on && !same ? endOf(prior, rows, memo) : null,
   };
 }
 
-/**
- * The rows that ride after the settled transcript, re-derived every time.
- */
-function liveTail(session: SessionState): Row[] {
-  const rows: Row[] = [];
+interface Settled {
+  noted: Set<string>;
+  rows: Row[];
+  starts: number[];
+}
 
-  // The live tail: only ever the main loop's, and only while nothing settled it.
-  // A thinking block is shown the moment it opens, even with no delta text yet —
-  // Claude's extended thinking is often REDACTED and streams no deltas at all
-  // (see frames.ts), so gating on thinkingStream meant "reasoning, silently,
-  // with no indicator". The row itself is the indicator; the text fills in if
-  // and when it arrives.
-  const reasoning = session.openBlock === "thinking";
+/** Every message, folded from the start. */
+function foldAll(
+  messages: Message[],
+  subagents: Record<string, SubagentState>
+): Settled {
+  const noted = notedTasks(messages);
+  return { ...foldRange(messages, subagents, 0, noted), noted };
+}
+
+/** The memo's rows, with only the turn at the cut and what follows it folded again. */
+function foldOnto(session: SessionState, memo: FoldMemo, cut: number): Settled {
+  // Nothing new: the settled rows are the last fold's, untouched.
+  if (session.messages.length === memo.count) {
+    return memo;
+  }
+  // The first row at or past the cut: an opener always begins a row, so the
+  // rows before it cover exactly the messages before it.
+  let keep = memo.starts.length;
+  for (let r = memo.starts.length - 1; r >= 0; r -= 1) {
+    if (memo.starts[r] < cut) {
+      break;
+    }
+    keep = r;
+  }
+  const tail = foldRange(session.messages, session.subagents, cut, memo.noted);
+  return {
+    rows: memo.rows.slice(0, keep).concat(tail.rows),
+    starts: memo.starts.slice(0, keep).concat(tail.starts),
+    noted: memo.noted,
+  };
+}
+
+/** How the last fold's live row ended: which settled row, if any, it became. */
+function endOf(
+  prior: LiveMemo,
+  rows: Row[],
+  memo: FoldMemo | null
+): NonNullable<Fold["ended"]> {
+  const as = prior.answer ? "answer" : "reasoning";
+  return {
+    key: liveKey(prior.gen),
+    as,
+    into: prior.answer || prior.reasoning ? settledInto(rows, memo, as) : null,
+  };
+}
+
+const liveKey = (gen: number): string => `live:${gen}`;
+
+type LiveContent = Omit<Extract<Row, { kind: "live" }>, "key" | "kind">;
+
+/**
+ * Whether the live row now is the one the last fold drew, still being
+ * written. It only ever moves forward: the indicator becomes whatever comes
+ * next, reasoning grows or gives way to an answer, an answer grows. A
+ * reasoning block that is gone — settled into its row, or dropped — or an
+ * answer that is not the old one grown, is a new row.
+ */
+function continues(prior: LiveMemo, now: LiveContent): boolean {
+  if (prior.answer) {
+    return now.text.startsWith(prior.answer);
+  }
+  if (prior.reasoning) {
+    return now.text !== "" || (now.thinking ?? "").startsWith(prior.reasoning);
+  }
+  return true;
+}
+
+/**
+ * The settled row a finished live row became: the newest row of its kind
+ * that the last fold did not have. An answer settles into an assistant
+ * message, reasoning into a thinking one; both land in the same frame that
+ * clears the live buffer.
+ */
+function settledInto(
+  rows: Row[],
+  memo: FoldMemo | null,
+  as: "answer" | "reasoning"
+): string | null {
+  const had = new Set(memo?.rows.map((row) => row.key));
+  const type = as === "answer" ? "assistant" : "thinking";
+  for (let i = rows.length - 1; i >= 0; i -= 1) {
+    const row = rows[i];
+    if (had.has(row.key)) {
+      return null;
+    }
+    if (row.kind === "single" && row.message.type === type) {
+      return row.key;
+    }
+  }
+  return null;
+}
+
+/**
+ * What the live row shows, or null when there is none.
+ *
+ * A thinking block is shown the moment it opens, even with no delta text yet
+ * — Claude's extended thinking is often REDACTED and streams no deltas at all
+ * (see frames.ts), so gating on thinkingStream meant "reasoning, silently,
+ * with no indicator". The row itself is the indicator; the text fills in if
+ * and when it arrives. A block that has CLOSED keeps its place until its
+ * message lands: that message is this row, settled, and the gap between the
+ * two was the reasoning blinking out of the tail and back in above it.
+ */
+function liveContent(session: SessionState): LiveContent | null {
+  const reasoning =
+    (session.openBlock === "thinking" || session.thinkingClosing) &&
+    !session.streaming;
   const indicating =
     session.busy &&
     session.pending.length === 0 &&
@@ -492,20 +614,35 @@ function liveTail(session: SessionState): Row[] {
     !session.currentTool &&
     session.openBlock !== "tool" &&
     !session.thinkingClosing;
-  if (reasoning || session.streaming || indicating) {
-    rows.push({
-      kind: "live",
-      key: "stream:live",
-      thinking: reasoning ? session.thinkingStream : null,
-      thinkingLive: !session.thinkingClosing,
-      indicating,
-      text: session.streaming,
-    });
+  if (!(reasoning || session.streaming || indicating)) {
+    return null;
   }
+  return {
+    thinking: reasoning ? session.thinkingStream : null,
+    thinkingLive: !session.thinkingClosing,
+    indicating,
+    text: session.streaming,
+  };
+}
+
+/**
+ * The rows that ride after the settled transcript, re-derived every time.
+ */
+function tailRows(
+  session: SessionState,
+  content: LiveContent | null,
+  gen: number
+): Row[] {
+  const rows: Row[] = [];
+  if (content) {
+    rows.push({ kind: "live", key: liveKey(gen), ...content });
+  }
+  // One row per call in flight, keyed by the call: the next tool is a new
+  // row arriving, not this one changing its words.
   if (session.currentTool) {
     rows.push({
       kind: "livetool",
-      key: "stream:tool",
+      key: `tool:${session.currentTool.toolId}`,
       glance: session.currentTool,
     });
   }

@@ -4,9 +4,9 @@
 
 <script lang="ts">
   import type { Component, Snippet } from "svelte";
+  import { untrack } from "svelte";
   import { Markdown } from "$lib/components/ui/markdown";
   import { IconCheck, IconGlobe, IconSearch } from "$lib/icons";
-  import Stream from "$lib/whiffle/motion/Stream.svelte";
   import { getSizeContext } from "../thinking-indicator/size-context";
 
   let {
@@ -15,7 +15,8 @@
     label = "",
     description,
     status = "complete",
-    delay = 0.08,
+    enters = false,
+    fades = false,
     isLast = false,
     markdown = false,
     children,
@@ -26,7 +27,14 @@
     label?: string;
     description?: string;
     status?: StepStatus;
-    delay?: number;
+    /**
+     * This step is new — it appeared under a block already on screen — and
+     * fades in (--dur-menu). Read once, at mount: a step drawn with its block
+     * (history, a block opened, a remount) never replays.
+     */
+    enters?: boolean;
+    /** Chunks streaming into this step's text fade in as they land. */
+    fades?: boolean;
     isLast?: boolean;
     /** Render the description as markdown rather than plain streamed text. */
     markdown?: boolean;
@@ -41,6 +49,7 @@
     check: IconCheck,
   };
   const Icon = $derived(typeof icon === "string" ? icons[icon] : icon);
+  const entering = untrack(() => enters);
 </script>
 
 {#if status !== "pending"}
@@ -49,7 +58,6 @@
     data-size={size?.() ?? "default"}
     data-slot="thinking-step"
     data-status={status}
-    style:--step-delay={`${delay}s`}
   >
     <div aria-hidden="true" class="icon-column">
       <span class="icon"
@@ -63,19 +71,21 @@
         <span class="connector"></span>
       {/if}
     </div>
-    <div class="copy">
+    <div class="copy" class:enters={entering}>
       {#if label}
-        <span class="label" class:shimmer={status === "active"}
-          ><Stream text={label} /></span
-        >
+        <span class="label" class:shimmer={status === "active"}>{label}</span>
       {/if}
       {#if description && markdown}
         <div class="description md">
-          <Markdown source={description} streaming={status === "active"} />
+          <Markdown
+            {fades}
+            source={description}
+            streaming={status === "active"}
+          />
         </div>
       {:else if description}
         <span class="description" class:shimmer={!label && status === "active"}
-          ><Stream text={description} /></span
+          >{description}</span
         >
       {/if}
       {@render children?.()}
@@ -87,12 +97,13 @@
   .step {
     display: flex;
     gap: var(--space-2);
-    min-width: 0;
+    min-inline-size: 0;
     font-size: var(--text-label);
     line-height: var(--leading-body);
-  }
-  .step[data-size="compact"] {
-    font-size: var(--text-meta);
+
+    &[data-size="compact"] {
+      font-size: var(--text-meta);
+    }
   }
   .icon-column {
     display: flex;
@@ -103,32 +114,33 @@
   .icon {
     display: grid;
     place-items: center;
-    width: 15px;
-    height: 1lh;
-    min-height: 15px;
-  }
-  .icon :global(svg) {
-    width: 15px;
-    height: 15px;
+    inline-size: 15px;
+    block-size: 1lh;
+    min-block-size: 15px;
+
+    & :global(svg) {
+      inline-size: 15px;
+      block-size: 15px;
+    }
   }
   .dot {
-    width: var(--space-1);
-    height: var(--space-1);
+    inline-size: var(--space-1);
+    block-size: var(--space-1);
     border-radius: 50%;
     background: currentColor;
   }
   .connector {
-    width: 1px;
+    inline-size: 1px;
     flex: 1;
     background: var(--border-hairline);
   }
   .copy {
-    min-width: 0;
+    min-inline-size: 0;
     flex: 1;
     display: flex;
     flex-direction: column;
     gap: var(--space-1);
-    padding-bottom: var(--space-2);
+    padding-block-end: var(--space-2);
   }
   .label {
     color: var(--ink-strong);
@@ -137,47 +149,48 @@
   .description {
     white-space: pre-wrap;
     overflow-wrap: anywhere;
-  }
-  /* Markdown keeps the plain description's type: prose-sm restates its own
-     size and colour on streamdown's root, so they are handed back here, and
-     block margins collapse so a step is exactly as tall as its text. */
-  .description.md {
-    white-space: normal;
-  }
-  .description.md :global(.prose) {
-    font-size: inherit;
-    line-height: inherit;
-    color: inherit;
-  }
-  .description.md :global(.prose > *),
-  .description.md :global(p),
-  .description.md :global(ul),
-  .description.md :global(ol) {
-    margin-block: 0;
-  }
-  .description.md :global(.prose > * + *) {
-    margin-top: var(--space-1);
-  }
-  .description.md :global(ul),
-  .description.md :global(ol) {
-    padding-left: var(--space-5);
-  }
-  .description.md :global(strong) {
-    color: var(--ink-strong);
-  }
-  /* prose wraps inline code in literal backticks; the code face already
-     marks it. */
-  .description.md :global(code::before),
-  .description.md :global(code::after) {
-    content: none;
-  }
-  .description.md :global(code) {
-    font-family: var(--font-mono);
+
+    /* Markdown keeps the plain description's type: prose-sm restates its own
+       size and colour on streamdown's root, so they are handed back here, and
+       block margins collapse so a step is exactly as tall as its text. */
+    &.md {
+      white-space: normal;
+
+      & :global(.prose) {
+        font-size: inherit;
+        line-height: inherit;
+        color: inherit;
+      }
+      & :global(.prose > *),
+      & :global(p),
+      & :global(ul),
+      & :global(ol) {
+        margin-block: 0;
+      }
+      & :global(.prose > * + *) {
+        margin-block-start: var(--space-1);
+      }
+      & :global(ul),
+      & :global(ol) {
+        padding-inline-start: var(--space-5);
+      }
+      & :global(strong) {
+        color: var(--ink-strong);
+      }
+      /* prose wraps inline code in literal backticks; the code face already
+         marks it. */
+      & :global(code::before),
+      & :global(code::after) {
+        content: none;
+      }
+      & :global(code) {
+        font-family: var(--font-mono);
+      }
+    }
   }
   @media (prefers-reduced-motion: no-preference) {
-    .copy {
-      animation: step-in var(--c-200, 200ms) var(--ease-out) var(--step-delay)
-        backwards;
+    .copy.enters {
+      animation: step-in var(--dur-menu) var(--ease-out) backwards;
     }
     .shimmer {
       color: transparent;
@@ -189,15 +202,12 @@
       );
       background-size: 300% 100%;
       background-clip: text;
-      animation: shimmer 1.5s ease-in-out infinite;
+      animation: shimmer var(--breath) var(--ease-in-out) infinite;
     }
   }
   @keyframes step-in {
     from {
       opacity: 0;
-    }
-    to {
-      opacity: 1;
     }
   }
   @keyframes shimmer {

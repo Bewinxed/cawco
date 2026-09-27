@@ -5,6 +5,7 @@
     UserQuestionResult,
   } from "@whiffle/core";
   import { IconCheck, IconClose } from "$lib/icons";
+  import { easeOut, motionOk } from "$lib/whiffle/motion/curves.svelte";
   import { questionsOf } from "../question";
   /**
    * An answered (or dismissed) `AskUserQuestion` as it settled in the transcript
@@ -13,6 +14,7 @@
    * Ported from the mock's `#q-card` (.hitl / .lede / .qopts / .kc).
    */
   import type { Message } from "../types";
+  import { useLedger } from "./arrivals.svelte";
 
   let { message }: { message: Message } = $props();
 
@@ -43,6 +45,26 @@
   };
   const isSelected = (question: string, label: string): boolean =>
     chosen(question).includes(label);
+
+  /**
+   * Answering morphs the card where it stands: the state pill cross-fades to
+   * its new word (--dur-control) and the picked option takes its selected
+   * look on the same beat. Only when the reader is watching; the card never
+   * plays this on its first render.
+   */
+  const ledger = useLedger();
+  function pillSwap(node: Element) {
+    if (!(motionOk.current && ledger?.watched)) {
+      return { duration: 0 };
+    }
+    return {
+      duration: Number.parseFloat(
+        getComputedStyle(node).getPropertyValue("--dur-control")
+      ),
+      easing: easeOut,
+      css: (t: number) => `opacity: ${t}`,
+    };
+  }
   /** A freeform answer whose text matches no listed option label. */
   const otherText = (q: UserQuestion): string | null => {
     const picks = chosen(q.question);
@@ -54,13 +76,19 @@
 
 <section aria-label="Question from the agent" class="hitl">
   <h2>
-    {#if answered}
-      <span class="pill done"><IconCheck />answered</span>
-    {:else if dismissed}
-      <span class="pill muted"><IconClose />dismissed</span>
-    {:else}
-      <span class="pill attn">needs you</span>
-    {/if}
+    <span class="state">
+      {#if answered}
+        <span class="pill done" in:pillSwap out:pillSwap
+          ><IconCheck />answered</span
+        >
+      {:else if dismissed}
+        <span class="pill muted" in:pillSwap out:pillSwap
+          ><IconClose />dismissed</span
+        >
+      {:else}
+        <span class="pill attn" in:pillSwap out:pillSwap>needs you</span>
+      {/if}
+    </span>
     Question from the agent
   </h2>
 
@@ -90,9 +118,14 @@
     border: 1px solid var(--border-control);
     border-radius: var(--radius-lg);
     background: var(--surface-raised);
-    margin: var(--space-4) 0 0 var(--space-2);
+    margin-block-start: var(--space-4);
+    margin-inline-start: var(--space-2);
     padding: var(--space-3);
     box-shadow: var(--shadow-hairline, var(--shadow-tile));
+
+    @media (width <= 900px) {
+      margin-inline-start: 0;
+    }
   }
   h2 {
     font-size: var(--text-label);
@@ -101,52 +134,84 @@
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    margin-bottom: var(--space-2);
+    margin-block-end: var(--space-2);
+  }
+  /* One cell, so the outgoing pill and the incoming one cross-fade in place. */
+  .state {
+    display: inline-grid;
+
+    & > :global(*) {
+      grid-area: 1 / 1;
+    }
   }
   .pill {
     display: inline-flex;
     align-items: center;
     gap: var(--space-1);
-    height: 20px;
-    padding: 0 var(--space-2);
+    block-size: 20px;
+    padding-block: 0;
+    padding-inline: var(--space-2);
     border-radius: var(--radius-pill);
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
     white-space: nowrap;
-  }
-  .pill :global(svg) {
-    width: 9px;
-    height: 9px;
-    flex: 0 0 auto;
-  }
-  .pill.attn {
-    background: var(--status-attn-bg);
-    color: var(--status-attn-ink);
-  }
-  .pill.done {
-    background: var(--status-done-bg, var(--surface-recess));
-    color: var(--status-done-ink, var(--ink-strong));
-  }
-  .pill.muted {
-    background: var(--surface-recess);
-    color: var(--ink-muted);
+
+    & :global(svg) {
+      inline-size: 9px;
+      block-size: 9px;
+      flex: 0 0 auto;
+    }
+    &.attn {
+      background: var(--status-attn-bg);
+      color: var(--status-attn-ink);
+    }
+    &.done {
+      background: var(--status-done-bg, var(--surface-recess));
+      color: var(--status-done-ink, var(--ink-strong));
+    }
+    &.muted {
+      background: var(--surface-recess);
+      color: var(--ink-muted);
+    }
   }
   .lede {
     font-size: var(--text-label);
     line-height: var(--leading-body);
     color: var(--ink-strong);
-    margin-bottom: var(--space-2);
-    max-width: 72ch;
+    margin-block-end: var(--space-2);
+    max-inline-size: 72ch;
   }
   .qopts {
     display: flex;
     gap: var(--space-2);
     flex-wrap: wrap;
-    margin: 2px 0 var(--space-2);
+    margin-block: 2px var(--space-2);
+  }
+  .kc {
+    display: inline-grid;
+    place-items: center;
+    min-inline-size: 17px;
+    block-size: 17px;
+    padding-block: 0;
+    padding-inline: 4px;
+    border-radius: var(--radius-xs);
+    background: var(--surface-recess);
+    font-family: var(--font-mono);
+    font-size: var(--text-meta);
+    color: var(--ink-strong);
+    line-height: 1;
+    flex: 0 0 auto;
+
+    @media (prefers-reduced-motion: no-preference) {
+      transition:
+        background-color var(--dur-control) var(--ease-out),
+        color var(--dur-control) var(--ease-out);
+    }
   }
   .opt {
-    min-height: 30px;
-    padding: var(--space-2) var(--space-3);
+    min-block-size: 30px;
+    padding-block: var(--space-2);
+    padding-inline: var(--space-3);
     border: 1px solid var(--border-control);
     border-radius: var(--radius-sm);
     background: var(--surface-raised);
@@ -157,62 +222,48 @@
     display: inline-flex;
     align-items: center;
     gap: var(--space-2);
-    text-align: left;
-    max-width: 100%;
-  }
-  /* Identical to the live card's `.qopts button.sel` — the settled record is
-     the same anatomy as the prompt that produced it, just inert, so what the
-     reader picked must look picked and not flagged. --status-attn-* stays
-     reserved for "a person is holding this up". */
-  .opt.sel {
-    border-color: var(--brand-solid);
-    background: var(--surface-recess);
-    color: var(--ink-strong);
-  }
-  .opt.sel .kc {
-    background: var(--brand-solid);
-    color: var(--on-brand);
-  }
-  /* biome-ignore lint/style/noDescendingSpecificity: cascade order is load-bearing — .kc's base rules must lose to .opt.sel .kc above them. */
-  .kc {
-    display: inline-grid;
-    place-items: center;
-    min-width: 17px;
-    height: 17px;
-    padding: 0 4px;
-    border-radius: var(--radius-xs);
-    background: var(--surface-recess);
-    font-family: var(--font-mono);
-    font-size: var(--text-meta);
-    color: var(--ink-strong);
-    line-height: 1;
-    flex: 0 0 auto;
+    text-align: start;
+    max-inline-size: 100%;
+
+    @media (pointer: coarse) {
+      min-block-size: 44px;
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      transition:
+        border-color var(--dur-control) var(--ease-out),
+        background-color var(--dur-control) var(--ease-out);
+    }
+    /* Identical to the live card's `.qopts button.sel` — the settled record
+       is the same anatomy as the prompt that produced it, just inert, so what
+       the reader picked must look picked and not flagged. --status-attn-*
+       stays reserved for "a person is holding this up". */
+    &.sel {
+      border-color: var(--brand-solid);
+      background: var(--surface-recess);
+      color: var(--ink-strong);
+
+      & .kc {
+        background: var(--brand-solid);
+        color: var(--on-brand);
+      }
+    }
   }
   .answer-free {
     font-size: var(--text-label);
     line-height: var(--leading-body);
     color: var(--ink-strong);
-    max-width: 72ch;
+    max-inline-size: 72ch;
     display: flex;
     gap: var(--space-2);
     align-items: baseline;
-  }
-  .answer-free .lbl {
-    font-size: var(--text-meta);
-    font-weight: var(--weight-strong);
-    text-transform: uppercase;
-    letter-spacing: 0.02em;
-    color: var(--ink-muted);
-    flex: 0 0 auto;
-  }
-  @media (max-width: 900px) {
-    .hitl {
-      margin-left: 0;
-    }
-  }
-  @media (pointer: coarse) {
-    .opt {
-      min-height: 44px;
+
+    & .lbl {
+      font-size: var(--text-meta);
+      font-weight: var(--weight-strong);
+      text-transform: uppercase;
+      letter-spacing: 0.02em;
+      color: var(--ink-muted);
+      flex: 0 0 auto;
     }
   }
 </style>

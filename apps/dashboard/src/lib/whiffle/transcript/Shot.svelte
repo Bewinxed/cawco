@@ -1,5 +1,4 @@
 <script lang="ts">
-  import Reveal from "$lib/whiffle/motion/Reveal.svelte";
   import { lightbox } from "./lightbox-state.svelte";
 
   let {
@@ -18,65 +17,72 @@
 
   let loaded = $state<string>();
   let failed = $state<string>();
+  /**
+   * An image the browser already had when this mounted — a row scrolled back
+   * into view, a pane come back — is simply there. Only an image that
+   * actually loads in front of the reader resolves out of its blur.
+   */
+  let cached = $state(false);
+  function mounted(img: HTMLImageElement): void {
+    if (img.complete && img.naturalWidth > 0) {
+      cached = true;
+      loaded = src;
+    }
+  }
 </script>
 
-<Reveal block>
-  <figure class:thumb={size === 'thumb'}>
-    {#if failed === src}
-      <div class="box missing">
-        <span>Image not available</span>
-        {#if path}
-          <span class="path">{path}</span>
-        {/if}
-      </div>
-    {:else}
-      <button
-        aria-label={`Open ${alt}`}
-        class="box"
-        onclick={() => lightbox.open({ src, alt, caption, path })}
-        type="button"
+<figure class:thumb={size === 'thumb'}>
+  {#if failed === src}
+    <div class="box missing">
+      <span>Image not available</span>
+      {#if path}
+        <span class="path">{path}</span>
+      {/if}
+    </div>
+  {:else}
+    <button
+      aria-label={`Open ${alt}`}
+      class="box"
+      onclick={() => lightbox.open({ src, alt, caption, path })}
+      type="button"
+    >
+      {#if loaded !== src}
+        <span aria-hidden="true" class="skeleton"></span>
+      {/if}
+      <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: image load/error lifecycle events; the containing button owns interaction. -->
+      <img
+        {alt}
+        decoding="async"
+        loading="lazy"
+        onerror={() => { failed = src; }}
+        onload={() => { loaded = src; }}
+        {src}
+        class:cached={cached}
+        class:loaded={loaded === src}
+        {@attach mounted}
       >
-        {#if loaded !== src}
-          <span aria-hidden="true" class="skeleton"></span>
-        {/if}
-        <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: image load/error lifecycle events; the containing button owns interaction. -->
-        <img
-          {alt}
-          decoding="async"
-          loading="lazy"
-          onerror={() => { failed = src; }}
-          onload={() => { loaded = src; }}
-          {src}
-          class:loaded={loaded === src}
-        >
-      </button>
-    {/if}
-    {#if caption || path}
-      <figcaption>
-        {#if caption}
-          <span>{caption}</span>
-        {/if}
-        {#if path}
-          <span class="path">{path}</span>
-        {/if}
-      </figcaption>
-    {/if}
-  </figure>
-</Reveal>
+    </button>
+  {/if}
+  {#if caption || path}
+    <figcaption>
+      {#if caption}
+        <span>{caption}</span>
+      {/if}
+      {#if path}
+        <span class="path">{path}</span>
+      {/if}
+    </figcaption>
+  {/if}
+</figure>
 
 <style>
-  figure {
-    margin: 0;
-    width: 100%;
-    max-width: 100%;
-  }
   .box {
     position: relative;
     display: flex;
     align-items: center;
     justify-content: flex-start;
-    width: 100%;
-    height: 240px;
+    inline-size: 100%;
+    block-size: 240px;
     padding: 0;
     border: 1px solid var(--border-hairline);
     border-radius: var(--radius-sm);
@@ -86,32 +92,41 @@
   }
   button {
     cursor: pointer;
-  }
-  button:focus-visible {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 2px;
+
+    &:focus-visible {
+      outline: 2px solid var(--focus-ring);
+      outline-offset: 2px;
+    }
   }
   img {
     display: block;
-    max-width: 100%;
-    max-height: 240px;
+    max-inline-size: 100%;
+    max-block-size: 240px;
     object-fit: contain;
     opacity: 0;
     filter: blur(6px);
-    transition:
-      opacity calc(var(--dur-control) * 3) var(--ease-out),
-      filter calc(var(--dur-control) * 3) var(--ease-out);
-  }
-  img.loaded {
-    opacity: 1;
-    filter: blur(0);
+
+    &.loaded {
+      opacity: 1;
+      filter: blur(0);
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      &:not(.cached) {
+        transition:
+          opacity calc(var(--dur-control) * 3) var(--ease-out),
+          filter calc(var(--dur-control) * 3) var(--ease-out);
+      }
+    }
   }
   .skeleton {
     position: absolute;
     inset: 0;
     background: var(--surface-recess);
-    animation: pulse calc(var(--dur-control) * 10) var(--ease-out) infinite
-      alternate;
+
+    @media (prefers-reduced-motion: no-preference) {
+      animation: pulse calc(var(--dur-control) * 10) var(--ease-out) infinite
+        alternate;
+    }
   }
   .missing {
     flex-direction: column;
@@ -129,21 +144,28 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-1);
-    margin-top: var(--space-2);
+    margin-block-start: var(--space-2);
     font-size: var(--text-meta);
     color: var(--ink-muted);
   }
-  .thumb .box {
-    width: 48px;
-    height: 48px;
-  }
-  .thumb {
-    width: 48px;
-  }
-  .thumb img {
-    width: 100%;
-    height: 100%;
-    object-fit: cover;
+  figure {
+    margin: 0;
+    inline-size: 100%;
+    max-inline-size: 100%;
+
+    &.thumb {
+      inline-size: 48px;
+
+      & .box {
+        inline-size: 48px;
+        block-size: 48px;
+      }
+      & img {
+        inline-size: 100%;
+        block-size: 100%;
+        object-fit: cover;
+      }
+    }
   }
   @keyframes pulse {
     from {

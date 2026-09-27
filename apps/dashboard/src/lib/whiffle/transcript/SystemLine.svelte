@@ -2,8 +2,6 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Collapsible from "$lib/components/ui/collapsible";
   import { IconChevronRight, IconInfo, IconStop } from "$lib/icons";
-  import Reveal from "$lib/whiffle/motion/Reveal.svelte";
-  import Stream from "$lib/whiffle/motion/Stream.svelte";
   /**
    * The quiet ledger's non-turn lines: a command's output in a recessed well, a
    * system note folded on the rail, and a failure or refusal as a named card
@@ -13,6 +11,7 @@
   import type { Message } from "../types";
   import MessageBody from "./MessageBody.svelte";
   import type { HarnessNote } from "./rows";
+  import Unfold from "./Unfold.svelte";
 
   let {
     message,
@@ -73,8 +72,8 @@
     {#if harness.body}
       <Collapsible.Root bind:open>
         <Collapsible.Trigger class="ftrig hn">
-          <Reveal><IconInfo /></Reveal>
-          <span class="ftitle"><Stream text={harness.title} /></span>
+          <IconInfo />
+          <span class="ftitle">{harness.title}</span>
           {#if harness.status}
             <span class="hstatus" class:bad={harness.status === 'failed'}
               >{harness.status}</span
@@ -82,16 +81,16 @@
           {/if}
           <span class="hchev" class:open><IconChevronRight /></span>
         </Collapsible.Trigger>
-        <Collapsible.Content reveal>
+        <Unfold>
           <div class="hbody"><MessageBody source={harness.body} /></div>
-        </Collapsible.Content>
+        </Unfold>
       </Collapsible.Root>
     {:else}
       <!-- Nothing to open, so nothing that looks openable: a chevron over an
            empty body is the dead disclosure the tool rows already refuse. -->
       <span class="hline">
-        <Reveal><IconInfo /></Reveal>
-        <span class="ftitle"><Stream text={harness.title} /></span>
+        <IconInfo />
+        <span class="ftitle">{harness.title}</span>
         {#if harness.status}
           <span class="hstatus" class:bad={harness.status === 'failed'}
             >{harness.status}</span
@@ -105,7 +104,7 @@
        "task done" with no reference to which task is a line that says nothing. -->
   <div class="note fold">
     <span class="hline">
-      <Reveal><IconInfo /></Reveal>
+      <IconInfo />
       <span class="tverb" class:bad={message?.content === 'task failed'}
         >{message?.content}</span
       >
@@ -121,8 +120,8 @@
        that happened TO the operator, not things they did. -->
   <div class="note fold">
     <span class="hline">
-      <Reveal><IconStop /></Reveal>
-      <span class="ftitle"><Stream text="Interrupted" /></span>
+      <IconStop />
+      <span class="ftitle">Interrupted</span>
     </span>
   </div>
 {:else if isFail}
@@ -137,13 +136,13 @@
         <span class="hchev" class:open><IconChevronRight /></span>
         <span class="ftitle">{foldTitle}</span>
       </Collapsible.Trigger>
-      <Collapsible.Content reveal>
+      <Unfold>
         {#if foldCommand}
           <pre class="well">{foldCommand}</pre>
         {:else if foldBody}
           <div class="hbody"><MessageBody source={foldBody} /></div>
         {/if}
-      </Collapsible.Content>
+      </Unfold>
     </Collapsible.Root>
   </div>
 {:else}
@@ -151,8 +150,8 @@
        refusal the harness line and the tool rows already make. -->
   <div class="note fold">
     <span class="hline">
-      <Reveal><IconInfo /></Reveal>
-      <span class="ftitle"><Stream text={foldTitle} /></span>
+      <IconInfo />
+      <span class="ftitle">{foldTitle}</span>
     </span>
   </div>
 {/if}
@@ -162,7 +161,8 @@
     background: var(--surface-recess);
     border-radius: var(--radius-sm);
     padding: var(--space-3);
-    margin: var(--rail-gap, var(--space-4)) 0 0 var(--space-2);
+    margin-block-start: var(--rail-gap, var(--space-4));
+    margin-inline-start: var(--space-2);
     overflow-x: auto;
     font-family: var(--font-mono);
     font-size: var(--text-label);
@@ -171,57 +171,60 @@
     white-space: pre-wrap;
   }
   .failcard {
-    border-left: 3px solid var(--status-fail-ink);
+    border-inline-start: 3px solid var(--status-fail-ink);
     background: var(--status-fail-bg);
     color: var(--status-fail-ink);
     border-radius: var(--radius-sm);
     padding: var(--space-3);
-    margin: var(--space-4) 0 0;
-  }
-  .failcard b {
-    display: block;
-    font-weight: var(--weight-strong);
-    margin-bottom: 2px;
-  }
-  .failcard .handoff {
-    font-size: var(--text-label);
-    opacity: 0.92;
-    white-space: pre-wrap;
+    margin-block-start: var(--space-4);
+
+    & b {
+      display: block;
+      font-weight: var(--weight-strong);
+      margin-block-end: 2px;
+    }
+    & .handoff {
+      font-size: var(--text-label);
+      opacity: 0.92;
+      white-space: pre-wrap;
+    }
   }
   .note {
-    margin: var(--rail-gap, var(--space-4)) 0 0 var(--space-2);
-    padding-left: var(--space-3);
+    margin-block-start: var(--rail-gap, var(--space-4));
+    margin-inline-start: var(--space-2);
+    padding-inline-start: var(--space-3);
     background: var(--rail-head, var(--rail)) left top / 2px 100% no-repeat;
     font-size: var(--text-label);
     color: var(--ink-muted);
-  }
-  .note :global(svg) {
-    width: 12px;
-    height: 12px;
-    flex: 0 0 auto;
-  }
-  :global(.note .ftrig) {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
-    background: none;
-    border: 0;
-    padding: 0;
-    color: var(--ink-muted);
-    font-size: var(--text-label);
-    cursor: pointer;
-    text-align: left;
+
+    & :global(svg) {
+      inline-size: 12px;
+      block-size: 12px;
+      flex: 0 0 auto;
+    }
+    & :global(.ftrig) {
+      display: inline-flex;
+      align-items: center;
+      gap: var(--space-2);
+      background: none;
+      border: 0;
+      padding: 0;
+      color: var(--ink-muted);
+      font-size: var(--text-label);
+      cursor: pointer;
+      text-align: start;
+    }
+    /* ── The harness fold ────────────────────────────────────────────────
+       A notification the operator never wrote, on the same rail as every
+       other note: the summary, how it went, and the report one click behind
+       them. */
+    & :global(.ftrig.hn) {
+      max-inline-size: 100%;
+    }
   }
   .ftitle {
     overflow: hidden;
     text-overflow: ellipsis;
-  }
-
-  /* ── The harness fold ──────────────────────────────────────────────────
-     A notification the operator never wrote, on the same rail as every other
-     note: the summary, how it went, and the report one click behind them. */
-  :global(.note .ftrig.hn) {
-    max-width: 100%;
   }
   /* The non-expandable twin: same line, no button, because there is nothing
      under it to open. */
@@ -229,61 +232,64 @@
     display: inline-flex;
     align-items: center;
     gap: var(--space-2);
-    max-width: 100%;
+    max-inline-size: 100%;
     font-size: var(--text-label);
     color: var(--ink-muted);
   }
   .hstatus {
     flex: 0 0 auto;
     color: var(--ink-muted);
+
+    /* The one word on this line that is allowed to carry colour. */
+    &.bad {
+      color: var(--data-bad);
+    }
   }
   /* The task line's verb holds body ink; only failure carries colour. */
   .tverb {
     flex: 0 0 auto;
     color: var(--ink-strong);
-  }
-  .tverb.bad {
-    color: var(--data-bad);
+
+    &.bad {
+      color: var(--data-bad);
+    }
   }
   /* WHICH task, in the same muted register as every note — ellipsized, never
      wrapped, so the line stays a line. */
   .tsum {
-    min-width: 0;
+    min-inline-size: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
     color: var(--ink-muted);
   }
-  /* The one word on this line that is allowed to carry colour. */
-  .hstatus.bad {
-    color: var(--data-bad);
-  }
   .hchev {
     display: inline-flex;
     flex: 0 0 auto;
+
+    &.open {
+      transform: rotate(90deg);
+    }
     @media (prefers-reduced-motion: no-preference) {
       transition: transform var(--dur-control) var(--ease-out);
     }
-  }
-  .hchev.open {
-    transform: rotate(90deg);
   }
   /* The report sits on the rail the fold already draws, and keeps MessageBody's
      own 74ch measure — a subagent's write-up is prose, not a dump, so it reads
      at the same width as every turn above it rather than running the full pane. */
   .hbody {
-    margin-top: var(--space-3);
+    margin-block-start: var(--space-3);
   }
 
   /* The ledger's rail column is narrower on a phone, and every other rail
      block already knows it — ToolGroup, Thinking, Subagent, Delegate all drop
      this inset at the same breakpoint. These two did not, so on a narrow
-     screen a note sat 7px to the right of the line above it and the run read
-     as a broken column. */
-  @media (max-width: 900px) {
+     screen a note sat 7px to the inline end of the line above it and the run
+     read as a broken column. */
+  @media (width <= 900px) {
     .note,
     .well {
-      margin-left: 0;
+      margin-inline-start: 0;
     }
   }
 </style>
