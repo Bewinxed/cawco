@@ -156,38 +156,39 @@
   }
 
   /**
+   * The section shows once both reads are in (or the OAuth code is being
+   * exchanged), so its first paint is the state it keeps: the header's button,
+   * the switch's hint and both status lines are already their final size.
+   */
+  const ready = $derived(
+    supervisor !== null && (openrouter !== null || exchanging)
+  );
+
+  /**
    * Which line the OpenRouter status shows. Each change cross-fades in place
    * (300ms in, 100ms out) while the box tweens to the new line's height.
    */
-  const phase = $derived.by(
-    (): "exchanging" | "checking" | "connected" | "off" => {
-      if (exchanging) {
-        return "exchanging";
-      }
-      if (openrouter === null) {
-        return "checking";
-      }
-      return openrouter.connected && openrouter.connectedAt !== null
-        ? "connected"
-        : "off";
+  const phase = $derived.by((): "exchanging" | "connected" | "off" => {
+    if (exchanging) {
+      return "exchanging";
     }
-  );
+    return openrouter?.connected && openrouter.connectedAt !== null
+      ? "connected"
+      : "off";
+  });
   /** A problem fades in over 300ms on the settle-in curve. */
   let openrouterHeight = $state(0);
   let reachHeight = $state(0);
 
   const reach = $derived.by(
-    (): { tone: "wait" | "off" | "bad" | "ok"; text: string } => {
-      if (!supervisor) {
-        return { tone: "wait", text: "Checking the server…" };
-      }
-      const { status } = supervisor;
-      if (!status.configured) {
+    (): { tone: "off" | "bad" | "ok"; text: string } => {
+      if (!supervisor?.status.configured) {
         return {
           tone: "off",
           text: "Not configured. Set a server URL and a model to turn it on.",
         };
       }
+      const { status } = supervisor;
       if (!status.reachable) {
         return {
           tone: "bad",
@@ -228,7 +229,12 @@
   });
 </script>
 
-<SectionFrame purpose={section.purpose} title={section.label}>
+<SectionFrame
+  problem={ready ? null : (openrouterError ?? supervisorError)}
+  purpose={section.purpose}
+  {ready}
+  title={section.label}
+>
   <div class="group">
     <SectionHeader hue={HUE} icon={IconGlobe} label="OpenRouter">
       {#snippet right()}
@@ -242,7 +248,7 @@
             size="sm"
             variant="outline"
           />
-        {:else if openrouter}
+        {:else}
           <Button
             disabled={exchanging}
             failed={openrouterError !== null}
@@ -274,9 +280,6 @@
             {#if phase === 'exchanging'}
               <span aria-hidden="true" class="dot pulse"></span>
               Finishing the connection with OpenRouter…
-            {:else if phase === 'checking'}
-              <span aria-hidden="true" class="dot"></span>
-              Checking the connection…
             {:else if phase === 'connected' && openrouter?.connectedAt}
               <svg aria-hidden="true" class="check" viewBox="0 0 20 20">
                 <circle cx="10" cy="10" r="10"></circle>

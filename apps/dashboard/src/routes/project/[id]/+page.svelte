@@ -26,7 +26,7 @@
   import * as Tabs from "$lib/components/ui/tabs";
   import { Textarea } from "$lib/components/ui/textarea";
   import { IconChat, IconDocument } from "$lib/icons";
-  import type { ProjectRow } from "$lib/whiffle/client.svelte";
+  import type { InstanceRow, ProjectRow } from "$lib/whiffle/client.svelte";
   import {
     deleteProject,
     machineFs,
@@ -47,6 +47,7 @@
   } from "$lib/whiffle/motion/curves.svelte";
   import { fold, unfold } from "$lib/whiffle/motion/fold.svelte";
   import { route } from "$lib/whiffle/motion/route.svelte";
+  import { reflow } from "$lib/whiffle/motion/rows.svelte";
   import { handOver, land } from "$lib/whiffle/motion/share.svelte";
   import OsMark from "$lib/whiffle/OsMark.svelte";
   import StoredSessionRow from "$lib/whiffle/StoredSessionRow.svelte";
@@ -167,6 +168,10 @@
     }
     loadedFor = current.id;
     untrack(() => {
+      liveMounted = LIVE_FIRST;
+      liveFirst = null;
+      rowsWatched = false;
+      liveFollowed = false;
       // biome-ignore lint/complexity/noVoid: fire-and-forget — each load manages its own state, independent of the other
       void loadDocs(current);
       // biome-ignore lint/complexity/noVoid: fire-and-forget — each load manages its own state, independent of the other
@@ -350,6 +355,59 @@
    * ones once the machine has listed them (or is not online to ask).
    */
   const liveRead = $derived(whiffle.fleetRead);
+
+  /**
+   * The live list mounts a screenful at once and the rest a chunk a frame. A
+   * checkout with hundreds of live sessions (cockpit has 363) otherwise held
+   * its first row back for the whole list's mount, ~300ms of it. Every row
+   * still renders; the ones past the first screenful follow a frame or two
+   * later, below the fold, where nothing on screen is under them.
+   *
+   * While it mounts, the list is the sessions that were live when the fleet
+   * answered (each row's own data stays current); a session that starts or
+   * stops in those few hundred ms is taken in once it is whole. Then the
+   * list's reflow is attached, and a frame later the list follows the live
+   * set: what arrived or left meanwhile opens or closes in place, and from
+   * then on every change does, instead of pushing the rows under it.
+   */
+  const LIVE_FIRST = 24;
+  const LIVE_STEP = 32;
+  let liveMounted = $state(LIVE_FIRST);
+  let liveFirst = $state.raw<InstanceRow[] | null>(null);
+  let rowsWatched = $state(false);
+  let liveFollowed = $state(false);
+  $effect(() => {
+    if (liveRead && liveFirst === null) {
+      liveFirst = untrack(() => live);
+    }
+  });
+  $effect(() => {
+    if (liveFirst === null || liveFollowed) {
+      return;
+    }
+    if (liveMounted < liveFirst.length) {
+      const frame = requestAnimationFrame(() => {
+        liveMounted += LIVE_STEP;
+      });
+      return () => cancelAnimationFrame(frame);
+    }
+    if (!rowsWatched) {
+      rowsWatched = true;
+      return;
+    }
+    const frame = requestAnimationFrame(() => {
+      liveFollowed = true;
+    });
+    return () => cancelAnimationFrame(frame);
+  });
+  const liveById = $derived(new Map(live.map((row) => [row.id, row])));
+  const liveShown = $derived(
+    liveFollowed
+      ? live
+      : (liveFirst ?? [])
+          .slice(0, liveMounted)
+          .map((row) => liveById.get(row.id) ?? row)
+  );
   const storedRead = $derived(
     project !== null &&
       whiffle.fleetRead &&
@@ -893,6 +951,7 @@
           <div
             class="flex flex-col gap-1.5 px-[var(--space-3)] pb-[var(--space-3)]"
             {@attach highlight({ rows: 'a' })}
+            {@attach rowsWatched && reflow()}
           >
             <!-- Each answer takes the place of the skeleton that stood for it:
                  a branch arrives after the one it replaces, so the leaving
@@ -900,17 +959,24 @@
                  already drawn moves. -->
             {#if liveRead}
               <div class="flex flex-col gap-1.5" in:crossIn>
-                {#each live as instance (instance.id)}
-                  <LiveSessionRow groupCwd={project.cwd} {instance} />
+                <!-- Sessions start and stop all day: a row that arrives or
+                     leaves opens or closes in place and the rows after it
+                     slide (motion/rows), as the sidebar's do. -->
+                {#each liveShown as instance (instance.id)}
+                  <div data-flip>
+                    <LiveSessionRow groupCwd={project.cwd} {instance} />
+                  </div>
                 {/each}
                 {#if storedRead}
                   <div class="flex flex-col gap-1.5" in:crossIn>
                     {#each stored.slice(0, 8) as info (info.sessionId)}
-                      <StoredSessionRow
-                        groupCwd={project.cwd}
-                        {info}
-                        machineId={project.machineId}
-                      />
+                      <div data-flip>
+                        <StoredSessionRow
+                          groupCwd={project.cwd}
+                          {info}
+                          machineId={project.machineId}
+                        />
+                      </div>
                     {:else}
                       {#if live.length === 0}
                         <EmptyState

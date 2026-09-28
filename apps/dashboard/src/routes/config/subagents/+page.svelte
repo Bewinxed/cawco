@@ -236,17 +236,18 @@
       the fleet does not keep can be adopted into it, and every other machine
       gets it.
     </p>
+    <!-- The list stands once every machine has answered: machines answer
+         in any order, and one listed above another would push the rows
+         already drawn down the page. -->
     {#if online.length === 0}
       <p class="note">No machine is online to ask.</p>
+    {:else if Object.keys(reading).length > 0}
+      <p class="note busy" role="status">
+        <IconSpinner class="size-4 shrink-0 animate-spin" />
+        Asking the machines…
+      </p>
     {:else if discovered.length === 0}
-      {#if Object.keys(reading).length > 0}
-        <p class="note busy" role="status">
-          <IconSpinner class="size-4 shrink-0 animate-spin" />
-          Asking the machines…
-        </p>
-      {:else}
-        <p class="note">No machine has any subagent files yet.</p>
-      {/if}
+      <p class="note">No machine has any subagent files yet.</p>
     {:else}
       <RowList label="Subagents on machines">
         {#each discovered as { machine, row } (`${machine.machineId}:${row.path}`)}

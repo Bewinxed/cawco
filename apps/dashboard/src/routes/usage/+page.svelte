@@ -388,7 +388,9 @@
               {#each orderedWindows as w (w.kind + (w.scopeLabel ?? ''))}
                 {@const tone = band(w.percent)}
                 <Table.Row>
-                  <Table.Cell class="num start">{windowLabel(w)}</Table.Cell>
+                  <Table.Cell class="num start lead"
+                    >{windowLabel(w)}</Table.Cell
+                  >
                   <Table.Cell class="wide">
                     <span
                       aria-label="{windowLabel(w)} limit"
@@ -404,10 +406,10 @@
                       ></span>
                     </span>
                   </Table.Cell>
-                  <Table.Cell class="num {tone}"
+                  <Table.Cell class="num {tone}" data-label="Used"
                     >{Math.round(w.percent)}%</Table.Cell
                   >
-                  <Table.Cell class="num muted"
+                  <Table.Cell class="num muted" data-label="Resets in"
                     >{resetsIn(w.resetsAt, now)}</Table.Cell
                   >
                 </Table.Row>
@@ -431,11 +433,13 @@
             <Table.Body>
               {#each claudeRows as row (row.key)}
                 <Table.Row>
-                  <Table.Cell class="mono">{row.key}</Table.Cell>
-                  <Table.Cell class="num"
+                  <Table.Cell class="mono lead">{row.key}</Table.Cell>
+                  <Table.Cell class="num" data-label="Output"
                     >{compactNumber(row.output)}</Table.Cell
                   >
-                  <Table.Cell class="num">~{usd(row.costUsd)}</Table.Cell>
+                  <Table.Cell class="num" data-label="At API prices"
+                    >~{usd(row.costUsd)}</Table.Cell
+                  >
                 </Table.Row>
               {/each}
             </Table.Body>
@@ -480,7 +484,7 @@
                       <HarnessGlyph harness={row.harness} />
                     </span>
                   </Table.Cell>
-                  <Table.Cell>
+                  <Table.Cell class="lead">
                     {#if i === 0}
                       <a
                         class="session-link"
@@ -491,11 +495,15 @@
                       {row.label}
                     {/if}
                   </Table.Cell>
-                  <Table.Cell class="muted">{row.machine}</Table.Cell>
-                  <Table.Cell class="num muted">
+                  <Table.Cell class="muted" data-label="Machine"
+                    >{row.machine}</Table.Cell
+                  >
+                  <Table.Cell class="num muted" data-label="Context">
                     {row.contextPct === null ? '—' : `${Math.round(row.contextPct)}%`}
                   </Table.Cell>
-                  <Table.Cell class="num">{usd(row.cost)}</Table.Cell>
+                  <Table.Cell class="num" data-label="Cost"
+                    >{usd(row.cost)}</Table.Cell
+                  >
                 </Table.Row>
               {/each}
             </Table.Body>
@@ -538,11 +546,13 @@
             <Table.Body>
               {#each openCodeRows as row (row.key)}
                 <Table.Row>
-                  <Table.Cell class="mono">{row.key}</Table.Cell>
-                  <Table.Cell class="num"
+                  <Table.Cell class="mono lead">{row.key}</Table.Cell>
+                  <Table.Cell class="num" data-label="Output"
                     >{compactNumber(row.output)}</Table.Cell
                   >
-                  <Table.Cell class="num">{usd(row.costUsd)}</Table.Cell>
+                  <Table.Cell class="num" data-label="Cost"
+                    >{usd(row.costUsd)}</Table.Cell
+                  >
                 </Table.Row>
               {/each}
             </Table.Body>
@@ -602,16 +612,18 @@
                 </Table.Row>
                 {#each group.blocks as block (block.harness + block.id)}
                   <Table.Row>
-                    <Table.Cell class="num start"
+                    <Table.Cell class="num start lead"
                       >{clock(block.startTime)}
                       – {clock(block.endTime)}</Table.Cell
                     >
-                    <Table.Cell class="muted">{block.harness}</Table.Cell>
-                    <Table.Cell class="num">
+                    <Table.Cell class="muted" data-label="Harness"
+                      >{block.harness}</Table.Cell
+                    >
+                    <Table.Cell class="num" data-label="Cost">
                       {block.harness === 'Claude' ? '~' : ''}
                       {usd(block.costUsd)}
                     </Table.Cell>
-                    <Table.Cell class="pace num">
+                    <Table.Cell class="pace num" data-label="Pace">
                       {#if block.isActive && block.burnRate}
                         {usd(block.burnRate.costPerHour)}/h
                         {#if projectable(block) && block.projection}
@@ -622,7 +634,7 @@
                         {/if}
                       {/if}
                     </Table.Cell>
-                    <Table.Cell class="mono muted"
+                    <Table.Cell class="mono muted" data-label="Models"
                       >{block.models.join(' · ')}</Table.Cell
                     >
                   </Table.Row>
@@ -938,6 +950,85 @@
     }
     .q-table .session-link:hover {
       text-decoration: underline;
+    }
+
+    /* A phone has no room for columns: each row is two lines, the name
+       as a label, then every figure as meta under its column's name. The
+       header row stays in the table for assistive tech, off screen. */
+    @media (max-width: 639px) {
+      .q-table {
+        display: block;
+        min-width: 0;
+      }
+      .q-table thead {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        overflow: hidden;
+        clip-path: inset(50%);
+        white-space: nowrap;
+      }
+      .q-table tbody {
+        display: block;
+      }
+      /* biome-ignore lint/style/noDescendingSpecificity: the phone layout sets display, gap and the meta role; the more specific base rules above set other properties, so their order does not decide anything. */
+      .q-table tbody tr {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: var(--space-1) var(--space-3);
+        padding-block: var(--space-2);
+        border-bottom: 1px solid var(--border-hairline);
+      }
+      .q-table tbody:last-child tr:last-child {
+        border-bottom: 0;
+      }
+      /* biome-ignore lint/style/noDescendingSpecificity: the phone layout sets display, gap and the meta role; the more specific base rules above set other properties, so their order does not decide anything. */
+      .q-table tbody td,
+      .q-table tr.dayrow th {
+        display: block;
+        height: auto;
+        padding: 0;
+        border-bottom: 0;
+      }
+      /* biome-ignore lint/style/noDescendingSpecificity: the phone layout sets display, gap and the meta role; the more specific base rules above set other properties, so their order does not decide anything. */
+      .q-table tbody td {
+        font: var(--type-meta);
+        white-space: nowrap;
+      }
+      .q-table td.lead {
+        flex: 1 0 100%;
+        font: var(--type-label);
+        white-space: normal;
+      }
+      .q-table td.mono.lead {
+        font-family: var(--font-mono);
+      }
+      .q-table td.glyph-cell {
+        width: auto;
+        padding: 0;
+        border-bottom: 0;
+      }
+      .q-table td.glyph-cell + td.lead {
+        flex-basis: calc(100% - 16px - var(--space-3));
+      }
+      .q-table td.wide {
+        flex: 1 1 60px;
+        width: auto;
+        min-width: 60px;
+      }
+      .q-table td.mono:not(.lead) {
+        font: var(--type-meta);
+        font-family: var(--font-mono);
+        white-space: normal;
+      }
+      .q-table td:empty {
+        display: none;
+      }
+      .q-table td[data-label]::before {
+        content: attr(data-label) " ";
+        color: var(--ink-muted);
+      }
     }
 
     /* Unpriced models callout. */

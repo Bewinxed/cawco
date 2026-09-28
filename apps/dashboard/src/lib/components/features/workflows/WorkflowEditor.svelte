@@ -511,15 +511,18 @@
         >
           Runs
         </button>
-        {#if narrow.current && tab === 'editor'}
+        <!-- Narrow-only, by the stylesheet: the server renders this row
+             before any media query can be asked, and a row that gained two
+             buttons on hydration wrapped and pushed the page down. -->
+        {#if tab === 'editor'}
           <button
-            class="wf-btn"
+            class="wf-btn narrow-only"
             onclick={() => { paletteOpen = true; }}
             type="button"
           >
             + Add node
           </button><button
-            class="wf-btn num"
+            class="wf-btn narrow-only num"
             onclick={() => { inspectorOpen = true; }}
             type="button"
           >
@@ -527,18 +530,18 @@
           </button>
         {/if}
       </div>
-      <span class="wf-muted num" role="status"
-        >{#if saving}
+      <span class="wf-muted num save-state" role="status"
+        >{#if !workflow}
+          Loading…
+        {:else if saving}
           Saving…
         {:else if refused}
           Not saved · {problems.length}
           {problems.length === 1 ? 'problem' : 'problems'}
         {:else if dirty}
           Unsaved changes
-        {:else if savedAt}
-          Saved · {Math.max(0, Math.floor((now - savedAt) / 1000))}s ago
         {:else}
-          Loading…
+          Saved · {Math.max(0, Math.floor((now - savedAt) / 1000))}s ago
         {/if}</span
       >
     </div>
@@ -789,6 +792,21 @@
   }
   .loading {
     padding: var(--space-6);
+  }
+  .wf-btn.narrow-only {
+    display: none;
+  }
+  /* The save state changes its words as the editor works; a box as wide as
+     the longest ("Not saved · 12 problems") keeps its edge still. */
+  .save-state {
+    inline-size: 24ch;
+    margin-inline-start: auto;
+    text-align: end;
+  }
+  @media (max-width: 1023px) {
+    .wf-btn.narrow-only {
+      display: inline-flex;
+    }
   }
   .runs {
     display: flex;

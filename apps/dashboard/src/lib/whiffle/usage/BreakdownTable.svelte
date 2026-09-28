@@ -203,7 +203,7 @@
     <Table.Root class="q-break" ghostRows="tbody tr.clickable">
       <Table.Header>
         <Table.Row>
-          <Table.Head>Name</Table.Head>
+          <Table.Head class="name-head">Name</Table.Head>
           {#each COLUMNS as column (column.key)}
             <Table.Head class="num">
               <button
@@ -236,22 +236,32 @@
             tabindex={tab === 'session' ? 0 : undefined}
           >
             <Table.Cell
-              class="name {tab === 'model' || tab === 'session' ? 'mono' : ''}"
+              class="name lead {tab === 'model' || tab === 'session' ? 'mono' : ''}"
               title={nameOf(row)}
             >
               {nameOf(row)}
             </Table.Cell>
-            <Table.Cell class="num">{compactNumber(row.input)}</Table.Cell>
-            <Table.Cell class="num">{compactNumber(row.output)}</Table.Cell>
-            <Table.Cell class="num"
+            <Table.Cell class="num" data-label="Input"
+              >{compactNumber(row.input)}</Table.Cell
+            >
+            <Table.Cell class="num" data-label="Output"
+              >{compactNumber(row.output)}</Table.Cell
+            >
+            <Table.Cell class="num" data-label="Cache write"
               >{compactNumber(row.cacheCreation)}</Table.Cell
             >
-            <Table.Cell class="num">{compactNumber(row.cacheRead)}</Table.Cell>
-            <Table.Cell class="num strong"
+            <Table.Cell class="num" data-label="Cache read"
+              >{compactNumber(row.cacheRead)}</Table.Cell
+            >
+            <Table.Cell class="num strong" data-label="Total"
               >{compactNumber(row.total)}</Table.Cell
             >
-            <Table.Cell class="num">{row.messages.toLocaleString()}</Table.Cell>
-            <Table.Cell class="num strong">{usd(row.costUsd)}</Table.Cell>
+            <Table.Cell class="num" data-label="Messages"
+              >{row.messages.toLocaleString()}</Table.Cell
+            >
+            <Table.Cell class="num strong" data-label="Cost"
+              >{usd(row.costUsd)}</Table.Cell
+            >
           </Table.Row>
         {/each}
         {#if rows.length === 0}
@@ -393,6 +403,70 @@
       padding: var(--space-6) var(--space-3);
       color: var(--ink-muted);
       white-space: normal;
+    }
+
+    /* A phone has no room for eight columns: the column heads wrap into one
+       row of sort buttons, and each row is two lines, the name as a label,
+       then every figure as meta under its column's name. */
+    @media (max-width: 639px) {
+      .q-break {
+        display: block;
+        min-width: 0;
+      }
+      .q-break thead,
+      .q-break tbody {
+        display: block;
+      }
+      /* biome-ignore lint/style/noDescendingSpecificity: the phone layout sets display, gap and the meta role; the more specific base rules above set other properties, so their order does not decide anything. */
+      .q-break thead tr {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-1) var(--space-3);
+        padding-block: var(--space-2);
+        border-bottom: 1px solid var(--border-hairline);
+      }
+      .q-break thead th {
+        display: block;
+        padding: 0;
+        border-bottom: 0;
+      }
+      .q-break thead th.name-head {
+        display: none;
+      }
+      /* biome-ignore lint/style/noDescendingSpecificity: the phone layout sets display, gap and the meta role; the more specific base rules above set other properties, so their order does not decide anything. */
+      .q-break tbody tr {
+        display: flex;
+        flex-wrap: wrap;
+        gap: var(--space-1) var(--space-3);
+        padding-block: var(--space-2);
+        border-bottom: 1px solid var(--border-hairline);
+      }
+      .q-break tbody tr:last-child {
+        border-bottom: 0;
+      }
+      /* biome-ignore lint/style/noDescendingSpecificity: the phone layout sets display, gap and the meta role; the more specific base rules above set other properties, so their order does not decide anything. */
+      .q-break tbody td {
+        display: block;
+        padding: 0;
+        border-bottom: 0;
+        font: var(--type-meta);
+      }
+      .q-break td.lead {
+        flex: 1 0 100%;
+        max-width: none;
+        font: var(--type-label);
+      }
+      .q-break td.lead.mono {
+        font-family: var(--font-mono);
+      }
+      .q-break td.empty {
+        flex: 1 0 100%;
+        padding-block: var(--space-6);
+      }
+      .q-break td[data-label]::before {
+        content: attr(data-label) " ";
+        color: var(--ink-muted);
+      }
     }
   }
 </style>
