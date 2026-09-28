@@ -1873,17 +1873,17 @@
       {/snippet}
     </Virtualizer>
   </div>
-  <!-- Under the last row, inside the scroller, from the switch until the
-       catch-up has appended: the transcript the reader left is on screen
-       already; this says the rest is on its way. -->
-  {#if catching}
-    <CatchUp />
-  {/if}
-  <!-- Scrolled away from the tail: the way back, floating above the composer
-       column. Zero height in the flow, so its coming and going moves nothing. -->
-  {#if showLatest}
-    <div class="latest-dock"><Latest onjump={jump} /></div>
-  {/if}
+  <!-- Floating above the composer column, at zero height in the flow, so
+       nothing here coming or going moves a row: the catch-up, from the switch
+       until it has appended, and — scrolled away from the tail — the way back. -->
+  <div class="dock">
+    {#if catching}
+      <CatchUp />
+    {/if}
+    {#if showLatest}
+      <Latest onjump={jump} />
+    {/if}
+  </div>
 </div>
 
 <style>
@@ -2001,10 +2001,10 @@
     white-space: nowrap;
   }
 
-  /* The way back to the tail. A zero-height strip stuck to the foot of the
-     scrollport, above the composer column; the control hangs up out of it, so
-     its coming and going never changes the scroll height it is about. */
-  .latest-dock {
+  /* The catch-up and the way back to the tail. A zero-height strip stuck to
+     the foot of the scrollport, above the composer column; what shows hangs
+     up out of it, so its coming and going never changes the scroll height. */
+  .dock {
     position: sticky;
     inset-block-end: calc(
       max(calc(var(--space-8) * 3), var(--composer-clearance, 0px)) -
@@ -2014,9 +2014,10 @@
     display: flex;
     justify-content: center;
     align-items: end;
+    gap: var(--space-2);
     pointer-events: none;
 
-    & > :global(*) {
+    & > :global(button) {
       pointer-events: auto;
     }
   }
