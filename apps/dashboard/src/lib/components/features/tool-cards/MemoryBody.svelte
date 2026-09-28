@@ -77,7 +77,9 @@
             <span class="meta">{lines(doc.content)} lines</span>
             <span class="chev"><IconChevronRight /></span>
           </Collapsible.Trigger>
-          <Collapsible.Content>
+          <!-- Folds like the row that holds it: grows open and folds shut
+               from the header, which the transcript holds in place. -->
+          <Collapsible.Content reveal>
             <div class="doc-body">{@render well(doc.content)}</div>
           </Collapsible.Content>
         </Collapsible.Root>
