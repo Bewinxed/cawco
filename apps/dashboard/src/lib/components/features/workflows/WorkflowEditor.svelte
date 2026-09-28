@@ -11,6 +11,9 @@
   import { fade } from "svelte/transition";
   import { beforeNavigate, goto } from "$app/navigation";
   import { page } from "$app/state";
+  import PendingContent, {
+    whileIdle,
+  } from "$lib/components/ui/button/pending-content.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
   import * as Dialog from "$lib/components/ui/dialog";
   import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
@@ -51,6 +54,8 @@
   let selected = $state<string>();
   let errorMessage = $state("");
   let saving = $state(false);
+  /** The button whose save is out, if a press started it. */
+  let pressed = $state<"validate" | "retry" | null>(null);
   let failedPayload = $state("");
   let saved = $state("");
   let savedAt = $state(0);
@@ -208,6 +213,25 @@
     } finally {
       saving = false;
     }
+  }
+  /** A save a button asked for: that button is pending until it ends. */
+  async function persistFrom(from: "validate" | "retry") {
+    pressed = from;
+    try {
+      await persist(serial);
+    } finally {
+      pressed = null;
+    }
+  }
+  /**
+   * Validate saves and shows what the hub found. On a narrow screen the
+   * inspector (where the problems read) opens once the save has answered, so
+   * the pending button keeps focus while it runs.
+   */
+  async function validate() {
+    selected = undefined;
+    await persistFrom("validate");
+    inspectorOpen = narrow.current;
   }
   function commit(next: WorkflowGraph) {
     history = [...history.slice(-49), JSON.stringify(root)];
@@ -435,13 +459,20 @@
       </div>
       <div class="wf-row">
         <button
+          aria-busy={pressed === 'validate' || undefined}
+          aria-disabled={pressed === 'validate' || undefined}
           class="wf-btn"
-          disabled={!(workflow && live) || saving}
-          onclick={() => { inspectorOpen = narrow.current; selected = undefined; persist(serial); }}
+          disabled={!(workflow && live) || (saving && pressed !== 'validate')}
+          onclick={whileIdle(() => pressed === 'validate', validate)}
           title={live ? undefined : "Can't save while the hub is unreachable"}
           type="button"
         >
-          Validate
+          <PendingContent
+            failed={errorMessage !== ''}
+            label="Validate"
+            pending={pressed === 'validate'}
+            pendingLabel="Validating…"
+          />
         </button><button
           class="wf-btn wf-primary"
           disabled={!(workflow && live) || !!errorMessage || dirty || saving || problems.length > 0}
@@ -480,15 +511,18 @@
         >
           Runs
         </button>
-        {#if narrow.current && tab === 'editor'}
+        <!-- Narrow-only, by the stylesheet: the server renders this row
+             before any media query can be asked, and a row that gained two
+             buttons on hydration wrapped and pushed the page down. -->
+        {#if tab === 'editor'}
           <button
-            class="wf-btn"
+            class="wf-btn narrow-only"
             onclick={() => { paletteOpen = true; }}
             type="button"
           >
             + Add node
           </button><button
-            class="wf-btn num"
+            class="wf-btn narrow-only num"
             onclick={() => { inspectorOpen = true; }}
             type="button"
           >
@@ -496,18 +530,18 @@
           </button>
         {/if}
       </div>
-      <span class="wf-muted num" role="status"
-        >{#if saving}
+      <span class="wf-muted num save-state" role="status"
+        >{#if !workflow}
+          Loading…
+        {:else if saving}
           Saving…
         {:else if refused}
           Not saved · {problems.length}
           {problems.length === 1 ? 'problem' : 'problems'}
         {:else if dirty}
           Unsaved changes
-        {:else if savedAt}
-          Saved · {Math.max(0, Math.floor((now - savedAt) / 1000))}s ago
         {:else}
-          Loading…
+          Saved · {Math.max(0, Math.floor((now - savedAt) / 1000))}s ago
         {/if}</span
       >
     </div>
@@ -515,8 +549,19 @@
   {#if errorMessage}
     <div class="wf-error" role="alert">
       {errorMessage}
-      <button class="wf-btn" onclick={() => persist(serial)} type="button">
-        Retry save
+      <button
+        aria-busy={pressed === 'retry' || undefined}
+        aria-disabled={pressed === 'retry' || undefined}
+        class="wf-btn"
+        onclick={whileIdle(() => pressed === 'retry', () => persistFrom('retry'))}
+        type="button"
+      >
+        <PendingContent
+          failed={errorMessage !== ''}
+          label="Retry save"
+          pending={pressed === 'retry'}
+          pendingLabel="Saving…"
+        />
       </button>
     </div>
   {/if}
@@ -747,6 +792,21 @@
   }
   .loading {
     padding: var(--space-6);
+  }
+  .wf-btn.narrow-only {
+    display: none;
+  }
+  /* The save state changes its words as the editor works; a box as wide as
+     the longest ("Not saved · 12 problems") keeps its edge still. */
+  .save-state {
+    inline-size: 24ch;
+    margin-inline-start: auto;
+    text-align: end;
+  }
+  @media (max-width: 1023px) {
+    .wf-btn.narrow-only {
+      display: inline-flex;
+    }
   }
   .runs {
     display: flex;

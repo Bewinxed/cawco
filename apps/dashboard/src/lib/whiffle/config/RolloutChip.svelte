@@ -7,6 +7,9 @@
    */
   import { toast } from "svelte-sonner";
   import { TextMorph } from "torph/svelte";
+  import PendingContent, {
+    whileIdle,
+  } from "$lib/components/ui/button/pending-content.svelte";
   import {
     MachineRow,
     machineHue,
@@ -67,11 +70,16 @@
 
   let asked = $state<Record<string, boolean>>({});
 
+  /** Machines whose last sync request failed: their button shows no check. */
+  let refused = $state<Record<string, boolean>>({});
+
   async function resync(machine: Machine) {
     asked[machine.machineId] = true;
+    delete refused[machine.machineId];
     try {
       await syncFleet(machine.machineId);
     } catch (error) {
+      refused[machine.machineId] = true;
       toast.error(error instanceof Error ? error.message : String(error));
     } finally {
       delete asked[machine.machineId];
@@ -123,15 +131,23 @@
               {:else if item?.state === 'applied'}
                 <span class="mark"><IconCheck /></span>
               {:else}
+                {@const syncing = asked[machine.machineId] === true}
                 <button
+                  aria-busy={syncing || undefined}
+                  aria-disabled={syncing || undefined}
                   aria-label="Sync {machineLabel(machine.hostname)}"
                   class="sync focus-ring"
-                  disabled={!online || asked[machine.machineId] === true}
-                  onclick={() => resync(machine)}
+                  disabled={!online}
+                  onclick={whileIdle(() => syncing, () => resync(machine))}
                   type="button"
                 >
-                  <IconRefresh />
-                  {asked[machine.machineId] ? 'Syncing…' : 'Sync'}
+                  <PendingContent
+                    failed={refused[machine.machineId] === true}
+                    icon={IconRefresh}
+                    label="Sync"
+                    pending={syncing}
+                    pendingLabel="Syncing…"
+                  />
                 </button>
               {/if}
             {/snippet}
@@ -230,6 +246,8 @@
     display: inline-flex;
     align-items: center;
     gap: 4px;
+    --btn-gap: 4px;
+    --btn-icon: 12px;
     height: 26px;
     padding: 0 8px;
     border-radius: var(--radius-sm);
@@ -242,7 +260,7 @@
         transform 160ms var(--ease-out);
     }
   }
-  .sync:active:not(:disabled) {
+  .sync:active:not(:disabled, [aria-busy="true"]) {
     transform: scale(var(--press-scale));
   }
   .sync:hover:not(:disabled) {

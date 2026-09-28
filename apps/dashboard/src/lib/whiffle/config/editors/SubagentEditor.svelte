@@ -83,26 +83,28 @@ You are a <role>, working in one repository at a time.
     if (!agent) {
       return;
     }
-    const ok = await confirm({
+    await confirm({
       title: `Remove ${agent.name}?`,
       body: "The fleet forgets it. Every machine keeps the file it was already given, and lists it as unmanaged, until the daemon can take one away itself.",
       confirmLabel: "Remove",
+      pendingLabel: "Removing…",
+      run: async () => {
+        deleting = true;
+        try {
+          await removeAgent(agent.name);
+          const fleet = store.fleet.value;
+          if (fleet) {
+            fleet.agents = fleet.agents.filter(
+              (row) => row.name !== agent.name
+            );
+          }
+          await goto("/config/subagents");
+        } catch (error) {
+          refused = error instanceof Error ? error.message : String(error);
+          deleting = false;
+        }
+      },
     });
-    if (!ok) {
-      return;
-    }
-    deleting = true;
-    try {
-      await removeAgent(agent.name);
-      const fleet = store.fleet.value;
-      if (fleet) {
-        fleet.agents = fleet.agents.filter((row) => row.name !== agent.name);
-      }
-      await goto("/config/subagents");
-    } catch (error) {
-      refused = error instanceof Error ? error.message : String(error);
-      deleting = false;
-    }
   }
 </script>
 

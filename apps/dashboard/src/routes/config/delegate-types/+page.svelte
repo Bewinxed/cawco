@@ -49,24 +49,24 @@
   }
 
   async function askRemove(row: DelegateType) {
-    const ok = await confirm({
+    await confirm({
       title: `Delete ${row.name}?`,
       body: "A session already running keeps the type list it started with — the prompt cache is frozen for its lifetime. This only stops the name from being offered to new sessions.",
       confirmLabel: "Delete delegate type",
       destructive: true,
+      pendingLabel: "Deleting…",
+      run: async () => {
+        busy[row.name] = true;
+        try {
+          await removeDelegateType(row.name);
+          store.types.value = types.filter((other) => other.name !== row.name);
+        } catch (error) {
+          toast.error(message(error));
+        } finally {
+          delete busy[row.name];
+        }
+      },
     });
-    if (!ok) {
-      return;
-    }
-    busy[row.name] = true;
-    try {
-      await removeDelegateType(row.name);
-      store.types.value = types.filter((other) => other.name !== row.name);
-    } catch (error) {
-      toast.error(message(error));
-    } finally {
-      delete busy[row.name];
-    }
   }
 </script>
 

@@ -207,6 +207,8 @@
   align-items: center;
   justify-content: center;
   gap: 8px;
+  --btn-gap: 8px;
+  --btn-icon: 16px;
   height: 36px;
   padding: 0 14px;
   font: 500 var(--text-body) / 1 var(--font-body);
@@ -220,6 +222,7 @@
 }
 .ns-theme .ns-btn.sm {
   gap: 7px;
+  --btn-gap: 7px;
   height: 30px;
   padding: 0 11px;
   font-size: var(--text-label);

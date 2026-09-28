@@ -1,4 +1,7 @@
 <script lang="ts">
+  import PendingContent, {
+    whileIdle,
+  } from "$lib/components/ui/button/pending-content.svelte";
   /** Project chip + popover (§1.4, §2.7): pick, clear, or create a project. */
   import Add from "~icons/solar/add-circle-bold-duotone";
   import Down from "~icons/solar/alt-arrow-down-linear";
@@ -50,7 +53,7 @@
     };
   }
   async function create() {
-    if (!draft || creating) {
+    if (!draft) {
       return;
     }
     creating = true;
@@ -131,12 +134,19 @@
           Back
         </button>
         <button
+          aria-busy={creating || undefined}
+          aria-disabled={creating || undefined}
           class="ns-btn sm primary touch-hit"
-          disabled={creating || !(draft.name.trim() && draft.path.trim())}
-          onclick={create}
+          disabled={!(draft.name.trim() && draft.path.trim())}
+          onclick={whileIdle(() => creating, create)}
           type="button"
         >
-          Create
+          <PendingContent
+            failed={createError !== ''}
+            label="Create"
+            pending={creating}
+            pendingLabel="Creating…"
+          />
         </button>
       </div>
     </div>

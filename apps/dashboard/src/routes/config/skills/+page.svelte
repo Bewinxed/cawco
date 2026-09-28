@@ -177,24 +177,29 @@
   }
 
   async function askForget(row: FleetSkillMeta) {
-    const ok = await confirm({
+    if (!fleet) {
+      return;
+    }
+    await confirm({
       title: `Remove ${row.name}?`,
       body: `This removes the ${row.name} skill from every machine in the fleet. It can't be undone.`,
       confirmLabel: "Remove everywhere",
       destructive: true,
+      pendingLabel: "Removing…",
+      run: async () => {
+        busy[row.name] = true;
+        try {
+          await removeSkill(row.name);
+          fleet.skills = fleet.skills.filter(
+            (other) => other.name !== row.name
+          );
+        } catch (err) {
+          toast.error(message(err));
+        } finally {
+          delete busy[row.name];
+        }
+      },
     });
-    if (!(ok && fleet)) {
-      return;
-    }
-    busy[row.name] = true;
-    try {
-      await removeSkill(row.name);
-      fleet.skills = fleet.skills.filter((other) => other.name !== row.name);
-    } catch (err) {
-      toast.error(message(err));
-    } finally {
-      delete busy[row.name];
-    }
   }
 
   async function browse(name: string) {
@@ -222,28 +227,31 @@
   }
 
   async function askUnlink(name: string) {
-    const ok = await confirm({
+    if (!fleet) {
+      return;
+    }
+    await confirm({
       title: `Unlink ${name}?`,
       body: "The fleet stops tracking this marketplace. Plugins already installed from it stay installed.",
       confirmLabel: "Unlink",
+      pendingLabel: "Unlinking…",
+      run: async () => {
+        busy[name] = true;
+        try {
+          await removeMarketplace(name);
+          fleet.config.marketplaces = fleet.config.marketplaces.filter(
+            (row) => row.name !== name
+          );
+          if (browsing === name) {
+            browsing = null;
+          }
+        } catch (err) {
+          toast.error(message(err));
+        } finally {
+          delete busy[name];
+        }
+      },
     });
-    if (!(ok && fleet)) {
-      return;
-    }
-    busy[name] = true;
-    try {
-      await removeMarketplace(name);
-      fleet.config.marketplaces = fleet.config.marketplaces.filter(
-        (row) => row.name !== name
-      );
-      if (browsing === name) {
-        browsing = null;
-      }
-    } catch (err) {
-      toast.error(message(err));
-    } finally {
-      delete busy[name];
-    }
   }
 
   async function install(plugin: MarketplacePluginInfo, marketplace: string) {
@@ -272,26 +280,29 @@
   }
 
   async function askUninstall(id: string) {
-    const ok = await confirm({
+    if (!fleet) {
+      return;
+    }
+    await confirm({
       title: `Remove ${id}?`,
       body: "This removes the plugin from every machine in the fleet. It can't be undone.",
       confirmLabel: "Remove everywhere",
       destructive: true,
+      pendingLabel: "Removing…",
+      run: async () => {
+        busy[id] = true;
+        try {
+          await removePlugin(id);
+          fleet.config.plugins = fleet.config.plugins.filter(
+            (row) => row.id !== id
+          );
+        } catch (err) {
+          toast.error(message(err));
+        } finally {
+          delete busy[id];
+        }
+      },
     });
-    if (!(ok && fleet)) {
-      return;
-    }
-    busy[id] = true;
-    try {
-      await removePlugin(id);
-      fleet.config.plugins = fleet.config.plugins.filter(
-        (row) => row.id !== id
-      );
-    } catch (err) {
-      toast.error(message(err));
-    } finally {
-      delete busy[id];
-    }
   }
 </script>
 

@@ -1,4 +1,7 @@
 <script lang="ts">
+  import PendingContent, {
+    whileIdle,
+  } from "$lib/components/ui/button/pending-content.svelte";
   import {
     IconClose,
     IconCursor,
@@ -178,11 +181,15 @@
         break;
     }
   }
+  let closing = $state(false);
   async function close() {
+    closing = true;
     try {
       await closePreview(instanceId);
     } catch (error) {
       failure = error instanceof Error ? error.message : String(error);
+    } finally {
+      closing = false;
     }
   }
 </script>
@@ -226,13 +233,19 @@
       ><IconExternalLink /></a
     >
     <button
+      aria-busy={closing || undefined}
+      aria-disabled={closing || undefined}
       aria-label="Close"
-      class="other touch-hit"
-      onclick={close}
+      class="other close touch-hit"
+      onclick={whileIdle(() => closing, close)}
       title="Close"
       type="button"
     >
-      <IconClose />
+      <PendingContent
+        failed={failure !== ''}
+        icon={IconClose}
+        pending={closing}
+      />
     </button>
   </header>
   <div class="well" bind:this={well}>
@@ -324,6 +337,9 @@
       color var(--dur-control) var(--ease-out),
       transform var(--dur-control) var(--ease-out),
       opacity var(--dur-control) var(--ease-in-out);
+  }
+  .close {
+    --btn-icon: 16px;
   }
   button :global(svg),
   a :global(svg) {

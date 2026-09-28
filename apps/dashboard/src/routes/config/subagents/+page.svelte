@@ -97,26 +97,28 @@
   }
 
   async function askForget(row: FleetAgent) {
-    const ok = await confirm({
+    await confirm({
       title: `Remove ${row.name}?`,
       body: "The fleet forgets it. Every machine keeps the file it was already given, and lists it below as unmanaged, until the daemon can take one away itself.",
       confirmLabel: "Remove",
+      pendingLabel: "Removing…",
+      run: async () => {
+        busy[row.name] = true;
+        try {
+          await removeAgent(row.name);
+          const fleet = store.fleet.value;
+          if (fleet) {
+            fleet.agents = fleet.agents.filter(
+              (other) => other.name !== row.name
+            );
+          }
+        } catch (caught) {
+          toast.error(message(caught));
+        } finally {
+          delete busy[row.name];
+        }
+      },
     });
-    if (!ok) {
-      return;
-    }
-    busy[row.name] = true;
-    try {
-      await removeAgent(row.name);
-      const fleet = store.fleet.value;
-      if (fleet) {
-        fleet.agents = fleet.agents.filter((other) => other.name !== row.name);
-      }
-    } catch (caught) {
-      toast.error(message(caught));
-    } finally {
-      delete busy[row.name];
-    }
   }
 
   async function adopt(machineId: string, row: DiscoveredAgent) {
@@ -234,17 +236,18 @@
       the fleet does not keep can be adopted into it, and every other machine
       gets it.
     </p>
+    <!-- The list stands once every machine has answered: machines answer
+         in any order, and one listed above another would push the rows
+         already drawn down the page. -->
     {#if online.length === 0}
       <p class="note">No machine is online to ask.</p>
+    {:else if Object.keys(reading).length > 0}
+      <p class="note busy" role="status">
+        <IconSpinner class="size-4 shrink-0 animate-spin" />
+        Asking the machines…
+      </p>
     {:else if discovered.length === 0}
-      {#if Object.keys(reading).length > 0}
-        <p class="note busy" role="status">
-          <IconSpinner class="size-4 shrink-0 animate-spin" />
-          Asking the machines…
-        </p>
-      {:else}
-        <p class="note">No machine has any subagent files yet.</p>
-      {/if}
+      <p class="note">No machine has any subagent files yet.</p>
     {:else}
       <RowList label="Subagents on machines">
         {#each discovered as { machine, row } (`${machine.machineId}:${row.path}`)}

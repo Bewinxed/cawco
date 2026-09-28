@@ -214,7 +214,7 @@
     const project = whiffle.projects.find(
       (candidate) => candidate.id === draft.projectId
     );
-    const ok = await confirm({
+    await confirm({
       title: id
         ? `Save ${draft.name.trim()}?`
         : `Write ${draft.name.trim()} to the fleet?`,
@@ -222,54 +222,58 @@
         ? `This writes a script and registers it to run with no prompt, on every machine that has ${project?.name ?? "this project"} checked out.`
         : `This writes a script and registers it to run with no prompt, on every machine in the fleet — ${total} machine${total === 1 ? "" : "s"} right now.`,
       confirmLabel: id ? "Save changes" : "Create hook",
+      pendingLabel: "Saving…",
+      run: async () => {
+        busy = true;
+        failed = undefined;
+        try {
+          const saved = await saveHook(id ?? newId(), {
+            ...draft,
+            name: draft.name.trim(),
+          });
+          if (store.hooks.value) {
+            upsert(store.hooks.value, saved, (row) => row.id === saved.id);
+          }
+          store.mark(saved.id);
+          toast.success(
+            `${saved.name} is written to every machine it applies to.`
+          );
+          await goto("/config/hooks");
+        } catch (error) {
+          failed = message(error);
+        } finally {
+          busy = false;
+        }
+      },
     });
-    if (!ok) {
-      return;
-    }
-    busy = true;
-    failed = undefined;
-    try {
-      const saved = await saveHook(id ?? newId(), {
-        ...draft,
-        name: draft.name.trim(),
-      });
-      if (store.hooks.value) {
-        upsert(store.hooks.value, saved, (row) => row.id === saved.id);
-      }
-      store.mark(saved.id);
-      toast.success(`${saved.name} is written to every machine it applies to.`);
-      await goto("/config/hooks");
-    } catch (error) {
-      failed = message(error);
-    } finally {
-      busy = false;
-    }
   }
 
   async function askRemove() {
     if (!id) {
       return;
     }
-    const ok = await confirm({
+    await confirm({
       title: `Delete ${draft.name || "this hook"}?`,
       body: "This removes it from every machine that has it — not just switches it off. There's no undo.",
       confirmLabel: "Delete hook",
       destructive: true,
+      pendingLabel: "Deleting…",
+      run: async () => {
+        deleting = true;
+        try {
+          await removeHook(id, draft.name);
+          if (store.hooks.value) {
+            store.hooks.value = store.hooks.value.filter(
+              (row) => row.id !== id
+            );
+          }
+          await goto("/config/hooks");
+        } catch (error) {
+          failed = message(error);
+          deleting = false;
+        }
+      },
     });
-    if (!ok) {
-      return;
-    }
-    deleting = true;
-    try {
-      await removeHook(id, draft.name);
-      if (store.hooks.value) {
-        store.hooks.value = store.hooks.value.filter((row) => row.id !== id);
-      }
-      await goto("/config/hooks");
-    } catch (error) {
-      failed = message(error);
-      deleting = false;
-    }
   }
 </script>
 

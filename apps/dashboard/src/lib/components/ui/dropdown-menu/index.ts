@@ -32,6 +32,10 @@ export {
   default as DropdownMenuLabel,
 } from "./dropdown-menu-label.svelte";
 export {
+  default as PendingItem,
+  default as DropdownMenuPendingItem,
+} from "./dropdown-menu-pending-item.svelte";
+export {
   default as Portal,
   default as DropdownMenuPortal,
 } from "./dropdown-menu-portal.svelte";
