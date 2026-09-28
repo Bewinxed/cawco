@@ -268,7 +268,12 @@ const server = http.createServer((req, res) => {
   serveApp(req, res);
 });
 
+/** Every upgraded socket this process is relaying, so a stop can hang them up. */
+const relayed = new Set();
+
 server.on("upgrade", (req, socket, head) => {
+  relayed.add(socket);
+  socket.on("close", () => relayed.delete(socket));
   // `http.Server` drops a socket's error handling the moment it emits
   // `upgrade`, so an upgrade nobody claims is left with no `error` listener and
   // the eventual reset becomes a process-level throw — taking the server, and
@@ -348,4 +353,31 @@ server.on("upgrade", (req, socket, head) => {
 const [fd] = sockets.collect("dashboard");
 server.listen({ fd }, () => {
   console.log(`dashboard on inherited fd ${fd} — /ws -> ${target.origin}`);
+});
+
+/**
+ * How long a request already being answered gets to finish once a restart has
+ * asked this process to stop. The restart waits on it: the next process only
+ * starts once this one has exited, and page loads queue on the socket until
+ * then.
+ */
+const DRAIN_MS = 5000;
+
+/**
+ * A restart stops this process with SIGTERM, and node's default is to exit on
+ * the spot — cutting off a request it had already accepted from the socket
+ * ("Connection terminated unexpectedly" on a page load that landed just before
+ * the restart). Instead it stops accepting, which leaves the listening socket
+ * itself open in the service manager's hands for the next process, hangs up
+ * idle keep-alive connections so their next request goes to that process,
+ * drops the websockets it relays (the board reconnects on its own), and exits
+ * once the requests in flight are answered.
+ */
+process.once("SIGTERM", () => {
+  server.close(() => process.exit(0));
+  server.closeIdleConnections();
+  for (const socket of relayed) {
+    socket.destroy();
+  }
+  setTimeout(() => process.exit(0), DRAIN_MS).unref();
 });
