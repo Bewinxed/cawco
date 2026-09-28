@@ -1556,13 +1556,17 @@ function handleFrame(frame: FramePayload): void {
         // queued row it replaces is not a copy anything can stamp. Its id is
         // the second way a row retires — the dequeue frame can be raced by the
         // turn it announces, or missed entirely by a tab that just subscribed.
-        const { uuid, text, queueId, absorbed } = mapping.echo;
-        if (absorbed) {
-          // The model read it mid-turn. The row this tab drew at the press is
-          // taken out of the queue, and its words fly from where the row still
-          // stands into the turn `mapFrame` just pushed — measured now, before
-          // this change is drawn and the row is gone.
-          const drawn = takeDrawn(target, (entry) => entry.text === text);
+        const { uuid, text, queueId, midTurn } = mapping.echo;
+        if (midTurn) {
+          // The model read it: folded into the turn it was sent into, or
+          // opening the next. The row this tab drew at the press is taken out
+          // of the queue, and its words fly from where the row still stands
+          // into the turn `mapFrame` just pushed — measured now, before this
+          // change is drawn and the row is gone. The read line opens with what
+          // was typed (pastes fold in after it), as the daemon matched it.
+          const drawn = takeDrawn(target, (entry) =>
+            entry.text === "" ? text === "" : text.startsWith(entry.text)
+          );
           if (drawn) {
             departFrom(
               `[data-queued="${CSS.escape(drawn.sentAs ?? drawn.queueId)}"]`,

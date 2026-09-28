@@ -407,17 +407,21 @@ export interface NeutralUserMessage {
    */
   queueId?: string;
   raw?: unknown;
+  /**
+   * A message the reader sent while a turn was running, read back from the
+   * transcript where the model read it: folded into that turn, or opening the
+   * next one. Stdout carries neither, so this frame is the only live word that
+   * it was read — and the queued row a client has been drawing for it is done.
+   */
+  sentMidTurn?: true;
   session_id?: string;
   shouldQuery?: boolean;
   /**
-   * The command id Claude Code gave a message the reader sent mid-turn, set
-   * only on the frame the harness reads back from the transcript at the moment
-   * the model absorbed it into the running turn (`queued_command`). Its
-   * presence is what tells a client this is that message, read where the model
-   * read it — the queued row it has been drawing for it is done.
+   * The command id Claude Code gave that message, when it was folded into the
+   * running turn (`queued_command.source_uuid`). A turn it opened has none.
    */
   sourceUuid?: string;
-  /** When the message was sent, ISO-8601 — on the absorbed frame above. */
+  /** When the line was written, ISO-8601 — on the `sentMidTurn` frame. */
   timestamp?: string;
   type: "user";
   uuid?: string;

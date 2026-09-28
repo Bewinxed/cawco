@@ -131,11 +131,12 @@ export interface FrameMapping {
     text: string;
     queueId?: string;
     /**
-     * A message the reader sent mid-turn, read where the model folded it into
-     * the running turn. `mapFrame` has pushed it; the store retires the queued
-     * row this tab drew for it and flies that row into it.
+     * A message the reader sent while a turn ran, read where the model read
+     * it: folded into that turn, or opening the next. `mapFrame` has pushed
+     * it; the store retires the queued row this tab drew for it and flies
+     * that row into it.
      */
-    absorbed?: true;
+    midTurn?: true;
   };
   /** The turn is over — the session is idle again. */
   endsTurn: boolean;
@@ -647,17 +648,18 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
       // too: retiring the row is what the store does with it, and it happens
       // whether or not the `message_dequeued` frame arrived first.
       const queueId = "queueId" in sdk ? sdk.queueId : undefined;
-      // A message the reader sent while the turn was running, which the model
-      // folded into it at a tool boundary. Nothing else draws it as a turn —
-      // the sender's tab holds it as a queued row, other tabs hold nothing —
-      // so it is pushed here, where it was read, at the time it was sent.
-      if ("sourceUuid" in sdk && sdk.sourceUuid && uuid && !agentId) {
+      // A message the reader sent while a turn was running, which the model
+      // folded into it at a tool boundary or which opened the next turn.
+      // Nothing else draws it as a turn — the sender's tab holds it as a
+      // queued row, other tabs hold nothing — so it is pushed here, where it
+      // was read, at the time its line was written.
+      if ("sentMidTurn" in sdk && sdk.sentMidTurn && uuid && !agentId) {
         mapping.messages.push({
           ...base,
           ...(sdk.timestamp && { timestamp: new Date(sdk.timestamp) }),
           ...userBody(text ?? "", transcriptUserImages(sdk.message)),
         });
-        mapping.echo = { uuid, text: text ?? "", absorbed: true };
+        mapping.echo = { uuid, text: text ?? "", midTurn: true };
         break;
       }
       if (text && (agentId || systemNote(text))) {
