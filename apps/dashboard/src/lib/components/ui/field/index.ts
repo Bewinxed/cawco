@@ -8,7 +8,6 @@ export {
   default as Description,
   default as FieldDescription,
 } from "./field-description.svelte";
-export { default as Error, default as FieldError } from "./field-error.svelte";
 export { default as Group, default as FieldGroup } from "./field-group.svelte";
 export { default as Label, default as FieldLabel } from "./field-label.svelte";
 export {

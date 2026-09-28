@@ -9,6 +9,7 @@
   import { goto } from "$app/navigation";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
+  import { Button } from "$lib/components/ui/button";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as ContextMenu from "$lib/components/ui/context-menu";
   import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
@@ -63,14 +64,18 @@
 
   let confirmingForget = $state(false);
   let busy = $state(false);
+  /** The last forget went through (a failed one leaves the dialog open). */
+  let forgotten = $state(false);
 
   async function forget() {
     if (!project) {
       return;
     }
     busy = true;
+    forgotten = false;
     try {
       await deleteProject(project.id);
+      forgotten = true;
       confirmingForget = false;
     } finally {
       busy = false;
@@ -193,9 +198,18 @@
     </AlertDialog.Header>
     <AlertDialog.Footer>
       <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-      <AlertDialog.Action disabled={busy} onclick={forget}
-        >Forget</AlertDialog.Action
-      >
+      <AlertDialog.Action>
+        {#snippet child({ props })}
+          <Button
+            {...props}
+            failed={!forgotten}
+            label="Forget"
+            onclick={forget}
+            pending={busy}
+            pendingLabel="Forgetting…"
+          />
+        {/snippet}
+      </AlertDialog.Action>
     </AlertDialog.Footer>
   </AlertDialog.Content>
 </AlertDialog.Root>

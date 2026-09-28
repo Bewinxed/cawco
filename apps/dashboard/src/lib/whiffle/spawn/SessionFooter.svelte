@@ -1,5 +1,9 @@
 <script lang="ts">
   /** Footer (§1.9): Cancel and Start. Lifetime lives in the composer's chips. */
+  import PendingContent, {
+    whileIdle,
+  } from "$lib/components/ui/button/pending-content.svelte";
+
   let {
     oncancel,
     onstart,
@@ -7,6 +11,7 @@
     busyLabel = "Starting…",
     disabled,
     busy,
+    failed,
   }: {
     oncancel: () => void;
     onstart: () => void;
@@ -15,7 +20,14 @@
     busyLabel?: string;
     disabled: boolean;
     busy: boolean;
+    /** The start that just ended failed (the dialog says why): no check. */
+    failed: boolean;
   } = $props();
+
+  const start = whileIdle(
+    () => busy,
+    () => onstart()
+  );
 </script>
 
 <div class="footer" data-ns-footer>
@@ -23,16 +35,22 @@
     Cancel
   </button>
   <button
-    aria-busy={busy}
+    aria-busy={busy || undefined}
+    aria-disabled={busy || undefined}
     class="ns-btn primary touch-hit"
     data-share="session:new"
     data-share-ttl="8000"
     {disabled}
     id="session-start"
-    onclick={onstart}
+    onclick={start}
     type="button"
   >
-    {busy ? busyLabel : startLabel}
+    <PendingContent
+      {failed}
+      label={startLabel}
+      pending={busy}
+      pendingLabel={busyLabel}
+    />
   </button>
 </div>
 
@@ -48,6 +66,11 @@
   }
   #session-start {
     min-width: 96px;
+    --btn-gap: 8px;
+    --btn-icon: 16px;
+  }
+  #session-start[aria-busy="true"] {
+    pointer-events: none;
   }
   @media (max-width: 640px) {
     .footer {

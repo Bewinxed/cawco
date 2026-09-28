@@ -82,8 +82,12 @@
     }
   }
 
+  /** The last delete went through (a failed one leaves the dialog open). */
+  let removed = $state(false);
+
   async function remove() {
     busy = true;
+    removed = false;
     try {
       await machineControl(
         machineId,
@@ -93,6 +97,7 @@
         info.harness
       );
       await loadCatalog(machineId);
+      removed = true;
       confirmingDelete = false;
     } finally {
       busy = false;
@@ -211,12 +216,18 @@
     </AlertDialog.Header>
     <AlertDialog.Footer>
       <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-      <AlertDialog.Action
-        disabled={busy}
-        onclick={remove}
-        variant="destructive"
-      >
-        Delete transcript
+      <AlertDialog.Action variant="destructive">
+        {#snippet child({ props })}
+          <Button
+            {...props}
+            failed={!removed}
+            label="Delete transcript"
+            onclick={remove}
+            pending={busy}
+            pendingLabel="Deleting…"
+            variant="destructive"
+          />
+        {/snippet}
       </AlertDialog.Action>
     </AlertDialog.Footer>
   </AlertDialog.Content>

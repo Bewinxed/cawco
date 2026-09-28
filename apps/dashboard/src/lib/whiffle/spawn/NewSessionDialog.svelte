@@ -443,9 +443,10 @@
           (!summarizerSelected ||
             Boolean(summarizerRefusal(summarizerSelected)))))
   );
+  /** The last start failed: the footer shows no check. */
+  const startFailed = $derived(error !== "");
   const cantStart = $derived(
     continueBlocked ||
-      busy ||
       whiffle.hub !== "connected" ||
       machineIds.length === 0 ||
       Boolean(offlineMachine) ||
@@ -1235,6 +1236,7 @@
       {busy}
       busyLabel={continueFrom ? "Summarising…" : "Starting…"}
       disabled={cantStart}
+      failed={startFailed}
       oncancel={close}
       onstart={start}
       {startLabel}

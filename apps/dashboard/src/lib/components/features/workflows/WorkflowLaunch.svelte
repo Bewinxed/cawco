@@ -3,6 +3,9 @@
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   import DirectoryPicker from "$lib/components/features/DirectoryPicker.svelte";
+  import PendingContent, {
+    whileIdle,
+  } from "$lib/components/ui/button/pending-content.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
   import * as Dialog from "$lib/components/ui/dialog";
   import { whiffle } from "$lib/whiffle/client.svelte";
@@ -179,14 +182,22 @@
           >
             Cancel
           </button><button
-            class="wf-btn wf-primary"
-            disabled={busy || !online || !workspace || whiffle.hub !== 'connected'}
+            aria-busy={busy || undefined}
+            aria-disabled={busy || undefined}
+            class="wf-btn wf-primary start"
+            disabled={!(online && workspace && whiffle.hub === 'connected')}
+            onclick={whileIdle(() => busy, undefined)}
             title={whiffle.hub === 'connected'
               ? undefined
               : "Can't start a run while the hub is unreachable"}
             type="submit"
           >
-            {busy ? 'Starting workflow run…' : 'Start run'}
+            <PendingContent
+              failed={errorMessage !== ''}
+              label="Start run"
+              pending={busy}
+              pendingLabel="Starting workflow run…"
+            />
           </button>
         </div>
       </form>
@@ -194,6 +205,15 @@
   ></Dialog.Root
 >
 <style>
+  /* The start button draws the kit's pending content in the workflow skin:
+     its gap and icon size, and no press while the run is being started. */
+  .start {
+    --btn-gap: var(--space-2);
+    --btn-icon: 16px;
+  }
+  .start[aria-busy="true"] {
+    pointer-events: none;
+  }
   .wf-launch :global(button) {
     min-height: 44px;
   }
