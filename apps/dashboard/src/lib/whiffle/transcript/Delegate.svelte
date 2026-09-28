@@ -5,7 +5,7 @@
   import { IconChevronRight, IconExternal } from "$lib/icons";
   import { formatDuration } from "$lib/utils/time";
   import {
-    backfillSession,
+    preloadHistory,
     unwatchDelegate,
     watchDelegate,
     whiffle,
@@ -303,7 +303,7 @@
     if (next) {
       watchDelegate(id);
       // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — onToggle is a sync callback, nothing here awaits the backfill.
-      void backfillSession(id);
+      void preloadHistory(id);
     } else {
       unwatchDelegate(id);
     }

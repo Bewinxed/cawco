@@ -231,9 +231,10 @@
        screenful above the caret, so the way out of the editor scrolled away
        from the person using it. -->
   <!-- One height whether it carries a button or not: an Edit arriving with
-       the file does not move what is under the card. -->
+       the file (or leaving with the machine) does not move what is under the
+       card. The floor is the button's line, the padding and the bottom rule. -->
   <header
-    class="sticky top-0 z-10 flex min-h-[calc(1.5rem+var(--space-2)*2)] items-center gap-3 border-b border-border/50 bg-card px-[var(--space-4)] py-[var(--space-2)]"
+    class="sticky top-0 z-10 flex min-h-[calc(1.5rem+var(--space-2)*2+1px)] items-center gap-3 border-b border-border/50 bg-card px-[var(--space-4)] py-[var(--space-2)]"
   >
     <span
       class="min-w-0 truncate font-mono text-label text-muted-foreground"
