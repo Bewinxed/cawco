@@ -87,7 +87,8 @@
   span {
     min-width: 40px;
     text-align: center;
-    font-size: var(--text-label);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     font-variant-numeric: tabular-nums;
   }
 </style>

@@ -3,6 +3,7 @@
   import { flip } from "svelte/animate";
   import { fade } from "svelte/transition";
   import { Kbd } from "$lib/components/ui/kbd";
+  import { Skeleton } from "$lib/components/ui/skeleton";
   import { IconToolGeneric, IconToolMcp, IconToolSkill } from "$lib/icons";
   import { bezier, easeOut, motionOk } from "$lib/whiffle/motion/curves.svelte";
   import {
@@ -236,7 +237,8 @@
         aria-hidden="true"
         class="shimmer"
         in:fade={{ duration: 280, easing: easeOut }}
-      ></span>
+        ><Skeleton class="size-full" /></span
+      >
     {/if}
     {#if failure}
       <p
@@ -318,6 +320,7 @@
     box-shadow: var(--shadow-tile);
     color: var(--ink-strong);
     font-size: var(--text-label);
+    font-weight: var(--weight-strong);
     white-space: nowrap;
     cursor: pointer;
     /* A confidence that moves in place re-tints over --dur-panel. */
@@ -344,12 +347,12 @@
 
     &:focus-visible {
       outline: 2px solid var(--focus-ring);
-      outline-offset: 2px;
+      outline-offset: 1px;
     }
 
     & :global(.glyph) {
-      inline-size: 14px;
-      block-size: 14px;
+      inline-size: 16px;
+      block-size: 16px;
       flex: none;
       color: var(--ink-muted);
     }
@@ -367,7 +370,8 @@
     align-items: center;
     gap: var(--space-1);
     color: var(--ink-muted);
-    font-size: var(--text-label);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     white-space: nowrap;
   }
 
@@ -378,40 +382,18 @@
     }
   }
 
-  /* One low-contrast sweep, only while an ask is slow. */
+  /* A chip's size, held by the kit skeleton only while an ask is slow. */
   .shimmer {
+    display: block;
     inline-size: 9rem;
     block-size: calc(var(--text-label) + var(--space-1) * 2 + 2px);
-    border-radius: var(--radius-sm);
-    background: var(--surface-recess);
-    opacity: 0.8;
-
-    @media (prefers-reduced-motion: no-preference) {
-      background: linear-gradient(
-          90deg,
-          transparent 0%,
-          oklch(from var(--surface-raised) l c h / 0.7) 50%,
-          transparent 100%
-        )
-        var(--surface-recess);
-      background-size: 200% 100%;
-      animation: sweep calc(var(--c-500) * 3) var(--ease-in-out) infinite;
-    }
-  }
-
-  @keyframes sweep {
-    from {
-      background-position: 150% 0;
-    }
-    to {
-      background-position: -50% 0;
-    }
   }
 
   .fail {
     margin: 0;
     color: var(--ink-muted);
-    font-size: var(--text-label);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     text-wrap: pretty;
   }
 </style>

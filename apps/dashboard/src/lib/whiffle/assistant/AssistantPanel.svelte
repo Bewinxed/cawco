@@ -13,6 +13,8 @@
   import { goto } from "$app/navigation";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for importing a component group
   import * as Drawer from "$lib/components/ui/drawer";
+  import { EmptyState } from "$lib/components/ui/empty";
+  import { Skeleton } from "$lib/components/ui/skeleton";
   import { IconAssistant } from "$lib/icons";
   import { whiffle } from "../client.svelte";
   import { conversationHref } from "../links";
@@ -301,18 +303,18 @@
     <!-- Intervention log -->
     <section class="sect log-sect">
       <h3 class="sect-h">Interventions</h3>
-      {#if events.length === 0}
-        <div class="empty">
-          <div class="empty-grid"></div>
-          <div class="empty-orb">
-            <IconAssistant />
-          </div>
-          <h4 class="empty-h">No interventions yet</h4>
-          <p class="empty-p">
-            When the supervisor acts on a session, every verdict appears here —
-            replies, escalations, and the ones it let pass.
-          </p>
+      {#if !seeded}
+        <div aria-busy="true" class="flex flex-col gap-1" role="status">
+          {#each [0, 1, 2] as row (row)}
+            <Skeleton class="h-8 w-full" />
+          {/each}
         </div>
+      {:else if events.length === 0}
+        <EmptyState
+          icon={IconAssistant}
+          line="When the supervisor acts on a session, every verdict appears here — replies, escalations, and the ones it let pass."
+          title="No interventions yet"
+        />
       {:else}
         <ul class="log">
           {#each events as ev (ev.id)}
@@ -397,8 +399,8 @@
     place-items: center;
   }
   .a-logo :global(svg) {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
   }
   .a-t {
     font-size: var(--text-body);
@@ -414,7 +416,7 @@
     height: 19px;
     padding: 0 8px;
     border-radius: var(--radius-pill);
-    font-size: var(--text-meta);
+    font-size: var(--text-label);
     font-weight: var(--weight-strong);
     letter-spacing: 0.03em;
     text-transform: uppercase;
@@ -436,8 +438,8 @@
     transition: background var(--dur-control) var(--ease-in-out);
   }
   .a-x svg {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
   }
   @media (hover: hover) and (pointer: fine) {
     .a-x:hover {
@@ -447,7 +449,7 @@
   }
   .a-x:focus-visible {
     outline: 2px solid var(--focus-ring);
-    outline-offset: 2px;
+    outline-offset: 1px;
   }
 
   /* ---- BODY ---- */
@@ -475,7 +477,8 @@
     letter-spacing: 0.06em;
   }
   .sect-note {
-    font-size: var(--text-label);
+    font-size: var(--text-body);
+    font-weight: var(--weight-body);
     line-height: var(--leading-body);
     color: var(--ink-muted);
   }
@@ -514,62 +517,9 @@
   }
   .status-label {
     font-size: var(--text-label);
-    font-weight: var(--weight-medium);
-    color: var(--ink-strong);
-    font-variant-numeric: tabular-nums;
-  }
-
-  /* ---- EMPTY STATE (mock anatomy) ---- */
-  .empty {
-    flex: 1 1 auto;
-    position: relative;
-    display: grid;
-    place-items: center;
-    min-height: 200px;
-    padding: var(--space-5);
-    text-align: center;
-  }
-  .empty-grid {
-    position: absolute;
-    inset: 0;
-    background-image:
-      linear-gradient(var(--border-hairline) 1px, transparent 1px),
-      linear-gradient(90deg, var(--border-hairline) 1px, transparent 1px);
-    background-size: 22px 22px;
-    opacity: 0.5;
-    mask-image: radial-gradient(closest-side, #000, transparent);
-    -webkit-mask-image: radial-gradient(closest-side, #000, transparent);
-  }
-  .empty-orb {
-    width: 52px;
-    height: 52px;
-    border-radius: var(--radius-pill);
-    background: var(--surface-recess);
-    border: 1px solid var(--border-hairline);
-    box-shadow: var(--shadow-tile);
-    display: grid;
-    place-items: center;
-    position: relative;
-  }
-  .empty-orb :global(svg) {
-    width: 22px;
-    height: 22px;
-    color: var(--ink-strong);
-  }
-  .empty-h {
-    font-size: var(--text-body);
     font-weight: var(--weight-strong);
     color: var(--ink-strong);
-    margin-top: var(--space-3);
-    position: relative;
-  }
-  .empty-p {
-    font-size: var(--text-label);
-    line-height: var(--leading-body);
-    color: var(--ink-muted);
-    margin-top: var(--space-1);
-    max-width: 260px;
-    position: relative;
+    font-variant-numeric: tabular-nums;
   }
 
   /* ---- LOG ---- */
@@ -594,7 +544,8 @@
     align-items: baseline;
     gap: var(--space-2);
     padding: var(--space-1) 0;
-    font-size: var(--text-label);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     line-height: var(--leading-ui);
   }
   .log-time {
@@ -651,7 +602,7 @@
     height: 18px;
     padding: 0 6px;
     border-radius: var(--radius-pill);
-    font-size: var(--text-meta);
+    font-size: var(--text-label);
     font-weight: var(--weight-strong);
   }
   .log-verdict.muted {

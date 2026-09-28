@@ -9,8 +9,10 @@
   }: WithoutChildren<WithElementRef<HTMLAttributes<HTMLDivElement>>> = $props();
 </script>
 
+<!-- The one loading placeholder: the kit-skeleton recipe in app.css. The
+     caller sizes it to exactly what it stands for, so the swap moves nothing. -->
 <div
-  class={cn("animate-pulse rounded-[var(--radius-sm)] bg-muted", className)}
+  class={cn("kit-skeleton", className)}
   data-slot="skeleton"
   bind:this={ref}
   {...restProps}

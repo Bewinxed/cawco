@@ -3,6 +3,7 @@
   import { toast } from "svelte-sonner";
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
+  import { EmptyState } from "$lib/components/ui/empty";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Popover from "$lib/components/ui/popover";
   import { Switch } from "$lib/components/ui/switch";
@@ -10,7 +11,13 @@
   import * as Table from "$lib/components/ui/table";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Tooltip from "$lib/components/ui/tooltip";
-  import { IconCheck, IconExternal, IconSpinner } from "$lib/icons";
+  import {
+    IconCheck,
+    IconExternal,
+    IconLaptop,
+    IconSpinner,
+    IconTerminal,
+  } from "$lib/icons";
   import type { Machine } from "./client.svelte";
   import { machineLabel, machineOs } from "./machine";
   import OsMark from "./OsMark.svelte";
@@ -80,8 +87,8 @@
   {#if shown === 'installed'}
     <span class="flex items-center gap-[var(--space-1)]">
       <Badge class="{CHIP} text-success" variant="ghost">
-        <IconCheck class="size-3.5 shrink-0" />
-        <span class="font-mono tabular-nums">{toolStatus?.version ?? '—'}</span>
+        <IconCheck class="size-4 shrink-0" />
+        <span class="num font-mono">{toolStatus?.version ?? '—'}</span>
       </Badge>
       <span
         class="transition-opacity group-focus-within/cell:opacity-100 group-hover/cell:opacity-100 md:opacity-0"
@@ -99,7 +106,7 @@
     </span>
   {:else if shown === 'installing'}
     <Badge class="{CHIP} text-muted-foreground" variant="ghost">
-      <IconSpinner class="size-3.5 shrink-0 animate-spin" />
+      <IconSpinner class="size-4 shrink-0 animate-spin" />
       Installing…
     </Badge>
   {:else if shown === 'missing'}
@@ -133,7 +140,7 @@
           <header
             class="flex items-baseline gap-[var(--space-1)] border-b border-border px-[var(--space-3)] py-[var(--space-2)]"
           >
-            <span class="text-meta font-medium text-foreground"
+            <span class="text-label text-foreground"
               >{spec.name}
               did not install</span
             >
@@ -220,22 +227,19 @@
 {/snippet}
 
 {#if columns.length === 0}
-  <p class="text-meta text-muted-foreground">
-    The hub's catalog is empty, so there is nothing to install yet.
-  </p>
+  <EmptyState
+    icon={IconTerminal}
+    line="The hub's catalog is empty, so there is nothing to install yet."
+    title="Nothing to install"
+  />
 {:else if machines.length === 0}
-  <div class="flex flex-col gap-2">
-    <h2 class="text-label text-foreground">No machines yet</h2>
-    <p class="text-meta text-muted-foreground">
-      Tools are installed on your own hardware, never on a server of ours — so
-      this stays empty until a machine says it is here. Start the agent daemon
-      on one, pointed at this hub, and it reports what it already has the moment
-      it registers.
-    </p>
-    <pre
-      class="overflow-x-auto rounded-[var(--radius-sm)] bg-muted px-[var(--space-3)] py-[var(--space-2)] font-mono text-label"
-    >WHIFFLE_HUB_URL=ws://&lt;this-host&gt;:3456/ws whiffle up</pre>
-  </div>
+  <EmptyState icon={IconLaptop} title="No machines yet">
+    {#snippet line()}
+      Tools install on your own machines, and none has registered with this hub.
+      Run <code>WHIFFLE_HUB_URL=ws://&lt;this-host&gt;:3456/ws whiffle up</code>
+      on one and it reports what it already has.
+    {/snippet}
+  </EmptyState>
 {:else}
   <div class="matrix">
     <Table.Root class="border-collapse text-left">
@@ -252,18 +256,16 @@
             {@const policy = policyOf(spec)}
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
-              class="h-auto min-w-56 border-l border-border px-[var(--space-4)] py-[var(--space-3)] font-normal whitespace-normal"
+              class="h-auto min-w-56 border-l border-border px-[var(--space-4)] py-[var(--space-3)] whitespace-normal"
               scope="col"
             >
               <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
               <div class="flex flex-col items-start gap-[var(--space-2)]">
                 <span class="flex items-center gap-1.5">
-                  <span class="text-meta font-medium text-foreground"
-                    >{spec.name}</span
-                  >
+                  <span class="text-label text-foreground">{spec.name}</span>
                   <a
                     aria-label="{spec.name} homepage"
-                    class="text-muted-foreground transition-colors hover:text-foreground"
+                    class="pointer-hit pressable text-muted-foreground transition-colors hover:text-foreground"
                     href={spec.homepage}
                     rel="noreferrer"
                     target="_blank"
@@ -272,7 +274,7 @@
                     <IconExternal class="size-3" />
                   </a>
                 </span>
-                <span class="text-label tabular-nums text-muted-foreground"
+                <span class="num text-meta text-muted-foreground"
                   >{installedOn(spec)}/{machines.length}
                   installed</span
                 >
@@ -300,7 +302,7 @@
           <Table.Row class={online ? '' : 'opacity-50'}>
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
-              class="sticky left-0 z-10 h-auto bg-[var(--surface-raised)] px-[var(--space-4)] py-[var(--space-2)] font-normal"
+              class="sticky left-0 z-10 h-auto bg-[var(--surface-raised)] px-[var(--space-4)] py-[var(--space-2)]"
               scope="row"
             >
               <!-- biome-ignore-end lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
@@ -311,7 +313,7 @@
                 />
                 <span class="flex min-w-0 flex-col">
                   <span class="flex items-center gap-[var(--space-2)]">
-                    <span class="truncate text-meta font-medium text-foreground"
+                    <span class="truncate text-label text-foreground"
                       >{machineLabel(machine.hostname)}</span
                     >
                     <span

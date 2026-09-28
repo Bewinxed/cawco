@@ -193,7 +193,7 @@
     });
   }
 </script>
-<section aria-label="Workflow graph" class="canvas">
+<section aria-label="Workflow graph" class="canvas" style:--hit-scale={zoom}>
   {#if mounted}
     <SvelteFlow
       colorMode={theme.current}
@@ -256,6 +256,10 @@
     border-color: var(--surface-raised);
     width: 10px;
     height: 10px;
+  }
+  /* A handle is placed by its transform, so its press is colour, not scale. */
+  .canvas :global(.svelte-flow__handle:active) {
+    background: var(--brand-solid);
   }
   .canvas :global(.svelte-flow__attribution) {
     font-size: var(--text-meta);

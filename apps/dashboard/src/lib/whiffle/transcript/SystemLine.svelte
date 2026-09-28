@@ -184,6 +184,7 @@
     }
     & .handoff {
       font-size: var(--text-label);
+      font-weight: var(--weight-strong);
       opacity: 0.92;
       white-space: pre-wrap;
     }
@@ -194,6 +195,7 @@
     padding-inline-start: var(--space-3);
     background: var(--rail-head, var(--rail)) left top / 2px 100% no-repeat;
     font-size: var(--text-label);
+    font-weight: var(--weight-strong);
     color: var(--ink-muted);
 
     & :global(svg) {
@@ -210,6 +212,7 @@
       padding: 0;
       color: var(--ink-muted);
       font-size: var(--text-label);
+      font-weight: var(--weight-strong);
       cursor: pointer;
       text-align: start;
     }
@@ -233,6 +236,7 @@
     gap: var(--space-2);
     max-inline-size: 100%;
     font-size: var(--text-label);
+    font-weight: var(--weight-strong);
     color: var(--ink-muted);
   }
   .hstatus {

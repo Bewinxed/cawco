@@ -2,7 +2,7 @@
   import type { PermissionMode } from "@whiffle/core";
   import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   /** Permission-mode rows (§1.8, §2.11): sliding fill + mounted check. */
-  import Check from "~icons/solar/check-circle-bold";
+  import Check from "~icons/solar/check-circle-bold-duotone";
   import { permissionLook } from "./permission-look";
 
   let {
@@ -138,8 +138,8 @@
     height: 26px;
   }
   .tile :global(svg) {
-    width: 15px;
-    height: 15px;
+    width: 16px;
+    height: 16px;
   }
   .text {
     flex: 1;

@@ -172,7 +172,7 @@
            "a person is holding this up" (DESIGN.md Never #3 reserves red). -->
       <Badge
         aria-label="{total} {total === 1 ? 'session needs' : 'sessions need'} you"
-        class="min-w-5 bg-[var(--status-attn-bg)] px-1.5 !text-[color:var(--status-attn-ink)] tabular-nums"
+        class="min-w-5 bg-[var(--status-attn-bg)] px-1.5 !text-[color:var(--status-attn-ink)] num"
         data-flip="box"
         variant="secondary"
       >
@@ -213,9 +213,7 @@
                   >{item.cwd}</span
                 >
               {/if}
-              <span
-                class="text-label shrink-0 text-muted-foreground tabular-nums"
-              >
+              <span class="num shrink-0 text-meta text-muted-foreground">
                 {waited(entry.since)}
               </span>
             </div>

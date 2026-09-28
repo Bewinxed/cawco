@@ -13,6 +13,7 @@
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import { Button } from "$lib/components/ui/button";
   import { Card } from "$lib/components/ui/card";
+  import { EmptyState } from "$lib/components/ui/empty";
   import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   import { Input } from "$lib/components/ui/input";
   import { Markdown } from "$lib/components/ui/markdown";
@@ -24,6 +25,7 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Tabs from "$lib/components/ui/tabs";
   import { Textarea } from "$lib/components/ui/textarea";
+  import { IconChat, IconDocument } from "$lib/icons";
   import type { ProjectRow } from "$lib/whiffle/client.svelte";
   import {
     deleteProject,
@@ -732,12 +734,12 @@
                         </Alert>
                       </div>
                     {:else if docs?.length === 0}
-                      <p
-                        class="px-[var(--space-6)] py-[var(--space-4)] text-body text-muted-foreground md:px-[var(--space-7)]"
-                      >
-                        Add a README.md at the top of the checkout and it shows
-                        up here.
-                      </p>
+                      <EmptyState
+                        class="px-[var(--space-6)] md:px-[var(--space-7)]"
+                        icon={IconDocument}
+                        line="Add a README.md at the top of the checkout and it shows up here."
+                        title="No markdown yet"
+                      />
                     {:else if shown === null}
                       <!-- The size the document will stand at, clamped,
                              with the row its Read more takes. -->
@@ -781,7 +783,7 @@
                       </div>
                       {#if clipped || expanded}
                         <button
-                          class="flex min-h-9 w-full items-center justify-center rounded-b-[var(--radius-lg)] text-caption
+                          class="pressable flex min-h-9 w-full items-center justify-center rounded-b-[var(--radius-lg)] text-label
                               transition-colors hover:bg-accent hover:text-accent-foreground"
                           onclick={toggleExpanded}
                           type="button"
@@ -889,9 +891,12 @@
                       />
                     {:else}
                       {#if live.length === 0}
-                        <p class="px-1 py-2 text-meta text-muted-foreground">
-                          Nothing running, nothing recorded yet.
-                        </p>
+                        <EmptyState
+                          class="px-1"
+                          icon={IconChat}
+                          line="Nothing is running in this project, and nothing has been recorded."
+                          title="No sessions yet"
+                        />
                       {/if}
                     {/each}
                   </div>

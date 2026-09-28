@@ -32,7 +32,7 @@
 
 <StoredSessionMenu {info} {machineId}>
   <a
-    class="flex min-h-9 items-center rounded-[var(--radius-sm)] px-4 py-1.5
+    class="pressable flex min-h-9 items-center rounded-[var(--radius-sm)] px-4 py-1.5
       transition-colors duration-150 ease-out hover:text-accent-foreground"
     {href}
     use:dragSession={{
@@ -48,7 +48,7 @@
       <span
         aria-hidden="true"
         class="flex shrink-0 items-center justify-center opacity-60"
-        style="--c-mark:20px;--c-mark-glyph:11px"
+        style="--c-mark:20px;--c-mark-glyph:12px"
       >
         <span class="mark m{markHue(info.cwd || machineId)}">
           <Sprite aria-hidden="true" />
@@ -69,10 +69,7 @@
           ><bdi>{info.cwd}</bdi></span
         >
       {/if}
-      <span
-        class="ml-auto shrink-0 text-label text-muted-foreground tabular-nums"
-        data-tabular
-      >
+      <span class="num ml-auto shrink-0 text-meta text-muted-foreground">
         {formatDistanceToNow(new Date(info.lastModified))}
       </span>
     </span>

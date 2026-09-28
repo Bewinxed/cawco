@@ -1,13 +1,13 @@
 import type { Component } from "svelte";
 import {
-  IconBoltDuo,
-  IconBookDuo,
-  IconCpuDuo,
-  IconHookDuo,
-  IconRuleDuo,
-  IconSubagentDuo,
-  IconSubagentsDuo,
-  IconTerminalDuo,
+  IconBolt,
+  IconBook,
+  IconCpu,
+  IconHook,
+  IconRules,
+  IconSubagent,
+  IconSubagents,
+  IconTerminal,
   IconToolMcp,
 } from "$lib/icons";
 
@@ -39,7 +39,7 @@ export const SECTIONS: ConfigSection[] = [
     group: "Automation",
     label: "Rules",
     purpose: "What Whiffle answers when a session says something",
-    icon: IconRuleDuo,
+    icon: IconRules,
     hue: "var(--hue-green-500)",
   },
   {
@@ -47,7 +47,7 @@ export const SECTIONS: ConfigSection[] = [
     group: "Automation",
     label: "Hooks",
     purpose: "Scripts each machine runs at a session's lifecycle events",
-    icon: IconHookDuo,
+    icon: IconHook,
     hue: "var(--hue-cyan-500)",
   },
   {
@@ -55,7 +55,7 @@ export const SECTIONS: ConfigSection[] = [
     group: "Agents",
     label: "Delegate types",
     purpose: "Presets a session's delegate call picks from",
-    icon: IconSubagentsDuo,
+    icon: IconSubagents,
     hue: "var(--hue-blue-500)",
   },
   {
@@ -63,7 +63,7 @@ export const SECTIONS: ConfigSection[] = [
     group: "Agents",
     label: "Subagents",
     purpose: "Agent files written to ~/.claude/agents on every machine",
-    icon: IconSubagentDuo,
+    icon: IconSubagent,
     hue: "var(--hue-orange-500)",
   },
   {
@@ -71,7 +71,7 @@ export const SECTIONS: ConfigSection[] = [
     group: "Tools",
     label: "Command-line tools",
     purpose: "CLIs each machine must have",
-    icon: IconTerminalDuo,
+    icon: IconTerminal,
     hue: "var(--hue-green-600)",
   },
   {
@@ -87,7 +87,7 @@ export const SECTIONS: ConfigSection[] = [
     group: "Tools",
     label: "Skills & plugins",
     purpose: "Skills, plugins and marketplaces",
-    icon: IconBoltDuo,
+    icon: IconBolt,
     hue: "var(--hue-amber-500)",
   },
   {
@@ -95,7 +95,7 @@ export const SECTIONS: ConfigSection[] = [
     group: "Memory",
     label: "Memory files",
     purpose: "CLAUDE.md and the model documents",
-    icon: IconBookDuo,
+    icon: IconBook,
     hue: "var(--hue-blue-600)",
   },
   {
@@ -103,7 +103,7 @@ export const SECTIONS: ConfigSection[] = [
     group: "Hub",
     label: "Models Whiffle uses",
     purpose: "OpenRouter and the supervisor server",
-    icon: IconCpuDuo,
+    icon: IconCpu,
     hue: "var(--hue-orange-500)",
   },
 ];

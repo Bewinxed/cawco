@@ -347,7 +347,7 @@
           {:else if hasBody}
             {@const disclosed = disclosure(m)}
             <Collapsible.Root bind:open={disclosed.get, disclosed.set}>
-              <Collapsible.Trigger class="trow">
+              <Collapsible.Trigger class="trow pressable">
                 {@render line()}
                 <span class="chev"><IconChevronRight /></span>
               </Collapsible.Trigger>
@@ -466,6 +466,7 @@
     background: transparent;
     color: var(--ink-strong);
     font-size: var(--text-label);
+    font-weight: var(--weight-strong);
     text-align: start;
     cursor: pointer;
 
@@ -480,7 +481,7 @@
 
       &::after {
         outline: 2px solid var(--focus-ring);
-        outline-offset: 2px;
+        outline-offset: 1px;
       }
     }
   }
@@ -510,8 +511,8 @@
     color: var(--mark-glyph);
 
     & :global(svg) {
-      inline-size: 13px;
-      block-size: 13px;
+      inline-size: 12px;
+      block-size: 12px;
     }
   }
   .artifact-thumb {
@@ -568,6 +569,7 @@
     gap: var(--space-2);
     font-family: inherit;
     font-size: var(--text-label);
+    font-weight: var(--weight-strong);
     color: var(--ink-strong);
     background: none;
     border: 0;
@@ -585,7 +587,7 @@
     }
     & :global(.trow:focus-visible) {
       outline: 2px solid var(--focus-ring);
-      outline-offset: 2px;
+      outline-offset: 1px;
       border-radius: var(--radius-xs);
     }
     & :global([data-slot="badge"]) {
@@ -598,8 +600,8 @@
   /* The glyph sits in one cell, so a status change can cross-fade two of
      them on the same spot. */
   .ic {
-    inline-size: 15px;
-    block-size: 15px;
+    inline-size: 16px;
+    block-size: 16px;
     flex: 0 0 auto;
     display: grid;
     place-items: center;
@@ -611,8 +613,8 @@
     color: var(--ink-muted);
 
     & :global(svg) {
-      inline-size: 15px;
-      block-size: 15px;
+      inline-size: 16px;
+      block-size: 16px;
       display: block;
     }
     /* A failed call carries its state on the glyph — the completed row's
@@ -678,8 +680,8 @@
       transition: transform var(--dur-control) var(--ease-out);
     }
     & :global(svg) {
-      inline-size: 14px;
-      block-size: 14px;
+      inline-size: 16px;
+      block-size: 16px;
       display: block;
     }
   }
@@ -710,8 +712,8 @@
     min-inline-size: 0;
 
     & .k {
-      font-size: var(--text-meta);
-      font-weight: var(--weight-medium);
+      font-size: var(--text-label);
+      font-weight: var(--weight-strong);
       color: var(--ink-muted);
     }
     & .v {

@@ -29,13 +29,13 @@
   import ThemeSwitcher from "$lib/components/ui/ThemeSwitcher.svelte";
   import { Toggle } from "$lib/components/ui/toggle";
   import {
-    IconAssistantDuo,
-    IconBoxDuo,
+    IconAssistant,
+    IconBox,
     IconChevronRight,
-    IconFolderDuo,
+    IconFolder,
     IconPlus,
     IconSearch,
-    IconSettingsDuo,
+    IconSettings,
     IconSort,
     IconUsage,
     IconWarningTriangle,
@@ -126,12 +126,9 @@
    * six destinations can afford to be, and a LIST row is 30px because a rail of
    * 40px rows is a rail that fits eight things.
    */
-  const NAV_ROW =
-    "h-[var(--c-nav-h)] gap-2.5 px-2.5 text-[length:var(--text-body)]";
-  const LIST_ROW =
-    "h-[30px] gap-2.5 px-2.5 py-0 text-[length:var(--text-label)]";
-  const SUB_ROW =
-    "h-[28px] gap-2.5 px-2.5 data-[size=md]:text-[length:var(--text-label)]";
+  const NAV_ROW = "h-[var(--c-nav-h)] gap-2.5 px-2.5 text-body";
+  const LIST_ROW = "h-[30px] gap-2.5 px-2.5 py-0";
+  const SUB_ROW = "h-[28px] gap-2.5 px-2.5";
   /** `Sidebar.Group`'s own `p-2` plus `Sidebar.Content`'s `gap-2` stacked to
    *  24px of nothing between every section; the label already separates them. */
   const GROUP = "px-2 py-1";
@@ -157,7 +154,7 @@
       stage = next;
     }
   });
-  const GROUP_LABEL = "px-2.5 text-[length:var(--text-label)]";
+  const GROUP_LABEL = "px-2.5";
   /** A label carrying a control (the sort, the delegates toggle): on a coarse
    *  pointer it takes a 44px row, so the control's touch area stays inside
    *  it, clear of the session row below. */
@@ -180,11 +177,11 @@
   const SLOT = "inline-flex size-[18px] shrink-0 items-center justify-center";
   /** A line glyph in the slot: 16px, 1px of air. */
   const SLOT_GLYPH = "size-4";
-  /** An identity chip fills the slot, and carries an 11px glyph — 3.5px of
+  /** An identity chip fills the slot, and carries a 12px glyph — 3px of
    *  inset, which is the difference between a mark and a glyph in a box. */
   const MARK = `${SLOT} rounded-[var(--radius-xs)]`;
-  const MARK_GLYPH = "size-[11px]";
-  /** The trailing column: one 16px box, so a 6px dot, an 8px dot and a 14px
+  const MARK_GLYPH = "size-3";
+  /** The trailing column: one 16px box, so a 6px dot, an 8px dot and a 16px
    *  warning triangle all hang off the same right edge. */
   const TRAIL = "flex size-4 shrink-0 items-center justify-center";
 
@@ -460,11 +457,8 @@
        drawn is ever pushed down. -->
   <Sidebar.Group aria-busy="true" aria-label="Loading" class={GROUP} data-flip>
     <div class="flex flex-col gap-1 px-2.5 py-1">
-      <!-- The kit's tint is the rail's own ground; the fill tone shows. -->
       {#each [0, 1, 2, 3, 4, 5] as row (row)}
-        <Skeleton
-          class="h-[22px] w-full rounded-[var(--radius-sm)] bg-[var(--surface-fill)]"
-        />
+        <Skeleton class="h-[22px] w-full" />
       {/each}
     </div>
   </Sidebar.Group>
@@ -482,7 +476,7 @@
      the sleeping one too. The number is what the section is not showing. -->
 {#snippet delegates(hidden: number)}
   <Toggle
-    class="-mr-1 ml-auto border border-transparent font-normal aria-pressed:border-[var(--border-control)] data-[state=off]:text-muted-foreground"
+    class="-mr-1 ml-auto border border-transparent aria-pressed:border-[var(--border-control)] data-[state=off]:text-muted-foreground"
     onPressedChange={(value) => rail.setDelegates(value)}
     pressed={rail.delegates}
     size="xs"
@@ -492,7 +486,7 @@
   >
     Delegates
     {#if hidden > 0}
-      <span class="tabular-nums opacity-70">{hidden}</span>
+      <span class="num opacity-70">{hidden}</span>
     {/if}
   </Toggle>
 {/snippet}
@@ -501,7 +495,7 @@
   {@const label = ageOf(row)}
   {#if label}
     <span
-      class="shrink-0 text-[length:var(--text-label)] tabular-nums text-muted-foreground"
+      class="num shrink-0 text-meta text-muted-foreground"
       title={ageHint(row)}
       >{label}</span
     >
@@ -555,7 +549,7 @@
              the real input. A bare input here took typing and did nothing. -->
         <button
           aria-label="Jump to session"
-          class="focus-ring touch-hit flex h-9 w-full [--hit-gap-y:8px] items-center rounded-md border border-[var(--border-control)] bg-[var(--surface-raised)] pr-14 pl-[38px] text-left text-body text-muted-foreground shadow-xs outline-none [transition:var(--transition-control)]"
+          class="focus-ring touch-hit flex h-9 w-full [--hit-gap-y:8px] items-center rounded-md border border-[var(--border-control)] bg-[var(--surface-raised)] pr-14 pl-[38px] pressable text-left text-body text-muted-foreground shadow-xs outline-none [transition:var(--transition-control),transform_160ms_var(--ease-out)]"
           onclick={onjump}
           type="button"
         >
@@ -570,7 +564,7 @@
         </span>
         <kbd
           class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 font-sans
-                  text-[length:var(--text-label)] text-muted-foreground opacity-0 transition-opacity duration-75
+                  text-meta text-muted-foreground opacity-0 transition-opacity duration-75
                   group-hover/search:opacity-100 group-focus-within/search:opacity-100"
           >⌘K</kbd
         >
@@ -586,8 +580,7 @@
                   class="inline-flex opacity-0 transition-opacity duration-75
                            group-hover/menu-item:opacity-100 group-focus-within/menu-item:opacity-100"
                 >
-                  <kbd
-                    class="font-sans text-[length:var(--text-label)] text-muted-foreground"
+                  <kbd class="font-sans text-meta text-muted-foreground"
                     >⇧⌘N</kbd
                   >
                 </span>
@@ -607,15 +600,14 @@
             {#snippet child({ props })}
               <button {...props} aria-expanded={assistantOpen} type="button">
                 <span class="{SLOT} text-[var(--accent-11)]"
-                  ><IconAssistantDuo class={SLOT_GLYPH} /></span
+                  ><IconAssistant class={SLOT_GLYPH} /></span
                 >
                 <span class="flex-1">Assistant</span>
                 <span
                   class="inline-flex opacity-0 transition-opacity duration-75
                            group-hover/menu-item:opacity-100 group-focus-within/menu-item:opacity-100"
                 >
-                  <kbd
-                    class="font-sans text-[length:var(--text-label)] text-muted-foreground"
+                  <kbd class="font-sans text-meta text-muted-foreground"
                     >⌘J</kbd
                   >
                 </span>
@@ -645,7 +637,7 @@
           >
             {#snippet child({ props })}
               <a href="/session" {...props}>
-                <span class={SLOT}><IconBoxDuo class={SLOT_GLYPH} /></span>
+                <span class={SLOT}><IconBox class={SLOT_GLYPH} /></span>
                 <span>Fleet</span>
               </a>
             {/snippet}
@@ -697,7 +689,7 @@
           >
             {#snippet child({ props })}
               <a href={configureHref} {...props}>
-                <span class={SLOT}><IconSettingsDuo class={SLOT_GLYPH} /></span>
+                <span class={SLOT}><IconSettings class={SLOT_GLYPH} /></span>
                 <span>Configure</span>
               </a>
             {/snippet}
@@ -766,7 +758,7 @@
                           >
                             <IconWarningTriangle
                               aria-hidden="true"
-                              class="size-3.5 text-warning"
+                              class="size-4 text-warning"
                             />
                             <span class="sr-only">Unreachable</span>
                           </span>
@@ -832,10 +824,7 @@
           </div>
         </Sidebar.GroupLabel>
         {#if orderedProjects.length === 0}
-          <p
-            class="px-2.5 text-[length:var(--text-label)] leading-relaxed text-muted-foreground"
-            data-flip
-          >
+          <p class="px-2.5 text-meta text-muted-foreground" data-flip>
             {#if whiffle.machines.length === 0}
               Run
               <code
@@ -881,7 +870,7 @@
                       class={MARK}
                       style="background-image: var(--mark-overlay); background-color: var(--mark-{markHue(project.cwd)});"
                     >
-                      <IconFolderDuo
+                      <IconFolder
                         class={MARK_GLYPH}
                         style="color: var(--mark-glyph);"
                       />
@@ -890,7 +879,7 @@
                     {#if sessions.length > 0}
                       {#key sessions.length}
                         <span
-                          class="ml-auto shrink-0 text-[length:var(--text-label)] tabular-nums text-muted-foreground"
+                          class="num ml-auto shrink-0 text-meta text-muted-foreground"
                           data-flip="pop"
                           >{sessions.length}</span
                         >
@@ -1027,7 +1016,7 @@
           <Sidebar.GroupLabel class="{GROUP_LABEL} {CONTROL_LABEL}">
             <span>Not running</span>
             {#key notRunning.length}
-              <span class="ml-1.5 tabular-nums opacity-70" data-flip="pop"
+              <span class="num ml-1.5 opacity-70" data-flip="pop"
                 >{notRunning.length}</span
               >
             {/key}
@@ -1118,15 +1107,13 @@
           <Sidebar.MenuButton class={NAV_ROW}>
             <span
               aria-hidden="true"
-              class="{SLOT} rounded-full bg-sidebar-accent text-[length:var(--text-meta)] font-medium text-sidebar-accent-foreground"
+              class="{SLOT} rounded-full bg-sidebar-accent text-meta text-sidebar-accent-foreground"
               >bw</span
             >
             <span class="min-w-0 flex-1 truncate text-foreground"
               >bewinxed</span
             >
-            <span
-              class="shrink-0 text-[length:var(--text-label)] text-muted-foreground"
-            >
+            <span class="num shrink-0 text-meta text-muted-foreground">
               {#key whiffle.machines.length}
                 <span data-flip="pop">{whiffle.machines.length}</span>
               {/key}

@@ -293,7 +293,7 @@
   .title {
     color: var(--ink-strong);
     font-size: var(--text-label);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-strong);
   }
   .path {
     color: var(--ink-muted);
@@ -316,6 +316,7 @@
     text-decoration: none;
     font: inherit;
     font-size: var(--text-label);
+    font-weight: var(--weight-strong);
     transition:
       background-color var(--dur-control) var(--ease-out),
       color var(--dur-control) var(--ease-out),
@@ -324,13 +325,13 @@
   }
   button :global(svg),
   a :global(svg) {
-    width: 17px;
-    height: 17px;
+    width: 16px;
+    height: 16px;
   }
   button:focus-visible,
   a:focus-visible {
     outline: 2px solid var(--focus-ring);
-    outline-offset: 2px;
+    outline-offset: 1px;
   }
   button:active,
   a:active {
@@ -396,7 +397,8 @@
     padding: var(--space-2);
     background: var(--surface-raised);
     color: var(--data-bad);
-    font-size: var(--text-label);
+    font-size: var(--text-body);
+    font-weight: var(--weight-body);
   }
   @container (max-width: 469px) {
     .select-label {

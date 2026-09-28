@@ -286,8 +286,8 @@
         <div class="hero-main">
           {#if spendPct !== null && spendUsed !== null && spendLimit !== null}
             <div class="hero-spend">
-              <span class="hero-amount {spendBand}">{usd(spendUsed)}</span>
-              <span class="hero-limit">/ {usd(spendLimit)}</span>
+              <span class="hero-amount num {spendBand}">{usd(spendUsed)}</span>
+              <span class="hero-limit num">/ {usd(spendLimit)}</span>
             </div>
             <span
               aria-label="Spend against threshold"
@@ -304,10 +304,10 @@
             </span>
           {:else if binding}
             <div class="hero-spend">
-              <span class="hero-amount {band(binding.percent)}"
+              <span class="hero-amount num {band(binding.percent)}"
                 >{Math.round(binding.percent)}%</span
               >
-              <span class="hero-limit">{windowLabel(binding)} used</span>
+              <span class="hero-limit num">{windowLabel(binding)} used</span>
             </div>
             <span
               aria-label="{windowLabel(binding)} limit"
@@ -325,15 +325,15 @@
           {/if}
           <div class="hero-meta">
             {#if planLabel}
-              <Badge class="q-tag">{planLabel}</Badge>
+              <Badge class="q-tag num">{planLabel}</Badge>
             {/if}
             {#if binding}
-              <span class="hero-reset"
+              <span class="hero-reset num"
                 >Resets in {resetsIn(binding.resetsAt, now) || '—'}</span
               >
             {/if}
             {#if readingAge}
-              <span class="hero-age">Checked {readingAge}</span>
+              <span class="hero-age num">Checked {readingAge}</span>
             {/if}
           </div>
         </div>
@@ -367,7 +367,7 @@
           >Account-scoped — every signed-in machine reads the same numbers</span
         >
         {#if planLabel}
-          <Badge class="q-tag">{planLabel}</Badge>
+          <Badge class="q-tag num">{planLabel}</Badge>
         {/if}
       </Card.Header>
 
@@ -388,7 +388,7 @@
               {#each orderedWindows as w (w.kind + (w.scopeLabel ?? ''))}
                 {@const tone = band(w.percent)}
                 <Table.Row>
-                  <Table.Cell>{windowLabel(w)}</Table.Cell>
+                  <Table.Cell class="num start">{windowLabel(w)}</Table.Cell>
                   <Table.Cell class="wide">
                     <span
                       aria-label="{windowLabel(w)} limit"
@@ -444,7 +444,7 @@
 
         {#if claudeTotals}
           <p class="note">
-            <span class="tabular">~{usd(claudeTotals.costUsd)}</span>
+            <span class="num">~{usd(claudeTotals.costUsd)}</span>
             would cost on the API — your plan already covers it.
           </p>
         {/if}
@@ -516,7 +516,7 @@
       <Card.Content class="q-body">
         {#if openCodeTotals}
           <div class="lede">
-            <span class="big">{usd(openCodeTotals.costUsd)}</span>
+            <span class="big num">{usd(openCodeTotals.costUsd)}</span>
             <span class="note">
               {compactNumber(openCodeTotals.input)}
               in · {compactNumber(openCodeTotals.output)} out ·
@@ -602,7 +602,7 @@
                 </Table.Row>
                 {#each group.blocks as block (block.harness + block.id)}
                   <Table.Row>
-                    <Table.Cell class="num-left"
+                    <Table.Cell class="num start"
                       >{clock(block.startTime)}
                       – {clock(block.endTime)}</Table.Cell
                     >
@@ -611,7 +611,7 @@
                       {block.harness === 'Claude' ? '~' : ''}
                       {usd(block.costUsd)}
                     </Table.Cell>
-                    <Table.Cell class="pace">
+                    <Table.Cell class="pace num">
                       {#if block.isActive && block.burnRate}
                         {usd(block.burnRate.costPerHour)}/h
                         {#if projectable(block) && block.projection}
@@ -657,7 +657,7 @@
   }
   .sub {
     max-width: 68ch;
-    font-size: var(--text-label);
+    font: var(--type-body);
     color: var(--ink-muted);
   }
 
@@ -683,10 +683,7 @@
     flex-wrap: wrap;
   }
   .hero-amount {
-    font-size: var(--text-kpi);
-    font-weight: var(--weight-strong);
-    line-height: var(--leading-numeric);
-    font-variant-numeric: tabular-nums;
+    font: var(--type-kpi);
   }
   .hero-amount.ok {
     color: var(--data-ok);
@@ -698,9 +695,8 @@
     color: var(--data-bad);
   }
   .hero-limit {
-    font-size: var(--text-title);
+    font: var(--type-title);
     color: var(--ink-muted);
-    font-variant-numeric: tabular-nums;
   }
   .hero-track {
     display: block;
@@ -734,13 +730,9 @@
     gap: var(--space-3);
     flex-wrap: wrap;
   }
-  .hero-reset {
-    font-size: var(--text-label);
-    color: var(--ink-muted);
-    font-variant-numeric: tabular-nums;
-  }
+  .hero-reset,
   .hero-age {
-    font-size: var(--text-label);
+    font: var(--type-meta);
     color: var(--ink-muted);
   }
 
@@ -750,11 +742,8 @@
     gap: var(--space-4);
   }
   .note {
-    font-size: var(--text-label);
+    font: var(--type-meta);
     color: var(--ink-muted);
-  }
-  .tabular {
-    font-variant-numeric: tabular-nums;
   }
   .mono {
     font-family: var(--font-mono);
@@ -766,11 +755,8 @@
     gap: var(--space-1);
   }
   .lede .big {
-    font-size: var(--text-kpi);
-    font-weight: var(--weight-strong);
-    line-height: var(--leading-numeric);
+    font: var(--type-kpi);
     color: var(--ink-strong);
-    font-variant-numeric: tabular-nums;
   }
 
   /* ---- shadcn primitives, dressed in Quiet Ledger tokens ------------------
@@ -798,13 +784,11 @@
       padding: 0;
     }
     .q-title {
-      font-size: var(--text-body);
-      font-weight: var(--weight-strong);
       line-height: var(--leading-tight);
       color: var(--ink-strong);
     }
     .q-sub {
-      font-size: var(--text-label);
+      font: var(--type-meta);
       color: var(--ink-muted);
     }
     /* Badge → the plan tag. A quiet neutral chip (idle carries no status hue),
@@ -817,8 +801,7 @@
       border: 1px solid var(--border-hairline);
       color: var(--ink-muted);
       padding: 2px var(--space-3);
-      font-size: var(--text-label);
-      font-weight: var(--weight-medium);
+      font: var(--type-label);
     }
     .q-body {
       display: flex;
@@ -843,11 +826,11 @@
     }
     .q-table thead th {
       height: auto;
-      font-size: var(--text-meta);
+      font-size: var(--text-label);
+      font-weight: var(--weight-strong);
       text-transform: uppercase;
       letter-spacing: var(--track-caps);
       color: var(--ink-muted);
-      font-weight: var(--weight-strong);
       text-align: left;
       padding: var(--space-2) var(--space-3);
       border-bottom: 1px solid var(--border-hairline);
@@ -857,7 +840,8 @@
       text-align: right;
     }
     .q-table td {
-      font-size: var(--text-label);
+      font-size: var(--text-body);
+      font-weight: var(--weight-body);
       color: var(--ink-strong);
       padding: var(--space-2) var(--space-3);
       border-bottom: 1px solid var(--border-hairline);
@@ -867,14 +851,13 @@
     .q-table tbody:last-child tr:last-child td {
       border-bottom: 0;
     }
-    .q-table td.num,
-    .q-table td.num-left {
-      font-variant-numeric: tabular-nums;
-    }
     .q-table td.num {
       text-align: right;
       white-space: nowrap;
       color: var(--ink-strong);
+    }
+    .q-table td.num.start {
+      text-align: start;
     }
     .q-table td.muted {
       color: var(--ink-muted);
@@ -889,8 +872,6 @@
       min-width: 90px;
     }
     .q-table td.pace {
-      font-size: var(--text-label);
-      font-variant-numeric: tabular-nums;
       color: var(--status-attn-ink);
     }
     .q-table tr.dayrow th {
@@ -898,7 +879,7 @@
       text-transform: none;
       letter-spacing: 0;
       font-size: var(--text-label);
-      font-weight: var(--weight-medium);
+      font-weight: var(--weight-strong);
       border-bottom: 1px solid var(--border-hairline);
     }
     .q-table td.ok {
@@ -954,7 +935,6 @@
     .q-table .session-link {
       color: var(--ink-strong);
       text-decoration: none;
-      font-weight: var(--weight-medium);
     }
     .q-table .session-link:hover {
       text-decoration: underline;
@@ -965,7 +945,7 @@
       border-left: 3px solid var(--data-warn);
     }
     .unpriced-text {
-      font-size: var(--text-label);
+      font: var(--type-body);
       color: var(--ink-muted);
     }
   }

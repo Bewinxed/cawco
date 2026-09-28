@@ -114,13 +114,13 @@
   .icon {
     display: grid;
     place-items: center;
-    inline-size: 15px;
+    inline-size: 16px;
     block-size: 1lh;
-    min-block-size: 15px;
+    min-block-size: 16px;
 
     & :global(svg) {
-      inline-size: 15px;
-      block-size: 15px;
+      inline-size: 16px;
+      block-size: 16px;
     }
   }
   .dot {

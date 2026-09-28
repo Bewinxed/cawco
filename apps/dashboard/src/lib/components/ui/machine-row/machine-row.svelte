@@ -62,8 +62,8 @@
   }
   .tile :global(svg) {
     flex: none;
-    width: 15px;
-    height: 15px;
+    width: 16px;
+    height: 16px;
   }
   .text {
     flex: 1;

@@ -149,12 +149,12 @@
            : value || 'The model the harness picks for itself'}
         variant="outline"
       >
-        <span class="truncate"
+        <span class="num truncate"
           >{unreported ? '—' : modelLabel(value, harness)}</span
         >
-        <!-- 14px: the inline-with-text icon size the session bar settled on,
-             so this unfold mark matches the one on the disclosure trigger. -->
-        <IconUnfold class="size-3.5 shrink-0 opacity-50" />
+        <!-- 16px, the control size, so this unfold mark matches the one on
+             the disclosure trigger. -->
+        <IconUnfold class="size-4 shrink-0 opacity-50" />
       </Button>
     {/snippet}
   </Popover.Trigger>

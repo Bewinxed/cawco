@@ -119,7 +119,7 @@
   <Collapsible.Trigger
     class="flex items-center gap-1.5 self-start text-meta text-muted-foreground transition-colors hover:text-foreground focus-ring"
   >
-    <IconFolder class="size-3.5" />
+    <IconFolder class="size-4" />
     Browse
   </Collapsible.Trigger>
 
@@ -147,7 +147,7 @@
           <span
             class="flex items-center gap-2 px-2 py-1 text-meta text-muted-foreground"
           >
-            <IconSpinner class="size-3.5 animate-spin" />
+            <IconSpinner class="size-4 animate-spin" />
             Reading directory…
           </span>
         {:else if errorMessage}

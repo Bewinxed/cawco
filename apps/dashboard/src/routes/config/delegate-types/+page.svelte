@@ -1,8 +1,8 @@
 <script lang="ts">
   import { toast } from "svelte-sonner";
   import { Button } from "$lib/components/ui/button";
+  import { EmptyState } from "$lib/components/ui/empty";
   import { IconPlus, IconTrash } from "$lib/icons";
-  import EmptyHead from "$lib/whiffle/config/EmptyHead.svelte";
   import RowList from "$lib/whiffle/config/RowList.svelte";
   import SectionFrame from "$lib/whiffle/config/SectionFrame.svelte";
   import SectionRow from "$lib/whiffle/config/SectionRow.svelte";
@@ -88,7 +88,8 @@
   {/snippet}
 
   {#if types.length === 0}
-    <EmptyHead
+    <EmptyState
+      icon={section.icon}
       line="A fresh hub seeds five on first read; delete all of them and this is what is left."
       title="No delegate types yet"
     />

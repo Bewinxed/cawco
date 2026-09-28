@@ -21,7 +21,7 @@
   {...restProps}
 >
   {#snippet children({ selected, highlighted })}
-    <span class="absolute end-2 flex size-3.5 items-center justify-center">
+    <span class="absolute end-2 flex size-4 items-center justify-center">
       {#if selected}
         <IconTick class="cn-select-item-indicator-icon" />
       {/if}

@@ -1309,8 +1309,8 @@
     flex: none;
   }
   .bolt :global(svg) {
-    width: 13px;
-    height: 13px;
+    width: 12px;
+    height: 12px;
   }
   .title {
     font: 500 var(--text-label) / 1 var(--font-body);
@@ -1332,8 +1332,8 @@
     cursor: pointer;
   }
   .close :global(svg) {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
   }
   @media (hover: hover) {
     .close:hover {

@@ -435,7 +435,10 @@
 
     /* ---- Type roles as font shorthands; their sizes are the @theme
        `--text-*` roles below, which also generate the `text-meta` ...
-       `text-kpi` utilities. */
+       `text-kpi` utilities. These six are the only styles text takes:
+       meta 12/400, label 13/500, body 14/400, title 20/500, kpi 24/500 and
+       the button's 14/500. A kpi figure is always `.num`: the font shorthand
+       cannot carry font-variant-numeric, and resets it. */
     --font-body:
       "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
       sans-serif;
@@ -449,7 +452,6 @@
     --leading-ui: 1.25;
     --leading-numeric: 1;
     --weight-body: 400;
-    --weight-medium: 450;
     --weight-strong: 500;
     --track-display: -0.008em;
     --track-caps: 0.01em;
@@ -486,7 +488,7 @@
 
     /* Component dimension ramp. */
     --c-mark: 26px;
-    --c-mark-glyph: 14px;
+    --c-mark-glyph: 16px;
     --c-pill-h: 24px;
     --c-pill-gap: 6px;
     --c-pill-fs: var(--text-label);
@@ -576,10 +578,13 @@
      between a 390px and a 1024px viewport. */
   --text-meta: 0.75rem;
   --text-meta--line-height: 1.35;
+  --text-meta--font-weight: 400;
   --text-label: 0.8125rem;
   --text-label--line-height: 1.3;
+  --text-label--font-weight: 500;
   --text-body: 0.875rem;
   --text-body--line-height: 1.45;
+  --text-body--font-weight: 400;
   --text-title: clamp(1.125rem, 1.048rem + 0.3155vi, 1.25rem);
   --text-title--line-height: 1.25;
   --text-title--letter-spacing: -0.01em;
@@ -634,6 +639,10 @@
 
   * {
     @apply border-border;
+    /* The ring's colour at rest, so focus only switches the outline on: a
+       control with transition-colors would otherwise fade its ring in from
+       its text colour. */
+    outline-color: var(--focus-ring);
     scrollbar-width: thin;
     scrollbar-color: oklch(from var(--muted-foreground) l c h / 0.35)
       transparent;
@@ -692,10 +701,25 @@
     outline-offset: 1px;
   }
 
-  /* Numbers that sit in columns line up. */
-  table,
-  [data-tabular] {
+  /* Icons come in three sizes: 12 (beside meta text), 16 (controls and
+     rows) and 20 (nav and headers). An icon nobody sized is a control's.
+     Solar's icons and the local glyphs are drawn at width="1.2em", which
+     would size them off the text beside them; this replaces it. */
+  svg[width="1.2em"] {
+    width: 16px;
+    height: 16px;
+  }
+
+  /* Numbers that sit in columns line up. Anywhere else a changing figure
+     is `.num`. */
+  table {
     font-variant-numeric: tabular-nums;
+  }
+
+  /* A text link answers the press by dimming, since a scale does nothing to
+     an inline box; link rows and controls carry .pressable instead. */
+  :where(a[href]:not(.pressable)):active {
+    opacity: 0.72;
   }
 
   /* A held press summons our menu; the platform's callout would fight it. */
@@ -749,6 +773,93 @@
         calc(var(--hit-gap-y, 44px) / -2)
       );
     }
+  }
+
+  /* Pointer hit area: the fine-pointer twin of .touch-hit. A control drawn
+     smaller than 24×24 (WCAG 2.5.8) gets a transparent ::after centred on
+     it that reaches 24px; the drawn box and the layout do not change.
+     --hit-gap-x / --hit-gap-y stop it at the midpoint to a closer
+     neighbour, as on touch. --hit-scale is the zoom of a scaled canvas
+     (the workflow graph), so the area stays 24px on screen. */
+  @media (pointer: fine) {
+    :where(.pointer-hit) {
+      position: relative;
+    }
+
+    .pointer-hit::after {
+      content: "";
+      position: absolute;
+      inset-inline: max(
+        min(0px, calc(50% - 12px / var(--hit-scale, 1))),
+        calc(var(--hit-gap-x, 24px / var(--hit-scale, 1)) / -2)
+      );
+      inset-block: max(
+        min(0px, calc(50% - 12px / var(--hit-scale, 1))),
+        calc(var(--hit-gap-y, 24px / var(--hit-scale, 1)) / -2)
+      );
+    }
+  }
+
+  /* The one skeleton (ui/skeleton): a --surface-fill block standing at the
+     size of what it waits for. One band of the raised surface crosses it
+     every 1.2s, transform only; without motion it sits still. */
+  .kit-skeleton {
+    position: relative;
+    overflow: hidden;
+    border-radius: var(--radius-sm);
+    background: var(--surface-fill);
+
+    @media (prefers-reduced-motion: no-preference) {
+      &::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        translate: -100% 0;
+        background: linear-gradient(
+          90deg,
+          transparent 0 30%,
+          oklch(from var(--surface-raised) l c h / 0.6) 50%,
+          transparent 70% 100%
+        );
+        animation: kit-skeleton-sweep 1.2s linear infinite;
+      }
+    }
+  }
+
+  /* The one empty state (ui/empty): mark, title, why, one action, set on
+     the column the content would have started on. */
+  .kit-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: var(--space-2);
+    padding-block: var(--space-6);
+
+    & > [data-slot="empty-mark"] {
+      inline-size: 20px;
+      block-size: 20px;
+      margin-block-end: var(--space-1);
+      color: var(--ink-muted);
+    }
+  }
+  .kit-empty-title {
+    font: var(--type-title);
+    letter-spacing: -0.01em;
+    color: var(--ink-strong);
+    text-wrap: balance;
+  }
+  .kit-empty-line {
+    max-inline-size: 60ch;
+    font: var(--type-body);
+    color: var(--ink-muted);
+    text-wrap: pretty;
+
+    & code {
+      font-size: var(--text-label);
+    }
+  }
+  .kit-empty-action {
+    margin-block-start: var(--space-2);
   }
 
   /* Floating surfaces: popover, dropdown, select, context menu, toast. */
@@ -1152,6 +1263,14 @@
   }
 }
 
+/* A changing figure: digits of one width, so a count or a price that
+   ticks does not move what stands beside it. Important, because a type role
+   is a `font` shorthand, which resets font-variant-numeric, and a
+   component's own (unlayered) rule would otherwise win over any utility. */
+@utility num {
+  font-variant-numeric: tabular-nums !important;
+}
+
 /* A scroller that scrolls without drawing a bar. */
 @utility no-scrollbar {
   scrollbar-width: none;
@@ -1198,6 +1317,11 @@
   to {
     opacity: 0;
     transform: translateY(6px);
+  }
+}
+@keyframes kit-skeleton-sweep {
+  to {
+    translate: 100% 0;
   }
 }
 @keyframes kit-fade-in {

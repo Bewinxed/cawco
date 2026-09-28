@@ -245,8 +245,8 @@
     box-shadow: var(--shadow-tile);
   }
   .tile :global(svg) {
-    width: 15px;
-    height: 15px;
+    width: 16px;
+    height: 16px;
   }
   .lead {
     display: flex;

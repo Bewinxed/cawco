@@ -107,7 +107,7 @@
     border: 0;
     border-radius: var(--radius-sm);
     background: transparent;
-    font: 500 var(--text-meta) / 1 var(--font-body);
+    font: 500 var(--text-label) / 1 var(--font-body);
     color: var(--ink-muted);
     cursor: pointer;
     white-space: nowrap;
@@ -121,6 +121,7 @@
   .md .tab {
     height: 30px;
     font-size: var(--text-label);
+    font-weight: var(--weight-strong);
   }
   .tab.on {
     color: var(--ink-strong);

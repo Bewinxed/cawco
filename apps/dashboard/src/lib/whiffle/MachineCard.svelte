@@ -219,8 +219,7 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: var(--text-label);
-    font-weight: var(--weight-medium);
+    font: var(--type-label);
     color: var(--ink-strong);
   }
   .dot {
@@ -254,7 +253,7 @@
     display: inline-flex;
     align-items: center;
     gap: var(--space-1);
-    font-size: var(--text-label);
+    font: var(--type-meta);
     color: var(--ink-muted);
   }
 </style>

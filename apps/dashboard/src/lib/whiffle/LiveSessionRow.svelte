@@ -147,7 +147,7 @@
 
 <LiveSessionMenu {instance}>
   <a
-    class="group flex min-h-9 flex-col justify-center gap-0.5 rounded-[var(--radius-sm)] px-4 py-1.5
+    class="pressable group flex min-h-9 flex-col justify-center gap-0.5 rounded-[var(--radius-sm)] px-4 py-1.5
       transition-colors duration-150 ease-out hover:text-accent-foreground
       {failed || activity === 'blocked' ? 'bg-error/10' : ''}"
     href={conversationHref(instance.id, whiffle.instanceIndex)}
@@ -163,7 +163,7 @@
            the rows it heads. -->
       <span
         class="flex shrink-0 items-center justify-center {sleeping || stale ? 'opacity-60' : ''}"
-        style="--c-mark:20px;--c-mark-glyph:11px"
+        style="--c-mark:20px;--c-mark-glyph:12px"
       >
         <span class="mark m{markHue(instance.cwd || instance.machineId)}">
           <Sprite aria-hidden="true" />
@@ -177,15 +177,13 @@
       <!-- A quest is named beside its title rather than glyphed in front of it:
            the lead slot belongs to state, and the titles keep their column. -->
       {#if quest}
-        <Badge class="shrink-0 text-label font-normal" variant="secondary"
-          >side quest</Badge
-        >
+        <Badge class="shrink-0" variant="secondary">side quest</Badge>
       {/if}
       <!-- A leaf delegate cannot fan out: the operator reads at a glance that
            nothing will ever nest beneath this row. -->
       {#if instance.canDelegate === false}
         <Badge
-          class="shrink-0 text-label font-normal"
+          class="shrink-0"
           title="Spawned with can_delegate=false — it cannot delegate or start sessions"
           variant="outline"
           >leaf</Badge
@@ -210,8 +208,7 @@
            so the state word beside it keeps reading as one group. -->
       {#if progress}
         <span
-          class="ml-auto flex shrink-0 items-center gap-1.5 text-label text-muted-foreground tabular-nums"
-          data-tabular
+          class="num ml-auto flex shrink-0 items-center gap-1.5 text-meta text-muted-foreground"
         >
           <span
             class="identity-ink flex items-center"
@@ -225,8 +222,7 @@
              long it has been on this step, which is what is actually known. -->
       {:else if unmeasured}
         <span
-          class="ml-auto flex shrink-0 items-center gap-1.5 text-label text-muted-foreground tabular-nums"
-          data-tabular
+          class="num ml-auto flex shrink-0 items-center gap-1.5 text-meta text-muted-foreground"
           title={onStepFor
             ? `Working — no task plan; ${onStepFor} on this step`
             : 'Working — no task plan'}

@@ -18,7 +18,6 @@
     IconExternal,
     IconPalette,
     IconPin,
-    IconPinFilled,
     IconPlus,
     IconTrash,
   } from "$lib/icons";
@@ -96,7 +95,7 @@
       </ContextMenu.Item>
       <ContextMenu.Item onSelect={() => rail.togglePin('project', project.id)}>
         {#if pinned}
-          <IconPinFilled />
+          <IconPin />
           Unpin from rail
         {:else}
           <IconPin />

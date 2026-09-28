@@ -512,6 +512,7 @@
     align-items: center;
     gap: var(--space-2);
     font-size: var(--text-label);
+    font-weight: var(--weight-strong);
     background: none;
     border: 0;
     padding: 0;
@@ -540,8 +541,8 @@
     transform: rotate(90deg);
   }
   .chev :global(svg) {
-    inline-size: 13px;
-    block-size: 13px;
+    inline-size: 12px;
+    block-size: 12px;
     display: block;
   }
 
@@ -556,8 +557,8 @@
     background-color: var(--mark-1);
   }
   .mark :global(svg) {
-    inline-size: 11px;
-    block-size: 11px;
+    inline-size: 12px;
+    block-size: 12px;
     display: block;
     color: var(--mark-glyph);
   }
@@ -671,8 +672,8 @@
       background var(--dur-control) var(--ease-out);
   }
   .jump :global(svg) {
-    inline-size: 13px;
-    block-size: 13px;
+    inline-size: 12px;
+    block-size: 12px;
     display: block;
   }
   @media (hover: hover) and (pointer: fine) {
@@ -687,7 +688,8 @@
   .brief {
     margin-block: var(--space-1) 0;
     margin-inline: var(--glyph) 0;
-    font-size: var(--text-label);
+    font-size: var(--text-body);
+    font-weight: var(--weight-body);
     color: var(--ink-muted);
     line-height: var(--leading-body);
     max-inline-size: 68ch;
@@ -700,7 +702,8 @@
     gap: var(--space-2);
     margin-block: var(--space-1) 0;
     margin-inline: var(--glyph) 0;
-    font-size: var(--text-label);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     color: var(--ink-strong);
     line-height: var(--leading-body);
     max-inline-size: 68ch;
@@ -741,7 +744,8 @@
     display: flex;
     align-items: baseline;
     gap: var(--space-2);
-    font-size: var(--text-label);
+    font-size: var(--text-body);
+    font-weight: var(--weight-body);
     line-height: var(--leading-body);
     color: var(--ink-strong);
     min-inline-size: 0;
@@ -791,7 +795,8 @@
   }
   .empty {
     padding: var(--space-2) var(--space-2);
-    font-size: var(--text-label);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     color: var(--ink-muted);
   }
   .say {
@@ -816,8 +821,8 @@
     box-shadow: var(--shadow-tile);
   }
   .report h4 {
-    font-size: var(--text-meta);
-    font-weight: var(--weight-medium);
+    font-size: var(--text-label);
+    font-weight: var(--weight-strong);
     letter-spacing: 0.02em;
     text-transform: uppercase;
     color: var(--ink-muted);

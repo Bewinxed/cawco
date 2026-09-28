@@ -3,7 +3,7 @@
   import { workflowPorts } from "@whiffle/core";
   import { Handle, type NodeProps, Position } from "@xyflow/svelte";
   import {
-    IconCpuDuo,
+    IconCpu,
     IconToolQuestion,
     IconToolTodo,
     IconWorkflow,
@@ -20,8 +20,8 @@
   const checkpoints = $derived((data.checkpoints ?? []) as JournalCheckpoint[]);
   /** A call the journal records but no authored node stands behind. */
   const effectGlyphs = {
-    run: IconCpuDuo,
-    spawn: IconCpuDuo,
+    run: IconCpu,
+    spawn: IconCpu,
     ask: IconToolQuestion,
     exec: IconToolTodo,
     exists: IconToolTodo,
@@ -81,6 +81,7 @@
   {#if node?.kind !== 'start'}
     <Handle
       aria-label="Input for {title}"
+      class="pointer-hit"
       position={Position.Left}
       type="target"
     />
@@ -134,6 +135,7 @@
           {port}
           <Handle
             aria-label="{title}: {port}"
+            class="pointer-hit"
             id={port}
             position={Position.Right}
             type="source"
@@ -144,12 +146,18 @@
   {:else if ports[0]}
     <Handle
       aria-label="{title}: {ports[0]}"
+      class="pointer-hit"
       id={ports[0]}
       position={Position.Right}
       type="source"
     />
   {:else if journal}
-    <Handle aria-label="{title}: out" position={Position.Right} type="source" />
+    <Handle
+      aria-label="{title}: out"
+      class="pointer-hit"
+      position={Position.Right}
+      type="source"
+    />
   {/if}
 </article>
 <style>
@@ -160,7 +168,8 @@
     border-radius: var(--radius-md);
     box-shadow: var(--shadow-tile);
     color: var(--ink-strong);
-    font-size: var(--text-label);
+    font-size: var(--text-body);
+    font-weight: var(--weight-body);
   }
   .selected {
     outline: 2px solid var(--brand-solid);
@@ -206,7 +215,8 @@
   }
   .meta {
     color: var(--ink-muted);
-    font-size: var(--text-label);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     overflow-wrap: anywhere;
     font-variant-numeric: tabular-nums;
   }
@@ -215,15 +225,19 @@
     border-top: 1px solid var(--border-hairline);
   }
   .port {
+    /* Stacked handles: each hit area stops halfway to the next port's. */
+    --hit-gap-y: 17px;
     position: relative;
     text-align: right;
     padding: var(--space-1) var(--space-4);
     font-size: var(--text-label);
+    font-weight: var(--weight-strong);
   }
   .problem {
     display: grid;
     gap: var(--space-1);
-    font-size: var(--text-label);
+    font-size: var(--text-body);
+    font-weight: var(--weight-body);
   }
   /* A checkpoint is a marker, not a status: the word and the time, on the
      step the program had just finished when it marked. No hue. */
@@ -231,7 +245,8 @@
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    font-size: var(--text-label);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     color: var(--ink-muted);
     background: var(--surface-recess);
     border-radius: var(--radius-pill);

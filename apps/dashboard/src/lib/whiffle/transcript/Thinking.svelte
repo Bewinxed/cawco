@@ -154,16 +154,18 @@
     display: flex;
     align-items: center;
     gap: var(--space-2);
+    font-size: var(--text-label);
+    font-weight: var(--weight-strong);
   }
   .icon {
     display: grid;
     place-items: center;
-    inline-size: 15px;
-    block-size: 15px;
+    inline-size: 16px;
+    block-size: 16px;
 
     & :global(svg) {
-      inline-size: 15px;
-      block-size: 15px;
+      inline-size: 16px;
+      block-size: 16px;
     }
   }
   /* One line past the chevron, pinned to its end so the newest words show;

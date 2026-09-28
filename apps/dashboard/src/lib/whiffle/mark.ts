@@ -5,18 +5,18 @@
  */
 import type { Component } from "svelte";
 import {
-  IconBoltDuo,
-  IconBookDuo,
-  IconBoxDuo,
-  IconFireDuo,
-  IconGhostDuo,
-  IconGlobeDuo,
-  IconLabDuo,
-  IconLeafDuo,
-  IconPaletteDuo,
-  IconPlanetDuo,
-  IconRocketDuo,
-  IconSparklesDuo,
+  IconBolt,
+  IconBook,
+  IconBox,
+  IconFire,
+  IconGhost,
+  IconGlobe,
+  IconLab,
+  IconLeaf,
+  IconPalette,
+  IconPlanet,
+  IconRocket,
+  IconSparkles,
 } from "$lib/icons";
 
 export type MarkHue = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
@@ -27,18 +27,18 @@ export type MarkHue = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
  * this is what stops nine sessions reading as the same hexagon in nine colours.
  */
 const SESSION_SPRITES: Component[] = [
-  IconGhostDuo,
-  IconRocketDuo,
-  IconBoxDuo,
-  IconGlobeDuo,
-  IconBookDuo,
-  IconLabDuo,
-  IconBoltDuo,
-  IconLeafDuo,
-  IconPlanetDuo,
-  IconFireDuo,
-  IconPaletteDuo,
-  IconSparklesDuo,
+  IconGhost,
+  IconRocket,
+  IconBox,
+  IconGlobe,
+  IconBook,
+  IconLab,
+  IconBolt,
+  IconLeaf,
+  IconPlanet,
+  IconFire,
+  IconPalette,
+  IconSparkles,
 ];
 
 /**

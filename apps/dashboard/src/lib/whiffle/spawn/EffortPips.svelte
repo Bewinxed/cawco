@@ -335,7 +335,7 @@
   .lvl {
     /* Reserve every label's width so a switch keeps the chip and rail stable. */
     display: grid;
-    font: 500 var(--text-meta) / 1 var(--font-body);
+    font: 500 var(--text-label) / 1 var(--font-body);
     text-transform: capitalize;
     font-variant-numeric: tabular-nums;
   }
@@ -363,6 +363,7 @@
     }
     .lvl {
       font-size: var(--text-label);
+      font-weight: var(--weight-strong);
     }
   }
 </style>

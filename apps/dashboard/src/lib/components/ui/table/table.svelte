@@ -21,7 +21,7 @@
   {@attach ghostRows ? highlight({ rows: ghostRows }) : undefined}
 >
   <table
-    class={cn("w-full caption-bottom text-label", className)}
+    class={cn("w-full caption-bottom text-body", className)}
     data-slot="table"
     bind:this={ref}
     {...restProps}

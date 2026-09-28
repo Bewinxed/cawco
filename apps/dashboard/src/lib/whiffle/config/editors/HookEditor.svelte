@@ -14,11 +14,11 @@
   import { Input } from "$lib/components/ui/input";
   import { Textarea } from "$lib/components/ui/textarea";
   import {
-    IconClockDuo,
-    IconHistoryDuo,
-    IconMapPointDuo,
-    IconPlayDuo,
-    IconTuningDuo,
+    IconClock,
+    IconHistory,
+    IconMapPoint,
+    IconPlay,
+    IconTuning,
   } from "$lib/icons";
   import { appear } from "$lib/whiffle/motion/curves.svelte";
   import { whiffle } from "../../client.svelte";
@@ -307,7 +307,7 @@
     {/if}
   {/snippet}
 
-  <EditorSection hue={HUE} icon={IconClockDuo} label="When it runs">
+  <EditorSection hue={HUE} icon={IconClock} label="When it runs">
     <p class="note">
       One lifecycle event. The events with a matcher are the ones Claude Code
       lets you narrow further.
@@ -359,7 +359,7 @@
     {/if}
   </EditorSection>
 
-  <EditorSection hue={HUE} icon={IconPlayDuo} label="What it runs">
+  <EditorSection hue={HUE} icon={IconPlay} label="What it runs">
     <p class="note">
       Whiffle writes this to every machine it applies to and registers it — no
       prompt, no approval, every time the event fires.
@@ -508,7 +508,7 @@
     {/if}
   </EditorSection>
 
-  <EditorSection hue={HUE} icon={IconTuningDuo} label="Common fields">
+  <EditorSection hue={HUE} icon={IconTuning} label="Common fields">
     <Field
       hint="A permission rule narrowing when this runs. Only read on tool events."
       id="hook-if"
@@ -567,7 +567,7 @@
     </div>
   </EditorSection>
 
-  <EditorSection hue={HUE} icon={IconMapPointDuo} label="Where it applies">
+  <EditorSection hue={HUE} icon={IconMapPoint} label="Where it applies">
     <p class="note">
       Every machine in the fleet unless you narrow it to one project.
     </p>
@@ -588,7 +588,7 @@
   </EditorSection>
 
   {#if id}
-    <EditorSection hue={HUE} icon={IconHistoryDuo} label="Previous versions">
+    <EditorSection hue={HUE} icon={IconHistory} label="Previous versions">
       <p class="note">
         Every save keeps what it replaced. Restoring writes an old version back
         as this one.

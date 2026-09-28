@@ -7,7 +7,7 @@
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { SectionHeader } from "$lib/components/ui/section-header";
-  import { IconGlobeDuo, IconRuleDuo } from "$lib/icons";
+  import { IconGlobe, IconRules } from "$lib/icons";
   import { formatDistanceToNow } from "$lib/utils/time";
   import Field from "$lib/whiffle/config/Field.svelte";
   import SectionFrame from "$lib/whiffle/config/SectionFrame.svelte";
@@ -246,7 +246,7 @@
 
 <SectionFrame purpose={section.purpose} title={section.label}>
   <div class="group">
-    <SectionHeader hue={HUE} icon={IconGlobeDuo} label="OpenRouter">
+    <SectionHeader hue={HUE} icon={IconGlobe} label="OpenRouter">
       {#snippet right()}
         {#if openrouter?.connected}
           <Button
@@ -279,7 +279,7 @@
         {#key phase}
           <p
             aria-live="polite"
-            class="status"
+            class="status num"
             data-tone={phase === 'connected' ? 'ok' : 'off'}
             in:blur={{ duration: 300, amount: 2 }}
             out:blur={{ duration: 100, amount: 2 }}
@@ -320,7 +320,7 @@
   </div>
 
   <form class="group" onsubmit={saveSupervisor}>
-    <SectionHeader hue={HUE} icon={IconRuleDuo} label="Supervisor">
+    <SectionHeader hue={HUE} icon={IconRules} label="Supervisor">
       {#snippet right()}
         <Button disabled={saving} size="sm" type="submit">
           <TextMorph text={saveLabel} />
@@ -378,7 +378,7 @@
         {#key reach.text}
           <p
             aria-live="polite"
-            class="status"
+            class="status num"
             data-tone={reach.tone}
             in:blur={{ duration: 300, amount: 2 }}
             out:blur={{ duration: 100, amount: 2 }}
@@ -438,8 +438,8 @@
   }
   /* Connected: the tick draws itself in. */
   .check {
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
     flex: none;
     align-self: center;
     fill: none;
@@ -487,8 +487,7 @@
     display: flex;
     align-items: baseline;
     gap: 8px;
-    font: var(--type-label);
-    font-weight: 400;
+    font: var(--type-body);
     color: var(--ink-muted);
   }
   .status[data-tone="ok"] {

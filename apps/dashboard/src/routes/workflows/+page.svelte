@@ -10,6 +10,8 @@
   } from "$lib/components/features/workflows/workflow-ui";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
+  import { EmptyState } from "$lib/components/ui/empty";
+  import { IconWorkflow } from "$lib/icons";
   import { formatDistanceToNow } from "$lib/utils/time";
   import { whiffle } from "$lib/whiffle/client.svelte";
   import { message } from "$lib/whiffle/delegate-types";
@@ -109,14 +111,16 @@
     <p class="wf-muted" role="status">Loading workflows…</p>
   {:else if !rows.length}
     {#if !workflowState.error}
-      <section class="empty">
-        <h2>No workflows yet.</h2>
-        <p>
-          A workflow is a graph of steps that run one after another across your
-          fleet.
-        </p>
-        {@render newMenu(true)}
-      </section>
+      <EmptyState
+        class="mx-auto w-full max-w-[420px]"
+        icon={IconWorkflow}
+        line="A workflow is a graph of steps that run one after another across your fleet."
+        title="No workflows yet"
+      >
+        {#snippet action()}
+          {@render newMenu(true)}
+        {/snippet}
+      </EmptyState>
     {/if}
   {:else}
     <table aria-label="Workflows" class="table">
@@ -163,7 +167,10 @@
                 Run
               </button>
               <details class="mobile">
-                <summary aria-label="Actions for {workflow.name}">
+                <summary
+                  aria-label="Actions for {workflow.name}"
+                  class="pressable"
+                >
                   Actions
                 </summary>
                 <button
@@ -217,6 +224,7 @@
   .heading {
     text-align: left;
     font-size: var(--text-label);
+    font-weight: var(--weight-strong);
     color: var(--ink-muted);
   }
   .workflow-row {
@@ -236,14 +244,6 @@
   .count {
     font-variant-numeric: tabular-nums;
   }
-  .empty {
-    margin: auto;
-    max-width: 420px;
-    display: grid;
-    justify-items: start;
-    gap: var(--space-4);
-    padding-block: var(--space-8);
-  }
   :global(.new-item) {
     min-height: 44px;
   }
@@ -252,10 +252,12 @@
     gap: var(--space-1);
     color: var(--ink-strong);
     font-size: var(--text-label);
+    font-weight: var(--weight-strong);
   }
   :global(.new-item) small {
     color: var(--ink-muted);
-    font-size: var(--text-label);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     line-height: var(--leading-body);
   }
   .mobile {

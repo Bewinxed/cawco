@@ -6,7 +6,7 @@
  */
 import type { Component } from "svelte";
 import {
-  IconBookDuo,
+  IconBook,
   IconToolCode,
   IconToolEdit,
   IconToolFiles,
@@ -188,7 +188,7 @@ const FAMILIES: Record<FamilyId, Omit<ToolFamily, "id">> = {
     many: "calls",
   },
   memory: {
-    icon: IconBookDuo,
+    icon: IconBook,
     color: "text-tool-plan",
     one: "memory edit",
     many: "memory edits",

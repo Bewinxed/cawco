@@ -41,7 +41,7 @@
   {#if origin === 'code'}
     <section aria-label="Problems" class="problems wf-stack">
       {#if problems.length}
-        <h2>Problems · {problems.length}</h2>
+        <h2 class="num">Problems · {problems.length}</h2>
       {:else}
         <p class="wf-muted">
           The hub compiled and typechecked this program. No problems found.

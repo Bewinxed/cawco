@@ -11,10 +11,10 @@
   import { SectionHeader } from "$lib/components/ui/section-header";
   import { autowidth } from "$lib/whiffle/motion/autosize.svelte";
   import OpenAiMark from "~icons/logos/openai-icon";
-  import Clear from "~icons/solar/close-square-linear";
+  import Clear from "~icons/solar/close-square-bold-duotone";
   import Code from "~icons/solar/code-square-bold-duotone";
   import Cpu from "~icons/solar/cpu-bolt-bold-duotone";
-  import Search from "~icons/solar/magnifer-linear";
+  import Search from "~icons/solar/magnifer-bold-duotone";
   import HarnessLogo from "../HarnessLogo.svelte";
   import {
     ensureModels,
@@ -556,8 +556,8 @@
   }
   .tab :global(.harness-logo),
   .tab :global(.codex-mark) {
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
     flex: none;
   }
   /* One tooltip for the whole rail: it slides to the mark under the pointer
@@ -590,14 +590,14 @@
     align-items: center;
     gap: 6px;
     padding: 0 10px;
-    font: 500 var(--text-meta) / 1 var(--font-body);
+    font: 400 var(--text-meta) / 1 var(--font-body);
     white-space: nowrap;
     @media (prefers-reduced-motion: no-preference) {
       animation: ns-in 160ms var(--ease-out) both;
     }
   }
   .soon {
-    font: 500 0.5625rem / 1 var(--font-body);
+    font: 500 var(--text-label) / 1 var(--font-body);
     letter-spacing: 0.04em;
     text-transform: uppercase;
     opacity: 0.6;
@@ -611,8 +611,8 @@
     border-bottom: 1px solid var(--border-hairline);
   }
   .search :global(svg.lead) {
-    width: 15px;
-    height: 15px;
+    width: 16px;
+    height: 16px;
     flex: none;
     color: var(--ink-subtle);
   }
@@ -625,7 +625,7 @@
     min-width: 0;
     border: 0;
     background: transparent;
-    font: 400 var(--text-label) / 1.4 var(--font-body);
+    font: 400 var(--text-body) / 1.4 var(--font-body);
     color: var(--ink-strong);
     padding: 0;
   }
@@ -642,8 +642,8 @@
     border-radius: var(--radius-xs);
   }
   .clear :global(svg) {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
   }
   @media (hover: hover) {
     .clear:hover {
@@ -739,8 +739,8 @@
     height: 26px;
   }
   .tile :global(svg) {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
   }
   .vendor {
     overflow: hidden;

@@ -285,29 +285,29 @@
       <dl class="grid grid-cols-2 gap-2 text-meta text-muted-foreground">
         <div>
           <dt class="text-muted-foreground">Input</dt>
-          <dd class="tabular-nums">{selected.input.toLocaleString()}</dd>
+          <dd class="num">{selected.input.toLocaleString()}</dd>
         </div>
         <div>
           <dt class="text-muted-foreground">Output</dt>
-          <dd class="tabular-nums">{selected.output.toLocaleString()}</dd>
+          <dd class="num">{selected.output.toLocaleString()}</dd>
         </div>
         <div>
           <dt class="text-muted-foreground">Cache write</dt>
-          <dd class="tabular-nums">
+          <dd class="num">
             {selected.cacheCreation.toLocaleString()}
           </dd>
         </div>
         <div>
           <dt class="text-muted-foreground">Cache read</dt>
-          <dd class="tabular-nums">{selected.cacheRead.toLocaleString()}</dd>
+          <dd class="num">{selected.cacheRead.toLocaleString()}</dd>
         </div>
         <div>
           <dt class="text-muted-foreground">Total</dt>
-          <dd class="tabular-nums">{selected.total.toLocaleString()}</dd>
+          <dd class="num">{selected.total.toLocaleString()}</dd>
         </div>
         <div>
           <dt class="text-muted-foreground">Cost</dt>
-          <dd class="tabular-nums">{usd(selected.costUsd)}</dd>
+          <dd class="num">{usd(selected.costUsd)}</dd>
         </div>
       </dl>
     {/if}
@@ -344,12 +344,11 @@
       align-items: center;
       gap: var(--space-1);
       margin-left: auto;
-      font-size: var(--text-meta);
+      font-size: var(--text-label);
+      font-weight: var(--weight-strong);
       text-transform: uppercase;
       letter-spacing: var(--track-caps);
-      font-weight: var(--weight-strong);
       color: var(--ink-muted);
-      font-variant-numeric: tabular-nums;
       transition: color var(--dur-control) var(--ease-in-out);
       cursor: pointer;
     }
@@ -360,7 +359,8 @@
       color: var(--ink-strong);
     }
     .q-break td {
-      font-size: var(--text-label);
+      font-size: var(--text-body);
+      font-weight: var(--weight-body);
       color: var(--ink-strong);
       padding: var(--space-2) var(--space-3);
       border-bottom: 1px solid var(--border-hairline);
@@ -375,17 +375,14 @@
     }
     .q-break td.num {
       text-align: right;
-      font-variant-numeric: tabular-nums;
     }
     .q-break td.strong {
       color: var(--ink-strong);
-      font-weight: var(--weight-medium);
     }
     .q-break td.name {
       max-width: 14rem;
       overflow: hidden;
       text-overflow: ellipsis;
-      font-weight: var(--weight-medium);
       color: var(--ink-strong);
     }
     .q-break td.name.mono {

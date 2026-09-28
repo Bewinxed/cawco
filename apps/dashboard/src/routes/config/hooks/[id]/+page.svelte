@@ -26,7 +26,7 @@
     {''}
   </SectionFrame>
 {:else if id !== 'new' && !hook}
-  <Missing back="/config/hooks" title={section.label} what="hook" />
+  <Missing {section} what="hook" />
 {:else}
   {#key id}
     <HookEditor {hook} {taken} />

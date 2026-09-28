@@ -96,8 +96,8 @@
     border-radius: var(--radius-xs);
   }
   .tile :global(svg) {
-    width: 13px;
-    height: 13px;
+    width: 12px;
+    height: 12px;
   }
   .label {
     flex: 1;

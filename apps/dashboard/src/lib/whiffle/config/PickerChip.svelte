@@ -96,14 +96,13 @@
     background: var(--surface-hover);
   }
   :global(.picker svg) {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     flex: none;
     color: var(--ink-muted);
   }
   :global(.picker) .k {
     color: var(--ink-muted);
-    font-weight: 400;
   }
   :global(.picker) .v {
     min-width: 0;
@@ -123,7 +122,6 @@
     padding: 0 10px;
     text-align: left;
     font: var(--type-label);
-    font-weight: 400;
     color: var(--ink-strong);
   }
   .group {
@@ -139,8 +137,8 @@
     white-space: nowrap;
   }
   .item :global(svg) {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     flex: none;
   }
 </style>

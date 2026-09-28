@@ -11,7 +11,7 @@
 
 <div aria-label="Loading" class="rows" role="status" class:fill>
   {#each rows as row (row)}
-    <Skeleton class="h-14 w-full rounded-[var(--radius-sm)]" />
+    <Skeleton class="h-14 w-full" />
   {/each}
 </div>
 

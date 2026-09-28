@@ -141,7 +141,7 @@
       {#each RANGES as r (r.id)}
         <button
           aria-pressed={range === r.id}
-          class="touch-hit rounded-[var(--radius-xs)] px-2.5 py-1 [--hit-gap-x:4px] text-label tabular-nums transition-colors duration-150 ease-out
+          class="touch-hit rounded-[var(--radius-xs)] px-2.5 py-1 [--hit-gap-x:4px] text-label num transition-colors duration-150 ease-out
                  {range === r.id
             ? 'bg-[var(--surface-lift)] text-foreground shadow-[var(--shadow-raised)]'
             : 'text-muted-foreground hover:text-foreground'}"
@@ -182,7 +182,7 @@
                   style="background-color: {color}"
                 ></span>
                 <span>{name}</span>
-                <span class="ml-auto font-mono text-label tabular-nums"
+                <span class="num ml-auto font-mono text-label"
                   >{compactNumber(Number(value))}</span
                 >
               </div>

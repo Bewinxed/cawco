@@ -143,7 +143,7 @@
     --crepe-color-hover: var(--surface-hover);
     --crepe-color-selected: var(--surface-fill);
 
-    --crepe-base-font-size: var(--text-label);
+    --crepe-base-font-size: var(--text-body);
     --crepe-font-title: var(--font-body);
     --crepe-font-default: var(--font-body);
     --crepe-font-code: var(--font-mono);
@@ -162,15 +162,15 @@
   /* Crepe's common stylesheet includes theme typography and motion. Keep its
      structural selectors while enforcing the ledger contract on every widget. */
   /* Crepe's stock CSS sizes text off its own scale, and DESIGN.md admits only
-     the named steps. This blanket rule is the enforcement; the exemptions below
-     put the hierarchy back on the elements that carry it. Measured after:
-     every size inside the editor is a token — 13.5 body, 12.5 code, 17 h2,
-     19 h1 — and every weight is 400 or 500.
+     the type roles. This blanket rule is the enforcement (the body role); the
+     exemptions below put the hierarchy back on the elements that carry it:
+     h1 and h2 in the title role, the smaller headings and strong text at the
+     body size in 500, code at the label size in the mono.
      Narrowing this to `.ProseMirror` descendants was tried and reverted: it let
      Crepe's own sizes back in on everything the exemptions did not name. */
   .crepe-host :global(.milkdown *) {
     font-weight: var(--weight-body) !important;
-    font-size: var(--text-label) !important;
+    font-size: var(--text-body) !important;
     line-height: var(--leading-body) !important;
   }
   .crepe-host :global(.milkdown *),
@@ -249,7 +249,7 @@
   }
   .crepe-host :global(.milkdown :focus-visible) {
     outline: 2px solid var(--focus-ring) !important;
-    outline-offset: 2px;
+    outline-offset: 1px;
   }
   .crepe-host :global(.milkdown :is(button, [role="button"]):active) {
     background: var(--surface-fill);

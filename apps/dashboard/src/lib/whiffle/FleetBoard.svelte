@@ -21,6 +21,7 @@
   import { Button } from "$lib/components/ui/button";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Card from "$lib/components/ui/card";
+  import { EmptyState } from "$lib/components/ui/empty";
   import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   import { Input } from "$lib/components/ui/input";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
@@ -31,9 +32,12 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Tooltip from "$lib/components/ui/tooltip";
   import {
+    IconAlert,
+    IconChat,
     IconDownload,
     IconExternal,
     IconHistory,
+    IconLaptop,
     IconMaximize,
     IconPlay,
     IconPlus,
@@ -523,7 +527,7 @@
     live: "bg-[var(--status-live-bg)] text-[var(--status-live-ink)]",
     attn: "bg-[var(--status-attn-bg)] text-[var(--status-attn-ink)]",
     fail: "bg-[var(--status-fail-bg)] text-[var(--status-fail-ink)]",
-    idle: "bg-transparent px-0 text-[var(--ink-muted)] [font-weight:var(--weight-medium)]",
+    idle: "bg-transparent px-0 text-[var(--ink-muted)]",
   };
 
   /** The conversation a row opens: the id its link carries. */
@@ -638,34 +642,46 @@
              says the hub is gone: swapping the table out and back moved the
              page twice for a state the banner already names. -->
         {#if whiffle.hub === 'unreachable' && !whiffle.fleetRead}
-          <div class="empty" data-flip>
-            <b>Can't reach the hub</b>
-            <p>
-              Nothing on the fleet can be read until the connection is back.
-            </p>
-            <Button onclick={() => reconnectNow()} variant="outline"
-              >Retry</Button
-            >
-          </div>
+          <EmptyState
+            class="px-[var(--space-5)]"
+            data-flip
+            icon={IconAlert}
+            line="Nothing on the fleet can be read until the connection is back."
+            title="Can't reach the hub"
+          >
+            {#snippet action()}
+              <Button onclick={() => reconnectNow()} variant="outline"
+                >Retry</Button
+              >
+            {/snippet}
+          </EmptyState>
         {:else if whiffle.machines.length === 0}
-          <div class="empty" data-flip>
-            <b>No machines yet</b>
-            <p>
+          <EmptyState
+            class="px-[var(--space-5)]"
+            data-flip
+            icon={IconLaptop}
+            title="No machines yet"
+          >
+            {#snippet line()}
               Run <code>whiffle</code> on a machine and it joins this board by
               itself.
-            </p>
-          </div>
+            {/snippet}
+          </EmptyState>
         {:else if rows.length === 0}
-          <div class="empty" data-flip>
-            <b
-              >{whiffle.onlineMachines.length}
-              machines online, no sessions running.</b
-            >
-            <Button onclick={startSession}>
-              <IconPlus />
-              Start session
-            </Button>
-          </div>
+          <EmptyState
+            class="px-[var(--space-5)]"
+            data-flip
+            icon={IconChat}
+            line="Nothing has been started on the {whiffle.onlineMachines.length === 1 ? 'machine' : `${whiffle.onlineMachines.length} machines`} online."
+            title="No sessions running"
+          >
+            {#snippet action()}
+              <Button onclick={startSession}>
+                <IconPlus />
+                Start session
+              </Button>
+            {/snippet}
+          </EmptyState>
         {:else}
           <div class="bar" data-flip>
             <!-- A label, so its touch area around the 36px field focuses it. -->
@@ -784,7 +800,9 @@
                         <span aria-hidden="true" class="mark m{row.hue}">
                           <HarnessGlyph harness={row.harness} />
                         </span>
-                        <a class="touch-hit" href={row.href}
+                        <a
+                          class="touch-hit pointer-hit pressable"
+                          href={row.href}
                           ><span class="nm-title">{row.title}</span></a
                         >
                       </div>
@@ -1106,7 +1124,7 @@
   }
   .show-all {
     padding: var(--space-3) var(--space-4);
-    font-size: var(--text-label);
+    font: var(--type-label);
     color: var(--ink-muted);
     background: none;
     border: 1px dashed var(--border-hairline);
@@ -1174,7 +1192,7 @@
     text-align: left;
     white-space: nowrap;
     font-size: var(--text-label);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-strong);
     letter-spacing: var(--track-caps);
     text-transform: uppercase;
     color: var(--ink-muted);
@@ -1236,7 +1254,8 @@
     height: 44px;
     padding: 0 var(--space-3);
     border-bottom: 1px solid var(--border-hairline);
-    font-size: var(--text-label);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     color: var(--ink-strong);
     vertical-align: middle;
   }
@@ -1306,6 +1325,7 @@
   .nm a {
     display: flex;
     min-width: 0;
+    font-size: var(--text-label);
     font-weight: var(--weight-strong);
     color: var(--ink-strong);
     text-decoration: none;
@@ -1328,8 +1348,8 @@
   }
   /* biome-ignore lint/style/noDescendingSpecificity: never matches the same element as .search .lead :global(svg) — different subtree */
   .when :global(svg) {
-    width: 13px;
-    height: 13px;
+    width: 12px;
+    height: 12px;
     flex: 0 0 auto;
   }
   /* 30px buttons: on a coarse pointer the gap opens to 14px, so each touch
@@ -1356,25 +1376,7 @@
     height: 55px;
     padding: 0 var(--space-3);
     border-top: 1px solid var(--border-hairline);
-    font-size: var(--text-label);
-    color: var(--ink-muted);
-  }
-  .empty {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-3);
-    padding: var(--space-8) var(--space-5);
-    text-align: center;
-  }
-  .empty b {
-    font-size: var(--text-body);
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-  }
-  .empty p {
-    font-size: var(--text-label);
+    font: var(--type-meta);
     color: var(--ink-muted);
   }
 

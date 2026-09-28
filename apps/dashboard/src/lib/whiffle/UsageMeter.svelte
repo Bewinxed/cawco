@@ -20,7 +20,7 @@
   import { Badge } from "$lib/components/ui/badge";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "$lib/components/ui/popover";
-  import IconDollar from "~icons/solar/dollar-linear";
+  import IconDollar from "~icons/solar/dollar-bold-duotone";
   import { whiffle } from "./client.svelte";
   import UsageRail from "./UsageRail.svelte";
   import { band, resetsIn, usd } from "./usage";
@@ -180,13 +180,13 @@
           staleNote ? ` ${staleNote}.` : ""
         }`
       : `Claude usage limits. ${emptyReason}`}
-    class="meter"
+    class="meter pressable"
   >
     {#if hasReading}
       <span class="rows">
         {#each visible as window (window.kind)}
           {@const tone = band(window.percent)}
-          <span aria-hidden="true" class="label" data-flip
+          <span aria-hidden="true" class="label num" data-flip
             >{compactLabel(window)}</span
           >
           <UsageRail
@@ -259,7 +259,7 @@
     {/if}
 
     <div class="pop-spend">
-      <IconDollar class="size-3.5 text-muted-foreground" />
+      <IconDollar class="size-3 text-muted-foreground" />
       <span>opencode</span>
       <span class="pop-spend-value">
         {#if spend}
@@ -319,7 +319,7 @@
     align-items: center;
     gap: 6px;
     min-width: 0;
-    font-weight: var(--weight-medium);
+    font: var(--type-label);
     color: var(--ink-strong);
   }
   .pop-active {
@@ -358,8 +358,7 @@
     justify-content: space-between;
     padding: 10px 12px;
     border-top: 1px solid var(--border-hairline);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-medium);
+    font: var(--type-label);
     color: var(--ink-strong);
     text-decoration: none;
     transition: background-color var(--dur-control) var(--ease-out);
@@ -401,7 +400,7 @@
     }
     &:focus-visible {
       outline: 2px solid var(--focus-ring);
-      outline-offset: 2px;
+      outline-offset: 1px;
     }
     /* A thumb gets a full-height target. */
     @media (pointer: coarse) {
@@ -417,8 +416,8 @@
     row-gap: 8px;
   }
   .label {
+    font: var(--type-label);
     color: var(--ink-muted);
-    font-weight: var(--weight-medium);
   }
   .pct {
     text-align: end;
@@ -426,11 +425,9 @@
   }
   .pct.warn {
     color: var(--warning);
-    font-weight: var(--weight-strong);
   }
   .pct.critical {
     color: var(--destructive);
-    font-weight: var(--weight-strong);
   }
   .note {
     color: var(--ink-muted);

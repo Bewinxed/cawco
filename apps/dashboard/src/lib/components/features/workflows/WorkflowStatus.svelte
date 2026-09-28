@@ -61,6 +61,6 @@
     color: var(--chip-ink);
     font-size: var(--text-label);
     white-space: nowrap;
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-strong);
   }
 </style>

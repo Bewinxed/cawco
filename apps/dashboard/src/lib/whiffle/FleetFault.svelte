@@ -163,7 +163,7 @@
         <span class="tag">at the hub</span>
       {:else if machine}
         <span class="tag">
-          <OsMark class="size-3.5 shrink-0" os={machine.os} />
+          <OsMark class="size-4 shrink-0" os={machine.os} />
           {machineLabel(machine.hostname)}{online ? '' : ' · offline'}
         </span>
       {:else}
@@ -180,9 +180,9 @@
         type="button"
       >
         {#if expanded}
-          <IconChevronDown class="size-3.5 shrink-0" />
+          <IconChevronDown class="size-4 shrink-0" />
         {:else}
-          <IconChevronRight class="size-3.5 shrink-0" />
+          <IconChevronRight class="size-4 shrink-0" />
         {/if}
         {expanded ? 'Hide' : 'Details'}
       </button>
@@ -242,9 +242,9 @@
           type="button"
         >
           {#if disclosureOpen}
-            <IconChevronDown class="size-3.5 shrink-0" />
+            <IconChevronDown class="size-4 shrink-0" />
           {:else}
-            <IconChevronRight class="size-3.5 shrink-0" />
+            <IconChevronRight class="size-4 shrink-0" />
           {/if}
           What it said
         </button>
@@ -277,7 +277,13 @@
           >{online ? actionHint : 'It syncs on its own the moment it comes back.'}</span
         >
       {:else if copy.action === 'refresh'}
-        <Button disabled={busy} onclick={refresh} size="xs" variant="outline">
+        <Button
+          class="num"
+          disabled={busy}
+          onclick={refresh}
+          size="xs"
+          variant="outline"
+        >
           <IconRefresh class="shrink-0" />
           {busy ? 'Fetching…' : actionLabel}
         </Button>
@@ -317,10 +323,6 @@
   }
   /* A hub fault is not a machine's problem and does not wear a machine's tint:
      nothing downstream of it can be fixed until it is. */
-  /* The ring takes the row's own ink so it holds 3:1 on the tint. */
-  .fault :global(:focus-visible) {
-    outline-color: var(--tone-ink);
-  }
   .fault.hub {
     --tone-bg: var(--status-fail-bg);
     --tone-ink: var(--status-fail-ink);
@@ -375,7 +377,8 @@
   }
   .why,
   .fix {
-    font-size: var(--text-label);
+    font-size: var(--text-body);
+    font-weight: var(--weight-body);
     color: var(--tone-ink);
     max-width: 68ch;
   }

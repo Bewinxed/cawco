@@ -107,8 +107,8 @@
     height: var(--thinking-icon-size, 20px);
   }
   .indicator[data-size="compact"] svg {
-    width: var(--thinking-icon-size, 18px);
-    height: var(--thinking-icon-size, 18px);
+    width: var(--thinking-icon-size, 16px);
+    height: var(--thinking-icon-size, 16px);
   }
   .labels {
     display: inline-grid;

@@ -1,10 +1,10 @@
 <script lang="ts">
   import {
-    IconAskDuo,
-    IconHandoffDuo,
-    IconReportDuo,
-    IconReportFailedDuo,
-    IconRuleDuo,
+    IconAsk,
+    IconHandoff,
+    IconReport,
+    IconReportFailed,
+    IconRules,
     IconWorkflow,
   } from "$lib/icons";
   import { whiffle } from "../client.svelte";
@@ -77,17 +77,17 @@
   <p class="label">
     <span class="glyph">
       {#if row.kind === 'rule'}
-        <IconRuleDuo />
+        <IconRules />
       {:else if row.kind === 'ask'}
-        <IconAskDuo />
+        <IconAsk />
       {:else if row.kind === 'report' && row.failed}
-        <IconReportFailedDuo />
+        <IconReportFailed />
       {:else if row.kind === 'report'}
-        <IconReportDuo />
+        <IconReport />
       {:else if row.kind === 'workflow'}
         <IconWorkflow />
       {:else}
-        <IconHandoffDuo />
+        <IconHandoff />
       {/if}
     </span>
     <span class="text">
@@ -121,7 +121,7 @@
     gap: var(--space-2);
     min-width: 0;
     margin: 0;
-    font-size: var(--text-label);
+    font: var(--type-label);
     line-height: var(--leading-ui);
     color: var(--ink-muted);
   }
@@ -131,8 +131,8 @@
     color: var(--accent-text);
   }
   .glyph :global(svg) {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
   }
   /* `clip` rather than `hidden`, with a margin, so the ellipsis still cuts a
      long name while the link's padded hit area is not clipped with it. */
@@ -144,7 +144,6 @@
     white-space: nowrap;
   }
   .name {
-    font-weight: var(--weight-medium);
     color: var(--ink-strong);
   }
   /* Vertical padding on an inline box grows the hit area to the 24px floor

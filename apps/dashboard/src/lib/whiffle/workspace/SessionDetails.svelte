@@ -485,7 +485,8 @@
     max-height: inherit;
     display: flex;
     flex-direction: column;
-    font-size: var(--text-label);
+    font-size: var(--text-body);
+    font-weight: var(--weight-body);
   }
   .details-body {
     min-height: 0;
@@ -546,7 +547,8 @@
     margin: 0;
     padding: 0 var(--space-5) var(--space-3);
     flex-wrap: wrap;
-    font-size: var(--text-label);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     line-height: var(--leading-body);
     color: var(--ink-muted);
   }
@@ -576,8 +578,8 @@
     background: transparent;
   }
   .icon-action :global(svg) {
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
   }
   .configuration {
     border-top: 1px solid var(--border-hairline);
@@ -629,7 +631,8 @@
   .feedback,
   .failure {
     margin-top: var(--space-2);
-    font-size: var(--text-label);
+    font-size: var(--text-body);
+    font-weight: var(--weight-body);
     line-height: var(--leading-body);
     overflow-wrap: anywhere;
   }
@@ -647,7 +650,8 @@
     padding: var(--space-3) var(--space-5);
     border-top: 1px solid var(--border-hairline);
     background: var(--surface-recess);
-    font-size: var(--text-label);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     line-height: var(--leading-body);
     font-variant-numeric: tabular-nums;
     flex-wrap: wrap;
@@ -669,7 +673,6 @@
   .cost {
     margin-left: auto;
     color: var(--ink-strong);
-    font-weight: var(--weight-medium);
   }
   .context-meter {
     flex: 1;
@@ -701,7 +704,7 @@
   button:focus-visible,
   a:focus-visible {
     outline: 2px solid var(--focus-ring);
-    outline-offset: 2px;
+    outline-offset: 1px;
   }
   @media (hover: hover) {
     .icon-action:hover {

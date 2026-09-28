@@ -711,7 +711,7 @@
     >
   {/if}
   <section aria-label="Problems" class="wf-stack">
-    <h2>Problems · {problems.length}</h2>
+    <h2 class="num">Problems · {problems.length}</h2>
     {#if !problems.length}
       <p class="wf-muted">No problems found.</p>
     {/if}
@@ -732,6 +732,7 @@
   }
   legend {
     font-size: var(--text-label);
+    font-weight: var(--weight-strong);
     margin-bottom: var(--space-2);
   }
   .problem {

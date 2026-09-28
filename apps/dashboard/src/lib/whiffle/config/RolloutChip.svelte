@@ -191,12 +191,11 @@
     color: var(--status-fail-ink);
   }
   :global(.rollout svg) {
-    width: 13px;
-    height: 13px;
+    width: 12px;
+    height: 12px;
     flex: none;
   }
   :global(.rollout .count) {
-    font-weight: 500;
     font-variant-numeric: tabular-nums;
     color: inherit;
   }
@@ -223,8 +222,8 @@
   .mark :global(svg),
   .sync :global(svg),
   .note :global(svg) {
-    width: 14px;
-    height: 14px;
+    width: 12px;
+    height: 12px;
     flex: none;
   }
   .sync {
@@ -234,8 +233,7 @@
     height: 26px;
     padding: 0 8px;
     border-radius: var(--radius-sm);
-    font: var(--type-meta);
-    font-weight: 500;
+    font: var(--type-label);
     color: var(--ink-strong);
     transition: var(--transition-control);
     @media (prefers-reduced-motion: no-preference) {

@@ -17,12 +17,12 @@
   import { Input } from "$lib/components/ui/input";
   import { Textarea } from "$lib/components/ui/textarea";
   import {
-    IconEyeDuo,
-    IconHistoryDuo,
-    IconMapPointDuo,
-    IconPinDuo,
-    IconPlainDuo,
-    IconSparklesDuo,
+    IconEye,
+    IconHistory,
+    IconMapPoint,
+    IconPin,
+    IconPlain,
+    IconSparkles,
   } from "$lib/icons";
   import { appear } from "$lib/whiffle/motion/curves.svelte";
   import { folds } from "$lib/whiffle/motion/fold.svelte";
@@ -313,7 +313,7 @@
   {/snippet}
 
   {#if !id}
-    <EditorSection hue={HUE} icon={IconSparklesDuo} label="Start from a preset">
+    <EditorSection hue={HUE} icon={IconSparkles} label="Start from a preset">
       <p class="note">
         Supervisor rules that catch the habits coding agents fall into. Using
         one fills the form; it is an ordinary rule once saved.
@@ -322,7 +322,7 @@
         {#each WHIP_PRESETS as preset (preset.name)}
           <SectionRow
             hue={HUE}
-            icon={IconSparklesDuo}
+            icon={IconSparkles}
             meta={preset.prompt}
             name={preset.name}
           >
@@ -341,7 +341,7 @@
     </EditorSection>
   {/if}
 
-  <EditorSection hue={HUE} icon={IconEyeDuo} label="What to watch for">
+  <EditorSection hue={HUE} icon={IconEye} label="What to watch for">
     <p class="note">
       Whiffle reads what a session writes, not what you write to it.
     </p>
@@ -465,7 +465,7 @@
     {/if}
   </EditorSection>
 
-  <EditorSection hue={HUE} icon={IconPlainDuo} label="What Whiffle sends back">
+  <EditorSection hue={HUE} icon={IconPlain} label="What Whiffle sends back">
     <p class="note">
       The session is told this is Whiffle and not you, so it does not answer you
       for something you never said.
@@ -546,7 +546,7 @@
     {/if}
   </EditorSection>
 
-  <EditorSection hue={HUE} icon={IconMapPointDuo} label="Where it applies">
+  <EditorSection hue={HUE} icon={IconMapPoint} label="Where it applies">
     <p class="note">
       Everywhere unless you narrow it. Each filter you set has to match for the
       rule to fire. A model matches as a substring, so a family name covers
@@ -596,7 +596,7 @@
   </EditorSection>
 
   {#if draft.action === 'reply'}
-    <EditorSection hue={HUE} icon={IconPinDuo} label="Making it stick">
+    <EditorSection hue={HUE} icon={IconPin} label="Making it stick">
       <SwitchField
         id="rule-ack"
         label="Keep firing until the session acknowledges"
@@ -618,7 +618,7 @@
   {/if}
 
   {#if id}
-    <EditorSection hue={HUE} icon={IconHistoryDuo} label="What it has caught">
+    <EditorSection hue={HUE} icon={IconHistory} label="What it has caught">
       <RuleActivity ruleId={id} />
     </EditorSection>
   {/if}

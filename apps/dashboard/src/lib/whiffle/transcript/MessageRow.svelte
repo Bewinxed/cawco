@@ -312,8 +312,8 @@
     background: transparent;
     padding-block: var(--space-1);
     padding-inline: var(--space-2);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-medium);
+    font-size: var(--text-label);
+    font-weight: var(--weight-strong);
     color: var(--ink-strong);
 
     &:hover {

@@ -11,9 +11,9 @@
     machineIcon,
   } from "$lib/components/ui/machine-row";
   import {
-    IconDocumentDuo,
-    IconHistoryDuo,
-    IconLaptopDuo,
+    IconDocument,
+    IconHistory,
+    IconLaptop,
     IconSpinner,
   } from "$lib/icons";
   import { formatDistanceToNow } from "$lib/utils/time";
@@ -383,7 +383,7 @@
       />
     </div>
     <h1 class="title">{fileLabel(path)}</h1>
-    <p class="facts">
+    <p class="facts num">
       <span>{formatBytes(bytes)}</span>
       <span
         class="tokens"
@@ -405,7 +405,7 @@
     </p>
   {/snippet}
 
-  <EditorSection hue={HUE} icon={IconDocumentDuo} label="Contents">
+  <EditorSection hue={HUE} icon={IconDocument} label="Contents">
     {#if conflict}
       <div class="conflict">
         <p class="caution">
@@ -451,7 +451,7 @@
     </div>
   </EditorSection>
 
-  <EditorSection hue={HUE} icon={IconHistoryDuo} label="History">
+  <EditorSection hue={HUE} icon={IconHistory} label="History">
     {#if historyError}
       <p class="caution" role="alert">{historyError}</p>
     {:else if versions === null}
@@ -526,7 +526,7 @@
     {/if}
   </EditorSection>
 
-  <EditorSection hue={HUE} icon={IconLaptopDuo} label="Per machine">
+  <EditorSection hue={HUE} icon={IconLaptop} label="Per machine">
     {#if machines.length === 0}
       <p class="note">
         No machines yet — this lands on the first one that registers.
