@@ -1087,6 +1087,34 @@ function refreshCatalogs(): void {
   }
 }
 
+/**
+ * The hub's word on the machines, pushed with every `instances` frame. A
+ * machine that comes online after the connect-time read has its stored
+ * sessions read now: `refreshCatalogs` only asks the machines that were online
+ * when that read landed. A hub restart is the usual case — its daemons take a
+ * few seconds to register again, so a dashboard that connects in that window
+ * reads every machine offline, and the board's first-read gate
+ * (`whiffle.catalogsRead`) then waits on catalogs nobody ever asked for.
+ */
+function adoptMachines(next: Machine[]): void {
+  const wasOnline = new Set(
+    state.machines
+      .filter((machine) => machine.status === "online")
+      .map((machine) => machine.machineId)
+  );
+  state.machines = next;
+  // Before the first read the connect-time `refreshCatalogs` asks them all.
+  if (!state.fleetRead) {
+    return;
+  }
+  for (const machine of next) {
+    if (machine.status === "online" && !wasOnline.has(machine.machineId)) {
+      // biome-ignore lint/complexity/noVoid: fire-and-forget — the catalog lands in the store the board reads
+      void loadCatalog(machine.machineId);
+    }
+  }
+}
+
 /** Answers the promise a `requestId` belongs to; false when nobody is waiting. */
 function settle(
   requestId: string | undefined,
@@ -1304,7 +1332,7 @@ function handleFrame(frame: FramePayload): void {
     }
     // The machines ride along so a daemon registering — the moment its auth
     // state is decided — reaches the rail without a re-fetch.
-    state.machines = frame.agents;
+    adoptMachines(frame.agents);
     checkRestartToast(frame.agents);
     // The hub's own record of what each session is carrying. Kept there rather
     // than learnt by watching, so it is the same on every device and survives a

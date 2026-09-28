@@ -253,6 +253,20 @@
     whiffle.listedInstances.filter((row) => isResumable(row) || isStale(row))
   );
 
+  /**
+   * The sessions the hub holds but cannot currently ask about, and the
+   * machines they are on. With no live row beside them the board has not got
+   * a real list yet — a hub that just restarted reads every session this way
+   * until its daemons register again — so the table says what it is waiting
+   * for rather than "No sessions yet" (JOURNEY §1: the empty reading is never
+   * reached while a machine is unreachable).
+   */
+  const unanswered = $derived(notRunning.filter(isStale));
+  const waitingOn = $derived.by(() => {
+    const ids = new Set(unanswered.map((row) => row.machineId));
+    return whiffle.machines.filter((machine) => ids.has(machine.machineId));
+  });
+
   /* ---- filters ------------------------------------------------------- */
 
   /* The filters live in the board's address (?q=&state=&machine=&sort=), so
@@ -863,6 +877,14 @@
                 </Button>
               {/snippet}
             </EmptyState>
+          {:else if rows.length === 0 && waitingOn.length > 0}
+            <EmptyState
+              class="px-[var(--space-5)]"
+              data-flip
+              icon={IconServer}
+              line={waitingOn.length === 1 ? 'Its sessions show here as soon as it answers.' : 'Their sessions show here as soon as they answer.'}
+              title="Waiting for {waitingOn.length === 1 ? machineLabel(waitingOn[0].hostname) : `${waitingOn.length} machines`} to answer"
+            />
           {:else if rows.length === 0}
             <EmptyState
               class="px-[var(--space-5)]"
