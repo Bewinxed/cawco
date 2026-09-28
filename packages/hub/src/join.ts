@@ -154,6 +154,11 @@ say() { printf '${INSTALL_STEP_PREFIX}%s\\n' "$*"; }
 fail() { printf 'whiffle: %s\\n' "$*" >&2; exit 1; }
 
 main() {
+  # The SSH session that started this can end under it — a dropped link, the
+  # hub restarting. Ignoring the hangup (inherited by everything below)
+  # lets the install finish what it started instead of dying half-way through
+  # replacing a running service.
+  trap '' HUP
   say "checking for git, curl and unzip"
   missing=""
   for tool in git curl; do
