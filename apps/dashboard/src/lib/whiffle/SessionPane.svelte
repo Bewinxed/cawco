@@ -31,7 +31,7 @@
     easeOut,
     motionOk,
   } from "$lib/whiffle/motion/curves.svelte";
-  import { land, waiting } from "$lib/whiffle/motion/share.svelte";
+  import { waiting as departing, land } from "$lib/whiffle/motion/share.svelte";
   import AutopilotToggle from "./AutopilotToggle.svelte";
   import {
     blankSession,
@@ -175,7 +175,8 @@
       return;
     }
     if (open) {
-      fromRow = untrack(() => !previewMounted) && waiting(`preview:${viewId}`);
+      fromRow =
+        untrack(() => !previewMounted) && departing(`preview:${viewId}`);
       previewMounted = true;
     }
     let settle = 0;
@@ -501,7 +502,9 @@
       holding = true;
     }
   });
-  const veiled = $derived(!(fault || unaddressable || blank) && (waiting || holding));
+  const veiled = $derived(
+    !(fault || unaddressable || blank) && (waiting || holding)
+  );
 
   /**
    * Hears the transcript's list being drawn, and lets the placeholder go:
@@ -1017,7 +1020,9 @@
                 : "This transcript couldn't be read"}
                   >
                     {#snippet action()}
-                      <Button onclick={retry} variant="outline">Try again</Button>
+                      <Button onclick={retry} variant="outline"
+                        >Try again</Button
+                      >
                     {/snippet}
                   </EmptyState>
                 </div>
