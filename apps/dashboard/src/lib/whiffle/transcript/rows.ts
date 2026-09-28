@@ -12,8 +12,13 @@ import type { SessionState } from "../client.svelte";
 import type { ToolGlance } from "../frames";
 import type { Message } from "../types";
 
+/**
+ * `grouped`, on the rows that can carry a speaker line: the speaker's previous
+ * turn is the last voice above it, so this one draws no header of its own.
+ * Decided once, as the rows are folded (see {@link Voices}).
+ */
 export type Row =
-  | { kind: "single"; key: string; message: Message }
+  | { kind: "single"; key: string; message: Message; grouped: boolean }
   | { kind: "tools"; key: string; messages: Message[] }
   | { kind: "question"; key: string; message: Message }
   | { kind: "subagent"; key: string; branch: SubagentState; spawn: Message }
@@ -35,6 +40,7 @@ export type Row =
       thinkingLive: boolean;
       indicating: boolean;
       text: string;
+      grouped: boolean;
     }
   | { kind: "livetool"; key: string; glance: ToolGlance }
   /**
@@ -43,8 +49,100 @@ export type Row =
    * reduced presence; once read it is a `single` row under the same key, in
    * the place it was read.
    */
-  | { kind: "queued"; key: string; message: Message }
+  | { kind: "queued"; key: string; message: Message; grouped: boolean }
   | { kind: "harness"; key: string; note: HarnessNote };
+
+/**
+ * Who has the floor, row by row: a speaker line appears only when the speaker
+ * changes. The reader's turns ("You") group with the reader's turns before
+ * them, the agent's with the agent's. The agent's run — its tool calls,
+ * reasoning, task lines, the cards its calls open — is the agent's and does
+ * not end its group, but carries no header either, so the first words the
+ * agent says after the reader still get one. A note whiffle or the harness put
+ * in on someone else's behalf (a peer, rule, report, hand-off, workflow row,
+ * a failure card, a command's output, an interruption) is its own voice and
+ * ends every group. Rows that paint nothing change nothing.
+ */
+export interface Voices {
+  /** Whether the agent's group has drawn its header yet. */
+  headed: boolean;
+  speaker: "you" | "agent" | null;
+}
+
+const NO_VOICE: Voices = { speaker: null, headed: false };
+
+type Voice = "you" | "says" | "acts" | "note" | "none";
+
+/** SystemLine's rows that belong to the agent's run rather than interrupt it. */
+const RUN_LINES = new Set(["system.task"]);
+
+function voiceOfMessage(m: Message): Voice {
+  switch (m.type) {
+    case "user":
+      return "you";
+    case "assistant":
+      return m.content.trim() ? "says" : "none";
+    case "thinking":
+      return m.content.trim() ? "acts" : "none";
+    case "result.success":
+      return "none";
+    default:
+      return RUN_LINES.has(m.type) ? "acts" : "note";
+  }
+}
+
+function voiceOf(row: Row): Voice {
+  switch (row.kind) {
+    case "single":
+    case "queued":
+      return voiceOfMessage(row.message);
+    case "live":
+      return row.text ? "says" : "acts";
+    default:
+      // tools, livetool, question, subagent, delegate, thinking, stream, and
+      // a harness task note: all of them the agent's run.
+      return "acts";
+  }
+}
+
+/** Advance `v` past `row`; true when `row` continues its speaker's group. */
+function voice(v: Voices, row: Row): boolean {
+  switch (voiceOf(row)) {
+    case "you": {
+      const grouped = v.speaker === "you";
+      v.speaker = "you";
+      v.headed = true;
+      return grouped;
+    }
+    case "says": {
+      const grouped = v.speaker === "agent" && v.headed;
+      v.speaker = "agent";
+      v.headed = true;
+      return grouped;
+    }
+    case "acts":
+      if (v.speaker !== "agent") {
+        v.speaker = "agent";
+        v.headed = false;
+      }
+      return false;
+    case "note":
+      v.speaker = null;
+      v.headed = false;
+      return false;
+    default:
+      return false;
+  }
+}
+
+/** Where the voices stand after `rows`, from the top of the transcript. */
+function voicesAfter(rows: Row[]): Voices {
+  const v = { ...NO_VOICE };
+  for (const row of rows) {
+    voice(v, row);
+  }
+  return v;
+}
 
 /**
  * A harness-injected notification, parsed.
@@ -207,7 +305,9 @@ export function foldMessages(
   messages: Message[],
   subagents: Record<string, SubagentState>
 ): Row[] {
-  return foldRange(messages, subagents, 0, notedTasks(messages)).rows;
+  return foldRange(messages, subagents, 0, notedTasks(messages), {
+    ...NO_VOICE,
+  }).rows;
 }
 
 /**
@@ -262,13 +362,15 @@ const notedTask = (m: Message): string | undefined =>
 /**
  * The grammar over `messages[from..]`. `starts` is the message index each row
  * begins at, kept beside the rows rather than on them: it is what lets a
- * later fold splice on at a row boundary, and no renderer needs it.
+ * later fold splice on at a row boundary, and no renderer needs it. `voices`
+ * is where the speakers stood before `from`, and is advanced past these rows.
  */
 function foldRange(
   messages: Message[],
   subagents: Record<string, SubagentState>,
   from: number,
-  noted: Set<string>
+  noted: Set<string>,
+  voices: Voices
 ): { rows: Row[]; starts: number[] } {
   const rows: Row[] = [];
   const starts: number[] = [];
@@ -335,11 +437,22 @@ function foldRange(
       continue;
     }
 
-    rows.push({ kind: "single", key: keyOf(m, i), message: m });
+    rows.push({ kind: "single", key: keyOf(m, i), message: m, grouped: false });
     i += 1;
   }
 
+  markVoices(rows, voices);
   return { rows, starts };
+}
+
+/** Group a fold's own rows, not yet seen by anyone, in place. */
+function markVoices(rows: Row[], voices: Voices): void {
+  for (const row of rows) {
+    const grouped = voice(voices, row);
+    if (row.kind === "single") {
+      row.grouped = grouped;
+    }
+  }
 }
 
 /**
@@ -353,13 +466,6 @@ export function branchRows(branch: SubagentState): Row[] {
     rows.push({ kind: "stream", key: "branch:stream", text: branch.streaming });
   }
   return rows;
-}
-
-export function buildRows(session: SessionState): Row[] {
-  return [
-    ...foldMessages(settledOf(session.messages), session.subagents),
-    ...tailRows(session, liveContent(session), NO_LIVE.gen + 1),
-  ];
 }
 
 /**
@@ -396,6 +502,8 @@ export interface FoldMemo {
   /** The settled rows — everything before the live tail — and where each begins. */
   rows: Row[];
   starts: number[];
+  /** Where the speakers stand after the settled rows. */
+  voices: Voices;
 }
 
 /**
@@ -499,7 +607,7 @@ export function buildRowsFrom(
   const branches = Object.keys(session.subagents).length;
   const cut = memo ? cutFor(messages, memo, branches) : -1;
   const appended = memo !== null && cut >= 0;
-  const { rows, starts, noted } =
+  const { rows, starts, noted, voices } =
     memo && appended
       ? foldOnto(messages, session.subagents, memo, cut)
       : foldAll(messages, session.subagents);
@@ -509,7 +617,7 @@ export function buildRowsFrom(
   const same = prior.on && content !== null && continues(prior, content);
   const gen = same ? prior.gen : prior.gen + 1;
   return {
-    rows: [...rows, ...tailRows(session, content, gen)],
+    rows: [...rows, ...tailRows(session, content, gen, { ...voices })],
     memo: {
       rows,
       starts,
@@ -518,6 +626,7 @@ export function buildRowsFrom(
       last: messages.at(-1),
       branches,
       noted,
+      voices,
       live: content
         ? {
             gen,
@@ -536,6 +645,7 @@ interface Settled {
   noted: Set<string>;
   rows: Row[];
   starts: number[];
+  voices: Voices;
 }
 
 /** Every message, folded from the start. */
@@ -544,7 +654,12 @@ function foldAll(
   subagents: Record<string, SubagentState>
 ): Settled {
   const noted = notedTasks(messages);
-  return { ...foldRange(messages, subagents, 0, noted), noted };
+  const voices = { ...NO_VOICE };
+  return {
+    ...foldRange(messages, subagents, 0, noted, voices),
+    noted,
+    voices,
+  };
 }
 
 /** The memo's rows, with only the turn at the cut and what follows it folded again. */
@@ -567,11 +682,16 @@ function foldOnto(
     }
     keep = r;
   }
-  const tail = foldRange(messages, subagents, cut, memo.noted);
+  // The kept rows are the same objects with the same speakers above them, so
+  // their grouping stands; the refolded turn picks up where they leave off.
+  const kept = memo.rows.slice(0, keep);
+  const voices = voicesAfter(kept);
+  const tail = foldRange(messages, subagents, cut, memo.noted, voices);
   return {
-    rows: memo.rows.slice(0, keep).concat(tail.rows),
+    rows: kept.concat(tail.rows),
     starts: memo.starts.slice(0, keep).concat(tail.starts),
     noted: memo.noted,
+    voices,
   };
 }
 
@@ -591,7 +711,10 @@ function endOf(
 
 const liveKey = (gen: number): string => `live:${gen}`;
 
-type LiveContent = Omit<Extract<Row, { kind: "live" }>, "key" | "kind">;
+type LiveContent = Omit<
+  Extract<Row, { kind: "live" }>,
+  "key" | "kind" | "grouped"
+>;
 
 /**
  * Whether the live row now is the one the last fold drew, still being
@@ -703,22 +826,32 @@ export function called(session: SessionState, toolId: string): boolean {
 function tailRows(
   session: SessionState,
   content: LiveContent | null,
-  gen: number
+  gen: number,
+  voices: Voices
 ): Row[] {
   const rows: Row[] = [];
   if (content) {
-    rows.push({ kind: "live", key: liveKey(gen), ...content });
+    const live: Row = {
+      kind: "live",
+      key: liveKey(gen),
+      ...content,
+      grouped: false,
+    };
+    live.grouped = voice(voices, live);
+    rows.push(live);
   }
   // One row per call in flight, keyed by the call: the next tool is a new
   // row arriving, not this one changing its words. It is the call before its
   // message lands; once the message is in, the call's own line in its run is
   // this row, settled, and drawing both showed the same call twice.
   if (session.currentTool && !called(session, session.currentTool.toolId)) {
-    rows.push({
+    const tool: Row = {
       kind: "livetool",
       key: `tool:${session.currentTool.toolId}`,
       glance: session.currentTool,
-    });
+    };
+    voice(voices, tool);
+    rows.push(tool);
   }
 
   // What the session has been sent and not read yet, after everything that
@@ -726,11 +859,14 @@ function tailRows(
   // row in the conversation, where it was read.
   const { messages } = session;
   for (let i = queuedFrom(messages); i < messages.length; i += 1) {
-    rows.push({
+    const queued: Row = {
       kind: "queued",
       key: keyOf(messages[i], i),
       message: messages[i],
-    });
+      grouped: false,
+    };
+    queued.grouped = voice(voices, queued);
+    rows.push(queued);
   }
 
   return rows;

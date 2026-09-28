@@ -136,8 +136,8 @@
 
 {#snippet body(live: Live, phase: Phase, trail: Trail | undefined)}
   {#if phase === 'answer'}
-    <section class="turn">
-      <Who name={agentName} />
+    <section class="turn" class:grouped={live.grouped}>
+      <Who grouped={live.grouped} name={agentName} />
       <MessageBody
         fades={ledger?.watched ?? false}
         source={live.text}
@@ -216,5 +216,11 @@
   }
   .turn {
     margin-block-start: var(--space-4);
+
+    /* MessageRow's grouped turn, so the answer settles without moving. */
+    &.grouped {
+      display: flow-root;
+      margin-block-start: var(--space-2);
+    }
   }
 </style>

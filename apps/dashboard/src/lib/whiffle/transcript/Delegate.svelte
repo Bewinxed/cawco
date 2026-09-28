@@ -552,7 +552,11 @@
               {:else if r.kind === 'stream'}
                 <div class="say"><MessageBody source={r.text} streaming /></div>
               {:else if r.kind === 'single'}
-                <MessageRow {agentName} message={r.message} />
+                <MessageRow
+                  {agentName}
+                  grouped={r.grouped}
+                  message={r.message}
+                />
               {/if}
             {/each}
 

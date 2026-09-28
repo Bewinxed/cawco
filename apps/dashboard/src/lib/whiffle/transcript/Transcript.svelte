@@ -26,7 +26,7 @@
 <script lang="ts">
   /**
    * The scrolling transcript: the folded rows, virtualized. The live tail rides
-   * as rows of its own (see `buildRows`), so streaming text, an open reasoning
+   * as rows of its own (see `buildRowsFrom`), so streaming text, an open reasoning
    * block and the tool in flight all scroll with the conversation. Announces
    * genuine arrivals — and blocked-on-you — through a dedicated live region
    * beside the log, never through the virtualized container itself.
@@ -1927,6 +1927,7 @@
                 {agentName}
                 carry={ticket?.kind === 'carry' ? ticket.trail : null}
                 folding={ticket?.kind === 'fold'}
+                grouped={row.grouped}
                 message={row.message}
               />
             {:else if row.kind === 'tools'}

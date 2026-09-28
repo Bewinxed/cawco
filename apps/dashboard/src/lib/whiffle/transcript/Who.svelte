@@ -12,11 +12,19 @@
 
   let {
     you = false,
+    grouped = false,
     name,
     timestamp,
     note,
   }: {
     you?: boolean;
+    /**
+     * The speaker's turn right above said who this is: no mark and no name on
+     * screen (the name stays for a screen reader, so every turn is still a
+     * heading that says who). What is left — the clock, or the note in its
+     * place — floats into the end of the turn's first line and adds no height.
+     */
+    grouped?: boolean;
     name: string;
     timestamp?: Date | string;
     /**
@@ -44,15 +52,19 @@
 
 <!-- The speaker line arrives with its row: it moves with the row's own
      entrance and has no motion of its own. -->
-<h2 class="who">
-  <span aria-hidden="true" class="dot {you ? 'u' : 'a'}">
-    {#if you}
-      <IconUser />
-    {:else}
-      <IconAgent />
-    {/if}
-  </span>
-  <span class="role">{name}</span>
+<h2 class="who" class:grouped>
+  {#if grouped}
+    <span class="sr-only">{name}</span>
+  {:else}
+    <span aria-hidden="true" class="dot {you ? 'u' : 'a'}">
+      {#if you}
+        <IconUser />
+      {:else}
+        <IconAgent />
+      {/if}
+    </span>
+    <span class="role">{name}</span>
+  {/if}
   {#if validAt}
     <time class="when" datetime={validAt.toISOString()}>{clock}</time>
   {:else if note}
@@ -69,6 +81,21 @@
     color: var(--ink-muted);
     font-weight: var(--weight-strong);
     margin-block-end: var(--space-2);
+
+    /* One line box of the body tall, so the clock sits centred on the turn's
+       first line; the body wraps around it rather than moving down. As wide
+       as the widest word the slot holds ("sending…"), whatever it holds now,
+       so the first line wraps the same while sending, queued, streaming and
+       settled — settling moves nothing. */
+    &.grouped {
+      float: inline-end;
+      justify-content: flex-end;
+      font-size: var(--text-meta);
+      min-inline-size: 9ch;
+      min-block-size: calc(var(--text-body) * var(--leading-body));
+      margin-block-end: 0;
+      margin-inline-start: var(--space-3);
+    }
   }
   .dot {
     inline-size: 18px;

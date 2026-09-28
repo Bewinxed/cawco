@@ -35,9 +35,12 @@
     agentName,
     folding = false,
     carry = null,
+    grouped = false,
   }: {
     message: Message;
     agentName: string;
+    /** The same speaker's turn is right above: no speaker line of its own. */
+    grouped?: boolean;
     /** A thinking message that is the live reasoning, settled: it folds shut. */
     folding?: boolean;
     /** An answer that is the live stream, settled: the chunk fades it carries on. */
@@ -175,12 +178,14 @@
     class="turn you"
     data-message={message.id}
     class:ghost={ghost || waiting}
+    class:grouped
     {@attach land(
       () => ghost ? `sent:${message.id}` : undefined,
       { ms: dur('--dur-pop'), uniform: true }
     )}
   >
     <Who
+      {grouped}
       name="You"
       note={whoNote}
       timestamp={ghost || failed || waiting ? undefined : message.timestamp}
@@ -248,8 +253,8 @@
     </div>
   </section>
 {:else if kind === 'assistant'}
-  <section class="turn">
-    <Who name={agentName} timestamp={message.timestamp} />
+  <section class="turn" class:grouped>
+    <Who {grouped} name={agentName} timestamp={message.timestamp} />
     <MessageBody {carry} source={message.content} />
   </section>
 {:else if kind === 'thinking'}
@@ -265,6 +270,13 @@
 <style>
   .turn {
     margin-block-start: var(--space-4);
+
+    /* A later turn in the same speaker's group sits closer to the one above,
+       and holds its floated clock inside its own box. */
+    &.grouped {
+      display: flow-root;
+      margin-block-start: var(--space-2);
+    }
   }
   /* The well bleeds back out by exactly its own padding, so the reader's words
      sit on the same ledger column as the agent's and only the wash widens.
