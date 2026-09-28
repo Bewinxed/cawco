@@ -1,8 +1,8 @@
 <script lang="ts">
   import { EFFORT_LEVELS } from "@whiffle/core";
   import { untrack } from "svelte";
-  import { toast } from "svelte-sonner";
   import { goto } from "$app/navigation";
+  import { page } from "$app/state";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Alert from "$lib/components/ui/alert";
   import { Input } from "$lib/components/ui/input";
@@ -21,6 +21,8 @@
   } from "../../delegate-types";
   import ModelCombobox from "../../ModelCombobox.svelte";
   import Choice from "../Choice.svelte";
+  import { keepDraft, sameFields } from "../drafts.svelte";
+  import { savedShown } from "../EditorFooter.svelte";
   import EditorFrame from "../EditorFrame.svelte";
   import EditorSection from "../EditorSection.svelte";
   import Field from "../Field.svelte";
@@ -52,6 +54,27 @@
   let attempted = $state(false);
 
   const name = $derived(type?.name ?? null);
+
+  const fieldsOf = (from: DelegateType) => ({
+    draft: from,
+    skillsText: (from.skills ?? []).join(", "),
+    denyToolsText: (from.denyTools ?? []).join(", "),
+    canDelegate: from.canDelegate === true,
+  });
+  /** What is saved: the fields differ from it by what is unsaved. */
+  const baseline = $derived(fieldsOf(type ? { ...type } : blankDelegateType()));
+  /** A new type was just created: its draft is over, and a second Save would write it again. */
+  let created = false;
+  const kept = keepDraft(
+    page.url.pathname,
+    () => {
+      const now = { draft, skillsText, denyToolsText, canDelegate };
+      return sameFields(now, baseline) ? null : now;
+    },
+    (stored) => {
+      ({ draft, skillsText, denyToolsText, canDelegate } = stored);
+    }
+  );
 
   const parsedList = (text: string): string[] | undefined => {
     const items = text
@@ -85,26 +108,50 @@
 
   const ready = $derived(problem === undefined && duplicate === undefined);
 
+  /**
+   * Saving a type keeps the editor open on it, the Save button saying so in
+   * place; a new one shows the same, then returns to the list, where it is
+   * marked.
+   */
   async function save() {
     attempted = true;
-    if (!ready || busy) {
+    if (!ready || busy || created) {
       return;
     }
     busy = true;
     failed = undefined;
+    let made: string | undefined;
     try {
       const saved = await saveDelegateType(submission);
       if (store.types.value) {
         upsert(store.types.value, saved, (row) => row.name === saved.name);
       }
-      store.mark(saved.name);
-      toast.success(`${saved.name} is available to new sessions.`);
-      await goto("/config/delegate-types");
+      if (name) {
+        ({ draft, skillsText, denyToolsText, canDelegate } = fieldsOf({
+          ...saved,
+        }));
+      } else {
+        created = true;
+        kept.drop();
+        made = saved.name;
+      }
     } catch (error) {
       failed = message(error);
     } finally {
       busy = false;
     }
+    if (made) {
+      await savedShown();
+      store.mark(made);
+      await goto("/config/delegate-types");
+    }
+  }
+
+  /** Cancel leaves the edits behind: the draft is dropped, not kept. */
+  function cancel() {
+    kept.drop();
+    // biome-ignore lint/complexity/noVoid: navigation reports nothing to wait for
+    void goto("/config/delegate-types");
   }
 
   async function askRemove() {
@@ -121,12 +168,14 @@
         deleting = true;
         try {
           await removeDelegateType(name);
+          kept.drop();
+          // Back to the list first, so the row is seen leaving it.
+          await goto("/config/delegate-types");
           if (store.types.value) {
             store.types.value = store.types.value.filter(
               (row) => row.name !== name
             );
           }
-          await goto("/config/delegate-types");
         } catch (error) {
           deleting = false;
           throw error;
@@ -140,7 +189,7 @@
   deleteLabel={name ? 'Delete delegate type' : undefined}
   {deleting}
   failed={failed !== undefined}
-  oncancel={() => goto('/config/delegate-types')}
+  oncancel={cancel}
   ondelete={name ? askRemove : undefined}
   onsubmit={save}
   saveLabel={name ? 'Save changes' : 'Create delegate type'}

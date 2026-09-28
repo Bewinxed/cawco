@@ -115,18 +115,30 @@ export class TranscriptIndex {
     this.db.close();
   }
 
-  /** Insert documents (deduplicated on (harness, doc_id)) in one transaction. */
+  /**
+   * Insert documents (deduplicated on (harness, doc_id)) in one transaction,
+   * returning how many were new.
+   *
+   * Counted off `RETURNING`, which yields a row only for an insert the
+   * `OR IGNORE` let through, and never for the FTS trigger's writes. It used
+   * to be the `count(*)` of `docs` before and after, and `count(*)` scans the
+   * whole table: two scans per transcript on every sync, all on the daemon's
+   * one thread. Measured on a 170 MB index: 11.6s of a 12.8s event-loop stall
+   * were those scans, and a daemon that frozen hears its hub socket close only
+   * when it thaws.
+   */
   indexDocs(docs: TranscriptDoc[]): number {
     if (docs.length === 0) {
       return 0;
     }
     const insert = this.db.prepare(
       `INSERT OR IGNORE INTO docs (harness, doc_id, session_id, role, ts, cwd, model, sidechain, tools, text)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING id`,
     );
+    let added = 0;
     const run = this.db.transaction((batch: TranscriptDoc[]) => {
       for (const doc of batch) {
-        insert.run(
+        const row = insert.get(
           doc.harness,
           doc.id,
           doc.sessionId,
@@ -138,13 +150,13 @@ export class TranscriptIndex {
           doc.tools ?? null,
           doc.text,
         );
+        if (row) {
+          added += 1;
+        }
       }
     });
-    // `changes` is unreliable here (FTS5 shadow-table writes from the sync
-    // trigger inflate it), so report the exact table-count delta instead.
-    const before = this.count();
     run(docs);
-    return this.count() - before;
+    return added;
   }
 
   /**
@@ -202,6 +214,11 @@ export class TranscriptIndex {
         workers: options.workers,
       });
       for (const file of parsed) {
+        // One file's inserts per turn of the event loop, as the tail loop
+        // below already gets from its reads: a catch-up of many new files is
+        // otherwise one unbroken block on the daemon's only thread.
+        // biome-ignore lint/performance/noAwaitInLoops: the await is the yield; the files are indexed one at a time on purpose.
+        await new Promise((resolve) => setImmediate(resolve));
         if (file.error !== undefined) {
           result.errors.push({ path: file.path, error: file.error });
           continue;

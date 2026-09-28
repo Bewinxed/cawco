@@ -10,10 +10,61 @@
   import * as Dialog from "$lib/components/ui/dialog";
   import { whiffle } from "$lib/whiffle/client.svelte";
   import { loadDelegateTypes, message } from "$lib/whiffle/delegate-types";
+  import { dur, ease, motionOk } from "$lib/whiffle/motion/curves.svelte";
   import { launchWorkflow } from "$lib/whiffle/workflows";
 
-  let { workflow, onclose }: { onclose: () => void; workflow: Workflow } =
-    $props();
+  let {
+    workflow,
+    from,
+    onclose,
+  }: {
+    /** The button that opened the dialog: it grows from there and goes back into it. */
+    from?: HTMLElement;
+    onclose: () => void;
+    workflow: Workflow;
+  } = $props();
+  let shown = $state(true);
+  let content = $state<HTMLElement | null>(null);
+  /**
+   * Where the dialog stands against the button it came from: the step that
+   * puts its centre on the button's, and the scale that brings it down
+   * toward the button's size (no smaller than half, so it reads as the
+   * dialog growing and not as a dot).
+   */
+  function fromButton(node: HTMLElement, button: HTMLElement) {
+    const box = node.getBoundingClientRect();
+    const at = button.getBoundingClientRect();
+    const x = at.left + at.width / 2 - (box.left + box.width / 2);
+    const y = at.top + at.height / 2 - (box.top + box.height / 2);
+    const scale = Math.max(0.5, at.width / box.width);
+    return {
+      opacity: 0,
+      transform: `translate(${x}px, ${y}px) scale(${scale})`,
+    };
+  }
+  // Opening, it grows out of the button over --dur-panel on the drawer
+  // curve; closing, it shrinks back into it at the exit tier, and bits-ui
+  // holds it mounted until that ends. Over the kit's own entrance, which
+  // it overrides for as long as it runs.
+  $effect(() => {
+    if (!(content && from && motionOk.current)) {
+      return;
+    }
+    const at = fromButton(content, from);
+    const rest = { opacity: 1, transform: "none" };
+    if (shown) {
+      content.animate([at, rest], {
+        duration: dur("--dur-panel"),
+        easing: ease("--ease-drawer"),
+      });
+    } else {
+      content.animate([rest, at], {
+        duration: dur("--dur-exit"),
+        easing: ease("--ease-out"),
+        fill: "forwards",
+      });
+    }
+  });
   let machineId = $state("");
   let workspace = $state("");
   let supervisor = $state("");
@@ -66,7 +117,7 @@
         supervisor: supervisor ? { delegateType: supervisor } : null,
       });
       await goto(`/workflows/${workflow.id}/runs/${runId}`);
-      onclose();
+      shown = false;
     } catch (caught) {
       errorMessage = message(caught);
     } finally {
@@ -75,9 +126,13 @@
   }
 </script>
 <Dialog.Root
-  onOpenChange={(open) => { if (!(open || busy)) { onclose(); } }}
-  open
-  ><Dialog.Content class="max-h-[90dvh] overflow-y-auto sm:max-w-xl"
+  onOpenChangeComplete={(next) => { if (!next) { onclose(); } }}
+  bind:open={shown}
+  ><Dialog.Content
+    class="max-h-[90dvh] overflow-y-auto sm:max-w-xl"
+    escapeKeydownBehavior={busy ? 'ignore' : 'close'}
+    interactOutsideBehavior={busy ? 'ignore' : 'close'}
+    bind:ref={content}
     ><div class="wf wf-stack wf-launch">
       <Dialog.Header
         ><Dialog.Title>Run {workflow.name}</Dialog.Title
@@ -177,7 +232,7 @@
           <button
             class="wf-btn"
             disabled={busy}
-            onclick={onclose}
+            onclick={() => { shown = false; }}
             type="button"
           >
             Cancel

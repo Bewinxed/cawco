@@ -1,8 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import EditorRoute from "$lib/whiffle/config/EditorRoute.svelte";
   import SubagentEditor from "$lib/whiffle/config/editors/SubagentEditor.svelte";
-  import Missing from "$lib/whiffle/config/Missing.svelte";
-  import SectionFrame from "$lib/whiffle/config/SectionFrame.svelte";
   import { sectionOf } from "$lib/whiffle/config/sections";
   import { configStore } from "$lib/whiffle/config/store.svelte";
 
@@ -15,19 +14,13 @@
   );
 </script>
 
-{#if fleet === null}
-  <SectionFrame
-    problem={store.fleet.error}
-    purpose={section.purpose}
-    ready={false}
-    title={section.label}
-  >
-    {''}
-  </SectionFrame>
-{:else if name !== 'new' && !agent}
-  <Missing {section} what="subagent" />
-{:else}
-  {#key name}
-    <SubagentEditor {agent} />
-  {/key}
-{/if}
+<EditorRoute
+  found={name === 'new' || agent !== null}
+  loaded={fleet !== null}
+  problem={store.fleet.error}
+  saveLabel={name === 'new' ? 'Create subagent' : 'Save changes'}
+  {section}
+  what="subagent"
+>
+  <SubagentEditor {agent} />
+</EditorRoute>

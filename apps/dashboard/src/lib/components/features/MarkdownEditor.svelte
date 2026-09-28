@@ -12,6 +12,8 @@
    * inside `onMount`: this editor never runs on the server.
    */
   import { onMount } from "svelte";
+  import { Button } from "$lib/components/ui/button";
+  import { crossIn } from "$lib/whiffle/motion/curves.svelte";
   import { morph } from "$lib/whiffle/motion/morph.svelte";
   // Structure only, and only for the features Crepe runs by default (top-bar,
   // ai and the ai diff stay off, so their sheets are not shipped). Crepe's own
@@ -60,43 +62,48 @@
       }
     });
   let failed = $state<string | null>(null);
+  let editor: { destroy: () => Promise<unknown> } | null = null;
+  let dropped = false;
+
+  /** Makes the editor over `host`; a failure says why, with a retry. */
+  const load = async () => {
+    failed = null;
+    try {
+      const { Crepe } = await import("@milkdown/crepe");
+      if (dropped || !host) {
+        return;
+      }
+      // A retry starts from an empty host: a create that failed part way
+      // may have left some of itself there.
+      host.replaceChildren();
+      const instance = new Crepe({ defaultValue: value, root: host });
+      // Only a real edit writes back. Crepe does not fire this for its
+      // initial parse, so opening a card and closing it again leaves
+      // `value` exactly as it was read and Save stays correctly disabled.
+      instance.on((api) => {
+        api.markdownUpdated((_ctx, markdown) => {
+          value = markdown;
+        });
+      });
+      await instance.create();
+      if (dropped) {
+        await instance.destroy();
+        return;
+      }
+      editor = instance;
+      // Crepe draws in steps after it is created (the document, then the
+      // blocks inside it), so "drawn" is the host keeping still.
+      await still(host);
+      onready?.();
+    } catch (caught) {
+      failed = caught instanceof Error ? caught.message : String(caught);
+      onready?.();
+    }
+  };
 
   onMount(() => {
-    let editor: { destroy: () => Promise<unknown> } | null = null;
-    let dropped = false;
-
-    const load = async () => {
-      try {
-        const { Crepe } = await import("@milkdown/crepe");
-        if (dropped || !host) {
-          return;
-        }
-        const instance = new Crepe({ defaultValue: value, root: host });
-        // Only a real edit writes back. Crepe does not fire this for its
-        // initial parse, so opening a card and closing it again leaves
-        // `value` exactly as it was read and Save stays correctly disabled.
-        instance.on((api) => {
-          api.markdownUpdated((_ctx, markdown) => {
-            value = markdown;
-          });
-        });
-        await instance.create();
-        if (dropped) {
-          await instance.destroy();
-          return;
-        }
-        editor = instance;
-        // Crepe draws in steps after it is created (the document, then the
-        // blocks inside it), so "drawn" is the host keeping still.
-        await still(host);
-        onready?.();
-      } catch (caught) {
-        failed = caught instanceof Error ? caught.message : String(caught);
-        onready?.();
-      }
-    };
-    load();
-
+    // biome-ignore lint/complexity/noVoid: load owns its failure, which it shows
+    void load();
     return () => {
       dropped = true;
       editor?.destroy();
@@ -104,13 +111,12 @@
   });
 </script>
 
+<!-- A failure fades up in place (--dur-control), with a retry. -->
 {#if failed}
-  <p
-    class="px-[var(--space-7)] py-[var(--space-3)] text-[length:var(--text-label)] text-[var(--ink-strong)]"
-    role="alert"
-  >
-    The editor did not load: {failed}
-  </p>
+  <div class="failed" role="alert" in:crossIn>
+    <p>The editor did not load: {failed}</p>
+    <Button onclick={load} size="sm" variant="outline">Retry</Button>
+  </div>
 {/if}
 <section
   aria-label={label}
@@ -158,6 +164,15 @@
   }
   .crepe-host {
     min-height: 100%;
+  }
+  .failed {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-3) var(--space-7);
+    font: var(--type-label);
+    color: var(--status-fail-ink);
   }
   /* Crepe's common stylesheet includes theme typography and motion. Keep its
      structural selectors while enforcing the ledger contract on every widget. */

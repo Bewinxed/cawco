@@ -13,9 +13,9 @@
    * built-in hover, active, focus, and spacing from the component library.
    *
    * Sessions use ActivityDot (status dots) rather than text pills — far more
-   * space-efficient and less noisy. Idle sessions are capped per project with a
-   * "+ N more" disclosure.
+   * space-efficient and less noisy.
    */
+  import { TextMorph } from "torph/svelte";
   import { Virtualizer } from "virtua/svelte";
   import { page } from "$app/state";
   import WorkflowRail from "$lib/components/features/workflows/WorkflowRail.svelte";
@@ -59,10 +59,12 @@
   import { LAST_KEY as CONFIG_LAST_KEY, SECTIONS } from "./config/sections";
   import { continuing } from "./continue.svelte";
   import FolderMenu from "./FolderMenu.svelte";
+  import { folderPrefs } from "./folder-prefs.svelte";
   import { conversationHref } from "./links";
   import MachineMenu from "./MachineMenu.svelte";
   import { machineLabel } from "./machine";
   import { markHue, sessionSprite } from "./mark";
+  import { CURVE, dur, ease, motionOk } from "./motion/curves.svelte";
   import { reflow } from "./motion/rows.svelte";
   import NewProjectPopover from "./NewProjectPopover.svelte";
   import OsMark from "./OsMark.svelte";
@@ -129,6 +131,10 @@
   const NAV_ROW = "h-[var(--c-nav-h)] gap-2.5 px-2.5 text-body";
   const LIST_ROW = "h-[30px] gap-2.5 px-2.5 py-0";
   const SUB_ROW = "h-[28px] gap-2.5 px-2.5";
+  /** The heights the loading rows stand at: a list row, and a workflow run
+   *  row as WorkflowRail draws it (its 44px floor plus the status chip, 48px). */
+  const LIST_ROW_H = "h-[30px]";
+  const RUN_ROW = "h-12";
   /** `Sidebar.Group`'s own `p-2` plus `Sidebar.Content`'s `gap-2` stacked to
    *  24px of nothing between every section; the label already separates them. */
   const GROUP = "px-2 py-1";
@@ -203,22 +209,15 @@
 
   /* ---- projects ------------------------------------------------------- */
 
-  let collapsed = $state<Set<string>>(new Set());
-
-  function toggle(id: string) {
-    const next = new Set(collapsed);
-    if (next.has(id)) {
-      next.delete(id);
-    } else {
-      next.add(id);
-    }
-    collapsed = next;
+  /** Which folders are shut is the reader's, kept in folder-prefs, so a reload keeps it. */
+  function toggle(project: ProjectRow) {
+    folderPrefs.setCollapsed(project.cwd, !folderPrefs.collapsed(project.cwd));
   }
 
   function collapseOthers(id: string) {
-    collapsed = new Set(
-      orderedProjects.filter((p) => p.id !== id).map((p) => p.id)
-    );
+    for (const project of orderedProjects) {
+      folderPrefs.setCollapsed(project.cwd, project.id !== id);
+    }
   }
 
   const inProject = (row: InstanceRow, project: ProjectRow): boolean =>
@@ -231,8 +230,8 @@
 
   const orderedProjects = $derived.by(() =>
     [...whiffle.projects].sort((a, b) => {
-      const pa = rail.isPinned("project", a.id) ? 0 : 1;
-      const pb = rail.isPinned("project", b.id) ? 0 : 1;
+      const pa = rail.isPinned(a.id) ? 0 : 1;
+      const pb = rail.isPinned(b.id) ? 0 : 1;
       if (pa !== pb) {
         return pa - pb;
       }
@@ -449,16 +448,44 @@
   const online = $derived(
     new Set(whiffle.onlineMachines.map((machine) => machine.machineId))
   );
+
+  /**
+   * A machine's mark pulses once when it goes online or offline, and never on
+   * its first draw: a rail that loads with the fleet already up has nothing
+   * to announce. The two glyphs cross-fade in CSS; this is only the pulse.
+   */
+  const pulses = (up: () => boolean) => (node: HTMLElement) => {
+    let was: boolean | undefined;
+    $effect(() => {
+      const next = up();
+      if (was !== undefined && was !== next && motionOk.current) {
+        node.animate([{ scale: 1 }, { scale: 1.25 }, { scale: 1 }], {
+          duration: dur("--dur-panel"),
+          easing: ease("--ease-out"),
+        });
+      }
+      was = next;
+    });
+  };
+
+  /** TextMorph's length, read from the token once the stylesheet is there. */
+  let morphMs = $state(0);
+  $effect(() => {
+    morphMs = dur("--dur-morph");
+  });
 </script>
 
-{#snippet pending()}
-  <!-- Rows where the next groups will stand, while their read is out. Each
-       stage has its own, gone when that stage's groups arrive, so nothing
-       drawn is ever pushed down. -->
+{#snippet pending(rows: number, height: string)}
+  <!-- Rows where the next groups will stand, while their read is out, at the
+       height of the rows that replace them. Each stage has its own, gone when
+       that stage's groups arrive, so nothing drawn is ever pushed down. -->
   <Sidebar.Group aria-busy="true" aria-label="Loading" class={GROUP} data-flip>
-    <div class="flex flex-col gap-1 px-2.5 py-1">
-      {#each [0, 1, 2, 3, 4, 5] as row (row)}
-        <Skeleton class="h-[22px] w-full" />
+    <div class="flex h-8 items-center {GROUP_LABEL}">
+      <Skeleton class="h-3 w-20" />
+    </div>
+    <div class="flex flex-col gap-0.5">
+      {#each Array.from({ length: rows }, (_, row) => row) as row (row)}
+        <Skeleton class="{height} w-full" />
       {/each}
     </div>
   </Sidebar.Group>
@@ -655,9 +682,12 @@
               : 'bg-[var(--status-live-bg)] text-[var(--status-live-ink)]'}
               data-flip="pop box"
             >
-              {#key fleetCount}
-                <span data-flip="pop">{fleetCount}</span>
-              {/key}
+              <TextMorph
+                as="span"
+                duration={morphMs}
+                ease={CURVE.out}
+                text={String(fleetCount)}
+              />
             </Sidebar.MenuBadge>
           {/if}
         </Sidebar.MenuItem>
@@ -724,7 +754,7 @@
         </Sidebar.Group>
       {/if}
     {:else}
-      {@render pending()}
+      {@render pending(2, RUN_ROW)}
     {/if}
     {#if stage >= 2}
       <!-- Machines -->
@@ -739,6 +769,7 @@
                 <MachineMenu {machine}>
                   <Sidebar.MenuButton class="{LIST_ROW} cursor-default">
                     {#snippet child({ props })}
+                      {@const up = online.has(machine.machineId)}
                       <div {...props}>
                         <span class={SLOT}>
                           <OsMark
@@ -749,26 +780,26 @@
                         <span class="min-w-0 flex-1 truncate"
                           >{machineLabel(machine.hostname)}</span
                         >
-                        {#if online.has(machine.machineId)}
-                          <span class={TRAIL} data-flip="pop" title="Online">
-                            <span
-                              class="size-2 rounded-full bg-[var(--hue-green-500)]"
-                            ></span>
-                            <span class="sr-only">Online</span>
-                          </span>
-                        {:else}
+                        <!-- Both marks stand in one cell and cross-fade, so the
+                             row never changes a node when the machine does. -->
+                        <span
+                          class="presence size-4 shrink-0"
+                          data-online={up}
+                          title={up ? 'Online' : MACHINE_UNREACHABLE_HINT}
+                          {@attach pulses(() => online.has(machine.machineId))}
+                        >
                           <span
-                            class={TRAIL}
-                            data-flip="pop"
-                            title={MACHINE_UNREACHABLE_HINT}
+                            aria-hidden="true"
+                            class="dot size-2 rounded-full bg-[var(--hue-green-500)]"
+                          ></span>
+                          <IconWarningTriangle
+                            aria-hidden="true"
+                            class="warn size-4 text-warning"
+                          />
+                          <span class="sr-only"
+                            >{up ? 'Online' : 'Unreachable'}</span
                           >
-                            <IconWarningTriangle
-                              aria-hidden="true"
-                              class="size-4 text-warning"
-                            />
-                            <span class="sr-only">Unreachable</span>
-                          </span>
-                        {/if}
+                        </span>
                       </div>
                     {/snippet}
                   </Sidebar.MenuButton>
@@ -779,7 +810,7 @@
         </Sidebar.Group>
       {/if}
     {:else if stage === 1}
-      {@render pending()}
+      {@render pending(2, LIST_ROW_H)}
     {/if}
     {#if stage >= 3}
       <!-- Projects -->
@@ -846,7 +877,7 @@
           <Sidebar.Menu class={MENU} {@attach highlight(PILL)}>
             {#each orderedProjects as project (project.id)}
               {@const sessions = sessionsOf(project)}
-              {@const expanded = !collapsed.has(project.id)}
+              {@const expanded = !folderPrefs.collapsed(project.cwd)}
               <li
                 class="group/menu-item relative"
                 data-flip
@@ -863,11 +894,11 @@
                 >
                   <Sidebar.MenuButton
                     class={LIST_ROW}
-                    onclick={() => toggle(project.id)}
+                    onclick={() => toggle(project)}
                   >
                     <span
                       aria-hidden="true"
-                      class="-ml-1 inline-flex size-[14px] shrink-0 items-center justify-center transition-transform duration-150"
+                      class="chevron -ml-1 inline-flex size-[14px] shrink-0 items-center justify-center"
                       class:rotate-90={expanded}
                     >
                       <IconChevronRight class="size-3 text-muted-foreground" />
@@ -1099,7 +1130,7 @@
         </Sidebar.Group>
       {/if}
     {:else if stage === 2}
-      {@render pending()}
+      {@render pending(6, LIST_ROW_H)}
     {/if}
   </Sidebar.Content>
 
@@ -1147,3 +1178,26 @@
   open={spawnOpen || continuing.source !== null}
   prefill={continuing.source ? undefined : spawnPrefill}
 />
+
+<style>
+  /* The project chevron turns over --dur-control. */
+  .chevron {
+    @media (prefers-reduced-motion: no-preference) {
+      transition: rotate var(--dur-control) var(--ease-out);
+    }
+  }
+  /* Online and unreachable marks share one cell and cross-fade. */
+  .presence {
+    display: grid;
+    place-items: center;
+
+    & > :global(:not(.sr-only)) {
+      grid-area: 1 / 1;
+      transition: opacity var(--dur-panel) var(--ease-out);
+    }
+    &[data-online="true"] > :global(.warn),
+    &[data-online="false"] > .dot {
+      opacity: 0;
+    }
+  }
+</style>

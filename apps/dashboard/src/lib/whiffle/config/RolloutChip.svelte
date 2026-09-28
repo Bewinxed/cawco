@@ -4,12 +4,15 @@
    * machine in the popover. A machine that refused it opens the full fault —
    * the same reading, remedy and retry the row's own alert gives — rather than
    * the raw string the machine printed.
+   *
+   * The chip's glyph cross-fades between refused, landed everywhere and a
+   * sync on its way (--dur-control) while its tint turns over --dur-panel.
    */
-  import { toast } from "svelte-sonner";
   import { TextMorph } from "torph/svelte";
   import PendingContent, {
     whileIdle,
   } from "$lib/components/ui/button/pending-content.svelte";
+  import { Spinner } from "$lib/components/ui/spinner";
   import {
     MachineRow,
     machineHue,
@@ -28,12 +31,14 @@
   import { syncFleet } from "../fleet";
   import { causeOf, type FaultScope } from "../fleet-faults";
   import { machineLabel, machineOs } from "../machine";
+  import { appear } from "../motion/curves.svelte";
 
   let {
     machines,
     kind,
     name,
     what,
+    syncing = false,
   }: {
     machines: Machine[];
     /** Which record of the machine's report this row lives in. */
@@ -50,6 +55,8 @@
     /** The row's key in that record; ignored for the singular memory row. */
     name: string;
     what: string;
+    /** A sync of the whole fleet was asked for and has not answered yet. */
+    syncing?: boolean;
   } = $props();
 
   const stateOf = (machine: Machine) =>
@@ -68,10 +75,22 @@
     removed: "Taken off",
   };
 
+  const glyph = $derived.by((): "fail" | "done" | "busy" | "none" => {
+    if (syncing) {
+      return "busy";
+    }
+    if (failed > 0) {
+      return "fail";
+    }
+    return machines.length > 0 && applied === machines.length
+      ? "done"
+      : "none";
+  });
+
   let asked = $state<Record<string, boolean>>({});
 
-  /** Machines whose last sync request failed: their button shows no check. */
-  let refused = $state<Record<string, boolean>>({});
+  /** Why a machine's last sync request failed, said under its row; its button shows no check. */
+  let refused = $state<Record<string, string>>({});
 
   async function resync(machine: Machine) {
     asked[machine.machineId] = true;
@@ -79,8 +98,8 @@
     try {
       await syncFleet(machine.machineId);
     } catch (error) {
-      refused[machine.machineId] = true;
-      toast.error(error instanceof Error ? error.message : String(error));
+      refused[machine.machineId] =
+        error instanceof Error ? error.message : String(error);
     } finally {
       delete asked[machine.machineId];
     }
@@ -93,11 +112,11 @@
     class="rollout focus-ring"
     data-fail={failed > 0 ? '' : undefined}
   >
-    {#if failed > 0}
-      <IconWarningTriangle />
-    {:else if machines.length > 0 && applied === machines.length}
-      <IconCheck />
-    {/if}
+    <span aria-hidden="true" class="glyph" data-glyph={glyph}>
+      <IconWarningTriangle data-for="fail" />
+      <IconCheck data-for="done" />
+      <Spinner aria-hidden="true" data-for="busy" role="presentation" />
+    </span>
     <!-- A machine catching up ticks the count over rather than swapping it. -->
     <TextMorph
       as="span"
@@ -142,7 +161,7 @@
                   type="button"
                 >
                   <PendingContent
-                    failed={refused[machine.machineId] === true}
+                    failed={refused[machine.machineId] !== undefined}
                     icon={IconRefresh}
                     label="Sync"
                     pending={syncing}
@@ -153,6 +172,12 @@
             {/snippet}
           </MachineRow>
         </div>
+        {#if refused[machine.machineId]}
+          <p class="note refused" role="alert" in:appear>
+            <IconWarningTriangle />
+            <span>{refused[machine.machineId]}</span>
+          </p>
+        {/if}
         {#if item?.state === 'failed'}
           <FleetFault
             group={{
@@ -189,10 +214,13 @@
     font: var(--type-meta);
     color: var(--ink-muted);
     white-space: nowrap;
-    transition: var(--transition-control);
+    transition:
+      background-color var(--dur-panel) var(--ease-out),
+      color var(--dur-panel) var(--ease-out);
     @media (prefers-reduced-motion: no-preference) {
       transition:
-        var(--transition-control),
+        background-color var(--dur-panel) var(--ease-out),
+        color var(--dur-panel) var(--ease-out),
         transform 160ms var(--ease-out);
     }
   }
@@ -210,6 +238,35 @@
     width: 12px;
     height: 12px;
     flex: none;
+  }
+  /* One cell for the three glyphs, which cross-fade; with none showing the
+     cell closes, taking its gap with it, so a chip with no glyph is as
+     narrow as it was. */
+  .glyph {
+    display: inline-grid;
+    flex: none;
+    width: 12px;
+    transition:
+      width var(--dur-control) var(--ease-out),
+      margin var(--dur-control) var(--ease-out);
+
+    &[data-glyph="none"] {
+      width: 0;
+      margin-inline-end: -5px;
+    }
+    & > :global(*) {
+      grid-area: 1 / 1;
+      opacity: 0;
+      transition: opacity var(--dur-control) var(--ease-out);
+    }
+    &[data-glyph="fail"] > :global([data-for="fail"]),
+    &[data-glyph="done"] > :global([data-for="done"]),
+    &[data-glyph="busy"] > :global([data-for="busy"]) {
+      opacity: 1;
+    }
+    &:not([data-glyph="busy"]) > :global([data-for="busy"]) {
+      animation-play-state: paused;
+    }
   }
   :global(.rollout .count) {
     font-variant-numeric: tabular-nums;
@@ -277,6 +334,9 @@
     font: var(--type-meta);
     color: var(--ink-muted);
     overflow-wrap: anywhere;
+  }
+  .refused {
+    color: var(--status-fail-ink);
   }
   .none {
     padding: 10px 8px;

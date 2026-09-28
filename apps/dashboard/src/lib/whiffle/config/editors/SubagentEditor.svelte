@@ -7,11 +7,14 @@
   import { untrack } from "svelte";
   import { toast } from "svelte-sonner";
   import { goto } from "$app/navigation";
+  import { page } from "$app/state";
   import { Textarea } from "$lib/components/ui/textarea";
   import { IconDocument } from "$lib/icons";
   import { appear } from "$lib/whiffle/motion/curves.svelte";
   import { confirm } from "../../confirm.svelte";
   import { removeAgent, saveAgent } from "../../fleet";
+  import { keepDraft } from "../drafts.svelte";
+  import { savedShown } from "../EditorFooter.svelte";
   import EditorFrame from "../EditorFrame.svelte";
   import EditorSection from "../EditorSection.svelte";
   import { configStore, upsert } from "../store.svelte";
@@ -48,6 +51,15 @@ You are a <role>, working in one repository at a time.
   /** Where the file goes: the row being edited, or whatever this one calls itself. */
   const target = $derived(agent?.name ?? front.name);
   const dirty = $derived(draft !== (agent?.content ?? TEMPLATE));
+  /** A new subagent was just created: its draft is over, and a second Save would write it again. */
+  let created = false;
+  const kept = keepDraft(
+    page.url.pathname,
+    () => (dirty ? draft : null),
+    (stored: string) => {
+      draft = stored;
+    }
+  );
 
   const claims = $derived(
     [
@@ -57,26 +69,47 @@ You are a <role>, working in one repository at a time.
     ].filter((part): part is string => part !== null)
   );
 
+  /**
+   * Saving a subagent keeps the editor open on it, the Save button saying
+   * so in place; a new one shows the same, then returns to the list, where
+   * it is marked.
+   */
   async function save() {
-    if (!target) {
+    if (!target || saving || created) {
       return;
     }
     saving = true;
     refused = undefined;
+    let made: string | undefined;
     try {
       const saved = await saveAgent(target, draft);
       const fleet = store.fleet.value;
       if (fleet) {
         upsert(fleet.agents, saved, (row) => row.name === saved.name);
       }
-      store.mark(saved.name);
+      if (!agent) {
+        created = true;
+        kept.drop();
+        made = saved.name;
+      }
       toast.success(`${target} is on its way to every machine that is online.`);
-      await goto("/config/subagents");
     } catch (error) {
       refused = error instanceof Error ? error.message : String(error);
     } finally {
       saving = false;
     }
+    if (made) {
+      await savedShown();
+      store.mark(made);
+      await goto("/config/subagents");
+    }
+  }
+
+  /** Cancel leaves the edits behind: the draft is dropped, not kept. */
+  function cancel() {
+    kept.drop();
+    // biome-ignore lint/complexity/noVoid: navigation reports nothing to wait for
+    void goto("/config/subagents");
   }
 
   async function askForget() {
@@ -92,13 +125,15 @@ You are a <role>, working in one repository at a time.
         deleting = true;
         try {
           await removeAgent(agent.name);
+          kept.drop();
+          // Back to the list first, so the row is seen leaving it.
+          await goto("/config/subagents");
           const fleet = store.fleet.value;
           if (fleet) {
             fleet.agents = fleet.agents.filter(
               (row) => row.name !== agent.name
             );
           }
-          await goto("/config/subagents");
         } catch (error) {
           deleting = false;
           throw error;
@@ -113,7 +148,7 @@ You are a <role>, working in one repository at a time.
   deleteLabel={agent ? 'Remove from the fleet' : undefined}
   {deleting}
   failed={refused !== undefined}
-  oncancel={() => goto('/config/subagents')}
+  oncancel={cancel}
   ondelete={agent ? askForget : undefined}
   onsubmit={save}
   saveLabel={agent ? 'Save changes' : 'Create subagent'}

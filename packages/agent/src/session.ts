@@ -444,7 +444,7 @@ export class SessionSupervisor {
   emit: (envelope: Envelope) => void = () => {
     // replaced once the daemon has a hub connection to emit onto
   };
-  /** Re-registers this machine, so a changed auth state reaches the fleet. */
+  /** Re-probes this machine's harnesses and tools and reports them on a beat, so a changed auth state reaches the fleet. */
   reannounce: () => void = () => {
     // replaced once the daemon has a hub connection to reannounce onto
   };

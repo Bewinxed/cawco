@@ -58,7 +58,7 @@
     @media (prefers-reduced-motion: no-preference) {
       transition:
         transform var(--dur-pop) var(--ease-drawer),
-        background-color var(--dur-exit) linear;
+        background-color var(--dur-panel) var(--ease-out);
     }
   }
   .fill.warn {

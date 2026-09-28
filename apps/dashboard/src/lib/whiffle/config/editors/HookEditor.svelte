@@ -10,6 +10,7 @@
   import { untrack } from "svelte";
   import { toast } from "svelte-sonner";
   import { goto } from "$app/navigation";
+  import { page } from "$app/state";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { Textarea } from "$lib/components/ui/textarea";
@@ -20,7 +21,15 @@
     IconPlay,
     IconTuning,
   } from "$lib/icons";
-  import { appear } from "$lib/whiffle/motion/curves.svelte";
+  import {
+    appear,
+    crossIn,
+    crossOut,
+    dur,
+  } from "$lib/whiffle/motion/curves.svelte";
+  import { unfold } from "$lib/whiffle/motion/fold.svelte";
+  import { morph } from "$lib/whiffle/motion/morph.svelte";
+  import { reflow } from "$lib/whiffle/motion/rows.svelte";
   import { whiffle } from "../../client.svelte";
   import { confirm } from "../../confirm.svelte";
   import HookTester from "../../HookTester.svelte";
@@ -37,6 +46,8 @@
   } from "../../hooks";
   import { newId } from "../../id";
   import Choice from "../Choice.svelte";
+  import { keepDraft, sameFields } from "../drafts.svelte";
+  import { savedShown } from "../EditorFooter.svelte";
   import EditorFrame from "../EditorFrame.svelte";
   import EditorSection from "../EditorSection.svelte";
   import Field from "../Field.svelte";
@@ -144,6 +155,35 @@
     draft.handler.args = parts.length > 0 ? parts : undefined;
   });
 
+  /**
+   * What is kept of an edit: the draft, less the command's `args`, which
+   * are only ever the arguments line split on spaces, and that line.
+   */
+  const fieldsOf = (from: HookDraft) => ({
+    draft: { ...from, handler: { ...from.handler, args: undefined } },
+    commandArgs:
+      from.handler.type === "command"
+        ? (from.handler.args ?? []).join(" ")
+        : "",
+  });
+  /** What is saved: the draft differs from it by what is unsaved. */
+  const baseline = $derived(fieldsOf(hook ? draftOf(hook) : blankHook()));
+  /** A new hook was just created: its draft is over, and a second Save would make a second hook. */
+  let created = false;
+  const kept = keepDraft(
+    page.url.pathname,
+    () => {
+      const now = {
+        draft: { ...draft, handler: { ...draft.handler, args: undefined } },
+        commandArgs,
+      };
+      return sameFields(now, baseline) ? null : { draft, commandArgs };
+    },
+    (stored: { draft: HookDraft; commandArgs: string }) => {
+      ({ draft, commandArgs } = stored);
+    }
+  );
+
   const scoped = $derived(draft.scope === "project" || draft.scope === "local");
 
   function setProject(projectId: string) {
@@ -159,7 +199,8 @@
   /** What this hook used to be, for a hook that has already been saved. */
   let versions = $state<HookVersion[]>([]);
   let versionsFailed = $state<string | undefined>(undefined);
-  let versionsLoading = $state(false);
+  /** From the first frame for a saved hook: the editor stands settling until they are in. */
+  let versionsLoading = $state(untrack(() => hook !== null));
   let restoring = $state<number | null>(null);
   let restoreFailed = $state<number | null>(null);
   let allVersions = $state(false);
@@ -205,11 +246,17 @@
     }
   }
 
+  /**
+   * Saving a hook keeps the editor open on it, the Save button saying so in
+   * place; a new hook shows the same, then returns to the list, where it is
+   * marked.
+   */
   async function save() {
     attempted = true;
-    if (!ready || busy) {
+    if (!ready || busy || created) {
       return;
     }
+    let made: string | undefined;
     const total = whiffle.machines.length;
     const project = whiffle.projects.find(
       (candidate) => candidate.id === draft.projectId
@@ -234,16 +281,34 @@
           if (store.hooks.value) {
             upsert(store.hooks.value, saved, (row) => row.id === saved.id);
           }
-          store.mark(saved.id);
+          if (id) {
+            draft = draftOf(saved);
+            ({ commandArgs } = fieldsOf(draft));
+          } else {
+            created = true;
+            kept.drop();
+            made = saved.id;
+          }
           toast.success(
             `${saved.name} is written to every machine it applies to.`
           );
-          await goto("/config/hooks");
         } finally {
           busy = false;
         }
       },
     });
+    if (made) {
+      await savedShown();
+      store.mark(made);
+      await goto("/config/hooks");
+    }
+  }
+
+  /** Cancel leaves the edits behind: the draft is dropped, not kept. */
+  function cancel() {
+    kept.drop();
+    // biome-ignore lint/complexity/noVoid: navigation reports nothing to wait for
+    void goto("/config/hooks");
   }
 
   async function askRemove() {
@@ -260,12 +325,14 @@
         deleting = true;
         try {
           await removeHook(id, draft.name);
+          kept.drop();
+          // Back to the list first, so the row is seen leaving it.
+          await goto("/config/hooks");
           if (store.hooks.value) {
             store.hooks.value = store.hooks.value.filter(
               (row) => row.id !== id
             );
           }
-          await goto("/config/hooks");
         } catch (error) {
           deleting = false;
           throw error;
@@ -279,11 +346,12 @@
   deleteLabel={id ? 'Delete hook' : undefined}
   {deleting}
   failed={failed !== undefined}
-  oncancel={() => goto('/config/hooks')}
+  oncancel={cancel}
   ondelete={id ? askRemove : undefined}
   onsubmit={save}
   saveLabel={id ? 'Save changes' : 'Create hook'}
   saving={busy}
+  settling={versionsLoading}
   title={id ? draft.name || 'Hook' : 'New hook'}
 >
   {#snippet header()}
@@ -335,33 +403,36 @@
       <p class="note">Runs {eventInfo.blurb}.</p>
     {/if}
     {#if hookTakesMatcher(draft.event)}
-      <Field
-        id="hook-matcher"
-        label="Matcher — {eventInfo?.filters}"
-        problem={shown('matcher')}
-      >
-        {#snippet hint()}
-          Empty or <span class="font-mono">*</span> matches every value. The
-          tester below shows what this one actually does.
-        {/snippet}
-        <Input
-          aria-invalid={shown('matcher') ? 'true' : undefined}
-          autocomplete="off"
-          class="font-mono"
+      <!-- The matcher comes and goes with the event: it folds (240 / 160). -->
+      <div class="fold" in:unfold out:unfold>
+        <Field
           id="hook-matcher"
-          onblur={() => {
+          label="Matcher — {eventInfo?.filters}"
+          problem={shown('matcher')}
+        >
+          {#snippet hint()}
+            Empty or <span class="font-mono">*</span> matches every value. The
+            tester below shows what this one actually does.
+          {/snippet}
+          <Input
+            aria-invalid={shown('matcher') ? 'true' : undefined}
+            autocomplete="off"
+            class="font-mono"
+            id="hook-matcher"
+            onblur={() => {
             touched.matcher = true;
           }}
-          placeholder={eventInfo?.suggests?.[0] ?? '*'}
-          spellcheck="false"
-          bind:value={draft.matcher}
+            placeholder={eventInfo?.suggests?.[0] ?? '*'}
+            spellcheck="false"
+            bind:value={draft.matcher}
+          />
+        </Field>
+        <HookTester
+          event={draft.event}
+          bind:matcher={draft.matcher}
+          bind:sample
         />
-      </Field>
-      <HookTester
-        event={draft.event}
-        bind:matcher={draft.matcher}
-        bind:sample
-      />
+      </div>
     {/if}
   </EditorSection>
 
@@ -376,142 +447,154 @@
       options={HANDLERS}
       value={draft.handler.type}
     />
-    {#if draft.handler.type === 'command'}
-      <Field
-        hint="Written to every machine, at a path Whiffle picks — the hook always points at that copy, never at one you keep locally."
-        id="hook-script"
-        label="Script"
-        problem={shown('script')}
-      >
-        <Textarea
-          aria-invalid={shown('script') ? 'true' : undefined}
-          class="resize-y font-mono"
-          id="hook-script"
-          onblur={() => {
+    <!-- One handler's fields cross-fade into the next's (--dur-control) in
+         one box, whose height follows over --dur-pop on --ease-drawer. -->
+    <div class="handler" {@attach morph({ ms: dur('--dur-pop') })}>
+      {#if draft.handler.type === 'command'}
+        <div class="fold" in:crossIn out:crossOut>
+          <Field
+            hint="Written to every machine, at a path Whiffle picks — the hook always points at that copy, never at one you keep locally."
+            id="hook-script"
+            label="Script"
+            problem={shown('script')}
+          >
+            <Textarea
+              aria-invalid={shown('script') ? 'true' : undefined}
+              class="resize-y font-mono"
+              id="hook-script"
+              onblur={() => {
             touched.script = true;
           }}
-          placeholder={'#!/bin/bash\nset -euo pipefail\n\n# The event JSON arrives on stdin.'}
-          rows={10}
-          spellcheck="false"
-          bind:value={draft.script}
-        />
-      </Field>
-      <Field id="hook-args" label="Arguments (optional)">
-        <Input
-          autocomplete="off"
-          class="font-mono"
-          id="hook-args"
-          placeholder="--flag value"
-          spellcheck="false"
-          bind:value={commandArgs}
-        />
-      </Field>
-      <SwitchField
-        checked={draft.handler.async === true}
-        hint="Claude Code does not wait for it before continuing."
-        id="hook-async"
-        label="Run in the background"
-        onchange={(next) => {
+              placeholder={'#!/bin/bash\nset -euo pipefail\n\n# The event JSON arrives on stdin.'}
+              rows={10}
+              spellcheck="false"
+              bind:value={draft.script}
+            />
+          </Field>
+          <Field id="hook-args" label="Arguments (optional)">
+            <Input
+              autocomplete="off"
+              class="font-mono"
+              id="hook-args"
+              placeholder="--flag value"
+              spellcheck="false"
+              bind:value={commandArgs}
+            />
+          </Field>
+          <SwitchField
+            checked={draft.handler.async === true}
+            hint="Claude Code does not wait for it before continuing."
+            id="hook-async"
+            label="Run in the background"
+            onchange={(next) => {
           if (draft.handler.type === 'command') {
             draft.handler.async = next;
           }
         }}
-      />
-      <Choice
-        label="Shell"
-        onchange={(next) => {
+          />
+          <Choice
+            label="Shell"
+            onchange={(next) => {
           if (draft.handler.type === 'command') {
             draft.handler.shell = next === 'bash' ? undefined : (next as 'powershell');
           }
         }}
-        options={[
+            options={[
           { value: 'bash', label: 'bash' },
           { value: 'powershell', label: 'PowerShell' },
         ]}
-        value={draft.handler.shell ?? 'bash'}
-      />
-    {:else if draft.handler.type === 'http'}
-      <Field
-        hint="Every machine posts the event's own JSON here — https, or localhost for something running on the same box."
-        id="hook-url"
-        label="URL"
-        problem={shown('url')}
-      >
-        <Input
-          aria-invalid={shown('url') ? 'true' : undefined}
-          autocomplete="off"
-          class="font-mono"
-          id="hook-url"
-          onblur={() => {
+            value={draft.handler.shell ?? 'bash'}
+          />
+        </div>
+      {:else if draft.handler.type === 'http'}
+        <div class="fold" in:crossIn out:crossOut>
+          <Field
+            hint="Every machine posts the event's own JSON here — https, or localhost for something running on the same box."
+            id="hook-url"
+            label="URL"
+            problem={shown('url')}
+          >
+            <Input
+              aria-invalid={shown('url') ? 'true' : undefined}
+              autocomplete="off"
+              class="font-mono"
+              id="hook-url"
+              onblur={() => {
             touched.url = true;
           }}
-          placeholder="https://example.com/hooks/whiffle"
-          spellcheck="false"
-          bind:value={draft.handler.url}
-        />
-      </Field>
-    {:else if draft.handler.type === 'mcp_tool'}
-      <div class="pair">
-        <Field
-          id="hook-server"
-          label="MCP server"
-          problem={shown('mcp_server_name')}
-        >
-          <Input
-            aria-invalid={shown('mcp_server_name') ? 'true' : undefined}
-            autocomplete="off"
-            class="font-mono"
+              placeholder="https://example.com/hooks/whiffle"
+              spellcheck="false"
+              bind:value={draft.handler.url}
+            />
+          </Field>
+        </div>
+      {:else if draft.handler.type === 'mcp_tool'}
+        <div class="pair" in:crossIn out:crossOut>
+          <Field
             id="hook-server"
-            onblur={() => {
+            label="MCP server"
+            problem={shown('mcp_server_name')}
+          >
+            <Input
+              aria-invalid={shown('mcp_server_name') ? 'true' : undefined}
+              autocomplete="off"
+              class="font-mono"
+              id="hook-server"
+              onblur={() => {
               touched.mcp_server_name = true;
             }}
-            placeholder="filesystem"
-            spellcheck="false"
-            bind:value={draft.handler.mcp_server_name}
-          />
-        </Field>
-        <Field id="hook-tool" label="Tool" problem={shown('tool_name')}>
-          <Input
-            aria-invalid={shown('tool_name') ? 'true' : undefined}
-            autocomplete="off"
-            class="font-mono"
-            id="hook-tool"
-            onblur={() => {
+              placeholder="filesystem"
+              spellcheck="false"
+              bind:value={draft.handler.mcp_server_name}
+            />
+          </Field>
+          <Field id="hook-tool" label="Tool" problem={shown('tool_name')}>
+            <Input
+              aria-invalid={shown('tool_name') ? 'true' : undefined}
+              autocomplete="off"
+              class="font-mono"
+              id="hook-tool"
+              onblur={() => {
               touched.tool_name = true;
             }}
-            placeholder="read_file"
-            spellcheck="false"
-            bind:value={draft.handler.tool_name}
-          />
-        </Field>
-      </div>
-    {:else}
-      <Field id="hook-prompt" label="Prompt" problem={shown('prompt')}>
-        <Textarea
-          aria-invalid={shown('prompt') ? 'true' : undefined}
-          class="resize-y"
-          id="hook-prompt"
-          onblur={() => {
+              placeholder="read_file"
+              spellcheck="false"
+              bind:value={draft.handler.tool_name}
+            />
+          </Field>
+        </div>
+      {:else}
+        <div class="fold" in:crossIn out:crossOut>
+          <Field id="hook-prompt" label="Prompt" problem={shown('prompt')}>
+            <Textarea
+              aria-invalid={shown('prompt') ? 'true' : undefined}
+              class="resize-y"
+              id="hook-prompt"
+              onblur={() => {
             touched.prompt = true;
           }}
-          placeholder="Decide whether this change needs a changelog entry, and say why."
-          rows={4}
-          bind:value={draft.handler.prompt}
-        />
-      </Field>
-      {#if draft.handler.type === 'agent'}
-        <Field id="hook-agent" label="Subagent (optional)">
-          <Input
-            autocomplete="off"
-            class="font-mono"
-            id="hook-agent"
-            placeholder="Inherits Claude Code's default"
-            spellcheck="false"
-            bind:value={draft.handler.agent}
-          />
-        </Field>
+              placeholder="Decide whether this change needs a changelog entry, and say why."
+              rows={4}
+              bind:value={draft.handler.prompt}
+            />
+          </Field>
+          {#if draft.handler.type === 'agent'}
+            <div class="fold" in:unfold out:unfold>
+              <Field id="hook-agent" label="Subagent (optional)">
+                <Input
+                  autocomplete="off"
+                  class="font-mono"
+                  id="hook-agent"
+                  placeholder="Inherits Claude Code's default"
+                  spellcheck="false"
+                  bind:value={draft.handler.agent}
+                />
+              </Field>
+            </div>
+          {/if}
+        </div>
       {/if}
-    {/if}
+    </div>
   </EditorSection>
 
   <EditorSection hue={HUE} icon={IconTuning} label="Common fields">
@@ -599,49 +682,53 @@
         Every save keeps what it replaced. Restoring writes an old version back
         as this one.
       </p>
-      {#if versionsLoading}
-        <p class="note">Loading…</p>
-      {:else if versionsFailed}
-        <p class="caution" role="alert">{versionsFailed}</p>
-      {:else if versions.length === 0}
-        <p class="note">Nothing has been saved over yet.</p>
-      {:else}
-        <ul class="versions">
-          {#each visibleVersions as version (version.id)}
-            <li class="version">
-              <span class="vtext">
-                <span class="vname">{version.name}</span>
-                <span class="note">
-                  {new Date(version.createdAt).toLocaleString()}
-                  · <span class="font-mono">{version.hash.slice(0, 7)}</span>
+      <!-- Read while the editor stands settling (EditorFrame), so the list
+           is here when it shows. Rows that come and go (Show all, a
+           restore's new version) go through reflow, what follows sliding. -->
+      <div class="history" {@attach reflow()}>
+        {#if versionsFailed}
+          <p class="caution" role="alert">{versionsFailed}</p>
+        {:else if versions.length === 0}
+          <p class="note">Nothing has been saved over yet.</p>
+        {:else}
+          <ul class="versions">
+            {#each visibleVersions as version (version.id)}
+              <li class="version" data-flip>
+                <span class="vtext">
+                  <span class="vname">{version.name}</span>
+                  <span class="note">
+                    {new Date(version.createdAt).toLocaleString()}
+                    · <span class="font-mono">{version.hash.slice(0, 7)}</span>
+                  </span>
                 </span>
-              </span>
+                <Button
+                  disabled={restoring !== null && restoring !== version.id}
+                  failed={restoreFailed === version.id}
+                  label="Restore"
+                  onclick={() => restore(version)}
+                  pending={restoring === version.id}
+                  pendingLabel="Restoring…"
+                  size="sm"
+                  variant="outline"
+                />
+              </li>
+            {/each}
+          </ul>
+          {#if versions.length > LATEST}
+            <div class="more" data-flip>
               <Button
-                disabled={restoring !== null && restoring !== version.id}
-                failed={restoreFailed === version.id}
-                label="Restore"
-                onclick={() => restore(version)}
-                pending={restoring === version.id}
-                pendingLabel="Restoring…"
+                onclick={() => {
+                allVersions = !allVersions;
+              }}
                 size="sm"
-                variant="outline"
-              />
-            </li>
-          {/each}
-        </ul>
-        {#if versions.length > LATEST}
-          <Button
-            class="self-start"
-            onclick={() => {
-              allVersions = !allVersions;
-            }}
-            size="sm"
-            variant="ghost"
-          >
-            {allVersions ? 'Show the latest 5' : `Show all ${versions.length}`}
-          </Button>
+                variant="ghost"
+              >
+                {allVersions ? 'Show the latest 5' : `Show all ${versions.length}`}
+              </Button>
+            </div>
+          {/if}
         {/if}
-      {/if}
+      </div>
     </EditorSection>
   {/if}
 </EditorFrame>
@@ -659,6 +746,26 @@
   .caution {
     font: var(--type-meta);
     color: var(--status-attn-ink);
+  }
+  .fold {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  /* The handler's fields: the set leaving is pinned in the box (crossOut)
+     while the one arriving sets its height. */
+  .handler {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+  .history {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .more {
+    align-self: flex-start;
   }
   .pair {
     display: grid;

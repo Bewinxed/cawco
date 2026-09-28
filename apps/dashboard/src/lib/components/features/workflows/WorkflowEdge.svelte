@@ -79,15 +79,28 @@
     background: var(--surface-raised);
     color: var(--ink-muted);
     opacity: 0;
+    transition: opacity var(--dur-control) var(--ease-out);
+  }
+  /* Shown, it fades in and grows from the pop scale; hidden again, it
+     shrinks back as it fades. Without motion only the fade runs. */
+  @media (prefers-reduced-motion: no-preference) {
+    button {
+      scale: var(--pop-scale);
+      transition:
+        opacity var(--dur-control) var(--ease-out),
+        scale var(--dur-control) var(--ease-out);
+    }
   }
   .edge-label:hover button,
   button:focus-visible,
   button.visible {
     opacity: 1;
+    scale: 1;
   }
   @media (pointer: coarse) {
     button {
       opacity: 1;
+      scale: 1;
     }
   }
 </style>

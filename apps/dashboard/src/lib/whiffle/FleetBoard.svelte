@@ -14,11 +14,13 @@
    * the same conversation, and it is the one that can still be spoken to.
    */
   import { untrack } from "svelte";
-  import { goto } from "$app/navigation";
+  import { TextMorph } from "torph/svelte";
+  import { goto, replaceState } from "$app/navigation";
   import { page } from "$app/state";
   import WorkflowStatus from "$lib/components/features/workflows/WorkflowStatus.svelte";
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
+  import PendingContent from "$lib/components/ui/button/pending-content.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Card from "$lib/components/ui/card";
   import { EmptyState } from "$lib/components/ui/empty";
@@ -42,13 +44,21 @@
     IconPlay,
     IconPlus,
     IconSearch,
+    IconWarningTriangle,
   } from "$lib/icons";
   import { cn } from "$lib/utils";
   import { formatDistanceToNow } from "$lib/utils/time";
   import AttentionQueue from "$lib/whiffle/AttentionQueue.svelte";
   import LiveSessionRow from "$lib/whiffle/LiveSessionRow.svelte";
   import MachineCard from "$lib/whiffle/MachineCard.svelte";
+  import {
+    CURVE,
+    crossIn,
+    crossOut,
+    dur,
+  } from "$lib/whiffle/motion/curves.svelte";
   import { reflow, tableReflow } from "$lib/whiffle/motion/rows.svelte";
+  import { handOver } from "$lib/whiffle/motion/share.svelte";
   import StatTile from "$lib/whiffle/StatTile.svelte";
   import NewSessionDialog from "$lib/whiffle/spawn/NewSessionDialog.svelte";
   import { workflowState } from "$lib/whiffle/workflow-state.svelte";
@@ -87,6 +97,12 @@
     key: string;
     machine: string;
     machineId: string;
+    /**
+     * Where "Last active" places the row: when its current turn began while
+     * it works, else its last activity. A working session's pulses move `at`
+     * every second; its turn start stays put, so it keeps its place.
+     */
+    rank: number;
     stateLabel: string;
     status: PillStatus;
     stored: SDKSessionInfo | null;
@@ -146,6 +162,8 @@
         contextPct: stats.contextPct,
         cost: stats.cost,
         at: whiffle.pulseAt(instance.id),
+        rank:
+          whiffle.turnSince(instance.id) ?? whiffle.pulseAt(instance.id) ?? 0,
         href: conversationHref(instance.id, whiffle.instanceIndex),
         instance,
         stored: null,
@@ -175,6 +193,7 @@
             contextPct: null,
             cost: null,
             at: info.lastModified,
+            rank: info.lastModified,
             href: conversationHref(info.sessionId, whiffle.instanceIndex, {
               machineId: machine.machineId,
               cwd: info.cwd,
@@ -186,7 +205,7 @@
         )
     );
 
-    return [...live, ...stored].sort((a, b) => (b.at ?? 0) - (a.at ?? 0));
+    return [...live, ...stored];
   });
 
   const spend = $derived(
@@ -205,13 +224,18 @@
 
   /* ---- filters ------------------------------------------------------- */
 
-  let search = $state("");
+  /* The filters live in the board's address (?q=&state=&machine=&sort=), so
+     a reload or a way back lands on the same board. They are read from it
+     once, as the board is made, and written back as they change, in place
+     (replaceState): typing a search adds no history. */
+  const inUrl = untrack(() => page.url.searchParams);
+  let search = $state(inUrl.get("q") ?? "");
   /**
    * What the list is filtered by: the field's text, 80ms after the last
    * keystroke, so a burst of typing reflows the table once rather than
    * once per letter.
    */
-  let query = $state("");
+  let query = $state(untrack(() => search));
   let searchTimer: ReturnType<typeof setTimeout> | undefined;
   function searchTyped() {
     clearTimeout(searchTimer);
@@ -257,19 +281,62 @@
     return info ? sessionTitle(info) : (row.title ?? "untitled session");
   });
   /** '' is "All machines"; otherwise a machineId. */
-  let machineFilter = $state("");
+  let machineFilter = $state(inUrl.get("machine") ?? "");
   const STATES: { value: PillStatus | ""; label: string }[] = [
     { value: "", label: "All states" },
     { value: "live", label: "Working" },
     { value: "attn", label: "Needs you" },
     { value: "idle", label: "Idle" },
   ];
-  let stateFilter = $state<PillStatus | "">("");
+  let stateFilter = $state<PillStatus | "">(
+    STATES.find((entry) => entry.value === inUrl.get("state"))?.value ?? ""
+  );
   const SORTS: { value: "recent" | "name"; label: string }[] = [
     { value: "recent", label: "Last active" },
     { value: "name", label: "Name (A–Z)" },
   ];
-  let sortBy = $state<"recent" | "name">("recent");
+  let sortBy = $state<"recent" | "name">(
+    SORTS.find((entry) => entry.value === inUrl.get("sort"))?.value ?? "recent"
+  );
+
+  $effect(() => {
+    const next = new URLSearchParams();
+    if (query) {
+      next.set("q", query);
+    }
+    if (stateFilter) {
+      next.set("state", stateFilter);
+    }
+    if (machineFilter) {
+      next.set("machine", machineFilter);
+    }
+    if (sortBy !== "recent") {
+      next.set("sort", sortBy);
+    }
+    if (!active) {
+      return;
+    }
+    untrack(() => {
+      const url = new URL(page.url);
+      if (url.pathname !== "/session" || url.search === withQuery(next)) {
+        return;
+      }
+      url.search = next.toString();
+      replaceState(url, page.state);
+    });
+  });
+  const withQuery = (params: URLSearchParams) =>
+    params.size > 0 ? `?${params}` : "";
+
+  /** Every filter back to all, and the search emptied. */
+  function clearFilters() {
+    clearTimeout(searchTimer);
+    search = "";
+    query = "";
+    machineFilter = "";
+    stateFilter = "";
+    shown = PAGE_SIZE;
+  }
   /**
    * How many rows are on screen. The whole catalogue is already in memory —
    * `SESSION_CATALOG_LIMIT` is 0, so every machine sends its entire list — so
@@ -295,28 +362,24 @@
   );
 
   /**
-   * How much of the board has been read, top down: 0 nothing yet; 1 the
-   * machines, the live sessions and the queue above the table, with the
-   * socket up; 2 every online machine's stored sessions too, which the
-   * table sorts in among the live ones by time. Each part stands only once
-   * its read is back, over a placeholder of its own that goes when it
-   * arrives, so nothing already drawn is pushed down on a cold load. It
-   * only rises: a reconnect later does not take the board away.
+   * Whether the board has had its first full read: the machines, the live
+   * sessions, the queue and every online machine's stored sessions, with
+   * the socket up (or the hub known to be unreachable). Until then a
+   * skeleton stands at the board's final size, and the board replaces it
+   * all at once, cross-fading in place, so nothing drawn is pushed down on
+   * a cold load. It only rises: a reconnect later does not take the board
+   * away.
    */
-  const stageNow = () => {
-    if (whiffle.hub === "unreachable") {
-      return 2;
-    }
-    if (!(whiffle.fleetRead && workflowState.loaded && hubLive)) {
-      return 0;
-    }
-    return whiffle.catalogsRead ? 2 : 1;
-  };
-  let stage = $state(untrack(stageNow));
+  const readNow = () =>
+    whiffle.hub === "unreachable" ||
+    (whiffle.fleetRead &&
+      workflowState.loaded &&
+      hubLive &&
+      whiffle.catalogsRead);
+  let ready = $state(untrack(readNow));
   $effect(() => {
-    const next = stageNow();
-    if (next > stage) {
-      stage = next;
+    if (readNow()) {
+      ready = true;
     }
   });
   const sortName = $derived(
@@ -342,31 +405,76 @@
   const sorted = $derived(
     sortBy === "name"
       ? [...filtered].sort((a, b) => a.title.localeCompare(b.title))
-      : [...filtered].sort((a, b) => (b.at ?? 0) - (a.at ?? 0))
+      : [...filtered].sort((a, b) => b.rank - a.rank)
   );
 
-  /* A filter, a search or a re-sort reflows the table: rows that leave close where
-     they were, rows that arrive open, the rest slide, and the table's
-     height follows, so nothing under the table jumps (motion/rows). A page
-     the scroll brings in does not: its rows land below the reader, in the
-     headroom under the board, already laid out. */
+  /* A live re-order (a session starts or stops working, arrives or goes)
+     can land while rows are still sliding from the last one. A row sent
+     back while it is still sliding jumps from where it was half drawn, and
+     the page moves under the reader. So a live re-order that lands
+     mid-slide waits for the slide to end and a frame at rest, then shows
+     the order as it is by then;
+     what the reader asks for (a search, a filter, a sort) shows at once. */
+  const viewOf = () => `${query}|${machineFilter}|${stateFilter}|${sortBy}`;
+  const keysOf = (list: Row[]) => list.map((row) => row.key).join("\n");
+  /** The slides the table's rows are still running. */
+  const sliding = () =>
+    [
+      ...(exitLayer?.parentElement?.querySelectorAll<HTMLElement>(
+        "tbody tr[data-key]"
+      ) ?? []),
+    ].flatMap((row) => row.getAnimations());
+  let listed = $state.raw(untrack(() => sorted));
+  let view = untrack(viewOf);
+  $effect(() => {
+    const next = sorted;
+    const asked = viewOf();
+    if (asked !== view || keysOf(next) === keysOf(untrack(() => listed))) {
+      view = asked;
+      listed = next;
+      return;
+    }
+    let current = true;
+    // A slide a newer reflow cancels rejects `finished`: it is over all the
+    // same. Then one frame is painted with the rows at rest before they move
+    // again (the second rAF runs after it), also when the last slide ended a
+    // moment ago: a move measured against a frame still drawn mid-slide
+    // jumps, and Chromium counts it as a shift.
+    const frame = () =>
+      new Promise<number>((done) => requestAnimationFrame(done));
+    Promise.allSettled(sliding().map((slide) => slide.finished))
+      .then(frame)
+      .then(frame)
+      .then(() => {
+        if (current) {
+          listed = untrack(() => sorted);
+        }
+      });
+    return () => {
+      current = false;
+    };
+  });
+
+  /* A filter, a search, a re-sort or the next page reflows the table: rows
+     that leave close where they were, rows that arrive open (a page the
+     scroll brings in fades in at the end, below the reader), the rest
+     slide, and the table's height follows, so nothing under the table
+     jumps (motion/rows). */
   let exitLayer = $state<HTMLElement | null>(null);
-  let paging = false;
   const tableRows = tableReflow({
     layer: () => exitLayer,
     rows: "tbody tr[data-key]",
-    enabled: () => active && !paging,
+    enabled: () => active,
   });
 
   // The list is where the leaving rows are caught: it is recomputed as the
   // table starts to update, the one moment they are still on screen.
   const visible = $derived.by(() => {
-    const next = sorted.slice(0, shown);
+    const next = listed.slice(0, shown);
     untrack(() => tableRows(next.map((row) => row.key)));
-    paging = false;
     return next;
   });
-  const more = $derived(sorted.length > visible.length);
+  const more = $derived(listed.length > visible.length);
 
   /**
    * The sentinel is watched inside `.board` rather than the viewport — the
@@ -397,7 +505,6 @@
       return;
     }
     const nextPage = () => {
-      paging = true;
       shown = from + PAGE_SIZE;
     };
     const room = boardEl.getBoundingClientRect();
@@ -428,13 +535,14 @@
     undefined
   );
 
-  // "Spawn here" from anywhere else in the app arrives as a query on the board's
-  // own URL. It is consumed once and cleared, so a reload is not a second spawn.
+  // "Spawn here" from anywhere else in the app arrives as `?spawn=<machine>`
+  // on the board's own URL (`machine` is the board's filter). It is consumed
+  // once and cleared, so a reload is not a second spawn.
   $effect(() => {
     if (!active) {
       return;
     }
-    const machineId = page.url.searchParams.get("machine");
+    const machineId = page.url.searchParams.get("spawn");
     if (!machineId) {
       return;
     }
@@ -443,8 +551,11 @@
       cwd: page.url.searchParams.get("cwd") ?? undefined,
     };
     spawnOpen = true;
+    const url = new URL(page.url);
+    url.searchParams.delete("spawn");
+    url.searchParams.delete("cwd");
     // biome-ignore lint/complexity/noVoid: fire-and-forget — the panel is already open, the URL cleanup is a courtesy
-    void goto("/session", { replaceState: true });
+    void goto(url, { replaceState: true });
   });
 
   function startSession() {
@@ -452,22 +563,50 @@
     spawnOpen = true;
   }
 
-  function resume(row: Row) {
+  /** The row whose resume is running, and why a row's last resume failed. */
+  let resuming = $state<string | null>(null);
+  let resumeFailed = $state<Record<string, string>>({});
+
+  /**
+   * Resumes the row's session and opens it: the button spins until its tab
+   * is up, and the row flies into that tab (the row departed on the click,
+   * as `pane:<its id>`; the new session's tab lands it). A failure is said
+   * on the row.
+   */
+  async function resume(row: Row) {
     const sessionId = row.instance?.sessionId ?? row.stored?.sessionId;
     if (!sessionId) {
       return;
     }
-    const id = resumeSession({
-      machineId: row.machineId,
-      cwd: row.cwd,
-      sessionId,
-      harness: row.harness as never,
-    });
-    // biome-ignore lint/complexity/noVoid: fire-and-forget — the session is already resuming, navigation doesn't need to be awaited
-    void goto(conversationHref(id, whiffle.instanceIndex));
+    resuming = row.key;
+    resumeFailed = Object.fromEntries(
+      Object.entries(resumeFailed).filter(([key]) => key !== row.key)
+    );
+    try {
+      const id = resumeSession({
+        machineId: row.machineId,
+        cwd: row.cwd,
+        sessionId,
+        harness: row.harness as never,
+      });
+      handOver(`pane:${sessionOf(row.href)}`, `session:${id}`);
+      await goto(conversationHref(id, whiffle.instanceIndex));
+    } catch (error) {
+      resumeFailed = {
+        ...resumeFailed,
+        [row.key]: error instanceof Error ? error.message : String(error),
+      };
+    } finally {
+      resuming = null;
+    }
   }
 
-  function exportCsv() {
+  /** The export button spins for the frame the file is made in, then holds
+   *  its check for --dur-hold (the kit's pending mechanism). */
+  let exporting = $state(false);
+  async function exportCsv() {
+    exporting = true;
+    await new Promise((done) => requestAnimationFrame(done));
     const head = [
       "Session",
       "Machine",
@@ -500,9 +639,19 @@
     link.download = "fleet-sessions.csv";
     link.click();
     URL.revokeObjectURL(url);
+    exporting = false;
   }
 
   /* ---- cells --------------------------------------------------------- */
+
+  /**
+   * TextMorph draws its text only in the browser, so the server draws the
+   * words as plain text and the morph takes over once the board is live.
+   */
+  let morphMs = $state(0);
+  $effect(() => {
+    morphMs = dur("--dur-morph");
+  });
 
   const contextClass = (pct: number | null): string => {
     if (pct === null) {
@@ -540,7 +689,9 @@
   <!-- What live data moves here (a machine's badges, the queue, the table's
        height, the not-running card) arrives, leaves and slides in place: the
        cards are `data-flip="box"`, so their edges travel too (motion/rows). -->
-  <div class="inner" {@attach reflow()}>
+  <!-- The reflow starts with the board: the first read replaces the
+       skeleton in one cross-fade, not as rows arriving. -->
+  <div class="inner" {@attach ready ? reflow() : undefined}>
     <div class="head">
       <p>Every agent across your machines, and what needs you.</p>
       <Button onclick={startSession}>
@@ -549,431 +700,510 @@
       </Button>
     </div>
 
-    <div class="stats">
-      <StatTile
-        label="Sessions"
-        value={String(whiffle.runningInstances.length)}
-      />
+    {#if ready}
+      <div class="loaded" in:crossIn>
+        <div class="stats">
+          <StatTile
+            label="Sessions"
+            value={String(whiffle.runningInstances.length)}
+          />
 
-      <!-- Needs you is not a readout. It names this surface's job, so it is the
-           control that reaches it (DESIGN.md §Open questions): pressing it
-           filters the board down to exactly the sessions it counts.
+          <!-- Needs you is not a readout. It names this surface's job, so it is the
+             control that reaches it (DESIGN.md §Open questions): pressing it
+             filters the board down to exactly the sessions it counts.
 
-           And it never says "0" on a guess. whiffle.blocked is only true when
-           the socket is live; while the hub is connecting or unreachable an
-           empty list means "not read yet", and printing 0 there is a false
-           all-clear — the one failure the Switch interview names by hand. -->
-      <button
-        aria-label={hubLive
-          ? `Needs you: ${whiffle.blockedCount}. Show sessions and workflow runs that need you.`
-          : `Needs you: unknown while ${hubNote}. Show only sessions that need you.`}
-        aria-pressed={stateFilter === 'attn'}
-        class="attn-tile"
-        onclick={() => {
-          stateFilter = stateFilter === 'attn' ? '' : 'attn';
-          shown = PAGE_SIZE;
-        }}
-        type="button"
-      >
-        <!-- The unit's line stays when the count is live, empty, so the tile
-             and its row stand at one height across the connect. -->
-        <StatTile
-          label="Needs you"
-          unit={hubLive ? '' : hubNote}
-          value={hubLive ? String(whiffle.blockedCount) : '—'}
-        />
-      </button>
-
-      <StatTile
-        label="Machines"
-        unit="of {whiffle.machines.length}"
-        value={String(whiffle.onlineMachines.length)}
-      />
-      <StatTile label="Spend today" value={`$${spend.toFixed(2)}`} />
-    </div>
-
-    <!-- Every machine's convergence with the rest of the fleet (leaf C2 —
-         .unlazy-liveness/gates/c2.md): the data was always in this frame,
-         the Mac's 21-day silence is what happens when nothing renders it.
-         Shown above the queue for the same reason the queue sits above the
-         roster — this is a fact about the fleet, not about one session. -->
-    {#if stage >= 1}
-      {#if whiffle.machines.length > 0}
-        <!-- MachineCard's badges carry tooltips (Tooltip.Root needs an ancestor
-           Provider or it throws on mount — see tools/+page.svelte's own note);
-           the board otherwise never needed one, so it is scoped to here. -->
-        <Tooltip.Provider>
-          <Card.Root class={machinesPanelClass} data-flip="box">
-            <ul class="machine-list">
-              {#each whiffle.machines as machine (machine.machineId)}
-                <MachineCard hubBuild={whiffle.hubBuild} {machine} />
-              {/each}
-            </ul>
-          </Card.Root>
-        </Tooltip.Provider>
-      {/if}
-
-      <!-- JOURNEY §1 block 3. Everything parked on a human sits above the roster,
-         longest wait first, with the answer one tap away — the roster below is
-         for choosing a session, this is for unblocking one. It renders itself
-         away when nothing is waiting. -->
-      <div class="queue">
-        <AttentionQueue />
-        {#each Object.values(workflowState.runs).filter((run) => run.status === 'waiting') as run (run.id)}
-          <a
-            class="flex min-h-11 flex-wrap items-center justify-between gap-3 rounded-[var(--radius-sm)] bg-[var(--surface-raised)] p-3"
-            data-flip
-            href="/workflows/{run.workflowId}/runs/{run.id}"
-            ><span
-              >{workflowState.workflows.find((entry) => entry.id === run.workflowId)?.name ?? 'Workflow'}
-              · run {run.id.slice(0, 8)}</span
-            ><WorkflowStatus status={run.status} /></a
+             And it never says "0" on a guess. whiffle.blocked is only true when
+             the socket is live; while the hub is connecting or unreachable an
+             empty list means "not read yet", and printing 0 there is a false
+             all-clear — the one failure the Switch interview names by hand. -->
+          <button
+            aria-label={hubLive
+            ? `Needs you: ${whiffle.blockedCount}. Show sessions and workflow runs that need you.`
+            : `Needs you: unknown while ${hubNote}. Show only sessions that need you.`}
+            aria-pressed={stateFilter === 'attn'}
+            class="attn-tile"
+            onclick={() => {
+            stateFilter = stateFilter === 'attn' ? '' : 'attn';
+            shown = PAGE_SIZE;
+          }}
+            type="button"
           >
-        {/each}
-      </div>
-    {:else}
-      {@render pending(true)}
-    {/if}
+            <!-- The unit's line stays when the count is live, empty, so the tile
+               and its row stand at one height across the connect. -->
+            <StatTile
+              label="Needs you"
+              unit={hubLive ? '' : hubNote}
+              value={hubLive ? String(whiffle.blockedCount) : '—'}
+            />
+          </button>
 
-    {#if stage >= 2}
-      <div class="panel" data-flip="box">
-        <!-- Only for a load that never read the fleet. Once it has, an outage
-             keeps the last-known table here, under the reconnect banner that
-             says the hub is gone: swapping the table out and back moved the
-             page twice for a state the banner already names. -->
-        {#if whiffle.hub === 'unreachable' && !whiffle.fleetRead}
-          <EmptyState
-            class="px-[var(--space-5)]"
-            data-flip
-            icon={IconAlert}
-            line="Nothing on the fleet can be read until the connection is back."
-            title="Can't reach the hub"
-          >
-            {#snippet action()}
-              <Button onclick={() => reconnectNow()} variant="outline"
-                >Retry</Button
-              >
-            {/snippet}
-          </EmptyState>
-        {:else if whiffle.machines.length === 0}
-          <EmptyState
-            class="px-[var(--space-5)]"
-            data-flip
-            icon={IconLaptop}
-            title="No machines yet"
-          >
-            {#snippet line()}
-              Run <code>whiffle</code> on a machine and it joins this board by
-              itself.
-            {/snippet}
-          </EmptyState>
-        {:else if rows.length === 0}
-          <EmptyState
-            class="px-[var(--space-5)]"
-            data-flip
-            icon={IconChat}
-            line="Nothing has been started on the {whiffle.onlineMachines.length === 1 ? 'machine' : `${whiffle.onlineMachines.length} machines`} online."
-            title="No sessions running"
-          >
-            {#snippet action()}
-              <Button onclick={startSession}>
-                <IconPlus />
-                Start session
-              </Button>
-            {/snippet}
-          </EmptyState>
-        {:else}
-          <div class="bar" data-flip>
-            <!-- A label, so its touch area around the 36px field focuses it. -->
-            <!-- biome-ignore lint/a11y/noLabelWithoutControl: the kit Input renders the native <input> this label wraps -->
-            <label class="search touch-hit">
-              <span class="lead"><IconSearch /></span>
-              <Input
-                aria-label="Search sessions"
-                class="search-input"
-                oninput={searchTyped}
-                placeholder="Search sessions…"
-                bind:value={search}
-              />
-            </label>
+          <StatTile
+            label="Machines"
+            unit="of {whiffle.machines.length}"
+            value={String(whiffle.onlineMachines.length)}
+          />
+          <StatTile label="Spend today" value={`$${spend.toFixed(2)}`} />
+        </div>
 
-            <Select.Root
-              onValueChange={(v) => {
-              machineFilter = v === 'all' ? '' : v;
-              shown = PAGE_SIZE;
-            }}
-              type="single"
-              value={machineFilter || 'all'}
+        <!-- Every machine's convergence with the rest of the fleet (leaf C2 —
+           .unlazy-liveness/gates/c2.md): the data was always in this frame,
+           the Mac's 21-day silence is what happens when nothing renders it.
+           Shown above the queue for the same reason the queue sits above the
+           roster — this is a fact about the fleet, not about one session. -->
+        {#if whiffle.machines.length > 0}
+          <!-- MachineCard's badges carry tooltips (Tooltip.Root needs an ancestor
+             Provider or it throws on mount — see tools/+page.svelte's own note);
+             the board otherwise never needed one, so it is scoped to here. -->
+          <Tooltip.Provider>
+            <Card.Root class={machinesPanelClass} data-flip="box">
+              <ul class="machine-list">
+                {#each whiffle.machines as machine (machine.machineId)}
+                  <MachineCard hubBuild={whiffle.hubBuild} {machine} />
+                {/each}
+              </ul>
+            </Card.Root>
+          </Tooltip.Provider>
+        {/if}
+
+        <!-- JOURNEY §1 block 3. Everything parked on a human sits above the roster,
+           longest wait first, with the answer one tap away — the roster below is
+           for choosing a session, this is for unblocking one. It renders itself
+           away when nothing is waiting. -->
+        <div class="queue">
+          <AttentionQueue />
+          {#each Object.values(workflowState.runs).filter((run) => run.status === 'waiting') as run (run.id)}
+            <a
+              class="flex min-h-11 flex-wrap items-center justify-between gap-3 rounded-[var(--radius-sm)] bg-[var(--surface-raised)] p-3"
+              data-flip
+              href="/workflows/{run.workflowId}/runs/{run.id}"
+              ><span
+                >{workflowState.workflows.find((entry) => entry.id === run.workflowId)?.name ?? 'Workflow'}
+                · run {run.id.slice(0, 8)}</span
+              ><WorkflowStatus status={run.status} /></a
             >
-              <Select.Trigger class="min-w-[168px]"
-                >{machineName}</Select.Trigger
-              >
-              <Select.Content>
-                <Select.Item label="All machines" value="all"
-                  >All machines</Select.Item
+          {/each}
+        </div>
+        <div class="panel" data-flip="box">
+          <!-- Only for a load that never read the fleet. Once it has, an outage
+               keeps the last-known table here, under the reconnect banner that
+               says the hub is gone: swapping the table out and back moved the
+               page twice for a state the banner already names. -->
+          {#if whiffle.hub === 'unreachable' && !whiffle.fleetRead}
+            <EmptyState
+              class="px-[var(--space-5)]"
+              data-flip
+              icon={IconAlert}
+              line="The board can't read the fleet until the hub answers. Check that the hub is running, then retry."
+              title="Can't reach the hub"
+            >
+              {#snippet action()}
+                <Button onclick={() => reconnectNow()} variant="outline"
+                  >Retry</Button
                 >
-                {#each whiffle.machines as m (m.machineId)}
-                  <Select.Item
-                    label={machineLabel(m.hostname)}
-                    value={m.machineId}
-                  >
-                    {machineLabel(m.hostname)}
-                  </Select.Item>
-                {/each}
-              </Select.Content>
-            </Select.Root>
-
-            <Select.Root
-              onValueChange={(v) => {
-              stateFilter = (v === 'all' ? '' : v) as PillStatus | '';
-              shown = PAGE_SIZE;
-            }}
-              type="single"
-              value={stateFilter || 'all'}
+              {/snippet}
+            </EmptyState>
+          {:else if whiffle.machines.length === 0}
+            <EmptyState
+              class="px-[var(--space-5)]"
+              data-flip
+              icon={IconLaptop}
+              title="No machines yet"
             >
-              <Select.Trigger class="min-w-[140px]">{stateName}</Select.Trigger>
-              <Select.Content>
-                {#each STATES as s (s.label)}
-                  <Select.Item label={s.label} value={s.value || 'all'}
-                    >{s.label}</Select.Item
-                  >
-                {/each}
-              </Select.Content>
-            </Select.Root>
-
-            <Select.Root
-              onValueChange={(v) => {
-              sortBy = v as 'recent' | 'name';
-            }}
-              type="single"
-              value={sortBy}
+              {#snippet line()}
+                Run <code>whiffle</code> on a machine and it joins this board by
+                itself.
+              {/snippet}
+            </EmptyState>
+          {:else if rows.length === 0}
+            <EmptyState
+              class="px-[var(--space-5)]"
+              data-flip
+              icon={IconChat}
+              line="None of the {whiffle.onlineMachines.length === 1 ? 'machine' : `${whiffle.onlineMachines.length} machines`} online has a session yet. Start one and it shows here."
+              title="No sessions yet"
             >
-              <Select.Trigger class="min-w-[150px]">{sortName}</Select.Trigger>
-              <Select.Content>
-                {#each SORTS as s (s.value)}
-                  <Select.Item label={s.label} value={s.value}
-                    >{s.label}</Select.Item
-                  >
-                {/each}
-              </Select.Content>
-            </Select.Root>
+              {#snippet action()}
+                <Button onclick={startSession}>
+                  <IconPlus />
+                  Start session
+                </Button>
+              {/snippet}
+            </EmptyState>
+          {:else}
+            <div class="bar" data-flip>
+              <!-- A label, so its touch area around the 36px field focuses it. -->
+              <!-- biome-ignore lint/a11y/noLabelWithoutControl: the kit Input renders the native <input> this label wraps -->
+              <label class="search touch-hit">
+                <span class="lead"><IconSearch /></span>
+                <Input
+                  aria-label="Search sessions"
+                  class="search-input"
+                  oninput={searchTyped}
+                  placeholder="Search sessions…"
+                  bind:value={search}
+                />
+              </label>
 
-            <Button
-              class="ml-auto max-[900px]:ml-0"
-              onclick={exportCsv}
-              variant="outline"
-            >
-              <IconDownload />
-              Export CSV
-            </Button>
-          </div>
-
-          <div class="tbl" data-flip>
-            <div aria-hidden="true" class="exits" bind:this={exitLayer}></div>
-            <Table.Root class="live" ghostRows="tbody tr">
-              <Table.Header>
-                <Table.Row>
-                  <Table.Head class="c-name">Session</Table.Head>
-                  <Table.Head class="c-mach">Machine</Table.Head>
-                  <Table.Head class="c-harn">Harness</Table.Head>
-                  <Table.Head class="num c-turns">Turns</Table.Head>
-                  <Table.Head class="num c-ctx">Context</Table.Head>
-                  <Table.Head class="c-when">Last activity</Table.Head>
-                  <Table.Head class="c-state">State</Table.Head>
-                  <Table.Head class="c-act">Action</Table.Head>
-                </Table.Row>
-              </Table.Header>
-              <Table.Body>
-                {#each visible as row (row.key)}
-                  <!-- A session that changes state re-sorts; it slides to its new place
-                     rather than swapping rows under the reader's eye. A row a
-                     filter brings back opens as the rows below make room. -->
-                  <tr
-                    class="border-b transition-colors"
-                    data-flip-anchor
-                    data-key={row.key}
-                    data-share="pane:{sessionOf(row.href)}"
-                    data-slot="table-row"
+              <Select.Root
+                onValueChange={(v) => {
+                machineFilter = v === 'all' ? '' : v;
+                shown = PAGE_SIZE;
+              }}
+                type="single"
+                value={machineFilter || 'all'}
+              >
+                <Select.Trigger class="min-w-[168px]"
+                  >{machineName}</Select.Trigger
+                >
+                <Select.Content>
+                  <Select.Item label="All machines" value="all"
+                    >All machines</Select.Item
                   >
-                    <Table.Cell class="c-name">
-                      <div class="nm">
-                        <span aria-hidden="true" class="mark m{row.hue}">
-                          <HarnessGlyph harness={row.harness} />
+                  {#each whiffle.machines as m (m.machineId)}
+                    <Select.Item
+                      label={machineLabel(m.hostname)}
+                      value={m.machineId}
+                    >
+                      {machineLabel(m.hostname)}
+                    </Select.Item>
+                  {/each}
+                </Select.Content>
+              </Select.Root>
+
+              <Select.Root
+                onValueChange={(v) => {
+                stateFilter = (v === 'all' ? '' : v) as PillStatus | '';
+                shown = PAGE_SIZE;
+              }}
+                type="single"
+                value={stateFilter || 'all'}
+              >
+                <Select.Trigger class="min-w-[140px]"
+                  >{stateName}</Select.Trigger
+                >
+                <Select.Content>
+                  {#each STATES as s (s.label)}
+                    <Select.Item label={s.label} value={s.value || 'all'}
+                      >{s.label}</Select.Item
+                    >
+                  {/each}
+                </Select.Content>
+              </Select.Root>
+
+              <Select.Root
+                onValueChange={(v) => {
+                sortBy = v as 'recent' | 'name';
+              }}
+                type="single"
+                value={sortBy}
+              >
+                <Select.Trigger class="min-w-[150px]"
+                  >{sortName}</Select.Trigger
+                >
+                <Select.Content>
+                  {#each SORTS as s (s.value)}
+                    <Select.Item label={s.label} value={s.value}
+                      >{s.label}</Select.Item
+                    >
+                  {/each}
+                </Select.Content>
+              </Select.Root>
+
+              <Button
+                class="ml-auto max-[900px]:ml-0"
+                icon={IconDownload}
+                label="Export CSV"
+                onclick={exportCsv}
+                pending={exporting}
+                variant="outline"
+              />
+            </div>
+
+            <div class="tbl" data-flip>
+              <div aria-hidden="true" class="exits" bind:this={exitLayer}></div>
+              <Table.Root class="live" ghostRows="tbody tr">
+                <Table.Header>
+                  <Table.Row>
+                    <Table.Head class="c-name">Session</Table.Head>
+                    <Table.Head class="c-mach">Machine</Table.Head>
+                    <Table.Head class="c-harn">Harness</Table.Head>
+                    <Table.Head class="num c-turns">Turns</Table.Head>
+                    <Table.Head class="num c-ctx">Context</Table.Head>
+                    <Table.Head class="c-when">Last activity</Table.Head>
+                    <Table.Head class="c-state">State</Table.Head>
+                    <Table.Head class="c-act">Action</Table.Head>
+                  </Table.Row>
+                </Table.Header>
+                <Table.Body>
+                  {#each visible as row (row.key)}
+                    <!-- A session that changes state re-sorts; it slides to its new place
+                       rather than swapping rows under the reader's eye. A row a
+                       filter brings back opens as the rows below make room. -->
+                    <tr
+                      class="border-b transition-colors"
+                      data-flip-anchor
+                      data-key={row.key}
+                      data-share="pane:{sessionOf(row.href)}"
+                      data-slot="table-row"
+                    >
+                      <Table.Cell class="c-name">
+                        <div class="nm">
+                          <span aria-hidden="true" class="mark m{row.hue}">
+                            <HarnessGlyph harness={row.harness} />
+                          </span>
+                          <a
+                            class="touch-hit pointer-hit pressable"
+                            href={row.href}
+                            ><span class="nm-title">{row.title}</span></a
+                          >
+                          {#if resumeFailed[row.key]}
+                            <span
+                              class="nm-failed"
+                              data-flip="pop"
+                              role="alert"
+                              title={resumeFailed[row.key]}
+                              ><IconWarningTriangle />Couldn't resume:
+                              {resumeFailed[row.key]}</span
+                            >
+                          {/if}
+                        </div>
+                      </Table.Cell>
+                      <Table.Cell class="mut c-mach">{row.machine}</Table.Cell>
+                      <Table.Cell class="mut c-harn"
+                        >{row.harnessLabel}</Table.Cell
+                      >
+                      <Table.Cell class="num c-turns"
+                        >{row.turns ?? '—'}</Table.Cell
+                      >
+                      <Table.Cell
+                        class={cn('num c-ctx', contextClass(row.contextPct))}
+                      >
+                        {#if morphMs}
+                          <TextMorph
+                            as="span"
+                            duration={morphMs}
+                            ease={CURVE.out}
+                            text={row.contextPct === null ? '—' : `${Math.round(row.contextPct)}%`}
+                          />
+                        {:else}
+                          {row.contextPct === null ? '—' : `${Math.round(row.contextPct)}%`}
+                        {/if}
+                      </Table.Cell>
+                      <Table.Cell class="c-when">
+                        <span class="when">
+                          <IconHistory />
+                          {row.at ? formatDistanceToNow(new Date(row.at)) : '—'}
                         </span>
-                        <a
-                          class="touch-hit pointer-hit pressable"
-                          href={row.href}
-                          ><span class="nm-title">{row.title}</span></a
-                        >
-                      </div>
-                    </Table.Cell>
-                    <Table.Cell class="mut c-mach">{row.machine}</Table.Cell>
-                    <Table.Cell class="mut c-harn"
-                      >{row.harnessLabel}</Table.Cell
-                    >
-                    <Table.Cell class="num c-turns"
-                      >{row.turns ?? '—'}</Table.Cell
-                    >
-                    <Table.Cell
-                      class={cn('num c-ctx', contextClass(row.contextPct))}
-                    >
-                      {row.contextPct === null ? '—' : `${Math.round(row.contextPct)}%`}
-                    </Table.Cell>
-                    <Table.Cell class="c-when">
-                      <span class="when">
-                        <IconHistory />
-                        {row.at ? formatDistanceToNow(new Date(row.at)) : '—'}
-                      </span>
-                    </Table.Cell>
-                    <!-- A session changing state pops its new chip in over the
-                         old; on a phone the cell sits after the name and
-                         slides as its width changes (motion/rows). -->
-                    <Table.Cell class="c-state" data-flip>
-                      {#key row.stateLabel}
+                      </Table.Cell>
+                      <!-- A session changing state keeps its chip: the tint turns and
+                           the words morph, the width following them. -->
+                      <Table.Cell class="c-state" data-flip>
                         <Badge
                           class={cn(pillBase, pillTint[row.status])}
-                          data-flip="pop"
-                          >{row.stateLabel}</Badge
+                          data-status={row.status}
                         >
-                      {/key}
-                    </Table.Cell>
-                    <Table.Cell class="c-act">
-                      <div class="act">
-                        <Button
-                          aria-label="Open {row.title}"
-                          href={row.href}
-                          size="icon-sm"
-                          variant="outline"
-                        >
-                          <IconExternal />
-                        </Button>
-                        {#if row.instance}
-                          {@const instance = row.instance}
+                          {#if morphMs}
+                            <TextMorph
+                              as="span"
+                              duration={morphMs}
+                              ease={CURVE.out}
+                              text={row.stateLabel}
+                            />
+                          {:else}
+                            {row.stateLabel}
+                          {/if}
+                        </Badge>
+                      </Table.Cell>
+                      <Table.Cell class="c-act">
+                        <div class="act">
                           <Button
-                            aria-label="Peek {row.title}"
-                            onclick={() => setPeeked(instance.id)}
+                            aria-label="Open {row.title}"
+                            href={row.href}
                             size="icon-sm"
                             variant="outline"
                           >
-                            <IconMaximize />
+                            <IconExternal />
                           </Button>
-                        {/if}
-                        {#if row.stored || (row.instance && isResumable(row.instance))}
-                          <Button
-                            aria-label="Resume {row.title}"
-                            onclick={() => resume(row)}
-                            size="icon-sm"
-                            variant="outline"
-                          >
-                            <IconPlay />
-                          </Button>
-                        {/if}
-                      </div>
-                    </Table.Cell>
-                  </tr>
-                {/each}
-              </Table.Body>
-            </Table.Root>
-            <!-- The scroll target. It sits after the table but inside the
-               scroller, so reaching it means the last row has been reached. It
-               is kept in the tree even when the list is fully shown: removing it
-               would tear down the observer, and the next filter that widens the
-               list would have nothing left to watch. It is inside the table's
-               box, so while that box morphs to a new height it is clipped with
-               the rows and does not read as reached before they are laid out. -->
-            <div class="sentinel" bind:this={sentinelEl}>
-              {#if more}
-                <span class="sr-only" role="status">Loading more sessions</span>
-              {/if}
+                          {#if row.instance}
+                            {@const instance = row.instance}
+                            <Button
+                              aria-label="Peek {row.title}"
+                              onclick={() => setPeeked(instance.id)}
+                              size="icon-sm"
+                              variant="outline"
+                            >
+                              <IconMaximize />
+                            </Button>
+                          {/if}
+                          {#if row.stored || (row.instance && isResumable(row.instance))}
+                            <Button
+                              aria-label="Resume {row.title}"
+                              class="[--btn-icon:16px]"
+                              onclick={() => resume(row)}
+                              pending={resuming === row.key}
+                              size="icon-sm"
+                              variant="outline"
+                            >
+                              <PendingContent
+                                failed={row.key in resumeFailed}
+                                icon={IconPlay}
+                                pending={resuming === row.key}
+                              />
+                            </Button>
+                          {/if}
+                        </div>
+                      </Table.Cell>
+                    </tr>
+                  {/each}
+                </Table.Body>
+              </Table.Root>
+              <!-- The scroll target. It sits after the table but inside the
+                 scroller, so reaching it means the last row has been reached. It
+                 is kept in the tree even when the list is fully shown: removing it
+                 would tear down the observer, and the next filter that widens the
+                 list would have nothing left to watch. It is inside the table's
+                 box, so while that box morphs to a new height it is clipped with
+                 the rows and does not read as reached before they are laid out. -->
+              <div class="sentinel" bind:this={sentinelEl}>
+                {#if more}
+                  <span class="sr-only" role="status"
+                    >Loading more sessions</span
+                  >
+                {/if}
+              </div>
             </div>
-          </div>
+            {#if filtered.length === 0}
+              <!-- Sessions exist, but the search and filters leave none. -->
+              <EmptyState
+                class="px-[var(--space-5)]"
+                data-flip
+                icon={IconSearch}
+                line="No session matches the search and filters. Clear them to see every session."
+                title="No sessions match"
+              >
+                {#snippet action()}
+                  <Button onclick={clearFilters} variant="outline"
+                    >Clear filters</Button
+                  >
+                {/snippet}
+              </EmptyState>
+            {/if}
 
-          <div class="foot" data-flip>
-            Showing {visible.length} of {filtered.length}
+            <div class="foot" data-flip>
+              Showing {visible.length} of {filtered.length}
+            </div>
+          {/if}
+        </div>
+
+        <!-- Asleep and unreachable rows never reach the roster above (it is
+           `runningInstances` only, by design — see the Sessions stat), so a
+           sleeping or unknown session would otherwise be absent from the whole
+           board. Shown apart, never folded into live work or its counts. -->
+        {#if notRunning.length > 0}
+          {@const CAP = 20}
+          {@const capped = showAllNotRunning ? notRunning : notRunning.slice(0, CAP)}
+          <div class="not-running" data-flip="box">
+            <div class="nr-head">
+              <span class="nr-count"
+                >Not running ·
+                {#if morphMs}
+                  <TextMorph
+                    as="span"
+                    class="num"
+                    duration={morphMs}
+                    ease={CURVE.out}
+                    text={String(notRunning.length)}
+                  />
+                {:else}
+                  <span class="num">{notRunning.length}</span>
+                {/if}</span
+              >
+              {#if latestNotRunning}
+                <span class="nr-hint">
+                  {latestTitle}
+                  {#if rowTime(latestNotRunning) > 0}
+                    · {formatDistanceToNow(new Date(rowTime(latestNotRunning)))}
+                  {/if}
+                </span>
+              {/if}
+              <Button
+                aria-expanded={notRunningOpen}
+                class="ml-auto"
+                label={notRunningOpen ? 'Hide' : 'Show'}
+                onclick={toggleNotRunning}
+                size="sm"
+                variant="outline"
+              />
+            </div>
+            {#if notRunningOpen}
+              <div
+                class="not-running-rows"
+                data-flip
+                {@attach highlight({ rows: "a" })}
+              >
+                {#each capped as row (row.id)}
+                  <div class="nr-row" data-flip>
+                    <LiveSessionRow instance={row} />
+                  </div>
+                {/each}
+              </div>
+              {#if !showAllNotRunning && notRunning.length > CAP}
+                <button
+                  class="show-all"
+                  data-flip
+                  onclick={() => {
+                  showAllNotRunning = true;
+                }}
+                  type="button"
+                >
+                  Show all {notRunning.length} sessions
+                </button>
+              {/if}
+            {/if}
           </div>
         {/if}
       </div>
-
-      <!-- Asleep and unreachable rows never reach the roster above (it is
-         `runningInstances` only, by design — see the Sessions stat), so a
-         sleeping or unknown session would otherwise be absent from the whole
-         board. Shown apart, never folded into live work or its counts. -->
-      {#if notRunning.length > 0}
-        {@const CAP = 20}
-        {@const capped = showAllNotRunning ? notRunning : notRunning.slice(0, CAP)}
-        <div class="not-running" data-flip="box">
-          <div class="nr-head">
-            <span class="nr-count"
-              >Not running ·
-              {#key notRunning.length}
-                <span data-flip="pop">{notRunning.length}</span>
-              {/key}</span
-            >
-            {#if latestNotRunning}
-              <span class="nr-hint">
-                {latestTitle}
-                {#if rowTime(latestNotRunning) > 0}
-                  · {formatDistanceToNow(new Date(rowTime(latestNotRunning)))}
-                {/if}
-              </span>
-            {/if}
-            <Button
-              aria-expanded={notRunningOpen}
-              class="ml-auto"
-              onclick={toggleNotRunning}
-              size="sm"
-              variant="outline"
-            >
-              {notRunningOpen ? 'Hide' : 'Show'}
-            </Button>
-          </div>
-          {#if notRunningOpen}
-            <div
-              class="not-running-rows"
-              data-flip
-              {@attach highlight({ rows: "a" })}
-            >
-              {#each capped as row (row.id)}
-                <div class="nr-row" data-flip>
-                  <LiveSessionRow instance={row} />
-                </div>
-              {/each}
-            </div>
-            {#if !showAllNotRunning && notRunning.length > CAP}
-              <button
-                class="show-all"
-                data-flip
-                onclick={() => {
-                showAllNotRunning = true;
-              }}
-                type="button"
-              >
-                Show all {notRunning.length} sessions
-              </button>
-            {/if}
-          {/if}
-        </div>
-      {/if}
-    {:else if stage === 1}
-      {@render pending(false)}
+    {:else}
+      {@render skeleton()}
     {/if}
   </div>
 </div>
 
-{#snippet pending(machines: boolean)}
-  <!-- Where the parts still being read will stand: the machines and the
-       table while nothing is back, the table alone once the machines are. -->
-  <div aria-busy="true" aria-label="Loading the fleet" data-flip role="status">
-    {#if machines}
-      <Skeleton
-        class="mt-[var(--space-8)] h-[88px] w-full rounded-[var(--radius-lg)]"
-      />
-    {/if}
-    <div class="panel pending-table">
-      <Skeleton class="h-9 w-[237px] max-w-full" />
-      {#each [0, 1, 2, 3, 4, 5, 6, 7] as row (row)}
-        <Skeleton class="h-10 w-full" />
+{#snippet skeleton()}
+  <!-- Where the board will stand, at its size, until its first read is back:
+       the four figures, two machine rows and a page of table rows. It leaves
+       pinned where it stands (crossOut) as the board cross-fades in over it. -->
+  <div
+    aria-busy="true"
+    aria-label="Loading the fleet"
+    role="status"
+    out:crossOut
+  >
+    <div class="stats">
+      {#each [0, 1, 2, 3] as tile (tile)}
+        <Skeleton
+          class="h-[113px] rounded-[var(--radius-lg)] max-[900px]:h-[112px]"
+        />
       {/each}
+    </div>
+    <div class="sk-machines">
+      {#each [0, 1] as machine (machine)}
+        <div class="sk-machine"><Skeleton class="h-6 w-[180px]" /></div>
+      {/each}
+    </div>
+    <div class="panel">
+      <div class="bar">
+        <Skeleton class="h-9 w-[237px] max-[900px]:w-full" />
+        <Skeleton class="h-9 w-[168px]" />
+        <Skeleton class="h-9 w-[140px]" />
+        <Skeleton class="h-9 w-[150px]" />
+        <Skeleton class="ml-auto h-9 w-[124px] max-[900px]:ml-0" />
+      </div>
+      <div class="sk-head"></div>
+      {#each Array.from({ length: PAGE_SIZE }, (_, i) => i) as row (row)}
+        <div class="sk-row"><Skeleton class="h-4 w-full max-w-[420px]" /></div>
+      {/each}
+      <div class="sk-foot"><Skeleton class="h-4 w-[120px]" /></div>
     </div>
   </div>
 {/snippet}
@@ -993,7 +1223,11 @@
     overflow: auto;
     background: var(--surface-recess);
   }
+  /* Positioned from the start: the skeleton is pinned in it as it leaves. */
   .inner {
+    /* A phone's two-line row, which its skeleton rows stand at. */
+    --phone-row: 83px;
+    position: relative;
     padding: 0 var(--space-6) var(--space-7) var(--space-7);
   }
   .head {
@@ -1058,10 +1292,39 @@
     margin-top: var(--space-8);
   }
 
-  .pending-table {
+  /* The skeleton's parts, each the size of what it stands for. */
+  .sk-machines {
+    margin-top: var(--space-8);
+    overflow: hidden;
+    border-radius: var(--radius-lg);
+    background: var(--surface-raised);
+    box-shadow: var(--shadow-tile);
+  }
+  .sk-machine {
+    padding: var(--space-3) var(--space-4);
+  }
+  .sk-machine + .sk-machine {
+    border-top: 1px solid var(--border-hairline);
+  }
+  .sk-head {
+    height: var(--space-8);
+    border-radius: var(--radius-xs);
+    background: var(--surface-recess);
+  }
+  .sk-row {
     display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
+    align-items: center;
+    box-sizing: border-box;
+    height: 44px;
+    padding: 0 var(--space-3);
+    border-bottom: 1px solid var(--border-hairline);
+  }
+  .sk-foot {
+    display: flex;
+    align-items: center;
+    height: 55px;
+    padding: 0 var(--space-3);
+    border-top: 1px solid var(--border-hairline);
   }
 
   .panel {
@@ -1108,16 +1371,6 @@
     font: var(--type-meta);
     color: var(--ink-muted);
   }
-  /* The list mounts on Show; rows fade in, nothing animates height. */
-  .nr-row {
-    animation: nr-in var(--dur-exit) var(--ease-out) both;
-  }
-  @keyframes nr-in {
-    from {
-      opacity: 0;
-    }
-  }
-
   .not-running-rows {
     display: flex;
     flex-direction: column;
@@ -1266,6 +1519,18 @@
   .tbl :global(.num) {
     font-variant-numeric: tabular-nums;
   }
+  /* A context share crossing a band turns colour rather than cutting. */
+  .tbl :global(.c-ctx) {
+    transition: color var(--dur-panel) var(--ease-out);
+  }
+  /* A state chip changing turns its tint (idle carries none) as its words
+     morph. */
+  .tbl :global(.c-state [data-slot="badge"]) {
+    transition:
+      background-color var(--dur-panel) var(--ease-out),
+      color var(--dur-panel) var(--ease-out),
+      padding var(--dur-panel) var(--ease-out);
+  }
   .tbl :global(.mut) {
     color: var(--ink-muted);
   }
@@ -1340,6 +1605,25 @@
   .nm a:hover {
     text-decoration: underline;
   }
+  /* A resume that failed, said on its row. */
+  .nm-failed {
+    display: inline-flex;
+    flex: 0 1 auto;
+    align-items: center;
+    gap: var(--space-1);
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font: var(--type-meta);
+    color: var(--destructive);
+  }
+  /* biome-ignore lint/style/noDescendingSpecificity: never matches the same element as .search .lead :global(svg) — different subtree */
+  .nm-failed :global(svg) {
+    width: 12px;
+    height: 12px;
+    flex: 0 0 auto;
+  }
   .when {
     display: inline-flex;
     align-items: center;
@@ -1396,8 +1680,9 @@
       width: 100%;
     }
   }
-  /* Phones: each session is a stacked row — name with its state chip on the
-     first line, where and when beneath, actions at the end. */
+  /* Phones: each session is a two-line card row: its title across the row,
+     then machine · state · age, with its actions at the end. Nothing is
+     wider than the phone, so nothing scrolls sideways. */
   @media (max-width: 639px) {
     .tbl :global(table.live),
     .tbl :global(table.live tbody) {
@@ -1406,11 +1691,13 @@
     .tbl :global(table.live thead) {
       display: none;
     }
+    /* The second line keeps to one line: the machine's name gives way
+       (ellipsis) before anything wraps. */
     .tbl :global(table.live tbody tr) {
-      display: flex;
-      flex-wrap: wrap;
+      display: grid;
+      grid-template-columns: minmax(0, max-content) max-content max-content 1fr;
       align-items: center;
-      gap: var(--space-1) var(--space-3);
+      gap: var(--space-1) var(--space-2);
       padding: var(--space-3);
       border-bottom: 1px solid var(--border-hairline);
     }
@@ -1426,33 +1713,49 @@
       border: 0;
     }
     .tbl :global(table.live tbody .c-name) {
-      flex: 1 1 0;
+      grid-row: 1;
+      grid-column: 1 / -1;
       min-width: 0;
     }
-    .tbl :global(table.live tbody .c-state) {
-      flex: 0 0 auto;
-    }
     .tbl :global(table.live tbody .c-mach) {
-      flex-basis: 100%;
-      order: 1;
+      grid-row: 2;
+      grid-column: 1;
+      min-width: 0;
       padding-left: calc(var(--c-mark) + var(--space-3));
-      font-size: var(--text-meta);
-      font-weight: var(--weight-body);
+    }
+    .tbl :global(table.live tbody .c-state),
+    .tbl :global(table.live tbody .c-when) {
+      display: flex;
+      align-items: center;
+      gap: var(--space-2);
+      grid-row: 2;
+    }
+    .tbl :global(table.live tbody .c-state) {
+      grid-column: 2;
+    }
+    .tbl :global(table.live tbody .c-when) {
+      grid-column: 3;
+    }
+    .tbl :global(table.live tbody .c-state::before),
+    .tbl :global(table.live tbody .c-when::before) {
+      content: "·";
+      color: var(--ink-muted);
     }
     .tbl :global(table.live tbody .c-harn),
     .tbl :global(table.live tbody .c-turns),
     .tbl :global(table.live tbody .c-ctx) {
       display: none;
     }
-    .tbl :global(table.live tbody .c-when) {
-      order: 2;
-      padding-left: calc(var(--c-mark) + var(--space-3));
-      font-size: var(--text-meta);
-      font-weight: var(--weight-body);
-    }
     .tbl :global(table.live tbody .c-act) {
-      order: 3;
-      margin-left: auto;
+      grid-row: 2;
+      grid-column: 4;
+      justify-self: end;
+    }
+    .sk-head {
+      display: none;
+    }
+    .sk-row {
+      height: var(--phone-row);
     }
   }
 </style>

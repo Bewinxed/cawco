@@ -765,7 +765,7 @@ const downgradeNonDelegateUrgent = (
 const LEAF_DELEGATE_REFUSAL =
   "This session is a leaf delegate — it was spawned with can_delegate=false and may not delegate or start sessions. Do the work yourself, or handoff to your parent session.";
 
-/** `register`'s word on what each harness adapter on the machine can do. */
+/** The report beat's word on what each harness adapter on the machine can do. */
 const peekHarnesses = (payload: unknown): HarnessReport[] | undefined => {
   if (typeof payload !== "object" || payload === null) {
     return undefined;
@@ -852,8 +852,8 @@ const custodyNotice = (
  * restore are precisely the rows the daemon will hand to `reattachFrom`, and a
  * mark for anything else is a mark it could never act on.
  *
- * Union, de-duplicated, order preserved: `reported` covers a live daemon's
- * `reannounce`, `restored` covers the returning one.
+ * Union, de-duplicated, order preserved: `reported` covers the sessions the
+ * daemon named live, `restored` covers the ones this hub just told it to restore.
  */
 export const reattachable = (
   reported: readonly string[],
@@ -1056,7 +1056,7 @@ const isToolStatus = (value: unknown): value is ToolStatus =>
   TOOL_STATES.includes((value as ToolStatus).state);
 
 /**
- * `register`'s word on what the machine has of the tool catalog (NEW.md §10).
+ * The report beat's word on what the machine has of the tool catalog (NEW.md §10).
  * Empty from a daemon that predates the feature, which is not the same as a
  * machine with none of them — the difference is what stops the hub installing
  * the whole catalog onto a daemon that has never been asked.
@@ -3125,12 +3125,13 @@ export const createServer = ({
   /**
    * Sends the machine what the fleet's Claude Code is supposed to be able to
    * reach (NEW.md §11): every MCP server, marketplace and plugin, for the
-   * machine to converge on and report back. Sent on register and after any
-   * change, so a machine that joins tomorrow needs nobody to remember it.
+   * machine to converge on and report back. Sent when a machine reports what
+   * its harnesses can do (once per connection) and after any change, so a
+   * machine that joins tomorrow needs nobody to remember it.
    *
    * A fleet nobody has configured is not sent at all — there is nothing to
    * converge on, and a sync that writes nothing is still a file read and a
-   * report stored on every register in the fleet. Unless the machine still has
+   * report stored on every connection in the fleet. Unless the machine still has
    * something of ours: the last row being deleted is exactly when a machine most
    * needs telling, and its own last report is what says it has anything to lose.
    */
@@ -6542,12 +6543,10 @@ export const createServer = ({
                 os: peek(message.payload, "os") ?? "unknown",
                 auth: peekAuth(message.payload),
                 build: peekBuild(message.payload),
-                harnesses: peekHarnesses(message.payload),
               });
-              db.mergeAgentTools(message.machineId, peekTools(message.payload));
-              // The re-announce (`supervisor.reannounce`) carries no deploy state,
-              // so a register without one leaves standing what the beats said —
-              // the same tolerance `build` gets on the row itself.
+              // A register from a daemon whose watcher has not ticked carries no
+              // deploy state, so it leaves standing what the beats said — the
+              // same tolerance `build` gets on the row itself.
               const registered = peekDeploy(message.payload);
               if (registered) {
                 deploys.set(message.machineId, registered);
@@ -6645,8 +6644,6 @@ export const createServer = ({
                 );
               }
               publishInstances(message.machineId);
-              autoInstall(message.machineId, ws);
-              sendFleetSync(message.machineId, ws);
               // After `settleInstances`, so the rows this reads the machine's home
               // out of are the ones the returning daemon just accounted for.
               // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — nothing here is waiting on it, and register must not stall on it.
@@ -6712,7 +6709,24 @@ export const createServer = ({
               if (beaten) {
                 deploys.set(message.machineId, beaten);
               }
+              // What the machine can do: one beat per connection carries it,
+              // sent the moment the daemon's probes finish. It used to ride the
+              // register, which made the register wait on those probes, and
+              // the register is what puts a machine back in the registry. So
+              // everything that reads a machine's harnesses or tools runs here,
+              // off the report it reads.
+              const reported = peekHarnesses(message.payload);
+              if (reported) {
+                db.setAgentHarnesses(message.machineId, reported);
+                db.mergeAgentTools(
+                  message.machineId,
+                  peekTools(message.payload)
+                );
+                autoInstall(message.machineId, ws);
+                sendFleetSync(message.machineId, ws);
+              }
               if (
+                reported ||
                 moved ||
                 beat.promoted.length > 0 ||
                 beat.settled.length > 0

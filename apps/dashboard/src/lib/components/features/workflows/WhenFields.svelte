@@ -22,7 +22,7 @@
 >
 {#if value}
   <!-- The condition's fields open and fold as one: the rows below slide. -->
-  <div class="when" transition:unfold>
+  <div class="when" in:unfold out:unfold>
     <label
       >Path<input
         oninput={(event) => value && onchange({ ...value, path: event.currentTarget.value })}
@@ -39,7 +39,7 @@
       </select></label
     >
     {#if value.op !== 'truthy' && value.op !== 'falsy'}
-      <div class="when" transition:unfold>
+      <div class="when" in:unfold out:unfold>
         <JsonField
           label="Compare with (JSON)"
           onchange={(next) => value && onchange({ ...value, value: next })}

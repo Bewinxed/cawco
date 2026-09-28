@@ -504,6 +504,10 @@
 
   /** Which section the bar names, for the readers who arrived by URL. */
   const crumb = $derived.by(() => {
+    // A path nothing answers is not a section: the bar says what happened.
+    if (page.error) {
+      return page.status === 404 ? "Not found" : "Error";
+    }
     const [section] = page.url.pathname.split("/").filter(Boolean);
     switch (section) {
       case undefined:

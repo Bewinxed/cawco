@@ -48,7 +48,6 @@ import {
   DISCARD_TIMEOUT_MS,
   SESSION_CATALOG_LIMIT,
   TRANSCRIPT_CHUNK_SIZE,
-  TRANSCRIPT_CHUNK_THRESHOLD,
   TRANSCRIPT_FIRST_CHUNK,
   TRANSCRIPT_TAIL_CEILING,
   WS_RECONNECT_BASE_DELAY,
@@ -73,7 +72,6 @@ import {
   mergePulses,
   routedToParent,
   suppressesTaskLine,
-  turnBoundaries,
   turnStart,
 } from "./frames";
 import { newId } from "./id";
@@ -498,6 +496,13 @@ const state = $state({
    */
   pulses: {} as Record<string, SessionPulse>,
   /**
+   * When each session's current turn began, epoch ms, as its pulses tell it:
+   * the `at` of the first pulse after an idle one that was not idle. Absent
+   * while the session is idle. The fleet board orders a working session by
+   * it, so a session keeps its place for as long as it works.
+   */
+  turnSince: {} as Record<string, number>,
+  /**
    * The hub's record of every delegate's asks, answers and reports, keyed by
    * the delegate they are about and oldest first. Kept apart from the session
    * it belongs to because the reader of this traffic is the *parent* — a
@@ -673,6 +678,15 @@ function session(instanceId: string): SessionState {
   // is the usual way — still has to name its machine on the fleet view.
   hydrate(target);
   return target;
+}
+
+/** Starts a session's turn clock at the first pulse that is not idle, and stops it at the idle one. */
+function trackTurn(instanceId: string, pulse: SessionPulse): void {
+  if (pulse.activity === "idle") {
+    delete state.turnSince[instanceId];
+  } else {
+    state.turnSince[instanceId] ??= pulse.at;
+  }
 }
 
 /** Fills in what the registry knows about a session this browser did not spawn. */
@@ -1253,6 +1267,7 @@ function handleFrame(frame: FramePayload): void {
       (frame as { pulses?: Record<string, SessionPulse> }).pulses
     );
     for (const [id, pulse] of Object.entries(state.pulses)) {
+      trackTurn(id, pulse);
       const held = state.sessions[id];
       if (held) {
         applyPulse(held, pulse);
@@ -1278,6 +1293,7 @@ function handleFrame(frame: FramePayload): void {
     // The daemon's coarse now-state, broadcast — this is the whole of what the
     // rail knows about a session this browser has not subscribed to.
     state.pulses[frame.instanceId] = frame.pulse;
+    trackTurn(frame.instanceId, frame.pulse);
     const held = state.sessions[frame.instanceId];
     if (held) {
       applyPulse(held, frame.pulse);
@@ -1798,16 +1814,15 @@ const streamHost: StreamHost = {
   applyFrame: (sessionId, frame) =>
     ingestFrame(sessionId, frame as FramePayload, "stream"),
   /**
-   * The existing re-read, unchanged — a reset is exactly the late-join problem
-   * `backfillSession` already solves, including holding the deltas that land
-   * while it reads. The latch it keeps is released first: a session may be
-   * reset more than once in a tab's life, and the second one must not be a
-   * silent no-op.
+   * A reset is the late-join problem the history read solves, including
+   * holding the deltas that land while it reads. The latch it keeps is
+   * released first: a session may be reset more than once in a tab's life,
+   * and the second one must not be a silent no-op.
    */
   rereadHistory: (sessionId) => {
     backfilled.delete(sessionId);
     // biome-ignore lint/complexity/noVoid: fire-and-forget — the latch is already released, the reread fills in when it lands
-    void backfillSession(sessionId);
+    void preloadHistory(sessionId);
   },
   sendToHub: (message) => {
     const socket = globalThis.__whiffleSocket;
@@ -1843,16 +1858,13 @@ const streamHost: StreamHost = {
    */
   noteFailure: (record) => {
     if (record.kind === "send") {
-      // The echo carries the failure from here on — stamped rather than kept
-      // only on the record, because records are swept after five minutes and a
-      // message that never sent must not fade back to looking sent. The stamp
-      // is also the claim: if no echo carries this id (superseded by a queued
-      // row, or the session was closed), nothing on screen says anything, and
-      // the toast below is all the operator gets.
+      // A send's failure is said over the composer it left (the session's
+      // notice) and on its echo — stamped rather than kept only on the record,
+      // because records are swept after five minutes and a message that never
+      // sent must not fade back to looking sent. It is never a toast.
       announceSendFailure(record);
-      if (stampSendFailure(record)) {
-        return;
-      }
+      stampSendFailure(record);
+      return;
     }
     // A parked permission card renders its own refusal (`Couldn't send that
     // answer.`) against the very command id it holds. It only does so while it
@@ -1882,26 +1894,20 @@ const failureNotice = (record: CommandRecord): string => {
 };
 
 /**
- * Stamps a failed send's reason onto the echo that represents it, and says
- * whether it found one. `metadata.sendFailed` is what keeps the message
+ * Stamps a failed send's reason onto the echo that represents it, when one
+ * is still in the session. `metadata.sendFailed` is what keeps the message
  * rendered as "not sent" after the ledger has swept its record.
  */
-function stampSendFailure(record: CommandRecord): boolean {
-  const target = state.sessions[record.sessionId];
-  if (!target) {
-    return false;
-  }
-  const echo = target.messages.find(
+function stampSendFailure(record: CommandRecord): void {
+  const echo = state.sessions[record.sessionId]?.messages.find(
     (message) => message.metadata?.sentAs === record.commandId
   );
-  if (!echo) {
-    return false;
+  if (echo) {
+    echo.metadata = {
+      ...echo.metadata,
+      sendFailed: record.reason ?? "The hub never took it.",
+    };
   }
-  echo.metadata = {
-    ...echo.metadata,
-    sendFailed: record.reason ?? "The hub never took it.",
-  };
-  return true;
 }
 
 /**
@@ -2235,17 +2241,17 @@ export function submitCommand<K extends CommandKind>(
     // The echo goes in FIRST, and only here: on every other path one of the
     // two dialects pushes it (the stream effects' `submitted`, or `sendText`),
     // and neither ran. Without it a payload-assembly bug leaves the reason
-    // stranded in a toast with no row to stamp, no Try again, and no Edit —
-    // recoverable text nobody can reach. It is wrapped because it is the one
-    // thing left that could throw, and a throw from a catch block is the
-    // silence this whole function exists to abolish.
+    // with no row to stamp, no Try again, and no Edit — recoverable text
+    // nobody can reach. It is wrapped because it is the one thing left that
+    // could throw, and a throw from a catch block is the silence this whole
+    // function exists to abolish.
     if (kind === "send") {
       const { text, extras } = intent as CommandIntents["send"];
       try {
         noteSendSubmitted(instanceId, text, extras ?? {}, commandId);
       } catch {
-        // The toast below is then the whole report, which is a worse outcome
-        // than a failed ghost but an infinitely better one than nothing.
+        // The composer's notice is then the whole report, which is a worse
+        // outcome than a failed ghost but an infinitely better one than nothing.
       }
     }
     return failLocally(
@@ -3639,72 +3645,6 @@ function harvestCommands(target: SessionState, messages: Message[]): void {
   }
 }
 
-async function ingestTranscript(
-  viewId: string,
-  target: SessionState,
-  transcript: SessionMessage[],
-  epoch: number,
-  onPublished?: () => void
-): Promise<void> {
-  // A transcript that already has turns in it is a session that already
-  // started, so the banner announcing the start has had its moment. The SDK
-  // re-emits `system.init` every turn; without this, every reload re-arms the
-  // flag and the next turn opens with "Session started" as if the process had
-  // just come up — which is exactly what it does *not* mean.
-  if (transcript.length > 0) {
-    target.initialized = true;
-  }
-
-  if (transcript.length <= TRANSCRIPT_CHUNK_THRESHOLD) {
-    const { messages, subagents } = mapTranscript(viewId, transcript);
-    target.messages = messages;
-    target.subagents = subagents;
-    harvestCommands(target, messages);
-    onPublished?.();
-    return;
-  }
-
-  const bounds = turnBoundaries(transcript, TRANSCRIPT_CHUNK_SIZE);
-  const newest = mapTranscript(
-    viewId,
-    // biome-ignore lint/style/useAtIndex: bounds is guaranteed non-empty here (transcript already exceeded the chunk threshold); .at(-1) would silently widen to undefined and change the slice
-    transcript.slice(bounds[bounds.length - 1])
-  );
-  target.messages = newest.messages;
-  target.subagents = newest.subagents;
-  harvestCommands(target, newest.messages);
-  target.hydrating = true;
-  target.loading = false;
-  onPublished?.();
-
-  for (let i = bounds.length - 2; i >= 0; i -= 1) {
-    // Mapping a chunk is the blocking work, so the loop hands the event loop
-    // back between them — this is what the reader scrolls and types through.
-    // biome-ignore lint/performance/noAwaitInLoops: chunks must yield to the event loop in order, oldest last, so the reader's scroll and typing stay responsive
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    if (hydrations.get(viewId) !== epoch) {
-      return;
-    }
-    const older = mapTranscript(
-      viewId,
-      transcript.slice(bounds[i], bounds[i + 1])
-    );
-    target.messages = [...older.messages, ...target.messages];
-    // Branches are keyed by the Task `tool_use_id` that opened them, so an older
-    // chunk mostly adds keys — except where a compacted transcript re-emits the
-    // same call, and then its turns belong in front of the ones already read
-    // back for it.
-    for (const [toolUseId, branch] of Object.entries(older.subagents)) {
-      const known = target.subagents[toolUseId];
-      if (known) {
-        known.messages = [...branch.messages, ...known.messages];
-      } else {
-        target.subagents[toolUseId] = branch;
-      }
-    }
-  }
-}
-
 /** Starts a read of this view's transcript, superseding whatever was reading it. */
 function claimTranscript(viewId: string): number {
   const epoch = (hydrations.get(viewId) ?? 0) + 1;
@@ -3738,83 +3678,6 @@ export function clearReadFault(instanceId: string): void {
   const held = state.sessions[instanceId];
   if (held) {
     held.readFault = null;
-  }
-}
-
-/**
- * Seeds a live session this browser joined late. Frames only carry what happens
- * from now on, so a session already under way renders as an empty transcript
- * until what it has already said is read back out of SDK session storage.
- */
-export async function backfillSession(instanceId: string): Promise<void> {
-  if (backfilling.has(instanceId)) {
-    return;
-  }
-  const target = session(instanceId);
-  // A latch with nothing behind it does not hold — the same rule
-  // `streamHistory` reads by, so the two paths agree on what "already read"
-  // means.
-  if (backfilled.has(instanceId) && target.messages.length > 0) {
-    return;
-  }
-  // Deliberately not "it already has messages, so it is loaded".
-  //
-  // This browser watches every session, not just the one on screen, so a
-  // session left in another tab quietly collects the frames of whatever it did
-  // meanwhile. Treating those few as a transcript meant switching to it showed
-  // the last thing it said and nothing before — and `backfilled` latched that
-  // for the rest of the tab, which is why only a hard refresh fixed it. Live
-  // frames are the tail of a conversation, never the whole of one.
-  if (target.loading) {
-    return;
-  }
-  const { machineId, sessionId, cwd } = target;
-  if (!(machineId && sessionId)) {
-    return;
-  }
-
-  backfilled.add(instanceId);
-  backfilling.set(instanceId, []);
-  // Whatever this session said while the reader was elsewhere. The transcript
-  // that is about to arrive replaces the message list wholesale, so these are
-  // kept and re-applied behind it — deduplicated against it by uuid, exactly
-  // like the frames that land *during* the fetch.
-  const live = target.messages.slice();
-  const epoch = claimTranscript(instanceId);
-  target.loading = true;
-  target.readFault = null;
-  try {
-    const transcript = await machineControl<SessionMessage[]>(
-      machineId,
-      "getSessionMessages",
-      [sessionId, { dir: cwd || undefined }],
-      CONTROL_TIMEOUT_MS,
-      target.harness
-    );
-    const seeded = new Set(transcript.map((entry) => entry.uuid));
-    await ingestTranscript(instanceId, target, transcript, epoch, () => {
-      target.streaming = "";
-      clearTurnPhase(target);
-      absorbLive(target, live, seeded);
-      // What was held belongs to the end of the transcript, which is now on
-      // screen: it appends while the older chunks prepend, so neither waits.
-      replayHeld(instanceId, seeded);
-    });
-  } catch (error) {
-    // The latch is undone, exactly as `streamHistory` undoes its own: this is
-    // fired from a hover-peek and a delegate card as much as from the pane,
-    // and a latch left set by a read that never landed made every later open
-    // of the same id short-circuit into a skeleton nothing would resolve.
-    backfilled.delete(instanceId);
-    replayHeld(instanceId, new Set());
-    const message = error instanceof Error ? error.message : String(error);
-    if (target.messages.length === 0) {
-      target.readFault = { reason: "failed", message };
-    }
-    console.error(`[whiffle] backfilling ${instanceId} failed:`, error);
-  } finally {
-    target.loading = false;
-    target.hydrating = false;
   }
 }
 
@@ -3882,10 +3745,11 @@ export function preloadHistory(viewId: string): Promise<TranscriptOutcome> {
 /**
  * A session's stored transcript over HTTP, published as it arrives.
  *
- * The socket path (`backfillSession`) cannot answer until the
- * WebSocket is up, which is why a reload showed an empty transcript until the
- * hub reconnected. The hub answers `GET /api/instances/:id/messages` with the
- * same `getSessionMessages` read, so this needs nothing but a page.
+ * The only read of a stored transcript there is. The hub answers
+ * `GET /api/instances/:id/messages` with the `getSessionMessages` read, so it
+ * needs nothing but a page — no socket to wait for — and it arrives a line at
+ * a time: a read that came back as one socket message was decoded, parsed and
+ * mapped in one task (50-57ms for a 12,000px delegate transcript).
  *
  * It arrives newest entry first, one JSON object per line, and is published in
  * turn-aligned chunks the moment each one is complete: the newest turns paint
@@ -4195,9 +4059,17 @@ export async function streamHistory({
 
     // The head of a transcript is always somewhere a chunk can start, and an
     // empty one still has to publish: it is what says the session is empty.
+    // The last chunk is mapped in a task of its own, like every chunk before
+    // it, and the read ends in the task after that: what waits for the whole
+    // read to draw (a delegate's card) draws in its own task, not in the one
+    // that mapped the last 250 entries.
     if (buffered.length > 0 || chunks === 0) {
+      if (chunks > 0) {
+        await new Promise((resolve) => setTimeout(resolve, 0));
+      }
       publish(buffered.reverse());
     }
+    await new Promise((resolve) => setTimeout(resolve, 0));
     return { ok: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
@@ -5236,6 +5108,9 @@ export const whiffle = {
    */
   pulseAt: (instanceId: string): number | undefined =>
     state.pulses[instanceId]?.at,
+  /** When the session's current turn began, ms epoch; `undefined` while it is idle. */
+  turnSince: (instanceId: string): number | undefined =>
+    state.turnSince[instanceId],
   /**
    * The ledger stats the fleet table shows per session — turns, context %, cost.
    * Only populated for a session this browser has state for (subscribed / a turn

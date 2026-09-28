@@ -28,6 +28,8 @@ interface Departure {
   radius: string;
   rect: DOMRect;
   source: HTMLElement;
+  /** The source stays drawn while its content travels (see `departBox`). */
+  stays?: boolean;
   ttl: number;
 }
 
@@ -64,6 +66,33 @@ export function depart(
     at: performance.now(),
     ttl: Number(source.dataset.shareTtl ?? TTL),
   });
+}
+
+/**
+ * A source that stays where it is while what it held travels: the
+ * composer's field, emptied into a send, stays drawn and ready for the next
+ * message while its text flies into the row it became. Its box is taken
+ * under `key`, which the destination names, and it is never hidden.
+ */
+export function departBox(key: string, source: HTMLElement): void {
+  departures.set(key, {
+    by: "click",
+    rect: source.getBoundingClientRect(),
+    radius: getComputedStyle(source).borderRadius,
+    source,
+    stays: true,
+    at: performance.now(),
+    ttl: TTL,
+  });
+}
+
+/**
+ * Whether a fresh departure waits under `key`: a destination deciding how
+ * to arrive (out of what was clicked, or on its own) asks before it lands.
+ */
+export function waiting(key: string): boolean {
+  const from = departures.get(key);
+  return !!from && performance.now() - from.at < from.ttl;
 }
 
 /**
@@ -124,9 +153,11 @@ function fly(node: HTMLElement, from: Departure, options: LandOptions) {
     return;
   }
   const { mode = "scale", uniform = false, ms = 280, anchor } = options;
-  from.source.style.visibility = "hidden";
+  if (!from.stays) {
+    from.source.style.visibility = "hidden";
+  }
   const reveal = () => {
-    if (from.source.isConnected) {
+    if (!from.stays && from.source.isConnected) {
       from.source.style.visibility = "";
     }
   };
