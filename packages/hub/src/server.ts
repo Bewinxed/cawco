@@ -6016,7 +6016,7 @@ export const createServer = ({
           const known = delegateTypes.list();
           const resolved = known.find((type) => type.name === typeName);
           if (!resolved) {
-            // Same wording handoff-shared.ts's own `delegate()` refuses an
+            // Same wording delegation-actions.ts's own `delegate()` refuses an
             // unknown type with (see its `resolvedType` block) — one refusal
             // vocabulary whichever side resolved the name.
             const names =
