@@ -36,17 +36,15 @@
   } = $props();
 
   /**
-   * The skeleton leaving: pinned where it stands, its whole box, while what
-   * replaces it fades in over it.
+   * The skeleton leaving: pinned over the route's whole box, the one it
+   * filled alone, while what replaces it fades in over it. Its own box is
+   * not measured here: the editor arriving is already in the route's column
+   * when this runs, and the skeleton measured then is squeezed to its share.
    */
   function leave(node: HTMLElement) {
-    const { offsetTop, offsetLeft, offsetWidth, offsetHeight } = node;
     Object.assign(node.style, {
       position: "absolute",
-      top: `${offsetTop}px`,
-      left: `${offsetLeft}px`,
-      width: `${offsetWidth}px`,
-      height: `${offsetHeight}px`,
+      inset: "0",
       pointerEvents: "none",
     });
     return {
