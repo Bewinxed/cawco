@@ -1,5 +1,7 @@
 <script lang="ts">
   import type { Problem, WorkflowOrigin } from "@whiffle/core";
+  import { crossIn } from "$lib/whiffle/motion/curves.svelte";
+  import { reflow } from "$lib/whiffle/motion/rows.svelte";
   import CodeView from "./CodeView.svelte";
   import { withoutLine } from "./workflow-ui";
 
@@ -21,7 +23,10 @@
   const lined = $derived(problems.filter((problem) => problem.line));
   /** The hub prefixes a diagnostic with its line; the chip already says it. */
 </script>
-<div class="program">
+<!-- The problems panel is marked for the program's own reflow: when a
+     problem arrives or leaves, the panel's edge slides to its new place
+     instead of jumping. -->
+<div class="program" {@attach reflow()}>
   <p class="wf-muted note">
     {#if origin === 'editor'}
       Compiled from this graph on save. Edit the graph to change it.
@@ -39,16 +44,30 @@
     />
   </div>
   {#if origin === 'code'}
-    <section aria-label="Problems" class="problems wf-stack">
-      {#if problems.length}
-        <h2 class="num">Problems · {problems.length}</h2>
-      {:else}
-        <p class="wf-muted">
-          The hub compiled and typechecked this program. No problems found.
-        </p>
-      {/if}
+    <!-- The count and the all-clear cross-fade in one grid cell; problems
+         come and go the house way (motion/rows). -->
+    <section
+      aria-label="Problems"
+      class="problems wf-stack"
+      data-flip
+      {@attach reflow()}
+    >
+      <div class="head">
+        {#key problems.length > 0}
+          <div transition:crossIn>
+            {#if problems.length}
+              <h2 class="num">Problems · {problems.length}</h2>
+            {:else}
+              <p class="wf-muted">
+                The hub compiled and typechecked this program. No problems
+                found.
+              </p>
+            {/if}
+          </div>
+        {/key}
+      </div>
       {#each problems as problem, index (index)}
-        <p class="problem">
+        <p class="problem" data-flip>
           {#if problem.line}
             <span class="line">Line {problem.line}</span>
           {/if}
@@ -88,6 +107,12 @@
     background: var(--surface-raised);
     max-height: 30dvh;
     overflow-y: auto;
+  }
+  .head {
+    display: grid;
+  }
+  .head > div {
+    grid-area: 1 / 1;
   }
   .problem {
     padding: var(--space-3);

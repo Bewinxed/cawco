@@ -16,6 +16,7 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Resizable from "$lib/components/ui/resizable";
   import { IsCoarsePointer } from "$lib/hooks/is-mobile.svelte";
+  import { dur, ease, motionOk } from "$lib/whiffle/motion/curves.svelte";
   import Self from "./PaneGrid.svelte";
   import PaneLeaf from "./PaneLeaf.svelte";
   import { type PaneNode, workspace } from "./workspace.svelte";
@@ -42,6 +43,43 @@
    * each pane keeps its own.
    */
   const coarse = new IsCoarsePointer();
+
+  /**
+   * A split grows its new group in from the edge it was made at, and the
+   * groups beside it give the room up as it does (--dur-panel,
+   * --ease-in-out): the drop's picture, half the group, becomes the group.
+   * The shares are paneforge's own `flex-grow`, read once it has laid the
+   * new group out; the animation runs from where the room was before — none
+   * for the new group, and for the others the whole of what they shared —
+   * to there, in the next frame's callbacks, so the first frame painted is
+   * already its first.
+   */
+  let group = $state<HTMLElement | null>(null);
+  $effect(() => {
+    const el = group;
+    if (node.t !== "b" || !el) {
+      return;
+    }
+    const made = node.kids.findIndex((kid) => workspace.takeFresh(kid.id));
+    if (made < 0 || !motionOk.current) {
+      return;
+    }
+    const frame = requestAnimationFrame(() => {
+      const panes = [
+        ...el.querySelectorAll<HTMLElement>(":scope > [data-pane]"),
+      ];
+      const now = panes.map((pane) => Number.parseFloat(pane.style.flexGrow));
+      const room = 100 - now[made];
+      panes.forEach((pane, i) => {
+        const from = i === made ? 0 : (now[i] * 100) / room;
+        pane.animate([{ flexGrow: `${from}` }, { flexGrow: `${now[i]}` }], {
+          duration: dur("--dur-panel"),
+          easing: ease("--ease-in-out"),
+        });
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  });
 </script>
 
 {#if node.t === 'l'}
@@ -56,6 +94,7 @@
     class="grid-group"
     direction={node.dir === 'h' ? 'horizontal' : 'vertical'}
     onLayoutChange={(sizes) => workspace.resize(node.id, sizes)}
+    bind:ref={group}
   >
     {#each node.kids as kid, i (kid.id)}
       {#if i > 0}
@@ -97,6 +136,17 @@
   :global(.grid-group [data-pane-resizer][data-active="pointer"]),
   :global(.grid-group [data-pane-resizer][data-active="keyboard"]) {
     background: var(--ink-muted);
+  }
+  /* A drag tracks the pointer 1:1. A step from the keyboard (paneforge
+     marks its divider `keyboard` while it holds focus) is a jump, so the
+     groups either side tween to it at the control tier. */
+  @media (prefers-reduced-motion: no-preference) {
+    :global(
+      .grid-group:has(> [data-pane-resizer][data-active="keyboard"])
+        > .grid-pane
+    ) {
+      transition: flex-grow var(--dur-control) var(--ease-out);
+    }
   }
   @media (prefers-reduced-motion: reduce) {
     :global(.grid-group [data-pane-resizer]) {

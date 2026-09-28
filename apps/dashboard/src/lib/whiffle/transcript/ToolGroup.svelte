@@ -363,6 +363,8 @@
                 aria-disabled={busy || undefined}
                 aria-label={preview?.title || 'Preview'}
                 class="artifact-open"
+                data-share="preview:{m.instanceId}"
+                data-share-ttl="10000"
                 onclick={whileIdle(() => busy, () => opened ? revealPreview(m.instanceId) : openArtifact(m, input))}
                 type="button"
               >

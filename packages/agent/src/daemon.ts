@@ -115,8 +115,8 @@ export class ConnectionLost extends Data.TaggedError("ConnectionLost")<{
  * How often a daemon knocks while its hub is coming back from a restart, and
  * how many knocks it spends before deciding the outage is real.
  *
- * Every deploy restarts the hub (`restartStack`, update.ts), and a restarted
- * hub starts with an empty registry, which is the only place `online` is read
+ * A deploy that reaches the hub's code restarts it (`restartStack`,
+ * update.ts), and a restarted hub starts with an empty registry, which is the only place `online` is read
  * from: every machine reads offline until its daemon registers again. Measured
  * here, the hub is listening again 0.42–0.54s after systemd stops it (journal,
  * `Stopping` to `listening on`, 12 deploy restarts). The first attempt after a
@@ -275,6 +275,11 @@ export const reconnecting = <E extends { readonly reason: string }, R>(
     // `Effect.retry` re-invokes on every attempt.
     let failures = 0;
     let firstFailureAt: number | undefined;
+    // The last reason this series logged, and when. A hub restart fails the
+    // knock about ten times inside half a second; one line per reason says
+    // as much, and a reason repeated after a knock window has passed (a real
+    // outage backing off) is logged again, as every attempt used to be.
+    let said: { at: number; reason: string } | undefined;
 
     return Effect.suspend(() => {
       // Per-pass, and read only after the failure that ends the pass — nothing
@@ -283,9 +288,17 @@ export const reconnecting = <E extends { readonly reason: string }, R>(
       return session(() => {
         liveAt = now();
       }).pipe(
-        Effect.tapError((error) =>
-          Effect.logWarning(`${error.reason} — reconnecting`)
-        ),
+        Effect.tapError((error) => {
+          const at = now();
+          if (
+            said?.reason === error.reason &&
+            at - said.at <= RESTART_WINDOW_MS
+          ) {
+            return Effect.void;
+          }
+          said = { at, reason: error.reason };
+          return Effect.logWarning(`${error.reason} — reconnecting`);
+        }),
         Effect.tapError(() => {
           if (!rediscover) {
             return Effect.void;

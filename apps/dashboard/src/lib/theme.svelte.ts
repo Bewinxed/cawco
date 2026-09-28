@@ -52,11 +52,10 @@ class ThemeState {
   }
 
   /**
-   * A switch the reader makes cross-fades the whole page as one: a view
-   * transition snapshots the page, flips the theme, and fades the new page in
-   * over the old one (app.css, --dur-fade on --ease-out). One composited fade,
-   * so every colour on the page turns together at no cost per element. With
-   * reduced motion the theme flips at once.
+   * A switch the reader makes draws the new theme at once under a wash of the
+   * old page's background, and fades the wash off it (app.css .theme-wash,
+   * --dur-fade on --ease-out): one composited layer, nothing captured. With
+   * reduced motion the theme flips at once, with no wash.
    */
   set(value: Theme) {
     const flip = () => {
@@ -64,20 +63,37 @@ class ThemeState {
       localStorage.setItem("whiffle-theme", value);
       applyTheme(value);
     };
-    if (!motionOk.current) {
-      flip();
-      return;
-    }
-    // Under the fade the page's own colour transitions (a button's hover
-    // ink, a row's pill) would start from the old theme and play inside the
-    // new snapshot: a second fade, and a style pass every frame for it. They
-    // are off for the flip, and back once the new page is drawn.
+    // The page's own colour transitions (a button's hover ink, a row's pill)
+    // would start from the old theme: a second fade under the wash's, a fade
+    // the reduced-motion switch promises not to have, and a style pass for
+    // those elements every frame until they end. They are off for the flip,
+    // and back once the new page is drawn (with the wash, once it has gone).
     const root = document.documentElement;
-    const transition = document.startViewTransition(() => {
+    if (!motionOk.current) {
       root.classList.add("theme-flip");
       flip();
-    });
-    transition.ready.finally(() => root.classList.remove("theme-flip"));
+      // The flip's frame is drawn with them off; the one after gets them back.
+      requestAnimationFrame(() =>
+        requestAnimationFrame(() => root.classList.remove("theme-flip"))
+      );
+      return;
+    }
+    const wash = document.createElement("div");
+    wash.className = "theme-wash";
+    wash.style.backgroundColor = getComputedStyle(
+      document.body
+    ).backgroundColor;
+    wash.addEventListener(
+      "animationend",
+      () => {
+        wash.remove();
+        root.classList.remove("theme-flip");
+      },
+      { once: true }
+    );
+    document.body.append(wash);
+    root.classList.add("theme-flip");
+    flip();
   }
 
   toggle() {

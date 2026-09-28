@@ -1,8 +1,11 @@
 <script lang="ts">
   import { Portal } from "bits-ui";
   import { tick, untrack } from "svelte";
-  import { Drawer } from "vaul-svelte";
+  import { Drawer as Vaul } from "vaul-svelte";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
+  import * as Drawer from "$lib/components/ui/drawer";
   import { hidePreview, whiffle } from "../client.svelte";
+  import { land, waiting } from "../motion/share.svelte";
   import { lightbox } from "../transcript/lightbox-state.svelte";
   import PreviewPane from "./PreviewPane.svelte";
   import type { CapturedSelection } from "./selection";
@@ -25,6 +28,18 @@
     onescape: () => boolean;
   } = $props();
   const peek = "106px";
+  /**
+   * How the sheet arrives, decided once as it mounts. Opened by its card's
+   * Preview button in the transcript, it comes out of that button
+   * (motion/share.svelte.ts, clipped open from the button's box over
+   * --dur-panel on --ease-drawer) straight to the middle snap the reader
+   * asked for, standing still while it does: vaul's own rise is skipped for
+   * that one open, so the two never move the sheet at once. Opened any other
+   * way (an agent showing a preview), it peeks up from the bottom edge on
+   * vaul's own curve and waits there.
+   */
+  const share = untrack(() => `preview:${instanceId}`);
+  const fromButton = untrack(() => waiting(share));
   let snap = $state<number | string | null>(peek);
   let bottom = $state(0);
   let viewportHeight = $state(0);
@@ -81,8 +96,24 @@
     }
   });
   $effect(() => {
-    untrack(() => hidePreview(instanceId));
+    if (!fromButton) {
+      untrack(() => hidePreview(instanceId));
+    }
   });
+  // Opened from the button: the sheet mounts at the middle snap, which is
+  // known once the space above the composer has been measured.
+  let placed = false;
+  $effect.pre(() => {
+    if (fromButton && !placed && availableHeight) {
+      placed = true;
+      snap = middle;
+      previousMiddle = middle;
+    }
+  });
+  /** Where vaul starts the sheet: at its snap when it comes out of the button. */
+  const initial = $derived(
+    fromButton ? `${availableHeight - Number.parseFloat(middle)}px` : undefined
+  );
   $effect(() => {
     const request = whiffle.previewRequests[instanceId];
     if (request !== undefined) {
@@ -137,6 +168,10 @@
   ></div></Portal
 >
 {#if host && availableHeight}
+  <!-- The kit's drawer (vaul): its content follows the finger 1:1 from the
+       handle and settles on the nearest snap on vaul's own curve. The
+       lowest snap is the peek, which is how the preview is put away; it is
+       never dismissed past that, and nothing behind it scales. -->
   <Drawer.Root
     container={host}
     dismissible={false}
@@ -146,21 +181,22 @@
     onRelease={reportSnap}
     {open}
     repositionInputs={false}
+    shouldScaleBackground={false}
     {snapPoints}
     bind:activeSnapPoint={snap}
   >
-    <Drawer.Portal>
-      <Drawer.Content
-        class="preview-sheet"
-        onCloseAutoFocus={(event) => event.preventDefault()}
-        onEscapeKeydown={(event) => { if (lightbox.current) { lightbox.close(); } else { previewPane?.parentEscape(event); } event.preventDefault(); }}
-        onOpenAutoFocus={(event) => event.preventDefault()}
-        style="inset:0;width:100%;height:100%"
-        trapFocus={false}
-        bind:ref={drawer}
-      >
-        <Drawer.Title class="sr-only">Preview</Drawer.Title>
-        <Drawer.Handle
+    <Drawer.Content
+      class="preview-sheet"
+      onCloseAutoFocus={(event) => event.preventDefault()}
+      onEscapeKeydown={(event) => { if (lightbox.current) { lightbox.close(); } else { previewPane?.parentEscape(event); } event.preventDefault(); }}
+      onOpenAutoFocus={(event) => event.preventDefault()}
+      style="inset:0;width:100%;height:100%;{initial ? `--initial-transform:${initial}` : ''}"
+      trapFocus={false}
+      bind:ref={drawer}
+    >
+      <Drawer.Title class="sr-only">Preview</Drawer.Title>
+      <div class="sheet" {@attach land(() => share, { mode: 'clip' })}>
+        <Vaul.Handle
           class="preview-grab"
           onclick={cycleSnap}
           onpointerdown={(event) => { handleStartY = event.clientY; handleDragged = false; }}
@@ -173,8 +209,8 @@
           {onselect}
           bind:this={previewPane}
         />
-      </Drawer.Content>
-    </Drawer.Portal>
+      </div>
+    </Drawer.Content>
   </Drawer.Root>
 {/if}
 
@@ -188,21 +224,36 @@
     overflow: hidden;
     pointer-events: none;
   }
+  /* The sheet fills its host (the space above the composer) edge to edge,
+     so the kit content's inset card, its top margin, its height cap, its
+     padding and its drawn grab bar give way to `.sheet`, which draws the
+     surface and holds the vaul handle: the one box that comes out of the
+     Preview button. */
   :global(.preview-sheet) {
-    transition-duration: var(--dur-panel) !important;
-    transition-timing-function: var(--ease-out) !important;
     position: absolute;
     z-index: 40;
     display: flex;
     flex-direction: column;
+    max-height: none;
+    margin: 0;
+    padding: 0;
+    outline: none;
+
+    &::before,
+    & > div:first-child {
+      display: none;
+    }
+  }
+  .sheet {
+    position: relative;
+    display: flex;
+    flex: 1;
+    flex-direction: column;
+    min-height: 0;
     padding-top: var(--space-3);
     border-radius: var(--radius-lg) var(--radius-lg) 0 0;
     background: var(--surface-raised);
     box-shadow: var(--shadow-drawer);
-    outline: none;
-  }
-  :global(.preview-sheet[data-state="closed"]) {
-    transition-timing-function: var(--ease-out) !important;
   }
   :global(.preview-sheet .preview-grab[data-vaul-handle]) {
     touch-action: none;
@@ -219,7 +270,7 @@
   :global(.preview-sheet [data-vaul-handle-hitarea]) {
     height: 44px;
   }
-  :global(.preview-sheet > .preview-pane) {
+  :global(.preview-sheet .sheet > .preview-pane) {
     flex: 1;
     height: auto;
     box-shadow: none;

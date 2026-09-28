@@ -13,7 +13,6 @@
     IconCheck,
     IconExternal,
     IconFolder,
-    IconPin,
     IconStop,
     IconTrash,
   } from "$lib/icons";
@@ -27,7 +26,6 @@
   import { confirm } from "./confirm.svelte";
   import { continueInNewSession } from "./continue.svelte";
   import { conversationHref } from "./links";
-  import { rail } from "./rail.svelte";
   import { sessionName } from "./session-name";
 
   interface Props {
@@ -45,7 +43,6 @@
 
   const href = $derived(conversationHref(instance.id, whiffle.instanceIndex));
   const scratch = $derived(instance.kind === "scratch");
-  const pinned = $derived(rail.isPinned("session", instance.id));
 
   async function askDiscard() {
     await confirm({
@@ -80,15 +77,6 @@
     >
       <IconStop />
       Stop
-    </ContextMenu.Item>
-    <ContextMenu.Item onSelect={() => rail.togglePin('session', instance.id)}>
-      {#if pinned}
-        <IconPin />
-        Unpin from rail
-      {:else}
-        <IconPin />
-        Pin to rail
-      {/if}
     </ContextMenu.Item>
     {#if ongroup}
       <ContextMenu.Item onSelect={ongroup}>

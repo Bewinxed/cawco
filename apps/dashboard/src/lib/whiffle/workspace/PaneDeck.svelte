@@ -16,6 +16,8 @@
    * in the same frame as the lift, and both the transition and the first
    * few drag frames went with it.
    */
+  import type { TransitionConfig } from "svelte/transition";
+  import { dur, easeOut } from "../motion/curves.svelte";
   import { createDeck } from "./deck.svelte";
   import PaneLeaf from "./PaneLeaf.svelte";
   import { workspace } from "./workspace.svelte";
@@ -28,6 +30,15 @@
   const focusedIndex = $derived(
     workspace.leaves.findIndex((leaf) => leaf.id === workspace.focusedLeafId)
   );
+
+  /** The page dots, and each dot, come and go as a fade at the control tier. */
+  function fadeDots(_node: Element): TransitionConfig {
+    return {
+      duration: dur("--dur-control"),
+      easing: easeOut,
+      css: (t) => `opacity: ${t}`,
+    };
+  }
 </script>
 
 <!-- The card's place in the stack is its delta, and the stylesheet parks it
@@ -53,14 +64,20 @@
 
   <!-- Graphite, never the accent: a page control is position, and the one
        loud colour in this product means a session is asking for something. -->
+  <!-- The fades are on wrappers: the dots' own opacity is the lift's and
+       the focus's, and a fade written over it would flash them in. -->
   {#if workspace.leaves.length > 1}
     <div aria-hidden="true" class="dots">
-      {#each workspace.leaves as leaf (leaf.id)}
-        <span
-          class="dot"
-          class:dot-on={leaf.id === workspace.focusedLeafId}
-        ></span>
-      {/each}
+      <div class="dots-in" transition:fadeDots>
+        {#each workspace.leaves as leaf (leaf.id)}
+          <span class="dot-slot" transition:fadeDots>
+            <span
+              class="dot"
+              class:dot-on={leaf.id === workspace.focusedLeafId}
+            ></span>
+          </span>
+        {/each}
+      </div>
     </div>
   {/if}
 </div>
@@ -178,13 +195,18 @@
     right: var(--space-3);
     top: 50%;
     translate: 0 -50%;
+    opacity: 0;
+    transition: opacity var(--dur-control) var(--ease-out);
+    pointer-events: none;
+    z-index: 5;
+  }
+  .dots-in {
     display: flex;
     flex-direction: column;
     gap: 6px;
-    opacity: 0;
-    transition: opacity 160ms var(--ease-out);
-    pointer-events: none;
-    z-index: 5;
+  }
+  .dot-slot {
+    display: flex;
   }
   .deck.lifted .dots {
     opacity: 1;

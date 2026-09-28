@@ -72,6 +72,13 @@ const KEY = "whiffle-workspace";
 /** A year: the layout is a habit, not a session. Matches the working set. */
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
+/**
+ * The group the last split made. Not state and never stored: the grid reads
+ * it once, as the new group first renders, to grow it in from the edge it
+ * was dropped on.
+ */
+let fresh: string | null = null;
+
 let seq = 0;
 const nodeId = (): string => {
   const id = `p${Date.now().toString(36)}${seq.toString(36)}`;
@@ -699,7 +706,7 @@ export const workspace = {
         from.active = from.tabs[0] ?? null;
       }
     }
-    const fresh: LeafNode = {
+    const made: LeafNode = {
       t: "l",
       id: nodeId(),
       tabs: [sessionId],
@@ -707,9 +714,10 @@ export const workspace = {
     };
     const dir = edge === "left" || edge === "right" ? "h" : "v";
     const before = edge === "left" || edge === "top";
-    const kids = before ? [fresh, target] : [target, fresh];
+    const kids = before ? [made, target] : [target, made];
     replace(target, { t: "b", id: nodeId(), dir, sizes: evenly(2), kids });
-    held.focusedLeaf = fresh.id;
+    held.focusedLeaf = made.id;
+    fresh = made.id;
     settle();
     project(sessionId, "push");
   },
@@ -758,6 +766,15 @@ export const workspace = {
       sessionId
     );
     save();
+  },
+
+  /** Whether `leafId` is the group a split just made; true once, to the grid rendering it. */
+  takeFresh(leafId: string): boolean {
+    if (fresh !== leafId) {
+      return false;
+    }
+    fresh = null;
+    return true;
   },
 
   /** Record a resize. Written by paneforge as the divider moves. */

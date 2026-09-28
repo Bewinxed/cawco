@@ -12,6 +12,7 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "$lib/components/ui/popover";
   import { IconRefresh, IconUnfold } from "$lib/icons";
+  import { crossIn, crossOut } from "$lib/whiffle/motion/curves.svelte";
   import {
     covers,
     ensureModels,
@@ -165,23 +166,28 @@
         placeholder="Search, or type a model id…"
         bind:value={typed}
       />
-      <Command.List>
+      <Command.List class="relative">
+        <!-- A typed id nothing covers and "no model goes by that" take
+             turns at the top of the list: they cross-fade over
+             --dur-control while the popover's height follows (its morph). -->
         {#if custom}
-          <Command.Group forceMount heading="Custom">
-            <Command.Item forceMount onSelect={selectCustom} value={trimmed}>
-              <ProviderLogo model={trimmed} />
-              <span class="flex flex-col">
-                <span>Use <span class="font-mono">{trimmed}</span></span>
-                <span class="text-meta text-muted-foreground">
-                  Sent to the selected harness exactly as typed
+          <div in:crossIn out:crossOut>
+            <Command.Group forceMount heading="Custom">
+              <Command.Item forceMount onSelect={selectCustom} value={trimmed}>
+                <ProviderLogo model={trimmed} />
+                <span class="flex flex-col">
+                  <span>Use <span class="font-mono">{trimmed}</span></span>
+                  <span class="text-meta text-muted-foreground">
+                    Sent to the selected harness exactly as typed
+                  </span>
                 </span>
-              </span>
-            </Command.Item>
-          </Command.Group>
-        {/if}
-
-        {#if !custom}
-          <Command.Empty>No model here goes by that.</Command.Empty>
+              </Command.Item>
+            </Command.Group>
+          </div>
+        {:else}
+          <div in:crossIn out:crossOut>
+            <Command.Empty>No model here goes by that.</Command.Empty>
+          </div>
         {/if}
 
         {#if recent.length > 0}

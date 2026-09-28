@@ -11,7 +11,7 @@
   import { MediaQuery } from "svelte/reactivity";
   import { TextMorph } from "torph/svelte";
   import { browser } from "$app/environment";
-  import { afterNavigate } from "$app/navigation";
+  import { onNavigate } from "$app/navigation";
   import { page } from "$app/state";
   import { Button } from "$lib/components/ui/button";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
@@ -25,13 +25,22 @@
     IconSidebar,
   } from "$lib/icons";
   import { isTyping } from "$lib/utils/typing";
-  import { pageIn, pageOut } from "$lib/whiffle/motion/route.svelte";
+  import {
+    crossOut,
+    dur,
+    ease,
+    easeOut,
+    motionOk,
+    popScale,
+  } from "$lib/whiffle/motion/curves.svelte";
+  import { pageIn, pageOut, route } from "$lib/whiffle/motion/route.svelte";
   import { reflow } from "$lib/whiffle/motion/rows.svelte";
   import AssistantOrb from "./assistant/AssistantOrb.svelte";
   import AssistantPanel from "./assistant/AssistantPanel.svelte";
   import ConfirmDialog from "./ConfirmDialog.svelte";
   import { hubSocketUrl, reconnectNow, whiffle } from "./client.svelte";
-  import JumpPalette from "./JumpPalette.svelte";
+  import JumpPalette, { type JumpOpener } from "./JumpPalette.svelte";
+  import SessionSurface from "./SessionSurface.svelte";
   import Sidebar from "./Sidebar.svelte";
   import PaneTabs from "./workspace/PaneTabs.svelte";
   import { type WorkspaceV1, workspace } from "./workspace/workspace.svelte";
@@ -66,6 +75,8 @@
   // Seeded once from the server's reading; dragging owns it after that.
   let railWidth = $state(untrack(() => clamp(initialRailWidth)));
   let jumpOpen = $state(false);
+  /** What opened the palette, which decides how it arrives (JumpPalette). */
+  let jumpOpener = $state<JumpOpener>("key");
   let railOpen = $state(false);
   let assistantOpen = $state(false);
 
@@ -190,29 +201,54 @@
     handle.addEventListener("pointercancel", stop);
   }
 
+  /**
+   * A key steps the width, and the step is a tween: the rail goes from the
+   * width it is drawn at (a step still in flight included) to the new one
+   * over --dur-control, so held arrows glide instead of stuttering. The
+   * pointer drag above stays 1:1: it writes the width directly and nothing
+   * tweens it.
+   */
+  let railStep: Animation | undefined;
   function resizeKey(event: KeyboardEvent) {
     const step = event.shiftKey ? 32 : 8;
+    let next: number;
     switch (event.key) {
       case "ArrowLeft":
-        setRail(railWidth - step);
+        next = railWidth - step;
         break;
       case "ArrowRight":
-        setRail(railWidth + step);
+        next = railWidth + step;
         break;
       case "Home":
-        setRail(RAIL_MIN);
+        next = RAIL_MIN;
         break;
       case "End":
-        setRail(RAIL_MAX);
+        next = RAIL_MAX;
         break;
       default:
         return;
     }
     event.preventDefault();
+    const rail = (event.currentTarget as HTMLElement)
+      .parentElement as HTMLElement;
+    const from = rail.getBoundingClientRect().width;
+    railStep?.cancel();
+    setRail(next);
+    if (motionOk.current && from !== railWidth) {
+      railStep = rail.animate(
+        [
+          { width: `${from}px`, flexBasis: `${from}px` },
+          { width: `${railWidth}px`, flexBasis: `${railWidth}px` },
+        ],
+        { duration: dur("--dur-control"), easing: ease("--ease-out") }
+      );
+    }
   }
 
-  // The sheet is a place you go through, not one you stay in.
-  afterNavigate(() => {
+  // The sheet is a place you go through, not one you stay in. It leaves as
+  // the navigation it started swaps the page, in the same frame, rather than
+  // after the new page has arrived.
+  onNavigate(() => {
     railOpen = false;
   });
 
@@ -226,6 +262,7 @@
     const key = event.key.toLowerCase();
     if (key === "k") {
       event.preventDefault();
+      jumpOpener = "key";
       jumpOpen = !jumpOpen;
       return;
     }
@@ -253,6 +290,86 @@
   }
 
   const onSession = $derived(page.url.pathname.startsWith("/session"));
+  /**
+   * The session surface (board, groups, panes) is mounted the first time a
+   * `/session` page shows and never again after that: under another spoke it
+   * is parked, still laid out but hidden and inert, so coming back finds
+   * every transcript scrolled and every disclosure open as it was left.
+   */
+  let surfaceMounted = $state(untrack(() => onSession));
+  $effect(() => {
+    if (onSession) {
+      surfaceMounted = true;
+    }
+  });
+
+  /**
+   * Parking the surface moves it the way the route moves (motion/route): out
+   * with the page it leaves with, back in with the page it arrives with, on
+   * the plan `onNavigate` wrote. Input leaves it at once; it is hidden only
+   * once it has travelled out, and shown before it travels back. With less
+   * motion it only fades, over --dur-control.
+   */
+  function travelOf(showing: boolean) {
+    if (!motionOk.current) {
+      return { end: { x: 0, y: 0, opacity: 0 }, ms: dur("--dur-control") };
+    }
+    const { enter, leave, ms } = route.travel;
+    return { end: showing ? enter : leave, ms };
+  }
+
+  function park(shown: () => boolean) {
+    return (node: HTMLElement) => {
+      let seen = untrack(shown);
+      let travelling: Animation | undefined;
+
+      const move = (showing: boolean) => {
+        const drawn = getComputedStyle(node);
+        const from: Keyframe = {
+          transform: drawn.transform,
+          opacity: drawn.opacity,
+        };
+        travelling?.cancel();
+        node.inert = !showing;
+        node.classList.remove("parked");
+        const { end, ms } = travelOf(showing);
+        const away: Keyframe = {
+          transform: `translate(${end.x}%, ${end.y}%)`,
+          opacity: end.opacity,
+        };
+        const home: Keyframe = { transform: "none", opacity: 1 };
+        const animation = node.animate(showing ? [away, home] : [from, away], {
+          duration: ms,
+          easing: ease("--ease-drawer"),
+          fill: "forwards",
+        });
+        travelling = animation;
+        animation.finished.then(
+          () => {
+            if (travelling !== animation) {
+              return;
+            }
+            node.classList.toggle("parked", !showing);
+            animation.cancel();
+            travelling = undefined;
+          },
+          () => {
+            /* the reader turned back mid-travel; the next one starts from here */
+          }
+        );
+      };
+
+      $effect(() => {
+        const next = shown();
+        untrack(() => {
+          if (next !== seen) {
+            seen = next;
+            move(next);
+          }
+        });
+      });
+    };
+  }
   /** What a page swap is keyed on: every conversation and all of Configure are one page each here. */
   const pageKey = $derived.by(() => {
     const path = page.url.pathname;
@@ -287,12 +404,110 @@
     // biome-ignore lint/suspicious/noDocumentCookie: needs the synchronous write; Cookie Store API is async and Safari lacks it
     document.cookie = `whiffle-narrow=${narrow ? 1 : 0};path=/;max-age=31536000;samesite=lax`;
   });
-  const hostedLeaf = $derived(
-    onSession && !narrow && workspace.root.t === "l" ? workspace.root : null
+  /** The one group's strip the bar carries, once the session has shown, on any route. */
+  const barLeaf = $derived(
+    surfaceMounted && !narrow && workspace.root.t === "l"
+      ? workspace.root
+      : null
   );
+  /** Whether the bar shows it: on a session page. */
+  const hostedLeaf = $derived(onSession ? barLeaf : null);
+
+  /* ── The bar's slot ──────────────────────────────────────────────────
+     The hosted tabs, the crumb and Configure's back link take turns in one
+     slot. The one leaving is lifted out of the row where it stands and
+     fades over --dur-control; the one arriving rises 4px as it fades in
+     over the same length, and the hosted strip comes down 6px from the
+     bar's edge instead. With less motion, only the fades run.
+     The strip is the session surface's, so like the surface it is kept
+     once it has been drawn: under another spoke it is lifted out of the
+     row and hidden, not unmounted, and comes back as it was left. */
+  const riseIn = (_node: Element) => ({
+    duration: dur("--dur-control"),
+    easing: easeOut,
+    css: (t: number, u: number) =>
+      motionOk.current
+        ? `opacity: ${t}; transform: translateY(${4 * u}px)`
+        : `opacity: ${t}`,
+  });
+
+  function barTabs(shown: () => boolean) {
+    return (node: HTMLElement) => {
+      let seen = untrack(shown);
+      let fading: Animation | undefined;
+      node.classList.toggle("away", !seen);
+      node.inert = !seen;
+      $effect(() => {
+        const next = shown();
+        untrack(() => {
+          if (next === seen) {
+            return;
+          }
+          seen = next;
+          fading?.cancel();
+          node.inert = !next;
+          const timing = {
+            duration: dur("--dur-control"),
+            easing: ease("--ease-out"),
+          };
+          if (next) {
+            node.classList.remove("lifted", "away");
+            fading = node.animate(
+              motionOk.current
+                ? [
+                    { opacity: 0, transform: "translateY(-6px)" },
+                    { opacity: 1, transform: "none" },
+                  ]
+                : [{ opacity: 0 }, { opacity: 1 }],
+              timing
+            );
+            return;
+          }
+          node.classList.add("lifted");
+          const out = node.animate([{ opacity: 1 }, { opacity: 0 }], {
+            ...timing,
+            fill: "forwards",
+          });
+          fading = out;
+          out.finished.then(
+            () => {
+              if (fading === out) {
+                node.classList.add("away");
+                out.cancel();
+              }
+            },
+            () => {
+              /* shown again before it had gone */
+            }
+          );
+        });
+      });
+    };
+  }
+
+  /* The attention control grows out of the bar's top edge from the pop
+     scale as it fades in, over --dur-menu, and shrinks back into it over
+     --dur-exit. */
+  const badge = (enter: boolean) => (_node: Element) => {
+    const pop = popScale();
+    return {
+      duration: dur(enter ? "--dur-menu" : "--dur-exit"),
+      easing: easeOut,
+      css: (t: number, u: number) =>
+        motionOk.current
+          ? `opacity: ${t}; transform-origin: top center; transform: scale(${1 - (1 - pop) * u})`
+          : `opacity: ${t}`,
+    };
+  };
+  const badgeIn = badge(true);
+  const badgeOut = badge(false);
 
   /** Which section the bar names, for the readers who arrived by URL. */
   const crumb = $derived.by(() => {
+    // A path nothing answers is not a section: the bar says what happened.
+    if (page.error) {
+      return page.status === 404 ? "Not found" : "Error";
+    }
     const [section] = page.url.pathname.split("/").filter(Boolean);
     switch (section) {
       case undefined:
@@ -395,6 +610,7 @@
         assistantOpen = !assistantOpen;
       }}
       onjump={() => {
+        jumpOpener = "field";
         jumpOpen = true;
       }}
     />
@@ -429,6 +645,7 @@
         }}
         onjump={() => {
           railOpen = false;
+          jumpOpener = "field";
           jumpOpen = true;
         }}
       />
@@ -450,34 +667,47 @@
       <!-- The one "where am I" label, now visible at every width — the brand
            lives in the rail, and the crumb is what the top bar owes a reader
            who arrived by URL. -->
-      {#if hostedLeaf}
-        <PaneTabs hosted leaf={hostedLeaf} />
-      {:else if narrow && page.url.pathname.startsWith('/config/')}
-        <!-- Inside a section on a phone the rail is its own page, so the bar
-             leads back to it. -->
-        <a class="crumb back pressable" href="/config"
-          ><IconChevronLeft />Configure</a
-        >
-      {:else}
-        <TextMorph as="span" class="crumb" duration={150} text={crumb} />
-      {/if}
+      <div class="slot">
+        {#if barLeaf}
+          <div class="slot-tabs" {@attach barTabs(() => hostedLeaf !== null)}>
+            <PaneTabs hosted leaf={barLeaf} />
+          </div>
+        {/if}
+        {#if hostedLeaf}
+        <!-- The strip above has the slot. -->
+        {:else if narrow && page.url.pathname.startsWith('/config/')}
+          <!-- Inside a section on a phone the rail is its own page, so the bar
+               leads back to it. -->
+          <a class="crumb back pressable" href="/config" in:riseIn out:crossOut
+            ><IconChevronLeft />Configure</a
+          >
+        {:else}
+          <span class="crumb" in:riseIn out:crossOut>
+            <TextMorph as="span" duration={150} text={crumb} />
+          </span>
+        {/if}
+      </div>
 
-      <div class="right" {@attach reflow()}>
+      <div class="right">
         <!-- First, so the order read is the order drawn: below 900px it stands
-             left of the cluster rather than in it (the style below). It pops
-             in and out, and its count pops over the old one (motion/rows). -->
+             left of the cluster rather than in it (the style below). It
+             grows out of the bar's edge and back into it; its count morphs
+             digit by digit. -->
         {#if whiffle.blockedCount > 0}
           <a
             class="icobtn touch-hit"
-            data-flip="pop"
             href="/session"
             title="{whiffle.blockedCount} waiting on you"
+            in:badgeIn
+            out:badgeOut
           >
             <IconShield />
-            <span class="badge" data-flip="box"
-              >{#key whiffle.blockedCount}
-                <span data-flip="pop">{whiffle.blockedCount}</span>
-              {/key}</span
+            <span class="badge"
+              ><TextMorph
+                as="span"
+                duration={150}
+                text={String(whiffle.blockedCount)}
+              /></span
             >
           </a>
         {/if}
@@ -485,7 +715,8 @@
              The old phone thumb bar duplicated it; that bar is gone. -->
         <Button
           class="jump min-[900px]:hidden"
-          onclick={() => {
+          onclick={(event: MouseEvent) => {
+            jumpOpener = event.currentTarget as HTMLElement;
             jumpOpen = true;
           }}
           size="sm"
@@ -523,16 +754,23 @@
           role="status"
         >
           {#if everConnected}
-            <span>Hub connection lost — retrying in {retryIn}s</span>
-            <Button onclick={reconnectNow} size="sm" variant="outline"
-              >Reconnect</Button
+            <span
+              >Hub connection lost — retrying in
+              <TextMorph as="span" duration={150} text="{retryIn}s" /></span
             >
           {:else}
             <span>Can't reach the hub at <code>{hubSocketUrl()}</code></span>
-            <Button onclick={reconnectNow} size="sm" variant="outline"
-              >Retry</Button
-            >
           {/if}
+          <!-- Pending in place while an attempt is out, whoever started it. -->
+          <Button
+            failed={whiffle.status !== 'connecting'}
+            label={everConnected ? 'Reconnect' : 'Retry'}
+            onclick={reconnectNow}
+            pending={whiffle.status === 'connecting'}
+            pendingLabel="Connecting…"
+            size="sm"
+            variant="outline"
+          />
         </div>
       {/if}
     </div>
@@ -551,12 +789,19 @@
         {#key pageKey}
           <div class="page" in:pageIn out:pageOut>{@render children()}</div>
         {/key}
+        <!-- After the keyed page, so it is drawn over the empty one a
+             `/session` route renders. -->
+        {#if surfaceMounted}
+          <div class="page" in:pageIn {@attach park(() => onSession)}>
+            <SessionSurface shown={onSession} />
+          </div>
+        {/if}
       </div>
     </main>
   </div>
 </div>
 
-<JumpPalette bind:open={jumpOpen} />
+<JumpPalette opener={jumpOpener} bind:open={jumpOpen} />
 <!-- One dialog for every destructive confirm in the app (see confirm.svelte.ts). -->
 <ConfirmDialog />
 
@@ -637,8 +882,10 @@
     align-items: center;
     gap: var(--space-2);
     /* The right inset equals the 8px above and below a 28px control in
-       the 44px bar, so the cluster sits in an even frame. */
-    padding: 0 calc((44px - 28px) / 2) 0 var(--space-7);
+       the 44px bar, so the cluster sits in an even frame. The left inset is
+       the crumb's own (below), so the slot starts at the bar's edge whether
+       it holds the crumb or the tabs, and nothing in it moves as they swap. */
+    padding: 0 calc((44px - 28px) / 2) 0 0;
     background: var(--surface-raised);
     border-bottom: 1px solid var(--border-hairline);
   }
@@ -650,12 +897,42 @@
   /* Hosting the tabs, the bar gives the first tab no extra inset: the
      track's own flare room is the margin. */
   .top.hosting {
-    padding-inline-start: 0;
     border-bottom: 0;
     background:
       linear-gradient(var(--border-hairline), var(--border-hairline)) bottom /
       100% 1px no-repeat,
       var(--surface-shelf);
+  }
+  /* One slot for the bar's left-hand content, positioned so the one leaving
+     can be lifted out of the row where it stands (crossOut). It takes the
+     room the hosted strip fills; a crumb just sits at its start. */
+  .slot {
+    position: relative;
+    display: flex;
+    flex: 1 1 0;
+    align-items: center;
+    align-self: stretch;
+    min-width: 0;
+  }
+  .slot-tabs {
+    display: flex;
+    flex: 1 1 0;
+    align-self: stretch;
+    min-width: 0;
+  }
+  /* Leaving, the strip keeps its box but gives up the row; gone, it is
+     not drawn. */
+  .slot-tabs:global(.lifted) {
+    position: absolute;
+    inset: 0;
+  }
+  .slot-tabs:global(.away) {
+    visibility: hidden;
+  }
+  /* Padding, not margin: the crumb leaving is pinned where its border box
+     stands (crossOut), and a margin would carry it along. */
+  span.crumb {
+    padding-inline-start: var(--space-7);
   }
   .back {
     display: inline-flex;
@@ -724,8 +1001,13 @@
      first paint the narrow bar already, its inset and ground, the hosted
      tabs not drawn, so nothing in the bar moves in the swap. */
   @media (max-width: 899px), (pointer: coarse) and (orientation: portrait) {
-    .top.hosting {
+    .top {
       padding-inline-start: var(--space-7);
+    }
+    span.crumb {
+      padding-inline-start: 0;
+    }
+    .top.hosting {
       border-bottom: 1px solid var(--border-hairline);
       background: var(--surface-raised);
     }
@@ -733,7 +1015,7 @@
       flex: 0 1 auto;
       padding-left: 0;
     }
-    .top.hosting > :global(.session-tabs) {
+    .top.hosting .slot-tabs {
       display: none;
     }
   }
@@ -811,6 +1093,7 @@
     font-weight: var(--weight-body);
     display: grid;
     place-items: center;
+    font-variant-numeric: tabular-nums;
   }
   /* The attention control comes and goes with the queue. Below 900px, where
      the cluster also holds Jump and the assistant, it stands the cluster's
@@ -892,6 +1175,11 @@
     flex-direction: column;
     min-width: 0;
     min-height: 0;
+  }
+  /* The session surface under another spoke: laid out, so its virtualisers
+     keep their measurements and its scroll offsets stand, but not drawn. */
+  .page:global(.parked) {
+    visibility: hidden;
   }
   /* Own the home-indicator inset where no composer is present to own it. */
   @media (pointer: coarse) {

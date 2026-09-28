@@ -112,8 +112,6 @@
               (other) => other.name !== row.name
             );
           }
-        } catch (caught) {
-          toast.error(message(caught));
         } finally {
           delete busy[row.name];
         }

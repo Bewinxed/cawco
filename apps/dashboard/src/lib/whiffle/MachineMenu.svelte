@@ -1,8 +1,36 @@
+<script lang="ts" module>
+  import { SvelteMap } from "svelte/reactivity";
+
+  /**
+   * An update this tab started on a machine, which the fleet board's build
+   * chip reads. `since` is the daemon start the machine reported as the
+   * update began: a restarted agent reports a new one, and until it does the
+   * chip reads "Updating…". `said` is what the update did, in one line.
+   */
+  export interface MachineUpdate {
+    said?: string;
+    /** The update ran and restarted nothing: there is no new build to wait for. */
+    settled: boolean;
+    since: number | undefined;
+  }
+  export const machineUpdates = new SvelteMap<string, MachineUpdate>();
+
+  /** The chip reads "Updating…": the update runs, or its restart has not reported yet. */
+  export function isUpdating(machine: {
+    build?: { startedAt: number };
+    machineId: string;
+  }): boolean {
+    const update = machineUpdates.get(machine.machineId);
+    return Boolean(
+      update && !update.settled && machine.build?.startedAt === update.since
+    );
+  }
+</script>
+
 <script lang="ts">
   /** Right-click on a machine's heading — what you can do to the box, not to a session. */
   import { UPDATE_WHIFFLE, type UpdateReport } from "@whiffle/core";
   import type { Snippet } from "svelte";
-  import { toast } from "svelte-sonner";
   import { goto } from "$app/navigation";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as ContextMenu from "$lib/components/ui/context-menu";
@@ -24,6 +52,8 @@
   const stuck = $derived(machine.auth === "unreadable-credentials");
   let unlocking = $state(false);
   let loggingIn = $state(false);
+  /** Why the last update failed, said on its menu item. */
+  let updateFailed = $state<string | null>(null);
 
   /** What an {@link UpdateReport} amounts to, in one line. */
   function said(report: UpdateReport): string {
@@ -47,18 +77,34 @@
    * on the machine's PATH is not what any session ever launches, and updating
    * it moved nothing. The agent is restarted too, but only once it is idle:
    * sessions already running keep the build they launched with either way.
+   *
+   * The item spins while it runs and says a failure on itself; the machine's
+   * build chip on the board reads "Updating…" from the start until the
+   * restarted agent reports its new build, and carries what the update did.
    */
   async function updateMachine() {
+    updateFailed = null;
+    const { machineId } = machine;
+    machineUpdates.set(machineId, {
+      since: machine.build?.startedAt,
+      settled: false,
+    });
     try {
       const report = await machineControl<UpdateReport>(
-        machine.machineId,
+        machineId,
         UPDATE_WHIFFLE,
         [{ restartAgent: true }],
         UPDATE_TIMEOUT_MS
       );
-      toast.success(said(report));
+      machineUpdates.set(machineId, {
+        since: machineUpdates.get(machineId)?.since,
+        settled: !report.restarted.includes("agent"),
+        said: said(report),
+      });
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : String(err));
+      machineUpdates.delete(machineId);
+      updateFailed = err instanceof Error ? err.message : String(err);
+      throw err;
     }
   }
 </script>
@@ -75,9 +121,9 @@
       pendingLabel="Reloading…"
       run={() => loadCatalog(machine.machineId)}
     />
-    <!-- The form reads `machine` out of the query and preselects it. -->
+    <!-- The board reads `spawn` out of the query and preselects it. -->
     <ContextMenu.Item
-      onSelect={() => goto(`/session?machine=${machine.machineId}`)}
+      onSelect={() => goto(`/session?spawn=${machine.machineId}`)}
     >
       <IconPlus />
       New session here
@@ -105,7 +151,15 @@
       label="Update this machine"
       pendingLabel="Updating…"
       run={updateMachine}
-    />
+    >
+      {#if updateFailed}
+        <span
+          class="ml-auto max-w-56 truncate text-meta text-destructive"
+          title={updateFailed}
+          >{updateFailed}</span
+        >
+      {/if}
+    </ContextMenu.PendingItem>
 
     <ContextMenu.Separator />
 

@@ -3,9 +3,17 @@
   import { untrack } from "svelte";
   import { toast } from "svelte-sonner";
   import { goto } from "$app/navigation";
+  import { page } from "$app/state";
   import { Input } from "$lib/components/ui/input";
   import { IconKey, IconPlay } from "$lib/icons";
-  import { appear } from "$lib/whiffle/motion/curves.svelte";
+  import {
+    appear,
+    crossIn,
+    crossOut,
+    dur,
+  } from "$lib/whiffle/motion/curves.svelte";
+  import { unfold } from "$lib/whiffle/motion/fold.svelte";
+  import { morph } from "$lib/whiffle/motion/morph.svelte";
   import { confirm } from "../../confirm.svelte";
   import {
     isRemoteMcp,
@@ -19,6 +27,8 @@
   } from "../../fleet";
   import KeyValueRows from "../../KeyValueRows.svelte";
   import Choice from "../Choice.svelte";
+  import { keepDraft, sameFields } from "../drafts.svelte";
+  import { savedShown } from "../EditorFooter.svelte";
   import EditorFrame from "../EditorFrame.svelte";
   import EditorSection from "../EditorSection.svelte";
   import Field from "../Field.svelte";
@@ -102,12 +112,59 @@
     };
   }
 
+  /** What is saved, as the server it would write: an edit that comes back to it is no edit. */
+  let baseline = $state(
+    untrack(() => ({ name: serverName.trim(), config: build() }))
+  );
+  /** A new server was just added (or a new name made one): its draft is over, and a second Save would add it again. */
+  let created = false;
+  const kept = keepDraft(
+    page.url.pathname,
+    () =>
+      sameFields({ name: serverName.trim(), config: build() }, baseline)
+        ? null
+        : {
+            mode,
+            serverName,
+            named,
+            pkg,
+            pkgArgs,
+            command,
+            argsLine,
+            env,
+            url,
+            transport,
+            headers,
+          },
+    (stored) => {
+      ({
+        mode,
+        serverName,
+        named,
+        pkg,
+        pkgArgs,
+        command,
+        argsLine,
+        env,
+        url,
+        transport,
+        headers,
+      } = stored);
+    }
+  );
+
+  /**
+   * Saving a server keeps the editor open on it, the Save button saying so
+   * in place. A new server, or a new name (which makes a new server),
+   * shows the same, then returns to the list, where it is marked.
+   */
   async function save() {
-    if (nameProblem || !filled || busy) {
+    if (nameProblem || !filled || busy || created) {
       return;
     }
     busy = true;
     failed = undefined;
+    let made: string | undefined;
     try {
       const saved = await saveMcpServer(
         serverName.trim(),
@@ -118,18 +175,35 @@
       if (fleet) {
         upsert(fleet.config.mcp, saved, (row) => row.name === saved.name);
       }
-      if (server && server.name !== saved.name) {
-        toast.info(
-          `${server.name} is still there — a new name makes a new server.`
-        );
+      if (server?.name === saved.name) {
+        baseline = { name: saved.name, config: build() };
+      } else {
+        if (server) {
+          toast.info(
+            `${server.name} is still there — a new name makes a new server.`
+          );
+        }
+        created = true;
+        kept.drop();
+        made = saved.name;
       }
-      store.mark(saved.name);
-      await goto("/config/mcp");
     } catch (error) {
       failed = error instanceof Error ? error.message : String(error);
     } finally {
       busy = false;
     }
+    if (made) {
+      await savedShown();
+      store.mark(made);
+      await goto("/config/mcp");
+    }
+  }
+
+  /** Cancel leaves the edits behind: the draft is dropped, not kept. */
+  function cancel() {
+    kept.drop();
+    // biome-ignore lint/complexity/noVoid: navigation reports nothing to wait for
+    void goto("/config/mcp");
   }
 
   async function askRemove() {
@@ -146,16 +220,18 @@
         deleting = true;
         try {
           await removeMcpServer(server.name);
+          kept.drop();
+          // Back to the list first, so the row is seen leaving it.
+          await goto("/config/mcp");
           const fleet = store.fleet.value;
           if (fleet) {
             fleet.config.mcp = fleet.config.mcp.filter(
               (row) => row.name !== server.name
             );
           }
-          await goto("/config/mcp");
         } catch (error) {
-          failed = error instanceof Error ? error.message : String(error);
           deleting = false;
+          throw error;
         }
       },
     });
@@ -167,7 +243,7 @@
   deleteLabel={server ? 'Remove everywhere' : undefined}
   {deleting}
   failed={failed !== undefined}
-  oncancel={() => goto('/config/mcp')}
+  oncancel={cancel}
   ondelete={server ? askRemove : undefined}
   onsubmit={save}
   saveLabel={server ? 'Save changes' : 'Add server'}
@@ -210,114 +286,149 @@
       ]}
       value={mode}
     />
-    <p class="note">{HOW[mode]}</p>
-    {#if mode === 'bunx'}
-      <Field id="mcp-package" label="Package">
-        <Input
-          autocomplete="off"
-          class="font-mono"
-          id="mcp-package"
-          oninput={() => {
+    <!-- One kind's note and fields cross-fade into the next's
+         (--dur-control) in one box, whose height follows over --dur-pop on
+         --ease-drawer. -->
+    <div class="kind" {@attach morph({ ms: dur('--dur-pop') })}>
+      {#if mode === 'bunx'}
+        <div class="fold" in:crossIn out:crossOut>
+          <p class="note">{HOW.bunx}</p>
+          <Field id="mcp-package" label="Package">
+            <Input
+              autocomplete="off"
+              class="font-mono"
+              id="mcp-package"
+              oninput={() => {
             if (!named) {
               serverName = suggestMcpName(pkg);
             }
           }}
-          placeholder="@modelcontextprotocol/server-filesystem"
-          spellcheck="false"
-          bind:value={pkg}
-        />
-      </Field>
-      <Field id="mcp-package-args" label="Arguments (optional)">
-        <Input
-          autocomplete="off"
-          class="font-mono"
-          id="mcp-package-args"
-          placeholder="/home/you/projects"
-          spellcheck="false"
-          bind:value={pkgArgs}
-        />
-      </Field>
-    {:else if mode === 'command'}
-      <Field id="mcp-command" label="Command">
-        <Input
-          autocomplete="off"
-          class="font-mono"
-          id="mcp-command"
-          placeholder="uvx"
-          spellcheck="false"
-          bind:value={command}
-        />
-      </Field>
-      <Field
-        hint="Split on spaces. Quotes are not honoured."
-        id="mcp-args"
-        label="Arguments"
-      >
-        <Input
-          autocomplete="off"
-          class="font-mono"
-          id="mcp-args"
-          placeholder="mcp-server-git --repository /home/you/repo"
-          spellcheck="false"
-          bind:value={argsLine}
-        />
-      </Field>
-    {:else}
-      <Field id="mcp-url" label="URL">
-        <Input
-          autocomplete="off"
-          class="font-mono"
-          id="mcp-url"
-          placeholder="https://mcp.example.com/sse"
-          spellcheck="false"
-          bind:value={url}
-        />
-      </Field>
-      <Choice
-        label="Transport"
-        onchange={(next) => {
+              placeholder="@modelcontextprotocol/server-filesystem"
+              spellcheck="false"
+              bind:value={pkg}
+            />
+          </Field>
+          <Field id="mcp-package-args" label="Arguments (optional)">
+            <Input
+              autocomplete="off"
+              class="font-mono"
+              id="mcp-package-args"
+              placeholder="/home/you/projects"
+              spellcheck="false"
+              bind:value={pkgArgs}
+            />
+          </Field>
+        </div>
+      {:else if mode === 'command'}
+        <div class="fold" in:crossIn out:crossOut>
+          <p class="note">{HOW.command}</p>
+          <Field id="mcp-command" label="Command">
+            <Input
+              autocomplete="off"
+              class="font-mono"
+              id="mcp-command"
+              placeholder="uvx"
+              spellcheck="false"
+              bind:value={command}
+            />
+          </Field>
+          <Field
+            hint="Split on spaces. Quotes are not honoured."
+            id="mcp-args"
+            label="Arguments"
+          >
+            <Input
+              autocomplete="off"
+              class="font-mono"
+              id="mcp-args"
+              placeholder="mcp-server-git --repository /home/you/repo"
+              spellcheck="false"
+              bind:value={argsLine}
+            />
+          </Field>
+        </div>
+      {:else}
+        <div class="fold" in:crossIn out:crossOut>
+          <p class="note">{HOW.remote}</p>
+          <Field id="mcp-url" label="URL">
+            <Input
+              autocomplete="off"
+              class="font-mono"
+              id="mcp-url"
+              placeholder="https://mcp.example.com/sse"
+              spellcheck="false"
+              bind:value={url}
+            />
+          </Field>
+          <Choice
+            label="Transport"
+            onchange={(next) => {
           transport = next as 'http' | 'sse';
         }}
-        options={[
+            options={[
           { value: 'http', label: 'HTTP' },
           { value: 'sse', label: 'SSE · deprecated' },
         ]}
-        value={transport}
-      />
-    {/if}
+            value={transport}
+          />
+        </div>
+      {/if}
+    </div>
   </EditorSection>
 
   {#if mode !== 'bunx'}
-    <EditorSection
-      hue={HUE}
-      icon={IconKey}
-      label={mode === 'remote' ? 'Headers' : 'Environment'}
-    >
-      <p class="note">
-        <span class="font-mono">&#36;&#123;VAR&#125;</span>
-        is expanded on each machine, from that machine's own environment —
-        secrets never pass through the hub.
-      </p>
-      {#if mode === 'remote'}
-        <KeyValueRows
-          keyPlaceholder="Authorization"
-          legend="Headers"
-          valuePlaceholder="Bearer &#36;&#123;MY_TOKEN&#125;"
-          bind:rows={headers}
-        />
-      {:else}
-        <KeyValueRows
-          keyPlaceholder="API_KEY"
-          legend="Environment"
-          valuePlaceholder="&#36;&#123;MY_API_KEY&#125;"
-          bind:rows={env}
-        />
-      {/if}
-    </EditorSection>
+    <!-- A bunx package takes neither: the section folds in and out (240 /
+         160), and between headers and environment its lines cross-fade. -->
+    <div in:unfold out:unfold>
+      <EditorSection
+        hue={HUE}
+        icon={IconKey}
+        label={mode === 'remote' ? 'Headers' : 'Environment'}
+      >
+        <p class="note">
+          <span class="font-mono">&#36;&#123;VAR&#125;</span>
+          is expanded on each machine, from that machine's own environment —
+          secrets never pass through the hub.
+        </p>
+        <div class="kind" {@attach morph({ ms: dur('--dur-pop') })}>
+          {#if mode === 'remote'}
+            <div in:crossIn out:crossOut>
+              <KeyValueRows
+                keyPlaceholder="Authorization"
+                legend="Headers"
+                valuePlaceholder="Bearer &#36;&#123;MY_TOKEN&#125;"
+                bind:rows={headers}
+              />
+            </div>
+          {:else}
+            <div in:crossIn out:crossOut>
+              <KeyValueRows
+                keyPlaceholder="API_KEY"
+                legend="Environment"
+                valuePlaceholder="&#36;&#123;MY_API_KEY&#125;"
+                bind:rows={env}
+              />
+            </div>
+          {/if}
+        </div>
+      </EditorSection>
+    </div>
   {/if}
 </EditorFrame>
 
 <style>
+  /* The kind's box: the set leaving is pinned in it (crossOut) while the
+     one arriving sets its height. */
+  .kind {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+  .fold {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
   .note {
     max-width: 72ch;
     font: var(--type-meta);

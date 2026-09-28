@@ -4,8 +4,11 @@
   /**
    * The env-vars and headers editor: a key and a value per line, with a blank
    * line always waiting at the bottom so adding one is typing, not clicking.
+   * A line that arrives or is removed goes through reflow: it opens and
+   * fades in, or closes and fades out, the lines after it sliding.
    */
   import { IconClose } from "$lib/icons";
+  import { reflow } from "$lib/whiffle/motion/rows.svelte";
 
   let {
     rows = $bindable(),
@@ -28,10 +31,12 @@
   }
 </script>
 
-<fieldset class="flex flex-col gap-1.5">
+<fieldset class="flex flex-col gap-1.5" {@attach reflow()}>
   <legend class="mb-1 text-label text-muted-foreground">{legend}</legend>
-  {#each rows as row, index (index)}
-    <div class="flex items-center gap-1.5">
+  <!-- Keyed by the line itself, so removing one removes that line rather
+       than shifting every value after it up a box. -->
+  {#each rows as row, index (row)}
+    <div class="flex items-center gap-1.5" data-flip>
       <Input
         aria-label="{legend} name"
         autocomplete="off"

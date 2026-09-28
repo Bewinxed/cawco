@@ -143,7 +143,7 @@ describe("the box the daemon reads", () => {
         asked.push(args.join(" "));
         return { ok: false, out: "", err: "never" };
       },
-      update: async () => undefined,
+      update: async () => ({ changed: [] }),
       report: () => {
         // no-op: this test doesn't assert on report
       },

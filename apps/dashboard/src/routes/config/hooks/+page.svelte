@@ -65,8 +65,6 @@
         try {
           await removeHook(row.id, row.name);
           store.hooks.value = hooks.filter((other) => other.id !== row.id);
-        } catch (error) {
-          toast.error(message(error));
         } finally {
           delete busy[row.id];
         }

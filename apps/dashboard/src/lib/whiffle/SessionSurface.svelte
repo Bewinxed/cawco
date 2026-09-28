@@ -19,8 +19,13 @@
    * server tail cannot land late and rebuild a transcript already on screen —
    * which is what the View-Transition suppression flag and the one-frame
    * animation guards used to be hiding.
+   *
+   * It is not a route's layout: the Shell mounts it the first time a
+   * `/session` page shows and keeps it mounted from then on, parked under
+   * whichever spoke is showing instead (`shown` false). Coming back finds
+   * every transcript where it was scrolled and every disclosure as it was
+   * left, because nothing was rebuilt.
    */
-  import type { Snippet } from "svelte";
   import { onMount, untrack } from "svelte";
   import { browser } from "$app/environment";
   import { afterNavigate } from "$app/navigation";
@@ -38,23 +43,14 @@
   } from "$lib/whiffle/client.svelte";
   import FleetBoard from "$lib/whiffle/FleetBoard.svelte";
   import { instanceForSession } from "$lib/whiffle/links";
+  import { dur, ease, motionOk } from "$lib/whiffle/motion/curves.svelte";
   import PaneDeck from "$lib/whiffle/workspace/PaneDeck.svelte";
   import PaneGrid from "$lib/whiffle/workspace/PaneGrid.svelte";
   import PaneHost from "$lib/whiffle/workspace/PaneHost.svelte";
-  import {
-    type WorkspaceV1,
-    workspace,
-  } from "$lib/whiffle/workspace/workspace.svelte";
+  import { workspace } from "$lib/whiffle/workspace/workspace.svelte";
 
-  let { children }: { children: Snippet } = $props();
-
-  // On the server, before the groups render: the module-level store is shared
-  // across requests, so each render adopts its own cookie's tree first.
-  if (!browser) {
-    workspace.serve(
-      (page.data as { workspace?: WorkspaceV1 | null }).workspace ?? null
-    );
-  }
+  /** Whether a `/session` page is showing, rather than another spoke over this one parked. */
+  let { shown }: { shown: boolean } = $props();
 
   /** 900px is this app's desktop line, not the 768 the hook defaults to. */
   const mobile = new IsMobile(900);
@@ -113,8 +109,12 @@
   });
 
   let entry = $state<EntryData>(captureEntry());
-  afterNavigate(() => {
-    entry = captureEntry();
+  // Only a `/session` page carries a conversation's server answer; a trip to
+  // another spoke leaves the one this surface holds alone.
+  afterNavigate(({ to }) => {
+    if (to?.url.pathname.startsWith("/session")) {
+      entry = captureEntry();
+    }
     reconcileFromUrl();
   });
 
@@ -255,17 +255,118 @@
   $effect(() => {
     syncSubscriptions();
   });
+
+  /* ── Board ↔ conversation ───────────────────────────────────────────
+     The board is the home the groups push in over: opening a conversation
+     slides the groups in from 8% toward the inline end as the board recedes
+     8% the other way and dims to 0.6, over --dur-pop on the drawer curve;
+     going back to the board slides the groups off the way they came as the
+     board returns. The one leaving stays drawn until its slide ends, then
+     is hidden (below); input goes to the one arriving at once. Parked under
+     another spoke, the swap is instant: nobody is watching it. */
+  let boardEl = $state<HTMLElement | null>(null);
+  let groupsEl = $state<HTMLElement | null>(null);
+  let boardHidden = $state(untrack(() => !onBoard));
+  let groupsHidden = $state(untrack(() => onBoard));
+  let pushing: Animation[] = [];
+
+  /** A surface's drawn transform and opacity, a slide in flight included. */
+  const drawn = (el: HTMLElement): Keyframe => {
+    const style = getComputedStyle(el);
+    return { transform: style.transform, opacity: style.opacity };
+  };
+
+  function push(toBoard: boolean, board: HTMLElement, groups: HTMLElement) {
+    const from = { board: drawn(board), groups: drawn(groups) };
+    for (const animation of pushing) {
+      animation.cancel();
+    }
+    boardHidden = false;
+    groupsHidden = false;
+    const side =
+      getComputedStyle(document.documentElement).direction === "rtl" ? -1 : 1;
+    const timing: KeyframeAnimationOptions = {
+      duration: dur("--dur-pop"),
+      easing: ease("--ease-drawer"),
+      fill: "forwards",
+    };
+    const home: Keyframe = { transform: "none", opacity: 1 };
+    const receded: Keyframe = {
+      transform: `translateX(${-8 * side}%)`,
+      opacity: 0.6,
+    };
+    const away: Keyframe = {
+      transform: `translateX(${8 * side}%)`,
+      opacity: 0,
+    };
+    const leaving = toBoard ? groups : board;
+    pushing = [
+      board.animate([from.board, toBoard ? home : receded], timing),
+      groups.animate([from.groups, toBoard ? away : home], timing),
+    ];
+    const mine = pushing;
+    pushing[0].finished.then(
+      () => {
+        if (pushing !== mine) {
+          return;
+        }
+        if (leaving === groups) {
+          groupsHidden = true;
+        } else {
+          boardHidden = true;
+        }
+        for (const animation of mine) {
+          animation.cancel();
+        }
+        pushing = [];
+      },
+      () => {
+        /* a newer swap took over from where this one had got to */
+      }
+    );
+  }
+
+  let seenBoard = untrack(() => onBoard);
+  $effect(() => {
+    const toBoard = onBoard;
+    untrack(() => {
+      if (toBoard === seenBoard) {
+        return;
+      }
+      seenBoard = toBoard;
+      if (shown && motionOk.current && boardEl && groupsEl) {
+        push(toBoard, boardEl, groupsEl);
+        return;
+      }
+      for (const animation of pushing) {
+        animation.cancel();
+      }
+      pushing = [];
+      boardHidden = !toBoard;
+      groupsHidden = toBoard;
+    });
+  });
 </script>
 
 <div class="surface">
   <!-- The board is a HOME rather than a peer: it is what is there when no
        conversation is, and it holds its scroll position underneath the
        groups rather than being rebuilt on every visit. -->
-  <div class="board" inert={!onBoard} class:hidden-surface={!onBoard}>
-    <FleetBoard active={onBoard} />
+  <div
+    class="board"
+    inert={!onBoard}
+    bind:this={boardEl}
+    class:hidden-surface={boardHidden}
+  >
+    <FleetBoard active={onBoard && shown} />
   </div>
 
-  <div class="groups" inert={onBoard} class:hidden-surface={onBoard}>
+  <div
+    class="groups"
+    inert={onBoard}
+    bind:this={groupsEl}
+    class:hidden-surface={groupsHidden}
+  >
     <!-- A phone shows one group at a time; the grid is a desktop arrangement.
          The tree still holds whatever splits were made at a desk, and the
          deck makes them reachable: the groups are a vertical stack that two
@@ -285,8 +386,6 @@
       entryTail={entry.tail}
     />
   </div>
-
-  {@render children()}
 </div>
 
 <style>

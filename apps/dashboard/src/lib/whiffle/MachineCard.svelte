@@ -9,7 +9,9 @@
    * adopt/overwrite affordance for a failed sync stays a click on Configure.
    */
   import type { BuildInfo } from "@whiffle/core";
+  import { TextMorph } from "torph/svelte";
   import { Badge } from "$lib/components/ui/badge";
+  import { Spinner } from "$lib/components/ui/spinner";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { IconCheck, IconWarningTriangle } from "$lib/icons";
@@ -24,7 +26,9 @@
     isDeployDiverged,
   } from "./convergence";
   import { CAUSE, faultHref, machineFaults } from "./fleet-faults";
+  import { isUpdating, machineUpdates } from "./MachineMenu.svelte";
   import { machineLabel } from "./machine";
+  import { CURVE, dur } from "./motion/curves.svelte";
   import OsMark from "./OsMark.svelte";
 
   let {
@@ -57,18 +61,50 @@
   // reader has, an outline carries the admission that it only has an absence.
   const pillBase =
     "inline-flex h-[var(--c-pill-h)] items-center rounded-[var(--radius-pill)] gap-1 px-2.5 text-label font-medium leading-none no-underline";
-  const outlinePill = `${pillBase} border border-[var(--border)] bg-transparent text-[var(--ink-muted)]`;
   const warnPill = `${pillBase} border-transparent bg-[var(--warning-3)] text-[var(--warning-11)]`;
   const failPill = `${pillBase} border-transparent bg-[var(--status-fail-bg)] text-[var(--status-fail-ink)]`;
 
   const commitOf = (info: BuildInfo | undefined) => info?.commit ?? "?";
+
+  /** What the build chip says: an update this tab started, then the build. */
+  const update = $derived(machineUpdates.get(machine.machineId));
+  const chip = $derived(isUpdating(machine) ? "updating" : build);
+  const CHIP_LABEL = {
+    updating: "Updating…",
+    unknown: "Build unknown",
+    behind: "Behind hub",
+    current: "Up to date",
+  } as const;
+  const chipHint = $derived.by(() => {
+    switch (chip) {
+      case "updating":
+        return `Updating from ${commitOf(machine.build)}. This clears when the machine reports its new build.`;
+      case "unknown":
+        return machine.build?.commit
+          ? "The hub hasn't reported its own build yet, so there is nothing to compare against."
+          : "This machine has never reported a commit — treat it as stale, not as up to date.";
+      case "behind":
+        return `${commitOf(machine.build)} on this machine, hub is on ${commitOf(hubBuild)}.`;
+      default:
+        return `On ${commitOf(machine.build)}, the same build as the hub.`;
+    }
+  });
+
+  /**
+   * TextMorph draws its text only in the browser, so the server draws the
+   * words as plain text and the morph takes over once the card is live.
+   */
+  let morphMs = $state(0);
+  $effect(() => {
+    morphMs = dur("--dur-morph");
+  });
 </script>
 
 <!-- A row per machine, keyed by its id where it is listed: one that drops
      and re-registers keeps its row, and only its dot and badges change, each
      badge popping in or out while the others slide aside (motion/rows). -->
 <li class="row" data-flip>
-  <span class="who">
+  <span class="who" class:off={!online}>
     <OsMark class="size-4 shrink-0" os={machine.os} />
     <span class="nm">{machineLabel(machine.hostname)}</span>
     <span
@@ -95,47 +131,58 @@
       </Tooltip.Root>
     {/if}
 
-    {#if build === 'unknown'}
-      <Tooltip.Root>
-        <Tooltip.Trigger>
-          {#snippet child({ props })}
-            <Badge
-              {...props}
-              class={outlinePill}
-              data-flip="pop"
-              variant="outline"
+    <!-- One chip for the build, whatever it says: its tint, icon and words
+         cross-fade in place and its width follows the words, so a machine
+         that falls behind, starts updating or catches up changes one thing
+         rather than swapping chips. -->
+    <Tooltip.Root>
+      <Tooltip.Trigger>
+        {#snippet child({ props })}
+          <Badge
+            {...props}
+            class="{pillBase} build-chip"
+            data-build={chip}
+            data-flip="pop"
+          >
+            <span class="icon-swap" style="--icon-swap-dur: var(--dur-control)">
+              <span data-active={chip === 'updating'}
+                ><Spinner
+                  aria-hidden="true"
+                  class="size-3"
+                  role="presentation"
+                /></span
+              >
+              <span data-active={chip === 'current'}
+                ><IconCheck class="size-3" /></span
+              >
+              <span data-active={chip === 'behind' || chip === 'unknown'}
+                ><IconWarningTriangle class="size-3" /></span
+              >
+            </span>
+            {#if morphMs}
+              <TextMorph
+                as="span"
+                duration={morphMs}
+                ease={CURVE.out}
+                text={CHIP_LABEL[chip]}
+              />
+            {:else}
+              <span>{CHIP_LABEL[chip]}</span>
+            {/if}
+          </Badge>
+        {/snippet}
+      </Tooltip.Trigger>
+      <Tooltip.Content class="max-w-72">
+        <div class="flex flex-col gap-1">
+          <span>{chipHint}</span>
+          {#if update?.said}
+            <span class="text-label opacity-80"
+              >Last update: {update.said}</span
             >
-              <IconWarningTriangle class="size-3" />
-              Build unknown
-            </Badge>
-          {/snippet}
-        </Tooltip.Trigger>
-        <Tooltip.Content>
-          {machine.build?.commit
-            ? "The hub hasn't reported its own build yet, so there is nothing to compare against."
-            : "This machine has never reported a commit — treat it as stale, not as up to date."}
-        </Tooltip.Content>
-      </Tooltip.Root>
-    {:else if build === 'behind'}
-      <Tooltip.Root>
-        <Tooltip.Trigger>
-          {#snippet child({ props })}
-            <Badge {...props} class={warnPill} data-flip="pop">
-              <IconWarningTriangle class="size-3" />
-              Behind hub
-            </Badge>
-          {/snippet}
-        </Tooltip.Trigger>
-        <Tooltip.Content>
-          {commitOf(machine.build)}
-          on this machine, hub is on {commitOf(hubBuild)}.
-        </Tooltip.Content>
-      </Tooltip.Root>
-    {:else}
-      <span class="ok" data-flip="pop"
-        ><IconCheck class="size-3" />Up to date</span
-      >
-    {/if}
+          {/if}
+        </div>
+      </Tooltip.Content>
+    </Tooltip.Root>
 
     {#if deploy && DEPLOY_LABEL[deploy.kind]}
       <Tooltip.Root>
@@ -196,10 +243,12 @@
 </li>
 
 <style>
+  /* Both sides stand at least one pill tall and hang from the top, so a
+     badge that comes, goes or wraps never re-centres the machine's name. */
   .row {
     display: flex;
     flex-wrap: wrap;
-    align-items: center;
+    align-items: flex-start;
     gap: var(--space-3);
     border-top: 1px solid var(--border-hairline);
     padding: var(--space-3) var(--space-4);
@@ -210,9 +259,19 @@
   .who {
     display: flex;
     min-width: 0;
+    min-height: 24px;
     flex: 0 0 auto;
     align-items: center;
     gap: var(--space-2);
+  }
+  /* An offline machine's name dims rather than changing shape. */
+  .who {
+    @media (prefers-reduced-motion: no-preference) {
+      transition: opacity var(--dur-panel) var(--ease-out);
+    }
+  }
+  .who.off {
+    opacity: 0.6;
   }
   .nm {
     max-width: 14ch;
@@ -244,16 +303,32 @@
   .badges {
     display: flex;
     min-width: 0;
+    min-height: 24px;
     flex: 1 1 auto;
     flex-wrap: wrap;
     align-items: center;
     gap: var(--space-2);
   }
-  .ok {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--space-1);
-    font: var(--type-meta);
+  /* The build chip's tint, per what it says; it turns over --dur-control. */
+  .badges :global(.build-chip) {
+    border: 1px solid transparent;
+    transition:
+      background-color var(--dur-control) var(--ease-out),
+      border-color var(--dur-control) var(--ease-out),
+      color var(--dur-control) var(--ease-out);
+  }
+  .badges :global(.build-chip[data-build="current"]) {
+    background: transparent;
     color: var(--ink-muted);
+  }
+  .badges :global(.build-chip[data-build="unknown"]),
+  .badges :global(.build-chip[data-build="updating"]) {
+    border-color: var(--border);
+    background: transparent;
+    color: var(--ink-muted);
+  }
+  .badges :global(.build-chip[data-build="behind"]) {
+    background: var(--warning-3);
+    color: var(--warning-11);
   }
 </style>
