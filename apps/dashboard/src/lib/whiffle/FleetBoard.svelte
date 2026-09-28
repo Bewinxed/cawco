@@ -596,6 +596,46 @@
     return () => io.disconnect();
   });
 
+  /** Not running's rows before its Show all. */
+  const NR_CAP = 20;
+  /** Rows Show all adds at a time: about 30ms of rendering. */
+  const NR_PAGE = 40;
+  /**
+   * How many of Not running's rows are mounted once Show all is chosen. They
+   * arrive a page at a time as the reader nears the end, the table's paging
+   * again. All of them at once was nearly a thousand rows laid out, measured
+   * and drawn in one 690ms task, the board frozen under the click that asked
+   * for them. Nothing sits under Not running, so a page landing on screen
+   * moves nothing the reader could be aiming at.
+   */
+  let nrShown = $state(NR_CAP + NR_PAGE);
+  let nrSentinelEl = $state<HTMLElement | null>(null);
+  $effect(() => {
+    // `from` makes this depend on `nrShown`: each page re-arms it.
+    const from = nrShown;
+    if (!(active && boardEl && nrSentinelEl)) {
+      return;
+    }
+    const nextPage = () => {
+      nrShown = from + NR_PAGE;
+    };
+    const room = boardEl.getBoundingClientRect();
+    if (nrSentinelEl.getBoundingClientRect().top <= room.bottom + HEADROOM) {
+      nextPage();
+      return;
+    }
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((entry) => entry.isIntersecting)) {
+          nextPage();
+        }
+      },
+      { root: boardEl, rootMargin: `0px 0px ${HEADROOM}px 0px` }
+    );
+    io.observe(nrSentinelEl);
+    return () => io.disconnect();
+  });
+
   /* ---- actions ------------------------------------------------------- */
 
   let spawnOpen = $state(false);
@@ -1202,8 +1242,7 @@
            sleeping or unknown session would otherwise be absent from the whole
            board. Shown apart, never folded into live work or its counts. -->
         {#if notRunning.length > 0}
-          {@const CAP = 20}
-          {@const capped = showAllNotRunning ? notRunning : notRunning.slice(0, CAP)}
+          {@const capped = notRunning.slice(0, showAllNotRunning ? nrShown : NR_CAP)}
           <div class="not-running" data-flip="box">
             <div class="nr-head">
               <span class="nr-count"
@@ -1249,7 +1288,14 @@
                   </div>
                 {/each}
               </div>
-              {#if !showAllNotRunning && notRunning.length > CAP}
+              {#if showAllNotRunning && capped.length < notRunning.length}
+                <!-- The next page's trigger: reaching it mounts the next rows. -->
+                <div class="nr-sentinel" bind:this={nrSentinelEl}>
+                  <span class="sr-only" role="status"
+                    >Loading more sessions</span
+                  >
+                </div>
+              {:else if !showAllNotRunning && notRunning.length > NR_CAP}
                 <button
                   class="show-all"
                   data-flip
@@ -1525,6 +1571,9 @@
     border-radius: var(--radius-sm);
     cursor: pointer;
     margin-top: var(--space-2);
+  }
+  .nr-sentinel {
+    height: 1px;
   }
   .show-all:hover {
     color: var(--ink-strong);
