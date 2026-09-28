@@ -192,7 +192,8 @@
         {#each message.metadata.attachments ?? [] as att, i (`${att.name}-${i}`)}
           <DocThumb content={att.content} name={att.name} />
         {/each}
-        {#each message.metadata.images ?? [] as img, i (img.src ?? `${img.mediaType}-${i}`)}
+        <!-- Keyed by position: the same picture sent twice is two pictures. -->
+        {#each message.metadata.images ?? [] as img, i (`${i}:${img.src ?? img.mediaType}`)}
           {#if img.src}
             <Shot
               alt="Attachment {i + 1} sent with this message"
