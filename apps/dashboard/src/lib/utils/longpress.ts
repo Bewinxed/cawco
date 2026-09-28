@@ -9,6 +9,10 @@
  *
  * Document-level and installed once: every menu — machines, sessions, stored
  * sessions, whatever is added later — gets the behaviour without wiring.
+ *
+ * While the finger holds, the row under it is marked `data-holding`, which
+ * draws it pressed (app.css), so the hold reads as a press that is going
+ * somewhere; the mark goes when the menu opens or the press is let go.
  */
 const HOLD_MS = 500;
 /** A finger that travels further than this is scrolling, not pressing. */
@@ -22,12 +26,20 @@ export function enableLongPressMenus(): () => void {
   let startY = 0;
   /** Swallow the click that follows a press which already opened a menu. */
   let fired = false;
+  /** The row drawn pressed while the hold runs. */
+  let held: Element | null = null;
+
+  const release = () => {
+    held?.removeAttribute("data-holding");
+    held = null;
+  };
 
   const cancel = () => {
     if (timer) {
       clearTimeout(timer);
     }
     timer = null;
+    release();
   };
 
   const onTouchStart = (event: TouchEvent) => {
@@ -35,18 +47,23 @@ export function enableLongPressMenus(): () => void {
       return cancel();
     }
     const [touch] = event.touches;
-    const target = event.target as HTMLElement | null;
+    const target = event.target as HTMLElement;
     // Only where a menu actually is — a long press on a paragraph should keep
     // meaning what the platform says it means (text selection).
-    if (!target?.closest('[data-slot="context-menu-trigger"]')) {
+    // The trigger is `display: contents`; the row is its child the finger is on.
+    const row = target.closest('[data-slot="context-menu-trigger"] > *');
+    if (!row) {
       return;
     }
     startX = touch.clientX;
     startY = touch.clientY;
     fired = false;
     cancel();
+    held = row;
+    row.setAttribute("data-holding", "");
     timer = setTimeout(() => {
       fired = true;
+      release();
       target.dispatchEvent(
         new MouseEvent("contextmenu", {
           bubbles: true,

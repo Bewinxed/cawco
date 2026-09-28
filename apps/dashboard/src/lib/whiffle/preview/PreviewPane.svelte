@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { Button } from "$lib/components/ui/button";
   import PendingContent, {
     whileIdle,
   } from "$lib/components/ui/button/pending-content.svelte";
@@ -9,8 +10,9 @@
     IconRefresh,
   } from "$lib/icons";
   import { closePreview, whiffle } from "../client.svelte";
-  import { dur } from "../motion/curves.svelte";
-  import type { CapturedSelection } from "./selection";
+  import { appear, dur } from "../motion/curves.svelte";
+  import { depart } from "../motion/share.svelte";
+  import { type CapturedSelection, selectionShare } from "./selection";
   import {
     previewElement,
     previewError,
@@ -35,7 +37,14 @@
   let connected = $state(false);
   let captured = false;
   let reload = $state(0);
-  let failure = $state("");
+  /**
+   * What last went wrong, and what trying again means: the frame's own
+   * errors (a capture the page refused) reload the frame; a refused close
+   * asks again.
+   */
+  let failure = $state<{ message: string; again: "reload" | "close" } | null>(
+    null
+  );
   let well = $state<HTMLDivElement>();
   const preview = $derived(whiffle.previews[instanceId]);
   const source = $derived(preview?.source);
@@ -57,6 +66,36 @@
       "Preview"
   );
   const frameKey = $derived(`${identity}:${reload}`);
+  /**
+   * The frame on screen while the next one loads. A reload or a new URL
+   * mounts the next frame over it, unpainted; once that one connects it
+   * fades in over --dur-control and this one goes. Until then the old page
+   * stays readable instead of the well going blank.
+   */
+  let standing = $state<string | null>(null);
+  const frames = $derived(
+    standing === null || standing === frameKey
+      ? [frameKey]
+      : [standing, frameKey]
+  );
+  /** The next frame has faded in over the one it replaces. */
+  function landed(event: TransitionEvent) {
+    if (event.propertyName === "opacity" && connected) {
+      standing = frameKey;
+    }
+  }
+  /**
+   * Try again after a frame failure: reload the frame. Pending until the
+   * reloaded page answers with a capture, which either clears the failure or
+   * states the new one.
+   */
+  let retrying = $state(false);
+  function retry() {
+    retrying = true;
+    reload += 1;
+  }
+  const frameError = (message: string | null) =>
+    message ? { message, again: "reload" as const } : null;
 
   $effect(() => {
     if (frameKey) {
@@ -130,10 +169,8 @@
         if (png) {
           preview.thumbnail = png;
         }
-        const error = previewError(message.error);
-        if (error) {
-          failure = error;
-        }
+        failure = frameError(previewError(message.error));
+        retrying = false;
         break;
       }
       case "whiffle:selected": {
@@ -141,6 +178,9 @@
           return;
         }
         const element = previewElement(message.element, location.origin);
+        if (element && iframe) {
+          flyFrom(element.rect, selectionShare(element));
+        }
         if (
           well &&
           element &&
@@ -167,7 +207,7 @@
         }
         const error = previewError(message.error);
         if (error) {
-          failure = error;
+          failure = frameError(error);
         }
         break;
       }
@@ -175,11 +215,39 @@
         select(false);
         break;
       case "whiffle:error":
-        failure = previewError(message.message) ?? "";
+        failure = frameError(previewError(message.message));
+        retrying = false;
         break;
       default:
         break;
     }
+  }
+  /**
+   * The picked element's chip flies out of the element into the composer
+   * (motion/share.svelte.ts): a stand-in is laid over the element's box in
+   * this page's coordinates, taken as the flight's source, and dropped.
+   */
+  function flyFrom(
+    rect: { x: number; y: number; width: number; height: number },
+    key: string
+  ) {
+    const frame = iframe?.getBoundingClientRect();
+    if (!frame) {
+      return;
+    }
+    const stand = document.createElement("div");
+    stand.dataset.share = key;
+    Object.assign(stand.style, {
+      position: "fixed",
+      left: `${frame.left + rect.x}px`,
+      top: `${frame.top + rect.y}px`,
+      width: `${rect.width}px`,
+      height: `${rect.height}px`,
+      pointerEvents: "none",
+    });
+    document.body.append(stand);
+    depart(stand);
+    stand.remove();
   }
   let closing = $state(false);
   async function close() {
@@ -187,7 +255,10 @@
     try {
       await closePreview(instanceId);
     } catch (error) {
-      failure = error instanceof Error ? error.message : String(error);
+      failure = {
+        message: error instanceof Error ? error.message : String(error),
+        again: "close",
+      };
     } finally {
       closing = false;
     }
@@ -242,31 +313,55 @@
       type="button"
     >
       <PendingContent
-        failed={failure !== ''}
+        failed={failure?.again === 'close'}
         icon={IconClose}
         pending={closing}
       />
     </button>
   </header>
   <div class="well" bind:this={well}>
-    {#key frameKey}
+    {#each frames as key (key)}
+      {@const current = key === frameKey}
       <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: load starts the overlay handshake. -->
       <iframe
         allow="clipboard-write"
-        onload={announce}
+        inert={!current}
+        onload={() => { if (key === frameKey) { announce(); } }}
+        ontransitionend={landed}
         src={url}
         title="Preview"
-        bind:this={iframe}
-        class:ready={connected}
+        class:ready={!current || connected}
+        {@attach (node) => { if (key === frameKey) { iframe = node; } }}
       ></iframe>
-    {/key}
-    <div aria-hidden="true" class="cover" class:ready={connected}>
+    {/each}
+    <div aria-hidden="true" class="cover" class:ready={connected || standing !== null}>
       <span
         class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"
       ></span>
     </div>
     {#if failure}
-      <p class="error" role="alert">{failure}</p>
+      <div class="error" role="alert" transition:appear>
+        <p>{failure.message}</p>
+        {#if failure.again === 'reload'}
+          <Button
+            label="Try again"
+            onclick={retry}
+            pending={retrying}
+            pendingLabel="Reloading…"
+            size="sm"
+            variant="outline"
+          />
+        {:else}
+          <Button
+            label="Try again"
+            onclick={close}
+            pending={closing}
+            pendingLabel="Closing…"
+            size="sm"
+            variant="outline"
+          />
+        {/if}
+      </div>
     {/if}
   </div>
 </section>
@@ -378,7 +473,10 @@
     outline-color: var(--accent);
     cursor: crosshair;
   }
+  /* Frames stack: the next one loads over the one on screen. */
   iframe {
+    position: absolute;
+    inset: 0;
     color-scheme: light;
     background: Canvas;
     display: block;
@@ -403,14 +501,27 @@
   .cover.ready {
     opacity: 0;
   }
+  /* What went wrong, over the foot of the frame, and the one thing to do
+     about it. */
   .error {
     position: absolute;
+    inset-inline: 0;
     bottom: 0;
-    padding: var(--space-2);
+    display: flex;
+    align-items: center;
+    gap: var(--space-3);
+    padding: var(--space-2) var(--space-3);
     background: var(--surface-raised);
-    color: var(--data-bad);
-    font-size: var(--text-body);
-    font-weight: var(--weight-body);
+    border-top: 1px solid var(--border-hairline);
+
+    & p {
+      flex: 1;
+      min-width: 0;
+      margin: 0;
+      color: var(--data-bad);
+      font-size: var(--text-body);
+      font-weight: var(--weight-body);
+    }
   }
   @container (max-width: 469px) {
     .select-label {
