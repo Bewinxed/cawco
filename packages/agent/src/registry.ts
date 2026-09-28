@@ -17,9 +17,17 @@
  * and what is available; acting on the difference is the operator's, through
  * `whiffle update` or the fleet control that calls it.
  */
+import { realpath } from "node:fs/promises";
+import { dirname, join } from "node:path";
 import type { UpdateReport } from "@whiffle/core";
 import { readEnv, WHIFFLE_ENV } from "@whiffle/core";
-import { failed, restartStack, run, SERVICES } from "./update";
+import {
+  failed,
+  installDashboardUnits,
+  restartStack,
+  run,
+  SERVICES,
+} from "./update";
 
 /**
  * What a user installs. One package, so a fleet has one version to compare.
@@ -166,6 +174,20 @@ export const registryUpdate = async ({
     // A release replaces every service's code at once.
     changed: SERVICES,
   };
+
+  // The release just installed is what writes the units, as a pull's checkout
+  // does in `updateCheckout`: bun links its `bin` into the global bin
+  // directory, and the link leads to the package's own `cli.js`.
+  const bin = await run(
+    [process.execPath, "pm", "bin", "-g"],
+    REGISTRY_TIMEOUT_MS
+  );
+  if (!bin.ok) {
+    throw failed("finding bun's global bin directory", bin);
+  }
+  const cli = await realpath(join(bin.said, PACKAGE_NAME));
+  await installDashboardUnits(report.changed, cli, dirname(cli));
+
   return restartStack(report, { restartAgent, force, busy }, [
     "the dashboard ships built, so nothing was compiled here",
   ]);

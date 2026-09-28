@@ -559,8 +559,11 @@
   });
   const rows = $derived(built.rows);
   const cache = untrack(() => {
+    // A pane with no saved sizes and no rows has `undefined` on both sides of
+    // the first-row match, so the saved entry is checked on its own first.
     const saved = sizes.get(session.instanceId);
-    return saved?.first === built.rows[0]?.key &&
+    return saved !== undefined &&
+      saved.first === built.rows[0]?.key &&
       built.rows.length >= saved.count
       ? saved.cache
       : undefined;
