@@ -63,24 +63,24 @@
   }
 
   async function askRemove(row: RuleRow) {
-    const ok = await confirm({
+    await confirm({
       title: `Delete ${row.name}?`,
       body: "This rule stops applying to every session and is removed for good. You can always write it again, but there's no undo.",
       confirmLabel: "Delete rule",
       destructive: true,
+      pendingLabel: "Deleting…",
+      run: async () => {
+        busy[row.id] = true;
+        try {
+          await removeRule(row.id, row.name);
+          store.rules.value = rules.filter((other) => other.id !== row.id);
+        } catch (error) {
+          toast.error(message(error));
+        } finally {
+          delete busy[row.id];
+        }
+      },
     });
-    if (!ok) {
-      return;
-    }
-    busy[row.id] = true;
-    try {
-      await removeRule(row.id, row.name);
-      store.rules.value = rules.filter((other) => other.id !== row.id);
-    } catch (error) {
-      toast.error(message(error));
-    } finally {
-      delete busy[row.id];
-    }
   }
 
   async function useTemplate(template: (typeof RULE_TEMPLATES)[number]) {

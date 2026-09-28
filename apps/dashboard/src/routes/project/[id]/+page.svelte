@@ -104,6 +104,9 @@
   let clipped = $state(false);
   let showMore = $state(false);
   let forgetOpen = $state(false);
+  let forgetting = $state(false);
+  /** The last forget went through (a failed one leaves the dialog open). */
+  let forgotten = $state(false);
   let spawnOpen = $state(false);
   let spawnPrompt = $state("");
 
@@ -415,8 +418,15 @@
     if (!project) {
       return;
     }
-    await deleteProject(project.id);
-    forgetOpen = false;
+    forgetting = true;
+    forgotten = false;
+    try {
+      await deleteProject(project.id);
+      forgotten = true;
+      forgetOpen = false;
+    } finally {
+      forgetting = false;
+    }
     // Back to the spoke the project was opened from; the project's row folds
     // out of the sidebar as its list drops it, and the dead page is not left
     // behind in the history.
@@ -552,7 +562,18 @@
             </AlertDialog.Header>
             <AlertDialog.Footer>
               <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-              <AlertDialog.Action onclick={forget}>Forget</AlertDialog.Action>
+              <AlertDialog.Action>
+                {#snippet child({ props })}
+                  <Button
+                    {...props}
+                    failed={!forgotten}
+                    label="Forget"
+                    onclick={forget}
+                    pending={forgetting}
+                    pendingLabel="Forgetting…"
+                  />
+                {/snippet}
+              </AlertDialog.Action>
             </AlertDialog.Footer>
           </AlertDialog.Content>
         </AlertDialog.Root>

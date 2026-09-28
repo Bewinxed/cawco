@@ -54,24 +54,24 @@
 
   /** A hook is executable material on every machine — never a bare click. */
   async function askRemove(row: FleetHook) {
-    const ok = await confirm({
+    await confirm({
       title: `Delete ${row.name}?`,
       body: "This hook stops running and is removed from every machine that had it. You can always write it again, but there's no undo.",
       confirmLabel: "Delete hook",
       destructive: true,
+      pendingLabel: "Deleting…",
+      run: async () => {
+        busy[row.id] = true;
+        try {
+          await removeHook(row.id, row.name);
+          store.hooks.value = hooks.filter((other) => other.id !== row.id);
+        } catch (error) {
+          toast.error(message(error));
+        } finally {
+          delete busy[row.id];
+        }
+      },
     });
-    if (!ok) {
-      return;
-    }
-    busy[row.id] = true;
-    try {
-      await removeHook(row.id, row.name);
-      store.hooks.value = hooks.filter((other) => other.id !== row.id);
-    } catch (error) {
-      toast.error(message(error));
-    } finally {
-      delete busy[row.id];
-    }
   }
 
   async function useTemplate(template: (typeof HOOK_TEMPLATES)[number]) {

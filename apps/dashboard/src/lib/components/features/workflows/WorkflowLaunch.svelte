@@ -184,7 +184,7 @@
           </button><button
             aria-busy={busy || undefined}
             aria-disabled={busy || undefined}
-            class="wf-btn wf-primary start"
+            class="wf-btn wf-primary"
             disabled={!(online && workspace && whiffle.hub === 'connected')}
             onclick={whileIdle(() => busy, undefined)}
             title={whiffle.hub === 'connected'
@@ -205,12 +205,6 @@
   ></Dialog.Root
 >
 <style>
-  /* The start button draws the kit's pending content in the workflow skin:
-     its gap and icon size. */
-  .start {
-    --btn-gap: var(--space-2);
-    --btn-icon: 16px;
-  }
   .wf-launch :global(button) {
     min-height: 44px;
   }

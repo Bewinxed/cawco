@@ -97,26 +97,28 @@
   }
 
   async function askForget(row: FleetAgent) {
-    const ok = await confirm({
+    await confirm({
       title: `Remove ${row.name}?`,
       body: "The fleet forgets it. Every machine keeps the file it was already given, and lists it below as unmanaged, until the daemon can take one away itself.",
       confirmLabel: "Remove",
+      pendingLabel: "Removing…",
+      run: async () => {
+        busy[row.name] = true;
+        try {
+          await removeAgent(row.name);
+          const fleet = store.fleet.value;
+          if (fleet) {
+            fleet.agents = fleet.agents.filter(
+              (other) => other.name !== row.name
+            );
+          }
+        } catch (caught) {
+          toast.error(message(caught));
+        } finally {
+          delete busy[row.name];
+        }
+      },
     });
-    if (!ok) {
-      return;
-    }
-    busy[row.name] = true;
-    try {
-      await removeAgent(row.name);
-      const fleet = store.fleet.value;
-      if (fleet) {
-        fleet.agents = fleet.agents.filter((other) => other.name !== row.name);
-      }
-    } catch (caught) {
-      toast.error(message(caught));
-    } finally {
-      delete busy[row.name];
-    }
   }
 
   async function adopt(machineId: string, row: DiscoveredAgent) {
