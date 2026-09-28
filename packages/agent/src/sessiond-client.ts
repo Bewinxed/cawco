@@ -272,7 +272,8 @@ export class SessiondClient {
       });
       const client = new SessiondClient(socket);
       socket.connect(endpoint);
-      client.#onWelcome = (welcome) => {
+      // The accept's own welcome, first in line: nothing is sent before it.
+      client.#welcomeWaiters.push((welcome) => {
         clearTimeout(timer);
         // §5: no compatible capability is a loud refusal, never a plausible lie.
         if (!welcome.capabilities.includes(SESSIOND_V1)) {
@@ -285,13 +286,21 @@ export class SessiondClient {
           return;
         }
         resolve(client);
-      };
+      });
     });
   }
 
-  #onWelcome: (welcome: SessiondWelcomeInfo) => void = () => {
-    // replaced by connect()/list() before any welcome can arrive
-  };
+  /**
+   * Who each welcome answers, oldest first. sessiond sends one welcome on
+   * accept and one per `list`, in the order it read them, on this one ordered
+   * socket, so the head of this queue is always the asker the next welcome
+   * belongs to. It was a single slot, and a second `list` outstanding at once
+   * (a hub reconnect starting a second reattach while the first was still
+   * listing) took the slot over: the first asker was never answered, and its
+   * reattach stalled without a word. A `subscribe`'s own `list` holds a place
+   * too, or its welcome would answer a `list()` that asked later.
+   */
+  readonly #welcomeWaiters: ((welcome: SessiondWelcomeInfo) => void)[] = [];
 
   get epoch(): string | undefined {
     return this.#welcome?.epoch;
@@ -344,7 +353,7 @@ export class SessiondClient {
             this.#exit(listener, proc.exitCode ?? null, proc.signal ?? null);
           }
         }
-        this.#onWelcome(this.#welcome);
+        this.#welcomeWaiters.shift()?.(this.#welcome);
         return;
       }
       case "ack": {
@@ -494,6 +503,8 @@ export class SessiondClient {
       ...(afterSeq === undefined ? {} : { afterSeq }),
     });
     this.#send({ type: "list" });
+    // Its welcome is read by the death check in `#onMessage`, not by a caller.
+    this.#welcomeWaiters.push(() => undefined);
   }
 
   unsubscribe(procId: string): void {
@@ -503,8 +514,8 @@ export class SessiondClient {
   /** Ask again what is alive. Answered with a fresh `welcome`. */
   list(): Promise<SessiondWelcomeInfo> {
     return new Promise((resolve) => {
-      this.#onWelcome = (welcome) => resolve(welcome);
       this.#send({ type: "list" });
+      this.#welcomeWaiters.push(resolve);
     });
   }
 
