@@ -87,16 +87,38 @@ export function departBox(key: string, source: HTMLElement): void {
 }
 
 /**
- * A source the store takes away rather than a click: a queued row whose
- * message the session just read. Its box is taken where it still stands,
- * before the state change that removes it is drawn, under the `key` its
- * destination lands. A source not on screen has nothing to hand over.
+ * Sources the store takes away rather than a click: queued rows whose
+ * messages the session just read as one turn. Their box — the one around all
+ * of them — is taken where they still stand, before the state change that
+ * removes them is drawn, under the `key` their destination lands, so several
+ * rows close into the one row they became. Sources not on screen have
+ * nothing to hand over.
  */
-export function departFrom(selector: string, key: string): void {
-  const source = document.querySelector<HTMLElement>(selector);
-  if (source) {
-    departBox(key, source);
+export function departFrom(selectors: string[], key: string): void {
+  const sources = selectors.flatMap(
+    (selector) => document.querySelector<HTMLElement>(selector) ?? []
+  );
+  const [first] = sources;
+  if (!first) {
+    return;
   }
+  const rects = sources.map((source) => source.getBoundingClientRect());
+  const top = Math.min(...rects.map((rect) => rect.top));
+  const left = Math.min(...rects.map((rect) => rect.left));
+  departures.set(key, {
+    by: "click",
+    rect: new DOMRect(
+      left,
+      top,
+      Math.max(...rects.map((rect) => rect.right)) - left,
+      Math.max(...rects.map((rect) => rect.bottom)) - top
+    ),
+    radius: getComputedStyle(first).borderRadius,
+    source: first,
+    stays: true,
+    at: performance.now(),
+    ttl: TTL,
+  });
 }
 
 /**

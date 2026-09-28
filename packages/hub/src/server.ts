@@ -1252,9 +1252,6 @@ type MemoryRead =
  * Read off the frame structurally rather than by narrowing the neutral union,
  * the way `peekInit` above reads an init: a daemon older than these subtypes
  * simply never sends one, and this answers `undefined` for every other frame.
- * The real turn retires its own entry too ({@link QueuedMessage}) — the
- * dequeue frame can race it or be dropped, and a queued row that outlives the
- * message is the same lie the local echo used to tell.
  */
 const peekQueue = (
   payload: unknown
@@ -1267,13 +1264,7 @@ const peekQueue = (
     return undefined;
   }
   const sdk = message as Record<string, unknown>;
-  if (typeof sdk.queueId !== "string") {
-    return undefined;
-  }
-  if (sdk.type === "user") {
-    return { retired: sdk.queueId };
-  }
-  if (sdk.type !== "system") {
+  if (typeof sdk.queueId !== "string" || sdk.type !== "system") {
     return undefined;
   }
   if (sdk.subtype === MESSAGE_DEQUEUED) {

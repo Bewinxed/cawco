@@ -398,14 +398,6 @@ export interface NeutralUserMessage {
   message: { role: "user"; content: string | NeutralContentBlock[] };
   origin?: NeutralOrigin;
   parent_tool_use_id?: string | null;
-  /**
-   * The {@link QueuedMessage} this turn was: set by the harness on the real
-   * message the model finally read, so a client can retire the queued row it
-   * has been drawing for it. Absent on every message that never waited — and on
-   * every message from a daemon older than the queue frames, whose clients
-   * simply never had a queued row to retire.
-   */
-  queueId?: string;
   raw?: unknown;
   /**
    * A message the reader sent while a turn was running, read back from the
@@ -435,9 +427,9 @@ export interface NeutralUserMessage {
  * and no snapshot carried one — so a dashboard could only *guess* that what it
  * sent was waiting, by drawing a local echo it lost on reload. This is the
  * queue as observable state: announced by a `message_queued` system frame,
- * retired by `message_dequeued` (or by the real turn's {@link
- * NeutralUserMessage.queueId}), and listed in the hub's snapshot so a client
- * that joins mid-queue sees what is waiting.
+ * retired by `message_dequeued` once the model has read it (or by the
+ * {@link NeutralUserMessage.sentMidTurn} frame that says where), and listed in
+ * the hub's snapshot so a client that joins mid-queue sees what is waiting.
  *
  * `images` is a COUNT. The payloads are megabytes of base64 and the queue is
  * broadcast state — what a reader needs is that pictures are riding with it.
@@ -459,7 +451,7 @@ export interface QueuedMessage {
  */
 export const MESSAGE_QUEUED = "message_queued";
 
-/** And the one announcing the moment it was consumed: `queueId` alone. */
+/** And the one announcing the moment it was read: `queueId` alone. */
 export const MESSAGE_DEQUEUED = "message_dequeued";
 
 export interface NeutralStreamMessage {

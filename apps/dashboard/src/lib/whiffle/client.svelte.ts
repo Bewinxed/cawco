@@ -84,6 +84,7 @@ import {
   type QueueEntry,
   retireQueued,
   takeDrawn,
+  takeRead,
 } from "./queue";
 import { checkRestartToast } from "./restart-toast";
 import type {
@@ -1552,36 +1553,31 @@ function handleFrame(frame: FramePayload): void {
       // Oldest unstamped copy first — frames arrive in send order — preferring
       // an exact text match when two sends are in flight.
       if (mapping.echo && !mapping.agentId) {
-        // A turn that WAITED renders itself (`mapFrame` pushed it), because the
-        // queued row it replaces is not a copy anything can stamp. Its id is
-        // the second way a row retires — the dequeue frame can be raced by the
-        // turn it announces, or missed entirely by a tab that just subscribed.
-        const { uuid, text, queueId, midTurn } = mapping.echo;
+        const { uuid, text, midTurn } = mapping.echo;
         if (midTurn) {
           // The model read it: folded into the turn it was sent into, or
-          // opening the next. The row this tab drew at the press is taken out
-          // of the queue, and its words fly from where the row still stands
-          // into the turn `mapFrame` just pushed — measured now, before this
-          // change is drawn and the row is gone. The read line opens with what
-          // was typed (pastes fold in after it), as the daemon matched it.
-          const drawn = takeDrawn(target, (entry) =>
-            entry.text === "" ? text === "" : text.startsWith(entry.text)
+          // opening the next. A turn the CLI opens carries every send it held,
+          // their words joined in one line, so every queued row whose words
+          // appear in it is taken out of the queue — as the daemon matched
+          // them — and they fly together, from where they still stand, into
+          // the one turn `mapFrame` just pushed: measured now, before this
+          // change is drawn and the rows are gone.
+          const read = takeRead(target, (entry) =>
+            entry.text === "" ? text === "" : text.includes(entry.text)
           );
-          if (drawn) {
+          if (read.length > 0) {
             departFrom(
-              `[data-queued="${CSS.escape(drawn.sentAs ?? drawn.queueId)}"]`,
+              read.map(
+                (entry) =>
+                  `[data-queued="${CSS.escape(entry.sentAs ?? entry.queueId)}"]`
+              ),
               `sent:${text}`
             );
-            const read = target.messages.findLast((m) => m.sdkUuid === uuid);
-            if (read) {
-              read.metadata = { ...read.metadata, queuedLocally: true };
+            const turn = target.messages.findLast((m) => m.sdkUuid === uuid);
+            if (turn) {
+              turn.metadata = { ...turn.metadata, queuedLocally: true };
             }
           }
-        } else if (queueId) {
-          retireQueued(target, queueId);
-          // Queued and run without this tab hearing the announcement: the entry
-          // it drew at the press is this turn too.
-          takeDrawn(target, (entry) => entry.text === text);
         } else {
           const copies = target.messages.filter(
             (m) => m.type === "user" && !m.sdkUuid

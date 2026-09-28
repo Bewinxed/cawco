@@ -106,10 +106,25 @@ export function adoptQueue(
 }
 
 /**
- * Retires a queue entry: the session pulled it (`message_dequeued`), or its
- * real turn landed carrying the same id. Both paths, because either can be the
- * one that arrives — the dequeue frame can be raced by the turn it announces,
- * and a tab that subscribed a moment late never saw it at all.
+ * Takes out every entry the model has just read, whoever drew or announced
+ * it: the read line carries each one whose words it holds (`match`), because
+ * the CLI opens one turn with every send it held, their words joined. The
+ * entries are returned so the caller can fly their rows into the turn.
+ */
+export function takeRead(
+  target: QueueTarget,
+  match: (entry: QueueEntry) => boolean
+): QueueEntry[] {
+  const read = target.queued.filter(match);
+  if (read.length > 0) {
+    target.queued = target.queued.filter((queued) => !match(queued));
+  }
+  return read;
+}
+
+/**
+ * Retires a queue entry the session says it has read (`message_dequeued`):
+ * what a tab that missed the read turn's own frame still hears.
  */
 export function retireQueued(target: QueueTarget, queueId: string): void {
   if (!target.queued.some((queued) => queued.queueId === queueId)) {

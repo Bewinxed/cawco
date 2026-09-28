@@ -114,10 +114,10 @@ export interface FrameMapping {
   /** Text to append to the instance's streaming buffer. */
   delta: string;
   /**
-   * The id of a queue entry that is no longer waiting: the session pulled it.
-   * Its real turn arrives a moment later carrying the same id on
-   * {@link FrameMapping.echo} — either retires the row, because a dequeue frame
-   * can be raced by the turn it announces, or lost with a dropped subscription.
+   * The id of a queue entry that is no longer waiting: the model read it. The
+   * frame that says where ({@link FrameMapping.echo}'s `midTurn`) goes out just
+   * before this and has already retired the row by its words; this retires it
+   * for a tab that missed that one.
    */
   dequeued?: string;
   /**
@@ -129,12 +129,11 @@ export interface FrameMapping {
   echo?: {
     uuid: string;
     text: string;
-    queueId?: string;
     /**
      * A message the reader sent while a turn ran, read where the model read
      * it: folded into that turn, or opening the next. `mapFrame` has pushed
-     * it; the store retires the queued row this tab drew for it and flies
-     * that row into it.
+     * it; the store retires every queued row it carries and flies them into
+     * it.
      */
     midTurn?: true;
   };
@@ -641,18 +640,11 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
         mapping.messages.push(queued);
         break;
       }
-      // A turn the session had to QUEUE carries the id it waited under. It has
-      // no local copy left to render it — the queued row replaced that copy the
-      // moment the daemon announced it, and the row is about to be retired — so
-      // this one is pushed rather than echoed. The id rides along on `echo`
-      // too: retiring the row is what the store does with it, and it happens
-      // whether or not the `message_dequeued` frame arrived first.
-      const queueId = "queueId" in sdk ? sdk.queueId : undefined;
       // A message the reader sent while a turn was running, which the model
       // folded into it at a tool boundary or which opened the next turn.
-      // Nothing else draws it as a turn — the sender's tab holds it as a
-      // queued row, other tabs hold nothing — so it is pushed here, where it
-      // was read, at the time its line was written.
+      // Nothing else draws it as a turn — until now every tab held it as a
+      // queued row — so it is pushed here, where it was read, at the time its
+      // line was written.
       if ("sentMidTurn" in sdk && sdk.sentMidTurn && uuid && !agentId) {
         mapping.messages.push({
           ...base,
@@ -667,12 +659,6 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
           ...base,
           ...userBody(text, transcriptUserImages(sdk.message)),
         });
-      } else if (text && uuid && !agentId && queueId) {
-        mapping.messages.push({
-          ...base,
-          ...userBody(text, transcriptUserImages(sdk.message)),
-        });
-        mapping.echo = { uuid, text, queueId };
       } else if (text && uuid && !agentId) {
         // The human's own turn: rendered by the local copy, so nothing is
         // pushed — but the copy has no SDK uuid until now.

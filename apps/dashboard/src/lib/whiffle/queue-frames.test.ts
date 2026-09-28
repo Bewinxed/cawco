@@ -31,14 +31,13 @@ const queuedFrame = (
     ...(images ? { images } : {}),
   }) as SDKMessage;
 
-/** The real turn, once the session read it — tagged with the id it waited under. */
-const turnFrame = (uuid: string, text: string, queueId?: string): SDKMessage =>
+/** An ordinary user turn frame. */
+const turnFrame = (uuid: string, text: string): SDKMessage =>
   ({
     type: "user",
     uuid,
     message: { role: "user", content: text },
     parent_tool_use_id: null,
-    ...(queueId ? { queueId } : {}),
   }) as SDKMessage;
 
 /** The optimistic copy `sendText` pushes, mark and all. */
@@ -89,20 +88,6 @@ test("a message_dequeued frame names the id to retire, and says nothing else", (
   } as SDKMessage);
   expect(mapping.dequeued).toBe("q-1");
   expect(mapping.messages).toEqual([]);
-});
-
-test("a turn that WAITED renders itself and carries its id back", () => {
-  // Its local copy was retired when the queue announced it, so unlike an
-  // ordinary user frame there is nothing left for this one to be echoed onto.
-  const mapping = mapFrame("i1", turnFrame("uuid-1", "ship it", "q-1"));
-  expect(mapping.messages).toHaveLength(1);
-  expect(mapping.messages[0].type).toBe("user");
-  expect(mapping.messages[0].content).toBe("ship it");
-  expect(mapping.echo).toEqual({
-    uuid: "uuid-1",
-    text: "ship it",
-    queueId: "q-1",
-  });
 });
 
 test("a turn that never waited is echoed, not pushed — the old behaviour, exactly", () => {
@@ -170,7 +155,7 @@ test("the same announcement twice files one row", () => {
   expect(state.queued).toHaveLength(1);
 });
 
-test("either retirement path clears the row, and a stranger id clears nothing", () => {
+test("the dequeue frame clears the row once, and a stranger id clears nothing", () => {
   const state = target({
     queued: [
       { queueId: "q-1", text: "one", timestamp: "t" },
@@ -180,7 +165,7 @@ test("either retirement path clears the row, and a stranger id clears nothing", 
   // The dequeue frame.
   retireQueued(state, "q-1");
   expect(state.queued.map((q) => q.queueId)).toEqual(["q-2"]);
-  // The real turn's tag, for a row the dequeue frame already took: a no-op.
+  // A row already taken — by the read turn's own frame — is a no-op.
   retireQueued(state, "q-1");
   expect(state.queued.map((q) => q.queueId)).toEqual(["q-2"]);
   retireQueued(state, "nobody");
@@ -195,7 +180,7 @@ test("an old daemon changes nothing: no frame, so the echo stays put", () => {
   const mapping = mapFrame("i1", turnFrame("uuid-1", "ship it"));
   expect(mapping.queued).toBeUndefined();
   expect(mapping.dequeued).toBeUndefined();
-  expect(mapping.echo?.queueId).toBeUndefined();
+  expect(mapping.echo).toEqual({ uuid: "uuid-1", text: "ship it" });
   expect(state.messages).toHaveLength(1);
   expect(state.queued).toEqual([]);
 });
