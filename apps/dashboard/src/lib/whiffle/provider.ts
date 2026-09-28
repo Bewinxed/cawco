@@ -4,9 +4,7 @@
  * after the last `/` is what matches. Prefix-first and case-insensitive: a
  * single token decides a whole family, and anything else is not our call.
  *
- * Kept out of `models.svelte.ts` on purpose: it is the one bit of that module a
- * plain `bun test` can reach, because it drags in no Svelte runes or `$app/*`
- * virtual imports. `models.svelte.ts` re-exports it, so callers keep importing
+ * `models.svelte.ts` re-exports it, so callers keep importing
  * it from the same place as `modelLabel`.
  */
 const PROVIDER_PREFIXES: ReadonlyArray<

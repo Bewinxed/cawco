@@ -2101,9 +2101,7 @@ export function applyToolResult(
  * C3, a `Record<instanceId, SessionPulse>` riding the same frame every
  * `instances` push carries) — into the client's own pulse map.
  *
- * Pulled out of the runes module for the same reason as everything else here:
- * `client.svelte.ts` cannot be imported by this repo's bun tests. The rule
- * itself is a merge, not a replace, because a per-instance `pulse` frame
+ * The rule is a merge, not a replace, because a per-instance `pulse` frame
  * (thrown the moment a daemon reports one) is not ordered against a snapshot
  * the hub took moments before the `instances` frame carrying it left — either
  * can reach the browser first, so whichever pulse actually happened later, by

@@ -41,10 +41,9 @@ const main = Effect.gen(function* () {
   void backfillUsage(db);
 });
 
-// Guarded so a test can import `migrateLegacyDb` above without booting a real
-// hub — `bun test` loads every file in one process, and this module is also
-// the actual entry point every service spec (`packages/cli/src/service.ts`)
-// and `bun --watch` run directly, where `import.meta.main` is true.
+// This module is the entry point every service spec
+// (`packages/cli/src/service.ts`) and `bun --watch` run directly, where
+// `import.meta.main` is true.
 if (import.meta.main) {
   migrateLegacyDb(DB_PATH);
   await Effect.runPromise(

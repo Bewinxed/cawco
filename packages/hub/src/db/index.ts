@@ -945,18 +945,6 @@ const hashHookMaterial = (hook: {
     ])
   );
 
-/**
- * Opens (and migrates) a database at `path`.
- *
- * Exported for tests. Going through `WHIFFLE_DB_PATH` instead is a trap:
- * `DB_PATH` is read once, when `../config` is first imported, and `bun test`
- * runs every test file in one process — so a test that sets the variable only
- * gets its own database if it happens to be the file that loads `config`
- * first. Whichever test loses that race writes to the fleet's real
- * `whiffle.db`. Naming the path leaves nothing to load order.
- */
-export const makeDb = (path: string): DbShape => make(path);
-
 const make = (path: string): DbShape => {
   const db = drizzle(path);
   migrate(db, { migrationsFolder: MIGRATIONS_DIR });

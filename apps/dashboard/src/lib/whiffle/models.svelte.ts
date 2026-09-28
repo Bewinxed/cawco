@@ -373,10 +373,9 @@ export function modelLabel(model: string, harness?: string): string {
  * after the last `/` is what matches. Prefix-first and case-insensitive: a
  * single token decides a whole family, and anything else is not our call.
  *
- * Pure string work, so it lives in a plain module — `models.svelte.ts` is full
- * of Svelte runes and `$app/*` imports, which no plain `bun test` can load.
+ * Pure string work, so it lives in a plain module.
  */
-// biome-ignore lint/performance/noBarrelFile: re-exports the one pure helper that both this store and non-Svelte test code need, not a module-graph barrel
+// biome-ignore lint/performance/noBarrelFile: re-exports the one pure helper so callers import it beside modelLabel, not a module-graph barrel
 export { providerOf } from "./provider";
 
 /**

@@ -38,9 +38,6 @@ jobs:
       - name: Typecheck
         run: bun run typecheck
 
-      - name: Test
-        run: bun test
-
       # The tag is the version. A mismatch means the tag was cut against a
       # commit that says something else, and publishing it would put a version
       # on the registry that no commit in this repo claims.

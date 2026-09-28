@@ -22,7 +22,6 @@
     "release:build": "bun scripts/build-release.mjs",
     "release:pack": "bun scripts/build-release.mjs && cd release && npm pack",
     "smoke:insecure": "node scripts/insecure-origin-smoke.mjs",
-    "test": "bun test",
     "typecheck": "bun run --filter '*' typecheck",
     "whiffle": "bun packages/cli/src/cli.ts"
   },

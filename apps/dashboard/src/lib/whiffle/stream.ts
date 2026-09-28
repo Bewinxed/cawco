@@ -6,8 +6,7 @@
  * object and calls out through {@link StreamHost} for the two things it cannot
  * do itself (apply a frame, re-read a transcript). `client.svelte.ts` owns the
  * runes binding and the socket; this file owns the decisions. The split follows
- * `queue.ts` — this repo's bun tests cannot import a `.svelte.ts` module, so
- * logic that has to be proven lives in a plain one.
+ * `queue.ts`.
  *
  * The rules it enforces, in one place:
  *
