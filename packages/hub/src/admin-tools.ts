@@ -599,14 +599,14 @@ export function adminTools() {
           throw new Error("id is required to update a hook");
         }
 
-        const body = {
-          name: args.name ?? "",
-          enabled: args.enabled ?? true,
-          event: args.event ?? "",
-          ...(args.matcher ? { matcher: args.matcher } : {}),
-          handler: args.handler ?? {},
-          ...(args.script ? { script: args.script } : {}),
-        };
+        // Only the fields given: the hub merges an update over the stored hook
+        // and validates the result, so `update {id, enabled: false}` touches
+        // nothing else. A create is validated the same way, from nothing.
+        const { action: _action, id: _id, ...given } = args;
+        const body =
+          action === "create"
+            ? { ...given, enabled: given.enabled ?? true }
+            : given;
 
         return ok(
           await api("PUT", `/api/fleet/hooks/${encodeURIComponent(id)}`, body)

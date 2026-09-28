@@ -83,7 +83,10 @@ const json = (body: unknown): RequestInit => ({
 export const loadHooks = (): Promise<HooksPayload> =>
   send<HooksPayload>("/api/fleet/hooks", {}, "load the hooks");
 
-/** Only the fields the hub's schema accepts — `force`/`cwd` are the hub's own to set. */
+/** Only the fields the hub's schema accepts — `force`/`cwd` are the hub's own to
+ *  set. The hub merges a PUT over the stored hook, so an optional field the
+ *  draft leaves empty goes as `null`, which clears it; an absent one would keep
+ *  the stored value. */
 export const saveHook = (id: string, draft: HookDraft): Promise<FleetHook> =>
   send<FleetHook>(
     `/api/fleet/hooks/${encodeURIComponent(id)}`,
@@ -93,11 +96,11 @@ export const saveHook = (id: string, draft: HookDraft): Promise<FleetHook> =>
         name: draft.name,
         enabled: draft.enabled,
         event: draft.event,
-        matcher: draft.matcher,
+        matcher: draft.matcher ?? null,
         handler: draft.handler,
-        script: draft.script,
-        scope: draft.scope,
-        projectId: draft.projectId,
+        script: draft.script ?? null,
+        scope: draft.scope ?? null,
+        projectId: draft.projectId ?? null,
       }),
     },
     `save ${draft.name || "the hook"}`

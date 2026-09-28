@@ -19,7 +19,7 @@ import {
   stat,
 } from "node:fs/promises";
 import { platform } from "node:os";
-import { delimiter, isAbsolute, join } from "node:path";
+import { basename, delimiter, isAbsolute, join } from "node:path";
 import type {
   CliInstall,
   ConfigInspection,
@@ -1625,6 +1625,68 @@ const syncMemoryHook = async (
 /** Where a hook's own script lands: `~/.claude/whiffle-hooks/<id>.sh`. */
 const hookScriptPath = (id: string): string => join(HOOKS_DIR, `${id}.sh`);
 
+/** How long one `bash -n` gets. Our choice: a parse of a hook script is
+ * milliseconds, and one that hangs is not a script worth registering. */
+const PARSE_TIMEOUT_MS = 5000;
+
+const WHITESPACE = /\s+/;
+
+/**
+ * The shell a script's shebang runs it with, when that shell is one `-n` can
+ * check. No shebang is `sh`: Claude Code spawns the command through a shell,
+ * and a file with no `#!` that the kernel refuses (ENOEXEC) is run by that
+ * shell as an `sh` script. Any other interpreter is not checked.
+ */
+const shellOf = (script: string): "bash" | "sh" | undefined => {
+  const first = script.split("\n", 1)[0] ?? "";
+  if (!first.startsWith("#!")) {
+    return "sh";
+  }
+  const words = first.slice(2).trim().split(WHITESPACE);
+  const program =
+    basename(words[0] ?? "") === "env"
+      ? words.slice(1).find((word) => !word.startsWith("-"))
+      : words[0];
+  const name = basename(program ?? "");
+  return name === "bash" || name === "sh" ? name : undefined;
+};
+
+/**
+ * The parser's error line when a shell script does not parse, undefined when
+ * it does or is not a shell script. A hook runs before every matching tool
+ * call on the machine, so one that cannot parse locks every session out; it is
+ * never registered.
+ */
+const scriptParseError = async (
+  script: string
+): Promise<string | undefined> => {
+  const shell = shellOf(script);
+  if (!shell) {
+    return undefined;
+  }
+  const child = Bun.spawn([shell, "-n"], {
+    env: toolEnv(),
+    stdin: new TextEncoder().encode(script),
+    stdout: "ignore",
+    stderr: "pipe",
+    timeout: PARSE_TIMEOUT_MS,
+  });
+  const stderr = await new Response(child.stderr).text();
+  const code = await child.exited;
+  if (child.signalCode) {
+    return `${shell} -n timed out after ${PARSE_TIMEOUT_MS / 1000}s`;
+  }
+  if (code === 0) {
+    return undefined;
+  }
+  return (
+    stderr
+      .split("\n")
+      .find((line) => line.trim() !== "")
+      ?.trim() ?? `${shell} -n exited ${code}`
+  );
+};
+
 /** `~/.claude/settings.json` for a fleet-wide hook, `<cwd>/.claude/settings.json`
  * for one bound to a project — the same file a project MCP server's counterpart
  * would use if MCP had one, and the only settings file a session in that
@@ -1726,6 +1788,19 @@ const syncHooks = async (
       await fileHashAt(path),
       managed[hook.id]?.hash
     );
+    // What would run once registered: the machine's own edit when it drifted,
+    // the fleet's script otherwise. One that does not parse is neither written
+    // nor registered, and whatever this file registered for it before comes
+    // out below; the file on disk stays, so a drifted copy can still be
+    // compared and adopted.
+    const parseError = await scriptParseError(
+      plan === "drift" ? await Bun.file(path).text() : hook.script
+    );
+    if (parseError) {
+      keep(hook.id);
+      report[hook.id] = { state: "failed", detail: parseError };
+      continue;
+    }
     if (plan === "drift") {
       report[hook.id] = { state: "failed", detail: DRIFTED };
       hashes.set(hook.id, managed[hook.id]?.hash ?? scriptHash);
@@ -2046,19 +2121,26 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
   }
   for (const [id, record] of Object.entries(managed.hooks)) {
     if (record.command.startsWith(HOOKS_DIR)) {
+      const scriptFile = Bun.file(record.command);
       // biome-ignore lint/performance/noAwaitInLoops: a read-only status check; kept sequential like the rest of this report rather than fanning out parallel file reads
-      const fileHash = await fileHashAt(record.command);
-      hooks[id] =
-        fileHash === record.hash
-          ? { state: "applied" }
-          : {
-              state: "failed",
-              detail: fileHash === null ? "not on disk" : DRIFTED,
-            };
-      continue;
+      if (!(await scriptFile.exists())) {
+        hooks[id] = { state: "failed", detail: "not on disk" };
+        continue;
+      }
+      const script = await scriptFile.text();
+      const parseError = await scriptParseError(script);
+      if (parseError) {
+        hooks[id] = { state: "failed", detail: parseError };
+        continue;
+      }
+      if (hashText(script) !== record.hash) {
+        hooks[id] = { state: "failed", detail: DRIFTED };
+        continue;
+      }
     }
-    // No script of whiffle's to check: the only question is whether the
-    // entry it registered is still in the settings.json it registered it in.
+    // The last question for every hook: whether the entry whiffle registered
+    // is still in the settings.json it registered it in — a script that was
+    // refused registration is kept on disk, so a matching file is not enough.
     const settingsPath = settingsPathFor(record);
     const stored = await readJson<Record<string, unknown>>(settingsPath);
     const entries =

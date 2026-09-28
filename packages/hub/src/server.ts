@@ -6138,29 +6138,25 @@ export const createServer = ({
       .put(
         "/api/fleet/hooks/:id",
         {
+          // A partial update: every field is optional, a given one replaces the
+          // stored value, `null` clears an optional one, and an absent one
+          // keeps what is stored. The merged hook is what gets validated.
           body: t.Object({
-            name: t.String(),
-            enabled: t.Boolean(),
-            event: t.String(),
-            matcher: t.Optional(t.String()),
+            name: t.Optional(t.String()),
+            enabled: t.Optional(t.Boolean()),
+            event: t.Optional(t.String()),
+            matcher: t.Optional(t.Nullable(t.String())),
             // Stored and written verbatim, so the schema only asks that it be an
             // object; `hookProblem` checks the fields that make it runnable.
-            handler: t.Record(t.String(), t.Unknown()),
-            script: t.Optional(t.String()),
-            scope: t.Optional(t.String()),
-            projectId: t.Optional(t.String()),
+            handler: t.Optional(t.Record(t.String(), t.Unknown())),
+            script: t.Optional(t.Nullable(t.String())),
+            scope: t.Optional(t.Nullable(t.String())),
+            projectId: t.Optional(t.Nullable(t.String())),
             expectedHash: t.Optional(t.String()),
           }),
         },
         ({ params, body, status }) => {
-          const { expectedHash, ...rest } = body;
-          const draft = rest as unknown as HookDraft;
-          const wrong = hookProblem(draft);
-          const [first] = Object.values(wrong);
-          if (first) {
-            return status(400, first);
-          }
-
+          const { expectedHash, ...patch } = body;
           const current = db.getFleetHook(params.id);
           // The same conflict a memory document's save answers with: what the
           // writer had in front of them is stale, so the row really there comes
@@ -6172,6 +6168,28 @@ export const createServer = ({
           ) {
             return status(409, current);
           }
+
+          const merged: Record<string, unknown> = {};
+          if (current) {
+            const { id: _id, hash: _hash, ...stored } = current;
+            Object.assign(merged, stored);
+          }
+          for (const [key, value] of Object.entries(patch)) {
+            if (value === null) {
+              delete merged[key];
+            } else if (value !== undefined) {
+              merged[key] = value;
+            }
+          }
+          const draft = merged as unknown as HookDraft;
+          if (typeof draft.enabled !== "boolean") {
+            return status(400, "Say whether the hook is enabled.");
+          }
+          const [first] = Object.values(hookProblem(draft));
+          if (first) {
+            return status(400, first);
+          }
+
           if (current) {
             keepHookVersion(current);
           }
