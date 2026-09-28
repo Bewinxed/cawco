@@ -141,9 +141,9 @@
   );
   let previewMounted = $state(false);
   /**
-   * The side preview is opening out of its tool row's thumbnail
+   * The side preview is opening out of its tool row
    * (motion/share.svelte.ts, `preview:<session>`): the split takes its width
-   * in one frame and the surface clips open from the thumbnail's box over
+   * in one frame and the surface clips open from the row's box over
    * --dur-panel on --ease-drawer, standing still while it does, so the two
    * never move at once. Opened any other way it slides in with the split.
    */
