@@ -1,4 +1,5 @@
 import { Effect, Layer } from "effect";
+import { buildInfo } from "./build";
 import { DB_PATH, HUB_PORT, HUB_VERSION } from "./config";
 import { Db, DbLayer } from "./db";
 import { advertise } from "./mdns";
@@ -25,7 +26,10 @@ const main = Effect.gen(function* () {
   // 147 files), and the socket is silent that whole time. 120s clears the
   // resolver's own 60s fetch timeout with room for the hash.
   const hostname = process.env.HOST ?? "0.0.0.0";
-  createServer({ registry, db, pending, telegram }).listen({
+  // Before `listen`: every dashboard's first frame names this commit (see
+  // `HubServices.build`), and two git calls are not worth a socket without it.
+  const build = yield* Effect.promise(buildInfo);
+  createServer({ build, registry, db, pending, telegram }).listen({
     hostname,
     port: HUB_PORT,
     idleTimeout: 120,

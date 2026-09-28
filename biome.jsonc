@@ -7,7 +7,9 @@
     "includes": ["!mocks", "!packages/jsonl-parser"]
   },
   "javascript": {
-    "globals": ["Bun"]
+    // __WHIFFLE_COMMIT__: the dashboard's build commit, a `define` in
+    // apps/dashboard/vite.config.ts.
+    "globals": ["Bun", "__WHIFFLE_COMMIT__"]
   },
   // Both sorters can change what the code does: JS object key order is
   // observable through Object.keys/entries and JSON output, and a CSS

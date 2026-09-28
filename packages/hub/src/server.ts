@@ -93,7 +93,6 @@ import {
 } from "@whiffle/core";
 import { Elysia, t, ValidationError } from "elysia";
 import { websocket } from "elysia/websocket";
-import { buildInfo } from "./build";
 import { HUB_VERSION } from "./config";
 import {
   type ContinuationSource,
@@ -394,6 +393,12 @@ const ndjsonNewestFirst = (rows: unknown[]): ReadableStream<Uint8Array> => {
 };
 
 export interface HubServices {
+  /**
+   * What this hub was built from, read before it serves: the first frame every
+   * dashboard receives carries it, so no socket ever meets a hub that has not
+   * yet said which commit it runs.
+   */
+  readonly build: BuildInfo;
   readonly db: DbShape;
   readonly pending: PendingShape;
   readonly registry: RegistryShape;
@@ -1473,6 +1478,7 @@ export const normalizeRelayMessage = (body: unknown): string | undefined => {
 };
 
 export const createServer = ({
+  build: hubBuild,
   registry,
   db,
   pending,
@@ -1570,18 +1576,6 @@ export const createServer = ({
    * restarted" about a machine that has been running quietly since.
    */
   const restarts = new Map<string, true>();
-
-  /**
-   * What this hub was built from, for the frame. `buildInfo()` is async and
-   * `instancesFrame` is not, so it is read once at boot and cached; a running
-   * hub is whatever it started as, which is the same assumption `buildInfo`
-   * itself makes.
-   */
-  let hubBuild: BuildInfo | undefined;
-  // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — boot must not stall on this, and `hubBuild` is read as still-undefined until it resolves.
-  void buildInfo().then((info) => {
-    hubBuild = info;
-  });
 
   /**
    * Standing instructions, enforced on the frame stream this server already
@@ -2944,12 +2938,13 @@ export const createServer = ({
       previewFrame(id, "open", target.source)
     ),
     handoffs: Object.fromEntries(handoffs),
-    // Additive, both of them: a dashboard that predates either reads the
-    // frame exactly as it always did. `pulses` seeds the rail's now-state on
-    // connect instead of leaving it blank until the next beat; `hubBuild`
-    // lets a client tell a hub that is behind from a machine that is.
+    // `pulses` seeds the rail's now-state on connect instead of leaving it
+    // blank until the next beat. `hubBuild` lets a client tell a hub that is
+    // behind from a machine that is, and lets a page running an older build
+    // see it on its very first frame and offer a reload — every dashboard
+    // build since 440bdbc6 reads it off this frame, whatever else it speaks.
     pulses: Object.fromEntries(pulses),
-    ...(hubBuild ? { hubBuild } : {}),
+    hubBuild,
   });
 
   const instancesFrame = (machineId: string): Envelope => ({
@@ -4178,7 +4173,7 @@ export const createServer = ({
       .get("/health", async () => ({
         ok: true,
         version: HUB_VERSION,
-        build: await buildInfo(),
+        build: hubBuild,
       }))
       .get("/api/agents", () => withPresence(db.listAgents()))
       .post(
@@ -7637,7 +7632,9 @@ export const createServer = ({
           // this browser just used one. See `dashboardUrl` in telegram.ts.
           registry.noteDashboardOrigin(ws.headers.origin);
           // The board, before it is asked for: the FIRST message every
-          // dashboard receives, so the rail fills before the REST snapshot lands.
+          // dashboard receives, unconditionally, so the rail fills before the
+          // REST snapshot lands and a page on an older build learns from it
+          // (its `hubBuild`) that it should reload, whatever protocol it speaks.
           ws.send(instancesFrame(""));
         },
         // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches every dashboard socket message shape (stream protocol, control, send, ack) through one handler; splitting it would scatter the ordering guarantees across several functions.

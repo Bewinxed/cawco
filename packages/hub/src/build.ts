@@ -23,7 +23,8 @@ const git = async (args: string[]): Promise<string | undefined> => {
   return ran.exitCode === 0 ? ran.stdout.toString().trim() : undefined;
 };
 
-const read = async (): Promise<BuildInfo> => {
+/** Read once, at boot, before the hub serves: a running hub is whatever it started as. */
+export const buildInfo = async (): Promise<BuildInfo> => {
   const commit = await git(["rev-parse", "--short", "HEAD"]);
   const status = commit ? await git(["status", "--porcelain"]) : undefined;
   return {
@@ -31,12 +32,4 @@ const read = async (): Promise<BuildInfo> => {
     ...(commit ? { commit, dirty: Boolean(status) } : {}),
     startedAt: STARTED_AT,
   };
-};
-
-let reported: Promise<BuildInfo> | undefined;
-
-/** Read once and kept: a running hub is whatever it started as. */
-export const buildInfo = (): Promise<BuildInfo> => {
-  reported ??= read();
-  return reported;
 };

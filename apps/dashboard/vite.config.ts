@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import http from "node:http";
 import path from "node:path";
 import { sveltekit } from "@sveltejs/kit/vite";
@@ -189,6 +190,19 @@ const hubProxy = (): Plugin => ({
 });
 
 export default defineConfig({
+  /**
+   * The commit this build was made from, the same `git rev-parse --short HEAD`
+   * the hub reports as its `BuildInfo.commit` (packages/hub/src/build.ts). The
+   * deploy toast compares the two. Not SvelteKit's `version`: svelte.config.js
+   * leaves `kit.version.name` unset, and its default is `Date.now()`.
+   */
+  define: {
+    __WHIFFLE_COMMIT__: JSON.stringify(
+      execFileSync("git", ["rev-parse", "--short", "HEAD"], {
+        encoding: "utf8",
+      }).trim()
+    ),
+  },
   plugins: [
     hubProxy(),
     tailwindcss(),
