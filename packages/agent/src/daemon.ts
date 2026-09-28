@@ -118,16 +118,18 @@ export class ConnectionLost extends Data.TaggedError("ConnectionLost")<{
  * Every deploy restarts the hub (`restartStack`, update.ts), and a restarted
  * hub starts with an empty registry, which is the only place `online` is read
  * from: every machine reads offline until its daemon registers again. Measured
- * here, the hub is listening again 0.44s after systemd stops it (journal:
- * `Stopping` 06:00:42.486, `listening` 06:00:42.930). The first attempt after a
+ * here, the hub is listening again 0.42–0.54s after systemd stops it (journal,
+ * `Stopping` to `listening on`, 12 deploy restarts). The first attempt after a
  * connection ends always finds the port closed, and when the series started at
- * 1s the second attempt came a second later, so every deploy showed healthy
- * machines as offline for half a second of pure waiting. A 50ms knock means the
- * daemon is back within 50ms of the hub. 40 knocks (2s) give a slow boot four
- * times the measured restart before the series backs off.
+ * 1s the second attempt came 0.8–1.2s later (jittered), so every deploy showed
+ * healthy machines as offline for another 0.3–0.8s of pure waiting after the
+ * hub was already listening. A 50ms knock means the daemon is back within
+ * 50ms of the hub. 40 knocks (2s) give a slow boot nearly four times the
+ * slowest measured restart before the series backs off.
  */
 const RESTART_KNOCK = Duration.millis(50);
 const RESTART_KNOCKS = 40;
+const RESTART_WINDOW_MS = Duration.toMillis(RESTART_KNOCK) * RESTART_KNOCKS;
 
 /**
  * One retry series: a 50ms knock for 2s ({@link RESTART_KNOCK}), then 1s, 2s,
@@ -409,11 +411,72 @@ export const custodyRow = (
   ...(payload.permissionMode ? { permissionMode: payload.permissionMode } : {}),
 });
 
+/**
+ * What the register says about this machine's sessions: what sessiond is still
+ * holding, and what each harness could resume.
+ */
+const readSessions = async () => {
+  // Read before the catalog: listing OpenCode conversations may start a new
+  // server, which must not be mistaken for one that survived this restart.
+  const custody = await (async () => {
+    try {
+      const client = await SessiondClient.connect(
+        process.env.WHIFFLE_SESSIOND_ENDPOINT ?? sessiondEndpoint()
+      );
+      try {
+        const held = client.procs.filter((proc) => proc.alive);
+        return {
+          instances: held
+            .filter((proc) => proc.procId !== OPENCODE_SERVER_PROC_ID)
+            .map((proc) => proc.procId),
+          opencode: held.some(
+            (proc) => proc.procId === OPENCODE_SERVER_PROC_ID
+          ),
+        };
+      } finally {
+        client.close();
+      }
+    } catch (error) {
+      Effect.runFork(
+        Effect.logWarning(`session custody unavailable: ${String(error)}`)
+      );
+    }
+  })();
+  const catalog = await resumableSessions();
+  return { custody, catalog };
+};
+
+/**
+ * The sessions half of the register, read when an attempt starts rather than
+ * after its socket opens, and shared by every attempt inside one knock window.
+ *
+ * The catalog is the slow part of a register: listing 757 claude conversations
+ * took 315–380ms here, and the register cannot go out without it. Read after
+ * the socket opened, it was the last thing keeping a healthy machine offline
+ * after a hub restart (0.39–0.41s in restart runs against a local hub). Started
+ * when the attempt starts, it runs while the hub is still booting. The knocks
+ * after it reuse that one read instead of starting their own, so it is at most
+ * one knock window (2s) old when a register carries it. The register used to
+ * wait about that long on the harness probes after this same read, so it is no
+ * staler than it was.
+ */
+const sessionsReader = () => {
+  let latest: { at: number; read: ReturnType<typeof readSessions> } | undefined;
+  return () => {
+    const now = Date.now();
+    if (!latest || now - latest.at > RESTART_WINDOW_MS) {
+      latest = { at: now, read: readSessions() };
+    }
+    return latest.read;
+  };
+};
+
 const attach = (
   scanner: UsageScanner,
   supervisor: SessionSupervisor,
   identity: MachineIdentity,
   url: string,
+  sessions: () => ReturnType<typeof readSessions>,
   /**
    * Called once the socket is open and the register has gone out — the moment
    * this connection counts as up. {@link reconnecting} reads it to tell a
@@ -426,37 +489,14 @@ const attach = (
   }
 ) =>
   Effect.gen(function* () {
+    // Started before the socket, so it runs while the hub is still booting:
+    // see {@link sessionsReader}.
+    const reading = sessions();
     const socket = yield* connection(url);
     // The hub drops this machine's preview targets the moment the socket goes,
     // so a forwarder kept alive past the connection serves nobody: it goes too.
     yield* Effect.addFinalizer(() => Effect.sync(stopPreviews));
-    // Read before the catalog: listing OpenCode conversations may start a new
-    // server, which must not be mistaken for one that survived this restart.
-    const custody = yield* Effect.promise(async () => {
-      try {
-        const client = await SessiondClient.connect(
-          process.env.WHIFFLE_SESSIOND_ENDPOINT ?? sessiondEndpoint()
-        );
-        try {
-          const held = client.procs.filter((proc) => proc.alive);
-          return {
-            instances: held
-              .filter((proc) => proc.procId !== OPENCODE_SERVER_PROC_ID)
-              .map((proc) => proc.procId),
-            opencode: held.some(
-              (proc) => proc.procId === OPENCODE_SERVER_PROC_ID
-            ),
-          };
-        } finally {
-          client.close();
-        }
-      } catch (error) {
-        Effect.runFork(
-          Effect.logWarning(`session custody unavailable: ${String(error)}`)
-        );
-      }
-    });
-    const catalog = yield* Effect.promise(() => resumableSessions());
+    const { custody, catalog } = yield* Effect.promise(() => reading);
     const build = yield* Effect.promise(() => buildInfo());
     // Consumed, not just read: true only the first register after THIS
     // process came up because a deploy restarted it onto `build.commit`, and
@@ -492,7 +532,9 @@ const attach = (
     // its own, and not inside the register above. The probes spawn processes
     // (claude's starts a real Claude Code to ask for the account), and a
     // register that waited for them kept this machine out of the hub's
-    // registry, and so reading offline, for 1.7–2.2s after every hub restart.
+    // registry, and so reading offline, for most of the 2.7–3.2s the journal
+    // showed between `Connection ended` and `registered with` on every hub
+    // restart.
     supervisor.reannounce = () => {
       // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — reannounce doesn't await its own send
       void Promise.all([
@@ -845,13 +887,16 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     yield* Effect.logInfo(
       `whiffle agent ${identity.machineId} connecting to ${url}`
     );
+    const sessions = sessionsReader();
     // The connection — and only the connection — is what the loop re-enters.
     // The supervisor above it keeps its sessions and the scanner keeps its
     // dedup set across every reconnect; an interrupt still unwinds through this
     // to the supervisor's release, so a signalled daemon drains between turns.
     yield* reconnecting(
       (markLive) =>
-        Effect.scoped(attach(scanner, supervisor, identity, hubUrl, markLive)),
+        Effect.scoped(
+          attach(scanner, supervisor, identity, hubUrl, sessions, markLive)
+        ),
       rediscover
         ? {
             rediscover: {
