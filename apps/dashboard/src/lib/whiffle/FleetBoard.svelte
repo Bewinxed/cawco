@@ -246,11 +246,15 @@
     )
   );
 
-  /** Listed rows with no live process — asleep or unreachable. Shown apart from
-   *  the roster above (staleInstances' own doc comment): "never as live work",
-   *  so it stays out of the Sessions stat and out of the live/idle/attn filters. */
+  /** Listed rows with no live process — asleep, unreachable, or failed. Shown
+   *  apart from the roster above (staleInstances' own doc comment): "never as
+   *  live work", so it stays out of the Sessions stat and out of the
+   *  live/idle/attn filters. A failed row is listed so it can be read and
+   *  removed; left out, it sat in the fleet with nowhere to be seen. */
   const notRunning = $derived(
-    whiffle.listedInstances.filter((row) => isResumable(row) || isStale(row))
+    whiffle.listedInstances.filter(
+      (row) => isResumable(row) || isStale(row) || isFailed(row)
+    )
   );
 
   /**

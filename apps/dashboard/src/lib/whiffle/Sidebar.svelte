@@ -45,12 +45,14 @@
   import ActivityDot from "./ActivityDot.svelte";
   import {
     type Activity,
+    FAILED_HINT,
     MACHINE_UNREACHABLE_HINT,
     SLEEPING_HINT,
     UNKNOWN_HINT,
   } from "./activity";
   import {
     type InstanceRow,
+    isFailed,
     isResumable,
     isStale,
     type ProjectRow,
@@ -274,13 +276,19 @@
   const ungrouped = $derived(ordered(shown(ungroupedAll)));
 
   const notRunningAll = $derived(
-    whiffle.listedInstances.filter((row) => isResumable(row) || isStale(row))
+    whiffle.listedInstances.filter(
+      (row) => isResumable(row) || isStale(row) || isFailed(row)
+    )
   );
 
   const notRunning = $derived(ordered(shown(notRunningAll)));
 
-  const notRunningHint = (row: InstanceRow): string =>
-    isResumable(row) ? SLEEPING_HINT : UNKNOWN_HINT;
+  const notRunningHint = (row: InstanceRow): string => {
+    if (isFailed(row)) {
+      return FAILED_HINT;
+    }
+    return isResumable(row) ? SLEEPING_HINT : UNKNOWN_HINT;
+  };
 
   /** Flattened once per change rather than per scroll frame — the virtualizer
    *  re-reads `data` on every visible-range update. */
