@@ -756,14 +756,32 @@ const writeUnit = async (path: string, contents: string): Promise<void> => {
  * was running under that label — which is both what an install over a running
  * service means and what a restart means on a launchctl too old for `kickstart`.
  */
+/** How long a booted-out LaunchAgent gets to finish exiting. */
+const BOOTOUT_WAIT_MS = 60_000;
+
 const loadLaunchAgent = async (
   spec: ServiceSpec,
   bootstrap: boolean,
   note: (line: string) => void
 ): Promise<void> => {
   const path = launchAgentPath(spec.id);
+  const target = `${guiDomain()}/${label(spec.id)}`;
   // launchd refuses to bootstrap a label it already knows.
-  await run(["launchctl", "bootout", `${guiDomain()}/${label(spec.id)}`]);
+  await run(["launchctl", "bootout", target]);
+  // …and `bootout` returns before the label is gone: a service that drains on
+  // SIGTERM (sessiond, taking its children down) is still being torn down,
+  // and bootstrapping it then fails with "5: Input/output error" and leaves it
+  // stopped. So the label is waited out first.
+  const deadline = Date.now() + BOOTOUT_WAIT_MS;
+  // biome-ignore lint/performance/noAwaitInLoops: a poll — each check must see launchd after the previous wait
+  while ((await run(["launchctl", "print", target])).exitCode === 0) {
+    if (Date.now() > deadline) {
+      throw new ServiceError(
+        `${target} was still loaded ${BOOTOUT_WAIT_MS / 1000}s after launchctl bootout, so it was not started again from the new plist. Check it with \`launchctl print ${target}\`, then run this again.`
+      );
+    }
+    await Bun.sleep(250);
+  }
 
   if (bootstrap) {
     const bootstrapped = await run([
