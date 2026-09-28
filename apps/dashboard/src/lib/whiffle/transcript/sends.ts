@@ -7,7 +7,8 @@
  * (`send.ref`) wherever a send was read (live: at the record frame that said
  * so) or stored (history: the entry the hub linked). {@link placeSends} puts
  * each send's row in: at its placeholder once it is read or failed there;
- * right after its anchor when it failed without being stored; at the end,
+ * right after its anchor when it failed without being stored — or, with no
+ * anchor, after the last row dated before it was accepted; at the end,
  * waiting, while it is pending. So a reload draws what the live stream drew:
  * the same ids, in the same order, with the same words and the same clock.
  */
@@ -81,14 +82,84 @@ const byAcceptance = (a: SendRecord, b: SendRecord): number =>
   a.acceptedAt.localeCompare(b.acceptedAt);
 
 /**
+ * A row's clock, as its row shows it: a placeholder by the record it draws
+ * there (`acceptedAt`), anything else by when the harness stored it. None for
+ * a placeholder that draws nothing here, or a row the harness gave no time.
+ */
+const clockOf = (
+  row: Message,
+  records: Record<string, SendRecord>
+): number | undefined => {
+  if (!isSendRef(row)) {
+    return row.timestamp?.getTime();
+  }
+  const record = row.id ? records[row.id] : undefined;
+  return record?.state === "read" || record?.state === "failed"
+    ? Date.parse(record.acceptedAt)
+    : undefined;
+};
+
+/**
+ * Where each anchored failure stands: after the last row its anchor names,
+ * by id or by the frame the row came from (one assistant frame is several
+ * rows). One whose anchor is not among `rows` is put nowhere.
+ */
+function placeAnchored(
+  rows: Message[],
+  anchored: Map<string, SendRecord[]>,
+  put: (at: number, failed: SendRecord[]) => void
+): void {
+  const lastAt = new Map<string, number>();
+  rows.forEach((row, index) => {
+    for (const key of [row.id, row.sdkUuid]) {
+      if (key && anchored.has(key)) {
+        lastAt.set(key, index);
+      }
+    }
+  });
+  for (const [anchor, failed] of anchored) {
+    const at = lastAt.get(anchor);
+    if (at !== undefined) {
+      put(at, failed);
+    }
+  }
+}
+
+/**
+ * Where each unanchored failure stands: after the last row dated before it
+ * was accepted ({@link clockOf}). Returns the ones no row is dated before.
+ */
+function placeDated(
+  rows: Message[],
+  records: Record<string, SendRecord>,
+  dated: SendRecord[],
+  put: (at: number, failed: SendRecord[]) => void
+): SendRecord[] {
+  const clocks = rows.map((row) => clockOf(row, records));
+  return dated.filter((record) => {
+    const accepted = Date.parse(record.acceptedAt);
+    const at = clocks.findLastIndex(
+      (clock) => clock !== undefined && clock < accepted
+    );
+    if (at >= 0) {
+      put(at, [record]);
+    }
+    return at < 0;
+  });
+}
+
+/**
  * THE ONE DERIVE: the harness's rows with every send drawn in its place.
  *
  * - A placeholder draws its send's row when the record is read or failed; a
  *   pending one waits at the end instead, and a replaced one draws nothing.
  * - A failed send that was never stored goes right after its anchor — the
- *   last row the anchor names — or first of all when the session had said
- *   nothing before it. One whose anchor is not among these rows (an older
- *   page not read yet) is not drawn until it is.
+ *   last row the anchor names. One whose anchor is not among these rows (an
+ *   older page not read yet) is not drawn until it is.
+ * - One with no anchor (the hub knew of nothing the session had said when it
+ *   failed) goes after the last row dated before it was accepted, or first of
+ *   all when none is. The hub serves such a record only with a page that
+ *   reaches the conversation's start, so every row it could follow is here.
  * - Pending sends wait at the end, oldest accepted first, and after them this
  *   tab's own sends the hub has not taken (`local`: sending, or unreached).
  *
@@ -106,6 +177,7 @@ export function placeSends(
   const first: SendRecord[] = [];
   const waiting: SendRecord[] = [];
   const anchored = new Map<string, SendRecord[]>();
+  const dated: SendRecord[] = [];
   for (const record of Object.values(records)) {
     if (record.state === "pending") {
       waiting.push(record);
@@ -116,30 +188,17 @@ export function placeSends(
           record,
         ]);
       } else {
-        first.push(record);
+        dated.push(record);
       }
     }
   }
 
-  // Where each anchor stands: the last row it names, by id or by the frame
-  // the row came from (one assistant frame is several rows).
   const after = new Map<number, SendRecord[]>();
-  if (anchored.size > 0) {
-    const lastAt = new Map<string, number>();
-    rows.forEach((row, index) => {
-      for (const key of [row.id, row.sdkUuid]) {
-        if (key && anchored.has(key)) {
-          lastAt.set(key, index);
-        }
-      }
-    });
-    for (const [anchor, failed] of anchored) {
-      const at = lastAt.get(anchor);
-      if (at !== undefined) {
-        after.set(at, [...(after.get(at) ?? []), ...failed]);
-      }
-    }
-  }
+  const put = (at: number, failed: SendRecord[]): void => {
+    after.set(at, [...(after.get(at) ?? []), ...failed]);
+  };
+  placeAnchored(rows, anchored, put);
+  first.push(...placeDated(rows, records, dated, put));
 
   const placed: Message[] = first.sort(byAcceptance).map((r) => sendRow(r));
   rows.forEach((row, index) => {

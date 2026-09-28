@@ -511,7 +511,9 @@ export interface SendRecord {
   /**
    * A failed send the harness never stored: the uuid of the last thing the
    * session said before it failed — an assistant frame, or a send it read.
-   * Its row goes right after that. Absent when the session had said nothing.
+   * Its row goes right after that. Absent when the hub knew of nothing the
+   * session had said: its row then goes after the last row dated before
+   * `acceptedAt`, or first when none is.
    */
   anchor?: string;
   /**
