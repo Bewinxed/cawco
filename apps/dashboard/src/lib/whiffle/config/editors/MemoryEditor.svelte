@@ -10,12 +10,8 @@
     machineHue,
     machineIcon,
   } from "$lib/components/ui/machine-row";
-  import {
-    IconDocument,
-    IconHistory,
-    IconLaptop,
-    IconSpinner,
-  } from "$lib/icons";
+  import { Spinner } from "$lib/components/ui/spinner";
+  import { IconDocument, IconHistory, IconLaptop } from "$lib/icons";
   import { formatDistanceToNow } from "$lib/utils/time";
   import { crossIn, crossOut } from "$lib/whiffle/motion/curves.svelte";
   import { unfold } from "$lib/whiffle/motion/fold.svelte";
@@ -549,9 +545,7 @@
                         in:crossIn
                         out:crossOut
                       >
-                        <IconSpinner
-                          class="size-4 shrink-0 animate-spin"
-                        />Reading that version…
+                        <Spinner class="size-4 shrink-0" />Reading that version…
                       </p>
                     {:else if contents[row.id] !== undefined}
                       <div class="reveal" in:crossIn out:crossOut>
@@ -675,9 +669,8 @@
                 <div class="swap" {@attach morph()}>
                   {#if peeking[machine.machineId]}
                     <p class="note busy" role="status" in:crossIn out:crossOut>
-                      <IconSpinner
-                        class="size-4 shrink-0 animate-spin"
-                      />Reading this machine's copy…
+                      <Spinner class="size-4 shrink-0" />Reading this machine's
+                      copy…
                     </p>
                   {:else if unread[machine.machineId]}
                     <p class="caution" role="alert" in:crossIn out:crossOut>

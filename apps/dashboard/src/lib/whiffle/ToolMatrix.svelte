@@ -6,6 +6,7 @@
   import { EmptyState } from "$lib/components/ui/empty";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Popover from "$lib/components/ui/popover";
+  import { Spinner } from "$lib/components/ui/spinner";
   import { Switch } from "$lib/components/ui/switch";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Table from "$lib/components/ui/table";
@@ -15,7 +16,6 @@
     IconCheck,
     IconExternal,
     IconLaptop,
-    IconSpinner,
     IconTerminal,
   } from "$lib/icons";
   import type { Machine } from "./client.svelte";
@@ -113,7 +113,7 @@
     </span>
   {:else if shown === 'installing'}
     <Badge class="{CHIP} text-muted-foreground" variant="ghost">
-      <IconSpinner class="size-4 shrink-0 animate-spin" />
+      <Spinner class="size-4 shrink-0" />
       Installing…
     </Badge>
   {:else if shown === 'missing'}

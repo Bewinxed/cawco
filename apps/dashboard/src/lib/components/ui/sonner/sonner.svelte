@@ -3,10 +3,10 @@
     Toaster as Sonner,
     type ToasterProps as SonnerProps,
   } from "svelte-sonner";
+  import { Spinner } from "$lib/components/ui/spinner";
   import {
     IconError,
     IconInfo,
-    IconSpinner,
     IconSuccess,
     IconWarningTriangle,
   } from "$lib/icons";
@@ -128,7 +128,7 @@
       {...restProps}
     >
       {#snippet loadingIcon()}
-        <IconSpinner class="size-4 animate-spin" />
+        <Spinner class="size-4" />
       {/snippet}
       {#snippet successIcon()}
         <IconSuccess class="size-4" />

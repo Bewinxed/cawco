@@ -117,7 +117,6 @@ export {
 } from "~icons/solar/question-circle-bold-duotone";
 export { default as IconDot } from "~icons/solar/record-circle-bold-duotone";
 export { default as IconRefresh } from "~icons/solar/refresh-bold-duotone";
-export { default as IconSpinner } from "~icons/solar/restart-bold-duotone";
 /*
  * The marks a folder can be given by hand (see `FOLDER_MARKS` in
  * lib/whiffle/folder-prefs.svelte.ts), picked to span the kinds of work a

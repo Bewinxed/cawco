@@ -11,12 +11,8 @@
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
   import { SectionHeader } from "$lib/components/ui/section-header";
-  import {
-    IconChevronDown,
-    IconChevronRight,
-    IconLaptop,
-    IconSpinner,
-  } from "$lib/icons";
+  import { Spinner } from "$lib/components/ui/spinner";
+  import { IconChevronDown, IconChevronRight, IconLaptop } from "$lib/icons";
   import type { Machine } from "./client.svelte";
   import { adoptSkill, inspectMachine, saveMcpServer } from "./fleet";
   import { machineLabel } from "./machine";
@@ -150,8 +146,7 @@
           {#if open[machine.machineId]}
             {#if reading[machine.machineId]}
               <p class="note busy" role="status">
-                <IconSpinner class="size-4 shrink-0 animate-spin" />Asking this
-                machine…
+                <Spinner class="size-4 shrink-0" />Asking this machine…
               </p>
             {:else if unread[machine.machineId]}
               <Alert variant="warning">

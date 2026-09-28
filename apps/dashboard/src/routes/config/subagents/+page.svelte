@@ -4,11 +4,11 @@
   import { Button } from "$lib/components/ui/button";
   import { EmptyState } from "$lib/components/ui/empty";
   import { SectionHeader } from "$lib/components/ui/section-header";
+  import { Spinner } from "$lib/components/ui/spinner";
   import {
     IconDownload,
     IconLaptop,
     IconPlus,
-    IconSpinner,
     IconSubagent,
     IconTrash,
   } from "$lib/icons";
@@ -241,7 +241,7 @@
       <p class="note">No machine is online to ask.</p>
     {:else if Object.keys(reading).length > 0}
       <p class="note busy" role="status">
-        <IconSpinner class="size-4 shrink-0 animate-spin" />
+        <Spinner class="size-4 shrink-0" />
         Asking the machines…
       </p>
     {:else if discovered.length === 0}
