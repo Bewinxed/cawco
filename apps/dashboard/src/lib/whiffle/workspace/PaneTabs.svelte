@@ -683,7 +683,7 @@
       <Popover.Content
         align="start"
         aria-label="Session details"
-        class="session-details-popover"
+        class="kit-pop session-details-popover"
         collisionPadding={12}
         customAnchor={detailAnchor}
         data-morph={morphing ? '' : undefined}
@@ -724,6 +724,11 @@
 {/if}
 
 <style>
+  /* The card is a kit floating surface (app.css `.kit-pop`): its surface,
+     and its open and close as transitions on data-state. Closed, it rests
+     invisible, so there is nothing to show between the close ending and
+     bits-ui unmounting it, and a close caught mid-open turns back from where
+     the entrance had reached. Its content runs edge to edge. */
   :global(.session-details-popover) {
     display: flex;
     z-index: 60;
@@ -731,10 +736,7 @@
     max-height: min(760px, var(--bits-popover-content-available-height, 85dvh));
     overflow: hidden;
     overscroll-behavior: contain;
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-overlay);
+    padding: 0;
     transform-origin: var(--bits-popover-content-transform-origin);
     outline: none;
   }
@@ -848,31 +850,6 @@
     }
     :global(.session-details-popover[data-morph]) .details-morph {
       transition: height 260ms var(--ease-drawer);
-    }
-    :global(.session-details-popover[data-state="open"]) {
-      animation: details-enter 260ms var(--ease-drawer);
-    }
-    /* `forwards` holds the last frame: bits-ui unmounts the card a frame
-       after the animation finishes, and without it that frame paints the
-       card back at full opacity. */
-    :global(.session-details-popover[data-state="closed"]) {
-      animation: details-exit 160ms var(--ease-out) forwards;
-    }
-  }
-  @keyframes details-enter {
-    from {
-      opacity: 0;
-      transform: translateY(-8px) scale(0.96);
-    }
-    to {
-      opacity: 1;
-      transform: none;
-    }
-  }
-  @keyframes details-exit {
-    to {
-      opacity: 0;
-      transform: translateY(-4px) scale(0.98);
     }
   }
   /* ── The row ──────────────────────────────────────────────────────
