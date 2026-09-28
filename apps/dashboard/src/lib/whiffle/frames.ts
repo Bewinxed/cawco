@@ -778,9 +778,13 @@ export function mapFrame(
           // (see `applyBranchEvent`), so for a background Bash this line is the
           // only place its completion ever shows — emitting nothing made those
           // tasks finish invisibly.
+          //
+          // Keyed by the task, not the frame: a reload reads the stored copy
+          // back under the stored record's own uuid, and the line has to be
+          // the same row either way.
           mapping.messages.push(
             systemLine(
-              base,
+              { ...base, id: `task:${sdk.task_id}` },
               "system.task",
               done ? "task done" : "task failed",
               {
@@ -1018,19 +1022,33 @@ export function applyBranchEvent(
  * Whether a `system.task` line must be dropped: it reports a `tool_use_id` whose
  * branch already exists, so the branch card owns that task's completion — the
  * "task done" pill is a stray for a real subagent. A plain tool task mints no
- * branch (see `applyBranchEvent`), so its line stays. The branch key comes from
- * the mapping's branch event, not the message: `mapFrame` is stateless and the
- * message itself carries no `tool_use_id`.
+ * branch (see `applyBranchEvent`); its line stays when the task ran in the
+ * background, and goes when it ran in the foreground — its call, in `messages`,
+ * is still waiting on the result that closes it, and the CLI stores no
+ * notification for it, so a reload has no line to draw (measured 0.3.280: a
+ * foreground task's `task_notification` arrives just before its
+ * `tool_result`, a background one's long after the placeholder result). The
+ * branch key comes from the mapping's branch event, not the message:
+ * `mapFrame` is stateless and the message itself carries no `tool_use_id`.
  */
 export function suppressesTaskLine(
   branches: Record<string, SubagentState>,
+  messages: Message[],
   message: Message,
   toolUseId: string | undefined
 ): boolean {
-  if (message.type !== "system.task") {
+  if (!(message.type === "system.task" && toolUseId)) {
     return false;
   }
-  return Boolean(toolUseId && branches[toolUseId]);
+  if (branches[toolUseId]) {
+    return true;
+  }
+  const call = messages.findLast(
+    (m) =>
+      (m.type === "tool.use" || m.type === "tool.handoff") &&
+      m.metadata?.toolId === toolUseId
+  );
+  return call?.metadata?.toolStatus === "pending";
 }
 
 /**
@@ -1778,7 +1796,12 @@ export function mapTranscript(
     sink.push(
       ...mapping.messages.filter(
         (message) =>
-          !suppressesTaskLine(subagents, message, mapping.branch?.toolUseId)
+          !suppressesTaskLine(
+            subagents,
+            sink,
+            message,
+            mapping.branch?.toolUseId
+          )
       )
     );
     for (const result of mapping.toolResults) {

@@ -1598,10 +1598,12 @@ function handleFrame(frame: FramePayload): void {
         // A real subagent's `task_notification` names a `tool_use_id` whose
         // branch already exists — its completion is the branch card. The branch
         // event above ran first, so the registry already answers whether this
-        // line is redundant; a plain tool task has no branch and keeps its line.
+        // line is redundant; a plain tool task keeps its line only when it ran
+        // in the background, as a reload does.
         if (
           suppressesTaskLine(
             target.subagents,
+            sink,
             message,
             mapping.branch?.toolUseId
           )
