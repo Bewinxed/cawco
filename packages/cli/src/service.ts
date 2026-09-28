@@ -859,6 +859,16 @@ const lingerHint = async (note: (line: string) => void): Promise<void> => {
  * machine whose services stop at logout has not joined anything.
  */
 const enableLinger = async (note: (line: string) => void): Promise<void> => {
+  // sd_booted(3): systemd as PID 1 is exactly when this directory exists.
+  // Without it there is no user manager to linger and no unit to install, so
+  // the answer is what the machine is missing, not a loginctl command that
+  // cannot work there.
+  note("checking for systemd…");
+  if (!existsSync("/run/systemd/system")) {
+    throw new ServiceError(
+      "this machine is not running systemd (no /run/systemd/system), and whiffle's services are systemd user units, so there is nothing here to install them into. Add a machine whose init is systemd."
+    );
+  }
   note("loginctl enable-linger…");
   const enabled = await run(["loginctl", "enable-linger"]);
   if (enabled.exitCode !== 0) {
