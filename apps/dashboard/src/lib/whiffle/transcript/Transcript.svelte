@@ -727,6 +727,11 @@
   /** The box around the list; its first child is virtua's container. */
   let listing = $state<HTMLElement>();
   let atBottom = $state(true);
+  /** How many screens from the tail the reader goes before "Jump to latest"
+      shows; our own call, no source sets it. */
+  const FAR_FROM_LATEST = 0.75;
+  /** Past FAR_FROM_LATEST screens from the tail, and not back at it since. */
+  let farFromLatest = $state(false);
 
   /**
    * Where the reader was, as the scroll handler last saw it. A pane hides
@@ -905,7 +910,12 @@
     // A row the reader scrolls to is not arriving, whenever it came in: what
     // is still waiting to mount is theirs to read, not ours to play.
     tickets.clear();
-    atBottom = height - scroller.scrollTop - scroller.clientHeight < 120;
+    const distance = height - scroller.scrollTop - scroller.clientHeight;
+    atBottom = distance < 120;
+    // Hysteresis: up past the far mark, and it stays until back at the tail.
+    farFromLatest =
+      !atBottom &&
+      (farFromLatest || distance > FAR_FROM_LATEST * scroller.clientHeight);
   }
 
   /**
@@ -1259,6 +1269,7 @@
     }
     landingFrame = requestAnimationFrame(landInFrame);
     atBottom = true;
+    farFromLatest = false;
   }
 
   /** The already-landed half of `land`, in the frame after it was called for. */
@@ -1577,7 +1588,7 @@
     land();
   }
 
-  const showLatest = $derived(landed && !atBottom && rows.length > 0);
+  const showLatest = $derived(landed && farFromLatest && rows.length > 0);
 
   // ── The live region ─────────────────────────────────────────────────────
   // The scroll container is NOT the live region. virtua mounts and unmounts
