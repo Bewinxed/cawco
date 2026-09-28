@@ -1915,8 +1915,8 @@ export const createServer = ({
   /**
    * Which sends a session's stored transcript holds, and whether its harness
    * has taken each up: by send uuid, true for read, false for written down
-   * and still waiting ({@link SessionMessage.queued}). Found the way a history
-   * read links them ({@link sendFinder}). `undefined` when the machine could
+   * and still waiting ({@link SessionMessage.queued}). Linked the way a history
+   * read links them ({@link linkEntries}). `undefined` when the machine could
    * not be asked: it has said nothing either way.
    */
   const storedIn = async (
@@ -1936,12 +1936,19 @@ export const createServer = ({
     if (typeof answer === "string" || !answer.ok) {
       return undefined;
     }
+    // Read as the newest history page is: linked, a send it took up read,
+    // and the session's anchor seeded when the hub has heard nothing of it
+    // since it started — so a send this fails goes after what the session
+    // last said, not at the conversation's start.
     const entries = answer.result as SessionMessage[];
-    const sendsOf = sendFinder(instanceId, entries);
+    const { last } = linkEntries(instanceId, entries);
+    if (last && !anchors.has(instanceId)) {
+      anchors.set(instanceId, last);
+    }
     const stored = new Map<string, boolean>();
     for (const entry of entries) {
-      for (const send of sendsOf(entry)) {
-        stored.set(send.uuid, !entry.queued);
+      for (const uuid of entry.sends ?? []) {
+        stored.set(uuid, !entry.queued);
       }
     }
     return stored;
