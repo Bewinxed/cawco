@@ -30,8 +30,8 @@
   const peek = "106px";
   /**
    * How the sheet arrives, decided once as it mounts. Opened by its card's
-   * Preview button in the transcript, it comes out of that button
-   * (motion/share.svelte.ts, clipped open from the button's box over
+   * Preview button in the transcript, it comes out of the card's thumbnail
+   * (motion/share.svelte.ts, clipped open from the thumbnail's box over
    * --dur-panel on --ease-drawer) straight to the middle snap the reader
    * asked for, standing still while it does: vaul's own rise is skipped for
    * that one open, so the two never move the sheet at once. Opened any other

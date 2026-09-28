@@ -1524,14 +1524,17 @@
   /** How a row arrives, by what it is. */
   function motionOf(row: Row): Motion {
     // The reader's own message, sent from the composer below, is its text
-    // landing from the field (MessageRow and Queued land it): no entrance of
-    // the row's own. A turn that WAITED in the queue was on screen already,
-    // as a queued row; it arrives like any other.
+    // landing from the field in the one row the send drew (MessageRow on an
+    // idle session, Queued on a busy one): no entrance of the row's own. A
+    // turn that WAITED in the queue was on screen already, as a queued row;
+    // it arrives like any other.
     if (row.kind === "single" && row.message.type === "user") {
       return waiting(`sent:${row.message.content}`) ? "emerge" : "rise";
     }
     if (row.kind === "queued") {
-      return waiting(`queued:${row.queued.text}`) ? "emerge" : "rise";
+      return row.queued.sentAs && waiting(`sent:${row.queued.text}`)
+        ? "emerge"
+        : "rise";
     }
     if (row.kind === "question") {
       return "settle";
