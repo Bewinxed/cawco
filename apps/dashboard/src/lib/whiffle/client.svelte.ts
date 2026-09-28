@@ -1577,6 +1577,23 @@ function handleFrame(frame: FramePayload): void {
             if (turn) {
               turn.metadata = { ...turn.metadata, queuedLocally: true };
             }
+          } else {
+            // Sent to an idle session: this tab drew it as its turn at the
+            // press, so that copy is the turn — it takes the SDK's uuid (edit
+            // and fork anchor on it) and the one `mapFrame` pushed goes.
+            const copy = target.messages.find(
+              (m) =>
+                m.type === "user" &&
+                !m.sdkUuid &&
+                m.metadata?.queuedLocally === true &&
+                (m.content === "" ? text === "" : text.startsWith(m.content))
+            );
+            if (copy) {
+              copy.sdkUuid = uuid;
+              target.messages = target.messages.filter(
+                (m) => m === copy || m.sdkUuid !== uuid
+              );
+            }
           }
         } else {
           const copies = target.messages.filter(

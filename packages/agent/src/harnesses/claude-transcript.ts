@@ -461,7 +461,7 @@ function walkChainWindowed(
 // ---------------------------------------------------------------------------
 
 interface QueuedCommand {
-  origin?: { kind?: unknown };
+  isMeta?: unknown;
   prompt?: unknown;
   source_uuid?: unknown;
   timestamp?: unknown;
@@ -469,16 +469,20 @@ interface QueuedCommand {
 }
 
 /**
- * A message the reader sent while a turn was running, where the model read it.
+ * A message that arrived while a turn was running, where the model read it.
  *
  * Claude Code does not write a user record for it. It holds the message in its
  * own queue and, at the next tool boundary, folds it into the running turn as a
  * `queued_command` attachment on the conversation chain, right after the tool
  * result it arrived beside — then writes `queue-operation` `remove` with reason
  * `absorbed_mid_turn`. Nothing is printed on stdout for it, so this line is
- * the only record that the message was read at all. Only the reader's own
- * words (`origin.kind: "human"`) become a user record; the prompt is a string,
- * or content blocks when images rode with it. Any other shape is not one.
+ * the only record that the message was read at all. Every one becomes a user
+ * record, whoever sent it: the reader's own words, a delegate's report, a
+ * rule, a hand-off, a background task's notification — the CLI drops the
+ * origin of all but the reader's, and a reader of the transcript tells them
+ * apart by their marker line, as it does for any user record. Only a meta
+ * command (`isMeta`, never shown) is not one. The prompt is a string, or
+ * content blocks when images rode with it; any other shape is not one.
  */
 export function absorbedMessage(r: RawRecord): SDKSessionMessage | null {
   if (r.type !== "attachment" || r.isSidechain) {
@@ -487,7 +491,7 @@ export function absorbedMessage(r: RawRecord): SDKSessionMessage | null {
   const command = r.attachment as QueuedCommand | undefined;
   if (
     command?.type !== "queued_command" ||
-    command.origin?.kind !== "human" ||
+    command.isMeta === true ||
     typeof command.timestamp !== "string" ||
     !(typeof command.prompt === "string" || Array.isArray(command.prompt))
   ) {
