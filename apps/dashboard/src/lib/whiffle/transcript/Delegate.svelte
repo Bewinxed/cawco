@@ -343,6 +343,10 @@
       (!branch || branch.loading || branch.hydrating) &&
       shown.length === 0
   );
+  /** A message long enough to take a frame of its own to draw. */
+  const PAGE_CHARS = 2000;
+  const isPage = (unit: (typeof rows)[number]): boolean =>
+    unit.kind === "single" && unit.message.content.length > PAGE_CHARS;
   const agentName = $derived(harness || "delegate");
   const seed = $derived(id ?? meta.toolId);
   const Sprite = $derived(sessionSprite(seed));
@@ -428,7 +432,14 @@
     {/if}
 
     <Collapsible.Content reveal>
-      <CollapsibleLazy count={shown.length} {open}>
+      <!-- The rows, then the report as one more unit: a report is often the
+           same page as the last row, and drawn in that row's frame it
+           doubled the heaviest frame of the card. -->
+      <CollapsibleLazy
+        alone={(index) => index >= shown.length || isPage(shown[index])}
+        count={shown.length + (report ? 1 : 0)}
+        {open}
+      >
         {#snippet children(limit)}
           <div class="inner">
             {#if loading}
@@ -456,8 +467,8 @@
               {/if}
             {/each}
 
-            <!-- The report closes the card: drawn with the last of its rows. -->
-            {#if report && !loading && limit >= shown.length}
+            <!-- The report closes the card: drawn after the last of its rows. -->
+            {#if report && !loading && limit > shown.length}
               <section class="report" class:failed={report.failed}>
                 <h4>
                   {report.failed ? 'Report — failed' : 'Report'}
