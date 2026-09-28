@@ -1,7 +1,9 @@
 #!/usr/bin/env bun
-import { CONFIG_PATH, readConfig } from "@whiffle/agent";
+import { platform } from "node:os";
+import { CONFIG_PATH, readConfig, toHttpBase } from "@whiffle/agent";
 import type { AgentRow, AuthState } from "@whiffle/core";
 import {
+  INSTALL_STEP_PREFIX,
   readEnv,
   WHIFFLE_ENV,
   WHIFFLE_HUB_PORT,
@@ -43,6 +45,7 @@ Usage
                                             run whiffle as per-user services
   whiffle update [--check] [--to <version>] install the newest release and restart
   whiffle deploy init [--origin <url>]      developer mode: run from a git clone
+  whiffle join --hub <url>                  add this machine to that hub's fleet
   whiffle login [--token <token>]           give this machine a Claude Code token
   whiffle logout                            forget it
 
@@ -78,6 +81,14 @@ Deploying
   and never pulled, so a dev tree cannot auto-update no matter what is running
   in it. A clone that has diverged from origin refuses loudly and is left
   exactly as it is — resetting it would destroy work nobody else has a copy of.
+
+Joining
+  \`whiffle join --hub <url>\` is what the hub's install script runs, from the
+  clone it made at ${deployRoot()}: it saves the hub, makes that clone this
+  machine's deployment clone, installs sessiond and the agent (no hub, no
+  dashboard), turns on lingering on Linux so they outlive the SSH session, and
+  waits for the hub to register the machine. It never prompts. The dashboard's
+  Connect a machine dialog does all of it for you, over SSH or as one command.
 
 Options
   --hub <url>     hub to use, as http://host:port or ws://host:port/ws
@@ -539,6 +550,89 @@ const runDeploy = async (args: Args): Promise<number> => {
   return 0;
 };
 
+/**
+ * How long `join` waits for the hub to list this machine online once its
+ * services are up. A fresh agent registers within seconds; the margin covers
+ * a slow first start (the SDK loading cold off a new install).
+ */
+const JOIN_REGISTER_MS = 90_000;
+
+/**
+ * Waits for the hub to hold a live socket from `machineId`: the one thing that
+ * makes the join true, as opposed to the services merely having started.
+ */
+const awaitRegistration = async (
+  httpUrl: string,
+  machineId: string
+): Promise<void> => {
+  const deadline = Date.now() + JOIN_REGISTER_MS;
+  while (Date.now() < deadline) {
+    // biome-ignore lint/performance/noAwaitInLoops: a poll — each read must see the hub after the previous one
+    const agents = await fetch(`${httpUrl}/api/agents`, {
+      signal: AbortSignal.timeout(5000),
+    })
+      .then((response) =>
+        response.ok ? (response.json() as Promise<AgentRow[]>) : undefined
+      )
+      .catch(() => undefined);
+    if (
+      agents?.some(
+        (agent) => agent.machineId === machineId && agent.status === "online"
+      )
+    ) {
+      return;
+    }
+    await Bun.sleep(1000);
+  }
+  const logs =
+    platform() === "darwin"
+      ? "tail -n 50 ~/Library/Logs/whiffle-agent.log"
+      : "journalctl --user -u whiffle-agent -n 50";
+  throw new ServiceError(
+    `the agent is installed, but ${httpUrl} has not listed ${machineId} online after ${JOIN_REGISTER_MS / 1000}s. Read why with: ${logs}`
+  );
+};
+
+/**
+ * `whiffle join --hub <url>`: this machine, into that hub's fleet, in one
+ * unattended run. It is `deploy init` for a worker — the same code path, with
+ * sessiond and the agent only and lingering required — preceded by saving the
+ * hub and followed by waiting for the hub to see the machine.
+ */
+const runJoin = async (args: Args): Promise<number> => {
+  if (!args.hub) {
+    throw new UsageError("whiffle join needs --hub <url>, the hub to join");
+  }
+  if (!toHttpBase(args.hub)) {
+    throw new UsageError(`--hub ${args.hub} is not a URL`);
+  }
+  const say = (line: string): void =>
+    console.log(`${INSTALL_STEP_PREFIX}${line}`);
+
+  // Through discovery, so the hub is saved exactly as `up` saves one it was
+  // told — the agent unit's `up` finds it there on every start.
+  const hub = (await discoverHub({ hub: args.hub })) as Hub;
+  say(`saved hub ${hub.httpUrl}`);
+
+  say(`setting up ${deployRoot()} as this machine's deployment clone`);
+  await deployInit({
+    command: "whiffle join",
+    ids: ["sessiond", "agent"],
+    requireLinger: true,
+    // deployInit's steps are the lines that end in an ellipsis ("bun
+    // install…"); those are progress, and everything else is detail.
+    note: (line) =>
+      console.log(line.endsWith("…") ? `${INSTALL_STEP_PREFIX}${line}` : line),
+  });
+
+  const { machineId } = await import("@whiffle/agent");
+  const id = await machineId();
+  say(`waiting for ${hub.httpUrl} to list ${id} online`);
+  await awaitRegistration(hub.httpUrl, id);
+  say(`joined as ${id}`);
+  return 0;
+};
+
 /** Importing the hub boots it: its entry point listens, and then stays up. */
 const hub = async (): Promise<number> => {
   await import("@whiffle/hub");
@@ -569,6 +663,8 @@ const run = async (argv: string[]): Promise<number> => {
       return runUpdate(args);
     case "deploy":
       return runDeploy(args);
+    case "join":
+      return runJoin(args);
     case "login":
       if (args.token) {
         await saveToken(args.token);

@@ -23,6 +23,9 @@ export * from "./harness";
 // this is the one row whose convergence executes code, so it is gated twice.
 export * from "./hooks";
 export * from "./injected";
+// Adding a machine: the join routes' shapes and the install script's step
+// prefix, which `whiffle join` prints and the hub reads back off SSH output.
+export * from "./join";
 // How an `AskUserQuestion` answer is shaped, wherever it is answered from —
 // the dashboard, a parent session's `answer_delegate`, the Telegram bridge.
 // Shared because the tool's schema is unforgiving: the answers go back inside

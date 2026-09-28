@@ -44,11 +44,13 @@
     IconPlay,
     IconPlus,
     IconSearch,
+    IconServer,
     IconWarningTriangle,
   } from "$lib/icons";
   import { cn } from "$lib/utils";
   import { formatDistanceToNow } from "$lib/utils/time";
   import AttentionQueue from "$lib/whiffle/AttentionQueue.svelte";
+  import { addMachine } from "$lib/whiffle/join/join.svelte";
   import LiveSessionRow from "$lib/whiffle/LiveSessionRow.svelte";
   import MachineCard from "$lib/whiffle/MachineCard.svelte";
   import {
@@ -695,6 +697,10 @@
   <div class="inner" {@attach ready ? reflow() : undefined}>
     <div class="head">
       <p>Every agent across your machines, and what needs you.</p>
+      <Button onclick={() => addMachine.show()} variant="outline">
+        <IconServer />
+        Add machine
+      </Button>
       <Button onclick={startSession}>
         <IconPlus />
         Start session
@@ -808,11 +814,14 @@
               class="px-[var(--space-5)]"
               data-flip
               icon={IconLaptop}
+              line="Your machines and the agents running on them show here. Add one to start a session on it."
               title="No machines yet"
             >
-              {#snippet line()}
-                Run <code>whiffle</code> on a machine and it joins this board by
-                itself.
+              {#snippet action()}
+                <Button onclick={() => addMachine.show()}>
+                  <IconServer />
+                  Add machine
+                </Button>
               {/snippet}
             </EmptyState>
           {:else if rows.length === 0}

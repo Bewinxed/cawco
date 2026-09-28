@@ -35,6 +35,7 @@
   } from "$lib/whiffle/motion/curves.svelte";
   import { pageIn, pageOut, route } from "$lib/whiffle/motion/route.svelte";
   import { reflow } from "$lib/whiffle/motion/rows.svelte";
+  import AddMachineDialog from "./AddMachineDialog.svelte";
   import AssistantOrb from "./assistant/AssistantOrb.svelte";
   import AssistantPanel from "./assistant/AssistantPanel.svelte";
   import ConfirmDialog from "./ConfirmDialog.svelte";
@@ -804,6 +805,8 @@
 <JumpPalette opener={jumpOpener} bind:open={jumpOpen} />
 <!-- One dialog for every destructive confirm in the app (see confirm.svelte.ts). -->
 <ConfirmDialog />
+<!-- One Connect a machine dialog for every entry that adds one (join/join.svelte.ts). -->
+<AddMachineDialog />
 
 <AssistantPanel bind:open={assistantOpen} />
 

@@ -16,9 +16,11 @@
     IconCheck,
     IconExternal,
     IconLaptop,
+    IconServer,
     IconTerminal,
   } from "$lib/icons";
   import type { Machine } from "./client.svelte";
+  import { addMachine } from "./join/join.svelte";
   import { machineLabel, machineOs } from "./machine";
   import OsMark from "./OsMark.svelte";
   import { installTool, policyFor, setPolicy } from "./tools";
@@ -252,11 +254,16 @@
     title="Nothing to install"
   />
 {:else if machines.length === 0}
-  <EmptyState icon={IconLaptop} title="No machines yet">
-    {#snippet line()}
-      Tools install on your own machines, and none has registered with this hub.
-      Run <code>WHIFFLE_HUB_URL=ws://&lt;this-host&gt;:3456/ws whiffle up</code>
-      on one and it reports what it already has.
+  <EmptyState
+    icon={IconLaptop}
+    line="Tools install on your own machines, and none has joined this hub. Add one and it reports what it already has."
+    title="No machines yet"
+  >
+    {#snippet action()}
+      <Button onclick={() => addMachine.show()}>
+        <IconServer />
+        Add machine
+      </Button>
     {/snippet}
   </EmptyState>
 {:else}

@@ -1,6 +1,6 @@
-import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { chmod } from "node:fs/promises";
-import { homedir, platform } from "node:os";
+import { homedir, platform, userInfo } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import type { AgentRow } from "@whiffle/core";
 import { readEnv, WHIFFLE_ENV, WHIFFLE_HUB_PORT } from "@whiffle/core";
@@ -824,6 +824,22 @@ const lingerHint = async (note: (line: string) => void): Promise<void> => {
   note(`  sudo loginctl enable-linger ${user}`);
 };
 
+/**
+ * Turns lingering on for this user, with no argument: logind lets a user set
+ * their own when polkit allows it. A refusal is the whole answer — the exact
+ * words logind gave, and the one command that fixes it — because a joined
+ * machine whose services stop at logout has not joined anything.
+ */
+const enableLinger = async (note: (line: string) => void): Promise<void> => {
+  note("loginctl enable-linger…");
+  const enabled = await run(["loginctl", "enable-linger"]);
+  if (enabled.exitCode !== 0) {
+    throw new ServiceError(
+      `loginctl enable-linger failed: ${enabled.stderr.toString().trim() || `exit ${enabled.exitCode}`}\nWithout lingering, systemd stops this machine's services when its last session closes. Turn it on as an administrator, then run this again:\n  sudo loginctl enable-linger ${userInfo().username}`
+    );
+  }
+};
+
 const installSystemdUnits = async (
   specs: ServiceSpec[],
   note: (line: string) => void
@@ -1576,6 +1592,8 @@ export interface DeployInitResult {
 
 export interface DeployInitOptions {
   readonly branch?: string;
+  /** Which verb is setting the clone up, recorded in the marker. */
+  readonly command?: "whiffle deploy init" | "whiffle join";
   /**
    * Where the fleet's database should end up, and where this checkout's legacy
    * one still sits. Both default to the real paths; named so a test can prove
@@ -1593,6 +1611,13 @@ export interface DeployInitOptions {
   readonly note: (line: string) => void;
   /** The remote to clone. Defaults to this checkout's `origin`. */
   readonly origin?: string;
+  /**
+   * `join`: on Linux, turn on lingering before any unit is installed, and fail
+   * if it cannot be turned on. A machine joined over SSH has nobody logged in
+   * once the SSH session closes, and without lingering systemd stops the user
+   * manager — and every service — right then.
+   */
+  readonly requireLinger?: boolean;
   readonly root?: string;
   /**
    * Injected by the tests. This verb clones, installs, builds and then hands
@@ -1651,20 +1676,34 @@ const occupied = (root: string): boolean => {
 };
 
 /**
- * `whiffle deploy init` — the whole of C8's setup, in the order it has to
- * happen: clone `origin/main` into {@link deployRoot}, install, build the
- * dashboard, write the marker, and install units that point at the clone with
- * the C9 data-dir database path.
+ * `whiffle deploy init` and `whiffle join` — the whole of C8's setup, in the
+ * order it has to happen: clone `origin/main` into {@link deployRoot}, write
+ * the marker, install, build the dashboard when this machine serves it, and
+ * install units that point at the clone with the C9 data-dir database path.
  *
- * It never restarts a service and never runs a poller. What it produces is a
- * checkout the daemon is *allowed* to update; the first actual deploy is the
- * next push to main.
+ * When `root` is the checkout this CLI is running from — `join`, run by the
+ * hub's install script inside the clone it just made — there is nothing to
+ * clone and nothing to guard against: that checkout is the one being marked.
+ * The script only ever runs `join` in an unmarked root it cloned itself; a
+ * root it finds already there without a marker it refuses, with the same
+ * words as the guard below.
+ *
+ * The marker is written before anything slow or fallible (install, build,
+ * units), so a run that fails part-way leaves a marked clone, and running it
+ * again catches that clone up rather than refusing it.
+ *
+ * The agent unit it installs carries `WHIFFLE_DEPLOY_POLL=1`: a deployment
+ * clone exists to follow its branch, and `up` only runs the poller when told
+ * to. It never restarts a service itself; the first actual deploy is the next
+ * push to main.
  */
 export const deployInit = async ({
   root = deployRoot(),
   origin,
   branch = DEPLOY_BRANCH,
+  command = "whiffle deploy init",
   ids = SERVICE_IDS,
+  requireLinger = false,
   note,
   run: runner = runStep,
   install,
@@ -1679,7 +1718,8 @@ export const deployInit = async ({
   }
 
   const marked = existsSync(join(root, DEPLOY_MARKER));
-  if (occupied(root) && !marked) {
+  const running = existsSync(root) && realpathSync(root) === realpathSync(ROOT);
+  if (occupied(root) && !(marked || running)) {
     throw new ServiceError(
       `${root} already exists and is not a deployment clone (no ${DEPLOY_MARKER}). ` +
         "Refusing to touch it — move it aside, or point elsewhere with WHIFFLE_DEPLOY_ROOT."
@@ -1720,7 +1760,7 @@ export const deployInit = async ({
       root,
       note
     );
-  } else {
+  } else if (!running) {
     await step(
       runner,
       `cloning ${remote} (${branch}) into ${root}`,
@@ -1752,7 +1792,7 @@ export const deployInit = async ({
     origin: remote,
     branch,
     createdAt: new Date().toISOString(),
-    createdBy: "whiffle deploy init",
+    createdBy: command,
   };
   await Bun.write(
     join(root, DEPLOY_MARKER),
@@ -1781,8 +1821,19 @@ export const deployInit = async ({
   }
 
   const layout = layoutFor(root);
-  const specs = ids.map((id) => specFor(id, "prod", layout));
+  const specs = ids.map((id) => {
+    const spec = specFor(id, "prod", layout);
+    return id === "agent"
+      ? {
+          ...spec,
+          environment: { ...spec.environment, [WHIFFLE_ENV.deployPoll]: "1" },
+        }
+      : spec;
+  });
   const mac = host === "darwin";
+  if (requireLinger && !mac) {
+    await enableLinger(note);
+  }
   const units: RenderedUnit[] = specs.map((spec) => ({
     id: spec.id,
     path: mac ? launchAgentPath(spec.id) : systemdPath(spec.id),

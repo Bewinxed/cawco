@@ -110,6 +110,7 @@ import { usageBucketFromRow } from "./db";
 import { delegateTypesRoutes, makeDelegateTypes } from "./delegate-types";
 import { hubHttpUrl } from "./delegation-actions";
 import { createDelegationMcp } from "./delegation-mcp";
+import { joinRoutes } from "./join";
 import { probe } from "./llm";
 import { MeaningJudge } from "./meaning";
 import { externalizeImages, mediaContentType, mediaFilePath } from "./media";
@@ -4058,6 +4059,11 @@ export const createServer = ({
     new Elysia()
       .use(websocket())
       .use(delegateTypesRoutes(delegateTypes))
+      .use(
+        joinRoutes({
+          online: (machineId) => Boolean(registry.agent(machineId)),
+        })
+      )
       .use(
         workflowRoutes(
           db,
