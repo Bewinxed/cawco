@@ -4,6 +4,8 @@ import type { RequestHandler } from "./$types";
 const WS_SCHEME = /^ws(s?):\/\//;
 const TRAILING_WS_PATH = /\/ws\/?$/;
 const TRAILING_SLASHES = /\/+$/;
+/** The hub's own response headers (`X-Whiffle-Machine`, …), as fetch lowercases them. */
+const WHIFFLE_HEADER = "x-whiffle-";
 
 /**
  * The hub's HTTP origin, derived from WHIFFLE_HUB_URL. That variable is a
@@ -55,6 +57,14 @@ async function proxyToHub(request: Request, path: string): Promise<Response> {
         ...(response.headers.has("Cache-Control") && {
           "Cache-Control": response.headers.get("Cache-Control") as string,
         }),
+        // The hub's word on where a transcript lives — its machine, folder,
+        // key and harness, and which machine a refused read was for — rides
+        // its own headers, and a reader addressed by id alone has no other.
+        ...Object.fromEntries(
+          [...response.headers].filter(([name]) =>
+            name.startsWith(WHIFFLE_HEADER)
+          )
+        ),
       },
     });
   } catch (error) {
