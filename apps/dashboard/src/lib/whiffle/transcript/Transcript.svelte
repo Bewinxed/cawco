@@ -1599,9 +1599,9 @@
     },
   });
 
-  /** Past this many screens from the tail, the jump hops to one screen short
-      of it before scrolling the rest; our own call, no source sets it. */
-  const JUMP_HOP_SCREENS = 3;
+  /** Within this many screens of the tail the jump scrolls there smoothly;
+      past it, it lands at once. Our own call, no source sets it. */
+  const JUMP_SMOOTH_SCREENS = 3;
   /** Keys that scroll the transcript: pressed during a jump, they are the reader's. */
   const SCROLL_KEYS = new Set([
     "PageUp",
@@ -1618,41 +1618,37 @@
    * writes over it: a `scrollTop` write stops a smooth scroll where it is.
    */
   let jumping = false;
-  /** Where the jump's smooth scroll was sent; null while the hop is in. */
+  /** Where the jump's smooth scroll was sent. */
   let jumpTarget: number | null = null;
 
   /**
    * Back to the newest row, from wherever the reader is: one smooth scroll
-   * to the tail when it is near, and when it is far an instant hop to a
-   * screen above it, so virtua renders the last screen only, then the smooth
-   * scroll over that screen. Arriving pins the true tail (`jumpScrolled`).
-   * The reader's own input takes the scroll back at once. Reduced motion
-   * lands at once.
+   * to the tail when it is within `JUMP_SMOOTH_SCREENS`, otherwise — or
+   * under reduced motion — an instant landing there. Arriving pins the true
+   * tail (`jumpScrolled`). The reader's own input takes the scroll back.
    */
   function jump(): void {
     tickets.clear();
     farFromLatest = false;
     const node = scroller;
-    if (!(node && motionOk.current)) {
+    if (
+      !(
+        node &&
+        motionOk.current &&
+        node.scrollHeight - node.clientHeight - node.scrollTop <=
+          JUMP_SMOOTH_SCREENS * node.clientHeight
+      )
+    ) {
       atBottom = true;
       land();
       return;
     }
     stopFollow();
     jumping = true;
-    jumpTarget = null;
     node.addEventListener("wheel", yieldJump, { passive: true });
     node.addEventListener("touchstart", yieldJump, { passive: true });
     node.addEventListener("pointerdown", yieldJump);
     node.addEventListener("keydown", yieldKey);
-    const h = node.clientHeight;
-    const bottom = node.scrollHeight - h;
-    if (bottom - node.scrollTop > JUMP_HOP_SCREENS * h) {
-      node.scrollTop = bottom - h;
-      lastWrite = node.scrollTop;
-      requestAnimationFrame(glide);
-      return;
-    }
     glide();
   }
 
