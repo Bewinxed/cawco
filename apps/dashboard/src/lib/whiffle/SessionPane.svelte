@@ -27,9 +27,11 @@
   import {
     crossIn,
     crossOut,
+    dur,
     easeOut,
     motionOk,
   } from "$lib/whiffle/motion/curves.svelte";
+  import { land, waiting } from "$lib/whiffle/motion/share.svelte";
   import AutopilotToggle from "./AutopilotToggle.svelte";
   import {
     blankSession,
@@ -138,6 +140,14 @@
     previewOpen && previewVisible && !phone && visible
   );
   let previewMounted = $state(false);
+  /**
+   * The side preview is opening out of its tool row's Preview button
+   * (motion/share.svelte.ts, `preview:<session>`): the split takes its width
+   * in one frame and the surface clips open from the button's box over
+   * --dur-panel on --ease-drawer, standing still while it does, so the two
+   * never move at once. Opened any other way it slides in with the split.
+   */
+  let fromRow = $state(false);
   let sheetMounted = $state(false);
   $effect(() => {
     if (phone && previewOpen && visible) {
@@ -165,14 +175,19 @@
       return;
     }
     if (open) {
+      fromRow = untrack(() => !previewMounted) && waiting(`preview:${viewId}`);
       previewMounted = true;
     }
+    let settle = 0;
     const frame = requestAnimationFrame(() => {
       if (open) {
         pane.resize(Math.max(savedWidth, (320 / paneWidth) * 100));
       } else {
         pane.collapse();
       }
+      settle = requestAnimationFrame(() => {
+        fromRow = false;
+      });
     });
     const timer = open
       ? undefined
@@ -184,6 +199,7 @@
         );
     return () => {
       cancelAnimationFrame(frame);
+      cancelAnimationFrame(settle);
       clearTimeout(timer);
     };
   });
@@ -754,7 +770,7 @@
     }
   });
 
-  /** What the live region says, when a send of this session's has failed. */
+  /** Why this session's last send failed, said over its composer's field. */
   const sendFailure = $derived(sendFailureNotice(viewId));
 
   /**
@@ -892,6 +908,9 @@
     get sending() {
       return sending;
     },
+    get sendError() {
+      return sendFailure;
+    },
     get commands() {
       return commands;
     },
@@ -938,7 +957,7 @@
    * that class. Reduced motion keeps the fade.
    */
   function surfaceIn(_node: Element): TransitionConfig {
-    if (!desktopPreview) {
+    if (!desktopPreview || fromRow) {
       return { duration: 0 };
     }
     const still = !motionOk.current;
@@ -973,7 +992,7 @@
       class="session-content"
       bind:this={content}
       class:preview-shown={desktopPreview}
-      class:resizing={resizing}
+      class:resizing={resizing || fromRow}
     >
       <Resizable.PaneGroup class="preview-group" direction="horizontal">
         <Resizable.Pane class="transcript-pane" defaultSize={100} minSize={30}>
@@ -1064,15 +1083,12 @@
                 paneVisible={visible}
                 previewPhone={phone}
                 prompts={parkedPrompts}
+                sendError={sendFailure}
                 {sending}
                 {suggest}
                 bind:height={composerHeight}
               />
             {/if}
-
-            <p aria-live="polite" class="announce" role="status">
-              {sendFailure}
-            </p>
           </div>
         </Resizable.Pane>
         <Resizable.Handle
@@ -1094,6 +1110,7 @@
               class="artifact-surface"
               class:shown={desktopPreview}
               in:surfaceIn
+              {@attach land(() => `preview:${viewId}`, { mode: 'clip', ms: dur('--dur-panel') })}
             >
               <PreviewPane
                 instanceId={viewId}
@@ -1189,19 +1206,6 @@
   }
   .body {
     min-width: 0;
-  }
-  /* Announced, never drawn: the live region carries the failure to a screen
-     reader while the row itself carries it to everyone else. */
-  .announce {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    margin: -1px;
-    padding: 0;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-    border: 0;
   }
 
   /* The composer's slot, when there is no composer. Sits where the input would,

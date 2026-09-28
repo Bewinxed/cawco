@@ -13,13 +13,20 @@
    * said yet — a time here would be a promise about the wrong moment.
    */
   import type { QueuedMessage } from "@whiffle/core";
+  import { dur } from "$lib/whiffle/motion/curves.svelte";
+  import { land } from "$lib/whiffle/motion/share.svelte";
   import MessageBody from "./MessageBody.svelte";
   import Who from "./Who.svelte";
 
   let { queued }: { queued: QueuedMessage } = $props();
 </script>
 
-<section class="turn you queued">
+<!-- Sent from this tab to a busy session, the row is the composer's text
+     landing (motion/share, departed by Composer's submit). -->
+<section
+  class="turn you queued"
+  {@attach land(() => `queued:${queued.text}`, { ms: dur('--dur-pop'), uniform: true })}
+>
   <Who name="You" note="queued" you />
   <MessageBody source={queued.text} />
   {#if queued.images}
