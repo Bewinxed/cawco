@@ -827,7 +827,6 @@
        never scrolls sideways — the table does, inside the panel. */
     .q-table {
       width: 100%;
-      min-width: max-content;
       border-collapse: collapse;
       font-variant-numeric: normal;
     }
@@ -850,6 +849,13 @@
     }
     .q-table thead th.num {
       text-align: right;
+    }
+    /* Under a laptop's width the heads wrap and the cells share the room,
+       so no table outgrows its card. */
+    @media (max-width: 1023px) {
+      .q-table thead th {
+        white-space: normal;
+      }
     }
     .q-table td {
       font-size: var(--text-body);

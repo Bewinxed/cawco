@@ -1,12 +1,9 @@
 <script lang="ts">
   import type { ClaudeLimits, LimitWindow } from "@whiffle/core";
   /**
-   * How full the machine's Claude limits are, on the dock next to ContextMeter.
-   * The two answer the same "am I about to hit a wall?" question for the same
-   * session, so this reads as its sibling — but where ContextMeter is one bar
-   * for one window, this is a segmented rail per window: the 5-hour, the weekly,
-   * and each scoped weekly window (the model scopes) ride their own strip, each
-   * strip filling green → amber → red down its own length. That structure is what
+   * How full the machine's Claude limits are, on the dock. The 5-hour, the
+   * weekly, and each scoped weekly window (the model scopes) ride their own
+   * strip, each strip filling green → amber → red down its own length. That structure is what
    * separates it from a sidebar row: segmented, severity-hued, and never one
    * collapsed number.
    *
@@ -379,13 +376,20 @@
      whatever the label. Neutral until a window is tight — then only that
      row's number takes the status colour, and the reset line says when it
      eases. */
+  /* The box is the same height whatever it shows — no reading yet, an empty
+     reason, one to three windows, a stale or reset note — so nothing in the
+     footer moves when the reading lands or changes: three window rows (1lh
+     each, 8px apart) and one note line (6px below), clipped. */
   :global(.meter) {
+    --meter-pad: 8px;
     display: flex;
     flex-direction: column;
     gap: 6px;
     width: 100%;
     min-width: 0;
-    padding: 8px 10px;
+    block-size: calc(4lh + 2 * 8px + 6px + 2 * var(--meter-pad));
+    overflow: hidden;
+    padding: var(--meter-pad) 10px;
     border: 0;
     border-radius: var(--radius-sm);
     background: transparent;
@@ -408,8 +412,7 @@
     }
     /* A thumb gets a full-height target. */
     @media (pointer: coarse) {
-      min-height: 44px;
-      padding-block: 10px;
+      --meter-pad: 10px;
     }
   }
   .rows {
@@ -420,8 +423,14 @@
     row-gap: 8px;
   }
   .label {
-    font: var(--type-label);
+    font: var(--type-meta);
     color: var(--ink-muted);
+  }
+  /* A window crossing into warn or critical changes colour over
+     --dur-panel, as its bar does. */
+  .pct,
+  .note {
+    transition: color var(--dur-panel) var(--ease-out);
   }
   .pct {
     text-align: end;

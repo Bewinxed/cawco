@@ -20,7 +20,7 @@
 
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { DeployInfo } from "@whiffle/core";
+import type { DeployInfo, UpdateReport } from "@whiffle/core";
 import { readEnv, WHIFFLE_ENV } from "@whiffle/core";
 
 /**
@@ -390,7 +390,7 @@ export interface DeployWatcherOptions {
    */
   readonly update: (
     state: Extract<DeployState, { kind: "behind" }>
-  ) => Promise<unknown>;
+  ) => Promise<Pick<UpdateReport, "changed">>;
 }
 
 const say = (line: string): void => console.error(`whiffle deploy: ${line}`);
@@ -545,11 +545,15 @@ export class DeployWatcher {
     this.#attempted = state.target;
     this.#busy = true;
     try {
-      await this.#options.update(state);
-      // The bits landed. Whether the agent picks them up this instant or has
-      // to wait for the machine to go idle is `#drainPendingRestart`'s call,
-      // asked on every tick from here on — not this one's.
-      this.#agentRestartOwedFor = state.target;
+      const { changed } = await this.#options.update(state);
+      // The bits landed. The agent owes a restart only when they reach code it
+      // runs, or when it already owed one for an earlier pull, which now moves
+      // to this head. Whether it takes it this instant or has to wait for the
+      // machine to go idle is `#drainPendingRestart`'s call, asked on every
+      // tick from here on — not this one's.
+      if (changed.includes("agent") || this.#agentRestartOwedFor) {
+        this.#agentRestartOwedFor = state.target;
+      }
       return { state, updated: true };
     } catch (error) {
       if (error instanceof DeployBlocked) {
