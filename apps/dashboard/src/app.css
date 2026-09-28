@@ -264,6 +264,18 @@
        surfaces (15.2% light / 33.3% dark; 15.3% / 33.4% fail). */
     --ink-strong: var(--neutral-12);
     --ink-muted: var(--neutral-11);
+    /* A ledger row's name: the plan's "row name #393939", just under the
+       strongest ink (mocks/tokens.css `--ink-row`). */
+    --ink-row: light-dark(
+      color-mix(in oklab, var(--neutral-12) 68%, var(--neutral-11)),
+      color-mix(in oklab, var(--neutral-12) 88%, var(--neutral-11))
+    );
+    /* A stat tile's figure: the plan's "stat value #404040", a step lighter
+       than the strongest ink (mocks/tokens.css `--ink-stat`). */
+    --ink-stat: light-dark(
+      color-mix(in oklab, var(--neutral-12) 60%, var(--neutral-11)),
+      color-mix(in oklab, var(--neutral-12) 72%, var(--neutral-11))
+    );
     --ink-subtle: light-dark(
       color-mix(in oklab, var(--neutral-8) 15.2%, var(--neutral-11)),
       color-mix(in oklab, var(--neutral-8) 33.3%, var(--neutral-11))
@@ -422,6 +434,9 @@
       oklch(from var(--neutral-1) l c h / 0.76)
     );
     --shadow-hairline: 0 3px 7px -2px var(--shadow-tint-2);
+    /* A stat tile's lift: the comp draws it below the card and not around it
+       (the field runs unbroken to its top edge). Dark rings it (below). */
+    --shadow-stat: var(--shadow-hairline);
     --shadow-tile:
       0 1px 2px oklch(from var(--neutral-12) l c h / 0.07),
       0 0 0 1px oklch(from var(--neutral-12) l c h / 0.035);
@@ -454,6 +469,7 @@
       --shadow-xl: var(--shadow-drawer);
       --shadow-2xl: var(--shadow-drawer);
       --shadow-raised: inset 0 0 0 1px oklch(from var(--neutral-7) l c h / 0.7);
+      --shadow-stat: var(--shadow-tile);
     }
 
     /* ---- Type roles as font shorthands; their sizes are the @theme
@@ -488,6 +504,9 @@
     --space-6: 21px;
     --space-7: 25px;
     --space-8: 32px;
+    /* Between the groups of a page (stat row, queue, a card): the comp's
+       stat row ends at y 246 and the table card starts at 262-264. */
+    --space-group: var(--space-5);
 
     /* Shape: the radius roles (xs..modal) live in @theme. */
     --radius-pill: 999px;
@@ -524,9 +543,15 @@
     --c-pill-h: 24px;
     --c-pill-gap: 6px;
     --c-pill-fs: var(--text-label);
-    /* The shell's top bar: its 32px tabs and a breath. Whatever floats under
+    /* A stat tile's height (plan: "stat card 280×90"). */
+    --c-stat-h: 90px;
+    /* A page head under the top bar: title, its line and the actions (the
+       comp's bar ends at y 60 and its stat row starts at 156). */
+    --c-page-head-h: 96px;
+    /* The shell's top bar, measured off the reference comp: 59px of bar and
+       its 1px hairline, the field starting at y 60. Whatever floats under
        the bar (the phone's toasts) reads this rather than repeating it. */
-    --c-top-bar-h: 44px;
+    --c-top-bar-h: 60px;
     /* A nav row. Full-width rows in the rail take the 44px touch row on a
        touch screen, and on a narrow window too. */
     --c-nav-h: 40px;

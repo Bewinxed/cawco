@@ -60,7 +60,8 @@
   const RAIL_KEY = "whiffle-rail-width";
   const RAIL_MIN = 216;
   const RAIL_MAX = 520;
-  const RAIL_DEFAULT = 340;
+  /** The plan's measured sidebar ("sidebar | 228"); a reader's own width overrides it. */
+  const RAIL_DEFAULT = 228;
 
   const clamp = (px: number) =>
     Math.min(RAIL_MAX, Math.max(RAIL_MIN, Math.round(px || RAIL_DEFAULT)));
@@ -876,19 +877,19 @@
   }
 
   .top {
-    /* The tabs' own height plus a breath above them: 32px folder tabs on
-       a 4px track pad, 8px of air. `--c-top-bar-h` carries it, so what
-       floats under the bar lands under it. */
+    /* The comp's bar height (app.css `--c-top-bar-h`); hosted folder tabs
+       stand on its floor. `--c-top-bar-h` carries it, so what floats under
+       the bar lands under it. */
     height: var(--c-top-bar-h);
     flex-shrink: 0;
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    /* The right inset equals the 8px above and below a 28px control in
-       the 44px bar, so the cluster sits in an even frame. The left inset is
+    /* The right inset is the content's right pad, so the cluster's edge
+       stands over the page's (the reference comp's 21px). The left inset is
        the crumb's own (below), so the slot starts at the bar's edge whether
        it holds the crumb or the tabs, and nothing in it moves as they swap. */
-    padding: 0 calc((44px - 28px) / 2) 0 0;
+    padding: 0 var(--space-6) 0 0;
     background: var(--surface-raised);
     border-bottom: 1px solid var(--border-hairline);
   }

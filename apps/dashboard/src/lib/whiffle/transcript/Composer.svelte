@@ -1225,6 +1225,11 @@
       background: var(--surface-hover);
       color: var(--ink-strong);
     }
+    /* Every primary action's hover (DESIGN.md, Primary button). */
+    .stop:not(:disabled):hover {
+      background-color: var(--ink-hover);
+      background-image: var(--action-surface-hover);
+    }
   }
   /* The flat brand stays under the gradient: `.stop:disabled` drops the image. */
   .stop {

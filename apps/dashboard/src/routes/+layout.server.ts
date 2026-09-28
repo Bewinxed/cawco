@@ -11,7 +11,7 @@ import type { LayoutServerLoad } from "./$types";
 const RAIL_KEY = "whiffle-rail-width";
 const RAIL_MIN = 216;
 const RAIL_MAX = 520;
-const RAIL_DEFAULT = 340;
+const RAIL_DEFAULT = 228;
 
 /**
  * The cookie workspace.svelte.ts mirrors its localStorage into — declared here

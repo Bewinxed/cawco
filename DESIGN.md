@@ -41,6 +41,8 @@ card, a lift goes above it.
 | `--ink-muted` | n-11 | secondary text, labels |
 | `--ink-subtle` | n-8 15.2% into n-11 (dark 33.3%) | placeholders, tertiary text |
 | `--ink-hover` | ink-strong ∓0.05 L | hover on the primary button (the base of `--action-surface-hover`) |
+| `--ink-row` | n-12 68% into n-11 (dark 88%) | a ledger row's name (plan: "row name #393939") |
+| `--ink-stat` | n-12 60% into n-11 (dark 72%) | a stat tile's figure (plan: "stat value #404040") |
 
 `--ink-subtle` is the weakest mix that holds 4.5:1 on fill and hover surfaces;
 15.3% / 33.4% fail.
@@ -58,6 +60,7 @@ card, a lift goes above it.
 | `--type-title` | 500 1.25rem/1.25, −0.01em |
 | `--type-kpi` | 500 1.5rem/1, tabular numerals (the figure carries `.num`) |
 | `--shadow-tile` | a 1px drop and a 1px ring, both from n-12 at low alpha |
+| `--shadow-stat` | `--shadow-hairline` (a drop under the tile, no ring, as the comp draws it); dark: `--shadow-tile` |
 | `--shadow-raised` | `0 1px 3px tint, 0 1px 1px tint`; dark: `inset 0 0 0 1px n-7/.7` |
 | `--shadow-overlay` | menus, popovers, the dialog tray |
 | `--scrim` / `--scrim-blur` | n-2/.72 (dark n-1/.72), 2px blur |
@@ -104,8 +107,8 @@ The kit is `apps/dashboard/src/lib/components/ui`; shared recipes are the
 - **Primary button**: never flat (plan 2026-08-18: "action `#272727` with a
   top-highlight gradient `#3C3C3C→#262626`, not flat"). `--action-surface`
   fill, `--on-brand` text, no border, no shadow; hover `--action-surface-hover`.
-  The same fill is on the new-session dialog's `.ns-btn.primary`, the
-  workflows `.wf-primary`, the composer's Send and the machine login link.
+  The same fill and hover are on the new-session dialog's `.ns-btn.primary`,
+  the workflows `.wf-primary`, the composer's Send and the machine login link.
 - **Card**: `--radius-lg`, `--shadow-tile`, 18px padding, no ring.
 - **Dialog**: a `--surface-recess` tray (radius 18, padding 6,
   `--shadow-overlay`) holding a `--surface-raised` body (radius 12, padding 18),
@@ -138,12 +141,25 @@ The kit is `apps/dashboard/src/lib/components/ui`; shared recipes are the
 - **Toggle**: `--radius-sm`, hover `--surface-hover`, pressed `--surface-fill`.
 - **Alert**: a compact status-tinted row — `--status-*-bg/ink`, `--radius-md`,
   10px 12px padding, `--type-body`. No full-width slabs, no border.
-- **StatTile**: an r10 (`--radius-md`) card holding a recessed well 7px in: the
-  well is `--surface-recess`, 1px `--border-hairline`, `--radius-well` (plan:
-  "stat well 7px inset, #F4F4F4 + 1px #EEEEEE, r7"; the radii are the comp's,
-  not concentric). The value is `--type-kpi` and `.num`, and a new value morphs
-  in through torph's TextMorph (150ms, `--ease-out`). The Needs-you tile's
-  hover, chosen and pressed fills paint the well.
+- **StatTile**: an r10 (`--radius-md`) card, `--c-stat-h` (90px) tall, holding
+  a recessed well 7px in: the well is `--surface-recess`, 1px
+  `--border-hairline`, `--radius-well` (plan: "stat card 280×90, r10 … stat
+  well 7px inset, #F4F4F4 + 1px #EEEEEE, r7"; the radii are the comp's, not
+  concentric). The label sits over the value; the value is `--type-kpi`,
+  `--ink-stat` and `.num` with its unit (meta) on the same baseline, and a new value morphs in
+  through torph's TextMorph (150ms, `--ease-out`). The Needs-you tile's hover,
+  chosen and pressed fills paint the well.
+- **Shell and page frame** (measured off the reference comp): the rail
+  defaults to 228px (a reader's own width wins), the top bar is
+  `--c-top-bar-h` 60px with its hairline, the page pads 25px left and 21px
+  right, and the groups of a page (stat row, queue, cards) stand
+  `--space-group` (18px) apart. A page head carries the page title
+  (`--type-title`) over its one line, the actions centred on the pair.
+- **Fleet board**: title and line, the four stat tiles, the attention queue,
+  the machines the board has something to say about (offline, build behind or
+  unknown, failed sync, diverged deploy — none on a healthy fleet; every
+  machine stays in the rail), then the sessions ledger with its 55px toolbar
+  zone and `--surface-band` header.
 - **Icons**: Solar through `$lib/icons.ts`, every product icon in the
   bold-duotone cut; linear only for the glyph-like chevrons and arrows
   (`alt-arrow-*`, `arrow-*`). Three sizes: 12 beside meta text, 16 in controls

@@ -83,6 +83,11 @@
   background: var(--action-surface);
   border-color: transparent;
 }
+@media (hover: hover) {
+  .wf .wf-primary:not(:disabled):hover {
+    background: var(--action-surface-hover);
+  }
+}
 /* A pressed toggle — the Editor/Program/Runs tabs, the run filters, the
    Steps/Canvas tabs, Select/Pan — said so only to a screen reader. Selection
    rides the surface and the edge, never a hue. */

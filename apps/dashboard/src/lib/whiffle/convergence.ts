@@ -6,7 +6,13 @@
  * caught up or refused to. Every reader here is pure: given the frame data a
  * machine already carries, no reach into the network.
  */
-import type { BuildInfo, DeployInfo, FleetSyncReport } from "@whiffle/core";
+import type {
+  AgentRow,
+  BuildInfo,
+  DeployInfo,
+  FleetSyncReport,
+} from "@whiffle/core";
+import { machineFaults } from "./fleet-faults";
 
 /** Whether a machine's own reported build is level with the hub's. */
 export type BuildConvergence = "unknown" | "current" | "behind";
@@ -100,4 +106,24 @@ export function deployInfoOf(deploy: unknown): MachineDeployInfo | undefined {
     return undefined;
   }
   return deploy as MachineDeployInfo;
+}
+
+/**
+ * Whether the board must say something about a machine beyond the Machines
+ * tile's "N of M online" (JOURNEY §1 block 4, the roster as a grouped
+ * reading): it is not online, its build cannot be placed level with the
+ * hub's (behind, or unknown — the Mac's `commit: None`), a fleet-sync row
+ * failed on it, or its deploy clone refuses to deploy. A machine with none
+ * of these is fine and gets no row of its own.
+ */
+export function machineNeedsNotice(
+  machine: AgentRow,
+  hubBuild: BuildInfo | undefined
+): boolean {
+  return (
+    machine.status !== "online" ||
+    buildConvergence(machine.build, hubBuild) !== "current" ||
+    machineFaults(machine.machineId, machine.fleet).length > 0 ||
+    isDeployDiverged(deployInfoOf(machine.deploy))
+  );
 }

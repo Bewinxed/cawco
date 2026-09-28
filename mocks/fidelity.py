@@ -21,7 +21,7 @@ TOL = {                      # px tolerance before a delta is flagged
     "default": 1,
     "sidebar_w": 2, "content_pad_l": 2, "content_pad_r": 3,
     "stat_run_w": 2, "stat_run_h": 2, "stat_run_gap": 1,
-    "stat_run_x": 2, "well_inset": 1,
+    "stat_run_x": 2, "well_inset": 1, "well_inset_top": 1,
     "card_left": 2, "card_top": 6, "toolbar_gap_above_band": 2,
     "search_w": 4, "search_h": 1,
     "band_h": 1, "row_pitch": 1, "cell_pad_l": 2,
@@ -236,6 +236,31 @@ def find_stats(lum, H, W, x_lo, card_top):
     }
 
 
+def find_well(lum, st, white=250):
+    """The stat card's recessed well, as its inset from the card's edge.
+
+    The stat row's white run is the card's FRAME (see find_stats), so the
+    well is found from it rather than on its row: walk down the first card's
+    middle column from the card's top until the surface stops being
+    card-white (the well's top border), then, one row inside the well, walk
+    left through the well to the frame and on through the frame to the card's
+    outer edge. Returns (left inset, top inset), both in CSS px."""
+    xm = st["x"] + st["w"] // 2
+    y0 = st["top"]
+    wt = next((y for y in range(y0, y0 + 30) if lum[y, xm] < white), None)
+    if wt is None:
+        return None
+    yw = wt + 3
+    x = xm
+    while x > 0 and lum[yw, x] < white:        # through the well to its left border
+        x -= 1
+    frame_in = x                               # last frame-white pixel beside the well
+    while x > 0 and lum[yw, x] >= white:       # through the frame to the card's edge
+        x -= 1
+    card_left = x + 1
+    return frame_in + 1 - card_left, wt - y0
+
+
 # ---------- the measurement ----------
 def measure(path):
     a, lum = load(path)
@@ -344,10 +369,13 @@ def measure(path):
             m["stat_run_gap"], m["stat_run_h"] = st["gap"], st["h"]
             m["stat_count"] = st["count"]
             if st["top"]:
-                inner = first_dark(lum, st["probe_y"], st["x"] + 1, st["x"] + 40, thr=246)
-                m["well_inset"] = (inner - st["x"]) if inner else None
+                w = find_well(lum, st)
+                if w:
+                    m["well_inset"], m["well_inset_top"] = w
+                # The figure sits in the tile's lower half; st["h"] is the frame
+                # strip's height, not the card's, so the rows come from the top.
                 m["stat_num_ink"], _ = darkest(
-                    lum, a, st["top"] + (st["h"] or 80) // 2, st["top"] + (st["h"] or 80) - 4,
+                    lum, a, st["top"] + 45, st["top"] + 80,
                     st["x"] + 14, st["x"] + 140)
 
     # surfaces

@@ -713,7 +713,7 @@
     max-width: 1100px;
     display: flex;
     flex-direction: column;
-    gap: var(--space-8);
+    gap: var(--space-group);
   }
   .page-error {
     display: flex;

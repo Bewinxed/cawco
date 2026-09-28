@@ -77,6 +77,7 @@
     resumeSession,
     whiffle,
   } from "./client.svelte";
+  import { machineNeedsNotice } from "./convergence";
   import ErrorText from "./ErrorText.svelte";
   import HarnessGlyph from "./HarnessGlyph.svelte";
   import { conversationHref, sessionTitle } from "./links";
@@ -235,6 +236,13 @@
     whiffle.runningInstances.reduce(
       (sum, row) => sum + (whiffle.statsOf(row.id).cost ?? 0),
       0
+    )
+  );
+
+  /** The machines the board has something to say about (the roster panel). */
+  const noticed = $derived(
+    whiffle.machines.filter((machine) =>
+      machineNeedsNotice(machine, whiffle.hubBuild)
     )
   );
 
@@ -689,7 +697,7 @@
   // The machine-convergence list: a raised card at zero padding, each row
   // drawing its own top hairline.
   const machinesPanelClass =
-    "gap-0 overflow-hidden rounded-[var(--radius-lg)] border-0 bg-[var(--surface-raised)] p-0 shadow-[var(--shadow-tile)] mt-[var(--space-8)]";
+    "gap-0 overflow-hidden rounded-[var(--radius-lg)] border-0 bg-[var(--surface-raised)] p-0 shadow-[var(--shadow-tile)] mt-[var(--space-group)]";
 
   // The status column, dressed on ui/badge: a light tint carries the meaning,
   // deepened ink carries the legibility. Idle carries no fill — absence is idle.
@@ -716,7 +724,10 @@
        skeleton in one cross-fade, not as rows arriving. -->
   <div class="inner" {@attach ready ? reflow() : undefined}>
     <div class="head">
-      <p>Every agent across your machines, and what needs you.</p>
+      <div class="title">
+        <h1>Fleet</h1>
+        <p>Every agent across your machines, and what needs you.</p>
+      </div>
       <Button onclick={() => addMachine.show()} variant="outline">
         <IconServer />
         Add machine
@@ -755,8 +766,8 @@
           }}
             type="button"
           >
-            <!-- The unit's line stays when the count is live, empty, so the tile
-               and its row stand at one height across the connect. -->
+            <!-- While the hub is not live, the unit says why beside the dash;
+               live, it is empty and draws nothing, and the figure stays put. -->
             <StatTile
               label="Needs you"
               unit={hubLive ? '' : hubNote}
@@ -771,32 +782,6 @@
           />
           <StatTile label="Spend today" value={`$${spend.toFixed(2)}`} />
         </div>
-
-        <!-- Every machine's convergence with the rest of the fleet (leaf C2 —
-           .unlazy-liveness/gates/c2.md): the data was always in this frame,
-           the Mac's 21-day silence is what happens when nothing renders it.
-           Shown above the queue for the same reason the queue sits above the
-           roster — this is a fact about the fleet, not about one session. -->
-        {#if whiffle.machines.length > 0}
-          <!-- MachineCard's badges carry tooltips (Tooltip.Root needs an ancestor
-             Provider or it throws on mount — see tools/+page.svelte's own note);
-             the board otherwise never needed one, so it is scoped to here. -->
-          <Tooltip.Provider>
-            <Card.Root class={machinesPanelClass} data-flip="box">
-              <ul class="machine-list">
-                {#each whiffle.machines as machine (machine.machineId)}
-                  <!-- The sidebar's machine menu, here too: one set of actions
-                       per machine wherever it is listed. -->
-                  <li class="machine-item" data-flip>
-                    <MachineMenu {machine}>
-                      <MachineCard hubBuild={whiffle.hubBuild} {machine} />
-                    </MachineMenu>
-                  </li>
-                {/each}
-              </ul>
-            </Card.Root>
-          </Tooltip.Provider>
-        {/if}
 
         <!-- JOURNEY §1 block 3. Everything parked on a human sits above the roster,
            longest wait first, with the answer one tap away — the roster below is
@@ -816,6 +801,34 @@
             >
           {/each}
         </div>
+        <!-- JOURNEY §1 block 4, the fleet roster, after the queue and before
+             the running sessions. The grouped reading is the Machines tile
+             ("N of M online"); a machine gets a row here only when there is
+             something to say about it (convergence.ts machineNeedsNotice):
+             offline, a build that is behind or cannot be placed, a failed
+             sync, a diverged deploy — the Mac's 21-day silence (leaf C2) is
+             what happens when nothing renders those. A healthy fleet renders
+             nothing here. Every machine stays listed in the rail. -->
+        {#if noticed.length > 0}
+          <!-- MachineCard's badges carry tooltips (Tooltip.Root needs an ancestor
+             Provider or it throws on mount — see tools/+page.svelte's own note);
+             the board otherwise never needed one, so it is scoped to here. -->
+          <Tooltip.Provider>
+            <Card.Root class={machinesPanelClass} data-flip="box">
+              <ul class="machine-list">
+                {#each noticed as machine (machine.machineId)}
+                  <!-- The sidebar's machine menu, here too: one set of actions
+                       per machine wherever it is listed. -->
+                  <li class="machine-item" data-flip>
+                    <MachineMenu {machine}>
+                      <MachineCard hubBuild={whiffle.hubBuild} {machine} />
+                    </MachineMenu>
+                  </li>
+                {/each}
+              </ul>
+            </Card.Root>
+          </Tooltip.Provider>
+        {/if}
         <div class="panel" data-flip="box">
           <!-- Only for a load that never read the fleet. Once it has, an outage
                keeps the last-known table here, under the reconnect banner that
@@ -1215,8 +1228,9 @@
 
 {#snippet skeleton()}
   <!-- Where the board will stand, at its size, until its first read is back:
-       the four figures, two machine rows and a page of table rows. It leaves
-       pinned where it stands (crossOut) as the board cross-fades in over it. -->
+       the four figures and a page of table rows (a healthy fleet has no
+       machine panel). It leaves pinned where it stands (crossOut) as the
+       board cross-fades in over it. -->
   <div
     aria-busy="true"
     aria-label="Loading the fleet"
@@ -1225,14 +1239,7 @@
   >
     <div class="stats">
       {#each [0, 1, 2, 3] as tile (tile)}
-        <Skeleton
-          class="h-[113px] rounded-[var(--radius-lg)] max-[900px]:h-[112px]"
-        />
-      {/each}
-    </div>
-    <div class="sk-machines">
-      {#each [0, 1] as machine (machine)}
-        <div class="sk-machine"><Skeleton class="h-6 w-[180px]" /></div>
+        <Skeleton class="h-[var(--c-stat-h)] rounded-[var(--radius-md)]" />
       {/each}
     </div>
     <div class="panel">
@@ -1298,26 +1305,43 @@
     position: relative;
     padding: 0 var(--space-6) var(--space-7) var(--space-7);
   }
+  /* The comp's head: the page title over its line, the actions centred on
+     the pair. Measured off the reference: title ink from y 89, the 36px
+     action at 91-126, the stat row at 156 under a 60px bar, so 25 above
+     and 21 below. */
   .head {
     display: flex;
-    align-items: flex-start;
+    align-items: center;
     gap: var(--space-4);
-    padding: var(--space-6) 0 var(--space-5);
+    padding: var(--space-7) 0 var(--space-6);
+    /* The comp's head band, 96px from the bar to the stat row: it also
+       lands everything under it on whole pixels (the line's 20.3px box
+       would leave the stat row at 155.3). */
+    @media (min-width: 640px) {
+      min-block-size: var(--c-page-head-h);
+    }
   }
-  .head p {
+  .title {
     margin-right: auto;
     min-width: 0;
-    font-size: var(--text-body);
-    font-weight: var(--weight-body);
+  }
+  .title h1 {
+    font: var(--type-title);
+    letter-spacing: var(--track-display);
+    color: var(--ink-strong);
+  }
+  .title p {
+    margin-top: var(--space-1);
+    font: var(--type-body);
     color: var(--ink-muted);
   }
-  /* Two actions leave a phone no room for the line beside them: it takes its
-     own row and the actions sit under it. */
+  /* Two actions leave a phone no room for the words beside them: they take
+     their own row and the actions sit under it. */
   @media (max-width: 639px) {
     .head {
       flex-wrap: wrap;
     }
-    .head p {
+    .title {
       flex-basis: 100%;
     }
   }
@@ -1366,23 +1390,10 @@
     display: contents;
   }
   .queue > :global(*) {
-    margin-top: var(--space-8);
+    margin-top: var(--space-group);
   }
 
   /* The skeleton's parts, each the size of what it stands for. */
-  .sk-machines {
-    margin-top: var(--space-8);
-    overflow: hidden;
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-  }
-  .sk-machine {
-    padding: var(--space-3) var(--space-4);
-  }
-  .sk-machine + .sk-machine {
-    border-top: 1px solid var(--border-hairline);
-  }
   .sk-head {
     height: var(--space-8);
     border-radius: var(--radius-xs);
@@ -1407,8 +1418,8 @@
   .panel {
     background: var(--surface-raised);
     border-radius: var(--radius-lg);
-    margin-top: var(--space-8);
-    padding: var(--space-3);
+    margin-top: var(--space-group);
+    padding: var(--space-2) var(--space-3) var(--space-3);
     box-shadow: var(--shadow-tile);
   }
 
@@ -1427,7 +1438,7 @@
   .not-running {
     background: var(--surface-raised);
     border-radius: var(--radius-lg);
-    margin-top: var(--space-8);
+    margin-top: var(--space-group);
     padding: var(--space-3);
     box-shadow: var(--shadow-tile);
   }
@@ -1471,6 +1482,10 @@
     border-color: var(--border-control);
   }
 
+  /* The plan's 55px toolbar zone (card top to header band). The comp's 32px
+     controls stand 11 in with 12 under them; the kit's 36px controls take
+     the same centre and the same 11px over the band, so the panel's top pad
+     is 7 (.panel) and the bar's foot 11. */
   .bar {
     display: flex;
     align-items: center;
@@ -1673,7 +1688,7 @@
     min-width: 0;
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
-    color: var(--ink-strong);
+    color: var(--ink-row);
     text-decoration: none;
   }
   .nm-title {
