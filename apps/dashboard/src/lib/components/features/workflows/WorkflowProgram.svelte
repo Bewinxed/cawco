@@ -59,7 +59,8 @@
               <h2 class="num">Problems · {problems.length}</h2>
             {:else}
               <p class="wf-muted">
-                The hub compiled and typechecked this program. No problems found.
+                The hub compiled and typechecked this program. No problems
+                found.
               </p>
             {/if}
           </div>
