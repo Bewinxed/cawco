@@ -1,4 +1,9 @@
-import type { InstanceRow, SessionMessage } from "@whiffle/core";
+import type {
+  HistoryLine,
+  InstanceRow,
+  SendRecord,
+  SessionMessage,
+} from "@whiffle/core";
 import { TRANSCRIPT_FIRST_CHUNK, TRANSCRIPT_TAIL_CEILING } from "$lib/config";
 import { turnStart } from "$lib/whiffle/frames";
 import type { PageServerLoad } from "./$types";
@@ -46,10 +51,20 @@ function contentBlocks(
 async function readTail(
   fetch: typeof globalThis.fetch,
   url: string
-): Promise<{ messages: SessionMessage[]; found: Partial<HistorySource> }> {
+): Promise<{
+  messages: SessionMessage[];
+  records: Record<string, SendRecord>;
+  found: Partial<HistorySource>;
+}> {
+  /**
+   * The send records the read carries, by uuid. The read leads with the
+   * records its entries name; they place the reader's sends among the rows
+   * (`placeSends`), exactly as the store's read of the same body does.
+   */
+  const records: Record<string, SendRecord> = {};
   const response = await fetch(url);
   if (!(response.ok && response.body)) {
-    return { messages: [], found: {} };
+    return { messages: [], records, found: {} };
   }
   // Where the hub found it — the one thing a bare id does not say, and the
   // pane names the machine in its header from the first paint.
@@ -97,6 +112,15 @@ async function readTail(
     }
     return turnStart(entry) !== null;
   };
+  /** One line off the wire: a send's record is kept, an entry is read. */
+  const take = (line: string): boolean => {
+    const read = JSON.parse(line) as HistoryLine;
+    if ("record" in read) {
+      records[read.record.uuid] = read.record;
+      return false;
+    }
+    return consume(read);
+  };
 
   try {
     for (;;) {
@@ -114,7 +138,7 @@ async function readTail(
       ) {
         const line = carry.slice(0, newline);
         carry = carry.slice(newline + 1);
-        if (line && consume(JSON.parse(line) as SessionMessage)) {
+        if (line && take(line)) {
           cut = true;
           break;
         }
@@ -126,7 +150,7 @@ async function readTail(
     if (!cut) {
       carry += decoder.decode();
       if (carry.trim()) {
-        consume(JSON.parse(carry) as SessionMessage);
+        take(carry);
       }
     }
   } catch {
@@ -138,7 +162,7 @@ async function readTail(
   }
 
   // Newest-first off the wire, oldest-first on screen.
-  return { messages: buffered.reverse(), found };
+  return { messages: buffered.reverse(), records, found };
 }
 
 /**
@@ -222,7 +246,10 @@ export const load: PageServerLoad = async ({
 
 /** The tail plus the identity the pane needs to name it before the store exists. */
 async function tailFor(fetch: typeof globalThis.fetch, source: HistorySource) {
-  const { messages, found } = await readTail(fetch, messagesUrl(source));
+  const { messages, records, found } = await readTail(
+    fetch,
+    messagesUrl(source)
+  );
   return {
     viewId: source.viewId,
     machineId: source.machineId || (found.machineId ?? ""),
@@ -230,5 +257,6 @@ async function tailFor(fetch: typeof globalThis.fetch, source: HistorySource) {
     cwd: source.cwd || (found.cwd ?? ""),
     harness: found.harness ?? source.harness,
     messages,
+    records,
   };
 }

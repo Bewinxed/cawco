@@ -2,6 +2,7 @@
   import type {
     HarnessKind,
     PermissionResult,
+    SendRecord,
     SessionMessage,
   } from "@whiffle/core";
   /**
@@ -67,6 +68,7 @@
     saveDraft,
   } from "./transcript/draft-store";
   import Prompt from "./transcript/Prompt.svelte";
+  import { placeSends } from "./transcript/sends";
   import Transcript from "./transcript/Transcript.svelte";
   import TranscriptSkeleton from "./transcript/TranscriptSkeleton.svelte";
   import {
@@ -209,6 +211,8 @@
     harness: string;
     machineId: string;
     messages: SessionMessage[];
+    /** The send records the read carried, by uuid: what places the reader's sends. */
+    records: Record<string, SendRecord>;
     sessionId: string;
     viewId: string;
   }
@@ -400,9 +404,14 @@
     blank.cwd = tail.cwd;
     blank.sessionId = tail.sessionId ?? null;
     blank.harness = tail.harness as HarnessKind;
-    blank.messages = mapped.messages;
+    // The harness's rows with the reader's sends placed among them by their
+    // records: the one derive the store runs on the same read, so the rows
+    // the server paints are the rows the store takes over.
+    blank.harnessRows = mapped.messages;
+    blank.records = tail.records;
+    blank.messages = placeSends(mapped.messages, tail.records, []);
     blank.subagents = mapped.subagents;
-    blank.initialized = mapped.messages.length > 0;
+    blank.initialized = blank.messages.length > 0;
     return blank;
   });
 
