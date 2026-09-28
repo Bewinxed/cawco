@@ -144,10 +144,6 @@
     switch (message?.type) {
       case "whiffle:ready":
       case "whiffle:navigated": {
-        if (message.type === "whiffle:ready" && message.url === undefined) {
-          post({ type: "whiffle:hello" });
-          return;
-        }
         const at = previewUrl(message.url, location.origin);
         if (!at) {
           return;

@@ -4208,13 +4208,7 @@ export const createServer = ({
           const answer = await callAgent(
             row.machineId,
             PREVIEW_START,
-            [
-              {
-                instanceId: row.id,
-                ...source,
-                dashboardOrigin: registry.dashboardOrigin(),
-              },
-            ],
+            [{ instanceId: row.id, ...source }],
             BUSY_TIMEOUT_MS
           );
           if (answer === "offline") {

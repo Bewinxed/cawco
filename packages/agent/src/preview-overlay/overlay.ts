@@ -6,7 +6,6 @@ import { domToPng } from "modern-screenshot";
 
 const INSPECTOR_PATH = /^(.*):(\d+):(\d+)$/;
 const PNG_PREFIX = /^data:image\/png;base64,/;
-let origin = (document.currentScript as HTMLScriptElement).dataset.origin || "";
 let selecting = false;
 
 /**
@@ -115,9 +114,8 @@ function stripPrefix(href: string): string {
 }
 
 function post(type: string, payload: object = {}) {
-  // Same origin: pin to location.origin.
-  const target = origin || location.origin;
-  window.parent.postMessage({ type, ...payload }, target);
+  // The pane serves this page at /preview/<id>/ on its own origin.
+  window.parent.postMessage({ type, ...payload }, location.origin);
 }
 
 function ready() {
@@ -440,28 +438,19 @@ window.addEventListener(
 );
 
 window.addEventListener("message", async (event) => {
-  if (event.source !== window.parent) {
-    return;
-  }
-  // Same-origin: accept messages from our origin.
-  if (origin && event.origin !== origin) {
+  if (event.source !== window.parent || event.origin !== location.origin) {
     return;
   }
   const message = event.data;
   if (message?.type === "whiffle:hello") {
-    origin ||= event.origin;
     ready();
-  } else if (origin && message?.type === "whiffle:mode") {
+  } else if (message?.type === "whiffle:mode") {
     mode(message.mode === "select");
-  } else if (origin && message?.type === "whiffle:capture") {
+  } else if (message?.type === "whiffle:capture") {
     post("whiffle:capture", await capture(document.documentElement));
   }
 });
 
 window.addEventListener("popstate", navigated);
 window.addEventListener("hashchange", navigated);
-if (origin) {
-  ready();
-} else {
-  window.parent.postMessage({ type: "whiffle:ready" }, "*");
-}
+ready();

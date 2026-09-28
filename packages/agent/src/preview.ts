@@ -72,9 +72,8 @@ export async function startPreview(options: {
   instanceId: string;
   port?: number;
   dir?: string;
-  dashboardOrigin?: string;
 }): Promise<{ port: number }> {
-  const { instanceId, port, dir, dashboardOrigin = "" } = options;
+  const { instanceId, port, dir } = options;
   if ((port === undefined) === (dir === undefined)) {
     throw new Error("Pass exactly one of port or dir.");
   }
@@ -93,11 +92,7 @@ export async function startPreview(options: {
   }
   const source: PreviewSource =
     port === undefined ? { dir: root as string } : { port };
-  const origin = dashboardOrigin
-    .replaceAll("&", "&amp;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("<", "&lt;");
-  const script = `<script src="/__whiffle/overlay.js" data-origin="${origin}"></script>`;
+  const script = `<script src="/__whiffle/overlay.js"></script>`;
   stopPreview({ instanceId });
   const listener = Bun.serve<PreviewSocket>({
     hostname: "0.0.0.0",
