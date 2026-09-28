@@ -16,9 +16,14 @@
     children,
   }: { open: boolean; count: number; children?: Snippet<[number]> } = $props();
 
-  /** Rows drawn before the fold, and per frame after it. */
-  const HEAD = 20;
-  const BATCH = 12;
+  /**
+   * Rows drawn before the fold, and per frame after it. A transcript row can
+   * be a tool body or a page of markdown: in WebKit twenty at once was a
+   * 53-63ms frame and twelve a frame up to 65ms, where four rows (already
+   * taller than the view) and one a frame keep every frame under 50ms.
+   */
+  const HEAD = 4;
+  const BATCH = 1;
   /** The fold opening (`collapsible-content`, 240ms from the frame after
    *  the click), after which the rest is drawn. */
   const FOLDED_MS = 280;
