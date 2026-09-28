@@ -6,8 +6,8 @@
  * that the connection is live before it is allowed to claim zero" — and its
  * generalisation: a client must never render a guess as truth. The dashboard's
  * historical failure class (fabricated echoes, invented timestamps, banners on
- * healthy connects, seams like `absorbLive` reconciling client guesses with
- * server state) all follow from state being duplicated or inferred client-side.
+ * healthy connects, sent messages paired with their echoes by text) all follow
+ * from state being duplicated or inferred client-side.
  * This protocol removes the inference: the hub assigns each session a monotonic
  * sequence, clients follow it gap-free or resynchronise explicitly, and
  * commands carry ids the hub acknowledges stage by stage. It is the only way
