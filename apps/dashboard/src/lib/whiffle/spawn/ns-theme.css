@@ -143,11 +143,6 @@
     transform: none;
   }
 }
-@keyframes ns-spin {
-  to {
-    transform: rotate(360deg);
-  }
-}
 /*
  * The model list's harness slide-swap. These live here, not in
  * ModelSection.svelte, because the rows name them from an inline `style`
