@@ -2,6 +2,9 @@
   import { onMount, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { goto } from "$app/navigation";
+  import PendingContent, {
+    whileIdle,
+  } from "$lib/components/ui/button/pending-content.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
   import * as Dialog from "$lib/components/ui/dialog";
   import { Skeleton } from "$lib/components/ui/skeleton";
@@ -38,7 +41,9 @@
   let stepsOpen = $state(true);
   let tab = $state("steps");
   let errorMessage = $state("");
-  let busy = $state(false);
+  /** The action whose request is out ("rerun", "answer:<label>", "cancel"). */
+  let acting = $state<string | null>(null);
+  const busy = $derived(acting !== null);
   let now = $state(Date.now());
   let other = $state("");
   let note = $state("");
@@ -198,8 +203,8 @@
         errorMessage = message(caught);
       });
   }
-  async function act(action: () => Promise<unknown>) {
-    busy = true;
+  async function act(key: string, action: () => Promise<unknown>) {
+    acting = key;
     errorMessage = "";
     try {
       await action();
@@ -207,23 +212,21 @@
     } catch (caught) {
       errorMessage = message(caught);
     } finally {
-      busy = false;
+      acting = null;
     }
   }
   async function cancel() {
     const names = sorted
       .filter((entry) => entry.status === "running" && entry.instanceId)
       .map((entry) => `${titleOf(entry.nodeId)} (${entry.instanceId})`);
-    if (
-      await confirm({
-        title: "Cancel workflow run?",
-        body: `Stops these live sessions and any child runs: ${names.length ? names.join(", ") : "No live step sessions reported"}. Pending steps will be skipped.`,
-        confirmLabel: "Cancel run",
-        destructive: true,
-      })
-    ) {
-      await act(() => cancelWorkflowRun(runId));
-    }
+    await confirm({
+      title: "Cancel workflow run?",
+      body: `Stops these live sessions and any child runs: ${names.length ? names.join(", ") : "No live step sessions reported"}. Pending steps will be skipped.`,
+      confirmLabel: "Cancel run",
+      destructive: true,
+      pendingLabel: "Cancelling…",
+      run: () => act("cancel", () => cancelWorkflowRun(runId)),
+    });
   }
   async function rerun() {
     if (!(step && run)) {
@@ -231,7 +234,7 @@
     }
     const selectedNode = step.nodeId;
     const { workflowId } = run;
-    await act(async () => {
+    await act("rerun", async () => {
       const result = await rerunWorkflow(runId, selectedNode);
       await goto(`/workflows/${workflowId}/runs/${result.runId}`);
     });
@@ -341,13 +344,20 @@
       {/each}
       {#if step.kind !== 'start'}
         <button
+          aria-busy={acting === 'rerun' || undefined}
+          aria-disabled={acting === 'rerun' || undefined}
           class="wf-btn"
-          disabled={busy || !live}
-          onclick={rerun}
+          disabled={(busy && acting !== 'rerun') || !live}
+          onclick={whileIdle(() => acting === 'rerun', rerun)}
           title={live ? undefined : "Can't re-run while the hub is unreachable"}
           type="button"
         >
-          Re-run from step
+          <PendingContent
+            failed={errorMessage !== ''}
+            label="Re-run from step"
+            pending={acting === 'rerun'}
+            pendingLabel="Re-running…"
+          />
         </button>
       {/if}
       <button
@@ -448,14 +458,24 @@
         <h2>Answer · {ask.question}</h2>
         <div class="options">
           {#each ask.options as option (option.label)}
+            {@const key = `answer:${option.label}`}
             <button
+              aria-busy={acting === key || undefined}
+              aria-disabled={acting === key || undefined}
               class="wf-btn"
-              disabled={busy || !live}
-              onclick={() => act(() => answerWorkflow(runId, ask.stepId, option.label, note))}
+              disabled={(busy && acting !== key) || !live}
+              onclick={whileIdle(() => acting === key, () => act(key, () => answerWorkflow(runId, ask.stepId, option.label, note)))}
               title={live ? undefined : "Can't answer while the hub is unreachable"}
               type="button"
             >
-              <span>{option.label}</span>
+              <span class="option-label"
+                ><PendingContent
+                  failed={errorMessage !== ''}
+                  label={option.label}
+                  pending={acting === key}
+                  pendingLabel="Answering…"
+                /></span
+              >
               {#if option.description}
                 <small>{option.description}</small>
               {/if}
@@ -467,13 +487,20 @@
           <div class="wf-row">
             <label>Other answer<input bind:value={other}></label
             ><button
+              aria-busy={acting === 'answer' || undefined}
+              aria-disabled={acting === 'answer' || undefined}
               class="wf-btn"
-              disabled={!other || busy || !live}
-              onclick={() => act(() => answerWorkflow(runId, ask.stepId, other, note))}
+              disabled={!other || (busy && acting !== 'answer') || !live}
+              onclick={whileIdle(() => acting === 'answer', () => act('answer', () => answerWorkflow(runId, ask.stepId, other, note)))}
               title={live ? undefined : "Can't answer while the hub is unreachable"}
               type="button"
             >
-              Send answer
+              <PendingContent
+                failed={errorMessage !== ''}
+                label="Send answer"
+                pending={acting === 'answer'}
+                pendingLabel="Sending…"
+              />
             </button>
           </div>
         {/if}
@@ -755,6 +782,11 @@
     padding: var(--space-3);
     max-width: 320px;
     text-align: left;
+  }
+  .answer .options .option-label {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--btn-gap);
   }
   .answer .options small {
     color: var(--ink-muted);

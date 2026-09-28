@@ -136,29 +136,29 @@
     if (!server) {
       return;
     }
-    const ok = await confirm({
+    await confirm({
       title: `Remove ${server.name}?`,
       body: `This removes ${server.name} from every machine in the fleet — not just this one. It can't be undone.`,
       confirmLabel: "Remove everywhere",
       destructive: true,
+      pendingLabel: "Removing…",
+      run: async () => {
+        deleting = true;
+        try {
+          await removeMcpServer(server.name);
+          const fleet = store.fleet.value;
+          if (fleet) {
+            fleet.config.mcp = fleet.config.mcp.filter(
+              (row) => row.name !== server.name
+            );
+          }
+          await goto("/config/mcp");
+        } catch (error) {
+          failed = error instanceof Error ? error.message : String(error);
+          deleting = false;
+        }
+      },
     });
-    if (!ok) {
-      return;
-    }
-    deleting = true;
-    try {
-      await removeMcpServer(server.name);
-      const fleet = store.fleet.value;
-      if (fleet) {
-        fleet.config.mcp = fleet.config.mcp.filter(
-          (row) => row.name !== server.name
-        );
-      }
-      await goto("/config/mcp");
-    } catch (error) {
-      failed = error instanceof Error ? error.message : String(error);
-      deleting = false;
-    }
   }
 </script>
 

@@ -49,21 +49,17 @@
    * sessions already running keep the build they launched with either way.
    */
   async function updateMachine() {
-    const updating = machineControl<UpdateReport>(
-      machine.machineId,
-      UPDATE_WHIFFLE,
-      [{ restartAgent: true }],
-      UPDATE_TIMEOUT_MS
-    );
-    toast.promise(updating, {
-      loading: `Updating ${machine.hostname}…`,
-      success: said,
-      error: (err: unknown) =>
-        err instanceof Error ? err.message : String(err),
-    });
-    await updating.catch(() => {
-      // toast.promise above already reported the failure.
-    });
+    try {
+      const report = await machineControl<UpdateReport>(
+        machine.machineId,
+        UPDATE_WHIFFLE,
+        [{ restartAgent: true }],
+        UPDATE_TIMEOUT_MS
+      );
+      toast.success(said(report));
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : String(err));
+    }
   }
 </script>
 
@@ -73,10 +69,12 @@
   </ContextMenu.Trigger>
 
   <ContextMenu.Content>
-    <ContextMenu.Item onSelect={() => loadCatalog(machine.machineId)}>
-      <IconRefresh />
-      Reload sessions
-    </ContextMenu.Item>
+    <ContextMenu.PendingItem
+      icon={IconRefresh}
+      label="Reload sessions"
+      pendingLabel="Reloading…"
+      run={() => loadCatalog(machine.machineId)}
+    />
     <!-- The form reads `machine` out of the query and preselects it. -->
     <ContextMenu.Item
       onSelect={() => goto(`/session?machine=${machine.machineId}`)}
@@ -102,15 +100,12 @@
         Unlock keychain…
       </ContextMenu.Item>
     {/if}
-    <ContextMenu.Item
-      onSelect={() => {
-        // biome-ignore lint/complexity/noVoid: fire-and-forget; toast.promise above already tracks the outcome
-        void updateMachine();
-      }}
-    >
-      <IconDownload />
-      Update this machine
-    </ContextMenu.Item>
+    <ContextMenu.PendingItem
+      icon={IconDownload}
+      label="Update this machine"
+      pendingLabel="Updating…"
+      run={updateMachine}
+    />
 
     <ContextMenu.Separator />
 

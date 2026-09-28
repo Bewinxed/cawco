@@ -71,8 +71,6 @@
   }
   #session-start {
     min-width: 96px;
-    --btn-gap: 8px;
-    --btn-icon: 16px;
   }
   @media (max-width: 640px) {
     .footer {

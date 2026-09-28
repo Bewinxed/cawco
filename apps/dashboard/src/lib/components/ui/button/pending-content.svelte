@@ -27,7 +27,8 @@
    * --dur-morph. The kit Button draws it; a button in another skin (the
    * new-session dialog, a workflow form) draws it in its own element, sets
    * --btn-gap and --btn-icon to its gap and icon size, and takes presses
-   * through `whileIdle`.
+   * through `whileIdle`. An icon-only button passes no `label`: only its
+   * icon slot changes, and its name stays its aria-label.
    */
   import type { Component } from "svelte";
   import type { SVGAttributes } from "svelte/elements";
@@ -43,7 +44,7 @@
     pendingLabel,
     failed = false,
   }: {
-    label: string;
+    label?: string;
     /** The icon in the slot at rest. */
     icon?: Component<SVGAttributes<SVGSVGElement>>;
     pending?: boolean;
@@ -78,7 +79,7 @@
     }
     return done ? "done" : "idle";
   });
-  const text = $derived(pending && pendingLabel ? pendingLabel : label);
+  const text = $derived(pending && pendingLabel ? pendingLabel : (label ?? ""));
 
   /**
    * The label is plain text as the server draws it, and TextMorph once the
@@ -114,7 +115,9 @@
     /></span
   >
 </span>
-{#if morphMs}
+{#if label === undefined}
+<!-- Icon only: nothing to morph. -->
+{:else if morphMs}
   <!-- TextMorph draws the words as one box per letter once it has morphed,
        which a screen reader spells out; the name comes from the plain copy
        beside it. -->

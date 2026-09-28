@@ -33,6 +33,10 @@ export {
   default as ContextMenuLabel,
 } from "./context-menu-label.svelte";
 export {
+  default as PendingItem,
+  default as ContextMenuPendingItem,
+} from "./context-menu-pending-item.svelte";
+export {
   default as Portal,
   default as ContextMenuPortal,
 } from "./context-menu-portal.svelte";
