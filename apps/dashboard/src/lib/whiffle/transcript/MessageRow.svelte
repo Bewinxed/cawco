@@ -14,6 +14,7 @@
   } from "../client.svelte";
   /** Dispatches one stand-alone transcript message to its renderer by type. */
   import type { Message } from "../types";
+  import DocThumb from "./DocThumb.svelte";
   import { disclosure } from "./disclosure.svelte";
   import MessageBody from "./MessageBody.svelte";
   import Peer from "./Peer.svelte";
@@ -187,12 +188,9 @@
     />
     <MessageBody source={message.content} />
     {#if message.metadata?.attachments?.length || message.metadata?.images?.length}
-      <div class="chips">
-        {#each message.metadata.attachments ?? [] as att (att.name)}
-          <Badge class={chipClass} variant="secondary"
-            >{att.name}
-            · {att.chars} chars</Badge
-          >
+      <div class="chips" data-gallery>
+        {#each message.metadata.attachments ?? [] as att, i (`${att.name}-${i}`)}
+          <DocThumb content={att.content} name={att.name} />
         {/each}
         {#each message.metadata.images ?? [] as img, i (img.src ?? `${img.mediaType}-${i}`)}
           {#if img.src}

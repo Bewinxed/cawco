@@ -1,7 +1,9 @@
 /**
  * Shared state for the Fluid Functionalism tabs: which value is chosen and
  * in what order the items sit (the root), and where each item sits in the
- * track (the list). Set by the root and the list, read by the items.
+ * track (the list). Set by the root and the list, read by the items; the
+ * order is the items' own order in the track (TabRects), kept as they
+ * arrive, leave and move.
  */
 import { getContext, setContext } from "svelte";
 import type { TabRects } from "./rects.svelte";
@@ -71,17 +73,9 @@ export class TabsListState {
   /** Where the indicator is drawn — moved on click, ahead of the value. */
   optimisticIndex = $state<number | null>(null);
   focusedIndex = $state<number | null>(null);
-  #next = 0;
 
   constructor(rects: TabRects) {
     this.rects = rects;
-  }
-
-  /** Items take an index in mount order. */
-  claim(): number {
-    const index = this.#next;
-    this.#next += 1;
-    return index;
   }
 }
 

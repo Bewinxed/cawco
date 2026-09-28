@@ -48,9 +48,19 @@
   function viewImage() {
     viewing = true;
     open = false;
+    // The popover closes as the picture opens, so there is no thumbnail left
+    // to zoom out of: PhotoSwipe fades it in.
     lightbox.open({
-      src: `data:image/png;base64,${selection.png}`,
-      alt: label,
+      kind: "image",
+      index: 0,
+      shots: [
+        {
+          src: `data:image/png;base64,${selection.png}`,
+          alt: label,
+          width: imageSize.width * selection.scale,
+          height: imageSize.height * selection.scale,
+        },
+      ],
     });
   }
 

@@ -1125,7 +1125,9 @@ test("the stamp does not cost the echo its thumbnails", () => {
     "cmd-2"
   );
   expect(echo.metadata?.sentAs).toBe("cmd-2");
-  expect(echo.metadata?.attachments).toEqual([{ name: "notes.md", chars: 4 }]);
+  expect(echo.metadata?.attachments).toEqual([
+    { name: "notes.md", content: "abcd" },
+  ]);
   expect(echo.metadata?.images).toEqual([
     { mediaType: "image/png", src: "data:image/png;base64,AAAA" },
   ]);
