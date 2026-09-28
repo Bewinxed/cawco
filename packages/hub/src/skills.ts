@@ -52,6 +52,12 @@ const FETCH_TIMEOUT_MS = 60_000;
  * the tunnel's: the files ride every sync to every machine. Sized with real
  * headroom — impeccable's Claude variant was already 147 files / 3.07 MB on
  * 2026-08-07 and growing.
+ *
+ * A skill carries no media its instructions never name: an image or video
+ * (gif, jpg, jpeg, png, webp, svg, mp4, mov, webm, avif) rides along only when
+ * a markdown file in the skill other than README.md names its path or basename.
+ * README demo renders are for people browsing the repo, not for the agent.
+ * The rule runs on the walk before these caps, so they count what is carried.
  */
 const MAX_FILES = 512;
 const MAX_BYTES = 8 * 1024 * 1024;
@@ -88,6 +94,8 @@ const URL_SOURCE_RE = /^https?:\/\//i;
 const ZIP_NAME_RE = /\.zip$/i;
 const MD_PATH_RE = /\.md$/i;
 const ARCHIVE_PATH_RE = /\.(zip|tgz|tar\.gz)$/i;
+const MEDIA_PATH_RE = /\.(gif|jpe?g|png|webp|svg|mp4|mov|webm|avif)$/i;
+const README_NAME_RE = /^readme\.md$/i;
 
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: parses the four source shapes (url, npm:, github:, bare owner/repo) whiffle accepts; each branch is a distinct grammar, not incidental complexity.
 export const parseSkillSource = (source: string): SkillSource | undefined => {
@@ -248,9 +256,10 @@ export const downloadRepo = async (
  */
 export const readTree = async (
   dir: string,
-  what = "the directory"
+  what = "the directory",
+  keep: (found: Found[]) => Promise<Found[]> = async (found) => found
 ): Promise<{ files: SkillFile[]; hash: string; bytes: number }> => {
-  const found = await walk(dir);
+  const found = await keep(await walk(dir));
   if (found.length > MAX_FILES) {
     throw new Error(
       `${what} has ${found.length} files; whiffle carries at most ${MAX_FILES}`
@@ -442,8 +451,31 @@ export const hashFiles = (files: SkillFile[]): string => {
   return hasher.digest("hex");
 };
 
+/**
+ * The walk's files less the media the skill's own instructions never name: a
+ * gif or jpg is kept only when a markdown file other than README.md mentions
+ * its relative path or its basename.
+ */
+const namedMedia = async (found: Found[]): Promise<Found[]> => {
+  const instructions = await Promise.all(
+    found
+      .filter(
+        (file) =>
+          MD_PATH_RE.test(file.rel) && !README_NAME_RE.test(basename(file.rel))
+      )
+      .map((file) => Bun.file(file.path).text())
+  );
+  const text = instructions.join("\n");
+  return found.filter(
+    (file) =>
+      !MEDIA_PATH_RE.test(file.rel) ||
+      text.includes(file.rel) ||
+      text.includes(basename(file.rel))
+  );
+};
+
 const readSkill = async (dir: string): Promise<ResolvedSkill> => {
-  const { files, hash, bytes } = await readTree(dir, "the skill");
+  const { files, hash, bytes } = await readTree(dir, "the skill", namedMedia);
   return { name: basename(dir), hash, bytes, files };
 };
 
