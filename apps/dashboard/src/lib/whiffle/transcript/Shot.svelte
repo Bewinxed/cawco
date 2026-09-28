@@ -47,7 +47,10 @@
       type="button"
     >
       {#if loaded !== src}
-        <span aria-hidden="true" class="skeleton"></span>
+        <span
+          aria-hidden="true"
+          class="kit-skeleton absolute inset-0 rounded-[inherit]"
+        ></span>
       {/if}
       <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: image load/error lifecycle events; the containing button owns interaction. -->
       <img
@@ -118,16 +121,6 @@
       }
     }
   }
-  .skeleton {
-    position: absolute;
-    inset: 0;
-    background: var(--surface-recess);
-
-    @media (prefers-reduced-motion: no-preference) {
-      animation: pulse calc(var(--dur-control) * 10) var(--ease-out) infinite
-        alternate;
-    }
-  }
   .missing {
     flex-direction: column;
     justify-content: center;
@@ -165,14 +158,6 @@
         block-size: 100%;
         object-fit: cover;
       }
-    }
-  }
-  @keyframes pulse {
-    from {
-      opacity: 0.4;
-    }
-    to {
-      opacity: 1;
     }
   }
 </style>

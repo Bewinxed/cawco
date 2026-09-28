@@ -247,8 +247,10 @@
         class:ready={connected}
       ></iframe>
     {/key}
-    <div aria-hidden="true" class="skeleton" class:ready={connected}>
-      <span></span>
+    <div aria-hidden="true" class="cover" class:ready={connected}>
+      <span
+        class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"
+      ></span>
     </div>
     {#if failure}
       <p class="error" role="alert">{failure}</p>
@@ -373,7 +375,8 @@
   iframe.ready {
     opacity: 1;
   }
-  .skeleton {
+  /* Covers the frame until it connects, holding one kit skeleton line. */
+  .cover {
     position: absolute;
     inset: 0;
     padding: var(--space-5);
@@ -381,15 +384,8 @@
     pointer-events: none;
     transition: opacity var(--dur-control) var(--ease-out);
   }
-  .skeleton.ready {
+  .cover.ready {
     opacity: 0;
-  }
-  .skeleton span {
-    display: block;
-    width: 42%;
-    height: var(--space-3);
-    background: var(--surface-recess);
-    border-radius: var(--radius-xs);
   }
   .error {
     position: absolute;

@@ -16,6 +16,7 @@
   import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
   import * as Resizable from "$lib/components/ui/resizable";
+  import { Skeleton } from "$lib/components/ui/skeleton";
   import { whiffle } from "$lib/whiffle/client.svelte";
   import { loadDelegateTypes, message } from "$lib/whiffle/delegate-types";
   import { newId } from "$lib/whiffle/id";
@@ -521,8 +522,8 @@
   {/if}
   {#if !workflow}
     <div class="loading wf-stack">
-      <div class="wf-skeleton"></div>
-      <div class="wf-skeleton"></div>
+      <Skeleton class="h-20 w-full" />
+      <Skeleton class="h-20 w-full" />
     </div>
   {:else if tab === 'program'}
     <WorkflowProgram

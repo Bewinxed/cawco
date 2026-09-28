@@ -4,6 +4,7 @@
   import { goto } from "$app/navigation";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
   import * as Dialog from "$lib/components/ui/dialog";
+  import { Skeleton } from "$lib/components/ui/skeleton";
   import { whiffle } from "$lib/whiffle/client.svelte";
   import { confirm } from "$lib/whiffle/confirm.svelte";
   import { message } from "$lib/whiffle/delegate-types";
@@ -369,8 +370,8 @@
       class="wf-stack loading"
       role="status"
     >
-      <div class="wf-skeleton"></div>
-      <div class="wf-skeleton"></div>
+      <Skeleton class="h-20 w-full" />
+      <Skeleton class="h-20 w-full" />
       <p>Loading workflow run…</p>
     </div>
   {:else}
