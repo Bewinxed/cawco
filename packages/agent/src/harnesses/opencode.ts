@@ -81,6 +81,7 @@ import {
   CONTROL_SUPPORTED_COMMANDS,
   CONTROL_SUPPORTED_MODELS,
   IMAGE_GENERATION_TIMEOUT_MS,
+  MESSAGES_READ,
 } from "@whiffle/core";
 // The protocol subpath, never the `@whiffle/core` barrel: `sessiond.ts` reaches
 // for `node:os` and the barrel is imported by the browser bundle (see f2e1c4c).
@@ -116,6 +117,44 @@ function withImageAttachments(
     }));
   return images.length ? [{ type: "text", text: output }, ...images] : output;
 }
+
+const BASE62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+let lastIdMs = 0;
+let idCounter = 0;
+
+/**
+ * An opencode message id, minted here so a send can name the message it
+ * becomes. opencode refuses a given id without its `msg` prefix and orders a
+ * session's messages by id, so it is minted the way opencode's own
+ * `Identifier.ascending` mints one (packages/opencode/src/id/id.ts): the
+ * prefix, the low 6 bytes of `Date.now() * 0x1000 + counter` as hex, then 14
+ * random base62 characters.
+ */
+export function messageId(): string {
+  const now = Date.now();
+  if (now !== lastIdMs) {
+    lastIdMs = now;
+    idCounter = 0;
+  }
+  idCounter += 1;
+  const stamp = (BigInt(now) * 0x10_00n + BigInt(idCounter))
+    .toString(16)
+    .padStart(12, "0")
+    .slice(-12);
+  const random = Array.from(
+    crypto.getRandomValues(new Uint8Array(14)),
+    (byte) => BASE62[byte % 62]
+  ).join("");
+  return `msg_${stamp}${random}`;
+}
+
+/**
+ * The uuid each message this daemon sent was sent under, by the opencode
+ * message id it became — what a history read keys the message by, so it is
+ * the row the live stream drew. Lives as long as the daemon does.
+ */
+// ponytail: in-memory and unbounded (one short entry per send); a daemon restart forgets it, and reloads then key those messages by opencode's id.
+const sentIds = new Map<string, string>();
 
 /**
  * opencode's own config files — the machine profile the fleet sync converges.
@@ -958,10 +997,14 @@ export class OpencodeSession implements HarnessSession {
   #turnOpen = false;
   /** Armed while a turn is open without any server event; see STALLED_TURN_MS. */
   #stallTimer: ReturnType<typeof setTimeout> | undefined;
+  /** Sends held while the config gate is up, each under the message id it will become. */
   readonly #queue: {
     parts: unknown[];
     model?: { providerID?: string; modelID?: string };
+    messageID: string;
   }[] = [];
+  /** Sends opencode has not written as messages yet: message id → the uuid it was sent under. */
+  readonly #unread = new Map<string, string>();
   #permissionMode: string | undefined;
   #providersCache: Promise<Pick<Provider, "id" | "models">[]> | undefined;
   #commandNames: Promise<Set<string>> | null = null;
@@ -1084,6 +1127,17 @@ export class OpencodeSession implements HarnessSession {
         if (info.role === "assistant") {
           this.#costs.set(info.id, info.cost);
           this.#lastTokens = info.tokens;
+        }
+        // A send, now a message of the session's: the harness has read it.
+        const read = this.#unread.get(info.id);
+        if (read) {
+          this.#unread.delete(info.id);
+          this.#ctx.frame({
+            type: "system",
+            subtype: MESSAGES_READ,
+            read: [read],
+            session_id: this.sessionId ?? undefined,
+          });
         }
         break;
       }
@@ -1304,7 +1358,7 @@ export class OpencodeSession implements HarnessSession {
         this.#ctx.busy(false);
         this.#busy = false;
         this.#flushResult();
-        // Everything queued during the turn is delivered now as one wake turn.
+        // Anything the config gate held while this turn ran goes now.
         this.#drainQueue();
         break;
       }
@@ -1324,9 +1378,8 @@ export class OpencodeSession implements HarnessSession {
             errors: [errorText(error)],
           });
         }
-        // The turn is over either way: whatever queued behind it runs now,
-        // same as the idle path. Without this an abort parks queued messages
-        // forever — busy is clear but nobody drains.
+        // The turn is over either way: whatever the config gate held runs
+        // now, same as the idle path.
         this.#drainQueue();
         break;
       }
@@ -2027,7 +2080,6 @@ export class OpencodeSession implements HarnessSession {
     }
   }
 
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: routes a send between urgent-abort, hand-back-queue, and command/prompt branches; not refactored in this pass
   send(
     message: SentMessage,
     extras: {
@@ -2080,12 +2132,17 @@ export class OpencodeSession implements HarnessSession {
     }
 
     const model = this.#model ? splitModel(this.#model) : undefined;
+    // The message it becomes is named up front, so opencode's word that it
+    // exists says which send it was.
+    const messageID = messageId();
+    sentIds.set(messageID, message.uuid);
+    this.#unread.set(messageID, message.uuid);
 
     // Config convergence gate: queue everything while a reload is in progress.
     // Active turns are allowed to finish (events still route), but no NEW work
     // may start — the server is being stopped and restarted.
     if (this.#isConfigGateHeld()) {
-      this.#queue.push({ parts, ...(model ? { model } : {}) });
+      this.#queue.push({ parts, ...(model ? { model } : {}), messageID });
       return;
     }
 
@@ -2099,34 +2156,32 @@ export class OpencodeSession implements HarnessSession {
         })
         // biome-ignore lint/suspicious/noEmptyBlockStatements: the abort's own failure is not actionable; the prompt below runs regardless
         .catch(() => {})
-        .then(() => this.#prompt(parts, model));
-    } else if ((message as { shouldQuery?: boolean }).shouldQuery === false) {
-      // Delivery rule (matches the claude adapter): a peer message reaching an
-      // IDLE session is the turn that wakes it. Silent appends left sessions
-      // holding unread briefs forever — delivered work must run. While busy it
-      // queues, and the idle drain delivers everything as ONE wake turn.
-      // biome-ignore lint/suspicious/noUnnecessaryConditions: #busy is reassigned elsewhere in the class; biome's per-method inference doesn't see that
-      if (this.#busy) {
-        this.#queue.push({ parts, ...(model ? { model } : {}) });
-      } else {
-        this.#ctx.busy(true);
-        this.#prompt(parts, model);
-      }
+        .then(() => this.#prompt(parts, messageID, model));
+      return;
+    }
+    // Idle or busy, every send is prompted at once: opencode writes it into
+    // the session as a message straight away and the running loop takes it
+    // up, which is the moment it is read.
+    this.#ctx.busy(true);
+    const command = parseCommand(text);
+    if (command) {
+      // biome-ignore lint/complexity/noVoid: fire-and-forget: send() itself is not awaited by its callers
+      void this.#commandOrPrompt(
+        command.name,
+        command.args,
+        parts,
+        messageID,
+        model
+      );
     } else {
-      this.#ctx.busy(true);
-      const command = parseCommand(text);
-      if (command) {
-        // biome-ignore lint/complexity/noVoid: fire-and-forget: send() itself is not awaited by its callers
-        void this.#commandOrPrompt(command.name, command.args, parts, model);
-      } else {
-        this.#prompt(parts, model);
-      }
+      this.#prompt(parts, messageID, model);
     }
   }
 
-  /** Starts one prompt turn with the given parts and optional model. */
+  /** Starts one prompt turn with the given parts, as message `messageID`. */
   #prompt(
     parts: unknown[],
+    messageID: string,
     model?: { providerID?: string; modelID?: string }
   ): void {
     this.#turnOpen = true;
@@ -2138,6 +2193,7 @@ export class OpencodeSession implements HarnessSession {
         path: { id: this.sessionId! },
         query: { directory: this.#directory },
         body: {
+          messageID,
           parts: parts as never,
           tools: {
             whiffle_submit_result: !!this.#workflowStepId,
@@ -2187,11 +2243,8 @@ export class OpencodeSession implements HarnessSession {
   }
 
   /**
-   * Delivers everything queued while the session was busy as ONE wake turn:
-   * all queued parts, in arrival order, in a single prompt. One turn instead
-   * of a turn per message keeps a burst of reports from becoming a burst of
-   * junk "Acknowledged" turns; a prompt instead of a silent append keeps
-   * delivered work from sitting unread forever.
+   * Delivers what the config gate held, in arrival order, each as the message
+   * it was named — so each is read as itself.
    */
   #drainQueue(): void {
     if (this.#queue.length === 0) {
@@ -2203,11 +2256,10 @@ export class OpencodeSession implements HarnessSession {
     if (this.#isConfigGateHeld()) {
       return;
     }
-    const queued = this.#queue.splice(0);
-    const parts = queued.flatMap((next) => next.parts);
-    const model = queued.find((next) => next.model)?.model;
     this.#ctx.busy(true);
-    this.#prompt(parts, model);
+    for (const { parts, messageID, model } of this.#queue.splice(0)) {
+      this.#prompt(parts, messageID, model);
+    }
   }
 
   /** The command names this session can answer, fetched once and cached. */
@@ -2232,11 +2284,12 @@ export class OpencodeSession implements HarnessSession {
     name: string,
     args: string,
     parts: unknown[],
+    messageID: string,
     model?: { providerID?: string; modelID?: string }
   ): Promise<void> {
     const names = await this.#commandNamesOf();
     if (!names.has(name)) {
-      this.#prompt(parts, model);
+      this.#prompt(parts, messageID, model);
       return;
     }
     this.#turnOpen = true;
@@ -2247,6 +2300,7 @@ export class OpencodeSession implements HarnessSession {
         path: { id: this.sessionId! },
         query: { directory: this.#directory },
         body: {
+          messageID,
           command: name,
           arguments: args,
           ...(this.#effort ? { variant: this.#effort } : {}),
@@ -4255,9 +4309,12 @@ export function toTranscript(
         parts.filter((part): part is FilePart => part.type === "file")
       );
       if (content) {
+        // A message this daemon sent is keyed by the uuid it was sent under.
+        const sent = sentIds.get(info.id);
         entries.push({
           type: "user",
           uuid: info.id,
+          ...(sent ? { sourceUuid: sent } : {}),
           session_id: sessionKey,
           message: { role: "user", content },
           parent_tool_use_id: null,

@@ -52,6 +52,7 @@ import {
   CONTROL_MODEL_CATALOG,
   CONTROL_SET_MODEL,
   CONTROL_SUPPORTED_MODELS,
+  MESSAGES_READ,
 } from "@whiffle/core";
 import { callDelegationTool, delegationTools } from "../delegation";
 import type { Harness, HarnessContext, HarnessSession } from "../harness";
@@ -168,6 +169,20 @@ const assistantContent = (message: {
   ];
 };
 
+/**
+ * The uuid each message this daemon sent was sent under, by the id of the
+ * entry pi stored it as — what a history read keys the message by, so it is
+ * the row the live stream drew. Lives as long as the daemon does.
+ */
+// ponytail: in-memory and unbounded (one short entry per send); a daemon restart forgets it, and reloads then key those messages by pi's entry id.
+const sentIds = new Map<string, string>();
+
+/** The `sourceUuid` a stored user entry carries, when this daemon sent it. */
+const sentAs = (entryId: string): { sourceUuid?: string } => {
+  const sent = sentIds.get(entryId);
+  return sent ? { sourceUuid: sent } : {};
+};
+
 /** Thin adapter over the same hub-owned definitions and handlers as MCP. */
 const piHandoffTools = async (instanceId: string): Promise<ToolDefinition[]> =>
   (await delegationTools(instanceId)).map((tool) =>
@@ -189,6 +204,13 @@ class PiSession implements HarnessSession {
   #streamedText = "";
   #streamedThinking = "";
   #busy = false;
+  /**
+   * The uuids of sends pi has not started on, oldest first. `prompt()` takes
+   * no id, but pi starts its user messages in the order it was handed them.
+   */
+  readonly #unread: string[] = [];
+  /** The send pi started last, until the entry it is stored as is known. */
+  #reading: string | undefined;
 
   constructor(ctx: HarnessContext, session: AgentSession) {
     this.#ctx = ctx;
@@ -208,6 +230,36 @@ class PiSession implements HarnessSession {
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: routes every pi AgentSessionEvent kind into neutral frames; not refactored in this pass
   #handle(event: AgentSessionEvent): void {
     switch (event.type) {
+      // A user message starting is a send read, in the order it was sent.
+      case "message_start": {
+        const read =
+          (event.message as { role?: string }).role === "user"
+            ? this.#unread.shift()
+            : undefined;
+        if (read) {
+          this.#reading = read;
+          this.#ctx.frame({
+            type: "system",
+            subtype: MESSAGES_READ,
+            read: [read],
+            session_id: this.sessionId ?? undefined,
+          });
+        }
+        break;
+      }
+      // And the entry it is stored as, which a history read keys it by.
+      case "entry_appended": {
+        const { entry } = event;
+        if (
+          this.#reading &&
+          entry.type === "message" &&
+          (entry.message as { role?: string }).role === "user"
+        ) {
+          sentIds.set(entry.id, this.#reading);
+          this.#reading = undefined;
+        }
+        break;
+      }
       case "message_update": {
         const ae = (event as { assistantMessageEvent?: { type?: string } })
           .assistantMessageEvent;
@@ -389,6 +441,8 @@ class PiSession implements HarnessSession {
           `\n\n<pasted-text name="${a.name}">\n${a.content}\n</pasted-text>`
       )
       .join("");
+    // Read back at the user message pi starts for it (`message_start`).
+    this.#unread.push(message.uuid);
 
     if (extras.urgent && this.#busy) {
       const prompt = `[Urgent — your previous turn was interrupted to deliver this]\n\n${text}${attachments}`;
@@ -408,9 +462,17 @@ class PiSession implements HarnessSession {
 
     this.#ctx.busy(true);
     this.#busy = true;
+    // A send into a running turn is steered in: pi delivers it once the turn
+    // has run its tool calls, before the next model call — where Claude folds
+    // one in. Without a behaviour, pi refuses a prompt while it streams.
     // biome-ignore lint/complexity/noVoid: fire-and-forget: send() itself is not awaited by its callers
     void this.#session
-      .prompt(text + attachments, { images: images as never })
+      .prompt(text + attachments, {
+        images: images as never,
+        ...(this.#session.isStreaming
+          ? { streamingBehavior: "steer" as const }
+          : {}),
+      })
       .catch((error) => this.#ctx.failed(error));
   }
 
@@ -671,9 +733,11 @@ export class PiHarness implements Harness {
       }
       const { role } = message;
       if (role === "user") {
+        // A message this daemon sent is keyed by the uuid it was sent under.
         entries.push({
           type: "user",
           uuid: entry.id,
+          ...sentAs(entry.id),
           session_id: sessionKey,
           message: { role: "user", content: contentOf(message.content) },
           parent_tool_use_id: null,
