@@ -364,7 +364,10 @@
   {#if errorMessage}
     <p class="wf-error" role="alert">{errorMessage}</p>
   {/if}
-  {#if !run}
+  <!-- The header names the run's workflow and its origin, and the canvas
+       takes its shape from the origin: both wait for the workflow list, so
+       the name never paints as "Workflow" and then widens into the real one. -->
+  {#if !(run && (workflow || workflowState.loaded))}
     <div
       aria-label="Loading workflow run"
       class="wf-stack loading"
