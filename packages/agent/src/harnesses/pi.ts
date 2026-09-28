@@ -188,17 +188,22 @@ const failedTurn = (
 /**
  * A stored assistant message as what the live stream drew for it: its blocks,
  * when it has any (`message_end`), and its error only as the result of the
- * attempt pi did not try again (`agent_end`) — `retried` when the next
- * message pi stored is the next attempt.
+ * attempt pi did not try again (`agent_end`). pi went on past it when the
+ * next message it stored (`next`, its role) is the next attempt, or when it is
+ * the last one stored and its turn is still running here ({@link openTurns}):
+ * a retry waits seconds between attempts, and a read in that gap is not the
+ * end of the turn.
  */
 const assistantEntries = (
   sessionKey: string,
   entry: { id: string; timestamp: string },
   message: { content?: unknown },
-  retried: boolean
+  next: string | undefined
 ): SessionMessage[] => {
   const blocks = toBlocks(message.content);
   const { errorMessage } = message as { errorMessage?: string };
+  const retried =
+    next === "assistant" || (next === undefined && openTurns.has(sessionKey));
   return [
     ...(blocks.length
       ? [
@@ -232,6 +237,13 @@ const piHandoffTools = async (instanceId: string): Promise<ToolDefinition[]> =>
     })
   );
 
+/**
+ * The sessions whose turn pi is still running here, by session id: from the
+ * send that starts it to the `agent_end` pi will not try again. An attempt
+ * that failed inside such a turn is not its result yet (`assistantEntries`).
+ */
+const openTurns = new Set<string>();
+
 class PiSession implements HarnessSession {
   readonly harness = "pi" as const;
   sessionId: string | null = null;
@@ -245,6 +257,17 @@ class PiSession implements HarnessSession {
   readonly #unread: string[] = [];
   /** The send pi started last, until the entry it is stored as is known. */
   #reading: string | undefined;
+
+  /** Whether a turn is running, said to the agent and kept in {@link openTurns}. */
+  #setBusy(active: boolean): void {
+    this.#busy = active;
+    this.#ctx.busy(active);
+    if (active) {
+      openTurns.add(this.#session.sessionId);
+    } else {
+      openTurns.delete(this.#session.sessionId);
+    }
+  }
 
   constructor(ctx: HarnessContext, session: AgentSession) {
     this.#ctx = ctx;
@@ -333,8 +356,7 @@ class PiSession implements HarnessSession {
                 delta: { type: "text_delta", text: delta },
               },
             });
-            this.#ctx.busy(true);
-            this.#busy = true;
+            this.#setBusy(true);
             break;
           }
           default:
@@ -384,8 +406,7 @@ class PiSession implements HarnessSession {
         if (willRetry) {
           break;
         }
-        this.#ctx.busy(false);
-        this.#busy = false;
+        this.#setBusy(false);
         const errors =
           (
             event as { messages?: { role?: string; errorMessage?: string }[] }
@@ -442,16 +463,14 @@ class PiSession implements HarnessSession {
         // biome-ignore lint/suspicious/noEmptyBlockStatements: an urgent abort racing the turn's own close is expected; nothing to report
         .catch(() => {})
         .then(() => {
-          this.#ctx.busy(true);
-          this.#busy = true;
+          this.#setBusy(true);
           return this.#session.prompt(prompt, { images: images as never });
         })
         .catch((error: unknown) => this.#refused(message.uuid, error));
       return;
     }
 
-    this.#ctx.busy(true);
-    this.#busy = true;
+    this.#setBusy(true);
     // A send into a running turn is steered in: pi delivers it once the turn
     // has run its tool calls, before the next model call — where Claude folds
     // one in. Without a behaviour, pi refuses a prompt while it streams.
@@ -477,8 +496,7 @@ class PiSession implements HarnessSession {
       this.#unread.splice(at, 1);
     }
     if (!this.#session.isStreaming) {
-      this.#busy = false;
-      this.#ctx.busy(false);
+      this.#setBusy(false);
     }
     this.#ctx.rejected(uuid, error);
   }
@@ -545,10 +563,12 @@ class PiSession implements HarnessSession {
     await this.#session.abort().catch(() => {});
     // biome-ignore lint/suspicious/noEmptyBlockStatements: stop() is tearing down regardless; waitForIdle's own failure is not actionable
     await this.#session.waitForIdle().catch(() => {});
+    openTurns.delete(this.#session.sessionId);
   }
 
   // biome-ignore lint/suspicious/useAwait: implements Harness.dispose's Promise<void> contract; this session's teardown is synchronous
   async dispose(): Promise<void> {
+    openTurns.delete(this.#session.sessionId);
     this.#session.dispose();
   }
 }
@@ -775,12 +795,7 @@ export class PiHarness implements Harness {
         });
       } else if (role === "assistant") {
         entries.push(
-          ...assistantEntries(
-            sessionKey,
-            entry,
-            message,
-            nextRole(index) === "assistant"
-          )
+          ...assistantEntries(sessionKey, entry, message, nextRole(index))
         );
       } else if (role === "toolResult") {
         const tool = message as { toolCallId?: string; isError?: boolean };
