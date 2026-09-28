@@ -197,6 +197,7 @@ export class SessiondServer {
       pid: proc.child.pid ?? -1,
       alive: proc.alive,
       ...(proc.exitCode === null ? {} : { exitCode: proc.exitCode }),
+      ...(proc.signal === null ? {} : { signal: proc.signal }),
       head: proc.ring.head,
       ...(proc.cwd === undefined ? {} : { cwd: proc.cwd }),
     }));

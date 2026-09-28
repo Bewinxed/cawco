@@ -99,6 +99,13 @@ export interface SessiondProcInfo {
   head: number;
   pid: number;
   procId: string;
+  /**
+   * The signal a dead child was killed by. With `exitCode` it is the whole of
+   * how it ended: a child killed by a signal has no exit code, and a reader
+   * that learns of the death from a listing (not a `proc.exit`) has nothing
+   * else to say it is over.
+   */
+  signal?: NodeJS.Signals;
 }
 
 /**

@@ -192,6 +192,11 @@ export interface SessiondWelcomeInfo {
 }
 
 interface ProcListener {
+  /**
+   * The child is gone. Both arguments `null` means sessiond reported it dead
+   * without saying how: a listing from a sessiond that predates the `signal`
+   * field describes a child killed by a signal exactly that way.
+   */
   exit?: (exitCode: number | null, signal: NodeJS.Signals | null) => void;
   line?: (event: SessiondLine) => void;
   /**
@@ -219,6 +224,8 @@ export class SessiondClient {
   /** Sent but not yet settled — re-sent once at reconnect under the same id (§8). */
   readonly #unacked = new Map<string, SessiondClientMessage>();
   readonly #listeners = new Map<string, ProcListener>();
+  /** Listeners already told their child is gone: a death reaches each once. */
+  readonly #toldExit = new WeakSet<ProcListener>();
   #closed = false;
   readonly onClose = new EventEmitter();
 
@@ -318,6 +325,16 @@ export class SessiondClient {
           capabilities: message.capabilities,
           procs: message.procs,
         };
+        // A child that died before its listener subscribed had its `proc.exit`
+        // broadcast to nobody, and sessiond answers a subscribe to a dead
+        // child with its backlog alone. The welcome {@link subscribe} asks for
+        // is where that death is learned.
+        for (const proc of message.procs) {
+          const listener = this.#listeners.get(proc.procId);
+          if (!proc.alive && listener) {
+            this.#exit(listener, proc.exitCode ?? null, proc.signal ?? null);
+          }
+        }
         this.#onWelcome(this.#welcome);
         return;
       }
@@ -340,14 +357,28 @@ export class SessiondClient {
           .get(message.procId)
           ?.reset?.(message.nextSeq, message.oldest);
         return;
-      case "proc.exit":
-        this.#listeners
-          .get(message.procId)
-          ?.exit?.(message.exitCode, message.signal);
+      case "proc.exit": {
+        const listener = this.#listeners.get(message.procId);
+        if (listener) {
+          this.#exit(listener, message.exitCode, message.signal);
+        }
         return;
+      }
       default:
         return;
     }
+  }
+
+  #exit(
+    listener: ProcListener,
+    exitCode: number | null,
+    signal: NodeJS.Signals | null
+  ): void {
+    if (this.#toldExit.has(listener)) {
+      return;
+    }
+    this.#toldExit.add(listener);
+    listener.exit?.(exitCode, signal);
   }
 
   #send(message: SessiondClientMessage): void {
@@ -436,6 +467,14 @@ export class SessiondClient {
    * Follow a child's stdout. `afterSeq` present is a resume from the ring;
    * absent follows from now. The listener sees backlog lines and live deltas
    * through the same callback, in seq order.
+   *
+   * A child that is already dead is reported to the listener as an exit. The
+   * `list` sent behind the subscribe is answered after it on the same ordered
+   * socket, so its welcome says whether the child was alive once the
+   * subscription stood; a death after that is broadcast to this listener as
+   * usual. Without it a subscriber that arrived late — an adoption between
+   * `list` and `subscribe`, a `Query` attaching after its custody let go —
+   * waited on a child that could never write or exit again.
    */
   subscribe(procId: string, listener: ProcListener, afterSeq?: number): void {
     this.#listeners.set(procId, listener);
@@ -444,6 +483,7 @@ export class SessiondClient {
       procId,
       ...(afterSeq === undefined ? {} : { afterSeq }),
     });
+    this.#send({ type: "list" });
   }
 
   unsubscribe(procId: string): void {
@@ -556,6 +596,21 @@ export const sessiondBridge = (
       exitCode = code;
       signalCode = sig;
       stdout.push(null);
+      // An `exit` with neither a code nor a signal is not one a process can
+      // emit, and the SDK reads it as still running: its `waitForExit` waits
+      // for another `exit` and never returns. A child whose end sessiond
+      // cannot describe is reported as what it is to this transport — a
+      // process that is not there — through `error`, which the SDK's
+      // `ProcessTransport` turns into the error its read ends with.
+      if (code === null && sig === null) {
+        events.emit(
+          "error",
+          new Error(
+            `[sessiond] ${procId}: the child had already exited; sessiond reported neither its exit code nor its signal`
+          )
+        );
+        return;
+      }
       events.emit("exit", code, sig);
     },
     // An overflowed ring is an honest refusal, not a silent splice: the SDK
