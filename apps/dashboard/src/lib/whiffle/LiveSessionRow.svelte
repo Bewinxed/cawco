@@ -26,6 +26,7 @@
 
 <script lang="ts">
   /** One live session, as the session index and a project home both list it. */
+  import { TextMorph } from "torph/svelte";
   import { Badge } from "$lib/components/ui/badge";
   import { formatDuration } from "$lib/utils/time";
   import ActivityDot from "./ActivityDot.svelte";
@@ -41,6 +42,7 @@
   import LiveSessionMenu from "./LiveSessionMenu.svelte";
   import { conversationHref, sessionTitle } from "./links";
   import { markHue, sessionSprite } from "./mark";
+  import { CURVE, crossIn, dur } from "./motion/curves.svelte";
   import TaskRing from "./TaskRing.svelte";
   import { taskProgress, tasksOf } from "./tasks.svelte";
   import { dragSession } from "./workspace/dnd.svelte";
@@ -130,6 +132,26 @@
     return instance.title ?? "untitled session";
   });
 
+  /** The figure beside the ring: the plan's count, else the time on this step. */
+  const figure = $derived(
+    progress ? `${progress.done}/${progress.total}` : (onStepFor ?? "")
+  );
+  const stepHint = $derived(
+    onStepFor
+      ? `Working — no task plan; ${onStepFor} on this step`
+      : "Working — no task plan"
+  );
+
+  /**
+   * TextMorph draws its text only in the browser, so the server draws the
+   * words as plain text and the morph takes over once the row is live (as
+   * the kit's pending label does).
+   */
+  let morphMs = $state(0);
+  $effect(() => {
+    morphMs = dur("--dur-morph");
+  });
+
   /** `title` on the row's link: sleeping and stale each explain themselves,
    *  and neither ever applies at once. */
   const rowHint = $derived.by(() => {
@@ -202,39 +224,41 @@
           ><bdi>{instance.cwd}</bdi></span
         >
       {/if}
-      <!-- How far its plan has got, at a glance and nothing more: the row is
-           already a link, and a control inside one is two targets sharing a
-           36px band. It takes the right cluster's `ml-auto` when it is here,
-           so the state word beside it keeps reading as one group. -->
-      {#if progress}
+      <!-- How far its plan has got, or, with no plan to measure while the
+           session runs, a turning arc and how long it has been on this step,
+           which is what is actually known. At a glance and nothing more: the
+           row is already a link, and a control inside one is two targets
+           sharing a 36px band. It takes the right cluster's `ml-auto` when it
+           is here, so the state word beside it keeps reading as one group.
+           One element for both, so the arc eases from turning to counted
+           (TaskRing) and the figure morphs, and it fades in and out as a
+           whole. -->
+      {#if progress || unmeasured}
         <span
           class="num ml-auto flex shrink-0 items-center gap-1.5 text-meta text-muted-foreground"
+          title={progress ? undefined : stepHint}
+          transition:crossIn
         >
           <span
             class="identity-ink flex items-center"
             style={identityVar(instance.cwd)}
           >
-            <TaskRing done={progress.done} size="sm" total={progress.total} />
+            <TaskRing
+              done={progress?.done}
+              indeterminate={!progress}
+              size="sm"
+              total={progress?.total}
+            />
           </span>
-          {progress.done}/{progress.total}
-        </span>
-      <!-- No plan to measure, but the session is running: a turning arc and how
-             long it has been on this step, which is what is actually known. -->
-      {:else if unmeasured}
-        <span
-          class="num ml-auto flex shrink-0 items-center gap-1.5 text-meta text-muted-foreground"
-          title={onStepFor
-            ? `Working — no task plan; ${onStepFor} on this step`
-            : 'Working — no task plan'}
-        >
-          <span
-            class="identity-ink flex items-center"
-            style={identityVar(instance.cwd)}
-          >
-            <TaskRing indeterminate size="sm" />
-          </span>
-          {#if onStepFor}
-            {onStepFor}
+          {#if morphMs}
+            <TextMorph
+              as="span"
+              duration={morphMs}
+              ease={CURVE.out}
+              text={figure}
+            />
+          {:else}
+            {figure}
           {/if}
         </span>
       {/if}
@@ -248,11 +272,25 @@
         <ActivityDot {activity} {failed} size={2.5} {sleeping} {stale} />
       </span>
     </span>
+    <!-- The tool it is running: the name morphs from one tool to the next,
+         and the line fades in and out as the session starts and stops one. -->
     {#if activity === 'working' && tool}
       <span
         class="flex max-w-3xl items-baseline gap-2 pl-8 text-label text-muted-foreground"
+        transition:crossIn
       >
-        <span class="shrink-0">{tool.name}</span>
+        <span class="shrink-0">
+          {#if morphMs}
+            <TextMorph
+              as="span"
+              duration={morphMs}
+              ease={CURVE.out}
+              text={tool.name}
+            />
+          {:else}
+            {tool.name}
+          {/if}
+        </span>
         <span class="truncate font-mono">{tool.glance}</span>
       </span>
     {/if}

@@ -108,7 +108,7 @@ export function buildJumpIndex(input: JumpIndexInput): JumpIndex {
       kind: "machine",
       label: machine.hostname,
       detail: `${machine.os} · start a session here`,
-      href: `/session?machine=${machine.machineId}`,
+      href: `/session?spawn=${machine.machineId}`,
       hay: "",
       labelLower: "",
       detailLower: "",
