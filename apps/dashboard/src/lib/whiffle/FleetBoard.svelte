@@ -535,16 +535,28 @@
   /** A page of headroom, so the next block is already there by the time the
    *  last row is read rather than arriving after a visible stop. */
   const HEADROOM = 400;
+  /** Whether the list is still filling the board after being built or reset:
+   *  true from a reset until its end first passes the board's bottom edge. */
+  let filling = true;
 
+  /* A page lands only below the reader, out of sight. Not running sits under
+     the table, so a page that lands while the table's end is on screen pushes
+     it (and the Show or Show all the pointer is on its way to) half a screen
+     down. A page that lands behind a reader who has scrolled past the table,
+     into Not running, is worse: the browser's scroll anchoring holds the
+     reader where they are by scrolling down the page's height, so the table's
+     end never leaves range and every page follows at once. That was the whole
+     catalogue in one eight-second task, the board frozen under the click.
+     The one exception is the fill: a list just built (or reset by a search
+     or a filter) pages while its end is still on screen, so the table the
+     board first draws reaches past the board. */
   $effect(() => {
     // `from` captures the count this observer was built against, which is what
     // makes it depend on `shown` and re-arm after every growth. An
     // IntersectionObserver reports CROSSINGS, not states, and only a frame
     // after it is built, so a sentinel already in range is paged here, in the
-    // same update: the table the board first draws, and the one each page
-    // leaves, already reaches past the board by the headroom, and no page
-    // lands under the foot just after it is painted. Each page re-runs this
-    // until the sentinel is out of range; from there the observer carries it.
+    // same update. Each page re-runs this until the sentinel is out of range;
+    // from there the observer carries it.
     const from = shown;
     // Not while the board is put away. It keeps its layout there
     // (`visibility: hidden`, so measurements survive), so the sentinel is
@@ -558,20 +570,27 @@
     };
     const room = boardEl.getBoundingClientRect();
     const mark = sentinelEl.getBoundingClientRect();
-    if (
-      mark.top <= room.bottom + HEADROOM &&
-      mark.bottom >= room.top - HEADROOM
-    ) {
+    const below = mark.top > room.bottom;
+    if (below) {
+      filling = false;
+    } else if (from === PAGE_SIZE) {
+      filling = true;
+    }
+    const inBand = below && mark.top <= room.bottom + HEADROOM;
+    const onScreen = mark.bottom >= room.top && !below;
+    if (inBand || (filling && onScreen)) {
       nextPage();
       return;
     }
+    // The band under the board's bottom edge and nothing else: the top is
+    // pulled down the board's full height, the bottom let out by the headroom.
     const io = new IntersectionObserver(
       (entries) => {
         if (entries.some((entry) => entry.isIntersecting)) {
           nextPage();
         }
       },
-      { root: boardEl, rootMargin: `${HEADROOM}px 0px` }
+      { root: boardEl, rootMargin: `-100% 0px ${HEADROOM}px 0px` }
     );
     io.observe(sentinelEl);
     return () => io.disconnect();
