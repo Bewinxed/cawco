@@ -2119,7 +2119,7 @@ export const createServer = ({
     if (signal.kind === "rejected") {
       const row = db.sendRecord(signal.uuid);
       if (row?.state === "pending" || row?.state === "read") {
-        failSend(row, signal.error);
+        rejectSend(row, signal.error);
       }
       return;
     }
@@ -2133,6 +2133,25 @@ export const createServer = ({
     if (signal.kind === "read") {
       takeRead(instanceId, signal.read);
     }
+  };
+
+  /**
+   * A send its harness refused, failed after what the session last said —
+   * which, when the hub has heard nothing of the session since it started,
+   * a transcript read tells first ({@link storedIn}).
+   */
+  const rejectSend = (row: SentMessageRow, reason: string): void => {
+    if (anchors.has(row.instanceId)) {
+      failSend(row, reason);
+      return;
+    }
+    // biome-ignore lint/complexity/noVoid: a frame handler must not wait on a machine round trip
+    void storedIn(row.instanceId).then(() => {
+      const now = db.sendRecord(row.uuid);
+      if (now?.state === "pending" || now?.state === "read") {
+        failSend(now, reason);
+      }
+    });
   };
 
   /**
