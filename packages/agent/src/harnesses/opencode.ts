@@ -4129,7 +4129,12 @@ export class OpencodeHarness implements Harness {
       }
     }
 
-    const entries = toTranscript(sessionKey, rows);
+    const knownModels = new Set(
+      modelCatalog(await connectedProviders(client, dir)).map(
+        (model) => model.value
+      )
+    );
+    const entries = toTranscript(sessionKey, rows, knownModels);
 
     // Subagents: children of this session, linked to their parent's task tool
     // call by the task ToolPart's `state.metadata.sessionId` (verified capture).
@@ -4169,7 +4174,8 @@ export class OpencodeHarness implements Harness {
       }
       const childEntries = toTranscript(
         child.id,
-        childRes.data as { info: Message; parts: Part[] }[]
+        childRes.data as { info: Message; parts: Part[] }[],
+        knownModels
       );
       for (const entry of childEntries) {
         entry.parent_tool_use_id = callID;
@@ -4351,9 +4357,16 @@ export class OpencodeHarness implements Harness {
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: replays every part kind opencode stores; not refactored in this pass
 export function toTranscript(
   sessionKey: string,
-  rows: { info: Message; parts: Part[] }[]
+  rows: { info: Message; parts: Part[] }[],
+  /** Every `provider/model` the connected providers offer. */
+  knownModels: ReadonlySet<string>
 ): SessionMessage[] {
   const entries: SessionMessage[] = [];
+  const answered = new Set(
+    rows.flatMap(({ info }) =>
+      info.role === "assistant" ? [info.parentID] : []
+    )
+  );
   for (const { info, parts } of rows) {
     // opencode records when each message was created (`time.created`, epoch
     // ms, on UserMessage and AssistantMessage in @opencode-ai/sdk
@@ -4378,6 +4391,32 @@ export function toTranscript(
           ...(sent ? { sourceUuid: sent } : {}),
           session_id: sessionKey,
           message: { role: "user", content },
+          parent_tool_use_id: null,
+          parent_agent_id: null,
+          timestamp,
+        });
+      }
+      // A prompt for a model no connected provider offers dies before opencode
+      // stores any reply, so nothing it keeps says why the question went
+      // unanswered. The stored message names the model it asked for; read
+      // back against the catalog, the reload draws the failure the live
+      // stream closed that turn with.
+      const asked = `${info.model.providerID}/${info.model.modelID}`;
+      if (!(answered.has(info.id) || knownModels.has(asked))) {
+        entries.push({
+          type: "system",
+          uuid: `${info.id}:error`,
+          session_id: sessionKey,
+          message: {
+            type: "result",
+            uuid: `${info.id}:error`,
+            session_id: sessionKey,
+            subtype: "error_during_execution",
+            is_error: true,
+            errors: [
+              `ProviderModelNotFoundError: Model not found: ${asked} — no connected provider offers it`,
+            ],
+          },
           parent_tool_use_id: null,
           parent_agent_id: null,
           timestamp,
