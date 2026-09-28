@@ -231,19 +231,29 @@ function notedTasks(messages: Message[]): Set<string> {
 }
 
 /**
- * Whether a "task done" line for `taskId` already stands before `index`. A
- * reload's history carries the stored notification as that line, and the live
- * stream can replay the frame it came from on top: one completion, one row.
- * Read over the whole array, so a fold that restarts at a cut still sees it.
+ * Whether `messages[index]` is a "task done" line another row already tells:
+ * a harness note about the same task, or an earlier line for it. A reload's
+ * history carries the stored notification as that line, and the live stream
+ * can replay the frame it came from on top: one completion, one row. Read
+ * over the whole array, so a fold that restarts at a cut still sees it.
  */
-const reportedBefore = (
+function repeatsTask(
   messages: Message[],
   index: number,
-  taskId: string
-): boolean =>
-  messages
-    .slice(0, index)
-    .some((m) => m.type === "system.task" && m.metadata?.taskId === taskId);
+  noted: Set<string>
+): boolean {
+  const m = messages[index];
+  const taskId = m.type === "system.task" ? m.metadata?.taskId : undefined;
+  if (!taskId) {
+    return false;
+  }
+  return (
+    noted.has(taskId) ||
+    messages
+      .slice(0, index)
+      .some((e) => e.type === "system.task" && e.metadata?.taskId === taskId)
+  );
+}
 
 /** The task id a harness note reports on, when the message is one and names one. */
 const notedTask = (m: Message): string | undefined =>
@@ -267,12 +277,7 @@ function foldRange(
   while (i < messages.length) {
     const m = messages[i];
 
-    if (
-      m.type === "system.task" &&
-      m.metadata?.taskId &&
-      (noted.has(m.metadata.taskId) ||
-        reportedBefore(messages, i, m.metadata.taskId))
-    ) {
+    if (repeatsTask(messages, i, noted)) {
       i += 1;
       continue;
     }
