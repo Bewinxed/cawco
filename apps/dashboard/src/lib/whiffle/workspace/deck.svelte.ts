@@ -23,6 +23,12 @@
  * the stylesheet's parking places take over again.
  */
 import { flushSync } from "svelte";
+import {
+  integrate,
+  spring as play,
+  type Sample,
+  sampleAt,
+} from "../motion/spring";
 import { type LeafNode, workspace } from "./workspace.svelte";
 
 /** Travel before the pair is taken to mean anything. */
@@ -41,25 +47,6 @@ const LOOKAHEAD = 0.1;
 const RESIST = 0.35;
 const RESIST_MAX = 0.25;
 /**
- * The settle, in Apple's terms: a perceptual duration and a bounce. No
- * bounce — a dashboard is crisp, and a card that wobbles into place keeps
- * moving after the reader has stopped. A flick can still carry it a hair
- * past and back, which is the finger's doing, not the spring's.
- */
-const SETTLE = 0.4;
-const BOUNCE = 0;
-const MASS = 1;
-const STIFFNESS = ((2 * Math.PI) / SETTLE) ** 2;
-const DAMPING = (4 * Math.PI * (1 - BOUNCE)) / SETTLE;
-/**
- * The settle is integrated at this step, in seconds, for at most this long,
- * and thinned to keyframes about this far apart, in ms. At 120Hz a step is
- * already a frame on the fastest phone, so the thinning mostly keeps all.
- */
-const STEP = 1 / 120;
-const MAX_SETTLE = 1.5;
-const KEYFRAME_MS = 8;
-/**
  * The last stretch of the spring, as a fraction of the height. Inside it and
  * slowing, the card sets down while it is still moving, so the scale-up and
  * the corners squaring off read as part of the landing, not a second event
@@ -70,12 +57,6 @@ const LAND = 0.06;
 const VELOCITY_WINDOW = 80;
 
 type Phase = "idle" | "armed" | "claimed";
-/** One point of the integrated settle: seconds since release, px, px/s. */
-interface Sample {
-  t: number;
-  v: number;
-  x: number;
-}
 /** A card in view: its element and its distance from the focus. */
 interface Card {
   delta: number;
@@ -176,38 +157,7 @@ export function createDeck(
     if (typeof at !== "number" || path.length === 0) {
       return null;
     }
-    const now = at / 1000;
-    const i = path.findIndex((sample) => sample.t >= now);
-    if (i < 0) {
-      // biome-ignore lint/style/useAtIndex: path is non-empty here (checked above); .at(-1) would widen the return to Sample | undefined
-      return path[path.length - 1];
-    }
-    if (i === 0) {
-      return path[0];
-    }
-    const a = path[i - 1];
-    const b = path[i];
-    const f = (now - a.t) / (b.t - a.t);
-    return { t: now, x: a.x + (b.x - a.x) * f, v: a.v + (b.v - a.v) * f };
-  };
-
-  /** The settle, integrated from here to rest. Always at least two points, the last exactly at rest. */
-  const integrate = (x0: number, v0: number): Sample[] => {
-    const out: Sample[] = [{ t: 0, x: x0, v: v0 }];
-    let x = x0;
-    let v = v0;
-    let t = 0;
-    for (;;) {
-      const a = (-STIFFNESS * x - DAMPING * v) / MASS;
-      v += a * STEP;
-      x += v * STEP;
-      t += STEP;
-      const done = (Math.abs(x) < 0.5 && Math.abs(v) < 20) || t >= MAX_SETTLE;
-      out.push(done ? { t, x: 0, v: 0 } : { t, x, v });
-      if (done) {
-        return out;
-      }
-    }
+    return sampleAt(path, at / 1000);
   };
 
   /** The neighbours of the focused group: above, itself, below. */
@@ -251,27 +201,14 @@ export function createDeck(
   function spring(velocity: number) {
     stopSettle();
     path = integrate(offset, velocity);
-    // biome-ignore lint/style/useAtIndex: integrate() always returns at least one point; .at(-1) would widen this to undefined
-    const duration = path[path.length - 1].t;
-
-    const kept: Sample[] = [path[0]];
-    for (let i = 1; i < path.length - 1; i += 1) {
-      // biome-ignore lint/style/useAtIndex: kept is never empty (seeded above); .at(-1) would widen to undefined
-      if ((path[i].t - kept[kept.length - 1].t) * 1000 >= KEYFRAME_MS) {
-        kept.push(path[i]);
-      }
-    }
-    // biome-ignore lint/style/useAtIndex: integrate() always returns at least one point; .at(-1) would widen to undefined, and push() needs a Sample
-    kept.push(path[path.length - 1]);
-
-    animations = cards.map(({ el, delta }) =>
-      el.animate(
-        kept.map((sample) => ({
-          transform: `translate3d(0, ${rest(delta) + sample.x}px, 0)`,
-          offset: sample.t / duration,
-        })),
-        { duration: duration * 1000, easing: "linear", fill: "forwards" }
-      )
+    animations = play(
+      path,
+      cards.map(({ el, delta }) => ({
+        el,
+        frame: (x) => ({
+          transform: `translate3d(0, ${rest(delta) + x}px, 0)`,
+        }),
+      }))
     );
     const focused = animations[cards.findIndex((card) => card.delta === 0)];
     if (!focused) {

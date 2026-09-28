@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { AuthState } from "@whiffle/core";
-  import { toast } from "svelte-sonner";
   import { Button } from "$lib/components/ui/button";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Dialog from "$lib/components/ui/dialog";
@@ -17,6 +16,7 @@
    */
   import { IconExternal, IconKey } from "$lib/icons";
   import { type Machine, machineControl } from "./client.svelte";
+  import { dur } from "./motion/curves.svelte";
 
   let {
     machine,
@@ -27,6 +27,17 @@
   let code = $state("");
   let busy = $state(false);
   let failed = $state<string | null>(null);
+  /** What the machine said once the login went through, shown in place. */
+  let result = $state<string | null>(null);
+  let closeTimer: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => () => clearTimeout(closeTimer));
+  // A close by the bound value runs no `onOpenChange`, so the last answer is
+  // dropped as the dialog opens again, before it is drawn.
+  $effect.pre(() => {
+    if (dialogOpen) {
+      result = null;
+    }
+  });
 
   const SAID: Record<string, string> = {
     authenticated: "is logged in",
@@ -89,8 +100,12 @@
         [code.trim()]
       );
       code = "";
-      dialogOpen = false;
-      toast.success(`${machine.hostname} ${SAID[state] ?? "is logged in"}.`);
+      // The button's check and the machine's answer stand for --dur-hold,
+      // then the dialog closes on its own.
+      result = `${machine.hostname} ${SAID[state] ?? "is logged in"}.`;
+      closeTimer = setTimeout(() => {
+        dialogOpen = false;
+      }, dur("--dur-hold"));
     } catch (error) {
       failed = error instanceof Error ? error.message : String(error);
     } finally {
@@ -104,9 +119,11 @@
     if (next) {
       return;
     }
+    clearTimeout(closeTimer);
     url = null;
     code = '';
     failed = null;
+    result = null;
   }}
   bind:open={dialogOpen}
 >
@@ -145,7 +162,7 @@
         aria-label="Authorisation code"
         autocomplete="off"
         class="font-mono"
-        disabled={busy || !url}
+        disabled={busy || !url || result !== null}
         placeholder="Paste the code from that page"
         spellcheck="false"
         bind:value={code}
@@ -153,6 +170,8 @@
 
       {#if failed}
         <p class="text-meta text-destructive">{failed}</p>
+      {:else if result}
+        <p class="text-meta text-muted-foreground" role="status">{result}</p>
       {/if}
 
       <div class="flex justify-end gap-[var(--space-2)]">
@@ -167,7 +186,7 @@
           Cancel
         </Button>
         <Button
-          disabled={!(code.trim() && url)}
+          disabled={!(code.trim() && url) && result === null}
           failed={failed !== null}
           label="Log in"
           pending={busy && url !== null}

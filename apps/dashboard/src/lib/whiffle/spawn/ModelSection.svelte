@@ -22,7 +22,7 @@
     providerOf,
     rememberModel,
   } from "../models.svelte";
-  import { motionOk } from "../motion/curves.svelte";
+  import { crossIn, crossOut, motionOk } from "../motion/curves.svelte";
   import {
     deriveModelEntries,
     groupModelEntries,
@@ -402,12 +402,16 @@
             {/each}
           </div>
         {/if}
+        <!-- One slot for the custom row and the empty line, ahead of the rows:
+             the one leaving keeps its place while the other fades in. -->
         {#if showCustomRow}
           <button
-            class="row custom ns-in"
+            class="row custom"
             data-fh="1"
             onclick={pickCustom}
             type="button"
+            in:crossIn
+            out:crossOut
           >
             <span class="ns-tile tile ink"><Code /></span>
             <span class="text">
@@ -416,6 +420,14 @@
             </span>
             <span class="hint">↵ Enter</span>
           </button>
+        {:else if noResults}
+          <div class="none" in:crossIn out:crossOut>
+            {#if q}
+              No {harnessName(listHarness)} models match "{query}"
+            {:else}
+              No {harnessName(listHarness)} models reported yet
+            {/if}
+          </div>
         {/if}
         {#each rows as entry, i (`${gen}:${entry.id}`)}
           {@const reason = unavailable?.(entry)}
@@ -435,15 +447,6 @@
             {@render rowBody(entry, reason)}
           </button>
         {/each}
-        {#if noResults}
-          <div class="none ns-in">
-            {#if q}
-              No {harnessName(listHarness)} models match "{query}"
-            {:else}
-              No {harnessName(listHarness)} models reported yet
-            {/if}
-          </div>
-        {/if}
       </div>
     </div>
   </div>

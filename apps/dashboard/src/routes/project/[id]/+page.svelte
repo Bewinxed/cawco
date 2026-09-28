@@ -43,9 +43,8 @@
     crossOut,
     dur,
     ease,
-    motionOk,
   } from "$lib/whiffle/motion/curves.svelte";
-  import { fold, unfold } from "$lib/whiffle/motion/fold.svelte";
+  import { fold } from "$lib/whiffle/motion/fold.svelte";
   import { route } from "$lib/whiffle/motion/route.svelte";
   import { reflow } from "$lib/whiffle/motion/rows.svelte";
   import { handOver, land } from "$lib/whiffle/motion/share.svelte";
@@ -416,24 +415,12 @@
   /** Indices for skeleton rows: `{#each}` wants something to walk. */
   const count = (n: number) => Array.from({ length: n }, (_, i) => i);
   const SESSION_SKELETON = 8;
-
-  /**
-   * The rows "Show more" adds open with the fold that carries them and fade
-   * in one after another, 20ms apart and never more than 120ms behind.
-   */
-  function stagger(node: HTMLElement) {
-    if (!motionOk.current) {
-      return;
-    }
-    for (const [i, row] of [...node.children].entries()) {
-      row.animate([{ opacity: 0 }, { opacity: 1 }], {
-        duration: dur("--dur-control"),
-        delay: Math.min(i * 20, 120),
-        easing: ease("--ease-out"),
-        fill: "backwards",
-      });
-    }
-  }
+  /** Stored sessions shown before "Show more". */
+  const STORED_FIRST = 8;
+  /** The rows "Show more" adds open in place through the list's reflow. */
+  const storedShown = $derived(
+    showMore ? stored : stored.slice(0, STORED_FIRST)
+  );
 
   function startSession(scratch: boolean) {
     if (!project) {
@@ -969,7 +956,7 @@
                 {/each}
                 {#if storedRead}
                   <div class="flex flex-col gap-1.5" in:crossIn>
-                    {#each stored.slice(0, 8) as info (info.sessionId)}
+                    {#each storedShown as info (info.sessionId)}
                       <div data-flip>
                         <StoredSessionRow
                           groupCwd={project.cwd}
@@ -988,21 +975,7 @@
                       {/if}
                     {/each}
                   </div>
-                  {#if showMore}
-                    <div
-                      class="flex flex-col gap-1.5"
-                      in:unfold
-                      {@attach stagger}
-                    >
-                      {#each stored.slice(8) as info (info.sessionId)}
-                        <StoredSessionRow
-                          groupCwd={project.cwd}
-                          {info}
-                          machineId={project.machineId}
-                        />
-                      {/each}
-                    </div>
-                  {:else if stored.length > 8}
+                  {#if !showMore && stored.length > STORED_FIRST}
                     <Button
                       class="self-start text-muted-foreground"
                       onclick={() => {
@@ -1011,7 +984,7 @@
                       size="sm"
                       variant="ghost"
                     >
-                      Show {stored.length - 8} more
+                      Show {stored.length - STORED_FIRST} more
                     </Button>
                   {/if}
                 {:else}

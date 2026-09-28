@@ -1404,6 +1404,14 @@
   }
 }
 
+/* A row held for its menu (utils/longpress) is drawn pressed for the hold. */
+@layer utilities {
+  [data-holding] {
+    transform: scale(var(--press-scale));
+    transition: transform 160ms var(--ease-out);
+  }
+}
+
 /* The one focus indicator: a solid outline, for elements that also set
    `outline-none` for mouse focus. */
 @utility focus-ring {
