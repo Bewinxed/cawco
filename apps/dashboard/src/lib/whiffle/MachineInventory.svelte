@@ -36,13 +36,6 @@
     onskill?: (row: FleetSkillMeta) => void;
   } = $props();
 
-  const online = $derived(
-    machines.filter((machine) => machine.status === "online")
-  );
-  const asleep = $derived(
-    machines.filter((machine) => machine.status !== "online")
-  );
-
   let open = $state<Record<string, boolean>>({});
   let found = $state<Record<string, ConfigInspection>>({});
   let reading = $state<Record<string, boolean>>({});
@@ -119,17 +112,21 @@
     stored. Anything the fleet does not manage can be adopted into it.
   </p>
 
-  {#if online.length === 0}
-    <p class="note">No machine is online to ask.</p>
+  <!-- Each machine keeps its row whether it is up or not: a machine that
+       drops for a moment says "Offline" in the same place, so nothing under
+       the list moves. It opens only while it is up; open, it can still close. -->
+  {#if machines.length === 0}
+    <p class="note">No machine is registered to ask.</p>
   {:else}
     <ul class="machines">
-      {#each online as machine (machine.machineId)}
+      {#each machines as machine (machine.machineId)}
         {@const inspection = found[machine.machineId]}
         {@const rows = kind === 'mcp' ? (inspection?.mcp ?? []) : (inspection?.skills ?? [])}
         <li class="machine">
           <button
             aria-expanded={open[machine.machineId] === true}
             class="head focus-ring pressable"
+            disabled={machine.status !== 'online' && !open[machine.machineId]}
             onclick={() => expand(machine)}
             type="button"
           >
@@ -140,9 +137,15 @@
             {/if}
             <OsMark class="size-4 shrink-0" os={machine.os} />
             <span class="host">{machineLabel(machine.hostname)}</span>
-            <span class="note"
-              >{open[machine.machineId] ? 'Hide' : 'Show what it has'}</span
-            >
+            <span class="note">
+              {#if open[machine.machineId]}
+                Hide
+              {:else if machine.status === 'online'}
+                Show what it has
+              {:else}
+                Offline
+              {/if}
+            </span>
           </button>
           {#if open[machine.machineId]}
             {#if reading[machine.machineId]}
@@ -202,14 +205,6 @@
       {/each}
     </ul>
   {/if}
-
-  {#if asleep.length > 0}
-    <p class="note">
-      {asleep.map((machine) => machineLabel(machine.hostname)).join(', ')}
-      {asleep.length === 1 ? 'is' : 'are'}
-      offline — only a machine that is up can say what it has.
-    </p>
-  {/if}
 </div>
 
 <style>
@@ -257,7 +252,7 @@
     text-align: left;
     transition: var(--transition-control);
   }
-  .head:hover {
+  .head:hover:not(:disabled) {
     background: var(--surface-hover);
   }
   .head :global(svg) {
