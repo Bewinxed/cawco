@@ -658,6 +658,15 @@
   }
 
   /**
+   * A leaving row's report, bound to its key when `Row` reads it — as its
+   * fold starts. The list item behind a row is a live view of an index, and
+   * by the time a fold finishes the tail can have changed under it (a queued
+   * message read mid-turn leaves as its turn lands above), so reading the key
+   * then read past the end of the list and the row never left.
+   */
+  const leaver = (key: string) => () => left(key);
+
+  /**
    * How many rows the SERVER paints — and nothing the browser ever hears about.
    *
    * `ssrCount` is virtua's server-render escape hatch: without it the store has
@@ -1772,7 +1781,7 @@
           id={row.kind === 'tools' ? undefined : row.key}
           leaving={presentation.leaving.has(row.key)}
           motion={motionOf(row)}
-          onleft={() => left(row.key)}
+          onleft={leaver(row.key)}
         >
           {#snippet children(ticket)}
             {#if row.kind === 'single'}
