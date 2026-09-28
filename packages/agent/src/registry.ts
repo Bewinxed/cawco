@@ -19,7 +19,7 @@
  */
 import type { UpdateReport } from "@whiffle/core";
 import { readEnv, WHIFFLE_ENV } from "@whiffle/core";
-import { restartStack, run } from "./update";
+import { restartStack, run, SERVICES } from "./update";
 
 /**
  * What a user installs. One package, so a fleet has one version to compare.
@@ -165,6 +165,8 @@ export const registryUpdate = async ({
     // Nothing is built on the machine any more: the release built it once.
     built: false,
     restarted: [],
+    // A release replaces every service's code at once.
+    changed: SERVICES,
   };
   return restartStack(report, { restartAgent, force, busy }, [
     "the dashboard ships built, so nothing was compiled here",

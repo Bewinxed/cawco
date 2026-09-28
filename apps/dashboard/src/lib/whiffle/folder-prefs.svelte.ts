@@ -1,8 +1,9 @@
 /**
  * What the reader has said about a directory, over what the app inferred:
- * whether the rail draws it as a folder and which hue it wears. Both are the
- * same kind of claim — "this directory, to me, is this" — so they live in one
- * document under one key rather than two.
+ * whether the rail draws it as a folder, whether that folder is shut, and
+ * which hue it wears. All the same kind of claim — "this directory, to me, is
+ * this" — so they live in one document under one key. A folder shut in the
+ * rail stays shut across reloads because the answer is kept here.
  *
  * Keyed by cwd, the one name a directory cannot be renamed out of, which is
  * also what `identity.ts` hashes: an override and the default it replaces are
@@ -15,6 +16,8 @@ import { readJson, writeJson } from "./storage";
 export type Grouping = "grouped" | "ungrouped";
 
 export interface FolderPref {
+  /** The rail's folder for this directory is shut. */
+  collapsed?: true;
   grouping?: Grouping;
   /** A hue chosen by hand; without one, the cwd's hash chooses. */
   hue?: number;
@@ -55,6 +58,11 @@ function edit(cwd: string, patch: FolderPref): void {
 }
 
 export const folderPrefs = {
+  /** The reader shut this directory's folder in the rail. */
+  collapsed: (cwd: string): boolean => prefs[cwd]?.collapsed === true,
+  setCollapsed(cwd: string, collapsed: boolean): void {
+    edit(cwd, { collapsed: collapsed ? true : undefined });
+  },
   /** What the reader said about grouping, if they said anything. */
   grouping: (cwd: string): Grouping | undefined => prefs[cwd]?.grouping,
   setGrouping(cwd: string, grouping: Grouping | undefined): void {

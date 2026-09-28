@@ -17,9 +17,13 @@
   import { Dialog as DialogPrimitive } from "bits-ui";
   import { tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
-  import { Drawer } from "vaul-svelte";
   import { goto } from "$app/navigation";
   import { Dialog, DialogPortal, DialogTitle } from "$lib/components/ui/dialog";
+  import {
+    Drawer,
+    DrawerContent,
+    DrawerTitle,
+  } from "$lib/components/ui/drawer";
   import { machineHue, machineIcon } from "$lib/components/ui/machine-row";
   import { SectionHeader } from "$lib/components/ui/section-header";
   import { IconClose as X } from "$lib/icons";
@@ -39,6 +43,7 @@
   import { type FleetSnapshot, inspectMachine } from "../fleet";
   import { conversationHref } from "../links";
   import { loadModelWindows, models } from "../models.svelte";
+  import { unfold } from "../motion/fold.svelte";
   import { handOver } from "../motion/share.svelte";
   import { PERMISSION_MODES } from "../permission-modes";
   import { rememberSpawn, spawnPrefs } from "../spawnPrefs.svelte";
@@ -82,129 +87,6 @@
   let card = $state<HTMLElement | null>(null);
   let editor = $state<HTMLDivElement>();
   const mobile = new MediaQuery("(max-width: 640px)");
-  $effect(() => {
-    // Keep the viewport geometry until the closing sheet has left the DOM.
-    if (!(card && mobile.current)) {
-      return;
-    }
-    const viewport = window.visualViewport;
-    const root = document.documentElement.style;
-    let viewportFrame = 0;
-    let settleTimer: ReturnType<typeof setTimeout>;
-    let blurredField = false;
-    let height = 0;
-    const textEntry =
-      "input:not([type=range]), textarea, [contenteditable=true]";
-    const writeHeight = (next: number) => {
-      if (height !== next) {
-        height = next;
-        root.setProperty("--ns-viewport-height", `${height}px`);
-      }
-    };
-    const focusedRect = (active: HTMLElement) => {
-      const field = active.getBoundingClientRect();
-      const selection = window.getSelection();
-      if (
-        !(
-          active.isContentEditable &&
-          selection?.rangeCount &&
-          active.contains(selection.focusNode)
-        )
-      ) {
-        return field;
-      }
-      const range = selection.getRangeAt(0).cloneRange();
-      range.setStart(selection.focusNode as Node, selection.focusOffset);
-      range.collapse(true);
-      const caret = range.getBoundingClientRect();
-      if (!caret.height) {
-        return field;
-      }
-      if (caret.bottom > field.bottom) {
-        active.scrollTop += Math.ceil(caret.bottom - field.bottom);
-      } else if (caret.top < field.top) {
-        active.scrollTop += Math.floor(caret.top - field.top);
-      }
-      return range.getBoundingClientRect();
-    };
-    const settled = () => {
-      clearTimeout(settleTimer);
-      // Let WebKit finish its keyboard animation and native caret scrolling.
-      settleTimer = setTimeout(() => {
-        if (!open || (viewport && viewport.scale > 1)) {
-          return;
-        }
-        const active = document.activeElement;
-        if (blurredField && !active?.matches(textEntry)) {
-          cancelAnimationFrame(viewportFrame);
-          viewportFrame = requestAnimationFrame(() => {
-            writeHeight(document.documentElement.clientHeight);
-          });
-        }
-        blurredField = false;
-        const body = active?.closest<HTMLElement>(".session-card .body");
-        if (
-          !(body && active instanceof HTMLElement && active.matches(textEntry))
-        ) {
-          return;
-        }
-        const field = focusedRect(active);
-        const visible = body.getBoundingClientRect();
-        if (field.bottom > visible.bottom) {
-          body.scrollTop += Math.ceil(field.bottom - visible.bottom);
-        } else if (field.top < visible.top) {
-          body.scrollTop += Math.floor(field.top - visible.top);
-        }
-      }, 120);
-    };
-    const measure = () => {
-      cancelAnimationFrame(viewportFrame);
-      viewportFrame = requestAnimationFrame(() => {
-        if (!open || (viewport && viewport.scale > 1)) {
-          return;
-        }
-        writeHeight(
-          viewport ? viewport.height * viewport.scale : window.innerHeight
-        );
-      });
-      settled();
-    };
-    const measurePage = () => {
-      const page = document.scrollingElement ?? document.documentElement;
-      root.setProperty("--ns-page-height", `${page.scrollHeight}px`);
-      root.setProperty("--ns-page-width", `${page.scrollWidth}px`);
-      measure();
-    };
-    const blurred = (event: FocusEvent) => {
-      if (
-        !(
-          event.target instanceof HTMLElement && event.target.matches(textEntry)
-        )
-      ) {
-        return;
-      }
-      blurredField = true;
-      settled();
-    };
-    measurePage();
-    viewport?.addEventListener("resize", measure);
-    viewport?.addEventListener("scroll", settled);
-    window.addEventListener("resize", measurePage);
-    window.addEventListener("blur", blurred, true);
-    window.addEventListener("focusin", settled);
-    return () => {
-      viewport?.removeEventListener("resize", measure);
-      viewport?.removeEventListener("scroll", settled);
-      window.removeEventListener("resize", measurePage);
-      window.removeEventListener("blur", blurred, true);
-      window.removeEventListener("focusin", settled);
-      clearTimeout(settleTimer);
-      cancelAnimationFrame(viewportFrame);
-      root.removeProperty("--ns-viewport-height");
-      root.removeProperty("--ns-page-height");
-      root.removeProperty("--ns-page-width");
-    };
-  });
   let opener: HTMLElement | null = null;
   let submission = 0;
   let prompt = $state("");
@@ -1045,31 +927,24 @@
 
 <svelte:window onkeydown={keydown} />
 {#if mobile.current}
-  <Drawer.Root
+  <Drawer
     noBodyStyles
     onOpenChange={(value) => { if (!value) { close(); } }}
     {open}
-    repositionInputs={false}
     shouldScaleBackground={false}
   >
-    <Drawer.Portal>
-      <div class="session-viewport">
-        <Drawer.Overlay class="session-scrim ns-theme" />
-        <Drawer.Content
-          aria-label="New Session"
-          class="session-card ns-theme"
-          data-ns-dialog
-          onCloseAutoFocus={(event) => { event.preventDefault(); opener?.focus({ preventScroll: true }); }}
-          onOpenAutoFocus={(event) => { event.preventDefault(); card?.focus({ preventScroll: true }); }}
-          bind:ref={card}
-        >
-          <Drawer.Title class="sr-only">New session</Drawer.Title>
-          <Drawer.Handle class="session-handle" preventCycle />
-          {@render formContent()}
-        </Drawer.Content>
-      </div>
-    </Drawer.Portal>
-  </Drawer.Root>
+    <DrawerContent
+      aria-label="New Session"
+      class="session-card ns-theme"
+      data-ns-dialog
+      onCloseAutoFocus={(event) => { event.preventDefault(); opener?.focus({ preventScroll: true }); }}
+      onOpenAutoFocus={(event) => { event.preventDefault(); card?.focus({ preventScroll: true }); }}
+      bind:ref={card}
+    >
+      <DrawerTitle class="sr-only">New session</DrawerTitle>
+      {@render formContent()}
+    </DrawerContent>
+  </Drawer>
 {:else}
   <Dialog onOpenChange={(value) => { if (!value) { close(); } }} {open}>
     <DialogPortal>
@@ -1193,7 +1068,7 @@
     <div class="fai-comb comb-gap"></div>
     <div class="stack">
       {#if continueFrom}
-        <p aria-live="polite" class="sizing">
+        <p aria-live="polite" class="sizing" in:unfold|global out:unfold>
           {estimate
             ? `Current context ${tokens(estimate.liveContextTokens)} → ${tokens(estimate.summariseInputTokens)} to summarise`
             : "Reading the session's context…"}
@@ -1283,13 +1158,13 @@
     animation: ns-panel var(--dur-panel) var(--ease-out) both;
   }
   :global(.session-card:not([data-vaul-drawer])[data-state="closed"]) {
-    animation: ns-panel-out var(--dur-panel) var(--ease-out) both;
+    animation: ns-panel-out var(--dur-exit) var(--ease-out) both;
   }
   :global(.session-scrim:not([data-vaul-overlay])[data-state="open"]) {
     animation: ns-scrim var(--dur-panel) var(--ease-out) both;
   }
   :global(.session-scrim:not([data-vaul-overlay])[data-state="closed"]) {
-    animation: ns-scrim-out var(--dur-panel) var(--ease-out) both;
+    animation: ns-scrim-out var(--dur-exit) var(--ease-out) both;
   }
   .head {
     display: flex;
@@ -1440,51 +1315,20 @@
     }
   }
   @media (max-width: 640px) {
-    /* Page-sized containment keeps the sheet clear of iOS fixed-overlay clipping. */
-    .session-viewport:has(:global(.session-card)) {
-      display: block;
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: var(--ns-page-width, 100%);
-      height: var(--ns-page-height, 100%);
-      isolation: isolate;
-      z-index: 80;
-      overflow: clip;
-    }
-    :global(.session-scrim) {
-      position: absolute;
-    }
+    /* The kit drawer (vaul) carries the sheet: it rises from the bottom,
+       follows the finger from the header down and lets go past vaul's
+       distance or flick thresholds. */
     :global(.session-card[data-vaul-drawer]) {
-      position: sticky;
-      inset: 0 0 auto;
+      inset: auto 0 0;
       margin: 0;
       width: 100%;
-      height: var(--ns-viewport-height, 100dvh);
-      max-height: var(--ns-viewport-height, 100dvh);
-      border-radius: 0;
-      padding: max(env(safe-area-inset-top), 7px) 7px
-        max(env(safe-area-inset-bottom), 7px);
-      touch-action: pan-y;
+      height: auto;
+      max-height: calc(100dvh - max(env(safe-area-inset-top), 24px));
+      border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+      padding: 0 7px max(env(safe-area-inset-bottom), 7px);
     }
-    :global(.session-card[data-vaul-drawer])::after {
+    :global(.session-card[data-vaul-drawer])::before {
       display: none;
-    }
-    :global(.session-card[data-vaul-drawer][data-state="closed"]),
-    :global(.session-scrim[data-vaul-overlay][data-state="closed"]) {
-      animation-fill-mode: forwards;
-    }
-    :global(.session-handle[data-vaul-handle]) {
-      flex: none;
-      margin: 4px auto 10px;
-      background: var(--neutral-8);
-      border-radius: var(--radius-pill);
-      touch-action: none;
-    }
-    /* Keep the expanded drag area inside the full-height sheet's top edge. */
-    :global(.session-handle [data-vaul-handle-hitarea]) {
-      top: -11px;
-      transform: translateX(-50%);
     }
     .head {
       touch-action: none;

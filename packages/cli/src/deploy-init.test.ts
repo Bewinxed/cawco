@@ -157,7 +157,11 @@ describe("the clone it builds (G1)", () => {
     expect(
       shape.some((line) => line.startsWith("git clone --branch main"))
     ).toBe(true);
-    const install = shape.findIndex((line) => line.endsWith(" install"));
+    // Frozen, as the deploy's own install is (f2e1706a): a clone whose lockfile
+    // disagrees with its manifests must fail here, not rewrite bun.lock.
+    const install = shape.findIndex((line) =>
+      line.endsWith(" install --frozen-lockfile")
+    );
     const build = shape.findIndex((line) =>
       line.includes("--filter @whiffle/dashboard")
     );

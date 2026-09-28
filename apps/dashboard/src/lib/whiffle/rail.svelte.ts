@@ -10,12 +10,6 @@ import type { Machine } from "./client.svelte";
 export const RAIL_LAYOUT_KEY = "whiffle-rail-layout";
 
 /**
- * What a pin points at. A side quest is a session that says it is one (NEW.md
- * §1), so keeping one never invalidates the pin that was put on it.
- */
-export type PinKind = "machine" | "project" | "session" | "stored";
-
-/**
  * How the rail orders the sessions inside a project and in its flat lists.
  * `recent` is the default because the question a rail is opened to answer is
  * "where was I", and only a timestamp answers that; `name` is for the reader
@@ -26,9 +20,10 @@ export type RailSort = "recent" | "name" | "state";
 
 const SORTS: readonly string[] = ["recent", "name", "state"];
 
-export interface Pin {
+/** A project the reader pinned: it sorts to the top of the rail's Projects. */
+interface Pin {
   id: string;
-  kind: PinKind;
+  kind: "project";
 }
 
 interface RailLayout {
@@ -42,16 +37,14 @@ interface RailLayout {
   delegates: boolean;
   /** Machine ids in the reader's order; anything not named here sorts after. */
   machines: string[];
-  /** The order the Pinned group is drawn in — first pinned, first shown. */
+  /** Pinned projects, which Projects lists first. */
   pins: Pin[];
   /** How session lists are ordered. See {@link RailSort}. */
   sort: RailSort;
 }
 
-const KINDS: readonly string[] = ["machine", "project", "session", "stored"];
-
 const isPin = (value: Pin | undefined): value is Pin =>
-  typeof value?.id === "string" && KINDS.includes(value.kind);
+  typeof value?.id === "string" && value.kind === "project";
 
 function read(): RailLayout {
   if (!browser) {
@@ -81,9 +74,6 @@ const save = () =>
   localStorage.setItem(RAIL_LAYOUT_KEY, JSON.stringify(layout));
 
 export const rail = {
-  get pins(): Pin[] {
-    return layout.pins;
-  },
   get machineOrder(): string[] {
     return layout.machines;
   },
@@ -101,21 +91,15 @@ export const rail = {
     layout.delegates = show;
     save();
   },
-  isPinned: (kind: PinKind, id: string): boolean =>
-    layout.pins.some((pin) => pin.kind === kind && pin.id === id),
-  togglePin(kind: PinKind, id: string): void {
-    const at = layout.pins.findIndex(
-      (pin) => pin.kind === kind && pin.id === id
-    );
+  isPinned: (projectId: string): boolean =>
+    layout.pins.some((pin) => pin.id === projectId),
+  togglePin(projectId: string): void {
+    const at = layout.pins.findIndex((pin) => pin.id === projectId);
     if (at === -1) {
-      layout.pins.push({ kind, id });
+      layout.pins.push({ kind: "project", id: projectId });
     } else {
       layout.pins.splice(at, 1);
     }
-    save();
-  },
-  setPins(pins: Pin[]): void {
-    layout.pins = pins;
     save();
   },
   setMachineOrder(machines: string[]): void {
@@ -127,10 +111,6 @@ export const rail = {
 /**
  * Machines in the reader's order. A peer that showed up after they last said
  * sorts behind the ones they placed, by hostname among themselves.
- *
- * A pin nobody can resolve any more — a discarded quest, a deleted transcript —
- * is skipped where it is drawn rather than pruned here: on a cold load the rail
- * is empty until the hub answers, and pruning then would throw away every pin.
  */
 export function orderMachines(machines: Machine[]): Machine[] {
   const placed = new Map(layout.machines.map((id, index) => [id, index]));

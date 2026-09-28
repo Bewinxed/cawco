@@ -196,10 +196,12 @@
 </li>
 
 <style>
+  /* Both sides stand at least one pill tall and hang from the top, so a
+     badge that comes, goes or wraps never re-centres the machine's name. */
   .row {
     display: flex;
     flex-wrap: wrap;
-    align-items: center;
+    align-items: flex-start;
     gap: var(--space-3);
     border-top: 1px solid var(--border-hairline);
     padding: var(--space-3) var(--space-4);
@@ -210,6 +212,7 @@
   .who {
     display: flex;
     min-width: 0;
+    min-height: 24px;
     flex: 0 0 auto;
     align-items: center;
     gap: var(--space-2);
@@ -244,6 +247,7 @@
   .badges {
     display: flex;
     min-width: 0;
+    min-height: 24px;
     flex: 1 1 auto;
     flex-wrap: wrap;
     align-items: center;

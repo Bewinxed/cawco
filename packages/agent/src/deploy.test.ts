@@ -165,6 +165,7 @@ describe("the marker is the guard (G2)", () => {
       // biome-ignore lint/suspicious/useAwait: update's type requires a promise; this stub just records the call
       update: async (state) => {
         runs.push(state);
+        return { changed: [] };
       },
       report: () => {
         // no-op: this test doesn't assert on report
@@ -189,6 +190,7 @@ describe("a marked clone that falls behind (G2)", () => {
         // here with the same `--ff-only` argv the real flow uses, against the
         // scratch origin and nothing else.
         await sh(state.root, "git", ...pullArgs("main"));
+        return { changed: [] };
       },
       report: () => {
         // no-op: this test doesn't assert on report
@@ -303,6 +305,7 @@ describe("a diverged clone refuses loudly (G3)", () => {
       // biome-ignore lint/suspicious/useAwait: update's type requires a promise; this stub just records the call
       update: async (state) => {
         runs.push(state);
+        return { changed: [] };
       },
       report: (t) => reported.push(t.state),
     });
