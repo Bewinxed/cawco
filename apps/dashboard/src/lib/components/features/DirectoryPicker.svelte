@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { FsEntry, SDKSessionInfo } from "@whiffle/core";
+  import type { FsEntry, NeutralSessionInfo } from "@whiffle/core";
   import { Button } from "$lib/components/ui/button";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for importing a component group
   import * as Collapsible from "$lib/components/ui/collapsible";
@@ -74,7 +74,7 @@
     }
     const recent = whiffle
       .catalogOf(machineId)
-      .reduce<SDKSessionInfo | null>(
+      .reduce<NeutralSessionInfo | null>(
         (best, info) =>
           info.cwd && (!best || info.lastModified > best.lastModified)
             ? info

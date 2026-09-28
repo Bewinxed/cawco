@@ -1,4 +1,4 @@
-import type { InstanceRow, SDKSessionInfo } from "@whiffle/core";
+import type { InstanceRow, NeutralSessionInfo } from "@whiffle/core";
 import { conversationHref, indexInstances, sessionTitle } from "./links";
 
 /** Which of the four groups a row belongs to — decides its icon and its cap. */
@@ -50,7 +50,7 @@ export interface JumpIndexInput {
   stored: ReadonlyArray<{
     machineId: string;
     hostname: string;
-    catalog: SDKSessionInfo[];
+    catalog: NeutralSessionInfo[];
   }>;
 }
 

@@ -57,11 +57,12 @@
    * sub-attention until there is something worth noticing.
    *
    *    0ms   ghost is on screen: presence 0.7, Who reads "sending…", no clock
-   *  tACK    the command leaves `submitted` (well under a second, on a live hub)
+   *  tACK    the hub's frame for it arrives (well under a second, on a live hub)
    *  +0ms    presence 0.7 → 1.0 over --dur-menu; Who's note slot swaps to
-   *          the real clock — same slot Queued.svelte already uses, so
-   *          settling moves nothing. No translation, no scale: arrival is
-   *          subtraction.
+   *          the real clock, so settling moves nothing. No translation, no
+   *          scale: arrival is subtraction. Sent into a running turn, it
+   *          reads "queued" at 0.7 instead, after the live tail, until the
+   *          session reads it and it moves into its place.
    *
    * fail (from the same ghost, instead of settling):
    *    0ms   presence 0.7 → 1.0 — the words matter MORE on failure, not less
@@ -74,26 +75,23 @@
    */
 
   /**
-   * The command this turn went out as, read straight off the ledger — the
-   * same pattern Prompt.svelte uses for its own card's answer. No record (a
-   * historical message, a swept one, or one from before this tab existed)
-   * renders solid: absence of evidence is a solid message, never a ghost.
+   * The command this turn went out as, when this tab sent it: a sent message
+   * is keyed by its command's id. What the ledger adds is why it failed and
+   * whether it may have been delivered anyway.
    */
   const record = $derived(
-    kind === "user" && message.metadata?.sentAs
-      ? commandRecord(message.metadata.sentAs)
-      : null
+    kind === "user" && message.id ? commandRecord(message.id) : null
   );
-  const ghost = $derived(record?.stage === "submitted");
+  /** Drawn by this tab, not yet taken by the hub. */
+  const ghost = $derived(message.state === "sending");
   /**
-   * `sendFailed` outlives the record's own five-minute sweep (see its doc in
-   * types.ts), so a message that failed does not quietly fade back to solid
-   * once the ledger has forgotten it — the stamp is read even after `record`
-   * itself goes back to `null`.
+   * Sent into a running turn and not read yet: the reader's own turn at
+   * reduced presence, with no clock — it has not been said in the
+   * conversation yet, and a time here would be a promise about the wrong
+   * moment.
    */
-  const failed = $derived(
-    record?.stage === "failed" || !!message.metadata?.sendFailed
-  );
+  const waiting = $derived(!!message.queued);
+  const failed = $derived(message.state === "failed");
   const reason = $derived(message.metadata?.sendFailed ?? record?.reason);
 
   /**
@@ -110,9 +108,7 @@
    * stays either way — the failure is still the truth, it is only the offer to
    * undo it that has expired.
    */
-  const recoverable = $derived(
-    !!message.metadata?.sentAs && canResend(message.metadata.sentAs)
-  );
+  const recoverable = $derived(!!message.id && canResend(message.id));
 
   /**
    * Whether re-sending is provably safe. A refused or throwing dispatch never
@@ -128,6 +124,9 @@
     }
     if (failed) {
       return "not sent";
+    }
+    if (waiting) {
+      return "queued";
     }
   });
 
@@ -150,15 +149,15 @@
   let heldLine = $state("");
   const retrying = $derived(retried && ghost);
   function retry(): void {
-    if (message.metadata?.sentAs) {
+    if (message.id) {
       heldLine = reasonLine;
       retried = true;
-      retrySend(message.metadata.sentAs);
+      retrySend(message.id);
     }
   }
   function edit(): void {
-    if (message.metadata?.sentAs) {
-      restoreDraft(message.metadata.sentAs);
+    if (message.id) {
+      restoreDraft(message.id);
     }
   }
 </script>
@@ -171,19 +170,20 @@
        are sparse, so filling them makes the operator's own instructions the
        landmarks. The agent's turns stay bare on the field. -->
   <!-- Sent from this tab, the turn is the composer's text landing (motion/share,
-       departed by Composer's submit). -->
+       departed by Composer's submit under the message's own id). -->
   <section
     class="turn you"
-    class:ghost
+    data-message={message.id}
+    class:ghost={ghost || waiting}
     {@attach land(
-      () => message.metadata?.queuedLocally ? `sent:${message.content}` : undefined,
+      () => ghost ? `sent:${message.id}` : undefined,
       { ms: dur('--dur-pop'), uniform: true }
     )}
   >
     <Who
       name="You"
       note={whoNote}
-      timestamp={ghost || failed ? undefined : message.timestamp}
+      timestamp={ghost || failed || waiting ? undefined : message.timestamp}
       you
     />
     <MessageBody source={message.content} />
@@ -281,11 +281,9 @@
        against its neighbours while it settles. */
     opacity: 1;
 
-    /* Third tense of Queued.svelte's grammar: same well, same 0.7, a note
-       chip instead of a clock. Not color alone — the note text and the
-       missing clock carry the state too, so it survives grayscale and
-       reduced motion. */
-    /* Queued.svelte's own presence — shared on purpose: same tense. */
+    /* Sending and queued: same well, 0.7, a note chip instead of a clock.
+       Not color alone — the note text and the missing clock carry the state
+       too, so it survives grayscale and reduced motion. */
     &.ghost {
       opacity: 0.7;
     }

@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { SDKSessionInfo } from "@whiffle/core";
+  import type { NeutralSessionInfo } from "@whiffle/core";
   /**
    * The fleet board — every session across every machine as one ledger table,
    * with the four counts that say whether the fleet needs you above it.
@@ -108,7 +108,7 @@
     rank: number;
     stateLabel: string;
     status: PillStatus;
-    stored: SDKSessionInfo | null;
+    stored: NeutralSessionInfo | null;
     title: string;
     turns: number | null;
   }

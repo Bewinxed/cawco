@@ -55,15 +55,14 @@
   import LiveRow from "./LiveRow.svelte";
   import MessageRow from "./MessageRow.svelte";
   import QuestionCard from "./QuestionCard.svelte";
-  import Queued from "./Queued.svelte";
   import TranscriptRow from "./Row.svelte";
   import {
     buildRowsFrom,
     called,
     type Fold,
     type FoldMemo,
+    queuedFrom,
     type Row,
-    sent,
   } from "./rows";
   import Subagent from "./Subagent.svelte";
   import SystemLine from "./SystemLine.svelte";
@@ -314,11 +313,19 @@
     }
     return serial;
   };
-  const printOf = (): string =>
-    `${arrayOf(session.messages)}:${session.messages.length}:${session.queued.length}:${session.streaming.length}:` +
-    `${session.thinkingStream.length}:${session.busy ? 1 : 0}:${session.pending.length}:` +
-    `${session.openBlock}:${session.thinkingClosing}:${session.currentTool?.toolId ?? ""}:${session.sdkStatus}:` +
-    `${session.messages.at(-1)?.metadata?.sendFailed ?? ""}`;
+  // Where the waiting messages begin and which message ends the conversation
+  // before them: a read moves a row there without changing how many
+  // messages there are.
+  const printOf = (): string => {
+    const settled = queuedFrom(session.messages);
+    const last = session.messages[settled - 1];
+    return (
+      `${arrayOf(session.messages)}:${session.messages.length}:${settled}:${last?.id ?? ""}:${session.streaming.length}:` +
+      `${session.thinkingStream.length}:${session.busy ? 1 : 0}:${session.pending.length}:` +
+      `${session.openBlock}:${session.thinkingClosing}:${session.currentTool?.toolId ?? ""}:${session.sdkStatus}:` +
+      `${last?.metadata?.sendFailed ?? ""}`
+    );
+  };
   /** Dev-only: the gate that catches an accidentally tracked session read. */
   const countBuild = (): void => {
     if (!import.meta.env.DEV || typeof window === "undefined") {
@@ -606,15 +613,12 @@
     for (const [key, row] of tail) {
       // A live row that became its settled row, or a tool's glance whose call
       // has landed: either is already on screen in its new form. A queued
-      // message that was sent is not its turn, which arrives as a row of its
-      // own — but that turn lands above anything folding at the end, and
-      // would push the fold down under the reader; the placeholder just goes.
+      // message the session read is still present, under the same key, in
+      // the place it was read.
       const settled =
         (ended?.key === key && ended.into !== null) ||
         (row.kind === "livetool" &&
-          untrack(() => called(session, row.glance.toolId))) ||
-        (row.kind === "queued" &&
-          untrack(() => sent(session, row.queued.text)));
+          untrack(() => called(session, row.glance.toolId)));
       if (!(present.has(key) || settled || leaving.includes(row))) {
         leaving.push(row);
       }
@@ -1553,17 +1557,13 @@
   /** How a row arrives, by what it is. */
   function motionOf(row: Row): Motion {
     // The reader's own message, sent from the composer below, is its text
-    // landing from the field in the one row the send drew (MessageRow on an
-    // idle session, Queued on a busy one): no entrance of the row's own. A
-    // turn that WAITED in the queue was on screen already, as a queued row;
-    // it arrives like any other.
-    if (row.kind === "single" && row.message.type === "user") {
-      return waiting(`sent:${row.message.content}`) ? "emerge" : "rise";
-    }
-    if (row.kind === "queued") {
-      return row.queued.sentAs && waiting(`sent:${row.queued.text}`)
-        ? "emerge"
-        : "rise";
+    // landing from the field in the one row the send drew, keyed by the
+    // message's id: no entrance of the row's own.
+    if (
+      (row.kind === "single" && row.message.type === "user") ||
+      row.kind === "queued"
+    ) {
+      return waiting(`sent:${row.message.id}`) ? "emerge" : "rise";
     }
     if (row.kind === "question") {
       return "settle";
@@ -1922,7 +1922,7 @@
           onleft={leaver(row.key)}
         >
           {#snippet children(ticket)}
-            {#if row.kind === 'single'}
+            {#if row.kind === 'single' || row.kind === 'queued'}
               <MessageRow
                 {agentName}
                 carry={ticket?.kind === 'carry' ? ticket.trail : null}
@@ -1946,8 +1946,6 @@
               <Thinking live={row.live} text={row.text} />
             {:else if row.kind === 'live'}
               <LiveRow {agentName} announce={active} {row} />
-            {:else if row.kind === 'queued'}
-              <Queued queued={row.queued} />
             {:else if row.kind === 'livetool'}
               {@const d = describeTool(row.glance.name, undefined, undefined, 'pending')}
               {@const LiveIcon = d.icon}

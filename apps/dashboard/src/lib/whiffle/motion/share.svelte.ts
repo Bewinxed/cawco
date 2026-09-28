@@ -87,41 +87,6 @@ export function departBox(key: string, source: HTMLElement): void {
 }
 
 /**
- * Sources the store takes away rather than a click: queued rows whose
- * messages the session just read as one turn. Their box — the one around all
- * of them — is taken where they still stand, before the state change that
- * removes them is drawn, under the `key` their destination lands, so several
- * rows close into the one row they became. Sources not on screen have
- * nothing to hand over.
- */
-export function departFrom(selectors: string[], key: string): void {
-  const sources = selectors.flatMap(
-    (selector) => document.querySelector<HTMLElement>(selector) ?? []
-  );
-  const [first] = sources;
-  if (!first) {
-    return;
-  }
-  const rects = sources.map((source) => source.getBoundingClientRect());
-  const top = Math.min(...rects.map((rect) => rect.top));
-  const left = Math.min(...rects.map((rect) => rect.left));
-  departures.set(key, {
-    by: "click",
-    rect: new DOMRect(
-      left,
-      top,
-      Math.max(...rects.map((rect) => rect.right)) - left,
-      Math.max(...rects.map((rect) => rect.bottom)) - top
-    ),
-    radius: getComputedStyle(first).borderRadius,
-    source: first,
-    stays: true,
-    at: performance.now(),
-    ttl: TTL,
-  });
-}
-
-/**
  * Whether a fresh departure waits under `key`: a destination deciding how
  * to arrive (out of what was clicked, or on its own) asks before it lands.
  */

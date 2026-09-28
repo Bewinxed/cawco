@@ -23,12 +23,12 @@ import type {
   InstanceSpec,
   NeutralMessage,
   NeutralSessionInfo,
-  NeutralUserMessage,
   PermissionMode,
   PermissionResult,
   RepoInfo,
   ReposResult,
   SendPayload,
+  SentMessage,
   SessionPulse,
   SpawnPayload,
   StopPayload,
@@ -82,7 +82,7 @@ interface ClaudeAdoption {
         instanceId: string;
         sessionId: string | null;
         held: {
-          message: NeutralUserMessage;
+          message: SentMessage;
           extras: Pick<SendPayload, "attachments" | "images" | "urgent">;
         }[];
         heldControls: { method: string; args: unknown[] }[];

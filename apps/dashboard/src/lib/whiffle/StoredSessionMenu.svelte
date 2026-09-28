@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { SDKSessionInfo } from "@whiffle/core";
+  import type { NeutralSessionInfo } from "@whiffle/core";
   /**
    * Right-click on a stored session, wherever one is listed. The row itself stays
    * a link — the trigger only wraps it, so it keeps its place in the tab order and
@@ -35,7 +35,8 @@
     machineId,
     info,
     children,
-  }: { machineId: string; info: SDKSessionInfo; children: Snippet } = $props();
+  }: { machineId: string; info: NeutralSessionInfo; children: Snippet } =
+    $props();
 
   const href = $derived(
     conversationHref(info.sessionId, whiffle.instanceIndex, {

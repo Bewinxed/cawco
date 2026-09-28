@@ -1,15 +1,14 @@
 /**
- * Raw `SDKMessage` → the `Message` shape the ported renderers already consume.
+ * A neutral frame → the `Message` shape the ported renderers already consume.
  *
  * Pure by design: it returns what a frame means and the client store applies it.
- * The SDK's own types are the input contract (tunnelled through `@whiffle/core`),
- * so nothing here re-models them.
+ * The neutral types are the input contract (`@whiffle/core`), so nothing here
+ * re-models them.
  */
 import type {
-  QueuedMessage,
-  SDKAssistantMessage,
-  SDKMessage,
-  SDKStatus,
+  NeutralAssistantMessage,
+  NeutralMessage,
+  NeutralStatus,
   SendPayload,
   SessionMessage,
   SessionPulse,
@@ -17,8 +16,7 @@ import type {
   UserQuestionResult,
 } from "@whiffle/core";
 import {
-  MESSAGE_DEQUEUED,
-  MESSAGE_QUEUED,
+  MESSAGES_READ,
   parseDelegateAsk,
   parseHandoffMarker,
   parseReportMarker,
@@ -36,7 +34,7 @@ import type {
   MessageType,
 } from "./types";
 
-type AssistantBlock = SDKAssistantMessage["message"]["content"][number];
+type AssistantBlock = NeutralAssistantMessage["message"]["content"][number];
 
 /** A tool result to fold into the `tool.use` message that opened it. */
 export interface ToolResult {
@@ -113,30 +111,6 @@ export interface FrameMapping {
   currentTool?: ToolGlance;
   /** Text to append to the instance's streaming buffer. */
   delta: string;
-  /**
-   * The id of a queue entry that is no longer waiting: the model read it. The
-   * frame that says where ({@link FrameMapping.echo}'s `midTurn`) goes out just
-   * before this and has already retired the row by its words; this retires it
-   * for a tab that missed that one.
-   */
-  dequeued?: string;
-  /**
-   * The main loop's own user turn, which the local copy already renders. The
-   * copy is pushed without an SDK uuid — this is that uuid, so the store can
-   * stamp it and edit/fork can anchor on a message the reader just sent
-   * instead of waiting for a transcript re-read.
-   */
-  echo?: {
-    uuid: string;
-    text: string;
-    /**
-     * A message the reader sent while a turn ran, read where the model read
-     * it: folded into that turn, or opening the next. `mapFrame` has pushed
-     * it; the store retires every queued row it carries and flies them into
-     * it.
-     */
-    midTurn?: true;
-  };
   /** The turn is over — the session is idle again. */
   endsTurn: boolean;
   /**
@@ -147,19 +121,17 @@ export interface FrameMapping {
   /** Appended to the transcript, in order. */
   messages: Message[];
   /**
-   * A message the session took but was too busy to start — the daemon's own
-   * word on its input queue, which used to be private to the harness. The
-   * store files it under {@link SessionState.queued}; the transcript draws it
-   * after the live tail, where it is waiting.
+   * The sends the harness has just consumed, by uuid: each row moves here —
+   * after everything already on screen, before whatever the model says next.
    */
-  queued?: QueuedMessage;
+  read?: string[];
   /**
    * What the session says it is doing right now: `compacting` while it rewrites
    * its own context, `requesting` while it waits on the model, `null` when it
    * has stopped saying. The only live word on a compaction — `compact_boundary`
    * arrives once the work is already done.
    */
-  status?: SDKStatus;
+  status?: NeutralStatus;
   /**
    * The SDK signing the open thinking block — its own word that the reasoning
    * is wrapping up, rather than a guess made from how long it has been going.
@@ -202,11 +174,6 @@ const QUIET = new Set([
   "rate_limit_event",
   // MCP server auth plumbing — the MCP status panel shows failures.
   "auth_status",
-  // The input queue moving. Both are session STATE, drawn as a pending row
-  // after the live tail — a transcript line for each would narrate the reader's
-  // own send back at them, twice.
-  MESSAGE_QUEUED,
-  MESSAGE_DEQUEUED,
 ]);
 
 /**
@@ -356,10 +323,10 @@ const empty = (): FrameMapping => ({
   endsTurn: false,
 });
 
-const uuidOf = (sdk: SDKMessage): string | undefined =>
+const uuidOf = (sdk: NeutralMessage): string | undefined =>
   "uuid" in sdk ? sdk.uuid : undefined;
 
-const parentOf = (sdk: SDKMessage): string | undefined =>
+const parentOf = (sdk: NeutralMessage): string | undefined =>
   "parent_tool_use_id" in sdk
     ? (sdk.parent_tool_use_id ?? undefined)
     : undefined;
@@ -568,7 +535,10 @@ function truncateSummary(summary: string | undefined): string {
 
 /** What one SDK frame does to an instance's UI state. */
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one switch over every SDK message subtype, each case self-contained
-export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
+export function mapFrame(
+  instanceId: string,
+  sdk: NeutralMessage
+): FrameMapping {
   const mapping = empty();
   const uuid = uuidOf(sdk);
   // `forwardSubagentText` forwards a subagent's own turns with their
@@ -624,74 +594,26 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
 
     case "user": {
       const { content } = sdk.message;
-      // A subagent's opening prompt has no local copy to render from, and it is
-      // the first thing its branch should say. The main loop's own text does
-      // have one, added on send, so it is skipped — except when it isn't the
-      // human's at all, which nothing echoes either.
       const text = transcriptUserText(sdk.message);
-      // Anything whiffle put into the session on someone else's behalf — a rule,
-      // a hand-off, a workflow notice, a delegate's report or ask. Nothing else
-      // will ever render it: the reader never typed it, so there is no local
-      // copy, and it must not read as the reader's own words. It is classified
-      // off its marker line exactly as a stored copy is, so the live and stored
-      // rows carry identical content and metadata.
-      const injected =
-        text &&
-        "origin" in sdk &&
-        (sdk.origin?.kind === "peer" || sdk.origin?.kind === "system")
-          ? injectedMessage(text, base)
-          : null;
-      if (injected) {
-        mapping.messages.push(injected);
-        break;
-      }
-      // A message queued for a busy session loses its `origin` and is re-wrapped
-      // as human speech at drain time, so it arrives here as a plain user frame
-      // whose text still carries its marker under the wrapper. Unwrapped, it is
-      // classified the same way — a genuinely human mid-turn message has no
-      // marker and falls through to the echo path below with the wrapper intact.
-      const inner = text ? unwrapMidTurn(text) : null;
-      const queued = inner ? injectedMessage(inner, base) : null;
-      if (queued) {
-        mapping.messages.push(queued);
-        break;
-      }
-      // A message sent to the session, read where the model read it: folded
-      // into a running turn at a tool boundary, or opening one. It is pushed
-      // here, at the time its line was written, and classified exactly as a
-      // stored copy of the same line is ({@link mapTranscript}), so the
-      // transcript reads the same live as after a reload. Whiffle's own
-      // messages — a rule, a hand-off, a delegate's report — are known by
-      // their marker line; the reader's words retire the queued row their tab
-      // drew, or take over the copy it drew as the turn.
-      if ("sentMidTurn" in sdk && sdk.sentMidTurn && uuid && !agentId) {
-        const written = {
-          ...base,
-          ...(sdk.timestamp && { timestamp: new Date(sdk.timestamp) }),
-        };
-        const whiffles = text
-          ? injectedMessage(unwrapMidTurn(text) ?? text, written)
-          : null;
-        if (whiffles) {
-          mapping.messages.push(whiffles);
-          break;
-        }
+      // A message SENT to the session — the reader's, a rule, a hand-off, a
+      // delegate's report or ask — is the only user frame with an `origin`
+      // (`SentMessage`), and the hub streams exactly one of it, under the uuid
+      // it was sent with. It is classified off its marker line exactly as a
+      // stored copy is, so the row reads the same live and after a reload.
+      if (sdk.origin && uuid) {
         mapping.messages.push({
-          ...written,
-          ...userBody(text ?? "", transcriptUserImages(sdk.message)),
+          ...sentRow(text ?? "", sdk.message, base),
+          state: "sent",
         });
-        mapping.echo = { uuid, text: text ?? "", midTurn: true };
         break;
       }
+      // The harness speaking in the user's role: a subagent's prompt, or its
+      // own notice. Anything else of the main loop's is not a row.
       if (text && (agentId || systemNote(text))) {
         mapping.messages.push({
           ...base,
           ...userBody(text, transcriptUserImages(sdk.message)),
         });
-      } else if (text && uuid && !agentId) {
-        // The human's own turn: rendered by the local copy, so nothing is
-        // pushed — but the copy has no SDK uuid until now.
-        mapping.echo = { uuid, text };
       }
       if (typeof content === "string") {
         break;
@@ -795,27 +717,11 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
         case "commands_changed":
           mapping.commands = sdk.commands;
           break;
-        // The harness's input queue, made observable. Read defensively: a
-        // daemon that predates the frame sends neither, and one that sends a
-        // half-formed announcement should move nothing rather than draw a row
-        // with no words in it.
-        case MESSAGE_QUEUED:
-          if (sdk.queueId && typeof sdk.text === "string" && sdk.timestamp) {
-            mapping.queued = {
-              queueId: sdk.queueId,
-              text: sdk.text,
-              timestamp: sdk.timestamp,
-              ...(typeof sdk.images === "number" ? { images: sdk.images } : {}),
-            };
-          }
-          break;
-        case MESSAGE_DEQUEUED:
-          if (sdk.queueId) {
-            mapping.dequeued = sdk.queueId;
-          }
+        case MESSAGES_READ:
+          mapping.read = sdk.read;
           break;
         case "status":
-          mapping.status = sdk.status as SDKStatus | undefined;
+          mapping.status = sdk.status as NeutralStatus | undefined;
           if (sdk.compact_result) {
             mapping.compaction = {
               result: sdk.compact_result,
@@ -1558,26 +1464,21 @@ function injectedMessage(
 }
 
 /**
- * The CLI's mid-turn delivery wrapper, reversed. A message queued for a busy
- * session loses its `origin` inside the native binary, which re-materializes
- * it wrapped as human speech at drain time. The wrapper prose is stable, so
- * it is stripped here before the peer markers are consulted — and a report
- * only reaches a delegate card whose own id it names, so ordinary prose cannot
- * impersonate peer traffic.
+ * A message sent to the session, as a row: whiffle's own (a rule, a hand-off,
+ * a delegate's report or ask) by its marker line, anything else as the
+ * reader's words. The live frame and a stored copy both come through here.
  */
-const MID_TURN_PREFIXES = [
-  "The user sent a new message while you were working:\n",
-  "Another Claude session sent a message while you were working:\n",
-];
-const MID_TURN_SUFFIX_START = "\nThis is how Claude Code surfaces";
-export function unwrapMidTurn(text: string): string | null {
-  const prefix = MID_TURN_PREFIXES.find((p) => text.startsWith(p));
-  if (!prefix) {
-    return null;
-  }
-  const inner = text.slice(prefix.length);
-  const cut = inner.lastIndexOf(MID_TURN_SUFFIX_START);
-  return (cut === -1 ? inner : inner.slice(0, cut)).trim();
+function sentRow(
+  text: string,
+  message: unknown,
+  base: Omit<Message, "type" | "content">
+): Message {
+  return (
+    injectedMessage(text, base) ?? {
+      ...base,
+      ...userBody(text, transcriptUserImages(message)),
+    }
+  );
 }
 
 /**
@@ -1821,7 +1722,7 @@ export function mapTranscript(
     // carry branch lifecycle data that stored transcripts would otherwise lose
     // (subagentType, description, result summary).
     if (entry.type === "system") {
-      const mapping = mapFrame(instanceId, entry as unknown as SDKMessage);
+      const mapping = mapFrame(instanceId, entry as unknown as NeutralMessage);
       if (mapping.branch) {
         applyBranchEvent(subagents, instanceId, mapping.branch);
       }
@@ -1832,45 +1733,26 @@ export function mapTranscript(
     // daemon or a non-Claude harness wrote (see {@link storedAt}).
     const recorded = storedAt(entry);
 
-    // A hand-off is a user-role message and looks exactly like one the reader
-    // typed — so this branch claimed it and rendered another agent's words as
-    // the reader's own, which is the one thing the peer origin exists to stop.
-    // `mapFrame` below knows the difference; let it have them.
-    // Anything whiffle injected — another session's hand-off, or a rule — is not
-    // the reader opening a turn, and claiming it as one renders it as their own.
-    const injectedKind =
-      "origin" in entry
-        ? (entry as { origin?: { kind?: string } }).origin?.kind
-        : undefined;
-    const fromPeer = injectedKind === "peer" || injectedKind === "system";
-    const opening = fromPeer ? null : turnStart(entry);
+    // A stored message the session was sent, and read: keyed by the uuid it
+    // was sent under, so it is the row the live stream drew. An entry with an
+    // `origin` is not stored at all — it is a send the hub is still holding
+    // for the harness, and `mapFrame` below draws it as the live frame did.
+    const opening = "origin" in entry ? null : turnStart(entry);
     if (opening) {
-      // Storage stripped the origin, so a message whiffle injected is known
-      // only by its marker line — classified exactly as the live frame was.
-      //
-      // The SDK filters queued entries out of stored reads today, so a wrapped
-      // mid-turn delivery is theoretical here — but if a future version surfaces
-      // one, classify on the unwrapped text. The userBody fallback keeps the
-      // ORIGINAL wrapped text, so a stored human message renders as stored.
       const stored = {
-        id: entry.uuid,
+        id: entry.sourceUuid ?? entry.uuid,
         instanceId,
         ...(recorded ? { timestamp: recorded } : {}),
         sdkUuid: entry.uuid,
       };
-      messages.push(
-        injectedMessage(
-          unwrapMidTurn(opening.text) ?? opening.text,
-          stored
-        ) ?? {
-          ...stored,
-          ...userBody(opening.text, opening.images),
-        }
-      );
+      messages.push({
+        ...sentRow(opening.text, entry.message, stored),
+        state: "read",
+      });
       continue;
     }
 
-    const mapping = mapFrame(instanceId, entry as unknown as SDKMessage);
+    const mapping = mapFrame(instanceId, entry as unknown as NeutralMessage);
     if (mapping.branch) {
       applyBranchEvent(subagents, instanceId, mapping.branch);
     }
@@ -1922,17 +1804,22 @@ export function mapTranscript(
   return { messages, subagents };
 }
 
-/** The message optimistically shown for text the user just sent. */
+/**
+ * The row this tab draws for a message it is sending, under the uuid the
+ * message goes out with — the row every later word about it lands on.
+ */
 export function localUserMessage(
   instanceId: string,
+  id: string,
   text: string,
   { attachments, images }: Pick<SendPayload, "attachments" | "images"> = {}
 ): Message {
   const carried = Boolean(attachments?.length || images?.length);
   return {
-    id: newId(),
+    id,
     instanceId,
     type: "user",
+    state: "sending",
     content: text,
     timestamp: new Date(),
     // Thumbnails come from the same base64 that went out: nothing comes back to
@@ -1977,67 +1864,6 @@ export function sessionFailedMessage(
     metadata: { errorTitle: "Session failed to start" },
   };
 }
-
-/**
- * Folds an injected message (`user.rule`, `user.peer`, `user.delegate_ask`)
- * into the transcript without doubling it. Each reaches the reader twice —
- * once live, with no uuid, and once as the stored copy, which has one — and
- * both are classified to the same row, so the second arrival merges into the
- * first: one row, and the uuid (edit/fork's anchor) attached whichever way
- * round they arrived. Rules and peers pair by exact text ({@link sameArrival});
- * an ask pairs by its `askRequestId`. Returns true when the message was folded
- * in and must not be appended.
- */
-export function mergePeerMessage(
-  messages: Message[],
-  incoming: Message
-): boolean {
-  if (incoming.type === "user.delegate_ask") {
-    const requestId = incoming.metadata?.askRequestId;
-    if (!requestId) {
-      return false;
-    }
-    const existing = messages.find(
-      (message) =>
-        message.type === "user.delegate_ask" &&
-        message.metadata?.askRequestId === requestId
-    );
-    if (!existing) {
-      return false;
-    }
-    if (!existing.sdkUuid && incoming.sdkUuid) {
-      existing.sdkUuid = incoming.sdkUuid;
-      existing.id = incoming.id;
-    }
-    return true;
-  }
-  if (incoming.type !== "user.rule" && incoming.type !== "user.peer") {
-    return false;
-  }
-  const existing = messages.find(
-    (message) =>
-      message.type === incoming.type &&
-      message.content === incoming.content &&
-      sameArrival(message, incoming)
-  );
-  if (!existing) {
-    return false;
-  }
-  if (!existing.sdkUuid) {
-    existing.sdkUuid = incoming.sdkUuid;
-    existing.id = incoming.id;
-  }
-  return true;
-}
-
-/**
- * Whether two rows with the same text are one message arriving twice rather
- * than two messages that happen to read alike (a rule that nags resends the
- * same words). The live copy carries no uuid and the stored copy does, so they
- * pair; two stored copies pair only on the same uuid, and two live ones never.
- */
-const sameArrival = (a: Message, b: Message): boolean =>
-  a.sdkUuid ? a.sdkUuid === b.sdkUuid || !b.sdkUuid : !!b.sdkUuid;
 
 /** Folds a tool result into the `tool.use` it answers. */
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one dispatch over every tool-result shape a `tool.use` can be answered by

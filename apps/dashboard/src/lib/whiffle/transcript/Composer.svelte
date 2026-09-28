@@ -49,6 +49,7 @@
   import { departBox } from "$lib/whiffle/motion/share.svelte";
   import type { SendExtras } from "../client.svelte";
   import { cleanDetail } from "../command-detail";
+  import { newId } from "../id";
   import SelectionChip from "../preview/SelectionChip.svelte";
   import SelectionPopover from "../preview/SelectionPopover.svelte";
   import {
@@ -118,13 +119,17 @@
     commands?: AvailableCommand[];
     /** What `@` can name — the sessions and machines in reach. */
     mentions?: Mention[];
-    onsubmit: (text: string, extras: SendExtras) => void;
+    /**
+     * `id` is the uuid the message is sent under, minted here so the text can
+     * fly into the row that carries it before the send has left.
+     */
+    onsubmit: (text: string, extras: SendExtras, id: string) => void;
     /**
      * The queue-jump (mod+Enter): interrupt the turn in flight, then send.
      * Optional — a composer without it (the spawn form) treats mod+Enter as a
      * plain send, which on an idle surface is the same thing.
      */
-    oninterruptsend?: (text: string, extras: SendExtras) => void;
+    oninterruptsend?: (text: string, extras: SendExtras, id: string) => void;
     /** Fired when the `/` menu opens, so the session can be re-asked what it has. */
     onmenu?: () => void;
     onstop: () => void;
@@ -575,7 +580,7 @@
   }
 
   function submit(
-    via: (text: string, extras: SendExtras) => void = onsubmit
+    via: (text: string, extras: SendExtras, id: string) => void = onsubmit
   ): void {
     // Nothing to send, the last one is still unanswered, or a swipe is
     // still carrying the conversation. The draft is left exactly as it is —
@@ -583,14 +588,14 @@
     if (!draft.hasContent || sending || held) {
       return;
     }
-    // The text leaves the field for the one row it becomes (motion/share):
-    // the sent turn on an idle session, the queued row on a busy one — the
-    // store decides which at this press and draws only that row. The field
-    // is measured before it redraws empty.
+    // The text leaves the field for the one row it becomes (motion/share),
+    // keyed by the id the message is sent under. The field is measured
+    // before it redraws empty.
     const { text, extras } = draft.take();
-    departBox(`sent:${text}`, field as HTMLTextAreaElement);
+    const id = newId();
+    departBox(`sent:${id}`, field as HTMLTextAreaElement);
     dismissed = true;
-    via(text, extras);
+    via(text, extras, id);
   }
 
   /**

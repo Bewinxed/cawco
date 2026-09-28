@@ -5,9 +5,8 @@
  */
 import type {
   AvailableCommand,
-  SDKHookResponseMessage,
-  SDKStatus,
-  SDKSystemMessage,
+  NeutralStatus,
+  NeutralSystemMessage,
   UserQuestionResult,
 } from "@whiffle/core";
 import type { SubagentState } from "$lib/utils/flow-types";
@@ -40,13 +39,30 @@ export type MessageType =
 
 export interface Message {
   content: string;
+  /**
+   * The row's identity. A message sent to the session is keyed by the uuid it
+   * was sent under, from the press to a reload, on every screen.
+   */
   id?: string;
   instanceId: string;
   metadata?: MessageMetadata;
   /** Links this message to the Task tool.use that spawned it (subagent output). */
   parentToolUseId?: string;
+  /**
+   * Sent into a running turn: drawn after the live tail, at reduced presence,
+   * until the session reads it. Decided when the row first appears — a send
+   * to an idle session is read at once and is never drawn as waiting.
+   */
+  queued?: boolean;
   /** The SDK message's own uuid — the handle for rewind and fork. */
   sdkUuid?: string;
+  /**
+   * Where a message sent to the session stands: drawn by this tab and not yet
+   * taken (`sending`), taken by the hub (`sent`), consumed by the harness
+   * (`read`), or never delivered (`failed`). Only moves forward, except that a
+   * retry puts a failed one back to `sending`.
+   */
+  state?: SendState;
   /**
    * When the turn happened, on the client's own clock — set only on the live
    * path, where that clock is the truth. A message folded out of a *stored*
@@ -59,6 +75,8 @@ export interface Message {
   toolCallId?: string | null;
   type: MessageType;
 }
+
+export type SendState = "sending" | "sent" | "read" | "failed";
 
 /** Everything a renderer may need beyond `content`, keyed by the type that uses it. */
 export interface MessageMetadata {
@@ -92,13 +110,13 @@ export interface MessageMetadata {
   // Session error
   /** The `ui.session_error` card's heading; a missing session when unset. */
   errorTitle?: string;
-  exitCode?: SDKHookResponseMessage["exit_code"];
+  exitCode?: NeutralSystemMessage["exit_code"];
   handoffBrief?: string;
   // Compact boundary
   /** Who sent a {@link MessageType} of `user.peer`: the sending session's id. */
   handoffKind?: "handoff" | "start" | "delegate";
   // Hook response
-  hookName?: SDKHookResponseMessage["hook_name"];
+  hookName?: NeutralSystemMessage["hook_name"];
   /** A stored transcript can name an image it no longer carries, hence the optional uri. */
   images?: Array<{ mediaType: string; src?: string }>;
   isRedactedThinking?: boolean;
@@ -108,7 +126,7 @@ export interface MessageMetadata {
   memoryPath?: string;
   // Memory picker
   memoryPhase?: "selection" | "editing";
-  model?: SDKSystemMessage["model"];
+  model?: NeutralSystemMessage["model"];
   models?: Array<{ value: string; displayName: string; description: string }>;
   // Harness-injected user-role content (task notifications, reminders, compaction)
   noteKind?: string;
@@ -123,7 +141,7 @@ export interface MessageMetadata {
   /** The sender's host-openable session, so the card can link back to it. */
   peerSession?: string;
   /** `init` only, and re-reported every turn: what the session answers tools with. */
-  permissionMode?: SDKSystemMessage["permissionMode"];
+  permissionMode?: NeutralSystemMessage["permissionMode"];
   preTokens?: number;
   questionAnswers?: Record<string, string>;
   // Ask question (AskUserQuestion tool / onUserDialog)
@@ -134,16 +152,6 @@ export interface MessageMetadata {
     options: Array<{ label: string; description: string }>;
     multiSelect: boolean;
   }>;
-  /**
-   * A local echo of a turn sent to a session that may have been busy — a guess,
-   * drawn before any frame came back, and the flag is what makes it one the
-   * store can take back. When the daemon announces the message as queued
-   * (`message_queued`), this copy is retired and the queue's own row takes its
-   * place; when no such frame ever arrives — an older daemon, or an idle
-   * session that started the turn at once — the copy simply stays, which is
-   * every dashboard's behaviour before the queue was observable.
-   */
-  queuedLocally?: boolean;
   /** Set when a `user.peer` is a delegate's auto-report rather than a hand-off. */
   reportKind?: "report" | "failed";
   result?: string;
@@ -157,32 +165,22 @@ export interface MessageMetadata {
   selectedMemoryType?: "project" | "user";
   selectedModel?: string;
   /**
-   * Why this message was never delivered, stamped on the echo when its command
+   * Why this message was never delivered, stamped on the row when its command
    * settles at `failed`.
    *
    * It duplicates the record's own `reason` on purpose: command records are
    * swept by count and age (`SETTLED_COMMAND_TTL_MS`, five minutes), and a
-   * message that failed must not quietly fade back to looking sent when its
-   * record is forgotten. The stamp outlives the ledger; the failure is the one
-   * thing about a message that must never expire on its own.
+   * message that failed must keep saying why after its record is forgotten.
    */
   sendFailed?: string;
-  /**
-   * The command this turn went out as, while its record is still readable —
-   * what lets the transcript render the send's own stage on the send's own row.
-   * A message with no record behind it (swept, historical, another device's)
-   * renders as a plain turn: absence of evidence is a solid message, never a
-   * ghost.
-   */
-  sentAs?: string;
   sessionId?: string;
   /** `init` only: which of those names are skills rather than commands. */
-  skills?: SDKSystemMessage["skills"];
+  skills?: NeutralSystemMessage["skills"];
   /** `init` only: what this session answers behind `/`, without the leading slash. */
-  slashCommands?: SDKSystemMessage["slash_commands"];
-  status?: SDKStatus;
-  stderr?: SDKHookResponseMessage["stderr"];
-  stdout?: SDKHookResponseMessage["stdout"];
+  slashCommands?: NeutralSystemMessage["slash_commands"];
+  status?: NeutralStatus;
+  stderr?: NeutralSystemMessage["stderr"];
+  stdout?: NeutralSystemMessage["stdout"];
   subagentDescription?: string;
   /** The `model` override the spawn input asked for, when present. */
   subagentModel?: string;

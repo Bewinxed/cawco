@@ -1,6 +1,6 @@
 <script lang="ts">
   /** One stored session from `listSessions`, linking to its read-only transcript. */
-  import type { SDKSessionInfo } from "@whiffle/core";
+  import type { NeutralSessionInfo } from "@whiffle/core";
   import { formatDistanceToNow } from "$lib/utils/time";
   import { whiffle } from "./client.svelte";
   import { conversationHref, sessionTitle } from "./links";
@@ -11,7 +11,7 @@
   interface Props {
     /** The card's own path: a row repeating it adds nothing, so it stays off. */
     groupCwd?: string;
-    info: SDKSessionInfo;
+    info: NeutralSessionInfo;
     machineId: string;
   }
 

@@ -241,8 +241,8 @@ export interface SendPayload {
   /** Images the turn carries: base64, with no `data:` URI prefix. */
   images?: { mediaType: string; data: string }[];
   instanceId: string;
-  /** The user turn, in the neutral user-message shape every adapter understands. */
-  message: import("./harness").NeutralUserMessage;
+  /** The user turn, under the uuid it keeps everywhere it is shown. */
+  message: import("./harness").SentMessage;
   /**
    * Force delivery: a busy claude session reads it mid-turn via `streamInput`;
    * opencode/pi interrupt the turn and deliver it as the immediate next one. The

@@ -17,13 +17,12 @@ import type {
   InstanceRow,
   McpServerStatus,
   ModelInfo,
+  NeutralSessionInfo,
+  NeutralStatus,
   PermissionMode,
   PermissionResult,
   PermissionUpdate,
   PreviewSource,
-  QueuedMessage,
-  SDKSessionInfo,
-  SDKStatus,
   SendPayload,
   SessionMessage,
   SessionPulse,
@@ -68,7 +67,6 @@ import {
   localUserMessage,
   mapFrame,
   mapTranscript,
-  mergePeerMessage,
   mergePulses,
   routedToParent,
   suppressesTaskLine,
@@ -76,16 +74,7 @@ import {
 } from "./frames";
 import { newId } from "./id";
 import { conversationHref, indexInstances, instanceForSession } from "./links";
-import { departFrom } from "./motion/share.svelte";
 import { type PendingSelection, selectionExtras } from "./preview/selection";
-import {
-  adoptQueue,
-  ingestQueued,
-  type QueueEntry,
-  retireQueued,
-  takeDrawn,
-  takeRead,
-} from "./queue";
 import { checkRestartToast } from "./restart-toast";
 import type {
   CommandRecord,
@@ -115,7 +104,13 @@ import {
   refreshTasks,
   TASK_LEDGER_TOOLS,
 } from "./tasks.svelte";
-import type { DelegateAskEvent, DelegateEvent, Message } from "./types";
+import { queuedFrom } from "./transcript/rows";
+import type {
+  DelegateAskEvent,
+  DelegateEvent,
+  Message,
+  SendState,
+} from "./types";
 import {
   acceptWorkflowFrame,
   refreshWorkflows,
@@ -222,7 +217,7 @@ const under = (root: string, path: string): boolean =>
  * tags its SDK session on the way out to say so. The tag is the whole test —
  * the directory a session ran in says nothing about whether it was a quest.
  */
-const listedInHistory = (info: SDKSessionInfo): boolean =>
+const listedInHistory = (info: NeutralSessionInfo): boolean =>
   info.tag !== WHIFFLE_SCRATCH_TAG;
 
 export interface PendingPermission {
@@ -362,18 +357,6 @@ export interface SessionState {
    */
   permissionMode: PermissionMode | null;
   /**
-   * Messages this session has taken but not started, oldest first — the
-   * harness's own input queue, announced by `message_queued` and retired
-   * either by `message_dequeued` or by the real turn carrying the same id.
-   *
-   * This is the queue as STATE, not as a guess: it survives a reload (the hub
-   * snapshots it), it is the same on every device, and it is what the reader
-   * sees waiting under the conversation. A message this tab sends while the
-   * session is busy goes in here at the press, drawn before the daemon's word
-   * (see {@link QueueEntry}), and never into the transcript as a sent turn.
-   */
-  queued: QueueEntry[];
-  /**
    * How the last transcript read ended, when it ended with nothing on screen.
    * Every read path sets this on a terminal failure and clears it when a read
    * starts, so a pane always has something to show for an empty transcript: a
@@ -390,7 +373,7 @@ export interface SessionState {
    * its context — the only live signal, since the boundary frame lands after
    * the work — `requesting` while it waits on the model.
    */
-  sdkStatus: SDKStatus;
+  sdkStatus: NeutralStatus;
   /** The SDK session behind this view, once one is known. */
   sessionId: string | null;
   /** Partial assistant text, between `stream_event`s and the final message. */
@@ -435,7 +418,7 @@ export interface SessionState {
  * deep proxy over its hundreds of rows was the 100ms+ flush every connect
  * paid for, with nothing ever mutating a row in place.
  */
-let catalog = $state.raw<Record<string, SDKSessionInfo[]>>({});
+let catalog = $state.raw<Record<string, NeutralSessionInfo[]>>({});
 /** The machines whose stored sessions have been asked for and answered, or failed. */
 const catalogsTried = $state<Record<string, true>>({});
 
@@ -645,7 +628,6 @@ export function blankSession(instanceId: string): SessionState {
     messages: [],
     subagents: {},
     pending: [],
-    queued: [],
     streaming: "",
     openBlock: null,
     thinkingStream: "",
@@ -695,6 +677,101 @@ function session(instanceId: string): SessionState {
   return target;
 }
 
+/** How far a sent message has got. A later word never moves it back. */
+const SEND_RANK: Record<SendState, number> = {
+  sending: 0,
+  failed: 1,
+  sent: 2,
+  read: 3,
+};
+
+/**
+ * THE ONE WRITER of a session's transcript. Every row goes in by id, and an id
+ * already there is never added twice: a message that arrives again — the
+ * hub's frame for a send this tab drew, a history read over rows already on
+ * screen, a replay after a reset — only moves its send state forward.
+ *
+ * New rows join the end, ahead of the rows still waiting on the session:
+ * those stay last until it reads them ({@link Message.queued}), which is
+ * decided here, as a sent message first appears — sent into a running turn,
+ * it waits. `older` rows are a history page, and go in front.
+ */
+function upsert(
+  target: SessionState,
+  incoming: Message[],
+  older = false
+): void {
+  const held = new Set(target.messages.map((message) => message.id));
+  const fresh: Message[] = [];
+  for (const message of incoming) {
+    if (held.has(message.id)) {
+      const row = target.messages.findLast((m) => m.id === message.id);
+      if (
+        row?.state &&
+        message.state &&
+        SEND_RANK[message.state] > SEND_RANK[row.state]
+      ) {
+        moveSend(target, row, message.state);
+      }
+      continue;
+    }
+    held.add(message.id);
+    if (message.state === "sending" || message.state === "sent") {
+      message.queued = target.busy;
+    }
+    fresh.push(message);
+  }
+  if (older) {
+    target.messages = [...fresh, ...target.messages];
+    return;
+  }
+  for (const message of fresh) {
+    if (message.queued) {
+      target.messages.push(message);
+    } else {
+      target.messages.splice(queuedFrom(target.messages), 0, message);
+    }
+  }
+}
+
+/**
+ * A sent message moving on. Taken by the hub, it stays where it is. Read, it
+ * has happened: it moves — once — out of the rows still waiting, to the end
+ * of what is on screen, before whatever the session says about it next. A
+ * waiting message that failed will never be read, and takes that same place
+ * as the failed turn it is.
+ */
+function moveSend(target: SessionState, row: Message, to: SendState): void {
+  row.state = to;
+  if (to === "sent") {
+    // Its failure was a timeout on this tab's side: the hub has it after all.
+    if (row.metadata?.sendFailed) {
+      row.metadata = { ...row.metadata, sendFailed: undefined };
+    }
+    return;
+  }
+  if (!(to === "read" || (to === "failed" && row.queued))) {
+    return;
+  }
+  const { messages } = target;
+  messages.splice(
+    messages.findLastIndex((message) => message.id === row.id),
+    1
+  );
+  row.queued = false;
+  messages.splice(queuedFrom(messages), 0, row);
+}
+
+/** The sends the harness has just consumed, each settled into its place. */
+function markRead(target: SessionState, uuids: string[]): void {
+  for (const uuid of uuids) {
+    const row = target.messages.findLast((message) => message.id === uuid);
+    if (row?.state && row.state !== "read") {
+      moveSend(target, row, "read");
+    }
+  }
+}
+
 /** Starts a session's turn clock at the first pulse that is not idle, and stops it at the idle one. */
 function trackTurn(instanceId: string, pulse: SessionPulse): void {
   if (pulse.activity === "idle") {
@@ -726,14 +803,6 @@ function hydrate(target: SessionState): void {
   const pulse = state.pulses[target.instanceId];
   if (pulse) {
     applyPulse(target, pulse);
-  }
-  // What the session was already holding before this view existed. Only ever
-  // fills a blank: once frames are flowing they are fresher than any snapshot.
-  if (target.queued.length === 0) {
-    const held = queueSnapshot[target.instanceId];
-    if (held?.length) {
-      target.queued = held;
-    }
   }
   const known = instanceIndex.byId.get(target.instanceId);
   if (!known) {
@@ -928,39 +997,6 @@ function patchInstances(upserts: InstanceRow[], removed: string[]): void {
   }
 }
 
-/**
- * Takes the hub's word on what each session is holding but has not started.
- *
- * This is the half of the queue a frame cannot deliver: a tab that opens while
- * a message is already waiting has missed the `message_queued` that announced
- * it, and before this the only record of that message was a local echo in
- * whichever tab sent it — lost on the reload, invisible on every other device.
- *
- * A full snapshot per session named, and only for those: the hub sends the
- * sessions with something queued, so a session absent from the map has an
- * empty queue and a hub that predates the field says nothing about any of them
- * (`undefined`), which must leave what frames have already established alone.
- */
-function adoptQueues(
-  queues: Record<string, QueuedMessage[]> | undefined
-): void {
-  if (!queues) {
-    return;
-  }
-  queueSnapshot = queues;
-  for (const target of Object.values(state.sessions)) {
-    adoptQueue(target, queues[target.instanceId] ?? []);
-  }
-}
-
-/**
- * The hub's last word on every session's queue, kept beside the sessions rather
- * than only inside them: a session this browser has not opened yet has no
- * {@link SessionState} to hold its queue, and opening it later must not start
- * from empty. {@link hydrate} seeds from here.
- */
-let queueSnapshot: Record<string, QueuedMessage[]> = {};
-
 /** Replaces the whole limits map with the hub's word — a full snapshot, not a patch. */
 function adoptUsageLimits(
   readings: { machineId: string; limits: ClaudeLimits }[]
@@ -987,7 +1023,7 @@ function usageLimitReadings(
 async function refresh(): Promise<void> {
   // Registry hydration also recovers workflow transitions missed while disconnected.
   refreshWorkflows();
-  const [machines, rows, projects, pending, handoffs, queues, usage] =
+  const [machines, rows, projects, pending, handoffs, usage] =
     await Promise.all([
       load<Machine[]>("/api/agents"),
       load<InstanceRow[]>("/api/instances"),
@@ -996,9 +1032,6 @@ async function refresh(): Promise<void> {
       // Read on connect, not only broadcast on change: a dashboard opened after
       // a hand-off went out has missed every broadcast it will ever get.
       load<Record<string, { from: string; at: number }>>("/api/handoffs"),
-      // Same reason again, and the whole point of the queue being observable: a
-      // tab opened while a message is waiting has missed the frame that said so.
-      load<Record<string, QueuedMessage[]>>("/api/queues"),
       // Same reason: a dashboard opened between reports has missed the frames.
       load<{ machines: { machineId: string; limits: ClaudeLimits }[] }>(
         "/api/usage/limits"
@@ -1007,9 +1040,6 @@ async function refresh(): Promise<void> {
 
   if (handoffs) {
     state.handoffs = handoffs;
-  }
-  if (queues) {
-    adoptQueues(queues);
   }
   if (machines) {
     state.machines = machines;
@@ -1268,7 +1298,6 @@ function handleFrame(frame: FramePayload): void {
     state.handoffs =
       (frame as { handoffs?: Record<string, { from: string; at: number }> })
         .handoffs ?? {};
-    adoptQueues((frame as { queues?: Record<string, QueuedMessage[]> }).queues);
     if (frame.kind === "instances") {
       adoptInstances(frame.instances);
     } else {
@@ -1328,7 +1357,7 @@ function handleFrame(frame: FramePayload): void {
       const target = session(instanceId);
       // A relaunch that never came up has no init frame to end its wait.
       target.relaunching = false;
-      target.messages.push(errorMessage(instanceId, message));
+      upsert(target, [errorMessage(instanceId, message)]);
     } else {
       console.error("[whiffle] hub error:", message);
     }
@@ -1350,12 +1379,12 @@ function handleFrame(frame: FramePayload): void {
     }
     // Fire-and-forget controls (interrupt, permission replies) still report failure.
     if (!frame.ok && frame.instanceId) {
-      session(frame.instanceId).messages.push(
+      upsert(session(frame.instanceId), [
         errorMessage(
           frame.instanceId,
           frame.error ?? "The machine could not carry out that request."
-        )
-      );
+        ),
+      ]);
     }
     return;
   }
@@ -1418,14 +1447,8 @@ function handleFrame(frame: FramePayload): void {
     case "frame": {
       target.harness = frame.harness;
       const mapping = mapFrame(frame.instanceId, frame.message);
-      // The input queue moving. Ahead of the transcript work below because the
-      // announcement takes back the local echo the sender drew, and the turn
-      // that retires the row is pushed by that same transcript work.
-      if (mapping.queued) {
-        ingestQueued(target, mapping.queued);
-      }
-      if (mapping.dequeued) {
-        retireQueued(target, mapping.dequeued);
+      if (mapping.read) {
+        markRead(target, mapping.read);
       }
       if (mapping.branch) {
         applyBranchEvent(target.subagents, frame.instanceId, mapping.branch);
@@ -1442,6 +1465,13 @@ function handleFrame(frame: FramePayload): void {
         ? branchFor(target.subagents, frame.instanceId, mapping.agentId)
             .messages
         : target.messages;
+      const append = (message: Message): void => {
+        if (mapping.agentId) {
+          sink.push(message);
+        } else {
+          upsert(target, [message]);
+        }
+      };
 
       for (const message of mapping.messages) {
         if (message.type === "system.init") {
@@ -1515,18 +1545,12 @@ function handleFrame(frame: FramePayload): void {
         // The settle that precedes a relaunch ends the old turn with an error
         // result the reader asked for — a quiet note, not a red card.
         if (target.relaunching && message.type === "result.error") {
-          sink.push({
+          append({
             ...message,
             type: "system.status",
             content: "Turn stopped to change the permission mode.",
             metadata: {},
           });
-          continue;
-        }
-        // A hand-off brief arrives twice — the uuid-less live echo and the
-        // uuid-bearing stored copy, both mapping to `user.peer` — and identical
-        // body text means it is one brief, not two.
-        if (mergePeerMessage(sink, message)) {
           continue;
         }
         // A real subagent's `task_notification` names a `tool_use_id` whose
@@ -1553,71 +1577,7 @@ function handleFrame(frame: FramePayload): void {
           message.type = "ui.interrupted";
           message.metadata = { ...message.metadata, noteTitle: "Interrupted" };
         }
-        sink.push(message);
-      }
-      // The frame for a turn the reader typed: stamp their local copy with the
-      // SDK's uuid so edit/fork can anchor on it without a transcript re-read.
-      // Oldest unstamped copy first — frames arrive in send order — preferring
-      // an exact text match when two sends are in flight.
-      if (mapping.echo && !mapping.agentId) {
-        const { uuid, text, midTurn } = mapping.echo;
-        if (midTurn) {
-          // The model read it: folded into the turn it was sent into, or
-          // opening the next. A turn the CLI opens carries every send it held,
-          // their words joined in one line, so every queued row whose words
-          // appear in it is taken out of the queue — as the daemon matched
-          // them — and they fly together, from where they still stand, into
-          // the one turn `mapFrame` just pushed: measured now, before this
-          // change is drawn and the rows are gone.
-          const read = takeRead(target, (entry) =>
-            entry.text === "" ? text === "" : text.includes(entry.text)
-          );
-          if (read.length > 0) {
-            departFrom(
-              read.map(
-                (entry) =>
-                  `[data-queued="${CSS.escape(entry.sentAs ?? entry.queueId)}"]`
-              ),
-              `sent:${text}`
-            );
-            const turn = target.messages.findLast((m) => m.sdkUuid === uuid);
-            if (turn) {
-              turn.metadata = { ...turn.metadata, queuedLocally: true };
-            }
-          } else {
-            // Sent to an idle session: this tab drew it as its turn at the
-            // press, so that copy is the turn — it takes the SDK's uuid (edit
-            // and fork anchor on it) and the one `mapFrame` pushed goes.
-            const copy = target.messages.find(
-              (m) =>
-                m.type === "user" &&
-                !m.sdkUuid &&
-                m.metadata?.queuedLocally === true &&
-                (m.content === "" ? text === "" : text.startsWith(m.content))
-            );
-            if (copy) {
-              copy.sdkUuid = uuid;
-              target.messages = target.messages.filter(
-                (m) => m === copy || m.sdkUuid !== uuid
-              );
-            }
-          }
-        } else {
-          const copies = target.messages.filter(
-            (m) => m.type === "user" && !m.sdkUuid
-          );
-          const copy = copies.find((m) => m.content === text) ?? copies[0];
-          if (copy) {
-            copy.sdkUuid = uuid;
-          } else {
-            // Sent to a busy session, but started at once rather than queued:
-            // the entry drawn at the press becomes the turn.
-            const started = takeDrawn(target, (entry) => entry.text === text);
-            if (started?.echo) {
-              target.messages.push({ ...started.echo, sdkUuid: uuid });
-            }
-          }
-        }
+        append(message);
       }
       for (const result of mapping.toolResults) {
         applyToolResult(sink, result);
@@ -1952,32 +1912,25 @@ const failureNotice = (record: CommandRecord): string => {
 };
 
 /**
- * Stamps a failed send's reason onto the echo that represents it.
- * `metadata.sendFailed` is what keeps the message rendered as "not sent"
- * after the ledger has swept its record. A send drawn as a queued row was
- * never queued: it leaves the queue for the transcript, as the failed turn
- * that carries Try again and Edit.
+ * A send this tab drew that the hub never took: its row, keyed by the
+ * command's id, becomes the failed turn that carries Try again and Edit.
+ * `metadata.sendFailed` keeps the reason after the ledger has swept its
+ * record. A row the hub's frame has already reached was delivered, whatever
+ * this tab's timer said.
  */
 function stampSendFailure(record: CommandRecord): void {
   const target = state.sessions[record.sessionId];
-  if (!target) {
-    return;
-  }
-  const sendFailed = record.reason ?? "The hub never took it.";
-  const echo = target.messages.find(
-    (message) => message.metadata?.sentAs === record.commandId
+  const row = target?.messages.findLast(
+    (message) => message.id === record.commandId
   );
-  if (echo) {
-    echo.metadata = { ...echo.metadata, sendFailed };
+  if (!(target && row?.state === "sending")) {
     return;
   }
-  const drawn = takeDrawn(target, (entry) => entry.sentAs === record.commandId);
-  if (drawn?.echo) {
-    target.messages.push({
-      ...drawn.echo,
-      metadata: { ...drawn.echo.metadata, sendFailed },
-    });
-  }
+  row.metadata = {
+    ...row.metadata,
+    sendFailed: record.reason ?? "The hub never took it.",
+  };
+  moveSend(target, row, "failed");
 }
 
 /**
@@ -2132,9 +2085,10 @@ function wirePayload<K extends CommandKind>(
   switch (kind) {
     case "send": {
       const { text, extras } = intent as CommandIntents["send"];
+      // The command's id is the message's: one identity from the press on.
       return {
         instanceId,
-        message: userMessage(text),
+        message: userMessage(text, commandId),
         ...selectionExtras(extras),
       };
     }
@@ -2250,12 +2204,17 @@ export function submitCommand<K extends CommandKind>(
   instanceId: string,
   machineId: string,
   kind: K,
-  intent: CommandIntents[K]
+  intent: CommandIntents[K],
+  /**
+   * Minted by the caller when it has to know the id before the command goes
+   * out — the composer, whose text flies into the row a send's id keys.
+   * Otherwise minted here, FIRST, before anything that can throw, so there is
+   * an id to fail under.
+   */
+  commandId = newId()
 ): string {
-  // Minted FIRST, before anything that can throw, so there is an id to fail
-  // under. Everything below either reaches the ledger or becomes a record in
-  // it; nothing reaches the caller as an exception.
-  const commandId = newId();
+  // Everything below either reaches the ledger or becomes a record in it;
+  // nothing reaches the caller as an exception.
   const settlesAt = SETTLES_AT[kind];
 
   // REGISTERED BEFORE ANYTHING THAT CAN FAIL, and that ordering is the whole
@@ -2512,21 +2471,21 @@ function pruneOutbox(): void {
   }
 }
 
-/** Removes the echo a failed command left behind, if it is still there. */
+/** Removes the row a failed send left behind, if it is still there. */
 function dropSendEcho(instanceId: string, commandId: string): void {
   const target = state.sessions[instanceId];
   if (!target) {
     return;
   }
   target.messages = target.messages.filter(
-    (message) => message.metadata?.sentAs !== commandId
+    (message) => message.id !== commandId
   );
 }
 
 /**
  * Re-send a failed message from the outbox as a NEW command with a NEW id,
- * on the failed message's own row (matched by `metadata.sentAs ===
- * commandId`): the row goes back to sending where it stands. No-op if the
+ * on the failed message's own row (keyed by the failed command's id): the row
+ * takes the new id and goes back to sending where it stands. No-op if the
  * outbox entry has aged out. Never throws.
  */
 export function retrySend(commandId: string): void {
@@ -2651,11 +2610,17 @@ function streamEffectsFor<K extends CommandKind>(
   switch (kind) {
     case "send": {
       const { text, extras, replaces } = intent as CommandIntents["send"];
-      // The echo is stamped with the id of the command it IS, which is the
-      // whole join between a rendered message and the ledger's word on it.
+      // The row is keyed by the id of the command it IS, which is the whole
+      // join between a rendered message and the ledger's word on it.
       return {
         submitted: () =>
-          noteSendSubmitted(instanceId, text, extras, commandId, replaces),
+          noteSendSubmitted(
+            instanceId,
+            text,
+            extras ?? {},
+            commandId,
+            replaces
+          ),
       };
     }
     case "interrupt":
@@ -3078,9 +3043,10 @@ function waitForOpen(timeoutMs = 5000): Promise<void> {
   });
 }
 
-function userMessage(text: string): SendPayload["message"] {
+function userMessage(text: string, uuid: string): SendPayload["message"] {
   return {
     type: "user",
+    uuid,
     message: { role: "user", content: text },
     parent_tool_use_id: null,
     // Stamped, not implied. The SDK treats an unstamped message as
@@ -3195,10 +3161,10 @@ export function resumeSession({
     resume: { sessionKey: sessionId },
   });
   created.sessionId = sessionId;
-  created.messages = history.map((message) => ({
-    ...message,
-    instanceId: created.instanceId,
-  }));
+  upsert(
+    created,
+    history.map((message) => ({ ...message, instanceId: created.instanceId }))
+  );
   // biome-ignore lint/complexity/noVoid: fire-and-forget — the session already started locally, this just resyncs the fleet list
   void refresh();
   return created.instanceId;
@@ -3233,10 +3199,10 @@ export function forkSession({
     resume: { sessionKey: sessionId, fork: true, ...(at && { atMessage: at }) },
     scratch: {},
   });
-  created.messages = history.map((message) => ({
-    ...message,
-    instanceId: created.instanceId,
-  }));
+  upsert(
+    created,
+    history.map((message) => ({ ...message, instanceId: created.instanceId }))
+  );
   // biome-ignore lint/complexity/noVoid: fire-and-forget — the session already started locally, this just resyncs the fleet list
   void refresh();
   return created.instanceId;
@@ -3253,89 +3219,54 @@ export function sendText(
   text: string,
   extras: SendExtras = {},
   /** The tracked command this send IS, when it has one. See {@link submitCommand}. */
-  commandId?: string,
+  commandId = newId(),
   /** The failed send this one retries. See {@link noteSendSubmitted}. */
   replaces?: string
 ): void {
   const payload: SendPayload = {
     instanceId,
-    message: userMessage(text),
+    message: userMessage(text, commandId),
     ...selectionExtras(extras),
   };
-  // Optimistic, and marked as such: a busy session's send is drawn as its
-  // queued row, an idle one's as its turn ({@link noteSendSubmitted}).
-  //
   // BEFORE the dispatch, not after: `send` throws when the socket is not open,
-  // and echoing afterwards meant the one case that most needs a visible
-  // outcome — the message that could not leave the tab — left nothing on
-  // screen for the failure to be rendered on. The stream dialect already
-  // ordered it this way (stream.ts applies `streamEffects.submitted` before
-  // `sendToHub`, "so a dispatch that fails synchronously still settles it");
-  // this makes the legacy dialect agree. Nothing renders twice: the drawn
-  // row is one object, taken over in place by the daemon's word.
+  // and drawing the row afterwards meant the one case that most needs a
+  // visible outcome — the message that could not leave the tab — left nothing
+  // on screen for the failure to be rendered on.
   noteSendSubmitted(instanceId, text, extras, commandId, replaces);
   send({ verb: "send", machineId, instanceId, payload });
 }
 
 /**
- * What a send does to the LOCAL store, on either dialect: the marked echo the
- * transcript renders, the busy flip, the working clock. ONE function, shared
- * by `sendText` (legacy) and the stream dialect's effects — the two drifting
- * apart was the sent-message-with-no-renderer defect: the wire's own user
- * frame defers to the local copy, so a dialect that skips the copy shows
- * nothing at all.
+ * What a send does to the LOCAL store, on either dialect: the row it draws
+ * under the message's own uuid (`sending`, until the hub's frame for it lands
+ * on the same row), the busy flip, the working clock.
  */
 function noteSendSubmitted(
   instanceId: string,
   text: string,
-  extras: SendExtras = {},
-  commandId?: string,
+  extras: SendExtras,
+  commandId: string,
   /**
-   * The failed send this one retries. Its row takes the new command's marks
-   * where it stands — the same row goes back to sending, then sent or failed
-   * again — instead of leaving and coming back as a new row at the end.
+   * The failed send this one retries. Its row takes the new message's id
+   * where it stands and goes back to sending, instead of leaving and coming
+   * back as a new row at the end.
    */
   replaces?: string
 ): void {
   const target = session(instanceId);
-  const marks = {
-    queuedLocally: true,
-    ...(commandId && { sentAs: commandId }),
-  };
   const retried =
     replaces === undefined
-      ? -1
-      : target.messages.findIndex(
-          (message) => message.metadata?.sentAs === replaces
-        );
-  if (retried >= 0) {
-    const { sendFailed: _failed, ...kept } =
-      target.messages[retried].metadata ?? {};
-    target.messages[retried] = {
-      ...target.messages[retried],
-      metadata: { ...kept, ...marks },
-    };
+      ? undefined
+      : target.messages.findLast((message) => message.id === replaces);
+  if (retried) {
+    const { sendFailed: _failed, ...kept } = retried.metadata ?? {};
+    retried.id = commandId;
+    retried.state = "sending";
+    retried.metadata = kept;
   } else {
-    const local = localUserMessage(instanceId, text, selectionExtras(extras));
-    const echo = { ...local, metadata: { ...local.metadata, ...marks } };
-    // Decided at the press: a busy session will hold this message, so it is
-    // drawn as its queued row at once — never as a sent turn first — keyed by
-    // the send, which the daemon's announcement keeps (queue.ts).
-    if (target.busy && commandId) {
-      target.queued = [
-        ...target.queued,
-        {
-          queueId: commandId,
-          sentAs: commandId,
-          text,
-          timestamp: new Date().toISOString(),
-          ...(extras.images?.length && { images: extras.images.length }),
-          echo,
-        },
-      ];
-    } else {
-      target.messages.push(echo);
-    }
+    upsert(target, [
+      localUserMessage(instanceId, commandId, text, selectionExtras(extras)),
+    ]);
   }
   // A new attempt replaces the last one's announcement rather than stacking on
   // it: the live region says what is true now, not what was true before.
@@ -3705,7 +3636,7 @@ function ask<T>(
 /** The machine's stored sessions, newest first. */
 export async function loadCatalog(machineId: string): Promise<void> {
   try {
-    const listed = await machineControl<SDKSessionInfo[]>(
+    const listed = await machineControl<NeutralSessionInfo[]>(
       machineId,
       "listSessions",
       [SESSION_CATALOG_LIMIT > 0 ? { limit: SESSION_CATALOG_LIMIT } : {}]
@@ -3823,13 +3754,19 @@ export interface HistorySource {
  * so the same address works before this browser knows anything about the
  * conversation.
  */
-export function messagesUrl(source: HistorySource, tail?: number): string {
+export function messagesUrl(
+  source: HistorySource,
+  page: { tail: number } | { before: string }
+): string {
   const path = `/api/instances/${encodeURIComponent(source.viewId)}/messages`;
   const params = new URLSearchParams();
   // A tail request is answered by parsing only the newest window of the
-  // transcript file — the difference between ~4ms and a full-file parse.
-  if (tail) {
-    params.set("tail", String(tail));
+  // transcript file — the difference between ~4ms and a full-file parse. An
+  // older page is everything strictly before the oldest entry already read.
+  if ("tail" in page) {
+    params.set("tail", String(page.tail));
+  } else {
+    params.set("before", page.before);
   }
   const suffix = params.size > 0 ? `?${params}` : "";
   return `${path}${suffix}`;
@@ -3939,11 +3876,6 @@ export async function streamHistory({
   };
 
   const epoch = claimTranscript(viewId);
-  // Whatever this session said while the reader was elsewhere. The transcript
-  // about to arrive replaces the message list wholesale, so these are kept and
-  // re-applied behind it — deduplicated against it by uuid, exactly like the
-  // frames that land *during* the read.
-  const seenLive = target.messages.slice();
   target.loading = true;
   target.readFault = null;
 
@@ -3952,12 +3884,23 @@ export async function streamHistory({
   /** Tool results in the buffer whose `tool_use` is older still — a cut here would split them. */
   const dangling = new Set<string>();
   const seeded = new Set<string>();
+  /** The oldest entry read so far: where an older page ends. */
+  let oldest: string | undefined;
+  let consumed = 0;
   let chunks = 0;
 
   const publish = (chunk: SessionMessage[]): void => {
     const mapped = mapTranscript(viewId, chunk);
     if (chunks === 0) {
-      target.messages = mapped.messages;
+      // The read REPLACES what history put on screen; it does not merge into
+      // it. What only this tab holds survives it: its sends the harness has
+      // not read yet — failed, not yet taken, or waiting (the hub serves those
+      // with the read too, under the same ids).
+      const own = target.messages.filter(
+        (message) => message.state && message.state !== "read"
+      );
+      target.messages = [];
+      upsert(target, [...mapped.messages, ...own]);
       target.subagents = mapped.subagents;
       // The tail chunk is newest-first, so it carries the latest `system.init`:
       // harvest the `/` menu from it, which the live-frame handler is otherwise
@@ -3970,14 +3913,6 @@ export async function streamHistory({
       }
       target.loading = false;
       target.hydrating = true;
-      // UNCONDITIONALLY, not `if (live)`: a switched-away tab's re-read arrives
-      // through the fallback source, which is labelled `live: false` even for a
-      // running session — and a message the reader QUEUED while the agent was
-      // busy exists only as a local echo the daemon has not persisted yet. The
-      // wholesale replace above would erase it; absorption is what puts it
-      // back, and on a genuinely stored session `seenLive` is empty and this
-      // is a no-op.
-      absorbLive(target, seenLive, seeded);
       if (live) {
         target.streaming = "";
         clearTurnPhase(target);
@@ -3986,7 +3921,7 @@ export async function streamHistory({
         replayHeld(viewId, seeded);
       }
     } else {
-      target.messages = [...mapped.messages, ...target.messages];
+      upsert(target, mapped.messages, true);
       // Branches are keyed by the Task `tool_use_id` that opened them, so an
       // older chunk mostly adds keys — except where a compacted transcript
       // re-emits the same call, and then its turns belong in front of the ones
@@ -4007,7 +3942,9 @@ export async function streamHistory({
     // Tail first: the agent parses only the newest window of the transcript
     // file, so the first paint is not behind a full-file parse. The full read
     // follows below, continuing the same stream state for scrollback.
-    const response = await fetch(messagesUrl(source, TRANSCRIPT_TAIL_CEILING));
+    const response = await fetch(
+      messagesUrl(source, { tail: TRANSCRIPT_TAIL_CEILING })
+    );
     if (!(response.ok && response.body)) {
       const detail =
         (await response.text().catch(() => "")) || response.statusText;
@@ -4066,6 +4003,8 @@ export async function streamHistory({
       }
       buffered.push(entry);
       seeded.add(entry.uuid);
+      oldest = entry.uuid;
+      consumed += 1;
       // Only a turn opener with no tool pair left hanging can begin a chunk:
       // anywhere else the slice would open mid-turn, with results arriving for
       // a `tool_use` on the other side of the cut.
@@ -4085,15 +4024,13 @@ export async function streamHistory({
 
     /**
      * One newest-first NDJSON body into the shared cut state. The tail body
-     * and the full body drain through here in turn, as one continuous stream:
-     * `skipSeen` is how the full read passes over the entries the tail
-     * already consumed, so the buffered/dangling bookkeeping never sees a
-     * duplicate and every chunk boundary invariant holds across the seam.
-     * Returns false when a later read superseded this one mid-stream.
+     * and the older page drain through here in turn, as one continuous
+     * stream: the older page begins strictly before the tail's oldest entry,
+     * so every chunk boundary invariant holds across the seam. Returns false
+     * when a later read superseded this one mid-stream.
      */
     const drain = async (
-      body: ReadableStream<Uint8Array>,
-      skipSeen: boolean
+      body: ReadableStream<Uint8Array>
     ): Promise<boolean> => {
       const reader = body.getReader();
       // A stream torn down mid-read (the page navigated away) rejects both
@@ -4104,12 +4041,8 @@ export async function streamHistory({
       });
       const decoder = new TextDecoder();
       let carry = "";
-      const take = async (line: string): Promise<void> => {
-        const entry = JSON.parse(line) as SessionMessage;
-        if (!(skipSeen && seeded.has(entry.uuid))) {
-          await consume(entry);
-        }
-      };
+      const take = (line: string): Promise<void> =>
+        consume(JSON.parse(line) as SessionMessage);
       for (;;) {
         // biome-ignore lint/performance/noAwaitInLoops: a stream reads sequentially by definition — each chunk depends on the last read landing first
         const { done, value } = await reader.read();
@@ -4143,23 +4076,26 @@ export async function streamHistory({
       return hydrations.get(viewId) === epoch;
     };
 
-    if (!(await drain(response.body, false))) {
+    if (!(await drain(response.body))) {
       return { ok: true, skipped: true };
     }
 
-    // Everything older than the tail, for scrollback. The same route without
-    // the tail bound answers with the whole conversation; the entries the
-    // tail already published are skipped by uuid and the rest continue
-    // prepending behind them. By now the newest turns are long since on
+    // Everything older than the tail, for scrollback: strictly before the
+    // oldest entry the tail read, so nothing on it can be a row already on
+    // screen — a line written between the two reads belongs to the newest
+    // end, which the live stream carries. A tail shorter than its bound is the
+    // whole conversation already. By now the newest turns are long since on
     // screen, so this read's full-file parse is off the visible path.
-    const rest = await fetch(messagesUrl(source));
-    if (!(rest.ok && rest.body)) {
-      throw new Error(
-        (await rest.text().catch(() => "")) || rest.statusText || "unreadable"
-      );
-    }
-    if (!(await drain(rest.body, true))) {
-      return { ok: true, skipped: true };
+    if (oldest && consumed >= TRANSCRIPT_TAIL_CEILING) {
+      const rest = await fetch(messagesUrl(source, { before: oldest }));
+      if (!(rest.ok && rest.body)) {
+        throw new Error(
+          (await rest.text().catch(() => "")) || rest.statusText || "unreadable"
+        );
+      }
+      if (!(await drain(rest.body))) {
+        return { ok: true, skipped: true };
+      }
     }
 
     // The head of a transcript is always somewhere a chunk can start, and an
@@ -4184,61 +4120,17 @@ export async function streamHistory({
     // on screen there is no transcript to join, so the failure is handed back
     // for the pane to state outright.
     if (chunks > 0) {
-      target.messages = [
-        errorMessage(viewId, `could not read transcript: ${message}`),
-        ...target.messages,
-      ];
+      upsert(
+        target,
+        [errorMessage(viewId, `could not read transcript: ${message}`)],
+        true
+      );
       return { ok: true };
     }
     return fail({ reason: "failed", message });
   } finally {
     target.loading = false;
     target.hydrating = false;
-  }
-}
-
-/**
- * Puts back whatever was seen live that the stored transcript does not carry
- * yet — the newest turn is written to disk a moment after it is streamed, so
- * this is what stops the last thing on screen vanishing when history lands over
- * the top of it.
- */
-function absorbLive(
-  target: SessionState,
-  live: Message[],
-  seeded: Set<string>
-): void {
-  const absorbed = new Set<Message>();
-  for (const message of live) {
-    if (message.sdkUuid && seeded.has(message.sdkUuid)) {
-      continue;
-    }
-    if (target.messages.some((existing) => existing.id === message.id)) {
-      continue;
-    }
-    // An unstamped local echo of a turn the transcript already carries. Its
-    // stamping frame is about to be dropped by replayHeld (the uuid is seeded),
-    // so left here it would double the stored turn — the "first prompt shows
-    // twice" bug. Absorbed one-to-one by content so a genuine repeated send
-    // keeps both bubbles.
-    const echoOfStored =
-      message.type === "user" &&
-      !message.sdkUuid &&
-      target.messages.find(
-        (m) =>
-          m.type === "user" &&
-          m.sdkUuid &&
-          !absorbed.has(m) &&
-          m.content === message.content
-      );
-    if (echoOfStored) {
-      absorbed.add(echoOfStored);
-      continue;
-    }
-    if (mergePeerMessage(target.messages, message)) {
-      continue;
-    }
-    target.messages.push(message);
   }
 }
 
@@ -4663,11 +4555,9 @@ export async function relaunchSession(
  */
 function rewindPoint(
   target: SessionState,
-  sdkUuid: string
+  id: string
 ): { at: string; cut: number } | null {
-  const edited = target.messages.findIndex(
-    (message) => message.sdkUuid === sdkUuid
-  );
+  const edited = target.messages.findIndex((message) => message.id === id);
   if (edited < 0) {
     return null;
   }
@@ -4701,9 +4591,10 @@ function toolFrames(messages: Message[]): Set<string | undefined> {
 }
 
 /**
- * Which of a session's turns can be rewound to, by uuid — what decides whether
- * the transcript offers the edit and fork affordances at all. One pass over the
- * transcript, because every message on screen asks the same question.
+ * Which of a session's turns can be rewound to, by the message's id — what
+ * decides whether the transcript offers the edit and fork affordances at all.
+ * One pass over the transcript, because every message on screen asks the same
+ * question.
  */
 export function rewindableTurns(instanceId: string): Set<string> {
   const turns = new Set<string>();
@@ -4714,8 +4605,8 @@ export function rewindableTurns(instanceId: string): Set<string> {
   const calls = toolFrames(target.messages);
   let anchored = false;
   for (const message of target.messages) {
-    if (message.type === "user" && message.sdkUuid && anchored) {
-      turns.add(message.sdkUuid);
+    if (message.type === "user" && message.state === "read" && anchored) {
+      turns.add(message.id as string);
     }
     if (
       message.type === "assistant" &&
@@ -4737,7 +4628,7 @@ export function rewindableTurns(instanceId: string): Set<string> {
  */
 export async function editAndResend(
   instanceId: string,
-  sdkUuid: string,
+  id: string,
   content: string
 ): Promise<void> {
   const target = session(instanceId);
@@ -4753,7 +4644,7 @@ export async function editAndResend(
       `no session key on record for ${instanceId}; cannot resume`
     );
   }
-  const point = rewindPoint(target, sdkUuid);
+  const point = rewindPoint(target, id);
   if (!point) {
     throw new Error(
       "There is no answered turn behind this message to go back to."
@@ -4819,14 +4710,14 @@ export async function editAndResend(
  * end: the fork the header offers, resumed at the turn the reader picked. The
  * session it branches from is left running and untouched.
  */
-export function forkFrom(instanceId: string, sdkUuid: string): string {
+export function forkFrom(instanceId: string, id: string): string {
   const target = session(instanceId);
   if (!(target.sessionId && target.machineId)) {
     throw new Error(
       "This session has not named itself yet. Try again in a moment."
     );
   }
-  const point = rewindPoint(target, sdkUuid);
+  const point = rewindPoint(target, id);
   if (!point) {
     throw new Error(
       "There is no answered turn behind this message to branch from."
@@ -5104,7 +4995,7 @@ export const whiffle = {
     return instances.filter((row) => isListed(row) && row.kind === "scratch");
   },
   /** Stored sessions on one machine, minus the side quests hiding among them. */
-  catalogOf: (machineId: string): SDKSessionInfo[] =>
+  catalogOf: (machineId: string): NeutralSessionInfo[] =>
     (catalog[machineId] ?? []).filter(listedInHistory),
   get projects() {
     return state.projects;
@@ -5123,7 +5014,7 @@ export const whiffle = {
           (row.machineId === project.machineId && under(project.cwd, row.cwd)))
     ),
   /** Stored sessions the SDK recorded somewhere inside the project's checkout. */
-  storedIn: (project: ProjectRow): SDKSessionInfo[] =>
+  storedIn: (project: ProjectRow): NeutralSessionInfo[] =>
     (catalog[project.machineId] ?? []).filter(
       (info) =>
         listedInHistory(info) && info.cwd && under(project.cwd, info.cwd)

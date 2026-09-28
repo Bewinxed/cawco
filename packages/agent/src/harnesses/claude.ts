@@ -11,7 +11,7 @@
  */
 
 import type { Dirent } from "node:fs";
-import { access, readdir, readFile, realpath, stat } from "node:fs/promises";
+import { access, readdir, readFile, realpath } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
@@ -34,9 +34,8 @@ import type {
   ModelInfo,
   NeutralMessage,
   NeutralSessionInfo,
-  NeutralUserMessage,
-  QueuedMessage,
   SendPayload,
+  SentMessage,
   SessionMessage,
   SpawnPayload,
   UserAnswers,
@@ -54,21 +53,14 @@ import {
   CONTROL_SUPPORTED_COMMANDS,
   CONTROL_SUPPORTED_MODELS,
   INSPECT_CONFIG,
-  isInjected,
   MARKETPLACE_CATALOG,
-  MESSAGE_DEQUEUED,
-  MESSAGE_QUEUED,
+  MESSAGES_READ,
   READ_MEMORY_FILE,
   READ_SKILL_FILES,
   settledQuestionResult,
 } from "@whiffle/core";
 import { sessiondEndpoint } from "@whiffle/core/sessiond";
 import { observeRateLimit } from "@whiffle/core/usage/observed";
-import {
-  type Checkpoint,
-  readTranscriptTail,
-  typeFilter,
-} from "@whiffle/jsonl-parser";
 import { probeAuth, unlockKeychain } from "../auth";
 import { delegationMcp, MCP_SERVER_NAME } from "../delegation";
 import { resolvedDenyList } from "../denied-tools";
@@ -100,17 +92,44 @@ import {
 import { resolveBin } from "../tools";
 import { claudeConfigDirs } from "../usage/scan-claude";
 import {
-  absorbedMessage,
-  openedTurn,
-  type RawRecord,
   readSessionEnd,
   readSessionFull,
   readSessionWhole,
   type SDKSessionMessage,
 } from "./claude-transcript";
 
-/** The neutral frame is the SDK frame re-tagged: same fields, plus the original. */
-export const toNeutral = (sdk: SDKMessage): NeutralMessage => {
+/**
+ * The CLI's word on one command it was sent: `command_uuid` is the uuid the
+ * send carried, and `started` is the moment its prompt was consumed — the
+ * turn it opens, or the tool boundary it is folded in at. It is written just
+ * before what the model says about it. The SDK passes the line through without
+ * typing it (0.3.280), so it is read by shape.
+ */
+interface CommandLifecycle {
+  command_uuid: string;
+  session_id?: string;
+  state: "queued" | "started" | "completed" | "cancelled";
+  type: "command_lifecycle";
+}
+
+/**
+ * The neutral frame is the SDK frame re-tagged: same fields, plus the
+ * original. A command's lifecycle is the one exception: `started` becomes the
+ * {@link MESSAGES_READ} frame, and its other states say nothing a reader
+ * needs, so they are `null` — no frame at all.
+ */
+export const toNeutral = (sdk: SDKMessage): NeutralMessage | null => {
+  if ((sdk as { type: string }).type === "command_lifecycle") {
+    const command = sdk as unknown as CommandLifecycle;
+    return command.state === "started"
+      ? {
+          type: "system",
+          subtype: MESSAGES_READ,
+          read: [command.command_uuid],
+          ...(command.session_id ? { session_id: command.session_id } : {}),
+        }
+      : null;
+  }
   if (sdk.type === "result") {
     // The SDK's own usage carries cache_creation/cache_read counts; re-tag them
     // under the harness-neutral `cache` shape the opencode adapter's result
@@ -419,8 +438,7 @@ function withExtras(
  * The SDK pulls from it as fast as it can write to the CLI, turn or no turn,
  * so a message waits here only for the instant between two pulls. Nothing
  * about a busy session is decided here: the CLI holds what arrives mid-turn in
- * a queue of its own, and only its transcript says when the model read it
- * ({@link ClaudeSession}'s held sends).
+ * a queue of its own, and says when it consumed each one ({@link toNeutral}).
  */
 export class InputStream implements AsyncIterable<SDKUserMessage> {
   readonly #queue: SDKUserMessage[] = [];
@@ -462,83 +480,6 @@ export class InputStream implements AsyncIterable<SDKUserMessage> {
     };
   }
 }
-
-/**
- * What a turn was typed as, before the adapter folded pastes and images into
- * it. This is what a queued row renders, and it is deliberately the text the
- * dashboard's own local copy holds — matching them is how the queue's truth
- * replaces the client's guess without doubling the message on screen.
- */
-export const queuedText = (message: NeutralUserMessage): string => {
-  const { content } = message.message;
-  if (typeof content === "string") {
-    return content;
-  }
-  return content
-    .filter(
-      (block): block is { type: "text"; text: string } => block.type === "text"
-    )
-    .map((block) => block.text)
-    .join("\n");
-};
-
-/** The `message_queued` announcement for one held turn. */
-export const queuedFrame = (
-  queued: QueuedMessage,
-  sessionId: string | null
-): NeutralMessage => ({
-  type: "system",
-  subtype: MESSAGE_QUEUED,
-  ...(sessionId ? { session_id: sessionId } : {}),
-  queueId: queued.queueId,
-  text: queued.text,
-  timestamp: queued.timestamp,
-  ...(queued.images ? { images: queued.images } : {}),
-});
-
-/** And the one that retires it, once the transcript shows the model read it. */
-export const dequeuedFrame = (
-  queueId: string,
-  sessionId: string | null
-): NeutralMessage => ({
-  type: "system",
-  subtype: MESSAGE_DEQUEUED,
-  ...(sessionId ? { session_id: sessionId } : {}),
-  queueId,
-});
-
-/**
- * The frame for a message sent to the session — by the reader or by whiffle —
- * read off the transcript where the model read it: folded into a running turn
- * ({@link absorbedMessage}) or opening one ({@link openedTurn}), because
- * stdout carries neither. It keeps the transcript line's uuid, so the stored
- * copy a later read brings is the same message, not a second one.
- */
-const heldFrame = (held: SDKSessionMessage): NeutralMessage =>
-  ({
-    type: "user",
-    uuid: held.uuid,
-    session_id: held.session_id,
-    parent_tool_use_id: null,
-    message: held.message,
-    timestamp: held.timestamp,
-    sentMidTurn: true,
-    ...(held.sourceUuid ? { sourceUuid: held.sourceUuid } : {}),
-  }) as NeutralMessage;
-
-/** Only these transcript lines can carry a held send. */
-const HELD_LINES = typeFilter("attachment", "user");
-
-/**
- * The frames after which a held send is on disk: the main loop opening a model
- * call (a fold, or the line opening a turn, is written before the request that
- * carries it), and a turn's `result`.
- */
-const readsHeld = (message: SDKMessage): boolean =>
-  message.type === "result" ||
-  (message.type === "stream_event" &&
-    message.parent_tool_use_id === null &&
-    message.event.type === "message_start");
 
 /** A main-loop frame only a running turn sends: the model answering. */
 const runsTurn = (message: SDKMessage): boolean =>
@@ -630,39 +571,6 @@ class ClaudeSession implements HarnessSession {
   >();
   /** Denied questions, keyed by tool call, until their `tool_result` goes past. */
   readonly #dismissedQuestions = new Map<string, UserQuestionResult>();
-  /**
-   * This session's transcript and how far it has been read, for the one
-   * question stdout never answers: where the model read what the reader sent.
-   *
-   * The CLI takes every send off its stdin at once. An idle session opens a
-   * turn with it; a busy one holds it in the CLI's own queue and, at the next
-   * tool boundary, folds it into the running turn — or, if the turn ends
-   * first, opens the next one with it. Only the transcript says which, so it
-   * is read — only the appended bytes — each time the main loop opens a model
-   * call (after either line is written) and at a `result`, and the frame goes
-   * out ahead of what the model says next.
-   *
-   * Resolved when the session is made, for a session resumed onto a file that
-   * already exists (from its end, before anything is sent); otherwise the
-   * first time there is something to read (from its start: the file is this
-   * session's own). Null until then.
-   */
-  #transcript: Promise<{ path: string; checkpoint: Checkpoint } | null> | null =
-    null;
-  /**
-   * What the reader sent, oldest first, until its line is read. A send made
-   * while a turn runs is the queue as observable state ({@link QueuedMessage}):
-   * `announced` by `message_queued` when it is held, retired by
-   * `message_dequeued` when the transcript shows the model read it,
-   * snapshotted by the hub in between. A send to an idle session is held only
-   * until the line opening its turn is read — its sender drew it as a turn at
-   * once. `ends` counts the `result`s it has outlived: one ends the turn it
-   * was sent into, and by the second it has opened the turn between them.
-   */
-  readonly #held: (QueuedMessage & { ends: number; announced: boolean })[] = [];
-  readonly #workdir: string;
-  /** Whether this session writes a transcript — what a held send is read back from. */
-  readonly #persisted: boolean;
   readonly instanceId: string;
 
   constructor(
@@ -693,9 +601,6 @@ class ClaudeSession implements HarnessSession {
   ) {
     this.instanceId = instanceId;
     this.#ctx = ctx;
-    this.#workdir = workdir;
-    this.#persisted = persistSession !== false;
-    this.#transcript = this.#resumedTranscript(resume);
     const input = new InputStream();
     this.#input = input;
     const turn = new Turn();
@@ -850,128 +755,7 @@ class ClaudeSession implements HarnessSession {
     this.#pump = this.#pumpMessages(ctx, handle, turn);
   }
 
-  /**
-   * The reader sent something: hold it until the transcript shows where the
-   * model read it. Announced as queued only when a turn is running — that is
-   * when the reader is waiting on it.
-   */
-  #hold(queued: QueuedMessage, announced: boolean): void {
-    this.#held.push({ ...queued, ends: 0, announced });
-    if (announced) {
-      this.#ctx.frame(queuedFrame(queued, this.sessionId));
-    }
-  }
-
-  /**
-   * A session resumed onto its own file is read from where that file ends now,
-   * before anything is sent; any other waits for its first line (`#readHeld`).
-   */
-  #resumedTranscript(
-    resume: SpawnPayload["resume"]
-  ): Promise<{ path: string; checkpoint: Checkpoint } | null> | null {
-    return resume && !resume.fork
-      ? this.#locate(resume.sessionKey, "end")
-      : null;
-  }
-
-  /**
-   * The transcript behind `sessionKey`, read from its `end` (a resumed file,
-   * whose history is not news) or its `start` (a file this session wrote).
-   */
-  #locate(
-    sessionKey: string,
-    from: "start" | "end"
-  ): Promise<{ path: string; checkpoint: Checkpoint } | null> {
-    return claudeSessionFile(sessionKey, this.#workdir).then(async (path) => {
-      if (!path) {
-        return null;
-      }
-      const offset = from === "end" ? (await stat(path)).size : 0;
-      return { path, checkpoint: { size: offset, offset, lines: 0 } };
-    });
-  }
-
-  /**
-   * Frames every held send read since the last look — a fold into the running
-   * turn, or a turn opened, whose words carry held texts — then retires each
-   * held send it carried. A line that carries none was not sent through this
-   * session (a message the CLI wrote itself, a line from before it). At a
-   * `result`, what is still held has outlived one more turn; nothing outlives
-   * two.
-   */
-  async #readHeld(ending: boolean): Promise<void> {
-    const { sessionId } = this;
-    if (!this.#transcript && sessionId) {
-      this.#transcript = this.#locate(sessionId, "start");
-    }
-    const transcript = await this.#transcript;
-    if (transcript) {
-      const tail = await readTranscriptTail(
-        transcript.path,
-        transcript.checkpoint,
-        { prefilter: HELD_LINES }
-      );
-      transcript.checkpoint = tail.checkpoint;
-      for (const located of tail.records) {
-        const record = located.record as unknown as RawRecord;
-        const read = absorbedMessage(record) ?? openedTurn(record);
-        const carried = read ? this.#takeHeld(read) : [];
-        if (read && carried.length > 0) {
-          this.#ctx.frame(heldFrame(read));
-        }
-        this.#retire(carried);
-      }
-    } else {
-      // A new session's file is written with its first line: look again next time.
-      this.#transcript = null;
-    }
-    if (!ending) {
-      return;
-    }
-    for (const held of this.#held) {
-      held.ends += 1;
-    }
-    this.#retire(this.#held.filter((held) => held.ends >= 2));
-    this.#held.splice(
-      0,
-      this.#held.length,
-      ...this.#held.filter((held) => held.ends < 2)
-    );
-  }
-
-  /** The held sends that are no longer waiting, said to be so where they were announced. */
-  #retire(done: (QueuedMessage & { announced: boolean })[]): void {
-    for (const queued of done) {
-      if (queued.announced) {
-        this.#ctx.frame(dequeuedFrame(queued.queueId, this.sessionId));
-      }
-    }
-  }
-
-  /**
-   * Takes every held send a read line carries. The CLI opens one turn with
-   * every send it held when the last turn ended, their words joined in one
-   * line, so a line carries each held send whose words appear in it; an
-   * images-only send is carried by a line with no words either.
-   */
-  #takeHeld(
-    read: SDKSessionMessage
-  ): (QueuedMessage & { announced: boolean })[] {
-    const text = queuedText({
-      message: read.message,
-    } as NeutralUserMessage);
-    const carries = (held: QueuedMessage) =>
-      held.text === "" ? text === "" : text.includes(held.text);
-    const taken = this.#held.filter(carries);
-    this.#held.splice(
-      0,
-      this.#held.length,
-      ...this.#held.filter((held) => !carries(held))
-    );
-    return taken;
-  }
-
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the session's whole live-frame pipeline — echo tagging, question dismissal, structured-result folding, busy/failed reporting — one pass per SDK message
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the session's whole live-frame pipeline — question dismissal, structured-result folding, busy/failed reporting — one pass per SDK message
   async #pumpMessages(
     ctx: HarnessContext,
     handle: Query,
@@ -987,11 +771,6 @@ class ClaudeSession implements HarnessSession {
           turn.start();
           ctx.busy(true);
         }
-        // What the reader sent is read where the model read it: before the
-        // answer that follows it, and before the turn closes.
-        if (this.#held.length > 0 && readsHeld(message)) {
-          await this.#readHeld(message.type === "result");
-        }
         // Free account-wide limit data: Claude Code read these off its own
         // response headers, so they are fresher than anything the polled
         // `/api/oauth/usage` can return — and cost no request of our own. Only
@@ -1001,6 +780,9 @@ class ClaudeSession implements HarnessSession {
           continue;
         }
         const neutral = toNeutral(message);
+        if (!neutral) {
+          continue;
+        }
         // The Claude SDK emits `AskUserQuestion`'s structured output as a
         // top-level `tool_use_result` on the user message (the prose alone is
         // what lands in the `tool_result` block's `content`). Normalise it onto
@@ -1063,36 +845,13 @@ class ClaudeSession implements HarnessSession {
   }
 
   send(
-    message: NeutralUserMessage,
+    message: SentMessage,
     extras: Pick<SendPayload, "attachments" | "images" | "urgent">
   ): void {
+    // The uuid rides on the message: the CLI keeps it as the command's own id
+    // and names it in the `command_lifecycle` that says it was consumed.
     const sdk = message as unknown as SDKUserMessage;
     const queued = (message as { shouldQuery?: boolean }).shouldQuery === false;
-
-    // Every send is held until the transcript shows where the model read it —
-    // the turn it opens, or, into a running turn, the tool boundary the CLI
-    // folds it in at or the next turn it opens — and its row goes out from
-    // there ({@link #readHeld}), whoever sent it: a session reads the same
-    // live as it does after a reload. Only the reader's own send into a
-    // running turn is announced as queued: that is the reader waiting on it,
-    // and a queued row is drawn as theirs. A session that writes no transcript
-    // has nothing to read it back from, so what whiffle injects into one is
-    // echoed as it goes (below), and the reader's own words are drawn by the
-    // tab that sent them.
-    const held = this.#persisted;
-    if (held) {
-      this.#hold(
-        {
-          queueId: crypto.randomUUID(),
-          text: queuedText(message),
-          timestamp: new Date().toISOString(),
-          ...(extras.images?.length ? { images: extras.images.length } : {}),
-        },
-        // biome-ignore lint/suspicious/noUnnecessaryConditions: Turn.busy is mutated by Turn.start()/.end() elsewhere; the checker doesn't see that cross-class mutation
-        this.#turn.busy && !isInjected(message.origin)
-      );
-    }
-    const echo = !held && isInjected(message.origin);
 
     // A mid-turn injection: the model reads it at the next tool boundary without
     // losing work. If the stream is gone, fall back to queueing it.
@@ -1106,9 +865,6 @@ class ClaudeSession implements HarnessSession {
       void this.#handle.streamInput(stream).catch(() => {
         this.#input.push(outgoing);
       });
-      if (echo) {
-        this.#ctx.frame(toNeutral(message as unknown as SDKMessage));
-      }
       return;
     }
 
@@ -1124,13 +880,6 @@ class ClaudeSession implements HarnessSession {
 
     this.#turn.start();
     this.#input.push(withExtras(outgoing, extras.attachments, extras.images));
-
-    // Echoed as the frame the SDK will not send, for a session with no
-    // transcript to read it back from: a rule's message or a hand-off has no
-    // local copy in any dashboard.
-    if (echo) {
-      this.#ctx.frame(toNeutral(message as unknown as SDKMessage));
-    }
   }
 
   async control(method: string, args: unknown[]): Promise<unknown> {
@@ -1190,11 +939,6 @@ class ClaudeSession implements HarnessSession {
 
   async stop(): Promise<void> {
     this.#input.end();
-    // Nothing left to hold these for: the session is ending, so no queue entry
-    // here will ever be read, and the hub drops the session's queue with the
-    // row. Retired quietly rather than announced — the reader is watching a
-    // session end, not a message being read.
-    this.#held.length = 0;
     for (const resolve of this.#permissions.values()) {
       resolve({ behavior: "deny", message: "session stopped" });
     }
@@ -1252,6 +996,10 @@ const toEntry = (
     message: entry.message,
     parent_tool_use_id: entry.parent_tool_use_id,
     parent_agent_id: entry.parent_agent_id,
+    // A fold's line has an id of its own; the send it carries is keyed by this.
+    ...((entry as SDKSessionMessage).sourceUuid
+      ? { sourceUuid: (entry as SDKSessionMessage).sourceUuid }
+      : {}),
     ...(typeof written === "string" ? { timestamp: written } : {}),
     ...((entry as { compactSummary?: true }).compactSummary
       ? { compactSummary: true as const }
@@ -1465,7 +1213,7 @@ export class ClaudeCustody implements HarnessSession {
   readonly #parked = new Set<string>();
   /** Turns pushed during custody; delivered by the attached session. */
   readonly #held: {
-    message: NeutralUserMessage;
+    message: SentMessage;
     extras: Pick<SendPayload, "attachments" | "images" | "urgent">;
   }[] = [];
   /** Controls deferred during custody; replayed by the attached session. */
@@ -1485,7 +1233,7 @@ export class ClaudeCustody implements HarnessSession {
     instanceId: string;
     sessionId: string | null;
     held: {
-      message: NeutralUserMessage;
+      message: SentMessage;
       extras: Pick<SendPayload, "attachments" | "images" | "urgent">;
     }[];
     heldControls: { method: string; args: unknown[] }[];
@@ -1502,7 +1250,7 @@ export class ClaudeCustody implements HarnessSession {
       instanceId: string;
       sessionId: string | null;
       held: {
-        message: NeutralUserMessage;
+        message: SentMessage;
         extras: Pick<SendPayload, "attachments" | "images" | "urgent">;
       }[];
       heldControls: { method: string; args: unknown[] }[];
@@ -1589,7 +1337,10 @@ export class ClaudeCustody implements HarnessSession {
       this.sessionId = sdk.session_id;
       this.#ctx.session(sdk.session_id);
     }
-    this.#ctx.frame(toNeutral(sdk));
+    const neutral = toNeutral(sdk);
+    if (neutral) {
+      this.#ctx.frame(neutral);
+    }
     if (sdk.type === "result") {
       this.#ctx.busy(false);
       // THE BOUNDARY. The turn that was in flight when the agent died has now
@@ -1667,7 +1418,7 @@ export class ClaudeCustody implements HarnessSession {
    * delivers it through the real path.
    */
   send(
-    message: NeutralUserMessage,
+    message: SentMessage,
     extras: Pick<SendPayload, "attachments" | "images" | "urgent">
   ): void {
     this.#held.push({ message, extras });
@@ -2067,7 +1818,7 @@ export class ClaudeHarness implements Harness {
         instanceId: string;
         sessionId: string | null;
         held: {
-          message: NeutralUserMessage;
+          message: SentMessage;
           extras: Pick<SendPayload, "attachments" | "images" | "urgent">;
         }[];
         heldControls: { method: string; args: unknown[] }[];

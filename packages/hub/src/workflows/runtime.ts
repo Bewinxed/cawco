@@ -315,6 +315,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
         instanceId,
         message: {
           type: "user",
+          uuid: crypto.randomUUID(),
           message: { role: "user", content: body },
           parent_tool_use_id: null,
           origin: {

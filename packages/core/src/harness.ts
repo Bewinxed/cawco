@@ -273,9 +273,6 @@ export interface NeutralSessionInfo {
   tag?: string;
 }
 
-/** Kept name for one release: the dashboard imported this from the SDK re-export. */
-export type SDKSessionInfo = NeutralSessionInfo;
-
 /** A stored transcript entry. `message` is the {@link NeutralMessage} the turn wrote. */
 export interface SessionMessage {
   /**
@@ -291,6 +288,14 @@ export interface SessionMessage {
   parent_agent_id: string | null;
   parent_tool_use_id: string | null;
   session_id: string;
+  /**
+   * The uuid a sent message was sent under ({@link NeutralUserMessage.uuid}),
+   * when the harness stores it apart from its own id for the entry: Claude's
+   * `queued_command.source_uuid` on a fold, and the id the opencode and pi
+   * adapters keep for what they were sent. A reader keys the message by this,
+   * so it is the same row live and after a reload.
+   */
+  sourceUuid?: string;
   /**
    * When the turn was actually written, ISO-8601, as the harness recorded it.
    * Optional in both directions: a daemon older than this field sends nothing,
@@ -368,20 +373,6 @@ export type NeutralOrigin =
    */
   | { kind: "system"; name?: string };
 
-/**
- * Whether a user message was put into the session by whiffle rather than typed
- * by the reader.
- *
- * This is what decides whether a harness echoes the message back as a frame.
- * The reader's own words already have a local copy in the dashboard, added when
- * they hit send; anything whiffle injects has no such copy, so unless the
- * harness frames it, it does not appear until the transcript is re-read from
- * disk. That was exactly the bug: rule messages arrived, the session acted on
- * them, and the chat stayed empty until a refresh.
- */
-export const isInjected = (origin?: NeutralOrigin): boolean =>
-  origin?.kind === "peer" || origin?.kind === "system";
-
 export interface NeutralAssistantMessage {
   /** Blocks already published for this message, preserving row ids across incremental settlement. */
   contentOffset?: number;
@@ -394,66 +385,42 @@ export interface NeutralAssistantMessage {
   uuid?: string;
 }
 
+/**
+ * A user-role message. Two things wear this shape: what the harness says in
+ * the user's role (tool results, its own notices), and a message SENT to the
+ * session — which always carries `origin` and `uuid` ({@link SentMessage}),
+ * and nothing else does.
+ */
 export interface NeutralUserMessage {
   message: { role: "user"; content: string | NeutralContentBlock[] };
   origin?: NeutralOrigin;
   parent_tool_use_id?: string | null;
   raw?: unknown;
-  /**
-   * A message sent to the session — the reader's, or one whiffle injected —
-   * read back from the transcript where the model read it: folded into a
-   * running turn, or opening one. Stdout carries neither, so this frame is the
-   * only live word that it was read, at the place a reload will show it — and
-   * a queued row a client has been drawing for it is done.
-   */
-  sentMidTurn?: true;
   session_id?: string;
   shouldQuery?: boolean;
-  /**
-   * The command id Claude Code gave that message, when it was folded into the
-   * running turn (`queued_command.source_uuid`). A turn it opened has none.
-   */
-  sourceUuid?: string;
-  /** When the line was written, ISO-8601 — on the `sentMidTurn` frame. */
-  timestamp?: string;
   type: "user";
   uuid?: string;
 }
 
 /**
- * A message the harness has taken but not started yet: sent while a turn was
- * already running, held until the model next pulls its input.
- *
- * The queue used to be private to the adapter — nothing announced an enqueue
- * and no snapshot carried one — so a dashboard could only *guess* that what it
- * sent was waiting, by drawing a local echo it lost on reload. This is the
- * queue as observable state: announced by a `message_queued` system frame,
- * retired by `message_dequeued` once the model has read it (or by the
- * {@link NeutralUserMessage.sentMidTurn} frame that says where), and listed in
- * the hub's snapshot so a client that joins mid-queue sees what is waiting.
- *
- * `images` is a COUNT. The payloads are megabytes of base64 and the queue is
- * broadcast state — what a reader needs is that pictures are riding with it.
+ * A message sent to a session, by the reader or by whiffle. `uuid` is its one
+ * identity from the press to a reload: the dashboard's command id for a
+ * reader's send, minted where the hub builds its own. The harness is handed
+ * it, reports it back in a {@link MESSAGES_READ} frame when it consumes the
+ * message, and stores it with the message, so every copy of the message on
+ * every screen is the same row.
  */
-export interface QueuedMessage {
-  /** How many images ride with it; absent when none do. */
-  images?: number;
-  queueId: string;
-  /** What was typed, before the harness folded pastes or images into the turn. */
-  text: string;
-  /** When the harness took it, ISO-8601. */
-  timestamp: string;
-}
+export type SentMessage = NeutralUserMessage & {
+  origin: NeutralOrigin;
+  uuid: string;
+};
 
 /**
- * The `system` subtype announcing an enqueue — a message the session was too
- * busy to start. Carries the {@link QueuedMessage} fields flat, the way every
- * other system subtype carries its own.
+ * The `system` subtype saying the harness has now consumed these sends: their
+ * uuids, in `read`, on the frame where it happened — before whatever the model
+ * says about them.
  */
-export const MESSAGE_QUEUED = "message_queued";
-
-/** And the one announcing the moment it was read: `queueId` alone. */
-export const MESSAGE_DEQUEUED = "message_dequeued";
+export const MESSAGES_READ = "read";
 
 export interface NeutralStreamMessage {
   event:
@@ -514,18 +481,15 @@ export interface NeutralSystemMessage {
   fallback_model?: string;
   // hook_response
   hook_name?: string;
-  images?: number;
   last_tool_name?: string;
   mcp_servers?: { name: string; status: string }[];
   // init
   model?: string;
   patch?: { description?: string; status?: string; error?: string };
   permissionMode?: PermissionMode;
-  // message_queued / message_dequeued — the harness's own input queue, made
-  // observable ({@link QueuedMessage}). `queueId` is on both; the rest only on
-  // the announcement.
-  queueId?: string;
   raw?: unknown;
+  // read ({@link MESSAGES_READ}) — the sends the harness has now consumed
+  read?: string[];
   session_id?: string;
   skills?: string[];
   slash_commands?: string[];
@@ -565,22 +529,6 @@ export type NeutralMessage =
   | NeutralResultMessage
   | NeutralSystemMessage
   | NeutralRawMessage;
-
-/* -------------------------------------------------------------- aliases — */
-/*
- * One-release aliases. The dashboard imported these names from the SDK's
- * re-export; they are now the neutral types above and mean the same shapes, so
- * the folding layer's imports did not all have to move at once. The `SDK`
- * prefix will go in the coordinated rename.
- */
-export type SDKMessage = NeutralMessage;
-export type SDKAssistantMessage = NeutralAssistantMessage;
-export type SDKUserMessage = NeutralUserMessage;
-export type SDKSystemMessage = NeutralSystemMessage;
-export type SDKResultMessage = NeutralResultMessage;
-export type SDKCompactBoundaryMessage = NeutralSystemMessage;
-export type SDKHookResponseMessage = NeutralSystemMessage;
-export type SDKStatus = NeutralStatus;
 
 /* ---------------------------------------------------------- capabilities — */
 

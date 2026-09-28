@@ -1,7 +1,7 @@
 import {
   deriveTitleFromFirstMessage,
   type InstanceRow,
-  type SDKSessionInfo,
+  type NeutralSessionInfo,
 } from "@whiffle/core";
 
 interface SessionInstance {
@@ -134,7 +134,7 @@ export function resolveSessionTitle(input: {
 }
 
 /** The same title, for a stored session the machine's catalog described. */
-export function sessionTitle(info: SDKSessionInfo): string {
+export function sessionTitle(info: NeutralSessionInfo): string {
   return resolveSessionTitle({
     title: info.customTitle || info.summary,
     firstMessage: info.firstPrompt,

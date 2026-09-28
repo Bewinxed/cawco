@@ -56,8 +56,8 @@ import type {
   NeutralAssistantBlock,
   NeutralContentBlock,
   NeutralSessionInfo,
-  NeutralUserMessage,
   PermissionResult,
+  SentMessage,
   SessionMessage,
   SlashCommand,
   SpawnPayload,
@@ -81,7 +81,6 @@ import {
   CONTROL_SUPPORTED_COMMANDS,
   CONTROL_SUPPORTED_MODELS,
   IMAGE_GENERATION_TIMEOUT_MS,
-  isInjected,
 } from "@whiffle/core";
 // The protocol subpath, never the `@whiffle/core` barrel: `sessiond.ts` reaches
 // for `node:os` and the barrel is imported by the browser bundle (see f2e1c4c).
@@ -2030,7 +2029,7 @@ export class OpencodeSession implements HarnessSession {
 
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: routes a send between urgent-abort, hand-back-queue, and command/prompt branches; not refactored in this pass
   send(
-    message: NeutralUserMessage,
+    message: SentMessage,
     extras: {
       attachments?: { name: string; content: string }[];
       images?: { mediaType: string; data: string }[];
@@ -2087,12 +2086,6 @@ export class OpencodeSession implements HarnessSession {
     // may start — the server is being stopped and restarted.
     if (this.#isConfigGateHeld()) {
       this.#queue.push({ parts, ...(model ? { model } : {}) });
-      if (isInjected(message.origin)) {
-        this.#ctx.frame({
-          ...message,
-          session_id: this.sessionId ?? undefined,
-        });
-      }
       return;
     }
 
@@ -2128,12 +2121,6 @@ export class OpencodeSession implements HarnessSession {
       } else {
         this.#prompt(parts, model);
       }
-    }
-
-    // A hand-off is queued rather than asked, so the server emits nothing until
-    // it is drained. Echoed as the frame the dashboard reads, the moment it lands.
-    if (isInjected(message.origin)) {
-      this.#ctx.frame({ ...message, session_id: this.sessionId ?? undefined });
     }
   }
 

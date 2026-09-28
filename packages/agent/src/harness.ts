@@ -23,10 +23,10 @@ import type {
   HarnessReport,
   NeutralMessage,
   NeutralSessionInfo,
-  NeutralUserMessage,
   PermissionResult,
   PermissionUpdate,
   SendPayload,
+  SentMessage,
   SessionMessage,
   SpawnPayload,
 } from "@whiffle/core";
@@ -89,7 +89,7 @@ export interface HarnessSession {
   /** Push one user turn into the session's prompt stream. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   send(
-    message: NeutralUserMessage,
+    message: SentMessage,
     extras: Pick<SendPayload, "attachments" | "images" | "urgent">
   ): void;
   /** The runtime's own session id, once known. */

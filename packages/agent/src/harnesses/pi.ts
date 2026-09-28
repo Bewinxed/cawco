@@ -40,9 +40,9 @@ import type {
   NeutralAssistantBlock,
   NeutralContentBlock,
   NeutralSessionInfo,
-  NeutralUserMessage,
   PermissionResult,
   SendPayload,
+  SentMessage,
   SessionMessage,
   SpawnPayload,
 } from "@whiffle/core";
@@ -374,7 +374,7 @@ class PiSession implements HarnessSession {
   }
 
   send(
-    message: NeutralUserMessage,
+    message: SentMessage,
     extras: Pick<SendPayload, "attachments" | "images" | "urgent">
   ): void {
     const text = textOf(message.message.content);

@@ -67,6 +67,14 @@ export interface TelegramBridge {
    * session's machine, and only the server holds the tunnel that reads it.
    */
   readonly setImageReader: (read: ImageReader) => void;
+  /**
+   * The server's one send path, registered after construction like
+   * {@link setAnswerRecorder}: a reply typed here is a message sent to the
+   * session like any other, and only the server files and streams those.
+   */
+  readonly setSender: (
+    send: (envelope: Envelope<SendPayload>) => boolean
+  ) => void;
   readonly start: () => void;
 }
 
@@ -510,6 +518,8 @@ export const createTelegramBridge = ({
     | undefined;
   /** Set by the server once the supervisor exists; called on every talkBack. */
   let humanSendObserver: ((instanceId: string) => void) | undefined;
+  /** Set by the server: the one path a message takes into a session. */
+  let sendMessage: ((envelope: Envelope<SendPayload>) => boolean) | undefined;
 
   const resolve = (
     envelope: Envelope,
@@ -556,6 +566,7 @@ export const createTelegramBridge = ({
       instanceId: entry.instanceId,
       message: {
         type: "user",
+        uuid: crypto.randomUUID(),
         message: { role: "user", content: text },
         parent_tool_use_id: null,
         origin: { kind: "human" },
@@ -563,12 +574,13 @@ export const createTelegramBridge = ({
       ...(carried?.images && { images: carried.images }),
       ...(carried?.attachments && { attachments: carried.attachments }),
     };
-    const delivered = toAgent({
-      verb: "send",
-      machineId: entry.machineId,
-      instanceId: entry.instanceId,
-      payload,
-    });
+    const delivered =
+      sendMessage?.({
+        verb: "send",
+        machineId: entry.machineId,
+        instanceId: entry.instanceId,
+        payload,
+      }) ?? false;
     // The operator typed this from the phone — the supervisor's mute defers
     // to exactly this kind of touch.
     if (delivered) {
@@ -952,6 +964,9 @@ export const createTelegramBridge = ({
     },
     setHumanSendObserver(observe) {
       humanSendObserver = observe;
+    },
+    setSender(deliver) {
+      sendMessage = deliver;
     },
   };
 };

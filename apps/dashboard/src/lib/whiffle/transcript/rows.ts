@@ -10,7 +10,6 @@ import { ASK_USER_QUESTION } from "@whiffle/core";
 import type { SubagentState } from "$lib/utils/flow-types";
 import type { SessionState } from "../client.svelte";
 import type { ToolGlance } from "../frames";
-import type { QueueEntry } from "../queue";
 import type { Message } from "../types";
 
 export type Row =
@@ -39,11 +38,12 @@ export type Row =
     }
   | { kind: "livetool"; key: string; glance: ToolGlance }
   /**
-   * A message the session is holding but has not started. Not a turn — it has
-   * not happened — so it sits after the live tail, in the reader's own turn
-   * anatomy at reduced presence, and carries no time at all.
+   * A message sent into a running turn that the session has not read yet. It
+   * has not happened in the conversation, so it sits after the live tail at
+   * reduced presence; once read it is a `single` row under the same key, in
+   * the place it was read.
    */
-  | { kind: "queued"; key: string; queued: QueueEntry }
+  | { kind: "queued"; key: string; message: Message }
   | { kind: "harness"; key: string; note: HarnessNote };
 
 /**
@@ -177,6 +177,25 @@ const branchOf = (
 
 const keyOf = (m: Message, index: number): string =>
   m.id ?? m.sdkUuid ?? `${m.type}:${index}`;
+
+/**
+ * Where the messages still waiting on the session begin. The store keeps them
+ * at the end of the list until they are read ({@link Message.queued}), so this
+ * reads only the last few.
+ */
+export function queuedFrom(messages: Message[]): number {
+  let from = messages.length;
+  while (from > 0 && messages[from - 1].queued) {
+    from -= 1;
+  }
+  return from;
+}
+
+/** The messages that have happened: everything but what is still waiting. */
+const settledOf = (messages: Message[]): Message[] => {
+  const from = queuedFrom(messages);
+  return from === messages.length ? messages : messages.slice(0, from);
+};
 
 /**
  * The row grammar itself: a list of messages folded into rows, with no live tail
@@ -317,7 +336,7 @@ export function branchRows(branch: SubagentState): Row[] {
 
 export function buildRows(session: SessionState): Row[] {
   return [
-    ...foldMessages(session.messages, session.subagents),
+    ...foldMessages(settledOf(session.messages), session.subagents),
     ...tailRows(session, liveContent(session), NO_LIVE.gen + 1),
   ];
 }
@@ -455,13 +474,13 @@ export function buildRowsFrom(
   session: SessionState,
   memo: FoldMemo | null
 ): Fold {
-  const { messages } = session;
+  const messages = settledOf(session.messages);
   const branches = Object.keys(session.subagents).length;
   const cut = memo ? cutFor(messages, memo, branches) : -1;
   const appended = memo !== null && cut >= 0;
   const { rows, starts, noted } =
     memo && appended
-      ? foldOnto(session, memo, cut)
+      ? foldOnto(messages, session.subagents, memo, cut)
       : foldAll(messages, session.subagents);
 
   const prior = memo?.live ?? NO_LIVE;
@@ -508,9 +527,14 @@ function foldAll(
 }
 
 /** The memo's rows, with only the turn at the cut and what follows it folded again. */
-function foldOnto(session: SessionState, memo: FoldMemo, cut: number): Settled {
+function foldOnto(
+  messages: Message[],
+  subagents: Record<string, SubagentState>,
+  memo: FoldMemo,
+  cut: number
+): Settled {
   // Nothing new: the settled rows are the last fold's, untouched.
-  if (session.messages.length === memo.count) {
+  if (messages.length === memo.count) {
     return memo;
   }
   // The first row at or past the cut: an opener always begins a row, so the
@@ -522,7 +546,7 @@ function foldOnto(session: SessionState, memo: FoldMemo, cut: number): Settled {
     }
     keep = r;
   }
-  const tail = foldRange(session.messages, session.subagents, cut, memo.noted);
+  const tail = foldRange(messages, subagents, cut, memo.noted);
   return {
     rows: memo.rows.slice(0, keep).concat(tail.rows),
     starts: memo.starts.slice(0, keep).concat(tail.starts),
@@ -605,7 +629,7 @@ function liveContent(session: SessionState): LiveContent | null {
   const reasoning =
     (session.openBlock === "thinking" || session.thinkingClosing) &&
     !session.streaming;
-  const last = session.messages.at(-1);
+  const last = session.messages[queuedFrom(session.messages) - 1];
   const indicating =
     session.busy &&
     // The agent's own words are the latest thing. Whatever it does next opens
@@ -640,28 +664,13 @@ function liveContent(session: SessionState): LiveContent | null {
  */
 export function called(session: SessionState, toolId: string): boolean {
   const { messages } = session;
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
+  for (let i = queuedFrom(messages) - 1; i >= 0; i -= 1) {
     const message = messages[i];
     if (message.type === "user") {
       return false;
     }
     if ((message.metadata?.toolId ?? message.toolCallId) === toolId) {
       return true;
-    }
-  }
-  return false;
-}
-
-/**
- * Whether the queued message `text` has been sent: it is the reader's last
- * turn now. What was queued is what was typed; the turn may carry pastes or
- * images folded into it as well.
- */
-export function sent(session: SessionState, text: string): boolean {
-  const { messages } = session;
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    if (messages[i].type === "user") {
-      return messages[i].content.includes(text);
     }
   }
   return false;
@@ -691,22 +700,15 @@ function tailRows(
     });
   }
 
-  // The pending register: what the session has been handed and not started,
-  // after everything that HAS happened. Keyed by the send this tab drew it for
-  // when it drew it (the daemon's announcement keeps that, so the row the
-  // composer's text flies into never changes under the flight), else by the
-  // queue id; and deliberately not the key its real turn will carry — when the
-  // message finally runs, the
-  // queued row leaves and the turn arrives, and pretending the two are one
-  // element would ask the transcript to morph a placeholder into a fact.
-  // Read defensively: a session shape built before this field existed — a
-  // server render's stand-in, a stub — must fold to a transcript, not throw.
-  // biome-ignore lint/suspicious/noUnnecessaryConditions: the type says queued is always an array, but a session built before this field existed (a server stand-in, a stub) can hand one that omits it — see the comment above.
-  for (const queued of session.queued ?? []) {
+  // What the session has been sent and not read yet, after everything that
+  // HAS happened. Keyed by the message itself: once read, the same key is its
+  // row in the conversation, where it was read.
+  const { messages } = session;
+  for (let i = queuedFrom(messages); i < messages.length; i += 1) {
     rows.push({
       kind: "queued",
-      key: `qd:${queued.sentAs ?? queued.queueId}`,
-      queued,
+      key: keyOf(messages[i], i),
+      message: messages[i],
     });
   }
 

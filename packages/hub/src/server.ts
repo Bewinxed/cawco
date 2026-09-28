@@ -27,11 +27,11 @@ import type {
   NeutralSessionInfo,
   PermissionMode,
   PreviewSource,
-  QueuedMessage,
   RegisterAckPayload,
   Rule,
   RuleDraft,
   SendPayload,
+  SentMessage,
   SessionMessage,
   SessionPulse,
   SessionTooling,
@@ -68,8 +68,7 @@ import {
   IMAGE_GENERATION_TIMEOUT_MS,
   INSPECT_CONFIG,
   identifyBlocks,
-  MESSAGE_DEQUEUED,
-  MESSAGE_QUEUED,
+  MESSAGES_READ,
   memoryDocProblem,
   PREVIEW_START,
   PREVIEW_STOP,
@@ -846,7 +845,6 @@ const custodyNotice = (
   session_id: row.sessionId ?? "",
   parent_agent_id: null,
   parent_tool_use_id: null,
-  origin: { kind: "system" as const },
   message: {
     role: "user" as const,
     content: `[SYSTEM NOTIFICATION]\n${reason}`,
@@ -1264,46 +1262,11 @@ type MemoryRead =
  * directory the agent really opened it in — the spawn's `cwd` after the agent
  * expanded it.
  */
-/**
- * The queue news a `frame` carries, if it carries any: a session announcing a
- * message it was too busy to start, or retiring one it has now read.
- *
- * Read off the frame structurally rather than by narrowing the neutral union,
- * the way `peekInit` above reads an init: a daemon older than these subtypes
- * simply never sends one, and this answers `undefined` for every other frame.
- */
-const peekQueue = (
-  payload: unknown
-): { queued: QueuedMessage } | { retired: string } | undefined => {
-  if (typeof payload !== "object" || payload === null) {
-    return undefined;
-  }
-  const { message } = payload as { message?: unknown };
-  if (typeof message !== "object" || message === null) {
-    return undefined;
-  }
-  const sdk = message as Record<string, unknown>;
-  if (typeof sdk.queueId !== "string" || sdk.type !== "system") {
-    return undefined;
-  }
-  if (sdk.subtype === MESSAGE_DEQUEUED) {
-    return { retired: sdk.queueId };
-  }
-  if (sdk.subtype !== MESSAGE_QUEUED) {
-    return undefined;
-  }
-  if (typeof sdk.text !== "string" || typeof sdk.timestamp !== "string") {
-    return undefined;
-  }
-  return {
-    queued: {
-      queueId: sdk.queueId,
-      text: sdk.text,
-      timestamp: sdk.timestamp,
-      ...(typeof sdk.images === "number" ? { images: sdk.images } : {}),
-    },
-  };
-};
+/** The sends a `frame` says the harness has now consumed ({@link MESSAGES_READ}). */
+const peekRead = (frame: FramePayload & { kind: "frame" }): string[] =>
+  frame.message.type === "system" && frame.message.subtype === MESSAGES_READ
+    ? (frame.message.read ?? [])
+    : [];
 
 const peekInit = (
   payload: unknown
@@ -1470,7 +1433,9 @@ export const normalizeRelayMessage = (body: unknown): string | undefined => {
     holder.message = {
       type: "user",
       message: { role: "user", content: message },
-    };
+      uuid: crypto.randomUUID(),
+      origin: { kind: "human" },
+    } satisfies SentMessage;
     return;
   }
   if (typeof message !== "object" || message === null) {
@@ -1498,6 +1463,12 @@ export const normalizeRelayMessage = (body: unknown): string | undefined => {
   if (envelope.type !== "user") {
     return "relay send message.type must be 'user'";
   }
+  // Every sent message has an identity and a speaker (`SentMessage`). The hub
+  // completes the message here, so a caller that named neither gets its uuid
+  // minted here, and speaks as a dashboard send does — as the operator.
+  const sent = envelope as { uuid?: unknown; origin?: unknown };
+  sent.uuid ??= crypto.randomUUID();
+  sent.origin ??= { kind: "human" };
 };
 
 export const createServer = ({
@@ -1625,10 +1596,13 @@ export const createServer = ({
    * new connect replaces it, and a finished exchange spends it.
    */
   let openrouterVerifier: string | undefined;
+  /** A machine to send to, while it is connected: through the one send path. */
+  const sendRoute = (machineId: string) =>
+    registry.agent(machineId) ? { send: deliverSend } : undefined;
   const ruleEngine = new RuleEngine({
     db,
     meaning: meaningJudge,
-    agent: (machineId) => registry.agent(machineId),
+    agent: sendRoute,
   });
 
   /**
@@ -1676,7 +1650,7 @@ export const createServer = ({
   const supervisor = new SupervisorEngine({
     db,
     meaning: meaningJudge,
-    agent: (machineId) => registry.agent(machineId),
+    agent: sendRoute,
     telegram,
     publish: publishSupervisorEvent,
     status: publishSupervisorStatus,
@@ -1701,9 +1675,8 @@ export const createServer = ({
     // A session that died before it ever said anything is never going to name
     // itself; nothing should still be waiting to hear its first words.
     awaitingFirstTurn.delete(instanceId);
-    // Nor is anything it was holding ever going to run. A queued row that
-    // outlives the process holding it is the same lie in a quieter font.
-    forgetQueue(instanceId);
+    // Nor is anything it was sent and never read ever going to run.
+    pendingSends.delete(instanceId);
     // The supervisor's turn buffers for a dead session are waste.
     supervisor.forget(instanceId);
     usageCounter.forget(instanceId);
@@ -1754,7 +1727,7 @@ export const createServer = ({
       "Answer it with the answer_delegate tool: answer_delegate(target, requestId, answers) — " +
       "answers are keyed by the exact question text and the value is the chosen option label " +
       "(pass deny=true to refuse it).";
-    registry.agent(parent.machineId)?.send({
+    deliverSend({
       verb: "send",
       machineId: parent.machineId,
       instanceId: parent.id,
@@ -1762,6 +1735,7 @@ export const createServer = ({
         instanceId: parent.id,
         message: {
           type: "user",
+          uuid: crypto.randomUUID(),
           message: {
             role: "user",
             content: delegateAskText({
@@ -1813,56 +1787,97 @@ export const createServer = ({
    */
   const handoffs = new Map<string, { from: string; at: number }>();
   /**
-   * What each session is holding but has not started, oldest first — folded
-   * from the `message_queued` / `message_dequeued` frames going past.
-   *
-   * Kept here for the same reason the hand-offs above are: a queue only the
-   * sending tab knows about is invisible on every other device and gone after
-   * a reload, which is exactly how a message sent to a busy session came to be
-   * lost. Published with the instances and readable on connect, so a dashboard
-   * that opens mid-queue sees what is waiting rather than an empty transcript.
+   * Every message sent to a session that its harness has not read yet, by
+   * instance, then uuid, oldest first. Filed by {@link deliverSend}, retired
+   * by the harness's `read` frame, dropped with the session; served with its
+   * history, so a reload draws what is still waiting.
    */
-  const queues = new Map<string, QueuedMessage[]>();
+  const pendingSends = new Map<string, Map<string, SentMessage>>();
 
-  /** Files one queue entry under the session holding it; false if it was already there. */
-  const enqueue = (instanceId: string, entry: QueuedMessage): boolean => {
-    const held = queues.get(instanceId);
-    if (!held) {
-      queues.set(instanceId, [entry]);
-      return true;
+  /**
+   * A send as the session's own stream carries it: the message under its
+   * uuid, with what rode with it put back in — images first and pastes after
+   * the typed words, the order every adapter hands them to its harness in.
+   */
+  const sentFrame = ({
+    message,
+    images = [],
+    attachments = [],
+  }: SendPayload): SentMessage => {
+    if (!(images.length || attachments.length)) {
+      return message;
     }
-    if (held.some((queued) => queued.queueId === entry.queueId)) {
-      return false;
-    }
-    held.push(entry);
-    return true;
-  };
-
-  /** And retires it — by the dequeue frame, or by the real turn that carries its id. */
-  const dequeue = (instanceId: string, queueId: string): boolean => {
-    const held = queues.get(instanceId);
-    if (!held) {
-      return false;
-    }
-    const left = held.filter((queued) => queued.queueId !== queueId);
-    if (left.length === held.length) {
-      return false;
-    }
-    if (left.length === 0) {
-      queues.delete(instanceId);
-    } else {
-      queues.set(instanceId, left);
-    }
-    return true;
+    const pasted = attachments
+      .map(
+        ({ name, content }) =>
+          `\n\n<pasted-text name="${name}">\n${content}\n</pasted-text>`
+      )
+      .join("");
+    const said = message.message.content;
+    return {
+      ...message,
+      message: {
+        role: "user",
+        content: [
+          ...images.map(({ mediaType, data }) => ({
+            type: "image" as const,
+            source: { type: "base64" as const, media_type: mediaType, data },
+          })),
+          ...(typeof said === "string"
+            ? [{ type: "text" as const, text: said + pasted }]
+            : said),
+        ],
+      },
+    };
   };
 
   /**
-   * The session is gone (stopped, discarded, failed, or relaunched under the
-   * same id). Nothing it was holding will ever run, and a queued row that
-   * outlives its process is a message the reader is still waiting for.
+   * THE ONE PATH A MESSAGE TAKES INTO A SESSION, whoever sent it — a reader, a
+   * rule, the supervisor, a delegate's report, another session's hand-off.
+   * The machine gets it; the hub files it as pending until the harness reads
+   * it; and the session's ring gets it as a `user` frame under its uuid, so
+   * every tab, device and late joiner draws the same row with the same id.
+   * `from` hears why when the machine is not there to take it.
    */
-  const forgetQueue = (instanceId: string): boolean =>
-    queues.delete(instanceId);
+  const deliverSend = (
+    envelope: Envelope<SendPayload>,
+    from?: HubSocket
+  ): boolean => {
+    const agent = registry.agent(envelope.machineId);
+    if (!agent) {
+      from?.send(
+        failure(envelope, `machine ${envelope.machineId} is not connected`)
+      );
+      return false;
+    }
+    agent.send(envelope);
+    const { instanceId } = envelope.payload;
+    // Built after the send has gone: the machine is handed the image bytes,
+    // the dashboards a reference to them.
+    const message = externalizeImages(sentFrame(envelope.payload));
+    const held = pendingSends.get(instanceId) ?? new Map<string, SentMessage>();
+    held.set(message.uuid, message);
+    pendingSends.set(instanceId, held);
+    const frame: FramePayload = {
+      kind: "frame",
+      instanceId,
+      // A row with no harness predates the column, and is Claude's.
+      harness: (db.getInstancesByIds([instanceId])[0]?.harness ??
+        "claude") as HarnessKind,
+      message,
+    };
+    streams.sequence(instanceId, frame);
+    registry.broadcastFrame(
+      {
+        verb: "frames",
+        machineId: envelope.machineId,
+        instanceId,
+        payload: frame,
+      },
+      instanceId
+    );
+    return true;
+  };
   /**
    * Each delegate session's assistant texts, accumulated while its turn runs
    * so the report delivered to its parent carries everything it said — not
@@ -2345,7 +2360,7 @@ export const createServer = ({
     content: string,
     from: { id: string; cwd: string }
   ): void => {
-    registry.agent(machineId)?.send({
+    deliverSend({
       verb: "send",
       machineId,
       instanceId,
@@ -2353,6 +2368,7 @@ export const createServer = ({
         instanceId,
         message: {
           type: "user",
+          uuid: crypto.randomUUID(),
           message: { role: "user", content },
           parent_tool_use_id: null,
           origin: {
@@ -2945,7 +2961,6 @@ export const createServer = ({
       previewFrame(id, "open", target.source)
     ),
     handoffs: Object.fromEntries(handoffs),
-    queues: Object.fromEntries(queues),
     // Additive, both of them: a dashboard that predates either reads the
     // frame exactly as it always did. `pulses` seeds the rail's now-state on
     // connect instead of leaving it blank until the next beat; `hubBuild`
@@ -3209,6 +3224,7 @@ export const createServer = ({
   // The Telegram bridge answers straight down the agent socket, past every
   // recording site above — so it files its answers through this instead.
   telegram?.setAnswerRecorder(recordDelegateAnswer);
+  telegram?.setSender(deliverSend);
   telegram?.setHumanSendObserver((instanceId) =>
     supervisor.noteHumanSend(instanceId)
   );
@@ -3765,7 +3781,7 @@ export const createServer = ({
       provenance?: { clientId?: string };
     };
     const from = peekPeer(message.payload);
-    const forwarded = forward(message, dashboard);
+    const forwarded = deliverSend(message, dashboard);
     // Logged after the guard, not before: a message the guard drops (no agent
     // connected) never reached the target, and a log line claiming otherwise
     // would itself become evidence in the next "did this land" argument.
@@ -3907,7 +3923,11 @@ export const createServer = ({
       if (!agent) {
         throw new Error(`Machine ${envelope.machineId} is not connected.`);
       }
-      agent.send(envelope);
+      if (envelope.verb === "send") {
+        deliverSend(envelope as Envelope<SendPayload>);
+      } else {
+        agent.send(envelope);
+      }
     },
     spawn: async (machineId, payload) => {
       const response = await fetch(`${hubHttpUrl()}/api/relay/spawn`, {
@@ -4026,7 +4046,7 @@ export const createServer = ({
       if (!response.ok) {
         throw new Error(await response.text());
       }
-      registry.agent(machineId)?.send({
+      deliverSend({
         verb: "send",
         machineId,
         instanceId,
@@ -4034,6 +4054,7 @@ export const createServer = ({
           instanceId,
           message: {
             type: "user",
+            uuid: crypto.randomUUID(),
             message: { role: "user", content: prompt },
             parent_tool_use_id: null,
             origin: {
@@ -4658,6 +4679,9 @@ export const createServer = ({
         {
           query: t.Object({
             tail: t.Optional(t.String()),
+            // An older page: every entry strictly before this one's uuid,
+            // which is the oldest the reader already holds.
+            before: t.Optional(t.String()),
           }),
         },
         // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: resolves the session's machine/cwd/harness from the row or a live locate in one place; splitting it would scatter the fallback order this route depends on.
@@ -4730,7 +4754,23 @@ export const createServer = ({
           // A session the machine has never stored answers with nothing, which is
           // an empty transcript rather than a fault — the same shape a brand new
           // session has.
-          const transcript = Array.isArray(answer.result) ? answer.result : [];
+          let transcript = Array.isArray(answer.result) ? answer.result : [];
+          // An older page never reaches the reader's oldest entry, so nothing
+          // on it can be something the reader already holds. A cursor the
+          // transcript no longer has (rewound, compacted away) has no page
+          // behind it, and says so.
+          if (query.before) {
+            const cut = transcript.findIndex(
+              (entry) => (entry as SessionMessage).uuid === query.before
+            );
+            if (cut < 0) {
+              return status(
+                409,
+                `the transcript no longer holds entry ${query.before}`
+              );
+            }
+            transcript = transcript.slice(0, cut);
+          }
 
           // A complete transcript's oldest user turn is the unambiguous answer
           // to what the session is called — including for conversations this
@@ -4738,7 +4778,12 @@ export const createServer = ({
           // say (its oldest row is mid-conversation); the full read that
           // follows every tail-first open derives it there. Write-once, so
           // this costs one statement the first time and nothing after.
-          if (!tail && row && !row.title && !row.derivedTitle) {
+          if (
+            !(tail || query.before) &&
+            row &&
+            !row.title &&
+            !row.derivedTitle
+          ) {
             const first = firstTurnOf(transcript);
             if (first) {
               nameFromFirstTurn(machineId, row.id, first);
@@ -4747,12 +4792,18 @@ export const createServer = ({
 
           const held = row && heldSessions.get(row.id);
           if (
+            !query.before &&
             row &&
             held &&
             registry.agent(row.machineId) &&
             (row.status === "sleeping" || row.status === "error")
           ) {
             transcript.push(custodyNotice(row, held.reason));
+          }
+          // What it was sent and has not read yet, newest of all: a reload
+          // draws these where the live stream drew them, under the same ids.
+          if (!query.before && row) {
+            transcript.push(...(pendingSends.get(row.id)?.values() ?? []));
           }
 
           // URI-encoded because a header is Latin-1 on the wire and a folder
@@ -4810,11 +4861,6 @@ export const createServer = ({
       // after a hand-off went out would otherwise show nothing until the next
       // time anything else moved.
       .get("/api/handoffs", () => Object.fromEntries(handoffs))
-      // What each session is holding but has not started. Broadcast with the
-      // instances *and* readable here, for the reason the hand-offs are: a
-      // dashboard that opens while a queue is already waiting has missed every
-      // frame that built it.
-      .get("/api/queues", () => Object.fromEntries(queues))
       .get("/api/pending", () => pending.list())
       .get(
         "/api/search",
@@ -6311,17 +6357,16 @@ export const createServer = ({
 
         downgradeNonDelegateUrgent(rows, body, instanceId);
 
-        const agent = registry.agent(machineId);
-        if (!agent) {
+        if (
+          !deliverSend({
+            verb: "send",
+            machineId,
+            instanceId,
+            payload: body as SendPayload,
+          })
+        ) {
           return status(404, `machine ${machineId} is not connected`);
         }
-
-        agent.send({
-          verb: "send",
-          machineId,
-          instanceId,
-          payload: body,
-        } satisfies Envelope);
         // The first thing a session is asked is what it is called, until
         // something names it properly.
         if (!hasAttachments(body)) {
@@ -6360,10 +6405,8 @@ export const createServer = ({
           payload: { instanceId, from },
         } satisfies Envelope);
         closePreview(instanceId).catch(console.error);
-        // Same as a stop from a dashboard: whatever it was holding dies with it.
-        if (forgetQueue(instanceId)) {
-          publishInstances(row.machineId);
-        }
+        // Same as a stop from a dashboard: whatever it was sent dies with it.
+        pendingSends.delete(instanceId);
         return { ok: true };
       })
       .post("/api/relay/interrupt", { body: t.Any() }, ({ body, status }) => {
@@ -6813,7 +6856,6 @@ export const createServer = ({
                 // gone, and the same goes for anything it was holding.
                 forgetPending(row.id);
                 escalateRoutedAsks(row.id);
-                forgetQueue(row.id);
               }
               // The deployment clone's state rides the beat (contract C8). A
               // change in it is board news on its own — `diverged` appearing
@@ -6901,7 +6943,12 @@ export const createServer = ({
                 }
               }
               const from = peekPeer(message.payload);
-              if (!(forward(message, ws) && message.instanceId)) {
+              if (
+                !(
+                  deliverSend(message as Envelope<SendPayload>, ws) &&
+                  message.instanceId
+                )
+              ) {
                 break;
               }
               // The first thing a session is asked is what it is called, until
@@ -7039,7 +7086,7 @@ export const createServer = ({
                 } else {
                   db.stopInstance(message.instanceId);
                 }
-                forgetQueue(message.instanceId);
+                pendingSends.delete(message.instanceId);
                 pulses.delete(message.instanceId);
                 touched.delete(message.instanceId);
                 escalateRoutedAsks(message.instanceId);
@@ -7192,20 +7239,12 @@ export const createServer = ({
                   noteActivity(message.instanceId);
                 }
               }
-              // What the session is holding but has not started. Mirrored here so
-              // it is snapshot state rather than something each tab has to watch
-              // for — and retired by BOTH paths, the dequeue frame and the real
-              // turn's own id, because either can be the one that arrives.
+              // The harness has read these: they are no longer waiting.
               if (kind === "frame" && message.instanceId) {
-                const news = peekQueue(message.payload);
-                if (news) {
-                  const moved =
-                    "queued" in news
-                      ? enqueue(message.instanceId, news.queued)
-                      : dequeue(message.instanceId, news.retired);
-                  if (moved) {
-                    publishInstances(message.machineId);
-                  }
+                for (const uuid of peekRead(
+                  message.payload as FramePayload & { kind: "frame" }
+                )) {
+                  pendingSends.get(message.instanceId)?.delete(uuid);
                 }
               }
               // A session named by what it was first asked, whether the ask came
@@ -7333,7 +7372,7 @@ export const createServer = ({
                         (errors?.length
                           ? errors.join("\n")
                           : "(the delegate produced no text this turn)");
-                      registry.agent(parent.machineId)?.send({
+                      deliverSend({
                         verb: "send",
                         machineId: parent.machineId,
                         instanceId: parent.id,
@@ -7341,6 +7380,7 @@ export const createServer = ({
                           instanceId: parent.id,
                           message: {
                             type: "user",
+                            uuid: crypto.randomUUID(),
                             message: {
                               role: "user",
                               content: `${reportMarker(label, !!neutral.is_error)}${body}`,
@@ -7578,13 +7618,6 @@ export const createServer = ({
           // An unconsumed restart event belonged to the connection that just
           // ended; the next one to hold this machineId did not just restart.
           restarts.delete(machineId);
-          // The daemon holding these queues is gone; whatever it had not started
-          // did not survive it, so the rows go with the sessions.
-          for (const row of db.listInstances()) {
-            if (row.machineId === machineId) {
-              forgetQueue(row.id);
-            }
-          }
           db.reconcileInstances(machineId, []);
           publishInstances(machineId);
         },

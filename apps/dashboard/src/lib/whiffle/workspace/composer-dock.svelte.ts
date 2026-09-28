@@ -26,10 +26,10 @@ export interface ComposerBinding {
   readonly draft: ComposerDraft;
   leading: Snippet;
   readonly mentions: Mention[];
-  oninterruptsend: (text: string, extras: SendExtras) => void;
+  oninterruptsend: (text: string, extras: SendExtras, id: string) => void;
   onmenu: () => void;
   onstop: () => void;
-  onsubmit: (text: string, extras: SendExtras) => void;
+  onsubmit: (text: string, extras: SendExtras, id: string) => void;
   readonly paneVisible: boolean;
   readonly previewPhone: boolean;
   prompts: Snippet;

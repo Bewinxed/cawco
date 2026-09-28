@@ -697,6 +697,7 @@ export const handoffActions = ({
       instanceId: peer.row.id,
       message: {
         type: "user",
+        uuid: crypto.randomUUID(),
         message: { role: "user", content: body },
         parent_tool_use_id: null,
         origin: {
@@ -756,6 +757,7 @@ export const handoffActions = ({
       instanceId: id,
       message: {
         type: "user",
+        uuid: crypto.randomUUID(),
         message: { role: "user", content: body },
         parent_tool_use_id: null,
         origin: {
@@ -881,14 +883,15 @@ export const handoffActions = ({
     emit({ verb: "spawn", machineId: "", instanceId: id, payload });
 
     // Same marker as `handoff()` and `startSession()` — survives SDK storage so
-    // stored transcripts render the opening as `user.peer` and `mergePeerMessage`
-    // deduplicates against the live echo that carries `origin`.
+    // stored transcripts render the opening as `user.peer`, the row the live
+    // frame drew under the same uuid.
     // The daemon adds `withWorktreeLine` if it actually made a worktree.
     const body = `${handoffMarker(from)}${prompt}`;
     const opening: SendPayload = {
       instanceId: id,
       message: {
         type: "user",
+        uuid: crypto.randomUUID(),
         message: { role: "user", content: body },
         parent_tool_use_id: null,
         origin: {

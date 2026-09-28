@@ -827,7 +827,8 @@
 
   async function onsubmit(
     text: string,
-    extras: SendExtras = {}
+    extras: SendExtras,
+    id: string
   ): Promise<string | undefined> {
     if (!machineId) {
       // A tripwire, not a guard anybody should hit: a pane with no machine
@@ -850,7 +851,8 @@
     // failed stage. The ledger is the report — which is why there is nothing
     // to catch here, and why the `.catch(() => {})` that used to sit on this
     // chain (and ate every send made from a plain-http origin) is gone.
-    const submit = () => submitCommand(viewId, mid, "send", { text, extras });
+    const submit = () =>
+      submitCommand(viewId, mid, "send", { text, extras }, id);
     return await ensureAlive(viewId, mid)
       .then(submit, submit)
       .finally(() => {
@@ -867,14 +869,14 @@
    * dying and the message being taken is narrated by the queued row rather
    * than guessed at. On an idle session it is exactly a send.
    */
-  function oninterruptsend(text: string, extras: SendExtras = {}): void {
+  function oninterruptsend(text: string, extras: SendExtras, id: string): void {
     if (!machineId || sending) {
       return;
     }
     if (session?.busy) {
       submitCommand(viewId, machineId, "interrupt", {});
     }
-    onsubmit(text, extras);
+    onsubmit(text, extras, id);
   }
 
   function onstop(): void {

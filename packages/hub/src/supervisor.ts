@@ -608,6 +608,7 @@ export class SupervisorEngine {
             instanceId,
             message: {
               type: "user",
+              uuid: crypto.randomUUID(),
               message: {
                 role: "user",
                 content: `${ruleMarker(markerName(originName))}${verdict.message}`,
@@ -797,6 +798,7 @@ export class SupervisorEngine {
             instanceId,
             message: {
               type: "user",
+              uuid: crypto.randomUUID(),
               message: {
                 role: "user",
                 content: `${ruleMarker(rule.name)}${verdict.message}`,
