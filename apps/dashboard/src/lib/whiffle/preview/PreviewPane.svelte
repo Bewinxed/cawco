@@ -11,8 +11,9 @@
   } from "$lib/icons";
   import { closePreview, whiffle } from "../client.svelte";
   import { appear, dur } from "../motion/curves.svelte";
-  import { depart } from "../motion/share.svelte";
+  import { closeInto, depart } from "../motion/share.svelte";
   import { type CapturedSelection, selectionShare } from "./selection";
+  import { previewSourceKey } from "./source";
   import {
     previewElement,
     previewError,
@@ -249,6 +250,60 @@
     depart(stand);
     stand.remove();
   }
+  /**
+   * Closing goes back where it came from: the preview opened out of its tool
+   * row's box (`preview:<session>`), so as it closes, a stand-in the size of
+   * the pane shrinks into that row and fades (closeInto, --ease-drawer) while
+   * the pane itself leaves. A row scrolled away or not mounted has nothing
+   * to land in, and the pane simply leaves.
+   */
+  let section = $state<HTMLElement>();
+  let shown = false;
+  $effect(() => {
+    const open = preview?.state === "open";
+    if (shown && !open && section && source) {
+      closeToRow(section, previewSourceKey(source));
+    }
+    shown = open;
+  });
+  function closeToRow(pane: HTMLElement, sourceKey: string) {
+    const row = [
+      ...document.querySelectorAll<HTMLElement>(
+        `.preview-tool[data-share="preview:${CSS.escape(instanceId)}"][data-preview-source="${CSS.escape(sourceKey)}"]`
+      ),
+    ].at(-1);
+    if (!row) {
+      return;
+    }
+    const box = row.getBoundingClientRect();
+    if (box.height === 0 || box.bottom <= 0 || box.top >= innerHeight) {
+      return;
+    }
+    const rect = pane.getBoundingClientRect();
+    const stand = document.createElement("div");
+    stand.setAttribute("aria-hidden", "true");
+    stand.className = "preview-close-flight";
+    Object.assign(stand.style, {
+      position: "fixed",
+      left: `${rect.left}px`,
+      top: `${rect.top}px`,
+      width: `${rect.width}px`,
+      height: `${rect.height}px`,
+      borderRadius: "var(--radius-lg)",
+      background: "var(--surface-raised)",
+      boxShadow: "var(--shadow-drawer)",
+      pointerEvents: "none",
+      zIndex: "50",
+    });
+    document.body.append(stand);
+    const done = () => stand.remove();
+    const flight = closeInto(stand, row, dur("--dur-panel"));
+    if (flight) {
+      flight.finished.then(done, done);
+    } else {
+      done();
+    }
+  }
   let closing = $state(false);
   async function close() {
     closing = true;
@@ -267,7 +322,12 @@
 
 <svelte:window onkeydown={parentEscape} onmessage={receive} />
 
-<section aria-label="Preview" class="preview-pane" class:selecting>
+<section
+  aria-label="Preview"
+  class="preview-pane"
+  bind:this={section}
+  class:selecting
+>
   <header>
     <div class="identity">
       <span class="title">{title}</span
