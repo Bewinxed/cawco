@@ -1157,10 +1157,16 @@ export class SessionSupervisor {
         await session.stop();
       } else {
         const target = this.#resumable.get(instanceId);
+        // A discard of an instance this machine holds nothing for — a spawn
+        // that never produced a session — has nothing to stop: the row is
+        // thrown away, or it could never leave the board.
         const aborted =
           discard &&
-          target &&
-          (await target.adapter.abortSession?.(target.sessionKey, target.cwd));
+          (!target ||
+            (await target.adapter.abortSession?.(
+              target.sessionKey,
+              target.cwd
+            )));
         if (!aborted) {
           throw new Error(
             `Nothing stopped for ${instanceId}: no live session or abortable server turn${discard ? "" : "; held turns require explicit discard"}`
