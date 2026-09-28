@@ -1,12 +1,9 @@
 <script lang="ts">
   import type { ClaudeLimits, LimitWindow } from "@whiffle/core";
   /**
-   * How full the machine's Claude limits are, on the dock next to ContextMeter.
-   * The two answer the same "am I about to hit a wall?" question for the same
-   * session, so this reads as its sibling — but where ContextMeter is one bar
-   * for one window, this is a segmented rail per window: the 5-hour, the weekly,
-   * and each scoped weekly window (the model scopes) ride their own strip, each
-   * strip filling green → amber → red down its own length. That structure is what
+   * How full the machine's Claude limits are, on the dock. The 5-hour, the
+   * weekly, and each scoped weekly window (the model scopes) ride their own
+   * strip, each strip filling green → amber → red down its own length. That structure is what
    * separates it from a sidebar row: segmented, severity-hued, and never one
    * collapsed number.
    *

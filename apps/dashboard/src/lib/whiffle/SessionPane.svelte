@@ -53,7 +53,6 @@
     submitCommand,
     whiffle,
   } from "./client.svelte";
-  // StaticTail removed — virtua's ssrCount renders the tail directly.
   import { cleanDetail } from "./command-detail";
   import { mapTranscript, routedToParent } from "./frames";
   import { delegateHandle } from "./links";
