@@ -1858,16 +1858,13 @@ const streamHost: StreamHost = {
    */
   noteFailure: (record) => {
     if (record.kind === "send") {
-      // The echo carries the failure from here on — stamped rather than kept
-      // only on the record, because records are swept after five minutes and a
-      // message that never sent must not fade back to looking sent. The stamp
-      // is also the claim: if no echo carries this id (superseded by a queued
-      // row, or the session was closed), nothing on screen says anything, and
-      // the toast below is all the operator gets.
+      // A send's failure is said over the composer it left (the session's
+      // notice) and on its echo — stamped rather than kept only on the record,
+      // because records are swept after five minutes and a message that never
+      // sent must not fade back to looking sent. It is never a toast.
       announceSendFailure(record);
-      if (stampSendFailure(record)) {
-        return;
-      }
+      stampSendFailure(record);
+      return;
     }
     // A parked permission card renders its own refusal (`Couldn't send that
     // answer.`) against the very command id it holds. It only does so while it
@@ -1897,26 +1894,20 @@ const failureNotice = (record: CommandRecord): string => {
 };
 
 /**
- * Stamps a failed send's reason onto the echo that represents it, and says
- * whether it found one. `metadata.sendFailed` is what keeps the message
+ * Stamps a failed send's reason onto the echo that represents it, when one
+ * is still in the session. `metadata.sendFailed` is what keeps the message
  * rendered as "not sent" after the ledger has swept its record.
  */
-function stampSendFailure(record: CommandRecord): boolean {
-  const target = state.sessions[record.sessionId];
-  if (!target) {
-    return false;
-  }
-  const echo = target.messages.find(
+function stampSendFailure(record: CommandRecord): void {
+  const echo = state.sessions[record.sessionId]?.messages.find(
     (message) => message.metadata?.sentAs === record.commandId
   );
-  if (!echo) {
-    return false;
+  if (echo) {
+    echo.metadata = {
+      ...echo.metadata,
+      sendFailed: record.reason ?? "The hub never took it.",
+    };
   }
-  echo.metadata = {
-    ...echo.metadata,
-    sendFailed: record.reason ?? "The hub never took it.",
-  };
-  return true;
 }
 
 /**
@@ -2250,17 +2241,17 @@ export function submitCommand<K extends CommandKind>(
     // The echo goes in FIRST, and only here: on every other path one of the
     // two dialects pushes it (the stream effects' `submitted`, or `sendText`),
     // and neither ran. Without it a payload-assembly bug leaves the reason
-    // stranded in a toast with no row to stamp, no Try again, and no Edit —
-    // recoverable text nobody can reach. It is wrapped because it is the one
-    // thing left that could throw, and a throw from a catch block is the
-    // silence this whole function exists to abolish.
+    // with no row to stamp, no Try again, and no Edit — recoverable text
+    // nobody can reach. It is wrapped because it is the one thing left that
+    // could throw, and a throw from a catch block is the silence this whole
+    // function exists to abolish.
     if (kind === "send") {
       const { text, extras } = intent as CommandIntents["send"];
       try {
         noteSendSubmitted(instanceId, text, extras ?? {}, commandId);
       } catch {
-        // The toast below is then the whole report, which is a worse outcome
-        // than a failed ghost but an infinitely better one than nothing.
+        // The composer's notice is then the whole report, which is a worse
+        // outcome than a failed ghost but an infinitely better one than nothing.
       }
     }
     return failLocally(

@@ -22,14 +22,14 @@
    *           --dur-panel while its content fades in, so a run's rail grows
    *           one call at a time. The transcript pins its bottom to the
    *           opening edge for exactly as long as it runs.
-   *   emerge  the reader's own message: it starts where they typed it and
-   *           travels to its row (a FLIP from the composer's field), fading
-   *           in on the way. --dur-panel, --ease-out.
+   *   emerge  the reader's own message, sent from this tab: no entrance of
+   *           the row's own. Its turn is the composer's text landing
+   *           (motion/share.svelte.ts, from MessageRow and Queued).
    *
    * A row leaving the tail (the turn's indicator, a finished tool's glance)
    * folds shut over --dur-exit instead of vanishing, so the tail never jumps.
    */
-  import { type Snippet, tick, untrack } from "svelte";
+  import { type Snippet, untrack } from "svelte";
   import { dur, motionOk } from "$lib/whiffle/motion/curves.svelte";
   import { type Motion, type Ticket, useLedger } from "./arrivals.svelte";
 
@@ -81,51 +81,14 @@
       ledger?.done(id);
     }
   }
-  if (ticket?.kind === "arrive" && !motionOk.current) {
+  // The reader's own message plays no entrance: its content lands the
+  // composer's text (motion/share.svelte.ts).
+  if (
+    ticket?.kind === "arrive" &&
+    (!motionOk.current || untrack(() => motion) === "emerge")
+  ) {
     spent();
   }
-
-  /** The reader's own message leaves the field they typed it in for its row. */
-  function emerge(row: HTMLElement): void {
-    const field = ledger?.composer()?.getBoundingClientRect();
-    if (!field) {
-      spent();
-      return;
-    }
-    const to = (row.firstElementChild ?? row).getBoundingClientRect();
-    const style = getComputedStyle(row);
-    row
-      .animate(
-        [
-          {
-            translate: `${field.left - to.left}px ${field.top - to.top}px`,
-            opacity: 0,
-          },
-          { translate: "0 0", opacity: 1 },
-        ],
-        {
-          duration: dur("--dur-panel"),
-          easing: style.getPropertyValue("--ease-out"),
-          delay: lead,
-          fill: "backwards",
-        }
-      )
-      .finished.then(spent, () => {
-        /* taken down mid-way: the ticket stays for the next mount */
-      });
-  }
-
-  $effect(() => {
-    if (!(node && arriving && motion === "emerge")) {
-      return;
-    }
-    const row = node;
-    // Measured once the virtualiser has placed the row: its item mounts in
-    // plain flow and takes its absolute position in the same flush, and the
-    // start of a FLIP read before that is the top of the list. `tick` is
-    // still ahead of the paint, so nothing is drawn unanimated.
-    tick().then(() => emerge(row));
-  });
 
   $effect(() => {
     if (!(node && leaving)) {
@@ -220,12 +183,6 @@
       &.arriving.rise {
         animation: row-rise var(--dur-panel) var(--ease-out) var(--lead)
           backwards;
-      }
-      /* Held out of sight from its first frame until the flight from the
-         composer takes it over — the start of that flight is measured once
-         the row is placed, and it must never be drawn at rest before it. */
-      &.arriving.emerge {
-        opacity: 0;
       }
       &.arriving.settle {
         animation: row-settle calc(var(--dur-control) * 2) var(--ease-out)

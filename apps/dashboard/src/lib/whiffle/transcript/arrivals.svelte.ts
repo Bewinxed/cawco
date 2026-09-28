@@ -37,7 +37,10 @@ import type { Trail } from "$lib/components/ui/markdown/trail";
 export type Motion =
   /** Fades up 6px: every turn, note and card that lands on the ledger. */
   | "rise"
-  /** The reader's own message, leaving the composer for its row. */
+  /**
+   * The reader's own message, sent from this tab: the row plays no entrance;
+   * its content is the composer's text landing (motion/share.svelte.ts).
+   */
   | "emerge"
   /** A card that asks for the reader: the prompt's settle. */
   | "settle"
@@ -67,8 +70,6 @@ export type Ticket =
   | { kind: "carry"; trail: Trail };
 
 export interface Ledger {
-  /** The composer this transcript's reader writes in — where their own turn starts. */
-  composer: () => Element | null;
   /** The arrival's entrance has run: its ticket is spent. */
   done: (id: string) => void;
   /**
