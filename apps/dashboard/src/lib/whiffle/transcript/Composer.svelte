@@ -582,15 +582,12 @@
     if (!draft.hasContent || sending || held) {
       return;
     }
-    // The text leaves the field for the row it becomes (motion/share): the
-    // user row an idle session renders, or the queued row a busy one does.
-    // Both keys depart, since a busy session's local echo can be replaced by
-    // its queued row while the first flight is still in the air. The field
+    // The text leaves the field for the one row it becomes (motion/share):
+    // the sent turn on an idle session, the queued row on a busy one — the
+    // store decides which at this press and draws only that row. The field
     // is measured before it redraws empty.
     const { text, extras } = draft.take();
-    const source = field as HTMLTextAreaElement;
-    departBox(`sent:${text}`, source);
-    departBox(`queued:${text}`, source);
+    departBox(`sent:${text}`, field as HTMLTextAreaElement);
     dismissed = true;
     via(text, extras);
   }

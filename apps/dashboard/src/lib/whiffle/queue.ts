@@ -7,17 +7,31 @@
  * moment the reader hit send, and that guess was the only evidence the message
  * existed. It did not survive a reload, it existed on no other device, and
  * when a re-read of the transcript landed over the top of it the message could
- * simply vanish. The daemon now announces its queue, and these two functions
- * are where that announcement takes over from the guess.
+ * simply vanish. The daemon now announces its queue, and these functions are
+ * where that announcement takes over from what this tab drew at the press.
  */
 import type { QueuedMessage } from "@whiffle/core";
 import type { Message } from "./types";
 
+/**
+ * A queue entry, as the store keeps it. One this tab drew itself, the moment
+ * the reader sent to a busy session, carries `sentAs`: the send command it
+ * is, and its queue id until the daemon names it. The announcement takes it
+ * over in place and keeps `sentAs`, so its row is keyed the same throughout
+ * and the composer's text lands in it once. Until then it also holds `echo`,
+ * the turn it is: what goes into the transcript if the daemon starts it at
+ * once instead of queueing it, or refuses it.
+ */
+export type QueueEntry = QueuedMessage & { sentAs?: string; echo?: Message };
+
 /** The parts of a session's state a queue move touches. */
 export interface QueueTarget {
   messages: Message[];
-  queued: QueuedMessage[];
+  queued: QueueEntry[];
 }
+
+/** An entry this tab drew and the daemon has not announced yet. */
+const drawn = (entry: QueueEntry): boolean => entry.sentAs === entry.queueId;
 
 /**
  * Files a message the session is holding, and takes back the guess the sender
@@ -37,6 +51,15 @@ export function ingestQueued(target: QueueTarget, entry: QueuedMessage): void {
   if (target.queued.some((queued) => queued.queueId === entry.queueId)) {
     return;
   }
+  const mine = target.queued.findIndex(
+    (queued) => drawn(queued) && queued.text === entry.text
+  );
+  if (mine >= 0) {
+    target.queued = target.queued.map((queued, i) =>
+      i === mine ? { ...entry, sentAs: queued.sentAs } : queued
+    );
+    return;
+  }
   const guess = target.messages.findLast(
     (message) =>
       message.type === "user" &&
@@ -51,6 +74,38 @@ export function ingestQueued(target: QueueTarget, entry: QueuedMessage): void {
 }
 
 /**
+ * Takes the hub's snapshot of a session's queue. The snapshot is the truth
+ * about what is queued, but it knows nothing of which entries this tab drew:
+ * an entry that was one keeps its `sentAs` (so its row keeps its key), and a
+ * drawn entry the hub has not heard of yet stays, after the rest.
+ */
+export function adoptQueue(
+  target: QueueTarget,
+  entries: QueuedMessage[]
+): void {
+  const held = target.queued;
+  const claimed = new Set<QueueEntry>();
+  const next: QueueEntry[] = entries.map((entry) => {
+    const mine = held.find(
+      (queued) =>
+        queued.sentAs !== undefined &&
+        !claimed.has(queued) &&
+        (queued.queueId === entry.queueId ||
+          (drawn(queued) && queued.text === entry.text))
+    );
+    if (!mine) {
+      return entry;
+    }
+    claimed.add(mine);
+    return { ...entry, sentAs: mine.sentAs };
+  });
+  target.queued = [
+    ...next,
+    ...held.filter((queued) => drawn(queued) && !claimed.has(queued)),
+  ];
+}
+
+/**
  * Retires a queue entry: the session pulled it (`message_dequeued`), or its
  * real turn landed carrying the same id. Both paths, because either can be the
  * one that arrives — the dequeue frame can be raced by the turn it announces,
@@ -61,4 +116,20 @@ export function retireQueued(target: QueueTarget, queueId: string): void {
     return;
   }
   target.queued = target.queued.filter((queued) => queued.queueId !== queueId);
+}
+
+/**
+ * Takes back the entry this tab drew for a send the daemon did not queue
+ * after all: the turn it became started at once, or the send failed. The
+ * entry is returned so the caller can put the turn in its place.
+ */
+export function takeDrawn(
+  target: QueueTarget,
+  match: (entry: QueueEntry) => boolean
+): QueueEntry | undefined {
+  const entry = target.queued.find((queued) => drawn(queued) && match(queued));
+  if (entry) {
+    target.queued = target.queued.filter((queued) => queued !== entry);
+  }
+  return entry;
 }

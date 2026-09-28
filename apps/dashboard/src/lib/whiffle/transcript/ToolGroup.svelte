@@ -28,6 +28,7 @@
   import { SHOW_IMAGE_TOOLS, SHOW_PREVIEW_TOOLS } from "$lib/whiffle/frames";
   import { mcpServerHost } from "$lib/whiffle/mcp";
   import { dur, easeOut, motionOk } from "$lib/whiffle/motion/curves.svelte";
+  import { depart } from "$lib/whiffle/motion/share.svelte";
   /**
    * A run of tool calls as rail-led rows — never a nested card. The rail is a
    * 2px stripe; each row is a glyph, the verb, a mono argument, and whatever the
@@ -129,6 +130,20 @@
   /** Preview calls whose open request is out, and those whose last one failed. */
   const opening = new SvelteSet<string>();
   const openFailed = new SvelteSet<string>();
+
+  /**
+   * The row's thumbnail departs as its Preview button is pressed: the button
+   * is what takes the press, the thumbnail beside it is what travels. A row
+   * whose preview has no thumbnail yet has nothing to fly.
+   */
+  function departThumb(event: MouseEvent): void {
+    const thumb = (event.currentTarget as HTMLElement)
+      .closest(".preview-tool")
+      ?.querySelector<HTMLElement>(".artifact-thumb");
+    if (thumb) {
+      depart(thumb);
+    }
+  }
 
   async function openArtifact(m: Message, input: PreviewSource) {
     const key = callId(m);
@@ -363,9 +378,7 @@
                 aria-disabled={busy || undefined}
                 aria-label={preview?.title || 'Preview'}
                 class="artifact-open"
-                data-share="preview:{m.instanceId}"
-                data-share-ttl="10000"
-                onclick={whileIdle(() => busy, () => opened ? revealPreview(m.instanceId) : openArtifact(m, input))}
+                onclick={whileIdle(() => busy, (event: MouseEvent) => { departThumb(event); if (opened) { revealPreview(m.instanceId); } else { openArtifact(m, input); } })}
                 type="button"
               >
                 <span class="mark"><IconWindow /></span>
@@ -383,7 +396,15 @@
                 >
               </button>
               {#if preview?.thumbnail}
-                <div aria-hidden="true" class="artifact-thumb" inert>
+                <!-- The thumbnail is what flies into the preview pane or sheet
+                     when the preview opens (motion/share, `preview:<session>`). -->
+                <div
+                  aria-hidden="true"
+                  class="artifact-thumb"
+                  data-share="preview:{m.instanceId}"
+                  data-share-ttl="10000"
+                  inert
+                >
                   <Shot
                     alt="Preview"
                     size="thumb"

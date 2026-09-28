@@ -12,20 +12,25 @@
    * the reader wants from a turn is when it was said, and this has not been
    * said yet — a time here would be a promise about the wrong moment.
    */
-  import type { QueuedMessage } from "@whiffle/core";
   import { dur } from "$lib/whiffle/motion/curves.svelte";
   import { land } from "$lib/whiffle/motion/share.svelte";
+  import type { QueueEntry } from "../queue";
   import MessageBody from "./MessageBody.svelte";
   import Who from "./Who.svelte";
 
-  let { queued }: { queued: QueuedMessage } = $props();
+  let { queued }: { queued: QueueEntry } = $props();
 </script>
 
-<!-- Sent from this tab to a busy session, the row is the composer's text
-     landing (motion/share, departed by Composer's submit). -->
+<!-- Sent from this tab to a busy session, the row is drawn at the press and
+     is the composer's text landing (motion/share, departed by Composer's
+     submit); the daemon's announcement keeps the row, so the flight lands
+     once. -->
 <section
   class="turn you queued"
-  {@attach land(() => `queued:${queued.text}`, { ms: dur('--dur-pop'), uniform: true })}
+  {@attach land(
+    () => queued.sentAs ? `sent:${queued.text}` : undefined,
+    { ms: dur('--dur-pop'), uniform: true }
+  )}
 >
   <Who name="You" note="queued" you />
   <MessageBody source={queued.text} />

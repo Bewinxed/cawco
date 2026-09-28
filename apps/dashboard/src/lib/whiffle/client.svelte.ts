@@ -77,7 +77,13 @@ import {
 import { newId } from "./id";
 import { conversationHref, indexInstances, instanceForSession } from "./links";
 import { type PendingSelection, selectionExtras } from "./preview/selection";
-import { ingestQueued, retireQueued } from "./queue";
+import {
+  adoptQueue,
+  ingestQueued,
+  type QueueEntry,
+  retireQueued,
+  takeDrawn,
+} from "./queue";
 import { checkRestartToast } from "./restart-toast";
 import type {
   CommandRecord,
@@ -360,10 +366,11 @@ export interface SessionState {
    *
    * This is the queue as STATE, not as a guess: it survives a reload (the hub
    * snapshots it), it is the same on every device, and it is what the reader
-   * sees waiting under the conversation. A dashboard talking to a daemon that
-   * predates the frames simply never fills it and keeps its local echo.
+   * sees waiting under the conversation. A message this tab sends while the
+   * session is busy goes in here at the press, drawn before the daemon's word
+   * (see {@link QueueEntry}), and never into the transcript as a sent turn.
    */
-  queued: QueuedMessage[];
+  queued: QueueEntry[];
   /**
    * How the last transcript read ended, when it ended with nothing on screen.
    * Every read path sets this on a terminal failure and clears it when a read
@@ -934,7 +941,7 @@ function adoptQueues(
   }
   queueSnapshot = queues;
   for (const target of Object.values(state.sessions)) {
-    target.queued = queues[target.instanceId] ?? [];
+    adoptQueue(target, queues[target.instanceId] ?? []);
   }
 }
 
@@ -1548,16 +1555,26 @@ function handleFrame(frame: FramePayload): void {
         // queued row it replaces is not a copy anything can stamp. Its id is
         // the second way a row retires — the dequeue frame can be raced by the
         // turn it announces, or missed entirely by a tab that just subscribed.
-        if (mapping.echo.queueId) {
-          retireQueued(target, mapping.echo.queueId);
+        const { uuid, text, queueId } = mapping.echo;
+        if (queueId) {
+          retireQueued(target, queueId);
+          // Queued and run without this tab hearing the announcement: the entry
+          // it drew at the press is this turn too.
+          takeDrawn(target, (entry) => entry.text === text);
         } else {
           const copies = target.messages.filter(
             (m) => m.type === "user" && !m.sdkUuid
           );
-          const copy =
-            copies.find((m) => m.content === mapping.echo?.text) ?? copies[0];
+          const copy = copies.find((m) => m.content === text) ?? copies[0];
           if (copy) {
-            copy.sdkUuid = mapping.echo.uuid;
+            copy.sdkUuid = uuid;
+          } else {
+            // Sent to a busy session, but started at once rather than queued:
+            // the entry drawn at the press becomes the turn.
+            const started = takeDrawn(target, (entry) => entry.text === text);
+            if (started?.echo) {
+              target.messages.push({ ...started.echo, sdkUuid: uuid });
+            }
           }
         }
       }
@@ -1894,19 +1911,31 @@ const failureNotice = (record: CommandRecord): string => {
 };
 
 /**
- * Stamps a failed send's reason onto the echo that represents it, when one
- * is still in the session. `metadata.sendFailed` is what keeps the message
- * rendered as "not sent" after the ledger has swept its record.
+ * Stamps a failed send's reason onto the echo that represents it.
+ * `metadata.sendFailed` is what keeps the message rendered as "not sent"
+ * after the ledger has swept its record. A send drawn as a queued row was
+ * never queued: it leaves the queue for the transcript, as the failed turn
+ * that carries Try again and Edit.
  */
 function stampSendFailure(record: CommandRecord): void {
-  const echo = state.sessions[record.sessionId]?.messages.find(
+  const target = state.sessions[record.sessionId];
+  if (!target) {
+    return;
+  }
+  const sendFailed = record.reason ?? "The hub never took it.";
+  const echo = target.messages.find(
     (message) => message.metadata?.sentAs === record.commandId
   );
   if (echo) {
-    echo.metadata = {
-      ...echo.metadata,
-      sendFailed: record.reason ?? "The hub never took it.",
-    };
+    echo.metadata = { ...echo.metadata, sendFailed };
+    return;
+  }
+  const drawn = takeDrawn(target, (entry) => entry.sentAs === record.commandId);
+  if (drawn?.echo) {
+    target.messages.push({
+      ...drawn.echo,
+      metadata: { ...drawn.echo.metadata, sendFailed },
+    });
   }
 }
 
@@ -3192,12 +3221,8 @@ export function sendText(
     message: userMessage(text),
     ...selectionExtras(extras),
   };
-  // Optimistic, and marked as such. If the session was busy the daemon answers
-  // with `message_queued` and this copy is retired in favour of the queue's own
-  // row ({@link ingestQueued}); if it was idle, or the daemon predates the
-  // frame, no announcement ever comes and the copy stays exactly as it always
-  // has. The mark is what makes the first case possible without risking the
-  // second.
+  // Optimistic, and marked as such: a busy session's send is drawn as its
+  // queued row, an idle one's as its turn ({@link noteSendSubmitted}).
   //
   // BEFORE the dispatch, not after: `send` throws when the socket is not open,
   // and echoing afterwards meant the one case that most needs a visible
@@ -3205,9 +3230,8 @@ export function sendText(
   // screen for the failure to be rendered on. The stream dialect already
   // ordered it this way (stream.ts applies `streamEffects.submitted` before
   // `sendToHub`, "so a dispatch that fails synchronously still settles it");
-  // this makes the legacy dialect agree. Nothing renders twice: the echo is
-  // one object, and the only path that replaces it — `ingestQueued` — removes
-  // the copy it supersedes.
+  // this makes the legacy dialect agree. Nothing renders twice: the drawn
+  // row is one object, taken over in place by the daemon's word.
   noteSendSubmitted(instanceId, text, extras, commandId, replaces);
   send({ verb: "send", machineId, instanceId, payload });
 }
@@ -3251,11 +3275,26 @@ function noteSendSubmitted(
       metadata: { ...kept, ...marks },
     };
   } else {
-    const echo = localUserMessage(instanceId, text, selectionExtras(extras));
-    target.messages.push({
-      ...echo,
-      metadata: { ...echo.metadata, ...marks },
-    });
+    const local = localUserMessage(instanceId, text, selectionExtras(extras));
+    const echo = { ...local, metadata: { ...local.metadata, ...marks } };
+    // Decided at the press: a busy session will hold this message, so it is
+    // drawn as its queued row at once — never as a sent turn first — keyed by
+    // the send, which the daemon's announcement keeps (queue.ts).
+    if (target.busy && commandId) {
+      target.queued = [
+        ...target.queued,
+        {
+          queueId: commandId,
+          sentAs: commandId,
+          text,
+          timestamp: new Date().toISOString(),
+          ...(extras.images?.length && { images: extras.images.length }),
+          echo,
+        },
+      ];
+    } else {
+      target.messages.push(echo);
+    }
   }
   // A new attempt replaces the last one's announcement rather than stacking on
   // it: the live region says what is true now, not what was true before.
