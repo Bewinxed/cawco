@@ -32,6 +32,8 @@
   import type { TransitionConfig } from "svelte/transition";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Command from "$lib/components/ui/command";
+  import { whileIdle } from "$lib/components/ui/button/pending-content.svelte";
+  import { Spinner } from "$lib/components/ui/spinner";
   import { IconClose, IconPlus, IconSend, IconStop } from "$lib/icons";
   import { autosize } from "$lib/whiffle/motion/autosize.svelte";
   import {
@@ -44,6 +46,7 @@
   } from "$lib/whiffle/motion/curves.svelte";
   import { unfold } from "$lib/whiffle/motion/fold.svelte";
   import { reflow } from "$lib/whiffle/motion/rows.svelte";
+  import { departBox } from "$lib/whiffle/motion/share.svelte";
   import type { SendExtras } from "../client.svelte";
   import { cleanDetail } from "../command-detail";
   import SelectionChip from "../preview/SelectionChip.svelte";
@@ -62,6 +65,7 @@
     height = $bindable(0),
     busy = false,
     sending = false,
+    sendError = "",
     held = false,
     paneVisible = true,
     previewPhone = false,
@@ -96,6 +100,11 @@
      * second send from a duplicate of the first.
      */
     sending?: boolean;
+    /**
+     * Why the last message this composer sent did not go through, said above
+     * the field until the next one is sent; empty when nothing failed.
+     */
+    sendError?: string;
     /**
      * A swipe is carrying the conversations under this composer. The action
      * button waits until one has landed, so nothing is sent to a chat that
@@ -573,7 +582,15 @@
     if (!draft.hasContent || sending || held) {
       return;
     }
+    // The text leaves the field for the row it becomes (motion/share): the
+    // user row an idle session renders, or the queued row a busy one does.
+    // Both keys depart, since a busy session's local echo can be replaced by
+    // its queued row while the first flight is still in the air. The field
+    // is measured before it redraws empty.
     const { text, extras } = draft.take();
+    const source = field as HTMLTextAreaElement;
+    departBox(`sent:${text}`, source);
+    departBox(`queued:${text}`, source);
     dismissed = true;
     via(text, extras);
   }
@@ -830,6 +847,11 @@
     />
   {/if}
 
+  <!-- A send that failed says so right over the field it left. -->
+  {#if sendError}
+    <p class="send-error" role="alert" transition:unfold>{sendError}</p>
+  {/if}
+
   <form
     aria-label="Message the agent"
     class="cin"
@@ -922,21 +944,26 @@
       >
         <IconPlus />
       </button>
+      <!-- Pending from the press until the hub takes the message: the glyph
+           slot turns to the kit spinner and presses are swallowed. -->
       <button
-        aria-disabled={!busy && sending ? 'true' : undefined}
+        aria-busy={sending || undefined}
+        aria-disabled={sending || undefined}
         aria-label={busy ? 'Stop the agent' : 'Send message'}
         class="stop touch-hit pressable"
-        disabled={held || !(busy || draft.hasContent)}
-        onclick={onaction}
+        disabled={held || !(busy || sending || draft.hasContent)}
+        onclick={whileIdle(() => sending, onaction)}
         type="button"
       >
         <!-- The one control that changes meaning mid-turn. `{#key}` re-creates
              the glyph on every flip, so BOTH directions of the swap animate in;
              the box it sits in is untouched, so send↔stop never moves or
              resizes under a thumb already travelling toward it. -->
-        {#key busy}
+        {#key sending ? 'wait' : busy}
           <span class="swap">
-            {#if busy}
+            {#if sending}
+              <Spinner aria-hidden="true" role="presentation" />
+            {:else if busy}
               <IconStop />
             {:else}
               <IconSend />
@@ -1251,6 +1278,13 @@
   .stop:focus-visible {
     outline: 2px solid var(--focus-ring);
     outline-offset: 1px;
+  }
+
+  .send-error {
+    padding-inline: var(--space-3);
+    color: var(--status-fail-ink);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
   }
 
   /* Pending attachment chips, above the input pill. The row scrolls, so on

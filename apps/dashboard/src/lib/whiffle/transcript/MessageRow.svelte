@@ -1,5 +1,7 @@
 <script lang="ts">
   import { Badge } from "$lib/components/ui/badge";
+  import { dur } from "$lib/whiffle/motion/curves.svelte";
+  import { land } from "$lib/whiffle/motion/share.svelte";
   import type { Trail } from "$lib/components/ui/markdown/trail";
   import {
     canResend,
@@ -143,7 +145,17 @@
        it is the one thing that carries a surface: a sunken well. User messages
        are sparse, so filling them makes the operator's own instructions the
        landmarks. The agent's turns stay bare on the field. -->
-  <section class="turn you" class:failed class:ghost>
+  <!-- Sent from this tab, the turn is the composer's text landing (motion/share,
+       departed by Composer's submit). -->
+  <section
+    class="turn you"
+    class:failed
+    class:ghost
+    {@attach land(
+      () => message.metadata?.queuedLocally ? `sent:${message.content}` : undefined,
+      { ms: dur('--dur-pop'), uniform: true }
+    )}
+  >
     <Who
       name="You"
       note={whoNote}

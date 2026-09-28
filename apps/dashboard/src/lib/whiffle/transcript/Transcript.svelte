@@ -39,6 +39,7 @@
   import type { Trail } from "$lib/components/ui/markdown/trail";
   import { IconChat } from "$lib/icons";
   import { type SessionState, whiffle } from "../client.svelte";
+  import { waiting } from "../motion/share.svelte";
   import { rebuildScheduler } from "../workspace/scheduler.svelte";
   import {
     type Motion,
@@ -1503,11 +1504,15 @@
 
   /** How a row arrives, by what it is. */
   function motionOf(row: Row): Motion {
+    // The reader's own message, sent from the composer below, is its text
+    // landing from the field (MessageRow and Queued land it): no entrance of
+    // the row's own. A turn that WAITED in the queue was on screen already,
+    // as a queued row; it arrives like any other.
     if (row.kind === "single" && row.message.type === "user") {
-      // The reader's own message, sent from the composer below: it leaves the
-      // field they typed it in. A turn that WAITED in the queue was on screen
-      // already, as a queued row; it arrives like any other.
-      return row.message.metadata?.queuedLocally ? "emerge" : "rise";
+      return waiting(`sent:${row.message.content}`) ? "emerge" : "rise";
+    }
+    if (row.kind === "queued") {
+      return waiting(`queued:${row.queued.text}`) ? "emerge" : "rise";
     }
     if (row.kind === "question") {
       return "settle";
@@ -1517,25 +1522,7 @@
     return row.kind === "livetool" ? "open" : "rise";
   }
 
-  /**
-   * The composer this transcript's reader writes in: the pane's own on a
-   * desk (the nearest one up the tree, so a grid of panes finds each its
-   * own), and on a phone the deck's — the one composer there is, drawn
-   * outside the pane.
-   */
-  const COMPOSER = 'textarea[aria-label="Message the agent"]';
-  function composer(): Element | null {
-    for (let node = scroller?.parentElement; node; node = node.parentElement) {
-      const field = node.querySelector(COMPOSER);
-      if (field) {
-        return field;
-      }
-    }
-    return document.querySelector(COMPOSER);
-  }
-
   provideLedger({
-    composer,
     take(id) {
       const ticket = tickets.get(id) ?? null;
       if (ticket && ticket.kind !== "arrive") {
