@@ -4,7 +4,9 @@
    * the active segment and the focus ring — positioned from measurements,
    * which is what lets one element slide between tabs rather than each tab
    * drawing its own. The hover layer is the kit's ghost (components/ui/
-   * highlight), the same one every list in the app has.
+   * highlight), the same one every list in the app has, placed from the
+   * same measurements, so it follows the tabs when they move under a
+   * pointer that stays still.
    *
    * `scrollable` lets a track that overflows scroll sideways: the chosen
    * item is kept in view and a wheel over the track, which has no vertical
@@ -29,7 +31,7 @@
   } = $props();
 
   const tabs = useTabs();
-  const rects = new TabRects();
+  const rects = new TabRects((order) => tabs.setOrder(order));
   const list = new TabsListState(rects);
   provideList(list);
 
@@ -128,14 +130,8 @@
     return () => cancelAnimationFrame(frame);
   });
 
-  const selectedRect = $derived(
-    list.optimisticIndex === null
-      ? undefined
-      : rects.rects[list.optimisticIndex]
-  );
-  const focusRect = $derived(
-    list.focusedIndex === null ? undefined : rects.rects[list.focusedIndex]
-  );
+  const selectedRect = $derived(rects.at(list.optimisticIndex));
+  const focusRect = $derived(rects.at(list.focusedIndex));
 
   const lerp = (a: number, b: number, f: number) => a + (b - a) * f;
   /**
@@ -146,7 +142,7 @@
   const travelRect = $derived.by(() => {
     const { travel } = tabs;
     const from = selectedRect;
-    const to = travel && rects.rects[tabs.order.indexOf(travel.toward)];
+    const to = travel && rects.at(tabs.order.indexOf(travel.toward));
     if (!(from && to)) {
       return;
     }
@@ -343,7 +339,7 @@
   bind:this={node}
   use:rects.container
   use:sideways
-  {@attach highlight({ rows: ".ff-tab", axis: "x", covered: ".ff-tab.selected" })}
+  {@attach highlight({ rows: ".ff-tab", axis: "x", covered: ".ff-tab.selected", laidOut: () => rects.rects })}
   {...rest}
 >
   {#if selectedRect}

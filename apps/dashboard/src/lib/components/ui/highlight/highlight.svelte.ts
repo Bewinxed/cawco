@@ -20,8 +20,24 @@
  * All three layers are drawn under the rows (the container isolates, they
  * sit at z-index -1), measured from the rows' own rects and radii, and move
  * on transform, width and height only.
+ *
+ * Rows can move under a pointer that stays still — one closes and the rest
+ * slide over. The browser says so with a `pointerover` on whatever is under
+ * the pointer now, and a list that measures its own rows (`laidOut`) says
+ * so every time it re-measures; either way the ghost goes to the row that
+ * is under the pointer now.
  */
+import { untrack } from "svelte";
+
 type Axis = "x" | "y" | "xy";
+
+/** A row's box in the container's own coordinates. */
+export interface LaidOut {
+  height: number;
+  left: number;
+  top: number;
+  width: number;
+}
 
 export interface HighlightOptions {
   /** How nearness to the pointer is measured: `xy` for a grid. */
@@ -36,6 +52,14 @@ export interface HighlightOptions {
   ghost?: boolean;
   /** A row attribute that says which row is hovered, instead of the pointer. */
   hovered?: string;
+  /**
+   * Where each row is laid out, for a list that measures its rows itself
+   * (the tabs' TabRects), read reactively. The layers are placed from these
+   * boxes rather than from what is drawn, so a row a FLIP is still carrying
+   * is aimed at where it lands, and they follow the rows each time the list
+   * re-measures. Only rows with a box here are rows.
+   */
+  laidOut?: () => ReadonlyMap<Element, LaidOut>;
   /** The rows the ghost and the pill stand under. */
   rows: string;
   /** The selected row. */
@@ -79,6 +103,7 @@ export function highlight(options: HighlightOptions) {
       hovered,
       selected,
       covered,
+      laidOut,
       axis = "y",
       ghost: withGhost = true,
     } = options;
@@ -97,13 +122,12 @@ export function highlight(options: HighlightOptions) {
     container.prepend(...(withGhost ? [ghost] : []), trail, pill);
 
     /**
-     * A row's box in the container's padding box, scroll included, in the
-     * container's own untransformed pixels: a list inside a popover that is
-     * still scaling in is measured at its real size, not its drawn one.
+     * A point on screen in the container's padding box, scroll included, in
+     * the container's own untransformed pixels: a list inside a popover that
+     * is still scaling in is measured at its real size, not its drawn one.
      */
-    const boxOf = (row: HTMLElement): Box => {
+    const toLocal = (clientX: number, clientY: number) => {
       const frame = container.getBoundingClientRect();
-      const rect = row.getBoundingClientRect();
       // Drawn size over laid-out size; the laid-out size is the resolved
       // one, fractional, so an untransformed list is exactly 1.
       const styles = getComputedStyle(container);
@@ -115,22 +139,46 @@ export function highlight(options: HighlightOptions) {
       const sy = across(frame.height, styles.height);
       return {
         x:
-          (rect.left - frame.left) / sx -
+          (clientX - frame.left) / sx -
           container.clientLeft +
           container.scrollLeft,
         y:
-          (rect.top - frame.top) / sy -
+          (clientY - frame.top) / sy -
           container.clientTop +
           container.scrollTop,
-        w: rect.width / sx,
-        h: rect.height / sy,
-        r: getComputedStyle(row).borderRadius,
+        sx,
+        sy,
       };
     };
+    /** A row's box in the same space: where the list laid it out, when it
+        says, or else where it is drawn. Undefined for a row not laid out. */
+    const placeOf = (row: HTMLElement): Omit<Box, "r"> | undefined => {
+      if (laidOut) {
+        const at = laidOut().get(row);
+        return at && { x: at.left, y: at.top, w: at.width, h: at.height };
+      }
+      const rect = row.getBoundingClientRect();
+      const at = toLocal(rect.left, rect.top);
+      return {
+        x: at.x,
+        y: at.y,
+        w: rect.width / at.sx,
+        h: rect.height / at.sy,
+      };
+    };
+    const boxOf = (row: HTMLElement): Box | undefined => {
+      const at = placeOf(row);
+      return at && { ...at, r: getComputedStyle(row).borderRadius };
+    };
+    /** A row's box, if it is shown at all. */
+    const shownBoxOf = (row: HTMLElement) =>
+      row.offsetParent === null ? undefined : boxOf(row);
     const rowsNow = () =>
       [...container.querySelectorAll<HTMLElement>(rows)].filter(
         (row) =>
-          !(row as HTMLButtonElement).disabled && row.offsetParent !== null
+          !(row as HTMLButtonElement).disabled &&
+          row.offsetParent !== null &&
+          (!laidOut || laidOut().has(row))
       );
     const rowOf = (node: EventTarget | null) =>
       node instanceof Element
@@ -158,12 +206,13 @@ export function highlight(options: HighlightOptions) {
         ghostRow?.removeAttribute("data-ghosted");
         row?.setAttribute("data-ghosted", "");
       }
-      if (!row) {
+      const box = row && boxOf(row);
+      if (!(row && box)) {
+        row?.removeAttribute("data-ghosted");
         ghost.style.opacity = "0";
         ghostRow = null;
         return;
       }
-      const box = boxOf(row);
       // Out of view, the ghost lands where it is going without a glide;
       // from under a covering row it glides out as it would from view.
       ghost.classList.toggle("kit-glide", ghostRow !== null);
@@ -179,13 +228,13 @@ export function highlight(options: HighlightOptions) {
         return;
       }
       const row = container.querySelector<HTMLElement>(selected);
-      if (!row || row.offsetParent === null) {
+      const box = row && shownBoxOf(row);
+      if (!(row && box)) {
         pill.style.opacity = "0";
         pillBox = null;
         pillRow = null;
         return;
       }
-      const box = boxOf(row);
       if (row === pillRow && same(box, pillBox)) {
         return;
       }
@@ -211,22 +260,23 @@ export function highlight(options: HighlightOptions) {
       pillRow = row;
     };
 
-    /** Where the pointer last was, to re-aim when a list scrolls under it. */
-    let pointer: { x: number; y: number } | null = null;
-    const onMove = (
-      event: { clientX: number; clientY: number },
-      again = false
-    ) => {
-      if (hovered) {
-        return;
-      }
-      pointer = { x: event.clientX, y: event.clientY };
+    /** The row nearest a point on screen, of those the pointer can reach. */
+    const nearest = (clientX: number, clientY: number) => {
+      const at = toLocal(clientX, clientY);
       let best: HTMLElement | null = null;
       let bestDistance = Number.POSITIVE_INFINITY;
       for (const row of rowsNow()) {
-        const rect = row.getBoundingClientRect();
-        const dx = event.clientX - (rect.left + rect.width / 2);
-        const dy = event.clientY - (rect.top + rect.height / 2);
+        // A row the pointer cannot reach — one on its way out — is not
+        // under it, wherever it is still drawn.
+        const box =
+          getComputedStyle(row).pointerEvents === "none"
+            ? undefined
+            : placeOf(row);
+        if (!box) {
+          continue;
+        }
+        const dx = at.x - (box.x + box.w / 2);
+        const dy = at.y - (box.y + box.h / 2);
         const distance = {
           x: Math.abs(dx),
           y: Math.abs(dy),
@@ -237,8 +287,22 @@ export function highlight(options: HighlightOptions) {
           best = row;
         }
       }
-      if (best && (again || best !== ghostRow)) {
-        ghostBy = "pointer";
+      return best;
+    };
+
+    /** Where the pointer last was, to re-aim when a list scrolls under it. */
+    let pointer: { x: number; y: number } | null = null;
+    const onMove = (
+      event: { clientX: number; clientY: number },
+      again = false
+    ) => {
+      if (hovered) {
+        return;
+      }
+      pointer = { x: event.clientX, y: event.clientY };
+      const best = nearest(event.clientX, event.clientY);
+      if (again || best !== ghostRow) {
+        ghostBy = best ? "pointer" : null;
         showGhost(best);
       }
     };
@@ -286,6 +350,8 @@ export function highlight(options: HighlightOptions) {
       }
     };
     container.addEventListener("pointermove", onPointer);
+    // Also sent, with no move, when the rows shift under a still pointer.
+    container.addEventListener("pointerover", onPointer);
     container.addEventListener("pointerleave", onLeave);
     container.addEventListener("focusin", onFocus);
     container.addEventListener("focusout", onBlur);
@@ -347,18 +413,38 @@ export function highlight(options: HighlightOptions) {
       pillBox = null;
       pill.classList.remove("kit-glide");
       syncPill(false);
-      if (ghostRow?.isConnected) {
+      const box = ghostRow?.isConnected ? boxOf(ghostRow) : undefined;
+      if (box) {
         ghost.classList.remove("kit-glide");
-        place(ghost, boxOf(ghostRow));
+        place(ghost, box);
+        ghostBox = box;
       }
     };
     sizes.observe(container);
     syncPill(false);
 
+    // A list that measures its rows moves the layers each time it does: the
+    // ghost glides to the row under the pointer now (or under focus, or
+    // away if its row has gone), and the pill onto the selected row.
+    if (laidOut) {
+      $effect(() => {
+        laidOut();
+        untrack(() => {
+          if (pointer && !hovered) {
+            onMove({ clientX: pointer.x, clientY: pointer.y }, true);
+          } else if (ghostRow) {
+            showGhost(ghostRow.isConnected ? ghostRow : null);
+          }
+          syncPill(true);
+        });
+      });
+    }
+
     return () => {
       cancelAnimationFrame(pendingResize);
       cancelAnimationFrame(pendingHide);
       container.removeEventListener("pointermove", onPointer);
+      container.removeEventListener("pointerover", onPointer);
       container.removeEventListener("pointerleave", onLeave);
       container.removeEventListener("focusin", onFocus);
       container.removeEventListener("focusout", onBlur);

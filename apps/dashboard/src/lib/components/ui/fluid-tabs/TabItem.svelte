@@ -1,5 +1,4 @@
 <script lang="ts">
-  import type { Component } from "svelte";
   /**
    * One segment. The item draws nothing of its own state — the track's
    * overlays do — it only places its content over them and changes weight
@@ -10,7 +9,7 @@
    * `href` makes the item a link — the row keeps a real address for
    * middle-click and copy — with a plain click still choosing in place.
    */
-  import { onMount, type Snippet } from "svelte";
+  import type { Component, Snippet } from "svelte";
   import type { HTMLAttributes } from "svelte/elements";
   import { cn } from "$lib/utils";
   import { useList, useTabs } from "./context.svelte";
@@ -40,22 +39,17 @@
 
   const tabs = useTabs();
   const list = useList();
-  const index = list.claim();
 
   let node = $state<HTMLElement | undefined>();
-  onMount(() => {
-    if (!node) {
-      return;
+  // The root learns the order from the items themselves, in the order they
+  // stand in the track — kept as tabs arrive, leave and are moved.
+  $effect(() => {
+    if (node) {
+      return list.rects.register(node, value);
     }
-    return list.rects.register(index, node);
   });
-
-  // The root learns the order from the items themselves, in mount order.
-  $effect.pre(() => {
-    const order = [...tabs.order];
-    order[index] = value;
-    tabs.setOrder(order);
-  });
+  /** Where this item stands now, not where it stood when it mounted. */
+  const index = $derived(node ? list.rects.items.indexOf(node) : -1);
 
   const selected = $derived(tabs.value === value);
   /**
