@@ -496,6 +496,13 @@ const state = $state({
    */
   pulses: {} as Record<string, SessionPulse>,
   /**
+   * When each session's current turn began, epoch ms, as its pulses tell it:
+   * the `at` of the first pulse after an idle one that was not idle. Absent
+   * while the session is idle. The fleet board orders a working session by
+   * it, so a session keeps its place for as long as it works.
+   */
+  turnSince: {} as Record<string, number>,
+  /**
    * The hub's record of every delegate's asks, answers and reports, keyed by
    * the delegate they are about and oldest first. Kept apart from the session
    * it belongs to because the reader of this traffic is the *parent* — a
@@ -671,6 +678,15 @@ function session(instanceId: string): SessionState {
   // is the usual way — still has to name its machine on the fleet view.
   hydrate(target);
   return target;
+}
+
+/** Starts a session's turn clock at the first pulse that is not idle, and stops it at the idle one. */
+function trackTurn(instanceId: string, pulse: SessionPulse): void {
+  if (pulse.activity === "idle") {
+    delete state.turnSince[instanceId];
+  } else {
+    state.turnSince[instanceId] ??= pulse.at;
+  }
 }
 
 /** Fills in what the registry knows about a session this browser did not spawn. */
@@ -1251,6 +1267,7 @@ function handleFrame(frame: FramePayload): void {
       (frame as { pulses?: Record<string, SessionPulse> }).pulses
     );
     for (const [id, pulse] of Object.entries(state.pulses)) {
+      trackTurn(id, pulse);
       const held = state.sessions[id];
       if (held) {
         applyPulse(held, pulse);
@@ -1276,6 +1293,7 @@ function handleFrame(frame: FramePayload): void {
     // The daemon's coarse now-state, broadcast — this is the whole of what the
     // rail knows about a session this browser has not subscribed to.
     state.pulses[frame.instanceId] = frame.pulse;
+    trackTurn(frame.instanceId, frame.pulse);
     const held = state.sessions[frame.instanceId];
     if (held) {
       applyPulse(held, frame.pulse);
@@ -5099,6 +5117,9 @@ export const whiffle = {
    */
   pulseAt: (instanceId: string): number | undefined =>
     state.pulses[instanceId]?.at,
+  /** When the session's current turn began, ms epoch; `undefined` while it is idle. */
+  turnSince: (instanceId: string): number | undefined =>
+    state.turnSince[instanceId],
   /**
    * The ledger stats the fleet table shows per session — turns, context %, cost.
    * Only populated for a session this browser has state for (subscribed / a turn

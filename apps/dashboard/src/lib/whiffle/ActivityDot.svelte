@@ -8,6 +8,7 @@
     SLEEPING_LABEL,
     UNKNOWN_LABEL,
   } from "./activity";
+  import { dur, easeOut, motionOk } from "./motion/curves.svelte";
 
   interface Props {
     activity: Activity;
@@ -62,6 +63,21 @@
     }[activity]
   );
 
+  /**
+   * One glyph handing its place to the next (failed, unknown, asleep, a dot):
+   * the new one fades in over --dur-control as it settles from .92, the old
+   * one fades out in the same cell. With reduced motion, only the fade.
+   */
+  function swap(_node: Element) {
+    const grow = motionOk.current;
+    return {
+      duration: dur("--dur-control"),
+      easing: easeOut,
+      css: (t: number) =>
+        grow ? `opacity: ${t}; scale: ${0.92 + 0.08 * t}` : `opacity: ${t}`,
+    };
+  }
+
   const label = $derived.by(() => {
     if (failed) {
       return FAILED_LABEL;
@@ -87,28 +103,45 @@
   {#if failed}
     <!-- Red and static. Working breathes and blocked pings because both are
          still going somewhere; this one has already stopped. -->
-    <span class="absolute inset-0 rounded-full bg-destructive"></span>
+    <span
+      class="absolute inset-0 rounded-full bg-destructive"
+      transition:swap
+    ></span>
   {:else if stale}
     <!-- Hollow, not filled: distinguishable from every filled state by shape
          alone, not only by colour — the honest rendering of "the hub does
          not know", never flattened into idle's quiet fill. -->
     <span
       class="absolute inset-0 rounded-full border border-muted-foreground/60"
+      transition:swap
     ></span>
   {:else if sleeping}
     <!-- A glyph, not a tint: distinguishable from idle's plain dot by shape
          even with colour vision switched off, and named for what it means —
          resumable, not merely quiet. -->
-    <IconMoonSleep
-      class="absolute top-1/2 left-1/2 size-3 -translate-x-1/2 -translate-y-1/2 text-muted-foreground/70"
-    />
+    <span class="absolute inset-0" transition:swap>
+      <IconMoonSleep
+        class="absolute top-1/2 left-1/2 size-3 -translate-x-1/2 -translate-y-1/2 text-muted-foreground/70"
+      />
+    </span>
   {:else}
     <!-- Blocked is the only state waiting on a human, so it is the loudest one. -->
     {#if activity === 'blocked'}
       <span
         class="absolute inset-0 rounded-full bg-warning opacity-75 animate-ping motion-reduce:animate-none"
+        transition:swap
       ></span>
     {/if}
-    <span class="absolute inset-0 rounded-full {tone}"></span>
+    <!-- One dot for every activity: its colour moves between them. -->
+    <span
+      class="tone absolute inset-0 rounded-full {tone}"
+      transition:swap
+    ></span>
   {/if}
 </span>
+
+<style>
+  .tone {
+    transition: background-color var(--dur-panel) var(--ease-out);
+  }
+</style>
