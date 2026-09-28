@@ -593,11 +593,10 @@ export function absorbedMessage(r: RawRecord): SDKSessionMessage | null {
 
 /**
  * The id a failed session-start hook goes by, live and read back alike: the
- * record its run's first prompts were stored as (under the last of them, when
- * the CLI took several up together), and its place among that run's
- * failures. The CLI stores the failures as attachments of their own, right
- * ahead of that record, and says nothing on its live stream that names them
- * — so the record they precede is what both sides can name them by.
+ * prompt its run took up first, and its place among that run's failures. The
+ * CLI stores the failures as attachments of their own, right ahead of that
+ * prompt's record, and says nothing on its live stream that names them — so
+ * the prompt they precede is what both sides can name them by.
  */
 export const hookFailureId = (prompt: string, index: number): string =>
   `${prompt}:hook:${index}`;
