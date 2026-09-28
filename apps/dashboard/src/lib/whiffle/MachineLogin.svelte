@@ -16,35 +16,50 @@
    */
   import { IconExternal, IconKey } from "$lib/icons";
   import { type Machine, machineControl } from "./client.svelte";
-  import { dur } from "./motion/curves.svelte";
+  import MachineAuthStatus from "./MachineAuthStatus.svelte";
+  import { crossIn, crossOut } from "./motion/curves.svelte";
 
   let {
     machine,
     open: dialogOpen = $bindable(false),
   }: { machine: Machine; open?: boolean } = $props();
 
+  /**
+   * Where the dialog is: the code form, the machine working on the code it
+   * was sent, what it answered, or the form again with why it failed.
+   */
+  type Phase =
+    | { kind: "code" }
+    | { kind: "working" }
+    | { kind: "done"; state: AuthState }
+    | { kind: "error"; message: string };
+
+  let phase = $state<Phase>({ kind: "code" });
   let url = $state<string | null>(null);
   let code = $state("");
-  let busy = $state(false);
-  let failed = $state<string | null>(null);
-  /** What the machine said once the login went through, shown in place. */
-  let result = $state<string | null>(null);
-  let closeTimer: ReturnType<typeof setTimeout> | undefined;
-  $effect(() => () => clearTimeout(closeTimer));
-  // A close by the bound value runs no `onOpenChange`, so the last answer is
-  // dropped as the dialog opens again, before it is drawn.
-  $effect.pre(() => {
-    if (dialogOpen) {
-      result = null;
-    }
-  });
+  /**
+   * Which submit an answer belongs to. The reader can close the dialog while
+   * the machine is still working and open it again; the first call's answer
+   * then lands on a dialog that has moved on, and is dropped.
+   */
+  let attempt = 0;
+  /** The height the form's view stood at when sent, held while it works. */
+  let held = $state(0);
 
-  const SAID: Record<string, string> = {
-    authenticated: "is logged in",
-    unauthenticated: "saved the token, but still reports nobody logged in",
-    "unreadable-credentials":
-      "saved the token, but cannot read its credentials",
-  };
+  const SAID: Record<AuthState, { title: string; body: string }> = $derived({
+    authenticated: {
+      title: `${machine.hostname} is logged in`,
+      body: `New sessions on ${machine.hostname} will use this login.`,
+    },
+    unauthenticated: {
+      title: `${machine.hostname} is not logged in`,
+      body: `${machine.hostname} saved the token, but still reports nobody logged in.`,
+    },
+    "unreadable-credentials": {
+      title: `${machine.hostname} cannot read its login`,
+      body: `${machine.hostname} saved the token, but cannot read its credentials.`,
+    },
+  });
 
   /**
    * Driven by `open` itself, not by `onOpenChange`.
@@ -52,10 +67,11 @@
    * The dialog is opened by setting the bound value from a menu item, and a
    * bound write does not run the change callback — so the request for a link
    * never went out and the box sat on "Asking…" for good. The state is the
-   * trigger; the callback is only the reader closing it.
+   * trigger; the callback is only the reader closing it. Everything from the
+   * last time is dropped as it opens, before it is drawn.
    */
-  let asked = $state(false);
-  $effect(() => {
+  let asked = false;
+  $effect.pre(() => {
     if (!dialogOpen) {
       asked = false;
       return;
@@ -64,136 +80,162 @@
       return;
     }
     asked = true;
-    // biome-ignore lint/complexity/noVoid: fire-and-forget; `begin` reports through `failed`/`busy` state, not its promise
-    void begin();
+    attempt += 1;
+    phase = { kind: "code" };
+    url = null;
+    code = "";
+    // biome-ignore lint/complexity/noVoid: fire-and-forget; `begin` reports through `phase`, not its promise
+    void begin(attempt);
   });
 
   /** Asked for as the dialog opens, so the reader never waits on a blank box. */
-  async function begin() {
-    busy = true;
-    failed = null;
+  async function begin(mine: number) {
     try {
       const challenge = await machineControl<{ url: string }>(
         machine.machineId,
         "beginLogin",
         []
       );
-      ({ url } = challenge);
+      if (mine === attempt) {
+        ({ url } = challenge);
+      }
     } catch (error) {
-      failed = error instanceof Error ? error.message : String(error);
-    } finally {
-      busy = false;
+      if (mine === attempt) {
+        phase = { kind: "error", message: messageOf(error) };
+      }
     }
   }
 
-  async function finish(event: SubmitEvent) {
+  async function finish(
+    event: SubmitEvent & { currentTarget: HTMLFormElement }
+  ) {
     event.preventDefault();
-    if (!code.trim() || busy) {
+    if (!(code.trim() && url)) {
       return;
     }
-    busy = true;
-    failed = null;
+    attempt += 1;
+    const mine = attempt;
+    // The form's parent is the view the status replaces.
+    held = (event.currentTarget.parentElement as HTMLElement).offsetHeight;
+    phase = { kind: "working" };
     try {
       const state = await machineControl<AuthState>(
         machine.machineId,
         "completeLogin",
         [code.trim()]
       );
-      code = "";
-      // The button's check and the machine's answer stand for --dur-hold,
-      // then the dialog closes on its own.
-      result = `${machine.hostname} ${SAID[state] ?? "is logged in"}.`;
-      closeTimer = setTimeout(() => {
-        dialogOpen = false;
-      }, dur("--dur-hold"));
+      if (mine === attempt) {
+        code = "";
+        phase = { kind: "done", state };
+      }
     } catch (error) {
-      failed = error instanceof Error ? error.message : String(error);
-    } finally {
-      busy = false;
+      if (mine === attempt) {
+        phase = { kind: "error", message: messageOf(error) };
+      }
     }
   }
+
+  const messageOf = (error: unknown) =>
+    error instanceof Error ? error.message : String(error);
+
+  const close = () => {
+    dialogOpen = false;
+  };
+
+  /** The form and its error are one view; waiting and answered are another. */
+  const view = $derived(
+    phase.kind === "working" || phase.kind === "done" ? "status" : "form"
+  );
 </script>
 
-<Dialog.Root
-  onOpenChange={(next) => {
-    if (next) {
-      return;
-    }
-    clearTimeout(closeTimer);
-    url = null;
-    code = '';
-    failed = null;
-    result = null;
-  }}
-  bind:open={dialogOpen}
->
+<Dialog.Root bind:open={dialogOpen}>
   <Dialog.Content class="sm:max-w-lg">
-    <Dialog.Header>
-      <Dialog.Title class="flex items-center gap-2">
-        <IconKey class="size-4" />
-        Log in {machine.hostname}
-      </Dialog.Title>
-      <Dialog.Description>
-        Authorise in your browser here, then paste the code back. Nothing needs
-        to be typed on that machine.
-      </Dialog.Description>
-    </Dialog.Header>
-
-    <form class="flex flex-col gap-[var(--space-4)]" onsubmit={finish}>
-      {#if url}
-        <a
-          class="flex items-center justify-center gap-2 rounded-[var(--radius-sm)] bg-primary px-3 py-2 text-label
-                 font-medium text-primary-foreground transition-colors hover:bg-primary/90"
-          href={url}
-          rel="noopener noreferrer"
-          target="_blank"
+    <div class="relative flex flex-col">
+      {#key view}
+        <div
+          class="flex flex-col gap-6"
+          style:min-height={view === 'status' ? `${held}px` : undefined}
+          in:crossIn
+          out:crossOut
         >
-          <IconExternal class="size-4" />
-          Open the authorisation page
-        </a>
-      {:else if !failed}
-        <p class="text-label text-muted-foreground">
-          Asking {machine.hostname} for a login link…
-        </p>
-      {/if}
+          {#if phase.kind === 'working' || phase.kind === 'done'}
+            <MachineAuthStatus
+              onclose={close}
+              outcome={phase}
+              said={SAID}
+              working={{
+                title: `Logging in ${machine.hostname}…`,
+                steps: [
+                  'Exchanging the code',
+                  `Checking ${machine.hostname} can use the new login`,
+                ],
+              }}
+            />
+          {:else}
+            <Dialog.Header>
+              <Dialog.Title class="flex items-center gap-2">
+                <IconKey class="size-4" />
+                Log in {machine.hostname}
+              </Dialog.Title>
+              <Dialog.Description>
+                Authorise in your browser here, then paste the code back.
+                Nothing needs to be typed on that machine.
+              </Dialog.Description>
+            </Dialog.Header>
 
-      <Input
-        aria-invalid={failed ? 'true' : undefined}
-        aria-label="Authorisation code"
-        autocomplete="off"
-        class="font-mono"
-        disabled={busy || !url || result !== null}
-        placeholder="Paste the code from that page"
-        spellcheck="false"
-        bind:value={code}
-      />
+            <form class="flex flex-col gap-[var(--space-4)]" onsubmit={finish}>
+              {#if url}
+                <a
+                  class="flex items-center justify-center gap-2 rounded-[var(--radius-sm)] bg-primary px-3 py-2 text-label
+                         font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                  href={url}
+                  rel="noopener noreferrer"
+                  target="_blank"
+                >
+                  <IconExternal class="size-4" />
+                  Open the authorisation page
+                </a>
+              {:else if phase.kind === 'code'}
+                <p class="text-label text-muted-foreground">
+                  Asking {machine.hostname} for a login link…
+                </p>
+              {/if}
 
-      {#if failed}
-        <p class="text-meta text-destructive">{failed}</p>
-      {:else if result}
-        <p class="text-meta text-muted-foreground" role="status">{result}</p>
-      {/if}
+              <Input
+                aria-describedby={phase.kind === 'error' ? 'login-error' : undefined}
+                aria-invalid={phase.kind === 'error' ? 'true' : undefined}
+                aria-label="Authorisation code"
+                autocomplete="off"
+                class="font-mono"
+                disabled={!url}
+                placeholder="Paste the code from that page"
+                spellcheck="false"
+                bind:value={code}
+                {@attach (node) => {
+                  if (phase.kind === 'error' && url) {
+                    node.focus();
+                  }
+                }}
+              />
 
-      <div class="flex justify-end gap-[var(--space-2)]">
-        <Button
-          disabled={busy}
-          onclick={() => {
-            dialogOpen = false;
-          }}
-          type="button"
-          variant="outline"
-        >
-          Cancel
-        </Button>
-        <Button
-          disabled={!(code.trim() && url) && result === null}
-          failed={failed !== null}
-          label="Log in"
-          pending={busy && url !== null}
-          pendingLabel="Finishing…"
-          type="submit"
-        />
-      </div>
-    </form>
+              {#if phase.kind === 'error'}
+                <p class="text-meta text-destructive" id="login-error">
+                  {phase.message}
+                </p>
+              {/if}
+
+              <div class="flex justify-end gap-[var(--space-2)]">
+                <Button onclick={close} type="button" variant="outline">
+                  Cancel
+                </Button>
+                <Button disabled={!(code.trim() && url)} type="submit">
+                  Log in
+                </Button>
+              </div>
+            </form>
+          {/if}
+        </div>
+      {/key}
+    </div>
   </Dialog.Content>
 </Dialog.Root>

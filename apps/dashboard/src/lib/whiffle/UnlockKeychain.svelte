@@ -19,136 +19,182 @@
    */
   import { IconKey } from "$lib/icons";
   import { type Machine, machineControl } from "./client.svelte";
-  import { dur } from "./motion/curves.svelte";
+  import MachineAuthStatus from "./MachineAuthStatus.svelte";
+  import { crossIn, crossOut } from "./motion/curves.svelte";
 
   let {
     machine,
     open: dialogOpen = $bindable(false),
   }: { machine: Machine; open?: boolean } = $props();
 
+  /**
+   * Where the dialog is: the password form, the machine unlocking and
+   * checking, what it answered, or the form again with why it failed.
+   */
+  type Phase =
+    | { kind: "password" }
+    | { kind: "working" }
+    | { kind: "done"; state: AuthState }
+    | { kind: "error"; message: string };
+
+  let phase = $state<Phase>({ kind: "password" });
   let password = $state("");
-  let busy = $state(false);
-  let failed = $state<string | null>(null);
-  /** What the machine said once it unlocked, shown in place of the note. */
-  let result = $state<string | null>(null);
-  let closeTimer: ReturnType<typeof setTimeout> | undefined;
-  $effect(() => () => clearTimeout(closeTimer));
-  // A close by the bound value runs no `onOpenChange`, so the last answer is
-  // dropped as the dialog opens again, before it is drawn.
-  $effect.pre(() => {
-    if (dialogOpen) {
-      result = null;
-    }
+  /**
+   * Which submit an answer belongs to: an answer that lands after the reader
+   * closed the dialog and opened it again is dropped.
+   */
+  let attempt = 0;
+  /** The height the form's view stood at when sent, held while it works. */
+  let held = $state(0);
+
+  const SAID: Record<AuthState, { title: string; body: string }> = $derived({
+    authenticated: {
+      title: `${machine.hostname} is unlocked`,
+      body: `${machine.hostname} is logged in again. New sessions there can read its credentials.`,
+    },
+    unauthenticated: {
+      title: `${machine.hostname} is not logged in`,
+      body: `${machine.hostname} unlocked, but nobody has logged in there yet.`,
+    },
+    "unreadable-credentials": {
+      title: `${machine.hostname} cannot read its login`,
+      body: `${machine.hostname} unlocked, but its credentials still cannot be read.`,
+    },
   });
 
-  const SAID: Record<string, string> = {
-    authenticated: "is logged in again",
-    unauthenticated: "unlocked, but nobody has logged in there yet",
-    "unreadable-credentials":
-      "unlocked, but its credentials still cannot be read",
-  };
-
-  async function unlock(event: SubmitEvent) {
-    event.preventDefault();
-    if (!password || busy) {
+  // A close by the bound value runs no `onOpenChange`, so the last answer is
+  // dropped as the dialog opens again, before it is drawn.
+  let shown = false;
+  $effect.pre(() => {
+    if (!dialogOpen) {
+      shown = false;
       return;
     }
-    busy = true;
-    failed = null;
+    if (shown) {
+      return;
+    }
+    shown = true;
+    attempt += 1;
+    phase = { kind: "password" };
+    password = "";
+  });
+
+  async function unlock(
+    event: SubmitEvent & { currentTarget: HTMLFormElement }
+  ) {
+    event.preventDefault();
+    if (!password) {
+      return;
+    }
+    attempt += 1;
+    const mine = attempt;
+    // The form's parent is the view the status replaces.
+    held = (event.currentTarget.parentElement as HTMLElement).offsetHeight;
+    phase = { kind: "working" };
+    const sent = password;
+    // Cleared the moment it has been sent, whatever the answer will be.
+    password = "";
     try {
       const state = await machineControl<AuthState>(
         machine.machineId,
         "unlockKeychain",
-        [password]
+        [sent]
       );
-      // Cleared the moment it has been used, whatever the answer was.
-      password = "";
-      // The button's check and the machine's answer stand for --dur-hold,
-      // then the dialog closes on its own.
-      result = `${machine.hostname} ${SAID[state] ?? "unlocked"}.`;
-      closeTimer = setTimeout(() => {
-        dialogOpen = false;
-      }, dur("--dur-hold"));
+      if (mine === attempt) {
+        phase = { kind: "done", state };
+      }
     } catch (error) {
-      failed = error instanceof Error ? error.message : String(error);
-    } finally {
-      busy = false;
+      if (mine === attempt) {
+        phase = {
+          kind: "error",
+          message: error instanceof Error ? error.message : String(error),
+        };
+      }
     }
   }
+
+  const close = () => {
+    dialogOpen = false;
+  };
+
+  const view = $derived(
+    phase.kind === "working" || phase.kind === "done" ? "status" : "form"
+  );
 </script>
 
-<Dialog.Root
-  onOpenChange={(next) => {
-    if (!next) {
-      clearTimeout(closeTimer);
-      password = '';
-      failed = null;
-      result = null;
-    }
-  }}
-  bind:open={dialogOpen}
->
+<Dialog.Root bind:open={dialogOpen}>
   <Dialog.Content class="sm:max-w-md">
-    <Dialog.Header>
-      <Dialog.Title class="flex items-center gap-2">
-        <IconKey class="size-4 text-warning" />
-        Unlock {machine.hostname}
-      </Dialog.Title>
-      <Dialog.Description>
-        Its login keychain is locked, so Claude Code there cannot read its
-        credentials. This is the macOS login password for that machine.
-      </Dialog.Description>
-    </Dialog.Header>
-
-    <form class="flex flex-col gap-[var(--space-3)]" onsubmit={unlock}>
-      <Input
-        aria-describedby={failed ? 'unlock-error' : 'unlock-note'}
-        aria-invalid={failed ? 'true' : undefined}
-        aria-label="Login password for {machine.hostname}"
-        autocomplete="current-password"
-        disabled={busy || result !== null}
-        placeholder="Login password for {machine.hostname}"
-        type="password"
-        bind:value={password}
-      />
-
-      {#if failed}
-        <p class="text-label text-destructive" id="unlock-error">{failed}</p>
-      {:else if result}
-        <p
-          class="text-meta text-muted-foreground"
-          id="unlock-note"
-          role="status"
+    <div class="relative flex flex-col">
+      {#key view}
+        <div
+          class="flex flex-col gap-6"
+          style:min-height={view === 'status' ? `${held}px` : undefined}
+          in:crossIn
+          out:crossOut
         >
-          {result}
-        </p>
-      {:else}
-        <p class="text-meta text-muted-foreground" id="unlock-note">
-          Sent over your tunnel to that machine, used once, and not stored
-          anywhere.
-        </p>
-      {/if}
+          {#if phase.kind === 'working' || phase.kind === 'done'}
+            <MachineAuthStatus
+              onclose={close}
+              outcome={phase}
+              said={SAID}
+              working={{
+                title: `Unlocking ${machine.hostname}…`,
+                steps: [
+                  'Unlocking the login keychain',
+                  `Checking ${machine.hostname} can read its credentials`,
+                ],
+              }}
+            />
+          {:else}
+            <Dialog.Header>
+              <Dialog.Title class="flex items-center gap-2">
+                <IconKey class="size-4 text-warning" />
+                Unlock {machine.hostname}
+              </Dialog.Title>
+              <Dialog.Description>
+                Its login keychain is locked, so Claude Code there cannot read
+                its credentials. This is the macOS login password for that
+                machine.
+              </Dialog.Description>
+            </Dialog.Header>
 
-      <div class="flex justify-end gap-[var(--space-2)]">
-        <Button
-          disabled={busy}
-          onclick={() => {
-            dialogOpen = false;
-          }}
-          type="button"
-          variant="outline"
-        >
-          Cancel
-        </Button>
-        <Button
-          disabled={!password && result === null}
-          failed={failed !== null}
-          label="Unlock"
-          pending={busy}
-          pendingLabel="Unlocking…"
-          type="submit"
-        />
-      </div>
-    </form>
+            <form class="flex flex-col gap-[var(--space-3)]" onsubmit={unlock}>
+              <Input
+                aria-describedby={phase.kind === 'error' ? 'unlock-error' : 'unlock-note'}
+                aria-invalid={phase.kind === 'error' ? 'true' : undefined}
+                aria-label="Login password for {machine.hostname}"
+                autocomplete="current-password"
+                placeholder="Login password for {machine.hostname}"
+                type="password"
+                bind:value={password}
+                {@attach (node) => {
+                  if (phase.kind === 'error') {
+                    node.focus();
+                  }
+                }}
+              />
+
+              {#if phase.kind === 'error'}
+                <p class="text-label text-destructive" id="unlock-error">
+                  {phase.message}
+                </p>
+              {:else}
+                <p class="text-meta text-muted-foreground" id="unlock-note">
+                  Sent over your tunnel to that machine, used once, and not
+                  stored anywhere.
+                </p>
+              {/if}
+
+              <div class="flex justify-end gap-[var(--space-2)]">
+                <Button onclick={close} type="button" variant="outline">
+                  Cancel
+                </Button>
+                <Button disabled={!password} type="submit">Unlock</Button>
+              </div>
+            </form>
+          {/if}
+        </div>
+      {/key}
+    </div>
   </Dialog.Content>
 </Dialog.Root>
