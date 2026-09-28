@@ -1639,8 +1639,10 @@
           JUMP_SMOOTH_SCREENS * node.clientHeight
       )
     ) {
+      // Landed in the click itself, not in `land`'s next frame: a re-armed
+      // `land` (the rows effect) can push that frame back one more.
       atBottom = true;
-      land();
+      landInFrame();
       return;
     }
     stopFollow();
