@@ -48,6 +48,9 @@
   onMount(ensureConnected);
   // iOS has no right-click; a held press is its context menu.
   onMount(enableLongPressMenus);
+  // Effects flush only once the whole tree has hydrated, so every handler is
+  // attached before the taps app.html held are replayed.
+  onMount(() => window.releaseHeldTaps());
 
   /** Configure's sections in the rail's order, top to bottom. */
   const SECTION_ORDER = GROUPS.flatMap(({ sections }) =>

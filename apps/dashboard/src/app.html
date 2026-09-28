@@ -23,6 +23,39 @@
       document.fonts.load('1em "Geist Variable"');
       document.fonts.load('1em "TX-02"');
     </script>
+    <!--
+      Taps before hydration. The shell is server-rendered, so its buttons (the
+      phone's burger first of all) are on screen before their handlers are,
+      and a tap in that gap used to fall through with nothing to catch it. A
+      button click that lands before the app has mounted is held here and
+      replayed by the root layout's onMount, once every handler is attached.
+      Links are left alone: before hydration they navigate as plain links.
+    -->
+    <script>
+      "use strict";
+      (() => {
+        const held = [];
+        const hold = (event) => {
+          const button =
+            event.target instanceof Element
+              ? event.target.closest("button")
+              : null;
+          if (button === null) {
+            return;
+          }
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          held.push(button);
+        };
+        document.addEventListener("click", hold, true);
+        window.releaseHeldTaps = () => {
+          document.removeEventListener("click", hold, true);
+          for (const button of held) {
+            button.click();
+          }
+        };
+      })();
+    </script>
   </head>
   <body data-sveltekit-preload-data="hover">
     <!--

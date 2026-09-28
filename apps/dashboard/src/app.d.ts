@@ -4,6 +4,10 @@
 declare global {
   /** The commit this build was made from — `define` in vite.config.ts. */
   const __WHIFFLE_COMMIT__: string;
+  interface Window {
+    /** Replays the button clicks app.html held before hydration. */
+    releaseHeldTaps: () => void;
+  }
   // biome-ignore lint/style/noNamespace: SvelteKit's app.d.ts convention requires the global App namespace for ambient typing hooks
   namespace App {
     // interface Error {}
