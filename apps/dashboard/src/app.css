@@ -1158,6 +1158,13 @@
     }
   }
 
+  /* vaul's own slide out (slideToBottom and its siblings) sets no fill
+     mode, and bits-ui unmounts the sheet a frame after it finishes: that
+     frame would paint the sheet back fully open. It holds the last frame. */
+  [data-vaul-drawer][data-state="closed"] {
+    animation-fill-mode: forwards;
+  }
+
   /* Two icons sharing one slot; the outgoing icon animates out too. */
   .icon-swap {
     display: inline-grid;

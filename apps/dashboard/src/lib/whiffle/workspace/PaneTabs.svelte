@@ -852,8 +852,11 @@
     :global(.session-details-popover[data-state="open"]) {
       animation: details-enter 260ms var(--ease-drawer);
     }
+    /* `forwards` holds the last frame: bits-ui unmounts the card a frame
+       after the animation finishes, and without it that frame paints the
+       card back at full opacity. */
     :global(.session-details-popover[data-state="closed"]) {
-      animation: details-exit 160ms var(--ease-out);
+      animation: details-exit 160ms var(--ease-out) forwards;
     }
   }
   @keyframes details-enter {
