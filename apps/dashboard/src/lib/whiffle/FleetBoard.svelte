@@ -1254,6 +1254,16 @@
     font-weight: var(--weight-body);
     color: var(--ink-muted);
   }
+  /* Two actions leave a phone no room for the line beside them: it takes its
+     own row and the actions sit under it. */
+  @media (max-width: 639px) {
+    .head {
+      flex-wrap: wrap;
+    }
+    .head p {
+      flex-basis: 100%;
+    }
+  }
 
   .stats {
     display: grid;
