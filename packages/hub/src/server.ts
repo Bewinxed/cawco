@@ -119,7 +119,7 @@ import type { PendingShape } from "./pending";
 import { answerWorkflow, onWorkflowAnswer } from "./pending";
 import { resolveMarketplacePlugins } from "./plugins";
 import { previewFrame, previewTargets } from "./preview";
-import type { HubSocket, RegistryShape } from "./registry";
+import { type HubSocket, type RegistryShape, toDashboard } from "./registry";
 import { RuleEngine } from "./rules";
 import { hashFiles, resolveSkill } from "./skills";
 import { createStreamHub } from "./stream";
@@ -1854,9 +1854,12 @@ export const createServer = ({
   ): boolean => {
     const agent = registry.agent(envelope.machineId);
     if (!agent) {
-      from?.send(
-        failure(envelope, `machine ${envelope.machineId} is not connected`)
-      );
+      if (from) {
+        toDashboard(
+          from,
+          failure(envelope, `machine ${envelope.machineId} is not connected`)
+        );
+      }
       return false;
     }
     const { instanceId } = envelope.payload;
@@ -2756,7 +2759,8 @@ export const createServer = ({
   const forward = (envelope: Envelope, dashboard: HubSocket): boolean => {
     const agent = registry.agent(envelope.machineId);
     if (!agent) {
-      dashboard.send(
+      toDashboard(
+        dashboard,
         failure(envelope, `machine ${envelope.machineId} is not connected`)
       );
       return false;
@@ -7796,7 +7800,7 @@ export const createServer = ({
                   ? registry.takeRequester(message.requestId)
                   : undefined;
               if (requester) {
-                requester.send(message);
+                toDashboard(requester, message);
               }
               // An acknowledged command's reply is that command's news and nobody
               // else's — the same rule as the line above, in the newer dialect.
@@ -7917,6 +7921,9 @@ export const createServer = ({
         },
       })
       .ws("/ws/dashboard", {
+        // Offered to the browser; every frame then goes out with `toDashboard`,
+        // which sets the flag Bun compresses on.
+        perMessageDeflate: true,
         open(ws) {
           registry.addDashboard(ws);
           // The one moment the hub learns a URL that reaches its own dashboard:
@@ -7926,7 +7933,7 @@ export const createServer = ({
           // dashboard receives, unconditionally, so the rail fills before the
           // REST snapshot lands and a page on an older build learns from it
           // (its `hubBuild`) that it should reload, whatever protocol it speaks.
-          ws.send(instancesFrame(""));
+          toDashboard(ws, instancesFrame(""));
         },
         // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches every dashboard socket message shape (stream protocol, control, send, ack) through one handler; splitting it would scatter the ordering guarantees across several functions.
         message(ws, message) {
@@ -7951,7 +7958,7 @@ export const createServer = ({
               );
               if (refusal) {
                 console.warn(`[hub] refused spawn: ${refusal}`);
-                ws.send(failure(message, refusal));
+                toDashboard(ws, failure(message, refusal));
                 break;
               }
               if (forward(message, ws) && message.instanceId) {

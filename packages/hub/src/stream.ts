@@ -42,7 +42,7 @@ import {
   type StreamReset,
   type StreamSubscribe,
 } from "@whiffle/core";
-import type { HubSocket } from "./registry";
+import { type HubSocket, toDashboard } from "./registry";
 
 export { RING_SIZE };
 
@@ -255,7 +255,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
    */
   const deliver = (socket: HubSocket, message: unknown): void => {
     try {
-      socket.send(message);
+      toDashboard(socket, message);
     } catch {
       dropSocket(socket.id);
     }

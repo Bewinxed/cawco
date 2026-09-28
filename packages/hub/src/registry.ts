@@ -9,8 +9,19 @@ import { Context, Effect, Layer } from "effect";
 export interface HubSocket {
   readonly id: string;
   // biome-ignore lint/style/useConsistentMethodSignatures: HubSocket is implemented by Elysia's ws handle across server.ts and stream.ts; a property signature would narrow the callback's variance against those real implementations.
-  send(data: unknown): unknown;
+  send(data: unknown, compress?: boolean): unknown;
 }
+
+/**
+ * Every frame to a dashboard goes out deflated. The dashboard route negotiates
+ * permessage-deflate, but Bun compresses only a message sent with the flag
+ * set: negotiated alone, a 1.8MB board went out as 1.8MB, and with it as 58KB.
+ * The board's first read is a couple of MB of JSON (every machine's whole
+ * session catalogue), which on a phone's link was half a minute of an empty
+ * board. JSON that repetitive deflates about thirtyfold.
+ */
+export const toDashboard = (socket: HubSocket, frame: unknown): unknown =>
+  socket.send(frame, true);
 
 export interface RegistryShape {
   readonly addDashboard: (socket: HubSocket) => void;
@@ -143,7 +154,7 @@ const make = (): RegistryShape => {
     },
     broadcast: (envelope) => {
       for (const socket of dashboards.values()) {
-        socket.send(envelope);
+        toDashboard(socket, envelope);
       }
     },
     noteDashboardOrigin: (origin) => {
