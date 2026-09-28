@@ -73,6 +73,10 @@ const SYSTEMD_DIR = join(
 );
 
 const systemdPath = (id: ServiceId): string => join(SYSTEMD_DIR, unitName(id));
+
+/** The listening socket systemd holds for a socket-activated service. */
+const socketName = (id: ServiceId): string => `whiffle-${id}.socket`;
+const socketPath = (id: ServiceId): string => join(SYSTEMD_DIR, socketName(id));
 const launchAgentPath = (id: ServiceId): string =>
   join(homedir(), "Library", "LaunchAgents", `${label(id)}.plist`);
 const launchAgentLog = (id: ServiceId): string =>
@@ -168,12 +172,54 @@ const layoutFor = (
  */
 const HERE = layoutFor(ROOT, Bun.main);
 
+const LISTEN_STREAM = /^ListenStream=(.+):(\d+)$/m;
+const SOCK_NODE = /<key>SockNodeName<\/key>\s*<string>([^<]*)<\/string>/;
+const SOCK_SERVICE = /<key>SockServiceName<\/key>\s*<string>([^<]*)<\/string>/;
+
+/**
+ * The address the installed dashboard socket already listens on, read back out
+ * of its socket unit or its plist. The deploy poller reinstalls the dashboard's
+ * units on every deploy that reaches it, from a daemon whose environment has no
+ * PORT or HOST in it; without this, a dashboard installed on another port
+ * would be moved back to 3000 by the next deploy.
+ */
+const installedDashboardAddress = ():
+  | { host: string; port: string }
+  | undefined => {
+  if (platform() === "darwin") {
+    const path = launchAgentPath("dashboard");
+    const text = existsSync(path) ? readFileSync(path, "utf8") : "";
+    const host = SOCK_NODE.exec(text)?.[1];
+    const port = SOCK_SERVICE.exec(text)?.[1];
+    return host && port ? { host, port } : undefined;
+  }
+  const path = socketPath("dashboard");
+  const listen = existsSync(path)
+    ? LISTEN_STREAM.exec(readFileSync(path, "utf8"))
+    : null;
+  return listen?.[1] && listen[2]
+    ? { host: listen[1], port: listen[2] }
+    : undefined;
+};
+
 /**
  * Where the dashboard listens. Read from the installing shell so a second
- * machine can differ, with the defaults this one's browser expects.
+ * machine can differ, then from the socket already installed, with the
+ * defaults this one's browser expects.
  */
-const DASHBOARD_PORT = process.env.PORT ?? "3000";
-const DASHBOARD_HOST = process.env.HOST ?? "0.0.0.0";
+const DASHBOARD_PORT =
+  process.env.PORT ?? installedDashboardAddress()?.port ?? "3000";
+const DASHBOARD_HOST =
+  process.env.HOST ?? installedDashboardAddress()?.host ?? "0.0.0.0";
+
+/**
+ * The node the dashboard's server runs under, found on the installing shell's
+ * PATH and named in the unit outright — `ExecStart=` is not a shell. The prod
+ * server is node rather than the Bun running this CLI because it serves on the
+ * socket its service manager passes it, and Bun 1.4.0's node:http accepts
+ * `listen({ fd })` without ever answering on that socket; node does.
+ */
+const NODE = Bun.which("node");
 
 /**
  * The PATH the installing shell had. A launchd job otherwise inherits a nearly
@@ -363,6 +409,18 @@ export interface ServiceSpec {
    */
   readonly restartOnSuccess: boolean;
   readonly restartSec: number;
+  /**
+   * A listening socket the init system opens and keeps open, handing it to the
+   * service at every start (systemd `.socket` unit, launchd `Sockets`). A
+   * connection that arrives while the service restarts waits in the socket's
+   * backlog for the new process rather than being refused. `name` is what the
+   * service collects it by.
+   */
+  readonly socket?: {
+    readonly host: string;
+    readonly name: string;
+    readonly port: string;
+  };
   readonly wants: readonly string[];
   readonly workingDirectory: string;
 }
@@ -417,17 +475,19 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
       id: "dashboard",
       mode: "prod",
       description: "Whiffle dashboard",
-      command: [process.execPath, DASHBOARD_ENTRY],
+      command: [NODE ?? "node", DASHBOARD_ENTRY],
       environment: {
-        PORT: DASHBOARD_PORT,
-        HOST: DASHBOARD_HOST,
         [WHIFFLE_ENV.previewPort]:
           readEnv(WHIFFLE_ENV.previewPort) ??
           String(Number(readEnv(WHIFFLE_ENV.hubPort) ?? WHIFFLE_HUB_PORT) + 1),
       },
+      // serve.js collects this socket by name and never binds the port itself,
+      // so a deploy's restart leaves the port open the whole time.
+      socket: { name: "dashboard", host: DASHBOARD_HOST, port: DASHBOARD_PORT },
       workingDirectory: LAYOUT_ROOT,
-      after: [unitName("hub")],
+      after: [unitName("hub"), socketName("dashboard")],
       wants: [unitName("hub")],
+      requires: [socketName("dashboard")],
       restartOnSuccess: true,
       restartSec: 2,
       // A missing build is a build away, so the unit goes in either way and says
@@ -436,10 +496,16 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
       // What is checked is the BUILD, not the entry: the entry is `serve.js`, a
       // checked-in file that is always present, and the thing that can actually
       // be absent is the `build/handler.js` it imports.
-      check: () =>
-        existsSync(DASHBOARD_BUILD)
+      check: () => {
+        if (!NODE) {
+          throw new ServiceError(
+            "the dashboard's server runs under node, and there is no node on PATH."
+          );
+        }
+        return existsSync(DASHBOARD_BUILD)
           ? undefined
-          : `no dashboard build at ${DASHBOARD_BUILD}, so its service will restart until there is one.\nMake it with \`bun run --filter '@whiffle/dashboard' build\`.`,
+          : `no dashboard build at ${DASHBOARD_BUILD}, so its service will restart until there is one.\nMake it with \`bun run --filter '@whiffle/dashboard' build\`.`;
+      },
       probe: probeDashboard,
     },
 
@@ -554,7 +620,7 @@ const devFor = (
       // the dashboard socket hangs in CONNECTING and the UI reads as an empty
       // fleet — node is also what `bun run dev` always gave it via the shebang.
       command: [
-        Bun.which("node") ?? "node",
+        NODE ?? "node",
         DASHBOARD_VITE,
         "dev",
         "--port",
@@ -562,6 +628,10 @@ const devFor = (
         "--host",
         DASHBOARD_HOST,
       ],
+      // vite binds its own port, so the dev flavour has no socket to wait on.
+      socket: undefined,
+      after: [unitName("hub")],
+      requires: undefined,
       workingDirectory: DASHBOARD_DIR,
       check: (): undefined => {
         if (!existsSync(DASHBOARD_VITE)) {
@@ -569,7 +639,7 @@ const devFor = (
             `no vite at ${DASHBOARD_VITE} — run \`bun install\` in ${ROOT} first.`
           );
         }
-        if (!Bun.which("node")) {
+        if (!NODE) {
           throw new ServiceError(
             `vite's dev server needs node on PATH, and there is none.`
           );
@@ -655,7 +725,21 @@ const plist = (
   <array>
 ${spec.command.map((argument) => `    <string>${xml(argument)}</string>`).join("\n")}
   </array>
-  <key>RunAtLoad</key>
+${
+  spec.socket
+    ? `  <key>Sockets</key>
+  <dict>
+    <key>${xml(spec.socket.name)}</key>
+    <dict>
+      <key>SockNodeName</key>
+      <string>${xml(spec.socket.host)}</string>
+      <key>SockServiceName</key>
+      <string>${xml(spec.socket.port)}</string>
+    </dict>
+  </dict>
+`
+    : ""
+}  <key>RunAtLoad</key>
   <true/>
   <key>KeepAlive</key>
 ${
@@ -712,6 +796,27 @@ RestartSec=${spec.restartSec}
 
 [Install]
 WantedBy=default.target
+`;
+
+/**
+ * The listening socket systemd holds for a socket-activated service. The
+ * service unit of the same name is the one it starts; `FileDescriptorName=` is
+ * what the service collects it by. `NoDelay=` because every byte on it is an
+ * interactive page load.
+ */
+const socketUnit = (
+  spec: ServiceSpec,
+  socket: NonNullable<ServiceSpec["socket"]>
+): string => `[Unit]
+Description=${spec.description} socket
+
+[Socket]
+ListenStream=${socket.host}:${socket.port}
+FileDescriptorName=${socket.name}
+NoDelay=true
+
+[Install]
+WantedBy=sockets.target
 `;
 
 const run = async (argv: string[]) => Bun.$`${argv}`.quiet().nothrow();
@@ -819,8 +924,24 @@ export const installLaunchAgents = async (
       note("");
     }
     const path = launchAgentPath(spec.id);
-    // biome-ignore lint/performance/noAwaitInLoops: services install one at a time so each one's notes print in its own order and a failure is attributable to the service that caused it.
-    await writeUnit(path, plist(spec));
+    const text = plist(spec);
+    // A job launchd holds a socket for keeps it only while it stays loaded:
+    // booting it out closes the socket, and a page load in that gap is refused.
+    // So an unchanged, loaded one is left running — a deploy restarts it with
+    // `kickstart -k`, which keeps the socket.
+    if (
+      spec.socket &&
+      // biome-ignore lint/performance/noAwaitInLoops: services install one at a time so each one's notes print in its own order and a failure is attributable to the service that caused it.
+      (await Bun.file(path)
+        .text()
+        .catch(() => "")) === text &&
+      (await run(["launchctl", "print", `${guiDomain()}/${label(spec.id)}`]))
+        .exitCode === 0
+    ) {
+      note(`${path} is unchanged and loaded, so its socket stays open`);
+      continue;
+    }
+    await writeUnit(path, text);
     note(`wrote ${path}`);
 
     await loadLaunchAgent(spec, bootstrap, note);
@@ -901,12 +1022,79 @@ const enableLinger = async (note: (line: string) => void): Promise<void> => {
   }
 };
 
+/**
+ * Puts a service's listening socket in front of systemd, and says whether that
+ * socket has to be (re)bound: it is not listening yet, or it is listening on an
+ * address the unit no longer names. Called before the daemon-reload, so the
+ * text on disk is still the one systemd is running.
+ */
+const writeSocketUnit = async (
+  spec: ServiceSpec,
+  socket: NonNullable<ServiceSpec["socket"]>,
+  note: (line: string) => void
+): Promise<boolean> => {
+  const path = socketPath(spec.id);
+  const text = socketUnit(spec, socket);
+  const before = await Bun.file(path)
+    .text()
+    .catch(() => "");
+  await writeUnit(path, text);
+  note(`wrote ${path}`);
+  const active = await run([
+    "systemctl",
+    "--user",
+    "is-active",
+    socketName(spec.id),
+  ]);
+  return active.stdout.toString().trim() !== "active" || before !== text;
+};
+
+/**
+ * Binds a service's socket. The service is stopped first: whatever holds the
+ * port while the socket is down is that service binding it itself — an install
+ * from before it was socket-activated — and a socket cannot bind a port that
+ * is taken. Only ever run when the socket is down or moving, so a service
+ * already serving on its socket is never stopped here.
+ */
+const bindSocket = async (
+  spec: ServiceSpec,
+  note: (line: string) => void
+): Promise<void> => {
+  const stopped = await run(["systemctl", "--user", "stop", unitName(spec.id)]);
+  if (stopped.exitCode !== 0) {
+    throw failed("systemctl --user stop", stopped);
+  }
+  const bound = await run([
+    "systemctl",
+    "--user",
+    "restart",
+    socketName(spec.id),
+  ]);
+  if (bound.exitCode !== 0) {
+    throw failed("systemctl --user restart", bound);
+  }
+  const enabled = await run([
+    "systemctl",
+    "--user",
+    "enable",
+    socketName(spec.id),
+  ]);
+  if (enabled.exitCode !== 0) {
+    throw failed("systemctl --user enable", enabled);
+  }
+  note(`listening on ${socketName(spec.id)}`);
+};
+
 const installSystemdUnits = async (
   specs: ServiceSpec[],
   note: (line: string) => void
 ): Promise<void> => {
+  const rebind = new Set<ServiceId>();
   for (const spec of specs) {
     // biome-ignore lint/performance/noAwaitInLoops: units write one at a time so each one's note prints in its own order and a failure is attributable to the unit that caused it.
+    if (spec.socket && (await writeSocketUnit(spec, spec.socket, note))) {
+      rebind.add(spec.id);
+    }
     await writeUnit(systemdPath(spec.id), unit(spec));
     note(`wrote ${systemdPath(spec.id)}`);
   }
@@ -919,7 +1107,10 @@ const installSystemdUnits = async (
   }
 
   for (const spec of specs) {
-    // biome-ignore lint/performance/noAwaitInLoops: units enable one at a time so each one's notes print in its own order and a failure is attributable to the unit that caused it.
+    if (rebind.has(spec.id)) {
+      // biome-ignore lint/performance/noAwaitInLoops: units enable one at a time, each socket listening before its service starts, so each one's notes print in its own order and a failure is attributable to the unit that caused it.
+      await bindSocket(spec, note);
+    }
     const enabled = await run([
       "systemctl",
       "--user",
@@ -950,6 +1141,21 @@ const uninstallSystemdUnits = async (
         // best effort: the unit file may already be gone
       });
     note(`removed ${systemdPath(spec.id)}`);
+    if (spec.socket) {
+      await run([
+        "systemctl",
+        "--user",
+        "disable",
+        "--now",
+        socketName(spec.id),
+      ]);
+      await Bun.file(socketPath(spec.id))
+        .delete()
+        .catch(() => {
+          // best effort: the socket unit may already be gone
+        });
+      note(`removed ${socketPath(spec.id)}`);
+    }
   }
   await run(["systemctl", "--user", "daemon-reload"]);
 };
@@ -1258,6 +1464,17 @@ const systemdStatus = async (
   note(
     `state    ${active.stdout.toString().trim() || "unknown"} (${enabled.stdout.toString().trim() || "not installed"})`
   );
+  if (spec.socket) {
+    const listening = await run([
+      "systemctl",
+      "--user",
+      "is-active",
+      socketName(spec.id),
+    ]);
+    note(
+      `socket   ${socketName(spec.id)} ${listening.stdout.toString().trim() || "unknown"} on ${spec.socket.host}:${spec.socket.port}`
+    );
+  }
   note(`mode     ${await modeLine(spec, systemdPath(spec.id))}`);
   const live = await spec.probe();
   if (live) {
@@ -1633,6 +1850,41 @@ const requireGuiDomain = async (
 };
 
 /**
+ * What is installed for a service right now: its unit or plist, and under
+ * systemd its listening socket, which is its own unit file — a change to it (a
+ * new port) is a change to the service as much as its ExecStart is. Empty for
+ * what is not there.
+ */
+const installedText = async (
+  spec: ServiceSpec,
+  path: string,
+  mac: boolean
+): Promise<{ current: string; currentSocket: string }> => {
+  const read = (file: string): Promise<string> =>
+    Bun.file(file)
+      .text()
+      .catch(() => "");
+  return {
+    current: await read(path),
+    currentSocket: !mac && spec.socket ? await read(socketPath(spec.id)) : "",
+  };
+};
+
+/** What `install` would write for a service, in the same two parts as {@link installedText}. */
+const renderedText = (
+  spec: ServiceSpec,
+  mac: boolean
+): { socketText: string; text: string } => {
+  if (mac) {
+    return { text: plist(spec), socketText: "" };
+  }
+  return {
+    text: unit(spec),
+    socketText: spec.socket ? socketUnit(spec, spec.socket) : "",
+  };
+};
+
+/**
  * Puts a deployment clone's services in front of the init system without
  * cutting a turn. A service that is not running is installed and started. One
  * that is running is left alone when its unit is unchanged — unless it is the
@@ -1661,9 +1913,7 @@ const settleServices = async (
   for (const base of specs) {
     const path = mac ? launchAgentPath(base.id) : systemdPath(base.id);
     // biome-ignore lint/performance/noAwaitInLoops: one unit at a time, so each decision is attributable to its service
-    const current = await Bun.file(path)
-      .text()
-      .catch(() => "");
+    const { current, currentSocket } = await installedText(base, path, mac);
     const spec: ServiceSpec = {
       ...base,
       environment: {
@@ -1673,11 +1923,12 @@ const settleServices = async (
         ...base.environment,
       },
     };
-    const text = mac ? plist(spec) : unit(spec);
+    const { text, socketText } = renderedText(spec, mac);
+    const unchanged = current === text && currentSocket === socketText;
     rendered.push({ id: spec.id, path, text });
     if (!(await isRunning(spec, mac))) {
       start.push(spec);
-    } else if (current === text && !(spec.id === "agent" && agentStale)) {
+    } else if (unchanged && !(spec.id === "agent" && agentStale)) {
       note(`${spec.id} is running and unchanged`);
     } else {
       replace.push(spec);

@@ -250,6 +250,19 @@ export default defineConfig({
     // These publish raw .svelte sources, which dev SSR must compile rather
     // than hand to Node — externalizing any of them ends in
     // ERR_UNKNOWN_FILE_EXTENSION on the first server-rendered request.
-    noExternal: ["@xyflow/svelte", "virtua", "@hugeicons/svelte", "torph"],
+    //
+    // The two @atlaskit packages are here for the production server, which
+    // runs under node: their subpaths (`…/combine`, `…/util/…`) are
+    // directories holding their own package.json, and node's ESM resolver
+    // refuses a directory import (ERR_UNSUPPORTED_DIR_IMPORT) where vite's
+    // resolver follows it. Bundled, the server never resolves them at all.
+    noExternal: [
+      "@xyflow/svelte",
+      "virtua",
+      "@hugeicons/svelte",
+      "torph",
+      "@atlaskit/pragmatic-drag-and-drop",
+      "@atlaskit/pragmatic-drag-and-drop-hitbox",
+    ],
   },
 });

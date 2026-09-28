@@ -33,6 +33,7 @@
     "dialkit": "2.0.0",
     "photoswipe": "^5.4.4",
     "shiki": "^4.4.3",
+    "socket-activation": "3.2.0",
     "svelte-streamdown": "^3.1.2",
     "tailwind-merge": "^3.6.0",
     "tailwind-variants": "^3.3.0",

@@ -27,8 +27,8 @@
   },
   "overrides": {
     "@types/bun": "latest",
-    "vite": "^8.3.1",
-    "oniguruma-to-es": "^4.3.6"
+    "oniguruma-to-es": "^4.3.6",
+    "vite": "^8.3.1"
   },
   "dependencies": {
     "torph": "^0.1.0"
@@ -45,5 +45,8 @@
     "svelte-streamdown@3.1.2": "patches/svelte-streamdown@3.1.2.patch",
     "virtua@0.50.0": "patches/virtua@0.50.0.patch",
     "dialkit@2.0.0": "patches/dialkit@2.0.0.patch"
-  }
+  },
+  "trustedDependencies": [
+    "socket-activation"
+  ]
 }

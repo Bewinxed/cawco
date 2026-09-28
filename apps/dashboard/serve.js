@@ -10,14 +10,18 @@
  * `routes/api/[...path]`), so the board still loaded while never once
  * connecting: "no hub connected", against a hub that was up the whole time.
  *
- * The relay is done on the RAW SOCKET rather than through `http.request`. It
- * was written that way for bun 1.3.14, which could neither emit `'upgrade'` on
- * an outgoing request nor relay bytes back through an upgraded server socket
- * (oven-sh/bun#9911, #9882, #28396) — 1.4.0 fixes both, and this stayed because
- * after the handshake a websocket proxy is only bytes in both directions
- * anyway: the request line and headers are re-issued verbatim over a plain TCP
- * connection and the hub's own 101 passes straight back. Nothing here has to
- * agree with a runtime about what an upgrade is.
+ * The relay is done on the RAW SOCKET rather than through `http.request`: after
+ * the handshake a websocket proxy is only bytes in both directions, so the
+ * request line and headers are re-issued verbatim over a plain TCP connection
+ * and the hub's own 101 passes straight back.
+ *
+ * It runs under node and serves only on the listening socket its service
+ * manager hands it — `whiffle-dashboard.socket` under systemd, the `Sockets`
+ * entry of the LaunchAgent under launchd (packages/cli/src/service.ts). The
+ * manager holds that socket across a restart of this process, so a page load
+ * that lands while a deploy restarts the dashboard waits in the listen backlog
+ * for the new process instead of being refused. It never binds the port
+ * itself; started any other way, `collect` throws and it exits.
  *
  * Preview routing: `/preview/<id>/…` is forwarded to the hub's preview
  * listener. Requests whose path does NOT start with `/preview/<id>/` but whose
@@ -29,12 +33,11 @@
 import { createReadStream, existsSync, statSync } from "node:fs";
 import http from "node:http";
 import net from "node:net";
-import { resolve, sep } from "node:path";
+import { extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
+import sockets from "socket-activation";
 import { handler } from "./build/handler.js";
 
-const PORT = Number(process.env.PORT ?? 3000);
-const HOST = process.env.HOST ?? "0.0.0.0";
 const target = new URL(process.env.WHIFFLE_HUB_URL || "http://localhost:3456");
 const targetPort = Number(target.port || 80);
 const previewPort = Number(process.env.WHIFFLE_PREVIEW_PORT || targetPort + 1);
@@ -130,6 +133,26 @@ const CLIENT_DIR = fileURLToPath(new URL("./build/client", import.meta.url));
 const IMMUTABLE_PREFIX = "/_app/immutable/";
 
 /**
+ * The Content-Type of what {@link serveFresh} answers: build/client's files
+ * outside `_app/immutable/`, which today is `_app/version.json` and whatever a
+ * `static/` directory would add. Anything else goes out as bytes.
+ */
+const TYPES = {
+  ".css": "text/css",
+  ".html": "text/html",
+  ".ico": "image/x-icon",
+  ".js": "text/javascript",
+  ".json": "application/json",
+  ".png": "image/png",
+  ".svg": "image/svg+xml",
+  ".txt": "text/plain",
+  ".webmanifest": "application/manifest+json",
+  ".woff2": "font/woff2",
+};
+
+const ACCEPTS_BROTLI = /(br|brotli)/i;
+
+/**
  * sirv also cached the SIZE of every non-hashed file (version.json, favicon,
  * manifest…) at startup, so between a deploy's swap and the restart it answers
  * with the old Content-Length over the new bytes. Those files are served here
@@ -157,12 +180,12 @@ function serveFresh(req, res, pathname) {
     return false;
   }
   // Like sirv: the precompressed sibling wins when the client accepts it.
-  const type = Bun.file(abs).type.split(";")[0];
+  const type = TYPES[extname(abs)] ?? "application/octet-stream";
   const accept = req.headers["accept-encoding"] ?? "";
   let file = abs;
   let encoding;
   for (const [ext, name, ok] of [
-    [".br", "br", /(br|brotli)/i.test(accept)],
+    [".br", "br", ACCEPTS_BROTLI.test(accept)],
     [".gz", "gzip", accept.includes("gzip")],
   ]) {
     if (!ok) {
@@ -208,7 +231,7 @@ function serveFresh(req, res, pathname) {
 }
 
 function serveApp(req, res) {
-  const pathname = req.url.split("?")[0];
+  const [pathname] = req.url.split("?");
   if (
     pathname.startsWith(IMMUTABLE_PREFIX) &&
     !existsSync(`${CLIENT_DIR}${pathname}`)
@@ -255,18 +278,6 @@ server.on("upgrade", (req, socket, head) => {
       `[whiffle] websocket socket error on ${req.url}: ${error.code ?? error.message}`
     );
   });
-  // Bun 1.4.0's node:http corks a connection's socket after every request it
-  // dispatches and never uncorks it (oven-sh/bun#35664, open). An upgrade that
-  // arrives on a kept-alive connection is handed a socket still corked, so the
-  // hub's 101 sits in its buffer and never reaches the browser. iOS Safari
-  // sends its websocket handshake over a connection that has already loaded
-  // the page's assets, so on the phone the dashboard socket stayed CONNECTING
-  // and the board never filled in. Chromium opens a fresh connection for a
-  // websocket, which is why it only showed on iOS.
-  while (socket.writableCorked > 0) {
-    socket.uncork();
-  }
-
   // Preview WebSocket: /preview/<id>/…
   const info = previewMatch(req);
   if (info) {
@@ -333,6 +344,8 @@ server.on("upgrade", (req, socket, head) => {
   upstream.on("close", () => socket.destroy());
 });
 
-server.listen(PORT, HOST, () => {
-  console.log(`dashboard on http://${HOST}:${PORT} — /ws -> ${target.origin}`);
+// One socket: the unit and the plist each name a single address for it.
+const [fd] = sockets.collect("dashboard");
+server.listen({ fd }, () => {
+  console.log(`dashboard on inherited fd ${fd} — /ws -> ${target.origin}`);
 });
