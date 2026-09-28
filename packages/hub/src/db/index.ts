@@ -662,6 +662,11 @@ export interface DbShape {
   readonly ruleStats: () => RuleStats[];
   /** A machine's own account of what it came to, from the sync it just answered. */
   readonly setAgentFleet: (machineId: string, report: FleetSyncReport) => void;
+  /** What each harness on the machine can do, as its daemon's report beat said. */
+  readonly setAgentHarnesses: (
+    machineId: string,
+    harnesses: HarnessReport[]
+  ) => void;
   readonly setAgentToolCell: (machineId: string, status: ToolStatus) => void;
   /** Stores the document and the hash the machines compare against. */
   readonly setFleetMemory: (content: string) => {
@@ -766,7 +771,6 @@ export interface DbShape {
     auth: AgentAuth;
     /** Absent from a register with nothing new to say about it; the row keeps what it had. */
     build?: BuildInfo;
-    harnesses?: HarnessReport[];
   }) => void;
   /** Returns the limit-history series for a machine, optionally filtered by kind and time range. */
   readonly usageLimitHistory: (q: {
@@ -1252,7 +1256,7 @@ const make = (path: string): DbShape => {
             .run();
         }
       }),
-    upsertAgent: ({ machineId, hostname, os, auth, build, harnesses }) => {
+    upsertAgent: ({ machineId, hostname, os, auth, build }) => {
       const lastSeenAt = new Date();
       db.insert(agents)
         .values({
@@ -1263,7 +1267,6 @@ const make = (path: string): DbShape => {
           status: "online",
           lastSeenAt,
           build,
-          harnesses,
         })
         .onConflictDoUpdate({
           target: agents.machineId,
@@ -1274,7 +1277,6 @@ const make = (path: string): DbShape => {
             status: "online",
             lastSeenAt,
             ...(build ? { build } : {}),
-            ...(harnesses ? { harnesses } : {}),
           },
         })
         .run();
@@ -1735,6 +1737,12 @@ const make = (path: string): DbShape => {
         ...agentTools(machineId),
         ...Object.fromEntries(statuses.map((status) => [status.id, status])),
       });
+    },
+    setAgentHarnesses: (machineId, harnesses) => {
+      db.update(agents)
+        .set({ harnesses })
+        .where(eq(agents.machineId, machineId))
+        .run();
     },
     setAgentToolCell: (machineId, status) => {
       writeAgentTools(machineId, {

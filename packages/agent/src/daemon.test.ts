@@ -266,9 +266,9 @@ describe("reconnecting", () => {
 });
 
 describe("the reconnect schedule", () => {
-  test("is 1s, 2s, 4s … capped at 30s, jittered — what its comment claims", async () => {
+  test("is a 50ms knock 40 times, then 1s, 2s, 4s … capped at 30s, jittered — what its comment claims", async () => {
     const { delays, probe } = observed(reconnect);
-    const hub = fakeHub({ uptimes: Array.from({ length: 12 }, () => 0) });
+    const hub = fakeHub({ uptimes: Array.from({ length: 52 }, () => 0) });
 
     await runUntil(
       reconnecting(hub.session, { schedule: probe, now: hub.now }),
@@ -278,14 +278,17 @@ describe("the reconnect schedule", () => {
     // Jitter is 0.8×–1.2× of the nominal delay (Schedule.jittered).
     const within = (millis: number, nominal: number) =>
       millis >= nominal * 0.8 && millis <= nominal * 1.2;
-    // biome-ignore lint/style/noNonNullAssertion: 12 uptimes guarantee at least 3 recorded delays
-    expect(within(delays[0]!, 1000)).toBe(true);
-    // biome-ignore lint/style/noNonNullAssertion: 12 uptimes guarantee at least 3 recorded delays
-    expect(within(delays[1]!, 2000)).toBe(true);
-    // biome-ignore lint/style/noNonNullAssertion: 12 uptimes guarantee at least 3 recorded delays
-    expect(within(delays[2]!, 4000)).toBe(true);
+    for (const delay of delays.slice(0, 40)) {
+      expect(within(delay, 50)).toBe(true);
+    }
+    // biome-ignore lint/style/noNonNullAssertion: 52 uptimes guarantee at least 43 recorded delays
+    expect(within(delays[40]!, 1000)).toBe(true);
+    // biome-ignore lint/style/noNonNullAssertion: 52 uptimes guarantee at least 43 recorded delays
+    expect(within(delays[41]!, 2000)).toBe(true);
+    // biome-ignore lint/style/noNonNullAssertion: 52 uptimes guarantee at least 43 recorded delays
+    expect(within(delays[42]!, 4000)).toBe(true);
     // Past saturation every delay is the cap, jitter and all — never more.
-    for (const delay of delays.slice(7, 12)) {
+    for (const delay of delays.slice(47, 52)) {
       expect(within(delay, 30_000)).toBe(true);
     }
   });

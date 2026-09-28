@@ -4,11 +4,9 @@ import type {
   BuildInfo,
   DeployInfo,
   Envelope,
-  HarnessReport,
   HeartbeatPayload,
   PermissionMode,
   SpawnPayload,
-  ToolStatus,
 } from "@whiffle/core";
 import {
   CONTROL_SEARCH_TRANSCRIPTS,
@@ -60,6 +58,13 @@ interface MachineIdentity {
  * What `register` carries. The supervisor outlives any one connection, so a
  * register is not a promise of zero sessions — `instances` names the ones still
  * running and the hub marks every other row it calls running as unknown.
+ *
+ * Only what the daemon can say without spawning anything. The register is the
+ * moment the hub puts this machine back in its registry — `online` is read
+ * from nowhere else — so every millisecond spent before sending it is a
+ * millisecond a healthy machine reads offline. Harnesses and tools, whose
+ * probes start processes, follow on a beat of their own: see
+ * {@link HeartbeatPayload}.
  */
 export interface RegisterPayload extends MachineIdentity {
   /**
@@ -75,12 +80,6 @@ export interface RegisterPayload extends MachineIdentity {
    * daemon with no deployment watcher running simply omits it.
    */
   deploy?: DeployInfo;
-  /**
-   * What each harness adapter on this machine can do, and whether it is
-   * installed and authenticated — the rail's per-harness word, and what gates
-   * the fleet syncs and spawn forms.
-   */
-  harnesses?: HarnessReport[];
   instances: string[];
   /**
    * True on exactly one register: the first one this process ever sends,
@@ -105,11 +104,6 @@ export interface RegisterPayload extends MachineIdentity {
    * so a hub that predates this field still reads the ids.
    */
   resumableAt?: Record<string, number>;
-  /**
-   * What the machine has of the tool catalog (NEW.md §10), so the hub can send
-   * an install for whatever its policy requires and this machine lacks.
-   */
-  tools?: ToolStatus[];
 }
 
 export class ConnectionLost extends Data.TaggedError("ConnectionLost")<{
@@ -118,8 +112,26 @@ export class ConnectionLost extends Data.TaggedError("ConnectionLost")<{
 }> {}
 
 /**
- * One retry series: 1s, 2s, 4s … capped at 30s, jittered so a fleet never
- * retries in lockstep.
+ * How often a daemon knocks while its hub is coming back from a restart, and
+ * how many knocks it spends before deciding the outage is real.
+ *
+ * Every deploy restarts the hub (`restartStack`, update.ts), and a restarted
+ * hub starts with an empty registry, which is the only place `online` is read
+ * from: every machine reads offline until its daemon registers again. Measured
+ * here, the hub is listening again 0.44s after systemd stops it (journal:
+ * `Stopping` 06:00:42.486, `listening` 06:00:42.930). The first attempt after a
+ * connection ends always finds the port closed, and when the series started at
+ * 1s the second attempt came a second later, so every deploy showed healthy
+ * machines as offline for half a second of pure waiting. A 50ms knock means the
+ * daemon is back within 50ms of the hub. 40 knocks (2s) give a slow boot four
+ * times the measured restart before the series backs off.
+ */
+const RESTART_KNOCK = Duration.millis(50);
+const RESTART_KNOCKS = 40;
+
+/**
+ * One retry series: a 50ms knock for 2s ({@link RESTART_KNOCK}), then 1s, 2s,
+ * 4s … capped at 30s, all jittered so a fleet never retries in lockstep.
  *
  * A schedule carries its exponent in its own state, and that state lives for
  * exactly as long as the `Effect.retry` that stepped it. Because `attach` never
@@ -133,12 +145,15 @@ export class ConnectionLost extends Data.TaggedError("ConnectionLost")<{
  *
  * {@link reconnecting} is what keeps this honest — it ends the series once a
  * connection has actually been healthy, so the next outage steps a schedule
- * that starts again at 1s.
+ * that starts again at the knock.
  */
-export const reconnect = Schedule.min([
-  Schedule.exponential(Duration.seconds(1)),
-  Schedule.spaced(Duration.seconds(30)),
-]).pipe(Schedule.jittered);
+export const reconnect = Schedule.concat(
+  Schedule.spaced(RESTART_KNOCK).pipe(Schedule.upTo({ times: RESTART_KNOCKS })),
+  Schedule.min([
+    Schedule.exponential(Duration.seconds(1)),
+    Schedule.spaced(Duration.seconds(30)),
+  ])
+).pipe(Schedule.jittered);
 
 /**
  * How long a connection must stand before losing it counts as a fresh outage
@@ -209,7 +224,7 @@ export const REDISCOVERY_FAILURE_WINDOW = Duration.minutes(2);
  * live, or less than `healthyAfter` after it went live, stays inside that retry
  * and pays the growing backoff. A failure after a healthy stretch ENDS the
  * series by succeeding, and the loop re-enters with a schedule that starts over
- * at 1s.
+ * at the knock.
  *
  * The loop deliberately contains nothing but the connection: the supervisor and
  * the scanner are built by the caller, outside it, and stay built across every
@@ -465,10 +480,6 @@ const attach = (
             ),
           }
         : {}),
-      harnesses: yield* Effect.promise(() =>
-        Promise.all(harnesses().map((adapter) => adapter.detect()))
-      ),
-      tools: yield* Effect.promise(() => probeTools()),
       build,
       ...(latestDeploy() ? { deploy: latestDeploy() } : {}),
       ...(restarted ? { restarted: true } : {}),
@@ -477,26 +488,34 @@ const attach = (
     yield* Effect.logInfo(`registered with ${url}`);
     markLive();
 
+    // What the machine can do goes out once its probes finish, on a beat of
+    // its own, and not inside the register above. The probes spawn processes
+    // (claude's starts a real Claude Code to ask for the account), and a
+    // register that waited for them kept this machine out of the hub's
+    // registry, and so reading offline, for 1.7–2.2s after every hub restart.
     supervisor.reannounce = () => {
-      if (socket.readyState !== WebSocket.OPEN) {
-        return;
-      }
       // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — reannounce doesn't await its own send
-      void Promise.all(harnesses().map((adapter) => adapter.detect())).then(
-        (detected) => {
-          send(socket, {
-            verb: "register",
-            machineId: identity.machineId,
-            payload: {
-              ...identity,
-              auth: detected[0]?.auth ?? identity.auth,
-              harnesses: detected,
-              instances: supervisor.instanceIds,
-            },
-          });
+      void Promise.all([
+        Promise.all(harnesses().map((adapter) => adapter.detect())),
+        probeTools(),
+      ]).then(([detected, tools]) => {
+        if (socket.readyState !== WebSocket.OPEN) {
+          return;
         }
-      );
+        send(socket, {
+          verb: "heartbeat",
+          machineId: identity.machineId,
+          payload: {
+            at: Date.now(),
+            instances: supervisor.instanceIds,
+            ...(latestDeploy() ? { deploy: latestDeploy() } : {}),
+            harnesses: detected,
+            tools,
+          } satisfies HeartbeatPayload,
+        });
+      });
     };
+    supervisor.reannounce();
 
     // A hand-off leaves as a `send` addressed at the target's machine; the hub
     // relays it the same way it relays a dashboard's.
