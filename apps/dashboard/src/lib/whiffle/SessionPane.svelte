@@ -45,6 +45,7 @@
     openSession,
     type PendingPermission,
     pendingRestore,
+    type ReadFault,
     refreshCommands,
     type SendExtras,
     type SessionState,
@@ -218,10 +219,7 @@
   }
 
   /** Why this pane has nothing to show, when it has nothing to show. */
-  let failure = $state<{
-    reason: "offline" | "failed";
-    message: string;
-  } | null>(null);
+  let failure = $state<ReadFault | null>(null);
   /** The hub answered 404: no row, no stored file, no machine that knows the id. */
   let missing = $state(false);
   /** The read finished, cleanly, with nothing in it — a transcript with no turns yet. */
@@ -293,7 +291,8 @@
       if (outcome.status === 404) {
         missing = true;
       } else {
-        failure = { reason: outcome.reason, message: outcome.message };
+        const { ok: _ok, status: _status, ...fault } = outcome;
+        failure = fault;
       }
       return;
     }
@@ -556,6 +555,40 @@
     clearReadFault(viewId);
     attempt += 1;
   }
+
+  /**
+   * The machine a read was refused for, as the fleet list says it is now.
+   * Its return is the moment the read can be answered: the hub lists a
+   * machine online once it has registered, and nothing else on this pane
+   * moves when that happens — a hub restart left the pane saying "offline"
+   * long after the machine was back.
+   */
+  const awayMachine = $derived(
+    fault?.reason === "offline" ? fault.machineId : null
+  );
+  const awayOnline = $derived(
+    awayMachine !== null &&
+      whiffle.machines.some(
+        (machine) =>
+          machine.machineId === awayMachine && machine.status === "online"
+      )
+  );
+  /** Whether that machine was online when last looked at: a return is a change to true. */
+  let wasOnline: boolean | null = null;
+  $effect(() => {
+    const online = awayOnline;
+    const machine = awayMachine;
+    untrack(() => {
+      if (machine === null) {
+        wasOnline = null;
+        return;
+      }
+      if (online && wasOnline === false) {
+        retry();
+      }
+      wasOnline = online;
+    });
+  });
 
   // The header's MCP count wants a reading, and the composer's `/` menu wants
   // the descriptions; only a live session answers either.
