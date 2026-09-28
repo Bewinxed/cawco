@@ -1330,6 +1330,16 @@
     :global(.session-card[data-vaul-drawer])::before {
       display: none;
     }
+    /* The sheet leaves as the dialog does: --dur-exit on --ease-out, with
+       its scrim, instead of vaul's 500ms slide. */
+    :global(.session-card[data-vaul-drawer][data-state="closed"]),
+    :global(
+      body:has(.session-card[data-vaul-drawer])
+        [data-vaul-overlay][data-state="closed"]
+    ) {
+      animation-duration: var(--dur-exit);
+      animation-timing-function: var(--ease-out);
+    }
     .head {
       touch-action: none;
     }
