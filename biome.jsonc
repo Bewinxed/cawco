@@ -3,8 +3,13 @@
   "extends": ["ultracite/biome/core", "ultracite/biome/svelte"],
   // Design mock-ups and their build scratch, not shipped code.
   // jsonl-parser is publishable and linted/formatted by oxlint/oxfmt instead.
+  // drizzle/meta is drizzle-kit generate output.
   "files": {
-    "includes": ["!mocks", "!packages/jsonl-parser"]
+    "includes": [
+      "!mocks",
+      "!packages/jsonl-parser",
+      "!packages/hub/drizzle/meta"
+    ]
   },
   "javascript": {
     // __WHIFFLE_COMMIT__: the dashboard's build commit, a `define` in

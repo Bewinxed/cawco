@@ -1,8 +1,8 @@
 <script lang="ts">
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
-  import { Button } from "$lib/components/ui/button";
-  import * as Collapsible from "$lib/components/ui/collapsible";
   import { TextMorph } from "torph/svelte";
+  import { Button } from "$lib/components/ui/button";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
+  import * as Collapsible from "$lib/components/ui/collapsible";
   import CollapsibleLazy from "$lib/components/ui/collapsible/collapsible-lazy.svelte";
   import { IconChevronRight, IconExternal } from "$lib/icons";
   import { formatDuration } from "$lib/utils/time";
@@ -453,25 +453,28 @@
                 duration={morphMs}
                 ease={CURVE.out}
                 text={pillWords}
-              />{#if elapsed}{pillWords ? ' · ' : ''}<span
-                  class="elapsed"
-                  class:ticking={inFlight}
+              />
+              {#if elapsed}
+                {pillWords ? ' · ' : ''}
+                <span class="elapsed" class:ticking={inFlight}
                   ><TextMorph
                     as="span"
                     duration={morphMs}
                     ease={CURVE.out}
                     text={elapsed}
                   /></span
-                >{/if}</span
+                >
+              {/if}</span
             >
             <span class="sr-only"
               >{[pillWords, elapsed].filter(Boolean).join(' · ')}</span
             >
           {:else}
-            {pillWords}{#if elapsed}{pillWords ? ' · ' : ''}<span
-                class="elapsed"
-                class:ticking={inFlight}>{elapsed}</span
-              >{/if}
+            {pillWords}
+            {#if elapsed}
+              {pillWords ? ' · ' : ''}
+              <span class="elapsed" class:ticking={inFlight}>{elapsed}</span>
+            {/if}
           {/if}
         </span>
       </Collapsible.Trigger>
@@ -530,9 +533,14 @@
               <p class="empty">
                 {branch.readFault.reason === 'offline'
                   ? 'Its machine is offline'
-                  : "Its transcript couldn't be read"}: {branch.readFault.message}
+                  : "Its transcript couldn't be read"}:
+                {branch.readFault.message}
               </p>
-              <Button onclick={() => id && preloadHistory(id)} size="sm" variant="outline">
+              <Button
+                onclick={() => id && preloadHistory(id)}
+                size="sm"
+                variant="outline"
+              >
                 Try again
               </Button>
             {:else if shown.length === 0}
@@ -812,14 +820,6 @@
     overflow-wrap: anywhere;
   }
 
-  /* One cell: a phase's line and the next one's cross-fade in place. */
-  .status {
-    display: grid;
-
-    & > .now {
-      grid-area: 1 / 1;
-    }
-  }
   .now {
     display: flex;
     align-items: baseline;
@@ -834,6 +834,14 @@
   }
   .now.err {
     color: var(--status-fail-ink);
+  }
+  /* One cell: a phase's line and the next one's cross-fade in place. */
+  .status {
+    display: grid;
+
+    & > .now {
+      grid-area: 1 / 1;
+    }
   }
   .beat {
     inline-size: 5px;
