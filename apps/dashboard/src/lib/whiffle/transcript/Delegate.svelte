@@ -35,6 +35,7 @@
     Message,
   } from "../types";
   import Self from "./Delegate.svelte";
+  import { disclosure } from "./disclosure.svelte";
   import MessageBody from "./MessageBody.svelte";
   import MessageRow from "./MessageRow.svelte";
   import { foldMessages } from "./rows";
@@ -287,13 +288,15 @@
       : (row?.lastError ?? (report?.failed ? headline(report.body) : ""))
   );
 
-  let open = $state(false);
+  /** Kept by the call that started it, so a card the reader opened stays open. */
+  const disclosed = $derived(disclosure(message));
+  const open = $derived(disclosed.get());
   /**
    * Opening the card is the only sign this transcript is wanted: watching
    * subscribes its frames, the backfill reads what was stored before this tab.
    */
   const onToggle = (next: boolean) => {
-    open = next;
+    disclosed.set(next);
     if (!id) {
       return;
     }
@@ -411,45 +414,48 @@
     {/if}
 
     <Collapsible.Content reveal>
-      <CollapsibleLazy {open}>
-        <div class="inner">
-          {#if loading}
-            <p class="empty">Loading its transcript…</p>
-          {:else if rows.length === 0}
-            <p class="empty">
-              {id ? 'Nothing in its transcript yet.' : 'Still starting — no transcript to show.'}
-            </p>
-          {/if}
-          {#each rows as r (r.key)}
-            {#if r.kind === 'tools'}
-              <ToolGroup messages={r.messages} />
-            {:else if r.kind === 'question'}
-              <ToolGroup messages={[r.message]} />
-            {:else if r.kind === 'delegate'}
-              <Self message={r.message} />
-            {:else if r.kind === 'subagent'}
-              <Subagent branch={r.branch} spawn={r.spawn} />
-            {:else if r.kind === 'thinking'}
-              <Thinking live={r.live} text={r.text} />
-            {:else if r.kind === 'stream'}
-              <div class="say"><MessageBody source={r.text} streaming /></div>
-            {:else if r.kind === 'single'}
-              <MessageRow {agentName} message={r.message} />
+      <CollapsibleLazy count={rows.length} {open}>
+        {#snippet children(limit)}
+          <div class="inner">
+            {#if loading}
+              <p class="empty">Loading its transcript…</p>
+            {:else if rows.length === 0}
+              <p class="empty">
+                {id ? 'Nothing in its transcript yet.' : 'Still starting — no transcript to show.'}
+              </p>
             {/if}
-          {/each}
+            {#each rows.slice(0, limit) as r (r.key)}
+              {#if r.kind === 'tools'}
+                <ToolGroup messages={r.messages} />
+              {:else if r.kind === 'question'}
+                <ToolGroup messages={[r.message]} />
+              {:else if r.kind === 'delegate'}
+                <Self message={r.message} />
+              {:else if r.kind === 'subagent'}
+                <Subagent branch={r.branch} spawn={r.spawn} />
+              {:else if r.kind === 'thinking'}
+                <Thinking live={r.live} text={r.text} />
+              {:else if r.kind === 'stream'}
+                <div class="say"><MessageBody source={r.text} streaming /></div>
+              {:else if r.kind === 'single'}
+                <MessageRow {agentName} message={r.message} />
+              {/if}
+            {/each}
 
-          {#if report}
-            <section class="report" class:failed={report.failed}>
-              <h4>
-                {report.failed ? 'Report — failed' : 'Report'}
-                {#if report.count > 1}
-                  · latest of {report.count}
-                {/if}
-              </h4>
-              <MessageBody source={report.body} />
-            </section>
-          {/if}
-        </div>
+            <!-- The report closes the card: drawn with the last of its rows. -->
+            {#if report && limit >= rows.length}
+              <section class="report" class:failed={report.failed}>
+                <h4>
+                  {report.failed ? 'Report — failed' : 'Report'}
+                  {#if report.count > 1}
+                    · latest of {report.count}
+                  {/if}
+                </h4>
+                <MessageBody source={report.body} />
+              </section>
+            {/if}
+          </div>
+        {/snippet}
       </CollapsibleLazy>
     </Collapsible.Content>
   </Collapsible.Root>

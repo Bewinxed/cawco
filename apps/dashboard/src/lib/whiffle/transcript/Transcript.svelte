@@ -2,14 +2,25 @@
   import type { CacheSnapshot } from "virtua";
 
   /**
-   * Where each conversation was left, by session id: virtua's measured sizes
-   * and the scroll offset, so a pane that mounts again lands in one write
-   * instead of hunting for its tail across several re-ranges.
+   * virtua's measured sizes for each conversation, by session id, so a pane
+   * that mounts again lands on measured rows instead of measuring its way
+   * there. Sizes are by index: they are handed back only to rows that begin
+   * with the same row and have not lost any.
    */
-  const landings = new Map<
+  const sizes = new Map<
     string,
-    { cache: CacheSnapshot; offset: number; count: number; tail: boolean }
+    { cache: CacheSnapshot; first: string; count: number }
   >();
+
+  /**
+   * Where the reader left a conversation: at its tail, or at a row — the one
+   * at the top of the view, by key, and how many pixels of it were scrolled
+   * past. A row keeps its key whatever arrives before or after it, so the
+   * place survives a conversation that grew while it was away. Kept per
+   * session in sessionStorage, so a reload returns there too.
+   */
+  type Landing = { tail: true } | { tail: false; key: string; into: number };
+  const LANDING = "whiffle:landing:";
 </script>
 
 <script lang="ts">
@@ -544,10 +555,24 @@
     }
   });
   const rows = $derived(built.rows);
-  const snapshot = untrack(() => {
-    const saved = landings.get(session.instanceId);
-    return saved?.count === built.rows.length ? saved : undefined;
+  const cache = untrack(() => {
+    const saved = sizes.get(session.instanceId);
+    return saved?.first === built.rows[0]?.key &&
+      built.rows.length >= saved.count
+      ? saved.cache
+      : undefined;
   });
+  /**
+   * The place this pane returns to, until a landing has used it. A place at
+   * a row the rows do not hold yet — a reload, whose first rows are the
+   * server's tail — waits for the history read (see the reveal).
+   */
+  let resume: Landing | null = browser
+    ? JSON.parse(
+        sessionStorage.getItem(LANDING + untrack(() => session.instanceId)) ??
+          "null"
+      )
+    : null;
   /**
    * virtua's size for a row it has not measured yet — and a transcript's
    * newest row is always one it has not measured. The smallest row there is:
@@ -697,17 +722,37 @@
    * landing keeps is already known without asking.
    */
   let lastTop = 0;
+  /** Where the list begins in the scroller, as the scroll handler last saw it. */
+  let listStart = 0;
 
+  /**
+   * Keep where the reader is for the pane's next mount. Called where a pane
+   * hides — inside a swipe's release, among others — so it reads nothing off
+   * the page: the row at the top of the view comes from virtua's own sizes,
+   * at the offset the scroll handler last saw.
+   */
   function saveLanding(): void {
-    if (!(list && landed)) {
+    if (!(list && shown) || renderedRows.length === 0) {
       return;
     }
-    landings.set(session.instanceId, {
+    sizes.set(session.instanceId, {
       cache: list.getCache(),
-      offset: lastTop,
-      count: built.rows.length,
-      tail: atBottom,
+      first: renderedRows[0].key,
+      count: renderedRows.length,
     });
+    let landing: Landing = { tail: true };
+    if (!atBottom) {
+      const index = list.findItemIndex(lastTop);
+      landing = {
+        tail: false,
+        key: renderedRows[index].key,
+        into: lastTop - listStart - list.getItemOffset(index),
+      };
+    }
+    sessionStorage.setItem(
+      LANDING + session.instanceId,
+      JSON.stringify(landing)
+    );
   }
 
   $effect.pre(() => {
@@ -716,17 +761,68 @@
     }
   });
   onDestroy(saveLanding);
+  // A reload tears the page down without destroying anything.
+  $effect(() => {
+    addEventListener("pagehide", saveLanding);
+    return () => removeEventListener("pagehide", saveLanding);
+  });
+
+  /** The row the reader's place is at, while it is being returned to: its index, or -1. */
+  function anchorIndex(): number {
+    if (!resume || resume.tail) {
+      return -1;
+    }
+    const { key } = resume;
+    return renderedRows.findIndex((row) => row.key === key);
+  }
+
+  /**
+   * Put the reader's row back at the top of the view, as far into it as they
+   * had scrolled, from virtua's sizes as they stand; says whether the
+   * scroller had to move. Called until it no longer does: each write brings
+   * rows into range that virtua measures, which moves the row again, and the
+   * list is not drawn until it has stopped (see the reveal). virtua's own
+   * `scrollToIndex` was no use here: after older history is shifted in front,
+   * it chased the row to the end of the list.
+   */
+  function restore(): boolean {
+    const index = anchorIndex();
+    if (!(resume && !resume.tail && list && scroller && listing) || index < 0) {
+      return false;
+    }
+    atBottom = false;
+    const start =
+      listing.getBoundingClientRect().top -
+      scroller.getBoundingClientRect().top +
+      scroller.scrollTop;
+    // Within what the scroller can reach: a place past its end — rows below
+    // it that are shorter now than when it was left — is its end.
+    const target = Math.min(
+      Math.max(0, start + list.getItemOffset(index) + resume.into),
+      scroller.scrollHeight - scroller.clientHeight
+    );
+    if (Math.abs(scroller.scrollTop - target) <= 0.5) {
+      return false;
+    }
+    scroller.scrollTop = target;
+    lastWrite = scroller.scrollTop;
+    return true;
+  }
 
   /** The scroll height the last scroll event saw — what tells a clamp from a reader. */
   let lastHeight = 0;
   function onscroll(): void {
-    if (!(scroller && landed)) {
+    if (!(scroller && listing && landed)) {
       return;
     }
     lastTop = scroller.scrollTop;
     const height = scroller.scrollHeight;
     const shrank = height < lastHeight;
     lastHeight = height;
+    listStart =
+      listing.getBoundingClientRect().top -
+      scroller.getBoundingClientRect().top +
+      lastTop;
     // Until the reveal the list is laid out but not painted: nothing on it
     // is the reader's to have scrolled. virtua's own writes land here while
     // it measures the rows the store's read brings in — untagged, and at a
@@ -1039,7 +1135,12 @@
       }
       frame = requestAnimationFrame(() => {
         frame = null;
+        if (restore()) {
+          wait();
+          return;
+        }
         if (measured()) {
+          resume = null;
           shown = true;
         }
       });
@@ -1132,12 +1233,10 @@
       return;
     }
     if (!landed) {
-      if (snapshot && scroller) {
-        scroller.scrollTop = snapshot.tail
-          ? scroller.scrollHeight
-          : snapshot.offset;
-        lastWrite = scroller.scrollTop;
-        atBottom = snapshot.tail;
+      // A place the rows do not hold yet — a reload's first rows are the
+      // server's tail — is looked for again once the history read is in.
+      if (anchorIndex() >= 0) {
+        restore();
       } else {
         list?.scrollToIndex(rows.length - 1, { align: "end" });
         atBottom = true;
@@ -1708,7 +1807,7 @@
   <!-- The list's own box: what the pin reads virtua's container off. -->
   <div class="listing" bind:this={listing} class:shown>
     <Virtualizer
-      cache={snapshot?.cache}
+      {cache}
       data={renderedRows}
       getKey={(r) => r.key}
       itemSize={ROW_ESTIMATE}

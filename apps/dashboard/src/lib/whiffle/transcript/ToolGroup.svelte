@@ -39,7 +39,7 @@
    */
   import type { Message } from "../types";
   import { useLedger } from "./arrivals.svelte";
-  import { openCalls } from "./disclosure.svelte";
+  import { disclosure } from "./disclosure.svelte";
   import TranscriptRow from "./Row.svelte";
   import Shot from "./Shot.svelte";
 
@@ -57,9 +57,6 @@
    * nothing in them arrives.
    */
   const callId = (m: Message): string => `call:${m.id ?? m.toolCallId}`;
-  /** Where the reader's disclosure of this call is kept (see `disclosure.svelte.ts`). */
-  const openKey = (m: Message): string =>
-    `${m.instanceId}:${m.id ?? m.toolCallId}`;
 
   const ledger = useLedger();
   /** Only a change the reader is watching is shown moving. */
@@ -348,19 +345,8 @@
               {/if}
             </div>
           {:else if hasBody}
-            {@const key = openKey(m)}
-            <Collapsible.Root
-              bind:open={
-                () => openCalls.has(key),
-                (next) => {
-                  if (next) {
-                    openCalls.add(key);
-                  } else {
-                    openCalls.delete(key);
-                  }
-                }
-              }
-            >
+            {@const disclosed = disclosure(m)}
+            <Collapsible.Root bind:open={disclosed.get, disclosed.set}>
               <Collapsible.Trigger class="trow">
                 {@render line()}
                 <span class="chev"><IconChevronRight /></span>
