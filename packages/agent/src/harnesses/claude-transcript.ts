@@ -507,6 +507,26 @@ export function absorbedMessage(r: RawRecord): SDKSessionMessage | null {
   };
 }
 
+/**
+ * A turn the reader opened: a main-chain `user` line stamped `origin.kind:
+ * "human"` that carries words or images rather than tool results. A message
+ * sent while a turn ran and not absorbed before it ended is dequeued by the
+ * CLI as the next turn and written as exactly this line — with nothing printed
+ * on stdout for it either.
+ */
+export function openedTurn(r: RawRecord): SDKSessionMessage | null {
+  const content = (r.message as { content?: unknown } | undefined)?.content;
+  if (
+    r.type !== "user" ||
+    (r.origin as { kind?: unknown } | undefined)?.kind !== "human" ||
+    (Array.isArray(content) &&
+      content.some((block: { type?: unknown }) => block.type === "tool_result"))
+  ) {
+    return null;
+  }
+  return toSDKMessage(r);
+}
+
 /** Map a chain-walked record to the SDK's output shape. */
 function toSDKMessage(r: RawRecord): SDKSessionMessage | null {
   if (r.type === "attachment") {
