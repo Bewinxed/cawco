@@ -101,6 +101,7 @@ import { resolveBin } from "../tools";
 import { claudeConfigDirs } from "../usage/scan-claude";
 import {
   absorbedMessage,
+  openedTurn,
   type RawRecord,
   readSessionEnd,
   readSessionFull,
@@ -525,31 +526,33 @@ export const dequeuedFrame = (
 });
 
 /**
- * The frame for a message the model folded into its running turn, read off the
- * transcript ({@link absorbedMessage}) because stdout never carries it. It
- * keeps the transcript line's uuid, so the stored copy a later read brings is
- * the same message, not a second one.
+ * The frame for a message the reader sent while a turn ran, read off the
+ * transcript where the model read it — folded into that turn
+ * ({@link absorbedMessage}) or opening the next ({@link openedTurn}) — because
+ * stdout carries neither. It keeps the transcript line's uuid, so the stored
+ * copy a later read brings is the same message, not a second one.
  */
-const absorbedFrame = (absorbed: SDKSessionMessage): NeutralMessage =>
+const heldFrame = (held: SDKSessionMessage): NeutralMessage =>
   ({
     type: "user",
-    uuid: absorbed.uuid,
-    session_id: absorbed.session_id,
+    uuid: held.uuid,
+    session_id: held.session_id,
     parent_tool_use_id: null,
-    message: absorbed.message,
-    timestamp: absorbed.timestamp,
-    ...(absorbed.sourceUuid ? { sourceUuid: absorbed.sourceUuid } : {}),
+    message: held.message,
+    timestamp: held.timestamp,
+    sentMidTurn: true,
+    ...(held.sourceUuid ? { sourceUuid: held.sourceUuid } : {}),
   }) as NeutralMessage;
 
-/** Only these transcript lines can carry an absorbed message. */
-const ABSORBED_LINES = typeFilter("attachment");
+/** Only these transcript lines can carry a held send. */
+const HELD_LINES = typeFilter("attachment", "user");
 
 /**
- * The frames after which an absorbed message is on disk: the main loop opening
- * its next model call (the fold is written before the request that carries
- * it), and the turn's `result`.
+ * The frames after which a held send is on disk: the main loop opening a model
+ * call (a fold, or the line opening a turn, is written before the request that
+ * carries it), and a turn's `result`.
  */
-const readsAbsorbed = (message: SDKMessage): boolean =>
+const readsHeld = (message: SDKMessage): boolean =>
   message.type === "result" ||
   (message.type === "stream_event" &&
     message.parent_tool_use_id === null &&
@@ -659,18 +662,25 @@ class ClaudeSession implements HarnessSession {
    */
   readonly #awaitingEcho: { queueId: string; text: string }[] = [];
   /**
-   * Where this session's transcript is being read for messages the model
-   * absorbs mid-turn, from the byte it had reached when the reader first sent
-   * during the running turn. Null while no such message can be waiting.
+   * Where this session's transcript is being read for the messages the reader
+   * sent while a turn ran, from the byte it had reached at the first of them.
+   * Null while none is waiting to be read.
    *
-   * The CLI takes a send off its stdin at once and holds it in its own queue;
-   * at the next tool boundary it folds it into the turn and says so only in
+   * The CLI takes a send off its stdin at once and holds it in its own queue.
+   * At the next tool boundary it folds it into the running turn; if the turn
+   * ends first, it dequeues it as the next turn. Either way it says so only in
    * the transcript. So the transcript is read — only the appended bytes — each
-   * time the main loop opens a new model call, which is after the fold was
+   * time the main loop opens a model call, which is after either line was
    * written, and the frame goes out ahead of what the model says next.
    */
-  #absorbing: Promise<{ path: string; checkpoint: Checkpoint } | null> | null =
+  #watch: Promise<{ path: string; checkpoint: Checkpoint } | null> | null =
     null;
+  /**
+   * What the reader typed into each running turn, oldest first, until its line
+   * is read. `ends` counts the `result`s it has outlived: one ends the turn it
+   * was sent into, and by the second it has opened the turn between them.
+   */
+  readonly #held: { text: string; ends: number }[] = [];
   readonly #workdir: string;
   readonly instanceId: string;
 
@@ -906,15 +916,16 @@ class ClaudeSession implements HarnessSession {
   }
 
   /**
-   * The reader sent while a turn is running: mark where the transcript ends
-   * now, so the fold that absorbs the message is the next thing read from it.
+   * The reader sent `text` while a turn is running: hold it, and mark where
+   * the transcript ends now, so the line that reads it is ahead of the mark.
    */
-  #watchAbsorption(): void {
+  #hold(text: string): void {
+    this.#held.push({ text, ends: 0 });
     const { sessionId } = this;
-    if (this.#absorbing || !sessionId) {
+    if (this.#watch || !sessionId) {
       return;
     }
-    this.#absorbing = claudeSessionFile(sessionId, this.#workdir).then(
+    this.#watch = claudeSessionFile(sessionId, this.#workdir).then(
       async (path) => {
         if (!path) {
           return null;
@@ -926,28 +937,61 @@ class ClaudeSession implements HarnessSession {
   }
 
   /**
-   * Frames every message the model has absorbed since the last read. At the
-   * turn's `result` nothing more can be absorbed into it — a send still held
-   * becomes the next turn — so the watch ends there.
+   * Frames every held send read since the last look: a fold of the reader's
+   * words into the running turn, or a turn the reader opened whose words are
+   * one of the held texts — a turn opened any other way was sent to an idle
+   * session, and its sender already drew it. At a `result`, what is still held
+   * has outlived one more turn; nothing outlives two, and the watch ends with
+   * the last of them.
    */
-  async #emitAbsorbed(ending: boolean): Promise<void> {
-    const watch = await this.#absorbing;
-    if (ending) {
-      this.#absorbing = null;
-    }
-    if (!watch) {
-      return;
-    }
-    const read = await readTranscriptTail(watch.path, watch.checkpoint, {
-      prefilter: ABSORBED_LINES,
-    });
-    watch.checkpoint = read.checkpoint;
-    for (const located of read.records) {
-      const absorbed = absorbedMessage(located.record as unknown as RawRecord);
-      if (absorbed) {
-        this.#ctx.frame(absorbedFrame(absorbed));
+  async #readHeld(ending: boolean): Promise<void> {
+    const watch = await this.#watch;
+    if (watch) {
+      const tail = await readTranscriptTail(watch.path, watch.checkpoint, {
+        prefilter: HELD_LINES,
+      });
+      watch.checkpoint = tail.checkpoint;
+      for (const located of tail.records) {
+        const record = located.record as unknown as RawRecord;
+        const absorbed = absorbedMessage(record);
+        const read = absorbed ?? openedTurn(record);
+        const at = read ? this.#heldIndex(read) : -1;
+        if (at >= 0) {
+          this.#held.splice(at, 1);
+        }
+        if (read && (absorbed || at >= 0)) {
+          this.#ctx.frame(heldFrame(read));
+        }
       }
     }
+    if (!ending) {
+      return;
+    }
+    for (const held of this.#held) {
+      held.ends += 1;
+    }
+    this.#held.splice(
+      0,
+      this.#held.length,
+      ...this.#held.filter((held) => held.ends < 2)
+    );
+    if (this.#held.length === 0) {
+      this.#watch = null;
+    }
+  }
+
+  /**
+   * The held send a read line is, oldest first: its words open with what was
+   * typed (pastes fold in after them), and an images-only send is matched
+   * only by a line with no words either.
+   */
+  #heldIndex(read: SDKSessionMessage): number {
+    const text = queuedText({
+      message: read.message,
+    } as NeutralUserMessage);
+    return this.#held.findIndex((held) =>
+      held.text === "" ? text === "" : text.startsWith(held.text)
+    );
   }
 
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the session's whole live-frame pipeline — echo tagging, question dismissal, structured-result folding, busy/failed reporting — one pass per SDK message
@@ -960,8 +1004,8 @@ class ClaudeSession implements HarnessSession {
       for await (const message of handle) {
         // A message the reader sent mid-turn is read where the model read it:
         // before the answer that follows it, and before the turn closes.
-        if (this.#absorbing && readsAbsorbed(message)) {
-          await this.#emitAbsorbed(message.type === "result");
+        if (this.#watch && readsHeld(message)) {
+          await this.#readHeld(message.type === "result");
         }
         const neutral = toNeutral(message);
         // The turn this frame is, when it is one the session had to hold.
@@ -1041,11 +1085,12 @@ class ClaudeSession implements HarnessSession {
     const sdk = message as unknown as SDKUserMessage;
     const queued = (message as { shouldQuery?: boolean }).shouldQuery === false;
 
-    // The reader's words, into a running turn: the CLI may fold them in at its
-    // next tool boundary, and only the transcript will say so.
+    // The reader's words, into a running turn: the CLI folds them in at its
+    // next tool boundary or opens the next turn with them, and only the
+    // transcript will say which.
     // biome-ignore lint/suspicious/noUnnecessaryConditions: Turn.busy is mutated by Turn.start()/.end() elsewhere; the checker doesn't see that cross-class mutation
     if (this.#turn.busy && !isInjected(message.origin)) {
-      this.#watchAbsorption();
+      this.#hold(queuedText(message));
     }
 
     // A mid-turn injection: the model reads it at the next tool boundary without
