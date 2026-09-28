@@ -189,8 +189,6 @@ class PiSession implements HarnessSession {
   sessionId: string | null = null;
   readonly #ctx: HarnessContext;
   readonly #session: AgentSession;
-  #streamedText = "";
-  #streamedThinking = "";
   #busy = false;
   /**
    * The uuids of sends pi has not started on, oldest first. `prompt()` takes
@@ -231,11 +229,16 @@ class PiSession implements HarnessSession {
       }
       // Read, and stored: pi tells its listeners `message_end` just before
       // it appends the entry, in the same synchronous run, so the entry is
-      // the leaf a microtask later. The read frame says both, so the hub
-      // keys the send to the entry a history read will return.
+      // the leaf a microtask later — before any tool the message calls has
+      // started. The read frame says both, so the hub keys the send to the
+      // entry a history read will return.
       case "message_end": {
+        const { role, content } = event.message as {
+          role?: string;
+          content?: unknown;
+        };
         const sent = this.#reading;
-        if (sent && (event.message as { role?: string }).role === "user") {
+        if (sent && role === "user") {
           this.#reading = undefined;
           queueMicrotask(() => {
             this.#ctx.frame({
@@ -249,6 +252,21 @@ class PiSession implements HarnessSession {
             });
           });
         }
+        // A finished assistant message, drawn once and whole under its entry
+        // — its reasoning, words and tool calls in the order a reload lists
+        // them, so each row keeps its id across one.
+        if (role === "assistant") {
+          queueMicrotask(() => {
+            const blocks = toBlocks(content);
+            if (blocks.length) {
+              this.#ctx.frame({
+                type: "assistant",
+                uuid: this.#session.sessionManager.getLeafId() as string,
+                message: { content: blocks },
+              });
+            }
+          });
+        }
         break;
       }
       case "message_update": {
@@ -260,46 +278,11 @@ class PiSession implements HarnessSession {
         switch (ae.type) {
           case "text_delta": {
             const delta = (ae as { delta?: string }).delta ?? "";
-            this.#streamedText += delta;
             this.#ctx.frame({
               type: "stream_event",
               event: {
                 type: "content_block_delta",
                 delta: { type: "text_delta", text: delta },
-              },
-            });
-            this.#ctx.busy(true);
-            this.#busy = true;
-            break;
-          }
-          case "thinking_delta": {
-            this.#streamedThinking += (ae as { delta?: string }).delta ?? "";
-            break;
-          }
-          case "toolcall_end": {
-            const call = (
-              ae as {
-                toolCall?: {
-                  id?: string;
-                  name?: string;
-                  arguments?: Record<string, unknown>;
-                };
-              }
-            ).toolCall;
-            if (!(call?.id && call.name)) {
-              break;
-            }
-            this.#ctx.frame({
-              type: "assistant",
-              message: {
-                content: [
-                  {
-                    type: "tool_use",
-                    id: call.id,
-                    name: call.name,
-                    input: call.arguments ?? {},
-                  },
-                ],
               },
             });
             this.#ctx.busy(true);
@@ -348,50 +331,11 @@ class PiSession implements HarnessSession {
         });
         break;
       }
-      case "turn_end": {
-        // The final assistant message: the streamed text already painted it, but
-        // the closing frame replaces the buffer with the real blocks (and carries
-        // any thinking the stream did not surface as text).
-        const blocks: NeutralAssistantBlock[] = [];
-        const { message } = event as { message?: { content?: unknown[] } };
-        for (const block of message?.content ?? []) {
-          const b = block as {
-            type?: string;
-            text?: string;
-            thinking?: string;
-          };
-          if (b.type === "text" && b.text) {
-            blocks.push({ type: "text", text: b.text });
-          } else if (b.type === "thinking" && b.thinking) {
-            blocks.push({ type: "thinking", thinking: b.thinking });
-          }
-        }
-        if (blocks.length) {
-          this.#ctx.frame({ type: "assistant", message: { content: blocks } });
-          // biome-ignore lint/suspicious/noUnnecessaryConditions: #streamedText is reassigned elsewhere in the class; biome's per-method inference doesn't see that
-        } else if (this.#streamedText) {
-          this.#ctx.frame({
-            type: "assistant",
-            message: { content: [{ type: "text", text: this.#streamedText }] },
-          });
-          // biome-ignore lint/suspicious/noUnnecessaryConditions: #streamedThinking is reassigned elsewhere in the class; biome's per-method inference doesn't see that
-        } else if (this.#streamedThinking) {
-          this.#ctx.frame({
-            type: "assistant",
-            message: {
-              content: [{ type: "thinking", thinking: this.#streamedThinking }],
-            },
-          });
-        }
-        break;
-      }
       case "agent_end": {
         const willRetry = (event as { willRetry?: boolean }).willRetry === true;
         if (willRetry) {
           break;
         }
-        this.#streamedText = "";
-        this.#streamedThinking = "";
         this.#ctx.busy(false);
         this.#busy = false;
         const errors =

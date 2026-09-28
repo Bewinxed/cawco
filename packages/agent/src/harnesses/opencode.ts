@@ -124,11 +124,13 @@ let idCounter = 0;
 
 /**
  * An opencode message id, minted here so a send can name the message it
- * becomes. opencode refuses a given id without its `msg` prefix and orders a
- * session's messages by id, so it is minted the way opencode's own
- * `Identifier.ascending` mints one (packages/opencode/src/id/id.ts): the
- * prefix, the low 6 bytes of `Date.now() * 0x1000 + counter` as hex, then 14
- * random base62 characters.
+ * becomes. opencode refuses a given id without its `msg` prefix, so it is
+ * minted the way opencode's own `Identifier.ascending` mints one
+ * (packages/opencode/src/id/id.ts): the prefix, the low 6 bytes of
+ * `Date.now() * 0x1000 + counter` as hex, then 14 random base62 characters.
+ * It lists a session's messages by when it wrote them, the id only breaking
+ * ties (message-v2.ts: `.orderBy(desc(MessageTable.time_created),
+ * desc(MessageTable.id))`).
  */
 export function messageId(): string {
   const now = Date.now();
@@ -866,10 +868,28 @@ const parseCommand = (
 
 /** A message's final content, keyed by part id in arrival order, for its closing frame. */
 interface PendingMessage {
+  /**
+   * The message's text, reasoning and tool parts, in the order they appeared —
+   * the order {@link toTranscript} lists them in, so a block's place here is
+   * the index its row is keyed by live and after a reload alike.
+   */
+  blocks: string[];
   parts: Map<string, { kind: "text" | "thinking"; text: string }>;
-  published?: Map<string, number>;
-  publishedBlocks?: number;
+  /** The parts already published as a block; each is published once. */
+  published: Set<string>;
 }
+
+const pendingMessage = (): PendingMessage => ({
+  blocks: [],
+  parts: new Map(),
+  published: new Set(),
+});
+
+/** A part's place among its message's blocks, taken on first sight. */
+const blockIndex = (pending: PendingMessage, partID: string): number => {
+  const at = pending.blocks.indexOf(partID);
+  return at === -1 ? pending.blocks.push(partID) - 1 : at;
+};
 
 /**
  * The live thinking stream, in the partial-event shape the dashboard's stream
@@ -989,12 +1009,21 @@ export class OpencodeSession implements HarnessSession {
   #turnOpen = false;
   /** Armed while a turn is open without any server event; see STALLED_TURN_MS. */
   #stallTimer: ReturnType<typeof setTimeout> | undefined;
-  /** Sends held while the config gate is up, each under the message id it will become. */
+  /**
+   * Sends held while the config gate is up, and any that arrive while they
+   * are delivered, each under the message id it will become.
+   */
   readonly #queue: {
     parts: unknown[];
     model?: { providerID?: string; modelID?: string };
     messageID: string;
   }[] = [];
+  /** The held send delivered last, until opencode has written it. */
+  #draining: string | undefined;
+  /** The assistant message opencode is writing, until it is complete. */
+  #answering: string | undefined;
+  /** Sends opencode has written that the session has yet to be given, by uuid. */
+  readonly #readAfter: string[] = [];
   /** Sends opencode has not written as messages yet: message id → the uuid it was sent under. */
   readonly #unread = new Map<string, string>();
   #permissionMode: string | undefined;
@@ -1119,20 +1148,37 @@ export class OpencodeSession implements HarnessSession {
         if (info.role === "assistant") {
           this.#costs.set(info.id, info.cost);
           this.#lastTokens = info.tokens;
+          if (!info.time.completed) {
+            this.#answering = info.id;
+          } else if (this.#answering === info.id) {
+            // The answer is whole: its blocks go on screen, then the sends
+            // written while it was being written — the order opencode keeps.
+            this.#answering = undefined;
+            this.#flushMessages(this.#pending, this.#roles);
+            this.#releaseReads();
+          }
         }
-        // A send, now a message of the session's: the harness has read it,
-        // and stores it under this message id.
+        // A send, now a message of the session's, stored under this message
+        // id — which the hub is told at once, so a history read finds the
+        // send in it. Written while an answer is still being written, it is
+        // read after that answer: where opencode stores it, and when the
+        // model is given it.
         const read = this.#unread.get(info.id);
         if (read) {
           this.#unread.delete(info.id);
           this.#ctx.frame({
             type: "system",
             subtype: MESSAGES_READ,
-            read: [read],
+            read: [],
             storedAs: { [read]: info.id },
             session_id: this.sessionId ?? undefined,
           });
+          this.#readAfter.push(read);
+          if (!this.#answering) {
+            this.#releaseReads();
+          }
         }
+        this.#drained(info.id);
         break;
       }
       case "message.part.updated": {
@@ -1178,6 +1224,9 @@ export class OpencodeSession implements HarnessSession {
           ? pending.parts.get(props.partID)
           : undefined;
         const held = existing?.kind === "thinking" ? "thinking" : "text";
+        if (props.partID) {
+          blockIndex(pending, props.partID);
+        }
         if (held === "thinking" && props.partID) {
           if (this.#openThinking !== props.partID) {
             this.#closeThinking();
@@ -1405,6 +1454,7 @@ export class OpencodeSession implements HarnessSession {
         // `message.part.delta` text already accumulated here is the truth.
         this.#closeThinking();
         const pending = this.#pendingOf(part.messageID);
+        blockIndex(pending, part.id);
         const existing = pending.parts.get(part.id);
         const acc = existing?.kind === "text" ? existing.text : "";
         const text = acc.length >= part.text.length ? acc : part.text;
@@ -1412,10 +1462,13 @@ export class OpencodeSession implements HarnessSession {
         break;
       }
       case "reasoning": {
+        // Its place is taken even before the role is known, as a stored
+        // message lists it.
+        const pending = this.#pendingOf(part.messageID);
+        blockIndex(pending, part.id);
         if (role !== "assistant") {
           return;
         }
-        const pending = this.#pendingOf(part.messageID);
         const stored = pending.parts.get(part.id);
         // A reasoning update carries the whole text again, so what streams is
         // what grew past the last one. A rewrite that does not extend it says
@@ -1477,6 +1530,8 @@ export class OpencodeSession implements HarnessSession {
           this.#flushMessages(this.#pending, this.#roles);
           this.#ctx.frame({
             type: "assistant",
+            uuid: part.messageID,
+            contentOffset: blockIndex(this.#pendingOf(part.messageID), part.id),
             message: {
               content: [
                 {
@@ -1535,7 +1590,7 @@ export class OpencodeSession implements HarnessSession {
   #pendingOf(messageID: string): PendingMessage {
     let pending = this.#pending.get(messageID);
     if (!pending) {
-      pending = { parts: new Map() };
+      pending = pendingMessage();
       this.#pending.set(messageID, pending);
     }
     return pending;
@@ -1646,6 +1701,7 @@ export class OpencodeSession implements HarnessSession {
           : undefined;
         const held = existing?.kind === "thinking" ? "thinking" : "text";
         if (props.partID) {
+          blockIndex(pending, props.partID);
           pending.parts.set(props.partID, {
             kind: held,
             text: (existing?.text ?? "") + props.delta,
@@ -1688,7 +1744,7 @@ export class OpencodeSession implements HarnessSession {
   #pendingChild(state: ChildState, messageID: string): PendingMessage {
     let pending = state.pending.get(messageID);
     if (!pending) {
-      pending = { parts: new Map() };
+      pending = pendingMessage();
       state.pending.set(messageID, pending);
     }
     return pending;
@@ -1702,6 +1758,14 @@ export class OpencodeSession implements HarnessSession {
     callID: string
   ): void {
     const role = state.roles.get(part.messageID);
+    // Every block takes its place on first sight, whatever is shown of it.
+    if (
+      part.type === "reasoning" ||
+      part.type === "tool" ||
+      (part.type === "text" && !(part.synthetic || part.ignored))
+    ) {
+      blockIndex(this.#pendingChild(state, part.messageID), part.id);
+    }
     switch (part.type) {
       case "text": {
         if (part.synthetic || part.ignored) {
@@ -1758,6 +1822,11 @@ export class OpencodeSession implements HarnessSession {
           this.#flushMessages(state.pending, state.roles, callID);
           this.#ctx.frame({
             type: "assistant",
+            uuid: part.messageID,
+            contentOffset: blockIndex(
+              this.#pendingChild(state, part.messageID),
+              part.id
+            ),
             parent_tool_use_id: callID,
             message: {
               content: [
@@ -1808,7 +1877,13 @@ export class OpencodeSession implements HarnessSession {
     state.pending.clear();
   }
 
-  /** Publish buffered prose before a tool frame clears the dashboard's live text. */
+  /**
+   * Publish buffered prose before a tool frame clears the dashboard's live
+   * text. Each part goes once, whole, keyed by its message and its place in it
+   * — the key a history read gives the same block. opencode finishes a part
+   * before it starts the next, so a part is done by the time a later one's
+   * tool call or the turn's end flushes it.
+   */
   #flushMessages(
     messages: Map<string, PendingMessage>,
     roles: Map<string, "user" | "assistant">,
@@ -1818,35 +1893,25 @@ export class OpencodeSession implements HarnessSession {
       if (roles.get(messageID) !== "assistant") {
         continue;
       }
-      pending.published ??= new Map();
-      const { published } = pending;
-      const blocks: NeutralAssistantBlock[] = [];
       for (const [partID, part] of pending.parts) {
-        const offset = published.get(partID) ?? 0;
-        const text = part.text.slice(offset);
-        if (!text) {
+        if (!part.text || pending.published.has(partID)) {
           continue;
         }
-        if (part.kind === "text") {
-          blocks.push({ type: "text", text });
-        } else {
-          blocks.push({ type: "thinking", thinking: text });
-        }
-        published.set(partID, part.text.length);
+        pending.published.add(partID);
+        this.#ctx.frame({
+          type: "assistant",
+          uuid: messageID,
+          contentOffset: blockIndex(pending, partID),
+          ...(parentToolUseId ? { parent_tool_use_id: parentToolUseId } : {}),
+          message: {
+            content: [
+              part.kind === "text"
+                ? { type: "text", text: part.text }
+                : { type: "thinking", thinking: part.text },
+            ],
+          },
+        });
       }
-      if (blocks.length === 0) {
-        continue;
-      }
-      this.#ctx.frame({
-        type: "assistant",
-        uuid: messageID,
-        ...(pending.publishedBlocks
-          ? { contentOffset: pending.publishedBlocks }
-          : {}),
-        ...(parentToolUseId ? { parent_tool_use_id: parentToolUseId } : {}),
-        message: { content: blocks },
-      });
-      pending.publishedBlocks = (pending.publishedBlocks ?? 0) + blocks.length;
     }
   }
 
@@ -1863,6 +1928,9 @@ export class OpencodeSession implements HarnessSession {
     // The live trace ends before the settled blocks replace it.
     this.#closeThinking();
     this.#flushMessages(this.#pending, this.#roles);
+    // Whatever was written behind an answer that never completed is read now.
+    this.#answering = undefined;
+    this.#releaseReads();
     const flushed = [...this.#pending.keys()];
     this.#pending.clear();
     // A ghost idle (e.g. the idle that trails an abort) has no open turn and must
@@ -2140,9 +2208,11 @@ export class OpencodeSession implements HarnessSession {
 
     // Config convergence gate: queue everything while a reload is in progress.
     // Active turns are allowed to finish (events still route), but no NEW work
-    // may start — the server is being stopped and restarted.
-    if (this.#isConfigGateHeld()) {
+    // may start — the server is being stopped and restarted. A send that
+    // arrives while the held ones are still going in waits behind them.
+    if (this.#isConfigGateHeld() || this.#draining || this.#queue.length > 0) {
       this.#queue.push({ parts, ...(model ? { model } : {}), messageID });
+      this.#drainQueue();
       return;
     }
 
@@ -2226,6 +2296,7 @@ export class OpencodeSession implements HarnessSession {
       .then((res) => {
         if (res.error) {
           this.#ctx.failed(new Error(errorText(res.error)));
+          this.#drained(messageID);
         }
       })
       .catch((error: unknown) => {
@@ -2239,6 +2310,7 @@ export class OpencodeSession implements HarnessSession {
         this.#ctx.failed(
           error instanceof Error ? error : new Error(String(error))
         );
+        this.#drained(messageID);
       });
   }
 
@@ -2247,18 +2319,45 @@ export class OpencodeSession implements HarnessSession {
    * it was named — so each is read as itself.
    */
   #drainQueue(): void {
-    if (this.#queue.length === 0) {
-      return;
-    }
     // Do not start new work while the config gate is held — the server is
     // mid-dispose. The queue stays intact; configGateLifted() will call us
     // again once the gate drops.
-    if (this.#isConfigGateHeld()) {
+    //
+    // One at a time: opencode lists a session's messages in the order it
+    // writes them, and `promptAsync` answers before the message is written
+    // (it forks the prompt and returns), so two held sends asked for at once
+    // were stored the wrong way round. The next goes when opencode says the
+    // last one is a message (`message.updated`), or that it failed.
+    if (this.#draining || this.#isConfigGateHeld()) {
+      return;
+    }
+    const next = this.#queue.shift();
+    if (!next) {
       return;
     }
     this.#ctx.busy(true);
-    for (const { parts, messageID, model } of this.#queue.splice(0)) {
-      this.#prompt(parts, messageID, model);
+    this.#draining = next.messageID;
+    this.#prompt(next.parts, next.messageID, next.model);
+  }
+
+  /** The sends waiting on an answer, read. */
+  #releaseReads(): void {
+    if (this.#readAfter.length === 0) {
+      return;
+    }
+    this.#ctx.frame({
+      type: "system",
+      subtype: MESSAGES_READ,
+      read: this.#readAfter.splice(0),
+      session_id: this.sessionId ?? undefined,
+    });
+  }
+
+  /** A held send is in, one way or the other: the next may go. */
+  #drained(messageID: string): void {
+    if (messageID === this.#draining) {
+      this.#draining = undefined;
+      this.#drainQueue();
     }
   }
 
@@ -4377,7 +4476,7 @@ export function toTranscript(
       );
       if (content) {
         // A sent message is keyed back to its send's uuid by the hub, which
-        // was told this message id when opencode read it (`storedAs`).
+        // was told this message id when opencode wrote it (`storedAs`).
         entries.push({
           type: "user",
           uuid: info.id,

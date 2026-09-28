@@ -4944,8 +4944,16 @@ export const createServer = ({
           }
           // What it was sent and has not read yet, newest of all: a reload
           // draws these where the live stream drew them, under the same ids.
-          if (!query.before && row) {
-            transcript.push(...(pendingSends.get(row.id)?.values() ?? []));
+          // A harness can store a send before it gives it to the model
+          // (opencode writes one at once); until the session reads it, it is
+          // drawn once, as the held send it still is.
+          const unread = row && pendingSends.get(row.id);
+          if (!query.before && unread) {
+            transcript = transcript.filter((entry) => {
+              const stored = entry as SessionMessage;
+              return !unread.has(stored.sourceUuid ?? stored.uuid);
+            });
+            transcript.push(...unread.values());
           }
 
           // URI-encoded because a header is Latin-1 on the wire and a folder
