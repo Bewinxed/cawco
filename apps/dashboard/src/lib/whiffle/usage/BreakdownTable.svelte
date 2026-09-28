@@ -435,10 +435,15 @@
     inset-block-start: 0;
     inset-inline-start: 0;
   }
-  /* The sort arrow: every sortable head holds its place, so a new sort
-     column widens nothing; it fades in on the column sorted by, points
-     down for descending and turns to point up. */
+  /* The sort arrow stands in the head's padding just before its label,
+     out of the flow, so no head changes width when the sort moves; it
+     fades in on the column sorted by, points down for descending and
+     turns to point up. */
   .arrow {
+    position: absolute;
+    inset-inline-end: calc(100% + 2px);
+    top: 50%;
+    translate: 0 -50%;
     display: inline-flex;
     opacity: 0;
     @media (prefers-reduced-motion: no-preference) {
@@ -492,6 +497,7 @@
       }
     }
     .q-break .sortbtn {
+      position: relative;
       display: inline-flex;
       align-items: center;
       gap: var(--space-1);

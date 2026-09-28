@@ -7,9 +7,9 @@
   import * as Card from "$lib/components/ui/card";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Table from "$lib/components/ui/table";
+  import { IconRefresh } from "$lib/icons";
   import { whiffle } from "$lib/whiffle/client.svelte";
   import HarnessGlyph from "$lib/whiffle/HarnessGlyph.svelte";
-  import { IconRefresh } from "$lib/icons";
   import { conversationHref } from "$lib/whiffle/links";
   import StatTile from "$lib/whiffle/StatTile.svelte";
   import { compactNumber, type UsageSummaryRow, usd } from "$lib/whiffle/usage";
@@ -325,7 +325,9 @@
               <span class="hero-amount {spendBand}"
                 ><Figure text={usd(spendUsed)} /></span
               >
-              <span class="hero-limit"><Figure text="/ {usd(spendLimit)}" /></span>
+              <span class="hero-limit"
+                ><Figure text="/ {usd(spendLimit)}" /></span
+              >
             </div>
             <span
               aria-label="Spend against threshold"
@@ -570,7 +572,9 @@
       <Card.Content class="q-body">
         {#if openCodeTotals}
           <div class="lede">
-            <span class="big"><Figure text={usd(openCodeTotals.costUsd)} /></span>
+            <span class="big"
+              ><Figure text={usd(openCodeTotals.costUsd)} /></span
+            >
             <span class="note">
               {compactNumber(openCodeTotals.input)}
               in · {compactNumber(openCodeTotals.output)} out ·
@@ -672,7 +676,9 @@
                     >
                     <Table.Cell class="pace num" data-label="Pace">
                       {#if block.isActive && block.burnRate}
-                        <Figure text={paceOf(block, block.burnRate.costPerHour)} />
+                        <Figure
+                          text={paceOf(block, block.burnRate.costPerHour)}
+                        />
                       {/if}
                     </Table.Cell>
                     <Table.Cell class="mono muted models" data-label="Models"
