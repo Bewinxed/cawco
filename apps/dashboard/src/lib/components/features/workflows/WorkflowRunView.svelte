@@ -7,10 +7,16 @@
   } from "$lib/components/ui/button/pending-content.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
   import * as Dialog from "$lib/components/ui/dialog";
+  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   import { Skeleton } from "$lib/components/ui/skeleton";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
+  import * as Tabs from "$lib/components/ui/tabs";
   import { whiffle } from "$lib/whiffle/client.svelte";
   import { confirm } from "$lib/whiffle/confirm.svelte";
   import { message } from "$lib/whiffle/delegate-types";
+  import { crossIn, crossOut } from "$lib/whiffle/motion/curves.svelte";
+  import { unfold } from "$lib/whiffle/motion/fold.svelte";
+  import { reflow } from "$lib/whiffle/motion/rows.svelte";
   import type { UsageSummary } from "$lib/whiffle/usage";
   import {
     refreshWorkflowEffects,
@@ -22,6 +28,7 @@
     cancelWorkflowRun,
     rerunWorkflow,
   } from "$lib/whiffle/workflows";
+  import { followTail } from "./follow-tail";
   import {
     type JournalCheckpoint,
     journalCheckpoints,
@@ -29,6 +36,7 @@
     journalLog,
     journalStateTouches,
   } from "./journal-graph";
+  import { paneSlide, towards } from "./pane-slide";
   import WorkflowCanvas from "./WorkflowCanvas.svelte";
   import WorkflowStatus from "./WorkflowStatus.svelte";
   import { duration } from "./workflow-ui";
@@ -40,6 +48,13 @@
   let selectedEnd = $state(false);
   let stepsOpen = $state(true);
   let tab = $state("steps");
+  const TABS = ["steps", "canvas"] as const;
+  /** Which way the last tab change went, for the panes' slide. */
+  let dir = $state(1);
+  function show(next: string) {
+    dir = towards(TABS, tab, next);
+    tab = next;
+  }
   let errorMessage = $state("");
   /** The action whose request is out ("rerun", "answer:<label>", "cancel"). */
   let acting = $state<string | null>(null);
@@ -437,11 +452,13 @@
       </div>
     </header>
     {#if logLines.length}
-      <details class="log" bind:open={logOpen}>
+      <details class="log" bind:open={logOpen} in:unfold out:unfold>
         <summary>Log · {logLines.length}</summary>
-        <ol>
+        <!-- A line arrives the house way (motion/rows), and the log keeps
+             the newest in view only while the reader is at its end. -->
+        <ol {@attach reflow()} {@attach followTail()}>
           {#each logLines as line (line.seq)}
-            <li>
+            <li data-flip>
               <time>{new Date(line.at).toLocaleTimeString()}</time
               ><span>{line.text}</span>
             </li>
@@ -454,7 +471,9 @@
     {/if}
     {#if run.status === 'waiting' && run.ask}
       {@const ask = run.ask}
-      <section class="answer wf-stack">
+      <!-- The question folds open; answered, the picked option pends until
+           the hub moves the run on, and then the block folds away. -->
+      <section class="answer wf-stack" in:unfold out:unfold>
         <h2>Answer · {ask.question}</h2>
         <div class="options">
           {#each ask.options as option (option.label)}
@@ -506,95 +525,120 @@
         {/if}
       </section>
     {/if}
+    {#snippet stepsList()}
+      <!-- The kit pill glides to the chosen step; rows that arrive as the
+           run moves (steps, checkpoints) come in the house way (motion/rows). -->
+      <aside
+        class="steps"
+        class:collapsed={!(stepsOpen || narrow.current)}
+        {@attach highlight({ rows: ".step-row", selected: '[aria-current="true"]' })}
+        {@attach reflow()}
+      >
+        {#if !narrow.current}
+          <button
+            aria-expanded={stepsOpen}
+            class="wf-btn"
+            onclick={() => { stepsOpen = !stepsOpen; }}
+            type="button"
+          >
+            Steps
+          </button>
+        {/if}
+        {#if stepsOpen || narrow.current}
+          {#each timeline as row (row.key)}
+            {#if row.step}
+              {@const entry = row.step}
+              <button
+                aria-current={entry.id === selected ? 'true' : undefined}
+                class="step-row pressable"
+                data-flip
+                onclick={() => { selected = entry.id; }}
+                type="button"
+              >
+                <span
+                  >{titleOf(entry.nodeId)}
+                  {entry.mapIndex === null ? '' : ` [${entry.mapIndex}]`}</span
+                ><WorkflowStatus status={entry.status} />
+                <small>{duration(entry.startedAt, entry.endedAt, now)}</small>
+              </button>
+            {:else if row.mark}
+              <p class="checkpoint-row" data-flip>
+                <span aria-hidden="true" class="mark"></span
+                ><span>{row.mark.label}</span
+                ><small>{new Date(row.mark.at).toLocaleTimeString()}</small>
+              </p>
+            {/if}
+          {/each}
+        {/if}
+      </aside>
+    {/snippet}
+    {#snippet canvasPane(shown: NonNullable<typeof run>)}
+      <div class="graph">
+        {#if Object.keys(shown.edges).length > 1}
+          <label class="scope"
+            >Scope<select bind:value={scope}>
+              {#each Object.keys(shown.edges) as key (key)}
+                <option>{key}</option>
+              {/each}
+            </select></label
+          >
+        {/if}
+        <WorkflowCanvas
+          checkpoints={pinned}
+          {costs}
+          executionScope={scope}
+          graph={graph ?? { nodes: [], edges: [] }}
+          {journal}
+          {now}
+          onselect={(id) => { selected = scopedSteps.find((entry) => entry.nodeId === id)?.id; }}
+          readonly
+          run={shown}
+          selection={step?.nodeId}
+          steps={scopedSteps}
+        />
+      </div>
+    {/snippet}
     {#if narrow.current}
-      <div class="wf-row tabs">
-        <button
-          aria-pressed={tab === 'steps'}
-          class="wf-btn"
-          onclick={() => { tab = 'steps'; }}
-          type="button"
-        >
-          Steps
-        </button><button
-          aria-pressed={tab === 'canvas'}
-          class="wf-btn"
-          onclick={() => { tab = 'canvas'; }}
-          type="button"
-        >
-          Canvas
-        </button>
+      <div class="tabs">
+        <Tabs.Root onValueChange={show} value={tab}>
+          <Tabs.List aria-label="Workflow run views">
+            <Tabs.Trigger value="steps">Steps</Tabs.Trigger>
+            <Tabs.Trigger value="canvas">Canvas</Tabs.Trigger>
+          </Tabs.List>
+        </Tabs.Root>
+      </div>
+      <!-- One pane gives way to the other in one cell, sliding across in
+           tab order (pane-slide). -->
+      <div class="run-body panes">
+        {#key tab}
+          <div class="pane" in:paneSlide={{ dir }} out:paneSlide={{ dir }}>
+            {#if tab === 'steps'}
+              {@render stepsList()}
+            {:else if graph || journal}
+              {@render canvasPane(run)}
+            {/if}
+          </div>
+        {/key}
+      </div>
+    {:else}
+      <div class="run-body">
+        {@render stepsList()}
+        {#if graph || journal}
+          {@render canvasPane(run)}
+        {/if}
+        {#if step}
+          <!-- One step's detail gives way to the next in place: the two
+               cross-fade, the one leaving taken out of the flow. -->
+          <aside class="detail">
+            {#key step.id}
+              <div class="detail-view" in:crossIn out:crossOut>
+                {@render drawer()}
+              </div>
+            {/key}
+          </aside>
+        {/if}
       </div>
     {/if}
-    <div class="run-body">
-      {#if !narrow.current || tab === 'steps'}
-        <aside class="steps" class:collapsed={!(stepsOpen || narrow.current)}>
-          {#if !narrow.current}
-            <button
-              aria-expanded={stepsOpen}
-              class="wf-btn"
-              onclick={() => { stepsOpen = !stepsOpen; }}
-              type="button"
-            >
-              Steps
-            </button>
-          {/if}
-          {#if stepsOpen || narrow.current}
-            {#each timeline as row (row.key)}
-              {#if row.step}
-                {@const entry = row.step}
-                <button
-                  class="step-row pressable"
-                  onclick={() => { selected = entry.id; }}
-                  type="button"
-                  class:chosen={entry.id === selected}
-                >
-                  <span
-                    >{titleOf(entry.nodeId)}
-                    {entry.mapIndex === null ? '' : ` [${entry.mapIndex}]`}</span
-                  ><WorkflowStatus status={entry.status} />
-                  <small>{duration(entry.startedAt, entry.endedAt, now)}</small>
-                </button>
-              {:else if row.mark}
-                <p class="checkpoint-row">
-                  <span aria-hidden="true" class="mark"></span
-                  ><span>{row.mark.label}</span
-                  ><small>{new Date(row.mark.at).toLocaleTimeString()}</small>
-                </p>
-              {/if}
-            {/each}
-          {/if}
-        </aside>
-      {/if}
-      {#if (graph || journal) && (!narrow.current || tab === 'canvas')}
-        <div class="graph">
-          {#if Object.keys(run.edges).length > 1}
-            <label class="scope"
-              >Scope<select bind:value={scope}>
-                {#each Object.keys(run.edges) as key (key)}
-                  <option>{key}</option>
-                {/each}
-              </select></label
-            >
-          {/if}
-          <WorkflowCanvas
-            checkpoints={pinned}
-            {costs}
-            executionScope={scope}
-            graph={graph ?? { nodes: [], edges: [] }}
-            {journal}
-            {now}
-            onselect={(id) => { selected = scopedSteps.find((entry) => entry.nodeId === id)?.id; }}
-            readonly
-            {run}
-            selection={step?.nodeId}
-            steps={scopedSteps}
-          />
-        </div>
-      {/if}
-      {#if step && !narrow.current}
-        <aside class="detail">{@render drawer()}</aside>
-      {/if}
-    </div>
   {/if}
 </div>
 {#if narrow.current && step}
@@ -666,10 +710,6 @@
     font-weight: var(--weight-body);
     font-variant-numeric: tabular-nums;
   }
-  .step-row:hover,
-  .chosen {
-    background: var(--surface-hover);
-  }
   /* A checkpoint is a marker in the schedule, not a step: no chip, no target. */
   .checkpoint-row {
     display: grid;
@@ -720,11 +760,14 @@
     font-weight: var(--weight-strong);
     color: var(--ink-muted);
   }
+  /* Open, the log is one fixed height: lines arriving fill and scroll it,
+     and never push the run below it down. */
   .log ol {
     display: grid;
+    align-content: start;
     gap: var(--space-2);
     padding-top: var(--space-2);
-    max-height: 30dvh;
+    height: 30dvh;
     overflow-y: auto;
   }
   .log li {
@@ -752,10 +795,23 @@
     max-width: 180px;
   }
   .detail {
+    position: relative;
     width: 340px;
     flex-shrink: 0;
     overflow-y: auto;
     border-left: 1px solid var(--border-hairline);
+  }
+  .panes {
+    display: grid;
+    grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+    overflow: hidden;
+  }
+  .pane {
+    grid-area: 1 / 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
   }
   .drawer {
     padding: var(--space-4);
