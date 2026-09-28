@@ -72,6 +72,7 @@
     setPeeked,
     whiffle,
   } from "./client.svelte";
+  import ErrorText from "./ErrorText.svelte";
   import HarnessGlyph from "./HarnessGlyph.svelte";
   import { conversationHref, sessionTitle } from "./links";
   import { machineLabel } from "./machine";
@@ -955,14 +956,17 @@
                             ><span class="nm-title">{row.title}</span></a
                           >
                           {#if resumeFailed[row.key]}
-                            <span
-                              class="nm-failed"
-                              data-flip="pop"
-                              role="alert"
-                              title={resumeFailed[row.key]}
-                              ><IconWarningTriangle />Couldn't resume:
-                              {resumeFailed[row.key]}</span
-                            >
+                            <span class="nm-failed" data-flip="pop">
+                              <ErrorText
+                                message={resumeFailed[row.key]}
+                                title="Couldn't resume {row.title}"
+                                ><IconWarningTriangle />
+                                <span class="truncate"
+                                  >Couldn't resume:
+                                  {resumeFailed[row.key]}</span
+                                ></ErrorText
+                              >
+                            </span>
                           {/if}
                         </div>
                       </Table.Cell>
@@ -1603,18 +1607,18 @@
   .nm a:hover {
     text-decoration: underline;
   }
-  /* A resume that failed, said on its row. */
+  /* A resume that failed, said on its row; the line opens the whole error. */
   .nm-failed {
-    display: inline-flex;
+    display: flex;
     flex: 0 1 auto;
-    align-items: center;
-    gap: var(--space-1);
     min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
     font: var(--type-meta);
     color: var(--destructive);
+  }
+  .nm-failed :global(button) {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
   }
   /* biome-ignore lint/style/noDescendingSpecificity: never matches the same element as .search .lead :global(svg) — different subtree */
   .nm-failed :global(svg) {

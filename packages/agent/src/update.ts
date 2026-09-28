@@ -26,11 +26,12 @@ import { toolEnv } from "./tools";
 export interface UpdateOptions {
   /**
    * Pull from `origin/<branch>` by name rather than from whatever upstream the
-   * checkout has configured. Set by the deployment poller (C8/G3): the deploy
-   * target is pinned to `origin/main`, and a fast-forward onto a branch nobody
-   * named is how a clone quietly starts following something else.
+   * checkout has configured. The deployment poller and the manual
+   * `updateWhiffle` control both pass {@link DEPLOY_BRANCH} (C8/G3): a
+   * fast-forward onto a branch nobody named is how a clone quietly starts
+   * following something else.
    */
-  branch?: string;
+  branch: string;
   /**
    * How many turns this daemon is carrying. Filled in by the supervisor, which
    * is the only thing that knows — never read off the wire.
@@ -64,6 +65,8 @@ const SERVICE_TIMEOUT_MS = 30_000;
 export interface Ran {
   code: number;
   ok: boolean;
+  /** Everything it wrote, stderr then stdout, uncut: what a failure reports. */
+  output: string;
   /** The tail of what it said: what it printed, or what it failed with. */
   said: string;
 }
@@ -91,12 +94,14 @@ export const run = async (
   ]);
   const code = await child.exited;
   if (child.signalCode) {
-    return { ok: false, code, said: `timed out after ${timeoutMs / 1000}s` };
+    const timedOut = `timed out after ${timeoutMs / 1000}s`;
+    return { ok: false, code, output: timedOut, said: timedOut };
   }
   const ok = code === 0;
   return {
     ok,
     code,
+    output: [stderr.trim(), stdout.trim()].filter(Boolean).join("\n"),
     said: ok ? tail(stdout) || tail(stderr) : tail(stderr) || tail(stdout),
   };
 };
@@ -104,8 +109,9 @@ export const run = async (
 const git = (args: string[], cwd?: string): Promise<Ran> =>
   run(["git", ...args], GIT_TIMEOUT_MS, cwd);
 
-const failed = (step: string, ran: Ran): Error =>
-  new Error(`${step} failed: ${ran.said || `exited ${ran.code}`}`);
+/** A failed step, carrying every line it wrote — never a tail of it. */
+export const failed = (step: string, ran: Ran): Error =>
+  new Error(`${step} failed:\n${ran.output || `exited ${ran.code}`}`);
 
 /** The three services `whiffle service install` puts on a machine, in start order. */
 export type Service = "hub" | "dashboard" | "agent";
@@ -384,26 +390,46 @@ const buildsDashboard = async (root: string): Promise<boolean> =>
  * to look at, because the commits it has that origin does not may be the only
  * copy in existence.
  *
- * When the caller names a branch — the poller always does — the remote and ref
- * are given explicitly, so the fast-forward can only ever be onto
- * `origin/<branch>` rather than onto whatever upstream the checkout has picked
- * up since.
+ * The remote and ref are always given explicitly, so the fast-forward can only
+ * ever be onto `origin/<branch>` rather than onto whatever upstream the
+ * checkout has picked up since.
  */
-export const pullArgs = (branch?: string): string[] =>
-  branch ? ["pull", "--ff-only", "origin", branch] : ["pull", "--ff-only"];
+export const pullArgs = (branch: string): string[] => [
+  "pull",
+  "--ff-only",
+  "origin",
+  branch,
+];
+
+/**
+ * The tail of the update queue. Git refuses two pulls in one checkout at once
+ * ("fatal: Cannot fast-forward…"), and the deployment poller and the manual
+ * `updateWhiffle` control both pull, on their own clocks. Every update in this
+ * process runs after the one before it has finished; one that queued behind a
+ * pull finds nothing left to fetch and reports the commit it is already on.
+ */
+let updateQueue: Promise<unknown> = Promise.resolve();
 
 /**
  * Everything the `updateWhiffle` control does, in the order it has to happen.
  * Every field of the report is what actually took place: a step that was
  * asked for and did not run says why in `skipped` rather than reading as done.
  */
-export const updateCheckout = async ({
+export const updateCheckout = (
+  options: UpdateOptions
+): Promise<UpdateReport> => {
+  const update = updateQueue.then(() => pullAndRestart(options));
+  updateQueue = update.catch(() => undefined);
+  return update;
+};
+
+const pullAndRestart = async ({
   restartAgent,
   force,
   busy = 0,
   root = REPO_ROOT,
   branch,
-}: UpdateOptions = {}): Promise<UpdateReport> => {
+}: UpdateOptions): Promise<UpdateReport> => {
   const head = await git(["rev-parse", "--short", "HEAD"], root);
   if (!head.ok) {
     throw new Error(

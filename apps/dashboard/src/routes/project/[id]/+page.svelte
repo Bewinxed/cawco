@@ -34,6 +34,7 @@
     whiffle,
   } from "$lib/whiffle/client.svelte";
   import { type Doc, readDocs } from "$lib/whiffle/docs";
+  import ErrorText from "$lib/whiffle/ErrorText.svelte";
   import LiveSessionRow from "$lib/whiffle/LiveSessionRow.svelte";
   import { conversationHref } from "$lib/whiffle/links";
   import MachineInventory from "$lib/whiffle/MachineInventory.svelte";
@@ -747,9 +748,11 @@
                   <Skeleton class="h-3.5 w-32" />
                 {/if}
                 {#if docError}
-                  <span class="truncate text-label text-error" role="alert"
-                    >{docError}</span
-                  >
+                  <ErrorText
+                    class="text-label text-error"
+                    message={docError}
+                    title="Error with {open?.name ?? 'the document'}"
+                  />
                 {/if}
                 {#if docs === null && !docsError}
                   <Skeleton class="ml-auto h-[30px] w-[50px] shrink-0" />
@@ -905,9 +908,11 @@
         >
           {#snippet meta()}
             {#if claudeError}
-              <span class="min-w-0 truncate text-label text-error" role="alert"
-                >{claudeError}</span
-              >
+              <ErrorText
+                class="text-label text-error"
+                message={claudeError}
+                title="Error with CLAUDE.md"
+              />
             {/if}
           {/snippet}
           {#snippet footer()}

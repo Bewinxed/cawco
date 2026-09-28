@@ -52,6 +52,7 @@ import {
   withWorktreeLine,
 } from "@whiffle/core";
 import { Effect } from "effect";
+import { DEPLOY_BRANCH } from "./deploy";
 import { expandHome, runFs } from "./fs";
 import type { Harness, HarnessContext, HarnessSession } from "./harness";
 import { harnesses, harness as harnessOf } from "./harnesses";
@@ -416,7 +417,11 @@ export class SessionSupervisor {
       instances: this.busyInstanceIds,
     }),
     [UPDATE_WHIFFLE]: (options) =>
-      updateCheckout({ ...(options as UpdateOptions), busy: this.busyCount }),
+      updateCheckout({
+        ...(options as Pick<UpdateOptions, "force" | "restartAgent">),
+        branch: DEPLOY_BRANCH,
+        busy: this.busyCount,
+      }),
   };
 
   /** Register a machine-scoped control method, callable without an instanceId. */

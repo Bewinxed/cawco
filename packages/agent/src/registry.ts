@@ -19,7 +19,7 @@
  */
 import type { UpdateReport } from "@whiffle/core";
 import { readEnv, WHIFFLE_ENV } from "@whiffle/core";
-import { restartStack, run, SERVICES } from "./update";
+import { failed, restartStack, run, SERVICES } from "./update";
 
 /**
  * What a user installs. One package, so a fleet has one version to compare.
@@ -151,9 +151,7 @@ export const registryUpdate = async ({
     INSTALL_TIMEOUT_MS
   );
   if (!install.ok) {
-    throw new Error(
-      `installing ${spec} failed: ${install.said || `exit ${install.code}`}`
-    );
+    throw failed(`installing ${spec}`, install);
   }
 
   const after = await latestVersion();

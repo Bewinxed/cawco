@@ -35,8 +35,15 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as ContextMenu from "$lib/components/ui/context-menu";
   import { UPDATE_TIMEOUT_MS } from "$lib/config";
-  import { IconDownload, IconKey, IconPlus, IconRefresh } from "$lib/icons";
+  import {
+    IconAlert,
+    IconDownload,
+    IconKey,
+    IconPlus,
+    IconRefresh,
+  } from "$lib/icons";
   import { loadCatalog, type Machine, machineControl } from "./client.svelte";
+  import ErrorDialog from "./ErrorDialog.svelte";
   import MachineLogin from "./MachineLogin.svelte";
   import UnlockKeychain from "./UnlockKeychain.svelte";
 
@@ -52,8 +59,9 @@
   const stuck = $derived(machine.auth === "unreadable-credentials");
   let unlocking = $state(false);
   let loggingIn = $state(false);
-  /** Why the last update failed, said on its menu item. */
+  /** Why the last update failed, whole: its menu item opens it in a dialog. */
   let updateFailed = $state<string | null>(null);
+  let readingFailure = $state(false);
 
   /** What an {@link UpdateReport} amounts to, in one line. */
   function said(report: UpdateReport): string {
@@ -78,7 +86,8 @@
    * it moved nothing. The agent is restarted too, but only once it is idle:
    * sessions already running keep the build they launched with either way.
    *
-   * The item spins while it runs and says a failure on itself; the machine's
+   * The item spins while it runs; a failure adds an "Update failed" item
+   * that opens the whole error. The machine's
    * build chip on the board reads "Updating…" from the start until the
    * restarted agent reports its new build, and carries what the update did.
    */
@@ -151,15 +160,18 @@
       label="Update this machine"
       pendingLabel="Updating…"
       run={updateMachine}
-    >
-      {#if updateFailed}
-        <span
-          class="ml-auto max-w-56 truncate text-meta text-destructive"
-          title={updateFailed}
-          >{updateFailed}</span
-        >
-      {/if}
-    </ContextMenu.PendingItem>
+    />
+    {#if updateFailed}
+      <ContextMenu.Item
+        onSelect={() => {
+          readingFailure = true;
+        }}
+        variant="destructive"
+      >
+        <IconAlert />
+        Update failed
+      </ContextMenu.Item>
+    {/if}
 
     <ContextMenu.Separator />
 
@@ -173,6 +185,13 @@
 </ContextMenu.Root>
 
 <MachineLogin {machine} bind:open={loggingIn} />
+{#if updateFailed}
+  <ErrorDialog
+    message={updateFailed}
+    title="Update failed on {machine.hostname}"
+    bind:open={readingFailure}
+  />
+{/if}
 {#if isMac}
   <UnlockKeychain {machine} bind:open={unlocking} />
 {/if}
