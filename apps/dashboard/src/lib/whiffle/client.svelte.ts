@@ -584,6 +584,7 @@ function teardown(): void {
   // design, so it is the one thing a teardown has to cancel by hand — an HMR
   // reload that left it armed would fire a sweep into a module nobody renders.
   disarmCommandSweep(streamState, streamHost);
+  cancelFleetRead();
   if (globalThis.__whiffleReconnectTimeout) {
     clearTimeout(globalThis.__whiffleReconnectTimeout);
     globalThis.__whiffleReconnectTimeout = null;
@@ -1033,8 +1034,11 @@ function usageLimitReadings(
   return next;
 }
 
-/** Registry reads: on connect and again after every reconnect. */
-async function refresh(): Promise<void> {
+/**
+ * Registry reads: on connect and again after every reconnect. True once the
+ * three reads the board waits on (machines, sessions, projects) all landed.
+ */
+async function refresh(): Promise<boolean> {
   // Registry hydration also recovers workflow transitions missed while disconnected.
   refreshWorkflows();
   const [machines, rows, projects, pending, handoffs, usage] =
@@ -1074,7 +1078,51 @@ async function refresh(): Promise<void> {
   }
   if (machines && rows && projects) {
     state.fleetRead = true;
+    return true;
   }
+  return false;
+}
+
+/** The pending re-read of `readFleet`; one chain per socket at most. */
+let fleetRetry: ReturnType<typeof setTimeout> | undefined;
+/** Bumped by every read and every cancel, so a read still in flight from an
+ * older socket cannot schedule a second chain when it lands. */
+let fleetChain = 0;
+
+/** A socket that closed, or one about to be replaced, takes its re-read with it. */
+function cancelFleetRead(): void {
+  clearTimeout(fleetRetry);
+  fleetRetry = undefined;
+  fleetChain += 1;
+}
+
+/**
+ * The connect-time read. A deploy restarts the hub and the dashboard together,
+ * and the socket can reopen through the dashboard before the hub answers REST:
+ * those reads fail, and nothing else would read again until the next reconnect.
+ * So while the socket stays open it reads again — 1s, 2s, 4s, 8s, then every
+ * 10s — until the board's reads land, and only then asks for the catalogs.
+ */
+function readFleet(delay = 1000): void {
+  cancelFleetRead();
+  const chain = fleetChain;
+  // biome-ignore lint/complexity/noVoid: fire-and-forget — the socket is already marked connected, the fleet state fills in when it lands
+  void refresh().then((read) => {
+    if (chain !== fleetChain) {
+      return;
+    }
+    if (read) {
+      refreshCatalogs();
+      return;
+    }
+    if (globalThis.__whiffleSocket?.readyState !== WebSocket.OPEN) {
+      return;
+    }
+    fleetRetry = setTimeout(
+      () => readFleet(Math.min(delay * 2, 10_000)),
+      delay
+    );
+  });
 }
 
 /** Every online machine's stored sessions — the sidebar's contents on arrival. */
@@ -2816,8 +2864,7 @@ function connect(): void {
     outageTimer = undefined;
     state.outage = false;
     globalThis.__whiffleReconnectAttempts = 0;
-    // biome-ignore lint/complexity/noVoid: fire-and-forget — the socket is already marked connected, the fleet state fills in when it lands
-    void refresh().then(refreshCatalogs);
+    readFleet();
     // Re-state the subscription on every (re)connect — the hub's registry forgot
     // this dashboard the moment the socket dropped.
     lastSubscriptionKey = "";
@@ -2862,6 +2909,7 @@ function bind(socket: WebSocket): void {
     state.status = "disconnected";
     // A socket that closed is an attempt that is over, one way or the other.
     state.failed = true;
+    cancelFleetRead();
     if (!(state.outage || outageTimer)) {
       outageTimer = setTimeout(() => {
         outageTimer = undefined;
@@ -2906,8 +2954,7 @@ export function ensureConnected(): void {
     if (socket.readyState === WebSocket.OPEN) {
       state.status = "connected";
       state.retryAt = null;
-      // biome-ignore lint/complexity/noVoid: fire-and-forget — the socket is already marked connected, the fleet state fills in when it lands
-      void refresh().then(refreshCatalogs);
+      readFleet();
       lastSubscriptionKey = "";
       syncSubscriptions();
     } else {
