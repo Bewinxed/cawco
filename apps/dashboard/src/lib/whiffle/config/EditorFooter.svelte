@@ -1,8 +1,26 @@
+<script lang="ts" module>
+  import { dur } from "$lib/whiffle/motion/curves.svelte";
+
+  /**
+   * Resolves once a save that just ended well has been shown as saved: an
+   * editor that moves on after saving (a new row, to its own editor) waits
+   * for this, so the check and "Saved" are seen where the press was.
+   */
+  export const savedShown = (): Promise<void> =>
+    new Promise((resolve) => {
+      setTimeout(resolve, dur("--dur-hold"));
+    });
+</script>
+
 <script lang="ts">
   /**
    * The editor's commit row. It sits outside the scrolling body, on the
    * recess, so no field ever scrolls under it; under 640px it pins to the
    * bottom edge and Delete moves to the header's ⋯ menu.
+   *
+   * Save shows its work where it was pressed: the kit Button spins while
+   * the save runs and draws a check for --dur-hold when it ends well, and
+   * for that same hold the label says "Saved".
    */
   import { Button } from "$lib/components/ui/button";
   import { IconTrash } from "$lib/icons";
@@ -31,6 +49,25 @@
     ondelete?: () => void;
     oncancel: () => void;
   } = $props();
+
+  /** The save just ended well: the label says so for as long as the check stands. */
+  let saved = $state(false);
+  let wasSaving = false;
+  let savedTimer: ReturnType<typeof setTimeout> | undefined;
+  $effect.pre(() => {
+    const now = saving;
+    if (now) {
+      clearTimeout(savedTimer);
+      saved = false;
+    } else if (wasSaving && !failed) {
+      saved = true;
+      savedTimer = setTimeout(() => {
+        saved = false;
+      }, dur("--dur-hold"));
+    }
+    wasSaving = now;
+  });
+  $effect(() => () => clearTimeout(savedTimer));
 </script>
 
 <footer class="footer">
@@ -64,7 +101,7 @@
       class="footer-btn save"
       disabled={down !== null || deleting || !canSave}
       {failed}
-      label={saveLabel}
+      label={saved ? 'Saved' : saveLabel}
       pending={saving}
       pendingLabel="Saving…"
       title={down ?? undefined}

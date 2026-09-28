@@ -1,6 +1,15 @@
 <script lang="ts">
-  /** A labelled control: the label above, then the hint or the problem under it. */
+  /**
+   * A labelled control: the label above, then one line under it that says
+   * the hint, a caution, or the problem. The three share that line's box and
+   * cross-fade in it over --dur-control as they take turns, its height
+   * following the words; the line folds open and shut when there is
+   * something, or nothing, to say.
+   */
   import type { Snippet } from "svelte";
+  import { crossIn, crossOut } from "$lib/whiffle/motion/curves.svelte";
+  import { unfold } from "$lib/whiffle/motion/fold.svelte";
+  import { morph } from "$lib/whiffle/motion/morph.svelte";
 
   let {
     id,
@@ -24,14 +33,18 @@
 <div class="field">
   <label class="label" for={id}>{label}</label>
   {@render children()}
-  {#if problem}
-    <span class="error">{problem}</span>
-  {:else if warn}
-    <span class="warn">{@render warn()}</span>
-  {:else if typeof hint === 'string'}
-    <span class="hint">{hint}</span>
-  {:else if hint}
-    <span class="hint">{@render hint()}</span>
+  {#if problem || warn || hint}
+    <div class="line" in:unfold out:unfold {@attach morph()}>
+      {#if problem}
+        <span class="error" in:crossIn out:crossOut>{problem}</span>
+      {:else if warn}
+        <span class="warn" in:crossIn out:crossOut>{@render warn()}</span>
+      {:else if typeof hint === 'string'}
+        <span class="hint" in:crossIn out:crossOut>{hint}</span>
+      {:else if hint}
+        <span class="hint" in:crossIn out:crossOut>{@render hint()}</span>
+      {/if}
+    </div>
   {/if}
 </div>
 
@@ -45,6 +58,13 @@
   .label {
     font: var(--type-meta);
     color: var(--ink-muted);
+  }
+  /* The one box the messages take turns in: the one leaving is pinned in
+     it (crossOut) while the one arriving sets its height. */
+  .line {
+    position: relative;
+    display: flex;
+    flex-direction: column;
   }
   .hint,
   .error,
