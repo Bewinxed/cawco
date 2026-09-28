@@ -2,8 +2,6 @@
 // See https://svelte.dev/docs/kit/types#app.d.ts
 // for information about these interfaces
 declare global {
-  /** The commit this build was made from — `define` in vite.config.ts. */
-  const __WHIFFLE_COMMIT__: string;
   interface Window {
     /** Replays the button clicks app.html held before hydration. */
     releaseHeldTaps: () => void;

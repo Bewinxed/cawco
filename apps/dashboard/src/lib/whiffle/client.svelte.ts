@@ -1414,7 +1414,6 @@ function handleFrame(frame: FramePayload): void {
     // unknown rather than as current.
     state.hubBuild =
       (frame as { hubBuild?: BuildInfo }).hubBuild ?? state.hubBuild;
-    checkDeployToast(state.hubBuild);
     return;
   }
 
@@ -2869,6 +2868,8 @@ function connect(): void {
     // this dashboard the moment the socket dropped.
     lastSubscriptionKey = "";
     syncSubscriptions();
+    // biome-ignore lint/complexity/noVoid: fire-and-forget — the toast shows itself when the served build is newer
+    void checkDeployToast();
   };
 
   bind(socket);

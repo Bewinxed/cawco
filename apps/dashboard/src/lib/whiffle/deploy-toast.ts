@@ -1,30 +1,30 @@
 /**
- * Toasts when the hub runs a different build from this page.
+ * Toasts when the dashboard now serving this tab is a newer build than the
+ * tab itself.
  *
- * The hub's first frame on every connection is an `instances` frame carrying
- * its {@link BuildInfo}, and every later board frame repeats it. This page's
- * own commit is baked in at build time (`__WHIFFLE_COMMIT__`, vite.config.ts),
- * so a tab that first connects to an already-newer hub is told on that first
- * frame, and a tab left open across a deploy is told on the reconnect. One
- * toast per new commit, never per reconnect.
+ * The comparison is SvelteKit's own: the build bakes its version (the commit,
+ * `kit.version.name` in svelte.config.js) into the page and serves the same
+ * string as `_app/version.json`, and `updated.check()` fetches that file and
+ * compares. It used to compare the page with the hub's commit instead, but the
+ * deploy poller restarts only the services a change touches: after a
+ * dashboard-only deploy the hub keeps running the older commit, so every tab,
+ * even one loaded a second ago, was told to reload, and the toast (it never
+ * times out) sat over whatever the board had in its bottom-right corner.
+ *
+ * It runs on every socket open. The socket is relayed through the dashboard's
+ * own server (serve.js), so a dashboard deploy always drops it and the
+ * reconnect is the moment to ask. One toast per tab.
  */
-import type { BuildInfo } from "@whiffle/core";
 import { toast } from "svelte-sonner";
+import { updated } from "$app/state";
 
-/** The last commit we toasted for, so the same deploy never fires twice. */
-let toastedCommit: string | undefined;
+let toasted = false;
 
-/**
- * Called on every board frame with the hub's build. Toasts exactly once per
- * hub commit that differs from the one this page was built from.
- */
-export function checkDeployToast(hubBuild: BuildInfo | undefined): void {
-  const commit = hubBuild?.commit;
-  if (!commit || commit === __WHIFFLE_COMMIT__ || commit === toastedCommit) {
+export async function checkDeployToast(): Promise<void> {
+  if (toasted || !(await updated.check())) {
     return;
   }
-
-  toastedCommit = commit;
+  toasted = true;
   toast.info("Whiffle updated — reload to get the new version.", {
     id: "deploy-update",
     duration: Number.POSITIVE_INFINITY,
