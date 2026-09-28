@@ -13,6 +13,14 @@ export interface PendingSelection extends CapturedSelection {
   id: string;
 }
 
+/**
+ * The key a picked element travels under (motion/share.svelte.ts): from its
+ * box in the preview to its chip in the composer.
+ */
+export function selectionShare(element: PreviewElement): string {
+  return `selection:${element.url}:${element.selector}`;
+}
+
 export function selectionLabel(element: PreviewElement): string {
   return `${element.tag}${element.id ? `#${element.id}` : ""}${element.classes.length ? `.${element.classes[0]}` : ""}`;
 }

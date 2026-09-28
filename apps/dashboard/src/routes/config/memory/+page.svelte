@@ -5,6 +5,7 @@
   import { IconBook, IconTrash, IconWarningTriangle } from "$lib/icons";
   import { formatDistanceToNow } from "$lib/utils/time";
   import { whiffle } from "$lib/whiffle/client.svelte";
+  import { drafts } from "$lib/whiffle/config/drafts.svelte";
   import {
     byteLength,
     fileHref,
@@ -70,7 +71,7 @@
     `${formatBytes(byteLength(row.content))} · saved ${formatDistanceToNow(new Date(row.updatedAt))}`;
 
   const drafted = (path: string) =>
-    store.memoryDrafts[path] === undefined ? "" : " · unsaved draft";
+    drafts.paths.has(fileHref(path)) ? " · unsaved draft" : "";
 
   async function askRemove(path: string) {
     if (!fleet) {
@@ -94,7 +95,7 @@
               (doc) => doc.path !== path
             );
           }
-          delete store.memoryDrafts[path];
+          drafts.forget(fileHref(path));
         } catch (caught) {
           toast.error(
             caught instanceof Error ? caught.message : String(caught)

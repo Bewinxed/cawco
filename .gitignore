@@ -9,6 +9,8 @@ dist
 *.tgz
 .svelte-kit
 apps/dashboard/build
+apps/dashboard/.build-next
+apps/dashboard/.build-old
 
 # database
 *.db

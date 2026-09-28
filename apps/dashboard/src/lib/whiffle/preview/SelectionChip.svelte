@@ -1,6 +1,12 @@
 <script lang="ts">
   import { IconClose, IconWindow } from "$lib/icons";
-  import { type PendingSelection, selectionLabel } from "./selection";
+  import { dur } from "../motion/curves.svelte";
+  import { land } from "../motion/share.svelte";
+  import {
+    type PendingSelection,
+    selectionLabel,
+    selectionShare,
+  } from "./selection";
 
   let {
     selection,
@@ -17,7 +23,11 @@
   const source = $derived(selection.element.source);
 </script>
 
-<span class="selection-chip">
+<span
+  class="selection-chip"
+  data-flip="pop"
+  {@attach land(() => selectionShare(selection.element), { ms: dur("--dur-pop") })}
+>
   <button
     aria-label={`Edit selection… ${label}`}
     class="body touch-hit"

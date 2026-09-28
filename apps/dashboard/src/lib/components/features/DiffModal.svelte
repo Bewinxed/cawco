@@ -1,16 +1,23 @@
 <script lang="ts">
+  /**
+   * A diff at full size, in the kit dialog: the file, what changed, and the
+   * layout (unified or split) as a segmented control. Each layout is drawn
+   * into its own layer, so switching cross-fades the new one in over the
+   * old over --dur-control instead of redrawing in place.
+   */
   import {
     type FileContents,
     FileDiff,
     parseDiffFromFile,
   } from "@pierre/diffs";
-  import { Dialog } from "bits-ui";
-  import { onDestroy } from "svelte";
-  import { quintOut } from "svelte/easing";
-  import { fade, scale } from "svelte/transition";
-  import { Button } from "$lib/components/ui/button";
   import { CopyButton } from "$lib/components/ui/copy-button";
-  import { IconAlignLeft, IconClose, IconColumns } from "$lib/icons";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
+  import * as Dialog from "$lib/components/ui/dialog";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
+  import * as ToggleGroup from "$lib/components/ui/toggle-group";
+  import { IconAlignLeft, IconColumns } from "$lib/icons";
+  import { crossIn, crossOut } from "$lib/whiffle/motion/curves.svelte";
+  import { fileName, languageOf } from "./diff-language";
 
   interface Props {
     filePath: string;
@@ -20,253 +27,119 @@
   }
 
   let { filePath, oldContent, newContent, onClose }: Props = $props();
-  // The parent unmounts us on `onClose`, so the close runs through bits first
-  // and only hands back once the exit transition has finished.
+  // The parent unmounts us on `onClose`, so the close runs through the
+  // dialog first and only hands back once its exit has finished.
   let open = $state(true);
-  let container = $state<HTMLDivElement | null>(null);
-  let diffInstance: FileDiff | null = null;
   let diffStyle = $state<"unified" | "split">("unified");
 
-  // Get file extension for syntax highlighting
-  function getLanguageFromPath(path: string): string | undefined {
-    const ext = path.split(".").pop()?.toLowerCase();
-    const langMap: Record<string, string> = {
-      ts: "typescript",
-      tsx: "tsx",
-      js: "javascript",
-      jsx: "jsx",
-      svelte: "svelte",
-      vue: "vue",
-      py: "python",
-      rb: "ruby",
-      go: "go",
-      rs: "rust",
-      java: "java",
-      kt: "kotlin",
-      swift: "swift",
-      c: "c",
-      cpp: "cpp",
-      h: "c",
-      hpp: "cpp",
-      cs: "csharp",
-      php: "php",
-      html: "html",
-      css: "css",
-      scss: "scss",
-      less: "less",
-      json: "json",
-      yaml: "yaml",
-      yml: "yaml",
-      xml: "xml",
-      md: "markdown",
-      sql: "sql",
-      sh: "bash",
-      bash: "bash",
-      zsh: "bash",
-      dockerfile: "dockerfile",
-      toml: "toml",
-    };
-    return ext ? langMap[ext] : undefined;
-  }
-
-  function getFileName(path: string): string {
-    return path.split("/").pop() || path;
-  }
-
-  function renderDiff() {
-    if (!container) {
-      return;
-    }
-
-    // Clean up existing instance (though {#key} handles container recreation)
-    if (diffInstance) {
-      diffInstance.cleanUp();
-      diffInstance = null;
-    }
-
-    const lang = getLanguageFromPath(filePath);
-    const fileName = getFileName(filePath);
-
-    const oldFile: FileContents = {
-      name: fileName,
-      contents: oldContent,
-      lang: lang as FileContents["lang"],
-    };
-
-    const newFile: FileContents = {
-      name: fileName,
-      contents: newContent,
-      lang: lang as FileContents["lang"],
-    };
-
-    diffInstance = new FileDiff({
+  /** Draws the diff into a layer in `style`, and clears it when the layer goes. */
+  const drawn = (style: "unified" | "split") => (layer: HTMLElement) => {
+    const lang = languageOf(filePath) as FileContents["lang"];
+    const name = fileName(filePath);
+    const diff = new FileDiff({
       disableFileHeader: true,
-      diffStyle,
+      diffStyle: style,
       expandUnchanged: true,
       hunkSeparators: "line-info",
     });
-
-    // Pass container as containerWrapper, not fileContainer
-    // The library creates its own diffs-container custom element with shadowRoot
-    diffInstance.render({
-      oldFile,
-      newFile,
-      containerWrapper: container,
+    diff.render({
+      oldFile: { name, contents: oldContent, lang },
+      newFile: { name, contents: newContent, lang },
+      containerWrapper: layer,
     });
-  }
+    return () => diff.cleanUp();
+  };
 
-  onDestroy(() => {
-    if (diffInstance) {
-      diffInstance.cleanUp();
-      diffInstance = null;
-    }
-  });
-
-  // Re-render when diff style changes
-  $effect(() => {
-    if (container && diffStyle) {
-      renderDiff();
-    }
-  });
-
-  // Calculate stats
-  const stats = $derived(() => {
-    const fileName = getFileName(filePath);
+  const stats = $derived.by(() => {
+    const name = fileName(filePath);
     const fileDiff = parseDiffFromFile(
-      { name: fileName, contents: oldContent },
-      { name: fileName, contents: newContent }
+      { name, contents: oldContent },
+      { name, contents: newContent }
     );
-
     let additions = 0;
     let deletions = 0;
     for (const hunk of fileDiff.hunks) {
       additions += hunk.additionLines;
       deletions += hunk.deletionLines;
     }
-
     return { additions, deletions };
   });
 </script>
 
 <Dialog.Root onOpenChangeComplete={(isOpen) => !isOpen && onClose()} bind:open>
-  <Dialog.Portal>
-    <Dialog.Overlay forceMount>
-      {#snippet child({ props, open: isOpen })}
-        {#if isOpen}
-          <div
-            {...props}
-            class="fixed inset-0 z-50 bg-[var(--scrim)] backdrop-blur-sm"
-            in:fade={{ duration: 200 }}
-            out:fade={{ duration: 150 }}
-          ></div>
-        {/if}
-      {/snippet}
-    </Dialog.Overlay>
-
-    <Dialog.Content aria-label={`Diff: ${filePath}`} forceMount>
-      {#snippet child({ props, open: isOpen })}
-        {#if isOpen}
-          <div
-            {...props}
-            class="fixed top-1/2 left-1/2 z-50 w-[95vw] h-[90vh] max-w-7xl -translate-x-1/2 -translate-y-1/2 bg-background rounded-[var(--radius-lg)] shadow-2xl border border-border flex flex-col overflow-hidden"
-            in:scale={{ duration: 200, start: 0.96, easing: quintOut }}
-            out:scale={{ duration: 150, start: 0.96, easing: quintOut }}
+  <Dialog.Content
+    aria-label={`Diff: ${filePath}`}
+    bodyClass="flex h-full flex-col gap-0 overflow-hidden p-0"
+    class="h-[90vh] w-[95vw] sm:max-w-7xl"
+  >
+    <header class="head">
+      <div class="flex min-w-0 items-center gap-3">
+        <div class="flex min-w-0 items-center gap-2">
+          <Dialog.Title class="truncate font-mono text-label"
+            >{filePath}</Dialog.Title
           >
-            <!-- Header -->
-            <div
-              class="flex items-center justify-between px-4 py-3 border-b border-border bg-card"
-            >
-              <div class="flex items-center gap-3 min-w-0">
-                <div class="flex items-center gap-2 min-w-0">
-                  <span class="font-mono text-label text-foreground truncate"
-                    >{filePath}</span
-                  >
-                  <CopyButton
-                    class="h-6 w-6"
-                    size="icon-sm"
-                    text={filePath}
-                    variant="ghost"
-                  />
-                </div>
-                <div class="flex items-center gap-2 text-meta">
-                  <span class="text-success">+{stats().additions}</span>
-                  <span class="text-error">-{stats().deletions}</span>
-                </div>
-              </div>
+          <CopyButton
+            class="h-6 w-6"
+            size="icon-sm"
+            text={filePath}
+            variant="ghost"
+          />
+        </div>
+        <div class="num flex items-center gap-2 text-meta">
+          <span class="text-success">+{stats.additions}</span>
+          <span class="text-error">-{stats.deletions}</span>
+        </div>
+      </div>
+      <ToggleGroup.Root
+        aria-label="Diff layout"
+        onValueChange={(next) => {
+          if (next) {
+            diffStyle = next as 'unified' | 'split';
+          }
+        }}
+        type="single"
+        value={diffStyle}
+      >
+        <ToggleGroup.Item value="unified"
+          ><IconAlignLeft />Unified</ToggleGroup.Item
+        >
+        <ToggleGroup.Item value="split"><IconColumns />Split</ToggleGroup.Item>
+      </ToggleGroup.Root>
+    </header>
 
-              <div class="flex items-center gap-2">
-                <!-- Diff style toggle -->
-                <!-- biome-ignore lint/a11y/useSemanticElements: a <fieldset> here would bring browser-default border/padding into this toggle group; it isn't a form control -->
-                <div
-                  aria-label="Diff layout"
-                  class="flex items-center bg-[var(--surface-recess-deep)] rounded-[var(--radius-sm)] p-0.5 border border-border"
-                  role="group"
-                >
-                  <Button
-                    aria-pressed={diffStyle === 'unified'}
-                    class="h-7 rounded-[14px] text-meta {diffStyle === 'unified'
-                      ? 'bg-[var(--surface-lift)] border-border shadow-[var(--shadow-raised)]'
-                      : ''}"
-                    onclick={() => {
-                      diffStyle = 'unified';
-                    }}
-                    size="sm"
-                    title="Unified view"
-                    variant={diffStyle === 'unified' ? 'outline' : 'ghost'}
-                  >
-                    <IconAlignLeft class="w-3.5 h-3.5" />
-                    <span>Unified</span>
-                  </Button>
-                  <Button
-                    aria-pressed={diffStyle === 'split'}
-                    class="h-7 rounded-[14px] text-meta {diffStyle === 'split'
-                      ? 'bg-[var(--surface-lift)] border-border shadow-[var(--shadow-raised)]'
-                      : ''}"
-                    onclick={() => {
-                      diffStyle = 'split';
-                    }}
-                    size="sm"
-                    title="Split view"
-                    variant={diffStyle === 'split' ? 'outline' : 'ghost'}
-                  >
-                    <IconColumns class="w-3.5 h-3.5" />
-                    <span>Split</span>
-                  </Button>
-                </div>
-
-                <!-- Close button -->
-                <Button
-                  aria-label="Close diff modal"
-                  onclick={() => {
-                    // biome-ignore lint/suspicious/noGlobalAssign: `open` is the component's own $state prop (bound via `bind:open`), not window.open — Biome's Svelte scope resolution doesn't see the local declaration here
-                    open = false;
-                  }}
-                  size="icon-sm"
-                  title="Close (Esc)"
-                  variant="ghost"
-                >
-                  <IconClose class="size-5" />
-                </Button>
-              </div>
-            </div>
-
-            <!-- Diff content -->
-            <div class="flex-1 overflow-auto">
-              {#key diffStyle}
-                <div class="diff-modal-content" bind:this={container}></div>
-              {/key}
-            </div>
-          </div>
-        {/if}
-      {/snippet}
-    </Dialog.Content>
-  </Dialog.Portal>
+    <div class="scroll">
+      {#key diffStyle}
+        <div
+          class="layer"
+          in:crossIn
+          out:crossOut
+          {@attach drawn(diffStyle)}
+        ></div>
+      {/key}
+    </div>
+  </Dialog.Content>
 </Dialog.Root>
 
 <style>
+  /* Room on the inline end for the dialog's own close button. */
+  .head {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px 12px;
+    padding: 12px 52px 12px 16px;
+    border-bottom: 1px solid var(--border-hairline);
+  }
+  .scroll {
+    position: relative;
+    flex: 1 1 auto;
+    min-height: 0;
+    overflow: auto;
+  }
   /* @pierre/diffs renders into a shadowRoot, so it can only be themed through
      the inherited custom properties it documents in its core stylesheet. */
-  .diff-modal-content {
+  .layer {
     min-height: 100%;
     --diffs-font-size: 0.8125rem;
     --diffs-line-height: 1.6;

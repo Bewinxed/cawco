@@ -1,8 +1,7 @@
 <script lang="ts">
+  import EditorRoute from "$lib/whiffle/config/EditorRoute.svelte";
   import MemoryEditor from "$lib/whiffle/config/editors/MemoryEditor.svelte";
-  import Missing from "$lib/whiffle/config/Missing.svelte";
   import { MAIN } from "$lib/whiffle/config/memory";
-  import SectionFrame from "$lib/whiffle/config/SectionFrame.svelte";
   import { sectionOf } from "$lib/whiffle/config/sections";
   import { configStore } from "$lib/whiffle/config/store.svelte";
   import type { PageProps } from "./$types";
@@ -19,19 +18,13 @@
   );
 </script>
 
-{#if fleet === null}
-  <SectionFrame
-    problem={store.fleet.error}
-    purpose={section.purpose}
-    ready={false}
-    title={section.label}
-  >
-    {''}
-  </SectionFrame>
-{:else if !known}
-  <Missing {section} what="memory file" />
-{:else}
-  {#key path}
-    <MemoryEditor {path} />
-  {/key}
-{/if}
+<EditorRoute
+  found={known}
+  loaded={fleet !== null}
+  problem={store.fleet.error}
+  saveLabel="Save"
+  {section}
+  what="memory file"
+>
+  <MemoryEditor {path} />
+</EditorRoute>
