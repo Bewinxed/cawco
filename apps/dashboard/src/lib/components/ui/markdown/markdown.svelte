@@ -7,7 +7,7 @@
   } from "svelte-streamdown";
   import OutputBlock from "$lib/components/features/tool-cards/OutputBlock.svelte";
   import { PROSE } from "$lib/prose";
-  import { motionOk } from "$lib/whiffle/motion/curves.svelte";
+  import { dur, motionOk } from "$lib/whiffle/motion/curves.svelte";
   import type { Trail } from "./trail";
 
   let {
@@ -140,7 +140,7 @@
   function fadeTiming(root: HTMLElement): { duration: number; easing: string } {
     const style = getComputedStyle(root);
     return {
-      duration: Number.parseFloat(style.getPropertyValue("--dur-menu")),
+      duration: dur("--dur-menu"),
       easing: style.getPropertyValue("--ease-out"),
     };
   }

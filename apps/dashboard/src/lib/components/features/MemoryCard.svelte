@@ -71,6 +71,14 @@
 
   const dirty = $derived(draft !== (content ?? ""));
 
+  /**
+   * A card that only summarises its file (a rail) is one size in every state
+   * — waiting, there, missing: two lines of meta type, so nothing under it
+   * moves when the file answers.
+   */
+  const SUMMARY_BOX =
+    "box-content h-[calc(var(--text-meta)*1.35*2)] px-[var(--space-4)] py-[var(--space-2)] text-meta";
+
   /** What the body shows; a change cross-fades while the card's height morphs. */
   const mode = $derived.by(() => {
     if (loading) {
@@ -217,8 +225,10 @@
   <!-- Sticky while editing: a long file used to push Save and Cancel a
        screenful above the caret, so the way out of the editor scrolled away
        from the person using it. -->
+  <!-- One height whether it carries a button or not: an Edit arriving with
+       the file does not move what is under the card. -->
   <header
-    class="sticky top-0 z-10 flex items-center gap-3 border-b border-border/50 bg-card px-[var(--space-4)] py-[var(--space-2)]"
+    class="sticky top-0 z-10 flex min-h-[calc(1.5rem+var(--space-2)*2)] items-center gap-3 border-b border-border/50 bg-card px-[var(--space-4)] py-[var(--space-2)]"
   >
     <span
       class="min-w-0 truncate font-mono text-label text-muted-foreground"
@@ -275,13 +285,11 @@
                it stands in for. -->
           <div
             aria-hidden="true"
-            class="flex flex-col gap-2 px-[var(--space-4)] {summary ? 'py-[var(--space-2)]' : 'min-h-40 py-[var(--space-3)]'}"
+            class="flex flex-col gap-2 {summary ? SUMMARY_BOX : 'min-h-40 px-[var(--space-4)] py-[var(--space-3)]'}"
           >
             {#if summary}
-              <p class="relative text-meta">
-                <span class="invisible">{summary}</span>
-                <Skeleton class="absolute inset-0" />
-              </p>
+              <Skeleton class="h-3 w-full" />
+              <Skeleton class="h-3 w-2/3" />
             {:else}
               <Skeleton class="h-3.5 w-3/4" />
               <Skeleton class="h-3.5 w-full" />
@@ -299,10 +307,20 @@
             <MarkdownEditor label={path} bind:value={draft} />
           </div>
         {:else if content !== null && summary}
-          <p
-            class="px-[var(--space-4)] py-[var(--space-2)] text-meta text-muted-foreground"
+          <p class="{SUMMARY_BOX} text-muted-foreground">
+            <span class="line-clamp-2">{summary}</span>
+          </p>
+        {:else if summary && save}
+          <Button
+            class="{SUMMARY_BOX} w-full justify-start rounded-none text-left font-normal whitespace-normal text-muted-foreground"
+            onclick={edit}
+            variant="ghost"
           >
-            {summary}
+            <span class="line-clamp-2">{emptyText}</span>
+          </Button>
+        {:else if summary}
+          <p class="{SUMMARY_BOX} text-muted-foreground">
+            <span class="line-clamp-2">{emptyText}</span>
           </p>
         {:else if content !== null}
           <!-- The click is the convenience; the Edit button above is the affordance,

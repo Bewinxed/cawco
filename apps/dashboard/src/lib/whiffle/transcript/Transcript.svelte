@@ -36,7 +36,7 @@
   import { browser } from "$app/environment";
   import { describeTool } from "$lib/components/features/tool-cards/descriptors";
   import type { Trail } from "$lib/components/ui/markdown/trail";
-  import { motionOk } from "$lib/whiffle/motion/curves.svelte";
+  import { dur, motionOk } from "$lib/whiffle/motion/curves.svelte";
   import { type SessionState, whiffle } from "../client.svelte";
   import { rebuildScheduler } from "../workspace/scheduler.svelte";
   import {
@@ -1194,9 +1194,7 @@
           stopFollow();
           return;
         }
-        span = Number.parseFloat(
-          getComputedStyle(scroller).getPropertyValue("--dur-panel")
-        );
+        span = dur("--dur-panel");
         last = now;
         ends = now + span;
       }

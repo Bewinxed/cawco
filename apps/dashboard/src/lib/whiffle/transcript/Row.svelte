@@ -30,7 +30,7 @@
    * folds shut over --dur-exit instead of vanishing, so the tail never jumps.
    */
   import { type Snippet, tick, untrack } from "svelte";
-  import { motionOk } from "$lib/whiffle/motion/curves.svelte";
+  import { dur, motionOk } from "$lib/whiffle/motion/curves.svelte";
   import { type Motion, type Ticket, useLedger } from "./arrivals.svelte";
 
   let {
@@ -85,10 +85,6 @@
     spent();
   }
 
-  /** A duration token, in ms, as WAAPI needs it. */
-  const ms = (style: CSSStyleDeclaration, token: string): number =>
-    Number.parseFloat(style.getPropertyValue(token));
-
   /** The reader's own message leaves the field they typed it in for its row. */
   function emerge(row: HTMLElement): void {
     const field = ledger?.composer()?.getBoundingClientRect();
@@ -108,7 +104,7 @@
           { translate: "0 0", opacity: 1 },
         ],
         {
-          duration: ms(style, "--dur-panel"),
+          duration: dur("--dur-panel"),
           easing: style.getPropertyValue("--ease-out"),
           delay: lead,
           fill: "backwards",
@@ -154,7 +150,7 @@
           { blockSize: "0px", opacity: 0 },
         ],
         {
-          duration: ms(style, "--dur-exit"),
+          duration: dur("--dur-exit"),
           easing: style.getPropertyValue("--ease-out"),
           fill: "forwards",
         }

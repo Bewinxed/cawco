@@ -251,7 +251,6 @@
             use:dragSession={{ sessionId: tab.id, from: leaf.id }}
             use:tabDropTarget={{ leafId: leaf.id, index: i, sessionId: tab.id }}
             {@attach land(() => `session:${tab.id}`, { uniform: true })}
-            {@attach land(() => 'session:new', { uniform: true })}
           >
             <TabItem
               aria-expanded={detailsOpen && detailId === tab.id}

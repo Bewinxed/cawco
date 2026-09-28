@@ -24,7 +24,7 @@
   import { fleetMcpServers } from "$lib/whiffle/fleet-mcp.svelte";
   import { SHOW_IMAGE_TOOLS, SHOW_PREVIEW_TOOLS } from "$lib/whiffle/frames";
   import { mcpServerHost } from "$lib/whiffle/mcp";
-  import { easeOut, motionOk } from "$lib/whiffle/motion/curves.svelte";
+  import { dur, easeOut, motionOk } from "$lib/whiffle/motion/curves.svelte";
   /**
    * A run of tool calls as rail-led rows — never a nested card. The rail is a
    * 2px stripe; each row is a glyph, the verb, a mono argument, and whatever the
@@ -59,9 +59,6 @@
   const callId = (m: Message): string => `call:${m.id ?? m.toolCallId}`;
 
   const ledger = useLedger();
-  /** A duration token, in ms, for Svelte's transition config. */
-  const ms = (node: Element, token: string): number =>
-    Number.parseFloat(getComputedStyle(node).getPropertyValue(token));
   /** Only a change the reader is watching is shown moving. */
   const moving = (): boolean => motionOk.current && !!ledger?.watched;
 
@@ -71,33 +68,33 @@
    * cell, over --dur-control. Svelte plays these only when the status
    * changes under a mounted row — never on a row's first render.
    */
-  function glyphIn(node: Element) {
+  function glyphIn(_node: Element) {
     if (!moving()) {
       return { duration: 0 };
     }
     return {
-      duration: ms(node, "--dur-control"),
+      duration: dur("--dur-control"),
       easing: easeOut,
       css: (t: number) => `opacity: ${t}; scale: ${0.8 + 0.2 * t}`,
     };
   }
-  function glyphOut(node: Element) {
+  function glyphOut(_node: Element) {
     if (!moving()) {
       return { duration: 0 };
     }
     return {
-      duration: ms(node, "--dur-control"),
+      duration: dur("--dur-control"),
       easing: easeOut,
       css: (t: number) => `opacity: ${t}`,
     };
   }
   /** What a call measured out, arriving with its result. */
-  function factIn(node: Element) {
+  function factIn(_node: Element) {
     if (!moving()) {
       return { duration: 0 };
     }
     return {
-      duration: ms(node, "--dur-menu"),
+      duration: dur("--dur-menu"),
       easing: easeOut,
       css: (t: number) => `opacity: ${t}`,
     };

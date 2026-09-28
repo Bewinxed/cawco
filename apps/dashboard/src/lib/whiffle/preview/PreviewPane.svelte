@@ -6,6 +6,7 @@
     IconRefresh,
   } from "$lib/icons";
   import { closePreview, whiffle } from "../client.svelte";
+  import { dur } from "../motion/curves.svelte";
   import type { CapturedSelection } from "./selection";
   import {
     previewElement,
@@ -157,7 +158,7 @@
             {
               duration: matchMedia("(prefers-reduced-motion: reduce)").matches
                 ? 1
-                : Number.parseFloat(style.getPropertyValue("--dur-panel")),
+                : dur("--dur-panel"),
             }
           );
         }
