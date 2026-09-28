@@ -255,6 +255,17 @@ server.on("upgrade", (req, socket, head) => {
       `[whiffle] websocket socket error on ${req.url}: ${error.code ?? error.message}`
     );
   });
+  // Bun 1.4.0's node:http corks a connection's socket after every request it
+  // dispatches and never uncorks it (oven-sh/bun#35664, open). An upgrade that
+  // arrives on a kept-alive connection is handed a socket still corked, so the
+  // hub's 101 sits in its buffer and never reaches the browser. iOS Safari
+  // sends its websocket handshake over a connection that has already loaded
+  // the page's assets, so on the phone the dashboard socket stayed CONNECTING
+  // and the board never filled in. Chromium opens a fresh connection for a
+  // websocket, which is why it only showed on iOS.
+  while (socket.writableCorked > 0) {
+    socket.uncork();
+  }
 
   // Preview WebSocket: /preview/<id>/…
   const info = previewMatch(req);
