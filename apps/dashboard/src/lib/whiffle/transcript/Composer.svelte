@@ -1269,7 +1269,7 @@
     transform: scale(0.96);
   }
   .stop:disabled {
-    opacity: 0.45;
+    opacity: 0.55;
     cursor: default;
     box-shadow: none;
     background-image: none;
