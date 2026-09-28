@@ -66,7 +66,7 @@
         : "Preview") ||
       "Preview"
   );
-  const frameKey = $derived(`${identity}:${reload}`);
+  const frameKey = $derived(`${identity}:${preview?.opened}:${reload}`);
   /**
    * The frame on screen while the next one loads. A reload or a new URL
    * mounts the next frame over it, unpainted; once that one connects it

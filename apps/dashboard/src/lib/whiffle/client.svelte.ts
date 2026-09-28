@@ -459,6 +459,12 @@ const state = $state({
       title?: string;
       path?: string;
       thumbnail?: string;
+      /**
+       * Counts "open" frames. Each one is a listener the hub just started —
+       * after a daemon restart, the same source on a new port — so the pane
+       * keys its frame on it and loads again.
+       */
+      opened?: number;
     }
   >,
   previewVisible: {} as Record<string, boolean>,
@@ -1224,6 +1230,7 @@ function handleFrame(frame: FramePayload): void {
     state.previews[frame.instanceId] = {
       ...(sameSource ? previous : {}),
       ...frame,
+      opened: (previous?.opened ?? 0) + (frame.state === "open" ? 1 : 0),
     };
     if (frame.state === "open" && (previous?.state !== "open" || !sameSource)) {
       revealPreview(frame.instanceId);

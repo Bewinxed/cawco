@@ -596,17 +596,14 @@ export class SessionSupervisor {
     }
   }
 
-  /** Drops every trace of an instance's pulse — the session is gone. */
+  /**
+   * Drops every trace of an instance's pulse — its process is gone. Not its
+   * preview: a relaunch and the hand-off after a restart come through here
+   * too, and the session they continue still has the preview open. The hub
+   * owns that lifetime and ends it on an explicit close or a stop.
+   */
   #forgetPulse(instanceId: string): void {
     this.#busy.delete(instanceId);
-    if (stopPreview({ instanceId })) {
-      this.sink({
-        kind: "preview",
-        instanceId,
-        state: "closed",
-        path: "",
-      });
-    }
     this.#line.delete(instanceId);
     // The custody this mark gated is over — a relaunch, a hand-off or a death.
     // Whatever produces frames next is not replaying the hub's own past.

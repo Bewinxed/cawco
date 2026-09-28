@@ -9,7 +9,15 @@ import {
 } from "@whiffle/core/preview-proxy";
 import type { Server } from "bun";
 
-const previews = new Map<string, Server<PreviewSocket>>();
+/**
+ * The listeners this process serves, with the source each was asked for. They
+ * outlive the hub connection: a hub that drops and comes back reads them off
+ * the register ({@link servingPreviews}) and points its targets at them again.
+ */
+const previews = new Map<
+  string,
+  { listener: Server<PreviewSocket>; source: PreviewSource }
+>();
 const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const HEAD_OPEN = /<head(\s[^>]*)?\s*>/i;
 const HEAD_CLOSE = /<\/head\s*>/i;
@@ -58,8 +66,21 @@ function loadOverlay(): Promise<string> {
 }
 
 export function stopPreview({ instanceId }: { instanceId: string }): boolean {
-  previews.get(instanceId)?.stop(true);
+  previews.get(instanceId)?.listener.stop(true);
   return previews.delete(instanceId);
+}
+
+/** What the register tells the hub this process is serving. */
+export function servingPreviews(): {
+  instanceId: string;
+  port: number;
+  source: PreviewSource;
+}[] {
+  return [...previews].map(([instanceId, { listener, source }]) => ({
+    instanceId,
+    port: listener.port as number,
+    source,
+  }));
 }
 
 export function stopPreviews(): void {
@@ -226,6 +247,9 @@ export async function startPreview(options: {
       return new Response("Preview upstream unavailable", { status: 502 });
     },
   });
-  previews.set(instanceId, listener);
+  previews.set(instanceId, {
+    listener,
+    source: port === undefined ? { dir: dir as string } : { port },
+  });
   return { port: listener.port as number };
 }

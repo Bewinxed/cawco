@@ -12,14 +12,17 @@ import { PREVIEW_PORT } from "./config";
  * serves its content. The dashboard routes `/preview/<id>/…` here via the
  * `x-whiffle-preview` header, so there is no per-browser limitation — every
  * tab can show a different preview simultaneously.
+ *
+ * A target is the operator's intent, and it outlives the listener: while its
+ * machine is away `upstream` is absent, and the register that brings the
+ * machine back starts the listener again and fills it in.
  */
 export const previewTargets = new Map<
   string,
   {
     machineId: string;
-    address: string;
-    port: number;
     source: PreviewSource;
+    upstream?: { address: string; port: number };
   }
 >();
 
@@ -48,11 +51,14 @@ export function startPreviewListener(hostname: string) {
       if (!target) {
         return new Response("No preview selected.", { status: 404 });
       }
+      if (!target.upstream) {
+        return new Response("Preview is restarting.", { status: 503 });
+      }
       const url = new URL(request.url);
-      const address = target.address.includes(":")
-        ? `[${target.address}]`
-        : target.address;
-      const upstream = `${address}:${target.port}${url.pathname}${url.search}`;
+      const address = target.upstream.address.includes(":")
+        ? `[${target.upstream.address}]`
+        : target.upstream.address;
+      const upstream = `${address}:${target.upstream.port}${url.pathname}${url.search}`;
       const headers = proxyHeaders(request.headers);
       if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
         return upgradePreview(request, server, `ws://${upstream}`, headers)

@@ -26,7 +26,7 @@ import { harnesses } from "./harnesses";
 import { OPENCODE_SERVER_PROC_ID } from "./harnesses/opencode";
 import { cache as transcriptCache } from "./harnesses/transcript-cache";
 import { machineId } from "./machine-id";
-import { stopPreviews } from "./preview";
+import { servingPreviews } from "./preview";
 import { TranscriptSearchService } from "./search";
 import { resumableSessions, SessionSupervisor } from "./session";
 import { SessiondClient } from "./sessiond-client";
@@ -81,6 +81,12 @@ export interface RegisterPayload extends MachineIdentity {
    */
   deploy?: DeployInfo;
   instances: string[];
+  /**
+   * The preview listeners this process is serving. A hub that restarted has
+   * no targets and takes these as they are; one that only lost the socket
+   * points its targets at them again.
+   */
+  previews: ReturnType<typeof servingPreviews>;
   /**
    * True on exactly one register: the first one this process ever sends,
    * and only when it came up because the deploy poller's idle-gated restart
@@ -506,9 +512,6 @@ const attach = (
     // see {@link sessionsReader}.
     const reading = sessions();
     const socket = yield* connection(url);
-    // The hub drops this machine's preview targets the moment the socket goes,
-    // so a forwarder kept alive past the connection serves nobody: it goes too.
-    yield* Effect.addFinalizer(() => Effect.sync(stopPreviews));
     const { custody, catalog } = yield* Effect.promise(() => reading);
     const build = yield* Effect.promise(() => buildInfo());
     // Consumed, not just read: true only the first register after THIS
@@ -524,6 +527,7 @@ const attach = (
     const payload: RegisterPayload = {
       ...identity,
       instances: supervisor.instanceIds,
+      previews: servingPreviews(),
       ...(custody ? { custody } : {}),
       ...(catalog
         ? {

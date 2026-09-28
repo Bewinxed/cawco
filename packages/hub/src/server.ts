@@ -806,6 +806,24 @@ const peekInstances = (payload: unknown): string[] => {
     : [];
 };
 
+interface ServingPreview {
+  instanceId: string;
+  port: number;
+  source: PreviewSource;
+}
+
+/** The preview listeners a registering daemon is still serving. */
+const peekPreviews = (payload: unknown): ServingPreview[] => {
+  const value = (payload as { previews?: unknown } | null)?.previews;
+  return Array.isArray(value)
+    ? value.filter(
+        (item): item is ServingPreview =>
+          typeof (item as Partial<ServingPreview>).instanceId === "string" &&
+          typeof (item as Partial<ServingPreview>).port === "number"
+      )
+    : [];
+};
+
 /** First-hand process custody, separate from the daemon's attached live list. */
 const peekCustody = (
   payload: unknown
@@ -1981,6 +1999,148 @@ export const createServer = ({
       return new Response(answer.error, { status: 500 });
     }
     return Response.json({ instanceId, state: "closed" });
+  };
+
+  /**
+   * Starts the daemon's listener for an instance's preview and makes it the
+   * target. The operator's open and a returning machine's restart both come
+   * through here.
+   */
+  const openPreview = async (
+    instanceId: string,
+    machineId: string,
+    source: PreviewSource
+  ): Promise<
+    | { ok: true; frame: ReturnType<typeof previewFrame> }
+    | { ok: false; code: 409 | 500 | 503 | 504; error: string }
+  > => {
+    const generation = nextPreviewGeneration(instanceId);
+    const stopLate = () =>
+      callAgent(
+        machineId,
+        PREVIEW_STOP,
+        [{ instanceId }],
+        BUSY_TIMEOUT_MS
+      ).catch(console.error);
+    const answer = await callAgent(
+      machineId,
+      PREVIEW_START,
+      [{ instanceId, ...source }],
+      BUSY_TIMEOUT_MS
+    );
+    if (answer === "offline") {
+      return { ok: false, code: 503, error: "Machine is not connected" };
+    }
+    if (answer === "timeout") {
+      // The daemon may still finish the start after this gave up; the
+      // listener it would open has no target here, so it is told to go.
+      stopLate();
+      return { ok: false, code: 504, error: "Machine did not answer" };
+    }
+    if (!answer.ok) {
+      return {
+        ok: false,
+        code: 500,
+        error: answer.error ?? "Preview failed",
+      };
+    }
+    if (previewGeneration.get(instanceId) !== generation) {
+      stopLate();
+      return {
+        ok: false,
+        code: 409,
+        error: "Preview was closed while starting.",
+      };
+    }
+    const address = registry.address(machineId);
+    if (!address) {
+      return { ok: false, code: 503, error: "Machine is not connected" };
+    }
+    previewTargets.set(instanceId, {
+      machineId,
+      source,
+      upstream: { address, port: (answer.result as { port: number }).port },
+    });
+    return { ok: true, frame: publishPreview(instanceId, "open", source) };
+  };
+
+  /**
+   * Machines whose previews this hub process has an account of. The first
+   * register from one after the hub starts is the only time a listener it
+   * reports without a target is the hub's own lost memory; after that, such a
+   * listener is one the operator closed while the machine was away.
+   */
+  const previewMachines = new Set<string>();
+
+  /**
+   * A register squares the machine's preview listeners with this hub's
+   * targets. A target whose listener the daemon still serves is pointed at it
+   * again. One it does not serve — the daemon restarted — is started again on
+   * the same source, and the "open" that follows reloads every dashboard's
+   * pane onto the new listener; if that start fails the preview is closed. A
+   * listener with no target is kept after a hub restart and stopped otherwise.
+   */
+  const reconcilePreviews = (
+    machineId: string,
+    address: string,
+    serving: ServingPreview[]
+  ): void => {
+    const known = previewMachines.has(machineId);
+    previewMachines.add(machineId);
+    const listeners = new Map(
+      serving.map((listener) => [listener.instanceId, listener])
+    );
+    for (const [instanceId, target] of previewTargets) {
+      if (target.machineId !== machineId) {
+        continue;
+      }
+      const listener = listeners.get(instanceId);
+      if (listener) {
+        previewTargets.set(instanceId, {
+          ...target,
+          upstream: { address, port: listener.port },
+        });
+        continue;
+      }
+      openPreview(instanceId, machineId, target.source)
+        .then((started) => {
+          // Not connected: the next register tries again. Superseded: a close
+          // or a newer start already decided.
+          if (
+            started.ok ||
+            started.code === 409 ||
+            !registry.agent(machineId)
+          ) {
+            return;
+          }
+          console.warn(
+            `[hub] preview for ${instanceId} did not restart: ${started.error}`
+          );
+          previewTargets.delete(instanceId);
+          publishPreview(instanceId, "closed", target.source);
+        })
+        .catch(console.error);
+    }
+    for (const listener of serving) {
+      if (previewTargets.has(listener.instanceId)) {
+        continue;
+      }
+      if (known) {
+        callAgent(
+          machineId,
+          PREVIEW_STOP,
+          [{ instanceId: listener.instanceId }],
+          BUSY_TIMEOUT_MS
+        ).catch(console.error);
+        continue;
+      }
+      previewTargets.set(listener.instanceId, {
+        machineId,
+        source: listener.source,
+        upstream: { address, port: listener.port },
+      });
+      publishPreview(listener.instanceId, "open", listener.source);
+    }
   };
 
   /**
@@ -4193,51 +4353,16 @@ export const createServer = ({
           if (!row) {
             return status(404, "Session not found.");
           }
-          const source: PreviewSource =
+          const started = await openPreview(
+            row.id,
+            row.machineId,
             body.port === undefined
               ? { dir: body.dir as string }
-              : { port: body.port };
-          const generation = nextPreviewGeneration(row.id);
-          const stopLate = () =>
-            callAgent(
-              row.machineId,
-              PREVIEW_STOP,
-              [{ instanceId: row.id }],
-              BUSY_TIMEOUT_MS
-            ).catch(console.error);
-          const answer = await callAgent(
-            row.machineId,
-            PREVIEW_START,
-            [{ instanceId: row.id, ...source }],
-            BUSY_TIMEOUT_MS
+              : { port: body.port }
           );
-          if (answer === "offline") {
-            return status(503, "Machine is not connected");
-          }
-          if (answer === "timeout") {
-            // The daemon may still finish the start after this gave up; the
-            // listener it would open has no target here, so it is told to go.
-            stopLate();
-            return status(504, "Machine did not answer");
-          }
-          if (!answer.ok) {
-            return status(500, answer.error ?? "Preview failed");
-          }
-          if (previewGeneration.get(row.id) !== generation) {
-            stopLate();
-            return status(409, "Preview was closed while starting.");
-          }
-          const address = registry.address(row.machineId);
-          if (!address) {
-            return status(503, "Machine is not connected");
-          }
-          previewTargets.set(row.id, {
-            machineId: row.machineId,
-            address,
-            port: (answer.result as { port: number }).port,
-            source,
-          });
-          return publishPreview(row.id, "open", source);
+          return started.ok
+            ? started.frame
+            : status(started.code, started.error);
         }
       )
       .delete("/api/instances/:id/preview", ({ params }) =>
@@ -6509,6 +6634,11 @@ export const createServer = ({
                 }
               }
               registry.registerAgent(message.machineId, ws, ws.remoteAddress);
+              reconcilePreviews(
+                message.machineId,
+                ws.remoteAddress,
+                peekPreviews(message.payload)
+              );
               // A machine arriving can turn a remembered "nobody holds this"
               // into an answer, so the negatives go. The hits stay: a
               // conversation does not move between machines.
@@ -6946,17 +7076,6 @@ export const createServer = ({
                   registry.broadcastFrame(message, row.id);
                   break;
                 }
-              }
-              if (kind === "preview" && message.instanceId) {
-                const target = previewTargets.get(message.instanceId);
-                if (
-                  target?.machineId === message.machineId &&
-                  peek(message.payload, "state") === "closed"
-                ) {
-                  previewTargets.delete(message.instanceId);
-                  publishPreview(message.instanceId, "closed", target.source);
-                }
-                break;
               }
               // THE INGEST LEDGER (design §7): a line becomes a hub frame AT MOST
               // ONCE per (instanceId, epoch, srcSeq). A returning agent replays
@@ -7420,11 +7539,17 @@ export const createServer = ({
               });
             }
           }
+          // A preview outlives its machine's socket: the intent stays, without
+          // a listener, until the register that brings the machine back
+          // starts one again (see `reconcilePreviews`). Nothing is published;
+          // the panes keep the page they have until that "open" reloads them.
           for (const [instanceId, target] of previewTargets) {
             if (target.machineId === machineId) {
               nextPreviewGeneration(instanceId);
-              previewTargets.delete(instanceId);
-              publishPreview(instanceId, "closed", target.source);
+              previewTargets.set(instanceId, {
+                machineId,
+                source: target.source,
+              });
             }
           }
           // The install may well still be running out there, but its reply can no
