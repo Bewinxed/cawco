@@ -1,7 +1,8 @@
 <script lang="ts">
-  import { Popover } from "bits-ui";
   import { tick, untrack } from "svelte";
   import { Drawer } from "vaul-svelte";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
+  import * as Popover from "$lib/components/ui/popover";
   import { IconWindow } from "$lib/icons";
   import { lightbox } from "../transcript/lightbox-state.svelte";
   import { NOTE_MAX, type PendingSelection, selectionLabel } from "./selection";
@@ -154,31 +155,28 @@
     </Drawer.Portal>
   </Drawer.Root>
 {:else}
+  <!-- The kit's floating surface: it grows out of the chip it is anchored
+       to (bits' transform-origin) and leaves back into it. -->
   <Popover.Root bind:open>
-    <Popover.Portal>
-      <Popover.Content
-        align="start"
-        class="selection-popover"
-        collisionPadding={11}
-        customAnchor={anchor}
-        onCloseAutoFocus={(event) => event.preventDefault()}
-        onEscapeKeydown={(event) => { event.preventDefault(); close(); }}
-        onOpenAutoFocus={focusNote}
-        side="top"
-        sideOffset={7}
-        trapFocus={false}
-      >
-        {@render content()}
-      </Popover.Content>
-    </Popover.Portal>
+    <Popover.Content
+      align="start"
+      class="selection-popover"
+      collisionPadding={11}
+      customAnchor={anchor}
+      onCloseAutoFocus={(event) => event.preventDefault()}
+      onEscapeKeydown={(event) => { event.preventDefault(); close(); }}
+      onOpenAutoFocus={focusNote}
+      side="top"
+      sideOffset={7}
+      trapFocus={false}
+    >
+      {@render content()}
+    </Popover.Content>
   </Popover.Root>
 {/if}
 
 <style>
   :global(.selection-popover) {
-    --preview-pop-ms: 260ms;
-    --preview-pop-out-ms: 160ms;
-    --preview-pop-ease: var(--ease-drawer);
     z-index: 80;
     display: flex;
     flex-direction: column;
@@ -186,21 +184,16 @@
     width: 320px;
     max-width: calc(100vw - var(--space-6));
     padding: var(--space-3);
+    color: var(--ink-strong);
+    font-size: var(--text-body);
+    font-weight: var(--weight-body);
+  }
+  /* The phone's note sheet is not a floating surface: it draws its own. */
+  :global(.selection-note-sheet) {
     background: var(--surface-raised);
     border: 1px solid var(--border-hairline);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-drawer);
-    color: var(--ink-strong);
-    font-size: var(--text-body);
-    font-weight: var(--weight-body);
-    transform-origin: var(--bits-popover-content-transform-origin);
-  }
-  :global(.selection-popover[data-state="open"]:not(.selection-note-sheet)) {
-    animation: preview-pop-in var(--preview-pop-ms) var(--preview-pop-ease) both;
-  }
-  :global(.selection-popover[data-state="closed"]:not(.selection-note-sheet)) {
-    animation: preview-pop-out var(--preview-pop-out-ms) var(--preview-pop-ease)
-      both;
   }
   :global(.selection-note-sheet) {
     position: fixed;
@@ -288,30 +281,5 @@
   }
   :global(.selection-note-sheet) input {
     font-size: 16px;
-  }
-  @keyframes preview-pop-in {
-    from {
-      opacity: 0;
-      transform: translateY(8px) scale(0.92);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
-  }
-  @keyframes preview-pop-out {
-    from {
-      opacity: 1;
-      transform: translateY(0) scale(1);
-    }
-    to {
-      opacity: 0;
-      transform: translateY(8px) scale(0.92);
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    :global(.selection-popover) {
-      animation-duration: 1ms !important;
-    }
   }
 </style>

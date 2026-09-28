@@ -24,7 +24,12 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group.
   import * as Resizable from "$lib/components/ui/resizable";
   import { IconAlert, IconChat, IconLaptop } from "$lib/icons";
-  import { easeOut, motionOk } from "$lib/whiffle/motion/curves.svelte";
+  import {
+    crossIn,
+    crossOut,
+    easeOut,
+    motionOk,
+  } from "$lib/whiffle/motion/curves.svelte";
   import AutopilotToggle from "./AutopilotToggle.svelte";
   import {
     blankSession,
@@ -461,6 +466,67 @@
    */
   const fault = $derived(failure ?? session?.readFault ?? null);
 
+  /** The read finished and there is nothing in it: a named state, not a list. */
+  const blank = $derived(empty && session?.messages.length === 0);
+  /** Nothing to draw yet: the history is still on its way. */
+  const waiting = $derived(
+    !!session && !session.initialized && session.messages.length === 0
+  );
+  /**
+   * The placeholder stays over a transcript that has mounted and not yet
+   * drawn its rows. Transcript keeps its list unpainted until every row in
+   * view is measured (its `.listing` gains `shown`), so dropping the
+   * placeholder when the transcript mounts left the pane blank for those
+   * frames. It stands from the pane's first frame until the first reveal,
+   * and again whenever the read starts over.
+   */
+  let holding = $state(true);
+  $effect.pre(() => {
+    if (waiting) {
+      holding = true;
+    }
+  });
+  const veiled = $derived(!(fault || unaddressable || blank) && (waiting || holding));
+
+  /**
+   * Hears the transcript's list being drawn, and lets the placeholder go:
+   * it fades over --dur-control on top of rows already in place, which is
+   * the cross-fade, and nothing under it moves.
+   */
+  function reveals(node: HTMLElement) {
+    const listing = node.querySelector(".listing");
+    if (!listing) {
+      return;
+    }
+    const check = () => {
+      if (listing.classList.contains("shown")) {
+        holding = false;
+        watch.disconnect();
+      }
+    };
+    const watch = new MutationObserver(check);
+    watch.observe(listing, { attributes: true, attributeFilter: ["class"] });
+    check();
+    return () => watch.disconnect();
+  }
+
+  /**
+   * A named state leaving under the one arriving: out of the flow where it
+   * stands (crossOut) and held at its own height, so a state centred in the
+   * area stays centred while it fades.
+   */
+  function leave(node: HTMLElement) {
+    node.style.height = `${node.offsetHeight}px`;
+    return crossOut(node);
+  }
+
+  /** What a read failure says: what went wrong, then what to do about it. */
+  const faultLine = $derived(
+    fault?.reason === "offline"
+      ? `${fault.message} Try again once it is back online.`
+      : `Reading it failed: ${fault?.message.replace(/\.$/, "")}. Try again; if it fails the same way, the hub's log has the cause.`
+  );
+
   /** Try again: forget what was said about the last read, then read. */
   function retry(): void {
     clearReadFault(viewId);
@@ -866,19 +932,6 @@
     };
   });
 
-  /* ---- the parked prompt's exit --------------------------------------- */
-
-  /**
-   * An answered prompt leaves DOWNWARD and fast — it is dismissed, not
-   * withdrawn upward toward the transcript it came from — at 120ms on --ease-out,
-   * because an exit that takes as long as its entrance reads as hesitation.
-   *
-   * Only opacity and transform move: the card holds its box for the whole
-   * 120ms, so the cards below it do not creep during the flight and the
-   * composer's measured height (and with it `--composer-clearance`) settles in
-   * one step when the node is actually gone. Under reduced motion the node is
-   * simply removed.
-   */
   /**
    * The side preview mounting already open slides 25px in from the edge it
    * opens against and fades up (--dur-panel, --ease-out), the same move its
@@ -899,17 +952,6 @@
           : `opacity: ${t}; transform: translateX(${u * 25}px);`,
     };
   }
-
-  function promptExit(_node: Element): TransitionConfig {
-    if (!motionOk.current) {
-      return { duration: 0 };
-    }
-    return {
-      duration: 120,
-      easing: easeOut,
-      css: (t, u) => `opacity: ${t}; transform: translateY(${u * 4}px);`,
-    };
-  }
 </script>
 
 <!-- The composer's two slots, drawn by whichever composer is writing to this
@@ -920,7 +962,7 @@
 
 {#snippet parkedPrompts()}
   {#each parked as request (request.requestId)}
-    <div class="parked" out:promptExit>
+    <div class="parked" data-flip>
       <Prompt onanswer={(result) => onanswer(request, result)} {request} />
     </div>
   {/each}
@@ -947,54 +989,65 @@
               <!-- A named state, not an empty pane: what happened, in one line,
                    and the one thing that can be done about it. -->
               {#if fault}
-                <EmptyState
-                  class={STATEFUL}
-                  icon={fault.reason === 'offline' ? IconLaptop : IconAlert}
-                  line={fault.message}
-                  title={fault.reason === 'offline'
+                <div class="state" in:crossIn out:leave>
+                  <EmptyState
+                    class={STATEFUL}
+                    icon={fault.reason === 'offline' ? IconLaptop : IconAlert}
+                    line={faultLine}
+                    title={fault.reason === 'offline'
                 ? 'This machine is offline'
                 : "This transcript couldn't be read"}
-                >
-                  {#snippet action()}
-                    <Button onclick={retry} variant="outline">Try again</Button>
-                  {/snippet}
-                </EmptyState>
+                  >
+                    {#snippet action()}
+                      <Button onclick={retry} variant="outline">Try again</Button>
+                    {/snippet}
+                  </EmptyState>
+                </div>
               {:else if unaddressable}
-                <EmptyState
-                  class={STATEFUL}
-                  icon={IconAlert}
-                  title="This session isn't reachable from here"
-                >
-                  {#snippet line()}
-                    The hub has no record of <code>{viewId}</code>, and no
-                    machine it can reach has a transcript filed under it. It may
-                    live on a machine that is offline, or it may have been
-                    deleted.
-                  {/snippet}
-                  {#snippet action()}
-                    <Button href="/session" variant="outline"
-                      >Back to the fleet</Button
-                    >
-                  {/snippet}
-                </EmptyState>
-              {:else if empty && session.messages.length === 0}
-                <EmptyState
-                  class={STATEFUL}
-                  icon={IconChat}
-                  line="The transcript was found, and it has no turns in it."
-                  title="Nothing has been said here yet"
-                />
-              {:else if !session.initialized && session.messages.length === 0}
-                <TranscriptSkeleton />
-              {:else}
-                <Transcript {agentName} {focused} {session} {visible} />
+                <div class="state" in:crossIn out:leave>
+                  <EmptyState
+                    class={STATEFUL}
+                    icon={IconAlert}
+                    title="This session isn't reachable from here"
+                  >
+                    {#snippet line()}
+                      The hub has no record of <code>{viewId}</code>, and no
+                      machine it can reach has a transcript filed under it. It
+                      may live on a machine that is offline, or it may have been
+                      deleted.
+                    {/snippet}
+                    {#snippet action()}
+                      <Button href="/session" variant="outline"
+                        >Back to the fleet</Button
+                      >
+                    {/snippet}
+                  </EmptyState>
+                </div>
+              {:else if blank}
+                <div class="state" in:crossIn out:leave>
+                  <EmptyState
+                    class={STATEFUL}
+                    icon={IconChat}
+                    line="The transcript was found and has no turns yet. Write the first message below."
+                    title="Nothing has been said here yet"
+                  />
+                </div>
+              {:else if !waiting}
+                <div class="state" {@attach reveals}>
+                  <Transcript {agentName} {focused} {session} {visible} />
+                </div>
+              {/if}
+              {#if veiled}
+                <div class="veil" in:crossIn out:crossOut>
+                  <TranscriptSkeleton />
+                </div>
               {/if}
             </div>
 
             <!-- Composer stays outside the slide — it's shared structure. On
                  the deck it is not here at all: the deck draws it. -->
             {#if !fault && (unaddressable || readOnly)}
-              <p class="readonly">
+              <p class="readonly" in:crossIn out:crossOut>
                 This transcript is stored; the session isn't reachable from
                 here.
               </p>
@@ -1185,11 +1238,31 @@
      stay put. The entering transcript slides in from the tab direction,
      the exiting one slides out the opposite way. */
   .transcript-slide {
+    position: relative;
     display: flex;
     flex-direction: column;
     flex: 1 1 auto;
     min-height: 0;
     overflow: hidden;
+  }
+
+  /* One named state, or the transcript, filling the area. */
+  .state {
+    display: flex;
+    flex-direction: column;
+    flex: 1 1 auto;
+    min-height: 0;
+  }
+  /* The placeholder, laid over the transcript until its rows are drawn:
+     opaque, so fading it is the cross-fade, and above the transcript's own
+     sticky notes, below the composer. */
+  .veil {
+    position: absolute;
+    inset: 0;
+    z-index: 4;
+    display: flex;
+    flex-direction: column;
+    background: var(--surface-recess);
   }
 
   /**

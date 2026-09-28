@@ -19,6 +19,7 @@
    */
   import Down from "~icons/solar/alt-arrow-down-linear";
   import Tuning from "~icons/solar/tuning-2-bold-duotone";
+  import { crossIn, crossOut } from "../motion/curves.svelte";
   import EffortPips from "./EffortPips.svelte";
   import NsPopover from "./NsPopover.svelte";
   import NsPopoverGroup from "./NsPopoverGroup.svelte";
@@ -52,66 +53,84 @@
   <span class="chip-label">{look.short}</span>
 {/snippet}
 
-{#if readonly}
-  {#if tools.efforts.length}
-    <span class="ns-chip-btn tool static">{@render effortChip()}</span>
+<!-- Read-only and editable cross-fade in place (motion/curves crossIn/crossOut). -->
+<span class="tool-chips">
+  {#if readonly}
+    <span class="swap" in:crossIn out:crossOut>
+      {#if tools.efforts.length}
+        <span class="ns-chip-btn tool static">{@render effortChip()}</span>
+      {/if}
+      {#if tools.modes.length}
+        <span class="ns-chip-btn tool static">{@render permissionChip()}</span>
+      {/if}
+    </span>
+  {:else}
+    <span class="swap" in:crossIn out:crossOut>
+      <NsPopoverGroup>
+        {#if tools.efforts.length}
+          <NsPopover
+            align="end"
+            id={`${id}-effort`}
+            label="Effort"
+            onchange={(value) => { pop = value ? 'effort' : null; }}
+            open={pop === "effort"}
+            triggerClass="ns-chip-btn tool"
+            width={300}
+          >
+            {#snippet trigger()}
+              {@render effortChip()}
+              <Down class="chevron" />
+            {/snippet}
+            <div class="effort-pop">
+              <EffortPips
+                efforts={tools.efforts}
+                embedded
+                onchange={tools.oneffort}
+                oncommit={closeOnCommit ? (level) => { tools.oneffort(level); pop = null; } : undefined}
+                value={tools.effort}
+              />
+            </div>
+          </NsPopover>
+        {/if}
+        {#if tools.modes.length}
+          <NsPopover
+            align="end"
+            id={`${id}-permission`}
+            label="Permission mode"
+            onchange={(value) => { pop = value ? 'permission' : null; }}
+            open={pop === "permission"}
+            triggerClass="ns-chip-btn tool"
+            width={340}
+          >
+            {#snippet trigger()}
+              {@render permissionChip()}
+              <Down class="chevron" />
+            {/snippet}
+            <PermissionSection
+              embedded
+              modes={tools.modes}
+              onchange={(mode) => { tools.onpermission(mode); pop = null; }}
+              value={tools.permission}
+            />
+          </NsPopover>
+        {/if}
+      </NsPopoverGroup>
+    </span>
   {/if}
-  {#if tools.modes.length}
-    <span class="ns-chip-btn tool static">{@render permissionChip()}</span>
-  {/if}
-{:else}
-  <NsPopoverGroup>
-    {#if tools.efforts.length}
-      <NsPopover
-        align="end"
-        id={`${id}-effort`}
-        label="Effort"
-        onchange={(value) => { pop = value ? 'effort' : null; }}
-        open={pop === "effort"}
-        triggerClass="ns-chip-btn tool"
-        width={300}
-      >
-        {#snippet trigger()}
-          {@render effortChip()}
-          <Down class="chevron" />
-        {/snippet}
-        <div class="effort-pop">
-          <EffortPips
-            efforts={tools.efforts}
-            embedded
-            onchange={tools.oneffort}
-            oncommit={closeOnCommit ? (level) => { tools.oneffort(level); pop = null; } : undefined}
-            value={tools.effort}
-          />
-        </div>
-      </NsPopover>
-    {/if}
-    {#if tools.modes.length}
-      <NsPopover
-        align="end"
-        id={`${id}-permission`}
-        label="Permission mode"
-        onchange={(value) => { pop = value ? 'permission' : null; }}
-        open={pop === "permission"}
-        triggerClass="ns-chip-btn tool"
-        width={340}
-      >
-        {#snippet trigger()}
-          {@render permissionChip()}
-          <Down class="chevron" />
-        {/snippet}
-        <PermissionSection
-          embedded
-          modes={tools.modes}
-          onchange={(mode) => { tools.onpermission(mode); pop = null; }}
-          value={tools.permission}
-        />
-      </NsPopover>
-    {/if}
-  </NsPopoverGroup>
-{/if}
+</span>
 
 <style>
+  /* The chips keep the gap of the row they sit in. */
+  .tool-chips {
+    position: relative;
+    display: inline-flex;
+    gap: inherit;
+  }
+  .swap {
+    display: inline-flex;
+    align-items: center;
+    gap: inherit;
+  }
   .level {
     text-transform: capitalize;
   }

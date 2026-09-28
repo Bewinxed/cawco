@@ -64,6 +64,15 @@ export function depart(
 }
 
 /**
+ * Whether a fresh departure waits under `key`: a destination deciding how
+ * to arrive (out of what was clicked, or on its own) asks before it lands.
+ */
+export function waiting(key: string): boolean {
+  const from = departures.get(key);
+  return !!from && performance.now() - from.at < from.ttl;
+}
+
+/**
  * A departure handed from one key to another. A Start is pressed before the
  * session it starts has an id, so it departs as `session:new`; once the
  * session exists, its departure becomes that session's, and only that
