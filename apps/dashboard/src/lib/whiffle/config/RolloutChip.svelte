@@ -246,9 +246,11 @@
     display: inline-grid;
     flex: none;
     width: 12px;
-    transition:
-      width var(--dur-control) var(--ease-out),
-      margin var(--dur-control) var(--ease-out);
+    @media (prefers-reduced-motion: no-preference) {
+      transition:
+        width var(--dur-control) var(--ease-out),
+        margin var(--dur-control) var(--ease-out);
+    }
 
     &[data-glyph="none"] {
       width: 0;
@@ -257,7 +259,9 @@
     & > :global(*) {
       grid-area: 1 / 1;
       opacity: 0;
-      transition: opacity var(--dur-control) var(--ease-out);
+      @media (prefers-reduced-motion: no-preference) {
+        transition: opacity var(--dur-control) var(--ease-out);
+      }
     }
     &[data-glyph="fail"] > :global([data-for="fail"]),
     &[data-glyph="done"] > :global([data-for="done"]),
