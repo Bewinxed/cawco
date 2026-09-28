@@ -103,7 +103,7 @@ import {
   refreshTasks,
   TASK_LEDGER_TOOLS,
 } from "./tasks.svelte";
-import { queuedFrom } from "./transcript/rows";
+import { queuedFrom, type Voice, voiceOfMessage } from "./transcript/rows";
 import type {
   DelegateAskEvent,
   DelegateEvent,
@@ -3908,6 +3908,14 @@ export async function streamHistory({
 
   /** Entries buffered newest-first, waiting for a cut a chunk can start at. */
   let buffered: SessionMessage[] = [];
+  /**
+   * A cut at one of the reader's own turns, held until the entry older than
+   * it says whether the reader's run goes on: how many buffered entries the
+   * chunk takes, or 0. A chunk that began mid-run drew its first turn with a
+   * speaker line the older chunk then took away (rows.ts `grouped`), so the
+   * cut moves back to the run's first turn.
+   */
+  let held = 0;
   /** Tool results in the buffer whose `tool_use` is older still — a cut here would split them. */
   const dangling = new Set<string>();
   const seeded = new Set<string>();
@@ -4043,6 +4051,9 @@ export async function streamHistory({
       seeded.add(entry.uuid);
       oldest = entry.uuid;
       consumed += 1;
+      if (held > 0 && !(await resolveHeld(entry))) {
+        return;
+      }
       // Only a turn opener with no tool pair left hanging can begin a chunk:
       // anywhere else the slice would open mid-turn, with results arriving for
       // a `tool_use` on the other side of the cut.
@@ -4051,13 +4062,53 @@ export async function streamHistory({
       if (buffered.length < size || dangling.size > 0 || !turnStart(entry)) {
         return;
       }
+      if (voiceOfEntry(entry) === "you") {
+        held = buffered.length;
+        return;
+      }
+      await flush(buffered.length);
+    };
+
+    /**
+     * The held cut, answered by the entry older than it: the reader's run goes
+     * on (the cut is dropped, and moves back), or it ended there (the chunk
+     * goes out). False while the entry draws nothing and the question stays
+     * with the one before it.
+     */
+    const resolveHeld = async (entry: SessionMessage): Promise<boolean> => {
+      const voice = voiceOfEntry(entry);
+      if (voice === "none") {
+        return false;
+      }
+      if (voice === "you") {
+        held = 0;
+      } else {
+        await flush(held);
+      }
+      return true;
+    };
+
+    /** Whose voice a stored entry's rows are, by the transcript's own rule. */
+    const voiceOfEntry = (entry: SessionMessage): Voice => {
+      const voices = mapTranscript(viewId, [entry]).messages.map(
+        voiceOfMessage
+      );
+      if (voices.includes("you")) {
+        return "you";
+      }
+      return voices.find((voice) => voice !== "none") ?? "none";
+    };
+
+    /** The newest `count` buffered entries, published as one chunk. */
+    const flush = async (count: number): Promise<void> => {
       // Mapping a chunk is the blocking work, so the loop hands the event loop
       // back between them — this is what the reader scrolls and types through.
       if (chunks > 0) {
         await new Promise((resolve) => setTimeout(resolve, 0));
       }
-      publish(buffered.reverse());
-      buffered = [];
+      publish(buffered.slice(0, count).reverse());
+      buffered = buffered.slice(count);
+      held = 0;
     };
 
     /**

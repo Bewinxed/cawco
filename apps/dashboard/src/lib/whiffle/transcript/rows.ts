@@ -71,12 +71,20 @@ export interface Voices {
 
 const NO_VOICE: Voices = { speaker: null, headed: false };
 
-type Voice = "you" | "says" | "acts" | "note" | "none";
+export type Voice = "you" | "says" | "acts" | "note" | "none";
 
 /** SystemLine's rows that belong to the agent's run rather than interrupt it. */
 const RUN_LINES = new Set(["system.task"]);
 
-function voiceOfMessage(m: Message): Voice {
+/**
+ * Whose voice one message is, by the rule above. The history reader asks it
+ * too, so a chunk never starts in the middle of the reader's run of turns.
+ */
+export function voiceOfMessage(m: Message): Voice {
+  // Harness plumbing in the reader's role is a task note on the rail.
+  if (isHarnessNote(m)) {
+    return "acts";
+  }
   switch (m.type) {
     case "user":
       return "you";
