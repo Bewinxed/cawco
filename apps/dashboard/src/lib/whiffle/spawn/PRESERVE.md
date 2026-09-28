@@ -131,32 +131,7 @@ It reruns on `ResizeObserver` width changes (`PromptWell.svelte:35-48`) to preve
 <meta content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" name="viewport">
 ```
 
-- While open at `max-width: 600px`, the dialog measures `window.visualViewport` and writes `--ns-viewport-height` and `--ns-viewport-top` on resize, viewport scroll, and window resize; cleanup removes the listeners and properties (`NewSessionDialog.svelte:85-110`):
-
-```ts
-root.setProperty("--ns-viewport-height", `${viewport?.height ?? window.innerHeight}px`);
-root.setProperty("--ns-viewport-top", `${viewport?.offsetTop ?? 0}px`);
-```
-
-- The card becomes a fixed bottom sheet using those variables, with safe-area bottom padding and bounded overflow (`NewSessionDialog.svelte:715-759`):
-
-```css
-:global(.session-card) {
-  top: auto;
-  bottom: calc(100% - var(--ns-viewport-height, 100dvh) - var(--ns-viewport-top, 0px));
-  left: 0;
-  translate: 0 var(--sheet-enter);
-  width: 100%;
-  max-width: 100%;
-  max-height: var(--ns-viewport-height, 100dvh);
-  display: flex;
-  flex-direction: column;
-  overflow-x: hidden;
-  padding: var(--space-2) 0 calc(var(--space-2) + env(safe-area-inset-bottom));
-  border-radius: var(--radius-modal) var(--radius-modal) 0 0;
-}
-```
-
+- On phones (`max-width: 640px`) the card is the kit Drawer (`$lib/components/ui/drawer`, vaul): a bottom sheet with safe-area bottom padding that follows the finger from its header and dismisses on vaul's distance (25%) or flick (0.4 px/ms) thresholds. vaul's `repositionInputs` keeps it above the keyboard; the dialog no longer measures `window.visualViewport` itself.
 - The mobile prompt may scroll within `min-height: 0`, and textarea height is capped against the measured visible viewport minus 160px and safe area (`NewSessionDialog.svelte:735-750`).
 - Mobile popovers become full-viewport fixed panels in the same measured viewport. Their shell fixes top/left/right/width/height and their content has safe-area top/bottom padding and its own vertical scroll (`ComposerPopover.svelte:151-177`):
 

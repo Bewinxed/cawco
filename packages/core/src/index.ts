@@ -1,4 +1,5 @@
 import type { FleetSyncReport } from "./fleet";
+import type { HarnessReport } from "./harness";
 import type { ToolStatus } from "./tools";
 
 // "Continue in new session": the size rules the hub and the dashboard share.
@@ -271,7 +272,22 @@ export interface HeartbeatPayload {
    * may be days away. Absent from a daemon whose watcher has never ticked.
    */
   deploy?: DeployInfo;
+  /**
+   * What each harness adapter on the machine can do, and whether it is
+   * installed and authenticated. Rides one beat per connection, sent the
+   * moment the daemon's probes finish, and never the 15s cadence: the probes
+   * spawn processes (claude's starts a real Claude Code), and a register that
+   * waited for them kept the machine out of the hub's registry for seconds
+   * after every hub restart. Absent from every other beat.
+   */
+  harnesses?: HarnessReport[];
   instances: string[];
+  /**
+   * What the machine has of the tool catalog (NEW.md §10), so the hub can send
+   * an install for whatever its policy requires and this machine lacks. Rides
+   * the same beat as `harnesses`, for the same reason.
+   */
+  tools?: ToolStatus[];
 }
 
 /** `stop`: interrupt and close a live session. */
@@ -442,6 +458,13 @@ export interface BuildInfo {
  */
 export interface UpdateReport {
   built: boolean;
+  /**
+   * The services whose code the update changed: the only ones it rebuilt or
+   * restarted, and the only way a deploy leaves the agent owing a restart.
+   * Every service when nothing was pulled (an update asked of a current
+   * checkout restarts the stack) and for a registry install.
+   */
+  changed: string[];
   from?: string;
   installed: boolean;
   /** The tail of what git said — 'Already up to date.' included. */

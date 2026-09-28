@@ -29,10 +29,21 @@
    * being written.
    */
   import { type Snippet, tick, untrack } from "svelte";
+  import type { TransitionConfig } from "svelte/transition";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Command from "$lib/components/ui/command";
   import { IconClose, IconPlus, IconSend, IconStop } from "$lib/icons";
   import { autosize } from "$lib/whiffle/motion/autosize.svelte";
+  import {
+    dur,
+    ease,
+    easeDrawer,
+    easeOut,
+    motionOk,
+    popScale,
+  } from "$lib/whiffle/motion/curves.svelte";
+  import { unfold } from "$lib/whiffle/motion/fold.svelte";
+  import { reflow } from "$lib/whiffle/motion/rows.svelte";
   import type { SendExtras } from "../client.svelte";
   import { cleanDetail } from "../command-detail";
   import SelectionChip from "../preview/SelectionChip.svelte";
@@ -200,13 +211,67 @@
   /** A `/` or `@` token stops being typed as one the moment it holds whitespace. */
   const TOKEN_WHITESPACE = /\s/;
 
-  /** The words put back from outside (Edit on a failed send) land with focus. */
+  /**
+   * The words put back from outside (Edit on a failed send) land with focus,
+   * and fade up in the field over --dur-control rather than replacing what
+   * was there in one frame. Their attachments come back with them, and the
+   * row that holds those folds open above the field.
+   */
   $effect(() => {
     if (draft.focusWanted) {
       field?.focus();
+      field?.animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration: dur("--dur-control"),
+        easing: ease("--ease-out"),
+      });
       draft.focusWanted = false;
     }
   });
+
+  /**
+   * The composer arriving where a read-only note stood (and back): the two
+   * cross-fade over --dur-control and the composer rises 8px into place.
+   * Reduced motion keeps the fade.
+   */
+  function rise(_node: Element): TransitionConfig {
+    const still = !motionOk.current;
+    return {
+      duration: dur("--dur-control"),
+      easing: easeOut,
+      css: (t, u) =>
+        still ? `opacity: ${t}` : `opacity: ${t}; translate: 0 ${u * 8}px`,
+    };
+  }
+  function fade(_node: Element): TransitionConfig {
+    return {
+      duration: dur("--dur-control"),
+      easing: easeOut,
+      css: (t) => `opacity: ${t}`,
+    };
+  }
+
+  /**
+   * The `/` and `@` menu leaves the way the kit's surfaces leave
+   * (app.css `.kit-pop[data-state="closed"]`, here `data-side="top"`): back
+   * down toward the field it stands on, shrinking to the pop scale as it
+   * fades, over --dur-exit. It comes in by the kit's own `@starting-style`.
+   */
+  function menuOut(node: HTMLElement): TransitionConfig {
+    const duration = dur("--dur-exit");
+    if (!motionOk.current) {
+      return { duration, css: (t) => `opacity: ${t}` };
+    }
+    const scale = popScale();
+    const rise = Number.parseFloat(
+      getComputedStyle(node).getPropertyValue("--pop-rise")
+    );
+    return {
+      duration,
+      easing: easeDrawer,
+      css: (t) =>
+        `opacity: ${t}; scale: ${scale + (1 - scale) * t}; translate: 0 ${((1 - t) * rise).toFixed(2)}px`,
+    };
+  }
 
   /* ---- the `/` and `@` menu ------------------------------------------- */
 
@@ -675,21 +740,39 @@
   };
 </script>
 
-<div class="fade"></div>
-<!-- Parked prompts stand in their own box on top of the composer, so a card
-     arriving or leaving never moves the composer itself. -->
+<div class="fade" transition:fade></div>
+<!-- Parked prompts stand in their own column on top of the composer, so a
+     card arriving or leaving never moves the composer itself. The column
+     reaches from the top of the pane down to the composer and stands its
+     cards on its bottom edge: it stays where it is while cards come and go,
+     so the list moves the way every list does (motion/rows.svelte.ts) — a
+     card arriving is uncovered as the cards above it slide up to make its
+     room, a card leaving closes as they slide back down. -->
 {#if prompts}
   <div
     class="prompts"
     style:bottom="calc(var(--space-4) + env(safe-area-inset-bottom) + {panel}px)"
-    bind:clientHeight={stack}
+    {@attach reflow()}
   >
-    {@render prompts()}
+    <div class="stack" bind:clientHeight={stack}>{@render prompts()}</div>
   </div>
 {/if}
-<div class="composer" bind:clientHeight={panel}>
+<div
+  class="composer"
+  in:rise
+  out:fade
+  bind:clientHeight={panel}
+>
+  <!-- The row of attachments is one block above the field: it folds open
+       with its first chip and shut with its last. The chips in it are a
+       list (motion/rows.svelte.ts): one added pops in, one removed shrinks
+       to the pop scale as it fades, and the rest slide together. -->
   {#if draft.images.length || draft.texts.length || draft.selections.length}
-    <div class="atts">
+    <div
+      class="atts"
+      transition:unfold
+      {@attach reflow()}
+    >
       {#each draft.selections as selection (`${selection.element.url}:${selection.element.selector}`)}
         <SelectionChip
           onedit={() => { draft.editing = selection; draft.editorOpen = true; }}
@@ -699,7 +782,7 @@
         />
       {/each}
       {#each draft.images as img, i (img.name + i)}
-        <span class="att">
+        <span class="att" data-flip="pop">
           <img alt="" src="data:{img.mediaType};base64,{img.data}">
           <span class="att-name">{img.name}</span>
           <button
@@ -713,7 +796,7 @@
         </span>
       {/each}
       {#each draft.texts as t, i (t.name + i)}
-        <span class="att">
+        <span class="att" data-flip="pop">
           <span class="att-name">{t.name}</span>
           <button
             aria-label="Remove"
@@ -768,10 +851,13 @@
            would blur it, so a clicked row lands on the message being written. -->
       <!-- biome-ignore lint/a11y/noStaticElementInteractions: role="presentation" is deliberate — this wrapper is never meant to be announced; the mousedown handler only preventDefaults so focus stays on the textarea, it is not a user interaction target. -->
       <div
-        class="menu"
+        class="menu kit-pop"
+        data-side="top"
+        data-state="open"
         id="composer-menu"
         onmousedown={(event) => event.preventDefault()}
         role="presentation"
+        out:menuOut
       >
         <Command.Root loop shouldFilter={false} bind:value={highlight}>
           <Command.List>
@@ -896,26 +982,29 @@
      panel is its own bottom padding, so its measured height carries it. */
   .prompts {
     position: absolute;
+    top: 0;
     left: 50%;
     transform: translateX(-50%);
     z-index: 20;
     width: min(720px, calc(100% - 50px));
     display: flex;
     flex-direction: column;
-    gap: var(--space-3);
-    padding-bottom: var(--space-3);
+    justify-content: flex-end;
     pointer-events: none;
+  }
+  /* What the column measures into the composer's height: the cards and
+     the step under them, and nothing at all with no card parked. */
+  .stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
 
+    &:has(> :global(*)) {
+      padding-bottom: var(--space-3);
+    }
     & > :global(*) {
       pointer-events: auto;
     }
-  }
-  /* The snippet is always passed; with nothing parked it renders only its
-     anchors, and an empty box would still carry its padding into the
-     measured column. A leaving prompt keeps it open until its exit has
-     played. */
-  .prompts:empty {
-    display: none;
   }
 
   /* One shape, always. --radius-lg outside, --space-2 of inset, and the
@@ -982,6 +1071,9 @@
   }
 
   /* The `/` and `@` menu, above the pill and matched to its width. */
+  /* A kit floating surface (app.css `.kit-pop`): it rises out of the field
+     below it, growing from its bottom edge, the side the caret is on. The
+     list inside carries its own inset. */
   .menu {
     position: absolute;
     left: 0;
@@ -989,26 +1081,8 @@
     bottom: calc(100% + var(--space-2));
     max-height: 320px;
     overflow: hidden;
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
-    /* It floats above the input, so it settles UPWARD into place — 4px of
-       travel, one --dur-control, and then it is still. Dismissal is instant: a menu
-       that lingers on the way out sits over the sentence being written. */
-    @media (prefers-reduced-motion: no-preference) {
-      animation: menu-open var(--dur-control) var(--ease-out) both;
-    }
-  }
-  @keyframes menu-open {
-    from {
-      opacity: 0;
-      transform: translateY(4px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
+    padding: 0;
+    transform-origin: bottom;
   }
 
   /* The Command primitive is shadcn's; its parts are addressed by slot so the
@@ -1041,9 +1115,9 @@
     color: var(--ink-muted);
   }
 
-  /* One row: the name, its prose, and where it came from — on a single line,
-     the selected one carrying fill and stronger ink so the highlight survives
-     greyscale (it is never colour alone). */
+  /* One row: the name, its prose, and where it came from — on a single
+     line. The highlighted row stands on the kit's ghost (Command.List),
+     which glides from row to row under the arrow keys and the pointer. */
   :global(.menu [data-slot="command-item"]) {
     display: flex;
     align-items: baseline;
@@ -1052,13 +1126,6 @@
     padding: var(--space-1) var(--space-2);
     border-radius: var(--radius-sm);
     cursor: pointer;
-    color: var(--ink-strong);
-    transition:
-      background-color var(--dur-control) var(--ease-out),
-      color var(--dur-control) var(--ease-out);
-  }
-  :global(.menu [data-slot="command-item"][data-selected="true"]) {
-    background: var(--surface-hover);
     color: var(--ink-strong);
   }
   @media (pointer: coarse) {
@@ -1217,22 +1284,6 @@
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
     color: var(--ink-strong);
-    /* A chip appearing under the input is a small confirmation, so it gets a
-       small one: 2px of travel and one --dur-control. Removal stays instant — the
-       reader who clicked × has already decided. */
-    @media (prefers-reduced-motion: no-preference) {
-      animation: att-in var(--dur-control) var(--ease-out) both;
-    }
-  }
-  @keyframes att-in {
-    from {
-      opacity: 0;
-      transform: translateY(2px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
   }
   /* The name carries the ellipsis, so the chip itself does not clip its
      remove button's touch area. */

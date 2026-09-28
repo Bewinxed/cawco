@@ -4,11 +4,9 @@ import type {
   BuildInfo,
   DeployInfo,
   Envelope,
-  HarnessReport,
   HeartbeatPayload,
   PermissionMode,
   SpawnPayload,
-  ToolStatus,
 } from "@whiffle/core";
 import {
   CONTROL_SEARCH_TRANSCRIPTS,
@@ -60,6 +58,13 @@ interface MachineIdentity {
  * What `register` carries. The supervisor outlives any one connection, so a
  * register is not a promise of zero sessions — `instances` names the ones still
  * running and the hub marks every other row it calls running as unknown.
+ *
+ * Only what the daemon can say without spawning anything. The register is the
+ * moment the hub puts this machine back in its registry — `online` is read
+ * from nowhere else — so every millisecond spent before sending it is a
+ * millisecond a healthy machine reads offline. Harnesses and tools, whose
+ * probes start processes, follow on a beat of their own: see
+ * {@link HeartbeatPayload}.
  */
 export interface RegisterPayload extends MachineIdentity {
   /**
@@ -75,12 +80,6 @@ export interface RegisterPayload extends MachineIdentity {
    * daemon with no deployment watcher running simply omits it.
    */
   deploy?: DeployInfo;
-  /**
-   * What each harness adapter on this machine can do, and whether it is
-   * installed and authenticated — the rail's per-harness word, and what gates
-   * the fleet syncs and spawn forms.
-   */
-  harnesses?: HarnessReport[];
   instances: string[];
   /**
    * True on exactly one register: the first one this process ever sends,
@@ -105,11 +104,6 @@ export interface RegisterPayload extends MachineIdentity {
    * so a hub that predates this field still reads the ids.
    */
   resumableAt?: Record<string, number>;
-  /**
-   * What the machine has of the tool catalog (NEW.md §10), so the hub can send
-   * an install for whatever its policy requires and this machine lacks.
-   */
-  tools?: ToolStatus[];
 }
 
 export class ConnectionLost extends Data.TaggedError("ConnectionLost")<{
@@ -118,8 +112,28 @@ export class ConnectionLost extends Data.TaggedError("ConnectionLost")<{
 }> {}
 
 /**
- * One retry series: 1s, 2s, 4s … capped at 30s, jittered so a fleet never
- * retries in lockstep.
+ * How often a daemon knocks while its hub is coming back from a restart, and
+ * how many knocks it spends before deciding the outage is real.
+ *
+ * A deploy that reaches the hub's code restarts it (`restartStack`,
+ * update.ts), and a restarted hub starts with an empty registry, which is the only place `online` is read
+ * from: every machine reads offline until its daemon registers again. Measured
+ * here, the hub is listening again 0.42–0.54s after systemd stops it (journal,
+ * `Stopping` to `listening on`, 12 deploy restarts). The first attempt after a
+ * connection ends always finds the port closed, and when the series started at
+ * 1s the second attempt came 0.8–1.2s later (jittered), so every deploy showed
+ * healthy machines as offline for another 0.3–0.8s of pure waiting after the
+ * hub was already listening. A 50ms knock means the daemon is back within
+ * 50ms of the hub. 40 knocks (2s) give a slow boot nearly four times the
+ * slowest measured restart before the series backs off.
+ */
+const RESTART_KNOCK = Duration.millis(50);
+const RESTART_KNOCKS = 40;
+const RESTART_WINDOW_MS = Duration.toMillis(RESTART_KNOCK) * RESTART_KNOCKS;
+
+/**
+ * One retry series: a 50ms knock for 2s ({@link RESTART_KNOCK}), then 1s, 2s,
+ * 4s … capped at 30s, all jittered so a fleet never retries in lockstep.
  *
  * A schedule carries its exponent in its own state, and that state lives for
  * exactly as long as the `Effect.retry` that stepped it. Because `attach` never
@@ -133,12 +147,15 @@ export class ConnectionLost extends Data.TaggedError("ConnectionLost")<{
  *
  * {@link reconnecting} is what keeps this honest — it ends the series once a
  * connection has actually been healthy, so the next outage steps a schedule
- * that starts again at 1s.
+ * that starts again at the knock.
  */
-export const reconnect = Schedule.min([
-  Schedule.exponential(Duration.seconds(1)),
-  Schedule.spaced(Duration.seconds(30)),
-]).pipe(Schedule.jittered);
+export const reconnect = Schedule.concat(
+  Schedule.spaced(RESTART_KNOCK).pipe(Schedule.upTo({ times: RESTART_KNOCKS })),
+  Schedule.min([
+    Schedule.exponential(Duration.seconds(1)),
+    Schedule.spaced(Duration.seconds(30)),
+  ])
+).pipe(Schedule.jittered);
 
 /**
  * How long a connection must stand before losing it counts as a fresh outage
@@ -209,7 +226,7 @@ export const REDISCOVERY_FAILURE_WINDOW = Duration.minutes(2);
  * live, or less than `healthyAfter` after it went live, stays inside that retry
  * and pays the growing backoff. A failure after a healthy stretch ENDS the
  * series by succeeding, and the loop re-enters with a schedule that starts over
- * at 1s.
+ * at the knock.
  *
  * The loop deliberately contains nothing but the connection: the supervisor and
  * the scanner are built by the caller, outside it, and stay built across every
@@ -258,6 +275,11 @@ export const reconnecting = <E extends { readonly reason: string }, R>(
     // `Effect.retry` re-invokes on every attempt.
     let failures = 0;
     let firstFailureAt: number | undefined;
+    // The last reason this series logged, and when. A hub restart fails the
+    // knock about ten times inside half a second; one line per reason says
+    // as much, and a reason repeated after a knock window has passed (a real
+    // outage backing off) is logged again, as every attempt used to be.
+    let said: { at: number; reason: string } | undefined;
 
     return Effect.suspend(() => {
       // Per-pass, and read only after the failure that ends the pass — nothing
@@ -266,9 +288,17 @@ export const reconnecting = <E extends { readonly reason: string }, R>(
       return session(() => {
         liveAt = now();
       }).pipe(
-        Effect.tapError((error) =>
-          Effect.logWarning(`${error.reason} — reconnecting`)
-        ),
+        Effect.tapError((error) => {
+          const at = now();
+          if (
+            said?.reason === error.reason &&
+            at - said.at <= RESTART_WINDOW_MS
+          ) {
+            return Effect.void;
+          }
+          said = { at, reason: error.reason };
+          return Effect.logWarning(`${error.reason} — reconnecting`);
+        }),
         Effect.tapError(() => {
           if (!rediscover) {
             return Effect.void;
@@ -394,11 +424,72 @@ export const custodyRow = (
   ...(payload.permissionMode ? { permissionMode: payload.permissionMode } : {}),
 });
 
+/**
+ * What the register says about this machine's sessions: what sessiond is still
+ * holding, and what each harness could resume.
+ */
+const readSessions = async () => {
+  // Read before the catalog: listing OpenCode conversations may start a new
+  // server, which must not be mistaken for one that survived this restart.
+  const custody = await (async () => {
+    try {
+      const client = await SessiondClient.connect(
+        process.env.WHIFFLE_SESSIOND_ENDPOINT ?? sessiondEndpoint()
+      );
+      try {
+        const held = client.procs.filter((proc) => proc.alive);
+        return {
+          instances: held
+            .filter((proc) => proc.procId !== OPENCODE_SERVER_PROC_ID)
+            .map((proc) => proc.procId),
+          opencode: held.some(
+            (proc) => proc.procId === OPENCODE_SERVER_PROC_ID
+          ),
+        };
+      } finally {
+        client.close();
+      }
+    } catch (error) {
+      Effect.runFork(
+        Effect.logWarning(`session custody unavailable: ${String(error)}`)
+      );
+    }
+  })();
+  const catalog = await resumableSessions();
+  return { custody, catalog };
+};
+
+/**
+ * The sessions half of the register, read when an attempt starts rather than
+ * after its socket opens, and shared by every attempt inside one knock window.
+ *
+ * The catalog is the slow part of a register: listing 757 claude conversations
+ * took 315–380ms here, and the register cannot go out without it. Read after
+ * the socket opened, it was the last thing keeping a healthy machine offline
+ * after a hub restart (0.39–0.41s in restart runs against a local hub). Started
+ * when the attempt starts, it runs while the hub is still booting. The knocks
+ * after it reuse that one read instead of starting their own, so it is at most
+ * one knock window (2s) old when a register carries it. The register used to
+ * wait about that long on the harness probes after this same read, so it is no
+ * staler than it was.
+ */
+const sessionsReader = () => {
+  let latest: { at: number; read: ReturnType<typeof readSessions> } | undefined;
+  return () => {
+    const now = Date.now();
+    if (!latest || now - latest.at > RESTART_WINDOW_MS) {
+      latest = { at: now, read: readSessions() };
+    }
+    return latest.read;
+  };
+};
+
 const attach = (
   scanner: UsageScanner,
   supervisor: SessionSupervisor,
   identity: MachineIdentity,
   url: string,
+  sessions: () => ReturnType<typeof readSessions>,
   /**
    * Called once the socket is open and the register has gone out — the moment
    * this connection counts as up. {@link reconnecting} reads it to tell a
@@ -411,37 +502,14 @@ const attach = (
   }
 ) =>
   Effect.gen(function* () {
+    // Started before the socket, so it runs while the hub is still booting:
+    // see {@link sessionsReader}.
+    const reading = sessions();
     const socket = yield* connection(url);
     // The hub drops this machine's preview targets the moment the socket goes,
     // so a forwarder kept alive past the connection serves nobody: it goes too.
     yield* Effect.addFinalizer(() => Effect.sync(stopPreviews));
-    // Read before the catalog: listing OpenCode conversations may start a new
-    // server, which must not be mistaken for one that survived this restart.
-    const custody = yield* Effect.promise(async () => {
-      try {
-        const client = await SessiondClient.connect(
-          process.env.WHIFFLE_SESSIOND_ENDPOINT ?? sessiondEndpoint()
-        );
-        try {
-          const held = client.procs.filter((proc) => proc.alive);
-          return {
-            instances: held
-              .filter((proc) => proc.procId !== OPENCODE_SERVER_PROC_ID)
-              .map((proc) => proc.procId),
-            opencode: held.some(
-              (proc) => proc.procId === OPENCODE_SERVER_PROC_ID
-            ),
-          };
-        } finally {
-          client.close();
-        }
-      } catch (error) {
-        Effect.runFork(
-          Effect.logWarning(`session custody unavailable: ${String(error)}`)
-        );
-      }
-    });
-    const catalog = yield* Effect.promise(() => resumableSessions());
+    const { custody, catalog } = yield* Effect.promise(() => reading);
     const build = yield* Effect.promise(() => buildInfo());
     // Consumed, not just read: true only the first register after THIS
     // process came up because a deploy restarted it onto `build.commit`, and
@@ -465,10 +533,6 @@ const attach = (
             ),
           }
         : {}),
-      harnesses: yield* Effect.promise(() =>
-        Promise.all(harnesses().map((adapter) => adapter.detect()))
-      ),
-      tools: yield* Effect.promise(() => probeTools()),
       build,
       ...(latestDeploy() ? { deploy: latestDeploy() } : {}),
       ...(restarted ? { restarted: true } : {}),
@@ -477,26 +541,36 @@ const attach = (
     yield* Effect.logInfo(`registered with ${url}`);
     markLive();
 
+    // What the machine can do goes out once its probes finish, on a beat of
+    // its own, and not inside the register above. The probes spawn processes
+    // (claude's starts a real Claude Code to ask for the account), and a
+    // register that waited for them kept this machine out of the hub's
+    // registry, and so reading offline, for most of the 2.7–3.2s the journal
+    // showed between `Connection ended` and `registered with` on every hub
+    // restart.
     supervisor.reannounce = () => {
-      if (socket.readyState !== WebSocket.OPEN) {
-        return;
-      }
       // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — reannounce doesn't await its own send
-      void Promise.all(harnesses().map((adapter) => adapter.detect())).then(
-        (detected) => {
-          send(socket, {
-            verb: "register",
-            machineId: identity.machineId,
-            payload: {
-              ...identity,
-              auth: detected[0]?.auth ?? identity.auth,
-              harnesses: detected,
-              instances: supervisor.instanceIds,
-            },
-          });
+      void Promise.all([
+        Promise.all(harnesses().map((adapter) => adapter.detect())),
+        probeTools(),
+      ]).then(([detected, tools]) => {
+        if (socket.readyState !== WebSocket.OPEN) {
+          return;
         }
-      );
+        send(socket, {
+          verb: "heartbeat",
+          machineId: identity.machineId,
+          payload: {
+            at: Date.now(),
+            instances: supervisor.instanceIds,
+            ...(latestDeploy() ? { deploy: latestDeploy() } : {}),
+            harnesses: detected,
+            tools,
+          } satisfies HeartbeatPayload,
+        });
+      });
     };
+    supervisor.reannounce();
 
     // A hand-off leaves as a `send` addressed at the target's machine; the hub
     // relays it the same way it relays a dashboard's.
@@ -826,13 +900,16 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     yield* Effect.logInfo(
       `whiffle agent ${identity.machineId} connecting to ${url}`
     );
+    const sessions = sessionsReader();
     // The connection — and only the connection — is what the loop re-enters.
     // The supervisor above it keeps its sessions and the scanner keeps its
     // dedup set across every reconnect; an interrupt still unwinds through this
     // to the supervisor's release, so a signalled daemon drains between turns.
     yield* reconnecting(
       (markLive) =>
-        Effect.scoped(attach(scanner, supervisor, identity, hubUrl, markLive)),
+        Effect.scoped(
+          attach(scanner, supervisor, identity, hubUrl, sessions, markLive)
+        ),
       rediscover
         ? {
             rediscover: {

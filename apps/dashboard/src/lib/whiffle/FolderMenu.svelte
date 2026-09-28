@@ -58,9 +58,7 @@
   /** A swatch shows the colour it would apply, at the ink lightness it lands on. */
   const swatch = (hue: number) => `--identity-h: ${hue}`;
 
-  const pinned = $derived(
-    project ? rail.isPinned("project", project.id) : false
-  );
+  const pinned = $derived(project ? rail.isPinned(project.id) : false);
 
   let confirmingForget = $state(false);
   let busy = $state(false);
@@ -98,7 +96,7 @@
         <IconExternal />
         Open project page
       </ContextMenu.Item>
-      <ContextMenu.Item onSelect={() => rail.togglePin('project', project.id)}>
+      <ContextMenu.Item onSelect={() => rail.togglePin(project.id)}>
         {#if pinned}
           <IconPin />
           Unpin from rail

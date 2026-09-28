@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { goto } from "$app/navigation";
   /**
    * The breakdown table (USAGE-SPEC.md §7.2.5). Tabs for Project / Model /
    * Session, driven from a search param like the tools page, plus a harness
@@ -7,9 +6,12 @@
    * and opencode's real spend never sit in the same total. Each (tab, harness)
    * pair is fetched once and cached, so switching back costs no request.
    */
+  import { MediaQuery } from "svelte/reactivity";
+  import { goto } from "$app/navigation";
   import { page } from "$app/state";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Dialog from "$lib/components/ui/dialog";
+  import { Skeleton } from "$lib/components/ui/skeleton";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Table from "$lib/components/ui/table";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
@@ -122,6 +124,13 @@
     }
   }
 
+  /** The token split: on a phone it is in the row's detail, not the row. */
+  const SPLIT = new Set<SortKey>([
+    "input",
+    "output",
+    "cacheCreation",
+    "cacheRead",
+  ]);
   const COLUMNS: { key: SortKey; label: string }[] = $derived([
     { key: "input", label: "Input" },
     { key: "output", label: "Output" },
@@ -139,6 +148,18 @@
 
   let selected = $state<Row | null>(null);
   let dialogOpen = $state(false);
+
+  /**
+   * On a phone a row shows its name, cost, total and messages; the token
+   * split is its detail, so there every row opens it, whatever the tab.
+   */
+  const phone = new MediaQuery("(max-width: 639px)");
+  const opens = $derived(tab === "session" || phone.current);
+  const DETAIL_TITLES: Record<TabId, string> = {
+    model: "Model",
+    project: "Project",
+    session: "Session",
+  };
 
   function openSession(row: Row): void {
     selected = row;
@@ -198,14 +219,14 @@
   {#if loadError}
     <p class="text-meta text-error" role="alert">{loadError}</p>
   {:else if loading}
-    <div class="h-40 w-full rounded-[var(--radius-md)] bg-muted/40"></div>
+    <Skeleton class="h-40 w-full" />
   {:else}
     <Table.Root class="q-break" ghostRows="tbody tr.clickable">
       <Table.Header>
         <Table.Row>
           <Table.Head class="name-head">Name</Table.Head>
           {#each COLUMNS as column (column.key)}
-            <Table.Head class="num">
+            <Table.Head class="num {SPLIT.has(column.key) ? 'split' : ''}">
               <button
                 aria-pressed={sortBy === column.key}
                 class="sortbtn touch-hit"
@@ -224,16 +245,16 @@
       <Table.Body>
         {#each rows as row (String(row.key))}
           <Table.Row
-            class={tab === 'session' ? 'clickable' : ''}
-            onclick={() => (tab === 'session' ? openSession(row) : undefined)}
+            class={opens ? 'clickable' : ''}
+            onclick={() => (opens ? openSession(row) : undefined)}
             onkeydown={(event) => {
-              if (tab === 'session' && (event.key === 'Enter' || event.key === ' ')) {
+              if (opens && (event.key === 'Enter' || event.key === ' ')) {
                 event.preventDefault();
                 openSession(row);
               }
             }}
-            role={tab === 'session' ? 'button' : undefined}
-            tabindex={tab === 'session' ? 0 : undefined}
+            role={opens ? 'button' : undefined}
+            tabindex={opens ? 0 : undefined}
           >
             <Table.Cell
               class="name lead {tab === 'model' || tab === 'session' ? 'mono' : ''}"
@@ -241,27 +262,25 @@
             >
               {nameOf(row)}
             </Table.Cell>
-            <Table.Cell class="num" data-label="Input"
+            <Table.Cell class="num split" data-label="Input"
               >{compactNumber(row.input)}</Table.Cell
             >
-            <Table.Cell class="num" data-label="Output"
+            <Table.Cell class="num split" data-label="Output"
               >{compactNumber(row.output)}</Table.Cell
             >
-            <Table.Cell class="num" data-label="Cache write"
+            <Table.Cell class="num split" data-label="Cache write"
               >{compactNumber(row.cacheCreation)}</Table.Cell
             >
-            <Table.Cell class="num" data-label="Cache read"
+            <Table.Cell class="num split" data-label="Cache read"
               >{compactNumber(row.cacheRead)}</Table.Cell
             >
-            <Table.Cell class="num strong" data-label="Total"
+            <Table.Cell class="num strong total" data-label="Total"
               >{compactNumber(row.total)}</Table.Cell
             >
-            <Table.Cell class="num" data-label="Messages"
+            <Table.Cell class="num messages" data-label="Messages"
               >{row.messages.toLocaleString()}</Table.Cell
             >
-            <Table.Cell class="num strong" data-label="Cost"
-              >{usd(row.costUsd)}</Table.Cell
-            >
+            <Table.Cell class="num strong cost">{usd(row.costUsd)}</Table.Cell>
           </Table.Row>
         {/each}
         {#if rows.length === 0}
@@ -286,7 +305,7 @@
 >
   <Dialog.Content class="max-w-md">
     <Dialog.Header>
-      <Dialog.Title>Session</Dialog.Title>
+      <Dialog.Title>{DETAIL_TITLES[tab]}</Dialog.Title>
       <Dialog.Description class="font-mono text-label"
         >{selected?.key}</Dialog.Description
       >
@@ -332,7 +351,6 @@
   :global {
     .q-break {
       width: 100%;
-      min-width: max-content;
       border-collapse: collapse;
       font-variant-numeric: normal;
     }
@@ -348,6 +366,20 @@
     }
     .q-break thead th.num {
       text-align: right;
+    }
+    /* Under a laptop's width the heads wrap onto two lines, so eight
+       columns fit the card rather than scroll inside it. */
+    @media (max-width: 1023px) {
+      .q-break thead th {
+        white-space: normal;
+      }
+      .q-break .sortbtn {
+        text-align: end;
+      }
+      .q-break td.name {
+        white-space: normal;
+        overflow-wrap: anywhere;
+      }
     }
     .q-break .sortbtn {
       display: inline-flex;
@@ -405,9 +437,10 @@
       white-space: normal;
     }
 
-    /* A phone has no room for eight columns: the column heads wrap into one
-       row of sort buttons, and each row is two lines, the name as a label,
-       then every figure as meta under its column's name. */
+    /* A phone has no room for eight columns. Each row is two lines: the
+       name with its cost, then its total and messages as meta. The token
+       split is the row's detail, a press away. The column heads left wrap
+       into one row of sort buttons. */
     @media (max-width: 639px) {
       .q-break {
         display: block;
@@ -430,13 +463,15 @@
         padding: 0;
         border-bottom: 0;
       }
-      .q-break thead th.name-head {
+      .q-break thead th.name-head,
+      .q-break th.split,
+      .q-break td.split {
         display: none;
       }
       /* biome-ignore lint/style/noDescendingSpecificity: the phone layout sets display, gap and the meta role; the more specific base rules above set other properties, so their order does not decide anything. */
       .q-break tbody tr {
-        display: flex;
-        flex-wrap: wrap;
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
         gap: var(--space-1) var(--space-3);
         padding-block: var(--space-2);
         border-bottom: 1px solid var(--border-hairline);
@@ -452,15 +487,28 @@
         font: var(--type-meta);
       }
       .q-break td.lead {
-        flex: 1 0 100%;
         max-width: none;
         font: var(--type-label);
       }
       .q-break td.lead.mono {
         font-family: var(--font-mono);
       }
+      .q-break td.lead {
+        grid-area: 1 / 1;
+      }
+      .q-break td.cost {
+        grid-area: 1 / 2;
+        font: var(--type-label);
+      }
+      .q-break td.total {
+        grid-area: 2 / 1;
+        text-align: start;
+      }
+      .q-break td.messages {
+        grid-area: 2 / 2;
+      }
       .q-break td.empty {
-        flex: 1 0 100%;
+        grid-column: 1 / -1;
         padding-block: var(--space-6);
       }
       .q-break td[data-label]::before {

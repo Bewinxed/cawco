@@ -113,12 +113,6 @@ export class ConfigStore {
     }
   );
 
-  /**
-   * Unsaved memory text by file, kept while the operator moves between files:
-   * switching away from something half-written and back again returns it.
-   */
-  memoryDrafts = $state<Record<string, string>>({});
-
   /** The row a save just returned to, marked once when the list renders. */
   flash = $state<string | null>(null);
   #flashTimer: ReturnType<typeof setTimeout> | undefined;

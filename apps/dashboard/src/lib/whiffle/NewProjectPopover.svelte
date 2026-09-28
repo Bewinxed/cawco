@@ -14,6 +14,7 @@
   import * as Select from "$lib/components/ui/select";
   import { IconPlus } from "$lib/icons";
   import { createProject, whiffle } from "./client.svelte";
+  import { appear } from "./motion/curves.svelte";
 
   const leaf = (path: string) => path.split("/").filter(Boolean).pop() ?? path;
 
@@ -28,7 +29,14 @@
   let machineId = $state("");
   let cwd = $state("");
   let saving = $state(false);
-  let formError = $state<string | null>(null);
+  /**
+   * What stopped the last Create, and where it is said: under the field it is
+   * about, or, for what the hub answered, beside the button.
+   */
+  let problem = $state<{
+    at: "machine" | "dir" | "hub";
+    text: string;
+  } | null>(null);
 
   let nameInput = $state<HTMLInputElement | null>(null);
 
@@ -46,7 +54,7 @@
     machineId = whiffle.onlineMachines[0]?.machineId ?? "";
     cwd = "";
     saving = false;
-    formError = null;
+    problem = null;
     // biome-ignore lint/complexity/noVoid: focusing the name field after open is fire-and-forget — nothing awaits it
     void tick().then(() => nameInput?.focus());
   }
@@ -54,15 +62,21 @@
   async function create(event: SubmitEvent) {
     event.preventDefault();
     if (!machineId) {
-      formError = "Choose the machine this directory is on.";
+      problem = {
+        at: "machine",
+        text: "Choose the machine this directory is on.",
+      };
       return;
     }
     if (!dir) {
-      formError = "Enter the directory this project lives in.";
+      problem = {
+        at: "dir",
+        text: "Enter the directory this project lives in.",
+      };
       return;
     }
     saving = true;
-    formError = null;
+    problem = null;
     try {
       // `createProject` refreshes the registry, so the folder is already there.
       await createProject({
@@ -72,12 +86,23 @@
       });
       open = false;
     } catch (err) {
-      formError = err instanceof Error ? err.message : String(err);
+      problem = {
+        at: "hub",
+        text: err instanceof Error ? err.message : String(err),
+      };
     } finally {
       saving = false;
     }
   }
 </script>
+
+{#snippet problemAt(at: 'machine' | 'dir' | 'hub')}
+  {#if problem?.at === at}
+    <span class="text-label text-error" role="alert" in:appear
+      >{problem.text}</span
+    >
+  {/if}
+{/snippet}
 
 <Popover.Root onOpenChange={opened} {open}>
   <Popover.Trigger>
@@ -113,7 +138,7 @@
           autocomplete="off"
           id="project-name"
           oninput={() => {
-            formError = null;
+            problem = null;
           }}
           placeholder={dir ? leaf(dir) : 'What you call it'}
           spellcheck="false"
@@ -152,6 +177,7 @@
             {/each}
           </Select.Content>
         </Select.Root>
+        {@render problemAt('machine')}
       </div>
 
       <div class="flex flex-col gap-1">
@@ -163,19 +189,20 @@
           class="font-mono"
           id="project-cwd"
           oninput={() => {
-            formError = null;
+            problem = null;
           }}
           placeholder="/home/you/project"
           spellcheck="false"
           bind:value={cwd}
         />
+        {@render problemAt('dir')}
       </div>
 
       <DirectoryPicker
         {machineId}
         onSelect={(path) => {
           cwd = path;
-          formError = null;
+          problem = null;
         }}
         value={cwd}
       />
@@ -183,16 +210,14 @@
       <div class="flex items-center gap-3 pt-1">
         <Button
           class="pressable"
-          failed={formError !== null}
+          failed={problem !== null}
           label="Create"
           pending={saving}
           pendingLabel="Creating…"
           size="sm"
           type="submit"
         />
-        {#if formError}
-          <span class="text-label text-error" role="alert">{formError}</span>
-        {/if}
+        {@render problemAt('hub')}
       </div>
     </form>
   </Popover.Content>

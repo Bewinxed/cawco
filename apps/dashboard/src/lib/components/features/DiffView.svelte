@@ -1,9 +1,32 @@
 <script lang="ts">
-  import { type FileContents, FileDiff } from "@pierre/diffs";
-  import { onDestroy, onMount } from "svelte";
+  /**
+   * A diff inline, in a box up to 400px tall, with a button that opens it
+   * full size. The library draws nothing until its highlighter has loaded
+   * (the first diff of a page waits for it), so the box stands a skeleton at
+   * the height the rows will take (the hunks' rows at the library's 20px
+   * line, under the cap) and the rows cross-fade in over it once they have
+   * drawn; any difference in height tweens. A diff that fails to draw says
+   * why in the box, with a retry.
+   */
+  import {
+    type FileContents,
+    FileDiff,
+    isHighlighterLoaded,
+    parseDiffFromFile,
+  } from "@pierre/diffs";
+  import { fade } from "svelte/transition";
   import { Button } from "$lib/components/ui/button";
-  import { IconAlert, IconMaximize, IconSpinner } from "$lib/icons";
+  import { Skeleton } from "$lib/components/ui/skeleton";
+  import { IconAlert, IconMaximize } from "$lib/icons";
+  import {
+    crossIn,
+    crossOut,
+    dur,
+    easeOut,
+  } from "$lib/whiffle/motion/curves.svelte";
+  import { morph } from "$lib/whiffle/motion/morph.svelte";
   import DiffModal from "./DiffModal.svelte";
+  import { fileName, languageOf } from "./diff-language";
 
   interface Props {
     filePath: string;
@@ -12,114 +35,63 @@
   }
 
   let { filePath, oldContent, newContent }: Props = $props();
-  // biome-ignore lint/suspicious/noUnassignedVariables: bind:this assigns this before onMount runs; Svelte's standard element-ref pattern
-  let container: HTMLDivElement | undefined;
-  let diffInstance: FileDiff | null = null;
   let showModal = $state(false);
-  let loading = $state(true);
-  let diffError = $state<string | null>(null);
+  /**
+   * The rows are in the box. With the highlighter loaded (every diff after
+   * the page's first) the library draws as it is asked, so there is nothing
+   * to stand in for.
+   */
+  let drawn = $state(isHighlighterLoaded());
+  let failure = $state<string | null>(null);
+  /** Bumped by Retry: the box is drawn again from scratch. */
+  let attempt = $state(0);
 
-  // Get file extension for syntax highlighting
-  function getLanguageFromPath(path: string): string | undefined {
-    const ext = path.split(".").pop()?.toLowerCase();
-    const langMap: Record<string, string> = {
-      ts: "typescript",
-      tsx: "tsx",
-      js: "javascript",
-      jsx: "jsx",
-      svelte: "svelte",
-      vue: "vue",
-      py: "python",
-      rb: "ruby",
-      go: "go",
-      rs: "rust",
-      java: "java",
-      kt: "kotlin",
-      swift: "swift",
-      c: "c",
-      cpp: "cpp",
-      h: "c",
-      hpp: "cpp",
-      cs: "csharp",
-      php: "php",
-      html: "html",
-      css: "css",
-      scss: "scss",
-      less: "less",
-      json: "json",
-      yaml: "yaml",
-      yml: "yaml",
-      xml: "xml",
-      md: "markdown",
-      sql: "sql",
-      sh: "bash",
-      bash: "bash",
-      zsh: "bash",
-      dockerfile: "dockerfile",
-      toml: "toml",
+  /** The library's row height, the collapsed-context bar between hunks, the box's cap. */
+  const ROW = 20;
+  const BAR = 32;
+  const CAP = 400;
+
+  const files = $derived.by(() => {
+    const lang = languageOf(filePath) as FileContents["lang"];
+    const name = fileName(filePath);
+    return {
+      oldFile: { name, contents: oldContent, lang },
+      newFile: { name, contents: newContent, lang },
     };
-    return ext ? langMap[ext] : undefined;
-  }
+  });
 
-  function getFileName(path: string): string {
-    return path.split("/").pop() || path;
-  }
+  /** The height the drawn rows will take. */
+  const expected = $derived.by(() => {
+    const { hunks } = parseDiffFromFile(files.oldFile, files.newFile);
+    const rows = hunks.reduce((sum, hunk) => sum + hunk.unifiedLineCount, 0);
+    return Math.min(CAP, rows * ROW + hunks.length * BAR);
+  });
 
-  onMount(() => {
-    if (!container) {
-      return;
-    }
-
+  /** Draws the diff into the box; `drawn` once it has a height. */
+  const draw = (_attempt: number) => (box: HTMLElement) => {
+    const diff = new FileDiff({ disableFileHeader: true });
+    const sizes = new ResizeObserver(() => {
+      if (box.offsetHeight > 0) {
+        drawn = true;
+        sizes.disconnect();
+      }
+    });
     try {
-      const lang = getLanguageFromPath(filePath);
-      const fileName = getFileName(filePath);
-
-      // The library accepts any string for lang (or undefined for auto-detect)
-      const oldFile: FileContents = {
-        name: fileName,
-        contents: oldContent,
-        lang: lang as FileContents["lang"],
-      };
-
-      const newFile: FileContents = {
-        name: fileName,
-        contents: newContent,
-        lang: lang as FileContents["lang"],
-      };
-
-      diffInstance = new FileDiff({
-        disableFileHeader: true,
-      });
-
-      // Pass container as containerWrapper, not fileContainer
-      // The library creates its own diffs-container custom element with shadowRoot
-      diffInstance.render({
-        oldFile,
-        newFile,
-        containerWrapper: container,
-      });
-
-      loading = false;
-    } catch (e) {
-      console.error("[DiffView] Failed to render diff:", e);
-      diffError = e instanceof Error ? e.message : "Failed to render diff";
-      loading = false;
+      diff.render({ ...files, containerWrapper: box });
+      sizes.observe(box);
+    } catch (caught) {
+      failure = caught instanceof Error ? caught.message : String(caught);
     }
-  });
+    return () => {
+      sizes.disconnect();
+      diff.cleanUp();
+    };
+  };
 
-  onDestroy(() => {
-    if (diffInstance) {
-      diffInstance.cleanUp();
-      diffInstance = null;
-    }
-  });
-
-  function openModal() {
-    showModal = true;
-  }
-
-  function closeModal() {
-    showModal = false;
+  function retry() {
+    failure = null;
+    drawn = false;
+    attempt += 1;
   }
 </script>
 
@@ -132,8 +104,10 @@
     <span class="break-all flex-1 min-w-0">{filePath}</span>
     <Button
       class="h-6 w-6 ml-2 shrink-0"
-      disabled={loading || !!diffError}
-      onclick={openModal}
+      disabled={!drawn || failure !== null}
+      onclick={() => {
+        showModal = true;
+      }}
       size="icon-sm"
       title="Expand diff (full view)"
       variant="ghost"
@@ -142,35 +116,68 @@
     </Button>
   </div>
 
-  {#if loading}
-    <div
-      class="flex items-center justify-center gap-2 p-8 text-label text-muted-foreground"
-    >
-      <IconSpinner class="w-5 h-5 animate-spin" />
-      <span>Loading diff...</span>
-    </div>
-  {:else if diffError}
-    <div
-      class="flex items-center justify-center gap-2 p-8 text-label text-error"
-    >
-      <IconAlert class="w-5 h-5" />
-      <span>{diffError}</span>
-    </div>
-  {/if}
-
-  <div
-    class="diff-content overflow-x-auto max-h-[400px]"
-    bind:this={container}
-    class:hidden={loading || !!diffError}
-  ></div>
+  <!-- The skeleton and the rows share one cell: the rows lay out under it
+       unseen and fade in where it stood. -->
+  <div class="body" {@attach morph()}>
+    {#if failure}
+      <div
+        class="flex items-center justify-center gap-2 p-8 text-label text-error"
+        role="alert"
+        in:crossIn
+        out:crossOut
+      >
+        <IconAlert class="w-5 h-5 shrink-0" />
+        <span>The diff did not draw: {failure}</span>
+        <Button onclick={retry} size="sm" variant="outline">Retry</Button>
+      </div>
+    {:else}
+      {#key attempt}
+        <div
+          class="diff-content overflow-x-auto max-h-[400px]"
+          class:veiled={!drawn}
+          {@attach draw(attempt)}
+        ></div>
+      {/key}
+      {#if !drawn}
+        <div
+          aria-label="Loading diff"
+          role="status"
+          out:fade={{ duration: dur('--dur-control'), easing: easeOut }}
+        >
+          <Skeleton class="w-full rounded-none" style="height: {expected}px" />
+        </div>
+      {/if}
+    {/if}
+  </div>
 </div>
 
 {#if showModal}
-  <DiffModal {filePath} {newContent} {oldContent} onClose={closeModal} />
+  <DiffModal
+    {filePath}
+    {newContent}
+    {oldContent}
+    onClose={() => {
+      showModal = false;
+    }}
+  />
 {/if}
 
 <style>
-  .diff-content.hidden {
-    display: none;
+  .body {
+    position: relative;
+    display: grid;
+  }
+  .body > * {
+    grid-area: 1 / 1;
+    min-width: 0;
+  }
+  .diff-content {
+    @media (prefers-reduced-motion: no-preference) {
+      transition: opacity var(--dur-control) var(--ease-out);
+    }
+  }
+  .diff-content.veiled {
+    visibility: hidden;
+    opacity: 0;
   }
 </style>
