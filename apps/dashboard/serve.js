@@ -26,9 +26,10 @@
  * request that is a navigation (`Sec-Fetch-Mode: navigate`) gets a 302 back
  * under the prefix so the iframe URL stays correct.
  */
-import { existsSync } from "node:fs";
+import { createReadStream, existsSync, statSync } from "node:fs";
 import http from "node:http";
 import net from "node:net";
+import { resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import { handler } from "./build/handler.js";
 
@@ -128,6 +129,84 @@ function proxyPreviewHttp(req, res, info) {
 const CLIENT_DIR = fileURLToPath(new URL("./build/client", import.meta.url));
 const IMMUTABLE_PREFIX = "/_app/immutable/";
 
+/**
+ * sirv also cached the SIZE of every non-hashed file (version.json, favicon,
+ * manifest…) at startup, so between a deploy's swap and the restart it answers
+ * with the old Content-Length over the new bytes. Those files are served here
+ * from a stat taken on each request, with the headers sirv gave them. Returns
+ * false when the path is not a file under build/client, leaving it to handler.
+ */
+function serveFresh(req, res, pathname) {
+  let decoded;
+  try {
+    decoded = decodeURIComponent(pathname);
+  } catch {
+    return false;
+  }
+  const abs = resolve(CLIENT_DIR, `.${decoded}`);
+  if (!abs.startsWith(CLIENT_DIR + sep)) {
+    return false;
+  }
+  let stats;
+  try {
+    stats = statSync(abs);
+  } catch {
+    return false;
+  }
+  if (!stats.isFile()) {
+    return false;
+  }
+  // Like sirv: the precompressed sibling wins when the client accepts it.
+  const type = Bun.file(abs).type.split(";")[0];
+  const accept = req.headers["accept-encoding"] ?? "";
+  let file = abs;
+  let encoding;
+  for (const [ext, name, ok] of [
+    [".br", "br", /(br|brotli)/i.test(accept)],
+    [".gz", "gzip", accept.includes("gzip")],
+  ]) {
+    if (!ok) {
+      continue;
+    }
+    try {
+      const variant = statSync(abs + ext);
+      if (variant.isFile()) {
+        file = abs + ext;
+        stats = variant;
+        encoding = name;
+        break;
+      }
+    } catch {
+      // no precompressed copy of this file
+    }
+  }
+  const etag = `W/"${stats.size}-${stats.mtime.getTime()}"`;
+  const headers = {
+    Vary: "Accept-Encoding",
+    "Content-Type": type,
+    "Last-Modified": stats.mtime.toUTCString(),
+    ETag: etag,
+  };
+  if (encoding) {
+    headers["Content-Encoding"] = encoding;
+  }
+  if (req.headers["if-none-match"] === etag) {
+    res.writeHead(304, headers);
+    res.end();
+    return true;
+  }
+  headers["Content-Length"] = stats.size;
+  res.writeHead(200, headers);
+  if (req.method === "HEAD") {
+    res.end();
+    return true;
+  }
+  createReadStream(file, { end: stats.size - 1 })
+    .on("error", () => res.destroy())
+    .pipe(res);
+  return true;
+}
+
 function serveApp(req, res) {
   const pathname = req.url.split("?")[0];
   if (
@@ -136,6 +215,13 @@ function serveApp(req, res) {
   ) {
     res.writeHead(404);
     res.end();
+    return;
+  }
+  if (
+    (req.method === "GET" || req.method === "HEAD") &&
+    !pathname.startsWith(IMMUTABLE_PREFIX) &&
+    serveFresh(req, res, pathname)
+  ) {
     return;
   }
   res.on("pipe", (source) => {
