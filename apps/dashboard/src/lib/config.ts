@@ -37,10 +37,7 @@ export const UPDATE_TIMEOUT_MS = 180_000;
 /** Installing a workflow tool fetches an installer and runs it — slower still. */
 export const INSTALL_TIMEOUT_MS = 300_000;
 
-/** Up to this many entries, a stored transcript is mapped in one pass. */
-export const TRANSCRIPT_CHUNK_THRESHOLD = 300;
-
-/** Entries per chunk beyond that, mapped one chunk per macrotask. */
+/** Entries per chunk of a streamed transcript after the first, mapped one chunk per macrotask. */
 export const TRANSCRIPT_CHUNK_SIZE = 250;
 
 /**
