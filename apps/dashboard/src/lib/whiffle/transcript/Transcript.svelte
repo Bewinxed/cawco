@@ -878,7 +878,7 @@
     // cold load on a phone one of them left 5,400px of tail under the
     // landing, read as the reader scrolling up, and the transcript opened
     // stranded there with the follow let go.
-    if (!shown) {
+    if (!shown || jumping) {
       return;
     }
     // Every write this component makes is tagged with the position it wrote.
@@ -1581,11 +1581,59 @@
     },
   });
 
-  /** Back to the newest row, from wherever the reader is. */
+  /** Past this many screens from the tail, the jump hops to one screen short
+      of it before scrolling the rest; our own call, no source sets it. */
+  const JUMP_HOP_SCREENS = 3;
+  /**
+   * The jump's scroll is under way. Its scroll events are not the reader's,
+   * and `atBottom` stays false until it ends so that no follow or landing
+   * writes over it: a `scrollTop` write stops a smooth scroll where it is.
+   */
+  let jumping = false;
+
+  /**
+   * Back to the newest row, from wherever the reader is: one smooth scroll
+   * to the tail when it is near, and when it is far an instant hop to a
+   * screen above it, so virtua renders the last screen only, then the smooth
+   * scroll over that screen. Its end pins the true tail, rows that arrived
+   * during it included. Reduced motion lands at once.
+   */
   function jump(): void {
     tickets.clear();
-    atBottom = true;
-    land();
+    farFromLatest = false;
+    const node = scroller;
+    if (!(node && motionOk.current)) {
+      atBottom = true;
+      land();
+      return;
+    }
+    stopFollow();
+    jumping = true;
+    const h = node.clientHeight;
+    const target = node.scrollHeight - h;
+    const finish = (): void => {
+      node.removeEventListener("scrollend", finish);
+      jumping = false;
+      atBottom = true;
+      farFromLatest = false;
+      pinBottom();
+    };
+    const glide = (): void => {
+      const to = node.scrollHeight - node.clientHeight;
+      if (Math.abs(to - node.scrollTop) < 1) {
+        finish();
+        return;
+      }
+      node.addEventListener("scrollend", finish);
+      node.scrollTo({ top: to, behavior: "smooth" });
+    };
+    if (target - node.scrollTop > JUMP_HOP_SCREENS * h) {
+      node.scrollTop = target - h;
+      lastWrite = node.scrollTop;
+      requestAnimationFrame(glide);
+      return;
+    }
+    glide();
   }
 
   const showLatest = $derived(landed && farFromLatest && rows.length > 0);
