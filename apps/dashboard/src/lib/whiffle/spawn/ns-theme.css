@@ -38,7 +38,7 @@
       transform 160ms var(--ease-out);
   }
 }
-.ns-theme button:not(:disabled):active {
+.ns-theme button:not(:disabled, [aria-busy="true"]):active {
   transform: scale(var(--press-scale));
 }
 .ns-theme :focus-visible {

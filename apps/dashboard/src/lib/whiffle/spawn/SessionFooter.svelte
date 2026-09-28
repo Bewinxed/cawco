@@ -31,7 +31,12 @@
 </script>
 
 <div class="footer" data-ns-footer>
-  <button class="ns-btn touch-hit" onclick={oncancel} type="button">
+  <button
+    class="ns-btn touch-hit"
+    inert={busy}
+    onclick={oncancel}
+    type="button"
+  >
     Cancel
   </button>
   <button
@@ -68,9 +73,6 @@
     min-width: 96px;
     --btn-gap: 8px;
     --btn-icon: 16px;
-  }
-  #session-start[aria-busy="true"] {
-    pointer-events: none;
   }
   @media (max-width: 640px) {
     .footer {
