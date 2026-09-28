@@ -38,6 +38,7 @@
   import { EmptyState } from "$lib/components/ui/empty";
   import type { Trail } from "$lib/components/ui/markdown/trail";
   import { IconChat } from "$lib/icons";
+  import { dur, motionOk } from "$lib/whiffle/motion/curves.svelte";
   import { type SessionState, whiffle } from "../client.svelte";
   import { rebuildScheduler } from "../workspace/scheduler.svelte";
   import {
@@ -394,7 +395,8 @@
    * release of the swipe that opened it.
    *
    * `catching` is state, and a build may not write state: it goes up in the
-   * microtask behind this flush, before the paint.
+   * microtask behind this flush, before the paint. `returning` is a plain
+   * flag the land reads later, so it is raised here.
    *
    * The delay is `requestAnimationFrame` THEN `setTimeout(0)`, not either
    * alone. A rAF callback runs at the top of the next frame, before that
@@ -409,6 +411,7 @@
    */
   function hold(): void {
     held = true;
+    returning = true;
     queueMicrotask(() => {
       catching = true;
     });
@@ -804,35 +807,6 @@
 
   /** The scroll height the last scroll event saw — what tells a clamp from a reader. */
   let lastHeight = 0;
-  /**
-   * The row at the top of the view and how far below the view's top it
-   * stood at the last scroll event, from virtua's sizes: what tells the
-   * reader's scrolling from virtua's corrections (see `onscroll`). Taken at
-   * scroll events only — never at this component's own writes — because
-   * that is the offset virtua corrects from: its jump fix is written as the
-   * offset it last saw plus what the rows above grew, and a write of ours
-   * that landed since is simply replaced.
-   */
-  let onScreen: { key: string; at: number } | null = null;
-  function rowAt(top: number): { key: string; at: number } | null {
-    if (!list || renderedRows.length === 0) {
-      return null;
-    }
-    const index = list.findItemIndex(top);
-    return {
-      key: renderedRows[index].key,
-      at: listStart + list.getItemOffset(index) - top,
-    };
-  }
-  /** Whether that row still stands where it stood in the view, at `top`. */
-  function stillAt(was: { key: string; at: number }, top: number): boolean {
-    const index = renderedRows.findIndex((row) => row.key === was.key);
-    return (
-      !!list &&
-      index >= 0 &&
-      Math.abs(listStart + list.getItemOffset(index) - top - was.at) <= 1
-    );
-  }
   function onscroll(): void {
     if (!(scroller && listing && landed)) {
       return;
@@ -845,8 +819,6 @@
       listing.getBoundingClientRect().top -
       scroller.getBoundingClientRect().top +
       lastTop;
-    const was = onScreen;
-    onScreen = rowAt(lastTop);
     // Until the reveal the list is laid out but not painted: nothing on it
     // is the reader's to have scrolled. virtua's own writes land here while
     // it measures the rows the store's read brings in — untagged, and at a
@@ -862,23 +834,11 @@
     // where the reader is looking. Neither does the browser clamping the
     // offset because the content under it got shorter (a tail row folding
     // shut): that event comes with a smaller scroll height and leaves the
-    // offset at its end. Nor does virtua keeping the rows on screen where
-    // they are while rows above them change size — measured as they mount
-    // under a ride to the tail, a history chunk put in front: the offset
-    // moves by what they grew, and the rows on screen do not move at all.
-    // virtua writes that correction from the offset it saw at the last
-    // scroll event, over the top of any write of ours since, so the rows
-    // stand where they stood THEN. Taken for the reader, one of those let go
-    // of the tail in the middle of a returning pane's catch-up and left it
-    // 2,800px short for good. Anything
-    // that moves what is on screen is the READER: wheel, scrollbar drag,
+    // offset at its end. Anything else is the READER: wheel, scrollbar drag,
     // keyboard, momentum, anything.
     const clamped =
       shrank && scroller.scrollTop >= height - scroller.clientHeight - 1;
     if (Math.abs(scroller.scrollTop - lastWrite) <= 1 || clamped) {
-      return;
-    }
-    if (was && stillAt(was, lastTop)) {
       return;
     }
     stopFollow();
@@ -899,10 +859,10 @@
    * the composer column. A tall permission card therefore never sits on top of
    * the message that raised it.
    */
-  /** The frame the next write to the tail is waiting for, and this
-   *  component's LAST WRITE — the tag that tells its own scroll events from
-   *  the reader's without caring which input device made them (a scrollbar
-   *  drag fires no wheel event; a tagged write needs no event taxonomy). */
+  /** The follow loop's handle, and its own LAST WRITE — the tag that tells the
+   *  loop's scroll events from the reader's without caring which input device
+   *  made them (a scrollbar drag fires no wheel event; a tagged write needs no
+   *  event taxonomy at all). */
   let following: number | null = null;
   let landingFrame: number | null = null;
   let lastWrite = -1;
@@ -914,23 +874,27 @@
   }
 
   /**
-   * A PINNED TRANSCRIPT STAYS PINNED. While the reader is at the tail, the
-   * tail is where the view is, every frame: what arrives there moves by its
-   * own entrance (a row's reserve and cascade), not by the scroll. The
-   * follow used to ride to a new tail over --dur-panel, which left every
-   * landing up to 24px short for a quarter of a second — on 450 streamed
-   * frames, 16 of them more than a pixel off. It yields to the reader in
-   * `onscroll`: any scroll that moves what is on screen lets go.
+   * TELEPROMPTER FOLLOW. Streaming arrives in irregular bursts, and any scheme
+   * that moves per-arrival — a tween, native smooth scroll, damped chasing —
+   * inherits that jitter, because the impulse IS the burst. So the follow is
+   * decoupled: one loop at a CONSTANT reading pace, and bursts merely
+   * accumulate below the fold while the viewport advances steadily. Velocity,
+   * not distance, is what the eye judges as smooth. The pace ramps only under
+   * a real backlog (more than half a viewport behind); past two viewports it
+   * is a teleport, not a ride; reduced motion always snaps; and the loop
+   * yields to the reader two ways — `atBottom` going false ends it, and any
+   * scroll event that is not its own tagged write ends it in `onscroll`.
    */
   /**
    * WHILE A ROW OPENS, ITS EDGE IS THE SCROLL.
    *
    * A tool call opens its own height (`Row`'s `open`), so the bottom of the
-   * list moves on every frame of that animation. For exactly as long as a
-   * row is opening — or a reasoning block is folding — the view is pinned to
-   * the bottom in the list's own resize, the same frame the row grows,
-   * rather than a frame behind it: the row's growth is what moves it. One
-   * motion, at the row's own curve.
+   * list moves for the length of that animation. The teleprompter below moves
+   * at a pace of its own choosing, and a pace chasing a target that is itself
+   * still moving is two animations arguing about where the bottom is. So for
+   * exactly as long as a row is opening — or a reasoning block is folding —
+   * the follow is not paced at all: the viewport is pinned to the bottom and
+   * the row's growth is what moves it. One motion, at the row's own curve.
    */
   let opening = 0;
   const resizing = new Set<Element>();
@@ -1193,23 +1157,71 @@
     };
   });
 
-  /**
-   * Put the view at the tail in the next frame, before it paints. Nothing is
-   * read here: this is called from the list's observers, and those fire
-   * inside whatever task changed the list — a finger lifting off a swipe
-   * between tabs among them — where reading the scroller forced a layout
-   * into that task. The frame's callbacks read it anyway, before its layout.
-   */
+  const FOLLOW_SPEED = 360; // px/s — a calm reading pace
   function followBottom(): void {
     if (!scroller || opening > 0 || following !== null) {
-      return;
+      return; // one loop; it reads the live target
     }
-    following = requestAnimationFrame(() => {
-      following = null;
-      if (atBottom && opening === 0) {
-        pinBottom();
+    const target = () =>
+      scroller ? scroller.scrollHeight - scroller.clientHeight : 0;
+    // Nothing is read until the loop's first frame. This is called from the
+    // list's observers, and those fire inside whatever task changed the list
+    // — a finger lifting off a swipe between tabs among them — where reading
+    // the scroller forced a layout into that task. The first frame reads it
+    // anyway, and a loop armed while the page was hidden starts from there
+    // when the reader is back.
+    let span = 0;
+    let last = 0;
+    let ends = 0;
+    const step = (now: number): void => {
+      if (!(scroller && atBottom)) {
+        stopFollow();
+        return;
       }
-    });
+      if (ends === 0) {
+        const gap = target() - scroller.scrollTop;
+        if (gap <= 0) {
+          stopFollow();
+          return;
+        }
+        if (!motionOk.current || gap > scroller.clientHeight * 2) {
+          scroller.scrollTop = scroller.scrollHeight;
+          lastWrite = scroller.scrollTop;
+          stopFollow();
+          return;
+        }
+        span = dur("--dur-panel");
+        last = now;
+        ends = now + span;
+      }
+      const dt = Math.min(64, now - last);
+      last = now;
+      const remaining = target() - scroller.scrollTop;
+      if (remaining <= 0.5) {
+        if (remaining > 0) {
+          scroller.scrollTop = target();
+          lastWrite = scroller.scrollTop;
+        }
+        stopFollow();
+        return;
+      }
+      // Duration-bounded, not distance-bounded: an engagement lands within
+      // one --dur-panel however far it has to go. The speed is three times
+      // what the distance left needs in the time left, so it eases out along
+      // a cubic and arrives as the time runs out, and reads the live target
+      // every frame, so a tail that keeps growing is absorbed without a jump.
+      // Past the deadline the time left holds at a quarter span: whatever
+      // still grows is caught up with quickly, never snapped to. A hop of a
+      // line or two rides at the reading pace instead. Without the bound the
+      // loop trod water behind a long stream or a return from elsewhere: a
+      // crawl of a second or more nobody asked for.
+      const timeLeft = Math.max(ends - now, span / 4) / 1000;
+      const speed = Math.max(FOLLOW_SPEED, (3 * remaining) / timeLeft);
+      scroller.scrollTop += Math.min(remaining, (speed * dt) / 1000);
+      lastWrite = scroller.scrollTop;
+      following = requestAnimationFrame(step);
+    };
+    following = requestAnimationFrame(step);
   }
 
   function land(): void {
@@ -1244,21 +1256,58 @@
   /** The already-landed half of `land`, in the frame after it was called for. */
   function landInFrame(): void {
     landingFrame = null;
-    if (!scroller) {
+    // `scrollToIndex` is virtua's far-row measuring power — needed for the
+    // first landing and for catching up from a real distance. For the
+    // message-sized follow it was the hard jump per stream batch that read
+    // as jitter, so a followable gap goes to the loop untouched.
+    const gap = scroller
+      ? scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop
+      : 0;
+    // A tab-return whose catch-up has just appended: the reader left at
+    // the tail, so the new turns ride in from where they were. A gap past
+    // the followable bound is first closed to within it in one silent
+    // write, and the loop rides the rest — the same arrival at any
+    // distance, rather than a teleport for a long absence. virtua measures
+    // the rows the ride crosses as they enter the viewport; the loop reads
+    // the live target every frame, so an estimate that firms up mid-ride
+    // is absorbed.
+    const riding = returning && gap > 0;
+    // Consumed by the land that has somewhere to go: the rising edge lands
+    // once on the frozen rows (gap 0) before the append does.
+    if (gap > 0) {
+      returning = false;
+    }
+    const bound = (scroller?.clientHeight ?? 0) * 2;
+    const followable = !!scroller && (gap <= bound || riding);
+    if (!followable) {
+      if (list) {
+        list.scrollToIndex(rows.length - 1, { align: "end" });
+      } else if (scroller) {
+        scroller.scrollTop = scroller.scrollHeight;
+      }
+    }
+    if (!(scroller && active && atBottom)) {
       return;
     }
-    // `scrollToIndex` is virtua's far-row measuring power: a tail more than
-    // two viewports off — a tab back from a long absence, the jump back from
-    // far up — is measured its way to before the view is put there.
-    const gap =
-      scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop;
-    if (gap > scroller.clientHeight * 2) {
-      list?.scrollToIndex(rows.length - 1, { align: "end" });
+    // The live follow and the catch-up ride the loop. The closing write sits inside
+    // the same frame as the loop's start, so the scroll event it raises
+    // carries the loop's own tag and is not read as the reader scrolling.
+    if (followable) {
+      if (
+        riding &&
+        scroller.scrollHeight - scroller.clientHeight - scroller.scrollTop >
+          bound
+      ) {
+        // One pixel inside the bound: `followBottom` teleports past it,
+        // and a scrollTop the browser rounds must not land on the far side.
+        scroller.scrollTop =
+          scroller.scrollHeight - scroller.clientHeight - bound + 1;
+        lastWrite = scroller.scrollTop;
+      }
+      followBottom();
+    } else {
+      scroller.scrollTop = scroller.scrollHeight;
     }
-    if (!(active && atBottom)) {
-      return;
-    }
-    pinBottom();
     settle();
   }
 
@@ -1295,6 +1344,13 @@
   // by the other door. Guarding first means an off-screen pane has no
   // dependency on the stream at all; and because `active` is itself tracked,
   // switching back re-runs this once, on rows that have just caught up.
+  /** Whether the CURRENT land follows a tab-return: the catch-up's append
+   *  is what changed `rows`, and a reader who left at the tail rides to the
+   *  new one rather than being teleported. Plain var: raised with the hold
+   *  when a switch has something to catch up on, consumed by the land that
+   *  follows the append, and dropped if the reader was scrolled up — they
+   *  stay where they were. */
+  let returning = false;
   $effect(() => {
     if (!active && landed) {
       return;
@@ -1318,6 +1374,8 @@
           land();
         }
       });
+    } else {
+      returning = false;
     }
   });
 
@@ -1561,10 +1619,11 @@
     },
   });
 
-  /** Back to the newest row, from wherever the reader is. */
+  /** Back to the newest row, from wherever the reader is: a glide, not a jump cut. */
   function jump(): void {
     tickets.clear();
     atBottom = true;
+    returning = true;
     land();
   }
 

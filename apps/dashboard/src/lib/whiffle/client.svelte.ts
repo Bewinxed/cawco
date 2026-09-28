@@ -48,6 +48,7 @@ import {
   DISCARD_TIMEOUT_MS,
   SESSION_CATALOG_LIMIT,
   TRANSCRIPT_CHUNK_SIZE,
+  TRANSCRIPT_CHUNK_THRESHOLD,
   TRANSCRIPT_FIRST_CHUNK,
   TRANSCRIPT_TAIL_CEILING,
   WS_RECONNECT_BASE_DELAY,
@@ -72,6 +73,7 @@ import {
   mergePulses,
   routedToParent,
   suppressesTaskLine,
+  turnBoundaries,
   turnStart,
 } from "./frames";
 import { newId } from "./id";
@@ -1796,15 +1798,16 @@ const streamHost: StreamHost = {
   applyFrame: (sessionId, frame) =>
     ingestFrame(sessionId, frame as FramePayload, "stream"),
   /**
-   * A reset is the late-join problem the history read solves, including
-   * holding the deltas that land while it reads. The latch it keeps is
-   * released first: a session may be reset more than once in a tab's life,
-   * and the second one must not be a silent no-op.
+   * The existing re-read, unchanged — a reset is exactly the late-join problem
+   * `backfillSession` already solves, including holding the deltas that land
+   * while it reads. The latch it keeps is released first: a session may be
+   * reset more than once in a tab's life, and the second one must not be a
+   * silent no-op.
    */
   rereadHistory: (sessionId) => {
     backfilled.delete(sessionId);
     // biome-ignore lint/complexity/noVoid: fire-and-forget — the latch is already released, the reread fills in when it lands
-    void preloadHistory(sessionId);
+    void backfillSession(sessionId);
   },
   sendToHub: (message) => {
     const socket = globalThis.__whiffleSocket;
@@ -3636,6 +3639,72 @@ function harvestCommands(target: SessionState, messages: Message[]): void {
   }
 }
 
+async function ingestTranscript(
+  viewId: string,
+  target: SessionState,
+  transcript: SessionMessage[],
+  epoch: number,
+  onPublished?: () => void
+): Promise<void> {
+  // A transcript that already has turns in it is a session that already
+  // started, so the banner announcing the start has had its moment. The SDK
+  // re-emits `system.init` every turn; without this, every reload re-arms the
+  // flag and the next turn opens with "Session started" as if the process had
+  // just come up — which is exactly what it does *not* mean.
+  if (transcript.length > 0) {
+    target.initialized = true;
+  }
+
+  if (transcript.length <= TRANSCRIPT_CHUNK_THRESHOLD) {
+    const { messages, subagents } = mapTranscript(viewId, transcript);
+    target.messages = messages;
+    target.subagents = subagents;
+    harvestCommands(target, messages);
+    onPublished?.();
+    return;
+  }
+
+  const bounds = turnBoundaries(transcript, TRANSCRIPT_CHUNK_SIZE);
+  const newest = mapTranscript(
+    viewId,
+    // biome-ignore lint/style/useAtIndex: bounds is guaranteed non-empty here (transcript already exceeded the chunk threshold); .at(-1) would silently widen to undefined and change the slice
+    transcript.slice(bounds[bounds.length - 1])
+  );
+  target.messages = newest.messages;
+  target.subagents = newest.subagents;
+  harvestCommands(target, newest.messages);
+  target.hydrating = true;
+  target.loading = false;
+  onPublished?.();
+
+  for (let i = bounds.length - 2; i >= 0; i -= 1) {
+    // Mapping a chunk is the blocking work, so the loop hands the event loop
+    // back between them — this is what the reader scrolls and types through.
+    // biome-ignore lint/performance/noAwaitInLoops: chunks must yield to the event loop in order, oldest last, so the reader's scroll and typing stay responsive
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    if (hydrations.get(viewId) !== epoch) {
+      return;
+    }
+    const older = mapTranscript(
+      viewId,
+      transcript.slice(bounds[i], bounds[i + 1])
+    );
+    target.messages = [...older.messages, ...target.messages];
+    // Branches are keyed by the Task `tool_use_id` that opened them, so an older
+    // chunk mostly adds keys — except where a compacted transcript re-emits the
+    // same call, and then its turns belong in front of the ones already read
+    // back for it.
+    for (const [toolUseId, branch] of Object.entries(older.subagents)) {
+      const known = target.subagents[toolUseId];
+      if (known) {
+        known.messages = [...branch.messages, ...known.messages];
+      } else {
+        target.subagents[toolUseId] = branch;
+      }
+    }
+  }
+}
+
 /** Starts a read of this view's transcript, superseding whatever was reading it. */
 function claimTranscript(viewId: string): number {
   const epoch = (hydrations.get(viewId) ?? 0) + 1;
@@ -3669,6 +3738,83 @@ export function clearReadFault(instanceId: string): void {
   const held = state.sessions[instanceId];
   if (held) {
     held.readFault = null;
+  }
+}
+
+/**
+ * Seeds a live session this browser joined late. Frames only carry what happens
+ * from now on, so a session already under way renders as an empty transcript
+ * until what it has already said is read back out of SDK session storage.
+ */
+export async function backfillSession(instanceId: string): Promise<void> {
+  if (backfilling.has(instanceId)) {
+    return;
+  }
+  const target = session(instanceId);
+  // A latch with nothing behind it does not hold — the same rule
+  // `streamHistory` reads by, so the two paths agree on what "already read"
+  // means.
+  if (backfilled.has(instanceId) && target.messages.length > 0) {
+    return;
+  }
+  // Deliberately not "it already has messages, so it is loaded".
+  //
+  // This browser watches every session, not just the one on screen, so a
+  // session left in another tab quietly collects the frames of whatever it did
+  // meanwhile. Treating those few as a transcript meant switching to it showed
+  // the last thing it said and nothing before — and `backfilled` latched that
+  // for the rest of the tab, which is why only a hard refresh fixed it. Live
+  // frames are the tail of a conversation, never the whole of one.
+  if (target.loading) {
+    return;
+  }
+  const { machineId, sessionId, cwd } = target;
+  if (!(machineId && sessionId)) {
+    return;
+  }
+
+  backfilled.add(instanceId);
+  backfilling.set(instanceId, []);
+  // Whatever this session said while the reader was elsewhere. The transcript
+  // that is about to arrive replaces the message list wholesale, so these are
+  // kept and re-applied behind it — deduplicated against it by uuid, exactly
+  // like the frames that land *during* the fetch.
+  const live = target.messages.slice();
+  const epoch = claimTranscript(instanceId);
+  target.loading = true;
+  target.readFault = null;
+  try {
+    const transcript = await machineControl<SessionMessage[]>(
+      machineId,
+      "getSessionMessages",
+      [sessionId, { dir: cwd || undefined }],
+      CONTROL_TIMEOUT_MS,
+      target.harness
+    );
+    const seeded = new Set(transcript.map((entry) => entry.uuid));
+    await ingestTranscript(instanceId, target, transcript, epoch, () => {
+      target.streaming = "";
+      clearTurnPhase(target);
+      absorbLive(target, live, seeded);
+      // What was held belongs to the end of the transcript, which is now on
+      // screen: it appends while the older chunks prepend, so neither waits.
+      replayHeld(instanceId, seeded);
+    });
+  } catch (error) {
+    // The latch is undone, exactly as `streamHistory` undoes its own: this is
+    // fired from a hover-peek and a delegate card as much as from the pane,
+    // and a latch left set by a read that never landed made every later open
+    // of the same id short-circuit into a skeleton nothing would resolve.
+    backfilled.delete(instanceId);
+    replayHeld(instanceId, new Set());
+    const message = error instanceof Error ? error.message : String(error);
+    if (target.messages.length === 0) {
+      target.readFault = { reason: "failed", message };
+    }
+    console.error(`[whiffle] backfilling ${instanceId} failed:`, error);
+  } finally {
+    target.loading = false;
+    target.hydrating = false;
   }
 }
 
@@ -3736,11 +3882,10 @@ export function preloadHistory(viewId: string): Promise<TranscriptOutcome> {
 /**
  * A session's stored transcript over HTTP, published as it arrives.
  *
- * The only read of a stored transcript there is. The hub answers
- * `GET /api/instances/:id/messages` with the `getSessionMessages` read, so it
- * needs nothing but a page — no socket to wait for — and it arrives a line at
- * a time: a read that came back as one socket message was decoded, parsed and
- * mapped in one task (50-57ms for a 12,000px delegate transcript).
+ * The socket path (`backfillSession`) cannot answer until the
+ * WebSocket is up, which is why a reload showed an empty transcript until the
+ * hub reconnected. The hub answers `GET /api/instances/:id/messages` with the
+ * same `getSessionMessages` read, so this needs nothing but a page.
  *
  * It arrives newest entry first, one JSON object per line, and is published in
  * turn-aligned chunks the moment each one is complete: the newest turns paint
@@ -4050,17 +4195,9 @@ export async function streamHistory({
 
     // The head of a transcript is always somewhere a chunk can start, and an
     // empty one still has to publish: it is what says the session is empty.
-    // The last chunk is mapped in a task of its own, like every chunk before
-    // it, and the read ends in the task after that: what waits for the whole
-    // read to draw (a delegate's card) draws in its own task, not in the one
-    // that mapped the last 250 entries.
     if (buffered.length > 0 || chunks === 0) {
-      if (chunks > 0) {
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      }
       publish(buffered.reverse());
     }
-    await new Promise((resolve) => setTimeout(resolve, 0));
     return { ok: true };
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
