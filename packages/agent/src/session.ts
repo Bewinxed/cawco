@@ -20,15 +20,12 @@ import type {
   GitChanges,
   HarnessKind,
   IngestMark,
-  InstanceSpec,
   NeutralMessage,
   NeutralSessionInfo,
-  PermissionMode,
   PermissionResult,
   RepoInfo,
   ReposResult,
   SendPayload,
-  SentMessage,
   SessionPulse,
   SpawnPayload,
   StopPayload,
@@ -44,7 +41,6 @@ import {
   PREVIEW_STOP,
   RESOLVE_PERMISSION,
   readIngested,
-  readSpecs,
   repoPath,
   resumeCursor,
   UPDATE_WHIFFLE,
@@ -59,6 +55,7 @@ import { harnesses, harness as harnessOf } from "./harnesses";
 import { generateImage } from "./image-generation";
 import { isMachineAgent } from "./machine-agent";
 import { startPreview, stopPreview, stopPreviews } from "./preview";
+import { procEpoch } from "./sessiond-client";
 import { installTool, probeTools } from "./tools";
 import { type UpdateOptions, updateCheckout } from "./update";
 
@@ -74,27 +71,25 @@ interface ClaudeAdoption {
     instanceId: string,
     ctx: HarnessContext,
     options: {
+      /** The hub's mark as a seq in this child's ring; absent follows from `head`. */
       afterSeq?: number;
-      sessionId?: string | null;
-      /** The ring's last seq off the same welcome — what lets an idle child hand off at once. */
-      head?: number;
-      onHandoff: (handoff: {
-        instanceId: string;
-        sessionId: string | null;
-        held: {
-          message: SentMessage;
-          extras: Pick<SendPayload, "attachments" | "images" | "urgent">;
-        }[];
-        heldControls: { method: string; args: unknown[] }[];
-      }) => void;
+      /** The ring's last seq off the same welcome. */
+      head: number;
+      sessionId: string | null;
     }
   ): Promise<HarnessSession>;
   // biome-ignore lint/style/useConsistentMethodSignatures: a property signature changes parameter variance here and would break the claude adapter's implementation
   custodyCandidates(): Promise<{
-    /** sessiond's per-boot epoch — what makes a stored ingest mark readable or dead (design §7). */
-    epoch?: string;
+    /** sessiond's per-boot epoch; with a child's pid, the space its seqs count in (design §7). */
+    epoch: string;
     /** `cwd` is what lets a survivor the hub never named be adopted at all. */
-    procs: { procId: string; alive: boolean; cwd?: string; head?: number }[];
+    procs: {
+      procId: string;
+      alive: boolean;
+      cwd?: string;
+      head: number;
+      pid: number;
+    }[];
   }>;
 }
 
@@ -598,14 +593,14 @@ export class SessionSupervisor {
 
   /**
    * Drops every trace of an instance's pulse — its process is gone. Not its
-   * preview: a relaunch and the hand-off after a restart come through here
-   * too, and the session they continue still has the preview open. The hub
-   * owns that lifetime and ends it on an explicit close or a stop.
+   * preview: a relaunch comes through here too, and the session it continues
+   * still has the preview open. The hub owns that lifetime and ends it on an
+   * explicit close or a stop.
    */
   #forgetPulse(instanceId: string): void {
     this.#busy.delete(instanceId);
     this.#line.delete(instanceId);
-    // The custody this mark gated is over — a relaunch, a hand-off or a death.
+    // The process this mark counted in is over — a relaunch or a death.
     // Whatever produces frames next is not replaying the hub's own past.
     this.#ingested.delete(instanceId);
     this.#pulseTool.delete(instanceId);
@@ -794,9 +789,7 @@ export class SessionSupervisor {
       }
 
       // A spawn for an instance already running is a relaunch: replace the
-      // process under the same id, settling the old one first. A custody that
-      // has handed off settles by letting go: the adapter attaches to its
-      // child rather than replacing it.
+      // process under the same id, settling the old one first.
       const running = this.#sessions.get(instanceId);
       if (running) {
         this.#sessions.delete(instanceId);
@@ -857,7 +850,7 @@ export class SessionSupervisor {
   /**
    * The supervisor's side of one session, built once and shared by both ways a
    * session can arrive: a fresh {@link #spawn}, and a {@link reattach} that
-   * takes custody of a child which outlived the agent. Shared deliberately —
+   * attaches to a child which outlived the agent. Shared deliberately —
    * two copies of this wiring is two places for the pulse, the busy set and
    * the frame routing to drift apart.
    */
@@ -954,23 +947,6 @@ export class SessionSupervisor {
   }
 
   /**
-   * REATTACH (design §4.1, §7). The agent has restarted; sessiond is still
-   * holding the children. For each row the caller knows about, take custody of
-   * the surviving child, replay its ring from the cursor the caller supplies,
-   * and arm the boundary hand-off: once the child is between turns, this
-   * method's own {@link #spawn} runs for the instance and the adapter attaches
-   * a full SDK `Query` to the same process — no relaunch, so nothing it is
-   * running (a background command, a Monitor) is cut off.
-   *
-   * `afterSeq` is the hub's own ingest mark when it has one (§7's ledger, leaf
-   * D3); `undefined` follows from now, which is the honest-loss rule — replay
-   * nothing rather than double what a history read already shows.
-   *
-   * Returns the instance ids actually taken into custody. A row sessiond is
-   * not holding is simply not one of them: no process, nothing to adopt, and
-   * the hub's own `sleeping`/`restore` path owns it from there.
-   */
-  /**
    * What sessiond is still holding that this daemon is not carrying.
    *
    * The hub names the sessions it wants restored, and for a while that was the
@@ -1007,26 +983,28 @@ export class SessionSupervisor {
       }));
   }
 
+  /**
+   * REATTACH (design §4.1, §7). The agent has restarted; sessiond is still
+   * holding the children. Each one the caller names is attached to at once: a
+   * full SDK `Query` on the same process, whether it is idle, mid-turn or
+   * running background work. No relaunch, so nothing it runs is cut off.
+   *
+   * The `Query` reads from the hub's own ingest mark (§7's ledger), so what
+   * the child wrote while no agent was reading reaches the hub exactly once.
+   * No mark, or one from another process, follows from head: the honest-loss
+   * rule, which replays nothing rather than double what history shows.
+   *
+   * Returns the instance ids attached. A row sessiond is not holding is not
+   * one of them: no process, nothing to attach to, and the hub's own
+   * `sleeping`/`restore` path owns it from there.
+   */
   async reattach(
-    rows: {
-      instanceId: string;
-      cwd: string;
-      sessionId?: string | null;
-      afterSeq?: number;
-      permissionMode?: PermissionMode;
-    }[],
+    rows: { instanceId: string; cwd: string; sessionId?: string | null }[],
     /**
-     * The hub's ingest ledger off the register ack. Absent — an old-shape ack,
-     * or a hub that has nothing of this machine — means every row follows from
-     * head, which is the honest-loss rule and not a degraded mode.
+     * The hub's ingest ledger off the register ack. Absent — a hub that has
+     * nothing of this machine — means every row follows from head.
      */
-    ingested?: Record<string, IngestMark>,
-    /**
-     * How each instance was configured to run, off the same ack. Absent from an
-     * older hub, and a relaunch then falls back to the harness defaults exactly
-     * as it did before the field existed.
-     */
-    specs?: Record<string, InstanceSpec>
+    ingested?: Record<string, IngestMark>
   ): Promise<string[]> {
     const adapter = this.#adapter("claude");
     // `adopt` is claude's alone: opencode reattaches through its own server
@@ -1051,103 +1029,30 @@ export class SessionSupervisor {
       if (!proc) {
         continue;
       }
-      // THE HONEST-LOSS RULE (design §7). A mark under sessiond's CURRENT epoch
-      // is a cursor: replay exactly the gap the hub named. Anything else — no
-      // entry, or a mark minted under a sessiond that has since restarted — is
-      // replayed as NOTHING and followed from head. The alternatives both lie:
-      // a hub that restarted during the absence has already reset every
-      // dashboard and re-read history, so a replay would double it; a sessiond
-      // that restarted killed these children, so its old seqs name lines that
-      // no longer exist. Disk transcripts cover the middle.
+      // THE HONEST-LOSS RULE (design §7). A mark in THIS child's sequence space
+      // — sessiond's current boot and this process — is a cursor: replay
+      // exactly the gap the hub named. Anything else is replayed as NOTHING and
+      // followed from head: a mark from a sessiond that has since restarted
+      // names lines that no longer exist, and one from an earlier process
+      // under the same id names another ring. Disk transcripts cover the
+      // middle.
       const mark = ingested?.[row.instanceId];
-      const cursor = resumeCursor(welcome.epoch, mark);
+      const cursor = resumeCursor(procEpoch(welcome.epoch, proc.pid), mark);
       if (cursor !== undefined && mark) {
         this.#ingested.set(row.instanceId, mark);
       } else {
         this.#ingested.delete(row.instanceId);
       }
-      const afterSeq = cursor ?? row.afterSeq;
-      // The row wins where it has anything to say — a hub restore names the
-      // spec on the payload it sent — and the ack fills the rest. A survivor
-      // has only the ack, which is the whole reason the ack carries it.
-      const spec: InstanceSpec = {
-        ...specs?.[row.instanceId],
-        ...(row.permissionMode ? { permissionMode: row.permissionMode } : {}),
-      };
       const holder: { session: HarnessSession | null } = { session: null };
       const ctx = this.#context(row.instanceId, row.cwd, adapter, holder);
       // biome-ignore lint/performance/noAwaitInLoops: each row mutates the shared #ingested map before the next is reattached
-      const custody = await claude.adopt(row.instanceId, ctx, {
-        ...(afterSeq === undefined ? {} : { afterSeq }),
-        ...(proc.head === undefined ? {} : { head: proc.head }),
+      const session = await claude.adopt(row.instanceId, ctx, {
+        ...(cursor === undefined ? {} : { afterSeq: cursor }),
+        head: proc.head,
         sessionId: row.sessionId ?? null,
-        onHandoff: ({
-          instanceId,
-          sessionId,
-          held: heldTurns,
-          heldControls,
-        }) => {
-          // Queued through `dispatch` so the hand-off serialises behind
-          // whatever else is in flight for this instance. The adapter answers
-          // this spawn by attaching to the child custody held, so the spec
-          // below configures the `Query`, not a new process.
-          this.dispatch({
-            verb: "spawn",
-            instanceId,
-            payload: {
-              instanceId,
-              cwd: row.cwd,
-              harness: "claude",
-              workflowRunId: spec.workflowRunId,
-              workflowStepId: spec.workflowStepId,
-              canDelegate: spec.canDelegate,
-              skills: spec.skills,
-              denyTools: spec.denyTools,
-              ...(sessionId ? { resume: { sessionKey: sessionId } } : {}),
-              // How it was configured to run, not how a fresh spawn would be.
-              // The row's own fields when the hub named it in a restore, the
-              // ack's spec when it did not — a survivor sessiond named carries
-              // a pid and a cwd and nothing else, and relaunching it on the
-              // harness defaults is what silently moved a `bypassPermissions`
-              // session back to asking for every tool call.
-              ...(spec.permissionMode
-                ? { permissionMode: spec.permissionMode as PermissionMode }
-                : {}),
-              ...(spec.model ? { model: spec.model } : {}),
-              ...(spec.effort
-                ? { effort: spec.effort as SpawnPayload["effort"] }
-                : {}),
-            } satisfies SpawnPayload,
-          } as Envelope);
-          // Before the held turns: a deferred reload must land before the turn
-          // that will use the skills and plugins it brings in.
-          for (const control of heldControls) {
-            this.dispatch({
-              verb: "control",
-              instanceId,
-              payload: {
-                instanceId,
-                requestId: crypto.randomUUID(),
-                method: control.method,
-                args: control.args,
-              } satisfies ControlPayload,
-            } as Envelope);
-          }
-          for (const turn of heldTurns) {
-            this.dispatch({
-              verb: "send",
-              instanceId,
-              payload: {
-                instanceId,
-                message: turn.message,
-                ...turn.extras,
-              } satisfies SendPayload,
-            } as Envelope);
-          }
-        },
       });
-      holder.session = custody;
-      this.#sessions.set(row.instanceId, custody);
+      holder.session = session;
+      this.#sessions.set(row.instanceId, session);
       adopted.push(row.instanceId);
     }
     return adopted;
@@ -1155,23 +1060,13 @@ export class SessionSupervisor {
 
   /**
    * The reattach as the register ack hands it over (design §7, step 4): the
-   * ack's payload in, the instance ids taken into custody out.
-   *
-   * BACKWARDS TOLERANT BY CONSTRUCTION. An ack with no `ingested` field — an
-   * older hub, or one that never saw this machine — reads as `undefined` and
-   * every row follows from head. Additive, never fatal: the agent reattaches
-   * either way, and the only difference is how much of the absence it replays.
+   * ack's payload in, the instance ids attached out.
    */
   reattachFrom(
     ackPayload: unknown,
-    rows: {
-      instanceId: string;
-      cwd: string;
-      sessionId?: string | null;
-      permissionMode?: PermissionMode;
-    }[]
+    rows: { instanceId: string; cwd: string; sessionId?: string | null }[]
   ): Promise<string[]> {
-    return this.reattach(rows, readIngested(ackPayload), readSpecs(ackPayload));
+    return this.reattach(rows, readIngested(ackPayload));
   }
 
   /** The harness session a side quest turned out to be writing, from its init frame. */

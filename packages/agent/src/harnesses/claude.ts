@@ -45,13 +45,7 @@ import type {
 } from "@whiffle/core";
 import {
   ASK_USER_QUESTION,
-  CONTROL_CONTEXT_USAGE,
-  CONTROL_INTERRUPT,
-  CONTROL_MCP_STATUS,
-  CONTROL_RELOAD_SKILLS,
   CONTROL_SET_EFFORT,
-  CONTROL_SUPPORTED_COMMANDS,
-  CONTROL_SUPPORTED_MODELS,
   INSPECT_CONFIG,
   MARKETPLACE_CATALOG,
   MESSAGES_READ,
@@ -84,7 +78,9 @@ import {
 // this file is part of, so a value import here would close a module cycle.
 import type { SessiondAwareContext } from "../session";
 import {
+  type BridgeRing,
   ensureSessiond,
+  procEpoch,
   SessiondClient,
   type SessiondWelcomeInfo,
   sessiondBridge,
@@ -512,30 +508,6 @@ class Turn {
 
 const SETTLE_TIMEOUT_MS = 5000;
 
-/**
- * How long a custody `stop` waits for the child to die after its stdin is
- * ended, before and again after a SIGKILL. Our choice: an idle claude exits on
- * stdin EOF within tens of milliseconds; a couple of seconds separates slow
- * from stuck, and stuck gets SIGKILL.
- */
-const CUSTODY_EXIT_MS = 2000;
-
-/** Whether `promise` settled within `ms`. The timer is cleared either way. */
-const within = async (
-  promise: Promise<unknown>,
-  ms: number
-): Promise<boolean> => {
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const expiry = new Promise<false>((resolve) => {
-    timer = setTimeout(() => resolve(false), ms);
-  });
-  try {
-    return await Promise.race([promise.then(() => true), expiry]);
-  } finally {
-    clearTimeout(timer);
-  }
-};
-
 /** The `canUseTool` callback, parked until `resolvePermission` answers it. */
 type PermissionResolver = (result: PermissionResult) => void;
 
@@ -571,6 +543,10 @@ class ClaudeSession implements HarnessSession {
   >();
   /** Denied questions, keyed by tool call, until their `tool_result` goes past. */
   readonly #dismissedQuestions = new Map<string, UserQuestionResult>();
+  /** The child's sessiond. */
+  readonly #sessiond: { client: SessiondClient; procId: string } | undefined;
+  /** The ring seq of each line the SDK was handed that carries a uuid. */
+  readonly #seqs = new Map<string, number>();
   readonly instanceId: string;
 
   constructor(
@@ -592,15 +568,20 @@ class ClaudeSession implements HarnessSession {
      * optional in practice — `spawn()` always supplies it, and there is no
      * in-process fallback (PLAN.md C7: full cutover, rollback is a revert).
      *
-     * `attachAfter` names a child that already exists — a custody handing its
-     * process back after an agent restart — and the ring line custody stopped
-     * at. The `Query` then attaches to that process instead of spawning one
-     * (see {@link sessiondBridge}).
+     * `attach` names a child that already exists — one that outlived the
+     * agent which started it — and the `Query` attaches to that process
+     * instead of spawning one (see {@link sessiondBridge}).
      */
-    sessiond?: { client: SessiondClient; procId: string; attachAfter?: number }
+    sessiond?: {
+      client: SessiondClient;
+      procId: string;
+      attach?: BridgeRing["attach"];
+    }
   ) {
     this.instanceId = instanceId;
     this.#ctx = ctx;
+    this.#sessiond = sessiond;
+    const seqs = this.#seqs;
     const input = new InputStream();
     this.#input = input;
     const turn = new Turn();
@@ -700,12 +681,10 @@ class ClaudeSession implements HarnessSession {
               spawnClaudeCodeProcess: (
                 spawnOptions: import("@anthropic-ai/claude-agent-sdk").SpawnOptions
               ) =>
-                sessiondBridge(
-                  sessiond.client,
-                  sessiond.procId,
-                  spawnOptions,
-                  sessiond.attachAfter
-                ),
+                sessiondBridge(sessiond.client, sessiond.procId, spawnOptions, {
+                  seqs,
+                  attach: sessiond.attach,
+                }),
             }
           : {}),
         canUseTool: (
@@ -834,6 +813,7 @@ class ClaudeSession implements HarnessSession {
           turn.end();
           ctx.busy(false);
         }
+        this.#stamp(message);
         ctx.frame(neutral);
       }
     } catch (error) {
@@ -842,6 +822,54 @@ class ClaudeSession implements HarnessSession {
     } finally {
       ctx.closed?.();
     }
+  }
+
+  /**
+   * PROVENANCE (design §7): the ring line the frame about to go out came from,
+   * which is what the hub's ingest ledger keeps its mark by — and what lets
+   * the attach after an agent restart replay exactly the lines the hub never
+   * framed. A message is matched to its line by `uuid`; entries up to it are
+   * dropped, since the SDK hands messages over in ring order and the ones it
+   * swallowed (rate-limit readings) will never be asked for. A frame whose
+   * line is unknown — no uuid, or its child's pid not yet listed — goes out
+   * unstamped, which the ledger reads as "no mark".
+   */
+  #stamp(message: SDKMessage): void {
+    const { uuid } = message as { uuid?: unknown };
+    const ring = this.#sessiond;
+    const seqs = this.#seqs;
+    if (!ring || typeof uuid !== "string") {
+      return;
+    }
+    const seq = seqs.get(uuid);
+    if (seq === undefined) {
+      return;
+    }
+    for (const key of seqs.keys()) {
+      seqs.delete(key);
+      if (key === uuid) {
+        break;
+      }
+    }
+    const { epoch } = ring.client;
+    const pid = ring.client.procs.find(
+      (proc) => proc.procId === ring.procId && proc.alive
+    )?.pid;
+    if (epoch !== undefined && pid !== undefined) {
+      (this.#ctx as Partial<SessiondAwareContext>).line?.(
+        procEpoch(epoch, pid),
+        seq
+      );
+    }
+  }
+
+  /**
+   * An attach that met a turn already running: the turn is this session's
+   * from here, and busy as it was before the agent went away.
+   */
+  adoptTurn(): void {
+    this.#turn.start();
+    this.#ctx.busy(true);
   }
 
   send(
@@ -1007,39 +1035,10 @@ const toEntry = (
   };
 };
 
-/**
- * A line off a child's stdout, as the CLI writes it. Only two shapes matter
- * during custody — an SDK message (which becomes a neutral frame) and a
- * `control_request` (which is either a permission to re-park or a control the
- * absent agent cannot serve). Everything else passes as `raw`.
- */
-type CustodyLine =
-  | (SDKMessage & { type: string })
-  | {
-      type: "control_request";
-      request_id: string;
-      request: { subtype: string } & Record<string, unknown>;
-    }
-  | { type: string; [key: string]: unknown };
-
-/** The raw `control_response` the CLI reads off its stdin, both polarities. */
-export const controlSuccess = (requestId: string, response: unknown): string =>
-  `${JSON.stringify({
-    type: "control_response",
-    response: { subtype: "success", request_id: requestId, response },
-  })}\n`;
-
-export const controlError = (requestId: string, error: string): string =>
-  `${JSON.stringify({
-    type: "control_response",
-    response: { subtype: "error", request_id: requestId, error },
-  })}\n`;
-
-/** The in-band notice a custody refusal writes into the transcript. */
-export const CUSTODY_DEGRADED = "custody_degraded";
-
-/** The fields of a ring line that custody reads; `undefined` when it is not JSON. */
+/** The fields of a ring line an adoption reads; `undefined` when it is not JSON. */
 interface RingLine {
+  request?: { subtype?: unknown };
+  request_id?: unknown;
   session_id?: unknown;
   skip_transcript?: unknown;
   subtype?: unknown;
@@ -1065,10 +1064,9 @@ const TURN_LINES: ReadonlySet<unknown> = new Set([
 ]);
 
 /**
- * WHETHER THE CHILD IS MID-TURN, read off its ring one line at a time — the
- * one thing that keeps a custody from handing the child to a fresh `Query`,
- * because a `Query` attached mid-stream would meet a turn it did not open and
- * permission asks it never parked.
+ * WHETHER THE CHILD IS MID-TURN, read off its ring one line at a time: an
+ * adoption that meets a running turn makes it the attached session's, busy
+ * from the start.
  *
  * `result` ends a turn. `init` opens one: the CLI writes it when it takes up a
  * message, not when it starts (on the isolated stack a fresh child wrote its
@@ -1119,410 +1117,45 @@ class ChildActivity {
 }
 
 /**
- * Where an adoption's peek starts: the oldest line sessiond still holds.
+ * The permission asks still open, by request id, as a ring is read in order.
+ * The CLI writes each as a `can_use_tool` control_request and the answer goes
+ * to its stdin, which the ring never sees — so an ask counts as open until
+ * the turn moves past it (the next assistant, user or result line: the tool
+ * ran or was refused) or the CLI cancels it.
+ */
+const readAsk = (
+  asks: Map<string, string>,
+  line: RingLine | undefined,
+  data: string
+): void => {
+  if (
+    line?.type === "control_request" &&
+    line.request?.subtype === "can_use_tool"
+  ) {
+    asks.set(String(line.request_id), data);
+  } else if (line?.type === "control_cancel_request") {
+    asks.delete(String(line.request_id));
+  } else if (
+    line?.type === "assistant" ||
+    line?.type === "user" ||
+    line?.type === "result"
+  ) {
+    asks.clear();
+  }
+};
+
+/**
+ * Where an adoption's read starts: the oldest line sessiond still holds.
  *
- * It used to be a fixed 64 lines back from the caller's cursor, and that is
- * the whole of the bug this constant replaces. An idle child does not fall
- * silent after its `result` — it keeps writing `control_response`,
- * `rate_limit_event` and `system` notices, and {@link ChildActivity} carries
- * the previous answer across those rather than replacing it. Once more than the
- * window's worth had piled up, the window held no turn-bearing line at all,
- * the verdict was still `undefined` at `head`, and the hand-off never fired:
- * the session sat in custody for good, holding every message sent to it.
- *
- * Reading from the ring's start cannot run out of window that way. It is one
- * pass over at most a few thousand retained lines, once per adopted session,
- * and only the peeked prefix is parsed — nothing below the caller's cursor is
- * re-emitted. Sessiond refusing this cursor is not a failure but the answer to
- * "how far back do you go": {@link SessiondClient.subscribe}'s `reset` names
- * the oldest seq it will serve, and the peek reopens there.
+ * A fixed window back from `head` can fill with the notices an idle child
+ * keeps writing after its `result` and say nothing about the turn. Reading
+ * from the ring's start cannot run out of window that way: one pass over at
+ * most a few thousand retained lines, once per adopted session, and nothing
+ * read here is emitted. Sessiond refusing this cursor is not a failure but
+ * the answer to "how far back do you go": {@link SessiondClient.subscribe}'s
+ * `reset` names the oldest seq it will serve, and the read reopens there.
  */
 const RING_START = 0;
-
-/**
- * Controls that only READ the session. A dashboard asks these on every open
- * (and a looping one asked them thousands of times in seconds), and nothing
- * in the session changes when they are refused — so the refusal goes back to
- * the caller as the rejection alone. Writing it into the transcript as well
- * told the operator nothing and buried the turn under notices. Everything
- * that would have CHANGED the session keeps its in-band notice: those are the
- * refusals the operator has to see. `accountInfo` has no core constant; it is
- * the SDK's own method name, asked by the dashboard verbatim.
- */
-const READ_ONLY_CONTROLS: ReadonlySet<string> = new Set([
-  CONTROL_RELOAD_SKILLS,
-  CONTROL_SUPPORTED_MODELS,
-  CONTROL_SUPPORTED_COMMANDS,
-  CONTROL_MCP_STATUS,
-  CONTROL_CONTEXT_USAGE,
-  "accountInfo",
-]);
-
-/**
- * Controls custody HOLDS rather than refuses. A fleet sync fires these at every
- * live session the moment the agent reconnects — which is exactly when every
- * session is in custody — so refusing them both spams the transcript and drops
- * the refresh on the floor. They are idempotent, and `refreshSessions` never
- * reads their result, so deferring them to the hand-off costs nothing and makes
- * the reload actually land. Every other control still fails at once: its caller
- * is waiting on a `control_result` that a hold would never deliver.
- */
-const DEFERRED_CONTROLS: ReadonlySet<string> = new Set([
-  "reloadSkills",
-  "reloadPlugins",
-  "reinitialize",
-]);
-
-/**
- * CUSTODY (design §4.1) — the session while the agent that owned it is gone.
- *
- * A restarted agent cannot reconstruct a live `Query` around a mid-stream
- * child: the SDK offers spawn substitution, not adoption of a half-initialized
- * protocol state (§4.1, and the spike recorded in this leaf's report did not
- * overturn it). So the returning agent takes CUSTODY instead — cursor
- * arithmetic and raw control answers, nothing more:
- *
- *  - ring lines are re-derived into neutral frames through {@link toNeutral},
- *    which is already a pure function over parsed JSON and needs no `Query`;
- *  - an unanswered `control_request`/`can_use_tool` is re-parked under the
- *    SDK's own `requestId`, so the hub's parked ask stays answerable — and the
- *    answer goes back as a raw `control_response` line, because that is what
- *    the `Query` would have written anyway;
- *  - any OTHER control the CLI asks of the absent agent (an `mcp_message` for
- *    the whiffle server, a hook callback) is answered with an explicit in-band
- *    error, so the tool call FAILS VISIBLY instead of hanging forever on a
- *    handler that no longer exists;
- *  - at the turn's next live `result` the hand-off fires: the owner builds a
- *    full SDK `Query` on the SAME process ({@link ClaudeHarness.spawn}'s
- *    attach), which re-sends `initialize` and reads the ring from the line
- *    custody stopped at. Nothing is relaunched, so nothing the child runs —
- *    a `run_in_background` command, a Monitor, a subagent — is cut off. A
- *    child that was already between turns when adopted has no next `result`
- *    coming, so {@link ClaudeHarness.adopt} hands off from the ring's last
- *    line instead.
- *
- * The attach waits for a turn boundary because a `Query` attached mid-stream
- * would meet a turn it did not open and permission asks it never parked.
- * Custody is a degraded mode measured in one turn, not a second
- * implementation of the SDK. Everything it refuses, it refuses out loud.
- */
-export class ClaudeCustody implements HarnessSession {
-  readonly harness = "claude" as const;
-  sessionId: string | null = null;
-  /** requestId → the parked ask, until an answer or the hand-off clears it. */
-  readonly #parked = new Set<string>();
-  /** Turns pushed during custody; delivered by the attached session. */
-  readonly #held: {
-    message: SentMessage;
-    extras: Pick<SendPayload, "attachments" | "images" | "urgent">;
-  }[] = [];
-  /** Controls deferred during custody; replayed by the attached session. */
-  readonly #heldControls: { method: string; args: unknown[] }[] = [];
-  #handedOff = false;
-  /** Whether the child is mid-turn; fed every ring line, peeked or ingested. */
-  readonly activity = new ChildActivity();
-  /** Settled by {@link exited} when sessiond reports the child gone. */
-  readonly #exit = Promise.withResolvers<void>();
-  readonly instanceId: string;
-  readonly #ctx: HarnessContext;
-  readonly #write: (data: string) => void;
-  /** Ends the child's stdin — how an operator's `stop` during custody ends it. */
-  readonly #stdinEnd: () => void;
-  /** Fired at the turn boundary; the owner attaches a `Query` to the same child. */
-  readonly #onHandoff: (handoff: {
-    instanceId: string;
-    sessionId: string | null;
-    held: {
-      message: SentMessage;
-      extras: Pick<SendPayload, "attachments" | "images" | "urgent">;
-    }[];
-    heldControls: { method: string; args: unknown[] }[];
-  }) => void;
-  /** Signals the child; what a `stop` falls back to when EOF alone does not end it. */
-  readonly #kill: (sig: NodeJS.Signals) => void;
-
-  constructor(
-    instanceId: string,
-    ctx: HarnessContext,
-    write: (data: string) => void,
-    stdinEnd: () => void,
-    onHandoff: (handoff: {
-      instanceId: string;
-      sessionId: string | null;
-      held: {
-        message: SentMessage;
-        extras: Pick<SendPayload, "attachments" | "images" | "urgent">;
-      }[];
-      heldControls: { method: string; args: unknown[] }[];
-    }) => void,
-    sessionId: string | null = null,
-    kill: (sig: NodeJS.Signals) => void = () => {
-      // Not supplied in every test rig: a `stop` that falls back to this is a no-op there.
-    }
-  ) {
-    this.instanceId = instanceId;
-    this.#ctx = ctx;
-    this.#write = write;
-    this.#stdinEnd = stdinEnd;
-    this.#onHandoff = onHandoff;
-    this.sessionId = sessionId;
-    this.#kill = kill;
-  }
-
-  /** The child is gone — from the ring subscription's `exit`, whatever caused it. */
-  exited(): void {
-    this.#exit.resolve();
-  }
-
-  /** The asks still waiting for an answer — what a reattach re-announces. */
-  get parked(): string[] {
-    return [...this.#parked];
-  }
-
-  get handedOff(): boolean {
-    return this.#handedOff;
-  }
-
-  /**
-   * One raw stdout line, from the ring's backlog or live. Replay and live use
-   * the same path on purpose: the daemon's single-threaded delivery is what
-   * makes backlog-then-live gapless, and a second code path would be a second
-   * place for a hole to open. `live` says the line was written after adoption
-   * (above the ring's `head` then), not replayed from the backlog. Only a
-   * live `result` is a boundary: a replayed one ended a turn that may well
-   * have been followed by another still running further down the ring.
-   */
-  ingest(line: string, live: boolean): void {
-    let parsed: CustodyLine;
-    try {
-      parsed = JSON.parse(line) as CustodyLine;
-    } catch {
-      // A line the CLI wrote that is not JSON is not a frame; sessiond never
-      // promised us one, and inventing a frame from it would be a lie.
-      return;
-    }
-
-    if (parsed.type === "control_request") {
-      this.#onControlRequest(
-        parsed as Extract<CustodyLine, { type: "control_request" }>
-      );
-      return;
-    }
-    // Usage data, not a transcript frame. Only a live line is read:
-    // `observeRateLimit` stamps what it reads as current, so a replayed
-    // reading would outrank a fresher poll.
-    if (parsed.type === "rate_limit_event") {
-      if (live) {
-        observeRateLimit(
-          (parsed as Extract<SDKMessage, { type: "rate_limit_event" }>)
-            .rate_limit_info
-        );
-      }
-      return;
-    }
-    // A control_response is the CLI answering something the dead agent asked;
-    // nobody is waiting for it any more.
-    if (
-      parsed.type === "control_response" ||
-      parsed.type === "control_cancel_request"
-    ) {
-      return;
-    }
-
-    const sdk = parsed as SDKMessage;
-    if (
-      sdk.type === "system" &&
-      (sdk as { subtype?: string }).subtype === "init"
-    ) {
-      this.sessionId = sdk.session_id;
-      this.#ctx.session(sdk.session_id);
-    }
-    const neutral = toNeutral(sdk);
-    if (neutral) {
-      this.#ctx.frame(neutral);
-    }
-    if (sdk.type === "result") {
-      this.#ctx.busy(false);
-      // THE BOUNDARY. The turn that was in flight when the agent died has now
-      // completed and been captured; this is the moment a `Query` can attach
-      // to the child without meeting a turn it did not open.
-      if (live) {
-        this.handOff();
-      }
-    }
-  }
-
-  #onControlRequest(
-    request: Extract<CustodyLine, { type: "control_request" }>
-  ): void {
-    const requestId = request.request_id;
-    if (request.request?.subtype === "can_use_tool") {
-      // Re-parked under the SDK's own requestId — the same id the hub's parked
-      // ask has carried end-to-end since this adapter first wrote it.
-      this.#parked.add(requestId);
-      const inner = request.request as {
-        tool_name?: string;
-        input?: Record<string, unknown>;
-        permission_suggestions?: unknown;
-      };
-      this.#ctx.permission({
-        requestId,
-        toolName: inner.tool_name ?? "unknown",
-        input: inner.input ?? {},
-        ...(Array.isArray(inner.permission_suggestions)
-          ? {
-              suggestions:
-                inner.permission_suggestions as import("@whiffle/core").PermissionUpdate[],
-            }
-          : {}),
-        ...(inner.tool_name === ASK_USER_QUESTION
-          ? { requestKind: "question" as const }
-          : {}),
-      });
-      return;
-    }
-    // Everything else: the handler it is addressed to died with the agent.
-    // Refused in-band and said out loud, so the tool call fails where the
-    // reader can see it rather than hanging on a promise nobody holds.
-    const subtype = request.request?.subtype ?? "unknown";
-    const reason = `whiffle: agent restarted; \`${subtype}\` cannot be served during custody`;
-    this.#write(controlError(requestId, reason));
-    this.#ctx.frame({
-      type: "system",
-      subtype: CUSTODY_DEGRADED,
-      ...(this.sessionId ? { session_id: this.sessionId } : {}),
-      control: subtype,
-      requestId,
-      text: reason,
-    } as unknown as NeutralMessage);
-  }
-
-  /**
-   * Answer a parked permission. The `control_response` is written raw: there is
-   * no `Query` to route it through, and the CLI reads exactly this shape off
-   * its stdin either way (verified against the SDK's own writer, `sdk.mjs`
-   * `handleControlRequest`).
-   */
-  resolvePermission(requestId: string, result: PermissionResult): void {
-    if (!this.#parked.delete(requestId)) {
-      throw new Error(`no permission request ${requestId}`);
-    }
-    this.#write(controlSuccess(requestId, result));
-  }
-
-  /**
-   * A turn sent during custody. Held rather than written: a raw user message on
-   * the child's stdin would bypass the queue machinery, the echo tagging and
-   * the busy accounting that the `Query` owns, and there is no way to know from
-   * here whether the model is ready for it. The hand-off is seconds away and
-   * delivers it through the real path.
-   */
-  send(
-    message: SentMessage,
-    extras: Pick<SendPayload, "attachments" | "images" | "urgent">
-  ): void {
-    this.#held.push({ message, extras });
-  }
-
-  /**
-   * Fleet-sync controls are held for hand-off (see {@link DEFERRED_CONTROLS}).
-   * Other controls except interrupt fail; only the ones that would have changed
-   * the session fail in the transcript too (see {@link READ_ONLY_CONTROLS}).
-   */
-  control(method: string, args: unknown[] = []): Promise<unknown> {
-    // The one control custody can serve itself: an interrupt is a raw
-    // control_request on the child's stdin, not something the dead `Query` had
-    // to route. Stopping a runaway turn is exactly what an operator needs
-    // during custody, so it is dispatched here rather than refused.
-    if (method === CONTROL_INTERRUPT) {
-      return this.interrupt();
-    }
-    if (DEFERRED_CONTROLS.has(method)) {
-      this.#heldControls.push({ method, args });
-      return Promise.resolve(undefined);
-    }
-    const reason = `whiffle: agent restarted; control \`${method}\` is unavailable until this session hands back (custody)`;
-    if (!READ_ONLY_CONTROLS.has(method)) {
-      this.#ctx.frame({
-        type: "system",
-        subtype: CUSTODY_DEGRADED,
-        ...(this.sessionId ? { session_id: this.sessionId } : {}),
-        control: method,
-        text: reason,
-      } as unknown as NeutralMessage);
-    }
-    return Promise.reject(new Error(reason));
-  }
-
-  /**
-   * An interrupt cannot wait for a turn boundary — that is the whole point of
-   * one — so it is written as the raw control_request the `Query` would have
-   * sent, and the hand-off follows on the `result` the interrupt produces.
-   */
-  // biome-ignore lint/suspicious/useAwait: HarnessSession.interrupt returns Promise<void>; dropping async would need an explicit Promise.resolve() wrapper instead
-  async interrupt(): Promise<void> {
-    const requestId = crypto.randomUUID();
-    this.#write(
-      `${JSON.stringify({ type: "control_request", request_id: requestId, request: { subtype: "interrupt" } })}\n`
-    );
-  }
-
-  /**
-   * The hand-off, once. The child is left exactly as it is — stdin open, every
-   * background task running — for the `Query` the owner attaches to it.
-   */
-  handOff(): void {
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: #handedOff is set true elsewhere in this class once a hand-off fires; the checker doesn't see that cross-method mutation
-    if (this.#handedOff) {
-      return;
-    }
-    this.#handedOff = true;
-    this.#onHandoff({
-      instanceId: this.instanceId,
-      sessionId: this.sessionId,
-      held: [...this.#held],
-      heldControls: [...this.#heldControls],
-    });
-    this.#held.length = 0;
-    this.#heldControls.length = 0;
-  }
-
-  async stop(): Promise<void> {
-    // After the hand-off the child belongs to the `Query` attaching to it: the
-    // supervisor retires this custody on its way to that attach, and ending
-    // the child here would be the very relaunch the attach exists to avoid.
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: #handedOff is set true by handOff() once a hand-off fires; the checker doesn't see that cross-method mutation
-    if (this.#handedOff) {
-      return;
-    }
-    // A stop during custody is the operator ending the session, not a
-    // hand-off: nothing is parked afterwards and nothing is attached.
-    for (const requestId of this.#parked) {
-      this.#write(controlError(requestId, "whiffle: session stopped"));
-    }
-    this.#parked.clear();
-    this.#held.length = 0;
-    this.#heldControls.length = 0;
-    this.#handedOff = true;
-    this.#stdinEnd();
-    // Returned only once the child is actually dead: the operator's stop is
-    // done when the process is, and a spawn that follows under the same procId
-    // must not meet a still-alive predecessor (sessiond SIGKILLs it and
-    // broadcasts its exit to whoever is subscribed under that id by then).
-    if (await within(this.#exit.promise, CUSTODY_EXIT_MS)) {
-      return;
-    }
-    this.#kill("SIGKILL");
-    await within(this.#exit.promise, CUSTODY_EXIT_MS);
-  }
-
-  // biome-ignore lint/suspicious/useAwait: HarnessSession.dispose returns Promise<void>; dropping async would need an explicit Promise.resolve() wrapper instead
-  async dispose(): Promise<void> {
-    this.#parked.clear();
-    this.#held.length = 0;
-    this.#heldControls.length = 0;
-  }
-}
 
 async function listAccountModels(): Promise<
   { id: string; display_name: string; created_at: string }[] | undefined
@@ -1731,13 +1364,6 @@ export class ClaudeHarness implements Harness {
     return this.#sessiond;
   }
 
-  /**
-   * Custodies that have handed back, by instance: the ring line each stopped
-   * at. The supervisor answers a hand-off with a `spawn` for the same
-   * instance, and that spawn attaches here instead of starting a process.
-   */
-  readonly #attachAt = new Map<string, number>();
-
   async spawn(
     spec: SpawnPayload,
     ctx: HarnessContext
@@ -1748,10 +1374,7 @@ export class ClaudeHarness implements Harness {
     // surviving child to the row it belongs to.
     const client = await this.sessiond();
     const fleetDenyList = await resolvedDenyList();
-    const attachAfter = this.#attachAt.get(ctx.instanceId);
-    this.#attachAt.delete(ctx.instanceId);
-    const attaching = attachAfter !== undefined;
-    const session = new ClaudeSession(
+    return new ClaudeSession(
       ctx.instanceId,
       ctx,
       ctx.cwd,
@@ -1761,326 +1384,128 @@ export class ClaudeHarness implements Harness {
       spec.effort,
       spec.resume,
       spec.persistSession,
-      // An attached child loaded its skills when it was spawned.
-      attaching ? undefined : spec.skills,
+      spec.skills,
       spec.denyTools,
       fleetDenyList,
-      { client, procId: ctx.instanceId, ...(attaching ? { attachAfter } : {}) }
+      { client, procId: ctx.instanceId }
     );
-    // An attached child writes no `init` until its next turn, and the
-    // conversation it carries is the one the hand-off named.
-    if (attaching && spec.resume) {
-      session.sessionId = spec.resume.sessionKey;
-    }
-    return session;
   }
 
   /**
-   * Take custody of a child that outlived the agent (design §4.1). The caller
-   * supplies the cursor it wants resumed from — the hub's own ingest mark when
-   * it has one, `undefined` to follow from now — and the hand-off it wants at
-   * the turn boundary.
+   * ATTACH (design §4.1): take over a child that outlived the agent, by
+   * putting a full SDK `Query` on the same process — idle, mid-turn, or with
+   * background work running. Nothing is relaunched, so nothing it runs is cut
+   * off, and nothing waits: the `Query` takes sends and controls at once.
    *
-   * THE IDLE CHILD (the boundary that never comes). Custody hands back at the
-   * next `result`, and a child whose turn finished BEFORE the agent died never
-   * writes another one: stream-json is silent after a `result` until the next
-   * user message, and custody holds every message. Left to the rule above such
-   * a session stays in custody for good — turns held, controls refused, and
-   * the row still reading `running` because the process is plainly there.
+   * The ring is read first, from {@link RING_START} through `head`, for the
+   * three things only the backlog can say:
+   *  - whether a turn is running ({@link ChildActivity}), so the session is
+   *    busy from the start, as it was before the agent went away;
+   *  - the permission asks the previous host left unanswered — the turn is
+   *    blocked on them, and the attached `Query` must park and answer them
+   *    under the CLI's own request ids (the bridge's `prelude`);
+   *  - the conversation's session id, for an attached child writes no `init`
+   *    until its next turn.
+   * Reading from the start cannot miss a turn line the way a fixed window
+   * did: an idle child keeps writing notices after its `result`. A start
+   * sessiond no longer holds is answered by its `reset`, which names the
+   * oldest line it still has, and the read reopens there.
    *
-   * So the ring is read from {@link RING_START} through `head` and every line
-   * is fed to the custody's {@link ChildActivity}. There is exactly one
-   * decision, taken once, at the one moment the whole backlog has gone past:
-   * unless the ring says a turn is in flight, the hand-off fires and the
-   * next `spawn` for this instance attaches to the child. Reading from the start is
-   * what makes that a decision rather than a guess — a fixed window can fill
-   * with the notices an idle child keeps writing and answer "don't know",
-   * which is the shape of the bug this replaces, whereas a full ring holding
-   * no turn-bearing line means the child has not taken a turn in anything
-   * sessiond still remembers.
-   *
-   * The peek is the same subscribe opened earlier, not a second read: what
-   * comes back at or below the caller's own cursor is looked at and NOT
-   * re-emitted — the hub already has it, and `ingest` would hand it a frame
-   * it holds. A cursor sessiond refuses is not a transcript gap and not a
-   * dead end: its `reset` names the oldest line it still holds, and the peek
-   * reopens there.
+   * The `Query` then reads from `afterSeq` — the hub's own mark, so the lines
+   * the CLI wrote while no agent was reading reach the hub now, exactly once
+   * (the ledger refuses what it has) — or from `head` when the hub has none or
+   * the ring no longer holds it, which is announced as a gap.
    */
   async adopt(
     instanceId: string,
     ctx: HarnessContext,
     options: {
       afterSeq?: number;
-      sessionId?: string | null;
-      /** The ring's last seq as the welcome reported it; absent means no peek. */
-      head?: number;
-      onHandoff: (handoff: {
-        instanceId: string;
-        sessionId: string | null;
-        held: {
-          message: SentMessage;
-          extras: Pick<SendPayload, "attachments" | "images" | "urgent">;
-        }[];
-        heldControls: { method: string; args: unknown[] }[];
-      }) => void;
+      /** The ring's last seq as sessiond listed it. */
+      head: number;
+      sessionId: string | null;
     }
-  ): Promise<ClaudeCustody> {
+  ): Promise<HarnessSession> {
     const client = await this.sessiond();
-    const head = options.head ?? 0;
-    // The last ring line custody has read. The `Query` attached at the
-    // hand-off reads from the line after it — and never from below `head`, so
-    // a peek that stopped short does not feed history to it as live output.
-    let lastSeq = 0;
-    const custody = new ClaudeCustody(
+    const { head } = options;
+    const activity = new ChildActivity();
+    const asks = new Map<string, string>();
+    let { sessionId } = options;
+    let oldest = 1;
+    await new Promise<void>((done) => {
+      if (head < 1) {
+        done();
+        return;
+      }
+      let reopened = false;
+      const listener: Parameters<SessiondClient["subscribe"]>[1] = {
+        line: (event) => {
+          if (event.seq > head) {
+            return;
+          }
+          if (!reopened) {
+            oldest = Math.min(oldest, event.seq);
+          }
+          const parsed = parseLine(event.data);
+          activity.read(parsed);
+          readAsk(asks, parsed, event.data);
+          if (typeof parsed?.session_id === "string") {
+            sessionId = parsed.session_id;
+          }
+          if (event.seq === head) {
+            done();
+          }
+        },
+        exit: () => done(),
+        reset: (_nextSeq, from) => {
+          if (from === undefined || reopened) {
+            done();
+            return;
+          }
+          reopened = true;
+          oldest = from;
+          client.subscribe(instanceId, listener, from - 1);
+        },
+      };
+      client.subscribe(instanceId, listener, RING_START);
+    });
+    const replayable =
+      options.afterSeq !== undefined && options.afterSeq + 1 >= oldest;
+    if (options.afterSeq !== undefined && !replayable) {
+      ctx.frame({
+        type: "system",
+        subtype: "sessiond_stream_gap",
+        text: `whiffle: sessiond's replay window overflowed; this transcript resumes at line ${head + 1}`,
+      } as unknown as NeutralMessage);
+    }
+    const session = new ClaudeSession(
       instanceId,
       ctx,
-      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent; sessiond write failures are not this session's to surface, best effort only
-      // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — nothing here can act on a write failure to a gone child
-      (data) => void client.write(instanceId, data).catch(() => {}),
-      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent; sessiond stdin-end failures are not this session's to surface, best effort only
-      // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — nothing here can act on a stdin-end failure to a gone child
-      () => void client.stdinEnd(instanceId).catch(() => {}),
-      (handoff) => {
-        this.#attachAt.set(instanceId, Math.max(lastSeq, head));
-        options.onHandoff(handoff);
-      },
-      options.sessionId ?? null,
-      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent; sessiond signal failures are not this session's to surface, best effort only
-      // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — nothing here can act on a signal failure to a gone child
-      (sig) => void client.signal(instanceId, sig).catch(() => {})
+      ctx.cwd,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      [],
+      {
+        client,
+        procId: instanceId,
+        attach: {
+          afterSeq: replayable ? (options.afterSeq ?? head) : head,
+          head,
+          prelude: [...asks.values()],
+        },
+      }
     );
-    // Everything at or below `boundary` the hub has already seen; everything
-    // above it is the replay the caller asked for. A cursor past `head` names
-    // lines the ring never assigned — sessiond's refusal covers that, and a
-    // peek would only muddle whose refusal it was.
-    // Raised to `head` if the replay is refused: what survives is then read
-    // for the verdict and emitted to nobody (see the `reset` handler).
-    let boundary = options.afterSeq ?? head;
-    let peekSeq = head >= 1 && boundary <= head ? RING_START : undefined;
-    // Set once the line at `head` has been read and the adoption has decided.
-    let decided = false;
-    let seen = false;
-    let reopened = false;
-    const outstanding = new Map<string, string>();
-    const repark = (): void => {
-      // The hub has these lines, but its pending asks did not survive restart.
-      // Only unresolved can_use_tool requests may replay without emitting frames.
-      for (const line of outstanding.values()) {
-        custody.ingest(line, false);
-      }
-      outstanding.clear();
-    };
-    // PROVENANCE (design §7). This frame came from exactly one sessiond line,
-    // and this is the only place that knows which: the stamp goes one
-    // statement before the ingest that emits it, because `ingest` emits
-    // synchronously and so the stamp lands on that frame and no other.
-    // Without it the hub has nothing to dedupe a replayed or re-sent line by.
-    //
-    // `client.epoch` is read here rather than asserted once at adopt time: it
-    // is only defined after sessiond's welcome, and reading it per line keeps
-    // the stamp truthful if a client ever re-welcomes under a new epoch.
-    // Undefined means no stamp at all — an unstamped frame is the pre-ledger
-    // behaviour the honest-loss rule already covers, which is strictly better
-    // than a frame stamped with an epoch nobody minted.
-    const stamp = (seq: number): void => {
-      const srcEpoch = client.epoch;
-      if (srcEpoch !== undefined) {
-        (ctx as Partial<SessiondAwareContext>).line?.(srcEpoch, seq);
-      }
-    };
-    // A PEEK THAT NEVER REACHES `head` MUST STILL HAND BACK.
-    //
-    // The hand-off below fires on the line at `head`, and there are survivors
-    // no such line ever arrives for: a sessiond too old to name its retained
-    // window (see `reset`) refuses the peek outright, and an idle child writes
-    // nothing further to rescue it. The session is then held for the life of
-    // this process — every message sent to it parked, the board showing it
-    // running — which is the wedge custody exists to prevent, not to cause.
-    //
-    // SILENCE IS THE EVIDENCE, so it is read as such. Every line pushes the
-    // deadline out, so a child that is genuinely mid-turn — which writes
-    // assistant and stream lines continuously — never reaches it, and one
-    // whose replay is merely slow keeps its full peek. What fires it is the
-    // child having gone quiet with the peek still outstanding, and the answer
-    // is then the same one `head` would have given: a hand-off unless what was
-    // read says a turn is running, which is custody's to keep until the
-    // child's own `result` line hands it back. Once `head` has decided there
-    // is no peek left to wait for, and the silence of a long tool call says
-    // nothing.
-    const QUIET_HANDBACK_MS = 15_000;
-    let quiet: ReturnType<typeof setTimeout> | undefined;
-    const stopWaiting = (): void => {
-      if (quiet !== undefined) {
-        clearTimeout(quiet);
-        quiet = undefined;
-      }
-    };
-    const waitForQuiet = (): void => {
-      stopWaiting();
-      quiet = setTimeout(() => {
-        quiet = undefined;
-        if (peekSeq === undefined || decided || custody.handedOff) {
-          return;
-        }
-        repark();
-        if (custody.activity.turnRunning) {
-          // Held on purpose, and said so: a custody nobody can explain looks
-          // exactly like the bug this guard removes.
-          ctx.frame({
-            type: "system",
-            subtype: "sessiond_custody_held",
-            text: `whiffle: adopted this session but sessiond's replay stopped short of line ${head}; holding it because its last turn reads as still running`,
-          } as unknown as NeutralMessage);
-          return;
-        }
-        custody.handOff();
-      }, QUIET_HANDBACK_MS);
-    };
-    // Peek-only: recover the session id and unanswered asks, never frames.
-    const peek = (parsed: ReturnType<typeof parseLine>, data: string): void => {
-      if (parsed?.type === "control_request") {
-        const request = parsed as Extract<
-          CustodyLine,
-          { type: "control_request" }
-        >;
-        if (request.request.subtype === "can_use_tool") {
-          outstanding.set(request.request_id, data);
-        }
-      } else if (parsed?.type === "control_cancel_request") {
-        outstanding.delete((parsed as { request_id: string }).request_id);
-      } else if (
-        parsed?.type === "assistant" ||
-        parsed?.type === "user" ||
-        parsed?.type === "result"
-      ) {
-        outstanding.clear();
-      }
-      if (
-        custody.sessionId === null &&
-        typeof parsed?.session_id === "string"
-      ) {
-        custody.sessionId = parsed.session_id;
-      }
-    };
-    const listener: Parameters<SessiondClient["subscribe"]>[1] = {
-      line: (event) => {
-        // Past the hand-off every line is the attached `Query`'s: it reads
-        // from the line after the one custody stopped at.
-        if (custody.handedOff) {
-          return;
-        }
-        lastSeq = event.seq;
-        seen = true;
-        if (!decided) {
-          waitForQuiet();
-        }
-        // Every line feeds whether a turn is running, peeked, replayed or
-        // live: the decision at `head` reads the whole backlog.
-        const parsed = parseLine(event.data);
-        custody.activity.read(parsed);
-        if (peekSeq !== undefined && event.seq <= boundary) {
-          peek(parsed, event.data);
-        } else {
-          repark();
-          stamp(event.seq);
-          custody.ingest(event.data, event.seq > head);
-        }
-        if (event.seq === head) {
-          repark();
-        }
-        // There is no backlog-complete event; the ring's last line is it, and
-        // it is the one place an adoption decides.
-        //
-        // A SILENT RING IS AN IDLE CHILD. Nothing said about a turn does not
-        // mean the evidence scrolled away — reading from {@link RING_START} is
-        // what removes that reading — it means nothing in everything sessiond
-        // still holds says anything about a turn. A child mid-turn cannot look
-        // like that: it writes assistant and stream lines continuously, and
-        // those replace the answer rather than carry it. What CAN look like that is
-        // a child that has taken no turn since its ring began and has only
-        // written hook and notice lines since, which is exactly the session
-        // this rule exists to hand back. Measured on a wedged one: six lines,
-        // all `hook_started`/`hook_response`/`control_response`, no `init` and
-        // no `result` — a strict `=== true` left it mute indefinitely.
-        //
-        // A turn still running stays in custody until its own `result`, and
-        // is busy from here, as it was before the agent went away.
-        if (peekSeq !== undefined && head >= 1 && event.seq === head) {
-          decided = true;
-          stopWaiting();
-          if (custody.activity.turnRunning) {
-            ctx.busy(true);
-          } else {
-            custody.handOff();
-          }
-        }
-      },
-      // A child that dies during custody is the session ending on its own,
-      // and the supervisor's `closed` hook retires the row. After the
-      // hand-off (or a stop) its death is the EOF doing what it was sent to
-      // do — expected, and not the session ending — so only `stop`'s wait
-      // hears of it.
-      exit: () => {
-        stopWaiting();
-        custody.exited();
-        if (!custody.handedOff) {
-          ctx.closed?.();
-        }
-      },
-      // §6's honest refusal, surfaced rather than smoothed over — unless what
-      // was refused is the peek window, which nobody asked to see. Asking from
-      // the ring's start is asking for more than sessiond may still hold, so a
-      // refusal here is not a failure but the answer to how far back it goes:
-      // `oldest` is the earliest line it will serve, and the peek reopens on
-      // the cursor just below it rather than switching itself off. The verdict
-      // is then read over everything that survives, which is all there is to
-      // read. Any reset after that, or with no peek outstanding, is a real seam.
-      //
-      // IT MUST BE `oldest`, NOT `nextSeq`. `nextSeq` is where the REFUSED
-      // subscription resumes — `head + 1`, a line the child has not written —
-      // and reopening there is how an idle survivor stayed wedged: the peek
-      // read nothing, never reached `head`, never handed back, and held every
-      // message sent to it for as long as the process lived. A sessiond too
-      // old to send `oldest` has no window to name, so that case keeps the
-      // previous behaviour rather than inventing a cursor.
-      reset: (nextSeq, oldest) => {
-        const reopenAt = oldest === undefined ? nextSeq : oldest - 1;
-        if (peekSeq !== undefined && peekSeq < reopenAt && !seen && !reopened) {
-          reopened = true;
-          peekSeq = reopenAt;
-          if (reopenAt > boundary) {
-            // The caller's replay was refused, and reading the survivors does
-            // not quietly grant a smaller one: §6 is never a PARTIAL replay,
-            // so the seam is announced and the peek window is widened to the
-            // whole of it. Everything sessiond still holds is then looked at
-            // for the verdict and emitted to nobody; the transcript resumes
-            // where the refusal said it would, at the next line the child
-            // writes.
-            boundary = head;
-            ctx.frame({
-              type: "system",
-              subtype: "sessiond_stream_gap",
-              text: `whiffle: sessiond's replay window overflowed; this transcript resumes at line ${nextSeq}`,
-            } as unknown as NeutralMessage);
-          }
-          client.subscribe(instanceId, listener, reopenAt);
-          waitForQuiet();
-          return;
-        }
-        ctx.frame({
-          type: "system",
-          subtype: "sessiond_stream_gap",
-          text: `whiffle: sessiond's replay window overflowed; this transcript resumes at line ${nextSeq}`,
-        } as unknown as NeutralMessage);
-      },
-    };
-    client.subscribe(instanceId, listener, peekSeq ?? options.afterSeq);
-    if (peekSeq !== undefined) {
-      // A peek that is refused outright, or answered with nothing, produces no
-      // line to arm the wait from — so it is armed here, before the first one.
-      waitForQuiet();
+    session.sessionId = sessionId;
+    if (activity.turnRunning) {
+      session.adoptTurn();
     }
-    return custody;
+    return session;
   }
 
   /** What sessiond is still holding for this machine — the reattach's first read. */

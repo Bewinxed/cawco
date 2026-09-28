@@ -21,7 +21,6 @@ import type {
   HookDraft,
   IngestMark,
   InstanceRow,
-  InstanceSpec,
   MachineMemorySet,
   ModelInfo,
   NeutralSessionInfo,
@@ -420,25 +419,17 @@ const ack = (envelope: Envelope): Envelope<{ ok: true }> => ({
 
 /**
  * `register`'s ack, carrying the ingest ledger for the instances the daemon
- * says it is holding (sessiond design §7, step 3), and how each of them was
- * configured to run. Additive on {@link ack}: an agent that predates either
- * field reads `{ ok: true }` exactly as it always did, and this hub gains
- * nothing to explain to it.
- *
- * The specs ride here because this ack is the one moment the two ends agree on
- * what this machine is carrying. A returning agent adopts survivors sessiond
- * names, and sessiond knows a pid and a cwd — not that the operator had put
- * the session on `bypassPermissions`. Without this the hand-off respawned it
- * on `default` and the session started asking for every tool call again.
+ * says it is holding (sessiond design §7, step 3): where each attached `Query`
+ * starts reading, so what a child wrote while no agent was reading reaches
+ * this hub exactly once.
  */
 const registerAck = (
   envelope: Envelope,
-  ingested: Record<string, IngestMark>,
-  specs: Record<string, InstanceSpec>
+  ingested: Record<string, IngestMark>
 ): Envelope<RegisterAckPayload> => ({
   verb: envelope.verb,
   machineId: envelope.machineId,
-  payload: { ok: true, ingested, specs },
+  payload: { ok: true, ingested },
 });
 
 /** Sent back as a frame, the only verb a dashboard renders. */
@@ -882,60 +873,6 @@ export const reattachable = (
   reported: readonly string[],
   restored: readonly string[]
 ): string[] => [...new Set([...reported, ...restored])];
-
-/**
- * How this machine's sessions were configured to run, for the ack the
- * returning agent reattaches against.
- *
- * SCOPED TO THE MACHINE, DELIBERATELY NOT TO {@link reattachable}. That set is
- * the right one for the ledger — a mark for a session this hub never ingested
- * is a mark the daemon could not act on — and it is the wrong one here, for
- * the reason the ledger's own note gives: `instances` is empty for a daemon
- * that just restarted, so the set reduces to the rows the hub chose to
- * restore. A survivor is by definition the session the hub did NOT restore,
- * and `reattachFrom` is handed it anyway, off sessiond's list. Scoping the
- * specs to the restores therefore left them out of exactly the adoption that
- * had no other source for them, and the hand-off respawned them on defaults.
- *
- * A spec is small and a machine's rows are few, so the honest scope is all of
- * them: the daemon looks up the ids it actually adopted and ignores the rest.
- * Only what a relaunch has to carry, and only where the row names it — an
- * absent field is spread as nothing, so a relaunch falls back to the same
- * harness default it always did rather than to a null the payload would then
- * have to explain.
- */
-export const instanceSpecs = (
-  rows: readonly {
-    id: string;
-    machineId: string;
-    permissionMode?: string | null;
-    model?: string | null;
-    effort?: string | null;
-    workflowRunId?: string | null;
-    workflowStepId?: string | null;
-    canDelegate?: boolean | null;
-  }[],
-  machineId: string
-): Record<string, InstanceSpec> => {
-  const specs: Record<string, InstanceSpec> = {};
-  for (const row of rows) {
-    if (row.machineId !== machineId) {
-      continue;
-    }
-    const spec: InstanceSpec = {
-      ...(row.workflowRunId ? { workflowRunId: row.workflowRunId } : {}),
-      ...(row.workflowStepId ? { workflowStepId: row.workflowStepId } : {}),
-      ...(row.canDelegate === false ? { canDelegate: false } : {}),
-      ...(row.permissionMode ? { permissionMode: row.permissionMode } : {}),
-      ...(row.model ? { model: row.model } : {}),
-      ...(row.effort ? { effort: row.effort } : {}),
-    };
-    if (Object.keys(spec).length > 0) {
-      specs[row.id] = spec;
-    }
-  }
-  return specs;
-};
 
 /**
  * And of the SDK sessions it could resume. Absent from a daemon that could not
@@ -2873,17 +2810,6 @@ export const createServer = ({
       effort: row.effort ?? undefined,
       canDelegate: row.canDelegate ?? undefined,
     });
-  };
-
-  /** {@link instanceSpecs} over this hub's rows — the ack's half of the relaunch. */
-  const specsFor = (machineId: string): Record<string, InstanceSpec> => {
-    const specs = instanceSpecs(db.listInstances(), machineId);
-    for (const spec of Object.values(specs)) {
-      if (spec.workflowStepId) {
-        Object.assign(spec, workflowRuntime.specFor(spec.workflowStepId));
-      }
-    }
-    return specs;
   };
 
   /**
@@ -6890,13 +6816,7 @@ export const createServer = ({
                 peekInstances(message.payload),
                 revivable.map((orphan) => orphan.row.id)
               );
-              ws.send(
-                registerAck(
-                  message,
-                  streams.ingestedFor(reattaching),
-                  specsFor(message.machineId)
-                )
-              );
+              ws.send(registerAck(message, streams.ingestedFor(reattaching)));
               workflowRuntime.recover(message.machineId);
               break;
             }

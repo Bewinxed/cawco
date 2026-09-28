@@ -473,8 +473,9 @@ export class SessiondClient {
    * socket, so its welcome says whether the child was alive once the
    * subscription stood; a death after that is broadcast to this listener as
    * usual. Without it a subscriber that arrived late — an adoption between
-   * `list` and `subscribe`, a `Query` attaching after its custody let go —
-   * waited on a child that could never write or exit again.
+   * `list` and `subscribe`, a `Query` attaching to a child that died after
+   * its ring was read — waited on a child that could never write or exit
+   * again.
    */
   subscribe(procId: string, listener: ProcListener, afterSeq?: number): void {
     this.#listeners.set(procId, listener);
@@ -513,6 +514,54 @@ const assertApplied = (ack: SessiondAck, verb: string): void => {
 };
 
 /**
+ * The sequence space a ring line's seq belongs to: one child process, under
+ * one sessiond boot. sessiond's own epoch spans every child it runs, and a
+ * relaunch starts a new ring at seq 1 under the same procId — so a mark kept
+ * per sessiond epoch alone would have the hub refuse the new child's lines as
+ * lines it had already framed.
+ */
+export const procEpoch = (sessiondEpoch: string, pid: number): string =>
+  `${sessiondEpoch}/${pid}`;
+
+/** What a {@link sessiondBridge} knows about the ring it reads. */
+export interface BridgeRing {
+  /**
+   * An attach to the child already running under the procId, in place of a
+   * spawn. `afterSeq` is where the SDK starts reading; lines at or below
+   * `head` are the backlog of the host before it; `prelude` is the
+   * permission asks that host left unanswered, raw.
+   */
+  readonly attach?: {
+    readonly afterSeq: number;
+    readonly head: number;
+    readonly prelude: readonly string[];
+  };
+  /**
+   * The ring seq of every line handed to the SDK that carries a `uuid`, in
+   * ring order — what lets the session stamp each frame with the line it came
+   * from (design §7).
+   */
+  readonly seqs: Map<string, number>;
+}
+
+/** The previous host's control traffic, which an attach does not replay. */
+const PREVIOUS_HOST_LINES: ReadonlySet<unknown> = new Set([
+  "control_request",
+  "control_response",
+  "control_cancel_request",
+]);
+
+const parseRingLine = (
+  data: string
+): { type?: unknown; uuid?: unknown } | undefined => {
+  try {
+    return JSON.parse(data) as { type?: unknown; uuid?: unknown };
+  } catch {
+    return undefined;
+  }
+};
+
+/**
  * The SDK seam. `options` is the command line the SDK built for the CLI; it
  * goes to sessiond verbatim (`ProcSpec` is opaque there), and what comes back
  * is a `SpawnedProcess` the SDK drives exactly as it drives a `ChildProcess`.
@@ -521,14 +570,14 @@ const assertApplied = (ack: SessiondAck, verb: string): void => {
  * SDK's stdin-EOF + ~2 s grace window (`sdk.d.ts:6725-6741`), so honouring it
  * with a SIGTERM is the graceful path completing, never a child killed early.
  *
- * ATTACH. With `attachAfter`, nothing is spawned: `procId` is a child that
- * outlived the agent which started it, and the SDK is handed that process,
- * read from the ring line after `attachAfter`. The CLI takes a repeated
- * `initialize` from a host that reconnects — the SDK documents it ("A host
- * that re-initializes an already-running process (a repeated `initialize`
- * control request, e.g. after reconnecting) is sent a snapshot of the current
- * set right behind the success response") — so the `Query` drives it like one
- * it spawned, and nothing the child runs is interrupted.
+ * ATTACH. With `ring.attach`, nothing is spawned: `procId` is a child that
+ * outlived the agent which started it, and the SDK is handed that process.
+ * The CLI takes a repeated `initialize` from a host that reconnects — the SDK
+ * documents it ("A host that re-initializes an already-running process (a
+ * repeated `initialize` control request, e.g. after reconnecting) is sent a
+ * snapshot of the current set right behind the success response") — so the
+ * `Query` drives it like one it spawned, mid-turn or not, and nothing the
+ * child runs is interrupted.
  */
 export const sessiondBridge = (
   client: SessiondClient,
@@ -540,8 +589,9 @@ export const sessiondBridge = (
     env: Record<string, string | undefined>;
     signal?: AbortSignal;
   },
-  attachAfter?: number
+  ring: BridgeRing
 ): import("@anthropic-ai/claude-agent-sdk").SpawnedProcess => {
+  const { attach } = ring;
   const events = new EventEmitter();
   let killed = false;
   let exitCode: number | null = null;
@@ -553,10 +603,10 @@ export const sessiondBridge = (
     },
   });
   // The highest sequence this wrapper has handed to the SDK. It subscribes at
-  // 0 against the child's own fresh ring (or at `attachAfter`, the line the
-  // custody before it stopped at), so this is what separates a benign reset
-  // from a lost window.
-  let consumed = attachAfter ?? 0;
+  // 0 against the child's own fresh ring (or, attaching, where the hub's own
+  // mark says its frames stop), so this is what separates a benign reset from
+  // a lost window.
+  let consumed = attach?.afterSeq ?? 0;
   const stdin = new Writable({
     write(chunk: Buffer | string, _encoding, callback) {
       client
@@ -578,7 +628,7 @@ export const sessiondBridge = (
   });
 
   // The listener is built here but attached only once the spawn is acked (see
-  // `started`). A relaunch or a custody hand-off reuses the procId, and until
+  // `started`). A relaunch reuses the procId, and until
   // the ack lands sessiond's table still holds the OLD child under it: a
   // subscribe at 0 sent before the ack replayed that child's entire ring into
   // this SDK's stdout — or, if its ring had overflowed, announced a reset that
@@ -590,6 +640,21 @@ export const sessiondBridge = (
     // reader frames on newlines, so it goes back on.
     line: (event) => {
       consumed = event.seq;
+      const parsed = parseRingLine(event.data);
+      // An attach replays what the hub has not yet framed, and in that
+      // backlog the control traffic was the previous host's: its requests
+      // were answered (or are handed over in the prelude), and its responses
+      // answer nothing this `Query` asked.
+      if (
+        attach &&
+        event.seq <= attach.head &&
+        PREVIOUS_HOST_LINES.has(parsed?.type)
+      ) {
+        return;
+      }
+      if (typeof parsed?.uuid === "string") {
+        ring.seqs.set(parsed.uuid, event.seq);
+      }
       stdout.push(`${event.data}\n`);
     },
     exit: (code, sig) => {
@@ -642,8 +707,16 @@ export const sessiondBridge = (
   }
 
   const started = (
-    attachAfter === undefined
-      ? client
+    attach
+      ? Promise.resolve().then(() => {
+          // The asks the previous host left open, first: this `Query` parks
+          // them under the CLI's own request ids and answers them itself.
+          for (const line of attach.prelude) {
+            stdout.push(`${line}\n`);
+          }
+          client.subscribe(procId, listener, attach.afterSeq);
+        })
+      : client
           .spawnProc(procId, {
             command: options.command,
             args: options.args,
@@ -651,9 +724,6 @@ export const sessiondBridge = (
             env,
           })
           .then(() => client.subscribe(procId, listener, 0))
-      : Promise.resolve().then(() =>
-          client.subscribe(procId, listener, attachAfter)
-        )
   ).catch((error: unknown) => {
     events.emit(
       "error",

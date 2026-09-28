@@ -146,28 +146,6 @@ export interface IngestMark {
   srcSeq: number;
 }
 
-/**
- * How one instance was configured to run: the fields a relaunch must carry to
- * be the same session rather than a default-shaped one.
- *
- * A custody hand-off respawns the child, and everything not named here is
- * reconstructed from the harness's defaults. `permissionMode` is the one that
- * bites: a session the operator put on `bypassPermissions` came back on
- * `default` — asking for every tool call — because the row the hand-off built
- * its spawn from was a survivor sessiond named, and a survivor carries only
- * what sessiond knows, which is a pid and a cwd.
- */
-export interface InstanceSpec {
-  canDelegate?: boolean;
-  denyTools?: string[];
-  effort?: string;
-  model?: string;
-  permissionMode?: string;
-  skills?: string[];
-  workflowRunId?: string;
-  workflowStepId?: string;
-}
-
 /** `register`'s ack, with the ledger the returning agent reattaches against. */
 export interface RegisterAckPayload {
   /**
@@ -179,16 +157,6 @@ export interface RegisterAckPayload {
    */
   ingested?: Record<string, IngestMark>;
   ok: true;
-  /**
-   * Per instance id, and additive in exactly the way `ingested` is: a hub that
-   * predates it sends nothing and the agent relaunches on harness defaults,
-   * which is the behaviour this replaces rather than a new failure mode.
-   *
-   * The hub is the only party that still knows these. sessiond holds the child
-   * but not the intent behind it, and the agent that did know died — so a
-   * survivor adopted after a restart has no other source for them.
-   */
-  specs?: Record<string, InstanceSpec>;
 }
 
 const record = (value: unknown): Record<string, unknown> | undefined =>
@@ -257,51 +225,16 @@ export const readIngested = (
 };
 
 /**
- * The spawn specs off a register ack, read the way the ledger above is read:
- * anything malformed drops out rather than travelling as a half-spec, and a
- * missing field stays missing so the caller spreads nothing for it.
- *
- * `undefined` when the hub said nothing at all, which an older hub does, and
- * which leaves a relaunch exactly where it was before this field existed.
- */
-export const readSpecs = (
-  payload: unknown
-): Record<string, InstanceSpec> | undefined => {
-  const specs = record(record(payload)?.specs);
-  if (!specs) {
-    return undefined;
-  }
-  const read: Record<string, InstanceSpec> = {};
-  for (const [instanceId, value] of Object.entries(specs)) {
-    const spec = record(value);
-    if (!spec) {
-      continue;
-    }
-    const named: InstanceSpec = {};
-    for (const field of ["effort", "model", "permissionMode"] as const) {
-      const at = spec[field];
-      if (typeof at === "string" && at.length > 0) {
-        named[field] = at;
-      }
-    }
-    if (Object.keys(named).length > 0) {
-      read[instanceId] = named;
-    }
-  }
-  return read;
-};
-
-/**
  * THE HONEST-LOSS RULE (design §7), as one function both ends read.
  *
  * The cursor a reattaching agent subscribes with: the hub's own mark when it
- * was minted under the sessiond epoch that is running NOW, and `undefined` —
- * follow from head, replay nothing — in every other case. No entry, or a mark
- * from a sessiond that has since restarted, is not a small gap to paper over:
- * a restarted hub has already reset its dashboards and had them re-read
- * history, and a restarted sessiond's children are gone with the seqs that
- * named their lines. Inventing history to fill either is the failure this rule
- * exists to prevent.
+ * was minted under the epoch of the child running NOW (one process under one
+ * sessiond boot), and `undefined` — follow from head, replay nothing — in
+ * every other case. No entry, or a mark from another process or a sessiond
+ * that has since restarted, is not a small gap to paper over: a restarted hub
+ * has already reset its dashboards and had them re-read history, and another
+ * process's seqs name lines of another ring. Inventing history to fill either
+ * is the failure this rule exists to prevent.
  */
 export const resumeCursor = (
   epoch: string | undefined,

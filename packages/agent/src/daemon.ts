@@ -5,7 +5,6 @@ import type {
   DeployInfo,
   Envelope,
   HeartbeatPayload,
-  PermissionMode,
   SpawnPayload,
 } from "@whiffle/core";
 import {
@@ -415,19 +414,13 @@ export const adoptable = (
   payload.bootstrap === undefined &&
   payload.scratch === undefined;
 
-/** That restore as `reattachFrom` wants it: where it runs, and what to resume. */
+/** That restore as `reattachFrom` wants it: where it runs, and its conversation. */
 export const custodyRow = (
   payload: SpawnPayload
-): {
-  instanceId: string;
-  cwd: string;
-  sessionId: string | null;
-  permissionMode?: PermissionMode;
-} => ({
+): { instanceId: string; cwd: string; sessionId: string | null } => ({
   instanceId: payload.instanceId,
   cwd: payload.cwd,
   sessionId: payload.resume?.sessionKey ?? null,
-  ...(payload.permissionMode ? { permissionMode: payload.permissionMode } : {}),
 });
 
 /**
@@ -632,9 +625,9 @@ const attach = (
      * never a cwd — so they are held here until the ack arrives rather than
      * dispatched straight into a fresh process.
      *
-     * On the ack the supervisor is asked to take custody of them instead:
-     * whatever sessiond is still holding is adopted onto its existing pipe and
-     * ring, and every spawn it did NOT adopt is dispatched exactly as it would
+     * On the ack the supervisor is asked to attach to them instead: whatever
+     * sessiond is still holding gets a `Query` on its existing pipe and ring,
+     * and every spawn it did NOT attach to is dispatched exactly as it would
      * have been. So a machine with no sessiond children behaves precisely as it
      * did before this wiring, and one that has them keeps their processes.
      *
@@ -682,7 +675,7 @@ const attach = (
           if (adopted.length > 0) {
             Effect.runFork(
               Effect.logInfo(
-                `took custody of ${adopted.length} surviving session(s): ${adopted.join(", ")}`
+                `attached to ${adopted.length} surviving session(s): ${adopted.join(", ")}`
               )
             );
           }

@@ -593,14 +593,14 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
    * leaf exists for.
    *
    * - No provenance: admitted, and any mark this instance had is RETIRED. A
-   *   session stops carrying provenance the moment it stops being read off a
-   *   ring — the boundary hand-off puts a full SDK `Query` back in charge, and
-   *   its frames derive from no line at all. Keeping the old mark would hand
-   *   the next reattach a cursor pointing into a stretch the hub has since
-   *   ingested by another route, and the replay would double it. An absent
-   *   mark is the honest answer there, and the honest-loss rule handles it.
-   * - A DIFFERENT epoch than the mark: admitted, and the mark is replaced. A
-   *   new sessiond boot is a new sequence space; the old cursor is meaningless
+   *   frame the agent cannot tie to a ring line (no uuid to match it by) says
+   *   nothing about where the hub stands, and keeping the old mark would hand
+   *   the next reattach a cursor into a stretch the hub has since ingested by
+   *   another route, and the replay would double it. An absent mark is the
+   *   honest answer there, and the honest-loss rule handles it.
+   * - A DIFFERENT epoch than the mark: admitted, and the mark is replaced. The
+   *   epoch names one child process under one sessiond boot, so a relaunch or
+   *   a new sessiond is a new sequence space; the old cursor is meaningless
    *   against it (the same reading `SessionRing.canReplay` gives a resume whose
    *   `afterSeq` exceeds `head` — "seqs belong to a dead epoch").
    * - The same epoch, at or below the mark: REFUSED. This hub has already
