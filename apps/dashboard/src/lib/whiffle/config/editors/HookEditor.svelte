@@ -369,6 +369,16 @@
   /** Per machine, the last settle failed: its button shows no check. */
   let settleFailed = $state<Record<string, boolean>>({});
 
+  /** Where a kept version came from: the fleet's own row, or a machine's edited copy. */
+  function sourceLabel(source: string): string {
+    if (!source.startsWith("machine:")) {
+      return "the fleet";
+    }
+    const machineId = source.slice("machine:".length);
+    const machine = machines.find((row) => row.machineId === machineId);
+    return machine ? machineLabel(machine.hostname) : machineId;
+  }
+
   const stateOn = (machine: Machine) =>
     id ? hooksOf(machine)?.[id] : undefined;
   const applied = $derived(
@@ -442,6 +452,7 @@
       toast.success(
         `${machineLabel(machine.hostname)} takes the fleet's copy.`
       );
+      loadVersions(id);
     } catch (caught) {
       settleFailed[machine.machineId] = true;
       toast.error(message(caught));
@@ -926,6 +937,7 @@
                   <span class="vname">{version.name}</span>
                   <span class="note">
                     {new Date(version.createdAt).toLocaleString()}
+                    · from {sourceLabel(version.source)}
                     · <span class="font-mono">{version.hash.slice(0, 7)}</span>
                   </span>
                 </span>

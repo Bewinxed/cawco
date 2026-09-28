@@ -34,7 +34,8 @@ export interface HookVersion {
   hookId: string;
   id: number;
   name: string;
-  /** `fleet` for every version today — a hook has never been edited from a machine. */
+  /** `fleet` for the hub's own row; `machine:<machineId>` for an edited
+   *  script an overwrite took off that machine. */
   source: string;
 }
 

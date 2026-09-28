@@ -107,7 +107,7 @@ import {
   transcriptModel,
 } from "./continuation";
 import type { AgentAuth, DbShape, DelegateEvent, InstanceKind } from "./db";
-import { usageBucketFromRow } from "./db";
+import { hashHookMaterial, usageBucketFromRow } from "./db";
 import { delegateTypesRoutes, makeDelegateTypes } from "./delegate-types";
 import { hubHttpUrl } from "./delegation-actions";
 import { createDelegationMcp } from "./delegation-mcp";
@@ -6287,12 +6287,17 @@ export const createServer = ({
       // The click for a hook that drifted on one machine, or that a reader
       // wants there right now rather than at the next reconnect: `force: true`
       // on the one row named, or on every enabled one when none is.
+      //
+      // The machine is read first, as a memory push reads it: an edited script
+      // an overwrite destroys exists nowhere else, so it goes into the hook's
+      // history before it goes, and a machine that will not answer stops the
+      // push.
       .post(
         "/api/fleet/hooks/push",
         {
           body: t.Object({ machineId: t.String(), id: t.Optional(t.String()) }),
         },
-        ({ body, status }) => {
+        async ({ body, status }) => {
           const agent = registry.agent(body.machineId);
           if (!agent) {
             return status(404, `machine ${body.machineId} is not connected`);
@@ -6307,6 +6312,38 @@ export const createServer = ({
             !config.hooks.some((hook) => hook.id === body.id)
           ) {
             return status(404, `the fleet keeps no hook ${body.id}`);
+          }
+
+          const forced = db
+            .listFleetHooks()
+            .filter((hook) =>
+              body.id === undefined ? hook.enabled : hook.id === body.id
+            );
+          for (const hook of forced) {
+            if (hook.script === undefined) {
+              continue;
+            }
+            // biome-ignore lint/performance/noAwaitInLoops: each hook's script is read and kept before the one push below; a push is one click on one machine, rarely more than a hook or two
+            const read = await readMachineHookScript(body.machineId, hook.id);
+            if (!read.ok) {
+              return status(read.code, read.said);
+            }
+            if (read.copy && read.copy.content !== hook.script) {
+              const theirs = { ...hook, script: read.copy.content };
+              db.recordFleetHook({
+                hookId: hook.id,
+                name: hook.name,
+                enabled: hook.enabled,
+                event: hook.event,
+                matcher: hook.matcher,
+                handler: hook.handler,
+                script: theirs.script,
+                hash: hashHookMaterial(theirs),
+                scope: hook.scope,
+                projectId: hook.projectId,
+                source: `machine:${body.machineId}`,
+              });
+            }
           }
 
           pushFleetConfig(body.machineId, agent, {

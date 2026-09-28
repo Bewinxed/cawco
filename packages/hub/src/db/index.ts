@@ -959,7 +959,7 @@ const hashText = (content: string): string =>
  * `name`, which is how the fleet talks about the hook, and not `enabled`,
  * which decides whether it is written at all rather than what gets written.
  */
-const hashHookMaterial = (hook: {
+export const hashHookMaterial = (hook: {
   event: HookEvent;
   matcher?: string;
   handler: HookHandler;
