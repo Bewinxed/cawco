@@ -107,3 +107,33 @@ export function appear(_node: Element) {
     css: (t: number) => `opacity: ${t}`,
   };
 }
+
+/**
+ * One view handing its place to another — a skeleton to what it stood in
+ * for, a document to the next, a reader to its editor: the two cross-fade
+ * over --dur-control. The one leaving is taken out of the flow as it starts,
+ * pinned where it stands (its parent is `position: relative`), so the box is only ever the size of
+ * what arrives and a height morph around it has one change to follow.
+ * Opacity only, so it runs with or without motion.
+ */
+export function crossIn(_node: Element) {
+  return {
+    duration: dur("--dur-control"),
+    easing: easeOut,
+    css: (t: number) => `opacity: ${t}`,
+  };
+}
+
+export function crossOut(node: HTMLElement) {
+  const { offsetTop, offsetLeft, offsetWidth } = node;
+  node.style.position = "absolute";
+  node.style.top = `${offsetTop}px`;
+  node.style.left = `${offsetLeft}px`;
+  node.style.width = `${offsetWidth}px`;
+  node.style.pointerEvents = "none";
+  return {
+    duration: dur("--dur-control"),
+    easing: easeOut,
+    css: (t: number) => `opacity: ${t}`,
+  };
+}

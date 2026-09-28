@@ -10,7 +10,7 @@
   import { enableLongPressMenus } from "$lib/utils/longpress";
   import { ensureConnected } from "$lib/whiffle/client.svelte";
   import { GROUPS } from "$lib/whiffle/config/sections";
-  import { plan, route } from "$lib/whiffle/motion/route.svelte";
+  import { leaving, plan, route } from "$lib/whiffle/motion/route.svelte";
   import { departAll } from "$lib/whiffle/motion/share.svelte";
   import Shell from "$lib/whiffle/Shell.svelte";
   import { tallestComposer } from "$lib/whiffle/transcript/composer-presence.svelte";
@@ -69,6 +69,7 @@
     // What the page going away shares with the page arriving hands itself
     // over: its rects are taken now, before the DOM changes.
     departAll();
+    leaving(navigation.from.url);
     route.travel = plan({
       from: navigation.from.url.pathname,
       to: navigation.to.url.pathname,
