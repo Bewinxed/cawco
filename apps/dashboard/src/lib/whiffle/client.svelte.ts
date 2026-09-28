@@ -3523,6 +3523,25 @@ export async function removeMachine(machineId: string): Promise<void> {
   await refresh();
 }
 
+/**
+ * Removes a session that never started: no transcript, no process. The hub
+ * refuses any other kind and says why; that answer is thrown as it is, for
+ * the confirm dialog to show under its question.
+ */
+export async function removeSession(instanceId: string): Promise<void> {
+  const response = await fetch(
+    `/api/instances/${encodeURIComponent(instanceId)}`,
+    { method: "DELETE" }
+  );
+  if (!response.ok) {
+    throw new Error(
+      (await response.text()) ||
+        `The hub answered ${response.status}, so the session was not removed. Try again.`
+    );
+  }
+  await refresh();
+}
+
 /** Sends something the agent answers by `requestId`, and waits for that answer. */
 function ask<T>(
   requestId: string,

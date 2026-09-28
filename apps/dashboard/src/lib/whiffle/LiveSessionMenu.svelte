@@ -20,6 +20,7 @@
     discardSession,
     type InstanceRow,
     keepSession,
+    removeSession,
     stopSession,
     whiffle,
   } from "./client.svelte";
@@ -43,6 +44,28 @@
 
   const href = $derived(conversationHref(instance.id, whiffle.instanceIndex));
   const scratch = $derived(instance.kind === "scratch");
+
+  /**
+   * A start that failed before the harness named a conversation: there is no
+   * transcript to delete and no process to discard, so this is the only way
+   * its row leaves the board.
+   */
+  const neverStarted = $derived(
+    !instance.sessionId &&
+      instance.status !== "running" &&
+      instance.status !== "starting"
+  );
+
+  async function askRemove() {
+    await confirm({
+      title: "Remove this session?",
+      body: "It never started, so there is no transcript to lose.",
+      confirmLabel: "Remove session",
+      destructive: true,
+      pendingLabel: "Removing…",
+      run: () => removeSession(instance.id),
+    });
+  }
 
   async function askDiscard() {
     await confirm({
@@ -82,6 +105,14 @@
       <ContextMenu.Item onSelect={ongroup}>
         <IconFolder />
         Group into folder
+      </ContextMenu.Item>
+    {/if}
+
+    {#if neverStarted}
+      <ContextMenu.Separator />
+      <ContextMenu.Item onSelect={askRemove} variant="destructive">
+        <IconTrash />
+        Remove session
       </ContextMenu.Item>
     {/if}
 

@@ -253,6 +253,8 @@ export interface DbShape {
   readonly deleteFleetAgent: (name: string) => void;
   readonly deleteFleetHook: (id: string) => void;
   readonly deleteFleetMemoryDoc: (path: string) => void;
+  /** Deletes one session row and everything keyed to it — the same delete Remove machine runs per session. */
+  readonly deleteInstance: (id: string) => void;
   /**
    * Forgets a machine: its row, the projects and session rows that name it,
    * and its current limit reading. Spend and limit history stay, because they
@@ -975,6 +977,48 @@ const hashHookMaterial = (hook: {
 const make = (path: string): DbShape => {
   const db = drizzle(path);
   migrate(db, { migrationsFolder: MIGRATIONS_DIR });
+
+  type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
+  /**
+   * Deletes session rows and everything keyed to them, inside the caller's
+   * transaction — the one way a session leaves the hub, whether its machine
+   * went with it or it never started at all.
+   */
+  const dropInstances = (tx: Tx, ids: readonly string[]): void => {
+    if (ids.length === 0) {
+      return;
+    }
+    const list = [...ids];
+    // What belonged to those sessions goes with them.
+    tx.delete(delegateEvents)
+      .where(
+        or(
+          inArray(delegateEvents.instanceId, list),
+          inArray(delegateEvents.parentInstanceId, list)
+        )
+      )
+      .run();
+    tx.delete(ruleState).where(inArray(ruleState.instanceId, list)).run();
+    tx.delete(sentMessages).where(inArray(sentMessages.instanceId, list)).run();
+    tx.delete(supervisorEvents)
+      .where(inArray(supervisorEvents.instanceId, list))
+      .run();
+    // What only pointed at one keeps its own history, pointing nowhere: a
+    // workflow's step, a run's supervisor, a delegate whose parent went.
+    tx.update(workflowSteps)
+      .set({ instanceId: null })
+      .where(inArray(workflowSteps.instanceId, list))
+      .run();
+    tx.update(workflowRuns)
+      .set({ supervisorInstanceId: null })
+      .where(inArray(workflowRuns.supervisorInstanceId, list))
+      .run();
+    tx.update(instances)
+      .set({ parentInstanceId: null })
+      .where(inArray(instances.parentInstanceId, list))
+      .run();
+    tx.delete(instances).where(inArray(instances.id, list)).run();
+  };
 
   const agentTools = (machineId: string): Record<string, ToolStatus> =>
     db
@@ -2440,40 +2484,7 @@ const make = (path: string): DbShape => {
           .where(eq(instances.machineId, machineId))
           .all()
           .map((row) => row.id);
-        if (ids.length > 0) {
-          // What belonged to those sessions goes with them.
-          tx.delete(delegateEvents)
-            .where(
-              or(
-                inArray(delegateEvents.instanceId, ids),
-                inArray(delegateEvents.parentInstanceId, ids)
-              )
-            )
-            .run();
-          tx.delete(ruleState).where(inArray(ruleState.instanceId, ids)).run();
-          tx.delete(sentMessages)
-            .where(inArray(sentMessages.instanceId, ids))
-            .run();
-          tx.delete(supervisorEvents)
-            .where(inArray(supervisorEvents.instanceId, ids))
-            .run();
-          // What only pointed at one keeps its own history, pointing nowhere:
-          // a workflow's step, a run's supervisor, a delegate elsewhere whose
-          // parent this machine held.
-          tx.update(workflowSteps)
-            .set({ instanceId: null })
-            .where(inArray(workflowSteps.instanceId, ids))
-            .run();
-          tx.update(workflowRuns)
-            .set({ supervisorInstanceId: null })
-            .where(inArray(workflowRuns.supervisorInstanceId, ids))
-            .run();
-          tx.update(instances)
-            .set({ parentInstanceId: null })
-            .where(inArray(instances.parentInstanceId, ids))
-            .run();
-          tx.delete(instances).where(eq(instances.machineId, machineId)).run();
-        }
+        dropInstances(tx, ids);
         const projectCount = tx
           .delete(projects)
           .where(eq(projects.machineId, machineId))
@@ -2484,6 +2495,10 @@ const make = (path: string): DbShape => {
           .run();
         tx.delete(agents).where(eq(agents.machineId, machineId)).run();
         return { instanceIds: ids, projects: projectCount };
+      }),
+    deleteInstance: (id) =>
+      db.transaction((tx) => {
+        dropInstances(tx, [id]);
       }),
     deleteProject: (id) => {
       // The sessions started from it outlive it; they just stop being its.

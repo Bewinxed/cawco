@@ -4052,6 +4052,20 @@ export const createServer = ({
     instances: () => db.listInstances(),
   });
 
+  /**
+   * What the hub holds in memory for sessions whose rows were just deleted —
+   * the same forgetting a stopped session gets — so nothing points at a row
+   * that is gone.
+   */
+  const forgetInstances = (ids: readonly string[]): void => {
+    for (const id of ids) {
+      pendingSends.delete(id);
+      pulses.delete(id);
+      touched.delete(id);
+      heldSessions.delete(id);
+    }
+  };
+
   return (
     new Elysia()
       .use(websocket())
@@ -4416,17 +4430,41 @@ export const createServer = ({
           );
         }
         const gone = db.deleteMachine(params.machineId);
-        // The same forgetting a stopped session gets, for every row that went.
-        for (const id of gone.instanceIds) {
-          pendingSends.delete(id);
-          pulses.delete(id);
-          touched.delete(id);
-          heldSessions.delete(id);
-        }
+        forgetInstances(gone.instanceIds);
         // The frame that carries the machine list: every dashboard drops the
         // machine and its sessions without a reload.
         publishInstances(params.machineId);
         return { sessions: gone.instanceIds.length, projects: gone.projects };
+      })
+      // A session that never started — no transcript, no process — has
+      // nothing a transcript delete or a discard could act on, and every
+      // failed start used to leave one on the board for good. This removes
+      // exactly those, with the same delete Remove machine runs per session.
+      .delete("/api/instances/:id", ({ params, status }) => {
+        const row = db.listInstances().find((r) => r.id === params.id);
+        if (!row) {
+          return status(404, "No session with that id on this hub.");
+        }
+        if (row.sessionId) {
+          return status(
+            409,
+            "This session has a transcript. Delete the transcript instead."
+          );
+        }
+        if (
+          row.status === "running" ||
+          row.status === "starting" ||
+          heldSessions.has(row.id)
+        ) {
+          return status(
+            409,
+            "This session is still running. Stop it first, then remove it."
+          );
+        }
+        db.deleteInstance(row.id);
+        forgetInstances([row.id]);
+        publishInstances(row.machineId);
+        return { ok: true };
       })
       .get("/api/agents/:machineId/busy", async ({ params, status }) => {
         const answer = await callAgent(
