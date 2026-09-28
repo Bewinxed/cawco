@@ -11,6 +11,12 @@ export const INSTALL_STEP_PREFIX = "whiffle-install: ";
 /** The line `whiffle join` ends a successful run on, followed by the machine id. */
 export const INSTALL_JOINED = `${INSTALL_STEP_PREFIX}joined as `;
 
+/**
+ * What a machine the fleet has forgotten is called wherever its history still
+ * shows — spend it ran up before it was removed stays, under this name.
+ */
+export const REMOVED_MACHINE = "Removed machine";
+
 /** One address a machine could reach this hub on. */
 export interface JoinAddress {
   /** Where it came from: `Tailscale`, `Tailscale DNS`, or an interface name. */

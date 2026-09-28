@@ -90,6 +90,11 @@ Joining
   waits for the hub to register the machine. It never prompts. The dashboard's
   Connect a machine dialog does all of it for you, over SSH or as one command.
 
+  On a machine that already runs them, \`join\` and \`deploy init\` leave a
+  service alone when nothing about it changed, and replace one that did only
+  the way \`service restart --when-idle\` would: the hub is asked, and the
+  machine's sessions get five minutes to finish their turns first.
+
 Options
   --hub <url>     hub to use, as http://host:port or ws://host:port/ws
   --token <token> a \`claude setup-token\` token, for \`login\` without a terminal
@@ -98,7 +103,8 @@ Options
   --to <version>  for \`update\`: a named release instead of the newest
   --origin <url>  for \`deploy init\`: the remote to clone (default this one's)
   --when-idle     for \`service restart\`: wait for this machine's sessions first
-  --force         for \`service restart\`: restart the agent mid-turn anyway
+  --force         for \`service restart\`, \`join\` and \`deploy init\`: restart the
+                  agent mid-turn anyway
   --follow, -f    keep printing, for \`service logs\`
   --verbose       narrate the discovery ladder
   --help          this
@@ -535,6 +541,7 @@ const runDeploy = async (args: Args): Promise<number> => {
   }
   const result = await deployInit({
     ...(args.origin === undefined ? {} : { origin: args.origin }),
+    force: args.force,
     note: (line) => console.log(line),
   });
   console.log("");
@@ -617,6 +624,7 @@ const runJoin = async (args: Args): Promise<number> => {
   say(`setting up ${deployRoot()} as this machine's deployment clone`);
   await deployInit({
     command: "whiffle join",
+    force: args.force,
     ids: ["sessiond", "agent"],
     requireLinger: true,
     // deployInit's steps are the lines that end in an ellipsis ("bun

@@ -3472,6 +3472,24 @@ export async function deleteProject(id: string): Promise<void> {
   await refresh();
 }
 
+/**
+ * Forgets an offline machine: its row, its projects and its session rows. The
+ * hub refuses a machine that is online, and says why; that answer is thrown
+ * as it is, for the confirm dialog to show under its question.
+ */
+export async function removeMachine(machineId: string): Promise<void> {
+  const response = await fetch(`/api/agents/${encodeURIComponent(machineId)}`, {
+    method: "DELETE",
+  });
+  if (!response.ok) {
+    throw new Error(
+      (await response.text()) ||
+        `The hub answered ${response.status}, so the machine was not removed. Try again.`
+    );
+  }
+  await refresh();
+}
+
 /** Sends something the agent answers by `requestId`, and waits for that answer. */
 function ask<T>(
   requestId: string,

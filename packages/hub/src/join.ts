@@ -162,19 +162,18 @@ main() {
   if [ "$(uname -s)" = Linux ] && ! command -v unzip >/dev/null 2>&1; then
     missing="$missing unzip"
   fi
-  PATH="$HOME/.bun/bin:$PATH"
-  export PATH
-  if ! command -v bun >/dev/null 2>&1 && ! command -v bash >/dev/null 2>&1; then
-    missing="$missing bash"
-  fi
   if [ -n "$missing" ]; then
     fail "this machine is missing:$missing. Install them with its package manager, then run this again."
   fi
 
+  PATH="$HOME/.bun/bin:$PATH"
+  export PATH
   if command -v bun >/dev/null 2>&1; then
     say "using Bun $(bun --version)"
   else
     say "installing Bun"
+    # Bun's installer is a bash script; nothing else here needs bash.
+    command -v bash >/dev/null 2>&1 || fail "Bun's installer needs bash, and this machine has none. Install bash with its package manager, then run this command again."
     curl -fsSL https://bun.com/install | bash
     command -v bun >/dev/null 2>&1 || fail "Bun did not install. Its installer's output is above."
   fi

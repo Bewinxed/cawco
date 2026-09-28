@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { LimitWindow } from "@whiffle/core";
+  import { REMOVED_MACHINE } from "@whiffle/core";
   import { invalidateAll } from "$app/navigation";
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
@@ -205,7 +206,7 @@
           instance.derivedTitle ??
           instance.cwd.split("/").pop() ??
           instance.id,
-        machine: machine?.hostname ?? instance.machineId,
+        machine: machine?.hostname ?? REMOVED_MACHINE,
         harness: instance.harness,
         cost: stats.cost,
         contextPct: stats.contextPct,

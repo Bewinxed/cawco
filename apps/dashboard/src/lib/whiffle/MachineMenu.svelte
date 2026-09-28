@@ -41,10 +41,19 @@
     IconKey,
     IconPlus,
     IconRefresh,
+    IconTrash,
   } from "$lib/icons";
-  import { loadCatalog, type Machine, machineControl } from "./client.svelte";
+  import {
+    loadCatalog,
+    type Machine,
+    machineControl,
+    removeMachine,
+    whiffle,
+  } from "./client.svelte";
+  import { confirm } from "./confirm.svelte";
   import ErrorDialog from "./ErrorDialog.svelte";
   import MachineLogin from "./MachineLogin.svelte";
+  import { machineLabel } from "./machine";
   import UnlockKeychain from "./UnlockKeychain.svelte";
 
   let { machine, children }: { machine: Machine; children: Snippet } = $props();
@@ -116,6 +125,33 @@
       throw err;
     }
   }
+
+  const count = (n: number, noun: string) =>
+    `${n} ${noun}${n === 1 ? "" : "s"}`;
+
+  /**
+   * Forgets a machine the fleet no longer has — offered only while it is
+   * offline, because a connected agent would register straight back. What goes
+   * is said by number, and what stays is said too: spend happened, and the
+   * machine itself is untouched.
+   */
+  async function askRemove() {
+    const { machineId, hostname } = machine;
+    const sessions = whiffle.instances.filter(
+      (row) => row.machineId === machineId
+    ).length;
+    const projects = whiffle.projects.filter(
+      (row) => row.machineId === machineId
+    ).length;
+    await confirm({
+      title: `Remove ${machineLabel(hostname)}?`,
+      body: `Its ${count(sessions, "session")} and ${count(projects, "project")} are removed from the fleet. Its spend history stays. If its agent starts again, it rejoins the fleet.`,
+      confirmLabel: "Remove machine",
+      destructive: true,
+      pendingLabel: "Removing…",
+      run: () => removeMachine(machineId),
+    });
+  }
 </script>
 
 <ContextMenu.Root>
@@ -181,6 +217,13 @@
     <ContextMenu.CopyItem text={machine.hostname} what="Hostname">
       Copy hostname
     </ContextMenu.CopyItem>
+    {#if machine.status !== 'online'}
+      <ContextMenu.Separator />
+      <ContextMenu.Item onSelect={askRemove} variant="destructive">
+        <IconTrash />
+        Remove machine…
+      </ContextMenu.Item>
+    {/if}
   </ContextMenu.Content>
 </ContextMenu.Root>
 

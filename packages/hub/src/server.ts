@@ -76,6 +76,7 @@ import {
   QUESTION_DISMISSED,
   READ_MEMORY_FILE,
   READ_SKILL_FILES,
+  REMOVED_MACHINE,
   RESOLVE_PERMISSION,
   RESTART_RESUMABLE,
   RULE_TEMPLATES,
@@ -4401,6 +4402,36 @@ export const createServer = ({
           });
         }
       )
+      // Forgetting a machine the fleet no longer has. Only an offline one: a
+      // connected daemon would register straight back, and its sessions are
+      // live. Nothing on the machine is touched — if its agent ever starts
+      // again it rejoins as new, and its stored transcripts come back with it.
+      .delete("/api/agents/:machineId", ({ params, status }) => {
+        const row = db
+          .listAgents()
+          .find((agent) => agent.machineId === params.machineId);
+        if (!row) {
+          return status(404, "No machine with that id on this hub.");
+        }
+        if (registry.agent(params.machineId)) {
+          return status(
+            409,
+            `${row.hostname} is online. Stop its agent first, then remove it.`
+          );
+        }
+        const gone = db.deleteMachine(params.machineId);
+        // The same forgetting a stopped session gets, for every row that went.
+        for (const id of gone.instanceIds) {
+          forgetQueue(id);
+          pulses.delete(id);
+          touched.delete(id);
+          heldSessions.delete(id);
+        }
+        // The frame that carries the machine list: every dashboard drops the
+        // machine and its sessions without a reload.
+        publishInstances(params.machineId);
+        return { sessions: gone.instanceIds.length, projects: gone.projects };
+      })
       .get("/api/agents/:machineId/busy", async ({ params, status }) => {
         const answer = await callAgent(
           params.machineId,
@@ -6506,7 +6537,7 @@ export const createServer = ({
             machineId: row.machineId,
             hostname:
               agents.find((agent) => agent.machineId === row.machineId)
-                ?.hostname ?? row.machineId,
+                ?.hostname ?? REMOVED_MACHINE,
             limits: row.payload,
           })),
         };
@@ -6611,7 +6642,7 @@ export const createServer = ({
             machineId: row.machineId,
             hostname:
               agents.find((a) => a.machineId === row.machineId)?.hostname ??
-              row.machineId,
+              REMOVED_MACHINE,
             limits: row.payload,
           })),
         };

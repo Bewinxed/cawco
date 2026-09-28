@@ -53,6 +53,7 @@
   import { addMachine } from "$lib/whiffle/join/join.svelte";
   import LiveSessionRow from "$lib/whiffle/LiveSessionRow.svelte";
   import MachineCard from "$lib/whiffle/MachineCard.svelte";
+  import MachineMenu from "$lib/whiffle/MachineMenu.svelte";
   import {
     CURVE,
     crossIn,
@@ -765,7 +766,13 @@
             <Card.Root class={machinesPanelClass} data-flip="box">
               <ul class="machine-list">
                 {#each whiffle.machines as machine (machine.machineId)}
-                  <MachineCard hubBuild={whiffle.hubBuild} {machine} />
+                  <!-- The sidebar's machine menu, here too: one set of actions
+                       per machine wherever it is listed. -->
+                  <li class="machine-item" data-flip>
+                    <MachineMenu {machine}>
+                      <MachineCard hubBuild={whiffle.hubBuild} {machine} />
+                    </MachineMenu>
+                  </li>
                 {/each}
               </ul>
             </Card.Root>
@@ -1359,6 +1366,9 @@
   .machine-list {
     display: flex;
     flex-direction: column;
+  }
+  .machine-item + .machine-item {
+    border-top: 1px solid var(--border-hairline);
   }
 
   /* Asleep/unreachable rows, kept in their own well rather than the roster's

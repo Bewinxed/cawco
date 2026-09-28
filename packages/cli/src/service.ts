@@ -186,7 +186,9 @@ const servicePath = (): string => {
   // Installing over SSH inherits a thin PATH with no Homebrew, so a service
   // installed remotely would lose git, gh and node. Union the usual homes with
   // whatever the installing shell had, keeping the shell's order first.
+  // `~/.local/bin` is where Claude Code's own installer puts `claude`.
   const usual = [
+    `${homedir()}/.local/bin`,
     `${homedir()}/.bun/bin`,
     "/opt/homebrew/bin",
     "/usr/local/bin",
@@ -249,21 +251,47 @@ const probeDashboard = async (): Promise<string> => {
     : `no answer from ${url}`;
 };
 
-const probeAgent = async (): Promise<string | undefined> => {
-  const agents = await probeJson<AgentRow[]>(`${hubOrigin()}/api/agents`);
-  // A worker machine's hub is somewhere else on the tailnet, so no hub here is
-  // not a verdict on the daemon — it is a question this machine cannot answer.
-  if (!agents) {
+/**
+ * The hub this machine's agent talks to: the one `up` and `join` saved. A
+ * worker's hub is on another machine, so asking 127.0.0.1 about the agent
+ * asks the wrong hub — or none at all. Undefined on a machine that has never
+ * joined one, which the callers read as "cannot say".
+ */
+const joinedHub = async (): Promise<string | undefined> => {
+  // Imported here rather than at the top so the verbs that never ask about
+  // the agent never pay for the agent package.
+  const { readConfig } = await import("@whiffle/agent");
+  return (await readConfig())?.hubUrl || undefined;
+};
+
+/** The build this machine's agent reports to its hub, while it is connected. */
+const runningAgentBuild = async (): Promise<AgentRow["build"]> => {
+  const hub = await joinedHub();
+  if (!hub) {
     return undefined;
   }
-  // Imported here rather than at the top so the other two probes, and every
-  // other verb, never pay for the agent SDK.
+  const { machineId } = await import("@whiffle/agent");
+  const id = await machineId();
+  const agents = await probeJson<AgentRow[]>(`${hub}/api/agents`);
+  return agents?.find(
+    (agent) => agent.machineId === id && agent.status === "online"
+  )?.build;
+};
+
+const probeAgent = async (): Promise<string | undefined> => {
+  const hub = await joinedHub();
+  const agents = hub
+    ? await probeJson<AgentRow[]>(`${hub}/api/agents`)
+    : undefined;
+  if (!(hub && agents)) {
+    return undefined;
+  }
   const { machineId } = await import("@whiffle/agent");
   const id = await machineId();
   const self = agents.find((agent) => agent.machineId === id);
   return self
-    ? `registered with ${hubOrigin()} as ${self.hostname} (${self.status})`
-    : `not registered with ${hubOrigin()}`;
+    ? `registered with ${hub} as ${self.hostname} (${self.status})`
+    : `not registered with ${hub}`;
 };
 
 /**
@@ -906,10 +934,14 @@ interface BusyReport {
  * route. A hub that cannot answer is never read as an idle one.
  */
 const agentBusy = async (): Promise<number | "unknown"> => {
+  const hub = await joinedHub();
+  if (!hub) {
+    return "unknown";
+  }
   // Imported here rather than at the top so no other verb pays for the agent SDK.
   const { machineId } = await import("@whiffle/agent");
   const report = await probeJson<BusyReport>(
-    `${hubOrigin()}/api/agents/${await machineId()}/busy`
+    `${hub}/api/agents/${await machineId()}/busy`
   );
   return typeof report?.busy === "number" ? report.busy : "unknown";
 };
@@ -1513,6 +1545,133 @@ export const sweepSessiondOrphans = async (
   return orphans;
 };
 
+/**
+ * The PATH a unit already hands its service, read back out of the file, so a
+ * reinstall adds to it rather than replacing it. The first install might have
+ * come from a desktop terminal and the next over SSH, whose PATH is far
+ * thinner; a service whose PATH shrank on reinstall loses tools it had.
+ */
+const SYSTEMD_PATH = /^Environment=PATH=(.*)$/m;
+const PLIST_PATH = /<key>PATH<\/key>\s*<string>([^<]*)<\/string>/;
+
+const pathIn = (text: string, mac: boolean): string[] =>
+  ((mac ? PLIST_PATH : SYSTEMD_PATH).exec(text)?.[1] ?? "")
+    .split(":")
+    .filter(Boolean);
+
+/** Whether the init system has this service running right now. */
+const isRunning = async (spec: ServiceSpec, mac: boolean): Promise<boolean> => {
+  if (mac) {
+    const printed = await run([
+      "launchctl",
+      "print",
+      `${guiDomain()}/${label(spec.id)}`,
+    ]);
+    return (
+      printed.exitCode === 0 &&
+      printed.stdout.toString().includes("state = running")
+    );
+  }
+  const active = await run([
+    "systemctl",
+    "--user",
+    "is-active",
+    unitName(spec.id),
+  ]);
+  return active.stdout.toString().trim() === "active";
+};
+
+/**
+ * LaunchAgents live in the logged-in user's GUI domain — the one place a
+ * service can read the login keychain Claude Code keeps its credentials in.
+ * With nobody logged in to the desktop there is no such domain, and nothing
+ * can be installed there; that is the platform refusing, said plainly.
+ */
+const requireGuiDomain = async (
+  note: (line: string) => void
+): Promise<void> => {
+  note(`launchctl print ${guiDomain()}…`);
+  const printed = await run(["launchctl", "print", guiDomain()]);
+  if (printed.exitCode !== 0) {
+    throw new ServiceError(
+      `launchctl print ${guiDomain()} failed: ${printed.stderr.toString().trim() || `exit ${printed.exitCode}`}\nNobody is logged in to this Mac's desktop, so launchd has no ${guiDomain()} domain for the agent to run in. Log in to the Mac once, and run \`whiffle login\` on it so the agent has a token, then run this again.`
+    );
+  }
+};
+
+/**
+ * Puts a deployment clone's services in front of the init system without
+ * cutting a turn. A service that is not running is installed and started. One
+ * that is running is left alone when its unit is unchanged — unless it is the
+ * agent and it is running other code than the clone holds. Any other running
+ * service is replaced only through {@link clearToRestart}, the same gate
+ * `service restart --when-idle` goes through: the hub is asked, the machine's
+ * sessions get up to five minutes to finish, and a machine still busy after
+ * that is refused with that gate's words, with nothing touched — `force`
+ * being the gate's own way through.
+ */
+const settleServices = async (
+  specs: readonly ServiceSpec[],
+  {
+    agentStale,
+    force,
+    note,
+  }: { agentStale: boolean; force: boolean; note: (line: string) => void }
+): Promise<RenderedUnit[]> => {
+  const mac = platform() === "darwin";
+  if (mac) {
+    await requireGuiDomain(note);
+  }
+  const start: ServiceSpec[] = [];
+  const replace: ServiceSpec[] = [];
+  const rendered: RenderedUnit[] = [];
+  for (const base of specs) {
+    const path = mac ? launchAgentPath(base.id) : systemdPath(base.id);
+    // biome-ignore lint/performance/noAwaitInLoops: one unit at a time, so each decision is attributable to its service
+    const current = await Bun.file(path)
+      .text()
+      .catch(() => "");
+    const spec: ServiceSpec = {
+      ...base,
+      environment: {
+        PATH: [
+          ...new Set([...servicePath().split(":"), ...pathIn(current, mac)]),
+        ].join(":"),
+        ...base.environment,
+      },
+    };
+    const text = mac ? plist(spec) : unit(spec);
+    rendered.push({ id: spec.id, path, text });
+    if (!(await isRunning(spec, mac))) {
+      start.push(spec);
+    } else if (current === text && !(spec.id === "agent" && agentStale)) {
+      note(`${spec.id} is running and unchanged`);
+    } else {
+      replace.push(spec);
+    }
+  }
+  for (const spec of replace) {
+    // biome-ignore lint/performance/noAwaitInLoops: each session-hosting service asks the hub in turn; nothing restarts until every one is clear
+    await clearToRestart(spec, { whenIdle: true, force }, note);
+  }
+  if (mac) {
+    // A LaunchAgent is replaced by booting it out and back in: that is the
+    // restart, and every one of them has already been cleared above.
+    if (start.length + replace.length > 0) {
+      await installLaunchAgents([...start, ...replace], note);
+    }
+    return rendered;
+  }
+  if (start.length + replace.length > 0) {
+    await installSystemdUnits([...start, ...replace], note);
+  }
+  for (const spec of replace) {
+    // biome-ignore lint/performance/noAwaitInLoops: services restart one at a time so each one's note prints in its own order
+    await restartSystemdUnit(spec, note);
+  }
+  return rendered;
+};
+
 // ---------------------------------------------------------------------------
 // The deployment clone (PLAN.md contract C8)
 // ---------------------------------------------------------------------------
@@ -1600,13 +1759,10 @@ export interface DeployInitOptions {
    * the move without going near the operator's own database.
    */
   readonly dbPath?: string;
+  /** `--force`: replace running services even while their sessions are mid-turn. */
+  readonly force?: boolean;
   /** Which services this machine runs from the clone. Defaults to all of them. */
   readonly ids?: readonly ServiceId[];
-  /** Injected for the same reason: nothing in a test may reach `systemctl`. */
-  readonly install?: (
-    specs: readonly ServiceSpec[],
-    note: (line: string) => void
-  ) => Promise<void>;
   readonly legacyDb?: string;
   readonly note: (line: string) => void;
   /** The remote to clone. Defaults to this checkout's `origin`. */
@@ -1702,11 +1858,11 @@ export const deployInit = async ({
   origin,
   branch = DEPLOY_BRANCH,
   command = "whiffle deploy init",
+  force = false,
   ids = SERVICE_IDS,
   requireLinger = false,
   note,
   run: runner = runStep,
-  install,
   dbPath = DEFAULT_DB_PATH,
   legacyDb = join(ROOT, "packages", "hub", "whiffle.db"),
 }: DeployInitOptions): Promise<DeployInitResult> => {
@@ -1834,16 +1990,22 @@ export const deployInit = async ({
   if (requireLinger && !mac) {
     await enableLinger(note);
   }
-  const units: RenderedUnit[] = specs.map((spec) => ({
-    id: spec.id,
-    path: mac ? launchAgentPath(spec.id) : systemdPath(spec.id),
-    text: mac ? plist(spec) : unit(spec),
-  }));
-
-  await (install ?? (mac ? installLaunchAgents : installSystemdUnits))(
-    [...specs],
-    note
-  );
+  const cloneHead = (
+    await runner({ argv: ["git", "rev-parse", "HEAD"], cwd: root })
+  ).said.trim();
+  const agentBuild = await runningAgentBuild();
+  const units = await settleServices(specs, {
+    // What the agent reports running, against what the clone now holds. Not
+    // knowing counts as stale: the gate then asks the hub, and a hub that
+    // cannot be asked refuses there.
+    agentStale: !(
+      agentBuild?.commit &&
+      !agentBuild.dirty &&
+      cloneHead.startsWith(agentBuild.commit)
+    ),
+    force,
+    note,
+  });
 
   const head = await runner({
     argv: ["git", "rev-parse", "--short", "HEAD"],

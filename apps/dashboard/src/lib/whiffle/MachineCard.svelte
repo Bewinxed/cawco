@@ -102,8 +102,9 @@
 
 <!-- A row per machine, keyed by its id where it is listed: one that drops
      and re-registers keeps its row, and only its dot and badges change, each
-     badge popping in or out while the others slide aside (motion/rows). -->
-<li class="row" data-flip>
+     badge popping in or out while the others slide aside (motion/rows). The
+     list item is the board's, around the machine menu that wraps this. -->
+<div class="row">
   <span class="who" class:off={!online}>
     <OsMark class="size-4 shrink-0" os={machine.os} />
     <span class="nm">{machineLabel(machine.hostname)}</span>
@@ -240,7 +241,7 @@
       </Tooltip.Root>
     {/if}
   </span>
-</li>
+</div>
 
 <style>
   /* Both sides stand at least one pill tall and hang from the top, so a
@@ -250,11 +251,7 @@
     flex-wrap: wrap;
     align-items: flex-start;
     gap: var(--space-3);
-    border-top: 1px solid var(--border-hairline);
     padding: var(--space-3) var(--space-4);
-  }
-  .row:first-child {
-    border-top: 0;
   }
   .who {
     display: flex;
