@@ -71,10 +71,7 @@
 </script>
 
 <script lang="ts">
-  import { TextMorph } from "torph/svelte";
-  import { Spinner } from "$lib/components/ui/spinner";
-  import { IconTick } from "$lib/icons";
-  import { CURVE, dur } from "$lib/whiffle/motion/curves.svelte";
+  import PendingContent, { whileIdle } from "./pending-content.svelte";
 
   let {
     class: className,
@@ -85,7 +82,7 @@
     type = "button",
     disabled,
     label,
-    icon: Icon,
+    icon,
     pending = false,
     pendingLabel,
     failed = false,
@@ -94,93 +91,18 @@
     ...restProps
   }: ButtonProps = $props();
 
-  /** The work ended well a moment ago: the check is up. */
-  let done = $state(false);
-  let running = false;
-  let doneTimer: ReturnType<typeof setTimeout> | undefined;
-  $effect.pre(() => {
-    const now = pending;
-    if (now) {
-      clearTimeout(doneTimer);
-      done = false;
-    } else if (running && !failed) {
-      done = true;
-      doneTimer = setTimeout(() => {
-        done = false;
-      }, dur("--dur-hold"));
-    }
-    running = now;
-  });
-  $effect(() => () => clearTimeout(doneTimer));
-
-  const phase = $derived.by(() => {
-    if (pending) {
-      return "pending";
-    }
-    return done ? "done" : "idle";
-  });
-  const text = $derived(pending && pendingLabel ? pendingLabel : label);
-
-  /**
-   * The label is plain text as the server draws it, and TextMorph once the
-   * page is live (it draws its text only in the browser, so a server-drawn
-   * TextMorph would be empty and grow on hydration); from then on each
-   * change morphs, the width following over --dur-morph.
-   */
-  let morphMs = $state(0);
-  $effect(() => {
-    morphMs = dur("--dur-morph");
-  });
-
-  /** While pending the button keeps its focus, so it is not disabled: it
-      swallows the press instead, including a form's implicit submit. */
-  function press(event: MouseEvent & { currentTarget: HTMLButtonElement }) {
-    if (pending) {
-      event.preventDefault();
-      return;
-    }
-    onclick?.(event);
-  }
+  const press = whileIdle(
+    () => pending,
+    (event: MouseEvent & { currentTarget: EventTarget & HTMLButtonElement }) =>
+      onclick?.(event)
+  );
 </script>
 
 {#snippet content()}
   {#if label === undefined}
     {@render children?.()}
   {:else}
-    <span
-      class="icon-swap kit-slot"
-      data-shown={Icon !== undefined || phase !== 'idle'}
-    >
-      {#if Icon}
-        <span data-active={phase === 'idle'}><Icon /></span>
-      {/if}
-      <span data-active={phase === 'pending'}
-        ><Spinner
-          aria-hidden="true"
-          class="size-(--btn-icon)"
-          role="presentation"
-        /></span
-      >
-      <span data-active={phase === 'done'}
-        ><IconTick class="kit-tick" data-on={phase === 'done'} /></span
-      >
-    </span>
-    {#if morphMs}
-      <!-- TextMorph draws the words as one box per letter once it has
-           morphed, which a screen reader spells out; the button's name comes
-           from the plain copy beside it. -->
-      <span aria-hidden="true" class="kit-label"
-        ><TextMorph
-          as="span"
-          duration={morphMs}
-          ease={CURVE.out}
-          text={text ?? ''}
-        /></span
-      >
-      <span class="sr-only">{text}</span>
-    {:else}
-      <span class="kit-label">{text}</span>
-    {/if}
+    <PendingContent {failed} {icon} {label} {pending} {pendingLabel} />
   {/if}
 {/snippet}
 
