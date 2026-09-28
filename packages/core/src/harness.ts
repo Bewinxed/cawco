@@ -400,10 +400,11 @@ export interface NeutralUserMessage {
   parent_tool_use_id?: string | null;
   raw?: unknown;
   /**
-   * A message the reader sent while a turn was running, read back from the
-   * transcript where the model read it: folded into that turn, or opening the
-   * next one. Stdout carries neither, so this frame is the only live word that
-   * it was read — and the queued row a client has been drawing for it is done.
+   * A message sent to the session — the reader's, or one whiffle injected —
+   * read back from the transcript where the model read it: folded into a
+   * running turn, or opening one. Stdout carries neither, so this frame is the
+   * only live word that it was read, at the place a reload will show it — and
+   * a queued row a client has been drawing for it is done.
    */
   sentMidTurn?: true;
   session_id?: string;

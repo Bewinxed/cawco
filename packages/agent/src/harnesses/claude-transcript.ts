@@ -512,17 +512,17 @@ export function absorbedMessage(r: RawRecord): SDKSessionMessage | null {
 }
 
 /**
- * A turn the reader opened: a main-chain `user` line stamped `origin.kind:
- * "human"` that carries words or images rather than tool results. A message
- * sent while a turn ran and not absorbed before it ended is dequeued by the
- * CLI as the next turn and written as exactly this line — with nothing printed
- * on stdout for it either.
+ * A turn a message opened: a main-chain `user` line that carries words or
+ * images rather than tool results. A message sent to an idle session, or sent
+ * while a turn ran and not absorbed before it ended, is written as exactly
+ * this line — with nothing printed on stdout for it. The CLI keeps the
+ * reader's origin on it and drops everyone else's, so the line says nothing
+ * of who sent it; its words do.
  */
 export function openedTurn(r: RawRecord): SDKSessionMessage | null {
   const content = (r.message as { content?: unknown } | undefined)?.content;
   if (
     r.type !== "user" ||
-    (r.origin as { kind?: unknown } | undefined)?.kind !== "human" ||
     (Array.isArray(content) &&
       content.some((block: { type?: unknown }) => block.type === "tool_result"))
   ) {

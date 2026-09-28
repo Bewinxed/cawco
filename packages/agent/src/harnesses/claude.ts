@@ -508,9 +508,9 @@ export const dequeuedFrame = (
 });
 
 /**
- * The frame for a message the reader sent while a turn ran, read off the
- * transcript where the model read it — folded into that turn
- * ({@link absorbedMessage}) or opening the next ({@link openedTurn}) — because
+ * The frame for a message sent to the session — by the reader or by whiffle —
+ * read off the transcript where the model read it: folded into a running turn
+ * ({@link absorbedMessage}) or opening one ({@link openedTurn}), because
  * stdout carries neither. It keeps the transcript line's uuid, so the stored
  * copy a later read brings is the same message, not a second one.
  */
@@ -661,6 +661,8 @@ class ClaudeSession implements HarnessSession {
    */
   readonly #held: (QueuedMessage & { ends: number; announced: boolean })[] = [];
   readonly #workdir: string;
+  /** Whether this session writes a transcript — what a held send is read back from. */
+  readonly #persisted: boolean;
   readonly instanceId: string;
 
   constructor(
@@ -687,6 +689,7 @@ class ClaudeSession implements HarnessSession {
     this.instanceId = instanceId;
     this.#ctx = ctx;
     this.#workdir = workdir;
+    this.#persisted = persistSession !== false;
     this.#transcript = this.#resumedTranscript(resume);
     const input = new InputStream();
     this.#input = input;
@@ -879,10 +882,10 @@ class ClaudeSession implements HarnessSession {
   }
 
   /**
-   * Frames every held send read since the last look — a fold of the reader's
-   * words into the running turn, or a turn the reader opened whose words carry
-   * held texts — then retires each held send it carried. A line that carries
-   * none was sent by someone else, and is framed where it was sent. At a
+   * Frames every held send read since the last look — a fold into the running
+   * turn, or a turn opened, whose words carry held texts — then retires each
+   * held send it carried. A line that carries none was not sent through this
+   * session (a message the CLI wrote itself, a line from before it). At a
    * `result`, what is still held has outlived one more turn; nothing outlives
    * two.
    */
@@ -1055,13 +1058,18 @@ class ClaudeSession implements HarnessSession {
     const sdk = message as unknown as SDKUserMessage;
     const queued = (message as { shouldQuery?: boolean }).shouldQuery === false;
 
-    // The reader's words: held until the transcript shows where the model read
-    // them — the turn they open, or, into a running turn, the tool boundary
-    // the CLI folds them in at or the next turn they open — and queued while
-    // a turn runs. Anything whiffle INJECTS (a hand-off brief, a rule's
-    // message) is echoed as a real user frame at the bottom of this method
-    // instead — holding it too would draw it twice.
-    if (!isInjected(message.origin)) {
+    // Every send is held until the transcript shows where the model read it —
+    // the turn it opens, or, into a running turn, the tool boundary the CLI
+    // folds it in at or the next turn it opens — and its row goes out from
+    // there ({@link #readHeld}), whoever sent it: a session reads the same
+    // live as it does after a reload. Only the reader's own send into a
+    // running turn is announced as queued: that is the reader waiting on it,
+    // and a queued row is drawn as theirs. A session that writes no transcript
+    // has nothing to read it back from, so what whiffle injects into one is
+    // echoed as it goes (below), and the reader's own words are drawn by the
+    // tab that sent them.
+    const held = this.#persisted;
+    if (held) {
       this.#hold(
         {
           queueId: crypto.randomUUID(),
@@ -1069,9 +1077,11 @@ class ClaudeSession implements HarnessSession {
           timestamp: new Date().toISOString(),
           ...(extras.images?.length ? { images: extras.images.length } : {}),
         },
-        this.#turn.busy
+        // biome-ignore lint/suspicious/noUnnecessaryConditions: Turn.busy is mutated by Turn.start()/.end() elsewhere; the checker doesn't see that cross-class mutation
+        this.#turn.busy && !isInjected(message.origin)
       );
     }
+    const echo = !held && isInjected(message.origin);
 
     // A mid-turn injection: the model reads it at the next tool boundary without
     // losing work. If the stream is gone, fall back to queueing it.
@@ -1085,7 +1095,7 @@ class ClaudeSession implements HarnessSession {
       void this.#handle.streamInput(stream).catch(() => {
         this.#input.push(outgoing);
       });
-      if (isInjected(message.origin)) {
+      if (echo) {
         this.#ctx.frame(toNeutral(message as unknown as SDKMessage));
       }
       return;
@@ -1104,13 +1114,10 @@ class ClaudeSession implements HarnessSession {
     this.#turn.start();
     this.#input.push(withExtras(outgoing, extras.attachments, extras.images));
 
-    // A hand-off is queued rather than asked (`shouldQuery: false`), so the SDK
-    // appends it and emits nothing until the session next takes a turn. Echoed
-    // as the frame the SDK will not send, so it appears the moment it lands.
-    // The same is true of anything else whiffle injects — a rule's message has
-    // no local copy in any dashboard, so without this echo it stays invisible
-    // until the transcript is read back from disk.
-    if (isInjected(message.origin)) {
+    // Echoed as the frame the SDK will not send, for a session with no
+    // transcript to read it back from: a rule's message or a hand-off has no
+    // local copy in any dashboard.
+    if (echo) {
       this.#ctx.frame(toNeutral(message as unknown as SDKMessage));
     }
   }

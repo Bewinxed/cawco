@@ -640,15 +640,28 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
         mapping.messages.push(queued);
         break;
       }
-      // A message the reader sent while a turn was running, which the model
-      // folded into it at a tool boundary or which opened the next turn.
-      // Nothing else draws it as a turn — until now every tab held it as a
-      // queued row — so it is pushed here, where it was read, at the time its
-      // line was written.
+      // A message sent to the session, read where the model read it: folded
+      // into a running turn at a tool boundary, or opening one. It is pushed
+      // here, at the time its line was written, and classified exactly as a
+      // stored copy of the same line is ({@link mapTranscript}), so the
+      // transcript reads the same live as after a reload. Whiffle's own
+      // messages — a rule, a hand-off, a delegate's report — are known by
+      // their marker line; the reader's words retire the queued row their tab
+      // drew, or take over the copy it drew as the turn.
       if ("sentMidTurn" in sdk && sdk.sentMidTurn && uuid && !agentId) {
-        mapping.messages.push({
+        const written = {
           ...base,
           ...(sdk.timestamp && { timestamp: new Date(sdk.timestamp) }),
+        };
+        const whiffles = text
+          ? injectedMessage(unwrapMidTurn(text) ?? text, written)
+          : null;
+        if (whiffles) {
+          mapping.messages.push(whiffles);
+          break;
+        }
+        mapping.messages.push({
+          ...written,
           ...userBody(text ?? "", transcriptUserImages(sdk.message)),
         });
         mapping.echo = { uuid, text: text ?? "", midTurn: true };
