@@ -233,11 +233,10 @@
   color: var(--on-brand);
   border-color: transparent;
 }
+/* A disabled button keeps its own colour pair and only fades. */
 .ns-theme .ns-btn:disabled {
-  background: var(--surface-recess);
-  border-color: var(--border-hairline);
   cursor: not-allowed;
-  opacity: 0.6;
+  opacity: 0.55;
 }
 @media (hover: hover) {
   .ns-theme .ns-btn:not(:disabled):hover {
