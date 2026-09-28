@@ -982,6 +982,14 @@ class ClaudeSession implements HarnessSession {
         if (this.#held.length > 0 && readsHeld(message)) {
           await this.#readHeld(message.type === "result");
         }
+        // Free account-wide limit data: Claude Code read these off its own
+        // response headers, so they are fresher than anything the polled
+        // `/api/oauth/usage` can return — and cost no request of our own. Only
+        // the reading is kept; the event is not a transcript frame.
+        if (message.type === "rate_limit_event") {
+          observeRateLimit(message.rate_limit_info);
+          continue;
+        }
         const neutral = toNeutral(message);
         // The Claude SDK emits `AskUserQuestion`'s structured output as a
         // top-level `tool_use_result` on the user message (the prose alone is
@@ -1033,13 +1041,6 @@ class ClaudeSession implements HarnessSession {
         if (message.type === "result") {
           turn.end();
           ctx.busy(false);
-        }
-        // Free account-wide limit data: Claude Code read these off its own
-        // response headers, so they are fresher than anything the polled
-        // `/api/oauth/usage` can return — and cost no request of our own. The
-        // frame itself stays quiet in the transcript; only the reading is kept.
-        if (message.type === "rate_limit_event") {
-          observeRateLimit(message.rate_limit_info);
         }
         ctx.frame(neutral);
       }
@@ -1510,10 +1511,14 @@ export class ClaudeCustody implements HarnessSession {
       return;
     }
     // A control_response is the CLI answering something the dead agent asked;
-    // nobody is waiting for it any more.
+    // nobody is waiting for it any more. A rate_limit_event is usage data, not
+    // a transcript frame, and it is not observed here either: `ingest` cannot
+    // tell a backlog line from a live one, and `observeRateLimit` stamps what
+    // it reads as current — a replayed reading would outrank a fresher poll.
     if (
       parsed.type === "control_response" ||
-      parsed.type === "control_cancel_request"
+      parsed.type === "control_cancel_request" ||
+      parsed.type === "rate_limit_event"
     ) {
       return;
     }

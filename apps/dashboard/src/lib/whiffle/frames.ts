@@ -539,6 +539,22 @@ function systemLine(
   return { ...base, type, content, metadata };
 }
 
+/**
+ * The generic line for a frame no case names, keyed by what it says it is (its
+ * `type`, its `system` subtype, or a raw frame's inner type). The one place
+ * {@link QUIET} is read, so a quiet kind stays quiet however it arrives — typed
+ * live, or stored as `raw` by a daemon whose normalizer predated it.
+ */
+function unnamedLine(
+  mapping: FrameMapping,
+  kind: string,
+  line: () => Message
+): void {
+  if (!QUIET.has(kind)) {
+    mapping.messages.push(line());
+  }
+}
+
 /** A task summary folded into the ~200-char line metadata. */
 const TASK_SUMMARY_LIMIT = 200;
 function truncateSummary(summary: string | undefined): string {
@@ -941,22 +957,18 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
           break;
         }
         default:
-          if (!QUIET.has(sdk.subtype)) {
-            mapping.messages.push(
-              // A subtype this switch does not name still says what it came to
-              // say: harnesses put their own words in `content` (a provider's
-              // retry notice, a quota message), and losing them here is how a
-              // real error once hid behind a generic label.
-              systemLine(
-                base,
-                `system.${sdk.subtype}`,
-                sdk.content ?? sdk.subtype.replace(/_/g, " "),
-                {
-                  subtype: sdk.subtype,
-                }
-              )
-            );
-          }
+          // A subtype this switch does not name still says what it came to
+          // say: harnesses put their own words in `content` (a provider's
+          // retry notice, a quota message), and losing them here is how a
+          // real error once hid behind a generic label.
+          unnamedLine(mapping, sdk.subtype, () =>
+            systemLine(
+              base,
+              `system.${sdk.subtype}`,
+              sdk.content ?? sdk.subtype.replace(/_/g, " "),
+              { subtype: sdk.subtype }
+            )
+          );
       }
       break;
     }
@@ -980,7 +992,7 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
         if (!(innerType || text)) {
           break;
         }
-        mapping.messages.push(
+        unnamedLine(mapping, innerType, () =>
           systemLine(base, "ui.system_note", text ?? "", {
             noteKind: "Unrecognised frame",
             noteTitle: (innerType || "unrecognised frame").replace(/_/g, " "),
@@ -988,11 +1000,9 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
         );
         break;
       }
-      if (!QUIET.has(sdk.type)) {
-        mapping.messages.push(
-          systemLine(base, `system.${sdk.type}`, sdk.type.replace(/_/g, " "))
-        );
-      }
+      unnamedLine(mapping, sdk.type, () =>
+        systemLine(base, `system.${sdk.type}`, sdk.type.replace(/_/g, " "))
+      );
   }
 
   return mapping;
