@@ -658,6 +658,15 @@
   }
 
   /**
+   * A leaving row's report, bound to its key when `Row` reads it — as its
+   * fold starts. The list item behind a row is a live view of an index, and
+   * by the time a fold finishes the tail can have changed under it (a queued
+   * message read mid-turn leaves as its turn lands above), so reading the key
+   * then read past the end of the list and the row never left.
+   */
+  const leaver = (key: string) => () => left(key);
+
+  /**
    * How many rows the SERVER paints — and nothing the browser ever hears about.
    *
    * `ssrCount` is virtua's server-render escape hatch: without it the store has
@@ -727,6 +736,11 @@
   /** The box around the list; its first child is virtua's container. */
   let listing = $state<HTMLElement>();
   let atBottom = $state(true);
+  /** How many screens from the tail the reader goes before "Jump to latest"
+      shows; our own call, no source sets it. */
+  const FAR_FROM_LATEST = 0.75;
+  /** Past FAR_FROM_LATEST screens from the tail, and not back at it since. */
+  let farFromLatest = $state(false);
 
   /**
    * Where the reader was, as the scroll handler last saw it. A pane hides
@@ -873,7 +887,7 @@
     // cold load on a phone one of them left 5,400px of tail under the
     // landing, read as the reader scrolling up, and the transcript opened
     // stranded there with the follow let go.
-    if (!shown) {
+    if (!shown || jumping) {
       return;
     }
     // Every write this component makes is tagged with the position it wrote.
@@ -905,7 +919,12 @@
     // A row the reader scrolls to is not arriving, whenever it came in: what
     // is still waiting to mount is theirs to read, not ours to play.
     tickets.clear();
-    atBottom = height - scroller.scrollTop - scroller.clientHeight < 120;
+    const distance = height - scroller.scrollTop - scroller.clientHeight;
+    atBottom = distance < 120;
+    // Hysteresis: up past the far mark, and it stays until back at the tail.
+    farFromLatest =
+      !atBottom &&
+      (farFromLatest || distance > FAR_FROM_LATEST * scroller.clientHeight);
   }
 
   /**
@@ -1259,6 +1278,7 @@
     }
     landingFrame = requestAnimationFrame(landInFrame);
     atBottom = true;
+    farFromLatest = false;
   }
 
   /** The already-landed half of `land`, in the frame after it was called for. */
@@ -1570,14 +1590,62 @@
     },
   });
 
-  /** Back to the newest row, from wherever the reader is. */
+  /** Past this many screens from the tail, the jump hops to one screen short
+      of it before scrolling the rest; our own call, no source sets it. */
+  const JUMP_HOP_SCREENS = 3;
+  /**
+   * The jump's scroll is under way. Its scroll events are not the reader's,
+   * and `atBottom` stays false until it ends so that no follow or landing
+   * writes over it: a `scrollTop` write stops a smooth scroll where it is.
+   */
+  let jumping = false;
+
+  /**
+   * Back to the newest row, from wherever the reader is: one smooth scroll
+   * to the tail when it is near, and when it is far an instant hop to a
+   * screen above it, so virtua renders the last screen only, then the smooth
+   * scroll over that screen. Its end pins the true tail, rows that arrived
+   * during it included. Reduced motion lands at once.
+   */
   function jump(): void {
     tickets.clear();
-    atBottom = true;
-    land();
+    farFromLatest = false;
+    const node = scroller;
+    if (!(node && motionOk.current)) {
+      atBottom = true;
+      land();
+      return;
+    }
+    stopFollow();
+    jumping = true;
+    const h = node.clientHeight;
+    const target = node.scrollHeight - h;
+    const finish = (): void => {
+      node.removeEventListener("scrollend", finish);
+      jumping = false;
+      atBottom = true;
+      farFromLatest = false;
+      pinBottom();
+    };
+    const glide = (): void => {
+      const to = node.scrollHeight - node.clientHeight;
+      if (Math.abs(to - node.scrollTop) < 1) {
+        finish();
+        return;
+      }
+      node.addEventListener("scrollend", finish);
+      node.scrollTo({ top: to, behavior: "smooth" });
+    };
+    if (target - node.scrollTop > JUMP_HOP_SCREENS * h) {
+      node.scrollTop = target - h;
+      lastWrite = node.scrollTop;
+      requestAnimationFrame(glide);
+      return;
+    }
+    glide();
   }
 
-  const showLatest = $derived(landed && !atBottom && rows.length > 0);
+  const showLatest = $derived(landed && farFromLatest && rows.length > 0);
 
   // ── The live region ─────────────────────────────────────────────────────
   // The scroll container is NOT the live region. virtua mounts and unmounts
@@ -1772,7 +1840,7 @@
           id={row.kind === 'tools' ? undefined : row.key}
           leaving={presentation.leaving.has(row.key)}
           motion={motionOf(row)}
-          onleft={() => left(row.key)}
+          onleft={leaver(row.key)}
         >
           {#snippet children(ticket)}
             {#if row.kind === 'single'}

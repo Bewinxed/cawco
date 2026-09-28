@@ -16,17 +16,27 @@
   import { land } from "$lib/whiffle/motion/share.svelte";
   import type { QueueEntry } from "../queue";
   import MessageBody from "./MessageBody.svelte";
+  import Shot from "./Shot.svelte";
   import Who from "./Who.svelte";
 
   let { queued }: { queued: QueueEntry } = $props();
+
+  /** The pictures this tab sent with it: the turn it will become, drawn now. */
+  const shots = $derived(
+    queued.echo?.metadata?.images?.filter(
+      (image): image is { mediaType: string; src: string } => !!image.src
+    ) ?? []
+  );
 </script>
 
 <!-- Sent from this tab to a busy session, the row is drawn at the press and
      is the composer's text landing (motion/share, departed by Composer's
      submit); the daemon's announcement keeps the row, so the flight lands
-     once. -->
+     once. When the session reads it mid-turn, the store departs this row by
+     `data-queued` and it flies into the turn it became (client.svelte.ts). -->
 <section
   class="turn you queued"
+  data-queued={queued.sentAs ?? queued.queueId}
   {@attach land(
     () => queued.sentAs ? `sent:${queued.text}` : undefined,
     { ms: dur('--dur-pop'), uniform: true }
@@ -34,9 +44,21 @@
 >
   <Who name="You" note="queued" you />
   <MessageBody source={queued.text} />
-  {#if queued.images}
-    <!-- The payloads never crossed the wire — the queue is broadcast state —
-         so what is said is that pictures are riding with it, not which. -->
+  {#if shots.length}
+    <!-- Sent from this tab: the bytes are still in hand, so the row shows the
+         pictures the turn will show, and they travel with it when it is read. -->
+    <div class="chips">
+      {#each shots as img, i (img.src)}
+        <Shot
+          alt="Attachment {i + 1} sent with this message"
+          size="thumb"
+          src={img.src}
+        />
+      {/each}
+    </div>
+  {:else if queued.images}
+    <!-- Sent from elsewhere: the payloads never crossed the wire — the queue is
+         broadcast state — so what is said is that pictures ride with it. -->
     <p class="carried">{queued.images} image{queued.images === 1 ? '' : 's'}</p>
   {/if}
 </section>
@@ -59,6 +81,14 @@
      part of the conversation. */
   .queued {
     opacity: 0.7;
+  }
+  /* MessageRow.svelte's `.chips`, restated for the same reason as the well. */
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-2);
+    margin-top: var(--space-2);
   }
   .carried {
     margin-top: var(--space-2);

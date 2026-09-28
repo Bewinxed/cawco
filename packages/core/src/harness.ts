@@ -409,6 +409,16 @@ export interface NeutralUserMessage {
   raw?: unknown;
   session_id?: string;
   shouldQuery?: boolean;
+  /**
+   * The command id Claude Code gave a message the reader sent mid-turn, set
+   * only on the frame the harness reads back from the transcript at the moment
+   * the model absorbed it into the running turn (`queued_command`). Its
+   * presence is what tells a client this is that message, read where the model
+   * read it — the queued row it has been drawing for it is done.
+   */
+  sourceUuid?: string;
+  /** When the message was sent, ISO-8601 — on the absorbed frame above. */
+  timestamp?: string;
   type: "user";
   uuid?: string;
 }

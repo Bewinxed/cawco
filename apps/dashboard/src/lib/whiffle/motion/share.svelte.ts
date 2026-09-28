@@ -87,6 +87,19 @@ export function departBox(key: string, source: HTMLElement): void {
 }
 
 /**
+ * A source the store takes away rather than a click: a queued row whose
+ * message the session just read. Its box is taken where it still stands,
+ * before the state change that removes it is drawn, under the `key` its
+ * destination lands. A source not on screen has nothing to hand over.
+ */
+export function departFrom(selector: string, key: string): void {
+  const source = document.querySelector<HTMLElement>(selector);
+  if (source) {
+    departBox(key, source);
+  }
+}
+
+/**
  * Whether a fresh departure waits under `key`: a destination deciding how
  * to arrive (out of what was clicked, or on its own) asks before it lands.
  */
