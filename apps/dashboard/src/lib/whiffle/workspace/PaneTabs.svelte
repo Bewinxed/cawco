@@ -14,8 +14,9 @@
    * hold them. Hosted, the strip is the top bar's content; in a group it
    * brings its own row.
    */
-  import { onDestroy, untrack } from "svelte";
+  import { onDestroy, onMount, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
+  import type { TransitionConfig } from "svelte/transition";
   import { page } from "$app/state";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as ContextMenu from "$lib/components/ui/context-menu";
@@ -28,6 +29,12 @@
     type TabsTravel,
   } from "$lib/components/ui/fluid-tabs";
   import { IconArrowRight, IconChevronDown, IconClose } from "$lib/icons";
+  import {
+    dur,
+    ease,
+    easeOut,
+    motionOk,
+  } from "$lib/whiffle/motion/curves.svelte";
   import { land } from "$lib/whiffle/motion/share.svelte";
   import {
     ACTIVITY_LABEL,
@@ -224,6 +231,193 @@
     }
   });
   onDestroy(() => clearTimeout(timer));
+
+  /* ── Tabs arriving and leaving ────────────────────────────────────
+     A tab that opens grows from nothing at its place in the strip while
+     the tabs after it slide over to make room (--dur-morph, --ease-out),
+     unless it flies in from the row that opened it (share.svelte.ts). A
+     tab that closes is taken out of the flow where it stands and narrows
+     to nothing as it fades (--dur-exit), while the tabs after it slide
+     into the gap (--dur-fade, --ease-in-out). A tab dropped at another
+     place in its strip slides there with its neighbours on the flight's
+     own curve (--dur-panel, --ease-drawer). A tab whose id changes in
+     place — a stored session reached again by its instance — neither
+     leaves nor arrives. The strip's first render is where it starts, and
+     nothing in it moves. */
+  const tabEls = new Map<string, HTMLElement>();
+  let ready = false;
+  onMount(() => {
+    const frame = requestAnimationFrame(() => {
+      ready = true;
+    });
+    return () => cancelAnimationFrame(frame);
+  });
+  /** Where each tab stood before a change to the strip, by id. */
+  let before = new Map<string, number>();
+  let lastTabs = untrack(() => [...leaf.tabs]);
+  /** The two ids of a tab re-addressed in place. */
+  const renamedOut = new Set<string>();
+  const renamedIn = new Set<string>();
+  /** How far a clip reaches past the tab's box: its sheet's flared foot and shoulders. */
+  const REACH = "-12px";
+
+  $effect.pre(() => {
+    const next = [...leaf.tabs];
+    untrack(() => {
+      const prev = lastTabs;
+      lastTabs = next;
+      before = new Map();
+      if (!(ready && motionOk.current)) {
+        return;
+      }
+      for (const [id, el] of tabEls) {
+        before.set(id, el.getBoundingClientRect().left);
+      }
+      if (prev.length === next.length) {
+        const moved = prev.flatMap((id, i) => (next[i] === id ? [] : [i]));
+        if (moved.length === 1 && !prev.includes(next[moved[0]])) {
+          renamedOut.add(prev[moved[0]]);
+          renamedIn.add(next[moved[0]]);
+        }
+      }
+    });
+  });
+
+  // After the strip has its new shape, with any closing tab already out of
+  // the flow: every tab that was there before starts where it stood.
+  $effect(() => {
+    const next = [...leaf.tabs];
+    untrack(() => {
+      const was = before;
+      before = new Map();
+      if (was.size === 0) {
+        return;
+      }
+      const removed = [...was.keys()].some(
+        (id) => !(next.includes(id) || renamedOut.has(id))
+      );
+      const added = next.some((id) => !(was.has(id) || renamedIn.has(id)));
+      let duration = dur("--dur-panel");
+      let easing = ease("--ease-drawer");
+      if (removed) {
+        duration = dur("--dur-fade");
+        easing = ease("--ease-in-out");
+      } else if (added) {
+        duration = dur("--dur-morph");
+        easing = ease("--ease-out");
+      }
+      for (const id of next) {
+        const el = tabEls.get(id);
+        const from = was.get(id);
+        if (!el || from === undefined) {
+          continue;
+        }
+        const dx = from - el.getBoundingClientRect().left;
+        if (Math.abs(dx) > 0.5) {
+          el.animate(
+            [{ transform: `translateX(${dx}px)` }, { transform: "none" }],
+            { duration, easing }
+          );
+        }
+      }
+    });
+  });
+
+  /**
+   * A tab that opened grows from nothing at its place, unless a flight from
+   * the row that opened it is landing it: that flight is started in the
+   * same frame's callbacks, ahead of this one, so it is there to be seen.
+   */
+  function entering(id: string) {
+    return (node: HTMLElement) => {
+      tabEls.set(id, node);
+      let frame = 0;
+      if (ready && motionOk.current && !renamedIn.delete(id)) {
+        frame = requestAnimationFrame(() => {
+          const flying = node
+            .getAnimations()
+            .some(
+              (a) => !(a instanceof CSSTransition || a instanceof CSSAnimation)
+            );
+          if (!flying) {
+            node.animate(
+              [
+                { clipPath: `inset(${REACH} 100% ${REACH} ${REACH})` },
+                { clipPath: `inset(${REACH} ${REACH} ${REACH} ${REACH})` },
+              ],
+              { duration: dur("--dur-morph"), easing: ease("--ease-out") }
+            );
+          }
+        });
+      }
+      return () => {
+        cancelAnimationFrame(frame);
+        if (tabEls.get(id) === node) {
+          tabEls.delete(id);
+        }
+      };
+    };
+  }
+
+  /**
+   * A tab that closed, taken out of the flow where it stands so the tabs
+   * after it can close the gap: it narrows toward its start as it fades.
+   * With less motion it only fades.
+   */
+  function leavingTab(node: HTMLElement, id: string): TransitionConfig {
+    if (renamedOut.delete(id)) {
+      return { duration: 0 };
+    }
+    const { offsetLeft, offsetTop, offsetWidth } = node;
+    node.style.position = "absolute";
+    node.style.left = `${offsetLeft}px`;
+    node.style.top = `${offsetTop}px`;
+    node.style.width = `${offsetWidth}px`;
+    node.style.pointerEvents = "none";
+    const narrow = motionOk.current;
+    return {
+      duration: dur("--dur-exit"),
+      easing: easeOut,
+      css: (t) =>
+        narrow
+          ? `opacity: ${t}; clip-path: inset(${REACH} ${((1 - t) * 100).toFixed(2)}% ${REACH} ${REACH})`
+          : `opacity: ${t}`,
+    };
+  }
+
+  /**
+   * The drawer drags from anywhere in it. A finger pulling down over content
+   * that is scrolled to its top would otherwise start the browser's own
+   * scroll, which takes the touch away from the drawer; held there, the
+   * pull is the drawer's. Content scrolled down scrolls back up first.
+   */
+  function lockAtTop(node: HTMLElement) {
+    let startY = 0;
+    const onstart = (event: TouchEvent) => {
+      startY = event.touches[0].clientY;
+    };
+    const onmove = (event: TouchEvent) => {
+      if (event.touches[0].clientY <= startY) {
+        return;
+      }
+      for (
+        let el = event.target instanceof Element ? event.target : null;
+        el && el !== node;
+        el = el.parentElement
+      ) {
+        if (el.scrollTop > 0) {
+          return;
+        }
+      }
+      event.preventDefault();
+    };
+    node.addEventListener("touchstart", onstart, { passive: true });
+    node.addEventListener("touchmove", onmove, { passive: false });
+    return () => {
+      node.removeEventListener("touchstart", onstart);
+      node.removeEventListener("touchmove", onmove);
+    };
+  }
 </script>
 
 <!-- `''` when the board is showing: a value no segment carries, so nothing
@@ -237,24 +431,27 @@
 >
   <TabsList aria-label="Open sessions in this group" scrollable>
     {#each tabs as tab, i (tab.id)}
-      <ContextMenu.Root onOpenChange={menuOpenChange}>
-        <ContextMenu.Trigger class="contents">
-          <!-- The caret marks where a drop would land, drawn on the side the
-               pointer is nearest. Graphite, like every structural mark here:
-               the one loud colour belongs to a session asking for something. -->
-          <div
-            class="tab"
-            class:drop-after={dropHint.tabIndexIn(leaf.id) === i + 1 && i === tabs.length - 1}
-            class:drop-before={dropHint.tabIndexIn(leaf.id) === i}
-            class:needs={tab.activity === 'blocked'}
-            use:dragSession={{ sessionId: tab.id, from: leaf.id }}
-            use:tabDropTarget={{ leafId: leaf.id, index: i, sessionId: tab.id }}
-            {@attach land(() => `session:${tab.id}`, { uniform: true })}
-          >
+      {@const chosen = leaf.active === tab.id}
+      <!-- The caret marks where a drop would land, drawn on the side the
+           pointer is nearest. Graphite, like every structural mark here:
+           the one loud colour belongs to a session asking for something. -->
+      <div
+        class="tab"
+        class:drop-after={dropHint.tabIndexIn(leaf.id) === i + 1 && i === tabs.length - 1}
+        class:drop-before={dropHint.tabIndexIn(leaf.id) === i}
+        class:needs={tab.activity === 'blocked'}
+        use:dragSession={{ sessionId: tab.id, from: leaf.id }}
+        use:tabDropTarget={{ leafId: leaf.id, index: i, sessionId: tab.id }}
+        out:leavingTab={tab.id}
+        {@attach land(() => `session:${tab.id}`, { uniform: true })}
+        {@attach entering(tab.id)}
+      >
+        <ContextMenu.Root onOpenChange={menuOpenChange}>
+          <ContextMenu.Trigger class="contents">
             <TabItem
               aria-expanded={detailsOpen && detailId === tab.id}
               aria-haspopup="dialog"
-              aria-label={`${tab.label}${tab.status ? ` — ${tab.status}` : ''}${leaf.active === tab.id ? ' — open session details' : ''}`}
+              aria-label={`${tab.label}${tab.status ? ` — ${tab.status}` : ''}${chosen ? ' — open session details' : ''}`}
               data-session-tab={tab.id}
               href={tab.href}
               label={tab.label}
@@ -278,18 +475,29 @@
                 <SessionStatus compact sessionId={tab.id} />
               {/snippet}
               {#snippet trail()}
-                {#if leaf.active === tab.id}
-                  <button
-                    aria-expanded={detailsOpen && detailId === tab.id}
-                    aria-haspopup="dialog"
-                    aria-label="Session details for {tab.label}"
-                    class="tdetails touch-hit pointer-hit pressable"
-                    onclick={(event) => clickTab(tab.id, event)}
-                    type="button"
-                  >
-                    <IconChevronDown />
-                  </button>
-                {/if}
+                <!-- Every tab keeps the details slot, so choosing one never
+                     changes its width; the chevron shows on the chosen tab
+                     only. The empty slot on another tab is part of that
+                     tab, and a click there chooses it. -->
+                <button
+                  aria-expanded={chosen ? detailsOpen && detailId === tab.id : undefined}
+                  aria-haspopup={chosen ? 'dialog' : undefined}
+                  aria-hidden={chosen ? undefined : 'true'}
+                  aria-label="Session details for {tab.label}"
+                  class="tdetails touch-hit pointer-hit pressable"
+                  onclick={(event) => {
+                    if (chosen) {
+                      clickTab(tab.id, event);
+                    } else {
+                      workspace.activate(tab.id, leaf.id);
+                    }
+                  }}
+                  tabindex={chosen ? undefined : -1}
+                  type="button"
+                  class:idle={!chosen}
+                >
+                  <IconChevronDown />
+                </button>
                 <button
                   aria-label="Close {tab.label}"
                   class="tclose touch-hit pointer-hit pressable"
@@ -300,76 +508,80 @@
                 </button>
               {/snippet}
             </TabItem>
-          </div>
-        </ContextMenu.Trigger>
-        <ContextMenu.Content>
-          <ContextMenu.Item
-            onSelect={() => {
-            const anchor = document.querySelector<HTMLElement>(`[data-session-tab="${tab.id}"]`);
-            if (anchor) { showDetails(tab.id, anchor, true); }
-          }}
-            >Session details</ContextMenu.Item
-          >
-          <ContextMenu.Item
-            onSelect={() => continueInNewSession(continueSourceOf(tab.id, tab.label))}
-          >
-            <IconArrowRight />
-            Continue in new session…
-          </ContextMenu.Item>
-          <!-- Every gesture has a command that does the same thing. Splitting
-               and moving are reachable from here before drag-and-drop exists,
-               and stay reachable for anyone not using a pointer. -->
-          <ContextMenu.Item
-            onSelect={() => workspace.split(leaf.id, 'right', tab.id)}
-          >
-            Split right
-          </ContextMenu.Item>
-          <ContextMenu.Item
-            onSelect={() => workspace.split(leaf.id, 'bottom', tab.id)}
-          >
-            Split down
-          </ContextMenu.Item>
-          {#if otherLeaves.length > 0}
-            <ContextMenu.Separator />
-            {#each otherLeaves as other, i (other.id)}
-              <ContextMenu.Item
-                onSelect={() => workspace.move(tab.id, other.id)}
-              >
-                Move to group {i + 2}
-              </ContextMenu.Item>
-            {/each}
-          {/if}
-          <ContextMenu.Separator />
-          <ContextMenu.Item onSelect={() => workspace.close(tab.id)}
-            >Close</ContextMenu.Item
-          >
-          <ContextMenu.Item
-            disabled={leaf.tabs.length < 2}
-            onSelect={() => {
-              for (const id of [...leaf.tabs]) {
-                if (id !== tab.id) {
-                  workspace.close(id);
-                }
-              }
+          </ContextMenu.Trigger>
+          <ContextMenu.Content>
+            <ContextMenu.Item
+              onSelect={() => {
+              const anchor = document.querySelector<HTMLElement>(`[data-session-tab="${tab.id}"]`);
+              if (anchor) { showDetails(tab.id, anchor, true); }
             }}
-          >
-            Close others
-          </ContextMenu.Item>
-          <ContextMenu.Separator />
-          <ContextMenu.CopyItem
-            text={new URL(tab.href, location.origin).href}
-            what="Link"
-          >
-            Copy link
-          </ContextMenu.CopyItem>
-        </ContextMenu.Content>
-      </ContextMenu.Root>
+              >Session details</ContextMenu.Item
+            >
+            <ContextMenu.Item
+              onSelect={() => continueInNewSession(continueSourceOf(tab.id, tab.label))}
+            >
+              <IconArrowRight />
+              Continue in new session…
+            </ContextMenu.Item>
+            <!-- Every gesture has a command that does the same thing. Splitting
+                 and moving are reachable from here before drag-and-drop exists,
+                 and stay reachable for anyone not using a pointer. -->
+            <ContextMenu.Item
+              onSelect={() => workspace.split(leaf.id, 'right', tab.id)}
+            >
+              Split right
+            </ContextMenu.Item>
+            <ContextMenu.Item
+              onSelect={() => workspace.split(leaf.id, 'bottom', tab.id)}
+            >
+              Split down
+            </ContextMenu.Item>
+            {#if otherLeaves.length > 0}
+              <ContextMenu.Separator />
+              {#each otherLeaves as other, i (other.id)}
+                <ContextMenu.Item
+                  onSelect={() => workspace.move(tab.id, other.id)}
+                >
+                  Move to group {i + 2}
+                </ContextMenu.Item>
+              {/each}
+            {/if}
+            <ContextMenu.Separator />
+            <ContextMenu.Item onSelect={() => workspace.close(tab.id)}
+              >Close</ContextMenu.Item
+            >
+            <ContextMenu.Item
+              disabled={leaf.tabs.length < 2}
+              onSelect={() => {
+                for (const id of [...leaf.tabs]) {
+                  if (id !== tab.id) {
+                    workspace.close(id);
+                  }
+                }
+              }}
+            >
+              Close others
+            </ContextMenu.Item>
+            <ContextMenu.Separator />
+            <ContextMenu.CopyItem
+              text={new URL(tab.href, location.origin).href}
+              what="Link"
+            >
+              Copy link
+            </ContextMenu.CopyItem>
+          </ContextMenu.Content>
+        </ContextMenu.Root>
+      </div>
     {/each}
   </TabsList>
 </Tabs>
 
 {#if touch.current}
+  <!-- It drags from anywhere, not only its handle (`handleOnly` false),
+       and content scrolled to its top gives a downward pull to the drawer
+       (`lockAtTop`); vaul follows the finger 1:1 and lets go on velocity. -->
   <Drawer.Root
+    handleOnly={false}
     onOpenChange={(open) => { if (!open) { closeDetails(); } }}
     open={detailsOpen}
   >
@@ -381,7 +593,7 @@
       <Drawer.Description class="sr-only"
         >Session identity, runtime configuration and usage.</Drawer.Description
       >
-      <div class="details-scroll">
+      <div class="details-scroll" {@attach lockAtTop}>
         {#if detailTab}
           <SessionDetails
             dir={detailDir}
@@ -515,6 +727,17 @@
     background: transparent;
     color: var(--ink-muted);
     cursor: pointer;
+
+    @media (prefers-reduced-motion: no-preference) {
+      transition:
+        opacity var(--dur-control) var(--ease-out),
+        scale var(--dur-control) var(--ease-out);
+    }
+    /* Another tab's slot: kept, empty, and part of that tab. */
+    &.idle {
+      opacity: 0;
+      scale: var(--pop-scale);
+    }
   }
   .tdetails :global(svg) {
     width: 12px;
@@ -639,9 +862,14 @@
     max-inline-size: 200px;
 
     /* Parked on you: the label carries the strong ink whether or not it
-       is chosen, so the ask is legible from across the strip. */
-    &.needs {
+       is chosen, so the ask is legible from across the strip. It comes up
+       at the panel's pace, the way the tab's glyph turns. */
+    &.needs :global(.ff-tab) {
       color: var(--ink-strong);
+
+      @media (prefers-reduced-motion: no-preference) {
+        transition: color var(--dur-panel) var(--ease-out);
+      }
     }
 
     /* Where a drop would land: a 2px rule in the gap, on the near side. */

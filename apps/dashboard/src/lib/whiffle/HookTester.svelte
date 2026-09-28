@@ -3,6 +3,8 @@
   import { hookEventInfo, hookMatcherKind, hookMatches } from "@whiffle/core";
   import { Badge } from "$lib/components/ui/badge";
   import { Input } from "$lib/components/ui/input";
+  import { crossIn, crossOut } from "$lib/whiffle/motion/curves.svelte";
+  import { unfold } from "$lib/whiffle/motion/fold.svelte";
 
   /**
    * The part of the editor that tells the truth about a matcher.
@@ -59,7 +61,7 @@
   </div>
 
   {#if info?.suggests && info.suggests.length > 0}
-    <div class="flex flex-wrap items-center gap-1.5">
+    <div class="flex flex-wrap items-center gap-1.5" in:unfold out:unfold>
       <span class="text-label text-muted-foreground">Real values:</span>
       {#each info.suggests as suggestion (suggestion)}
         <button
@@ -87,13 +89,32 @@
     />
   </label>
 
+  <!-- The verdict appears with the first sample and its two readings
+       cross-fade over --dur-control in one line box. -->
   {#if sample.trim()}
     <p
       aria-live="polite"
-      class="text-label transition-colors duration-240 ease-[var(--ease-out)] {hit ? 'text-success' : 'text-muted-foreground'}"
+      class="verdict text-label"
       role="status"
+      in:unfold
+      out:unfold
     >
-      {hit ? 'Matches — this hook would fire.' : 'No match — this hook would stay quiet for this value.'}
+      {#key hit}
+        <span
+          class={hit ? 'text-success' : 'text-muted-foreground'}
+          in:crossIn
+          out:crossOut
+          >{hit ? 'Matches — this hook would fire.' : 'No match — this hook would stay quiet for this value.'}</span
+        >
+      {/key}
     </p>
   {/if}
 </div>
+
+<style>
+  .verdict {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+  }
+</style>

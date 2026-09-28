@@ -60,8 +60,6 @@
         try {
           await removeDelegateType(row.name);
           store.types.value = types.filter((other) => other.name !== row.name);
-        } catch (error) {
-          toast.error(message(error));
         } finally {
           delete busy[row.name];
         }

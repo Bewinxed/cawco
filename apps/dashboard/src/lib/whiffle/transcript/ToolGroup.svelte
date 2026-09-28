@@ -91,6 +91,18 @@
       css: (t: number) => `opacity: ${t}`,
     };
   }
+  /**
+   * A favicon that fails to load gives way to the tool's glyph, the two
+   * cross-fading in one cell over --dur-control. Opacity only, so it runs
+   * with reduced motion as well; never on a row's first render.
+   */
+  function iconSwap(_node: Element) {
+    return {
+      duration: dur("--dur-control"),
+      easing: easeOut,
+      css: (t: number) => `opacity: ${t}`,
+    };
+  }
   /** What a call measured out, arriving with its result. */
   function factIn(_node: Element) {
     if (!moving()) {
@@ -293,9 +305,13 @@
                 class="fav"
                 onerror={() => brokenIcons.add(src)}
                 {src}
+                in:iconSwap
+                out:iconSwap
               >
             {:else}
-              <Icon />
+              <span class="tool-glyph" in:iconSwap out:iconSwap
+                ><Icon
+              /></span>
             {/if}</span
           >
         {/key}
@@ -347,6 +363,8 @@
                 aria-disabled={busy || undefined}
                 aria-label={preview?.title || 'Preview'}
                 class="artifact-open"
+                data-share="preview:{m.instanceId}"
+                data-share-ttl="10000"
                 onclick={whileIdle(() => busy, () => opened ? revealPreview(m.instanceId) : openArtifact(m, input))}
                 type="button"
               >
@@ -649,6 +667,11 @@
     place-items: center;
     color: var(--ink-muted);
 
+    /* A favicon and the glyph it gives way to share the cell. */
+    & > * {
+      grid-area: 1 / 1;
+    }
+
     & :global(svg) {
       inline-size: 16px;
       block-size: 16px;
@@ -665,7 +688,11 @@
     inline-size: 14px;
     block-size: 14px;
     display: block;
-    border-radius: 3px;
+    border-radius: var(--radius-xs);
+  }
+  .tool-glyph {
+    display: grid;
+    place-items: center;
   }
   .tk {
     font-weight: var(--weight-strong);

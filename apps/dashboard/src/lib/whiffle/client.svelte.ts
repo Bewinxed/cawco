@@ -496,6 +496,13 @@ const state = $state({
    */
   pulses: {} as Record<string, SessionPulse>,
   /**
+   * When each session's current turn began, epoch ms, as its pulses tell it:
+   * the `at` of the first pulse after an idle one that was not idle. Absent
+   * while the session is idle. The fleet board orders a working session by
+   * it, so a session keeps its place for as long as it works.
+   */
+  turnSince: {} as Record<string, number>,
+  /**
    * The hub's record of every delegate's asks, answers and reports, keyed by
    * the delegate they are about and oldest first. Kept apart from the session
    * it belongs to because the reader of this traffic is the *parent* — a
@@ -671,6 +678,15 @@ function session(instanceId: string): SessionState {
   // is the usual way — still has to name its machine on the fleet view.
   hydrate(target);
   return target;
+}
+
+/** Starts a session's turn clock at the first pulse that is not idle, and stops it at the idle one. */
+function trackTurn(instanceId: string, pulse: SessionPulse): void {
+  if (pulse.activity === "idle") {
+    delete state.turnSince[instanceId];
+  } else {
+    state.turnSince[instanceId] ??= pulse.at;
+  }
 }
 
 /** Fills in what the registry knows about a session this browser did not spawn. */
@@ -1251,6 +1267,7 @@ function handleFrame(frame: FramePayload): void {
       (frame as { pulses?: Record<string, SessionPulse> }).pulses
     );
     for (const [id, pulse] of Object.entries(state.pulses)) {
+      trackTurn(id, pulse);
       const held = state.sessions[id];
       if (held) {
         applyPulse(held, pulse);
@@ -1276,6 +1293,7 @@ function handleFrame(frame: FramePayload): void {
     // The daemon's coarse now-state, broadcast — this is the whole of what the
     // rail knows about a session this browser has not subscribed to.
     state.pulses[frame.instanceId] = frame.pulse;
+    trackTurn(frame.instanceId, frame.pulse);
     const held = state.sessions[frame.instanceId];
     if (held) {
       applyPulse(held, frame.pulse);
@@ -1840,16 +1858,13 @@ const streamHost: StreamHost = {
    */
   noteFailure: (record) => {
     if (record.kind === "send") {
-      // The echo carries the failure from here on — stamped rather than kept
-      // only on the record, because records are swept after five minutes and a
-      // message that never sent must not fade back to looking sent. The stamp
-      // is also the claim: if no echo carries this id (superseded by a queued
-      // row, or the session was closed), nothing on screen says anything, and
-      // the toast below is all the operator gets.
+      // A send's failure is said over the composer it left (the session's
+      // notice) and on its echo — stamped rather than kept only on the record,
+      // because records are swept after five minutes and a message that never
+      // sent must not fade back to looking sent. It is never a toast.
       announceSendFailure(record);
-      if (stampSendFailure(record)) {
-        return;
-      }
+      stampSendFailure(record);
+      return;
     }
     // A parked permission card renders its own refusal (`Couldn't send that
     // answer.`) against the very command id it holds. It only does so while it
@@ -1879,26 +1894,20 @@ const failureNotice = (record: CommandRecord): string => {
 };
 
 /**
- * Stamps a failed send's reason onto the echo that represents it, and says
- * whether it found one. `metadata.sendFailed` is what keeps the message
+ * Stamps a failed send's reason onto the echo that represents it, when one
+ * is still in the session. `metadata.sendFailed` is what keeps the message
  * rendered as "not sent" after the ledger has swept its record.
  */
-function stampSendFailure(record: CommandRecord): boolean {
-  const target = state.sessions[record.sessionId];
-  if (!target) {
-    return false;
-  }
-  const echo = target.messages.find(
+function stampSendFailure(record: CommandRecord): void {
+  const echo = state.sessions[record.sessionId]?.messages.find(
     (message) => message.metadata?.sentAs === record.commandId
   );
-  if (!echo) {
-    return false;
+  if (echo) {
+    echo.metadata = {
+      ...echo.metadata,
+      sendFailed: record.reason ?? "The hub never took it.",
+    };
   }
-  echo.metadata = {
-    ...echo.metadata,
-    sendFailed: record.reason ?? "The hub never took it.",
-  };
-  return true;
 }
 
 /**
@@ -2025,7 +2034,8 @@ export function latestCommandFor(
 export interface CommandIntents {
   interrupt: Record<string, never>;
   "permission.answer": { requestId: string; result: PermissionResult };
-  send: { text: string; extras?: SendExtras };
+  /** `replaces`: the failed send this one retries, whose row it takes over. */
+  send: { text: string; extras?: SendExtras; replaces?: string };
   "set-effort": { effort: EffortLevel };
   "set-model": { model: string };
   "set-permission-mode": { mode: PermissionMode };
@@ -2099,11 +2109,11 @@ function legacyCall<K extends CommandKind>(
 ): () => Promise<unknown> | undefined {
   switch (kind) {
     case "send": {
-      const { text, extras } = intent as CommandIntents["send"];
+      const { text, extras, replaces } = intent as CommandIntents["send"];
       // The id travels into the echo on this dialect too, so a legacy-hub
       // failure lands on the same row a stream-hub failure would.
       return (): undefined => {
-        sendText(instanceId, machineId, text, extras, commandId);
+        sendText(instanceId, machineId, text, extras, commandId, replaces);
       };
     }
     case "permission.answer": {
@@ -2232,17 +2242,17 @@ export function submitCommand<K extends CommandKind>(
     // The echo goes in FIRST, and only here: on every other path one of the
     // two dialects pushes it (the stream effects' `submitted`, or `sendText`),
     // and neither ran. Without it a payload-assembly bug leaves the reason
-    // stranded in a toast with no row to stamp, no Try again, and no Edit —
-    // recoverable text nobody can reach. It is wrapped because it is the one
-    // thing left that could throw, and a throw from a catch block is the
-    // silence this whole function exists to abolish.
+    // with no row to stamp, no Try again, and no Edit — recoverable text
+    // nobody can reach. It is wrapped because it is the one thing left that
+    // could throw, and a throw from a catch block is the silence this whole
+    // function exists to abolish.
     if (kind === "send") {
-      const { text, extras } = intent as CommandIntents["send"];
+      const { text, extras, replaces } = intent as CommandIntents["send"];
       try {
-        noteSendSubmitted(instanceId, text, extras ?? {}, commandId);
+        noteSendSubmitted(instanceId, text, extras ?? {}, commandId, replaces);
       } catch {
-        // The toast below is then the whole report, which is a worse outcome
-        // than a failed ghost but an infinitely better one than nothing.
+        // The composer's notice is then the whole report, which is a worse
+        // outcome than a failed ghost but an infinitely better one than nothing.
       }
     }
     return failLocally(
@@ -2444,9 +2454,9 @@ function dropSendEcho(instanceId: string, commandId: string): void {
 }
 
 /**
- * Re-send a failed message from the outbox as a NEW command with a NEW id.
- * Drops the failed echo (matched by `metadata.sentAs === commandId`) and
- * funnels the payload back through the normal submit path. No-op if the
+ * Re-send a failed message from the outbox as a NEW command with a NEW id,
+ * on the failed message's own row (matched by `metadata.sentAs ===
+ * commandId`): the row goes back to sending where it stands. No-op if the
  * outbox entry has aged out. Never throws.
  */
 export function retrySend(commandId: string): void {
@@ -2456,12 +2466,12 @@ export function retrySend(commandId: string): void {
   }
   sendOutbox.delete(commandId);
   outboxVersion += 1;
-  dropSendEcho(entry.instanceId, commandId);
   // Through `submitCommand`, not around it: a retry is a new command with its
-  // own record and its own ghost, never a resurrected one.
+  // own record, never a resurrected one — only the row is the same.
   submitCommand(entry.instanceId, entry.machineId, "send", {
     text: entry.text,
     extras: entry.extras,
+    replaces: commandId,
   });
 }
 
@@ -2570,11 +2580,12 @@ function streamEffectsFor<K extends CommandKind>(
   const target = session(instanceId);
   switch (kind) {
     case "send": {
-      const { text, extras } = intent as CommandIntents["send"];
+      const { text, extras, replaces } = intent as CommandIntents["send"];
       // The echo is stamped with the id of the command it IS, which is the
       // whole join between a rendered message and the ledger's word on it.
       return {
-        submitted: () => noteSendSubmitted(instanceId, text, extras, commandId),
+        submitted: () =>
+          noteSendSubmitted(instanceId, text, extras, commandId, replaces),
       };
     }
     case "interrupt":
@@ -3172,7 +3183,9 @@ export function sendText(
   text: string,
   extras: SendExtras = {},
   /** The tracked command this send IS, when it has one. See {@link submitCommand}. */
-  commandId?: string
+  commandId?: string,
+  /** The failed send this one retries. See {@link noteSendSubmitted}. */
+  replaces?: string
 ): void {
   const payload: SendPayload = {
     instanceId,
@@ -3195,7 +3208,7 @@ export function sendText(
   // this makes the legacy dialect agree. Nothing renders twice: the echo is
   // one object, and the only path that replaces it — `ingestQueued` — removes
   // the copy it supersedes.
-  noteSendSubmitted(instanceId, text, extras, commandId);
+  noteSendSubmitted(instanceId, text, extras, commandId, replaces);
   send({ verb: "send", machineId, instanceId, payload });
 }
 
@@ -3211,18 +3224,39 @@ function noteSendSubmitted(
   instanceId: string,
   text: string,
   extras: SendExtras = {},
-  commandId?: string
+  commandId?: string,
+  /**
+   * The failed send this one retries. Its row takes the new command's marks
+   * where it stands — the same row goes back to sending, then sent or failed
+   * again — instead of leaving and coming back as a new row at the end.
+   */
+  replaces?: string
 ): void {
   const target = session(instanceId);
-  const echo = localUserMessage(instanceId, text, selectionExtras(extras));
-  target.messages.push({
-    ...echo,
-    metadata: {
-      ...echo.metadata,
-      queuedLocally: true,
-      ...(commandId && { sentAs: commandId }),
-    },
-  });
+  const marks = {
+    queuedLocally: true,
+    ...(commandId && { sentAs: commandId }),
+  };
+  const retried =
+    replaces === undefined
+      ? -1
+      : target.messages.findIndex(
+          (message) => message.metadata?.sentAs === replaces
+        );
+  if (retried >= 0) {
+    const { sendFailed: _failed, ...kept } =
+      target.messages[retried].metadata ?? {};
+    target.messages[retried] = {
+      ...target.messages[retried],
+      metadata: { ...kept, ...marks },
+    };
+  } else {
+    const echo = localUserMessage(instanceId, text, selectionExtras(extras));
+    target.messages.push({
+      ...echo,
+      metadata: { ...echo.metadata, ...marks },
+    });
+  }
   // A new attempt replaces the last one's announcement rather than stacking on
   // it: the live region says what is true now, not what was true before.
   sendFailureNotices[instanceId] = "";
@@ -5099,6 +5133,9 @@ export const whiffle = {
    */
   pulseAt: (instanceId: string): number | undefined =>
     state.pulses[instanceId]?.at,
+  /** When the session's current turn began, ms epoch; `undefined` while it is idle. */
+  turnSince: (instanceId: string): number | undefined =>
+    state.turnSince[instanceId],
   /**
    * The ledger stats the fleet table shows per session — turns, context %, cost.
    * Only populated for a session this browser has state for (subscribed / a turn

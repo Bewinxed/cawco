@@ -1,13 +1,49 @@
+<script lang="ts" module>
+  import { depart } from "$lib/whiffle/motion/share.svelte";
+
+  /** What the row's last action came to: running, done, or why it failed. */
+  export interface RowNote {
+    text: string;
+    tone: "busy" | "done" | "fail";
+  }
+
+  /**
+   * A row about to become another: its icon and title take off for the row
+   * `href` names, which lands them when it mounts (a starter template turning
+   * into the hook it wrote). Called before the list changes.
+   */
+  export function departInto(name: string, href: string): void {
+    const row = document.querySelector<HTMLElement>(
+      `[data-row-name="${CSS.escape(name)}"]`
+    );
+    for (const [part, key] of [
+      [".tile", `icon:${href}`],
+      [".label", `title:${href}`],
+    ]) {
+      const piece = row?.querySelector<HTMLElement>(part);
+      if (piece) {
+        piece.dataset.share = key;
+        depart(piece);
+      }
+    }
+  }
+</script>
+
 <script lang="ts">
   /**
    * One row of a section list. The whole row opens the thing when it has an
    * editor; the switch, the rollout chip and the ⋯ menu sit above that link
-   * so each stays its own target. A fault attaches underneath as one compact
-   * line.
+   * so each stays its own target. What the row's last action came to, and a
+   * fault, attach underneath as compact lines.
+   *
+   * The row is one of its list's `reflow()` marks (RowList): a row added,
+   * removed or filtered away opens, closes and slides on the list's timing,
+   * and so does a line arriving or leaving under it.
    */
   import type { Component, Snippet } from "svelte";
+  import { Spinner } from "$lib/components/ui/spinner";
   import { Switch } from "$lib/components/ui/switch";
-  import { unfold } from "$lib/whiffle/motion/fold.svelte";
+  import { IconCheck, IconWarningTriangle } from "$lib/icons";
   import { land } from "$lib/whiffle/motion/share.svelte";
   import RowMenu, { type RowAction } from "./RowMenu.svelte";
 
@@ -27,6 +63,8 @@
     actions = [],
     trailing,
     below,
+    note,
+    share,
     flash = false,
   }: {
     name: string;
@@ -49,25 +87,26 @@
     trailing?: Snippet;
     /** Faults and anything the row opens in place. */
     below?: Snippet;
+    note?: RowNote;
+    /**
+     * For a row with no editor: the key its icon and title land from (a
+     * plugin flying in from the marketplace listing it was installed from).
+     */
+    share?: string;
     flash?: boolean;
   } = $props();
 </script>
 
-<!-- A row added or removed grows or folds its own height as it fades, so
-     the rows around it slide to their new places instead of jumping. Only
-     a row the operator just made grows in; the list's first paint does not. -->
-<li
-  class={["item", flash && "flash"]}
-  data-row-name={name}
-  in:unfold={{ ms: flash ? 240 : 0 }}
-  out:unfold
->
+<li class={["item", flash && "flash"]} data-flip data-row-name={name}>
   <div class="row" class:off={enabled === false} class:two={meta !== undefined}>
     <span
       class="tile"
       data-share={href ? `icon:${href}` : undefined}
       style={hue ? `color:${hue}` : undefined}
-      {@attach land(() => (href ? `icon:${href}` : undefined))}
+      {@attach land(() => {
+        const key = href ?? share;
+        return key ? `icon:${key}` : undefined;
+      })}
     >
       {#if tile}
         {@render tile()}
@@ -86,7 +125,12 @@
             >{name}</a
           >
         {:else}
-          {name}
+          <span
+            class="label"
+            {@attach land(() => (share ? `title:${share}` : undefined), {
+              uniform: true,
+            })}>{name}</span
+          >
         {/if}
         {#if badge}
           {@render badge()}
@@ -101,11 +145,12 @@
         {@render rollout()}
       {/if}
       {#if enabled !== undefined && ontoggle}
+        <!-- It shows what the row's `enabled` says: a switch whose save
+             fails goes back to its old side when the page puts it back. -->
         <Switch
           aria-label="{enabled ? 'Turn off' : 'Turn on'} {name}"
-          checked={enabled}
           disabled={toggling}
-          onCheckedChange={ontoggle}
+          bind:checked={() => enabled === true, (next) => ontoggle?.(next)}
         />
       {/if}
       {#if trailing}
@@ -116,8 +161,27 @@
       {/if}
     </span>
   </div>
-  {#if below}
-    <div class="below">{@render below()}</div>
+  {#if below || note}
+    <div class="below">
+      {#if note}
+        <p
+          class="note"
+          data-flip
+          data-tone={note.tone}
+          role={note.tone === 'fail' ? 'alert' : 'status'}
+        >
+          {#if note.tone === 'busy'}
+            <Spinner aria-hidden="true" />
+          {:else if note.tone === 'fail'}
+            <IconWarningTriangle />
+          {:else}
+            <IconCheck />
+          {/if}
+          <span>{note.text}</span>
+        </p>
+      {/if}
+      {@render below?.()}
+    </div>
   {/if}
 </li>
 
@@ -185,7 +249,7 @@
     flex-direction: column;
     gap: 1px;
     min-width: 0;
-    transition: opacity 300ms ease-out;
+    transition: opacity var(--dur-panel) var(--ease-out);
   }
   .off .text {
     opacity: 0.55;
@@ -201,7 +265,8 @@
   .name.mono {
     font-family: var(--font-mono);
   }
-  .link {
+  .link,
+  .label {
     overflow: hidden;
     color: inherit;
     text-decoration: none;
@@ -246,6 +311,24 @@
   }
   .below:empty {
     display: none;
+  }
+  .note {
+    display: flex;
+    align-items: flex-start;
+    gap: 6px;
+    font: var(--type-meta);
+    color: var(--ink-muted);
+    overflow-wrap: anywhere;
+
+    & :global(svg) {
+      width: 12px;
+      height: 12px;
+      flex: none;
+      margin-block-start: 2px;
+    }
+    &[data-tone="fail"] {
+      color: var(--status-fail-ink);
+    }
   }
   .below {
     display: flex;

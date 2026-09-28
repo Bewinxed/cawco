@@ -7,19 +7,23 @@
  * arrives. That only works because the panes are all mounted and the
  * workspace answers synchronously — a gesture cannot wait for a router.
  *
- * Three rules decide whether a horizontal drag belongs to the page, and all
- * three exist because of something that would otherwise break:
+ * Who owns a touch is decided once the finger has travelled past the slop,
+ * by the way it went, because only then is there a way to go by:
  *
- * - It must be mostly horizontal. A transcript scrolls vertically, and a
+ * - Mostly vertical is a scroll. A transcript scrolls vertically, and a
  *   thumb travelling down the screen must never take the page with it.
- * - It must not start on a control, or inside something that scrolls
- *   sideways. Code blocks and tool output scroll horizontally; stealing
- *   that is worse than having no gesture at all. (The composer is never
- *   under it: a swiping group draws its composer outside the panes it
- *   moves.)
- * - Ownership is settled at touchstart and never revisited. The browser
- *   cannot be told half way through a gesture that someone else wants it,
- *   so asking later would mean asking after the answer stopped mattering.
+ * - Mostly horizontal is the page's, whatever the finger started on. A
+ *   transcript is mostly tool rows and links, and a swipe that refused to
+ *   start on them refused most of the screen. Once the page has it, the
+ *   control under the finger does not also get its click.
+ * - Except where something under the finger scrolls sideways and still has
+ *   room to go the way the finger is going: a wide code block keeps its own
+ *   travel until it reaches its edge, and from there the page takes over.
+ *   A block that fits, or one already at that edge, is just part of the page.
+ *
+ * Fields keep every touch: a finger dragging across a text box is moving
+ * the caret. (The composer is never under the gesture anyway: a swiping
+ * group draws its composer outside the panes it moves.)
  *
  * CSS owns rest, this file owns motion — the same division as the deck's.
  * The stylesheet parks the active pane and its two neighbours by their
@@ -29,6 +33,12 @@
  * the inline transforms are cleared and the parking places take over.
  */
 import { flushSync } from "svelte";
+import {
+  integrate,
+  spring as play,
+  type Sample,
+  sampleAt,
+} from "../motion/spring";
 import { workspace } from "./workspace.svelte";
 
 /** Travel before a drag is anything at all. */
@@ -42,65 +52,45 @@ const FLICK = 0.3;
 /** How much of a drag past the last tab is shown, and the most it can show. The deck's. */
 const RESIST = 0.35;
 const RESIST_MAX = 0.25;
-/** The settle: the deck's spring, so a tab and a group arrive the same way. */
-const SETTLE = 0.4;
-const BOUNCE = 0;
-const MASS = 1;
-const STIFFNESS = ((2 * Math.PI) / SETTLE) ** 2;
-const DAMPING = (4 * Math.PI * (1 - BOUNCE)) / SETTLE;
-const STEP = 1 / 120;
-const MAX_SETTLE = 1.5;
-const KEYFRAME_MS = 8;
 
 type Phase = "idle" | "tracking" | "decided";
-/** One point of the integrated settle: seconds since release, px, px/s. */
-interface Sample {
-  t: number;
-  v: number;
-  x: number;
-}
 /** A pane in view: its element and its distance from the active tab. */
 interface Pane {
   delta: number;
   el: HTMLElement;
 }
 
+/** What keeps a touch whichever way it goes: fields and sliders. */
+const KEEPS =
+  'input, textarea, select, [contenteditable="true"], [role="slider"]';
+
 /**
- * Whether something under the finger wants this touch more than the page
- * does. Asked once, at the start, against the element the finger landed on.
+ * What between the finger and the pane scrolls sideways, asked when the
+ * finger lands. `scrollWidth > clientWidth` is true of anything merely
+ * clipping its overflow — including the transcript column — so the computed
+ * style is what separates "this scrolls" from "this is cut off".
  */
-function fenced(target: EventTarget | null, fence: HTMLElement): boolean {
-  if (!(target instanceof HTMLElement)) {
-    return true;
-  }
-  if (!fence.contains(target)) {
-    return true;
-  }
-  if (
-    target.closest(
-      'button, a, input, textarea, select, [contenteditable="true"], ' +
-        '[role="button"], [role="link"], [role="tab"], [role="slider"]'
-    )
-  ) {
-    return true;
-  }
-  // Anything between the finger and the pane that scrolls sideways owns its
-  // own horizontal travel. `scrollWidth > clientWidth` is true of anything
-  // merely clipping its overflow — including the transcript column — so the
-  // computed style is what separates "this scrolls" from "this is cut off".
-  let node: HTMLElement | null = target;
+function scrollersUnder(target: Element, fence: HTMLElement): HTMLElement[] {
+  const found: HTMLElement[] = [];
+  let node = target instanceof HTMLElement ? target : target.parentElement;
   while (node && node !== fence) {
     const { overflowX } = getComputedStyle(node);
     if (
       (overflowX === "auto" || overflowX === "scroll") &&
       node.scrollWidth - node.clientWidth > 4
     ) {
-      return true;
+      found.push(node);
     }
     node = node.parentElement;
   }
-  return false;
+  return found;
 }
+
+/** Whether a sideways scroller has room left the way the finger is going. */
+const roomToward = (el: HTMLElement, dx: number) =>
+  dx > 0
+    ? el.scrollLeft > 0.5
+    : el.scrollLeft < el.scrollWidth - el.clientWidth - 0.5;
 
 /**
  * `leafOf` is a getter rather than a value: a group's identity is a prop,
@@ -137,9 +127,16 @@ export function createSwipe(
    * and in the release task that work held the pane still under the lifted
    * finger (WebKit: 28ms of a 35ms release). It sits a width or more off
    * screen for the whole settle, so a frame or two later nobody sees it
-   * arrive, and the work lands while the compositor moves the panes.
+   * arrive, and the work lands while the compositor moves the panes. A tab
+   * chosen by a tap veils the same way, and also the tab it jumped past.
    */
-  let veiled = $state<string | null>(null);
+  let veiled = $state<string[]>([]);
+  /**
+   * The conversation a tap is leaving when it jumps further than the next
+   * tab: painted beside the one arriving for the length of the settle, as if
+   * the two were neighbours, and hidden again when it lands.
+   */
+  let leaving = $state<string | null>(null);
 
   // Not reactive: the finger writes the transforms itself, straight onto the
   // panes in view, and writing state per touchmove would schedule a render
@@ -147,6 +144,7 @@ export function createSwipe(
   // commit point reaches the header.
   let root: HTMLElement | null = null;
   let offset = 0;
+  /** The stack's width, kept by an observer so neither a claim nor a tap lays the page out to learn it. */
   let width = 0;
   let startX = 0;
   let startY = 0;
@@ -162,10 +160,21 @@ export function createSwipe(
   let held: number | null = null;
   /** The frame reading the settle for the indicator. */
   let followFrame: number | null = null;
+  /** What sideways scrollers the finger landed in, asked again at the claim for room. */
+  let scrollers: HTMLElement[] = [];
+  /**
+   * The tab a committed release is switching to. The switch reaches the
+   * group like any other (`prepare`, `arrive`), and this is how the release
+   * says the settle for it is already its own.
+   */
+  let flip: string | null = null;
 
   const reduced = () =>
     typeof window !== "undefined" &&
     window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  const tabsOf = () =>
+    workspace.leaves.find((node) => node.id === leafOf())?.tabs ?? [];
 
   /** The tabs either side of the active one, in strip order and without wrapping. */
   const neighbours = () => {
@@ -235,6 +244,23 @@ export function createSwipe(
     offset = 0;
     toward = null;
     fraction = 0;
+    leaving = null;
+    flip = null;
+  };
+
+  /** Two frames on — one to hand the settle to the compositor, one to paint — show what was veiled. */
+  const unveil = () => {
+    const mine = veiled;
+    if (mine.length === 0) {
+      return;
+    }
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        if (veiled === mine) {
+          veiled = [];
+        }
+      })
+    );
   };
 
   const travelled = () =>
@@ -247,65 +273,21 @@ export function createSwipe(
     if (typeof at !== "number" || path.length === 0) {
       return null;
     }
-    const now = at / 1000;
-    const i = path.findIndex((sample) => sample.t >= now);
-    if (i < 0) {
-      // biome-ignore lint/style/useAtIndex: path is non-empty here (checked above); .at(-1) would widen the return to Sample | undefined
-      return path[path.length - 1];
-    }
-    if (i === 0) {
-      return path[0];
-    }
-    const a = path[i - 1];
-    const b = path[i];
-    const f = (now - a.t) / (b.t - a.t);
-    return { t: now, x: a.x + (b.x - a.x) * f, v: a.v + (b.v - a.v) * f };
-  };
-
-  /** The settle, integrated from here to rest. Always at least two points, the last exactly at rest. */
-  const integrate = (x0: number, v0: number): Sample[] => {
-    const out: Sample[] = [{ t: 0, x: x0, v: v0 }];
-    let x = x0;
-    let v = v0;
-    let t = 0;
-    for (;;) {
-      const a = (-STIFFNESS * x - DAMPING * v) / MASS;
-      v += a * STEP;
-      x += v * STEP;
-      t += STEP;
-      const done = (Math.abs(x) < 0.5 && Math.abs(v) < 20) || t >= MAX_SETTLE;
-      out.push(done ? { t, x: 0, v: 0 } : { t, x, v });
-      if (done) {
-        return out;
-      }
-    }
+    return sampleAt(path, at / 1000);
   };
 
   /** The settle, played by the compositor: the path as keyframes, one set per pane, offset by its parking place. */
   function spring(velocity: number) {
     stopSettle();
     path = integrate(offset, velocity);
-    // biome-ignore lint/style/useAtIndex: integrate() always returns at least one point; .at(-1) would widen this to undefined
-    const duration = path[path.length - 1].t;
-
-    const kept: Sample[] = [path[0]];
-    for (let i = 1; i < path.length - 1; i += 1) {
-      // biome-ignore lint/style/useAtIndex: kept is never empty (seeded above); .at(-1) would widen to undefined
-      if ((path[i].t - kept[kept.length - 1].t) * 1000 >= KEYFRAME_MS) {
-        kept.push(path[i]);
-      }
-    }
-    // biome-ignore lint/style/useAtIndex: integrate() always returns at least one point; .at(-1) would widen to undefined, and push() needs a Sample
-    kept.push(path[path.length - 1]);
-
-    animations = panes.map(({ el, delta }) =>
-      el.animate(
-        kept.map((sample) => ({
-          transform: `translate3d(${rest(delta) + sample.x}px, 0, 0)`,
-          offset: sample.t / duration,
-        })),
-        { duration: duration * 1000, easing: "linear", fill: "forwards" }
-      )
+    animations = play(
+      path,
+      panes.map(({ el, delta }) => ({
+        el,
+        frame: (x) => ({
+          transform: `translate3d(${rest(delta) + x}px, 0, 0)`,
+        }),
+      }))
     );
     const active = animations[panes.findIndex((pane) => pane.delta === 0)];
     if (!active) {
@@ -397,7 +379,6 @@ export function createSwipe(
     phase = "idle";
     targetId = null;
     past = false;
-    let beyond: string | null = null;
     if (allowed && target && (far || flicked)) {
       // Flip first, then compensate in the same synchronous step: every
       // pane's parking place is derived from the active tab, so the flip
@@ -407,15 +388,16 @@ export function createSwipe(
       // set is cleared first so the pane that left the view drops its inline
       // transform with it. The tab beyond the target is veiled before the
       // flush, so the flush never paints it.
-      const tabs = workspace.leaves.find((node) => node.id === leafOf())?.tabs;
-      beyond = tabs?.[tabs.indexOf(target) + (left ? 1 : -1)] ?? null;
-      veiled = beyond;
+      const tabs = tabsOf();
+      const beyond = tabs.indexOf(target) + (left ? 1 : -1);
+      veiled = tabs.slice(Math.max(beyond, 0), beyond + 1);
       // The indicator is on the new tab now, drawn the rest of the way back
       // toward the old one, and settles home from there with the pane. Set
       // before the flush, so the strip never draws the new tab both chosen
       // and still travelled toward.
       toward = here;
       fraction = 1 - travelled();
+      flip = target;
       workspace.activate(target, leafOf());
       flushSync();
       clear();
@@ -432,17 +414,67 @@ export function createSwipe(
     } else {
       spring(velocity * 1000);
     }
-    // The first frame after this task hands the settle to the compositor;
-    // the one after it paints the veiled neighbour.
-    if (beyond) {
-      requestAnimationFrame(() =>
-        requestAnimationFrame(() => {
-          if (veiled === beyond) {
-            veiled = null;
-          }
-        })
-      );
+    unveil();
+  }
+
+  /**
+   * A tab chosen without the finger — a tap on the strip, a key, a jump —
+   * lands the way a committed swipe does: the panes start where they were,
+   * a width apart, and settle on the same spring, from rest. Called before
+   * the switch renders, to decide what it paints: the tab beyond the new
+   * one, and the tab a far jump passes over, stay veiled until the settle
+   * runs, and a far jump keeps the pane it is leaving painted beside the
+   * new one.
+   */
+  function prepare(from: string, to: string) {
+    if (flip === to || reduced()) {
+      return;
     }
+    const tabs = tabsOf();
+    const was = tabs.indexOf(from);
+    const at = tabs.indexOf(to);
+    const dir = Math.sign(at - was);
+    const far = Math.abs(at - was) > 1;
+    leaving = far ? from : null;
+    veiled = [tabs[at + dir], far ? tabs[at - dir] : undefined].filter(
+      (id): id is string => id !== undefined
+    );
+  }
+
+  /** After the switch rendered: play the settle `prepare` readied. */
+  function arrive(from: string, to: string) {
+    if (flip === to) {
+      flip = null;
+      return;
+    }
+    if (reduced() || !root) {
+      return;
+    }
+    const tabs = tabsOf();
+    const was = tabs.indexOf(from);
+    const at = tabs.indexOf(to);
+    const dir = Math.sign(at - was);
+    // A settle in flight hands over where it has the picture: the pane
+    // leaving is where it was drawn, and the one arriving a width beyond it.
+    const now = animations.length > 0 ? progress() : null;
+    stopSettle();
+    clear();
+    const out = root.querySelector<HTMLElement>(
+      `:scope > [data-pane="${CSS.escape(from)}"]`
+    );
+    panes = gather().filter((pane) => pane.delta !== -dir);
+    if (out) {
+      panes.push({ el: out, delta: -dir });
+    }
+    offset = (now?.x ?? 0) + dir * width;
+    // The strip's sheet rides the settle to a neighbour, as after a swipe; a
+    // jump further along keeps the strip's own slide across the tabs between.
+    toward = Math.abs(at - was) === 1 ? from : null;
+    fraction = travelled();
+    moving = true;
+    paint(offset);
+    spring(now?.v ?? 0);
+    unveil();
   }
 
   return {
@@ -455,10 +487,16 @@ export function createSwipe(
     get moving() {
       return moving;
     },
-    /** A pane in reach that is not painted yet (see `veiled` above). */
+    /** Panes in reach that are not painted yet (see `veiled` above). */
     get veiled() {
       return veiled;
     },
+    /** A pane out of reach painted for a tap's settle (see `leaving` above). */
+    get leaving() {
+      return leaving;
+    },
+    prepare,
+    arrive,
     /**
      * The conversation the header should be NAMING right now — the target
      * once the drag has passed the point it would commit at, the current one
@@ -488,6 +526,10 @@ export function createSwipe(
     action(node: HTMLElement, enabled = true) {
       let live = enabled;
       root = node;
+      const sizes = new ResizeObserver(() => {
+        width = node.clientWidth;
+      });
+      sizes.observe(node);
 
       /** Stand down: whatever was under the finger goes back to its place. */
       const standDown = () => {
@@ -512,9 +554,14 @@ export function createSwipe(
         if (phase !== "idle" || event.touches.length !== 1) {
           return;
         }
-        if (fenced(event.target, node)) {
+        const { target } = event;
+        if (
+          !(target instanceof Element && node.contains(target)) ||
+          target.closest(KEEPS)
+        ) {
           return;
         }
+        scrollers = scrollersUnder(target, node);
         const [touch] = event.touches;
         startX = touch.clientX;
         startY = touch.clientY;
@@ -546,8 +593,12 @@ export function createSwipe(
           if (Math.abs(dx) < SLOP && Math.abs(dy) < SLOP) {
             return;
           }
-          if (Math.abs(dy) > Math.abs(dx) * SLOPE) {
-            // A scroll. Stand down for the rest of this touch.
+          // A scroll, or a sideways scroller's own travel: stand down for
+          // the rest of this touch.
+          if (
+            Math.abs(dy) > Math.abs(dx) * SLOPE ||
+            scrollers.some((el) => roomToward(el, dx))
+          ) {
             resume();
             phase = "idle";
             return;
@@ -557,10 +608,14 @@ export function createSwipe(
             return;
           }
           // Taking hold mid-settle picks the pane up where the finger
-          // stopped it; the settle is dropped, not rewound.
+          // stopped it; the settle is dropped, not rewound. A far tap's
+          // leaving pane is out of reach of a drag, so it goes now.
           held = null;
           base = offset;
-          width = node.clientWidth;
+          if (leaving) {
+            clear();
+            leaving = null;
+          }
           panes = gather();
           phase = "decided";
           moving = true;
@@ -584,8 +639,11 @@ export function createSwipe(
         fraction = travelled();
       };
 
-      const onEnd = () => {
+      const onEnd = (event: TouchEvent) => {
         if (phase === "decided") {
+          // The page had this touch: the row or link it started on does not
+          // also get the click a lifted finger would send it.
+          event.preventDefault();
           release(true);
         } else if (phase === "tracking") {
           resume();
@@ -593,9 +651,11 @@ export function createSwipe(
         phase = "idle";
       };
 
+      // `touchend` is not passive either: cancelling it is what keeps the
+      // click from a claimed touch.
       node.addEventListener("touchstart", onStart, { passive: true });
       node.addEventListener("touchmove", onMove, { passive: false });
-      node.addEventListener("touchend", onEnd, { passive: true });
+      node.addEventListener("touchend", onEnd, { passive: false });
       node.addEventListener("touchcancel", standDown, { passive: true });
 
       return {
@@ -611,6 +671,7 @@ export function createSwipe(
         },
         destroy() {
           stopSettle();
+          sizes.disconnect();
           root = null;
           node.removeEventListener("touchstart", onStart);
           node.removeEventListener("touchmove", onMove);

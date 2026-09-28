@@ -64,7 +64,7 @@ export const totalTokensOf = (r: {
   reasoning: number;
 }): number => r.input + r.output + r.cacheCreation + r.cacheRead + r.reasoning;
 
-/** The three limit bands, identical to ContextMeter and UsageMeter. */
+/** The three limit bands UsageMeter colours by. */
 export type Band = "calm" | "warn" | "critical";
 
 export const band = (pct: number): Band => {

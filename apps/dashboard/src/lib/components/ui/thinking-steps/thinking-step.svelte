@@ -7,6 +7,7 @@
   import { untrack } from "svelte";
   import { Markdown } from "$lib/components/ui/markdown";
   import { IconCheck, IconGlobe, IconSearch } from "$lib/icons";
+  import { dur, easeOut } from "$lib/whiffle/motion/curves.svelte";
   import { getSizeContext } from "../thinking-indicator/size-context";
 
   let {
@@ -49,7 +50,29 @@
     check: IconCheck,
   };
   const Icon = $derived(typeof icon === "string" ? icons[icon] : icon);
+  /** What the icon slot draws: the step's icon, or its dot. */
+  const glyph = $derived(showIcon && Icon ? Icon : null);
   const entering = untrack(() => enters);
+
+  /**
+   * A step's glyph changing cross-fades in its cell (--dur-control), and the
+   * connector a step gains when the next one starts draws down from it
+   * (--dur-toggle). Neither plays on a step's first render.
+   */
+  function glyphFade(_node: Element) {
+    return {
+      duration: dur("--dur-control"),
+      easing: easeOut,
+      css: (t: number) => `opacity: ${t}`,
+    };
+  }
+  function draw(_node: Element) {
+    return {
+      duration: dur("--dur-toggle"),
+      easing: easeOut,
+      css: (t: number) => `transform-origin: top; scale: 1 ${t}`,
+    };
+  }
 </script>
 
 {#if status !== "pending"}
@@ -61,14 +84,19 @@
   >
     <div aria-hidden="true" class="icon-column">
       <span class="icon"
-        >{#if showIcon && Icon}
-          <Icon />
-        {:else}
-          <span class="dot"></span>
-        {/if}</span
+        >{#key glyph}
+          <span class="glyph" in:glyphFade out:glyphFade
+            >{#if glyph}
+              {@const Glyph = glyph}
+              <Glyph />
+            {:else}
+              <span class="dot"></span>
+            {/if}</span
+          >
+        {/key}</span
       >
       {#if !isLast}
-        <span class="connector"></span>
+        <span class="connector" in:draw></span>
       {/if}
     </div>
     <div class="copy" class:enters={entering}>
@@ -124,6 +152,12 @@
       inline-size: 16px;
       block-size: 16px;
     }
+  }
+  /* One cell, so an outgoing glyph and its replacement overlap. */
+  .glyph {
+    grid-area: 1 / 1;
+    display: grid;
+    place-items: center;
   }
   .dot {
     inline-size: var(--space-1);

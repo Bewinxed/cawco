@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { onDestroy, untrack } from "svelte";
+  import { untrack } from "svelte";
   import { toast } from "svelte-sonner";
   import { goto } from "$app/navigation";
   import DiffView from "$lib/components/features/DiffView.svelte";
@@ -17,6 +17,10 @@
     IconSpinner,
   } from "$lib/icons";
   import { formatDistanceToNow } from "$lib/utils/time";
+  import { crossIn, crossOut } from "$lib/whiffle/motion/curves.svelte";
+  import { unfold } from "$lib/whiffle/motion/fold.svelte";
+  import { morph } from "$lib/whiffle/motion/morph.svelte";
+  import { reflow } from "$lib/whiffle/motion/rows.svelte";
   import { type Machine, whiffle } from "../../client.svelte";
   import { confirm } from "../../confirm.svelte";
   import {
@@ -37,6 +41,7 @@
   } from "../../fleet";
   import { machineLabel, machineOs } from "../../machine";
   import { orderMachines } from "../../rail.svelte";
+  import { drafts, keepDraft } from "../drafts.svelte";
   import EditorFrame from "../EditorFrame.svelte";
   import EditorSection from "../EditorSection.svelte";
   import {
@@ -70,10 +75,28 @@
   );
   const machines = $derived(orderMachines(whiffle.machines));
 
-  let text = $state(
-    untrack(() => store.memoryDrafts[path] ?? saved?.content ?? "")
-  );
+  let text = $state(untrack(() => saved?.content ?? ""));
   const dirty = $derived(text !== (saved?.content ?? ""));
+  /**
+   * The version the edit started from. A save names it, so if the fleet's
+   * copy has moved on since (another tab, another day, a draft kept across
+   * a reload) the save is refused and the conflict shows, rather than
+   * writing over what it never saw. With nothing unsaved it is simply the
+   * saved version.
+   */
+  let base = $state(untrack(() => saved?.hash));
+  $effect.pre(() => {
+    if (!dirty) {
+      base = saved?.hash;
+    }
+  });
+  const kept = keepDraft(
+    untrack(() => fileHref(path)),
+    () => (dirty ? { text, base } : null),
+    (back) => {
+      ({ text, base } = back);
+    }
+  );
   const bytes = $derived(byteLength(text));
   /** Roughly what this costs a session, at the usual ~4 bytes a token. */
   const tokens = $derived(Math.round(bytes / 4));
@@ -85,14 +108,6 @@
   let deleting = $state(false);
   let deleteFailed = $state(false);
   let conflict = $state<FleetMemoryRow | null>(null);
-
-  onDestroy(() => {
-    if (dirty) {
-      store.memoryDrafts[path] = text;
-    } else {
-      delete store.memoryDrafts[path];
-    }
-  });
 
   const message = (caught: unknown) =>
     caught instanceof Error ? caught.message : String(caught);
@@ -128,7 +143,8 @@
     return false;
   }
 
-  async function save(expectedHash = saved?.hash) {
+  /** Saving keeps the editor open on the file, the Save button saying so in place. */
+  async function save(expectedHash = base) {
     if (busy || !dirty) {
       return;
     }
@@ -141,10 +157,7 @@
       if (written) {
         conflict = null;
         text = saved?.content ?? text;
-        delete store.memoryDrafts[path];
-        store.mark(path);
         toast.success(`${fileLabel(path)} is on its way to every machine.`);
-        await goto("/config/memory");
       }
     } catch (caught) {
       saveFailed = true;
@@ -164,9 +177,9 @@
     conflict = null;
   }
 
+  /** Cancel leaves the edits behind: the draft is dropped, not kept. */
   function cancel() {
-    text = saved?.content ?? "";
-    delete store.memoryDrafts[path];
+    kept.drop();
     // biome-ignore lint/complexity/noVoid: navigation reports nothing to wait for
     void goto("/config/memory");
   }
@@ -187,20 +200,23 @@
         try {
           if (main) {
             await removeMemory();
-            fleet.memory = null;
           } else {
             await removeMemoryDoc(path);
+          }
+          kept.drop();
+          // Back to the list first, so the file is seen leaving it.
+          await goto("/config/memory");
+          if (main) {
+            fleet.memory = null;
+          } else {
             fleet.memoryDocs = fleet.memoryDocs.filter(
               (doc) => doc.path !== path
             );
           }
-          text = "";
-          delete store.memoryDrafts[path];
-          await goto("/config/memory");
         } catch (caught) {
           deleteFailed = true;
-          toast.error(message(caught));
           deleting = false;
+          throw caught;
         }
       },
     });
@@ -218,7 +234,7 @@
     { value: MAIN, label: fileLabel(MAIN) },
     ...(fleet?.memoryDocs ?? []).map((doc) => ({
       value: doc.path,
-      label: `${fileLabel(doc.path)}${store.memoryDrafts[doc.path] === undefined ? "" : " · unsaved"}`,
+      label: `${fileLabel(doc.path)}${drafts.paths.has(fileHref(doc.path)) ? " · unsaved" : ""}`,
     })),
   ]);
 
@@ -428,14 +444,16 @@
         <span>Not written yet</span>
       {/if}
       {#if dirty}
-        <span class="unsaved">Unsaved changes · ⌘S saves</span>
+        <span class="unsaved" in:crossIn out:crossOut
+          >Unsaved changes · ⌘S saves</span
+        >
       {/if}
     </p>
   {/snippet}
 
   <EditorSection hue={HUE} icon={IconDocument} label="Contents">
     {#if conflict}
-      <div class="conflict">
+      <div class="conflict" in:unfold out:unfold>
         <p class="caution">
           Changed elsewhere while you edited. Nothing was overwritten.
         </p>
@@ -469,7 +487,9 @@
       </div>
     {/if}
     <div class="well">
-      {#key path}
+      <!-- Crepe reads its text once, when it is made: it waits for a draft
+           kept for this file to be back. -->
+      {#if kept.restored}
         <MarkdownEditor
           label={fileLabel(path)}
           onready={() => {
@@ -477,7 +497,7 @@
           }}
           bind:value={text}
         />
-      {/key}
+      {/if}
     </div>
   </EditorSection>
 
@@ -492,68 +512,88 @@
         replaces is kept here.
       </p>
     {:else}
-      <ul class="list">
-        {#each visibleVersions as row (row.id)}
-          <li class="entry">
-            <div class="line">
-              <span class="label"
-                >{formatDistanceToNow(new Date(row.createdAt))}</span
-              >
-              <span class="note">from {sourceLabel(row.source)}</span>
-              <span class="note font-mono" title={row.hash}
-                >{row.hash.slice(0, 8)}</span
-              >
-              <span class="note">{formatBytes(row.bytes)}</span>
-              <Button
-                class="ml-auto"
-                onclick={() => openVersion(row)}
-                size="sm"
-                variant={shown === row.id ? 'secondary' : 'outline'}
-              >
-                {shown === row.id ? 'Hide' : 'Compare'}
-              </Button>
-            </div>
-            {#if shown === row.id}
-              {#if reading[row.id]}
-                <p class="note busy" role="status">
-                  <IconSpinner class="size-4 shrink-0 animate-spin" />Reading
-                  that version…
-                </p>
-              {:else if contents[row.id] !== undefined}
-                {#key `${row.id}:${saved?.hash ?? ''}`}
-                  <DiffView
-                    filePath={path}
-                    newContent={saved?.content ?? ''}
-                    oldContent={contents[row.id]}
-                  />
-                {/key}
+      <!-- Rows that come and go (Show all, a new version) go through
+           reflow, what follows sliding; a row's compare folds open inside
+           it. -->
+      <div class="history" {@attach reflow()}>
+        <ul class="list">
+          {#each visibleVersions as row (row.id)}
+            <li class="entry" data-flip>
+              <div class="line">
+                <span class="label"
+                  >{formatDistanceToNow(new Date(row.createdAt))}</span
+                >
+                <span class="note">from {sourceLabel(row.source)}</span>
+                <span class="note font-mono" title={row.hash}
+                  >{row.hash.slice(0, 8)}</span
+                >
+                <span class="note">{formatBytes(row.bytes)}</span>
                 <Button
-                  class="self-start"
-                  failed={restoreFailed === row.id}
-                  label="Restore this version"
-                  onclick={() => restore(row)}
-                  pending={restoring === row.id}
-                  pendingLabel="Restoring…"
+                  class="ml-auto"
+                  onclick={() => openVersion(row)}
                   size="sm"
-                  variant="outline"
-                />
+                  variant={shown === row.id ? 'secondary' : 'outline'}
+                >
+                  {shown === row.id ? 'Hide' : 'Compare'}
+                </Button>
+              </div>
+              {#if shown === row.id}
+                <!-- The compare folds open (240 / 160); inside, reading
+                   cross-fades to the diff as the box follows its height. -->
+                <div class="reveal" in:unfold out:unfold>
+                  <div class="swap" {@attach morph()}>
+                    {#if reading[row.id]}
+                      <p
+                        class="note busy"
+                        role="status"
+                        in:crossIn
+                        out:crossOut
+                      >
+                        <IconSpinner
+                          class="size-4 shrink-0 animate-spin"
+                        />Reading that version…
+                      </p>
+                    {:else if contents[row.id] !== undefined}
+                      <div class="reveal" in:crossIn out:crossOut>
+                        {#key `${row.id}:${saved?.hash ?? ''}`}
+                          <DiffView
+                            filePath={path}
+                            newContent={saved?.content ?? ''}
+                            oldContent={contents[row.id]}
+                          />
+                        {/key}
+                        <Button
+                          class="self-start"
+                          failed={restoreFailed === row.id}
+                          label="Restore this version"
+                          onclick={() => restore(row)}
+                          pending={restoring === row.id}
+                          pendingLabel="Restoring…"
+                          size="sm"
+                          variant="outline"
+                        />
+                      </div>
+                    {/if}
+                  </div>
+                </div>
               {/if}
-            {/if}
-          </li>
-        {/each}
-      </ul>
-      {#if versions.length > LATEST}
-        <Button
-          class="self-start"
-          onclick={() => {
-            allVersions = !allVersions;
-          }}
-          size="sm"
-          variant="ghost"
-        >
-          {allVersions ? 'Show the latest 5' : `Show all ${versions.length}`}
-        </Button>
-      {/if}
+            </li>
+          {/each}
+        </ul>
+        {#if versions.length > LATEST}
+          <div class="more" data-flip>
+            <Button
+              onclick={() => {
+              allVersions = !allVersions;
+            }}
+              size="sm"
+              variant="ghost"
+            >
+              {allVersions ? 'Show the latest 5' : `Show all ${versions.length}`}
+            </Button>
+          </div>
+        {/if}
+      </div>
     {/if}
   </EditorSection>
 
@@ -589,7 +629,7 @@
               />
               {#if drifted || !saved}
                 {@const settle = settling[machine.machineId]}
-                <span class="acts">
+                <span class="acts" in:crossIn out:crossOut>
                   {#if drifted}
                     <Button
                       disabled={!online}
@@ -626,27 +666,40 @@
               {/if}
             </div>
             {#if drifted && item?.detail}
-              <pre class="said">{item.detail}</pre>
+              <pre class="said" in:unfold out:unfold>{item.detail}</pre>
             {/if}
             {#if comparingThis}
-              {#if peeking[machine.machineId]}
-                <p class="note busy" role="status">
-                  <IconSpinner class="size-4 shrink-0 animate-spin" />Reading
-                  this machine's copy…
-                </p>
-              {:else if unread[machine.machineId]}
-                <p class="caution" role="alert">{unread[machine.machineId]}</p>
-              {:else if copies[machine.machineId] === null}
-                <p class="note">This machine has no copy of this file.</p>
-              {:else if copies[machine.machineId] !== undefined}
-                {#key `${machine.machineId}:${saved?.hash ?? ''}`}
-                  <DiffView
-                    filePath={path}
-                    newContent={copies[machine.machineId] ?? ''}
-                    oldContent={saved?.content ?? ''}
-                  />
-                {/key}
-              {/if}
+              <!-- The machine's copy folds open under its row; reading
+                   cross-fades to what was read as the box follows. -->
+              <div class="reveal" in:unfold out:unfold>
+                <div class="swap" {@attach morph()}>
+                  {#if peeking[machine.machineId]}
+                    <p class="note busy" role="status" in:crossIn out:crossOut>
+                      <IconSpinner
+                        class="size-4 shrink-0 animate-spin"
+                      />Reading this machine's copy…
+                    </p>
+                  {:else if unread[machine.machineId]}
+                    <p class="caution" role="alert" in:crossIn out:crossOut>
+                      {unread[machine.machineId]}
+                    </p>
+                  {:else if copies[machine.machineId] === null}
+                    <p class="note" in:crossIn out:crossOut>
+                      This machine has no copy of this file.
+                    </p>
+                  {:else if copies[machine.machineId] !== undefined}
+                    <div in:crossIn out:crossOut>
+                      {#key `${machine.machineId}:${saved?.hash ?? ''}`}
+                        <DiffView
+                          filePath={path}
+                          newContent={copies[machine.machineId] ?? ''}
+                          oldContent={saved?.content ?? ''}
+                        />
+                      {/key}
+                    </div>
+                  {/if}
+                </div>
+              </div>
             {/if}
           </li>
         {/each}
@@ -667,6 +720,7 @@
     overflow-wrap: anywhere;
   }
   .facts {
+    position: relative;
     display: flex;
     flex-wrap: wrap;
     gap: 4px 12px;
@@ -727,10 +781,28 @@
     background: var(--surface-recess);
   }
   .line {
+    position: relative;
     display: flex;
     flex-wrap: wrap;
     align-items: center;
     gap: 8px 12px;
+  }
+  .history,
+  .reveal {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .more {
+    align-self: flex-start;
+  }
+  /* One box the reading line and what was read take turns in: the one
+     leaving is pinned in it (crossOut) while the one arriving sets its
+     height. */
+  .swap {
+    position: relative;
+    display: flex;
+    flex-direction: column;
   }
   .acts {
     display: flex;

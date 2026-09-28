@@ -1,5 +1,10 @@
 <script lang="ts">
   import { Badge } from "$lib/components/ui/badge";
+  import PendingContent, {
+    whileIdle,
+  } from "$lib/components/ui/button/pending-content.svelte";
+  import { dur } from "$lib/whiffle/motion/curves.svelte";
+  import { land } from "$lib/whiffle/motion/share.svelte";
   import type { Trail } from "$lib/components/ui/markdown/trail";
   import {
     canResend,
@@ -9,6 +14,7 @@
   } from "../client.svelte";
   /** Dispatches one stand-alone transcript message to its renderer by type. */
   import type { Message } from "../types";
+  import { disclosure } from "./disclosure.svelte";
   import MessageBody from "./MessageBody.svelte";
   import Peer from "./Peer.svelte";
   import Shot from "./Shot.svelte";
@@ -124,8 +130,28 @@
     }
   });
 
+  /** What the reason line says about this failure. */
+  const reasonLine = $derived(
+    `Couldn't send that message.${reason ? ` ${reason}` : ""}${
+      recoverable && !undelivered
+        ? " It may still have reached the agent — sending it again could repeat it."
+        : ""
+    }`
+  );
+  /**
+   * A retry goes out on this row (`retrySend`): the row turns back to a ghost
+   * where it stands, and the failure stays open under it with its Retry
+   * pending in place until the hub answers — then the row settles sent and
+   * the failure folds away, or the reason line takes the new reason.
+   */
+  let retried = $state(false);
+  /** The reason line as it read when the retry went out, held while it is out. */
+  let heldLine = $state("");
+  const retrying = $derived(retried && ghost);
   function retry(): void {
     if (message.metadata?.sentAs) {
+      heldLine = reasonLine;
+      retried = true;
       retrySend(message.metadata.sentAs);
     }
   }
@@ -143,7 +169,16 @@
        it is the one thing that carries a surface: a sunken well. User messages
        are sparse, so filling them makes the operator's own instructions the
        landmarks. The agent's turns stay bare on the field. -->
-  <section class="turn you" class:failed class:ghost>
+  <!-- Sent from this tab, the turn is the composer's text landing (motion/share,
+       departed by Composer's submit). -->
+  <section
+    class="turn you"
+    class:ghost
+    {@attach land(
+      () => message.metadata?.queuedLocally ? `sent:${message.content}` : undefined,
+      { ms: dur('--dur-pop'), uniform: true }
+    )}
+  >
     <Who
       name="You"
       note={whoNote}
@@ -179,21 +214,32 @@
          answer.") — a failed send is a sibling of a failed answer, not a new
          dialect of failure. The grid-rows wrapper is what animates a height
          that content, not JS, decides. -->
-    <div class="failure">
+    <div class="failure" class:open={failed || retrying}>
       <div class="failure-inner">
-        {#if failed}
-          <p class="reason">
-            Couldn't send that message.{reason ? ` ${reason}` : ''}
-            {recoverable && !undelivered
-              ? ' It may still have reached the agent — sending it again could repeat it.'
-              : ''}
-          </p>
+        {#if failed || retrying}
+          <p class="reason">{retrying ? heldLine : reasonLine}</p>
           {#if recoverable}
             <div class="actions">
-              <button class="pressable action" onclick={retry} type="button">
-                {undelivered ? 'Try again' : 'Send anyway'}
+              <button
+                aria-busy={retrying || undefined}
+                aria-disabled={retrying || undefined}
+                class="pressable action"
+                onclick={whileIdle(() => retrying, retry)}
+                type="button"
+              >
+                <PendingContent
+                  failed={failed}
+                  label={undelivered ? 'Try again' : 'Send anyway'}
+                  pending={retrying}
+                  pendingLabel="Sending…"
+                />
               </button>
-              <button class="pressable action" onclick={edit} type="button">
+              <button
+                class="pressable action"
+                disabled={retrying}
+                onclick={edit}
+                type="button"
+              >
                 Edit
               </button>
             </div>
@@ -214,7 +260,7 @@
 {:else if kind === 'user.peer' || kind === 'user.rule' || kind === 'user.delegate_ask'}
   <Peer {message} />
 {:else}
-  <SystemLine {message} />
+  <SystemLine disclosed={disclosure(message)} {message} />
 {/if}
 
 <style>
@@ -270,7 +316,7 @@
     grid-template-rows: 0fr;
     opacity: 0;
 
-    .turn.you.failed & {
+    &.open {
       grid-template-rows: 1fr;
       opacity: 1;
       margin-block-start: var(--space-2);
@@ -308,6 +354,11 @@
      text-meta, space-2) rather than a new button style — a failed send reads as
      a sibling of the well it sits in, not a dialog bolted onto it. */
   .action {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--btn-gap);
+    --btn-gap: var(--space-1);
+    --btn-icon: 12px;
     border-radius: var(--radius-xs);
     border: 1px solid var(--border-hairline);
     background: transparent;
@@ -317,8 +368,12 @@
     font-weight: var(--weight-strong);
     color: var(--ink-strong);
 
-    &:hover {
+    &:hover:not(:disabled) {
       background: var(--surface-hover);
+    }
+    /* The other action, while a retry is out. */
+    &:disabled {
+      opacity: 0.5;
     }
   }
 </style>

@@ -1,7 +1,9 @@
 <script lang="ts">
   /**
    * The faults that belong to one row, as compact alert lines under it: what
-   * broke and where, with the reading and the remedy a click away.
+   * broke and where, with the reading and the remedy a click away. Each is a
+   * mark of the row list's `reflow()`: a fault that clears closes away and
+   * the rows below slide up; one that arrives opens.
    */
   import type { Machine } from "../client.svelte";
   import FleetFault from "../FleetFault.svelte";
@@ -41,5 +43,5 @@
 </script>
 
 {#each groups as group (group.origin + group.cause + (group.machineId ?? ''))}
-  <FleetFault compact {group} {machines} {onresolved} />
+  <div data-flip><FleetFault compact {group} {machines} {onresolved} /></div>
 {/each}

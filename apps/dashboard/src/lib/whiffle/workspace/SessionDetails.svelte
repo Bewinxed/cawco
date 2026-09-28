@@ -4,12 +4,13 @@
 
 <script lang="ts">
   import type { EffortLevel, HarnessKind, PermissionMode } from "@whiffle/core";
-  import { untrack } from "svelte";
+  import { onDestroy, untrack } from "svelte";
   import { cubicOut } from "svelte/easing";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
   import { TextMorph } from "torph/svelte";
   import ProviderLogo from "$lib/components/features/ProviderLogo.svelte";
+  import { IconCheck } from "$lib/icons";
   import Down from "~icons/solar/alt-arrow-down-linear";
   import Link from "~icons/solar/link-bold-duotone";
   import {
@@ -24,6 +25,7 @@
   import { copyToClipboard } from "../copy";
   import HarnessLogo from "../HarnessLogo.svelte";
   import { describingRow, ensureModels } from "../models.svelte";
+  import { crossIn, crossOut, dur } from "../motion/curves.svelte";
   import { PERMISSION_MODES } from "../permission-modes";
   import ModelSection from "../spawn/ModelSection.svelte";
   import { modelName } from "../spawn/model-entries";
@@ -238,6 +240,70 @@
       ? record.reason || "Change refused. Try again."
       : null;
   }
+  /*
+   * A change that lands says so where it was made: a check on its line for
+   * the hold (--dur-hold), in the place its pending and failed lines take.
+   * Only a change seen going from pending to settled while the card is on
+   * this session counts — opening the card shows no old news.
+   */
+  const SLOTS: Slot[] = ["model", "effort", "permission"];
+  const DONE: Record<Slot, string> = {
+    model: "Model changed",
+    effort: "Effort changed",
+    permission: "Permission changed",
+  };
+  let done = $state<Record<Slot, boolean>>({
+    model: false,
+    effort: false,
+    permission: false,
+  });
+  const holds = new Map<Slot, ReturnType<typeof setTimeout>>();
+  let doneFor = untrack(() => sessionId);
+  let wasPending = untrack(() => ({
+    model: pending("model"),
+    effort: pending("effort"),
+    permission: pending("permission"),
+  }));
+  $effect(() => {
+    const id = sessionId;
+    const now = {
+      model: pending("model"),
+      effort: pending("effort"),
+      permission: pending("permission"),
+    };
+    const failed = {
+      model: failure("model") !== null,
+      effort: failure("effort") !== null,
+      permission: failure("permission") !== null,
+    };
+    untrack(() => {
+      const moved = id !== doneFor;
+      for (const slot of SLOTS) {
+        const landed =
+          !moved && wasPending[slot] && !now[slot] && !failed[slot];
+        if (landed || moved || now[slot]) {
+          clearTimeout(holds.get(slot));
+          done[slot] = landed;
+        }
+        if (landed) {
+          holds.set(
+            slot,
+            setTimeout(() => {
+              done[slot] = false;
+            }, dur("--dur-hold"))
+          );
+        }
+      }
+      doneFor = id;
+      wasPending = now;
+    });
+  });
+  onDestroy(() => {
+    for (const hold of holds.values()) {
+      clearTimeout(hold);
+    }
+  });
+
   function changeModel(next: string) {
     if (!(editable && machineId) || pending("model") || next === model) {
       return;
@@ -295,11 +361,23 @@
   >
 {/snippet}
 
+<!-- One line per field, whatever it is saying: the lines cross-fade at the
+     control tier (crossIn / crossOut), the one leaving lifted out of the
+     flow so the card only ever holds the one arriving. -->
 {#snippet feedback(slot: Slot)}
   {#if failure(slot)}
-    <p class="failure" role="alert">{failure(slot)}</p>
+    <p class="failure" role="alert" in:crossIn out:crossOut>
+      {failure(slot)}
+    </p>
   {:else if pending(slot)}
-    <p class="feedback" role="status">Applying change…</p>
+    <p class="feedback" role="status" in:crossIn out:crossOut>
+      Applying change…
+    </p>
+  {:else if done[slot]}
+    <p class="feedback done" role="status" in:crossIn out:crossOut>
+      <IconCheck aria-hidden="true" />
+      {DONE[slot]}
+    </p>
   {/if}
 {/snippet}
 
@@ -582,6 +660,7 @@
     height: 16px;
   }
   .configuration {
+    position: relative;
     border-top: 1px solid var(--border-hairline);
     padding: var(--space-3) var(--space-5);
   }
@@ -641,6 +720,17 @@
   }
   .failure {
     color: var(--status-fail-ink);
+  }
+  .done {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+  }
+  .done :global(svg) {
+    width: 16px;
+    height: 16px;
+    flex: none;
+    color: var(--status-live-ink);
   }
   .stats {
     flex: none;

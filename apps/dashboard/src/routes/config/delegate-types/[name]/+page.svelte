@@ -1,8 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import EditorRoute from "$lib/whiffle/config/EditorRoute.svelte";
   import DelegateTypeEditor from "$lib/whiffle/config/editors/DelegateTypeEditor.svelte";
-  import Missing from "$lib/whiffle/config/Missing.svelte";
-  import SectionFrame from "$lib/whiffle/config/SectionFrame.svelte";
   import { sectionOf } from "$lib/whiffle/config/sections";
   import { configStore } from "$lib/whiffle/config/store.svelte";
 
@@ -16,19 +15,13 @@
   );
 </script>
 
-{#if types === null}
-  <SectionFrame
-    problem={store.types.error}
-    purpose={section.purpose}
-    ready={false}
-    title={section.label}
-  >
-    {''}
-  </SectionFrame>
-{:else if name !== 'new' && !type}
-  <Missing {section} what="delegate type" />
-{:else}
-  {#key name}
-    <DelegateTypeEditor {taken} {type} />
-  {/key}
-{/if}
+<EditorRoute
+  found={name === 'new' || type !== null}
+  loaded={types !== null}
+  problem={store.types.error}
+  saveLabel={name === 'new' ? 'Create delegate type' : 'Save changes'}
+  {section}
+  what="delegate type"
+>
+  <DelegateTypeEditor {taken} {type} />
+</EditorRoute>

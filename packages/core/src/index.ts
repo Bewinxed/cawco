@@ -458,6 +458,13 @@ export interface BuildInfo {
  */
 export interface UpdateReport {
   built: boolean;
+  /**
+   * The services whose code the update changed: the only ones it rebuilt or
+   * restarted, and the only way a deploy leaves the agent owing a restart.
+   * Every service when nothing was pulled (an update asked of a current
+   * checkout restarts the stack) and for a registry install.
+   */
+  changed: string[];
   from?: string;
   installed: boolean;
   /** The tail of what git said — 'Already up to date.' included. */

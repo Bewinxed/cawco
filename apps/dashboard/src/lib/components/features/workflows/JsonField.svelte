@@ -40,7 +40,7 @@
   ></textarea></label
 >
 {#if errorMessage}
-  <p class="wf-error" role="alert" transition:unfold>
+  <p class="wf-error" role="alert" in:unfold out:unfold>
     {errorMessage}
     Changes are not applied until the JSON is valid.
   </p>

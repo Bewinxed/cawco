@@ -4,8 +4,17 @@
     UserQuestion,
     UserQuestionResult,
   } from "@whiffle/core";
+  import { untrack } from "svelte";
   import { IconCheck, IconClose } from "$lib/icons";
-  import { dur, easeOut, motionOk } from "$lib/whiffle/motion/curves.svelte";
+  import {
+    CURVE,
+    crossIn,
+    dur,
+    easeOut,
+    motionOk,
+  } from "$lib/whiffle/motion/curves.svelte";
+  import { fold } from "$lib/whiffle/motion/fold.svelte";
+  import { depart, land } from "$lib/whiffle/motion/share.svelte";
   import { questionsOf } from "../question";
   /**
    * An answered (or dismissed) `AskUserQuestion` as it settled in the transcript
@@ -63,6 +72,101 @@
       css: (t: number) => `opacity: ${t}`,
     };
   }
+  /**
+   * SETTLING. Answered, the card becomes its summary: each option picked is
+   * the one chip left, and the options not picked go. The picked chip travels
+   * from where it stood among the options to its place in the summary
+   * (`share`, --dur-pop on the drawer curve); the others fade where they
+   * stood (--dur-control), out of the flow from the start, so nothing else
+   * waits on them. Dismissed, every option fades and their row folds shut
+   * toward the question (--dur-exit). Only a card that settles while it is
+   * drawn plays this; one that is drawn settled is simply its summary.
+   */
+  const settled = $derived(answered || dismissed);
+  const card = $derived(String(message.toolCallId ?? message.id));
+  const shareKey = (question: string, label: string): string =>
+    `question:${card}:${question}:${label}`;
+  let section = $state<HTMLElement>();
+  /** Where each option stood as the card settled, in its row. */
+  const stood = new WeakMap<
+    Element,
+    { top: number; left: number; width: number }
+  >();
+  /** Each options row's height as the card settled, by its question. */
+  const rowHeights = new Map<string, number>();
+  let wasSettled = untrack(() => settled);
+  $effect.pre(() => {
+    const now = settled;
+    if (now && !wasSettled && section) {
+      untrack(() => {
+        for (const row of section?.querySelectorAll<HTMLElement>(".qopts") ??
+          []) {
+          rowHeights.set(row.dataset.question ?? "", row.offsetHeight);
+          for (const option of row.querySelectorAll<HTMLElement>(".opt")) {
+            stood.set(option, {
+              top: option.offsetTop,
+              left: option.offsetLeft,
+              width: option.offsetWidth,
+            });
+          }
+        }
+        for (const q of questions) {
+          for (const label of chosen(q.question)) {
+            const option = section?.querySelector<HTMLElement>(
+              `.opt[data-key="${CSS.escape(shareKey(q.question, label))}"]`
+            );
+            if (option) {
+              option.dataset.share = shareKey(q.question, label);
+              depart(option);
+            }
+          }
+        }
+      });
+    }
+    wasSettled = now;
+  });
+  /** A row's height from what it was to what it is now; shut when nothing is left in it. */
+  function settleRow(row: HTMLElement, question: string): void {
+    const was = rowHeights.get(question);
+    rowHeights.delete(question);
+    if (was === undefined || !motionOk.current) {
+      return;
+    }
+    fold(
+      row,
+      !dismissed,
+      { ms: dur("--dur-exit"), easing: CURVE.out },
+      was
+    );
+  }
+  /** An option not picked fades where it stood, out of the flow. */
+  function leave(node: HTMLElement) {
+    const at = stood.get(node);
+    if (at) {
+      node.style.position = "absolute";
+      node.style.top = `${at.top}px`;
+      node.style.left = `${at.left}px`;
+      node.style.width = `${at.width}px`;
+      node.style.pointerEvents = "none";
+    }
+    return {
+      duration: dur("--dur-control"),
+      easing: easeOut,
+      css: (t: number) => `opacity: ${t}`,
+    };
+  }
+  $effect(() => {
+    if (!settled) {
+      return;
+    }
+    untrack(() => {
+      for (const row of section?.querySelectorAll<HTMLElement>(".qopts") ??
+        []) {
+        settleRow(row, row.dataset.question ?? "");
+      }
+    });
+  });
+
   /** A freeform answer whose text matches no listed option label. */
   const otherText = (q: UserQuestion): string | null => {
     const picks = chosen(q.question);
@@ -72,7 +176,11 @@
   };
 </script>
 
-<section aria-label="Question from the agent" class="hitl">
+<section
+  aria-label="Question from the agent"
+  class="hitl"
+  bind:this={section}
+>
   <h2>
     <span class="state">
       {#if answered}
@@ -92,20 +200,34 @@
 
   {#each questions as q (q.question)}
     <p class="lede">{q.question}</p>
-    <div class="qopts">
-      {#each q.options as opt, i (opt.label)}
-        <span class="opt" class:sel={isSelected(q.question, opt.label)}>
+    <div class="qopts" data-question={q.question}>
+      {#each settled ? [] : q.options as opt, i (opt.label)}
+        <span class="opt" data-key={shareKey(q.question, opt.label)} out:leave>
           <span class="kc">{i + 1}</span><span>{opt.label}</span>
         </span>
       {/each}
+      {#if answered}
+        {#each q.options.filter((opt) => isSelected(q.question, opt.label)) as opt (opt.label)}
+          <span
+            class="opt sel"
+            {@attach land(() => shareKey(q.question, opt.label), { ms: dur('--dur-pop') })}
+          >
+            <span class="kc">{q.options.indexOf(opt) + 1}</span><span
+              >{opt.label}</span
+            >
+          </span>
+        {/each}
+      {/if}
     </div>
     {#if otherText(q)}
-      <p class="answer-free"><span class="lbl">Answered</span>{otherText(q)}</p>
+      <p class="answer-free" in:crossIn>
+        <span class="lbl">Answered</span>{otherText(q)}
+      </p>
     {/if}
   {/each}
 
   {#if freeform}
-    <p class="answer-free">
+    <p class="answer-free" in:crossIn>
       <span class="lbl">In your own words</span>{freeform}
     </p>
   {/if}
@@ -181,6 +303,7 @@
     max-inline-size: 72ch;
   }
   .qopts {
+    position: relative;
     display: flex;
     gap: var(--space-2);
     flex-wrap: wrap;

@@ -2,6 +2,7 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import { Button } from "$lib/components/ui/button";
   import * as Collapsible from "$lib/components/ui/collapsible";
+  import { TextMorph } from "torph/svelte";
   import CollapsibleLazy from "$lib/components/ui/collapsible/collapsible-lazy.svelte";
   import { IconChevronRight, IconExternal } from "$lib/icons";
   import { formatDuration } from "$lib/utils/time";
@@ -21,6 +22,8 @@
   import { conversationHref, delegateHandle } from "../links";
   import { markHue, sessionSprite } from "../mark";
   import { modelLabel } from "../models.svelte";
+  import { CURVE, dur, easeOut } from "../motion/curves.svelte";
+  import { reflow } from "../motion/rows.svelte";
   /**
    * A fleet delegate — a session this one spawned with `delegate` or
    * `start_session` — folded onto the parent's spine the way a subagent branch
@@ -198,9 +201,12 @@
         });
     }
   );
-  const pendingAsks = $derived(
-    asks.filter((ask) => ask.status === "pending").length
-  );
+  /**
+   * The asks still waiting on an answer. One lands in the register as it is
+   * asked and leaves it once answered or refused, both through `reflow`.
+   */
+  const waiting = $derived(asks.filter((ask) => ask.status === "pending"));
+  const pendingAsks = $derived(waiting.length);
 
   const live = $derived(
     row?.status === "running" || row?.status === "starting"
@@ -253,6 +259,17 @@
     return phase === "reported" ? "done" : "idle";
   });
   const phaseWord = $derived(phase === "blocked" ? "needs an answer" : phase);
+  /** What the pill says before its clock: the phase, and how many reports. */
+  const pillWords = $derived(
+    [
+      phase === "reported" ? "" : phaseWord,
+      report?.count
+        ? `${report.count} report${report.count === 1 ? "" : "s"}`
+        : "",
+    ]
+      .filter(Boolean)
+      .join(" · ")
+  );
 
   // Elapsed is a clock: while it runs the card re-reads it on its own, and once
   // it has settled the last report is the end of the run.
@@ -289,9 +306,65 @@
       : (row?.lastError ?? (report?.failed ? headline(report.body) : ""))
   );
 
+  /**
+   * The pill's words and clock morph letter by letter (TextMorph, over
+   * --dur-morph) once the page is live; the server draws them as plain text,
+   * which TextMorph would draw empty.
+   */
+  let morphMs = $state(0);
+  $effect(() => {
+    morphMs = dur("--dur-morph");
+  });
+
   /** Kept by the call that started it, so a card the reader opened stays open. */
   const disclosed = $derived(disclosure(message));
   const open = $derived(disclosed.get());
+
+  /**
+   * The line under the head: what it is doing, that it failed, or — closed —
+   * the headline of its last report. `kind` is what a phase change swaps.
+   */
+  const status = $derived.by(
+    (): { kind: string; text: string; err: boolean; beat: boolean } | null => {
+      if (phase === "working") {
+        return {
+          kind: "working",
+          text: currentTool
+            ? `${currentTool.name} ${currentTool.glance}`.trim()
+            : "working",
+          err: false,
+          beat: true,
+        };
+      }
+      if (phase === "spawning") {
+        return { kind: "spawning", text: "starting", err: false, beat: true };
+      }
+      if (phase === "failed" && failure) {
+        return { kind: "failed", text: failure, err: true, beat: false };
+      }
+      if (report && !open) {
+        return {
+          kind: "report",
+          text: headline(report.body),
+          err: report.failed,
+          beat: false,
+        };
+      }
+      return null;
+    }
+  );
+  /**
+   * A phase change cross-fades the line in one cell over --dur-control, the
+   * old one going as the new one comes. A line with nothing after it — the
+   * report's headline as the card opens — goes at once, as it always has.
+   */
+  function lineSwap(_node: Element) {
+    return {
+      duration: dur("--dur-control"),
+      easing: easeOut,
+      css: (t: number) => `opacity: ${t}`,
+    };
+  }
   /**
    * Opening the card is the only sign this transcript is wanted: watching
    * subscribes its frames, the backfill reads what was stored before this tab.
@@ -371,19 +444,34 @@
           <span class="may">may delegate</span>
         {/if}
         <span class="pill {tone}">
-          {#if phase !== 'reported'}
-            {phaseWord}
-          {/if}
-          {#if report?.count}
-            {#if phase !== 'reported'}
-              {' · '}
-            {/if}
-            {report.count}
-            report{report.count === 1 ? '' : 's'}
-          {/if}
-          {#if elapsed}
-            {' · '}
-            <span class="elapsed" class:ticking={inFlight}>{elapsed}</span>
+          {#if morphMs}
+            <!-- One box per letter once morphed, which a screen reader would
+                 spell out: the name is read from the plain copy beside it. -->
+            <span aria-hidden="true" class="pill-words"
+              ><TextMorph
+                as="span"
+                duration={morphMs}
+                ease={CURVE.out}
+                text={pillWords}
+              />{#if elapsed}{pillWords ? ' · ' : ''}<span
+                  class="elapsed"
+                  class:ticking={inFlight}
+                  ><TextMorph
+                    as="span"
+                    duration={morphMs}
+                    ease={CURVE.out}
+                    text={elapsed}
+                  /></span
+                >{/if}</span
+            >
+            <span class="sr-only"
+              >{[pillWords, elapsed].filter(Boolean).join(' · ')}</span
+            >
+          {:else}
+            {pillWords}{#if elapsed}{pillWords ? ' · ' : ''}<span
+                class="elapsed"
+                class:ticking={inFlight}>{elapsed}</span
+              >{/if}
           {/if}
         </span>
       </Collapsible.Trigger>
@@ -403,30 +491,28 @@
       <p class="brief">{headline(brief)}</p>
     {/if}
 
-    {#if phase === 'working'}
-      <p class="now">
-        <span aria-hidden="true" class="beat"></span>
-        {currentTool ? `${currentTool.name} ${currentTool.glance}`.trim() : 'working'}
-      </p>
-    {:else if phase === 'spawning'}
-      <p class="now"><span aria-hidden="true" class="beat"></span>starting</p>
-    {:else if phase === 'failed' && failure}
-      <p class="now err">{failure}</p>
-    {:else if report && !open}
-      <p class="now" class:err={report.failed}>{headline(report.body)}</p>
+    {#if status}
+      <div class="status">
+        {#key status.kind}
+          <p class="now" class:err={status.err} in:lineSwap out:lineSwap>
+            {#if status.beat}
+              <span aria-hidden="true" class="beat"></span>
+            {/if}
+            {status.text}
+          </p>
+        {/key}
+      </div>
     {/if}
 
-    {#if asks.length}
-      <ul class="asks">
-        {#each asks as ask (ask.key)}
-          <li class="ask {ask.status}" title={ask.detail}>
-            <span aria-hidden="true" class="dot"></span>
-            <span class="astate">{ask.status}</span>
-            <span class="ashort">{ask.short}</span>
-          </li>
-        {/each}
-      </ul>
-    {/if}
+    <ul class="asks" {@attach reflow()}>
+      {#each waiting as ask (ask.key)}
+        <li class="ask" data-flip title={ask.detail}>
+          <span aria-hidden="true" class="dot"></span>
+          <span class="astate">{ask.status}</span>
+          <span class="ashort">{ask.short}</span>
+        </li>
+      {/each}
+    </ul>
 
     <Collapsible.Content reveal>
       <!-- The rows, then the report as one more unit: a report is often the
@@ -648,6 +734,10 @@
     background: var(--status-idle-bg);
     color: var(--status-idle-ink);
     white-space: nowrap;
+    /* A phase change carries its tone across with its words. */
+    transition:
+      background-color var(--dur-control) var(--ease-out),
+      color var(--dur-control) var(--ease-out);
   }
   .pill.live {
     background: var(--status-live-bg);
@@ -714,6 +804,14 @@
     overflow-wrap: anywhere;
   }
 
+  /* One cell: a phase's line and the next one's cross-fade in place. */
+  .status {
+    display: grid;
+
+    & > .now {
+      grid-area: 1 / 1;
+    }
+  }
   .now {
     display: flex;
     align-items: baseline;
@@ -746,11 +844,12 @@
     }
   }
 
-  /* The asks register: each ask on its own line with its state in words —
-     the dot is the second cue. A pending one is the card's only warm colour. */
+  /* The asks register: each ask still waiting on an answer, on its own line
+     with its state in words — the dot is the second cue, and the card's only
+     warm colour. */
   .asks {
     list-style: none;
-    margin-block: var(--space-1) 0;
+    margin-block: 0;
     margin-inline: var(--glyph) 0;
     padding: 0;
     display: flex;
@@ -767,37 +866,28 @@
     line-height: var(--leading-body);
     color: var(--ink-strong);
     min-inline-size: 0;
+
+    /* The register is always there for an ask to land in; it takes room
+       only with one in it. */
+    &:first-child {
+      margin-block-start: var(--space-1);
+    }
   }
   .dot {
     inline-size: 5px;
     block-size: 5px;
     flex: 0 0 auto;
     border-radius: 50%;
-    background: var(--status-idle-ink);
-    align-self: center;
-  }
-  .ask.pending .dot {
     background: var(--status-attn-ink);
-  }
-  .ask.answered .dot {
-    background: var(--status-done-ink);
-  }
-  .ask.denied .dot {
-    background: var(--status-fail-ink);
+    align-self: center;
   }
   .astate {
     flex: 0 0 auto;
     font-size: var(--text-meta);
     font-weight: var(--weight-body);
-    color: var(--ink-muted);
+    color: var(--status-attn-ink);
     text-transform: uppercase;
     letter-spacing: 0.02em;
-  }
-  .ask.pending .astate {
-    color: var(--status-attn-ink);
-  }
-  .ask.denied .astate {
-    color: var(--status-fail-ink);
   }
   .ashort {
     min-inline-size: 0;
