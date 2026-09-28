@@ -29,6 +29,12 @@
  * the inline transforms are cleared and the parking places take over.
  */
 import { flushSync } from "svelte";
+import {
+  integrate,
+  spring as play,
+  type Sample,
+  sampleAt,
+} from "../motion/spring";
 import { workspace } from "./workspace.svelte";
 
 /** Travel before a drag is anything at all. */
@@ -42,23 +48,8 @@ const FLICK = 0.3;
 /** How much of a drag past the last tab is shown, and the most it can show. The deck's. */
 const RESIST = 0.35;
 const RESIST_MAX = 0.25;
-/** The settle: the deck's spring, so a tab and a group arrive the same way. */
-const SETTLE = 0.4;
-const BOUNCE = 0;
-const MASS = 1;
-const STIFFNESS = ((2 * Math.PI) / SETTLE) ** 2;
-const DAMPING = (4 * Math.PI * (1 - BOUNCE)) / SETTLE;
-const STEP = 1 / 120;
-const MAX_SETTLE = 1.5;
-const KEYFRAME_MS = 8;
 
 type Phase = "idle" | "tracking" | "decided";
-/** One point of the integrated settle: seconds since release, px, px/s. */
-interface Sample {
-  t: number;
-  v: number;
-  x: number;
-}
 /** A pane in view: its element and its distance from the active tab. */
 interface Pane {
   delta: number;
@@ -247,65 +238,21 @@ export function createSwipe(
     if (typeof at !== "number" || path.length === 0) {
       return null;
     }
-    const now = at / 1000;
-    const i = path.findIndex((sample) => sample.t >= now);
-    if (i < 0) {
-      // biome-ignore lint/style/useAtIndex: path is non-empty here (checked above); .at(-1) would widen the return to Sample | undefined
-      return path[path.length - 1];
-    }
-    if (i === 0) {
-      return path[0];
-    }
-    const a = path[i - 1];
-    const b = path[i];
-    const f = (now - a.t) / (b.t - a.t);
-    return { t: now, x: a.x + (b.x - a.x) * f, v: a.v + (b.v - a.v) * f };
-  };
-
-  /** The settle, integrated from here to rest. Always at least two points, the last exactly at rest. */
-  const integrate = (x0: number, v0: number): Sample[] => {
-    const out: Sample[] = [{ t: 0, x: x0, v: v0 }];
-    let x = x0;
-    let v = v0;
-    let t = 0;
-    for (;;) {
-      const a = (-STIFFNESS * x - DAMPING * v) / MASS;
-      v += a * STEP;
-      x += v * STEP;
-      t += STEP;
-      const done = (Math.abs(x) < 0.5 && Math.abs(v) < 20) || t >= MAX_SETTLE;
-      out.push(done ? { t, x: 0, v: 0 } : { t, x, v });
-      if (done) {
-        return out;
-      }
-    }
+    return sampleAt(path, at / 1000);
   };
 
   /** The settle, played by the compositor: the path as keyframes, one set per pane, offset by its parking place. */
   function spring(velocity: number) {
     stopSettle();
     path = integrate(offset, velocity);
-    // biome-ignore lint/style/useAtIndex: integrate() always returns at least one point; .at(-1) would widen this to undefined
-    const duration = path[path.length - 1].t;
-
-    const kept: Sample[] = [path[0]];
-    for (let i = 1; i < path.length - 1; i += 1) {
-      // biome-ignore lint/style/useAtIndex: kept is never empty (seeded above); .at(-1) would widen to undefined
-      if ((path[i].t - kept[kept.length - 1].t) * 1000 >= KEYFRAME_MS) {
-        kept.push(path[i]);
-      }
-    }
-    // biome-ignore lint/style/useAtIndex: integrate() always returns at least one point; .at(-1) would widen to undefined, and push() needs a Sample
-    kept.push(path[path.length - 1]);
-
-    animations = panes.map(({ el, delta }) =>
-      el.animate(
-        kept.map((sample) => ({
-          transform: `translate3d(${rest(delta) + sample.x}px, 0, 0)`,
-          offset: sample.t / duration,
-        })),
-        { duration: duration * 1000, easing: "linear", fill: "forwards" }
-      )
+    animations = play(
+      path,
+      panes.map(({ el, delta }) => ({
+        el,
+        frame: (x) => ({
+          transform: `translate3d(${rest(delta) + x}px, 0, 0)`,
+        }),
+      }))
     );
     const active = animations[panes.findIndex((pane) => pane.delta === 0)];
     if (!active) {
