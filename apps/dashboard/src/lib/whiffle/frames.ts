@@ -126,7 +126,17 @@ export interface FrameMapping {
    * stamp it and edit/fork can anchor on a message the reader just sent
    * instead of waiting for a transcript re-read.
    */
-  echo?: { uuid: string; text: string; queueId?: string };
+  echo?: {
+    uuid: string;
+    text: string;
+    queueId?: string;
+    /**
+     * A message the reader sent mid-turn, read where the model folded it into
+     * the running turn. `mapFrame` has pushed it; the store retires the queued
+     * row this tab drew for it and flies that row into it.
+     */
+    absorbed?: true;
+  };
   /** The turn is over — the session is idle again. */
   endsTurn: boolean;
   /**
@@ -637,6 +647,19 @@ export function mapFrame(instanceId: string, sdk: SDKMessage): FrameMapping {
       // too: retiring the row is what the store does with it, and it happens
       // whether or not the `message_dequeued` frame arrived first.
       const queueId = "queueId" in sdk ? sdk.queueId : undefined;
+      // A message the reader sent while the turn was running, which the model
+      // folded into it at a tool boundary. Nothing else draws it as a turn —
+      // the sender's tab holds it as a queued row, other tabs hold nothing —
+      // so it is pushed here, where it was read, at the time it was sent.
+      if ("sourceUuid" in sdk && sdk.sourceUuid && uuid && !agentId) {
+        mapping.messages.push({
+          ...base,
+          ...(sdk.timestamp && { timestamp: new Date(sdk.timestamp) }),
+          ...userBody(text ?? "", transcriptUserImages(sdk.message)),
+        });
+        mapping.echo = { uuid, text: text ?? "", absorbed: true };
+        break;
+      }
       if (text && (agentId || systemNote(text))) {
         mapping.messages.push({
           ...base,
@@ -1305,10 +1328,17 @@ function userBody(
 ): Pick<Message, "type" | "content" | "metadata"> {
   const note = systemNote(text);
   if (!note) {
+    const { typed, attachments } = pastedText(text);
     return {
       type: "user",
-      content: text,
-      metadata: images ? { images } : undefined,
+      content: typed,
+      metadata:
+        images || attachments
+          ? {
+              ...(images ? { images } : {}),
+              ...(attachments ? { attachments } : {}),
+            }
+          : undefined,
     };
   }
   return {
@@ -1320,6 +1350,33 @@ function userBody(
       ...(note.taskToolId ? { noteTaskToolId: note.taskToolId } : {}),
     },
   };
+}
+
+/**
+ * A file the reader attached, as every harness folds it into the prompt
+ * (`\n\n<pasted-text name="…">\n…\n</pasted-text>`, claude.ts / opencode.ts /
+ * pi.ts). OpenCode stores it as its own text part, which the stored read joins
+ * back on a newline, so any run of newlines before it belongs to it.
+ */
+const PASTED_TEXT =
+  /\n*<pasted-text name="([^"\n]*)">\n([\s\S]*?)\n<\/pasted-text>/g;
+
+/**
+ * A user turn split back into what the reader typed and the files they
+ * attached to it. A block that does not close stays in the text as written.
+ */
+function pastedText(text: string): {
+  typed: string;
+  attachments?: NonNullable<MessageMetadata["attachments"]>;
+} {
+  const attachments = Array.from(text.matchAll(PASTED_TEXT), (match) => ({
+    name: match[1],
+    content: match[2],
+  }));
+  if (!attachments.length) {
+    return { typed: text };
+  }
+  return { typed: text.replace(PASTED_TEXT, "").trimEnd(), attachments };
 }
 
 const TASK_NOTIFICATION_SUMMARY = /<summary>([\s\S]*?)<\/summary>/;
@@ -1873,7 +1930,7 @@ export function localUserMessage(
       ? {
           attachments: attachments?.map(({ name, content }) => ({
             name,
-            chars: content.length,
+            content,
           })),
           images: images?.map(({ mediaType, data }) => ({
             mediaType,

@@ -97,9 +97,12 @@
     const row = node;
     let fold: Animation | null = null;
     let standing = true;
+    // Read as the fold starts, while this row is still the one it names: the
+    // list can move under it before the fold ends (Transcript's `leaver`).
+    const report = untrack(() => onleft);
     untrack(() => {
       if (!(motionOk.current && ledger?.watched)) {
-        onleft?.();
+        report?.();
         return;
       }
       const style = getComputedStyle(row);
@@ -121,7 +124,7 @@
       fold.finished.then(
         () => {
           if (standing) {
-            onleft?.();
+            report?.();
           }
         },
         () => {

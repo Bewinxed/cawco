@@ -11,7 +11,7 @@
  */
 
 import type { Dirent } from "node:fs";
-import { access, readdir, readFile, realpath } from "node:fs/promises";
+import { access, readdir, readFile, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
 import {
@@ -64,6 +64,11 @@ import {
 } from "@whiffle/core";
 import { sessiondEndpoint } from "@whiffle/core/sessiond";
 import { observeRateLimit } from "@whiffle/core/usage/observed";
+import {
+  type Checkpoint,
+  readTranscriptTail,
+  typeFilter,
+} from "@whiffle/jsonl-parser";
 import { probeAuth, unlockKeychain } from "../auth";
 import { delegationMcp, MCP_SERVER_NAME } from "../delegation";
 import { resolvedDenyList } from "../denied-tools";
@@ -95,6 +100,8 @@ import {
 import { resolveBin } from "../tools";
 import { claudeConfigDirs } from "../usage/scan-claude";
 import {
+  absorbedMessage,
+  type RawRecord,
   readSessionEnd,
   readSessionFull,
   readSessionWhole,
@@ -517,6 +524,37 @@ export const dequeuedFrame = (
   queueId,
 });
 
+/**
+ * The frame for a message the model folded into its running turn, read off the
+ * transcript ({@link absorbedMessage}) because stdout never carries it. It
+ * keeps the transcript line's uuid, so the stored copy a later read brings is
+ * the same message, not a second one.
+ */
+const absorbedFrame = (absorbed: SDKSessionMessage): NeutralMessage =>
+  ({
+    type: "user",
+    uuid: absorbed.uuid,
+    session_id: absorbed.session_id,
+    parent_tool_use_id: null,
+    message: absorbed.message,
+    timestamp: absorbed.timestamp,
+    ...(absorbed.sourceUuid ? { sourceUuid: absorbed.sourceUuid } : {}),
+  }) as NeutralMessage;
+
+/** Only these transcript lines can carry an absorbed message. */
+const ABSORBED_LINES = typeFilter("attachment");
+
+/**
+ * The frames after which an absorbed message is on disk: the main loop opening
+ * its next model call (the fold is written before the request that carries
+ * it), and the turn's `result`.
+ */
+const readsAbsorbed = (message: SDKMessage): boolean =>
+  message.type === "result" ||
+  (message.type === "stream_event" &&
+    message.parent_tool_use_id === null &&
+    message.event.type === "message_start");
+
 /** Whether a turn is in flight, and a way to wait for the one that is. */
 class Turn {
   busy = false;
@@ -620,6 +658,20 @@ class ClaudeSession implements HarnessSession {
    * {@link #pumpMessages} tags the frame before it leaves the daemon.
    */
   readonly #awaitingEcho: { queueId: string; text: string }[] = [];
+  /**
+   * Where this session's transcript is being read for messages the model
+   * absorbs mid-turn, from the byte it had reached when the reader first sent
+   * during the running turn. Null while no such message can be waiting.
+   *
+   * The CLI takes a send off its stdin at once and holds it in its own queue;
+   * at the next tool boundary it folds it into the turn and says so only in
+   * the transcript. So the transcript is read — only the appended bytes — each
+   * time the main loop opens a new model call, which is after the fold was
+   * written, and the frame goes out ahead of what the model says next.
+   */
+  #absorbing: Promise<{ path: string; checkpoint: Checkpoint } | null> | null =
+    null;
+  readonly #workdir: string;
   readonly instanceId: string;
 
   constructor(
@@ -645,6 +697,7 @@ class ClaudeSession implements HarnessSession {
   ) {
     this.instanceId = instanceId;
     this.#ctx = ctx;
+    this.#workdir = workdir;
     // The model just pulled a held turn: retire the queue entry, and remember
     // the text so the frame that echoes it can be tagged with the same id.
     const input = new InputStream((queueId) => this.#dequeue(queueId));
@@ -852,6 +905,51 @@ class ClaudeSession implements HarnessSession {
     neutral.queueId = matched.queueId;
   }
 
+  /**
+   * The reader sent while a turn is running: mark where the transcript ends
+   * now, so the fold that absorbs the message is the next thing read from it.
+   */
+  #watchAbsorption(): void {
+    const { sessionId } = this;
+    if (this.#absorbing || !sessionId) {
+      return;
+    }
+    this.#absorbing = claudeSessionFile(sessionId, this.#workdir).then(
+      async (path) => {
+        if (!path) {
+          return null;
+        }
+        const { size } = await stat(path);
+        return { path, checkpoint: { size, offset: size, lines: 0 } };
+      }
+    );
+  }
+
+  /**
+   * Frames every message the model has absorbed since the last read. At the
+   * turn's `result` nothing more can be absorbed into it — a send still held
+   * becomes the next turn — so the watch ends there.
+   */
+  async #emitAbsorbed(ending: boolean): Promise<void> {
+    const watch = await this.#absorbing;
+    if (ending) {
+      this.#absorbing = null;
+    }
+    if (!watch) {
+      return;
+    }
+    const read = await readTranscriptTail(watch.path, watch.checkpoint, {
+      prefilter: ABSORBED_LINES,
+    });
+    watch.checkpoint = read.checkpoint;
+    for (const located of read.records) {
+      const absorbed = absorbedMessage(located.record as unknown as RawRecord);
+      if (absorbed) {
+        this.#ctx.frame(absorbedFrame(absorbed));
+      }
+    }
+  }
+
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the session's whole live-frame pipeline — echo tagging, question dismissal, structured-result folding, busy/failed reporting — one pass per SDK message
   async #pumpMessages(
     ctx: HarnessContext,
@@ -860,6 +958,11 @@ class ClaudeSession implements HarnessSession {
   ): Promise<void> {
     try {
       for await (const message of handle) {
+        // A message the reader sent mid-turn is read where the model read it:
+        // before the answer that follows it, and before the turn closes.
+        if (this.#absorbing && readsAbsorbed(message)) {
+          await this.#emitAbsorbed(message.type === "result");
+        }
         const neutral = toNeutral(message);
         // The turn this frame is, when it is one the session had to hold.
         this.#tagEcho(neutral);
@@ -937,6 +1040,13 @@ class ClaudeSession implements HarnessSession {
   ): void {
     const sdk = message as unknown as SDKUserMessage;
     const queued = (message as { shouldQuery?: boolean }).shouldQuery === false;
+
+    // The reader's words, into a running turn: the CLI may fold them in at its
+    // next tool boundary, and only the transcript will say so.
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: Turn.busy is mutated by Turn.start()/.end() elsewhere; the checker doesn't see that cross-class mutation
+    if (this.#turn.busy && !isInjected(message.origin)) {
+      this.#watchAbsorption();
+    }
 
     // A mid-turn injection: the model reads it at the next tool boundary without
     // losing work. If the stream is gone, fall back to queueing it.

@@ -76,6 +76,7 @@ import {
 } from "./frames";
 import { newId } from "./id";
 import { conversationHref, indexInstances, instanceForSession } from "./links";
+import { departFrom } from "./motion/share.svelte";
 import { type PendingSelection, selectionExtras } from "./preview/selection";
 import {
   adoptQueue,
@@ -1555,8 +1556,24 @@ function handleFrame(frame: FramePayload): void {
         // queued row it replaces is not a copy anything can stamp. Its id is
         // the second way a row retires — the dequeue frame can be raced by the
         // turn it announces, or missed entirely by a tab that just subscribed.
-        const { uuid, text, queueId } = mapping.echo;
-        if (queueId) {
+        const { uuid, text, queueId, absorbed } = mapping.echo;
+        if (absorbed) {
+          // The model read it mid-turn. The row this tab drew at the press is
+          // taken out of the queue, and its words fly from where the row still
+          // stands into the turn `mapFrame` just pushed — measured now, before
+          // this change is drawn and the row is gone.
+          const drawn = takeDrawn(target, (entry) => entry.text === text);
+          if (drawn) {
+            departFrom(
+              `[data-queued="${CSS.escape(drawn.sentAs ?? drawn.queueId)}"]`,
+              `sent:${text}`
+            );
+            const read = target.messages.findLast((m) => m.sdkUuid === uuid);
+            if (read) {
+              read.metadata = { ...read.metadata, queuedLocally: true };
+            }
+          }
+        } else if (queueId) {
           retireQueued(target, queueId);
           // Queued and run without this tab hearing the announcement: the entry
           // it drew at the press is this turn too.

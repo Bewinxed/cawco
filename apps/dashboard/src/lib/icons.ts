@@ -33,10 +33,12 @@ export { default as IconSuccess } from "~icons/solar/check-circle-bold-duotone";
 export { default as IconCheck } from "~icons/solar/check-read-bold-duotone";
 export { default as IconToolTodo } from "~icons/solar/checklist-bold-duotone";
 export { default as IconReport } from "~icons/solar/clipboard-check-bold-duotone";
+export { default as IconFileTable } from "~icons/solar/clipboard-list-bold-duotone";
 export { default as IconReportFailed } from "~icons/solar/clipboard-remove-bold-duotone";
 export { default as IconClock } from "~icons/solar/clock-circle-bold-duotone";
 export { default as IconError } from "~icons/solar/close-circle-bold-duotone";
 export { default as IconToolCode } from "~icons/solar/code-2-bold-duotone";
+export { default as IconFileCode } from "~icons/solar/code-file-bold-duotone";
 export {
   default as IconTerminal,
   default as IconToolTerminal,
@@ -50,7 +52,10 @@ export {
 } from "~icons/solar/cursor-bold-duotone";
 export { default as IconAlert } from "~icons/solar/danger-circle-bold-duotone";
 export { default as IconWarningTriangle } from "~icons/solar/danger-triangle-bold-duotone";
-export { default as IconToolRead } from "~icons/solar/document-text-bold-duotone";
+export {
+  default as IconFileMarkdown,
+  default as IconToolRead,
+} from "~icons/solar/document-text-bold-duotone";
 export { default as IconDollar } from "~icons/solar/dollar-bold-duotone";
 export { default as IconDownload } from "~icons/solar/download-bold-duotone";
 export { default as IconEye } from "~icons/solar/eye-bold-duotone";
@@ -84,10 +89,12 @@ export { default as IconMapPoint } from "~icons/solar/map-point-bold-duotone";
 export { default as IconMaximize } from "~icons/solar/maximize-bold-duotone";
 export { default as IconMore } from "~icons/solar/menu-dots-bold-duotone";
 export { default as IconMic } from "~icons/solar/microphone-bold-duotone";
+export { default as IconZoomIn } from "~icons/solar/minimalistic-magnifer-zoom-in-bold-duotone";
 export { default as IconMonitor } from "~icons/solar/monitor-bold-duotone";
 export { default as IconMoon } from "~icons/solar/moon-bold-duotone";
 export { default as IconMoonSleep } from "~icons/solar/moon-sleep-bold-duotone";
 export { default as IconToolNotebook } from "~icons/solar/notebook-bold-duotone";
+export { default as IconFileLog } from "~icons/solar/notes-bold-duotone";
 /** Solar's own spelling. The `palette-*` cut is a board; this one is the palette. */
 export { default as IconPalette } from "~icons/solar/pallete-2-bold-duotone";
 export { default as IconToolEdit } from "~icons/solar/pen-2-bold-duotone";

@@ -15,15 +15,16 @@ declare const Bun:
   | {
       file(path: string): {
         arrayBuffer(): Promise<ArrayBuffer>;
-        slice(start: number, end: number): { arrayBuffer(): Promise<ArrayBuffer> };
+        slice(start: number, end?: number): { arrayBuffer(): Promise<ArrayBuffer> };
       };
     }
   | undefined;
 
 async function readBytes(path: string, offset = 0): Promise<Uint8Array> {
   if (typeof Bun !== "undefined") {
-    const buf = new Uint8Array(await Bun.file(path).arrayBuffer());
-    return offset > 0 ? buf.subarray(offset) : buf;
+    // Only the bytes past `offset` leave the disk: a tail of a 50 MB
+    // transcript is the few kilobytes appended since the checkpoint.
+    return new Uint8Array(await Bun.file(path).slice(offset).arrayBuffer());
   }
   const { readFile } = await import("node:fs/promises");
   const buf = await readFile(path);

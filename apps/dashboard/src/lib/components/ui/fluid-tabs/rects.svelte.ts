@@ -1,13 +1,21 @@
 /**
- * Where each tab sits in its track, for the overlays the track places from
- * measurements: the chosen segment, a gesture carrying it part-way to
- * another tab, the focus ring, and the scroll that keeps the chosen tab in
- * view. The hover layer is not one of them: it is the kit's highlight.
+ * The tabs in their track: in what order they stand, and where each one is
+ * laid out, for the overlays the track places from measurements — the
+ * chosen segment, a gesture carrying it part-way to another tab, the focus
+ * ring, the hover ghost, and the scroll that keeps the chosen tab in view.
  *
  * Rects are layout values (`offset*`), accumulated up to the track, so they
  * are in the track's own coordinate space — the space an absolutely
- * positioned overlay lives in — and unaffected by transforms on ancestors.
+ * positioned overlay lives in — and unaffected by transforms: a tab a FLIP
+ * is still carrying from where it stood is measured where it lands.
+ *
+ * They are re-measured whenever a tab can have moved, not only resized: a
+ * tab or the track resizing, a tab arriving or leaving, the tabs being
+ * reordered, or a box that holds a tab restyled (a closing tab taken out
+ * of the flow, which slides every tab after it over without resizing any).
  */
+
+import { untrack } from "svelte";
 
 export interface ItemRect {
   height: number;
@@ -17,29 +25,58 @@ export interface ItemRect {
 }
 
 export class TabRects {
-  rects = $state<ItemRect[]>([]);
+  /** The tabs, in the order they stand in the track. */
+  items = $state.raw<HTMLElement[]>([]);
+  /** Where each tab is laid out. */
+  rects = $state.raw<ReadonlyMap<HTMLElement, ItemRect>>(new Map());
   /** The track's own inner size, re-read with the items: a track that
       narrows moves what is in view even when no item moved. */
   viewport = $state({ width: 0, height: 0 });
 
+  readonly #values = new Map<HTMLElement, string>();
+  readonly #onOrder: (values: string[]) => void;
   #container: HTMLElement | null = null;
-  readonly #items = new Map<number, HTMLElement>();
   #frame: number | null = null;
-  #observer: ResizeObserver | null = null;
+  #sizes: ResizeObserver | null = null;
+  #moves: MutationObserver | null = null;
+
+  /** `onOrder` hears the tabs' values in the order they stand. */
+  constructor(onOrder: (values: string[]) => void) {
+    this.#onOrder = onOrder;
+  }
+
+  /** The box of the tab at a place in the order. */
+  at(index: number | null): ItemRect | undefined {
+    return index === null ? undefined : this.rects.get(this.items[index]);
+  }
 
   /** Svelte action for the track. */
   container = (node: HTMLElement) => {
     this.#container = node;
-    this.#observer = new ResizeObserver(() => this.#schedule());
-    this.#observer.observe(node);
-    for (const el of this.#items.values()) {
-      this.#observer.observe(el);
+    this.#sizes = new ResizeObserver(() => this.#schedule());
+    this.#sizes.observe(node);
+    for (const el of this.#values.keys()) {
+      this.#sizes.observe(el);
     }
+    this.#moves = new MutationObserver((records) => {
+      if (records.some((record) => this.#canMove(record))) {
+        this.#sort();
+        this.#schedule();
+      }
+    });
+    this.#moves.observe(node, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ["style", "class"],
+    });
     this.#schedule();
     return {
       destroy: () => {
-        this.#observer?.disconnect();
-        this.#observer = null;
+        this.#sizes?.disconnect();
+        this.#sizes = null;
+        this.#moves?.disconnect();
+        this.#moves = null;
         this.#container = null;
         if (this.#frame !== null) {
           cancelAnimationFrame(this.#frame);
@@ -48,18 +85,66 @@ export class TabRects {
     };
   };
 
-  /** Registers an item at an index for as long as it is mounted. */
-  register(index: number, element: HTMLElement): () => void {
-    this.#items.set(index, element);
-    this.#observer?.observe(element);
-    this.#schedule();
-    return () => {
-      if (this.#items.get(index) === element) {
-        this.#items.delete(index);
-      }
-      this.#observer?.unobserve(element);
+  /**
+   * Registers a tab and its value for as long as it is mounted. Called from
+   * the item's effect, so the order it reads and rewrites is untracked: the
+   * effect depends on the tab and its value, not on the order it changes.
+   */
+  register(element: HTMLElement, value: string): () => void {
+    untrack(() => {
+      this.#values.set(element, value);
+      this.#sizes?.observe(element);
+      this.#sort();
       this.#schedule();
+    });
+    return () =>
+      untrack(() => {
+        this.#values.delete(element);
+        this.#sizes?.unobserve(element);
+        this.#sort();
+        this.#schedule();
+      });
+  }
+
+  /**
+   * Whether a change in the track can have moved a tab: a node carrying one
+   * added, removed or moved (a reorder), or a box holding one restyled. A
+   * tab's own style is the kit's — a gesture's `--ride`, every frame — and
+   * moves nothing; nor do the overlays, which hold no tab.
+   */
+  #canMove(record: MutationRecord): boolean {
+    const holds = (node: Node) => {
+      for (const item of this.#values.keys()) {
+        if (node !== item && node.contains(item)) {
+          return true;
+        }
+      }
+      return false;
     };
+    if (record.type === "childList") {
+      return [...record.addedNodes, ...record.removedNodes].some(
+        (node) => this.#values.has(node as HTMLElement) || holds(node)
+      );
+    }
+    return holds(record.target);
+  }
+
+  /** The tabs in document order, and their values handed to the root. */
+  #sort(): void {
+    const next = [...this.#values.keys()]
+      .filter((el) => el.isConnected)
+      // Tabs never hold one another, so `b` is either after `a` or before it.
+      .sort((a, b) =>
+        a.compareDocumentPosition(b) === Node.DOCUMENT_POSITION_FOLLOWING
+          ? -1
+          : 1
+      );
+    const prev = this.items;
+    if (next.length === prev.length && next.every((el, i) => el === prev[i])) {
+      return;
+    }
+    this.items = next;
+    this.#onOrder(next.map((el) => this.#values.get(el) as string));
   }
 
   #schedule(): void {
@@ -77,8 +162,8 @@ export class TabRects {
     if (!container) {
       return;
     }
-    const rects: ItemRect[] = [];
-    for (const [index, element] of this.#items) {
+    const rects = new Map<HTMLElement, ItemRect>();
+    for (const element of this.items) {
       if (element.offsetParent === null) {
         continue;
       }
@@ -94,23 +179,22 @@ export class TabRects {
         left += ancestor.offsetLeft + ancestor.clientLeft;
         ancestor = ancestor.offsetParent as HTMLElement | null;
       }
-      rects[index] = {
+      rects.set(element, {
         top,
         left,
         width: element.offsetWidth,
         height: element.offsetHeight,
-      };
+      });
     }
     const prev = this.rects;
-    let changed = prev.length !== rects.length;
-    for (let i = 0; !changed && i < rects.length; i += 1) {
-      const p = prev[i];
-      const r = rects[i];
-      if (p === r) {
-        continue;
+    let changed = prev.size !== rects.size;
+    for (const [element, r] of rects) {
+      if (changed) {
+        break;
       }
+      const p = prev.get(element);
       changed =
-        !(p && r) ||
+        !p ||
         p.top !== r.top ||
         p.left !== r.left ||
         p.width !== r.width ||
