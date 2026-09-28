@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Button } from "$lib/components/ui/button";
+  import { reflow } from "$lib/whiffle/motion/rows.svelte";
   import {
     loadRuleActivity,
     message,
@@ -62,68 +63,82 @@
   only place it is visible. Anything a session wrote back appears here.
 </p>
 
-{#if loading}
-  <p class="note">Loading…</p>
-{:else if failed}
-  <p class="caution" role="alert">{failed}</p>
-{:else if rows.length === 0}
-  <p class="note">
-    It has not caught anything yet. Nothing to see is the good outcome.
-  </p>
-{:else}
-  {#if waiting > 0}
-    <p class="caution">
-      {waiting}
-      {waiting === 1 ? 'session is' : 'sessions are'}
-      still being reminded — nothing written back yet.
+<!-- Rows that arrive, leave or move (a catch coming in, Show all) go
+     through reflow: uncovered and faded in, closed and faded out, what
+     follows sliding (motion/rows.svelte.ts). -->
+<div class="activity" {@attach reflow()}>
+  {#if loading}
+    <p class="note">Loading…</p>
+  {:else if failed}
+    <p class="caution" role="alert">{failed}</p>
+  {:else if rows.length === 0}
+    <p class="note">
+      It has not caught anything yet. Nothing to see is the good outcome.
     </p>
-  {/if}
-  <ul class="list">
-    {#each visible as row (row.instanceId)}
-      <li class="entry">
-        <div class="top">
-          <span class="where">
-            <span class="path">{row.where}</span>
-            {#if row.harness}
-              <span class="muted">{row.harness}</span>
-            {/if}
-          </span>
-          <span class="muted">
-            {times(row.totalFires)}, last {since(row.lastFiredAt)}
-          </span>
-        </div>
+  {:else}
+    {#if waiting > 0}
+      <p class="caution num" data-flip>
+        {waiting}
+        {waiting === 1 ? 'session is' : 'sessions are'}
+        still being reminded — nothing written back yet.
+      </p>
+    {/if}
+    <ul class="list">
+      {#each visible as row (row.instanceId)}
+        <li class="entry" data-flip>
+          <div class="top">
+            <span class="where">
+              <span class="path">{row.where}</span>
+              {#if row.harness}
+                <span class="muted">{row.harness}</span>
+              {/if}
+            </span>
+            <span class="muted">
+              {times(row.totalFires)}, last {since(row.lastFiredAt)}
+            </span>
+          </div>
 
-        {#if row.status === 'pending'}
-          <p class="caution">
-            Reminded {times(row.fireCount)} since it last wrote back.
-          </p>
-        {/if}
+          {#if row.status === 'pending'}
+            <p class="caution">
+              Reminded {times(row.fireCount)} since it last wrote back.
+            </p>
+          {/if}
 
-        {#if row.ackNote}
-          <!-- The session's own words, quoted rather than paraphrased. -->
-          <blockquote class="quote">{row.ackNote}</blockquote>
-          <span class="muted">Written back {since(row.ackedAt)}.</span>
-        {:else if row.status !== 'pending'}
-          <p class="muted">Settled without a note.</p>
-        {/if}
-      </li>
-    {/each}
-  </ul>
-  {#if rows.length > LATEST}
-    <Button
-      class="self-start"
-      onclick={() => {
-        all = !all;
-      }}
-      size="sm"
-      variant="ghost"
-    >
-      {all ? 'Show the latest 5' : `Show all ${rows.length}`}
-    </Button>
+          {#if row.ackNote}
+            <!-- The session's own words, quoted rather than paraphrased. -->
+            <blockquote class="quote">{row.ackNote}</blockquote>
+            <span class="muted">Written back {since(row.ackedAt)}.</span>
+          {:else if row.status !== 'pending'}
+            <p class="muted">Settled without a note.</p>
+          {/if}
+        </li>
+      {/each}
+    </ul>
+    {#if rows.length > LATEST}
+      <div class="more" data-flip>
+        <Button
+          onclick={() => {
+          all = !all;
+        }}
+          size="sm"
+          variant="ghost"
+        >
+          {all ? 'Show the latest 5' : `Show all ${rows.length}`}
+        </Button>
+      </div>
+    {/if}
   {/if}
-{/if}
+</div>
 
 <style>
+  .activity {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .more {
+    align-self: flex-start;
+  }
   .note,
   .muted {
     max-width: 72ch;

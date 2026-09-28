@@ -6,6 +6,7 @@
    */
   import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   import { countOf, faultsIn } from "./counts.svelte";
+  import { unsavedIn } from "./drafts.svelte";
   import { GROUPS, type SectionSlug } from "./sections";
   import { configStore } from "./store.svelte";
 
@@ -48,6 +49,11 @@
                 ><section.icon /></span
               >
               <span class="name">{section.label}</span>
+              {#if unsavedIn(store, section.slug)}
+                <span class="unsaved" title="Unsaved changes"
+                  ><span class="sr-only">Unsaved changes</span></span
+                >
+              {/if}
               {#if faults > 0}
                 <span
                   class="fault num"
@@ -175,6 +181,20 @@
     font: var(--type-meta);
     font-variant-numeric: tabular-nums;
     color: var(--ink-muted);
+  }
+  /* An editor in this section holds edits not saved yet. */
+  .unsaved {
+    flex: none;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: var(--ink-strong);
+    @media (prefers-reduced-motion: no-preference) {
+      transition: opacity var(--dur-control) var(--ease-out);
+      @starting-style {
+        opacity: 0;
+      }
+    }
   }
   .fault {
     flex: none;

@@ -1,8 +1,7 @@
 <script lang="ts">
   import { page } from "$app/state";
+  import EditorRoute from "$lib/whiffle/config/EditorRoute.svelte";
   import HookEditor from "$lib/whiffle/config/editors/HookEditor.svelte";
-  import Missing from "$lib/whiffle/config/Missing.svelte";
-  import SectionFrame from "$lib/whiffle/config/SectionFrame.svelte";
   import { sectionOf } from "$lib/whiffle/config/sections";
   import { configStore } from "$lib/whiffle/config/store.svelte";
 
@@ -16,19 +15,13 @@
   );
 </script>
 
-{#if hooks === null}
-  <SectionFrame
-    problem={store.hooks.error}
-    purpose={section.purpose}
-    ready={false}
-    title={section.label}
-  >
-    {''}
-  </SectionFrame>
-{:else if id !== 'new' && !hook}
-  <Missing {section} what="hook" />
-{:else}
-  {#key id}
-    <HookEditor {hook} {taken} />
-  {/key}
-{/if}
+<EditorRoute
+  found={id === 'new' || hook !== null}
+  loaded={hooks !== null}
+  problem={store.hooks.error}
+  saveLabel={id === 'new' ? 'Create hook' : 'Save changes'}
+  {section}
+  what="hook"
+>
+  <HookEditor {hook} {taken} />
+</EditorRoute>
