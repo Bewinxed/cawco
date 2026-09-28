@@ -30,9 +30,9 @@
    */
   import { type Snippet, tick, untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
+  import { whileIdle } from "$lib/components/ui/button/pending-content.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Command from "$lib/components/ui/command";
-  import { whileIdle } from "$lib/components/ui/button/pending-content.svelte";
   import { Spinner } from "$lib/components/ui/spinner";
   import { IconClose, IconPlus, IconSend, IconStop } from "$lib/icons";
   import { autosize } from "$lib/whiffle/motion/autosize.svelte";
@@ -272,14 +272,14 @@
       return { duration, css: (t) => `opacity: ${t}` };
     }
     const scale = popScale();
-    const rise = Number.parseFloat(
+    const lift = Number.parseFloat(
       getComputedStyle(node).getPropertyValue("--pop-rise")
     );
     return {
       duration,
       easing: easeDrawer,
       css: (t) =>
-        `opacity: ${t}; scale: ${scale + (1 - scale) * t}; translate: 0 ${((1 - t) * rise).toFixed(2)}px`,
+        `opacity: ${t}; scale: ${scale + (1 - scale) * t}; translate: 0 ${((1 - t) * lift).toFixed(2)}px`,
     };
   }
 
@@ -772,22 +772,13 @@
     <div class="stack" bind:clientHeight={stack}>{@render prompts()}</div>
   </div>
 {/if}
-<div
-  class="composer"
-  in:rise
-  out:fade
-  bind:clientHeight={panel}
->
+<div class="composer" bind:clientHeight={panel} in:rise out:fade>
   <!-- The row of attachments is one block above the field: it folds open
        with its first chip and shut with its last. The chips in it are a
        list (motion/rows.svelte.ts): one added pops in, one removed shrinks
        to the pop scale as it fades, and the rest slide together. -->
   {#if draft.images.length || draft.texts.length || draft.selections.length}
-    <div
-      class="atts"
-      transition:unfold
-      {@attach reflow()}
-    >
+    <div class="atts" transition:unfold {@attach reflow()}>
       {#each draft.selections as selection (`${selection.element.url}:${selection.element.selector}`)}
         <SelectionChip
           onedit={() => { draft.editing = selection; draft.editorOpen = true; }}
