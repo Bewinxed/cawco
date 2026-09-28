@@ -11,25 +11,16 @@
   turns it stood for slide in beneath it as it fades.
 -->
 <script lang="ts">
-  import { dur, easeOut } from "$lib/whiffle/motion/curves.svelte";
-
-  /** Fades in over --dur-control and out over --dur-exit. Opacity only, so it
-      runs with or without motion. */
-  function fade(_node: Element, token: "--dur-control" | "--dur-exit") {
-    return {
-      duration: dur(token),
-      easing: easeOut,
-      css: (t: number) => `opacity: ${t}`,
-    };
-  }
+  import { rise } from "$lib/whiffle/motion/curves.svelte";
 </script>
 
+<!-- Comes and goes as "Jump to latest" does, which shares its dock. -->
 <div
   aria-busy="true"
   class="catchup"
   role="status"
-  in:fade={'--dur-control'}
-  out:fade={'--dur-exit'}
+  in:rise={'--dur-panel'}
+  out:rise={'--dur-exit'}
 >
   <span aria-hidden="true" class="beat"></span>Catching up…
 </div>
