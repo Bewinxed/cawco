@@ -14,6 +14,7 @@
    * the same conversation, and it is the one that can still be spoken to.
    */
   import { untrack } from "svelte";
+  import { MediaQuery } from "svelte/reactivity";
   import { TextMorph } from "torph/svelte";
   import { goto, replaceState } from "$app/navigation";
   import { page } from "$app/state";
@@ -23,6 +24,8 @@
   import PendingContent from "$lib/components/ui/button/pending-content.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Card from "$lib/components/ui/card";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
+  import * as Drawer from "$lib/components/ui/drawer";
   import { EmptyState } from "$lib/components/ui/empty";
   import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   import { Input } from "$lib/components/ui/input";
@@ -72,7 +75,6 @@
     isStale,
     reconnectNow,
     resumeSession,
-    setPeeked,
     whiffle,
   } from "./client.svelte";
   import ErrorText from "./ErrorText.svelte";
@@ -80,8 +82,25 @@
   import { conversationHref, sessionTitle } from "./links";
   import { machineLabel } from "./machine";
   import { type MarkHue, markHue } from "./mark";
+  import PeekPane, { type PeekTarget } from "./PeekPane.svelte";
 
   let { active }: { active: boolean } = $props();
+
+  /**
+   * The session being peeked: the middle step between glancing at its row and
+   * opening it. Kept after the sheet is put away, so the pane still has its
+   * session while it slides out; `peekOpen` is what shows it.
+   */
+  let peeked = $state<PeekTarget | null>(null);
+  let peekOpen = $state(false);
+  /**
+   * On a touch screen or a narrow window the peek rises from the bottom, as a
+   * tab's details do; with a fine pointer it comes in from the right, beside
+   * the board it was opened from.
+   */
+  const touch = new MediaQuery(
+    "(hover: none), (pointer: coarse), (max-width: 640px)"
+  );
 
   const PAGE_SIZE = 12;
 
@@ -1046,7 +1065,14 @@
                             {@const instance = row.instance}
                             <Button
                               aria-label="Peek {row.title}"
-                              onclick={() => setPeeked(instance.id)}
+                              onclick={() => {
+                                peeked = {
+                                  viewId: instance.id,
+                                  href: row.href,
+                                  title: row.title,
+                                };
+                                peekOpen = true;
+                              }}
                               size="icon-sm"
                               variant="outline"
                             >
@@ -1234,7 +1260,31 @@
   prefill={spawnPrefill}
 />
 
+<Drawer.Root
+  direction={touch.current ? 'bottom' : 'right'}
+  onOpenChange={(open) => { peekOpen = open; }}
+  open={peekOpen}
+>
+  <Drawer.Content class="peek-sheet">
+    <Drawer.Title class="sr-only">Peek</Drawer.Title>
+    <Drawer.Description class="sr-only"
+      >What this session is doing now, without leaving the
+      board.</Drawer.Description
+    >
+    {#if peeked}
+      <PeekPane onclose={() => { peekOpen = false; }} target={peeked} />
+    {/if}
+  </Drawer.Content>
+</Drawer.Root>
+
 <style>
+  /* The peek holds its size from the first frame: it opens on "Reading…" and
+     the tail arrives into a sheet already its height, instead of the sheet
+     growing under the reader as the transcript lands. */
+  :global(.peek-sheet[data-vaul-drawer-direction="bottom"]) {
+    height: 80dvh;
+    padding-bottom: env(safe-area-inset-bottom);
+  }
   .board {
     flex: 1 1 auto;
     min-width: 0;
