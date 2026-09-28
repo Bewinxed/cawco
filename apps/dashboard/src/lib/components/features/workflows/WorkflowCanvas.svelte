@@ -17,10 +17,12 @@
   import "@xyflow/svelte/dist/style.css";
   import { onMount } from "svelte";
   import FlowAutoFit from "$lib/components/features/flow/FlowAutoFit.svelte";
-  import FlowContextMenu from "$lib/components/features/flow/FlowContextMenu.svelte";
   import FlowZoomTracker from "$lib/components/features/flow/FlowZoomTracker.svelte";
+  import { FIT } from "$lib/components/features/flow/fit";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
+  import * as ContextMenu from "$lib/components/ui/context-menu";
+  import { IconChat } from "$lib/icons";
   import { theme } from "$lib/theme.svelte";
-  import { copyToClipboard } from "$lib/whiffle/copy";
   import { newId } from "$lib/whiffle/id";
   import { workflowState } from "$lib/whiffle/workflow-state.svelte";
   import type { JournalCheckpoint, JournalGraph } from "./journal-graph";
@@ -74,7 +76,26 @@
   let mounted = $state(false);
   let zoom = $state(1);
   let pan = $state(false);
-  let menu = $state<{ x: number; y: number; id: string } | null>(null);
+  /** The node a right-click (or a long press) opened the menu on. */
+  let menuNode = $state<string | null>(null);
+  const menuTarget = $derived(
+    nodes.find((entry) => entry.id === menuNode)?.data.node
+  );
+  /**
+   * The menu's trigger handler (a right-click, a long press), run only for
+   * an event on a node, which it records first.
+   */
+  function onNode(handler: unknown) {
+    return (event: Event) => {
+      const at = (event.target as Element).closest<HTMLElement>(
+        ".svelte-flow__node"
+      );
+      if (at?.dataset.id) {
+        menuNode = at.dataset.id;
+        (handler as (event: Event) => void)(event);
+      }
+    };
+  }
   onMount(() => {
     mounted = true;
   });
@@ -193,57 +214,74 @@
     });
   }
 </script>
-<section aria-label="Workflow graph" class="canvas" style:--hit-scale={zoom}>
-  {#if mounted}
-    <SvelteFlow
-      colorMode={theme.current}
-      deleteKey={null}
-      {edgeTypes}
-      fitView
-      maxZoom={2}
-      minZoom={.15}
-      nodesConnectable={!readonly}
-      nodesDraggable={!(readonly || pan)}
-      {nodeTypes}
-      onconnect={connect}
-      onedgeclick={({ edge }) => onselect(edge.id)}
-      onnodeclick={({ node }) => onselect(node.id)}
-      onnodecontextmenu={({ node, event }) => { event.preventDefault(); menu = { x: event.clientX, y: event.clientY, id: node.id }; }}
-      onnodedragstop={() => onchange?.({ ...graph, nodes: graph.nodes.map((node) => ({ ...node, position: nodes.find((entry) => entry.id === node.id)?.position ?? node.position })) })}
-      onpaneclick={() => onselect()}
-      panOnDrag={pan || readonly ? true : [1, 2]}
-      selectionOnDrag={!(pan || readonly)}
-      snapGrid={[8, 8]}
-      bind:edges
-      bind:nodes
-    >
-      <Background gap={16} size={1} variant={BackgroundVariant.Dots} />
-      <FlowAutoFit mode="fit" nodeCount={graph.nodes.length} {nodes} />
-      <FlowZoomTracker nodes={[]} onZoomChange={(value) => { zoom = value; }} />
-      <Panel position="bottom-center"
-        ><WorkflowCanvasTools
-          {canRedo}
-          {canUndo}
-          onpan={() => { pan = !pan; }}
-          {pan}
-          {readonly}
-          {redo}
-          {undo}
-          {zoom}
-        /></Panel
+<!-- The kit menu, popping from the pointer. It opens on a node only: the
+     pane and the edges keep the browser's own menu. -->
+<ContextMenu.Root onOpenChange={(open) => { if (!open) { menuNode = null; } }}>
+  <ContextMenu.Trigger>
+    {#snippet child({ props })}
+      <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: these are the kit menu trigger's own handlers (in `props`), narrowed to a node; the node's inspector is the keyboard path to the same actions -->
+      <section
+        {...props}
+        aria-label="Workflow graph"
+        class="canvas"
+        oncontextmenu={onNode(props.oncontextmenu)}
+        onpointerdown={onNode(props.onpointerdown)}
+        style:--hit-scale={zoom}
       >
-    </SvelteFlow>
-  {/if}
-  {#if menu}
-    <FlowContextMenu
-      jumpLabel="Open inspector"
-      onAction={(action) => { if (!menu) { return; } if (action === 'jump') { onselect(menu.id); } else { copyToClipboard('Node', JSON.stringify(graph.nodes.find((node) => node.id === menu?.id), null, 2)); } menu = null; }}
-      onClose={() => { menu = null; }}
-      x={menu.x}
-      y={menu.y}
-    />
-  {/if}
-</section>
+        {#if mounted}
+          <SvelteFlow
+            colorMode={theme.current}
+            deleteKey={null}
+            {edgeTypes}
+            fitView
+            fitViewOptions={FIT}
+            maxZoom={2}
+            minZoom={.15}
+            nodesConnectable={!readonly}
+            nodesDraggable={!(readonly || pan)}
+            {nodeTypes}
+            onconnect={connect}
+            onedgeclick={({ edge }) => onselect(edge.id)}
+            onnodeclick={({ node }) => onselect(node.id)}
+            onnodedragstop={() => onchange?.({ ...graph, nodes: graph.nodes.map((node) => ({ ...node, position: nodes.find((entry) => entry.id === node.id)?.position ?? node.position })) })}
+            onpaneclick={() => onselect()}
+            panOnDrag={pan || readonly ? true : [1, 2]}
+            selectionOnDrag={!(pan || readonly)}
+            snapGrid={[8, 8]}
+            bind:edges
+            bind:nodes
+          >
+            <Background gap={16} size={1} variant={BackgroundVariant.Dots} />
+            <FlowAutoFit nodeCount={graph.nodes.length} />
+            <FlowZoomTracker onZoomChange={(value) => { zoom = value; }} />
+            <Panel position="bottom-center"
+              ><WorkflowCanvasTools
+                {canRedo}
+                {canUndo}
+                onpan={() => { pan = !pan; }}
+                {pan}
+                {readonly}
+                {redo}
+                {undo}
+                {zoom}
+              /></Panel
+            >
+          </SvelteFlow>
+        {/if}
+      </section>
+    {/snippet}
+  </ContextMenu.Trigger>
+  <ContextMenu.Content aria-label="Node actions">
+    <ContextMenu.CopyItem
+      text={JSON.stringify(menuTarget ?? null, null, 2)}
+      what="Node"
+      >Copy content</ContextMenu.CopyItem
+    >
+    <ContextMenu.Item onSelect={() => { if (menuNode) { onselect(menuNode); } }}
+      ><IconChat />Open inspector</ContextMenu.Item
+    >
+  </ContextMenu.Content>
+</ContextMenu.Root>
 <style>
   .canvas {
     height: 100%;

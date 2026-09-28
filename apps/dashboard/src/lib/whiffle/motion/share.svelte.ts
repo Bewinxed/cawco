@@ -14,7 +14,10 @@
  * its own on the Web Animations API (FLIP, transform only) while the source
  * is hidden, so there is one object, never two. `mode: "clip"` opens a large
  * destination out of a small source by clipping instead of scaling, so a
- * transcript never squashes.
+ * transcript never squashes. `mode: "grow"` is for a destination somewhere
+ * else that the source becomes (a field that opens into a palette): it
+ * starts moved onto the source, cut to the source's box around its `anchor`
+ * (the part of it that is the source), and travels home as the cut opens.
  */
 import { CURVE, motionOk } from "./curves.svelte";
 
@@ -132,8 +135,13 @@ if (typeof document !== "undefined") {
 }
 
 export interface LandOptions {
-  /** `clip` opens the destination out of the source's box instead of scaling it. */
-  mode?: "scale" | "clip";
+  /** For `grow`: the part of the destination that the source is (a selector inside it). */
+  anchor?: string;
+  /**
+   * `clip` opens the destination out of the source's box instead of scaling
+   * it; `grow` also moves it there first (see above).
+   */
+  mode?: "scale" | "clip" | "grow";
   ms?: number;
   /** Scale both axes by the height ratio, so text keeps its shape. */
   uniform?: boolean;
@@ -144,7 +152,7 @@ function fly(node: HTMLElement, from: Departure, options: LandOptions) {
   if (to.width === 0 || to.height === 0) {
     return;
   }
-  const { mode = "scale", uniform = false, ms = 280 } = options;
+  const { mode = "scale", uniform = false, ms = 280, anchor } = options;
   if (!from.stays) {
     from.source.style.visibility = "hidden";
   }
@@ -154,7 +162,27 @@ function fly(node: HTMLElement, from: Departure, options: LandOptions) {
     }
   };
   let frames: Keyframe[];
-  if (mode === "clip") {
+  if (mode === "grow") {
+    // The source's box laid over the anchor, their starts and middles lined
+    // up, in the destination's own coordinates.
+    const part = anchor
+      ? (node.querySelector(anchor) as HTMLElement).getBoundingClientRect()
+      : to;
+    const left = part.left - to.left;
+    const top = part.top - to.top + (part.height - from.rect.height) / 2;
+    const right = to.width - left - from.rect.width;
+    const bottom = to.height - top - from.rect.height;
+    frames = [
+      {
+        transform: `translate(${from.rect.left - to.left - left}px, ${from.rect.top - to.top - top}px)`,
+        clipPath: `inset(${top}px ${right}px ${bottom}px ${left}px round ${from.radius})`,
+      },
+      {
+        transform: "none",
+        clipPath: `inset(0px 0px 0px 0px round ${getComputedStyle(node).borderRadius})`,
+      },
+    ];
+  } else if (mode === "clip") {
     const top = from.rect.top - to.top;
     const left = from.rect.left - to.left;
     const bottom = to.bottom - from.rect.bottom;

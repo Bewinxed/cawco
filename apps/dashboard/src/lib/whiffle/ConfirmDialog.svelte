@@ -4,26 +4,35 @@
    * whatever the current `confirm(...)` call asked for, and answers it. Every
    * destructive action in the app funnels through this one dialog. Its
    * confirm button runs the asked work and stays pending, the dialog open,
-   * until the work ends.
+   * until the work ends. Work that fails keeps the dialog open and says why
+   * under the body, where the reader is already looking; only work that
+   * succeeds closes it.
    */
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as AlertDialog from "$lib/components/ui/alert-dialog";
   import { Button } from "$lib/components/ui/button";
   import { confirmHost } from "./confirm.svelte";
+  import { unfold } from "./motion/fold.svelte";
 
   const pending = $derived(confirmHost.pending);
   let running = $state(false);
-  /** The last run threw (the dialog stays open): no check. */
-  let failed = $state(false);
+  /** Why the last run failed (the dialog stays open), or null. */
+  let failure = $state<string | null>(null);
+
+  // A new question starts clean.
+  $effect.pre(() => {
+    if (pending) {
+      failure = null;
+    }
+  });
 
   async function accept() {
     running = true;
-    failed = false;
+    failure = null;
     try {
       await confirmHost.accept();
-    } catch (error) {
-      failed = true;
-      throw error;
+    } catch (caught) {
+      failure = caught instanceof Error ? caught.message : String(caught);
     } finally {
       running = false;
     }
@@ -44,6 +53,9 @@
       {#if pending?.body}
         <AlertDialog.Description>{pending.body}</AlertDialog.Description>
       {/if}
+      {#if failure}
+        <p class="failure" role="alert" transition:unfold>{failure}</p>
+      {/if}
     </AlertDialog.Header>
     <AlertDialog.Footer>
       <AlertDialog.Cancel
@@ -53,7 +65,7 @@
         {#snippet child({ props })}
           <Button
             {...props}
-            {failed}
+            failed={failure !== null}
             label={pending?.confirmLabel ?? 'Confirm'}
             onclick={accept}
             pending={running}
@@ -65,3 +77,12 @@
     </AlertDialog.Footer>
   </AlertDialog.Content>
 </AlertDialog.Root>
+
+<style>
+  .failure {
+    color: var(--status-fail-ink);
+    font-size: var(--text-body);
+    font-weight: var(--weight-body);
+    line-height: var(--leading-body);
+  }
+</style>

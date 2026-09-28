@@ -8,6 +8,12 @@
     ThinkingStepsHeader,
   } from "$lib/components/ui/thinking-steps";
   import { IconCpu } from "$lib/icons";
+  import {
+    CURVE,
+    dur,
+    easeOut,
+    motionOk,
+  } from "$lib/whiffle/motion/curves.svelte";
 
   let {
     text,
@@ -63,11 +69,90 @@
   const paragraphs = $derived(splitBlocks(text));
   /** A running block starts open; a finished one folds to its tail. */
   let expanded = $state(untrack(() => live || folding));
+  /**
+   * The live block the reader just watched arrives as it was — its live
+   * label too — and becomes "Reasoning" as it folds shut: the two labels
+   * cross-fade in one place (--dur-control), the one leaving out of the flow
+   * so the new one's width is the header's at once. The same swap plays when
+   * a branch's block stops being live under the reader.
+   */
+  let settling = $state(untrack(() => folding));
   $effect(() => {
     if (untrack(() => folding)) {
       expanded = false;
+      settling = false;
     }
   });
+  const liveLabel = $derived(live || settling);
+  function faceIn(_node: Element) {
+    return {
+      duration: dur("--dur-control"),
+      easing: easeOut,
+      css: (t: number) => `opacity: ${t}`,
+    };
+  }
+  function faceOut(node: HTMLElement) {
+    node.style.position = "absolute";
+    node.style.insetInlineStart = "0";
+    return {
+      duration: dur("--dur-control"),
+      easing: easeOut,
+      css: (t: number) => `opacity: ${t}`,
+    };
+  }
+  /**
+   * The chevron after the label travels with the label's width instead of
+   * jumping to it: the cell's width tweens from the old label's to the new
+   * one's, clipping on its inline axis as it goes.
+   */
+  let cell = $state<HTMLElement>();
+  let cellWas = 0;
+  $effect.pre(() => {
+    // biome-ignore lint/complexity/noVoid: the swap this reads the old width for
+    void liveLabel;
+    cellWas = untrack(() => cell?.getBoundingClientRect().width ?? 0);
+  });
+  $effect(() => {
+    // biome-ignore lint/complexity/noVoid: the swap this tweens the width of
+    void liveLabel;
+    untrack(() => {
+      if (!(cell && cellWas && motionOk.current)) {
+        return;
+      }
+      const now = cell.getBoundingClientRect().width;
+      if (Math.abs(now - cellWas) < 0.5) {
+        return;
+      }
+      cell.animate(
+        [
+          { width: `${cellWas}px`, overflowX: "clip" },
+          { width: `${now}px`, overflowX: "clip" },
+        ],
+        { duration: dur("--dur-control"), easing: CURVE.out }
+      );
+    });
+  });
+  /**
+   * Folding shut, the last thought's end rises into the header as the body
+   * closes up under it, on the fold's own length (--dur-exit); opened, it
+   * fades out of the way (--dur-control). Never on a first render.
+   */
+  function tailIn(_node: Element) {
+    const rise = motionOk.current;
+    return {
+      duration: dur("--dur-exit"),
+      easing: easeOut,
+      css: (t: number) =>
+        `opacity: ${t}${rise ? `; translate: 0 ${((1 - t) * 0.5).toFixed(3)}lh` : ""}`,
+    };
+  }
+  function tailOut(_node: Element) {
+    return {
+      duration: dur("--dur-control"),
+      easing: easeOut,
+      css: (t: number) => `opacity: ${t}`,
+    };
+  }
   /**
    * Steps drawn in the first render are the block as it was when it mounted —
    * history, or the live block a reader just opened. Only steps that appear
@@ -100,19 +185,23 @@
     <ThinkingStepsHeader disabled={!text.trim()}>
       {#snippet after()}
         {#if !expanded && tail}
-          <span class="tail"><span>{tail}</span></span>
+          <span class="tail" in:tailIn out:tailOut><span>{tail}</span></span>
         {/if}
       {/snippet}
-      {#if live}
-        <ThinkingIndicator
-          aria-live={announce ? 'polite' : 'off'}
-          class="rail-indicator"
-        />
-      {:else}
-        <span class="identity"
-          ><span class="icon"><IconCpu /></span>Reasoning</span
-        >
-      {/if}
+      <span class="label" bind:this={cell}>
+        {#if liveLabel}
+          <span class="face" in:faceIn out:faceOut
+            ><ThinkingIndicator
+              aria-live={announce ? 'polite' : 'off'}
+              class="rail-indicator"
+            /></span
+          >
+        {:else}
+          <span class="face identity" in:faceIn out:faceOut
+            ><span class="icon"><IconCpu /></span>Reasoning</span
+          >
+        {/if}
+      </span>
     </ThinkingStepsHeader>
     <ThinkingStepsContent>
       {#each paragraphs as paragraph, i (i)}
@@ -149,6 +238,19 @@
     & :global(.thinking-header) {
       inline-size: 100%;
     }
+  }
+  /* The label's cell: a label leaving is drawn over it, out of the flow. */
+  .label {
+    position: relative;
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+  }
+  .face {
+    display: flex;
+    align-items: center;
+    inset-block: 0;
+    white-space: nowrap;
   }
   .identity {
     display: flex;

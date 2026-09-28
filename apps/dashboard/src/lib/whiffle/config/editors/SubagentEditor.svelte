@@ -135,8 +135,8 @@ You are a <role>, working in one repository at a time.
             );
           }
         } catch (error) {
-          refused = error instanceof Error ? error.message : String(error);
           deleting = false;
+          throw error;
         }
       },
     });

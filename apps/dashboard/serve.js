@@ -156,13 +156,40 @@ function serveFresh(req, res, pathname) {
   if (!stats.isFile()) {
     return false;
   }
+  // Like sirv: the precompressed sibling wins when the client accepts it.
+  const type = Bun.file(abs).type.split(";")[0];
+  const accept = req.headers["accept-encoding"] ?? "";
+  let file = abs;
+  let encoding;
+  for (const [ext, name, ok] of [
+    [".br", "br", /(br|brotli)/i.test(accept)],
+    [".gz", "gzip", accept.includes("gzip")],
+  ]) {
+    if (!ok) {
+      continue;
+    }
+    try {
+      const variant = statSync(abs + ext);
+      if (variant.isFile()) {
+        file = abs + ext;
+        stats = variant;
+        encoding = name;
+        break;
+      }
+    } catch {
+      // no precompressed copy of this file
+    }
+  }
   const etag = `W/"${stats.size}-${stats.mtime.getTime()}"`;
   const headers = {
     Vary: "Accept-Encoding",
-    "Content-Type": Bun.file(abs).type.split(";")[0],
+    "Content-Type": type,
     "Last-Modified": stats.mtime.toUTCString(),
     ETag: etag,
   };
+  if (encoding) {
+    headers["Content-Encoding"] = encoding;
+  }
   if (req.headers["if-none-match"] === etag) {
     res.writeHead(304, headers);
     res.end();
@@ -174,7 +201,7 @@ function serveFresh(req, res, pathname) {
     res.end();
     return true;
   }
-  createReadStream(abs, { end: stats.size - 1 })
+  createReadStream(file, { end: stats.size - 1 })
     .on("error", () => res.destroy())
     .pipe(res);
   return true;

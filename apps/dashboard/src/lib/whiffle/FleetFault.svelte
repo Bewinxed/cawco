@@ -11,11 +11,12 @@
    * The one exception is a cause whiffle does not recognise, where the machine's
    * own words ARE the message; that case shows the output open, because hiding
    * an explanation nobody has behind a summary that says nothing is worse.
+   *
+   * Its disclosures fold (240ms open, 160ms shut, motion/fold) and what its
+   * remedy came to is said under the button, in place.
    */
-  import { toast } from "svelte-sonner";
   import { Button } from "$lib/components/ui/button";
   import {
-    IconChevronDown,
     IconChevronRight,
     IconRefresh,
     IconWarningTriangle,
@@ -31,6 +32,8 @@
     SCOPE_NOUN,
   } from "./fleet-faults";
   import { machineLabel } from "./machine";
+  import { appear, CURVE } from "./motion/curves.svelte";
+  import { fold } from "./motion/fold.svelte";
   import OsMark from "./OsMark.svelte";
 
   let {
@@ -69,6 +72,8 @@
 
   let busy = $state(false);
   let actFailed = $state(false);
+  /** What the remedy came to, said under its button. */
+  let result = $state<{ tone: "done" | "fail"; text: string } | null>(null);
   let disclosureOpen = $state(false);
   let expanded = $state(false);
   const whole = $derived(!compact || expanded);
@@ -76,21 +81,50 @@
   const message = (error: unknown) =>
     error instanceof Error ? error.message : String(error);
 
+  /**
+   * An always-mounted part held open or shut by `open`: the first state lands
+   * still, every change after it folds from where the part is drawn.
+   */
+  const disclose = (open: () => boolean, gap = 0) => (node: HTMLElement) => {
+    let first = true;
+    $effect(() => {
+      const next = open();
+      if (first) {
+        first = false;
+        if (!next) {
+          node.style.overflow = "hidden";
+          node.style.height = "0px";
+          node.style.marginBottom = `${-gap}px`;
+          node.style.opacity = "0";
+        }
+        return;
+      }
+      fold(node, next, {
+        ms: next ? 240 : 160,
+        easing: CURVE.out,
+        fade: true,
+        gap,
+      });
+    });
+  };
+
   async function resync() {
     if (!group.machineId) {
       return;
     }
     busy = true;
     actFailed = false;
+    result = null;
     try {
       await syncFleet(group.machineId);
-      toast.success(
-        `${machine ? machineLabel(machine.hostname) : "That machine"} is syncing.`
-      );
+      result = {
+        tone: "done",
+        text: `Sent. This clears once ${machine ? machineLabel(machine.hostname) : "the machine"} reports back.`,
+      };
       onresolved?.();
     } catch (error) {
       actFailed = true;
-      toast.error(message(error));
+      result = { tone: "fail", text: message(error) };
     } finally {
       busy = false;
     }
@@ -103,11 +137,12 @@
   async function refresh() {
     busy = true;
     actFailed = false;
+    result = null;
     try {
       let stillFailing = 0;
       for (const fault of group.faults) {
         if (fault.scope === "skills") {
-          // biome-ignore lint/performance/noAwaitInLoops: rows are re-resolved one at a time, in order, so the toast's final count is right
+          // biome-ignore lint/performance/noAwaitInLoops: rows are re-resolved one at a time, in order, so the final count is right
           if ((await refreshSkill(fault.key)).error) {
             stillFailing += 1;
           }
@@ -120,16 +155,20 @@
       }
       if (stillFailing > 0) {
         actFailed = true;
-        toast.error(
-          `${stillFailing} still would not fetch — the row says why.`
-        );
+        result = {
+          tone: "fail",
+          text: `${stillFailing} still would not fetch. The row says why.`,
+        };
       } else {
-        toast.success("Fetched. The machines are being sent the files.");
+        result = {
+          tone: "done",
+          text: "Fetched. The machines are being sent the files.",
+        };
       }
       onresolved?.();
     } catch (error) {
       actFailed = true;
-      toast.error(message(error));
+      result = { tone: "fail", text: message(error) };
     } finally {
       busy = false;
     }
@@ -185,17 +224,14 @@
         }}
         type="button"
       >
-        {#if expanded}
-          <IconChevronDown class="size-4 shrink-0" />
-        {:else}
-          <IconChevronRight class="size-4 shrink-0" />
-        {/if}
+        <IconChevronRight class="chevron size-4 shrink-0" />
         {expanded ? 'Hide' : 'Details'}
       </button>
     {/if}
   </div>
 
-  {#if whole}
+  <div class="body" inert={!whole} {@attach disclose(() => whole)}>
+    <div class="inner">
     <p class="rows">
       <span class="noun"
         >{SCOPE_NOUN[group.scope]}{group.faults.length === 1 ? '' : 's'}:</span
@@ -247,14 +283,14 @@
           onclick={() => { disclosureOpen = !disclosureOpen; }}
           type="button"
         >
-          {#if disclosureOpen}
-            <IconChevronDown class="size-4 shrink-0" />
-          {:else}
-            <IconChevronRight class="size-4 shrink-0" />
-          {/if}
+          <IconChevronRight class="chevron size-4 shrink-0" />
           What it said
         </button>
-        {#if disclosureOpen}
+        <div
+          class="saids"
+          inert={!disclosureOpen}
+          {@attach disclose(() => disclosureOpen, 7)}
+        >
           {#each shown as fault (fault.scope + fault.key)}
             {#if fault.detail}
               <pre
@@ -262,7 +298,7 @@
               ><span class="for">{faultLabel(fault)}</span>{fault.detail}</pre>
             {/if}
           {/each}
-        {/if}
+        </div>
       {/if}
     {/if}
 
@@ -311,7 +347,19 @@
         >
       {/if}
     </div>
-  {/if}
+    {#if result}
+      <p
+        class="result"
+        data-flip
+        data-tone={result.tone}
+        role={result.tone === 'fail' ? 'alert' : 'status'}
+        in:appear
+      >
+        {result.text}
+      </p>
+    {/if}
+    </div>
+  </div>
 </div>
 
 <style>
@@ -322,7 +370,6 @@
     --tone-ink: var(--status-attn-ink);
     display: flex;
     flex-direction: column;
-    gap: var(--space-2);
     border-radius: var(--radius-md);
     background: var(--tone-bg);
     color: var(--tone-ink);
@@ -335,6 +382,38 @@
   .fault.hub {
     --tone-bg: var(--status-fail-bg);
     --tone-ink: var(--status-fail-ink);
+  }
+  /* The body folds as one piece under the title line; its own gap to the
+     line sits inside it, so a shut body leaves nothing behind. */
+  .inner {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    padding-block-start: var(--space-2);
+  }
+  .saids {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  /* The chevron turns with the disclosure it opens. */
+  :global(.chevron) {
+    @media (prefers-reduced-motion: no-preference) {
+      transition: rotate var(--dur-control) var(--ease-out);
+    }
+  }
+  [aria-expanded="true"] > :global(.chevron) {
+    rotate: 90deg;
+  }
+  .result {
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
+    color: var(--tone-ink);
+    overflow-wrap: anywhere;
+
+    &[data-tone="fail"] {
+      color: var(--status-fail-ink);
+    }
   }
   .top {
     display: flex;

@@ -292,8 +292,6 @@
           toast.success(
             `${saved.name} is written to every machine it applies to.`
           );
-        } catch (error) {
-          failed = message(error);
         } finally {
           busy = false;
         }
@@ -336,8 +334,8 @@
             );
           }
         } catch (error) {
-          failed = message(error);
           deleting = false;
+          throw error;
         }
       },
     });

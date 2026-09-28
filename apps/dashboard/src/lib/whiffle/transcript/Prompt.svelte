@@ -136,12 +136,17 @@
   };
 
   // A permission blocks the turn that asked it, so its answer must land exactly
-  // once and only when it can reach the daemon that asked. `sent` latches the
-  // row the instant it is answered — a double-tap, or an Enter after a click,
-  // cannot answer twice — and both paths refuse while the hub is unreachable,
-  // where the answer would resolve into nothing and leave the turn wedged.
-  let sent = $state(false);
-  const answerable = $derived(!sent && whiffle.hub === "connected");
+  // once and only when it can reach the daemon that asked. `pressed` latches
+  // the card the instant it is answered — a double-tap, or an Enter after a
+  // click, cannot answer twice — and every path refuses while the hub is
+  // unreachable, where the answer would resolve into nothing and leave the
+  // turn wedged. The pressed button pends (the kit's pending: spinner, its
+  // label morphing to what it is doing) while its peers dim, until the gate
+  // leaves; refused, it stops and the reason sits under the buttons.
+  type Choice = "allow" | "deny" | "always" | "answer";
+  let pressed = $state<Choice | null>(null);
+  const connected = $derived(whiffle.hub === "connected");
+  const answerable = $derived(pressed === null && connected);
 
   /**
    * The card arrives — settles in — only when it comes in while the reader is
@@ -178,9 +183,17 @@
     if (!answerable) {
       return;
     }
-    sent = true;
+    pressed = kind;
     commandId = onanswer(permissionAnswer(request, kind));
   }
+
+  /** A button's part in the answer: pending while its answer is out, and the rest dimmed. */
+  const pendingOf = (choice: Choice): boolean =>
+    pressed === choice && refused === null;
+  const failedOf = (choice: Choice): boolean =>
+    pressed === choice && refused !== null;
+  const disabledOf = (choice: Choice): boolean =>
+    pressed === null ? !connected : !pendingOf(choice);
 
   /* Only a question card claims the digits, and only one of them at a time. */
   const claim = Symbol("prompt");
@@ -238,7 +251,7 @@
     if (!answerable) {
       return;
     }
-    sent = true;
+    pressed = "answer";
     commandId = onanswer(questionAnswer(input, answers));
   }
 
@@ -246,10 +259,10 @@
      shadcn (no 4/8/12 padding ladder, no pill radius, no --primary fill).
      Control height sits on the scale — --space-8 (32) fine, 44 coarse. */
   const btnBase =
-    "h-[var(--space-8)] pointer-coarse:h-11 gap-[var(--space-2)] " +
+    "h-[var(--space-8)] pointer-coarse:h-11 gap-(--btn-gap) " +
+    "[--btn-gap:var(--space-2)] [--btn-icon:12px] " +
     "rounded-[var(--radius-sm)] px-[var(--space-3)] " +
-    "text-label font-medium " +
-    "[&_svg:not([class*='size-'])]:size-3";
+    "text-label font-medium";
 
   /* The permission gate is symmetric: Approve and Deny are recessed peers at
      one fill and one border. They differ in kind, never in salience: a check
@@ -268,6 +281,17 @@
 </script>
 
 <svelte:window onkeydown={handleKeydown} />
+
+<!-- Under the buttons, one line when there is something the buttons cannot
+     say: the socket cannot carry an answer yet, or the hub refused the one
+     sent and said why. A live region, so the refusal is heard. -->
+{#snippet wait()}
+  {#if refused}
+    <p class="wait refused" role="status">{refused}</p>
+  {:else if pressed === null && !connected}
+    <p class="wait" role="status">Reconnecting — can't answer yet.</p>
+  {/if}
+{/snippet}
 
 <section
   aria-label={questions ? 'Question from the agent' : 'Permission request'}
@@ -298,36 +322,29 @@
         {/each}
       </div>
     {/each}
-    <!-- Answered, the card morphs where it stands: its actions fold shut and
-         the line under them says the answer is out. -->
-    <div class="controls" class:folded={sent}>
-      <div class="controls-inner">
-        <div class="qact">
-          <Button
-            class={primary}
-            disabled={!(allAnswered && answerable)}
-            onclick={submitQuestion}
-          >
-            <IconCheck />Answer
-          </Button>
-          <Button
-            class={dismiss}
-            disabled={!answerable}
-            onclick={() => answer('deny')}
-            variant="outline"
-            >Dismiss</Button
-          >
-        </div>
-      </div>
+    <div class="qact">
+      <Button
+        class={primary}
+        disabled={disabledOf('answer') || (pressed === null && !allAnswered)}
+        failed={failedOf('answer')}
+        icon={IconCheck}
+        label="Answer"
+        onclick={submitQuestion}
+        pending={pendingOf('answer')}
+        pendingLabel="Answering…"
+      />
+      <Button
+        class={dismiss}
+        disabled={disabledOf('deny')}
+        failed={failedOf('deny')}
+        label="Dismiss"
+        onclick={() => answer('deny')}
+        pending={pendingOf('deny')}
+        pendingLabel="Dismissing…"
+        variant="outline"
+      />
     </div>
-    <!-- One line, three truths: the answer is out, the socket cannot carry it
-         yet, or the hub called it off and said why. A live region, so the last
-         of those is heard when it replaces the first. -->
-    {#if !answerable}
-      <p class="wait" role="status">
-        {refused ?? (sent ? 'Sent.' : "Reconnecting — can't answer yet.")}
-      </p>
-    {/if}
+    {@render wait()}
   {:else}
     <h2>
       <span class="pill attn"><IconArrowUp />needs you</span>Permission —
@@ -341,9 +358,7 @@
          Edit/Write/WebFetch shows one sentence and hides the file, the diff, the
          URL it is actually about. Every field of the tool input is here, one
          disclosure away, so the grant is informed. -->
-    <div class="controls" class:folded={sent}>
-      <div class="controls-inner">
-        <details class="disclose">
+    <details class="disclose">
           <summary>What this touches</summary>
           <div class="fields">
             {#each Object.entries(input) as [key, value]}
@@ -354,54 +369,50 @@
               </div>
             {/each}
           </div>
-        </details>
-        <div class="choice">
-          <Button
-            class={grant}
-            disabled={!answerable}
-            onclick={() => answer('allow')}
-            variant="secondary"
-          >
-            <IconTick />Approve
-          </Button>
-          <Button
-            class={refuse}
-            disabled={!answerable}
-            onclick={() => answer('deny')}
-            variant="secondary"
-          >
-            <IconClose />Deny
-          </Button>
-        </div>
-      </div>
+    </details>
+    <div class="choice">
+      <Button
+        class={grant}
+        disabled={disabledOf('allow')}
+        failed={failedOf('allow')}
+        icon={IconTick}
+        label="Approve"
+        onclick={() => answer('allow')}
+        pending={pendingOf('allow')}
+        pendingLabel="Approving…"
+        variant="secondary"
+      />
+      <Button
+        class={refuse}
+        disabled={disabledOf('deny')}
+        failed={failedOf('deny')}
+        icon={IconClose}
+        label="Deny"
+        onclick={() => answer('deny')}
+        pending={pendingOf('deny')}
+        pendingLabel="Denying…"
+        variant="secondary"
+      />
     </div>
-    <!-- One line, three truths: the answer is out, the socket cannot carry it
-         yet, or the hub called it off and said why. A live region, so the last
-         of those is heard when it replaces the first. -->
-    {#if !answerable}
-      <p class="wait" role="status">
-        {refused ?? (sent ? 'Sent.' : "Reconnecting — can't answer yet.")}
-      </p>
-    {/if}
+    {@render wait()}
     {#if rule}
-      <div class="controls" class:folded={sent}>
-        <div class="controls-inner">
-          <div class="widen">
-            <p>
-              This would allow <span class="mono">{rule.full}</span> for
-              {rule.scope}
-              — a wider grant than the request above.
-            </p>
-            <Button
-              class={widen}
-              disabled={!answerable}
-              onclick={() => answer('always')}
-              variant="outline"
-            >
-              <IconShield />Always allow {rule.short}
-            </Button>
-          </div>
-        </div>
+      <div class="widen">
+        <p>
+          This would allow <span class="mono">{rule.full}</span> for
+          {rule.scope}
+          — a wider grant than the request above.
+        </p>
+        <Button
+          class={widen}
+          disabled={disabledOf('always')}
+          failed={failedOf('always')}
+          icon={IconShield}
+          label="Always allow {rule.short}"
+          onclick={() => answer('always')}
+          pending={pendingOf('always')}
+          pendingLabel="Allowing…"
+          variant="outline"
+        />
       </div>
     {/if}
   {/if}
@@ -432,30 +443,6 @@
         animation: hitl-settle calc(var(--dur-control) * 2) var(--ease-out)
           backwards;
       }
-    }
-  }
-  /* Answered: the controls fold shut in place (grid rows 1fr → 0fr, fading
-     as they go, --dur-pop on the on-screen curve) and the card is its
-     question and its outcome. */
-  .controls {
-    display: grid;
-    grid-template-rows: 1fr;
-
-    &.folded {
-      grid-template-rows: 0fr;
-      opacity: 0;
-    }
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        grid-template-rows var(--dur-pop) var(--ease-in-out),
-        opacity var(--dur-exit) var(--ease-out);
-    }
-  }
-  .controls-inner {
-    min-block-size: 0;
-
-    .folded > & {
-      overflow: hidden;
     }
   }
   h2 {
@@ -489,6 +476,10 @@
     font-size: var(--text-meta);
     font-weight: var(--weight-body);
     color: var(--ink-muted);
+
+    &.refused {
+      color: var(--status-fail-ink);
+    }
   }
   .lede {
     font-size: var(--text-body);

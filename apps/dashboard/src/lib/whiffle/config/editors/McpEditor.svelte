@@ -230,8 +230,8 @@
             );
           }
         } catch (error) {
-          failed = error instanceof Error ? error.message : String(error);
           deleting = false;
+          throw error;
         }
       },
     });

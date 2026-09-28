@@ -2034,7 +2034,8 @@ export function latestCommandFor(
 export interface CommandIntents {
   interrupt: Record<string, never>;
   "permission.answer": { requestId: string; result: PermissionResult };
-  send: { text: string; extras?: SendExtras };
+  /** `replaces`: the failed send this one retries, whose row it takes over. */
+  send: { text: string; extras?: SendExtras; replaces?: string };
   "set-effort": { effort: EffortLevel };
   "set-model": { model: string };
   "set-permission-mode": { mode: PermissionMode };
@@ -2108,11 +2109,11 @@ function legacyCall<K extends CommandKind>(
 ): () => Promise<unknown> | undefined {
   switch (kind) {
     case "send": {
-      const { text, extras } = intent as CommandIntents["send"];
+      const { text, extras, replaces } = intent as CommandIntents["send"];
       // The id travels into the echo on this dialect too, so a legacy-hub
       // failure lands on the same row a stream-hub failure would.
       return (): undefined => {
-        sendText(instanceId, machineId, text, extras, commandId);
+        sendText(instanceId, machineId, text, extras, commandId, replaces);
       };
     }
     case "permission.answer": {
@@ -2246,9 +2247,9 @@ export function submitCommand<K extends CommandKind>(
     // could throw, and a throw from a catch block is the silence this whole
     // function exists to abolish.
     if (kind === "send") {
-      const { text, extras } = intent as CommandIntents["send"];
+      const { text, extras, replaces } = intent as CommandIntents["send"];
       try {
-        noteSendSubmitted(instanceId, text, extras ?? {}, commandId);
+        noteSendSubmitted(instanceId, text, extras ?? {}, commandId, replaces);
       } catch {
         // The composer's notice is then the whole report, which is a worse
         // outcome than a failed ghost but an infinitely better one than nothing.
@@ -2453,9 +2454,9 @@ function dropSendEcho(instanceId: string, commandId: string): void {
 }
 
 /**
- * Re-send a failed message from the outbox as a NEW command with a NEW id.
- * Drops the failed echo (matched by `metadata.sentAs === commandId`) and
- * funnels the payload back through the normal submit path. No-op if the
+ * Re-send a failed message from the outbox as a NEW command with a NEW id,
+ * on the failed message's own row (matched by `metadata.sentAs ===
+ * commandId`): the row goes back to sending where it stands. No-op if the
  * outbox entry has aged out. Never throws.
  */
 export function retrySend(commandId: string): void {
@@ -2465,12 +2466,12 @@ export function retrySend(commandId: string): void {
   }
   sendOutbox.delete(commandId);
   outboxVersion += 1;
-  dropSendEcho(entry.instanceId, commandId);
   // Through `submitCommand`, not around it: a retry is a new command with its
-  // own record and its own ghost, never a resurrected one.
+  // own record, never a resurrected one — only the row is the same.
   submitCommand(entry.instanceId, entry.machineId, "send", {
     text: entry.text,
     extras: entry.extras,
+    replaces: commandId,
   });
 }
 
@@ -2579,11 +2580,12 @@ function streamEffectsFor<K extends CommandKind>(
   const target = session(instanceId);
   switch (kind) {
     case "send": {
-      const { text, extras } = intent as CommandIntents["send"];
+      const { text, extras, replaces } = intent as CommandIntents["send"];
       // The echo is stamped with the id of the command it IS, which is the
       // whole join between a rendered message and the ledger's word on it.
       return {
-        submitted: () => noteSendSubmitted(instanceId, text, extras, commandId),
+        submitted: () =>
+          noteSendSubmitted(instanceId, text, extras, commandId, replaces),
       };
     }
     case "interrupt":
@@ -3181,7 +3183,9 @@ export function sendText(
   text: string,
   extras: SendExtras = {},
   /** The tracked command this send IS, when it has one. See {@link submitCommand}. */
-  commandId?: string
+  commandId?: string,
+  /** The failed send this one retries. See {@link noteSendSubmitted}. */
+  replaces?: string
 ): void {
   const payload: SendPayload = {
     instanceId,
@@ -3204,7 +3208,7 @@ export function sendText(
   // this makes the legacy dialect agree. Nothing renders twice: the echo is
   // one object, and the only path that replaces it — `ingestQueued` — removes
   // the copy it supersedes.
-  noteSendSubmitted(instanceId, text, extras, commandId);
+  noteSendSubmitted(instanceId, text, extras, commandId, replaces);
   send({ verb: "send", machineId, instanceId, payload });
 }
 
@@ -3220,18 +3224,39 @@ function noteSendSubmitted(
   instanceId: string,
   text: string,
   extras: SendExtras = {},
-  commandId?: string
+  commandId?: string,
+  /**
+   * The failed send this one retries. Its row takes the new command's marks
+   * where it stands — the same row goes back to sending, then sent or failed
+   * again — instead of leaving and coming back as a new row at the end.
+   */
+  replaces?: string
 ): void {
   const target = session(instanceId);
-  const echo = localUserMessage(instanceId, text, selectionExtras(extras));
-  target.messages.push({
-    ...echo,
-    metadata: {
-      ...echo.metadata,
-      queuedLocally: true,
-      ...(commandId && { sentAs: commandId }),
-    },
-  });
+  const marks = {
+    queuedLocally: true,
+    ...(commandId && { sentAs: commandId }),
+  };
+  const retried =
+    replaces === undefined
+      ? -1
+      : target.messages.findIndex(
+          (message) => message.metadata?.sentAs === replaces
+        );
+  if (retried >= 0) {
+    const { sendFailed: _failed, ...kept } =
+      target.messages[retried].metadata ?? {};
+    target.messages[retried] = {
+      ...target.messages[retried],
+      metadata: { ...kept, ...marks },
+    };
+  } else {
+    const echo = localUserMessage(instanceId, text, selectionExtras(extras));
+    target.messages.push({
+      ...echo,
+      metadata: { ...echo.metadata, ...marks },
+    });
+  }
   // A new attempt replaces the last one's announcement rather than stacking on
   // it: the live region says what is true now, not what was true before.
   sendFailureNotices[instanceId] = "";

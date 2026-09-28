@@ -74,8 +74,6 @@
         try {
           await removeRule(row.id, row.name);
           store.rules.value = rules.filter((other) => other.id !== row.id);
-        } catch (error) {
-          toast.error(message(error));
         } finally {
           delete busy[row.id];
         }

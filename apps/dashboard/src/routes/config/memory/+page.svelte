@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { toast } from "svelte-sonner";
   import { Input } from "$lib/components/ui/input";
   import { SectionHeader } from "$lib/components/ui/section-header";
   import { IconBook, IconTrash, IconWarningTriangle } from "$lib/icons";
@@ -96,10 +95,6 @@
             );
           }
           drafts.forget(fileHref(path));
-        } catch (caught) {
-          toast.error(
-            caught instanceof Error ? caught.message : String(caught)
-          );
         } finally {
           delete busy[path];
         }

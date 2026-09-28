@@ -32,6 +32,7 @@ import {
   extractClosestEdge,
 } from "@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge";
 import { getReorderDestinationIndex } from "@atlaskit/pragmatic-drag-and-drop-hitbox/util/get-reorder-destination-index";
+import { depart } from "../motion/share.svelte";
 import { workingSet } from "../working-set.svelte";
 import { workspace } from "./workspace.svelte";
 
@@ -127,6 +128,17 @@ export const dropHint = {
   tabIndexIn(leafId: string): number | null {
     return tabHint.leafId === leafId ? tabHint.index : null;
   },
+};
+
+/**
+ * A drop that puts a conversation in another group's strip: the tab there
+ * flies in from what was dragged (the tab it left, or the fleet or sidebar
+ * row), on the shared-element flight every opened tab uses.
+ */
+const flyFrom = (element: HTMLElement, sessionId: string) => {
+  element.dataset.share = `session:${sessionId}`;
+  depart(element);
+  delete element.dataset.share;
 };
 
 const clearHints = () => {
@@ -270,6 +282,9 @@ export function paneDropTarget(node: HTMLElement, leafId: string) {
       if (!data) {
         return;
       }
+      if (edge || data.from !== current) {
+        flyFrom(source.element, data.sessionId);
+      }
       if (edge) {
         workspace.split(current, edge, data.sessionId);
       } else {
@@ -349,8 +364,10 @@ export function tabDropTarget(
         axis: "horizontal",
       });
       // Same strip is a reorder — the conversation is already here and only
-      // its place in the row changes, which must not disturb its pane.
+      // its place in the row changes, which must not disturb its pane; the
+      // strip slides it there itself (PaneTabs).
       if (startIndex === -1) {
+        flyFrom(source.element, data.sessionId);
         workspace.move(data.sessionId, current.leafId, index);
       } else {
         workspace.reorder(current.leafId, data.sessionId, index);

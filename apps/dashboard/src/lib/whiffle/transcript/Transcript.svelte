@@ -39,6 +39,7 @@
   import type { Trail } from "$lib/components/ui/markdown/trail";
   import { IconChat } from "$lib/icons";
   import { type SessionState, whiffle } from "../client.svelte";
+  import { crossIn, dur, easeOut, motionOk } from "../motion/curves.svelte";
   import { waiting } from "../motion/share.svelte";
   import { rebuildScheduler } from "../workspace/scheduler.svelte";
   import {
@@ -49,6 +50,7 @@
   } from "./arrivals.svelte";
   import CatchUp from "./CatchUp.svelte";
   import Delegate from "./Delegate.svelte";
+  import { disclosureAt } from "./disclosure.svelte";
   import Latest from "./Latest.svelte";
   import LiveRow from "./LiveRow.svelte";
   import MessageRow from "./MessageRow.svelte";
@@ -700,6 +702,23 @@
    * surface every frame, is not a state indicator. The pill alone carries it.
    */
   const compacting = $derived(session.sdkStatus === "compacting");
+  /** The pill rises into place as it fades up, and fades as it goes. */
+  function pillIn(_node: Element) {
+    const rise = motionOk.current;
+    return {
+      duration: dur("--dur-menu"),
+      easing: easeOut,
+      css: (t: number, u: number) =>
+        `opacity: ${t}${rise ? `; translate: 0 ${(u * 4).toFixed(2)}px` : ""}`,
+    };
+  }
+  function pillOut(_node: Element) {
+    return {
+      duration: dur("--dur-exit"),
+      easing: easeOut,
+      css: (t: number) => `opacity: ${t}`,
+    };
+  }
 
   let scroller = $state<HTMLElement | undefined>();
   /** virtua's imperative handle — `scrollToIndex` reaches the true last row even
@@ -1702,23 +1721,30 @@
   bind:this={scroller}
 >
   <!-- Pinned to the top of the transcript viewport (the foot is the composer's),
-       first child so `position: sticky` actually holds. -->
-  {#if compacting}
-    <div class="compacting-note" role="status">
-      <span aria-hidden="true" class="beat"></span>
-      Compacting context…
-    </div>
-  {/if}
+       first child so `position: sticky` actually holds. A strip at no height
+       in the flow, the pill hanging from it over the rows, so its coming and
+       going moves nothing. -->
+  <div class="top-dock">
+    {#if compacting}
+      <div class="compacting-note" role="status" in:pillIn out:pillOut>
+        <span aria-hidden="true" class="beat"></span>
+        Compacting context…
+      </div>
+    {/if}
+  </div>
   {#if session.loading && rows.length === 0}
     <p class="empty">Loading transcript…</p>
   {:else if rows.length === 0}
-    <!-- The two keys that do anything from the composer below. Left-aligned:
-         this surface is a ledger. -->
-    <EmptyState
-      icon={IconChat}
-      line="Send the first instruction below — / lists this session's commands, @ names a machine or session."
-      title="No messages yet"
-    />
+    <!-- Only once the read has said the conversation is empty, fading in
+         where it stands. The two keys that do anything from the composer
+         below. Left-aligned: this surface is a ledger. -->
+    <div in:crossIn>
+      <EmptyState
+        icon={IconChat}
+        line="Send the first instruction below — / lists this session's commands, @ names a machine or session."
+        title="No messages yet"
+      />
+    </div>
   {/if}
 
   <!-- The list's own box: what the pin reads virtua's container off. -->
@@ -1758,7 +1784,10 @@
             {:else if row.kind === 'question'}
               <QuestionCard message={row.message} />
             {:else if row.kind === 'harness'}
-              <SystemLine harness={row.note} />
+              <SystemLine
+                disclosed={disclosureAt(session.instanceId, row.key)}
+                harness={row.note}
+              />
             {:else if row.kind === 'subagent'}
               <Subagent branch={row.branch} spawn={row.spawn} />
             {:else if row.kind === 'delegate'}
@@ -1838,14 +1867,19 @@
     padding-block: var(--space-5);
   }
 
-  .compacting-note {
+  .top-dock {
     position: sticky;
     inset-block-start: var(--space-3);
     z-index: 3;
+    block-size: 0;
+    display: flex;
+    justify-content: center;
+    align-items: start;
+    pointer-events: none;
+  }
+  .compacting-note {
     inline-size: fit-content;
     max-inline-size: 100%;
-    margin-block: 0 var(--space-4);
-    margin-inline: auto;
     display: flex;
     align-items: center;
     gap: var(--space-2);

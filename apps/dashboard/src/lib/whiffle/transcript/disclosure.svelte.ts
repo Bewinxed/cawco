@@ -30,8 +30,12 @@ function openIn(session: string): SvelteSet<string> {
  * `bind:open={...}`.
  */
 export function disclosure(call: Message) {
-  const open = openIn(call.instanceId);
-  const id = String(call.toolCallId ?? call.id);
+  return disclosureAt(call.instanceId, String(call.toolCallId ?? call.id));
+}
+
+/** The same, for a row that no single call made: a harness note, by its row key. */
+export function disclosureAt(session: string, id: string) {
+  const open = openIn(session);
   return {
     get: (): boolean => open.has(id),
     set: (next: boolean): void => {

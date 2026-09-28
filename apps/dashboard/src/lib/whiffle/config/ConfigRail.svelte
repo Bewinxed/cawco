@@ -4,7 +4,14 @@
    * and how many of them are failing somewhere. As `list` it is the whole
    * screen under 900px — the same entries at a touch height.
    */
+  import { TextMorph } from "torph/svelte";
   import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
+  import {
+    dur,
+    easeOut,
+    motionOk,
+    popScale,
+  } from "$lib/whiffle/motion/curves.svelte";
   import { countOf, faultsIn } from "./counts.svelte";
   import { unsavedIn } from "./drafts.svelte";
   import { GROUPS, type SectionSlug } from "./sections";
@@ -24,6 +31,27 @@
    * (components/ui/highlight). The rail sits outside Configure's keyed pane,
    * so it holds still while the section slides beside it.
    */
+
+  /**
+   * A section's fault badge pops in from the pop scale as it fades
+   * (--dur-menu) and leaves the same way on the exit tier; its figure ticks
+   * over through TextMorph. With reduced motion, a fade.
+   */
+  function badge(
+    _node: Element,
+    _params: undefined,
+    { direction }: { direction?: "in" | "out" | "both" } = {}
+  ) {
+    const scale = popScale();
+    return {
+      duration: dur(direction === "out" ? "--dur-exit" : "--dur-menu"),
+      easing: easeOut,
+      css: (t: number) =>
+        motionOk.current
+          ? `opacity: ${t}; scale: ${scale + (1 - scale) * t}`
+          : `opacity: ${t}`,
+    };
+  }
 </script>
 
 <nav
@@ -58,7 +86,12 @@
                 <span
                   class="fault num"
                   title="{faults} failing on a machine or at the hub"
-                  >{faults}<span class="sr-only"> failing</span></span
+                  transition:badge
+                  ><TextMorph
+                    as="span"
+                    duration={150}
+                    text={String(faults)}
+                  /><span class="sr-only"> failing</span></span
                 >
               {/if}
               {#if section.slug !== 'models'}

@@ -20,7 +20,13 @@
      * through MessageBody rather than a `pre`.
      */
     harness,
-  }: { message?: Message; harness?: HarnessNote } = $props();
+    disclosed,
+  }: {
+    message?: Message;
+    harness?: HarnessNote;
+    /** Whether the reader has this line open, kept per session by its row. */
+    disclosed: { get: () => boolean; set: (open: boolean) => void };
+  } = $props();
 
   const type = $derived(message?.type);
   const isOutput = $derived(type === "ui.command_output");
@@ -61,7 +67,7 @@
       : undefined
   );
 
-  let open = $state(false);
+  const open = $derived(disclosed.get());
 </script>
 
 {#if harness}
@@ -69,7 +75,7 @@
        one quiet line, the report itself behind it. -->
   <div class="note fold">
     {#if harness.body}
-      <Collapsible.Root bind:open>
+      <Collapsible.Root bind:open={disclosed.get, disclosed.set}>
         <Collapsible.Trigger class="ftrig hn">
           <IconInfo />
           <span class="ftitle">{harness.title}</span>
@@ -130,7 +136,7 @@
   </div>
 {:else if foldCommand || foldBody}
   <div class="note fold">
-    <Collapsible.Root bind:open>
+    <Collapsible.Root bind:open={disclosed.get, disclosed.set}>
       <Collapsible.Trigger class="ftrig">
         <span class="hchev" class:open><IconChevronRight /></span>
         <span class="ftitle">{foldTitle}</span>

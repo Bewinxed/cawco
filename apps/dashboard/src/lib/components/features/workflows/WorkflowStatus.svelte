@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { WorkflowRunStatus, WorkflowStepStatus } from "@whiffle/core";
+  import { TextMorph } from "torph/svelte";
   import {
     IconCheck,
     IconChevronUp,
@@ -7,6 +8,7 @@
     IconDot,
     IconStop,
   } from "$lib/icons";
+  import { crossIn } from "$lib/whiffle/motion/curves.svelte";
 
   let {
     status,
@@ -40,16 +42,20 @@
   };
   const Glyph = $derived(icons[tone]);
 </script>
-<!-- Keyed: in a `reflow` list (the rail, the board's queue) a new status
-     pops in over the old one leaving (motion/rows); elsewhere it is set. -->
-{#key status}
-  <span
-    class="wf-status"
-    data-flip="pop"
-    style="--chip-bg: var(--status-{tone}-bg); --chip-ink: var(--status-{tone}-ink)"
-    ><Glyph aria-hidden="true" class="size-3" />{label}</span
-  >
-{/key}
+<!-- One chip for the life of the status: a change tints it over --dur-panel,
+     the glyph cross-fades in its cell and the label morphs in place. In a
+     `reflow` list (the rail, the board's queue) the chip still pops in and
+     out as a whole (motion/rows). -->
+<span
+  class="wf-status"
+  data-flip="pop"
+  style="--chip-bg: var(--status-{tone}-bg); --chip-ink: var(--status-{tone}-ink)"
+  ><span aria-hidden="true" class="glyph"
+    >{#key tone}
+      <span transition:crossIn><Glyph class="size-3" /></span>
+    {/key}</span
+  ><TextMorph as="span" duration={150} text={label} /></span
+>
 <style>
   .wf-status {
     display: inline-flex;
@@ -59,8 +65,17 @@
     border-radius: var(--radius-pill);
     background: var(--chip-bg);
     color: var(--chip-ink);
-    font-size: var(--text-label);
+    font: var(--type-label);
     white-space: nowrap;
-    font-weight: var(--weight-strong);
+    transition:
+      background-color var(--dur-panel) var(--ease-out),
+      color var(--dur-panel) var(--ease-out);
+  }
+  .glyph {
+    display: grid;
+  }
+  .glyph > :global(*) {
+    grid-area: 1 / 1;
+    display: grid;
   }
 </style>
