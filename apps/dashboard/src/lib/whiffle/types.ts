@@ -35,6 +35,12 @@ export type MessageType =
   | "tool.progress"
   | "result.success"
   | "result.error"
+  /**
+   * Not a row: the place a send was read at, or stored at, among the
+   * harness's own rows. `placeSends` (transcript/sends.ts) draws the send's
+   * row there from its record; nothing else ever sees one.
+   */
+  | "send.ref"
   | `system.${string}`
   | `ui.${string}`;
 
@@ -50,33 +56,35 @@ export interface Message {
   /** Links this message to the Task tool.use that spawned it (subagent output). */
   parentToolUseId?: string;
   /**
-   * Sent into a running turn: drawn after the live tail, at reduced presence,
-   * until the session reads it. Decided when the row first appears — a send
-   * to an idle session is read at once and is never drawn as waiting.
+   * Waits at the end of the transcript, after the live tail: a send the
+   * session has not read — its record `pending`, or this tab's own send the
+   * hub has not taken yet (`sending`, `unreached`).
    */
   queued?: boolean;
   /** The SDK message's own uuid — the handle for rewind and fork. */
   sdkUuid?: string;
   /**
-   * Where a message sent to the session stands: drawn by this tab and not yet
-   * taken (`sending`), taken by the hub (`sent`), consumed by the harness
-   * (`read`), or never delivered (`failed`). Only moves forward, except that a
-   * retry puts a failed one back to `sending`.
+   * Where a message sent to the session stands. From its record, the hub's
+   * word: waiting for the harness (`pending`), taken up by it (`read`), or
+   * never going to be (`failed`). Before the hub has taken it, this tab's
+   * own: on its way (`sending`), or it never reached the hub (`unreached`).
+   * Absent on everything that is not a send.
    */
   state?: SendState;
   /**
-   * When the turn happened. A sent message: when the hub accepted it, live and
-   * stored alike. Any other live frame: the client's clock on arrival, which is
-   * the truth there. A stored entry: its `SessionMessage.timestamp`, and none
-   * when the entry has none — stamping the parse time would render a time that
-   * never happened. Absent beats invented; readers must handle it being unset.
+   * When the turn happened. A send: when the hub accepted it, live and stored
+   * alike (`SendRecord.acceptedAt`). Any other live frame: the client's clock
+   * on arrival, which is the truth there. A stored entry: its
+   * `SessionMessage.timestamp`, and none when the entry has none — stamping
+   * the parse time would render a time that never happened. Absent beats
+   * invented; readers must handle it being unset.
    */
   timestamp?: Date;
   toolCallId?: string | null;
   type: MessageType;
 }
 
-export type SendState = "sending" | "sent" | "read" | "failed";
+export type SendState = "sending" | "unreached" | "pending" | "read" | "failed";
 
 /** Everything a renderer may need beyond `content`, keyed by the type that uses it. */
 export interface MessageMetadata {
@@ -165,12 +173,8 @@ export interface MessageMetadata {
   selectedMemoryType?: "project" | "user";
   selectedModel?: string;
   /**
-   * Why this message was never delivered, stamped on the row when its command
-   * settles at `failed`.
-   *
-   * It duplicates the record's own `reason` on purpose: command records are
-   * swept by count and age (`SETTLED_COMMAND_TTL_MS`, five minutes), and a
-   * message that failed must keep saying why after its record is forgotten.
+   * Why a send did not go: its record's reason, or — for one that never
+   * reached the hub — its command's.
    */
   sendFailed?: string;
   sessionId?: string;
@@ -218,6 +222,8 @@ export interface MessageMetadata {
   toolUseResult?: UserQuestionResult;
   totalCost?: number;
   trigger?: "manual" | "auto";
+  /** A send made urgently (`SendRecord.mode`): into the running turn, or ahead of it. */
+  urgent?: true;
   // Help menu
   version?: string;
   /** Set when a `user.peer` is a workflow's notice: what happened, e.g. `step Build failed`. */

@@ -1,6 +1,5 @@
 import { generateCodeChallenge, generateCodeVerifier } from "@whiffle/auth";
 import type {
-  AcceptedSend,
   AgentRow,
   BuildInfo,
   ClaudeLimits,
@@ -25,13 +24,17 @@ import type {
   MachineHookScript,
   MachineMemorySet,
   ModelInfo,
+  NeutralResultMessage,
   NeutralSessionInfo,
+  NeutralUserMessage,
   PermissionMode,
   PreviewSource,
   RegisterAckPayload,
   Rule,
   RuleDraft,
+  SendMode,
   SendPayload,
+  SendRecord,
   SentMessage,
   SessionMessage,
   SessionPulse,
@@ -53,6 +56,7 @@ import {
   CONTROL_GET_SESSION_INFO,
   CONTROL_GET_SESSION_MESSAGES,
   CONTROL_GIT_CHANGES,
+  CONTROL_INTERRUPT,
   CONTROL_LIST_SESSIONS,
   CONTROL_MODEL_CATALOG,
   CONTROL_SEARCH_TRANSCRIPTS,
@@ -70,6 +74,7 @@ import {
   INSPECT_CONFIG,
   identifyBlocks,
   MESSAGES_READ,
+  MESSAGES_STORED,
   memoryDocProblem,
   PREVIEW_START,
   PREVIEW_STOP,
@@ -106,7 +111,13 @@ import {
   summariserPrompt,
   transcriptModel,
 } from "./continuation";
-import type { AgentAuth, DbShape, DelegateEvent, InstanceKind } from "./db";
+import type {
+  AgentAuth,
+  DbShape,
+  DelegateEvent,
+  InstanceKind,
+  SentMessageRow,
+} from "./db";
 import { hashHookMaterial, usageBucketFromRow } from "./db";
 import { delegateTypesRoutes, makeDelegateTypes } from "./delegate-types";
 import { hubHttpUrl } from "./delegation-actions";
@@ -1218,19 +1229,81 @@ type MemoryRead =
  * directory the agent really opened it in — the spawn's `cwd` after the agent
  * expanded it.
  */
-/** The sends a `frame` says the harness has now consumed ({@link MESSAGES_READ}). */
-const peekRead = (frame: FramePayload & { kind: "frame" }): string[] =>
-  frame.message.type === "system" && frame.message.subtype === MESSAGES_READ
-    ? (frame.message.read ?? [])
-    : [];
+/**
+ * What a harness said about the sends it was handed: which it stores under
+ * which id and which it has read (system frames), and which one it refused
+ * (a `rejected` payload). These are the hub's to turn into records; no screen
+ * draws them.
+ */
+type SendSignal =
+  | { kind: "stored"; storedAs: Record<string, string> }
+  | { kind: "read"; read: string[]; storedAs: Record<string, string> }
+  | { kind: "rejected"; uuid: string; error: string };
 
-/** The ids the harness stored those sends under, by uuid, where it says. */
-const peekStoredAs = (
+const peekSendSignal = (
   frame: FramePayload & { kind: "frame" }
-): Record<string, string> =>
-  frame.message.type === "system" && frame.message.subtype === MESSAGES_READ
-    ? (frame.message.storedAs ?? {})
-    : {};
+): SendSignal | undefined => {
+  const { message } = frame;
+  if (message.type !== "system") {
+    return undefined;
+  }
+  switch (message.subtype) {
+    case MESSAGES_STORED:
+      return { kind: "stored", storedAs: message.storedAs ?? {} };
+    case MESSAGES_READ:
+      return {
+        kind: "read",
+        read: message.read ?? [],
+        storedAs: message.storedAs ?? {},
+      };
+    default:
+      return undefined;
+  }
+};
+
+/**
+ * How a send asks to be read. The hub has already downgraded an urgent send
+ * it does not honour by the time this is asked.
+ */
+const sendMode = ({ urgent, message }: SendPayload): SendMode => {
+  if (urgent) {
+    return "urgent";
+  }
+  return message.shouldQuery === false ? "note" : "turn";
+};
+
+/** A record as it goes out: on the stream, and with a history read. */
+const toSendRecord = (row: SentMessageRow): SendRecord => ({
+  uuid: row.uuid,
+  instanceId: row.instanceId,
+  acceptedAt: row.acceptedAt.toISOString(),
+  // Written at accept for every record since bodies were kept; a record from
+  // before goes out only through the history route, which fills it first.
+  body: row.body as NeutralUserMessage,
+  mode: row.mode,
+  state: row.state,
+  ...(row.reason ? { reason: row.reason } : {}),
+  ...(row.anchor ? { anchor: row.anchor } : {}),
+  ...(row.harnessId ? { harnessId: row.harnessId } : {}),
+  ...(row.replaces ? { replaces: row.replaces } : {}),
+  ...(row.replacedBy ? { replacedBy: row.replacedBy } : {}),
+});
+
+/**
+ * Why a send did not go, when the session never read it and no harness error
+ * says more — what its row says beside "not sent".
+ */
+const UNREAD = {
+  stopped: "The session was stopped before it read this.",
+  ended: "The session ended before it read this.",
+  restarted: "The session restarted before it read this.",
+} as const;
+
+/**
+ * The newest entries of a transcript read for the sends a session stored as
+ * it stopped, restarted or came back: the notes it held sit at its very end.
+ */
+const STORED_TAIL = 50;
 
 const peekInit = (
   payload: unknown
@@ -1614,7 +1687,11 @@ export const createServer = ({
    * elsewhere that they are over — a Telegram message whose buttons still work
    * after the session behind them is gone is a message that lies.
    */
-  const forgetPending = (instanceId: string): void => {
+  const forgetPending = (
+    instanceId: string,
+    why: string,
+    stillHeld = false
+  ): void => {
     for (const parked of pending.list()) {
       if (parked.instanceId === instanceId && parked.requestId) {
         telegram?.onSettled(parked.requestId);
@@ -1628,8 +1705,9 @@ export const createServer = ({
     // A session that died before it ever said anything is never going to name
     // itself; nothing should still be waiting to hear its first words.
     awaitingFirstTurn.delete(instanceId);
-    // Nor is anything it was sent and never read ever going to run.
-    pendingSends.delete(instanceId);
+    // Nor is anything it was sent and never read going to run — unless its
+    // harness wrote it down as it went, or a process it outlived holds it.
+    settlePending(instanceId, why, stillHeld);
     // The supervisor's turn buffers for a dead session are waste.
     supervisor.forget(instanceId);
     usageCounter.forget(instanceId);
@@ -1710,8 +1788,6 @@ export const createServer = ({
         },
       },
     });
-    handoffs.set(parent.id, { from: leaf(delegate.cwd), at: Date.now() });
-    publishInstances(parent.machineId);
 
     const toolName = peek(ask.payload, "toolName");
     publishDelegateEvent(
@@ -1739,17 +1815,413 @@ export const createServer = ({
    * watching is invisible on every other device, and gone after a reload.
    */
   const handoffs = new Map<string, { from: string; at: number }>();
-  /**
-   * Every message sent to a session that its harness has not read yet, by
-   * instance, then uuid, oldest first. Filed by {@link deliverSend}, retired
-   * by the harness's `read` frame, dropped with the session; served with its
-   * history, so a reload draws what is still waiting, dated as the live frame
-   * dated it ({@link AcceptedSend}).
-   */
-  const pendingSends = new Map<string, Map<string, AcceptedSend>>();
+
+  /* ---- send records: the hub's one account of every send (SendRecord) ---- */
 
   /**
-   * A send as the session's own stream carries it: the message under its
+   * The last thing each session said that a screen draws a row for: its
+   * newest main-loop assistant frame, or the newest send it read. A send that
+   * fails without being stored is placed right after it. Seeded from the
+   * stored transcript by a history read when the hub has heard nothing since
+   * it started.
+   */
+  const anchors = new Map<string, string>();
+  /**
+   * Sends each session has read and not yet said anything about, each with
+   * the anchor it had before it was read. An error that closes the turn before
+   * the model says a word is that send's failure (rule b); anything the model
+   * says, a clean close, or an interrupt clears them.
+   */
+  const unanswered = new Map<string, Map<string, string | undefined>>();
+  /** Pending sends a transcript read is deciding, so none is decided twice. */
+  const deciding = new Set<string>();
+
+  /** A record's latest state onto its session's stream: where every screen hears it. */
+  const publishSend = (row: SentMessageRow): void => {
+    streams.sequence(row.instanceId, {
+      kind: "send",
+      instanceId: row.instanceId,
+      record: toSendRecord(row),
+    } satisfies FramePayload);
+  };
+
+  /** One change to a record: stored, then said. The only way a record moves. */
+  const changeSend = (
+    row: SentMessageRow,
+    change: Parameters<DbShape["updateSend"]>[1]
+  ): SentMessageRow => {
+    const moved = db.updateSend(row.uuid, change) ?? row;
+    publishSend(moved);
+    return moved;
+  };
+
+  /**
+   * Where a failed send goes: after the last thing the session said — or,
+   * when that is this send itself (it read it, then failed on it), after
+   * what came before it.
+   */
+  const anchorFor = (instanceId: string, uuid: string): string | undefined => {
+    const last = anchors.get(instanceId);
+    return last === uuid ? unanswered.get(instanceId)?.get(uuid) : last;
+  };
+
+  /**
+   * A pending send read. `answering` is the harness's own read, which the
+   * model's turn follows; a read found in a stored transcript follows no turn.
+   */
+  const readSend = (
+    row: SentMessageRow,
+    answering: boolean
+  ): SentMessageRow => {
+    if (answering) {
+      const waiting = unanswered.get(row.instanceId) ?? new Map();
+      waiting.set(row.uuid, anchors.get(row.instanceId));
+      unanswered.set(row.instanceId, waiting);
+    }
+    anchors.set(row.instanceId, row.uuid);
+    return changeSend(row, { state: "read" });
+  };
+
+  /** A send that will never be read, and why. Final. */
+  const failSend = (row: SentMessageRow, reason: string): void => {
+    const anchor = anchorFor(row.instanceId, row.uuid);
+    unanswered.get(row.instanceId)?.delete(row.uuid);
+    changeSend(row, { state: "failed", reason, anchor: anchor ?? null });
+  };
+
+  /**
+   * The session's turn was cut into — an interrupt, or an urgent send that
+   * aborts it — so the error that closes it is the cut, not a failure of
+   * what it had read.
+   */
+  const noteInterrupt = (instanceId: string): void => {
+    unanswered.delete(instanceId);
+  };
+
+  /**
+   * Which of these sends a session's stored transcript holds — under the
+   * send's uuid (Claude, whole or folded into a turn) or the id its harness
+   * named for it. A machine that cannot be asked cannot say it stored one.
+   */
+  const storedIn = async (
+    instanceId: string,
+    sends: SentMessageRow[]
+  ): Promise<Set<string>> => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    if (!row?.sessionId) {
+      return new Set();
+    }
+    const answer = await callAgent(
+      row.machineId,
+      CONTROL_GET_SESSION_MESSAGES,
+      [row.sessionId, { dir: row.cwd || undefined, tail: STORED_TAIL }],
+      READ_TIMEOUT_MS,
+      (row.harness || undefined) as HarnessKind | undefined
+    );
+    if (typeof answer === "string" || !answer.ok) {
+      return new Set();
+    }
+    const ids = new Set(
+      (answer.result as SessionMessage[]).flatMap((entry) =>
+        entry.sourceUuid ? [entry.uuid, entry.sourceUuid] : [entry.uuid]
+      )
+    );
+    return new Set(
+      sends
+        .filter(
+          (send) =>
+            ids.has(send.uuid) ||
+            (send.harnessId !== null && ids.has(send.harnessId))
+        )
+        .map((send) => send.uuid)
+    );
+  };
+
+  /**
+   * What a session was sent and has not read, decided now that it stopped,
+   * ended or restarted (rule c): whatever its harness wrote down as it went is
+   * read — a process can store the notes it was holding as it stops, and say
+   * nothing — and the rest did not go, for `why`. `keepUnstored` leaves the
+   * rest waiting instead, for a process that is still holding them.
+   */
+  const settlePending = (
+    instanceId: string,
+    why: string,
+    keepUnstored = false
+  ): void => {
+    // A turn that is over answers nothing it read; one a live process is
+    // still running may yet.
+    if (!keepUnstored) {
+      unanswered.delete(instanceId);
+    }
+    const sends = db
+      .sendsIn(instanceId, ["pending"])
+      .filter((send) => !deciding.has(send.uuid));
+    if (sends.length === 0) {
+      return;
+    }
+    for (const send of sends) {
+      deciding.add(send.uuid);
+    }
+    // biome-ignore lint/complexity/noVoid: the callers are frame handlers that must not wait on a machine round trip
+    void storedIn(instanceId, sends)
+      .then((stored) => {
+        for (const send of sends) {
+          // Read meanwhile, or thrown away with its session: that stands.
+          const now = db.sendRecord(send.uuid);
+          if (now?.state !== "pending") {
+            continue;
+          }
+          if (stored.has(now.uuid)) {
+            readSend(now, false);
+          } else if (!keepUnstored) {
+            failSend(now, why);
+          }
+        }
+      })
+      .finally(() => {
+        for (const send of sends) {
+          deciding.delete(send.uuid);
+        }
+      });
+  };
+
+  /** A retry is out: the failed send it stands in for is over. */
+  const replaceSend = (replaced: string, by: string): void => {
+    const row = db.sendRecord(replaced);
+    if (row?.state === "failed") {
+      changeSend(row, { state: "replaced", replacedBy: by });
+    }
+  };
+
+  /**
+   * A harness's word about its sends (`SendSignal`): stored under an id,
+   * read, or refused. Read ones are read in the order named; one named by an
+   * id this hub has no record under was never a send — typed in the harness,
+   * or its own.
+   */
+  const takeSendSignal = (instanceId: string, signal: SendSignal): void => {
+    if (signal.kind === "rejected") {
+      const row = db.sendRecord(signal.uuid);
+      if (row?.state === "pending" || row?.state === "read") {
+        failSend(row, signal.error);
+      }
+      return;
+    }
+    for (const [uuid, harnessId] of Object.entries(signal.storedAs)) {
+      db.linkSend(uuid, harnessId);
+    }
+    if (signal.kind === "stored") {
+      return;
+    }
+    const order = (row: SentMessageRow): number => {
+      const at = signal.read.indexOf(row.uuid);
+      return at >= 0 ? at : signal.read.indexOf(row.harnessId ?? "");
+    };
+    const read = db
+      .sendsFor(signal.read)
+      .filter((row) => row.instanceId === instanceId && row.state === "pending")
+      .sort((a, b) => order(a) - order(b));
+    for (const row of read) {
+      readSend(row, true);
+    }
+  };
+
+  /**
+   * What the session's own turn says about the sends it read. The model's
+   * first words answer them, and are where the next failure goes; an error
+   * that closes the turn before any is theirs (rule b): they fail with it,
+   * and the result frame says which, so it draws no line of its own.
+   */
+  const observeTurn = (
+    instanceId: string,
+    frame: FramePayload & { kind: "frame" }
+  ): void => {
+    const neutral = frame.message;
+    if (neutral.type === "assistant" && !neutral.parent_tool_use_id) {
+      unanswered.delete(instanceId);
+      if (neutral.uuid) {
+        anchors.set(instanceId, neutral.uuid);
+      }
+      return;
+    }
+    if (neutral.type !== "result") {
+      return;
+    }
+    const waiting = unanswered.get(instanceId);
+    if (!(neutral.is_error && waiting?.size)) {
+      unanswered.delete(instanceId);
+      return;
+    }
+    const reason = neutral.errors?.length
+      ? neutral.errors.join("\n")
+      : neutral.result || `Harness error (${neutral.subtype}).`;
+    const failed = db
+      .sendsFor([...waiting.keys()])
+      .filter((row) => row.state === "read");
+    for (const row of failed) {
+      failSend(row, reason);
+    }
+    unanswered.delete(instanceId);
+    neutral.failedSends = failed.map((row) => row.uuid);
+  };
+
+  /**
+   * A history page's sends, and the record lines it carries.
+   *
+   * Each stored entry that is a send is linked to its record
+   * (`SessionMessage.send`), found by the send's uuid (Claude stores it, or
+   * names it as a fold's source) or by the id the harness stores it under. A
+   * record from before the hub kept bodies takes the stored copy as its body.
+   * A pending send stored under its own uuid has been read: Claude writes a
+   * send down as it takes it up, so this is the read a daemon restart lost.
+   *
+   * The page carries every record it links, every failed record whose anchor
+   * is on it — and, on the page that reaches the conversation's start, every
+   * one that has none — and on the newest page every send still pending. The
+   * newest page also seeds the session's anchor when the hub has heard nothing
+   * of it since it started.
+   */
+  const sendLines = (
+    instanceId: string | undefined,
+    entries: SessionMessage[],
+    newest: boolean,
+    start: boolean
+  ): { record: SendRecord }[] => {
+    const { lines, last } = linkEntries(entries);
+    if (instanceId) {
+      if (newest && last && !anchors.has(instanceId)) {
+        anchors.set(instanceId, last);
+      }
+      const onPage = new Set([
+        ...entries.map((entry) => entry.uuid),
+        ...lines.keys(),
+      ]);
+      for (const send of unlinkedOnPage(instanceId, onPage, newest, start)) {
+        if (!lines.has(send.uuid)) {
+          lines.set(send.uuid, send);
+        }
+      }
+    }
+    return [...lines.values()].map((send) => ({ record: toSendRecord(send) }));
+  };
+
+  /**
+   * The sends a page draws that none of its entries is: every one still
+   * pending, on the newest page; every failed one whose anchor is on it; and,
+   * on the page that reaches the conversation's start, every failed one with
+   * no anchor at all.
+   */
+  const unlinkedOnPage = (
+    instanceId: string,
+    onPage: Set<string>,
+    newest: boolean,
+    start: boolean
+  ): SentMessageRow[] =>
+    db
+      .sendsIn(instanceId, newest ? ["pending", "failed"] : ["failed"])
+      .filter(
+        (send) =>
+          send.state === "pending" ||
+          (send.anchor ? onPage.has(send.anchor) : start)
+      );
+
+  /**
+   * The sends a page's entries are, linked, by uuid — and the last thing on
+   * the page a failed send could be anchored to. A stored error that closes
+   * a turn on failed sends, with nothing said in between, is theirs (rule b,
+   * read back) and draws no line of its own, as the live result frame did.
+   */
+  const linkEntries = (
+    entries: SessionMessage[]
+  ): { lines: Map<string, SentMessageRow>; last: string | undefined } => {
+    const sendOf = sendFinder(entries);
+    const lines = new Map<string, SentMessageRow>();
+    let last: string | undefined;
+    let failures: string[] = [];
+    for (const entry of entries) {
+      if (entry.type === "assistant" && !entry.parent_tool_use_id) {
+        last = entry.uuid;
+        failures = [];
+      }
+      const stored = entry.message as NeutralResultMessage | undefined;
+      if (entry.type === "system" && stored?.is_error && failures.length) {
+        stored.failedSends = failures;
+        failures = [];
+      }
+      const found = sendOf(entry);
+      if (found) {
+        const send = linkEntry(entry, found.send, found.own);
+        last = send.uuid;
+        if (send.state === "failed") {
+          failures.push(send.uuid);
+        }
+        lines.set(send.uuid, send);
+      }
+    }
+    return { lines, last };
+  };
+
+  /**
+   * Which send a stored entry is: found by the send's uuid (`own` — Claude
+   * stores it, or names it as a fold's source) or by the id the harness
+   * stores it under.
+   */
+  const sendFinder = (
+    entries: SessionMessage[]
+  ): ((
+    entry: SessionMessage
+  ) => { send: SentMessageRow; own: boolean } | undefined) => {
+    const found = db.sendsFor(
+      entries
+        .filter((entry) => entry.type === "user" || entry.sourceUuid)
+        .flatMap((entry) =>
+          entry.sourceUuid ? [entry.sourceUuid, entry.uuid] : [entry.uuid]
+        )
+    );
+    const byUuid = new Map(found.map((send) => [send.uuid, send]));
+    const byHarnessId = new Map(
+      found.flatMap((send) =>
+        send.harnessId ? [[send.harnessId, send] as const] : []
+      )
+    );
+    return (entry) => {
+      const own = byUuid.get(entry.sourceUuid ?? entry.uuid);
+      if (own) {
+        return { send: own, own: true };
+      }
+      const stored = byHarnessId.get(entry.uuid);
+      return stored && { send: stored, own: false };
+    };
+  };
+
+  /**
+   * One stored entry, linked to the send it is. A record from before the hub
+   * kept bodies takes the stored copy as its body. A pending send stored
+   * under its own uuid has been read: Claude writes a send down as it takes
+   * it up, so this is a read that a daemon restart kept from being framed.
+   */
+  const linkEntry = (
+    entry: SessionMessage,
+    found: SentMessageRow,
+    own: boolean
+  ): SentMessageRow => {
+    entry.send = found.uuid;
+    let send = found;
+    if (!send.body) {
+      send =
+        db.updateSend(send.uuid, {
+          body: {
+            type: "user",
+            message: entry.message as NeutralUserMessage["message"],
+          },
+        }) ?? send;
+    }
+    return own && send.state === "pending" ? readSend(send, false) : send;
+  };
+
+  /**
+   * A send as its record keeps it (`SendRecord.body`): the message under its
    * uuid, with what rode with it put back in — images first and pastes after
    * the typed words, the order every adapter hands them to its harness in.
    */
@@ -1822,7 +2294,7 @@ export const createServer = ({
     };
     agent.send({ verb: "spawn", machineId, instanceId, payload: revive });
     // A relaunch replaces the process; what the old one had parked is over.
-    forgetPending(instanceId);
+    forgetPending(instanceId, UNREAD.restarted);
     db.openInstance({
       id: instanceId,
       machineId,
@@ -1838,58 +2310,88 @@ export const createServer = ({
   };
 
   /**
+   * What taking a send means beyond the send itself, whoever sent it — the
+   * one place it is done. The reader's hand clears a supervisor's mute; a
+   * session's first words name it; a queued hand-off is work the target now
+   * carries, and a send that starts a turn reads it; an urgent send cuts into
+   * the turn it lands in.
+   */
+  const afterSend = (
+    { machineId, payload }: Envelope<SendPayload>,
+    mode: SendMode
+  ): void => {
+    const { instanceId, message } = payload;
+    if (mode === "urgent") {
+      noteInterrupt(instanceId);
+    }
+    if (message.origin.kind === "human") {
+      supervisor.noteHumanSend(instanceId);
+    }
+    if (!hasAttachments(payload)) {
+      nameFromLiveTurn(machineId, instanceId, message);
+    }
+    const from = peekPeer(payload);
+    if (from && !isQuerySend(payload)) {
+      handoffs.set(instanceId, { from, at: Date.now() });
+      publishInstances(machineId);
+    } else if (isQuerySend(payload) && handoffs.delete(instanceId)) {
+      publishInstances(machineId);
+    }
+  };
+
+  /**
    * THE ONE PATH A MESSAGE TAKES INTO A SESSION, whoever sent it — a reader, a
    * rule, the supervisor, a delegate's report, another session's hand-off.
    * A session whose process is gone is woken first ({@link wakeForSend}), so
-   * every sender reaches a sleeping session the same way. The machine gets it;
-   * the hub files it as
-   * pending until the harness reads it; and the session's ring gets it as a
-   * `user` frame under its uuid, so every tab, device and late joiner draws
-   * the same row with the same id. `from` hears why when the machine is not
-   * there to take it.
+   * every sender reaches a sleeping session the same way. The machine gets
+   * it, and the hub writes its record — pending, or failed when the machine
+   * is not there to take it — and says so on the session's stream, so every
+   * tab, device and late joiner draws the same row under the same id.
+   *
+   * A uuid the hub already has a record for is the same send again (a tab
+   * trying once more after its socket dropped): the machine is not handed it
+   * twice, and the record it has is said again for whoever asked.
    */
-  const deliverSend = (
-    envelope: Envelope<SendPayload>,
-    from?: HubSocket
-  ): boolean => {
-    const agent = registry.agent(envelope.machineId);
-    if (!agent) {
-      if (from) {
-        toDashboard(
-          from,
-          failure(envelope, `machine ${envelope.machineId} is not connected`)
-        );
-      }
-      return false;
+  const deliverSend = (envelope: Envelope<SendPayload>): SentMessageRow => {
+    const { instanceId, message } = envelope.payload;
+    const known = db.sendRecord(message.uuid);
+    if (known) {
+      publishSend(known);
+      return known;
     }
-    const { instanceId } = envelope.payload;
-    wakeForSend(agent, envelope.machineId, instanceId);
-    agent.send(envelope);
+    const agent = registry.agent(envelope.machineId);
+    if (agent) {
+      wakeForSend(agent, envelope.machineId, instanceId);
+      agent.send(envelope);
+    }
     // Built after the send has gone: the machine is handed the image bytes,
-    // the dashboards a reference to them. Dated here, once: the frame every
-    // live tab draws and the pending copy a reload draws are this one object.
-    const acceptedAt = new Date();
-    const message: AcceptedSend = {
-      ...externalizeImages(sentFrame(envelope.payload)),
-      timestamp: acceptedAt.toISOString(),
-    };
-    // And kept, so its stored copy reads this same time after the harness
-    // has read it (the history route dates it by this row).
-    db.recordSend({ uuid: message.uuid, instanceId, acceptedAt });
-    const held =
-      pendingSends.get(instanceId) ?? new Map<string, AcceptedSend>();
-    held.set(message.uuid, message);
-    pendingSends.set(instanceId, held);
-    const frame: FramePayload = {
-      kind: "frame",
+    // the record a reference to them.
+    const mode = sendMode(envelope.payload);
+    const record = db.recordSend({
+      uuid: message.uuid,
       instanceId,
-      // A row with no harness predates the column, and is Claude's.
-      harness: (db.getInstancesByIds([instanceId])[0]?.harness ??
-        "claude") as HarnessKind,
-      message,
-    };
-    streams.sequence(instanceId, frame);
-    return true;
+      acceptedAt: new Date(),
+      body: externalizeImages(sentFrame(envelope.payload)),
+      mode,
+      ...(message.replaces ? { replaces: message.replaces } : {}),
+      ...(agent
+        ? { state: "pending" as const }
+        : {
+            state: "failed" as const,
+            reason: `machine ${envelope.machineId} is not connected`,
+            anchor: anchors.get(instanceId) ?? null,
+          }),
+    });
+    // The send it retries goes first, so a screen folds that row away as
+    // this one arrives.
+    if (message.replaces) {
+      replaceSend(message.replaces, record.uuid);
+    }
+    publishSend(record);
+    if (agent) {
+      afterSend(envelope, mode);
+    }
+    return record;
   };
   /**
    * Each delegate session's assistant texts, accumulated while its turn runs
@@ -3237,10 +3739,7 @@ export const createServer = ({
   // The Telegram bridge answers straight down the agent socket, past every
   // recording site above — so it files its answers through this instead.
   telegram?.setAnswerRecorder(recordDelegateAnswer);
-  telegram?.setSender(deliverSend);
-  telegram?.setHumanSendObserver((instanceId) =>
-    supervisor.noteHumanSend(instanceId)
-  );
+  telegram?.setSender((envelope) => deliverSend(envelope).state !== "failed");
 
   const awaitingInstall = (machineId: string, toolId: string): boolean => {
     for (const install of pendingInstalls.values()) {
@@ -3814,73 +4313,23 @@ export const createServer = ({
   };
 
   /**
-   * A dashboard's `send`, whole: relay it, name the session after its first
-   * words, and keep the hub's record of what the target is carrying.
-   *
-   * Extracted rather than inlined in the route so the Ledger Protocol's `send`
-   * command runs THIS, not a second implementation of it — a command that did
-   * anything less than the legacy call would be a quieter way of doing the same
-   * thing wrong.
+   * A dashboard's `send` command, taken: the one send path, and a log line.
+   * Its record — pending, or failed with why — is the answer every tab hears.
    */
-  const relaySend = (
-    message: Envelope<SendPayload>,
-    dashboard: HubSocket
-  ): boolean => {
+  const relaySend = (message: Envelope<SendPayload>): void => {
     // Provenance (NEW.md, cross-session delivery incident): which tab it
-    // believed it was sending from, when the dashboard's own command carried
-    // one. Never required — a legacy send or an older dashboard build logs
-    // with it absent — but it is the one thing that makes "a send landed on
-    // the wrong session" provable after the fact instead of merely suspected.
+    // believed it was sending from. It is the one thing that makes "a send
+    // landed on the wrong session" provable after the fact instead of merely
+    // suspected.
     const { provenance } = message.payload as {
       provenance?: { clientId?: string };
     };
-    const from = peekPeer(message.payload);
-    const forwarded = deliverSend(message, dashboard);
-    // Logged after the guard, not before: a message the guard drops (no agent
-    // connected) never reached the target, and a log line claiming otherwise
-    // would itself become evidence in the next "did this land" argument.
+    const record = deliverSend(message);
     console.log(
-      `[hub] send -> ${message.instanceId ?? "?"} (${forwarded ? "forwarded" : "dropped"})${
+      `[hub] send -> ${record.instanceId} (${record.state})${
         provenance ? ` client ${provenance.clientId ?? "?"}` : ""
       }`
     );
-    if (!(forwarded && message.instanceId)) {
-      return false;
-    }
-    // The operator's hand on the session: a send relayed for a dashboard is
-    // human unless its origin says otherwise (system/peer sends come from
-    // hub-side senders, not this relay). It clears a supervisor
-    // consecutive-cap mute — the cap hands control to the human, and this is
-    // the human taking it.
-    const sendOriginKind = (
-      message.payload as { message?: { origin?: { kind?: string } } } | null
-    )?.message?.origin?.kind;
-    if (sendOriginKind === undefined || sendOriginKind === "human") {
-      supervisor.noteHumanSend(message.instanceId);
-    }
-    // The first thing a session is asked is what it is called, until
-    // something names it properly.
-    if (!hasAttachments(message.payload)) {
-      nameFromLiveTurn(
-        message.machineId,
-        message.instanceId,
-        (message.payload as { message?: unknown } | null)?.message
-      );
-    }
-    if (from && !isQuerySend(message.payload)) {
-      // A queued hand-off: the target now carries unread work.
-      handoffs.set(message.instanceId, { from, at: Date.now() });
-      publishInstances(message.machineId);
-    } else if (
-      isQuerySend(message.payload) &&
-      handoffs.has(message.instanceId)
-    ) {
-      // A querying send folds everything queued into the turn it
-      // starts — the hand-off has been read.
-      handoffs.delete(message.instanceId);
-      publishInstances(message.machineId);
-    }
-    return true;
   };
 
   /**
@@ -3955,7 +4404,15 @@ export const createServer = ({
     if (method === FLEET_SYNC || method === FLEET_STATUS) {
       pendingFleet.set(message.requestId, message.machineId);
     }
+    noteControl(message);
     return true;
+  };
+
+  /** A control that interrupts a session's turn cuts into it ({@link noteInterrupt}). */
+  const noteControl = (message: Envelope<ControlPayload>): void => {
+    if (message.payload.method === CONTROL_INTERRUPT && message.instanceId) {
+      noteInterrupt(message.instanceId);
+    }
   };
 
   /**
@@ -4142,7 +4599,8 @@ export const createServer = ({
    */
   const forgetInstances = (ids: readonly string[]): void => {
     for (const id of ids) {
-      pendingSends.delete(id);
+      anchors.delete(id);
+      unanswered.delete(id);
       pulses.delete(id);
       touched.delete(id);
       heldSessions.delete(id);
@@ -4839,17 +5297,21 @@ export const createServer = ({
             if (!row.sessionId) {
               // Never reported a session key, so nothing is stored under this
               // id anywhere; asking a machine with the whiffle id as the key
-              // would only make the harness reject it.
-              return new Response(ndjsonNewestFirst([]), {
-                headers: {
-                  "Content-Type": "application/x-ndjson",
-                  "Cache-Control": "no-store",
-                  "X-Whiffle-Machine": row.machineId,
-                  "X-Whiffle-Session": "",
-                  "X-Whiffle-Cwd": encodeURIComponent(row.cwd || ""),
-                  "X-Whiffle-Harness": row.harness || "claude",
-                },
-              });
+              // would only make the harness reject it. What it was sent is
+              // the hub's own to say: the records, and nothing else.
+              return new Response(
+                ndjsonNewestFirst(sendLines(row.id, [], true, true)),
+                {
+                  headers: {
+                    "Content-Type": "application/x-ndjson",
+                    "Cache-Control": "no-store",
+                    "X-Whiffle-Machine": row.machineId,
+                    "X-Whiffle-Session": "",
+                    "X-Whiffle-Cwd": encodeURIComponent(row.cwd || ""),
+                    "X-Whiffle-Harness": row.harness || "claude",
+                  },
+                }
+              );
             }
             ({ machineId } = row);
             sessionKey = row.sessionId;
@@ -4910,34 +5372,19 @@ export const createServer = ({
             transcript = transcript.slice(0, cut);
           }
 
-          // A sent message is one record, the hub's: its stored copy is keyed
-          // by the send's uuid (found by the harness's own id for it where the
-          // harness keeps one) and dated when the hub accepted it, so the row
-          // is the same row at the same time live, reloaded, on a fresh open
-          // and after the daemon restarted.
-          const entries = transcript as SessionMessage[];
-          const sends = db.sendsFor(
-            entries
-              .filter((entry) => entry.type === "user" || entry.sourceUuid)
-              .flatMap((entry) =>
-                entry.sourceUuid ? [entry.sourceUuid, entry.uuid] : [entry.uuid]
-              )
+          // Pictures as references to the media store, before a send's
+          // record is filled from one of these entries.
+          externalizeImages(transcript);
+          // Every send on this page, linked to the entry it was stored as,
+          // and the records the page draws: a tail page reaches the newest
+          // entry, and one shorter than asked for — like every page before a
+          // cursor — reaches the conversation's start.
+          const records = sendLines(
+            row?.id,
+            transcript as SessionMessage[],
+            query.before === undefined,
+            query.before !== undefined || !tail || transcript.length < tail
           );
-          const byUuid = new Map(sends.map((send) => [send.uuid, send]));
-          const byHarnessId = new Map(
-            sends.map((send) => [send.harnessId, send])
-          );
-          for (const entry of entries) {
-            const send =
-              byUuid.get(entry.sourceUuid ?? entry.uuid) ??
-              byHarnessId.get(entry.uuid);
-            if (send) {
-              if (send.uuid !== entry.uuid) {
-                entry.sourceUuid = send.uuid;
-              }
-              entry.timestamp = send.acceptedAt.toISOString();
-            }
-          }
 
           // A complete transcript's oldest user turn is the unambiguous answer
           // to what the session is called — including for conversations this
@@ -4967,24 +5414,12 @@ export const createServer = ({
           ) {
             transcript.push(custodyNotice(row, held.reason));
           }
-          // What it was sent and has not read yet, newest of all: a reload
-          // draws these where the live stream drew them, under the same ids.
-          // A harness can store a send before it gives it to the model
-          // (opencode writes one at once); until the session reads it, it is
-          // drawn once, as the held send it still is.
-          const unread = row && pendingSends.get(row.id);
-          if (!query.before && unread) {
-            transcript = transcript.filter((entry) => {
-              const stored = entry as SessionMessage;
-              return !unread.has(stored.sourceUuid ?? stored.uuid);
-            });
-            transcript.push(...unread.values());
-          }
 
-          // URI-encoded because a header is Latin-1 on the wire and a folder
-          // path is not.
-          externalizeImages(transcript);
-          return new Response(ndjsonNewestFirst(transcript), {
+          // Newest first, so the records — written last — lead the page: a
+          // reader has every record in hand before the entries that name one.
+          // URI-encoded headers because a header is Latin-1 on the wire and a
+          // folder path is not.
+          return new Response(ndjsonNewestFirst([...transcript, ...records]), {
             headers: {
               "Content-Type": "application/x-ndjson",
               "Cache-Control": "no-store",
@@ -6643,32 +7078,15 @@ export const createServer = ({
 
         downgradeNonDelegateUrgent(rows, body, instanceId);
 
-        if (
-          !deliverSend({
-            verb: "send",
-            machineId,
-            instanceId,
-            payload: body as SendPayload,
-          })
-        ) {
-          return status(404, `machine ${machineId} is not connected`);
+        const record = deliverSend({
+          verb: "send",
+          machineId,
+          instanceId,
+          payload: body as SendPayload,
+        });
+        if (record.state === "failed") {
+          return status(404, record.reason ?? "the send failed");
         }
-        // The first thing a session is asked is what it is called, until
-        // something names it properly.
-        if (!hasAttachments(body)) {
-          nameFromLiveTurn(
-            machineId,
-            instanceId,
-            (body as { message?: unknown } | null)?.message
-          );
-        }
-        const from = peekPeer(body);
-        if (from && !isQuerySend(body)) {
-          handoffs.set(instanceId, { from, at: Date.now() });
-        } else if (isQuerySend(body) && handoffs.has(instanceId)) {
-          handoffs.delete(instanceId);
-        }
-        publishInstances(machineId);
         return { ok: true };
       })
       .post("/api/relay/stop", { body: t.Any() }, ({ body, status }) => {
@@ -6691,8 +7109,7 @@ export const createServer = ({
           payload: { instanceId, from },
         } satisfies Envelope);
         closePreview(instanceId).catch(console.error);
-        // Same as a stop from a dashboard: whatever it was sent dies with it.
-        pendingSends.delete(instanceId);
+        // What it was sent and had not read is settled by its `stopped`.
         return { ok: true };
       })
       .post("/api/relay/interrupt", { body: t.Any() }, ({ body, status }) => {
@@ -6715,11 +7132,12 @@ export const createServer = ({
           payload: {
             instanceId,
             requestId: crypto.randomUUID(),
-            method: "interrupt",
+            method: CONTROL_INTERRUPT,
             args: [],
             from,
           },
         } satisfies Envelope);
+        noteInterrupt(instanceId);
         return { ok: true };
       })
       .post("/api/relay/answer", { body: t.Any() }, ({ body, status }) => {
@@ -7010,9 +7428,25 @@ export const createServer = ({
                 peekResumable(message.payload),
                 peekResumableAt(message.payload)
               );
+              const custody = peekCustody(message.payload);
+              const heldIds = new Set(custody.instances);
               for (const orphan of settled) {
-                forgetPending(orphan.row.id);
+                // A child sessiond kept alive still holds what it was sent and
+                // has not read: that waits for its read after the reattach. A
+                // send its harness wrote down is read either way — a read that
+                // happened while no agent was reading is not framed again.
+                forgetPending(
+                  orphan.row.id,
+                  UNREAD.ended,
+                  heldIds.has(orphan.row.id)
+                );
                 escalateRoutedAsks(orphan.row.id);
+              }
+              // Sessions that ran on while this hub was away: a read that
+              // happened meanwhile was framed to nobody, and the transcript
+              // says it happened.
+              for (const instanceId of peekInstances(message.payload)) {
+                settlePending(instanceId, UNREAD.ended, true);
               }
               // The daemon went away and came back. A session whose conversation
               // the harness still has is not finished — it lost its process, which
@@ -7031,8 +7465,6 @@ export const createServer = ({
               // one of these `sleeping`, so the ones this skips are not lost —
               // they are asleep, listed, and one wake away.
               const cutoff = Date.now() - RESTORE_HORIZON_MS;
-              const custody = peekCustody(message.payload);
-              const heldIds = new Set(custody.instances);
               // A surviving child is not a fresh spawn. OpenCode's one held
               // server owns its sessions; the adapter verifies each key with
               // session.get before publishing an init frame and subscribing.
@@ -7134,7 +7566,7 @@ export const createServer = ({
               for (const row of beat.settled) {
                 // Its parked questions cannot be answered by a process that is
                 // gone, and the same goes for anything it was holding.
-                forgetPending(row.id);
+                forgetPending(row.id, UNREAD.ended);
                 escalateRoutedAsks(row.id);
               }
               // The deployment clone's state rides the beat (contract C8). A
@@ -7222,36 +7654,10 @@ export const createServer = ({
                   delete (message.payload as Record<string, unknown>).urgent;
                 }
               }
-              const from = peekPeer(message.payload);
-              if (
-                !(
-                  deliverSend(message as Envelope<SendPayload>, ws) &&
-                  message.instanceId
-                )
-              ) {
-                break;
-              }
-              // The first thing a session is asked is what it is called, until
-              // something names it properly.
-              if (!hasAttachments(message.payload)) {
-                nameFromLiveTurn(
-                  message.machineId,
-                  message.instanceId,
-                  (message.payload as { message?: unknown } | null)?.message
-                );
-              }
-              if (from && !isQuerySend(message.payload)) {
-                // A queued hand-off: the target now carries unread work.
-                handoffs.set(message.instanceId, { from, at: Date.now() });
-                publishInstances(message.machineId);
-              } else if (
-                isQuerySend(message.payload) &&
-                handoffs.has(message.instanceId)
-              ) {
-                // A querying send folds everything queued into the turn it
-                // starts — the hand-off has been read.
-                handoffs.delete(message.instanceId);
-                publishInstances(message.machineId);
+              const record = deliverSend(message as Envelope<SendPayload>);
+              // The sending session hears why its hand-off did not go.
+              if (record.state === "failed" && record.reason) {
+                ws.send(failure(message, record.reason));
               }
               break;
             }
@@ -7351,6 +7757,18 @@ export const createServer = ({
                 } as FramePayload;
               }
               const kind = peek(message.payload, "kind");
+              // One send did not go: its record says so, and nothing else does.
+              if (kind === "rejected" && message.instanceId) {
+                const { uuid, error } = message.payload as FramePayload & {
+                  kind: "rejected";
+                };
+                takeSendSignal(message.instanceId, {
+                  kind: "rejected",
+                  uuid,
+                  error,
+                });
+                break;
+              }
               if (kind === "stopped" && message.instanceId) {
                 turnWaiters
                   .get(message.instanceId)
@@ -7366,7 +7784,9 @@ export const createServer = ({
                 } else {
                   db.stopInstance(message.instanceId);
                 }
-                pendingSends.delete(message.instanceId);
+                // What it was sent and had not read did not go, unless it wrote
+                // some of it down as it stopped.
+                settlePending(message.instanceId, UNREAD.stopped);
                 pulses.delete(message.instanceId);
                 touched.delete(message.instanceId);
                 escalateRoutedAsks(message.instanceId);
@@ -7423,6 +7843,21 @@ export const createServer = ({
                 !streams.admitFrame(message.instanceId, readProvenance(message))
               ) {
                 break;
+              }
+              // The harness's word on its sends becomes their records, and goes
+              // no further: every screen hears it as the records' `send` frames.
+              // Everything else the session says is read for what its turn
+              // makes of the sends it read (rule b).
+              if (kind === "frame" && message.instanceId) {
+                const frame = message.payload as FramePayload & {
+                  kind: "frame";
+                };
+                const signal = peekSendSignal(frame);
+                if (signal) {
+                  takeSendSignal(message.instanceId, signal);
+                  break;
+                }
+                observeTurn(message.instanceId, frame);
               }
               if (message.requestId && kind === "permission_request") {
                 // A replayed ask (the daemon re-announces unresolved asks after
@@ -7516,22 +7951,6 @@ export const createServer = ({
                   // so it is the fleet's cheapest honest signal for the column
                   // the rails age rows from.
                   noteActivity(message.instanceId);
-                }
-              }
-              // The harness has read these: they are no longer waiting. Where
-              // it stored one under an id of its own, the send's record keeps
-              // that id, so a later history read finds the send again.
-              if (kind === "frame" && message.instanceId) {
-                const frame = message.payload as FramePayload & {
-                  kind: "frame";
-                };
-                for (const uuid of peekRead(frame)) {
-                  pendingSends.get(message.instanceId)?.delete(uuid);
-                }
-                for (const [uuid, harnessId] of Object.entries(
-                  peekStoredAs(frame)
-                )) {
-                  db.linkSend(uuid, harnessId);
                 }
               }
               // A session named by what it was first asked, whether the ask came
@@ -7683,11 +8102,6 @@ export const createServer = ({
                           },
                         },
                       });
-                      handoffs.set(parent.id, {
-                        from: leaf(row.cwd),
-                        at: Date.now(),
-                      });
-                      publishInstances(parent.machineId);
                       publishDelegateEvent(
                         row.machineId,
                         db.recordDelegateEvent({
@@ -7706,14 +8120,14 @@ export const createServer = ({
               if (
                 kind === "error" &&
                 message.instanceId &&
-                peek(message.payload, "verb") !== "stop"
+                peek(message.payload, "verb") === "spawn"
               ) {
                 const reason =
                   peek(message.payload, "message") ?? "the session failed";
                 turnWaiters.get(message.instanceId)?.reject(new Error(reason));
                 db.failInstance(message.instanceId, reason);
                 workflowRuntime.observe(message.instanceId, reason);
-                forgetPending(message.instanceId);
+                forgetPending(message.instanceId, reason);
                 escalateRoutedAsks(message.instanceId);
                 telegram?.onError(message.instanceId, reason);
                 publishInstances(message.machineId);
@@ -7864,6 +8278,9 @@ export const createServer = ({
               if (message.verb === "stop") {
                 closePreview(row.id).catch(console.error);
               }
+              if (peek(message.payload, "method") === CONTROL_INTERRUPT) {
+                noteInterrupt(row.id);
+              }
               // A parent answering its delegate's ask with `answer_delegate`.
               const answered = peekAnswer(message.payload);
               if (answered) {
@@ -7985,7 +8402,7 @@ export const createServer = ({
               if (forward(message, ws) && message.instanceId) {
                 // A relaunch replaces the process — questions the old one had
                 // open are settled by its teardown and must not replay.
-                forgetPending(message.instanceId);
+                forgetPending(message.instanceId, UNREAD.restarted);
                 db.openInstance({
                   id: message.instanceId,
                   machineId: message.machineId,
@@ -8008,9 +8425,6 @@ export const createServer = ({
               }
               break;
             }
-            case "send":
-              relaySend(message as Envelope<SendPayload>, ws);
-              break;
             case "stop":
               if (forward(message, ws) && message.requestId) {
                 registry.rememberRequester(message.requestId, ws);

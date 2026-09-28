@@ -300,24 +300,30 @@ export interface SessionMessage {
   message: unknown;
   parent_agent_id: string | null;
   parent_tool_use_id: string | null;
+  /**
+   * The send this stored entry is ({@link SendRecord.uuid}), as the hub
+   * linked it on the way out of the history route. A reader draws the entry
+   * from that record — its words, its clock, its state — in the entry's place.
+   * Absent on everything the hub has no record for: the harness's own turns,
+   * and a message typed into the harness directly.
+   */
+  send?: string;
   session_id: string;
   /**
    * The uuid a sent message was sent under ({@link NeutralUserMessage.uuid}),
    * when the harness stores it apart from its own id for the entry: Claude's
-   * `queued_command.source_uuid` on a fold, and the id the opencode and pi
-   * adapters keep for what they were sent. A reader keys the message by this,
-   * so it is the same row live and after a reload.
+   * `queued_command.source_uuid` on a fold. A reader keys a message the hub
+   * has no record for by this.
    */
   sourceUuid?: string;
   /**
    * When the entry was written, ISO-8601, as its harness recorded it: Claude's
    * line time, opencode's message `time.created` (a tool result: its call's
-   * end), pi's entry `timestamp`. A message sent through the hub is the one
-   * exception: the history route dates it by when the hub accepted it, so a
-   * send reads the same time live and after any reload. An entry the hub
-   * builds itself (a custody notice) has none, and a reader that gets none
-   * renders none rather than its own clock — stamping the read time dates every
-   * turn of an old session to the moment it was opened.
+   * end), pi's entry `timestamp`. A send is dated by its record instead
+   * ({@link SendRecord.acceptedAt}). An entry the hub builds itself (a custody
+   * notice) has none, and a reader that gets none renders none rather than its
+   * own clock — stamping the read time dates every turn of an old session to
+   * the moment it was opened.
    */
   timestamp?: string;
   type: "user" | "assistant" | "system";
@@ -410,6 +416,11 @@ export interface NeutralUserMessage {
   origin?: NeutralOrigin;
   parent_tool_use_id?: string | null;
   raw?: unknown;
+  /**
+   * A retry: the uuid of the failed send this one is sent in place of. The
+   * hub marks that record `replaced` ({@link SendRecord.replacedBy}).
+   */
+  replaces?: string;
   session_id?: string;
   shouldQuery?: boolean;
   type: "user";
@@ -419,10 +430,9 @@ export interface NeutralUserMessage {
 /**
  * A message sent to a session, by the reader or by whiffle. `uuid` is its one
  * identity from the press to a reload: the dashboard's command id for a
- * reader's send, minted where the hub builds its own. The harness is handed
- * it, reports it back in a {@link MESSAGES_READ} frame when it consumes the
- * message, and stores it with the message, so every copy of the message on
- * every screen is the same row.
+ * reader's send, minted where the hub builds its own. The hub keeps one
+ * {@link SendRecord} under it, and every copy of the message on every screen
+ * is drawn from that record.
  */
 export type SentMessage = NeutralUserMessage & {
   origin: NeutralOrigin;
@@ -430,20 +440,73 @@ export type SentMessage = NeutralUserMessage & {
 };
 
 /**
- * A {@link SentMessage} as the hub accepted it, with `timestamp`, the ISO-8601
- * moment it took the send. The sender builds the message; the hub alone dates
- * it, streams it in this shape and serves it with the history until the
- * harness reads it. So a tab that saw it live and a tab that reloaded while it
- * waited date the row by the same clock.
+ * How a send asks to be read: as a turn of its own, as a note the next turn
+ * folds in (`shouldQuery: false`), or urgently — into the running turn, or
+ * ahead of it.
  */
-export type AcceptedSend = SentMessage & { timestamp: string };
+export type SendMode = "turn" | "note" | "urgent";
 
 /**
- * The `system` subtype saying the harness has now consumed these sends: their
- * uuids, in `read`, on the frame where it happened — before whatever the model
- * says about them.
+ * Where a send stands, as the hub alone decides it: waiting for the harness
+ * (`pending`), taken up by it (`read`), never going to be (`failed`, with
+ * why), or sent again as another send (`replaced`).
+ */
+export type SendState = "pending" | "read" | "failed" | "replaced";
+
+/**
+ * THE ONE RECORD OF A SEND. The hub writes it when it accepts the send and is
+ * its only writer after that: every change is stored, then sequenced into the
+ * session's stream as a `send` frame, and a history read serves it beside the
+ * entries. Every screen draws the send from this, live and after any reload.
+ */
+export interface SendRecord {
+  /** ISO-8601: when the hub took the send. The only clock its row shows. */
+  acceptedAt: string;
+  /**
+   * A failed send the harness never stored: the uuid of the last thing the
+   * session said before it failed — an assistant frame, or a send it read.
+   * Its row goes right after that. Absent when the session had said nothing.
+   */
+  anchor?: string;
+  /**
+   * Exactly what the sender submitted: its words, its pictures (as the hub's
+   * media references) and pastes, and who it is from. What the agent adds on
+   * the way to the harness (a worktree line, an urgent prefix) is not in it.
+   */
+  body: NeutralUserMessage;
+  /** The id the harness stored the send under, where that is not its uuid. */
+  harnessId?: string;
+  instanceId: string;
+  mode: SendMode;
+  /** Why it failed, in the harness's words or the hub's. */
+  reason?: string;
+  /** The retry that replaced it. */
+  replacedBy?: string;
+  /** The failed send this one was sent in place of. */
+  replaces?: string;
+  state: SendState;
+  uuid: string;
+}
+
+/**
+ * One line of a session's history as the hub serves it: a stored entry, or a
+ * send's record. The records of a page come before its entries.
+ */
+export type HistoryLine = SessionMessage | { record: SendRecord };
+
+/**
+ * The `system` subtype saying the harness has now consumed these sends: each
+ * named in `read` by its uuid, or by the id the harness stored it under
+ * ({@link MESSAGES_STORED}). The hub turns it into the records' `read`; it
+ * never reaches a screen.
  */
 export const MESSAGES_READ = "read";
+
+/**
+ * The `system` subtype saying which id the harness stores each send under
+ * (`storedAs`, by the send's uuid), said as soon as the harness knows it.
+ */
+export const MESSAGES_STORED = "stored";
 
 export interface NeutralStreamMessage {
   event:
@@ -472,6 +535,11 @@ export interface NeutralResultMessage {
   /** Prompt-cache tokens the turn read from / wrote to, when the harness reports them. */
   cache?: { read: number; write: number };
   errors?: string[];
+  /**
+   * The sends this error failed, set by the hub: read, and answered by nothing
+   * but this error. Their rows carry the error, so it draws no line of its own.
+   */
+  failedSends?: string[];
   is_error: boolean;
   num_turns?: number;
   raw?: unknown;
@@ -528,10 +596,10 @@ export interface NeutralSystemMessage {
   stderr?: string;
   stdout?: string;
   /**
-   * read: the id the harness stored each read send under, by the send's
-   * uuid, where the harness keys its own record differently (opencode's
-   * message id, pi's entry id). The hub keeps it on the send's record, so a
-   * history read finds the send's uuid again whenever it happens.
+   * stored ({@link MESSAGES_STORED}), or read: the id the harness stores each
+   * send under, by the send's uuid, where the harness keys its own record
+   * differently (opencode's message id, pi's entry id). The hub keeps it on
+   * the send's record, so a history read finds the send again.
    */
   storedAs?: Record<string, string>;
   subagent_type?: string;

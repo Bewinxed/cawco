@@ -39,7 +39,13 @@
   import type { Trail } from "$lib/components/ui/markdown/trail";
   import { IconChat } from "$lib/icons";
   import { type SessionState, whiffle } from "../client.svelte";
-  import { crossIn, dur, easeOut, motionOk } from "../motion/curves.svelte";
+  import {
+    crossIn,
+    dur,
+    ease,
+    easeOut,
+    motionOk,
+  } from "../motion/curves.svelte";
   import { waiting } from "../motion/share.svelte";
   import { rebuildScheduler } from "../workspace/scheduler.svelte";
   import {
@@ -441,6 +447,7 @@
     const { rows: next } = folded;
     ({ memo } = folded);
     ledger(folded);
+    noteMoves(frozen, next);
     // FRONT-CHANGE DETECTION for virtua's `shift` mode: an older history chunk
     // arriving puts new rows ABOVE everything on screen — without `shift`,
     // virtua keeps the scroll OFFSET and the content lurches toward the top
@@ -486,6 +493,87 @@
       }
     }
     return { rows: next, shifted, ended: folded.ended };
+  }
+
+  /**
+   * A SEND MOVES; IT DOES NOT JUMP. A send that goes between the rows waiting
+   * at the end and its place in the conversation — read, or failed out of the
+   * wait — is the same row the whole way (one key, one element), so it slides
+   * there: where it is drawn is read before the update puts it in its new
+   * place, and once the update is in it starts from there and travels home
+   * (FLIP, transform only). Nothing else it passes moves on its own: the rows
+   * it trades places with take theirs at once.
+   */
+  const moving = new Map<string, number>();
+
+  /** Where a row is drawn in the list, transforms included; null when it is not mounted. */
+  function drawnAt(key: string): number | null {
+    const node = listing?.querySelector<HTMLElement>(
+      `[data-row="${CSS.escape(key)}"]`
+    );
+    return node && listing
+      ? node.getBoundingClientRect().top - listing.getBoundingClientRect().top
+      : null;
+  }
+
+  /** The keys of the sends waiting at the end of a build's rows. */
+  function waitingKeys(sequence: Row[]): Set<string> {
+    const keys = new Set<string>();
+    for (
+      let index = sequence.length - 1;
+      index >= 0 && LIVE_KINDS.has(sequence[index].kind);
+      index -= 1
+    ) {
+      if (sequence[index].kind === "queued") {
+        keys.add(sequence[index].key);
+      }
+    }
+    return keys;
+  }
+
+  /**
+   * The sends this build moves in or out of the wait — on screen before and
+   * after it — measured where they stand. Only the ends are read unless one
+   * has moved.
+   */
+  function noteMoves(prior: Row[], next: Row[]): void {
+    if (!untrack(() => landed && watched && motionOk.current)) {
+      return;
+    }
+    const before = waitingKeys(prior);
+    const now = waitingKeys(next);
+    const changed = [
+      ...[...before].filter((key) => !now.has(key)),
+      ...[...now].filter((key) => !before.has(key)),
+    ];
+    if (changed.length === 0) {
+      return;
+    }
+    const was = new Set(prior.map((row) => row.key));
+    const is = new Set(next.map((row) => row.key));
+    for (const key of changed) {
+      const at = was.has(key) && is.has(key) ? drawnAt(key) : null;
+      if (at !== null) {
+        moving.set(key, at);
+      }
+    }
+  }
+
+  /** Each moved send, sliding from where it was drawn to where it now stands. */
+  function slideMoves(): void {
+    for (const [key, from] of moving) {
+      const to = drawnAt(key);
+      const node = listing?.querySelector<HTMLElement>(
+        `[data-row="${CSS.escape(key)}"]`
+      );
+      if (to !== null && node && Math.abs(from - to) > 0.5) {
+        node.animate(
+          [{ translate: `0 ${from - to}px` }, { translate: "0 0" }],
+          { duration: dur("--dur-panel"), easing: ease("--ease-in-out") }
+        );
+      }
+    }
+    moving.clear();
   }
 
   /** Where a build's own tail — the live row, the tool in flight, the queue — begins. */
@@ -556,6 +644,10 @@
     if (!held && untrack(() => catching)) {
       catching = false;
     }
+    // The update is in: a send it moved starts where it was drawn.
+    if (moving.size > 0) {
+      untrack(slideMoves);
+    }
   });
   const rows = $derived(built.rows);
   const cache = untrack(() => {
@@ -606,13 +698,23 @@
    */
   const TAIL_KINDS = new Set<Row["kind"]>(["live", "livetool", "queued"]);
   let tail = new Map<string, Row>();
-  let leaving: Row[] = [];
+  /**
+   * A failed send's row, with the key of the row before it: the place it
+   * folds shut in when its retry replaces it, as the retry arrives.
+   */
+  let failedSends = new Map<string, { row: Row; after: string | null }>();
+  /**
+   * Rows folding shut: a tail row after everything else (`after` null), a
+   * replaced send where it stood.
+   */
+  let leaving: { row: Row; after: string | null }[] = [];
   let leftTick = $state(0);
   const presentation = $derived.by(() => {
     // biome-ignore lint/complexity/noVoid: a row finishing its fold re-draws the list without it.
     void leftTick;
     const { rows: next, ended } = built;
     const present = new Set(next.map((row) => row.key));
+    const folding = new Set(leaving.map(({ row }) => row.key));
     for (const [key, row] of tail) {
       // A live row that became its settled row, or a tool's glance whose call
       // has landed: either is already on screen in its new form. A queued
@@ -622,8 +724,16 @@
         (ended?.key === key && ended.into !== null) ||
         (row.kind === "livetool" &&
           untrack(() => called(session, row.glance.toolId)));
-      if (!(present.has(key) || settled || leaving.includes(row))) {
-        leaving.push(row);
+      if (!(present.has(key) || settled || folding.has(key))) {
+        leaving.push({ row, after: null });
+      }
+    }
+    for (const [key, sent] of failedSends) {
+      if (
+        !(present.has(key) || folding.has(key)) &&
+        untrack(() => session.records[key]?.state === "replaced")
+      ) {
+        leaving.push(sent);
       }
     }
     tail = new Map(
@@ -631,10 +741,30 @@
         .filter((row) => TAIL_KINDS.has(row.kind))
         .map((row) => [row.key, row])
     );
-    leaving = leaving.filter((row) => !present.has(row.key));
+    failedSends = new Map(
+      next.flatMap((row, index) =>
+        row.kind === "single" && row.message.state === "failed"
+          ? [[row.key, { row, after: next[index - 1]?.key ?? null }] as const]
+          : []
+      )
+    );
+    leaving = leaving.filter(({ row }) => !present.has(row.key));
+    if (leaving.length === 0) {
+      return { rows: next, leaving: new Set<string>() };
+    }
+    const drawn = [...next];
+    for (const { row, after } of leaving) {
+      const at =
+        after === null ? -1 : drawn.findIndex((each) => each.key === after);
+      if (at < 0) {
+        drawn.push(row);
+      } else {
+        drawn.splice(at + 1, 0, row);
+      }
+    }
     return {
-      rows: leaving.length > 0 ? [...next, ...leaving] : next,
-      leaving: new Set(leaving.map((row) => row.key)),
+      rows: drawn,
+      leaving: new Set(leaving.map(({ row }) => row.key)),
     };
   });
   const renderedRows = $derived(presentation.rows);
@@ -660,7 +790,7 @@
   );
 
   function left(key: string): void {
-    leaving = leaving.filter((row) => row.key !== key);
+    leaving = leaving.filter(({ row }) => row.key !== key);
     leftTick += 1;
   }
 

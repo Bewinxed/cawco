@@ -479,10 +479,15 @@ export class SessionSupervisor {
         // A route failure otherwise reads as delivered silence: spawn answers
         // through #fail and control through its own timeout, but a send or a
         // stop has no ack — without this the reader waits on work that died.
-        if (
-          envelope.instanceId &&
-          (envelope.verb === "send" || envelope.verb === "stop")
-        ) {
+        // A send that could not be handed over is that send's failure, never
+        // the session's.
+        if (envelope.instanceId && envelope.verb === "send") {
+          this.#reject(
+            envelope.instanceId,
+            (envelope.payload as SendPayload).message.uuid,
+            error
+          );
+        } else if (envelope.instanceId && envelope.verb === "stop") {
           this.sink({
             kind: "error",
             instanceId: envelope.instanceId,
@@ -926,6 +931,7 @@ export class SessionSupervisor {
       session: (sessionId) =>
         this.#noteQuestSession(instanceId, sessionId, adapter.kind),
       failed: (error) => this.#fail(instanceId, error),
+      rejected: (uuid, error) => this.#reject(instanceId, uuid, error),
       emit: (envelope) => this.emit(envelope),
       closed: () => {
         // A dead process is never going to answer anything it asked.
@@ -1122,6 +1128,20 @@ export class SessionSupervisor {
       instanceId,
       verb: "spawn",
       message: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  /**
+   * One send that did not go: the harness refused it, or there was no
+   * session to hand it to. The hub fails that send's record; the session, if
+   * there is one, goes on.
+   */
+  #reject(instanceId: string, uuid: string, error: unknown): void {
+    this.sink({
+      kind: "rejected",
+      instanceId,
+      uuid,
+      error: error instanceof Error ? error.message : String(error),
     });
   }
 

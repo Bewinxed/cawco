@@ -8,12 +8,15 @@ import type {
   HarnessReport,
   HookEvent,
   HookHandler,
+  NeutralUserMessage,
   RuleAction,
   RuleMatchKind,
   RuleScope,
   RuleTiming,
   RuleTrigger,
   RuleWatch,
+  SendMode,
+  SendState,
   SessionTooling,
   SkillFile,
   ToolStatus,
@@ -356,12 +359,11 @@ export const delegateEvents = sqliteTable("delegate_events", {
 });
 
 /**
- * One record per message sent to a session: its identity and its clock. The
- * live frame, the pending copy a reload draws and the stored entry a later
- * history read returns are all dated by `acceptedAt`, whatever the harness
- * recorded, and a stored entry the harness keeps under its own id is keyed
- * back to the send's uuid through `harnessId` — so every view of the message,
- * across reloads and daemon restarts, is one row with one time.
+ * One record per message sent to a session (`SendRecord`, @whiffle/core): what
+ * was sent, when the hub took it, and where it stands. The hub is the only
+ * writer of `state`; every change is stored here before any screen hears of
+ * it, so a reload and a hub restart read the same record the live stream
+ * carried.
  */
 export const sentMessages = sqliteTable(
   "sent_messages",
@@ -371,14 +373,38 @@ export const sentMessages = sqliteTable(
     instanceId: text("instance_id").notNull(),
     acceptedAt: timestamp("accepted_at").notNull(),
     /**
-     * The id the harness stored the message under, where that is not the uuid
-     * (opencode's message id, pi's entry id), as its adapter reported it on
-     * reading the send (`NeutralSystemMessage.storedAs`). Null until then, and
-     * for Claude, which stores the send's uuid itself.
+     * The id the harness stores the message under, where that is not the uuid
+     * (opencode's message id, pi's entry id), as its adapter reported it
+     * (`NeutralSystemMessage.storedAs`). Null for Claude, which stores the
+     * send's uuid itself.
      */
     harnessId: text("harness_id"),
+    /**
+     * What the sender submitted, pictures as media references. Null only on a
+     * record from before the hub kept bodies, until a history read links it to
+     * its stored entry and fills it from there.
+     */
+    body: text("body", { mode: "json" }).$type<NeutralUserMessage>(),
+    /** Records from before modes were kept were all ordinary turns to the reader. */
+    mode: text("mode").$type<SendMode>().notNull().default("turn"),
+    /**
+     * Where the send stands. Records from before this column were all read by
+     * the time it arrived: every one of them had been stored by its harness.
+     */
+    state: text("state").$type<SendState>().notNull().default("read"),
+    /** Why it failed. */
+    reason: text("reason"),
+    /** A failed send's place: the last thing the session said before it failed. */
+    anchor: text("anchor"),
+    /** The failed send this one retries. */
+    replaces: text("replaces"),
+    /** The retry that replaced this one. */
+    replacedBy: text("replaced_by"),
   },
-  (table) => [index("sent_messages_harness_id").on(table.harnessId)]
+  (table) => [
+    index("sent_messages_harness_id").on(table.harnessId),
+    index("sent_messages_state").on(table.instanceId, table.state),
+  ]
 );
 
 /**

@@ -8,8 +8,9 @@
   import { land } from "$lib/whiffle/motion/share.svelte";
   import {
     canResend,
-    commandRecord,
     restoreDraft,
+    retryFailed,
+    retryOf,
     retrySend,
   } from "../client.svelte";
   /** Dispatches one stand-alone transcript message to its renderer by type. */
@@ -60,12 +61,13 @@
    * sub-attention until there is something worth noticing.
    *
    *    0ms   ghost is on screen: presence 0.7, Who reads "sending…", no clock
-   *  tACK    the hub's frame for it arrives (well under a second, on a live hub)
-   *  +0ms    presence 0.7 → 1.0 over --dur-menu; Who's note slot swaps to
-   *          the real clock, so settling moves nothing. No translation, no
-   *          scale: arrival is subtraction. Sent into a running turn, it
-   *          reads "queued" at 0.7 instead, after the live tail, until the
-   *          session reads it and it moves into its place.
+   *  tACK    the hub's record of it arrives (well under a second, on a live
+   *          hub): "queued" at 0.7, after the live tail, until the session
+   *          reads it
+   *  tREAD   presence 0.7 → 1.0 over --dur-menu; Who's note slot swaps to
+   *          the real clock (the hub's), and the row slides into the place
+   *          it was read at (Transcript's FLIP). No scale: arrival is
+   *          subtraction.
    *
    * fail (from the same ghost, instead of settling):
    *    0ms   presence 0.7 → 1.0 — the words matter MORE on failure, not less
@@ -77,50 +79,44 @@
    * ───────────────────────────────────────────────────────────────────────
    */
 
-  /**
-   * The command this turn went out as, when this tab sent it: a sent message
-   * is keyed by its command's id. What the ledger adds is why it failed and
-   * whether it may have been delivered anyway.
-   */
-  const record = $derived(
-    kind === "user" && message.id ? commandRecord(message.id) : null
-  );
   /** Drawn by this tab, not yet taken by the hub. */
   const ghost = $derived(message.state === "sending");
   /**
-   * Sent into a running turn and not read yet: the reader's own turn at
-   * reduced presence, with no clock — it has not been said in the
+   * Taken by the hub and not read yet (its record `pending`): the reader's
+   * own turn at reduced presence, with no clock — it has not been said in the
    * conversation yet, and a time here would be a promise about the wrong
    * moment.
    */
-  const waiting = $derived(!!message.queued);
-  const failed = $derived(message.state === "failed");
-  const reason = $derived(message.metadata?.sendFailed ?? record?.reason);
+  const waiting = $derived(message.state === "pending");
+  /** Never reached the hub: this tab's to send again, from its outbox. */
+  const unreached = $derived(message.state === "unreached");
+  /** Did not go: the hub's word (`failed`), or this tab's (`unreached`). */
+  const failed = $derived(message.state === "failed" || unreached);
+  /**
+   * The retry out for this failed send, once there is one: the command whose
+   * stage says whether it is still on its way, or did not go either.
+   */
+  const retry = $derived(
+    message.state === "failed" && message.id ? retryOf(message.id) : null
+  );
+  const reason = $derived(
+    retry?.stage === "failed" ? retry.reason : message.metadata?.sendFailed
+  );
 
   /**
-   * Whether the payload behind this row is still in hand.
-   *
-   * `sendFailed` is stamped permanently — deliberately, so a message that never
-   * sent never fades back to looking sent — but the OUTBOX that Try again and
-   * Edit actually read from is bounded to the ledger's own five minutes. Those
-   * two lifetimes disagreed, and the disagreement rendered as two buttons that
-   * looked exactly as they had a moment before and now did nothing whatsoever:
-   * an operator action that fails in silence, which is the one thing this whole
-   * surface exists to make impossible. So the affordance is gated on the thing
-   * it needs rather than on the thing that is always true. The reason line
-   * stays either way — the failure is still the truth, it is only the offer to
-   * undo it that has expired.
+   * Whether Try again has anything to send. A failed send's words are its
+   * record's, so it always does. One that never reached the hub has only this
+   * tab's outbox, which is bounded to the ledger's own five minutes — so the
+   * offer is gated on the payload being in hand rather than left standing as
+   * a button that does nothing. The reason line stays either way.
    */
-  const recoverable = $derived(!!message.id && canResend(message.id));
-
-  /**
-   * Whether re-sending is provably safe. A refused or throwing dispatch never
-   * left this tab; a failure by ack-timeout or dropped socket may already be in
-   * the daemon's hands and acting on the world, so the second one is offered
-   * with a word that does not promise the first one's certainty. Absence of a
-   * record (swept) reads as ambiguous, which is the cautious side to be on.
-   */
-  const undelivered = $derived(record?.undelivered === true);
+  const recoverable = $derived(
+    kind === "user" &&
+      !!message.id &&
+      (message.state === "failed" || canResend(message.id))
+  );
+  /** Edit hands the whole payload back to the composer, which only the outbox holds. */
+  const editable = $derived(unreached && !!message.id && canResend(message.id));
   const whoNote = $derived.by(() => {
     if (ghost) {
       return "sending…";
@@ -131,31 +127,40 @@
     if (waiting) {
       return "queued";
     }
+    if (message.metadata?.urgent) {
+      return "urgent";
+    }
   });
 
   /** What the reason line says about this failure. */
   const reasonLine = $derived(
-    `Couldn't send that message.${reason ? ` ${reason}` : ""}${
-      recoverable && !undelivered
-        ? " It may still have reached the agent — sending it again could repeat it."
-        : ""
-    }`
+    `Couldn't send that message.${reason ? ` ${reason}` : ""}`
   );
   /**
-   * A retry goes out on this row (`retrySend`): the row turns back to a ghost
-   * where it stands, and the failure stays open under it with its Retry
-   * pending in place until the hub answers — then the row settles sent and
-   * the failure folds away, or the reason line takes the new reason.
+   * A retry goes out from this row and says so on its button, pending in
+   * place, until the hub answers. One that never reached the hub goes again
+   * under its own id: the row itself turns back to a ghost where it stands.
+   * A failed send is sent anew: the hub retires this row, which folds away as
+   * its retry arrives — or, if the retry does not go either, the button comes
+   * back with why.
    */
   let retried = $state(false);
   /** The reason line as it read when the retry went out, held while it is out. */
   let heldLine = $state("");
-  const retrying = $derived(retried && ghost);
-  function retry(): void {
-    if (message.id) {
-      heldLine = reasonLine;
-      retried = true;
+  const retrying = $derived(
+    retried && !unreached && (ghost || retry?.stage !== "failed")
+  );
+  function tryAgain(): void {
+    if (!message.id) {
+      return;
+    }
+    heldLine = reasonLine;
+    retried = true;
+    if (unreached) {
       retrySend(message.id);
+    } else {
+      // biome-ignore lint/complexity/noVoid: fire-and-forget — the retry's own record and this row's leaving are the outcome
+      void retryFailed(message);
     }
   }
   function edit(): void {
@@ -228,24 +233,26 @@
                 aria-busy={retrying || undefined}
                 aria-disabled={retrying || undefined}
                 class="pressable action"
-                onclick={whileIdle(() => retrying, retry)}
+                onclick={whileIdle(() => retrying, tryAgain)}
                 type="button"
               >
                 <PendingContent
                   {failed}
-                  label={undelivered ? 'Try again' : 'Send anyway'}
+                  label="Try again"
                   pending={retrying}
                   pendingLabel="Sending…"
                 />
               </button>
-              <button
-                class="pressable action"
-                disabled={retrying}
-                onclick={edit}
-                type="button"
-              >
-                Edit
-              </button>
+              {#if editable}
+                <button
+                  class="pressable action"
+                  disabled={retrying}
+                  onclick={edit}
+                  type="button"
+                >
+                  Edit
+                </button>
+              {/if}
             </div>
           {/if}
         {/if}

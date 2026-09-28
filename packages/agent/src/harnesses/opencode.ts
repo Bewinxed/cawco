@@ -82,6 +82,7 @@ import {
   CONTROL_SUPPORTED_MODELS,
   IMAGE_GENERATION_TIMEOUT_MS,
   MESSAGES_READ,
+  MESSAGES_STORED,
 } from "@whiffle/core";
 // The protocol subpath, never the `@whiffle/core` barrel: `sessiond.ts` reaches
 // for `node:os` and the barrel is imported by the browser bundle (see f2e1c4c).
@@ -1017,15 +1018,16 @@ export class OpencodeSession implements HarnessSession {
     parts: unknown[];
     model?: { providerID?: string; modelID?: string };
     messageID: string;
+    uuid: string;
   }[] = [];
   /** The held send delivered last, until opencode has written it. */
   #draining: string | undefined;
   /** The assistant message opencode is writing, until it is complete. */
   #answering: string | undefined;
-  /** Sends opencode has written that the session has yet to be given, by uuid. */
+  /** User messages opencode has written that the session has yet to be given. */
   readonly #readAfter: string[] = [];
-  /** Sends opencode has not written as messages yet: message id → the uuid it was sent under. */
-  readonly #unread = new Map<string, string>();
+  /** Every user message already counted into {@link #readAfter}, so none is read twice. */
+  readonly #written = new Set<string>();
   #permissionMode: string | undefined;
   #providersCache: Promise<Pick<Provider, "id" | "models">[]> | undefined;
   #commandNames: Promise<Set<string>> | null = null;
@@ -1158,22 +1160,14 @@ export class OpencodeSession implements HarnessSession {
             this.#releaseReads();
           }
         }
-        // A send, now a message of the session's, stored under this message
-        // id — which the hub is told at once, so a history read finds the
-        // send in it. Written while an answer is still being written, it is
-        // read after that answer: where opencode stores it, and when the
-        // model is given it.
-        const read = this.#unread.get(info.id);
-        if (read) {
-          this.#unread.delete(info.id);
-          this.#ctx.frame({
-            type: "system",
-            subtype: MESSAGES_READ,
-            read: [],
-            storedAs: { [read]: info.id },
-            session_id: this.sessionId ?? undefined,
-          });
-          this.#readAfter.push(read);
+        // A user message written into the session: read, by the id the hub
+        // was told at dispatch (`MESSAGES_STORED`). Written while an answer is
+        // still being written, it is read after that answer: where opencode
+        // stores it, and when the model is given it. One the hub never sent
+        // (typed in opencode itself) is an id it has no send under.
+        if (info.role === "user" && !this.#written.has(info.id)) {
+          this.#written.add(info.id);
+          this.#readAfter.push(info.id);
           if (!this.#answering) {
             this.#releaseReads();
           }
@@ -2201,17 +2195,24 @@ export class OpencodeSession implements HarnessSession {
     }
 
     const model = this.#model ? splitModel(this.#model) : undefined;
-    // The message it becomes is named up front, so opencode's word that it
-    // exists says which send it was.
+    // The message it becomes is named up front, and the hub told at once, so
+    // opencode's word that the message exists says which send it was — even
+    // to a hub hearing it from an agent that has since restarted.
     const messageID = messageId();
-    this.#unread.set(messageID, message.uuid);
+    const { uuid } = message;
+    this.#ctx.frame({
+      type: "system",
+      subtype: MESSAGES_STORED,
+      storedAs: { [uuid]: messageID },
+      session_id: this.sessionId ?? undefined,
+    });
 
     // Config convergence gate: queue everything while a reload is in progress.
     // Active turns are allowed to finish (events still route), but no NEW work
     // may start — the server is being stopped and restarted. A send that
     // arrives while the held ones are still going in waits behind them.
     if (this.#isConfigGateHeld() || this.#draining || this.#queue.length > 0) {
-      this.#queue.push({ parts, ...(model ? { model } : {}), messageID });
+      this.#queue.push({ parts, ...(model ? { model } : {}), messageID, uuid });
       this.#drainQueue();
       return;
     }
@@ -2226,7 +2227,7 @@ export class OpencodeSession implements HarnessSession {
         })
         // biome-ignore lint/suspicious/noEmptyBlockStatements: the abort's own failure is not actionable; the prompt below runs regardless
         .catch(() => {})
-        .then(() => this.#prompt(parts, messageID, model));
+        .then(() => this.#prompt(parts, messageID, uuid, model));
       return;
     }
     // Idle or busy, every send is prompted at once: opencode writes it into
@@ -2241,17 +2242,23 @@ export class OpencodeSession implements HarnessSession {
         command.args,
         parts,
         messageID,
+        uuid,
         model
       );
     } else {
-      this.#prompt(parts, messageID, model);
+      this.#prompt(parts, messageID, uuid, model);
     }
   }
 
-  /** Starts one prompt turn with the given parts, as message `messageID`. */
+  /**
+   * Starts one prompt turn with the given parts, as message `messageID`, for
+   * the send `uuid`. A prompt opencode refuses is that send's failure; the
+   * session goes on.
+   */
   #prompt(
     parts: unknown[],
     messageID: string,
+    uuid: string,
     model?: { providerID?: string; modelID?: string }
   ): void {
     this.#turnOpen = true;
@@ -2295,21 +2302,19 @@ export class OpencodeSession implements HarnessSession {
       })
       .then((res) => {
         if (res.error) {
-          this.#ctx.failed(new Error(errorText(res.error)));
+          this.#ctx.rejected(uuid, new Error(errorText(res.error)));
           this.#drained(messageID);
         }
       })
       .catch((error: unknown) => {
         // A rejected prompt never opens a turn server-side, so no pump event
-        // will ever settle it: fail loudly and leave busy clear here, or the
+        // will ever settle it: say so and leave busy clear here, or the
         // session strands busy with every later message queuing behind nothing.
         this.#turnOpen = false;
         this.#clearStallTimer();
         this.#busy = false;
         this.#ctx.busy(false);
-        this.#ctx.failed(
-          error instanceof Error ? error : new Error(String(error))
-        );
+        this.#ctx.rejected(uuid, error);
         this.#drained(messageID);
       });
   }
@@ -2337,7 +2342,7 @@ export class OpencodeSession implements HarnessSession {
     }
     this.#ctx.busy(true);
     this.#draining = next.messageID;
-    this.#prompt(next.parts, next.messageID, next.model);
+    this.#prompt(next.parts, next.messageID, next.uuid, next.model);
   }
 
   /** The sends waiting on an answer, read. */
@@ -2378,17 +2383,18 @@ export class OpencodeSession implements HarnessSession {
     return this.#commandNames;
   }
 
-  /** A `/name` turned: run it as a command, or fall back to a plain prompt. */
+  /** A `/name` turned: run it as a command, or send it as a plain prompt. */
   async #commandOrPrompt(
     name: string,
     args: string,
     parts: unknown[],
     messageID: string,
+    uuid: string,
     model?: { providerID?: string; modelID?: string }
   ): Promise<void> {
     const names = await this.#commandNamesOf();
     if (!names.has(name)) {
-      this.#prompt(parts, messageID, model);
+      this.#prompt(parts, messageID, uuid, model);
       return;
     }
     this.#turnOpen = true;
@@ -2409,7 +2415,7 @@ export class OpencodeSession implements HarnessSession {
       })
       .then((res) => {
         if (res.error) {
-          this.#ctx.failed(new Error(errorText(res.error)));
+          this.#ctx.rejected(uuid, new Error(errorText(res.error)));
         }
       });
   }
@@ -4221,12 +4227,7 @@ export class OpencodeHarness implements Harness {
       }
     }
 
-    const knownModels = new Set(
-      modelCatalog(await connectedProviders(client, dir)).map(
-        (model) => model.value
-      )
-    );
-    const entries = toTranscript(sessionKey, rows, knownModels);
+    const entries = toTranscript(sessionKey, rows);
 
     // Subagents: children of this session, linked to their parent's task tool
     // call by the task ToolPart's `state.metadata.sessionId` (verified capture).
@@ -4266,8 +4267,7 @@ export class OpencodeHarness implements Harness {
       }
       const childEntries = toTranscript(
         child.id,
-        childRes.data as { info: Message; parts: Part[] }[],
-        knownModels
+        childRes.data as { info: Message; parts: Part[] }[]
       );
       for (const entry of childEntries) {
         entry.parent_tool_use_id = callID;
@@ -4449,16 +4449,9 @@ export class OpencodeHarness implements Harness {
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: replays every part kind opencode stores; not refactored in this pass
 export function toTranscript(
   sessionKey: string,
-  rows: { info: Message; parts: Part[] }[],
-  /** Every `provider/model` the connected providers offer. */
-  knownModels: ReadonlySet<string>
+  rows: { info: Message; parts: Part[] }[]
 ): SessionMessage[] {
   const entries: SessionMessage[] = [];
-  const answered = new Set(
-    rows.flatMap(({ info }) =>
-      info.role === "assistant" ? [info.parentID] : []
-    )
-  );
   for (const { info, parts } of rows) {
     // opencode records when each message was created (`time.created`, epoch
     // ms, on UserMessage and AssistantMessage in @opencode-ai/sdk
@@ -4476,38 +4469,13 @@ export function toTranscript(
       );
       if (content) {
         // A sent message is keyed back to its send's uuid by the hub, which
-        // was told this message id when opencode wrote it (`storedAs`).
+        // was told this message id when the send was dispatched (`storedAs`).
+        // Why a send failed is its record's to say, not the transcript's.
         entries.push({
           type: "user",
           uuid: info.id,
           session_id: sessionKey,
           message: { role: "user", content },
-          parent_tool_use_id: null,
-          parent_agent_id: null,
-          timestamp,
-        });
-      }
-      // A prompt for a model no connected provider offers dies before opencode
-      // stores any reply, so nothing it keeps says why the question went
-      // unanswered. The stored message names the model it asked for; read
-      // back against the catalog, the reload draws the failure the live
-      // stream closed that turn with.
-      const asked = `${info.model.providerID}/${info.model.modelID}`;
-      if (!(answered.has(info.id) || knownModels.has(asked))) {
-        entries.push({
-          type: "system",
-          uuid: `${info.id}:error`,
-          session_id: sessionKey,
-          message: {
-            type: "result",
-            uuid: `${info.id}:error`,
-            session_id: sessionKey,
-            subtype: "error_during_execution",
-            is_error: true,
-            errors: [
-              `ProviderModelNotFoundError: Model not found: ${asked} — no connected provider offers it`,
-            ],
-          },
           parent_tool_use_id: null,
           parent_agent_id: null,
           timestamp,

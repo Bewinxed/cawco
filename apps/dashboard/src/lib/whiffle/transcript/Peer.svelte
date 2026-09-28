@@ -73,13 +73,14 @@
   );
 </script>
 
-<!-- Sent into a running turn and not read yet: the same row at reduced
-     presence, saying so, until the session reads it and it moves into place. -->
+<!-- Sent and not read yet: the same row at reduced presence, saying so,
+     until the session reads it and it moves into place. One the session
+     will never read says so in words, with why on hover. -->
 <div
   class="sysrow"
   data-message={message.id}
   class:err={row.failed}
-  class:waiting={message.queued}
+  class:waiting={message.state === 'pending'}
 >
   <p class="label">
     <span class="glyph">
@@ -107,12 +108,19 @@
         <span class="name">{row.name}</span>
       {/if}
     </span>
-    {#if row.kind === 'report' && row.failed}
+    {#if message.state === 'failed'}
+      <span class="state">not sent</span>
+    {:else if row.kind === 'report' && row.failed}
       <span class="state">failed</span>
-    {:else if message.queued}
+    {:else if message.state === 'pending'}
       <span class="pending">queued</span>
+    {:else if meta.urgent}
+      <span class="pending">urgent</span>
     {/if}
   </p>
+  {#if message.state === 'failed' && meta.sendFailed}
+    <p class="reason">{meta.sendFailed}</p>
+  {/if}
   <div class="body"><MessageBody source={message.content} /></div>
 </div>
 
@@ -183,6 +191,13 @@
   .state,
   .pending {
     flex: 0 0 auto;
+  }
+  /* Why it did not go, in MessageRow's own reason line. */
+  .reason {
+    margin: var(--space-1) 0 0;
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
+    color: var(--status-fail-ink);
   }
   /* MessageRow's queued presence, for the rows whiffle sends. */
   .sysrow.waiting {

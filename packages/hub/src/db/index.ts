@@ -27,6 +27,7 @@ import type {
 import { RESTART_LOST, resolveRates } from "@whiffle/core";
 import {
   and,
+  asc,
   desc,
   eq,
   gt,
@@ -345,7 +346,7 @@ export interface DbShape {
   readonly instanceBySessionId: (
     sessionId: string
   ) => typeof instances.$inferSelect | undefined;
-  /** Keys a send to the id its harness stored it under. */
+  /** Keys a send to the id its harness stores it under. */
   readonly linkSend: (uuid: string, harnessId: string) => void;
   /**
    * Every machine, in the shape everything downstream reads them: the `fleet`
@@ -661,12 +662,10 @@ export interface DbShape {
     source: string;
     path?: string;
   }) => void;
-  /** Files the moment the hub accepted a send: the time that send shows everywhere. */
-  readonly recordSend: (send: {
-    uuid: string;
-    instanceId: string;
-    acceptedAt: Date;
-  }) => void;
+  /** Files a send's record as the hub accepted it: pending, or failed at once. */
+  readonly recordSend: (
+    send: typeof sentMessages.$inferInsert
+  ) => SentMessageRow;
   /** Files one supervisor evaluation result and prunes to newest 5,000 rows (plan: our choice). */
   readonly recordSupervisorEvent: (event: {
     instanceId: string;
@@ -693,11 +692,18 @@ export interface DbShape {
   readonly ruleStatesFor: (ruleId: string) => RuleState[];
   /** Per-rule totals for the list, aggregated in SQL rather than per row. */
   readonly ruleStats: () => RuleStats[];
+  /** One send's record, by its uuid. */
+  readonly sendRecord: (uuid: string) => SentMessageRow | undefined;
   /**
    * The sends among these ids, matched by the send's uuid or by the id its
    * harness stored it under.
    */
   readonly sendsFor: (ids: string[]) => SentMessageRow[];
+  /** A session's sends in these states, oldest accepted first. */
+  readonly sendsIn: (
+    instanceId: string,
+    states: SentMessageRow["state"][]
+  ) => SentMessageRow[];
   /** A machine's own account of what it came to, from the sync it just answered. */
   readonly setAgentFleet: (machineId: string, report: FleetSyncReport) => void;
   /** What each harness on the machine can do, as its daemon's report beat said. */
@@ -802,6 +808,16 @@ export interface DbShape {
   ) => (typeof instances.$inferSelect)[];
   /** Enabled plugins with no resolved files and no recorded failure — what a resolve is for. */
   readonly unresolvedPlugins: () => string[];
+  /** One change to a send's record — the hub's only kind of write to one. */
+  readonly updateSend: (
+    uuid: string,
+    change: Partial<
+      Pick<
+        SentMessageRow,
+        "state" | "reason" | "anchor" | "replacedBy" | "body" | "harnessId"
+      >
+    >
+  ) => SentMessageRow | undefined;
   readonly upsertAgent: (agent: {
     machineId: string;
     hostname: string;
@@ -2528,17 +2544,29 @@ const make = (path: string): DbShape => {
         })
         .run();
     },
-    recordSend: (send) => {
-      // A retry goes out under the same uuid; its acceptance is the one the
-      // frame and the pending copy now carry, so the row takes it too.
-      db.insert(sentMessages)
-        .values(send)
-        .onConflictDoUpdate({
-          target: sentMessages.uuid,
-          set: { acceptedAt: send.acceptedAt },
-        })
-        .run();
-    },
+    recordSend: (send) =>
+      db.insert(sentMessages).values(send).returning().get(),
+    sendRecord: (uuid) =>
+      db.select().from(sentMessages).where(eq(sentMessages.uuid, uuid)).get(),
+    sendsIn: (instanceId, states) =>
+      db
+        .select()
+        .from(sentMessages)
+        .where(
+          and(
+            eq(sentMessages.instanceId, instanceId),
+            inArray(sentMessages.state, states)
+          )
+        )
+        .orderBy(asc(sentMessages.acceptedAt))
+        .all(),
+    updateSend: (uuid, change) =>
+      db
+        .update(sentMessages)
+        .set(change)
+        .where(eq(sentMessages.uuid, uuid))
+        .returning()
+        .get(),
     sendsFor: (ids) => {
       const rows: SentMessageRow[] = [];
       // A long transcript names more ids than SQLite binds in one statement.

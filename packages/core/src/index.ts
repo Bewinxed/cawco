@@ -670,6 +670,28 @@ export type FramePayload =
     }
   | {
       /**
+       * Hub-originated: a send's record, as it stands after its latest change
+       * — accepted, read, failed or replaced. Sequenced into the session's
+       * stream at the moment of the change, which is where a read send's row
+       * sits.
+       */
+      kind: "send";
+      instanceId: string;
+      record: import("./harness").SendRecord;
+    }
+  | {
+      /**
+       * Daemon-originated: one send did not go — the harness refused it, or
+       * there was nothing to hand it to — with the words that say why. The
+       * hub fails that send's record; the session, if any, goes on.
+       */
+      kind: "rejected";
+      instanceId: string;
+      uuid: string;
+      error: string;
+    }
+  | {
+      /**
        * Hub-originated: every session it still lists, pushed whenever one of the
        * rows moves.
        */

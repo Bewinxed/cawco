@@ -6,7 +6,6 @@
  * re-models them.
  */
 import type {
-  AcceptedSend,
   NeutralAssistantMessage,
   NeutralMessage,
   NeutralStatus,
@@ -17,7 +16,6 @@ import type {
   UserQuestionResult,
 } from "@whiffle/core";
 import {
-  MESSAGES_READ,
   parseDelegateAsk,
   parseHandoffMarker,
   parseReportMarker,
@@ -27,6 +25,7 @@ import {
 import type { SubagentState } from "$lib/utils/flow-types";
 import { getToolGlance } from "$lib/utils/tool-display";
 import { newId } from "./id";
+import { sendRef } from "./transcript/sends";
 import type {
   DelegateEvent,
   JsonValue,
@@ -121,11 +120,6 @@ export interface FrameMapping {
   failedTurn?: boolean;
   /** Appended to the transcript, in order. */
   messages: Message[];
-  /**
-   * The sends the harness has just consumed, by uuid: each row moves here —
-   * after everything already on screen, before whatever the model says next.
-   */
-  read?: string[];
   /**
    * What the session says it is doing right now: `compacting` while it rewrites
    * its own context, `requesting` while it waits on the model, `null` when it
@@ -596,24 +590,10 @@ export function mapFrame(
     case "user": {
       const { content } = sdk.message;
       const text = transcriptUserText(sdk.message);
-      // A message SENT to the session — the reader's, a rule, a hand-off, a
-      // delegate's report or ask — is the only user frame with an `origin`
-      // (`SentMessage`), and the hub streams exactly one of it, under the uuid
-      // it was sent with. It is classified off its marker line exactly as a
-      // stored copy is, so the row reads the same live and after a reload.
-      // Dated by the hub's clock (`AcceptedSend`), as its pending copy is.
-      if (sdk.origin && uuid) {
-        mapping.messages.push({
-          ...sentRow(text ?? "", sdk.message, {
-            ...base,
-            timestamp: new Date((sdk as AcceptedSend).timestamp),
-          }),
-          state: "sent",
-        });
-        break;
-      }
-      // The harness speaking in the user's role: a subagent's prompt, or its
-      // own notice. Anything else of the main loop's is not a row.
+      // A message sent to the session is not a frame at all: it is its
+      // record's (`send` frames, transcript/sends.ts). The harness speaking in
+      // the user's role: a subagent's prompt, or its own notice. Anything
+      // else of the main loop's is not a row.
       if (text && (agentId || systemNote(text))) {
         mapping.messages.push({
           ...base,
@@ -677,7 +657,9 @@ export function mapFrame(
       // is the common one, and it reports cost too. `total_cost_usd` is
       // cumulative, so the session overwrites rather than accumulates.
       mapping.cost = sdk.total_cost_usd;
-      if (sdk.subtype === "success") {
+      // An error that failed the sends it closed on is said on their rows,
+      // which carry it live and after a reload alike (`failedSends`).
+      if (sdk.subtype === "success" || sdk.failedSends?.length) {
         break;
       }
       mapping.messages.push(
@@ -731,9 +713,6 @@ export function mapFrame(
           break;
         case "commands_changed":
           mapping.commands = sdk.commands;
-          break;
-        case MESSAGES_READ:
-          mapping.read = sdk.read;
           break;
         case "status":
           mapping.status = sdk.status as NeutralStatus | undefined;
@@ -1208,10 +1187,9 @@ export function thinkingDurationMs(
 }
 
 /**
- * The user's own text, which live frames never echo (the local copy covers it)
- * but a stored transcript is the only source of.
+ * The words of a user-role message: a send's body, or a stored user entry.
  */
-function transcriptUserText(message: unknown): string | null {
+export function transcriptUserText(message: unknown): string | null {
   if (typeof message !== "object" || message === null) {
     return null;
   }
@@ -1253,11 +1231,11 @@ function transcriptUserImages(message: unknown): MessageMetadata["images"] {
 }
 
 /**
- * When a stored entry was written (`SessionMessage.timestamp`: the harness's
- * record, or for a sent message the hub's acceptance) — the only honest clock
- * a replayed transcript has. `undefined` when the entry carries none (one the
- * hub built itself) or it is unparseable, because the alternative is dating
- * the turn to the moment the reader opened the session.
+ * When a stored entry was written (`SessionMessage.timestamp`, the harness's
+ * record) — the only honest clock a replayed transcript has. `undefined` when
+ * the entry carries none (one the hub built itself) or it is unparseable,
+ * because the alternative is dating the turn to the moment the reader opened
+ * the session.
  */
 function storedAt(entry: SessionMessage): Date | undefined {
   if (!entry.timestamp) {
@@ -1499,9 +1477,10 @@ function injectedMessage(
 /**
  * A message sent to the session, as a row: whiffle's own (a rule, a hand-off,
  * a delegate's report or ask) by its marker line, anything else as the
- * reader's words. The live frame and a stored copy both come through here.
+ * reader's words. A send's record and a stored user turn the hub has no
+ * record for both come through here.
  */
-function sentRow(
+export function sentRow(
   text: string,
   message: unknown,
   base: Omit<Message, "type" | "content">
@@ -1754,22 +1733,24 @@ export function mapTranscript(
     // The one honest clock a replayed turn has (see {@link storedAt}).
     const recorded = storedAt(entry);
 
-    // A stored message the session was sent, and read: keyed by the uuid it
-    // was sent under, so it is the row the live stream drew. An entry with an
-    // `origin` is not stored at all — it is a send the hub is still holding
-    // for the harness, and `mapFrame` below draws it as the live frame did.
-    const opening = "origin" in entry ? null : turnStart(entry);
+    // A send, stored: its place, where its record draws it (transcript/
+    // sends.ts) — the same row, under the same id, the live stream drew.
+    if (entry.send) {
+      messages.push(sendRef(instanceId, entry.send, entry.uuid));
+      continue;
+    }
+    // A user turn the hub has no record of — typed into the harness itself,
+    // or from before the hub kept records — is the harness's own row.
+    const opening = turnStart(entry);
     if (opening) {
-      const stored = {
-        id: entry.sourceUuid ?? entry.uuid,
-        instanceId,
-        ...(recorded ? { timestamp: recorded } : {}),
-        sdkUuid: entry.uuid,
-      };
-      messages.push({
-        ...sentRow(opening.text, entry.message, stored),
-        state: "read",
-      });
+      messages.push(
+        sentRow(opening.text, entry.message, {
+          id: entry.sourceUuid ?? entry.uuid,
+          instanceId,
+          ...(recorded ? { timestamp: recorded } : {}),
+          sdkUuid: entry.uuid,
+        })
+      );
       continue;
     }
 
@@ -1787,15 +1768,9 @@ export function mapTranscript(
     // `mapFrame` stamps the client's clock, which is the truth for a frame
     // arriving live and a fiction for one read back off disk — it would date
     // every turn of a year-old session to the moment the reader opened it. The
-    // entry's own recorded time replaces it: the harness's for a stored entry,
-    // the hub's for a send (stored, or still held as an `AcceptedSend`).
+    // entry's own recorded time replaces it.
     for (const message of mapping.messages) {
       message.timestamp = recorded;
-      // A send the hub still holds for the harness is waiting on it, whether
-      // or not this tab has heard yet that the session is busy.
-      if ("origin" in entry) {
-        message.queued = true;
-      }
     }
 
     const sink = mapping.agentId
@@ -1845,7 +1820,8 @@ export function mapTranscript(
 
 /**
  * The row this tab draws for a message it is sending, under the uuid the
- * message goes out with — the row every later word about it lands on.
+ * message goes out with — the row its record takes over once the hub has it.
+ * It waits at the end, where that record puts a send not read yet.
  */
 export function localUserMessage(
   instanceId: string,
@@ -1859,6 +1835,7 @@ export function localUserMessage(
     instanceId,
     type: "user",
     state: "sending",
+    queued: true,
     content: text,
     timestamp: new Date(),
     // Thumbnails come from the same base64 that went out: nothing comes back to

@@ -98,11 +98,11 @@ export interface StreamPorts {
     envelope: Envelope<ControlPayload>,
     dashboard: HubSocket
   ) => boolean;
-  /** The dashboard `send` relay, verbatim — false when the relay refused it. */
-  readonly relaySend: (
-    envelope: Envelope<SendPayload>,
-    dashboard: HubSocket
-  ) => boolean;
+  /**
+   * The one send path. It always takes the send: a machine that is not there
+   * makes its record failed, and the record's frame says so.
+   */
+  readonly relaySend: (envelope: Envelope<SendPayload>) => void;
 }
 
 export interface StreamHubShape {
@@ -403,10 +403,6 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
       fail(socket, commandId, "the command names no machine");
       return;
     }
-    if (!ports.isMachineConnected(machineId)) {
-      fail(socket, commandId, `machine ${machineId} is not connected`);
-      return;
-    }
 
     const payload = isRecord(message.payload) ? message.payload : undefined;
     if (!payload) {
@@ -414,37 +410,35 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
       return;
     }
 
+    // A send is taken whether or not its machine is there: the hub records it
+    // either way, failed with why when nobody can take it, and that record —
+    // not this ack — is what every tab draws.
     if (kind === "send") {
       if (!isRecord(payload.message)) {
         fail(socket, commandId, "a send command carries no message");
         return;
       }
-      const sent = ports.relaySend(
-        {
-          verb: "send",
-          machineId,
+      ports.relaySend({
+        verb: "send",
+        machineId,
+        instanceId: sessionId,
+        // The envelope's session is authoritative: the payload's own copy is
+        // normalised onto it so the two can never disagree on the wire.
+        payload: {
+          ...payload,
           instanceId: sessionId,
-          // The envelope's session is authoritative: the payload's own copy is
-          // normalised onto it so the two can never disagree on the wire.
-          payload: {
-            ...payload,
-            instanceId: sessionId,
-          } as unknown as SendPayload,
-        },
-        socket
-      );
-      if (!sent) {
-        fail(socket, commandId, `machine ${machineId} is not connected`);
-        return;
-      }
-      // No confirmation exists to wait for: the daemon's `send` answers with
-      // the turn itself. `accepted` is the last honest word the hub has, and
-      // the sequenced frames that follow are the proof of application.
+        } as unknown as SendPayload,
+      });
       ackTo(socket, {
         type: "command.ack",
         commandId,
         stage: "accepted",
       });
+      return;
+    }
+
+    if (!ports.isMachineConnected(machineId)) {
+      fail(socket, commandId, `machine ${machineId} is not connected`);
       return;
     }
 

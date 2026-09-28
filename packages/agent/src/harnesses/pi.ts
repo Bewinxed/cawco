@@ -391,7 +391,7 @@ class PiSession implements HarnessSession {
           this.#busy = true;
           return this.#session.prompt(prompt, { images: images as never });
         })
-        .catch((error) => this.#ctx.failed(error));
+        .catch((error: unknown) => this.#refused(message.uuid, error));
       return;
     }
 
@@ -408,7 +408,24 @@ class PiSession implements HarnessSession {
           ? { streamingBehavior: "steer" as const }
           : {}),
       })
-      .catch((error) => this.#ctx.failed(error));
+      .catch((error: unknown) => this.#refused(message.uuid, error));
+  }
+
+  /**
+   * pi refused one send: it will never start a user message for it, so it
+   * leaves the order the others are read back in, and it failed — the
+   * session goes on. A refusal with no turn running leaves nothing busy.
+   */
+  #refused(uuid: string, error: unknown): void {
+    const at = this.#unread.indexOf(uuid);
+    if (at >= 0) {
+      this.#unread.splice(at, 1);
+    }
+    if (!this.#session.isStreaming) {
+      this.#busy = false;
+      this.#ctx.busy(false);
+    }
+    this.#ctx.rejected(uuid, error);
   }
 
   async control(method: string, args: unknown[]): Promise<unknown> {

@@ -31,7 +31,8 @@
      * A word in the clock's place, for a turn that has no clock: a queued
      * message has not happened yet, so it has no time to show and this says
      * what it is instead. Always visible — unlike the clock, which is context
-     * the reader hovers for, this is the row's whole status.
+     * the reader hovers for, this is the row's whole status. A turn with a
+     * clock can carry one too (an urgent send): it stands before the clock.
      */
     note?: string;
   } = $props();
@@ -65,10 +66,11 @@
     </span>
     <span class="role">{name}</span>
   {/if}
+  {#if note}
+    <span class="note">{note}</span>
+  {/if}
   {#if validAt}
     <time class="when" datetime={validAt.toISOString()}>{clock}</time>
-  {:else if note}
-    <span class="note">{note}</span>
   {/if}
 </h2>
 
@@ -169,5 +171,9 @@
     @media (prefers-reduced-motion: no-preference) {
       transition: opacity var(--dur-control) var(--ease-out);
     }
+  }
+  /* A note and a clock together: the note takes the push, the clock follows it. */
+  .note + .when {
+    margin-inline-start: 0;
   }
 </style>

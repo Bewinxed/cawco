@@ -44,7 +44,7 @@ export interface HarnessContext {
   /** Put an arbitrary envelope on the daemon's hub socket (hand-offs). */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   emit(envelope: Envelope): void;
-  /** The session died of something the reader should see. */
+  /** The session itself died of something the reader should see. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   failed(error: unknown): void;
   /** Ship one neutral frame toward the hub. */
@@ -63,6 +63,13 @@ export interface HarnessContext {
   /** A gate was answered elsewhere, or by the adapter's own policy. */
   // biome-ignore lint/style/useConsistentMethodSignatures: matches the context callbacks
   permissionResolved?(requestId: string): void;
+  /**
+   * The harness refused one send, `uuid`: that send failed, with the
+   * harness's own words. The session goes on — this is never a session
+   * failure ({@link failed}).
+   */
+  // biome-ignore lint/style/useConsistentMethodSignatures: matches the context callbacks
+  rejected(uuid: string, error: unknown): void;
   /** The harness's own session id, once the runtime names it. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   session(sessionId: string): void;

@@ -113,8 +113,12 @@ interface CommandLifecycle {
 /**
  * The neutral frame is the SDK frame re-tagged: same fields, plus the
  * original. A command's lifecycle is the one exception: `started` becomes the
- * {@link MESSAGES_READ} frame, and its other states say nothing a reader
- * needs, so they are `null` — no frame at all.
+ * {@link MESSAGES_READ} frame, and its other states say nothing the hub
+ * needs, so they are `null` — no frame at all. Measured on CLI 2.1.280: an
+ * interrupt cancels only the command it is running; each command still queued
+ * behind it is then `started` as a turn of its own and stored under its uuid,
+ * and one folded in before the interrupt was `started` (read) already, so its
+ * later `cancelled` changes nothing.
  */
 export const toNeutral = (sdk: SDKMessage): NeutralMessage | null => {
   if ((sdk as { type: string }).type === "command_lifecycle") {
@@ -884,16 +888,18 @@ class ClaudeSession implements HarnessSession {
     const queued = (message as { shouldQuery?: boolean }).shouldQuery === false;
 
     // A mid-turn injection: the model reads it at the next tool boundary without
-    // losing work. If the stream is gone, fall back to queueing it.
+    // losing work. The CLI queues it and says `started` when it is read, as it
+    // does for any send (measured 2.1.280). A stream that refuses it is that
+    // send's failure.
     if (extras.urgent && this.#turn.busy) {
       const outgoing = withExtras(sdk, extras.attachments, extras.images);
       // biome-ignore lint/suspicious/useAwait: must stay an async generator — streamInput's signature requires AsyncGenerator<SDKUserMessage>, not the plain Generator a non-async function* would produce
       const stream = (async function* (): AsyncGenerator<SDKUserMessage> {
         yield outgoing;
       })();
-      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent; the rejection is already handled by the .catch() right here, which falls back to the normal queue
-      void this.#handle.streamInput(stream).catch(() => {
-        this.#input.push(outgoing);
+      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent; the rejection is handled by the .catch() right here
+      void this.#handle.streamInput(stream).catch((error: unknown) => {
+        this.#ctx.rejected(message.uuid, error);
       });
       return;
     }

@@ -14,6 +14,7 @@ import type {
   FramePayload,
   FsPayload,
   HarnessKind,
+  HistoryLine,
   InstanceRow,
   McpServerStatus,
   ModelInfo,
@@ -24,6 +25,7 @@ import type {
   PermissionUpdate,
   PreviewSource,
   SendPayload,
+  SendRecord,
   SessionMessage,
   SessionPulse,
   SessionTooling,
@@ -103,13 +105,15 @@ import {
   refreshTasks,
   TASK_LEDGER_TOOLS,
 } from "./tasks.svelte";
-import { queuedFrom, type Voice, voiceOfMessage } from "./transcript/rows";
-import type {
-  DelegateAskEvent,
-  DelegateEvent,
-  Message,
-  SendState,
-} from "./types";
+import { type Voice, voiceOfMessage } from "./transcript/rows";
+import {
+  isSendRef,
+  newer,
+  placeSends,
+  sendRef,
+  sendRow,
+} from "./transcript/sends";
+import type { DelegateAskEvent, DelegateEvent, Message } from "./types";
 import {
   acceptWorkflowFrame,
   refreshWorkflows,
@@ -307,6 +311,13 @@ export interface SessionState {
   effort: EffortLevel | null;
   /** Which harness owns {@link sessionId} — what a resume and a catalog read route on. */
   harness: HarnessKind;
+  /**
+   * The transcript as the harness said it: its own rows, in order, with a
+   * placeholder (`send.ref`) wherever a send was read or stored. What is on
+   * screen, {@link messages}, is these with every send drawn in its place
+   * ({@link place}).
+   */
+  harnessRows: Message[];
   /** The older chunks of a long transcript are still being prepended. */
   hydrating: boolean;
   /** The `system.init` banner is re-emitted every turn; render it once. */
@@ -334,10 +345,20 @@ export interface SessionState {
   lastTurnFailed: boolean;
   /** A stored transcript is being fetched. */
   loading: boolean;
+  /**
+   * This tab's own sends the hub has not taken: on their way, or never
+   * arrived. Each gives way to its record the moment the hub's word on it
+   * lands, as the same row.
+   */
+  local: Message[];
   machineId: string;
   /** The session's MCP servers (`mcpServerStatus`), null until asked; [] when the ask failed or found none. */
   mcp: McpServerStatus[] | null;
   mcpPending: boolean;
+  /**
+   * What is on screen: {@link harnessRows} with every send in its place
+   * (`placeSends`). Only {@link place} writes it.
+   */
   messages: Message[];
   /** Which model answers the next turn, learnt and corrected the same way. */
   model: string | null;
@@ -363,6 +384,8 @@ export interface SessionState {
    * and leave the pane on its loading state for the life of the tab.
    */
   readFault: ReadFault | null;
+  /** The hub's record of every send this view knows of, by uuid. */
+  records: Record<string, SendRecord>;
   /** Started again in place for a mode it could not switch into; ends at the next init. */
   relaunching: boolean;
   /** A side quest (NEW.md §1) — kept visually apart until it is kept or discarded. */
@@ -632,6 +655,9 @@ export function blankSession(instanceId: string): SessionState {
     cwd: "",
     sessionId: null,
     harness: "claude",
+    harnessRows: [],
+    records: {},
+    local: [],
     messages: [],
     subagents: {},
     pending: [],
@@ -685,114 +711,182 @@ function session(instanceId: string): SessionState {
   return target;
 }
 
-/** How far a sent message has got. A later word never moves it back. */
-const SEND_RANK: Record<SendState, number> = {
-  sending: 0,
-  failed: 1,
-  sent: 2,
-  read: 3,
-};
-
 /**
- * THE ONE WRITER of a session's transcript. Every row goes in by id, and an id
- * already there is never added twice: a message that arrives again — the
- * hub's frame for a send this tab drew, a history read over rows already on
- * screen, a replay after a reset — only moves its send state forward.
+ * THE ONE WRITER of what a session shows: {@link SessionState.harnessRows}
+ * with every send drawn in its place (`placeSends`, transcript/sends.ts).
  *
- * New rows join the end, ahead of the rows still waiting on the session:
- * those stay last until it reads them ({@link Message.queued}). A sent
- * message waits when it first appears while a turn is running — or when it
- * arrives already known to be waiting, as a history read's pending send
- * does. `older` rows are a history page, and go in front.
+ * A send's row already on screen is kept, its fields moved to what its record
+ * says now — so the row that was `sending` is the row that is `queued`, then
+ * read in its place: one element for the life of the send. The list itself is
+ * kept wherever it changed only past its first row: the transcript reads a
+ * kept list that changed as the conversation arriving, and a new one as
+ * history.
  */
-function upsert(
-  target: SessionState,
-  incoming: Message[],
-  older = false
-): void {
-  const held = new Set(target.messages.map((message) => message.id));
-  const fresh: Message[] = [];
-  for (const message of incoming) {
-    if (held.has(message.id)) {
-      const row = target.messages.findLast((m) => m.id === message.id);
-      if (row) {
-        adoptCopy(target, row, message);
-      }
-      continue;
-    }
-    held.add(message.id);
-    if (message.state === "sending" || message.state === "sent") {
-      message.queued ??= target.busy;
-    }
-    fresh.push(message);
-  }
-  if (older) {
-    target.messages = [...fresh, ...target.messages];
-    return;
-  }
-  for (const message of fresh) {
-    if (message.queued) {
-      target.messages.push(message);
-    } else {
-      target.messages.splice(queuedFrom(target.messages), 0, message);
-    }
-  }
-}
-
-/**
- * Another copy of a send already on screen: it only carries the row forward.
- * The furthest copy dates the row (the hub's accepted send over this tab's
- * own draft, the harness's stored copy over both); a copy behind the row, a
- * replayed frame after a history read, leaves it alone.
- */
-function adoptCopy(target: SessionState, row: Message, copy: Message): void {
-  if (!(row.state && copy.state)) {
-    return;
-  }
-  if (copy.timestamp && SEND_RANK[copy.state] >= SEND_RANK[row.state]) {
-    row.timestamp = copy.timestamp;
-  }
-  if (SEND_RANK[copy.state] > SEND_RANK[row.state]) {
-    moveSend(target, row, copy.state);
-  }
-}
-
-/**
- * A sent message moving on. Taken by the hub, it stays where it is. Read, it
- * has happened: it moves — once — out of the rows still waiting, to the end
- * of what is on screen, before whatever the session says about it next. A
- * waiting message that failed will never be read, and takes that same place
- * as the failed turn it is.
- */
-function moveSend(target: SessionState, row: Message, to: SendState): void {
-  row.state = to;
-  if (to === "sent") {
-    // Its failure was a timeout on this tab's side: the hub has it after all.
-    if (row.metadata?.sendFailed) {
-      row.metadata = { ...row.metadata, sendFailed: undefined };
-    }
-    return;
-  }
-  if (!(to === "read" || (to === "failed" && row.queued))) {
-    return;
-  }
-  const { messages } = target;
-  messages.splice(
-    messages.findLastIndex((message) => message.id === row.id),
-    1
+function place(target: SessionState): void {
+  const current = target.messages;
+  const sends = new Map(
+    current.flatMap((message) =>
+      message.state && message.id ? [[message.id, message] as const] : []
+    )
   );
-  row.queued = false;
-  messages.splice(queuedFrom(messages), 0, row);
+  const next = placeSends(target.harnessRows, target.records, target.local).map(
+    (message) => {
+      const held =
+        message.state && message.id ? sends.get(message.id) : undefined;
+      if (!held || held === message) {
+        return message;
+      }
+      adopt(held, message);
+      return held;
+    }
+  );
+  let same = 0;
+  while (
+    same < current.length &&
+    same < next.length &&
+    current[same] === next[same]
+  ) {
+    same += 1;
+  }
+  if (same === current.length && same === next.length) {
+    return;
+  }
+  // A change at the very first row is a different transcript — a read, a
+  // page in front, a rewind to nothing — and takes a list of its own.
+  if (same === 0 && current.length > 0) {
+    target.messages = next;
+    return;
+  }
+  current.splice(same, current.length - same, ...next.slice(same));
 }
 
-/** The sends the harness has just consumed, each settled into its place. */
-function markRead(target: SessionState, uuids: string[]): void {
-  for (const uuid of uuids) {
-    const row = target.messages.findLast((message) => message.id === uuid);
-    if (row?.state && row.state !== "read") {
-      moveSend(target, row, "read");
+/** Whether two plain values say the same thing, field for field. */
+function equal(a: unknown, b: unknown): boolean {
+  if (a === b) {
+    return true;
+  }
+  if (!(a && b && typeof a === "object" && typeof b === "object")) {
+    return false;
+  }
+  const ak = Object.keys(a);
+  const bk = Object.keys(b);
+  return (
+    ak.length === bk.length &&
+    ak.every((key) =>
+      equal(
+        (a as Record<string, unknown>)[key],
+        (b as Record<string, unknown>)[key]
+      )
+    )
+  );
+}
+
+/**
+ * A send's row on screen, moved to what its record says now: the same row.
+ * Only what changed is written. A row this tab drew from its own send keeps
+ * the pictures it sent: the record names the same ones by the hub's media
+ * references, and trading one for the other would load them all again.
+ */
+function adopt(held: Message, fresh: Message): void {
+  if (held.type !== fresh.type) {
+    held.type = fresh.type;
+  }
+  if (held.content !== fresh.content) {
+    held.content = fresh.content;
+  }
+  if (held.state !== fresh.state) {
+    held.state = fresh.state;
+  }
+  if (held.queued !== fresh.queued) {
+    held.queued = fresh.queued;
+  }
+  if (held.sdkUuid !== fresh.sdkUuid) {
+    held.sdkUuid = fresh.sdkUuid;
+  }
+  if (held.timestamp?.getTime() !== fresh.timestamp?.getTime()) {
+    held.timestamp = fresh.timestamp;
+  }
+  const drawn = held.metadata?.images;
+  const pictures =
+    drawn?.length === fresh.metadata?.images?.length &&
+    drawn?.every((image) => image.src?.startsWith("data:"))
+      ? { images: drawn }
+      : {};
+  const metadata = fresh.metadata && { ...fresh.metadata, ...pictures };
+  if (!equal(held.metadata, metadata)) {
+    held.metadata = metadata;
+  }
+}
+
+/**
+ * The harness's rows, onto the end of what it has said. A row already there
+ * — a frame replayed behind a history read — is not said twice.
+ */
+function addRows(target: SessionState, rows: Message[]): void {
+  const held = new Set(target.harnessRows.map((message) => message.id));
+  const fresh: Message[] = [];
+  for (const message of rows) {
+    if (!held.has(message.id)) {
+      held.add(message.id);
+      fresh.push(message);
     }
   }
+  if (fresh.length > 0) {
+    target.harnessRows.push(...fresh);
+    place(target);
+  }
+}
+
+/**
+ * The hub's word on one send (a `send` frame). Read, it takes its place where
+ * the word arrives — after everything said so far, before whatever the model
+ * says about it — unless a history read already found where it was stored.
+ * This tab's own copy of the send gives way to it; an older word than the
+ * one in hand changes nothing.
+ */
+function receive(target: SessionState, record: SendRecord): void {
+  if (!newer(target.records[record.uuid], record)) {
+    return;
+  }
+  target.records[record.uuid] = record;
+  const own = target.local.some((message) => message.id === record.uuid);
+  target.local = target.local.filter((message) => message.id !== record.uuid);
+  // This tab's own send, failed at once (its machine was not there): said
+  // where every failure of a send this tab made is said.
+  if (own && record.state === "failed") {
+    sendFailureNotices[target.instanceId] = record.reason
+      ? `Message not sent: ${record.reason}`
+      : "Message not sent.";
+  }
+  if (
+    record.state === "read" &&
+    !target.harnessRows.some((row) => isSendRef(row) && row.id === record.uuid)
+  ) {
+    target.harnessRows.push(sendRef(target.instanceId, record.uuid));
+  }
+  place(target);
+}
+
+/**
+ * An older page of history, in front of what is on screen, with the records
+ * its sends need — unless the view already holds a later word on one.
+ */
+function prependPage(
+  target: SessionState,
+  rows: Message[],
+  records: Record<string, SendRecord>
+): void {
+  const known = new Set(target.harnessRows.map((message) => message.id));
+  target.harnessRows = [
+    ...rows.filter((message) => !known.has(message.id)),
+    ...target.harnessRows,
+  ];
+  for (const record of Object.values(records)) {
+    if (newer(target.records[record.uuid], record)) {
+      target.records[record.uuid] = record;
+    }
+  }
+  place(target);
 }
 
 /** Starts a session's turn clock at the first pulse that is not idle, and stops it at the idle one. */
@@ -1454,7 +1548,7 @@ function handleFrame(frame: FramePayload): void {
       const target = session(instanceId);
       // A relaunch that never came up has no init frame to end its wait.
       target.relaunching = false;
-      upsert(target, [errorMessage(instanceId, message)]);
+      addRows(target, [errorMessage(instanceId, message)]);
     } else {
       console.error("[whiffle] hub error:", message);
     }
@@ -1476,7 +1570,7 @@ function handleFrame(frame: FramePayload): void {
     }
     // Fire-and-forget controls (interrupt, permission replies) still report failure.
     if (!frame.ok && frame.instanceId) {
-      upsert(session(frame.instanceId), [
+      addRows(session(frame.instanceId), [
         errorMessage(
           frame.instanceId,
           frame.error ?? "The machine could not carry out that request."
@@ -1541,12 +1635,12 @@ function handleFrame(frame: FramePayload): void {
   }
 
   switch (frame.kind) {
+    case "send":
+      receive(target, frame.record);
+      break;
     case "frame": {
       target.harness = frame.harness;
       const mapping = mapFrame(frame.instanceId, frame.message);
-      if (mapping.read) {
-        markRead(target, mapping.read);
-      }
       if (mapping.branch) {
         applyBranchEvent(target.subagents, frame.instanceId, mapping.branch);
       }
@@ -1561,12 +1655,12 @@ function handleFrame(frame: FramePayload): void {
       const sink = mapping.agentId
         ? branchFor(target.subagents, frame.instanceId, mapping.agentId)
             .messages
-        : target.messages;
+        : target.harnessRows;
       const append = (message: Message): void => {
         if (mapping.agentId) {
           sink.push(message);
         } else {
-          upsert(target, [message]);
+          addRows(target, [message]);
         }
       };
 
@@ -1949,11 +2043,11 @@ const streamHost: StreamHost = {
   noteFailure: (record) => {
     if (record.kind === "send") {
       // A send's failure is said over the composer it left (the session's
-      // notice) and on its echo — stamped rather than kept only on the record,
-      // because records are swept after five minutes and a message that never
+      // notice) and on its row — stamped rather than kept only on the command
+      // record, which is swept after five minutes, where a message that never
       // sent must not fade back to looking sent. It is never a toast.
       announceSendFailure(record);
-      stampSendFailure(record);
+      markUnreached(record);
       return;
     }
     // A parked permission card renders its own refusal (`Couldn't send that
@@ -1984,25 +2078,24 @@ const failureNotice = (record: CommandRecord): string => {
 };
 
 /**
- * A send this tab drew that the hub never took: its row, keyed by the
- * command's id, becomes the failed turn that carries Try again and Edit.
- * `metadata.sendFailed` keeps the reason after the ledger has swept its
- * record. A row the hub's frame has already reached was delivered, whatever
- * this tab's timer said.
+ * A send whose command the hub never took — the socket was down, went down,
+ * or no answer came: this tab's row for it did not go, with why, and offers
+ * Try again and Edit. A send the hub has a record of is not this tab's to
+ * say anything about (its row is the record's), and neither is a retry of a
+ * failed send, which draws no row of its own until the hub takes it.
  */
-function stampSendFailure(record: CommandRecord): void {
-  const target = state.sessions[record.sessionId];
-  const row = target?.messages.findLast(
+function markUnreached(record: CommandRecord): void {
+  const row = state.sessions[record.sessionId]?.local.find(
     (message) => message.id === record.commandId
   );
-  if (!(target && row?.state === "sending")) {
+  if (!row) {
     return;
   }
+  row.state = "unreached";
   row.metadata = {
     ...row.metadata,
     sendFailed: record.reason ?? "The hub never took it.",
   };
-  moveSend(target, row, "failed");
 }
 
 /**
@@ -2124,7 +2217,7 @@ export function latestCommandFor(
 export interface CommandIntents {
   interrupt: Record<string, never>;
   "permission.answer": { requestId: string; result: PermissionResult };
-  /** `replaces`: the failed send this one retries, whose row it takes over. */
+  /** `replaces`: the failed send this one retries, which the hub then retires. */
   send: { text: string; extras?: SendExtras; replaces?: string };
   "set-effort": { effort: EffortLevel };
   "set-model": { model: string };
@@ -2150,11 +2243,15 @@ function wirePayload<K extends CommandKind>(
   });
   switch (kind) {
     case "send": {
-      const { text, extras } = intent as CommandIntents["send"];
-      // The command's id is the message's: one identity from the press on.
+      const { text, extras, replaces } = intent as CommandIntents["send"];
+      // The command's id is the message's: one identity from the press on. A
+      // retry names the failed send it stands in for.
       return {
         instanceId,
-        message: userMessage(text, commandId),
+        message: {
+          ...userMessage(text, commandId),
+          ...(replaces ? { replaces } : {}),
+        },
         ...selectionExtras(extras),
       };
     }
@@ -2476,37 +2573,94 @@ function pruneOutbox(): void {
   }
 }
 
-/** Removes the row a failed send left behind, if it is still there. */
+/** Removes the row a send that never reached the hub left behind. */
 function dropSendEcho(instanceId: string, commandId: string): void {
   const target = state.sessions[instanceId];
   if (!target) {
     return;
   }
-  target.messages = target.messages.filter(
-    (message) => message.id !== commandId
-  );
+  target.local = target.local.filter((message) => message.id !== commandId);
+  place(target);
 }
 
 /**
- * Re-send a failed message from the outbox as a NEW command with a NEW id,
- * on the failed message's own row (keyed by the failed command's id): the row
- * takes the new id and goes back to sending where it stands. No-op if the
- * outbox entry has aged out. Never throws.
+ * Sends again, from the outbox, a message that never reached the hub — under
+ * its own uuid, on its own row, which goes back to sending where it stands.
+ * The uuid is what makes it safe: a hub that did take the first one after
+ * all has its record, answers with that, and hands the machine nothing twice.
+ * No-op if the outbox entry has aged out. Never throws.
  */
 export function retrySend(commandId: string): void {
   const entry = sendOutbox.get(commandId);
   if (!entry) {
     return;
   }
-  sendOutbox.delete(commandId);
-  outboxVersion += 1;
-  // Through `submitCommand`, not around it: a retry is a new command with its
-  // own record, never a resurrected one — only the row is the same.
-  submitCommand(entry.instanceId, entry.machineId, "send", {
-    text: entry.text,
-    extras: entry.extras,
-    replaces: commandId,
-  });
+  // Through `submitCommand`, not around it: a new command record under the
+  // same id, whose stages the row reads.
+  submitCommand(
+    entry.instanceId,
+    entry.machineId,
+    "send",
+    { text: entry.text, extras: entry.extras },
+    commandId
+  );
+}
+
+/**
+ * The retry out for each failed send, by that send's uuid: the command its
+ * row reads for whether the retry is still on its way, or did not go either.
+ */
+const retries = $state<Record<string, string>>({});
+
+/** The command retrying the failed send `uuid`, while this tab knows of one. */
+export function retryOf(uuid: string): CommandRecord | null {
+  const commandId = retries[uuid];
+  return commandId ? commandRecord(commandId) : null;
+}
+
+/**
+ * Sends again, as a new send that replaces it, a send the hub failed — from
+ * any screen, after any reload: the words and pictures are the row's own,
+ * from its record. The hub retires the failed one (`replaced`) as it takes
+ * this one, and every screen folds the old row away as the new one arrives.
+ */
+export async function retryFailed(message: Message): Promise<void> {
+  const images = await Promise.all(
+    (message.metadata?.images ?? []).flatMap(({ src, mediaType }) =>
+      src ? [imageBytes(src, mediaType)] : []
+    )
+  );
+  retries[message.id as string] = submitCommand(
+    message.instanceId,
+    session(message.instanceId).machineId,
+    "send",
+    {
+      text: message.content,
+      extras: {
+        attachments: message.metadata?.attachments?.map(
+          ({ name, content }) => ({ kind: "text" as const, name, content })
+        ),
+        images,
+      },
+      replaces: message.id,
+    }
+  );
+}
+
+/** A picture's bytes as a send carries them: base64, with no `data:` prefix. */
+async function imageBytes(
+  src: string,
+  mediaType: string
+): Promise<{ mediaType: string; data: string }> {
+  if (src.startsWith("data:")) {
+    return { mediaType, data: src.slice(src.indexOf(",") + 1) };
+  }
+  const bytes = new Uint8Array(await (await fetch(src)).arrayBuffer());
+  let binary = "";
+  for (const byte of bytes) {
+    binary += String.fromCharCode(byte);
+  }
+  return { mediaType, data: btoa(binary) };
 }
 
 /**
@@ -3095,7 +3249,9 @@ export function spawnSession({
     projectId,
   });
   if (prompt?.trim()) {
-    sendText(created.instanceId, machineId, prompt.trim());
+    submitCommand(created.instanceId, machineId, "send", {
+      text: prompt.trim(),
+    });
   }
   // biome-ignore lint/complexity/noVoid: fire-and-forget — the session already started locally, this just resyncs the fleet list
   void refresh();
@@ -3142,13 +3298,21 @@ export function resumeSession({
     resume: { sessionKey: sessionId },
   });
   created.sessionId = sessionId;
-  upsert(
-    created,
-    history.map((message) => ({ ...message, instanceId: created.instanceId }))
-  );
+  seed(created, history);
   // biome-ignore lint/complexity/noVoid: fire-and-forget — the session already started locally, this just resyncs the fleet list
   void refresh();
   return created.instanceId;
+}
+
+/**
+ * A new view's transcript, carried over from the one on screen: the rows as
+ * they are drawn there, sends included, now the new view's own.
+ */
+function seed(target: SessionState, history: Message[]): void {
+  addRows(
+    target,
+    history.map((message) => ({ ...message, instanceId: target.instanceId }))
+  );
 }
 
 /**
@@ -3180,10 +3344,7 @@ export function forkSession({
     resume: { sessionKey: sessionId, fork: true, ...(at && { atMessage: at }) },
     scratch: {},
   });
-  upsert(
-    created,
-    history.map((message) => ({ ...message, instanceId: created.instanceId }))
-  );
+  seed(created, history);
   // biome-ignore lint/complexity/noVoid: fire-and-forget — the session already started locally, this just resyncs the fleet list
   void refresh();
   return created.instanceId;
@@ -3194,30 +3355,10 @@ export type SendExtras = Pick<SendPayload, "attachments" | "images"> & {
   selections?: PendingSelection[];
 };
 
-export function sendText(
-  instanceId: string,
-  machineId: string,
-  text: string,
-  extras: SendExtras = {}
-): void {
-  const uuid = newId();
-  const payload: SendPayload = {
-    instanceId,
-    message: userMessage(text, uuid),
-    ...selectionExtras(extras),
-  };
-  // BEFORE the dispatch, not after: `send` throws when the socket is not open,
-  // and drawing the row afterwards meant the one case that most needs a
-  // visible outcome — the message that could not leave the tab — left nothing
-  // on screen for the failure to be rendered on.
-  noteSendSubmitted(instanceId, text, extras, uuid);
-  send({ verb: "send", machineId, instanceId, payload });
-}
-
 /**
  * What a send does to the LOCAL store: the row it draws under the message's
- * own uuid (`sending`, until the hub's frame for it lands on the same row),
- * the busy flip, the working clock.
+ * own uuid (`sending`, at the end, until the hub's record for it lands on the
+ * same row), the busy flip, the working clock.
  */
 function noteSendSubmitted(
   instanceId: string,
@@ -3225,26 +3366,24 @@ function noteSendSubmitted(
   extras: SendExtras,
   commandId: string,
   /**
-   * The failed send this one retries. Its row takes the new message's id
-   * where it stands and goes back to sending, instead of leaving and coming
-   * back as a new row at the end.
+   * The failed send this one retries. It draws no row until the hub takes
+   * it: then its record's row arrives as the failed one folds away.
    */
   replaces?: string
 ): void {
   const target = session(instanceId);
-  const retried =
-    replaces === undefined
-      ? undefined
-      : target.messages.findLast((message) => message.id === replaces);
-  if (retried) {
-    const { sendFailed: _failed, ...kept } = retried.metadata ?? {};
-    retried.id = commandId;
-    retried.state = "sending";
-    retried.metadata = kept;
-  } else {
-    upsert(target, [
-      localUserMessage(instanceId, commandId, text, selectionExtras(extras)),
-    ]);
+  const drawn = target.local.find((message) => message.id === commandId);
+  if (drawn) {
+    // Try again on a send that never reached the hub: the same row, on its
+    // way again.
+    const { sendFailed: _failed, ...kept } = drawn.metadata ?? {};
+    drawn.state = "sending";
+    drawn.metadata = kept;
+  } else if (replaces === undefined) {
+    target.local.push(
+      localUserMessage(instanceId, commandId, text, selectionExtras(extras))
+    );
+    place(target);
   }
   // A new attempt replaces the last one's announcement rather than stacking on
   // it: the live region says what is true now, not what was true before.
@@ -3923,19 +4062,21 @@ export async function streamHistory({
   let oldest: string | undefined;
   let consumed = 0;
   let chunks = 0;
+  /**
+   * The send records the read has carried so far, by uuid. Each page leads
+   * with its records, so every entry that names one arrives after it.
+   */
+  const records: Record<string, SendRecord> = {};
 
   const publish = (chunk: SessionMessage[]): void => {
     const mapped = mapTranscript(viewId, chunk);
     if (chunks === 0) {
-      // The read REPLACES what history put on screen; it does not merge into
-      // it. What only this tab holds survives it: its sends the harness has
-      // not read yet — failed, not yet taken, or waiting (the hub serves those
-      // with the read too, under the same ids).
-      const own = target.messages.filter(
-        (message) => message.state && message.state !== "read"
-      );
-      target.messages = [];
-      upsert(target, [...mapped.messages, ...own]);
+      // The read REPLACES what history put on screen, rows and records; it
+      // does not merge into them. What only this tab holds survives it: its
+      // sends the hub has not taken (`local`).
+      target.harnessRows = mapped.messages;
+      target.records = { ...records };
+      place(target);
       target.subagents = mapped.subagents;
       // The tail chunk is newest-first, so it carries the latest `system.init`:
       // harvest the `/` menu from it, which the live-frame handler is otherwise
@@ -3956,7 +4097,7 @@ export async function streamHistory({
         replayHeld(viewId, seeded);
       }
     } else {
-      upsert(target, mapped.messages, true);
+      prependPage(target, mapped.messages, records);
       // Branches are keyed by the Task `tool_use_id` that opened them, so an
       // older chunk mostly adds keys — except where a compacted transcript
       // re-emits the same call, and then its turns belong in front of the ones
@@ -4089,15 +4230,8 @@ export async function streamHistory({
     };
 
     /** Whose voice a stored entry's rows are, by the transcript's own rule. */
-    const voiceOfEntry = (entry: SessionMessage): Voice => {
-      const voices = mapTranscript(viewId, [entry]).messages.map(
-        voiceOfMessage
-      );
-      if (voices.includes("you")) {
-        return "you";
-      }
-      return voices.find((voice) => voice !== "none") ?? "none";
-    };
+    const voiceOfEntry = (entry: SessionMessage): Voice =>
+      entryVoice(viewId, entry, records);
 
     /** The newest `count` buffered entries, published as one chunk. */
     const flush = async (count: number): Promise<void> => {
@@ -4130,8 +4264,16 @@ export async function streamHistory({
       });
       const decoder = new TextDecoder();
       let carry = "";
-      const take = (line: string): Promise<void> =>
-        consume(JSON.parse(line) as SessionMessage);
+      // A send's record is kept for the entries that name it; an entry is
+      // read into the chunks.
+      const take = (line: string): Promise<void> => {
+        const read = JSON.parse(line) as HistoryLine;
+        if ("record" in read) {
+          records[read.record.uuid] = read.record;
+          return Promise.resolve();
+        }
+        return consume(read);
+      };
       for (;;) {
         // biome-ignore lint/performance/noAwaitInLoops: a stream reads sequentially by definition — each chunk depends on the last read landing first
         const { done, value } = await reader.read();
@@ -4209,11 +4351,11 @@ export async function streamHistory({
     // on screen there is no transcript to join, so the failure is handed back
     // for the pane to state outright.
     if (chunks > 0) {
-      upsert(
-        target,
-        [errorMessage(viewId, `could not read transcript: ${message}`)],
-        true
-      );
+      target.harnessRows = [
+        errorMessage(viewId, `could not read transcript: ${message}`),
+        ...target.harnessRows,
+      ];
+      place(target);
       return { ok: true };
     }
     return fail({ reason: "failed", message });
@@ -4221,6 +4363,29 @@ export async function streamHistory({
     target.loading = false;
     target.hydrating = false;
   }
+}
+
+/**
+ * Whose voice a stored entry's rows are, by the transcript's own rule — what
+ * the history reader cuts its chunks by. A send's is its row's, where it
+ * draws one in this place; one waiting, or retired, draws nothing here.
+ */
+function entryVoice(
+  viewId: string,
+  entry: SessionMessage,
+  records: Record<string, SendRecord>
+): Voice {
+  if (entry.send) {
+    const record = records[entry.send];
+    return record.state === "read" || record.state === "failed"
+      ? voiceOfMessage(sendRow(record))
+      : "none";
+  }
+  const voices = mapTranscript(viewId, [entry]).messages.map(voiceOfMessage);
+  if (voices.includes("you")) {
+    return "you";
+  }
+  return voices.find((voice) => voice !== "none") ?? "none";
 }
 
 /** Hands the held frames back to the store, minus what the transcript already had. */
@@ -4616,11 +4781,9 @@ export async function relaunchSession(
       send({ verb: "spawn", machineId, instanceId, requestId, payload })
     );
     if (hadWork) {
-      sendText(
-        instanceId,
-        machineId,
-        `The permission mode is now "${permissionMode}". Continue the interrupted work.`
-      );
+      submitCommand(instanceId, machineId, "send", {
+        text: `The permission mode is now "${permissionMode}". Continue the interrupted work.`,
+      });
     }
   } catch (error) {
     target.permissionMode = previous;
@@ -4694,7 +4857,12 @@ export function rewindableTurns(instanceId: string): Set<string> {
   const calls = toolFrames(target.messages);
   let anchored = false;
   for (const message of target.messages) {
-    if (message.type === "user" && message.state === "read" && anchored) {
+    // A send the session read, or a turn it stored with no send behind it.
+    if (
+      message.type === "user" &&
+      (message.state === "read" || message.state === undefined) &&
+      anchored
+    ) {
       turns.add(message.id as string);
     }
     if (
@@ -4758,10 +4926,16 @@ export async function editAndResend(
   // Cut on screen before the process is cut, so the rewind reads as the reader
   // asked for it — and put every bit of it back if the spawn never lands, or
   // they are left with a transcript shorter than the conversation behind it.
-  const transcript = target.messages;
+  // The cut is made in the harness's rows, after the answer the rewind lands
+  // on: the row that ends the kept part on screen is one of them.
+  const transcript = target.harnessRows;
   const branches = target.subagents;
   const read = backfilled.has(instanceId);
-  target.messages = transcript.slice(0, point.cut);
+  target.harnessRows = transcript.slice(
+    0,
+    transcript.indexOf(target.messages[point.cut - 1]) + 1
+  );
+  place(target);
   const spawned = new Set(
     target.messages.map((message) => message.metadata?.toolId)
   );
@@ -4779,9 +4953,10 @@ export async function editAndResend(
     await ask<void>(requestId, "rewind", CONTROL_TIMEOUT_MS, () =>
       send({ verb: "spawn", machineId, instanceId, requestId, payload })
     );
-    sendText(instanceId, machineId, content);
+    submitCommand(instanceId, machineId, "send", { text: content });
   } catch (error) {
-    target.messages = transcript;
+    target.harnessRows = transcript;
+    place(target);
     target.subagents = branches;
     if (read) {
       backfilled.add(instanceId);

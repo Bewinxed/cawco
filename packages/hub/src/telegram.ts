@@ -52,16 +52,6 @@ export interface TelegramBridge {
     ) => void
   ) => void;
   /**
-   * The supervisor's human-touch observer, registered after construction for
-   * the same reason as {@link setAnswerRecorder}: a Telegram reply lands in
-   * the session through this bridge's own socket send, so the hub's relay
-   * never sees it — without this, answering an escalation from the phone
-   * would leave the supervisor muted against the operator's evident wish.
-   */
-  readonly setHumanSendObserver: (
-    observe: (instanceId: string) => void
-  ) => void;
-  /**
    * The server's machine-image reader, registered after construction like
    * {@link setAnswerRecorder}: a `send_to_user` attachment is a path on the
    * session's machine, and only the server holds the tunnel that reads it.
@@ -70,7 +60,9 @@ export interface TelegramBridge {
   /**
    * The server's one send path, registered after construction like
    * {@link setAnswerRecorder}: a reply typed here is a message sent to the
-   * session like any other, and only the server files and streams those.
+   * session like any other — recorded, streamed, and the reader's hand on the
+   * session to the supervisor — and only the server does those. True when the
+   * machine took it.
    */
   readonly setSender: (
     send: (envelope: Envelope<SendPayload>) => boolean
@@ -516,8 +508,6 @@ export const createTelegramBridge = ({
         result: PermissionResult
       ) => void)
     | undefined;
-  /** Set by the server once the supervisor exists; called on every talkBack. */
-  let humanSendObserver: ((instanceId: string) => void) | undefined;
   /** Set by the server: the one path a message takes into a session. */
   let sendMessage: ((envelope: Envelope<SendPayload>) => boolean) | undefined;
 
@@ -574,19 +564,14 @@ export const createTelegramBridge = ({
       ...(carried?.images && { images: carried.images }),
       ...(carried?.attachments && { attachments: carried.attachments }),
     };
-    const delivered =
+    return (
       sendMessage?.({
         verb: "send",
         machineId: entry.machineId,
         instanceId: entry.instanceId,
         payload,
-      }) ?? false;
-    // The operator typed this from the phone — the supervisor's mute defers
-    // to exactly this kind of touch.
-    if (delivered) {
-      humanSendObserver?.(entry.instanceId);
-    }
-    return delivered;
+      }) ?? false
+    );
   };
 
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: builds the ask's message, buttons and tracking entry from one permission request in a single pass
@@ -961,9 +946,6 @@ export const createTelegramBridge = ({
     },
     setImageReader(read) {
       readImage = read;
-    },
-    setHumanSendObserver(observe) {
-      humanSendObserver = observe;
     },
     setSender(deliver) {
       sendMessage = deliver;

@@ -147,6 +147,7 @@
 
 <div
   class="row {motion}"
+  data-row={id}
   onanimationend={(event) => {
   if (event.target === node) {
     spent();
