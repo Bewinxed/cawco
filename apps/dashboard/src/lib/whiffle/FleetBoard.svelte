@@ -1340,24 +1340,23 @@
     font: inherit;
     color: inherit;
     cursor: pointer;
-    border-radius: var(--radius-lg);
+    border-radius: var(--radius-md);
   }
-  .attn-tile :global(.st-card) {
-    transition: var(--transition-control);
-  }
-  .attn-tile:hover :global(.st-card) {
+  /* The fills go on the tile's well, the surface the figure sits on; the
+     card around it stays the frame. */
+  .attn-tile:hover :global(.st-well) {
     background: var(--surface-hover);
   }
-  .attn-tile[aria-pressed="true"] :global(.st-card) {
+  .attn-tile[aria-pressed="true"] :global(.st-well) {
     background: var(--status-attn-bg);
   }
   .attn-tile[aria-pressed="true"] :global(.st-value) {
     color: var(--status-attn-ink);
   }
   /* A card, so the press is the tint .press-tint gives (app.css), drawn on
-     the card inside, since the button itself paints nothing. After the hover
+     the well inside, since the button itself paints nothing. After the hover
      and chosen fills so it wins over both. */
-  .attn-tile:active :global(.st-card) {
+  .attn-tile:active :global(.st-well) {
     background-color: var(--surface-fill);
   }
 
@@ -1387,7 +1386,7 @@
   .sk-head {
     height: var(--space-8);
     border-radius: var(--radius-xs);
-    background: var(--surface-recess);
+    background: var(--surface-band);
   }
   .sk-row {
     display: flex;
@@ -1523,7 +1522,7 @@
   .tbl :global([data-slot="table-head"]) {
     height: var(--space-8);
     padding: 0 var(--space-3);
-    background: var(--surface-recess);
+    background: var(--surface-band);
     text-align: left;
     white-space: nowrap;
     font-size: var(--text-label);

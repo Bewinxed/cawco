@@ -231,7 +231,16 @@
     /* ---- Surfaces. The frame recesses; content sits raised on it. A groove
        (recess-deep) holds a lifted thumb (lift). Dark flips the polarity. */
     --surface-raised: light-dark(var(--neutral-1), var(--neutral-3));
-    --surface-recess: light-dark(var(--neutral-3), var(--neutral-2));
+    /* One step under what is raised, the same step in both themes. The plan's
+       measured field is #F4F4F4 (L 0.967) under a #FDFDFD card; raised n-1
+       less 0.026 L lands on it. Dark takes the same step under raised n-3, so
+       a well is never level with the surface it is cut into (it used to be
+       n-2, equal to --card) and stays above recess-deep n-1. */
+    --surface-recess: oklch(from var(--surface-raised) calc(l - 0.026) c h);
+    /* A table's header band, one step further down than the field: the plan
+       measures it apart ("header band 32, #F1F1F1" against field #F4F4F4),
+       #F1F1F1 sitting 0.036 L under the #FDFDFD card. Same step in dark. */
+    --surface-band: oklch(from var(--surface-raised) calc(l - 0.036) c h);
     --surface-recess-deep: light-dark(var(--neutral-4), var(--neutral-1));
     /* The bar folder tabs stand on: a step below recess-deep, so bar,
        unselected tab (recess-deep) and chosen sheet (recess) are three
@@ -271,6 +280,20 @@
     --focus-ring: light-dark(var(--accent-solid), var(--accent-11));
     --brand-solid: var(--neutral-12);
     --on-brand: var(--neutral-1);
+    /* The action is never flat (plan 2026-08-18, measured reference: "action
+       #272727 with a top-highlight gradient #3C3C3C→#262626, not flat"). The
+       stops keep the reference's offsets from its base, +0.084 L on top and
+       -0.004 L below, taken from --brand-solid so dark (a light ink) gets the
+       same top highlight; there the top stop clamps at L 1. Hover is the same
+       gradient off --ink-hover. */
+    --action-surface: linear-gradient(
+      oklch(from var(--brand-solid) calc(l + 0.084) c h),
+      oklch(from var(--brand-solid) calc(l - 0.004) c h)
+    );
+    --action-surface-hover: linear-gradient(
+      oklch(from var(--ink-hover) calc(l + 0.084) c h),
+      oklch(from var(--ink-hover) calc(l - 0.004) c h)
+    );
 
     /* Status: four functional hues and a hueless idle (idle carries NO
        fill). A chip is its hue's 3-step tinted toward the 9-step; its ink
@@ -577,6 +600,9 @@
   --radius-md: 10px;
   --radius-lg: 12px;
   --radius-modal: 18px;
+  /* The stat tile's recessed well (plan: "stat well 7px inset, #F4F4F4 + 1px
+     #EEEEEE, r7" in an r10 card). */
+  --radius-well: 7px;
 
   /* Type roles. Each generates a `text-<role>` utility with its leading.
      The dense roles (meta, label, body) hold one size at every width: they

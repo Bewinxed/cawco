@@ -21,7 +21,7 @@
       },
       variant: {
         default:
-          "border-transparent bg-[var(--brand-solid)] text-[var(--on-brand)] hover:bg-[var(--ink-hover)]",
+          "border-transparent bg-[image:var(--action-surface)] bg-[var(--brand-solid)] text-[var(--on-brand)] hover:bg-[image:var(--action-surface-hover)] hover:bg-[var(--ink-hover)]",
         outline: "aria-expanded:bg-[var(--surface-hover)]",
         secondary:
           "border-[var(--border-hairline)] bg-[var(--surface-recess)] hover:bg-[var(--surface-hover)]",

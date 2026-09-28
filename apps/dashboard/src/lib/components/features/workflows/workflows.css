@@ -80,7 +80,7 @@
 }
 .wf .wf-primary {
   color: var(--on-brand);
-  background: var(--brand-solid);
+  background: var(--action-surface);
   border-color: transparent;
 }
 /* A pressed toggle — the Editor/Program/Runs tabs, the run filters, the

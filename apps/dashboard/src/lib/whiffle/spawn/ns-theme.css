@@ -228,7 +228,7 @@
   font-weight: var(--weight-strong);
 }
 .ns-theme .ns-btn.primary {
-  background: var(--brand-solid);
+  background: var(--action-surface);
   color: var(--on-brand);
   border-color: transparent;
 }
@@ -242,7 +242,7 @@
     background: var(--surface-hover);
   }
   .ns-theme .ns-btn.primary:not(:disabled):hover {
-    background: var(--ink-hover);
+    background: var(--action-surface-hover);
   }
 }
 

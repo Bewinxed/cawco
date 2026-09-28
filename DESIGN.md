@@ -8,8 +8,10 @@ tokens and nothing else: no one-off colours, sizes, radii, curves or durations.
 
 The frame recesses; content never does. The app field, the top bar, the dialog
 tray, table headers and the groove of a segmented control sit on a recess
-surface. Content — cards, rows, menus, the dialog body, a segmented thumb — sits
-raised on it. A value is never put in a sunken well.
+surface (a table header one step deeper, on the band). Content — cards, rows, menus, the dialog body, a segmented thumb — sits
+raised on it. The one sanctioned card-in-card is the stat tile's recessed well
+(plan 2026-08-18: "the stat card is a near-white card containing a recessed
+well … a signature move of the design").
 
 ## Tokens
 
@@ -18,7 +20,8 @@ raised on it. A value is never put in a sunken well.
 | Token | Light | Dark | Use |
 |---|---|---|---|
 | `--surface-raised` | n-1 | n-3 | cards, menus, popovers, dialog body |
-| `--surface-recess` | n-3 | n-2 | the frame: field, top bar, dialog tray, badges, table heads |
+| `--surface-recess` | raised − 0.026 L (≈ #F4F4F4, the comp's field) | raised − 0.026 L (n-3 − 0.026) | the frame: field, top bar, dialog tray, badges, the stat well |
+| `--surface-band` | raised − 0.036 L (≈ #F1F1F1, the comp's header band) | raised − 0.036 L | a table's header band (and its skeleton), one step under the field |
 | `--surface-recess-deep` | n-4 | n-1 | groove of tabs, toggle groups, progress |
 | `--surface-shelf` | n-5 | n-1 − 0.03 L | the bar folder tabs stand on (session tab row, hosted top bar) |
 | `--surface-lift` | n-1 | n-6 | the thumb in a groove |
@@ -37,7 +40,7 @@ card, a lift goes above it.
 | `--ink-strong` | n-12 | primary text |
 | `--ink-muted` | n-11 | secondary text, labels |
 | `--ink-subtle` | n-8 15.2% into n-11 (dark 33.3%) | placeholders, tertiary text |
-| `--ink-hover` | ink-strong ∓0.05 L | hover on the primary button |
+| `--ink-hover` | ink-strong ∓0.05 L | hover on the primary button (the base of `--action-surface-hover`) |
 
 `--ink-subtle` is the weakest mix that holds 4.5:1 on fill and hover surfaces;
 15.3% / 33.4% fail.
@@ -47,6 +50,8 @@ card, a lift goes above it.
 | Token | Value |
 |---|---|
 | `--radius-xs / sm / md / lg / modal` | 5 / 8 / 10 / 12 / 18px — marks and tiles / items in a surface / controls and buttons / cards and menus / the dialog tray |
+| `--radius-well` | 7px — the stat tile's well, inside its r10 card |
+| `--action-surface` | `--brand-solid` +0.084 L → −0.004 L, top to bottom (the comp's #3C3C3C→#262626 over #272727); `-hover` is the same off `--ink-hover` |
 | `--type-meta` | 400 0.75rem/1.35 |
 | `--type-label` | 500 0.8125rem/1.3 |
 | `--type-body` | 400 0.875rem/1.45 (body default) |
@@ -96,9 +101,11 @@ The kit is `apps/dashboard/src/lib/components/ui`; shared recipes are the
 - **Button**: 36px (sm 30px at 13px, 11px padding), `500 0.875rem/1`, −0.01em,
   `--radius-md`, 1px `--border-control`, `--surface-raised`, hover
   `--surface-hover`, press `scale(--press-scale)`.
-- **Primary button**: flat. `--brand-solid` fill, `--on-brand` text, no border,
-  no gradient, no shadow; hover `--ink-hover`. The new-session dialog's `.ns-btn`
-  is the same recipe.
+- **Primary button**: never flat (plan 2026-08-18: "action `#272727` with a
+  top-highlight gradient `#3C3C3C→#262626`, not flat"). `--action-surface`
+  fill, `--on-brand` text, no border, no shadow; hover `--action-surface-hover`.
+  The same fill is on the new-session dialog's `.ns-btn.primary`, the
+  workflows `.wf-primary`, the composer's Send and the machine login link.
 - **Card**: `--radius-lg`, `--shadow-tile`, 18px padding, no ring.
 - **Dialog**: a `--surface-recess` tray (radius 18, padding 6,
   `--shadow-overlay`) holding a `--surface-raised` body (radius 12, padding 18),
@@ -131,8 +138,12 @@ The kit is `apps/dashboard/src/lib/components/ui`; shared recipes are the
 - **Toggle**: `--radius-sm`, hover `--surface-hover`, pressed `--surface-fill`.
 - **Alert**: a compact status-tinted row — `--status-*-bg/ink`, `--radius-md`,
   10px 12px padding, `--type-body`. No full-width slabs, no border.
-- **StatTile**: a flat card; the value is `--type-kpi` and `.num`, and a new
-  value morphs in through torph's TextMorph (150ms, `--ease-out`).
+- **StatTile**: an r10 (`--radius-md`) card holding a recessed well 7px in: the
+  well is `--surface-recess`, 1px `--border-hairline`, `--radius-well` (plan:
+  "stat well 7px inset, #F4F4F4 + 1px #EEEEEE, r7"; the radii are the comp's,
+  not concentric). The value is `--type-kpi` and `.num`, and a new value morphs
+  in through torph's TextMorph (150ms, `--ease-out`). The Needs-you tile's
+  hover, chosen and pressed fills paint the well.
 - **Icons**: Solar through `$lib/icons.ts`, every product icon in the
   bold-duotone cut; linear only for the glyph-like chevrons and arrows
   (`alt-arrow-*`, `arrow-*`). Three sizes: 12 beside meta text, 16 in controls

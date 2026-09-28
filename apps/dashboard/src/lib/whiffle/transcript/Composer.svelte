@@ -1226,9 +1226,11 @@
       color: var(--ink-strong);
     }
   }
+  /* The flat brand stays under the gradient: `.stop:disabled` drops the image. */
   .stop {
     border: 0;
-    background: var(--brand-solid);
+    background-color: var(--brand-solid);
+    background-image: var(--action-surface);
     color: var(--on-brand);
   }
   .stop :global(svg) {

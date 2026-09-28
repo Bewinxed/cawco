@@ -19,7 +19,7 @@ In order: agent/model pill, location pill, mode pill, effort slider, options, St
 - Mode shows a Solar icon and short name. Its popover contains four RadioGroup rows. Bypass all uses `--status-attn-bg` / `--status-attn-ink` on the trigger.
 - Effort uses a 150px bits-ui Slider with five 16px Solar detents. Inactive icons use full-opacity `--ink-muted`; the active filled icon rides an 18px spring thumb in `--brand-solid`. The visible 4px track uses `--border-control`. Hover/drag shows the level name. Null shows the documented harness default in muted ink and remains omitted from the payload: Claude Code xhigh where supported, otherwise the API high default. Unsupported effort collapses inside a reserved slot.
 - Options contains two app Switch controls: Scratch and Bootstrap. Scratch maps to the existing scratch payload. Bootstrap opens the repository location picker.
-- Start is the flat primary button (`--brand-solid` fill, `--on-brand` text, hover `--ink-hover`), with the keyboard hint.
+- Start is the primary button (`--action-surface` fill, `--on-brand` text, hover `--action-surface-hover`), with the keyboard hint.
 
 Pills are transparent, with `--surface-hover` on hover and `--surface-fill` while open. Selected agent tiles and rows use a 12% `--brand-solid` tint with `--ink-strong` text; the travelling hover/keyboard highlight uses `--surface-hover`. Brand is reserved for selection, effort, enabled switches, and Start. Identity logos retain their own colours.
 

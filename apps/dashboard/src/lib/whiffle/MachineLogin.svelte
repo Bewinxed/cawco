@@ -186,8 +186,8 @@
             <form class="flex flex-col gap-[var(--space-4)]" onsubmit={finish}>
               {#if url}
                 <a
-                  class="flex items-center justify-center gap-2 rounded-[var(--radius-sm)] bg-primary px-3 py-2 text-label
-                         font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+                  class="flex items-center justify-center gap-2 rounded-[var(--radius-sm)] bg-[image:var(--action-surface)] px-3 py-2 text-label
+                         font-medium text-primary-foreground hover:bg-[image:var(--action-surface-hover)]"
                   href={url}
                   rel="noopener noreferrer"
                   target="_blank"
