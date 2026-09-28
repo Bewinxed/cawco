@@ -5034,6 +5034,9 @@ export const whiffle = {
         .every((machine) => catalogsTried[machine.machineId])
     );
   },
+  /** One machine's stored sessions have been read, or failed to be. */
+  catalogRead: (machineId: string): boolean =>
+    catalogsTried[machineId] === true,
   get status() {
     return state.status;
   },

@@ -125,8 +125,24 @@ function configTravel(
   };
 }
 
-/** The plan for the navigation in flight; `onNavigate` writes it. */
-export const route = $state<{ travel: Travel }>({ travel: nudge(8, 0) });
+/**
+ * The plan for the navigation in flight, and the last page shown outside a
+ * project home (the spoke a project was opened from, where forgetting the
+ * project goes back to); `onNavigate` writes both.
+ */
+export const route = $state<{ spoke: string; travel: Travel }>({
+  spoke: "/session",
+  travel: nudge(8, 0),
+});
+
+const PROJECT = /^\/project(\/|$)/;
+
+/** Remember where a navigation leaves from, unless it is a project home. */
+export function leaving(from: URL): void {
+  if (!PROJECT.test(from.pathname)) {
+    route.spoke = `${from.pathname}${from.search}`;
+  }
+}
 
 /** Reduced motion: a 120ms cross-fade in place, nothing travels. */
 const STILL: End = { x: 0, y: 0, opacity: 0 };
