@@ -24,6 +24,7 @@ import type {
   MachineHookScript,
   MachineMemorySet,
   ModelInfo,
+  NeutralAssistantMessage,
   NeutralResultMessage,
   NeutralSessionInfo,
   NeutralUserMessage,
@@ -2039,6 +2040,20 @@ export const createServer = ({
   ): void => {
     const neutral = frame.message;
     if (neutral.type === "assistant" && !neutral.parent_tool_use_id) {
+      // An error the harness wrote in the model's place answers nothing:
+      // what it had just read failed, in its words, which its rows carry.
+      const waiting = unanswered.get(instanceId);
+      if (neutral.error && waiting?.size) {
+        const words = neutral.message.content
+          .flatMap((block) => (block.type === "text" ? [block.text] : []))
+          .join("\n");
+        neutral.failedSends = failWaiting(
+          instanceId,
+          waiting,
+          words || neutral.error
+        );
+        return;
+      }
       unanswered.delete(instanceId);
       if (neutral.uuid) {
         anchors.set(instanceId, neutral.uuid);
@@ -2053,17 +2068,29 @@ export const createServer = ({
       unanswered.delete(instanceId);
       return;
     }
-    const reason = neutral.errors?.length
-      ? neutral.errors.join("\n")
-      : neutral.result || `Harness error (${neutral.subtype}).`;
+    neutral.failedSends = failWaiting(
+      instanceId,
+      waiting,
+      neutral.errors?.length
+        ? neutral.errors.join("\n")
+        : neutral.result || `Harness error (${neutral.subtype}).`
+    );
+  };
+
+  /** The sends a session read and nothing answered, failed for `reason`: their uuids. */
+  const failWaiting = (
+    instanceId: string,
+    read: Map<string, string | undefined>,
+    reason: string
+  ): string[] => {
     const failed = db
-      .sendsFor([...waiting.keys()])
+      .sendsFor([...read.keys()])
       .filter((row) => row.state === "read");
     for (const row of failed) {
       failSend(row, reason);
     }
     unanswered.delete(instanceId);
-    neutral.failedSends = failed.map((row) => row.uuid);
+    return failed.map((row) => row.uuid);
   };
 
   /**
@@ -2140,13 +2167,10 @@ export const createServer = ({
     let last: string | undefined;
     let failures: string[] = [];
     for (const entry of entries) {
-      if (entry.type === "assistant" && !entry.parent_tool_use_id) {
-        last = entry.uuid;
+      if (theirError(entry, failures)) {
         failures = [];
-      }
-      const stored = entry.message as NeutralResultMessage | undefined;
-      if (entry.type === "system" && stored?.is_error && failures.length) {
-        stored.failedSends = failures;
+      } else if (entry.type === "assistant" && !entry.parent_tool_use_id) {
+        last = entry.uuid;
         failures = [];
       }
       const found = sendOf(entry);
@@ -2160,6 +2184,28 @@ export const createServer = ({
       }
     }
     return { lines, last };
+  };
+
+  /**
+   * Whether a stored entry is the error that failed the sends before it —
+   * an error result, or an error the harness wrote in the model's place —
+   * and if so, mark it as theirs, as its live frame was: it draws no line of
+   * its own, and is nobody's anchor.
+   */
+  const theirError = (entry: SessionMessage, failures: string[]): boolean => {
+    if (failures.length === 0) {
+      return false;
+    }
+    if (entry.type === "assistant" && entry.error) {
+      (entry as unknown as NeutralAssistantMessage).failedSends = failures;
+      return true;
+    }
+    const stored = entry.message as NeutralResultMessage | undefined;
+    if (entry.type === "system" && stored?.is_error) {
+      stored.failedSends = failures;
+      return true;
+    }
+    return false;
   };
 
   /**

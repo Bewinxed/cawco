@@ -28,6 +28,11 @@ import { cache } from "./transcript-cache.ts";
 export interface SDKSessionMessage {
   /** The summary a `/compact` wrote (`isCompactSummary` on the record). */
   compactSummary?: true;
+  /**
+   * An assistant record the CLI wrote in place of the model's answer: its
+   * `error` (`authentication_failed`, …), as the live frame carries it.
+   */
+  error?: string;
   message: unknown;
   parent_agent_id: string | null;
   parent_tool_use_id: string | null;
@@ -609,6 +614,9 @@ function toSDKMessage(r: RawRecord): SDKSessionMessage | null {
   }
   if (r.isCompactSummary === true) {
     msg.compactSummary = true;
+  }
+  if (r.type === "assistant" && typeof r.error === "string") {
+    msg.error = r.error;
   }
   return msg;
 }

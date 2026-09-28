@@ -1040,6 +1040,9 @@ const toEntry = (
     ...((entry as { compactSummary?: true }).compactSummary
       ? { compactSummary: true as const }
       : {}),
+    ...((entry as SDKSessionMessage).error
+      ? { error: (entry as SDKSessionMessage).error }
+      : {}),
   };
 };
 

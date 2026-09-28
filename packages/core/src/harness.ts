@@ -292,6 +292,11 @@ export interface SessionMessage {
    */
   compactSummary?: true;
   /**
+   * An assistant entry the harness wrote in place of the model's answer: its
+   * error, as the live frame carried it ({@link NeutralAssistantMessage.error}).
+   */
+  error?: string;
+  /**
    * A `user`/`assistant` entry's stored message. A `system` entry's is the
    * frame the live stream carried for the same record — a
    * {@link NeutralSystemMessage}, or the error `result` a failed turn closed
@@ -396,6 +401,19 @@ export type NeutralOrigin =
 export interface NeutralAssistantMessage {
   /** Blocks already published for this message, preserving row ids across incremental settlement. */
   contentOffset?: number;
+  /**
+   * The harness's word that this message is not the model answering but a
+   * failure written in its place — Claude's synthetic `authentication_failed`,
+   * `rate_limit`, … (measured on CLI 2.1.280: "Not logged in · Please run
+   * /login" arrives as one, before an `is_error` result).
+   */
+  error?: string;
+  /**
+   * Set by the hub on an error message ({@link error}) that answered sends
+   * the session had just read: they failed with its words, and their rows
+   * carry them, so it draws no row of its own.
+   */
+  failedSends?: string[];
   message: { model?: string; content: NeutralAssistantBlock[] };
   parent_tool_use_id?: string | null;
   /** The harness's own event, verbatim, for renderers that need more than this. */

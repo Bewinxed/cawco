@@ -552,6 +552,12 @@ export function mapFrame(
 
   switch (sdk.type) {
     case "assistant": {
+      // An error the harness wrote in the model's place, which failed the
+      // sends it answered: their rows carry its words (`failedSends`).
+      if (sdk.failedSends?.length) {
+        mapping.clearsStream = true;
+        break;
+      }
       sdk.message.content.forEach((block, index) => {
         const message = blockToMessage(block, {
           ...base,
