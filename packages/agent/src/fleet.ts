@@ -1713,19 +1713,24 @@ const syncHooks = async (
       continue;
     }
     const path = hookScriptPath(hook.id);
+    // The hub's `hook.hash` covers the event, matcher and handler too, so it
+    // never equals a hash of the file alone; drift is read off the script's
+    // own bytes, the same thing {@link fleetStatus} hashes on disk.
+    const scriptHash = hashText(hook.script);
     const plan = memoryPlan(
-      { hash: hook.hash, force: hook.force },
+      { hash: scriptHash, force: hook.force },
       // biome-ignore lint/performance/noAwaitInLoops: the write two branches below depends on this hook's own drift check; scripts are written one hook at a time
       await fileHashAt(path),
       managed[hook.id]?.hash
     );
     if (plan === "drift") {
       report[hook.id] = { state: "failed", detail: DRIFTED };
-      hashes.set(hook.id, managed[hook.id]?.hash ?? hook.hash);
+      hashes.set(hook.id, managed[hook.id]?.hash ?? scriptHash);
       scriptPaths.set(hook.id, path);
       settled.push(hook);
       continue;
     }
+    hashes.set(hook.id, scriptHash);
     if (plan === "write") {
       try {
         await writeAtomic(path, hook.script);
