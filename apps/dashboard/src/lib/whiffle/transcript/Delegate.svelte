@@ -1,5 +1,6 @@
 <script lang="ts">
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
+  import { Button } from "$lib/components/ui/button";
   import * as Collapsible from "$lib/components/ui/collapsible";
   import CollapsibleLazy from "$lib/components/ui/collapsible/collapsible-lazy.svelte";
   import { IconChevronRight, IconExternal } from "$lib/icons";
@@ -343,10 +344,6 @@
       (!branch || branch.loading || branch.hydrating) &&
       shown.length === 0
   );
-  /** A message long enough to take a frame of its own to draw. */
-  const PAGE_CHARS = 2000;
-  const isPage = (unit: (typeof rows)[number]): boolean =>
-    unit.kind === "single" && unit.message.content.length > PAGE_CHARS;
   const agentName = $derived(harness || "delegate");
   const seed = $derived(id ?? meta.toolId);
   const Sprite = $derived(sessionSprite(seed));
@@ -435,15 +432,21 @@
       <!-- The rows, then the report as one more unit: a report is often the
            same page as the last row, and drawn in that row's frame it
            doubled the heaviest frame of the card. -->
-      <CollapsibleLazy
-        alone={(index) => index >= shown.length || isPage(shown[index])}
-        count={shown.length + (report ? 1 : 0)}
-        {open}
-      >
+      <CollapsibleLazy count={shown.length + (report ? 1 : 0)} {open}>
         {#snippet children(limit)}
           <div class="inner">
             {#if loading}
               <p class="empty">Loading its transcript…</p>
+            {:else if shown.length === 0 && branch?.readFault}
+              <!-- A read that failed is said, never shown as an empty transcript. -->
+              <p class="empty">
+                {branch.readFault.reason === 'offline'
+                  ? 'Its machine is offline'
+                  : "Its transcript couldn't be read"}: {branch.readFault.message}
+              </p>
+              <Button onclick={() => id && preloadHistory(id)} size="sm" variant="outline">
+                Try again
+              </Button>
             {:else if shown.length === 0}
               <p class="empty">
                 {id ? 'Nothing in its transcript yet.' : 'Still starting — no transcript to show.'}

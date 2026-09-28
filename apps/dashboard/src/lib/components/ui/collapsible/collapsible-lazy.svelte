@@ -1,43 +1,23 @@
 <script lang="ts">
-  import { flushSync, type Snippet, untrack } from "svelte";
+  import { type Snippet, untrack } from "svelte";
+  import { draw } from "./draw";
 
   /** Children exist in the DOM only while the panel is open (or closing):
    *  a transcript can hold hundreds of collapsed panels, and mounting their
    *  pre blocks and diffs eagerly is what made route renders take seconds.
    *
-   *  What opens is drawn a frame's budget at a time. The snippet is handed
-   *  how many of its `count` units to draw, and each frame draws units one
-   *  by one until the frame has spent its budget: the head lands in the
-   *  first frames, the rest below it right behind, and no frame carries more
-   *  than one heavy unit. A delegate's transcript drawn whole held the click
-   *  for 100-120ms; drawn a fixed four rows then one a frame it took a
-   *  second to finish, and a page of markdown landing beside the report of
-   *  the same page made one 40ms frame. A panel that mounts open is drawn
-   *  whole. */
+   *  What opens is drawn in steps under a frame's budget (`draw`): the
+   *  snippet is handed how many of its `count` units to draw, one more per
+   *  step, and a message mounted by a step draws its own blocks the same way
+   *  before the next unit. A delegate's transcript drawn whole held the click
+   *  for 100-120ms; drawn a fixed count per frame, a page of markdown landing
+   *  beside the next made 40ms frames. A panel that mounts open is drawn
+   *  whole, and so is everything in it. */
   let {
     open,
     count,
-    alone,
     children,
-  }: {
-    open: boolean;
-    count: number;
-    /**
-     * Units heavy enough to take a frame to themselves — a page of markdown
-     * is 10ms to build and 15ms to lay out in WebKit. One is drawn first in
-     * its frame and ends it, instead of landing after the budget's other
-     * units and doubling that frame.
-     */
-    alone?: (index: number) => boolean;
-    children?: Snippet<[number]>;
-  } = $props();
-
-  /**
-   * What a frame may spend drawing units, in ms: each unit is drawn,
-   * flushed and laid out on its own, and the budget is checked after it, so
-   * a unit that costs more than the budget is drawn alone in its frame.
-   */
-  const BUDGET_MS = 8;
+  }: { open: boolean; count: number; children?: Snippet<[number]> } = $props();
 
   // Seeded from the initial `open` so a panel that starts open is server-rendered:
   // effects do not run during SSR, so waiting for one would ship it empty.
@@ -65,39 +45,32 @@
     }
   });
 
+  // One drawer for as long as there is something left to draw. Units that
+  // arrive while it runs (a read settling) are drawn by it, in its place: a
+  // drawer registered again goes to the front, ahead of a message it mounted
+  // that is still drawing its blocks, and that message then grew last.
+  let stop: (() => void) | undefined;
   $effect(() => {
-    if (!(open && rendered) || limit >= count) {
+    if (!(open && rendered)) {
+      stop?.();
+      stop = undefined;
       return;
     }
-    const frame = requestAnimationFrame((start) => {
-      const total = untrack(() => count);
-      let drawn = 0;
-      for (;;) {
-        const next = untrack(() => limit);
-        const heavy = alone?.(next) ?? false;
-        if (drawn > 0 && heavy) {
-          break;
+    if (stop || untrack(() => limit) >= count) {
+      return;
+    }
+    stop = draw({
+      step: () => {
+        limit = untrack(() => limit) + 1;
+        const more = limit < untrack(() => count);
+        if (!more) {
+          stop = undefined;
         }
-        flushSync(() => {
-          limit = next + 1;
-        });
-        // Laid out here rather than after the frame's callbacks, so what a
-        // unit costs to lay out — a page of markdown is most of its cost —
-        // counts against the budget it was drawn under.
-        // biome-ignore lint/complexity/noVoid: a layout read, made for its side effect of laying the unit out now
-        void document.documentElement.offsetHeight;
-        drawn += 1;
-        if (
-          heavy ||
-          next + 1 >= total ||
-          performance.now() - start >= BUDGET_MS
-        ) {
-          break;
-        }
-      }
+        return more;
+      },
     });
-    return () => cancelAnimationFrame(frame);
   });
+  $effect(() => () => stop?.());
 </script>
 
 {#if rendered}

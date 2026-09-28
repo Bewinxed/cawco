@@ -7,6 +7,7 @@
   } from "svelte-streamdown";
   import OutputBlock from "$lib/components/features/tool-cards/OutputBlock.svelte";
   import { PROSE } from "$lib/prose";
+  import { draw, stepping } from "../collapsible/draw";
   import { dur, motionOk } from "$lib/whiffle/motion/curves.svelte";
   import type { Trail } from "./trail";
 
@@ -92,6 +93,63 @@
   const drawn = $derived(
     streaming ? source.slice(0, source.search(/\S*$/)) : source
   );
+
+  /** A fence's opening or closing line: three or more backticks or tildes. */
+  const FENCE = /^\s{0,3}(`{3,}|~{3,})/;
+
+  /**
+   * Where a block can end: after a blank line outside a fence, where the
+   * next line starts one. Cutting the text there leaves whole blocks, so
+   * each prefix renders as the finished message's first blocks do.
+   */
+  function blockEnds(text: string): number[] {
+    const ends: number[] = [];
+    let fence: string | null = null;
+    let blank = false;
+    let offset = 0;
+    for (const line of text.split("\n")) {
+      const marker = line.match(FENCE)?.[1];
+      if (fence === null && blank && line.trim() !== "" && offset > 0) {
+        ends.push(offset);
+      }
+      if (marker && (fence === null || marker.startsWith(fence))) {
+        fence = fence === null ? marker : null;
+      }
+      blank = line.trim() === "";
+      offset += line.length + 1;
+    }
+    return ends;
+  }
+
+  /**
+   * How much of a settled message is drawn. Mounted by a step of something
+   * drawn in steps (`draw`), a message draws its first block and then one
+   * more per step — a page of markdown was 10ms to build and 15ms to lay out
+   * in WebKit, too much for one frame. Anywhere else it is drawn whole.
+   */
+  const ends = $derived(blockEnds(source));
+  let upto = $state(
+    untrack(() =>
+      !streaming && stepping()
+        ? (ends[0] ?? source.length)
+        : Number.POSITIVE_INFINITY
+    )
+  );
+  const content = $derived(
+    upto >= source.length ? drawn : source.slice(0, upto)
+  );
+  $effect(() => {
+    if (untrack(() => upto >= source.length)) {
+      return;
+    }
+    return draw({
+      step: () => {
+        const next = ends.find((end) => end > upto);
+        upto = next ?? source.length;
+        return upto < source.length;
+      },
+    });
+  });
 
   /** A word Streamdown renders as a span of its own while streaming. */
   const TOKEN = 'span[style*="sd-"]';
@@ -254,7 +312,7 @@
       tokenize: 'word',
     }}
     class="{PROSE} {invert ? 'prose-invert' : ''}"
-    content={drawn}
+    {content}
     controls={{ mermaid: false, table: false }}
     mergeTheme={false}
     static={!tokens}
