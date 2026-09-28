@@ -38,6 +38,7 @@
     onharness,
     installed,
     machineName,
+    machineIds,
     model,
     onmodel,
     runtime = false,
@@ -49,6 +50,8 @@
     onharness: (harness: HarnessKind) => void;
     installed: HarnessKind[];
     machineName: string;
+    /** The machines the model will run on: only what they can resolve is listed. */
+    machineIds: string[];
     model: string;
     onmodel: (id: string) => void;
     runtime?: boolean;
@@ -177,7 +180,7 @@
     return () => clearTimeout(idle);
   });
 
-  const catalog = $derived(models.forHarness(listHarness));
+  const catalog = $derived(models.forHarness(listHarness, machineIds));
   const use = $derived.by<ModelUse>(() => ({
     lastSpawnAt: lastSpawnAt(listHarness),
     lastUsedAt: Object.fromEntries(

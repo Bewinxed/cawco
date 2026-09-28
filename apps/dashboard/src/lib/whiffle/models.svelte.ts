@@ -217,7 +217,11 @@ function reported(): HarnessModel[] {
   for (const machine of whiffle.machines) {
     for (const report of machine.harnesses ?? []) {
       for (const model of report.models ?? []) {
-        rows.push({ ...model, harness: report.harness });
+        rows.push({
+          ...model,
+          harness: report.harness,
+          machineId: machine.machineId,
+        });
       }
     }
   }
@@ -260,8 +264,9 @@ export const models = {
   get offered(): ModelInfo[] {
     return modelsForHarness(catalog());
   },
-  forHarness: (harness?: string): ModelInfo[] =>
-    modelsForHarness(catalog(), harness),
+  /** A harness's models; given `machineIds`, only what those machines run. */
+  forHarness: (harness?: string, machineIds?: string[]): ModelInfo[] =>
+    modelsForHarness(catalog(), harness, machineIds),
   /** Typed-in ids the offered list does not cover, newest first. */
   get recent(): string[] {
     const rows = catalog();

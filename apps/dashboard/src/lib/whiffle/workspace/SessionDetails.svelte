@@ -455,6 +455,7 @@
                 <ModelSection
                   {harness}
                   installed={[harness]}
+                  machineIds={machineId ? [machineId] : []}
                   machineName={machine?.hostname ?? ''}
                   model={model ?? ''}
                   onharness={() => { /* Running sessions retain their harness. */ }}

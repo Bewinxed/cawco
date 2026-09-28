@@ -148,10 +148,10 @@
     )
   );
   const entries = $derived(
-    deriveModelEntries(models.forHarness(harness), {
+    deriveModelEntries(models.forHarness(harness, machineIds), {
       lastSpawnAt: lastSpawnAt(harness),
       lastUsedAt: Object.fromEntries(
-        models.forHarness(harness).flatMap((row) => {
+        models.forHarness(harness, machineIds).flatMap((row) => {
           const id = row.resolvedModel ?? row.value;
           const used = lastUsedAt(harness, id);
           return used ? [[id, used]] : [];
@@ -288,7 +288,7 @@
     )
   );
   const summarizerEntries = $derived(
-    deriveModelEntries(models.forHarness(summarizerHarness), {
+    deriveModelEntries(models.forHarness(summarizerHarness, machineIds), {
       lastSpawnAt: lastSpawnAt(summarizerHarness),
       lastUsedAt: {},
     })
@@ -1081,6 +1081,7 @@
               harness={summarizerHarness}
               installed={installedHarnesses}
               label="Summarise with"
+              {machineIds}
               machineName={machine?.hostname ?? machineId}
               model={summarizerModel}
               onharness={(value) => { summarizerHarness = value; summarizerModel = ""; }}
@@ -1094,6 +1095,7 @@
             {harness}
             installed={installedHarnesses}
             label={continueFrom ? "Continue on" : "Model"}
+            {machineIds}
             machineName={machine?.hostname ?? machineId}
             {model}
             onharness={chooseHarness}
