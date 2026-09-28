@@ -357,6 +357,8 @@ export interface HandoffActions {
       skills?: string[];
       /** An earlier delegate's instanceId — the new one forks its full conversation. */
       forkOf?: string;
+      /** Default true: run in its own git worktree of `cwd`. Ignored by a fork. */
+      worktree?: boolean;
       /**
        * A named preset from `HandoffDeps.delegateTypes`. Its harness/model/
        * effort/skills/denyTools apply first; an explicit `harness`/`model`/
@@ -784,12 +786,13 @@ export const handoffActions = ({
       model?: string;
       skills?: string[];
       forkOf?: string;
+      worktree?: boolean;
       type?: string;
       canDelegate?: boolean;
     }
   ): Promise<HandoffResult> {
     const id = crypto.randomUUID();
-    const workdir = opts?.cwd ?? cwd;
+    let workdir = opts?.cwd ?? cwd;
     const from = leafOf(cwd);
     // The brief is the only thing that says what this session is for, and the
     // rail would otherwise have nothing to call it but its directory and its id.
@@ -839,6 +842,9 @@ export const handoffActions = ({
       }
       harness = opts.harness ?? (sourceHarness as typeof harness);
       resume = { sessionKey: source.row.sessionId, fork: true };
+      // The directory its init reported: the source's worktree, where its
+      // uncommitted work and its transcript both are.
+      workdir = source.row.cwd;
       if (source.row.model && opts.model && source.row.model !== opts.model) {
         modelNote =
           ` Forked from a ${source.row.model} delegate onto ${opts.model} — the conversation carries ` +
@@ -849,6 +855,7 @@ export const handoffActions = ({
     const model = opts?.model ?? resolvedType?.model;
     const canDelegate = opts?.canDelegate ?? resolvedType?.canDelegate ?? false;
     const skills = opts?.skills?.length ? opts.skills : resolvedType?.skills;
+    const worktree = !resume && (opts?.worktree ?? true);
     const payload: SpawnPayload = {
       instanceId: id,
       cwd: workdir,
@@ -861,7 +868,7 @@ export const handoffActions = ({
         ? { denyTools: resolvedType.denyTools }
         : {}),
       ...(resume ? { resume } : {}),
-      scratch: { baseCwd: workdir },
+      scratch: { baseCwd: workdir, worktree },
       parent: { instanceId },
       spawnedBy: { instanceId },
       // Always explicit for a delegate: the call's word, else the type's
@@ -876,7 +883,10 @@ export const handoffActions = ({
     // Same marker as `handoff()` and `startSession()` — survives SDK storage so
     // stored transcripts render the opening as `user.peer` and `mergePeerMessage`
     // deduplicates against the live echo that carries `origin`.
-    const body = `${handoffMarker(from)}${prompt}`;
+    const where = worktree
+      ? `You work in your own git worktree (your current directory). Paths under ${workdir} in this brief mean the same path in your worktree. Land with \`git fetch origin && git rebase origin/main && git push origin HEAD:main\`. Compare against main with \`git show origin/main:<path>\`; the stash list is shared by every worktree of the repo.\n\n`
+      : "";
+    const body = `${handoffMarker(from)}${where}${prompt}`;
     const opening: SendPayload = {
       instanceId: id,
       message: {

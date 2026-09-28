@@ -355,7 +355,8 @@ export function handoffTools(deps: HandoffDeps) {
         "Run menial work yourself: git status/log/diff, ls/grep/find, reading a file or a handful of files, port and process checks, tailing a log, a dev-server restart, and the reads needed to write a brief. Ten read-only commands in a row is normal prep; a delegate for that costs more than the task and its report costs more to read than the output.\n\n" +
         "Do NOT delegate: a single command or file read whose exact output you need; work that depends on conversation context you cannot write into the brief; edits to files you are actively changing; anything the user asked to watch you do directly.\n\n" +
         "The delegate cannot see this conversation, so `prompt` must stand alone: intent, constraints, acceptance criteria, and what not to do. Keep the decisions yourself and ask for evidence and conclusions, not file dumps.\n\n" +
-        "Prefer `type` over raw harness/model — it routes by what the work needs rather than a model string you must already know; use list_delegate_types for the live catalog. Prefer this over start_session when the work must report back, and over handoff for new standalone work (set cwd for another repository). Use fork_of to continue a prior delegate's conversation instead of starting fresh." +
+        "Prefer `type` over raw harness/model — it routes by what the work needs rather than a model string you must already know; use list_delegate_types for the live catalog. Prefer this over start_session when the work must report back, and over handoff for new standalone work (set cwd for another repository). Use fork_of to continue a prior delegate's conversation instead of starting fresh. " +
+        "Each delegate works in its own git worktree unless you pass `worktree: false`." +
         delegateTypeLine(deps.delegateTypes),
       {
         prompt: z
@@ -408,6 +409,15 @@ export function handoffTools(deps: HandoffDeps) {
               "untouched. Works best on the SAME model, where it also reuses the prompt cache; a " +
               "different model still works but re-ingests the transcript at full cost."
           ),
+        worktree: z
+          .boolean()
+          .optional()
+          .describe(
+            "Default true: the delegate gets its own git worktree of the repo at `cwd`, a fresh " +
+              "checkout of the current commit, so parallel delegates never share files. It lands work " +
+              "by rebasing on origin/main and pushing. Set false when the delegate needs the checkout at " +
+              "`cwd` exactly as it is now: uncommitted changes, running servers, or files it inspects in place."
+          ),
         can_delegate: z
           .boolean()
           .optional()
@@ -426,6 +436,7 @@ export function handoffTools(deps: HandoffDeps) {
         cwd,
         skills,
         fork_of,
+        worktree,
         can_delegate,
       }) => {
         const result = await actions.delegate(prompt, {
@@ -434,6 +445,7 @@ export function handoffTools(deps: HandoffDeps) {
           model,
           skills,
           forkOf: fork_of,
+          worktree,
           type,
           canDelegate: can_delegate,
         });

@@ -8,6 +8,7 @@
  */
 
 import { mkdir, stat } from "node:fs/promises";
+import { basename, join } from "node:path";
 import type {
   ControlPayload,
   Envelope,
@@ -138,12 +139,11 @@ const isDirectory = async (path: string): Promise<boolean> => {
 
 /** The checkout a side quest ran in, kept until the quest is discarded. */
 interface Worktree {
+  /** Where the session runs: `path`, or the same subdirectory of it. */
+  dir: string;
   path: string;
   root: string;
 }
-
-/** Where a side quest's worktrees live, relative to the repo they branch off. */
-const WORKTREE_DIR = ".whiffle-worktrees";
 
 /**
  * A side quest's transcript, kept out of the catalogs the rails read. The tag
@@ -768,7 +768,7 @@ export class SessionSupervisor {
       // A relaunch stays in the checkout the side quest has been working in.
       const cut = this.#worktrees.get(instanceId);
       if (cut) {
-        workdir = cut.path;
+        workdir = cut.dir;
       } else if (scratch?.worktree) {
         workdir = await this.#addWorktree(
           instanceId,
@@ -1322,30 +1322,42 @@ export class SessionSupervisor {
     return target;
   }
 
+  /**
+   * A detached checkout of `baseCwd`'s repo at `~/.worktrees/<repo>-<id8>`,
+   * outside the repo so its own `git status` never sees it. A directory with
+   * no commit to check out (not a repo, or an empty one) runs as it is.
+   */
   async #addWorktree(instanceId: string, baseCwd: string): Promise<string> {
-    const repository = await Bun.$`git -C ${baseCwd} rev-parse --show-toplevel`
-      .quiet()
-      .nothrow();
+    const repository =
+      await Bun.$`git -C ${baseCwd} rev-parse --show-toplevel --show-prefix HEAD`
+        .quiet()
+        .nothrow();
     if (repository.exitCode !== 0) {
-      throw new Error(
-        `a worktree side quest needs a git repository, and ${baseCwd} is not one`
-      );
+      return baseCwd;
     }
 
-    const root = repository.text().trim();
-    const path = `${root}/${WORKTREE_DIR}/${instanceId.slice(0, 8)}`;
-    await Bun.$`mkdir -p ${`${root}/${WORKTREE_DIR}`}`.quiet();
-    const added = await Bun.$`git -C ${root} worktree add ${path} --detach`
+    const [root = "", prefix = ""] = repository.text().split("\n");
+    const path = expandHome(
+      `~/.worktrees/${basename(root)}-${instanceId.slice(0, 8)}`
+    );
+    // A relaunch after a daemon restart finds its worktree already there.
+    const listed = await Bun.$`git -C ${root} worktree list --porcelain`
       .quiet()
-      .nothrow();
-    if (added.exitCode !== 0) {
-      throw new Error(
-        `git worktree add failed: ${added.stderr.toString().trim()}`
-      );
+      .text();
+    if (!listed.split("\n").includes(`worktree ${path}`)) {
+      const added = await Bun.$`git -C ${root} worktree add ${path} --detach`
+        .quiet()
+        .nothrow();
+      if (added.exitCode !== 0) {
+        throw new Error(
+          `git worktree add failed: ${added.stderr.toString().trim()}`
+        );
+      }
     }
 
-    this.#worktrees.set(instanceId, { path, root });
-    return path;
+    const dir = join(path, prefix);
+    this.#worktrees.set(instanceId, { path, root, dir });
+    return dir;
   }
 
   async #removeWorktree(instanceId: string): Promise<void> {
