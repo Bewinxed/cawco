@@ -21,6 +21,7 @@
   aria-expanded={open}
   aria-label={open ? 'Close assistant' : 'Open assistant'}
   class="orb touch-hit"
+  data-assistant-orb
   {onclick}
   title="Assistant"
   type="button"

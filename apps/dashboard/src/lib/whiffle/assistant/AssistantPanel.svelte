@@ -19,6 +19,17 @@
   import { whiffle } from "../client.svelte";
   import { conversationHref } from "../links";
   import {
+    crossIn,
+    crossOut,
+    dur,
+    ease,
+    easeDrawer,
+    easeOut,
+    motionOk,
+  } from "../motion/curves.svelte";
+  import { morph } from "../motion/morph.svelte";
+  import { reflow } from "../motion/rows.svelte";
+  import {
     loadSupervisor,
     loadSupervisorEvents,
     type SupervisorStatus,
@@ -162,6 +173,54 @@
     goto(conversationHref(instanceId, whiffle.instanceIndex));
   }
 
+  /* ── Where it comes from ──────────────────────────────────────────────
+     On a desk the pane grows out of the rail's Assistant row, which is its
+     origin, from 0.96 and 8px below, over --dur-panel on the drawer curve,
+     and goes back into it over --dur-exit. With less motion it only fades. */
+  function fromRow(node: HTMLElement, enter: boolean) {
+    const row = (
+      document.querySelector(".rail [data-assistant-row]") as HTMLElement
+    ).getBoundingClientRect();
+    const box = node.getBoundingClientRect();
+    const origin = `${row.left + row.width / 2 - box.left}px ${row.top + row.height / 2 - box.top}px`;
+    return {
+      duration: dur(enter ? "--dur-panel" : "--dur-exit"),
+      easing: enter ? easeDrawer : easeOut,
+      css: (t: number, u: number) =>
+        motionOk.current
+          ? `opacity: ${t}; transform-origin: ${origin}; transform: translateY(${8 * u}px) scale(${0.96 + 0.04 * t})`
+          : `opacity: ${t}`,
+    };
+  }
+  const growIn = (node: HTMLElement) => fromRow(node, true);
+  const growOut = (node: HTMLElement) => fromRow(node, false);
+
+  /* On a phone the drawer rises from the bottom edge (vaul) over
+     --dur-panel, and grows toward the header's assistant button as it does:
+     the button is its origin, and it opens from 0.96 on the same curve. */
+  let drawer = $state<HTMLElement | null>(null);
+  $effect(() => {
+    if (!(drawer && motionOk.current)) {
+      return;
+    }
+    const orb = (
+      document.querySelector("[data-assistant-orb]") as HTMLElement
+    ).getBoundingClientRect();
+    drawer.animate(
+      [
+        {
+          transformOrigin: `${orb.left + orb.width / 2 - drawer.offsetLeft}px ${orb.bottom - drawer.offsetTop}px`,
+          scale: "0.96",
+        },
+        {
+          transformOrigin: `${orb.left + orb.width / 2 - drawer.offsetLeft}px ${orb.bottom - drawer.offsetTop}px`,
+          scale: "1",
+        },
+      ],
+      { duration: dur("--dur-panel"), easing: ease("--ease-drawer") }
+    );
+  });
+
   const VERDICT_TONE: Record<string, string> = {
     silent: "muted",
     reply: "live",
@@ -177,7 +236,7 @@
 {#if isMobile}
   <!-- MOBILE-FIRST: vaul-svelte drawer -->
   <Drawer.Root direction="bottom" shouldScaleBackground={false} bind:open>
-    <Drawer.Content class="assistant-drawer">
+    <Drawer.Content class="assistant-drawer" bind:ref={drawer}>
       <Drawer.Header>
         <Drawer.Title class="sr-only">Whiffle Assistant</Drawer.Title>
       </Drawer.Header>
@@ -201,6 +260,8 @@
     role="dialog"
     tabindex="-1"
     bind:this={panelEl}
+    in:growIn
+    out:growOut
   >
     <header class="panel-head">
       <span class="a-logo">
@@ -233,37 +294,60 @@
 {#snippet panelContents()}
   <div class="body">
     <!-- Supervisor status -->
+    <!-- Each state cross-fades into the next where it stands, and the box
+         follows the height of what arrives (motion/morph, --dur-pop on the
+         drawer curve). Loading is drawn as the status line it becomes. -->
     <section class="sect">
       <h3 class="sect-h">Supervisor</h3>
-      {#if supError}
-        <p class="sect-note fail">Could not reach the supervisor. {supError}</p>
-      {:else if !sup}
-        <p class="sect-note muted">Loading...</p>
-      {:else if !sup.status.configured}
-        <div class="status-block">
-          <span class="dot off"></span>
-          <span class="status-label">Not configured</span>
-        </div>
-        <p class="sect-note">
-          Set a supervisor model under fleet settings to enable automated
-          session oversight.
-        </p>
-      {:else if sup.status.reachable}
-        <div class="status-block">
-          <span class="dot on"></span>
-          <span class="status-label"
-            >{sup.status.resolvedModel ?? sup.config.model ?? 'Connected'}</span
+      <div class="status" {@attach morph({ ms: dur('--dur-pop') })}>
+        {#if supError}
+          <p class="sect-note fail" in:crossIn out:crossOut>
+            Could not reach the supervisor. {supError}
+          </p>
+        {:else if !sup}
+          <div
+            aria-busy="true"
+            class="status-block"
+            role="status"
+            in:crossIn
+            out:crossOut
           >
-        </div>
-      {:else}
-        <div class="status-block">
-          <span class="dot off"></span>
-          <span class="status-label">Unreachable</span>
-        </div>
-        {#if sup.status.error}
-          <p class="sect-note fail">{sup.status.error}</p>
+            <span class="dot off"></span>
+            <span class="status-label"
+              ><Skeleton class="inline-block h-[1em] w-28 align-middle" />
+              <span class="sr-only">Loading</span></span
+            >
+          </div>
+        {:else if !sup.status.configured}
+          <div class="status-stack" in:crossIn out:crossOut>
+            <div class="status-block">
+              <span class="dot off"></span>
+              <span class="status-label">Not configured</span>
+            </div>
+            <p class="sect-note">
+              Set a supervisor model under fleet settings to enable automated
+              session oversight.
+            </p>
+          </div>
+        {:else if sup.status.reachable}
+          <div class="status-block" in:crossIn out:crossOut>
+            <span class="dot on"></span>
+            <span class="status-label"
+              >{sup.status.resolvedModel ?? sup.config.model ?? 'Connected'}</span
+            >
+          </div>
+        {:else}
+          <div class="status-stack" in:crossIn out:crossOut>
+            <div class="status-block">
+              <span class="dot off"></span>
+              <span class="status-label">Unreachable</span>
+            </div>
+            {#if sup.status.error}
+              <p class="sect-note fail">{sup.status.error}</p>
+            {/if}
+          </div>
         {/if}
-      {/if}
+      </div>
     </section>
 
     <!-- Focused session autopilot -->
@@ -316,11 +400,13 @@
           title="No interventions yet"
         />
       {:else}
-        <ul class="log">
+        <!-- A new verdict opens at the top and the rest slide down to make
+             its room (motion/rows). -->
+        <ul class="log" {@attach reflow()}>
           {#each events as ev (ev.id)}
             {@const session = whiffle.instanceIndex.byId.get(ev.instanceId)}
             {@const tone = VERDICT_TONE[ev.verdict] ?? 'muted'}
-            <li class="log-row">
+            <li class="log-row" data-flip>
               <span class="log-time">{ago(ev.createdAt)}</span>
               {#if session}
                 <button
@@ -369,13 +455,6 @@
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    animation: panel-in var(--dur-panel) var(--ease-out) both;
-  }
-  @keyframes panel-in {
-    from {
-      opacity: 0;
-      transform: translateY(-8px) scale(0.98);
-    }
   }
 
   /* ---- HEADER (shared mobile + desktop) ---- */
@@ -500,6 +579,15 @@
     overflow: hidden;
   }
 
+  /* Positioned so the state leaving can stand where it was (crossOut). */
+  .status {
+    position: relative;
+  }
+  .status-stack {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
   .status-block {
     display: flex;
     align-items: center;
@@ -640,18 +728,19 @@
   :global(.assistant-drawer) {
     max-height: 85dvh !important;
   }
+  /* vaul's own slide, on its own curve (the drawer curve), at this app's
+     lengths: in over --dur-panel, out over --dur-exit. */
+  :global(.assistant-drawer[data-vaul-drawer]) {
+    animation-duration: var(--dur-panel);
+  }
+  :global(.assistant-drawer[data-vaul-drawer][data-state="closed"]) {
+    animation-duration: var(--dur-exit);
+  }
   .panel-inner {
     display: flex;
     flex-direction: column;
     height: 100%;
     min-height: 0;
     overflow: hidden;
-  }
-
-  /* ---- REDUCED MOTION ---- */
-  @media (prefers-reduced-motion: reduce) {
-    .panel {
-      animation: none;
-    }
   }
 </style>

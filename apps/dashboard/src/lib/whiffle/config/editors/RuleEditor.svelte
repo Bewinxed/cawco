@@ -261,8 +261,8 @@
           }
           await goto("/config/rules");
         } catch (error) {
-          failed = message(error);
           deleting = false;
+          throw error;
         }
       },
     });

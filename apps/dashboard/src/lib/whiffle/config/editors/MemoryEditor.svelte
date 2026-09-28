@@ -199,8 +199,8 @@
           await goto("/config/memory");
         } catch (caught) {
           deleteFailed = true;
-          toast.error(message(caught));
           deleting = false;
+          throw caught;
         }
       },
     });

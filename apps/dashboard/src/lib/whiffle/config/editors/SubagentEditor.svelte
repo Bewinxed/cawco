@@ -100,8 +100,8 @@ You are a <role>, working in one repository at a time.
           }
           await goto("/config/subagents");
         } catch (error) {
-          refused = error instanceof Error ? error.message : String(error);
           deleting = false;
+          throw error;
         }
       },
     });

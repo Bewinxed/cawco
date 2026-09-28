@@ -239,8 +239,6 @@
             `${saved.name} is written to every machine it applies to.`
           );
           await goto("/config/hooks");
-        } catch (error) {
-          failed = message(error);
         } finally {
           busy = false;
         }
@@ -269,8 +267,8 @@
           }
           await goto("/config/hooks");
         } catch (error) {
-          failed = message(error);
           deleting = false;
+          throw error;
         }
       },
     });

@@ -17,7 +17,9 @@
  * The confirm button starts `run` and goes pending (spinner, `pendingLabel`)
  * with the dialog left open until the work ends; then the dialog closes and
  * the promise resolves `true`. Cancel or dismiss resolves `false`; work that
- * throws leaves the dialog open. A new ask while one is open cancels the
+ * throws leaves the dialog open with the error's message under the body, so
+ * `run` reports a failure by throwing, not by toasting and returning. A new
+ * ask while one is open cancels the
  * first — there is a single dialog, so there is a single question at a time.
  */
 

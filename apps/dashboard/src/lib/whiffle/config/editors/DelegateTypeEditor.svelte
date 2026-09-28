@@ -128,8 +128,8 @@
           }
           await goto("/config/delegate-types");
         } catch (error) {
-          failed = message(error);
           deleting = false;
+          throw error;
         }
       },
     });

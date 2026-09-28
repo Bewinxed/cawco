@@ -95,10 +95,6 @@
             );
           }
           delete store.memoryDrafts[path];
-        } catch (caught) {
-          toast.error(
-            caught instanceof Error ? caught.message : String(caught)
-          );
         } finally {
           delete busy[path];
         }

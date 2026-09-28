@@ -225,7 +225,16 @@
       confirmLabel: "Cancel run",
       destructive: true,
       pendingLabel: "Cancelling…",
-      run: () => act("cancel", () => cancelWorkflowRun(runId)),
+      // Not through `act`: a failure is the dialog's to show, under its body.
+      run: async () => {
+        acting = "cancel";
+        try {
+          await cancelWorkflowRun(runId);
+          await refreshWorkflowRun(runId);
+        } finally {
+          acting = null;
+        }
+      },
     });
   }
   async function rerun() {
