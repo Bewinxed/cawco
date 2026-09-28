@@ -1044,8 +1044,17 @@ export class SessionSupervisor {
       // `Query` stranded with no stream while both had initialised the CLI. A
       // child already carried, or being attached right now, is this daemon's
       // already; it counts as adopted, so its spawn is not dispatched either.
-      // biome-ignore lint/performance/noAwaitInLoops: rows are adopted one at a time: each mutates the shared #ingested map, and another reattach's adoption of this row must land before this one decides
-      await this.#adopting.get(row.instanceId);
+      // Only an adoption in flight is awaited: an `await` with nothing to wait
+      // on still yields, and in that gap the other reattach passed the same
+      // check and adopted the row too — whose subscribe then took over this
+      // pre-read's listener, so this reattach never finished. From the last
+      // check to the `#adopting.set` below nothing yields.
+      let inFlight = this.#adopting.get(row.instanceId);
+      while (inFlight) {
+        // biome-ignore lint/performance/noAwaitInLoops: rows are adopted one at a time: each mutates the shared #ingested map, and another reattach's adoption of this row must land before this one decides
+        await inFlight;
+        inFlight = this.#adopting.get(row.instanceId);
+      }
       if (this.#sessions.has(row.instanceId)) {
         adopted.push(row.instanceId);
         continue;
