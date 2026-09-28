@@ -1465,25 +1465,37 @@ export class ClaudeHarness implements Harness {
           }
         },
         exit: () => done(),
-        reset: (_nextSeq, from) => {
-          if (from === undefined || reopened) {
+        // `head` is the listing's, taken before every earlier row was adopted,
+        // and the child has gone on writing since. When its ring has since
+        // dropped its window (the 8 MB cap) or wrapped past `head`, the lines
+        // this read waits for are gone: reopening there replays only lines
+        // above `head`, the child may be idle, and the reattach of every
+        // later row stalled behind this one without a word. The ring's first
+        // line — or, holding none, the next it will write — says whether any
+        // line up to `head` is still there to read.
+        reset: (nextSeq, from) => {
+          oldest = from ?? nextSeq;
+          if (reopened || oldest > head) {
             done();
             return;
           }
           reopened = true;
-          oldest = from;
-          client.subscribe(instanceId, listener, from - 1);
+          client.subscribe(instanceId, listener, oldest - 1);
         },
       };
       client.subscribe(instanceId, listener, RING_START);
     });
     const replayable =
       options.afterSeq !== undefined && options.afterSeq + 1 >= oldest;
-    if (options.afterSeq !== undefined && !replayable) {
+    // Where the `Query` reads from when it cannot replay the hub's mark: the
+    // listing's `head`, unless the ring no longer holds the line after it — a
+    // cursor sessiond cannot serve would end the `Query` on a reset.
+    const start = Math.max(head, oldest - 1);
+    if (!replayable && (options.afterSeq !== undefined || start > head)) {
       ctx.frame({
         type: "system",
         subtype: "sessiond_stream_gap",
-        text: `whiffle: sessiond's replay window overflowed; this transcript resumes at line ${head + 1}`,
+        text: `whiffle: sessiond's replay window overflowed; this transcript resumes at line ${start + 1}`,
       } as unknown as NeutralMessage);
     }
     const session = new ClaudeSession(
@@ -1503,7 +1515,7 @@ export class ClaudeHarness implements Harness {
         client,
         procId: instanceId,
         attach: {
-          afterSeq: replayable ? (options.afterSeq ?? head) : head,
+          afterSeq: replayable ? (options.afterSeq ?? start) : start,
           head,
           prelude: [...asks.values()],
         },
