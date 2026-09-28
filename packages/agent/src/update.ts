@@ -381,6 +381,37 @@ const buildsDashboard = async (root: string): Promise<boolean> =>
   (await isInstalled("dashboard"));
 
 /**
+ * A restart re-runs whatever the installed unit says, so a change to HOW the
+ * dashboard is served (its runtime, the socket it is handed) reaches this
+ * machine only once the unit says so. The units are written by the CLI in the
+ * checkout just pulled — not by this daemon, which is still running the code
+ * from before the pull and knows only the old units. A range that did not
+ * reach the dashboard, and a machine that never installed it, are left alone.
+ */
+const installDashboardUnits = async (
+  changed: UpdateReport["changed"],
+  root: string
+): Promise<void> => {
+  if (!(changed.includes("dashboard") && (await isInstalled("dashboard")))) {
+    return;
+  }
+  const units = await run(
+    [
+      process.execPath,
+      join(root, "packages", "cli", "src", "cli.ts"),
+      "service",
+      "install",
+      "dashboard",
+    ],
+    SERVICE_TIMEOUT_MS,
+    root
+  );
+  if (!units.ok) {
+    throw failed("installing the dashboard's units", units);
+  }
+};
+
+/**
  * How the checkout is moved forward, and the one line of this file that the
  * deployment channel's safety rests on (C8/G3).
  *
@@ -508,6 +539,8 @@ const pullAndRestart = async ({
       }
     }
   }
+
+  await installDashboardUnits(report.changed, root);
 
   return restartStack(report, { restartAgent, force, busy }, skipped);
 };
