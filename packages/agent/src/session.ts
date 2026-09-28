@@ -49,6 +49,7 @@ import {
   resumeCursor,
   UPDATE_WHIFFLE,
   WHIFFLE_SCRATCH_TAG,
+  withWorktreeLine,
 } from "@whiffle/core";
 import { Effect } from "effect";
 import { expandHome, runFs } from "./fs";
@@ -139,6 +140,8 @@ const isDirectory = async (path: string): Promise<boolean> => {
 
 /** The checkout a side quest ran in, kept until the quest is discarded. */
 interface Worktree {
+  /** The requested cwd, until the opening message says whose worktree this is. */
+  announce?: string;
   /** Where the session runs: `path`, or the same subdirectory of it. */
   dir: string;
   path: string;
@@ -1229,6 +1232,18 @@ export class SessionSupervisor {
     images,
     urgent,
   }: SendPayload): Promise<void> {
+    const worktree = this.#worktrees.get(instanceId);
+    const { content } = message.message;
+    if (worktree?.announce && typeof content === "string") {
+      message = {
+        ...message,
+        message: {
+          ...message.message,
+          content: withWorktreeLine(content, worktree.announce),
+        },
+      };
+      worktree.announce = undefined;
+    }
     this.#session(instanceId).send(message, { attachments, images, urgent });
   }
 
@@ -1344,10 +1359,20 @@ export class SessionSupervisor {
     const listed = await Bun.$`git -C ${root} worktree list --porcelain`
       .quiet()
       .text();
-    if (!listed.split("\n").includes(`worktree ${path}`)) {
-      const added = await Bun.$`git -C ${root} worktree add ${path} --detach`
-        .quiet()
-        .nothrow();
+    const reused = listed.split("\n").includes(`worktree ${path}`);
+    if (!reused) {
+      // The remote's default branch, not the local checkout: a shared clone's
+      // HEAD is whatever nobody updated. No fetch; every leaf's own fetch keeps
+      // the remote-tracking refs current.
+      const origin =
+        await Bun.$`git -C ${root} rev-parse --verify --quiet origin/HEAD`
+          .quiet()
+          .nothrow();
+      const commit = origin.exitCode === 0 ? "origin/HEAD" : "HEAD";
+      const added =
+        await Bun.$`git -C ${root} worktree add --detach ${path} ${commit}`
+          .quiet()
+          .nothrow();
       if (added.exitCode !== 0) {
         throw new Error(
           `git worktree add failed: ${added.stderr.toString().trim()}`
@@ -1356,7 +1381,12 @@ export class SessionSupervisor {
     }
 
     const dir = join(path, prefix);
-    this.#worktrees.set(instanceId, { path, root, dir });
+    this.#worktrees.set(instanceId, {
+      path,
+      root,
+      dir,
+      ...(reused ? {} : { announce: baseCwd }),
+    });
     return dir;
   }
 

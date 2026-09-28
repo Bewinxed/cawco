@@ -23,6 +23,15 @@ const HANDOFF =
   /^\[Hand-off from the (.+?) (?:session — another agent|workflow — step (.+?)), not the user\]\n\n/;
 
 /**
+ * The opening of a session the daemon started in a fresh git worktree of
+ * `cwd`, with the line that says so right after any hand-off marker.
+ */
+export const withWorktreeLine = (text: string, cwd: string): string => {
+  const at = HANDOFF.exec(text)?.[0].length ?? 0;
+  return `${text.slice(0, at)}You work in your own git worktree (your current directory). Paths under ${cwd} in this brief mean the same path in your worktree. Land with \`git fetch origin && git rebase origin/main && git push origin HEAD:main\`. Compare against main with \`git show origin/main:<path>\`; the stash list is shared by every worktree of the repo.\n\n${text.slice(at)}`;
+};
+
+/**
  * A hand-off read back into who sent it and what it says. `from` names the
  * sending session, or the workflow and step for a step's brief.
  */

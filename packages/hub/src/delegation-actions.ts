@@ -883,10 +883,8 @@ export const handoffActions = ({
     // Same marker as `handoff()` and `startSession()` — survives SDK storage so
     // stored transcripts render the opening as `user.peer` and `mergePeerMessage`
     // deduplicates against the live echo that carries `origin`.
-    const where = worktree
-      ? `You work in your own git worktree (your current directory). Paths under ${workdir} in this brief mean the same path in your worktree. Land with \`git fetch origin && git rebase origin/main && git push origin HEAD:main\`. Compare against main with \`git show origin/main:<path>\`; the stash list is shared by every worktree of the repo.\n\n`
-      : "";
-    const body = `${handoffMarker(from)}${where}${prompt}`;
+    // The daemon adds `withWorktreeLine` if it actually made a worktree.
+    const body = `${handoffMarker(from)}${prompt}`;
     const opening: SendPayload = {
       instanceId: id,
       message: {

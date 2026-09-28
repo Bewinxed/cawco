@@ -6010,10 +6010,6 @@ export const createServer = ({
           );
         }
 
-        // A delegate type, for callers outside the WebSocket tunnel (the
-        // opencode plugin's `delegate` tool passes `type` through its relay
-        // body rather than resolving it itself — see handoff-shared.ts's own
-        // `delegate()` for the same resolution done daemon-side for claude/pi).
         // Explicit fields already on the body win; the type only fills gaps.
         const typeName = peek(body, "type");
         if (typeName) {
