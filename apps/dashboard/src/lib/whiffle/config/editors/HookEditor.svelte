@@ -161,6 +161,7 @@
   let versionsFailed = $state<string | undefined>(undefined);
   let versionsLoading = $state(false);
   let restoring = $state<number | null>(null);
+  let restoreFailed = $state<number | null>(null);
   let allVersions = $state(false);
   const visibleVersions = $derived(
     allVersions ? versions : versions.slice(0, LATEST)
@@ -186,6 +187,7 @@
 
   async function restore(version: HookVersion) {
     restoring = version.id;
+    restoreFailed = null;
     try {
       const restored = await restoreHookVersion(version.id);
       draft = draftOf(restored);
@@ -196,6 +198,7 @@
       }
       toast.success(`Restored — this is now what ${restored.name} runs.`);
     } catch (error) {
+      restoreFailed = version.id;
       toast.error(message(error));
     } finally {
       restoring = null;
@@ -273,6 +276,7 @@
 <EditorFrame
   deleteLabel={id ? 'Delete hook' : undefined}
   {deleting}
+  failed={failed !== undefined}
   oncancel={() => goto('/config/hooks')}
   ondelete={id ? askRemove : undefined}
   onsubmit={save}
@@ -611,13 +615,15 @@
                 </span>
               </span>
               <Button
-                disabled={restoring !== null}
+                disabled={restoring !== null && restoring !== version.id}
+                failed={restoreFailed === version.id}
+                label="Restore"
                 onclick={() => restore(version)}
+                pending={restoring === version.id}
+                pendingLabel="Restoring…"
                 size="sm"
                 variant="outline"
-              >
-                {restoring === version.id ? 'Restoring…' : 'Restore'}
-              </Button>
+              />
             </li>
           {/each}
         </ul>

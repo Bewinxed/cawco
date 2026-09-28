@@ -12,7 +12,7 @@
   import * as Popover from "$lib/components/ui/popover";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Select from "$lib/components/ui/select";
-  import { IconPlus, IconSpinner } from "$lib/icons";
+  import { IconPlus } from "$lib/icons";
   import { createProject, whiffle } from "./client.svelte";
 
   const leaf = (path: string) => path.split("/").filter(Boolean).pop() ?? path;
@@ -98,8 +98,7 @@
   <Popover.Content
     align="start"
     aria-label="New project"
-    class="material-panel flex w-[340px] max-w-[calc(100vw-2rem)] flex-col gap-3 rounded-[var(--radius-lg)] p-4
-           shadow-xl duration-[180ms] ease-[var(--ease-out)]"
+    class="material-panel flex w-[340px] max-w-[calc(100vw-2rem)] flex-col gap-3 rounded-[var(--radius-lg)] p-4 shadow-xl"
     side="bottom"
     sideOffset={6}
   >
@@ -182,12 +181,15 @@
       />
 
       <div class="flex items-center gap-3 pt-1">
-        <Button class="pressable" disabled={saving} size="sm" type="submit">
-          {#if saving}
-            <IconSpinner class="animate-spin" />
-          {/if}
-          Create
-        </Button>
+        <Button
+          class="pressable"
+          failed={formError !== null}
+          label="Create"
+          pending={saving}
+          pendingLabel="Creating…"
+          size="sm"
+          type="submit"
+        />
         {#if formError}
           <span class="text-label text-error" role="alert">{formError}</span>
         {/if}

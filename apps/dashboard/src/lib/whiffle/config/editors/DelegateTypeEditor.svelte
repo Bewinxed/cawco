@@ -139,6 +139,7 @@
 <EditorFrame
   deleteLabel={name ? 'Delete delegate type' : undefined}
   {deleting}
+  failed={failed !== undefined}
   oncancel={() => goto('/config/delegate-types')}
   ondelete={name ? askRemove : undefined}
   onsubmit={save}

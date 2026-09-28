@@ -67,6 +67,7 @@
   /** The editor's text: seeded when editing starts, never from a prop after. */
   let draft = $state("");
   let saving = $state(false);
+  let commitFailed = $state(false);
   let seeded = $state(false);
 
   const dirty = $derived(draft !== (content ?? ""));
@@ -206,12 +207,16 @@
       return;
     }
     saving = true;
+    commitFailed = false;
     try {
       if (await save(draft)) {
         forget();
         editing = false;
+      } else {
+        commitFailed = true;
       }
     } catch (error) {
+      commitFailed = true;
       toast.error(error instanceof Error ? error.message : String(error));
     } finally {
       saving = false;
@@ -250,13 +255,15 @@
       </Button>
       <Button
         class="shrink-0"
-        disabled={saving || !dirty}
+        disabled={!dirty}
+        failed={commitFailed}
+        label="Save"
         onclick={commit}
+        pending={saving}
+        pendingLabel="Saving…"
         size="xs"
         variant="outline"
-      >
-        {saving ? 'Saving…' : 'Save'}
-      </Button>
+      />
     {:else}
       <span class="ml-auto flex shrink-0 items-center gap-2">
         {#if actions}

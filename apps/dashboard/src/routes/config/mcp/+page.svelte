@@ -41,6 +41,7 @@
   const machines = $derived(orderMachines(whiffle.machines));
   let busy = $state<Record<string, boolean>>({});
   let syncing = $state(false);
+  let syncFailed = $state(false);
 
   const message = (caught: unknown) =>
     caught instanceof Error ? caught.message : String(caught);
@@ -92,10 +93,12 @@
 
   async function syncAll() {
     syncing = true;
+    syncFailed = false;
     try {
       await syncFleet();
       toast.success("Every machine that is online is syncing.");
     } catch (caught) {
+      syncFailed = true;
       toast.error(message(caught));
     } finally {
       syncing = false;
@@ -120,10 +123,16 @@
     </Button>
   {/snippet}
   {#snippet toolbar()}
-    <Button disabled={syncing} onclick={syncAll} size="sm" variant="outline">
-      <IconRefresh />
-      {syncing ? 'Syncing…' : 'Sync all'}
-    </Button>
+    <Button
+      failed={syncFailed}
+      icon={IconRefresh}
+      label="Sync all"
+      onclick={syncAll}
+      pending={syncing}
+      pendingLabel="Syncing…"
+      size="sm"
+      variant="outline"
+    />
   {/snippet}
 
   {#if servers.length === 0}

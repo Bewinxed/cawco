@@ -110,6 +110,7 @@ You are a <role>, working in one repository at a time.
   canSave={Boolean(target) && dirty}
   deleteLabel={agent ? 'Remove from the fleet' : undefined}
   {deleting}
+  failed={refused !== undefined}
   oncancel={() => goto('/config/subagents')}
   ondelete={agent ? askForget : undefined}
   onsubmit={save}

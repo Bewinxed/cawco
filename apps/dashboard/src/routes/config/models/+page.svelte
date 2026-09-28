@@ -1,7 +1,6 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { blur } from "svelte/transition";
-  import { TextMorph } from "torph/svelte";
   import { replaceState } from "$app/navigation";
   import { page } from "$app/state";
   import { Button } from "$lib/components/ui/button";
@@ -124,16 +123,6 @@
   let model = $state("");
   let apiKey = $state("");
   let saving = $state(false);
-  /** The save just went through: the button says so, where it was pressed. */
-  let saved = $state(false);
-  let savedTimer: ReturnType<typeof setTimeout> | undefined;
-  $effect(() => () => clearTimeout(savedTimer));
-  const saveLabel = $derived.by(() => {
-    if (saving) {
-      return "Saving…";
-    }
-    return saved ? "Saved" : "Save supervisor";
-  });
 
   async function readSupervisor() {
     try {
@@ -160,11 +149,6 @@
       });
       apiKey = "";
       await readSupervisor();
-      saved = true;
-      clearTimeout(savedTimer);
-      savedTimer = setTimeout(() => {
-        saved = false;
-      }, 1600);
     } catch (error) {
       supervisorError = error instanceof Error ? error.message : String(error);
     }
@@ -250,21 +234,24 @@
       {#snippet right()}
         {#if openrouter?.connected}
           <Button
-            disabled={disconnecting}
+            failed={openrouterError !== null}
+            label="Disconnect"
             onclick={disconnect}
+            pending={disconnecting}
+            pendingLabel="Disconnecting…"
             size="sm"
             variant="outline"
-          >
-            {disconnecting ? 'Disconnecting…' : 'Disconnect'}
-          </Button>
+          />
         {:else if openrouter}
           <Button
-            disabled={connecting || exchanging}
+            disabled={exchanging}
+            failed={openrouterError !== null}
+            label="Connect OpenRouter"
             onclick={connect}
+            pending={connecting}
+            pendingLabel="Opening OpenRouter…"
             size="sm"
-          >
-            {connecting ? 'Opening OpenRouter…' : 'Connect OpenRouter'}
-          </Button>
+          />
         {/if}
       {/snippet}
     </SectionHeader>
@@ -322,9 +309,14 @@
   <form class="group" onsubmit={saveSupervisor}>
     <SectionHeader hue={HUE} icon={IconRuleDuo} label="Supervisor">
       {#snippet right()}
-        <Button disabled={saving} size="sm" type="submit">
-          <TextMorph text={saveLabel} />
-        </Button>
+        <Button
+          failed={supervisorError !== null}
+          label="Save supervisor"
+          pending={saving}
+          pendingLabel="Saving…"
+          size="sm"
+          type="submit"
+        />
       {/snippet}
     </SectionHeader>
     <p class="note">
@@ -429,12 +421,6 @@
   }
   .stack > :global(*) {
     grid-area: 1 / 1;
-  }
-  /* The switch's knob travels on the toggle curve. */
-  .group :global([data-slot="switch-thumb"]) {
-    @media (prefers-reduced-motion: no-preference) {
-      transition: transform 300ms cubic-bezier(0.65, 0, 0.35, 1);
-    }
   }
   /* Connected: the tick draws itself in. */
   .check {

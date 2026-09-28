@@ -67,6 +67,8 @@
   let reading = $state<Record<string, boolean>>({});
   let unread = $state<Record<string, string>>({});
   let refetching = $state(false);
+  let refetchFailed = $state(false);
+  let installFailed = $state<Record<string, boolean>>({});
 
   const message = (err: unknown) =>
     err instanceof Error ? err.message : String(err);
@@ -146,6 +148,7 @@
   /** Re-resolves every row the hub could not fetch, in order. */
   async function refetchAll() {
     refetching = true;
+    refetchFailed = false;
     try {
       let still = 0;
       for (const fault of hubBroken) {
@@ -159,12 +162,14 @@
         }
       }
       if (still > 0) {
+        refetchFailed = true;
         toast.error(`${still} still would not fetch — the row says why.`);
       } else {
         toast.success("Fetched. The machines are being sent the files.");
       }
       resolved();
     } catch (err) {
+      refetchFailed = true;
       toast.error(message(err));
     } finally {
       refetching = false;
@@ -244,9 +249,11 @@
   async function install(plugin: MarketplacePluginInfo, marketplace: string) {
     const id = `${plugin.name}@${marketplace}`;
     busy[id] = true;
+    installFailed[id] = false;
     try {
       landedPlugin(await savePlugin(id, { enabled: true }));
     } catch (err) {
+      installFailed[id] = true;
       toast.error(message(err));
     } finally {
       delete busy[id];
@@ -305,15 +312,17 @@
     <!-- Acts on the rows below, so it arrives with them, not in the header. -->
     {#if hubBroken.length > 0}
       <Button
-        disabled={hubDown() !== null || refetching}
+        disabled={hubDown() !== null}
+        failed={refetchFailed}
+        icon={IconRefresh}
+        label="Fetch all {hubBroken.length} again"
         onclick={refetchAll}
+        pending={refetching}
+        pendingLabel="Fetching…"
         size="sm"
         title={hubDown() ?? undefined}
         variant="outline"
-      >
-        <IconRefresh />
-        {refetching ? 'Fetching…' : `Fetch all ${hubBroken.length} again`}
-      </Button>
+      />
     {/if}
     <LinkMarketplacePopover
       down={hubDown()}
@@ -462,13 +471,14 @@
                           <span class="note">Added</span>
                         {:else}
                           <Button
-                            disabled={busy[id] === true}
+                            failed={installFailed[id] === true}
+                            label="Install"
                             onclick={() => install(plugin, row.name)}
+                            pending={busy[id] === true}
+                            pendingLabel="Adding…"
                             size="sm"
                             variant="outline"
-                          >
-                            {busy[id] ? 'Adding…' : 'Install'}
-                          </Button>
+                          />
                         {/if}
                       </li>
                     {/each}

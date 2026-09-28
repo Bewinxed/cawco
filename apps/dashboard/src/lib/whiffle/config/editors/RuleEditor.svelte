@@ -278,6 +278,7 @@
 <EditorFrame
   deleteLabel={id ? 'Delete rule' : undefined}
   {deleting}
+  failed={failed !== undefined}
   oncancel={() => goto('/config/rules')}
   ondelete={id ? askRemove : undefined}
   onsubmit={save}

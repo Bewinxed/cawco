@@ -6,6 +6,7 @@
    * writes go through `PUT /api/autopilot/:id` via autopilot.ts.
    */
   import type { InstanceRow } from "@whiffle/core";
+  import { Button } from "$lib/components/ui/button";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for importing a component group
   import * as Drawer from "$lib/components/ui/drawer";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for importing a component group
@@ -148,9 +149,15 @@
       <p class="ap-error">{refused}</p>
     {/if}
 
-    <button class="ap-save" disabled={saving} onclick={save} type="button">
-      {saving ? 'Saving…' : 'Save'}
-    </button>
+    <Button
+      class="self-end"
+      failed={refused !== null}
+      label="Save"
+      onclick={save}
+      pending={saving}
+      pendingLabel="Saving…"
+      size="sm"
+    />
   </div>
 {/snippet}
 
@@ -385,34 +392,5 @@
     color: var(--error);
     margin: 0;
     line-height: var(--leading-ui);
-  }
-  .ap-save {
-    align-self: flex-end;
-    height: 30px;
-    padding: 0 var(--space-4);
-    font-size: var(--text-label);
-    font-weight: 500;
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: var(--brand-solid);
-    color: var(--on-brand);
-    cursor: pointer;
-    transition:
-      var(--transition-control),
-      transform 160ms var(--ease-out);
-  }
-  .ap-save:hover {
-    background: var(--ink-hover);
-  }
-  .ap-save:active {
-    transform: scale(var(--press-scale));
-  }
-  .ap-save:disabled {
-    opacity: 0.5;
-    cursor: default;
-  }
-  .ap-save:focus-visible {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 2px;
   }
 </style>

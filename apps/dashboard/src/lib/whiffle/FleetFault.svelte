@@ -68,6 +68,7 @@
   const extra = $derived(group.faults.length - shown.length);
 
   let busy = $state(false);
+  let actFailed = $state(false);
   let disclosureOpen = $state(false);
   let expanded = $state(false);
   const whole = $derived(!compact || expanded);
@@ -80,6 +81,7 @@
       return;
     }
     busy = true;
+    actFailed = false;
     try {
       await syncFleet(group.machineId);
       toast.success(
@@ -87,6 +89,7 @@
       );
       onresolved?.();
     } catch (error) {
+      actFailed = true;
       toast.error(message(error));
     } finally {
       busy = false;
@@ -99,6 +102,7 @@
    */
   async function refresh() {
     busy = true;
+    actFailed = false;
     try {
       let stillFailing = 0;
       for (const fault of group.faults) {
@@ -115,6 +119,7 @@
         }
       }
       if (stillFailing > 0) {
+        actFailed = true;
         toast.error(
           `${stillFailing} still would not fetch — the row says why.`
         );
@@ -123,6 +128,7 @@
       }
       onresolved?.();
     } catch (error) {
+      actFailed = true;
       toast.error(message(error));
     } finally {
       busy = false;
@@ -265,22 +271,30 @@
     <div class="acts">
       {#if copy.action === 'resync'}
         <Button
-          disabled={busy || !online}
+          disabled={!online}
+          failed={actFailed}
+          icon={IconRefresh}
+          label={actionLabel}
           onclick={resync}
+          pending={busy}
+          pendingLabel="Syncing…"
           size="xs"
           variant="outline"
-        >
-          <IconRefresh class="shrink-0" />
-          {busy ? 'Syncing…' : actionLabel}
-        </Button>
+        />
         <span class="hint"
           >{online ? actionHint : 'It syncs on its own the moment it comes back.'}</span
         >
       {:else if copy.action === 'refresh'}
-        <Button disabled={busy} onclick={refresh} size="xs" variant="outline">
-          <IconRefresh class="shrink-0" />
-          {busy ? 'Fetching…' : actionLabel}
-        </Button>
+        <Button
+          failed={actFailed}
+          icon={IconRefresh}
+          label={actionLabel}
+          onclick={refresh}
+          pending={busy}
+          pendingLabel="Fetching…"
+          size="xs"
+          variant="outline"
+        />
         <span class="hint">{actionHint}</span>
       {:else if copy.action === 'settle'}
         <Button href={faultHref(group.faults[0])} size="xs" variant="outline"

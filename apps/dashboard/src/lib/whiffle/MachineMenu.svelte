@@ -7,15 +7,8 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as ContextMenu from "$lib/components/ui/context-menu";
   import { UPDATE_TIMEOUT_MS } from "$lib/config";
-  import {
-    IconCopy,
-    IconDownload,
-    IconKey,
-    IconPlus,
-    IconRefresh,
-  } from "$lib/icons";
+  import { IconDownload, IconKey, IconPlus, IconRefresh } from "$lib/icons";
   import { loadCatalog, type Machine, machineControl } from "./client.svelte";
-  import { copyToClipboard } from "./copy";
   import MachineLogin from "./MachineLogin.svelte";
   import UnlockKeychain from "./UnlockKeychain.svelte";
 
@@ -121,18 +114,12 @@
 
     <ContextMenu.Separator />
 
-    <ContextMenu.Item
-      onSelect={() => copyToClipboard('Machine id', machine.machineId)}
-    >
-      <IconCopy />
+    <ContextMenu.CopyItem text={machine.machineId} what="Machine id">
       Copy machine id
-    </ContextMenu.Item>
-    <ContextMenu.Item
-      onSelect={() => copyToClipboard('Hostname', machine.hostname)}
-    >
-      <IconCopy />
+    </ContextMenu.CopyItem>
+    <ContextMenu.CopyItem text={machine.hostname} what="Hostname">
       Copy hostname
-    </ContextMenu.Item>
+    </ContextMenu.CopyItem>
   </ContextMenu.Content>
 </ContextMenu.Root>
 

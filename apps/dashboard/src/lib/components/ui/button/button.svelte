@@ -1,13 +1,15 @@
 <script lang="ts" module>
+  import type { Component } from "svelte";
   import type {
     HTMLAnchorAttributes,
     HTMLButtonAttributes,
+    SVGAttributes,
   } from "svelte/elements";
   import type { VariantProps } from "tailwind-variants";
   import { cn, tv, type WithElementRef } from "$lib/utils.js";
 
   export const buttonVariants = tv({
-    base: "group/button focus-ring touch-hit inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-md border border-[var(--border-control)] bg-[var(--surface-raised)] bg-clip-padding font-medium text-[var(--ink-strong)] text-body leading-none tracking-[-0.01em] outline-none [transition:var(--transition-control),transform_160ms_var(--ease-out)] hover:bg-[var(--surface-hover)] disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive active:not-disabled:[transform:scale(var(--press-scale))] [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    base: "group/button focus-ring touch-hit inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-md border border-[var(--border-control)] bg-[var(--surface-raised)] bg-clip-padding font-medium text-[var(--ink-strong)] text-body leading-none tracking-[-0.01em] outline-none [transition:var(--transition-control),transform_160ms_var(--ease-out)] hover:bg-[var(--surface-hover)] disabled:pointer-events-none disabled:opacity-50 aria-busy:pointer-events-none aria-invalid:border-destructive active:not-disabled:[transform:scale(var(--press-scale))] [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
     variants: {
       variant: {
         default:
@@ -23,10 +25,10 @@
       },
       size: {
         default:
-          "h-9 gap-2 px-3.5 has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
-        xs: "h-6 gap-1 px-2 text-meta has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
-        sm: "h-[30px] gap-[7px] px-[11px] text-label has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
-        lg: "h-11 gap-2 px-4 has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
+          "h-9 gap-(--btn-gap) px-3.5 [--btn-gap:8px] [--btn-icon:16px] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
+        xs: "h-6 gap-(--btn-gap) px-2 text-meta [--btn-gap:4px] [--btn-icon:12px] has-data-[icon=inline-end]:pr-1.5 has-data-[icon=inline-start]:pl-1.5 [&_svg:not([class*='size-'])]:size-3",
+        sm: "h-[30px] gap-(--btn-gap) px-[11px] text-label [--btn-gap:7px] [--btn-icon:16px] has-data-[icon=inline-end]:pr-2 has-data-[icon=inline-start]:pl-2",
+        lg: "h-11 gap-(--btn-gap) px-4 [--btn-gap:8px] [--btn-icon:16px] has-data-[icon=inline-end]:pr-3 has-data-[icon=inline-start]:pl-3",
         icon: "size-9",
         "icon-xs": "size-6 [&_svg:not([class*='size-'])]:size-3",
         "icon-sm": "size-[30px]",
@@ -46,10 +48,31 @@
     WithElementRef<HTMLAnchorAttributes> & {
       variant?: ButtonVariant;
       size?: ButtonSize;
+      /**
+       * The button's words, for a button that runs something: with `label`
+       * the button draws its own icon slot and label, and `pending` can
+       * change both. Without it, the children are drawn as given.
+       */
+      label?: string;
+      /** The icon in the slot at rest. */
+      icon?: Component<SVGAttributes<SVGSVGElement>>;
+      /**
+       * The work this button started is running. The icon slot spins, the
+       * label says `pendingLabel`, the width follows over --dur-morph, and the
+       * button holds its place and its focus but takes no press. When it
+       * ends without `failed`, a check stands in the slot for --dur-hold.
+       */
+      pending?: boolean;
+      /** What the label says while pending ("Saving…"); unchanged if unset. */
+      pendingLabel?: string;
+      /** The work that just ended failed: no check. */
+      failed?: boolean;
     };
 </script>
 
 <script lang="ts">
+  import PendingContent, { whileIdle } from "./pending-content.svelte";
+
   let {
     class: className,
     variant = "default",
@@ -58,10 +81,30 @@
     href,
     type = "button",
     disabled,
+    label,
+    icon,
+    pending = false,
+    pendingLabel,
+    failed = false,
+    onclick,
     children,
     ...restProps
   }: ButtonProps = $props();
+
+  const press = whileIdle(
+    () => pending,
+    (event: MouseEvent & { currentTarget: EventTarget & HTMLButtonElement }) =>
+      onclick?.(event)
+  );
 </script>
+
+{#snippet content()}
+  {#if label === undefined}
+    {@render children?.()}
+  {:else}
+    <PendingContent {failed} {icon} {label} {pending} {pendingLabel} />
+  {/if}
+{/snippet}
 
 {#if href}
   <a
@@ -69,22 +112,26 @@
     class={cn(buttonVariants({ variant, size }), className)}
     data-slot="button"
     href={disabled ? undefined : href}
+    {onclick}
     role={disabled ? "link" : undefined}
     tabindex={disabled ? -1 : undefined}
     bind:this={ref}
     {...restProps}
   >
-    {@render children?.()}
+    {@render content()}
   </a>
 {:else}
   <button
+    aria-busy={pending || undefined}
+    aria-disabled={pending || undefined}
     class={cn(buttonVariants({ variant, size }), className)}
     data-slot="button"
     {disabled}
+    onclick={press}
     {type}
     bind:this={ref}
     {...restProps}
   >
-    {@render children?.()}
+    {@render content()}
   </button>
 {/if}

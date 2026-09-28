@@ -1,6 +1,5 @@
 <script lang="ts">
   import { ContextMenu as ContextMenuPrimitive } from "bits-ui";
-  import { IconTick } from "$lib/icons";
   import { cn, type WithoutChild } from "$lib/utils.js";
 
   let {
@@ -22,10 +21,10 @@
   {...restProps}
 >
   {#snippet children({ checked })}
-    <span class="absolute right-2 pointer-events-none">
-      {#if checked}
-        <IconTick />
-      {/if}
+    <span
+      class="absolute right-2 flex size-4 items-center justify-center pointer-events-none"
+    >
+      <span class="kit-dot" data-on={checked}></span>
     </span>
     {@render childrenProp?.({ checked })}
   {/snippet}

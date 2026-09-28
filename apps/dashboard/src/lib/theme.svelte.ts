@@ -1,4 +1,5 @@
 import { browser } from "$app/environment";
+import { motionOk } from "$lib/whiffle/motion/curves.svelte";
 
 type Theme = "light" | "dark" | "system";
 
@@ -50,12 +51,33 @@ class ThemeState {
     }
   }
 
+  /**
+   * A switch the reader makes cross-fades the whole page as one: a view
+   * transition snapshots the page, flips the theme, and fades the new page in
+   * over the old one (app.css, --dur-fade on --ease-out). One composited fade,
+   * so every colour on the page turns together at no cost per element. With
+   * reduced motion the theme flips at once.
+   */
   set(value: Theme) {
-    this.current = value;
-    if (browser) {
+    const flip = () => {
+      this.current = value;
       localStorage.setItem("whiffle-theme", value);
       applyTheme(value);
+    };
+    if (!motionOk.current) {
+      flip();
+      return;
     }
+    // Under the fade the page's own colour transitions (a button's hover
+    // ink, a row's pill) would start from the old theme and play inside the
+    // new snapshot: a second fade, and a style pass every frame for it. They
+    // are off for the flip, and back once the new page is drawn.
+    const root = document.documentElement;
+    const transition = document.startViewTransition(() => {
+      root.classList.add("theme-flip");
+      flip();
+    });
+    transition.ready.finally(() => root.classList.remove("theme-flip"));
   }
 
   toggle() {

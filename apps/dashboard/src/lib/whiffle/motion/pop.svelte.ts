@@ -1,8 +1,9 @@
 /**
  * A floating surface an `{#if}` removes leaves the way the kit's surfaces
- * do (app.css `.kit-pop`, kit-pop-out): back up toward the field it hangs
- * from, shrinking to the pop scale as it fades, at the exit tier. It comes
- * in by the stylesheet's own kit-pop-in, on `data-state="open"`.
+ * do (app.css `.kit-pop[data-state="closed"]`): back up toward the field it
+ * hangs from, shrinking to the pop scale as it fades, at the exit tier. It
+ * comes in by the stylesheet's own `@starting-style`, on
+ * `data-state="open"`.
  */
 import type { TransitionConfig } from "svelte/transition";
 import { easeDrawer, motionOk } from "./curves.svelte";

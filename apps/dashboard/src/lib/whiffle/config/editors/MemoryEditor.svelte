@@ -79,7 +79,11 @@
   const tokens = $derived(Math.round(bytes / 4));
 
   let busy = $state(false);
+  /** The save running is "Save mine anyway", over a conflict. */
+  let forcing = $state(false);
+  let saveFailed = $state(false);
   let deleting = $state(false);
+  let deleteFailed = $state(false);
   let conflict = $state<FleetMemoryRow | null>(null);
 
   onDestroy(() => {
@@ -129,8 +133,12 @@
       return;
     }
     busy = true;
+    forcing = conflict !== null && expectedHash === conflict.hash;
+    saveFailed = false;
     try {
-      if (await write(expectedHash)) {
+      const written = await write(expectedHash);
+      saveFailed = !written;
+      if (written) {
         conflict = null;
         text = saved?.content ?? text;
         delete store.memoryDrafts[path];
@@ -139,9 +147,11 @@
         await goto("/config/memory");
       }
     } catch (caught) {
+      saveFailed = true;
       toast.error(message(caught));
     } finally {
       busy = false;
+      forcing = false;
     }
   }
 
@@ -172,6 +182,7 @@
       return;
     }
     deleting = true;
+    deleteFailed = false;
     try {
       if (main) {
         await removeMemory();
@@ -184,6 +195,7 @@
       delete store.memoryDrafts[path];
       await goto("/config/memory");
     } catch (caught) {
+      deleteFailed = true;
       toast.error(message(caught));
       deleting = false;
     }
@@ -215,6 +227,7 @@
   let contents = $state<Record<number, string>>({});
   let reading = $state<Record<number, boolean>>({});
   let restoring = $state<number | null>(null);
+  let restoreFailed = $state<number | null>(null);
   const visibleVersions = $derived(
     allVersions ? (versions ?? []) : (versions ?? []).slice(0, LATEST)
   );
@@ -263,6 +276,7 @@
 
   async function restore(row: FleetMemoryVersion) {
     restoring = row.id;
+    restoreFailed = null;
     try {
       const landed = await restoreMemory(row.id);
       stored(landed);
@@ -271,6 +285,7 @@
       toast.success("Restored — every machine gets it.");
       await loadHistory();
     } catch (caught) {
+      restoreFailed = row.id;
       toast.error(message(caught));
     } finally {
       restoring = null;
@@ -365,11 +380,12 @@
   canSave={dirty}
   deleteLabel={saved ? 'Delete everywhere' : undefined}
   {deleting}
+  failed={saveFailed || deleteFailed}
   oncancel={cancel}
   ondelete={saved ? askRemove : undefined}
   onsubmit={() => save()}
   saveLabel="Save"
-  saving={busy}
+  saving={busy && !forcing}
   settling={!drawn || (versions === null && historyError === null)}
   title={fileLabel(path)}
 >
@@ -428,13 +444,15 @@
             Take latest
           </Button>
           <Button
-            disabled={busy}
+            disabled={busy && !forcing}
+            failed={saveFailed}
+            label="Save mine anyway"
             onclick={() => save(conflict?.hash)}
+            pending={busy && forcing}
+            pendingLabel="Saving…"
             size="sm"
             variant="outline"
-          >
-            {busy ? 'Saving…' : 'Save mine anyway'}
-          </Button>
+          />
         </div>
       </div>
     {/if}
@@ -499,13 +517,14 @@
                 {/key}
                 <Button
                   class="self-start"
-                  disabled={restoring === row.id}
+                  failed={restoreFailed === row.id}
+                  label="Restore this version"
                   onclick={() => restore(row)}
+                  pending={restoring === row.id}
+                  pendingLabel="Restoring…"
                   size="sm"
                   variant="outline"
-                >
-                  {restoring === row.id ? 'Restoring…' : 'Restore this version'}
-                </Button>
+                />
               {/if}
             {/if}
           </li>
