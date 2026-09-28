@@ -50,7 +50,7 @@
               <span class="name">{section.label}</span>
               {#if faults > 0}
                 <span
-                  class="fault"
+                  class="fault num"
                   title="{faults} failing on a machine or at the hub"
                   >{faults}<span class="sr-only"> failing</span></span
                 >
@@ -153,8 +153,8 @@
     box-shadow: var(--shadow-tile);
   }
   .tile :global(svg) {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
   }
   .name {
     flex: 1 1 auto;
@@ -184,7 +184,6 @@
     border-radius: var(--radius-xs);
     background: var(--status-attn-bg);
     font: var(--type-meta);
-    font-weight: 500;
     line-height: 18px;
     text-align: center;
     color: var(--status-attn-ink);

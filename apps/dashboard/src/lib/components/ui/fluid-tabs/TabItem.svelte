@@ -111,7 +111,7 @@
 >
   <svelte:element
     aria-selected={selected}
-    class="hit touch-hit"
+    class="hit touch-hit pressable"
     draggable={href ? 'false' : undefined}
     {href}
     onclick={choose}
@@ -127,7 +127,6 @@
       <Icon class="ff-tab-icon" />
     {/if}
     <span class="label">
-      <span aria-hidden="true" class="sizer">{label}</span>
       <span class="text">{label}</span>
     </span>
   </svelte:element>
@@ -300,23 +299,10 @@
     inline-size: var(--icon);
     block-size: var(--icon);
     flex: 0 0 auto;
-    stroke-width: 1.5;
-
-    @media (prefers-reduced-motion: no-preference) {
-      transition: stroke-width 80ms linear;
-    }
-  }
-  .ff-tab.selected :global(.ff-tab-icon) {
-    stroke-width: 2;
-  }
-  @media (hover: hover) {
-    .ff-tab[data-ghosted] :global(.ff-tab-icon) {
-      stroke-width: 2;
-    }
   }
 
-  /* Two labels in one cell: the hidden one is set at the strong weight
-     and decides the width; the visible one animates its weight in place. */
+  /* A tab's name is in the label role whatever its state; the colour and
+     the sheet say which one is chosen. */
   .label {
     display: grid;
     min-inline-size: 0;
@@ -332,16 +318,7 @@
       line-height: var(--item);
     }
   }
-  .sizer {
-    visibility: hidden;
-    font-variation-settings: "wght" var(--weight-strong);
-  }
-  /* The weight changes at once. Tweening it re-shaped the label's glyphs on
-     every frame of the switch; the colour and the sheet carry the motion. */
   .text {
-    font-variation-settings: "wght" var(--weight-body);
-  }
-  .ff-tab.selected .text {
-    font-variation-settings: "wght" var(--weight-strong);
+    font-weight: var(--weight-strong);
   }
 </style>

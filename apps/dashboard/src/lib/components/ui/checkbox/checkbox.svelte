@@ -22,7 +22,7 @@
 >
   {#snippet children({ checked, indeterminate })}
     <div
-      class="[&>svg]:size-3.5 grid place-content-center text-current transition-none"
+      class="[&>svg]:size-3 grid place-content-center text-current transition-none"
       data-slot="checkbox-indicator"
     >
       {#if indeterminate}

@@ -55,7 +55,7 @@
     <Badge class="shrink-0 {KIND_TONE[kind]}" variant="outline"
       >{KIND_LABEL[kind]}</Badge
     >
-    <span class="text-label text-muted-foreground">{KIND_HOW[kind]}</span>
+    <span class="text-meta text-muted-foreground">{KIND_HOW[kind]}</span>
   </div>
 
   {#if info?.suggests && info.suggests.length > 0}
@@ -63,7 +63,7 @@
       <span class="text-label text-muted-foreground">Real values:</span>
       {#each info.suggests as suggestion (suggestion)}
         <button
-          class="rounded-[var(--radius-sm)] border border-border px-2 py-0.5 font-mono text-label text-foreground transition-colors hover:bg-accent"
+          class="pointer-hit pressable rounded-[var(--radius-sm)] border border-border px-2 py-0.5 font-mono text-label text-foreground transition-colors hover:bg-accent"
           onclick={() => {
             matcher = suggestion;
           }}

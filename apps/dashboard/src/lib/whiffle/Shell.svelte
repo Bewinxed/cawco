@@ -455,7 +455,9 @@
       {:else if narrow && page.url.pathname.startsWith('/config/')}
         <!-- Inside a section on a phone the rail is its own page, so the bar
              leads back to it. -->
-        <a class="crumb back" href="/config"><IconChevronLeft />Configure</a>
+        <a class="crumb back pressable" href="/config"
+          ><IconChevronLeft />Configure</a
+        >
       {:else}
         <TextMorph as="span" class="crumb" duration={150} text={crumb} />
       {/if}
@@ -613,7 +615,7 @@
   .grip:focus-visible {
     background: var(--border-control);
     outline: 2px solid var(--focus-ring);
-    outline-offset: 0;
+    outline-offset: 1px;
   }
 
   .main {
@@ -690,8 +692,8 @@
     }
   }
   .burger :global(svg) {
-    width: 19px;
-    height: 19px;
+    width: 20px;
+    height: 20px;
   }
   /* The cluster's controls sit a --space-2 gap apart and their touch areas
      meet in it; on a coarse pointer the gap opens to 16px, so a 28px control's
@@ -744,6 +746,7 @@
     border: 1px solid var(--border-hairline);
     border-radius: var(--radius-sm);
     font-size: var(--text-label);
+    font-weight: var(--weight-strong);
   }
   .right > :global(:is(.jump, [data-slot="button"])) {
     background: var(--surface-raised);
@@ -757,8 +760,8 @@
     padding: 0 var(--space-3);
   }
   .right :global(.jump svg) {
-    width: 15px;
-    height: 15px;
+    width: 16px;
+    height: 16px;
     color: var(--ink-muted);
   }
 
@@ -775,8 +778,8 @@
     cursor: pointer;
   }
   .icobtn :global(svg) {
-    width: 17px;
-    height: 17px;
+    width: 16px;
+    height: 16px;
   }
   @media (hover: hover) and (pointer: fine) {
     .icobtn:hover,
@@ -805,7 +808,7 @@
     background: var(--status-attn-bg);
     color: var(--status-attn-ink);
     font-size: var(--text-meta);
-    font-weight: var(--weight-strong);
+    font-weight: var(--weight-body);
     display: grid;
     place-items: center;
   }
@@ -840,7 +843,8 @@
     gap: var(--space-3);
     font-variant-numeric: tabular-nums;
     padding: var(--space-2) var(--space-6) var(--space-2) var(--space-7);
-    font-size: var(--text-label);
+    font-size: var(--text-body);
+    font-weight: var(--weight-body);
     border-bottom: 1px solid var(--border-hairline);
   }
   /* The sentence takes the room, so the countdown ticking in it never moves

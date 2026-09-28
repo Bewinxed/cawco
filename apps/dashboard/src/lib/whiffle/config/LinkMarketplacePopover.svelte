@@ -9,7 +9,7 @@
   import { Input } from "$lib/components/ui/input";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "$lib/components/ui/popover";
-  import { IconShopDuo } from "$lib/icons";
+  import { IconShop } from "$lib/icons";
   import { unfold } from "$lib/whiffle/motion/fold.svelte";
   import { closeInto } from "$lib/whiffle/motion/share.svelte";
   import { saveMarketplace } from "../fleet";
@@ -87,7 +87,7 @@
         title={down ?? undefined}
         variant="outline"
       >
-        <IconShopDuo />
+        <IconShop />
         Link marketplace
       </Button>
     {/snippet}

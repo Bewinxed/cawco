@@ -5,7 +5,7 @@
    * options, so the chip opens them rather than flipping on a click.
    */
   import Down from "~icons/solar/alt-arrow-down-linear";
-  import Check from "~icons/solar/check-circle-bold";
+  import Check from "~icons/solar/check-circle-bold-duotone";
   import Database from "~icons/solar/database-bold-duotone";
   import Fire from "~icons/solar/fire-bold-duotone";
   import NsPopover from "./NsPopover.svelte";
@@ -96,8 +96,8 @@
     }
   }
   .swap :global(svg) {
-    width: 15px;
-    height: 15px;
+    width: 16px;
+    height: 16px;
     flex: none;
   }
   .row {
@@ -123,8 +123,8 @@
     height: 26px;
   }
   .tile :global(svg) {
-    width: 15px;
-    height: 15px;
+    width: 16px;
+    height: 16px;
   }
   .text {
     flex: 1;

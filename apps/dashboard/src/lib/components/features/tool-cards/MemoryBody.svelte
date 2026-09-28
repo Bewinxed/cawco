@@ -96,8 +96,8 @@
     min-width: 0;
   }
   .label {
-    font-size: var(--text-meta);
-    font-weight: var(--weight-medium);
+    font-size: var(--text-label);
+    font-weight: var(--weight-strong);
     color: var(--ink-muted);
   }
   .well {
@@ -129,12 +129,13 @@
     background: none;
     color: var(--ink-strong);
     font-size: var(--text-label);
+    font-weight: var(--weight-strong);
     text-align: left;
     cursor: pointer;
   }
   .docs :global(.doc:focus-visible) {
     outline: 2px solid var(--focus-ring);
-    outline-offset: 2px;
+    outline-offset: 1px;
     border-radius: var(--radius-xs);
   }
   .path {
@@ -148,6 +149,7 @@
   .meta {
     flex: 0 0 auto;
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     color: var(--ink-muted);
     font-variant-numeric: tabular-nums;
   }
@@ -159,8 +161,8 @@
     transition: transform var(--dur-control) var(--ease-out);
   }
   .chev :global(svg) {
-    width: 14px;
-    height: 14px;
+    width: 12px;
+    height: 12px;
     display: block;
   }
   .docs :global(.doc[data-state="open"] .chev) {

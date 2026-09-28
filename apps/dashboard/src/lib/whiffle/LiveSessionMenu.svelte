@@ -14,7 +14,6 @@
     IconExternal,
     IconFolder,
     IconPin,
-    IconPinFilled,
     IconStop,
     IconTrash,
   } from "$lib/icons";
@@ -93,7 +92,7 @@
     </ContextMenu.Item>
     <ContextMenu.Item onSelect={() => rail.togglePin('session', instance.id)}>
       {#if pinned}
-        <IconPinFilled />
+        <IconPin />
         Unpin from rail
       {:else}
         <IconPin />

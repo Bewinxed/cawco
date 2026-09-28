@@ -35,7 +35,9 @@
   import { Virtualizer, type VirtualizerHandle } from "virtua/svelte";
   import { browser } from "$app/environment";
   import { describeTool } from "$lib/components/features/tool-cards/descriptors";
+  import { EmptyState } from "$lib/components/ui/empty";
   import type { Trail } from "$lib/components/ui/markdown/trail";
+  import { IconChat } from "$lib/icons";
   import { dur, motionOk } from "$lib/whiffle/motion/curves.svelte";
   import { type SessionState, whiffle } from "../client.svelte";
   import { rebuildScheduler } from "../workspace/scheduler.svelte";
@@ -71,8 +73,6 @@
     visible,
     focused,
     agentName,
-    machineName = "",
-    cwd = "",
     onlanded,
   }: {
     session: SessionState;
@@ -91,10 +91,6 @@
      */
     focused?: boolean;
     agentName: string;
-    /** Where this session runs — named in the empty state, nowhere else. */
-    machineName?: string;
-    /** The folder it runs in — named in the empty state, nowhere else. */
-    cwd?: string;
     /** Optional callback when the transcript first renders content. */
     onlanded?: () => void;
   } = $props();
@@ -1788,20 +1784,13 @@
   {#if session.loading && rows.length === 0}
     <p class="empty">Loading transcript…</p>
   {:else if rows.length === 0}
-    <!-- Not a shrug: where this session runs, then the two keys that do anything
-         from the composer below. Left-aligned — this surface is a ledger. -->
-    <div class="blank">
-      <!-- Both halves or neither: the identity line is `machine : folder`, and
-           half of it is a dangling colon. -->
-      {#if machineName && cwd}
-        <p class="b-where">{machineName} : {cwd}</p>
-      {/if}
-      <h2 class="b-lead">No messages yet.</h2>
-      <p class="b-hint">
-        Send the first instruction below — / lists this session's commands, @
-        names a machine or session.
-      </p>
-    </div>
+    <!-- The two keys that do anything from the composer below. Left-aligned:
+         this surface is a ledger. -->
+    <EmptyState
+      icon={IconChat}
+      line="Send the first instruction below — / lists this session's commands, @ names a machine or session."
+      title="No messages yet"
+    />
   {/if}
 
   <!-- The list's own box: what the pin reads virtua's container off. -->
@@ -1915,35 +1904,10 @@
     }
   }
   .empty {
-    font-size: var(--text-label);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     color: var(--ink-muted);
     padding-block: var(--space-5);
-  }
-
-  /* The empty transcript. Quiet by construction — no fill, no border, no
-     illustration; it is a caption on the ledger, so it sits where every other
-     row starts rather than in the middle of the pane. */
-  .blank {
-    display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-    padding-block: var(--space-8);
-    line-height: var(--leading-body);
-  }
-  .b-where {
-    font-family: var(--font-mono);
-    font-size: var(--text-meta);
-    color: var(--ink-muted);
-  }
-  .b-lead {
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
-  }
-  .b-hint {
-    max-inline-size: 44ch;
-    font-size: var(--text-label);
-    color: var(--ink-muted);
   }
 
   .compacting-note {
@@ -1964,6 +1928,7 @@
     background: var(--surface-raised);
     box-shadow: var(--shadow-tile);
     font-size: var(--text-label);
+    font-weight: var(--weight-strong);
     color: var(--ink-strong);
 
     /* Motion is opt-in: the dot only beats when the reader hasn't asked for
@@ -2036,6 +2001,7 @@
     align-items: center;
     gap: var(--space-2);
     font-size: var(--text-label);
+    font-weight: var(--weight-strong);
     color: var(--ink-strong);
 
     @media (width <= 900px) {
@@ -2045,15 +2011,15 @@
     /* No `color` here: the tool family's `text-tool-*` tint governs the
        glyph; the generic case inherits --ink-strong from .livetool. */
     & .ic {
-      inline-size: 15px;
-      block-size: 15px;
+      inline-size: 16px;
+      block-size: 16px;
       flex: 0 0 auto;
       display: grid;
       place-items: center;
 
       & :global(svg) {
-        inline-size: 15px;
-        block-size: 15px;
+        inline-size: 16px;
+        block-size: 16px;
       }
     }
     & .tk {

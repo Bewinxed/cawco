@@ -2,17 +2,17 @@
   import { type FleetAgent, parseAgentFrontMatter } from "@whiffle/core";
   import { toast } from "svelte-sonner";
   import { Button } from "$lib/components/ui/button";
+  import { EmptyState } from "$lib/components/ui/empty";
   import { SectionHeader } from "$lib/components/ui/section-header";
   import {
     IconDownload,
-    IconLaptopDuo,
+    IconLaptop,
     IconPlus,
     IconSpinner,
-    IconSubagentDuo,
+    IconSubagent,
     IconTrash,
   } from "$lib/icons";
   import { whiffle } from "$lib/whiffle/client.svelte";
-  import EmptyHead from "$lib/whiffle/config/EmptyHead.svelte";
   import RowList from "$lib/whiffle/config/RowList.svelte";
   import SectionFrame from "$lib/whiffle/config/SectionFrame.svelte";
   import SectionRow from "$lib/whiffle/config/SectionRow.svelte";
@@ -190,7 +190,8 @@
   {/snippet}
 
   {#if agents.length === 0}
-    <EmptyHead
+    <EmptyState
+      icon={section.icon}
       line="Write one, or adopt one a machine already has from the list below."
       title="No subagents yet"
     />
@@ -210,7 +211,7 @@
           flash={store.flash === row.name}
           href="/config/subagents/{row.name}"
           hue={HUE}
-          icon={IconSubagentDuo}
+          icon={IconSubagent}
           meta={describe(row)}
           mono
           name={row.name}
@@ -227,7 +228,7 @@
   {/each}
 
   <div class="group">
-    <SectionHeader hue={HUE} icon={IconLaptopDuo} label="On machines" />
+    <SectionHeader hue={HUE} icon={IconLaptop} label="On machines" />
     <p class="note">
       The definition files each machine really has, read live off its disk. One
       the fleet does not keep can be adopted into it, and every other machine
@@ -256,7 +257,7 @@
             name={row.name}
           >
             {#snippet tile()}
-              <OsMark class="size-3.5" os={machine.os} />
+              <OsMark class="size-4" os={machine.os} />
             {/snippet}
             {#snippet trailing()}
               {#if same}

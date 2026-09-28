@@ -1059,7 +1059,6 @@
           aria-label="New Session"
           class="session-card ns-theme"
           data-ns-dialog
-          inert={busy}
           onCloseAutoFocus={(event) => { event.preventDefault(); opener?.focus({ preventScroll: true }); }}
           onOpenAutoFocus={(event) => { event.preventDefault(); card?.focus({ preventScroll: true }); }}
           bind:ref={card}
@@ -1079,7 +1078,6 @@
         aria-label="New Session"
         class="session-card ns-theme"
         data-ns-dialog
-        inert={busy}
         onCloseAutoFocus={(event) => { event.preventDefault(); opener?.focus({ preventScroll: true }); }}
         onOpenAutoFocus={(event) => { event.preventDefault(); card?.focus({ preventScroll: true }); }}
         bind:ref={card}
@@ -1092,7 +1090,10 @@
 {/if}
 
 {#snippet formContent()}
-  <div class="head">
+  <!-- While a start runs the form takes no input; the footer stays live so
+       the pending Start keeps its focus (a focused element in an inert
+       subtree drops focus to the body). -->
+  <div class="head" inert={busy}>
     <div class="head-left">
       <span class="bolt"><Bolt /></span>
       <span class="title"
@@ -1110,7 +1111,12 @@
       <X />
     </button>
   </div>
-  <div class="body fai-scroll" data-vaul-no-drag onscroll={bodyScroll}>
+  <div
+    class="body fai-scroll"
+    data-vaul-no-drag
+    inert={busy}
+    onscroll={bodyScroll}
+  >
     <h2>New Session</h2>
     <section class="sec prompt-sec" style="--delay:0ms">
       <SectionHeader
@@ -1311,8 +1317,8 @@
     flex: none;
   }
   .bolt :global(svg) {
-    width: 13px;
-    height: 13px;
+    width: 12px;
+    height: 12px;
   }
   .title {
     font: 500 var(--text-label) / 1 var(--font-body);
@@ -1334,8 +1340,8 @@
     cursor: pointer;
   }
   .close :global(svg) {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
   }
   @media (hover: hover) {
     .close:hover {

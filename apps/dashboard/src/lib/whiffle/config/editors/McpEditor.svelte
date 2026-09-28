@@ -4,7 +4,7 @@
   import { toast } from "svelte-sonner";
   import { goto } from "$app/navigation";
   import { Input } from "$lib/components/ui/input";
-  import { IconKeyDuo, IconPlayDuo } from "$lib/icons";
+  import { IconKey, IconPlay } from "$lib/icons";
   import { appear } from "$lib/whiffle/motion/curves.svelte";
   import { confirm } from "../../confirm.svelte";
   import {
@@ -197,7 +197,7 @@
     {/if}
   {/snippet}
 
-  <EditorSection hue={HUE} icon={IconPlayDuo} label="How machines run it">
+  <EditorSection hue={HUE} icon={IconPlay} label="How machines run it">
     <Choice
       label="Kind"
       onchange={(next) => {
@@ -290,7 +290,7 @@
   {#if mode !== 'bunx'}
     <EditorSection
       hue={HUE}
-      icon={IconKeyDuo}
+      icon={IconKey}
       label={mode === 'remote' ? 'Headers' : 'Environment'}
     >
       <p class="note">

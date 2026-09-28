@@ -1,6 +1,7 @@
 .wf {
   color: var(--ink-strong);
-  font-size: var(--text-label);
+  font-size: var(--text-body);
+  font-weight: var(--weight-body);
   min-width: 0;
 }
 .wf h1 {
@@ -9,7 +10,7 @@
   color: var(--ink-strong);
 }
 .wf h2 {
-  font-size: var(--text-body);
+  font-size: var(--text-label);
   font-weight: var(--weight-strong);
   color: var(--ink-strong);
 }
@@ -24,6 +25,7 @@
   gap: var(--space-2);
   color: var(--ink-muted);
   font-size: var(--text-label);
+  font-weight: var(--weight-strong);
 }
 .wf input:not([type="checkbox"]),
 .wf select,
@@ -49,7 +51,7 @@
 }
 .wf :is(button, a, input, textarea, select):focus-visible {
   outline: 2px solid var(--focus-ring);
-  outline-offset: 2px;
+  outline-offset: 1px;
 }
 .wf .wf-btn {
   display: inline-flex;
@@ -63,8 +65,14 @@
   background: var(--surface-raised);
   color: var(--ink-strong);
   font-size: var(--text-label);
+  font-weight: var(--weight-strong);
   cursor: pointer;
   text-decoration: none;
+  transition: transform 160ms var(--ease-out);
+}
+/* The press, as .pressable gives every other control. */
+.wf .wf-btn:active:not(:disabled) {
+  transform: scale(var(--press-scale));
 }
 .wf .wf-primary {
   color: var(--on-brand);
@@ -115,7 +123,8 @@
 }
 .wf .wf-muted {
   color: var(--ink-muted);
-  font-size: var(--text-label);
+  font-size: var(--text-meta);
+  font-weight: var(--weight-body);
 }
 .wf .wf-mono,
 .wf pre {
@@ -135,11 +144,6 @@
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: var(--space-3);
-}
-.wf .wf-skeleton {
-  height: 80px;
-  background: var(--surface-recess);
-  border-radius: var(--radius-sm);
 }
 @media (hover: hover) {
   .wf .wf-btn:hover:not(:disabled) {

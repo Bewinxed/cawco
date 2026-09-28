@@ -1,9 +1,9 @@
 <script lang="ts">
   /** Project chip + popover (§1.4, §2.7): pick, clear, or create a project. */
-  import Add from "~icons/solar/add-circle-linear";
+  import Add from "~icons/solar/add-circle-bold-duotone";
   import Down from "~icons/solar/alt-arrow-down-linear";
-  import Check from "~icons/solar/check-circle-bold";
-  import Clear from "~icons/solar/close-square-linear";
+  import Check from "~icons/solar/check-circle-bold-duotone";
+  import Clear from "~icons/solar/close-square-bold-duotone";
   import Folder from "~icons/solar/folder-bold-duotone";
   import Files from "~icons/solar/folder-with-files-bold-duotone";
   import NsPopover from "./NsPopover.svelte";
@@ -192,8 +192,8 @@
       color 120ms ease;
   }
   .clear :global(svg) {
-    width: 13px;
-    height: 13px;
+    width: 12px;
+    height: 12px;
   }
   /* A little larger than the mark, never larger than the chip: a 44px target
      here reached over the label, so clicking the project's name cleared it. */
@@ -242,8 +242,8 @@
     height: 24px;
   }
   .tile :global(svg) {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
   }
   .text {
     flex: 1;
@@ -298,8 +298,8 @@
     box-shadow: var(--shadow-xs);
   }
   .field :global(svg) {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     flex: none;
     color: var(--ink-subtle);
   }
@@ -309,7 +309,7 @@
     border: 0;
     outline: none;
     background: transparent;
-    font: 400 var(--text-label) / 1.4 var(--font-body);
+    font: 400 var(--text-body) / 1.4 var(--font-body);
     color: var(--ink-strong);
     padding: 0;
   }

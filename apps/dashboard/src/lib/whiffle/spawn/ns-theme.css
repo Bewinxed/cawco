@@ -38,7 +38,7 @@
       transform 160ms var(--ease-out);
   }
 }
-.ns-theme button:not(:disabled):active {
+.ns-theme button:not(:disabled, [aria-busy="true"]):active {
   transform: scale(var(--press-scale));
 }
 .ns-theme :focus-visible {
@@ -223,6 +223,7 @@
   height: 30px;
   padding: 0 11px;
   font-size: var(--text-label);
+  font-weight: var(--weight-strong);
 }
 .ns-theme .ns-btn.primary {
   background: var(--brand-solid);
@@ -272,13 +273,13 @@
   }
 }
 .ns-theme .ns-chip-btn > svg {
-  width: 15px;
-  height: 15px;
+  width: 16px;
+  height: 16px;
   flex: none;
 }
 .ns-theme .ns-chip-btn > svg.chevron {
-  width: 13px;
-  height: 13px;
+  width: 12px;
+  height: 12px;
   color: var(--ink-subtle);
 }
 .ns-theme .ns-chip-btn .chip-label {

@@ -98,11 +98,13 @@
     display: flex;
     gap: var(--space-2);
     min-inline-size: 0;
-    font-size: var(--text-label);
+    font-size: var(--text-body);
+    font-weight: var(--weight-body);
     line-height: var(--leading-body);
 
     &[data-size="compact"] {
       font-size: var(--text-meta);
+      font-weight: var(--weight-body);
     }
   }
   .icon-column {
@@ -114,13 +116,13 @@
   .icon {
     display: grid;
     place-items: center;
-    inline-size: 15px;
+    inline-size: 16px;
     block-size: 1lh;
-    min-block-size: 15px;
+    min-block-size: 16px;
 
     & :global(svg) {
-      inline-size: 15px;
-      block-size: 15px;
+      inline-size: 16px;
+      block-size: 16px;
     }
   }
   .dot {

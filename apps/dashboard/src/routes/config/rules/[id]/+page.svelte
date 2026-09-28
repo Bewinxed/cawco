@@ -26,7 +26,7 @@
     {''}
   </SectionFrame>
 {:else if id !== 'new' && !rule}
-  <Missing back="/config/rules" title={section.label} what="rule" />
+  <Missing {section} what="rule" />
 {:else}
   {#key id}
     <RuleEditor {rule} {taken} />

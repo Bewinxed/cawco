@@ -91,15 +91,16 @@
     color: var(--mark-glyph);
   }
   .mark :global(svg) {
-    width: 17px;
-    height: 17px;
+    width: 16px;
+    height: 16px;
   }
   .lines {
     display: flex;
     flex-direction: column;
     min-width: 0;
     max-width: 220px;
-    font-size: var(--text-label);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     line-height: var(--leading-ui);
     color: var(--ink-muted);
   }
@@ -123,12 +124,12 @@
     height: 28px;
   }
   .remove :global(svg) {
-    width: 13px;
-    height: 13px;
+    width: 12px;
+    height: 12px;
   }
   button:focus-visible {
     outline: 2px solid var(--focus-ring);
-    outline-offset: 2px;
+    outline-offset: 1px;
   }
   @media (hover: hover) {
     button:hover {

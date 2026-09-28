@@ -30,7 +30,7 @@
     {''}
   </SectionFrame>
 {:else if name !== 'new' && !server}
-  <Missing back="/config/mcp" title={section.label} what="MCP server" />
+  <Missing {section} what="MCP server" />
 {:else}
   {#key name}
     <McpEditor {server} {taken} />

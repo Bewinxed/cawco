@@ -15,7 +15,8 @@
 <style>
   .tprose,
   .tprose :global(.prose) {
-    font-size: var(--text-label);
+    font-size: var(--text-body);
+    font-weight: var(--weight-body);
     line-height: var(--leading-body);
     color: var(--ink-strong);
   }

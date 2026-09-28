@@ -33,7 +33,7 @@
 <Popover.Root bind:open={expanded}>
   <Popover.Trigger aria-label="{label}: {chosen}" class="picker focus-ring">
     <span class="k">{label}</span>
-    <span class="v"><TextMorph text={chosen} /></span>
+    <span class="v num"><TextMorph text={chosen} /></span>
     <IconChevronDown />
   </Popover.Trigger>
   <Popover.Content align="start" class="max-h-80 w-64 gap-0 overflow-y-auto">
@@ -96,14 +96,13 @@
     background: var(--surface-hover);
   }
   :global(.picker svg) {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     flex: none;
     color: var(--ink-muted);
   }
   :global(.picker) .k {
     color: var(--ink-muted);
-    font-weight: 400;
   }
   :global(.picker) .v {
     min-width: 0;
@@ -123,7 +122,6 @@
     padding: 0 10px;
     text-align: left;
     font: var(--type-label);
-    font-weight: 400;
     color: var(--ink-strong);
   }
   .group {
@@ -139,8 +137,8 @@
     white-space: nowrap;
   }
   .item :global(svg) {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     flex: none;
   }
 </style>

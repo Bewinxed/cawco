@@ -2,9 +2,9 @@
   import { hookSentence } from "@whiffle/core";
   import { toast } from "svelte-sonner";
   import { Button } from "$lib/components/ui/button";
-  import { IconHookDuo, IconPlus, IconTrash } from "$lib/icons";
+  import { EmptyState } from "$lib/components/ui/empty";
+  import { IconHook, IconPlus, IconTrash } from "$lib/icons";
   import { whiffle } from "$lib/whiffle/client.svelte";
-  import EmptyHead from "$lib/whiffle/config/EmptyHead.svelte";
   import RolloutChip from "$lib/whiffle/config/RolloutChip.svelte";
   import RowFaults from "$lib/whiffle/config/RowFaults.svelte";
   import RowList from "$lib/whiffle/config/RowList.svelte";
@@ -109,7 +109,8 @@
   {/snippet}
 
   {#if hooks.length === 0}
-    <EmptyHead
+    <EmptyState
+      icon={section.icon}
       line="Start from one of these — they are ordinary hooks once added, and you can change every part of them."
       title="Nothing runs yet"
     />
@@ -117,7 +118,7 @@
       {#each HOOK_TEMPLATES as template (template.title)}
         <SectionRow
           hue={HUE}
-          icon={IconHookDuo}
+          icon={IconHook}
           meta="{template.blurb} {hookSentence(template.draft)}"
           name={template.title}
         >
@@ -157,7 +158,7 @@
           flash={store.flash === row.id}
           href="/config/hooks/{row.id}"
           hue={HUE}
-          icon={IconHookDuo}
+          icon={IconHook}
           meta="{row.event} · {hookSentence(row)}"
           name={row.name}
           ontoggle={(next) => toggle(row, next)}

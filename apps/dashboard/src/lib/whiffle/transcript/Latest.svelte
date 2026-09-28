@@ -31,8 +31,8 @@
     cursor: pointer;
 
     & :global(svg) {
-      inline-size: 15px;
-      block-size: 15px;
+      inline-size: 16px;
+      block-size: 16px;
     }
 
     @media (hover: hover) {
@@ -42,7 +42,7 @@
     }
     &:focus-visible {
       outline: 2px solid var(--focus-ring);
-      outline-offset: 2px;
+      outline-offset: 1px;
     }
 
     /* The catch-up's own entrance: it fades in where it stands. */

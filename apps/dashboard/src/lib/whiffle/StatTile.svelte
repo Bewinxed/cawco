@@ -4,8 +4,10 @@
    * empty `unit` still keeps its line, so a tile whose unit comes and goes
    * stands at one height and its figure does not move when it changes.
    */
+  import { TextMorph } from "torph/svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Card from "$lib/components/ui/card";
+  import { CURVE } from "$lib/whiffle/motion/curves.svelte";
 
   interface Props {
     label: string;
@@ -18,14 +20,17 @@
 
 <Card.Root class="st-card">
   <span class="st-label">{label}</span>
-  <!-- Keyed, so a new figure pops in over the old one leaving where a
-       `reflow` container holds the tile (the board); elsewhere it is set. -->
-  {#key value}
-    <span class="st-value" data-flip="pop">{value}</span>
-  {/key}
+  <!-- A new figure morphs out of the old one, digit by digit, in place. -->
+  <TextMorph
+    as="span"
+    class="st-value num"
+    duration={150}
+    ease={CURVE.out}
+    text={String(value)}
+  />
   {#if unit !== undefined}
     {#key unit}
-      <span class="st-unit" data-flip="pop">{unit}</span>
+      <span class="st-unit num" data-flip="pop">{unit}</span>
     {/key}
   {/if}
 </Card.Root>
@@ -41,9 +46,11 @@
     font: var(--type-label);
     color: var(--ink-muted);
   }
-  .st-value {
+  /* TextMorph writes its text after mount; the line stands from the first
+     paint so nothing below it moves when the figure lands. */
+  :global(.st-card .st-value) {
+    min-height: 1lh;
     font: var(--type-kpi);
-    font-variant-numeric: tabular-nums;
     color: var(--ink-strong);
   }
   .st-unit {
@@ -52,7 +59,7 @@
     color: var(--ink-muted);
   }
   @media (max-width: 900px) {
-    .st-value {
+    :global(.st-card .st-value) {
       font: var(--type-title);
     }
   }

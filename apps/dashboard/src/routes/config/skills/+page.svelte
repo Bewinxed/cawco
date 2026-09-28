@@ -9,11 +9,11 @@
   import { SectionHeader } from "$lib/components/ui/section-header";
   import { Skeleton } from "$lib/components/ui/skeleton";
   import {
-    IconBoltDuo,
-    IconLayersDuo,
+    IconBolt,
+    IconLayers,
     IconRefresh,
     IconSearch,
-    IconShopDuo,
+    IconShop,
     IconTrash,
   } from "$lib/icons";
   import { whiffle } from "$lib/whiffle/client.svelte";
@@ -312,6 +312,7 @@
     <!-- Acts on the rows below, so it arrives with them, not in the header. -->
     {#if hubBroken.length > 0}
       <Button
+        class="num"
         disabled={hubDown() !== null}
         failed={refetchFailed}
         icon={IconRefresh}
@@ -332,7 +333,7 @@
   {/snippet}
 
   <div class="group">
-    <SectionHeader hue={HUE} icon={IconBoltDuo} label="Skills" />
+    <SectionHeader hue={HUE} icon={IconBolt} label="Skills" />
     {#if skills.length === 0}
       <p class="note">
         No skills fetched yet. Paste what you would otherwise have run and the
@@ -349,7 +350,7 @@
             enabled={row.enabled}
             flash={store.flash === row.name}
             hue={HUE}
-            icon={IconBoltDuo}
+            icon={IconBolt}
             meta={[row.source, ...sized(row)].join(' · ')}
             name={row.name}
             ontoggle={(next) => switchSkill(row, next)}
@@ -383,7 +384,7 @@
   </div>
 
   <div class="group">
-    <SectionHeader hue={HUE} icon={IconShopDuo} label="Marketplaces" />
+    <SectionHeader hue={HUE} icon={IconShop} label="Marketplaces" />
     {#if marketplaces.length === 0}
       <p class="note">
         No marketplaces linked yet. Link one and its plugins become browsable
@@ -398,7 +399,7 @@
               { label: 'Unlink', icon: IconTrash, destructive: true, disabled: busy[row.name] === true, onselect: () => askUnlink(row.name) },
             ]}
             hue={HUE}
-            icon={IconShopDuo}
+            icon={IconShop}
             meta={row.source}
             name={row.name}
           >
@@ -437,9 +438,7 @@
                     role="status"
                   >
                     {#each [0, 1, 2] as line (line)}
-                      <Skeleton
-                        class="h-10 w-full rounded-[var(--radius-sm)]"
-                      />
+                      <Skeleton class="h-10 w-full" />
                     {/each}
                   </div>
                 {:else if unread[row.name]}
@@ -493,7 +492,7 @@
   </div>
 
   <div class="group">
-    <SectionHeader hue={HUE} icon={IconLayersDuo} label="Plugins" />
+    <SectionHeader hue={HUE} icon={IconLayers} label="Plugins" />
     {#if plugins.length === 0}
       <p class="note">
         Nothing installed yet. Browse a marketplace above and add a plugin.
@@ -508,7 +507,7 @@
             ]}
             enabled={row.enabled}
             hue={HUE}
-            icon={IconLayersDuo}
+            icon={IconLayers}
             meta={sized(row).join(' · ') || 'No bytes resolved yet'}
             mono
             name={row.id}

@@ -47,6 +47,7 @@
     background: var(--surface-raised);
     box-shadow: var(--shadow-overlay);
     font-size: var(--text-label);
+    font-weight: var(--weight-strong);
     color: var(--ink-strong);
   }
   /* The one thing that moves, and only for a reader who has not asked for

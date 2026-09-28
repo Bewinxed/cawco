@@ -45,7 +45,7 @@
     {#if data?.remove}
       <button
         aria-label="Delete edge"
-        class="touch-hit"
+        class="touch-hit pressable"
         onclick={() => { if (typeof data?.remove === 'function') { data.remove(id); } }}
         type="button"
         class:visible={selected}
@@ -62,6 +62,7 @@
     align-items: center;
     gap: var(--space-1);
     font-size: var(--text-label);
+    font-weight: var(--weight-strong);
   }
   span {
     background: var(--surface-recess);

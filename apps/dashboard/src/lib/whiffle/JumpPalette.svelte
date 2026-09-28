@@ -7,6 +7,7 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Command from "$lib/components/ui/command";
   import { Kbd } from "$lib/components/ui/kbd";
+  import { Skeleton } from "$lib/components/ui/skeleton";
   import {
     IconAgent,
     IconChat,
@@ -170,11 +171,11 @@
          chip and field are flex siblings, so nothing overlaps and nothing
          needs measuring. -->
     <div class="jump-search">
-      <IconSearch class="jump-search-icon" height={15} width={15} />
+      <IconSearch class="jump-search-icon" height={16} width={16} />
       {#if scoped}
         {@const ScopedMark = AUTHOR_MARK[scoped.token]}
         <span class="jump-chip" transition:scale={chipMotion}>
-          <ScopedMark class="jump-chip-mark" height={11} width={11} />
+          <ScopedMark class="jump-chip-mark" height={12} width={12} />
           {scoped.label}
           <button
             aria-label="Clear author filter"
@@ -215,7 +216,7 @@
               onSelect={() => chooseAuthor(author.token)}
               value={`author:${author.token}`}
             >
-              <AuthorMark class="jump-mark" height={14} width={14} />
+              <AuthorMark class="jump-mark" height={16} width={16} />
               <span class="jump-name">{author.label}</span>
               <span class="jump-trail">@{author.token} · {author.detail}</span>
             </Command.Item>
@@ -229,7 +230,7 @@
             {@const EntryMark = MARK[entry.kind]}
             <div animate:flip={settle}>
               <Command.Item onSelect={() => jump(entry.href)} value={entry.id}>
-                <EntryMark class="jump-mark" height={14} width={14} />
+                <EntryMark class="jump-mark" height={16} width={16} />
                 <JumpMatch
                   class="jump-name"
                   ranges={entry.labelRanges}
@@ -255,14 +256,14 @@
             <div aria-hidden="true" class="jump-skeletons">
               {#each SKELETONS as row (row)}
                 <div class="jump-skeleton">
-                  <span
+                  <Skeleton
                     class="jump-skeleton-bar"
                     style="width: {38 - row * 6}%"
-                  ></span>
-                  <span
+                  />
+                  <Skeleton
                     class="jump-skeleton-bar"
                     style="width: {74 - row * 9}%"
-                  ></span>
+                  />
                 </div>
               {/each}
             </div>
@@ -279,7 +280,7 @@
                 <!-- Which conversation this line came out of. Without it a list of
                    snippets is a list of strangers. -->
                 <span class="jump-hit-head">
-                  <IconDocument class="jump-mark" height={14} width={14} />
+                  <IconDocument class="jump-mark" height={16} width={16} />
                   <span class="jump-name">
                     {index.sessionTitles.get(hit.sessionId) ??
                     (hit.cwd ? leaf(hit.cwd) : hit.sessionId.slice(0, 8))}
@@ -365,6 +366,7 @@
     color: currentcolor;
     opacity: 0.65;
     font-size: var(--text-label);
+    font-weight: var(--weight-strong);
     line-height: 1;
     cursor: pointer;
   }
@@ -395,6 +397,7 @@
     background: transparent;
     color: var(--ink-strong);
     font-size: var(--text-body);
+    font-weight: var(--weight-body);
     outline: none;
   }
   :global(.jump-field)::placeholder {
@@ -421,7 +424,7 @@
     background: var(--accent-bg-subtle);
     color: var(--accent-text);
     font-size: var(--text-label);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-strong);
     line-height: 1;
     white-space: nowrap;
   }
@@ -438,7 +441,7 @@
     overflow: hidden;
     color: var(--ink-strong);
     font-size: var(--text-label);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-strong);
     text-overflow: ellipsis;
     white-space: nowrap;
   }
@@ -450,7 +453,8 @@
     max-width: 45%;
     overflow: hidden;
     color: var(--ink-muted);
-    font-size: var(--text-label);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     letter-spacing: var(--track-caps);
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -474,7 +478,7 @@
      anchor. */
   :global(.jump-hit .jump-name) {
     color: var(--ink-muted);
-    font-size: var(--text-label);
+    font-size: var(--text-meta);
     font-weight: var(--weight-body);
   }
   :global(.jump-snippet) {
@@ -482,8 +486,8 @@
     overflow: hidden;
     margin-left: 22px;
     color: var(--ink-strong);
-    font-size: var(--text-label);
-    font-weight: var(--weight-medium);
+    font-size: var(--text-body);
+    font-weight: var(--weight-body);
     line-height: var(--leading-ui);
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -506,30 +510,8 @@
     flex-direction: column;
     gap: 5px;
   }
-  .jump-skeleton-bar {
+  .jump-skeleton :global(.jump-skeleton-bar) {
     height: 7px;
-    border-radius: var(--radius-pill);
-    background: var(--border-hairline);
-    opacity: 0.6;
-
-    @media (prefers-reduced-motion: no-preference) {
-      animation: jump-breathe var(--breath) var(--ease-in-out) infinite;
-    }
-  }
-  .jump-skeleton:nth-child(2) .jump-skeleton-bar {
-    animation-delay: 120ms;
-  }
-  .jump-skeleton:nth-child(3) .jump-skeleton-bar {
-    animation-delay: 240ms;
-  }
-  @keyframes jump-breathe {
-    0%,
-    100% {
-      opacity: 0.45;
-    }
-    50% {
-      opacity: 0.9;
-    }
   }
   /* Inside the well, divided from the results by the same hairline as the
      search line above them — the panel reads as one object, top to bottom. */
@@ -540,6 +522,7 @@
     padding: 7px 12px;
     border-top: 1px solid var(--border-hairline);
     color: var(--ink-muted);
-    font-size: var(--text-label);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
   }
 </style>

@@ -14,7 +14,7 @@
   import {
     IconChevronDown,
     IconChevronRight,
-    IconLaptopDuo,
+    IconLaptop,
     IconSpinner,
   } from "$lib/icons";
   import type { Machine } from "./client.svelte";
@@ -111,7 +111,7 @@
 <div class="inventory">
   <SectionHeader
     hue="var(--hue-amber-500)"
-    icon={IconLaptopDuo}
+    icon={IconLaptop}
     label="On each machine"
   />
   <p class="note">
@@ -129,7 +129,7 @@
         <li class="machine">
           <button
             aria-expanded={open[machine.machineId] === true}
-            class="head focus-ring"
+            class="head focus-ring pressable"
             onclick={() => expand(machine)}
             type="button"
           >
@@ -138,7 +138,7 @@
             {:else}
               <IconChevronRight />
             {/if}
-            <OsMark class="size-3.5 shrink-0" os={machine.os} />
+            <OsMark class="size-4 shrink-0" os={machine.os} />
             <span class="host">{machineLabel(machine.hostname)}</span>
             <span class="note"
               >{open[machine.machineId] ? 'Hide' : 'Show what it has'}</span
@@ -261,8 +261,8 @@
     background: var(--surface-hover);
   }
   .head :global(svg) {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     flex: none;
     color: var(--ink-muted);
   }

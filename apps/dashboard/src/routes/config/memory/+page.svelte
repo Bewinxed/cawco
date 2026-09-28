@@ -2,7 +2,7 @@
   import { toast } from "svelte-sonner";
   import { Input } from "$lib/components/ui/input";
   import { SectionHeader } from "$lib/components/ui/section-header";
-  import { IconBookDuo, IconTrash, IconWarningTriangle } from "$lib/icons";
+  import { IconBook, IconTrash, IconWarningTriangle } from "$lib/icons";
   import { formatDistanceToNow } from "$lib/utils/time";
   import { whiffle } from "$lib/whiffle/client.svelte";
   import {
@@ -146,7 +146,7 @@
         flash={store.flash === MAIN}
         href={fileHref(MAIN)}
         hue={HUE}
-        icon={IconBookDuo}
+        icon={IconBook}
         meta={memory
           ? `Loaded into every session · ${facts(memory)}${drafted(MAIN)}`
           : "The fleet keeps no memory yet — write one, or adopt a machine's copy"}
@@ -177,7 +177,7 @@
         flash={store.flash === doc.path}
         href={fileHref(doc.path)}
         hue={HUE}
-        icon={IconBookDuo}
+        icon={IconBook}
         meta="{facts(doc)}{drafted(doc.path)}"
         mono
         name={fileLabel(doc.path)}

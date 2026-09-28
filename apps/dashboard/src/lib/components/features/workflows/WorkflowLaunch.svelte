@@ -206,13 +206,10 @@
 >
 <style>
   /* The start button draws the kit's pending content in the workflow skin:
-     its gap and icon size, and no press while the run is being started. */
+     its gap and icon size. */
   .start {
     --btn-gap: var(--space-2);
     --btn-icon: 16px;
-  }
-  .start[aria-busy="true"] {
-    pointer-events: none;
   }
   .wf-launch :global(button) {
     min-height: 44px;

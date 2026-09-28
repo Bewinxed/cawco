@@ -247,8 +247,10 @@
         class:ready={connected}
       ></iframe>
     {/key}
-    <div aria-hidden="true" class="skeleton" class:ready={connected}>
-      <span></span>
+    <div aria-hidden="true" class="cover" class:ready={connected}>
+      <span
+        class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"
+      ></span>
     </div>
     {#if failure}
       <p class="error" role="alert">{failure}</p>
@@ -293,7 +295,7 @@
   .title {
     color: var(--ink-strong);
     font-size: var(--text-label);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-strong);
   }
   .path {
     color: var(--ink-muted);
@@ -316,6 +318,7 @@
     text-decoration: none;
     font: inherit;
     font-size: var(--text-label);
+    font-weight: var(--weight-strong);
     transition:
       background-color var(--dur-control) var(--ease-out),
       color var(--dur-control) var(--ease-out),
@@ -324,13 +327,13 @@
   }
   button :global(svg),
   a :global(svg) {
-    width: 17px;
-    height: 17px;
+    width: 16px;
+    height: 16px;
   }
   button:focus-visible,
   a:focus-visible {
     outline: 2px solid var(--focus-ring);
-    outline-offset: 2px;
+    outline-offset: 1px;
   }
   button:active,
   a:active {
@@ -372,7 +375,8 @@
   iframe.ready {
     opacity: 1;
   }
-  .skeleton {
+  /* Covers the frame until it connects, holding one kit skeleton line. */
+  .cover {
     position: absolute;
     inset: 0;
     padding: var(--space-5);
@@ -380,15 +384,8 @@
     pointer-events: none;
     transition: opacity var(--dur-control) var(--ease-out);
   }
-  .skeleton.ready {
+  .cover.ready {
     opacity: 0;
-  }
-  .skeleton span {
-    display: block;
-    width: 42%;
-    height: var(--space-3);
-    background: var(--surface-recess);
-    border-radius: var(--radius-xs);
   }
   .error {
     position: absolute;
@@ -396,7 +393,8 @@
     padding: var(--space-2);
     background: var(--surface-raised);
     color: var(--data-bad);
-    font-size: var(--text-label);
+    font-size: var(--text-body);
+    font-weight: var(--weight-body);
   }
   @container (max-width: 469px) {
     .select-label {

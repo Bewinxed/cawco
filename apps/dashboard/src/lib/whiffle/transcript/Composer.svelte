@@ -839,7 +839,7 @@
       <button
         aria-disabled={!busy && sending ? 'true' : undefined}
         aria-label={busy ? 'Stop the agent' : 'Send message'}
-        class="stop touch-hit"
+        class="stop touch-hit pressable"
         disabled={held || !(busy || draft.hasContent)}
         onclick={onaction}
         type="button"
@@ -1034,8 +1034,8 @@
   }
   :global(.menu [data-slot="command-group"] [data-command-group-heading]) {
     padding: var(--space-1) var(--space-2) var(--space-2);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-medium);
+    font-size: var(--text-label);
+    font-weight: var(--weight-strong);
     letter-spacing: 0.04em;
     text-transform: uppercase;
     color: var(--ink-muted);
@@ -1069,7 +1069,7 @@
 
   .e-label {
     font-family: var(--font-mono);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-strong);
     color: var(--ink-strong);
     white-space: nowrap;
     flex: 0 0 auto;
@@ -1079,7 +1079,8 @@
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
-    font-size: var(--text-label);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     color: var(--ink-muted);
     flex: 1 1 auto;
   }
@@ -1126,8 +1127,8 @@
     color: var(--ink-muted);
   }
   .att-btn :global(svg) {
-    width: 17px;
-    height: 17px;
+    width: 16px;
+    height: 16px;
   }
   @media (hover: hover) and (pointer: fine) {
     .att-btn:hover {
@@ -1182,7 +1183,7 @@
   .att-btn:focus-visible,
   .stop:focus-visible {
     outline: 2px solid var(--focus-ring);
-    outline-offset: 2px;
+    outline-offset: 1px;
   }
 
   /* Pending attachment chips, above the input pill. The row scrolls, so on
@@ -1214,6 +1215,7 @@
     background: var(--surface-raised);
     box-shadow: var(--shadow-tile);
     font-size: var(--text-label);
+    font-weight: var(--weight-strong);
     color: var(--ink-strong);
     /* A chip appearing under the input is a small confirmation, so it gets a
        small one: 2px of travel and one --dur-control. Removal stays instant — the
@@ -1260,8 +1262,8 @@
     flex: 0 0 auto;
   }
   .att button :global(svg) {
-    width: 13px;
-    height: 13px;
+    width: 12px;
+    height: 12px;
   }
   .att button:hover {
     background: var(--surface-recess);

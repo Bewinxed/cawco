@@ -396,8 +396,8 @@
     display: inline-flex;
   }
   .editor :global(.ns-chip-icon svg) {
-    width: 13px;
-    height: 13px;
+    width: 12px;
+    height: 12px;
   }
   @media (max-width: 640px) {
     .editor {

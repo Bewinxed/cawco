@@ -51,7 +51,7 @@ card, a lift goes above it.
 | `--type-label` | 500 0.8125rem/1.3 |
 | `--type-body` | 400 0.875rem/1.45 (body default) |
 | `--type-title` | 500 1.25rem/1.25, −0.01em |
-| `--type-kpi` | 500 1.5rem/1, tabular numerals |
+| `--type-kpi` | 500 1.5rem/1, tabular numerals (the figure carries `.num`) |
 | `--shadow-tile` | a 1px drop and a 1px ring, both from n-12 at low alpha |
 | `--shadow-raised` | `0 1px 3px tint, 0 1px 1px tint`; dark: `inset 0 0 0 1px n-7/.7` |
 | `--shadow-overlay` | menus, popovers, the dialog tray |
@@ -60,8 +60,13 @@ card, a lift goes above it.
 
 The radius and type roles are Tailwind theme values, so `rounded-md`,
 `text-meta`, `text-label`, `text-body`, `text-title` and `text-kpi` are the
-utilities. `text-*` sets size and leading; `text-title` and `text-kpi` also set
-weight 500. Weight never goes above 500. TX-02 is the mono for code, paths and
+utilities. Each `text-*` sets its role whole: size, leading and weight. Text
+takes only these roles and the button's 500 0.875rem: meta 12/400, label
+13/500, body 14/400, title 20/500, kpi 24/500. A role is chosen by what the
+text does, not by the size wanted: names, headings of groups, column heads,
+badges and small buttons are label; sentences and table data are body;
+timestamps, counts, units and hints are meta. Weight never goes above 500. A
+changing figure (a count, a price, an age) is `.num`, tabular digits. TX-02 is the mono for code, paths and
 IDs; Geist is everything else.
 
 ### Motion
@@ -121,13 +126,29 @@ The kit is `apps/dashboard/src/lib/components/ui`; shared recipes are the
   `--ink-strong` when chosen.
 - **Tooltip**: `--brand-solid`, `--on-brand`, `--type-meta`, `--radius-sm`, 140ms
   opacity and scale from .96.
-- **Badge**: 20px, `--radius-xs`, meta at 500, `--surface-recess`, no border;
+- **Badge**: 20px, `--radius-xs`, the label role, `--surface-recess`, no border;
   status variants use the `--status-*-bg/ink` pairs.
 - **Toggle**: `--radius-sm`, hover `--surface-hover`, pressed `--surface-fill`.
 - **Alert**: a compact status-tinted row — `--status-*-bg/ink`, `--radius-md`,
   10px 12px padding, `--type-body`. No full-width slabs, no border.
-- **StatTile**: a flat card; the value is `--type-kpi`.
-- **Icons**: Solar through `$lib/icons.ts`, duotone where the barrel has it.
+- **StatTile**: a flat card; the value is `--type-kpi` and `.num`, and a new
+  value morphs in through torph's TextMorph (150ms, `--ease-out`).
+- **Icons**: Solar through `$lib/icons.ts`, every product icon in the
+  bold-duotone cut; linear only for the glyph-like chevrons and arrows
+  (`alt-arrow-*`, `arrow-*`). Three sizes: 12 beside meta text, 16 in controls
+  and rows (the default), 20 in nav and headers.
+- **Focus**: one ring on every focusable, `outline: 2px solid --focus-ring`,
+  1px offset. The ring's colour is set at rest, so focus only switches it on.
+- **Pointer targets**: on a fine pointer, `.pointer-hit` grows a control drawn
+  under 24×24 to a 24px area through a transparent `::after`, with the same
+  `--hit-gap-x/-y` stops as `.touch-hit`, and `--hit-scale` on a zoomed canvas.
+- **Press**: every button, link row, chip, trigger, segment and tab is
+  `.pressable` (`scale(--press-scale)`); a text link dims on press.
+- **Skeleton**: one, `ui/skeleton`: a `--surface-fill` block at the size of
+  what it stands for, one band crossing it every 1.2s (motion only).
+- **Empty state**: one, `ui/empty`: a duotone mark, a title in the title role,
+  one plain line saying why, at most one action. It renders only once the data
+  is known to be empty, never while it loads.
   Plus, Tick and Minus are local glyphs drawn to Solar's grid because Solar has
   no bare version.
 

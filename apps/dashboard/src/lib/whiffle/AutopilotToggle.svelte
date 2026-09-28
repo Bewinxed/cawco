@@ -317,8 +317,8 @@
     }
   }
   .ap-trigger :global(svg) {
-    width: 17px;
-    height: 17px;
+    width: 16px;
+    height: 16px;
   }
   @media (hover: hover) and (pointer: fine) {
     .ap-trigger:hover {
@@ -331,7 +331,7 @@
   }
   .ap-trigger:focus-visible {
     outline: 2px solid var(--focus-ring);
-    outline-offset: 2px;
+    outline-offset: 1px;
   }
   /* Active state: accent-colored glyph, no solid fill. */
   .ap-active {
@@ -373,7 +373,8 @@
     background: var(--surface-recess);
     color: var(--ink-strong);
     font-family: var(--font-body);
-    font-size: var(--text-label);
+    font-size: var(--text-body);
+    font-weight: var(--weight-body);
     line-height: var(--leading-ui);
     padding: var(--space-2) var(--space-3);
     resize: vertical;

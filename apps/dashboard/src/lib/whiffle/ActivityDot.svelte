@@ -1,6 +1,6 @@
 <script lang="ts">
   /** One session's state, in the one glance the fleet view is built around. */
-  import { IconMoonSleepBold } from "$lib/icons";
+  import { IconMoonSleep } from "$lib/icons";
   import {
     ACTIVITY_LABEL,
     type Activity,
@@ -99,8 +99,8 @@
     <!-- A glyph, not a tint: distinguishable from idle's plain dot by shape
          even with colour vision switched off, and named for what it means —
          resumable, not merely quiet. -->
-    <IconMoonSleepBold
-      class="absolute inset-0 size-full text-muted-foreground/70"
+    <IconMoonSleep
+      class="absolute top-1/2 left-1/2 size-3 -translate-x-1/2 -translate-y-1/2 text-muted-foreground/70"
     />
   {:else}
     <!-- Blocked is the only state waiting on a human, so it is the loudest one. -->

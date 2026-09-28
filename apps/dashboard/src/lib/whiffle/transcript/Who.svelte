@@ -67,7 +67,7 @@
     gap: var(--space-2);
     font-size: var(--text-label);
     color: var(--ink-muted);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-strong);
     margin-block-end: var(--space-2);
   }
   .dot {

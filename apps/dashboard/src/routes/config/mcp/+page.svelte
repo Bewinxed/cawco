@@ -2,15 +2,15 @@
   import type { FleetMcpServer } from "@whiffle/core";
   import { toast } from "svelte-sonner";
   import { Button } from "$lib/components/ui/button";
+  import { EmptyState } from "$lib/components/ui/empty";
   import {
-    IconGlobeDuo,
+    IconGlobe,
     IconPlus,
     IconRefresh,
     IconToolMcp,
     IconTrash,
   } from "$lib/icons";
   import { whiffle } from "$lib/whiffle/client.svelte";
-  import EmptyHead from "$lib/whiffle/config/EmptyHead.svelte";
   import RolloutChip from "$lib/whiffle/config/RolloutChip.svelte";
   import RowFaults from "$lib/whiffle/config/RowFaults.svelte";
   import RowList from "$lib/whiffle/config/RowList.svelte";
@@ -136,7 +136,8 @@
   {/snippet}
 
   {#if servers.length === 0}
-    <EmptyHead
+    <EmptyState
+      icon={section.icon}
       line="Add a server and every machine gets it — the quick way is a package name."
       title="No MCP servers yet"
     />
@@ -156,7 +157,7 @@
           flash={store.flash === row.name}
           href="/config/mcp/{encodeURIComponent(row.name)}"
           hue={HUE}
-          icon={isRemoteMcp(row.config) ? IconGlobeDuo : IconToolMcp}
+          icon={isRemoteMcp(row.config) ? IconGlobe : IconToolMcp}
           meta="{isRemoteMcp(row.config) ? `${row.config.type.toUpperCase()} · ` : ''}{describeMcp(row.config)}"
           name={row.name}
           ontoggle={(next) => toggle(row, next)}

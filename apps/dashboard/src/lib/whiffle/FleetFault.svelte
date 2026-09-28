@@ -169,7 +169,7 @@
         <span class="tag">at the hub</span>
       {:else if machine}
         <span class="tag">
-          <OsMark class="size-3.5 shrink-0" os={machine.os} />
+          <OsMark class="size-4 shrink-0" os={machine.os} />
           {machineLabel(machine.hostname)}{online ? '' : ' · offline'}
         </span>
       {:else}
@@ -186,9 +186,9 @@
         type="button"
       >
         {#if expanded}
-          <IconChevronDown class="size-3.5 shrink-0" />
+          <IconChevronDown class="size-4 shrink-0" />
         {:else}
-          <IconChevronRight class="size-3.5 shrink-0" />
+          <IconChevronRight class="size-4 shrink-0" />
         {/if}
         {expanded ? 'Hide' : 'Details'}
       </button>
@@ -248,9 +248,9 @@
           type="button"
         >
           {#if disclosureOpen}
-            <IconChevronDown class="size-3.5 shrink-0" />
+            <IconChevronDown class="size-4 shrink-0" />
           {:else}
-            <IconChevronRight class="size-3.5 shrink-0" />
+            <IconChevronRight class="size-4 shrink-0" />
           {/if}
           What it said
         </button>
@@ -286,6 +286,7 @@
         >
       {:else if copy.action === 'refresh'}
         <Button
+          class="num"
           failed={actFailed}
           icon={IconRefresh}
           label={actionLabel}
@@ -331,10 +332,6 @@
   }
   /* A hub fault is not a machine's problem and does not wear a machine's tint:
      nothing downstream of it can be fixed until it is. */
-  /* The ring takes the row's own ink so it holds 3:1 on the tint. */
-  .fault :global(:focus-visible) {
-    outline-color: var(--tone-ink);
-  }
   .fault.hub {
     --tone-bg: var(--status-fail-bg);
     --tone-ink: var(--status-fail-ink);
@@ -364,6 +361,7 @@
     background: var(--surface-raised);
     padding: 1px var(--space-2);
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     color: var(--ink-muted);
     white-space: nowrap;
   }
@@ -378,6 +376,7 @@
   .more,
   .hint {
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     color: var(--tone-ink);
     opacity: 0.8;
   }
@@ -389,7 +388,8 @@
   }
   .why,
   .fix {
-    font-size: var(--text-label);
+    font-size: var(--text-body);
+    font-weight: var(--weight-body);
     color: var(--tone-ink);
     max-width: 68ch;
   }
@@ -404,6 +404,7 @@
   }
   .tool .k {
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     color: var(--ink-muted);
   }
   .tool .line {
@@ -417,6 +418,7 @@
   }
   .tool .v {
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     font-variant-numeric: tabular-nums;
     color: var(--ink-muted);
   }
@@ -425,10 +427,12 @@
     background: var(--surface-raised);
     padding: 0 var(--space-2);
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     color: var(--ink-muted);
   }
   .shadow {
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     color: var(--ink-strong);
     padding-top: var(--space-1);
   }
@@ -451,6 +455,7 @@
     padding-inline: var(--space-2);
     border-radius: var(--radius-sm);
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     color: var(--ink-muted);
     cursor: pointer;
   }

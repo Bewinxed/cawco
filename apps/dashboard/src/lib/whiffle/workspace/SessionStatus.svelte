@@ -65,12 +65,12 @@
     gap: var(--space-1);
     color: var(--ink-muted);
     font-size: var(--text-label);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-strong);
     white-space: nowrap;
   }
   .session-status :global(svg) {
-    width: 18px;
-    height: 18px;
+    width: 16px;
+    height: 16px;
     flex: none;
   }
   .compact :global(svg) {

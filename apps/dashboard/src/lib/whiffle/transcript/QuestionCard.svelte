@@ -155,8 +155,8 @@
     white-space: nowrap;
 
     & :global(svg) {
-      inline-size: 9px;
-      block-size: 9px;
+      inline-size: 12px;
+      block-size: 12px;
       flex: 0 0 auto;
     }
     &.attn {
@@ -173,7 +173,8 @@
     }
   }
   .lede {
-    font-size: var(--text-label);
+    font-size: var(--text-body);
+    font-weight: var(--weight-body);
     line-height: var(--leading-body);
     color: var(--ink-strong);
     margin-block-end: var(--space-2);
@@ -216,7 +217,7 @@
     color: var(--ink-strong);
     font-family: var(--font-body);
     font-size: var(--text-label);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-strong);
     display: inline-flex;
     align-items: center;
     gap: var(--space-2);
@@ -247,7 +248,8 @@
     }
   }
   .answer-free {
-    font-size: var(--text-label);
+    font-size: var(--text-body);
+    font-weight: var(--weight-body);
     line-height: var(--leading-body);
     color: var(--ink-strong);
     max-inline-size: 72ch;
@@ -256,7 +258,7 @@
     align-items: baseline;
 
     & .lbl {
-      font-size: var(--text-meta);
+      font-size: var(--text-label);
       font-weight: var(--weight-strong);
       text-transform: uppercase;
       letter-spacing: 0.02em;

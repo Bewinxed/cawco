@@ -25,7 +25,7 @@
     {''}
   </SectionFrame>
 {:else if name !== 'new' && !agent}
-  <Missing back="/config/subagents" title={section.label} what="subagent" />
+  <Missing {section} what="subagent" />
 {:else}
   {#key name}
     <SubagentEditor {agent} />

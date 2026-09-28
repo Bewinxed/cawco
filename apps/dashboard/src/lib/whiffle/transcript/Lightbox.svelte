@@ -91,6 +91,7 @@
     gap: var(--space-3);
     padding-block-start: var(--space-2);
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
   }
   .description {
     display: flex;

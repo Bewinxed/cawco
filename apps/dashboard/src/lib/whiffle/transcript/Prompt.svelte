@@ -480,17 +480,19 @@
     color: var(--status-attn-ink);
   }
   .pill :global(svg) {
-    inline-size: 9px;
-    block-size: 9px;
+    inline-size: 12px;
+    block-size: 12px;
     flex: 0 0 auto;
   }
   .wait {
     margin-block-start: var(--space-2);
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     color: var(--ink-muted);
   }
   .lede {
-    font-size: var(--text-label);
+    font-size: var(--text-body);
+    font-weight: var(--weight-body);
     line-height: var(--leading-body);
     color: var(--ink-strong);
     margin-block-end: var(--space-2);
@@ -517,7 +519,8 @@
     inline-size: fit-content;
     cursor: pointer;
     list-style: none;
-    font-size: var(--text-meta);
+    font-size: var(--text-label);
+    font-weight: var(--weight-strong);
     color: var(--ink-muted);
   }
   .disclose > summary::-webkit-details-marker {
@@ -549,8 +552,8 @@
     min-inline-size: 0;
   }
   .field .k {
-    font-size: var(--text-meta);
-    font-weight: var(--weight-medium);
+    font-size: var(--text-label);
+    font-weight: var(--weight-strong);
     color: var(--ink-muted);
   }
   .field .v {
@@ -592,7 +595,8 @@
     border-block-start: 1px solid var(--border-hairline);
   }
   .widen > p {
-    font-size: var(--text-label);
+    font-size: var(--text-body);
+    font-weight: var(--weight-body);
     color: var(--ink-muted);
     margin-block-end: var(--space-2);
     max-inline-size: 66ch;
@@ -621,7 +625,7 @@
     color: var(--ink-strong);
     font-family: var(--font-body);
     font-size: var(--text-label);
-    font-weight: var(--weight-medium);
+    font-weight: var(--weight-strong);
     display: inline-flex;
     align-items: center;
     gap: var(--space-2);

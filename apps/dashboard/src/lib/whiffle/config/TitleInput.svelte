@@ -72,7 +72,7 @@
   }
   .title-input:focus-visible {
     outline: 2px solid var(--focus-ring);
-    outline-offset: 2px;
+    outline-offset: 1px;
   }
   .title-input:disabled {
     color: var(--ink-strong);

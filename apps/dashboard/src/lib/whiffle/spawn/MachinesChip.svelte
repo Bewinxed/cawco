@@ -6,7 +6,7 @@
    * command surface to reuse.
    */
   import Down from "~icons/solar/alt-arrow-down-linear";
-  import Check from "~icons/solar/check-circle-bold";
+  import Check from "~icons/solar/check-circle-bold-duotone";
   import Server from "~icons/solar/server-square-bold-duotone";
   import NsPopover from "./NsPopover.svelte";
   import type { MachineItem } from "./ns-types";

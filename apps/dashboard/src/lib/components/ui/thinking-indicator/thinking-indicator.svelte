@@ -107,17 +107,19 @@
     height: var(--thinking-icon-size, 20px);
   }
   .indicator[data-size="compact"] svg {
-    width: var(--thinking-icon-size, 18px);
-    height: var(--thinking-icon-size, 18px);
+    width: var(--thinking-icon-size, 16px);
+    height: var(--thinking-icon-size, 16px);
   }
   .labels {
     display: inline-grid;
     overflow: hidden;
     font-size: var(--text-label);
+    font-weight: var(--weight-strong);
     line-height: var(--leading-body);
 
     &.compact {
       font-size: var(--text-meta);
+      font-weight: var(--weight-body);
     }
   }
 

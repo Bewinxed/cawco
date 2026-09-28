@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { IconServerDuo } from "$lib/icons";
+  import { IconServer } from "$lib/icons";
   /**
    * The mark of the operating system itself, rather than the shape of a box —
    * a laptop glyph on a Mac and a monitor glyph on a Linux tower said which
@@ -36,7 +36,7 @@
 </script>
 
 {#if shape === 'unknown'}
-  <IconServerDuo class={cn('size-4 shrink-0', className)} />
+  <IconServer class={cn('size-4 shrink-0', className)} />
 {:else}
   <svg
     aria-hidden="true"

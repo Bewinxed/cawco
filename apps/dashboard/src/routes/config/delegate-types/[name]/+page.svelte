@@ -26,11 +26,7 @@
     {''}
   </SectionFrame>
 {:else if name !== 'new' && !type}
-  <Missing
-    back="/config/delegate-types"
-    title={section.label}
-    what="delegate type"
-  />
+  <Missing {section} what="delegate type" />
 {:else}
   {#key name}
     <DelegateTypeEditor {taken} {type} />

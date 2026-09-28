@@ -214,9 +214,7 @@
     {#key generation}
       <Transcript
         agentName="Traffic"
-        cwd="/bench"
         focused
-        machineName="bench"
         onlanded={() => {
         landed = true;
       }}
@@ -245,7 +243,8 @@
   }
   header p {
     margin-top: var(--space-1);
-    font-size: var(--text-label);
+    font-size: var(--text-body);
+    font-weight: var(--weight-body);
     color: var(--ink-muted);
   }
   code {
@@ -263,8 +262,8 @@
     border: 1px solid var(--border-hairline);
     background: transparent;
     padding: var(--space-1) var(--space-2);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-medium);
+    font-size: var(--text-label);
+    font-weight: var(--weight-strong);
     color: var(--ink-strong);
     cursor: pointer;
   }
@@ -273,6 +272,7 @@
   }
   .count {
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     color: var(--ink-muted);
     font-variant-numeric: tabular-nums;
   }

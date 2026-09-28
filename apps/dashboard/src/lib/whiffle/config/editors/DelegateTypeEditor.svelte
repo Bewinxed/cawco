@@ -7,7 +7,7 @@
   import * as Alert from "$lib/components/ui/alert";
   import { Input } from "$lib/components/ui/input";
   import { Textarea } from "$lib/components/ui/textarea";
-  import { IconCpuDuo, IconDocumentDuo, IconKeyDuo } from "$lib/icons";
+  import { IconCpu, IconDocument, IconKey } from "$lib/icons";
   import { appear } from "$lib/whiffle/motion/curves.svelte";
   import { confirm } from "../../confirm.svelte";
   import {
@@ -180,7 +180,7 @@
     {/if}
   {/snippet}
 
-  <EditorSection hue={HUE} icon={IconDocumentDuo} label="Description">
+  <EditorSection hue={HUE} icon={IconDocument} label="Description">
     <Field
       hint="What the calling model reads to decide whether this is the type to route to — not a note for you, a routing signal for it."
       id="type-description"
@@ -201,7 +201,7 @@
     </Field>
   </EditorSection>
 
-  <EditorSection hue={HUE} icon={IconCpuDuo} label="What it runs on">
+  <EditorSection hue={HUE} icon={IconCpu} label="What it runs on">
     <p class="note">
       The harness and model the delegate spawns on, and how hard it should
       think.
@@ -244,7 +244,7 @@
     />
   </EditorSection>
 
-  <EditorSection hue={HUE} icon={IconKeyDuo} label="What it can reach">
+  <EditorSection hue={HUE} icon={IconKey} label="What it can reach">
     <p class="note">
       Comma-separated. Both are optional narrowings — empty means the delegate
       has the harness's ordinary defaults.

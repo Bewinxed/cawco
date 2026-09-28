@@ -8,7 +8,7 @@
   import { toast } from "svelte-sonner";
   import { goto } from "$app/navigation";
   import { Textarea } from "$lib/components/ui/textarea";
-  import { IconDocumentDuo } from "$lib/icons";
+  import { IconDocument } from "$lib/icons";
   import { appear } from "$lib/whiffle/motion/curves.svelte";
   import { confirm } from "../../confirm.svelte";
   import { removeAgent, saveAgent } from "../../fleet";
@@ -130,9 +130,9 @@ You are a <role>, working in one repository at a time.
     {/if}
   {/snippet}
 
-  <EditorSection hue={HUE} icon={IconDocumentDuo} label="Definition">
+  <EditorSection hue={HUE} icon={IconDocument} label="Definition">
     {#snippet right()}
-      <span class="claims">{claims.join(' · ')}</span>
+      <span class="claims num">{claims.join(' · ')}</span>
     {/snippet}
     {#if problem}
       <p class="caution">Not storable yet — {problem}.</p>

@@ -2,9 +2,9 @@
   import { type RuleRow, ruleSentence } from "@whiffle/core";
   import { toast } from "svelte-sonner";
   import { Button } from "$lib/components/ui/button";
+  import { EmptyState } from "$lib/components/ui/empty";
   import { Toggle } from "$lib/components/ui/toggle";
-  import { IconAlert, IconPlus, IconRuleDuo, IconTrash } from "$lib/icons";
-  import EmptyHead from "$lib/whiffle/config/EmptyHead.svelte";
+  import { IconAlert, IconPlus, IconRules, IconTrash } from "$lib/icons";
   import RowList from "$lib/whiffle/config/RowList.svelte";
   import SectionFrame from "$lib/whiffle/config/SectionFrame.svelte";
   import SectionRow from "$lib/whiffle/config/SectionRow.svelte";
@@ -131,7 +131,8 @@
   {/snippet}
 
   {#if rules.length === 0}
-    <EmptyHead
+    <EmptyState
+      icon={section.icon}
       line="Start from one of these — they are ordinary rules once added, and you can change every part of them."
       title="Nothing is watching yet"
     />
@@ -139,7 +140,7 @@
       {#each RULE_TEMPLATES as template (template.title)}
         <SectionRow
           hue={HUE}
-          icon={IconRuleDuo}
+          icon={IconRules}
           meta={template.blurb}
           name={template.title}
         >
@@ -164,7 +165,8 @@
       </Button>
     </div>
   {:else if shown.length === 0}
-    <EmptyHead
+    <EmptyState
+      icon={section.icon}
       line="Every session that was told something has answered for it."
       title="No rule is waiting on an answer"
     />
@@ -184,7 +186,7 @@
           flash={store.flash === row.id}
           href="/config/rules/{row.id}"
           hue={HUE}
-          icon={IconRuleDuo}
+          icon={IconRules}
           meta="{fired(row)} · {ruleSentence(row)}"
           name={row.name}
           ontoggle={(next) => toggle(row, next)}
@@ -192,7 +194,7 @@
         >
           {#snippet badge()}
             {#if row.stats.pending > 0}
-              <span class="waiting">{row.stats.pending} waiting</span>
+              <span class="waiting num">{row.stats.pending} waiting</span>
             {/if}
           {/snippet}
         </SectionRow>
@@ -207,8 +209,7 @@
     padding: 1px 6px;
     border-radius: var(--radius-xs);
     background: var(--status-attn-bg);
-    font: var(--type-meta);
-    font-weight: 500;
+    font: var(--type-label);
     color: var(--status-attn-ink);
   }
 </style>

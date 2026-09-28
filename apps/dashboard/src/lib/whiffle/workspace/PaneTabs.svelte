@@ -283,7 +283,7 @@
                     aria-expanded={detailsOpen && detailId === tab.id}
                     aria-haspopup="dialog"
                     aria-label="Session details for {tab.label}"
-                    class="tdetails touch-hit"
+                    class="tdetails touch-hit pointer-hit pressable"
                     onclick={(event) => clickTab(tab.id, event)}
                     type="button"
                   >
@@ -292,7 +292,7 @@
                 {/if}
                 <button
                   aria-label="Close {tab.label}"
-                  class="tclose touch-hit"
+                  class="tclose touch-hit pointer-hit pressable"
                   onclick={() => { closeDetails(); workspace.close(tab.id); }}
                   type="button"
                 >
@@ -478,14 +478,14 @@
     max-height: calc(88dvh - 24px - env(safe-area-inset-bottom));
     overflow: hidden;
   }
-  /* The two trailing controls sit 2px apart and their touch areas meet
+  /* The two trailing controls sit 4px apart and their hit areas meet
      between them. On a coarse pointer the close button stands 24px off the
      chevron and 8px off the tab's end, so each 44px area reaches its full
      width before meeting a neighbour's. The chevron's leading half falls on
      its own tab's label, which opens the same details. */
   .tdetails,
   .tclose {
-    --hit-gap-x: 2px;
+    --hit-gap-x: 4px;
 
     @media (pointer: coarse) {
       --hit-gap-x: 24px;
@@ -673,7 +673,7 @@
     flex: 0 0 auto;
     inline-size: 20px;
     block-size: 20px;
-    margin-inline-start: 2px;
+    margin-inline-start: 4px;
 
     @media (pointer: coarse) {
       margin-inline: 24px 8px;
@@ -708,8 +708,8 @@
     }
   }
   .tclose :global(svg) {
-    inline-size: 11px;
-    block-size: 11px;
+    inline-size: 12px;
+    block-size: 12px;
     display: block;
   }
 </style>

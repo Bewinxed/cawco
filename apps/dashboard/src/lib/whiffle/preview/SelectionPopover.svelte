@@ -191,7 +191,8 @@
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-drawer);
     color: var(--ink-strong);
-    font-size: var(--text-label);
+    font-size: var(--text-body);
+    font-weight: var(--weight-body);
     transform-origin: var(--bits-popover-content-transform-origin);
   }
   :global(.selection-popover[data-state="open"]:not(.selection-note-sheet)) {
@@ -211,7 +212,8 @@
     padding-bottom: calc(var(--space-3) + env(safe-area-inset-bottom));
   }
   .name {
-    font-weight: var(--weight-medium);
+    font-size: var(--text-label);
+    font-weight: var(--weight-strong);
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -231,8 +233,8 @@
     color: var(--mark-glyph);
   }
   .mark :global(svg) {
-    width: 13px;
-    height: 13px;
+    width: 12px;
+    height: 12px;
   }
   .note {
     display: flex;
@@ -282,7 +284,7 @@
   input:focus-visible,
   button:focus-visible {
     outline: 2px solid var(--focus-ring);
-    outline-offset: 2px;
+    outline-offset: 1px;
   }
   :global(.selection-note-sheet) input {
     font-size: 16px;

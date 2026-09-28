@@ -172,6 +172,19 @@
     box-shadow: var(--shadow-overlay);
     font: var(--type-body);
   }
+  /* The toast's action and cancel buttons: the label role, an item's radius,
+     and the press every control gives. */
+  :global(
+    [data-sonner-toaster] [data-sonner-toast][data-styled="true"] [data-button]
+  ) {
+    border-radius: var(--radius-sm);
+    font: var(--type-label);
+    transition: transform 160ms var(--ease-out);
+
+    &:active {
+      transform: scale(var(--press-scale));
+    }
+  }
 
   /* Motion on the kit's scale (app.css). Sonner has no timing options, so
      its transitions are restated here, one attribute more specific than its

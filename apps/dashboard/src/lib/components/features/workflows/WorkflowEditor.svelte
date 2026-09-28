@@ -16,6 +16,7 @@
   import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
   import * as Resizable from "$lib/components/ui/resizable";
+  import { Skeleton } from "$lib/components/ui/skeleton";
   import { whiffle } from "$lib/whiffle/client.svelte";
   import { loadDelegateTypes, message } from "$lib/whiffle/delegate-types";
   import { newId } from "$lib/whiffle/id";
@@ -345,7 +346,7 @@
         <h3>{group}</h3>
         {#each kinds.filter((entry) => entry.group === group) as entry (entry.kind)}
           <button
-            class="palette-item"
+            class="palette-item pressable"
             onclick={() => add(entry.kind)}
             title={entry.meaning}
             type="button"
@@ -365,7 +366,7 @@
         <h3>Templates</h3>
         {#each types as type (type.name)}
           <button
-            class="palette-item"
+            class="palette-item pressable"
             onclick={() => add('step', type)}
             type="button"
           >
@@ -487,7 +488,7 @@
           >
             + Add node
           </button><button
-            class="wf-btn"
+            class="wf-btn num"
             onclick={() => { inspectorOpen = true; }}
             type="button"
           >
@@ -495,7 +496,7 @@
           </button>
         {/if}
       </div>
-      <span class="wf-muted" role="status"
+      <span class="wf-muted num" role="status"
         >{#if saving}
           Saving…
         {:else if refused}
@@ -521,8 +522,8 @@
   {/if}
   {#if !workflow}
     <div class="loading wf-stack">
-      <div class="wf-skeleton"></div>
-      <div class="wf-skeleton"></div>
+      <Skeleton class="h-20 w-full" />
+      <Skeleton class="h-20 w-full" />
     </div>
   {:else if tab === 'program'}
     <WorkflowProgram
@@ -698,7 +699,8 @@
   }
   .palette-item small {
     display: block;
-    font-size: var(--text-label);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     color: var(--ink-muted);
     line-height: 1.4;
     margin-top: var(--space-1);
@@ -732,7 +734,8 @@
     top: var(--space-4);
     inset-inline: var(--space-4);
     text-align: center;
-    font-size: var(--text-label);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     pointer-events: none;
     color: var(--ink-muted);
   }

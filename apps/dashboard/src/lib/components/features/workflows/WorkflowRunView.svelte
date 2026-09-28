@@ -4,6 +4,7 @@
   import { goto } from "$app/navigation";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
   import * as Dialog from "$lib/components/ui/dialog";
+  import { Skeleton } from "$lib/components/ui/skeleton";
   import { whiffle } from "$lib/whiffle/client.svelte";
   import { confirm } from "$lib/whiffle/confirm.svelte";
   import { message } from "$lib/whiffle/delegate-types";
@@ -369,8 +370,8 @@
       class="wf-stack loading"
       role="status"
     >
-      <div class="wf-skeleton"></div>
-      <div class="wf-skeleton"></div>
+      <Skeleton class="h-20 w-full" />
+      <Skeleton class="h-20 w-full" />
       <p>Loading workflow run…</p>
     </div>
   {:else}
@@ -512,7 +513,7 @@
               {#if row.step}
                 {@const entry = row.step}
                 <button
-                  class="step-row"
+                  class="step-row pressable"
                   onclick={() => { selected = entry.id; }}
                   type="button"
                   class:chosen={entry.id === selected}
@@ -628,8 +629,11 @@
   .step-row span {
     overflow-wrap: anywhere;
   }
-  .step-row small {
+  .step-row small,
+  .checkpoint-row small {
     color: var(--ink-muted);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     font-variant-numeric: tabular-nums;
   }
   .step-row:hover,
@@ -644,7 +648,8 @@
     gap: var(--space-2);
     padding: var(--space-2);
     color: var(--ink-muted);
-    font-size: var(--text-label);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
   }
   .checkpoint-row .mark {
     width: 6px;
@@ -682,6 +687,7 @@
     padding-block: var(--space-2);
     cursor: pointer;
     font-size: var(--text-label);
+    font-weight: var(--weight-strong);
     color: var(--ink-muted);
   }
   .log ol {
@@ -695,7 +701,8 @@
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     gap: var(--space-3);
-    font-size: var(--text-label);
+    font-size: var(--text-body);
+    font-weight: var(--weight-body);
     overflow-wrap: anywhere;
   }
   .log time {
@@ -748,7 +755,8 @@
   }
   .answer .options small {
     color: var(--ink-muted);
-    font-size: var(--text-label);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     line-height: 1.4;
     overflow-wrap: anywhere;
   }

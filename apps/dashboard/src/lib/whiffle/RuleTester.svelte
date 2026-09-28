@@ -61,10 +61,10 @@
   class="flex flex-col gap-2 rounded-[var(--radius-md)] bg-[var(--surface-recess)] p-3"
 >
   <div class="flex flex-wrap items-baseline justify-between gap-2">
-    <span class="text-meta font-medium text-foreground">Try it</span>
+    <span class="text-label text-foreground">Try it</span>
     <span
       aria-live="polite"
-      class="text-label transition-colors duration-240 ease-[var(--ease-out)] {firing
+      class="text-meta transition-colors duration-240 ease-[var(--ease-out)] {firing
         ? 'text-success'
         : 'text-muted-foreground'}"
       role="status"

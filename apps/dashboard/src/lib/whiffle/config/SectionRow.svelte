@@ -162,10 +162,6 @@
   .row:has(.link) {
     cursor: pointer;
   }
-  .row:has(.link:focus-visible) {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: -2px;
-  }
   .tile {
     display: inline-flex;
     align-items: center;
@@ -179,8 +175,8 @@
     color: var(--ink-muted);
   }
   .tile :global(svg) {
-    width: 15px;
-    height: 15px;
+    width: 16px;
+    height: 16px;
     flex: none;
   }
   .text {
@@ -213,12 +209,17 @@
     white-space: nowrap;
     outline: none;
   }
-  /* The whole row is the link's hit area; the controls sit above it. */
+  /* The whole row is the link's hit area; the controls sit above it, and
+     the focus ring is drawn round that area rather than round the words. */
   .link::after {
     content: "";
     position: absolute;
     inset: 0;
     border-radius: inherit;
+  }
+  .link:focus-visible::after {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 1px;
   }
   .meta {
     overflow: hidden;

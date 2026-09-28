@@ -11,7 +11,7 @@
 </script>
 
 <th
-  class={cn("h-12 whitespace-nowrap px-3 text-left align-middle font-medium text-foreground [&:has([role=checkbox])]:pr-0", className)}
+  class={cn("h-12 whitespace-nowrap px-3 text-left align-middle text-foreground text-label [&:has([role=checkbox])]:pr-0", className)}
   data-slot="table-head"
   bind:this={ref}
   {...restProps}

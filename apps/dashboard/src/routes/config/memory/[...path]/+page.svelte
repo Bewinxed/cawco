@@ -29,7 +29,7 @@
     {''}
   </SectionFrame>
 {:else if !known}
-  <Missing back="/config/memory" title={section.label} what="memory file" />
+  <Missing {section} what="memory file" />
 {:else}
   {#key path}
     <MemoryEditor {path} />

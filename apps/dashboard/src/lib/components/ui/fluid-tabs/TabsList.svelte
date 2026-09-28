@@ -435,7 +435,7 @@
     --pad: 2px;
     --item: 24px;
     --px: 10px;
-    --icon: 14px;
+    --icon: 16px;
     --text: var(--text-label);
     --radius: var(--radius-xs);
 

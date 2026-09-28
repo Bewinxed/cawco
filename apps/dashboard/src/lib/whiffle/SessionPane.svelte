@@ -19,8 +19,11 @@
    */
   import { untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
+  import { Button } from "$lib/components/ui/button";
+  import { EmptyState } from "$lib/components/ui/empty";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group.
   import * as Resizable from "$lib/components/ui/resizable";
+  import { IconAlert, IconChat, IconLaptop } from "$lib/icons";
   import { easeOut, motionOk } from "$lib/whiffle/motion/curves.svelte";
   import AutopilotToggle from "./AutopilotToggle.svelte";
   import {
@@ -112,6 +115,8 @@
   } = $props();
 
   const previewVisible = $derived(whiffle.previewVisible[viewId] === true);
+  /** A named state stands in the middle of the transcript area. */
+  const STATEFUL = "m-auto max-w-[46ch] px-[var(--space-6)]";
   let paneWidth = $state(0);
   let content = $state<HTMLDivElement>();
   let previewPane = $state<ReturnType<typeof Resizable.Pane>>();
@@ -503,11 +508,6 @@
   };
   const agentName = $derived(
     HARNESS_LABEL[session?.harness ?? ""] ?? session?.harness ?? "Agent"
-  );
-
-  const machineName = $derived(
-    whiffle.machines.find((m) => m.machineId === machineId)?.hostname ??
-      machineId
   );
 
   const instanceRow = $derived(whiffle.instanceIndex.byId.get(viewId));
@@ -944,45 +944,50 @@
            pane above this one, so nothing here animates on a switch — this is
            the surface a swipe carries, not the thing that carries it. -->
             <div class="transcript-slide">
+              <!-- A named state, not an empty pane: what happened, in one line,
+                   and the one thing that can be done about it. -->
               {#if fault}
-                <div class="stateful">
-                  <h2>
-                    {fault.reason === 'offline'
+                <EmptyState
+                  class={STATEFUL}
+                  icon={fault.reason === 'offline' ? IconLaptop : IconAlert}
+                  line={fault.message}
+                  title={fault.reason === 'offline'
                 ? 'This machine is offline'
                 : "This transcript couldn't be read"}
-                  </h2>
-                  <p>{fault.message}</p>
-                  <button class="touch-hit" onclick={retry} type="button">
-                    Try again
-                  </button>
-                </div>
+                >
+                  {#snippet action()}
+                    <Button onclick={retry} variant="outline">Try again</Button>
+                  {/snippet}
+                </EmptyState>
               {:else if unaddressable}
-                <div class="stateful">
-                  <h2>This session isn't reachable from here</h2>
-                  <p>
+                <EmptyState
+                  class={STATEFUL}
+                  icon={IconAlert}
+                  title="This session isn't reachable from here"
+                >
+                  {#snippet line()}
                     The hub has no record of <code>{viewId}</code>, and no
                     machine it can reach has a transcript filed under it. It may
                     live on a machine that is offline, or it may have been
                     deleted.
-                  </p>
-                  <a class="touch-hit" href="/session">Back to the fleet</a>
-                </div>
+                  {/snippet}
+                  {#snippet action()}
+                    <Button href="/session" variant="outline"
+                      >Back to the fleet</Button
+                    >
+                  {/snippet}
+                </EmptyState>
               {:else if empty && session.messages.length === 0}
-                <div class="stateful">
-                  <h2>Nothing has been said here yet</h2>
-                  <p>The transcript was found, and it has no turns in it.</p>
-                </div>
+                <EmptyState
+                  class={STATEFUL}
+                  icon={IconChat}
+                  line="The transcript was found, and it has no turns in it."
+                  title="Nothing has been said here yet"
+                />
               {:else if !session.initialized && session.messages.length === 0}
                 <TranscriptSkeleton />
               {:else}
-                <Transcript
-                  {agentName}
-                  cwd={session.cwd || browsingCwd}
-                  {focused}
-                  {machineName}
-                  {session}
-                  {visible}
-                />
+                <Transcript {agentName} {focused} {session} {visible} />
               {/if}
             </div>
 
@@ -1154,6 +1159,7 @@
     padding: var(--space-2) var(--space-3);
     color: var(--ink-muted);
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     text-align: center;
   }
 
@@ -1194,62 +1200,4 @@
    * would take half each.
    */
   /* No standin — virtua renders the tail directly via ssrCount. */
-
-  /* A named state, not an empty pane: what happened, in one line, and the one
-     thing that can be done about it. */
-  .stateful {
-    display: flex;
-    flex-direction: column;
-    align-items: flex-start;
-    gap: var(--space-3);
-    max-width: 46ch;
-    margin: auto;
-    padding: var(--space-6);
-  }
-  .stateful h2 {
-    font-size: var(--text-body);
-    font-weight: var(--weight-strong);
-    letter-spacing: var(--track-display);
-    color: var(--ink-strong);
-  }
-  .stateful p {
-    font-size: var(--text-label);
-    line-height: var(--leading-body);
-    color: var(--ink-muted);
-  }
-  .stateful code {
-    font-family: var(--font-mono);
-    font-size: var(--text-label);
-  }
-  .stateful button,
-  .stateful a {
-    height: 34px;
-    padding: 0 var(--space-4);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-sm);
-    background: var(--surface-raised);
-    color: var(--ink-strong);
-    font-size: var(--text-label);
-    font-weight: var(--weight-medium);
-    display: inline-grid;
-    place-items: center;
-    text-decoration: none;
-    cursor: pointer;
-    transition: background-color var(--dur-control) var(--ease-out);
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        background-color var(--dur-control) var(--ease-out),
-        transform var(--dur-control) var(--ease-out);
-    }
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .stateful button:hover,
-    .stateful a:hover {
-      background: var(--surface-hover);
-    }
-  }
-  .stateful button:active,
-  .stateful a:active {
-    transform: scale(0.96);
-  }
 </style>

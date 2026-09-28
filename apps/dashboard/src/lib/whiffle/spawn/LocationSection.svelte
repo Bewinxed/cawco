@@ -14,7 +14,7 @@
   import Right from "~icons/solar/arrow-right-linear";
   import Folder from "~icons/solar/folder-bold-duotone";
   import FolderOpen from "~icons/solar/folder-open-bold-duotone";
-  import Search from "~icons/solar/magnifer-linear";
+  import Search from "~icons/solar/magnifer-bold-duotone";
   import Refresh from "~icons/solar/refresh-bold-duotone";
   import { machineFs } from "../client.svelte";
   import Segmented from "./Segmented.svelte";
@@ -374,7 +374,7 @@
     border-radius: var(--radius-sm);
     background: var(--status-live-bg);
     color: var(--status-live-ink);
-    font: 500 0.6875rem / 1 var(--font-body);
+    font: 500 var(--text-label) / 1 var(--font-body);
     white-space: nowrap;
   }
   .override {
@@ -413,8 +413,8 @@
     cursor: not-allowed;
   }
   .browse :global(svg) {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     flex: none;
     color: var(--ink-muted);
   }
@@ -456,7 +456,7 @@
     padding: 0 8px;
     border-radius: var(--radius-sm);
     background: var(--surface-lift);
-    font: 500 var(--text-meta) / 1 var(--font-body);
+    font: 500 var(--text-label) / 1 var(--font-body);
     color: var(--ink-strong);
     white-space: nowrap;
     flex: none;
@@ -542,8 +542,8 @@
     flex: none;
   }
   .folder :global(svg.go) {
-    width: 14px;
-    height: 14px;
+    width: 16px;
+    height: 16px;
     color: var(--neutral-8);
   }
   .folder .name {
@@ -604,8 +604,8 @@
     border-radius: var(--radius-md);
   }
   .note :global(svg) {
-    width: 15px;
-    height: 15px;
+    width: 16px;
+    height: 16px;
     flex: none;
     margin-top: 1px;
     color: var(--hue-blue-500);
