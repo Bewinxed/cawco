@@ -18,9 +18,10 @@
    * draft and sends to its session. Under a cursor each pane draws its own.
    */
   import { untrack } from "svelte";
-  import { MediaQuery } from "svelte/reactivity";
+  import type { TransitionConfig } from "svelte/transition";
   import { browser } from "$app/environment";
   import { page } from "$app/state";
+  import { dur, easeOut, motionOk } from "$lib/whiffle/motion/curves.svelte";
   import { land } from "$lib/whiffle/motion/share.svelte";
   import type { HistorySource } from "../client.svelte";
   import SessionPane from "../SessionPane.svelte";
@@ -69,9 +70,32 @@
     };
   });
 
-  /** What a drop hovering this group would do, if anything. */
-  const splitEdge = $derived(dropHint.splits(leaf.id));
-  const joins = $derived(dropHint.joins(leaf.id));
+  /**
+   * What a drop hovering this group would do, as the box it would fill:
+   * half the group when a split is on offer, the whole of it when the drop
+   * would join these tabs, nothing when no drop is over it.
+   */
+  const INSETS = {
+    left: "0 50% 0 0",
+    right: "0 0 0 50%",
+    top: "0 0 50% 0",
+    bottom: "50% 0 0 0",
+  } as const;
+  const previewInset = $derived.by(() => {
+    const edge = dropHint.splits(leaf.id);
+    if (edge) {
+      return INSETS[edge];
+    }
+    return dropHint.joins(leaf.id) ? "0" : null;
+  });
+  /** The preview fades at the control tier. Opacity only, so it runs with or without motion. */
+  function previewFade(_node: Element): TransitionConfig {
+    return {
+      duration: dur("--dur-control"),
+      easing: easeOut,
+      css: (t) => `opacity: ${0.9 * t}`,
+    };
+  }
 
   const viewId = $derived(leaf.active ?? "");
   const activeIndex = $derived(leaf.tabs.indexOf(viewId));
@@ -142,41 +166,70 @@
   });
 
   /* ── The switch ────────────────────────────────────────────────────
-     On a desktop a tab switch glides the arriving transcript in from the
-     side it came from and fades it up, on the strip's own --wipe (260ms)
-     and --wipe-ease (--ease-drawer), so the eye reads which way it went.
-     Only the showing transcript is painted there, so it alone moves. The
-     phone's group is left alone: its swipe already slides the transcripts. */
+     Where the group can be swiped, a tab chosen any other way — a tap on
+     the strip, a key, a jump — lands the way a swipe does: the panes slide
+     by their distance on the swipe's own spring (gesture.svelte.ts,
+     `prepare` and `arrive`). Elsewhere the arriving transcript glides in
+     from the side of the tab it came from and fades up, on the strip's own
+     --wipe (260ms) and --wipe-ease (--ease-drawer), so the eye reads which
+     way it went. The side is read off the strip as it was before the
+     switch, so a tab that closed still says where it stood. Only the
+     showing transcript is painted there, so it alone moves. */
   /** How far the arriving transcript travels: a cue, not a page turn. */
   const NUDGE_PX = 40;
   const SWITCH_MS = 260;
-  const motion = new MediaQuery("(prefers-reduced-motion: no-preference)");
   let stack = $state<HTMLElement>();
-  let shownIndex = untrack(() => activeIndex);
+  /** What the group last showed, and its strip then. Not reactive: only the effects below read them. */
+  let shownId = untrack(() => viewId);
+  let shownTabs = untrack(() => [...leaf.tabs]);
+  /** A switch between two tabs that were both already in the strip, the one left still open. */
+  const tabSwitch = (from: string, to: string) =>
+    from !== to && leaf.tabs.includes(from) && shownTabs.includes(to);
 
-  // Started in the next frame's callbacks, never in the task that made the
-  // switch: the curve is read off the stylesheet, and reading style there
-  // restyles the page mid-task. The callbacks run before that frame's
-  // style, so the first frame the arriving transcript paints is already
-  // the glide's first.
-  $effect(() => {
-    const index = activeIndex;
+  // Before the switch renders, so what the settle paints is decided in the
+  // same pass as the switch itself and no pane is revealed and hidden again.
+  $effect.pre(() => {
     const id = viewId;
+    untrack(() => {
+      if (swipeable && shownId && id && tabSwitch(shownId, id)) {
+        swipe.prepare(shownId, id);
+      }
+    });
+  });
+
+  // The glide is started in the next frame's callbacks, never in the task
+  // that made the switch: the curve is read off the stylesheet, and reading
+  // style there restyles the page mid-task. The callbacks run before that
+  // frame's style, so the first frame the arriving transcript paints is
+  // already the glide's first.
+  $effect(() => {
+    const id = viewId;
+    const tabs = [...leaf.tabs];
     let frame = 0;
     untrack(() => {
-      const fromIndex = shownIndex;
-      shownIndex = index;
-      const track = stack;
-      if (
-        swipeable ||
-        !(track && motion.current) ||
-        index < 0 ||
-        fromIndex < 0 ||
-        index === fromIndex
-      ) {
+      const from = shownId;
+      const was = shownTabs;
+      const settle = swipeable && tabSwitch(from, id);
+      shownId = id;
+      shownTabs = tabs;
+      if (!(from && id) || from === id) {
         return;
       }
-      const dir = Math.sign(index - fromIndex);
+      if (settle) {
+        swipe.arrive(from, id);
+        return;
+      }
+      let order: string[] | null = null;
+      if (was.includes(from) && was.includes(id)) {
+        order = was;
+      } else if (tabs.includes(from) && tabs.includes(id)) {
+        order = tabs;
+      }
+      const track = stack;
+      if (!(order && track && motionOk.current)) {
+        return;
+      }
+      const dir = Math.sign(order.indexOf(id) - order.indexOf(from));
       frame = requestAnimationFrame(() => {
         track
           .querySelector<HTMLElement>(
@@ -230,19 +283,24 @@
        take: half the group when a split is on offer, the whole of it when
        the drop would simply join these tabs. The indicator and the hitbox
        read the same 25% band, so the picture cannot promise something the
-       drop will not do. -->
-  {#if splitEdge}
-    <div aria-hidden="true" class="drop-preview drop-{splitEdge}"></div>
-  {:else if joins}
-    <div aria-hidden="true" class="drop-preview drop-whole"></div>
+       drop will not do. One box, so moving between halves morphs it from
+       one shape to the next instead of swapping boxes. -->
+  {#if previewInset}
+    <div
+      aria-hidden="true"
+      class="drop-preview"
+      style:inset={previewInset}
+      transition:previewFade
+    ></div>
   {/if}
 
   <!-- Every open conversation has a slot, built in the background. Where
        the strip can be swiped, the two neighbours are also painted, parked
        either side, so a swipe reveals a current transcript; a pointer
-       cannot swipe, so elsewhere only the active pane is shown. The one a
-       committed swipe brings into reach is painted once its settle runs
-       (gesture.svelte.ts, `veiled`). -->
+       cannot swipe, so elsewhere only the active pane is shown. The ones a
+       committed swipe or a tap brings into reach are painted once its
+       settle runs, and a tap that jumps along the strip keeps the pane it
+       left painted until it lands (gesture.svelte.ts, `veiled`, `leaving`). -->
   <div
     class="stack"
     bind:this={stack}
@@ -255,7 +313,9 @@
       {@const delta = deltaOf(paneId)}
       {@const shown =
         isActive ||
-        (swipeable && Math.abs(delta) <= 1 && paneId !== swipe.veiled)}
+        (swipeable &&
+          ((Math.abs(delta) <= 1 && !swipe.veiled.includes(paneId)) ||
+            paneId === swipe.leaving))}
       {@const ctx = contextOf(paneId)}
       <div
         class="pane"
@@ -353,6 +413,11 @@
   .leaf-focused .rail {
     opacity: 0.5;
   }
+  @media (prefers-reduced-motion: no-preference) {
+    .rail {
+      transition: opacity var(--dur-control) var(--ease-out);
+    }
+  }
 
   /* Graphite and a hairline, never the accent — a drop preview is
      structure being proposed, not a session asking for something. */
@@ -363,21 +428,10 @@
     background: var(--surface-hover);
     border: 1px solid var(--border-control);
     opacity: 0.9;
-  }
-  .drop-whole {
-    inset: 0;
-  }
-  .drop-left {
-    inset: 0 50% 0 0;
-  }
-  .drop-right {
-    inset: 0 0 0 50%;
-  }
-  .drop-top {
-    inset: 0 0 50% 0;
-  }
-  .drop-bottom {
-    inset: 50% 0 0 0;
+
+    @media (prefers-reduced-motion: no-preference) {
+      transition: inset var(--dur-morph) var(--ease-in-out);
+    }
   }
 
   /* The composer's box: it positions itself at the foot of this, and lets
