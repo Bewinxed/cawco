@@ -323,11 +323,25 @@
     }
     return folded;
   });
+  /**
+   * The rows the card draws: the transcript as it stood before a read under
+   * way, until that read has finished. The read publishes the newest turns
+   * and then prepends the older ones a chunk at a time, and the card draws
+   * from the top — so every chunk replaced the rows it had just drawn, a
+   * 100ms render each, as the card was opening.
+   */
+  let settled: typeof rows = [];
+  const shown = $derived.by(() => {
+    if (!(branch && (branch.loading || branch.hydrating))) {
+      settled = rows;
+    }
+    return settled;
+  });
   const loading = $derived(
     open &&
       !!id &&
       (!branch || branch.loading || branch.hydrating) &&
-      rows.length === 0
+      shown.length === 0
   );
   const agentName = $derived(harness || "delegate");
   const seed = $derived(id ?? meta.toolId);
@@ -414,17 +428,17 @@
     {/if}
 
     <Collapsible.Content reveal>
-      <CollapsibleLazy count={rows.length} {open}>
+      <CollapsibleLazy count={shown.length} {open}>
         {#snippet children(limit)}
           <div class="inner">
             {#if loading}
               <p class="empty">Loading its transcript…</p>
-            {:else if rows.length === 0}
+            {:else if shown.length === 0}
               <p class="empty">
                 {id ? 'Nothing in its transcript yet.' : 'Still starting — no transcript to show.'}
               </p>
             {/if}
-            {#each rows.slice(0, limit) as r (r.key)}
+            {#each shown.slice(0, limit) as r (r.key)}
               {#if r.kind === 'tools'}
                 <ToolGroup messages={r.messages} />
               {:else if r.kind === 'question'}
@@ -443,7 +457,7 @@
             {/each}
 
             <!-- The report closes the card: drawn with the last of its rows. -->
-            {#if report && limit >= rows.length}
+            {#if report && !loading && limit >= shown.length}
               <section class="report" class:failed={report.failed}>
                 <h4>
                   {report.failed ? 'Report — failed' : 'Report'}
