@@ -496,24 +496,67 @@
   }
 
   /**
-   * A SEND MOVES; IT DOES NOT JUMP. A send that goes between the rows waiting
-   * at the end and its place in the conversation — read, or failed out of the
-   * wait — is the same row the whole way (one key, one element), so it slides
-   * there: where it is drawn is read before the update puts it in its new
-   * place, and once the update is in it starts from there and travels home
-   * (FLIP, transform only). Nothing else it passes moves on its own: the rows
-   * it trades places with take theirs at once.
+   * A SEND MOVES; NOTHING JUMPS. A send that goes between the rows waiting at
+   * the end and its place in the conversation — read, or failed out of the
+   * wait — is the same row the whole way (one key, one element), so it
+   * slides there, and every row it trades places with slides aside (FLIP,
+   * transform only): each is measured where it is drawn before the update,
+   * and once the update is in it starts from there and travels home.
+   *
+   * A failed send its retry replaced folds shut where it stood (see
+   * `leaving`), and the rows after it close up behind it — but the update
+   * that takes it out also regroups them: the agent's turn under it joins the
+   * turn above and loses its speaker line, a row's height gone in one frame.
+   * So that update slides them too, on the fold's own timing: the rows after
+   * the fold start where they were drawn and ride it up as one.
+   *
+   * Home is worked out, not read off the page. virtua keeps its sizes by
+   * index, so right after the update the rows past the change stand where
+   * the old sizes put them until it measures them again — and a slide aimed
+   * at where they stand then would end in the wrong place. Their places are
+   * the row above the change, which did not move, plus each row's height as
+   * the update drew it. A row is placed by its bottom edge: a speaker line
+   * comes and goes at a row's top, so the words under it hold still.
    */
-  const moving = new Map<string, number>();
+  interface Box {
+    /** Its list item's layout top and height, in the list. */
+    height: number;
+    /** How far the row is drawn off that top: a slide still in flight. */
+    shift: number;
+    top: number;
+  }
+  /** The mounted rows as they stood before an update that moves a send. */
+  let beforeMove: Map<string, Box> | null = null;
+  /**
+   * The rows that stand still above each change in that update: the last row
+   * before a send moved, and a replaced send starting its fold. The slide
+   * starts under the first of them.
+   */
+  let movedAfter = new Set<string>();
+  /** The update folds a replaced send: its slides run on the fold's timing. */
+  let foldMove = false;
+  /** The name a slide's animation goes by, so a newer one can take it over. */
+  const SLIDE = "send-slide";
 
-  /** Where a row is drawn in the list, transforms included; null when it is not mounted. */
-  function drawnAt(key: string): number | null {
-    const node = listing?.querySelector<HTMLElement>(
-      `[data-row="${CSS.escape(key)}"]`
-    );
-    return node && listing
-      ? node.getBoundingClientRect().top - listing.getBoundingClientRect().top
-      : null;
+  /** Every mounted row's box in the list, by key. */
+  function measure(): Map<string, Box> {
+    const boxes = new Map<string, Box>();
+    if (!listing) {
+      return boxes;
+    }
+    const origin = listing.getBoundingClientRect().top;
+    for (const node of listing.querySelectorAll<HTMLElement>("[data-row]")) {
+      const item = node.parentElement;
+      if (item && node.dataset.row) {
+        const box = item.getBoundingClientRect();
+        boxes.set(node.dataset.row, {
+          top: box.top - origin,
+          height: box.height,
+          shift: node.getBoundingClientRect().top - box.top - node.offsetTop,
+        });
+      }
+    }
+    return boxes;
   }
 
   /** The keys of the sends waiting at the end of a build's rows. */
@@ -532,48 +575,109 @@
   }
 
   /**
-   * The sends this build moves in or out of the wait — on screen before and
-   * after it — measured where they stand. Only the ends are read unless one
-   * has moved.
+   * Whether this build moves a send in or out of the wait with the rows on
+   * screen before and after it; if so, every mounted row is measured where
+   * it stands. Only the ends are read unless a send has moved.
    */
   function noteMoves(prior: Row[], next: Row[]): void {
     if (!untrack(() => landed && watched && motionOk.current)) {
       return;
     }
-    const before = waitingKeys(prior);
-    const now = waitingKeys(next);
-    const changed = [
-      ...[...before].filter((key) => !now.has(key)),
-      ...[...now].filter((key) => !before.has(key)),
+    const waited = waitingKeys(prior);
+    const waits = waitingKeys(next);
+    const moved = [
+      ...[...waited].filter((key) => !waits.has(key)),
+      ...[...waits].filter((key) => !waited.has(key)),
     ];
-    if (changed.length === 0) {
-      return;
-    }
     const was = new Set(prior.map((row) => row.key));
     const is = new Set(next.map((row) => row.key));
-    for (const key of changed) {
-      const at = was.has(key) && is.has(key) ? drawnAt(key) : null;
-      if (at !== null) {
-        moving.set(key, at);
-      }
+    if (!moved.some((key) => was.has(key) && is.has(key))) {
+      return;
+    }
+    let from = 0;
+    while (
+      from < prior.length &&
+      from < next.length &&
+      prior[from].key === next[from].key
+    ) {
+      from += 1;
+    }
+    // A change from the very first row is a different transcript, not a move.
+    if (from > 0) {
+      beforeMove ??= measure();
+      movedAfter.add(next[from - 1].key);
     }
   }
 
-  /** Each moved send, sliding from where it was drawn to where it now stands. */
+  /**
+   * A replaced send starting its fold: the rows after it are measured where
+   * they stand, before the update that regroups them is drawn.
+   */
+  function noteFold(key: string): void {
+    if (!untrack(() => landed && watched && motionOk.current)) {
+      return;
+    }
+    beforeMove ??= measure();
+    movedAfter.add(key);
+    foldMove = true;
+  }
+
+  /**
+   * Every row the update moved, sliding from where it was drawn to its new
+   * place: the row above the change, plus the heights of the rows between as
+   * they are drawn now. The first row that was not on screen before ends it —
+   * past there, the places are not known, and a move nobody saw jumps.
+   */
   function slideMoves(): void {
-    for (const [key, from] of moving) {
-      const to = drawnAt(key);
-      const node = listing?.querySelector<HTMLElement>(
-        `[data-row="${CSS.escape(key)}"]`
+    const boxes = beforeMove;
+    const after = movedAfter;
+    const timing = foldMove
+      ? { duration: dur("--dur-exit"), easing: ease("--ease-out") }
+      : { duration: dur("--dur-panel"), easing: ease("--ease-in-out") };
+    beforeMove = null;
+    movedAfter = new Set();
+    foldMove = false;
+    const drawn = renderedRows;
+    const start = drawn.findIndex((row) => after.has(row.key));
+    const above = boxes?.get(drawn[start]?.key);
+    if (!(boxes && above && listing)) {
+      return;
+    }
+    let bottom = above.top + above.height;
+    for (const row of drawn.slice(start + 1)) {
+      const box = boxes.get(row.key);
+      const node = listing.querySelector<HTMLElement>(
+        `[data-row="${CSS.escape(row.key)}"]`
       );
-      if (to !== null && node && Math.abs(from - to) > 0.5) {
+      const item = node?.parentElement;
+      if (!(box && node && item)) {
+        return;
+      }
+      const { height } = item.getBoundingClientRect();
+      bottom += height;
+      const delta = box.top + box.shift + box.height - bottom;
+      // A row that gained a speaker line starts with it above where the row
+      // began — over the row above. It is cut off there and opens as the row
+      // travels. The sides and bottom stay open: a well bleeds past its box.
+      const gained = Math.max(0, height - box.height - node.offsetTop);
+      if (Math.abs(delta) > 0.5) {
+        for (const running of node.getAnimations()) {
+          if (running.id === SLIDE) {
+            running.cancel();
+          }
+        }
         node.animate(
-          [{ translate: `0 ${from - to}px` }, { translate: "0 0" }],
-          { duration: dur("--dur-panel"), easing: ease("--ease-in-out") }
+          [
+            {
+              translate: `0 ${delta}px`,
+              clipPath: `inset(${gained}px -100vmax -100vmax)`,
+            },
+            { translate: "0 0", clipPath: "inset(0px -100vmax -100vmax)" },
+          ],
+          { id: SLIDE, ...timing }
         );
       }
     }
-    moving.clear();
   }
 
   /** Where a build's own tail — the live row, the tool in flight, the queue — begins. */
@@ -644,8 +748,8 @@
     if (!held && untrack(() => catching)) {
       catching = false;
     }
-    // The update is in: a send it moved starts where it was drawn.
-    if (moving.size > 0) {
+    // The update is in: what it moved starts where it was drawn.
+    if (beforeMove) {
       untrack(slideMoves);
     }
   });
@@ -734,6 +838,7 @@
         untrack(() => session.records[key]?.state === "replaced")
       ) {
         leaving.push(sent);
+        noteFold(key);
       }
     }
     tail = new Map(
@@ -2053,6 +2158,7 @@
           leaving={presentation.leaving.has(row.key)}
           motion={motionOf(row)}
           onleft={leaver(row.key)}
+          rowKey={row.key}
         >
           {#snippet children(ticket)}
             {#if row.kind === 'single' || row.kind === 'queued'}

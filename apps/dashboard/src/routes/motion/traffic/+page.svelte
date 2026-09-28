@@ -186,6 +186,62 @@
         push({ id: `user-${n}`, type: "user", content, timestamp: now() });
         session.busy = true;
       },
+      /** A send the session has not read: waiting at the end, after the live tail. */
+      send: (content: string): string => {
+        n += 1;
+        const id = `send-${n}`;
+        push({
+          id,
+          type: "user",
+          content,
+          timestamp: now(),
+          state: "pending",
+          queued: true,
+        });
+        return id;
+      },
+      /**
+       * The session read it: the same row, moved to what its record says —
+       * which is all the store does (`place` in client.svelte.ts).
+       */
+      read: (id: string) => {
+        const row = session.messages.find((message) => message.id === id);
+        if (row) {
+          row.state = "read";
+          row.queued = false;
+        }
+      },
+      /** A send that did not go, in the conversation: not sent, with why. */
+      fail: (content: string, reason: string): string => {
+        n += 1;
+        const id = `failed-${n}`;
+        push({
+          id,
+          type: "user",
+          content,
+          timestamp: now(),
+          state: "failed",
+          metadata: { sendFailed: reason },
+        });
+        return id;
+      },
+      /**
+       * Its retry went out: the record says `replaced`, and the store draws it
+       * no more — which is all `place` does with one.
+       */
+      replace: (id: string) => {
+        session.records[id] = {
+          uuid: id,
+          instanceId: INSTANCE,
+          acceptedAt: now().toISOString(),
+          body: { type: "user", message: { role: "user", content: "" } },
+          mode: "turn",
+          state: "replaced",
+        };
+        session.messages = session.messages.filter(
+          (message) => message.id !== id
+        );
+      },
     };
   });
 </script>

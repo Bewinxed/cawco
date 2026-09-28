@@ -97,6 +97,7 @@ import {
   SETTLED_COMMAND_TTL_MS,
   sessionCommands,
   submitCommand as submitTrackedCommand,
+  subscribeSession,
   sweepCommands,
   syncStreamSubscriptions,
 } from "./stream";
@@ -845,18 +846,26 @@ function addRows(target: SessionState, rows: Message[]): void {
  * one in hand changes nothing.
  */
 function receive(target: SessionState, record: SendRecord): void {
-  if (!newer(target.records[record.uuid], record)) {
+  const held = target.records[record.uuid];
+  if (!newer(held, record)) {
     return;
   }
   target.records[record.uuid] = record;
-  const own = target.local.some((message) => message.id === record.uuid);
   target.local = target.local.filter((message) => message.id !== record.uuid);
-  // This tab's own send, failed at once (its machine was not there): said
-  // where every failure of a send this tab made is said.
-  if (own && record.state === "failed") {
+  // A send this tab made that failed before the session read it: said where
+  // every failure of a send this tab made is said, and the turn this tab
+  // took it to start never started — whether the session is working is the
+  // daemon's word again (none, from a machine that is not there).
+  if (
+    record.state === "failed" &&
+    held?.state !== "read" &&
+    commandRecord(record.uuid)
+  ) {
     sendFailureNotices[target.instanceId] = record.reason
       ? `Message not sent: ${record.reason}`
       : "Message not sent.";
+    target.busy = state.pulses[target.instanceId]?.busy ?? false;
+    trackWorking(target);
   }
   if (
     record.state === "read" &&
@@ -3249,6 +3258,10 @@ export function spawnSession({
     projectId,
   });
   if (prompt?.trim()) {
+    // Followed before its first prompt goes, on the socket that carries it:
+    // that send's record is among the first frames the session's stream
+    // carries, and a tab that joined after it would never hear it.
+    subscribeSession(streamState, streamHost, created.instanceId);
     submitCommand(created.instanceId, machineId, "send", {
       text: prompt.trim(),
     });

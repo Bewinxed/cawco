@@ -35,6 +35,7 @@
 
   let {
     id,
+    rowKey,
     motion = "rise",
     continues = false,
     leaving = false,
@@ -46,6 +47,11 @@
      * whole — a run of tool calls, whose calls arrive one by one.
      */
     id?: string;
+    /**
+     * The row's key in the transcript's list — what a slide finds it by
+     * (Transcript's FLIP). Absent on a call inside a run, which moves with it.
+     */
+    rowKey?: string;
     motion?: Motion;
     /** Continues the rail above it: abut it, and paint the rail's body. */
     continues?: boolean;
@@ -147,7 +153,7 @@
 
 <div
   class="row {motion}"
-  data-row={id}
+  data-row={rowKey}
   onanimationend={(event) => {
   if (event.target === node) {
     spent();
