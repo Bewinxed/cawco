@@ -39,6 +39,7 @@ import type {
   FleetToolchain,
   HookEvent,
   HookHandler,
+  MachineHookScript,
   MachineMemoryDoc,
   MachineMemorySet,
   MarketplacePluginInfo,
@@ -1197,8 +1198,10 @@ export function memoryPlan(
       ? "write"
       : "drift";
   }
+  // A file that already says what the fleet now says is settled, not drifted:
+  // that is how an adoption lands back on the machine it was adopted from.
   if (fileHash !== managedHash) {
-    return desired.force ? "write" : "drift";
+    return desired.force || fileHash === desired.hash ? "write" : "drift";
   }
   return desired.hash === managedHash ? "skip" : "write";
 }
@@ -2107,6 +2110,22 @@ export const readMemoryFile = async (): Promise<MachineMemorySet | null> => {
 
   const content = await file.text();
   return { content, hash: hashText(content), docs };
+};
+
+/**
+ * One fleet hook's script as this machine has it on disk, whoever last wrote
+ * it. What a compare reads, and what adopting an edited script takes as the
+ * fleet's.
+ */
+export const readHookScript = async (
+  id: string
+): Promise<MachineHookScript | null> => {
+  const file = Bun.file(hookScriptPath(id));
+  if (!(await file.exists())) {
+    return null;
+  }
+  const content = await file.text();
+  return { content, hash: hashText(content) };
 };
 
 /**

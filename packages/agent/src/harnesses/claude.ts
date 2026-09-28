@@ -49,6 +49,7 @@ import {
   INSPECT_CONFIG,
   MARKETPLACE_CATALOG,
   MESSAGES_READ,
+  READ_HOOK_SCRIPT,
   READ_MEMORY_FILE,
   READ_SKILL_FILES,
   settledQuestionResult,
@@ -62,6 +63,7 @@ import {
   fleetStatus,
   inspectConfig,
   marketplaceCatalog,
+  readHookScript,
   readMemoryFile,
   readSkillFiles,
   syncFleetConfig,
@@ -1602,6 +1604,8 @@ export class ClaudeHarness implements Harness {
         return marketplaceCatalog(args[0] as string);
       case READ_MEMORY_FILE:
         return readMemoryFile();
+      case READ_HOOK_SCRIPT:
+        return readHookScript(args[0] as string);
       case READ_SKILL_FILES:
         return readSkillFiles(args[0] as string, args[1] as string | undefined);
       case INSPECT_CONFIG:

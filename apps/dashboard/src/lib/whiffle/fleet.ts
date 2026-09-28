@@ -10,6 +10,7 @@ import {
   type ConfigInspection,
   type FleetAgent,
   type FleetConfig,
+  type FleetHook,
   type FleetMarketplace,
   type FleetMcpConfig,
   type FleetMcpServer,
@@ -17,6 +18,7 @@ import {
   type FleetSkillMeta,
   type FsEntry,
   MARKETPLACE_CATALOG,
+  type MachineHookScript,
   type MachineMemorySet,
   type MarketplacePluginInfo,
   type McpHttpServerConfig,
@@ -775,6 +777,45 @@ export const pushMemory = (
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ machineId, path }),
+    },
+    "overwrite this machine"
+  );
+
+/** One machine's copy of a hook's script, for the compare beside a drift. */
+export const peekHook = (
+  machineId: string,
+  id: string
+): Promise<MachineHookScript | null> =>
+  send(
+    "/api/fleet/hooks/peek",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ machineId, id }),
+    },
+    "read this machine's script"
+  );
+
+/** Takes one machine's edited script for a hook as the fleet's. */
+export const adoptHook = (machineId: string, id: string): Promise<FleetHook> =>
+  send(
+    "/api/fleet/hooks/adopt",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ machineId, id }),
+    },
+    "adopt this machine's script"
+  );
+
+/** The other direction: the fleet's script over a machine's edited one. */
+export const pushHook = (machineId: string, id: string): Promise<unknown> =>
+  send(
+    "/api/fleet/hooks/push",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ machineId, id }),
     },
     "overwrite this machine"
   );

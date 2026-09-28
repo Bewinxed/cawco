@@ -11,12 +11,20 @@
   import { toast } from "svelte-sonner";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
+  import DiffView from "$lib/components/features/DiffView.svelte";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
+  import {
+    MachineRow,
+    machineHue,
+    machineIcon,
+  } from "$lib/components/ui/machine-row";
+  import { Spinner } from "$lib/components/ui/spinner";
   import { Textarea } from "$lib/components/ui/textarea";
   import {
     IconClock,
     IconHistory,
+    IconLaptop,
     IconMapPoint,
     IconPlay,
     IconTuning,
@@ -30,14 +38,17 @@
   import { unfold } from "$lib/whiffle/motion/fold.svelte";
   import { morph } from "$lib/whiffle/motion/morph.svelte";
   import { reflow } from "$lib/whiffle/motion/rows.svelte";
-  import { whiffle } from "../../client.svelte";
+  import { type Machine, whiffle } from "../../client.svelte";
   import { confirm } from "../../confirm.svelte";
+  import { adoptHook, peekHook, pushHook } from "../../fleet";
+  import { causeOf } from "../../fleet-faults";
   import HookTester from "../../HookTester.svelte";
   import {
     blankHook,
     draftOf,
     type FleetHook,
     type HookVersion,
+    hooksOf,
     loadHookVersions,
     message,
     removeHook,
@@ -45,6 +56,8 @@
     saveHook,
   } from "../../hooks";
   import { newId } from "../../id";
+  import { machineLabel, machineOs } from "../../machine";
+  import { orderMachines } from "../../rail.svelte";
   import Choice from "../Choice.svelte";
   import { keepDraft, sameFields } from "../drafts.svelte";
   import { savedShown } from "../EditorFooter.svelte";
@@ -207,11 +220,7 @@
   const visibleVersions = $derived(
     allVersions ? versions : versions.slice(0, LATEST)
   );
-  $effect(() => {
-    const current = id;
-    if (!current) {
-      return;
-    }
+  function loadVersions(current: string) {
     versionsLoading = true;
     versionsFailed = undefined;
     loadHookVersions(current)
@@ -224,6 +233,12 @@
       .finally(() => {
         versionsLoading = false;
       });
+  }
+  $effect(() => {
+    const current = id;
+    if (current) {
+      untrack(() => loadVersions(current));
+    }
   });
 
   async function restore(version: HookVersion) {
@@ -340,6 +355,106 @@
       },
     });
   }
+
+  // ── per machine ──────────────────────────────────────────────────────
+  // A machine only ever gives back the script Whiffle wrote it, so one edited
+  // on the machine itself waits here until it is adopted or overwritten.
+  const machines = $derived(orderMachines(whiffle.machines));
+  let comparing = $state<string | null>(null);
+  let copies = $state<Record<string, string | null>>({});
+  let peeking = $state<Record<string, boolean>>({});
+  let unread = $state<Record<string, string>>({});
+  /** Per machine, the settle whose request is out. */
+  let settling = $state<Record<string, "adopt" | "push">>({});
+  /** Per machine, the last settle failed: its button shows no check. */
+  let settleFailed = $state<Record<string, boolean>>({});
+
+  const stateOn = (machine: Machine) =>
+    id ? hooksOf(machine)?.[id] : undefined;
+  const applied = $derived(
+    machines.filter((row) => stateOn(row)?.state === "applied")
+  );
+  const asleep = $derived(applied.filter((row) => row.status !== "online"));
+
+  async function compare(machine: Machine) {
+    if (!id) {
+      return;
+    }
+    if (comparing === machine.machineId) {
+      comparing = null;
+      return;
+    }
+    comparing = machine.machineId;
+    if (
+      Object.hasOwn(copies, machine.machineId) ||
+      peeking[machine.machineId]
+    ) {
+      return;
+    }
+    peeking[machine.machineId] = true;
+    delete unread[machine.machineId];
+    try {
+      copies[machine.machineId] =
+        (await peekHook(machine.machineId, id))?.content ?? null;
+    } catch (caught) {
+      unread[machine.machineId] = message(caught);
+    } finally {
+      delete peeking[machine.machineId];
+    }
+  }
+
+  async function adopt(machine: Machine) {
+    if (!id) {
+      return;
+    }
+    settling[machine.machineId] = "adopt";
+    delete settleFailed[machine.machineId];
+    try {
+      const landed = await adoptHook(machine.machineId, id);
+      if (store.hooks.value) {
+        upsert(store.hooks.value, landed, (row) => row.id === landed.id);
+      }
+      draft = draftOf(landed);
+      comparing = null;
+      delete copies[machine.machineId];
+      toast.success(
+        `The fleet now keeps ${machineLabel(machine.hostname)}'s copy.`
+      );
+      loadVersions(id);
+    } catch (caught) {
+      settleFailed[machine.machineId] = true;
+      toast.error(message(caught));
+    } finally {
+      delete settling[machine.machineId];
+    }
+  }
+
+  async function overwrite(machine: Machine) {
+    if (!id) {
+      return;
+    }
+    settling[machine.machineId] = "push";
+    delete settleFailed[machine.machineId];
+    try {
+      await pushHook(machine.machineId, id);
+      comparing = null;
+      delete copies[machine.machineId];
+      toast.success(
+        `${machineLabel(machine.hostname)} takes the fleet's copy.`
+      );
+    } catch (caught) {
+      settleFailed[machine.machineId] = true;
+      toast.error(message(caught));
+    } finally {
+      delete settling[machine.machineId];
+    }
+  }
+
+  const SAID: Record<string, string> = {
+    applied: "In sync",
+    failed: "Not applied",
+    removed: "Taken off",
+  };
 </script>
 
 <EditorFrame
@@ -677,6 +792,119 @@
   </EditorSection>
 
   {#if id}
+    <EditorSection hue={HUE} icon={IconLaptop} label="Per machine">
+      {#if machines.length === 0}
+        <p class="note">
+          No machines yet — this lands on the first one that registers.
+        </p>
+      {:else}
+        {#if applied.length > 0}
+          <p class="note">
+            In sync on
+            {applied.length}
+            machine{applied.length === 1 ? '' : 's'}.
+            {#if asleep.length > 0}
+              {asleep.map((row) => machineLabel(row.hostname)).join(', ')}
+              offline — they sync when back.
+            {/if}
+          </p>
+        {/if}
+        <ul class="machines">
+          {#each machines as machine, index (machine.machineId)}
+            {@const item = stateOn(machine)}
+            {@const online = machine.status === 'online'}
+            {@const refused = item?.state === 'failed'}
+            {@const drifted = refused && causeOf(item?.detail) === 'drifted'}
+            {@const comparingThis = comparing === machine.machineId}
+            {@const settle = settling[machine.machineId]}
+            <li class="machine">
+              <div class="line">
+                <MachineRow
+                  hue={machineHue(index, online)}
+                  icon={machineIcon(machine.os)}
+                  meta="{drifted ? 'Kept its own copy' : (SAID[item?.state ?? ''] ?? 'Not reported')} · {machineOs(machine.os).label}{online ? '' : ' · offline, it syncs when back'}"
+                  name={machineLabel(machine.hostname)}
+                  presence={online ? 'online' : 'off'}
+                />
+                {#if drifted}
+                  <span class="acts" in:crossIn out:crossOut>
+                    <Button
+                      disabled={!online}
+                      onclick={() => compare(machine)}
+                      size="sm"
+                      variant={comparingThis ? 'secondary' : 'outline'}
+                    >
+                      {comparingThis ? 'Hide' : 'Compare'}
+                    </Button>
+                    <Button
+                      disabled={!online || settle === 'push'}
+                      failed={settleFailed[machine.machineId] === true}
+                      label="Adopt this copy"
+                      onclick={() => adopt(machine)}
+                      pending={settle === 'adopt'}
+                      pendingLabel="Adopting…"
+                      size="sm"
+                      variant="outline"
+                    />
+                    <Button
+                      disabled={!online || settle === 'adopt'}
+                      failed={settleFailed[machine.machineId] === true}
+                      label="Send ours"
+                      onclick={() => overwrite(machine)}
+                      pending={settle === 'push'}
+                      pendingLabel="Sending…"
+                      size="sm"
+                      variant="outline"
+                    />
+                  </span>
+                {/if}
+              </div>
+              {#if refused && item?.detail}
+                <pre class="said" in:unfold out:unfold>{item.detail}</pre>
+              {/if}
+              {#if comparingThis}
+                <!-- The machine's script folds open under its row; reading
+                     cross-fades to what was read as the box follows. -->
+                <div class="fold" in:unfold out:unfold>
+                  <div class="handler" {@attach morph()}>
+                    {#if peeking[machine.machineId]}
+                      <p
+                        class="note busy"
+                        role="status"
+                        in:crossIn
+                        out:crossOut
+                      >
+                        <Spinner class="size-4 shrink-0" />Reading this
+                        machine's script…
+                      </p>
+                    {:else if unread[machine.machineId]}
+                      <p class="caution" role="alert" in:crossIn out:crossOut>
+                        {unread[machine.machineId]}
+                      </p>
+                    {:else if copies[machine.machineId] === null}
+                      <p class="note" in:crossIn out:crossOut>
+                        This machine has no copy of this script.
+                      </p>
+                    {:else if copies[machine.machineId] !== undefined}
+                      <div in:crossIn out:crossOut>
+                        {#key `${machine.machineId}:${hook?.hash ?? ''}`}
+                          <DiffView
+                            filePath="{id}.sh"
+                            newContent={copies[machine.machineId] ?? ''}
+                            oldContent={hook?.script ?? ''}
+                          />
+                        {/key}
+                      </div>
+                    {/if}
+                  </div>
+                </div>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+      {/if}
+    </EditorSection>
+
     <EditorSection hue={HUE} icon={IconHistory} label="Previous versions">
       <p class="note">
         Every save keeps what it replaced. Restoring writes an old version back
@@ -802,5 +1030,49 @@
   .vname {
     font: var(--type-label);
     color: var(--ink-strong);
+  }
+  .busy {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .machines {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    margin: 0;
+    padding: 0;
+    list-style: none;
+  }
+  .machine {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 8px 10px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-recess);
+  }
+  .line {
+    position: relative;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px 12px;
+  }
+  .acts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .said {
+    max-height: 6rem;
+    overflow: auto;
+    padding: 6px 8px;
+    border-radius: var(--radius-sm);
+    background: var(--surface-raised);
+    font-family: var(--font-mono);
+    font-size: var(--text-meta);
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
   }
 </style>

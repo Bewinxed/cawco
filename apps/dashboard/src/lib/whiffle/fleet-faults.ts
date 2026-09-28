@@ -377,8 +377,8 @@ export const SCOPE_ANCHOR: Record<FaultScope, string> = {
 };
 
 /**
- * Where a fault is settled: the section, or — for a memory file — that file's
- * own editor, which is where its per-machine copies are compared.
+ * Where a fault is settled: the section, or — for a memory file or a hook —
+ * its own editor, which is where its per-machine copies are compared.
  */
 export function faultHref(fault: Pick<Fault, "scope" | "key">): string {
   if (fault.scope === "memory") {
@@ -386,6 +386,9 @@ export function faultHref(fault: Pick<Fault, "scope" | "key">): string {
   }
   if (fault.scope === "memoryDocs") {
     return `/config/memory/${fault.key}`;
+  }
+  if (fault.scope === "hooks") {
+    return `/config/hooks/${fault.key}`;
   }
   return SCOPE_ANCHOR[fault.scope];
 }

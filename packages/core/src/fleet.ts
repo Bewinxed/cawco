@@ -620,6 +620,15 @@ export interface MachineMemorySet {
 }
 
 /**
+ * A fleet hook's script as one machine really has it, whoever last wrote it.
+ * What {@link READ_HOOK_SCRIPT} answers with.
+ */
+export interface MachineHookScript {
+  content: string;
+  hash: string;
+}
+
+/**
  * The machine-scoped control names, exported so the agent's allowlist, the
  * hub's peeks and the dashboard's calls cannot drift apart.
  *
@@ -635,6 +644,9 @@ export interface MachineMemorySet {
  *   the fleet and hand it to every other machine.
  * - `readMemoryFile() => MachineMemorySet | null` — the machine's current user
  *   CLAUDE.md and the documents beside it, for adoption.
+ * - `readHookScript(id: string) => MachineHookScript | null` — the script a
+ *   fleet hook runs from on that machine, as it is on disk, for a compare and
+ *   an adoption.
  */
 export const FLEET_SYNC = "syncFleetConfig";
 export const FLEET_STATUS = "fleetStatus";
@@ -642,6 +654,7 @@ export const MARKETPLACE_CATALOG = "marketplaceCatalog";
 export const INSPECT_CONFIG = "inspectConfig";
 export const READ_SKILL_FILES = "readSkillFiles";
 export const READ_MEMORY_FILE = "readMemoryFile";
+export const READ_HOOK_SCRIPT = "readHookScript";
 
 /** What the composer's `/` menu renders. Derived from the SDK's `SlashCommand`. */
 export interface AvailableCommand {

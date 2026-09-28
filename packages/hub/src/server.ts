@@ -22,6 +22,7 @@ import type {
   HookDraft,
   IngestMark,
   InstanceRow,
+  MachineHookScript,
   MachineMemorySet,
   ModelInfo,
   NeutralSessionInfo,
@@ -74,6 +75,7 @@ import {
   PREVIEW_STOP,
   parseAgentFrontMatter,
   QUESTION_DISMISSED,
+  READ_HOOK_SCRIPT,
   READ_MEMORY_FILE,
   READ_SKILL_FILES,
   REMOVED_MACHINE,
@@ -3450,6 +3452,47 @@ export const createServer = ({
     return { ok: true, copy: peekMemoryFile(answer.result) };
   };
 
+  /**
+   * One fleet hook's script as one machine has it on disk. A compare is this
+   * alone; adopting is this and a store.
+   */
+  const readMachineHookScript = async (
+    machineId: string,
+    id: string
+  ): Promise<
+    | { ok: true; copy: MachineHookScript | null }
+    | { ok: false; code: 404 | 500 | 504; said: string }
+  > => {
+    const answer = await callAgent(
+      machineId,
+      READ_HOOK_SCRIPT,
+      [id],
+      READ_TIMEOUT_MS
+    );
+    if (answer === "offline") {
+      return {
+        ok: false,
+        code: 404,
+        said: `machine ${machineId} is not connected`,
+      };
+    }
+    if (answer === "timeout") {
+      return {
+        ok: false,
+        code: 504,
+        said: `machine ${machineId} did not answer`,
+      };
+    }
+    if (!answer.ok) {
+      return {
+        ok: false,
+        code: 500,
+        said: answer.error ?? "the machine could not read the hook's script",
+      };
+    }
+    return { ok: true, copy: answer.result as MachineHookScript | null };
+  };
+
   /** The version about to be replaced, kept — a save is not a way to lose one. */
   const keepReplacedMemory = (content: string): void => {
     const current = db.getFleetMemory();
@@ -6181,6 +6224,62 @@ export const createServer = ({
             scope: version.scope,
             projectId: version.projectId,
           });
+          fanOutFleet();
+          return hook;
+        }
+      )
+      // One machine's copy of a hook's script, for the compare beside a drift.
+      .post(
+        "/api/fleet/hooks/peek",
+        { body: t.Object({ machineId: t.String(), id: t.String() }) },
+        async ({ body, status }) => {
+          if (!db.getFleetHook(body.id)) {
+            return status(404, `the fleet keeps no hook ${body.id}`);
+          }
+          const read = await readMachineHookScript(body.machineId, body.id);
+          return read.ok ? read.copy : status(read.code, read.said);
+        }
+      )
+      // The other way to settle a drifted hook: the machine's edited script
+      // becomes the fleet's, kept through the same door a save goes through so
+      // what it replaces is in the history. Every other machine then gets it,
+      // and the machine it came from finds its file already says so.
+      .post(
+        "/api/fleet/hooks/adopt",
+        { body: t.Object({ machineId: t.String(), id: t.String() }) },
+        async ({ body, status }) => {
+          const current = db.getFleetHook(body.id);
+          if (!current) {
+            return status(404, `the fleet keeps no hook ${body.id}`);
+          }
+          const read = await readMachineHookScript(body.machineId, body.id);
+          if (!read.ok) {
+            return status(read.code, read.said);
+          }
+          if (!read.copy) {
+            return status(
+              404,
+              `machine ${body.machineId} has no script for ${current.name}`
+            );
+          }
+
+          const draft: HookDraft = {
+            name: current.name,
+            enabled: current.enabled,
+            event: current.event,
+            matcher: current.matcher,
+            handler: current.handler,
+            script: read.copy.content,
+            scope: current.scope,
+            projectId: current.projectId,
+          };
+          const [first] = Object.values(hookProblem(draft));
+          if (first) {
+            return status(400, first);
+          }
+
+          keepHookVersion(current);
+          const hook = db.putFleetHook({ ...draft, id: body.id });
           fanOutFleet();
           return hook;
         }
