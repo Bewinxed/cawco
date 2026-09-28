@@ -2659,6 +2659,8 @@ export class OpencodeHarness implements Harness {
   readonly #pumpDirs = new Set<string>();
   readonly #pumpReady = new Map<string, Promise<void>>();
   readonly #pumpControllers = new Map<string, AbortController>();
+  /** Directories whose subscription is up right now. */
+  readonly #pumpConnected = new Set<string>();
   #recovering = 0;
   #recoveryHighWater = 0;
   readonly #recoveryWaiters: (() => void)[] = [];
@@ -3535,6 +3537,9 @@ export class OpencodeHarness implements Harness {
             clearTimeout(deadline);
             console.info(`[opencode] ${directory}: subscribe ready`);
             ready.resolve();
+            // Every session already attached here gets its snapshot now; one
+            // that attaches while this holds takes its own (see `attached`).
+            this.#pumpConnected.add(directory);
             for (const session of this.#sessions.values()) {
               if (session.directory === directory) {
                 // biome-ignore lint/complexity/noVoid: snapshots must not block consumption of live gate events
@@ -3561,6 +3566,9 @@ export class OpencodeHarness implements Harness {
       } catch {
         // The stream ended or dropped; reconnect below unless disposed.
       } finally {
+        if (connected) {
+          this.#pumpConnected.delete(directory);
+        }
         clearTimeout(deadline);
         controller.abort();
         ready.reject(
@@ -3959,14 +3967,22 @@ export class OpencodeHarness implements Harness {
           console.warn(`[opencode] command list: ${String(error)}`)
         );
 
-      // A resumed session may already be mid-turn on the server; nothing else
-      // would ever tell this process so. See `watchResumedTurn`.
-      // The supervisor owns the handle before init or any asynchronous gate work.
-      // SSE readiness precedes both snapshots; the dedupe handles their overlap.
-      // biome-ignore lint/complexity/noVoid: attached handles remain operable while reconciliation runs
-      void this.#ensurePump(client, ctx.cwd)
-        .then(() => this.#reconcile(session))
-        .catch((error: unknown) => console.warn(String(error)));
+      // A resumed session may already be mid-turn on the server, or holding an
+      // open permission or question; nothing else would ever tell this
+      // process so (see `watchResumedTurn`, `reconcileGates`). One snapshot
+      // per session, taken after its directory is subscribed so no live gate
+      // event is missed: a directory that connects after this line reconciles
+      // every session it holds, this one included, so only a directory whose
+      // subscription is already up reconciles here. Both checks run without
+      // an await between them and the connection's, so exactly one fires.
+      // biome-ignore lint/complexity/noVoid: attached handles remain operable while the subscription starts
+      void this.#ensurePump(client, ctx.cwd).catch((error: unknown) =>
+        console.warn(String(error))
+      );
+      if (this.#pumpConnected.has(ctx.cwd)) {
+        // biome-ignore lint/complexity/noVoid: attached handles remain operable while reconciliation runs
+        void this.#reconcile(session);
+      }
     };
 
     // Load skills natively: send each as a /command before the first prompt.
