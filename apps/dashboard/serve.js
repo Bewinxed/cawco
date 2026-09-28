@@ -26,8 +26,11 @@
  * request that is a navigation (`Sec-Fetch-Mode: navigate`) gets a 302 back
  * under the prefix so the iframe URL stays correct.
  */
+import { createReadStream, existsSync, statSync } from "node:fs";
 import http from "node:http";
 import net from "node:net";
+import { resolve, sep } from "node:path";
+import { fileURLToPath } from "node:url";
 import { handler } from "./build/handler.js";
 
 const PORT = Number(process.env.PORT ?? 3000);
@@ -112,13 +115,134 @@ function proxyPreviewHttp(req, res, info) {
   req.pipe(proxyReq);
 }
 
+/**
+ * A deploy swaps a new `build/` in under this running process, and the old
+ * hashed assets go with the old directory. adapter-node's sirv listed its files
+ * once at startup, so it still claims them: `send()` writes a 200 head and then
+ * pipes `fs.createReadStream(file)` into the response with no `'error'`
+ * listener, and the ENOENT from `open()` becomes an unhandled error that exits
+ * the process. A hashed asset that is no longer on disk is answered with a 404
+ * before sirv sees it; the listener on the piped stream covers the file that
+ * disappears between that check and sirv's open, where the 200 head is already
+ * committed and the response can only be cut off.
+ */
+const CLIENT_DIR = fileURLToPath(new URL("./build/client", import.meta.url));
+const IMMUTABLE_PREFIX = "/_app/immutable/";
+
+/**
+ * sirv also cached the SIZE of every non-hashed file (version.json, favicon,
+ * manifest…) at startup, so between a deploy's swap and the restart it answers
+ * with the old Content-Length over the new bytes. Those files are served here
+ * from a stat taken on each request, with the headers sirv gave them. Returns
+ * false when the path is not a file under build/client, leaving it to handler.
+ */
+function serveFresh(req, res, pathname) {
+  let decoded;
+  try {
+    decoded = decodeURIComponent(pathname);
+  } catch {
+    return false;
+  }
+  const abs = resolve(CLIENT_DIR, `.${decoded}`);
+  if (!abs.startsWith(CLIENT_DIR + sep)) {
+    return false;
+  }
+  let stats;
+  try {
+    stats = statSync(abs);
+  } catch {
+    return false;
+  }
+  if (!stats.isFile()) {
+    return false;
+  }
+  // Like sirv: the precompressed sibling wins when the client accepts it.
+  const type = Bun.file(abs).type.split(";")[0];
+  const accept = req.headers["accept-encoding"] ?? "";
+  let file = abs;
+  let encoding;
+  for (const [ext, name, ok] of [
+    [".br", "br", /(br|brotli)/i.test(accept)],
+    [".gz", "gzip", accept.includes("gzip")],
+  ]) {
+    if (!ok) {
+      continue;
+    }
+    try {
+      const variant = statSync(abs + ext);
+      if (variant.isFile()) {
+        file = abs + ext;
+        stats = variant;
+        encoding = name;
+        break;
+      }
+    } catch {
+      // no precompressed copy of this file
+    }
+  }
+  const etag = `W/"${stats.size}-${stats.mtime.getTime()}"`;
+  const headers = {
+    Vary: "Accept-Encoding",
+    "Content-Type": type,
+    "Last-Modified": stats.mtime.toUTCString(),
+    ETag: etag,
+  };
+  if (encoding) {
+    headers["Content-Encoding"] = encoding;
+  }
+  if (req.headers["if-none-match"] === etag) {
+    res.writeHead(304, headers);
+    res.end();
+    return true;
+  }
+  headers["Content-Length"] = stats.size;
+  res.writeHead(200, headers);
+  if (req.method === "HEAD") {
+    res.end();
+    return true;
+  }
+  createReadStream(file, { end: stats.size - 1 })
+    .on("error", () => res.destroy())
+    .pipe(res);
+  return true;
+}
+
+function serveApp(req, res) {
+  const pathname = req.url.split("?")[0];
+  if (
+    pathname.startsWith(IMMUTABLE_PREFIX) &&
+    !existsSync(`${CLIENT_DIR}${pathname}`)
+  ) {
+    res.writeHead(404);
+    res.end();
+    return;
+  }
+  if (
+    (req.method === "GET" || req.method === "HEAD") &&
+    !pathname.startsWith(IMMUTABLE_PREFIX) &&
+    serveFresh(req, res, pathname)
+  ) {
+    return;
+  }
+  res.on("pipe", (source) => {
+    source.on("error", (error) => {
+      if (error.code !== "ENOENT") {
+        throw error;
+      }
+      console.warn(`[whiffle] static file gone mid-request: ${error.path}`);
+      res.destroy();
+    });
+  });
+  handler(req, res);
+}
+
 const server = http.createServer((req, res) => {
   const info = previewMatch(req);
   if (info) {
     proxyPreviewHttp(req, res, info);
     return;
   }
-  handler(req, res);
+  serveApp(req, res);
 });
 
 server.on("upgrade", (req, socket, head) => {

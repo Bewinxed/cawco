@@ -11,10 +11,12 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import { EmptyState } from "$lib/components/ui/empty";
+  import { Skeleton } from "$lib/components/ui/skeleton";
   import { IconWorkflow } from "$lib/icons";
   import { formatDistanceToNow } from "$lib/utils/time";
   import { whiffle } from "$lib/whiffle/client.svelte";
   import { message } from "$lib/whiffle/delegate-types";
+  import { crossIn, crossOut } from "$lib/whiffle/motion/curves.svelte";
   import {
     refreshWorkflows,
     workflowState,
@@ -22,10 +24,12 @@
   import { createWorkflow } from "$lib/whiffle/workflows";
   import "$lib/components/features/workflows/workflows.css";
 
-  let loading = $state(true);
   let busy = $state(false);
   let errorMessage = $state("");
-  let launch = $state<Workflow>();
+  /** The workflow being launched, and the Run button its dialog grows from. */
+  let launch = $state<{ workflow: Workflow; from: HTMLElement }>();
+  /** Until the first read is in, rows standing where the list will be. */
+  const loading = $derived(!workflowState.loaded);
   const live = $derived(whiffle.hub === "connected");
   const rows = $derived(
     workflowState.workflows.map((workflow) => {
@@ -36,9 +40,7 @@
     })
   );
   onMount(() => {
-    refreshWorkflows().finally(() => {
-      loading = false;
-    });
+    refreshWorkflows();
   });
   const GRAPH = { graph: { nodes: [newNode("start")], edges: [] } };
   const PROGRAM = { program: STARTER_PROGRAM };
@@ -115,23 +117,54 @@
   {#if errorMessage || (workflowState.error && (live || !rows.length))}
     <p class="wf-error" role="alert">{errorMessage || workflowState.error}</p>
   {/if}
+  <!-- Until the first read is in, rows at the height the list's rows take
+       stand where it will be; then the two cross-fade (the skeleton leaves
+       the flow as it goes), so nothing below them moves. -->
   {#if loading}
-    <p class="wf-muted" role="status">Loading workflows…</p>
+    <table
+      aria-label="Loading workflows"
+      class="table"
+      role="status"
+      out:crossOut
+    >
+      <thead>
+        <tr class="heading">
+          <th scope="col">Name</th>
+          <th scope="col">Last run</th>
+          <th scope="col">Started</th>
+          <th scope="col">Runs</th>
+          <th scope="col">Actions</th>
+        </tr>
+      </thead>
+      <tbody aria-hidden="true">
+        {#each [0, 1, 2] as index (index)}
+          <tr class="workflow-row">
+            <td class="name"><Skeleton class="h-4 w-40" /></td>
+            <td><Skeleton class="h-5 w-16" /></td>
+            <td class="age"><Skeleton class="h-4 w-20" /></td>
+            <td class="count"><Skeleton class="h-4 w-6" /></td>
+            <td><Skeleton class="h-8 w-14" /></td>
+          </tr>
+        {/each}
+      </tbody>
+    </table>
   {:else if !rows.length}
     {#if !workflowState.error}
-      <EmptyState
-        class="mx-auto w-full max-w-[420px]"
-        icon={IconWorkflow}
-        line="A workflow is a graph of steps that run one after another across your fleet."
-        title="No workflows yet"
-      >
-        {#snippet action()}
-          {@render newMenu(true)}
-        {/snippet}
-      </EmptyState>
+      <div in:crossIn>
+        <EmptyState
+          class="mx-auto w-full max-w-[420px]"
+          icon={IconWorkflow}
+          line="A workflow is a graph of steps that run one after another across your fleet."
+          title="No workflows yet"
+        >
+          {#snippet action()}
+            {@render newMenu(true)}
+          {/snippet}
+        </EmptyState>
+      </div>
     {/if}
   {:else}
-    <table aria-label="Workflows" class="table">
+    <table aria-label="Workflows" class="table" in:crossIn>
       <thead>
         <tr class="heading">
           <th scope="col">Name</th>
@@ -168,7 +201,7 @@
               <button
                 class="wf-btn desktop"
                 disabled={!live}
-                onclick={() => { launch = workflow; }}
+                onclick={(event) => { launch = { workflow, from: event.currentTarget }; }}
                 title={live ? undefined : "Can't run while the hub is unreachable"}
                 type="button"
               >
@@ -184,7 +217,7 @@
                 <button
                   class="wf-btn"
                   disabled={!live}
-                  onclick={() => { launch = workflow; }}
+                  onclick={(event) => { launch = { workflow, from: event.currentTarget }; }}
                   title={live ? undefined : "Can't run while the hub is unreachable"}
                   type="button"
                 >
@@ -199,10 +232,15 @@
   {/if}
 </div>
 {#if launch}
-  <WorkflowLaunch onclose={() => { launch = undefined; }} workflow={launch} />
+  <WorkflowLaunch
+    from={launch.from}
+    onclose={() => { launch = undefined; }}
+    workflow={launch.workflow}
+  />
 {/if}
 <style>
   .list-page {
+    position: relative;
     padding: var(--space-7) var(--space-6);
     overflow-y: auto;
     flex: 1;

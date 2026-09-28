@@ -34,6 +34,8 @@ export interface ComposerBinding {
   readonly previewPhone: boolean;
   prompts: Snippet;
   readonly sending: boolean;
+  /** Why the last send failed; empty when it did not. */
+  readonly sendError: string;
   readonly suggest: { candidates: SuggestCandidate[] };
   /**
    * How much of the pane's width, from its leading edge, the transcript

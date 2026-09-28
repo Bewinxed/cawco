@@ -9,15 +9,25 @@
    * settled at last time (cards) with skeleton rows over its sections, and
    * shows them, all at once and in place, when they are all in: nothing in
    * it moves while it assembles.
+   *
+   * Every editor's sections also stand veiled under the skeleton for the
+   * frame after they mount: a textarea fits its text in that frame, and a
+   * section drawn before it would move down once it has. They cross-fade in
+   * over --dur-control from their final places.
    */
-  import { type Snippet, untrack } from "svelte";
+  import { onMount, type Snippet, untrack } from "svelte";
   import { fade } from "svelte/transition";
   import { page } from "$app/state";
   import { buttonVariants } from "$lib/components/ui/button";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
   import { IconMore, IconTrash } from "$lib/icons";
-  import { CURVE, easeOut, motionOk } from "$lib/whiffle/motion/curves.svelte";
+  import {
+    CURVE,
+    dur,
+    easeOut,
+    motionOk,
+  } from "$lib/whiffle/motion/curves.svelte";
   import { land } from "$lib/whiffle/motion/share.svelte";
   import { whiffle } from "../client.svelte";
   import { type Cards, rememberCard } from "./cards";
@@ -58,6 +68,18 @@
     /** Parts of the editor are still arriving. */
     settling?: boolean;
   } = $props();
+
+  /** The fields have taken their size (autosize fits in the next frame). */
+  let fitted = $state(false);
+  onMount(() => {
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => {
+        fitted = true;
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  });
+  const veiled = $derived(settling || !fitted);
 
   /** Held at the kept height from opening until the parts are in. */
   let holding = $state(untrack(() => settling));
@@ -149,13 +171,13 @@
           </span>
         {/if}
       </header>
-      <div class="content" class:fill={settling && card !== null}>
-        <div class="slot" class:veiled={settling}>{@render children()}</div>
-        {#if settling}
+      <div class="content" class:fill={veiled && card !== null}>
+        <div class="slot" class:veiled>{@render children()}</div>
+        {#if veiled}
           <div
             aria-hidden="true"
             class="slot"
-            out:fade={{ duration: 120, easing: easeOut }}
+            out:fade={{ duration: dur('--dur-control'), easing: easeOut }}
           >
             <SkeletonRows fill={card !== null} />
           </div>
@@ -231,7 +253,7 @@
       opacity: 0;
     }
     @media (prefers-reduced-motion: no-preference) {
-      transition: opacity 200ms var(--ease-out);
+      transition: opacity var(--dur-control) var(--ease-out);
     }
   }
   /* The section's tile, the one its row carries in the list: 26px, raised,

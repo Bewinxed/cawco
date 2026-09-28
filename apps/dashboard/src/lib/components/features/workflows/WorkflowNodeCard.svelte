@@ -217,9 +217,13 @@
     color: var(--ink-strong);
     font-size: var(--text-body);
     font-weight: var(--weight-body);
+    /* The selection ring is always drawn; choosing a node fades its colour
+       in over --dur-control, and the one let go fades out the same way. */
+    outline: 2px solid transparent;
+    transition: outline-color var(--dur-control) var(--ease-out);
   }
   .selected {
-    outline: 2px solid var(--brand-solid);
+    outline-color: var(--brand-solid);
   }
   header {
     display: flex;
@@ -356,13 +360,13 @@
   }
   @keyframes workflow-breath {
     50% {
-      outline: 2px solid var(--status-live-ink);
+      outline-color: var(--status-live-ink);
     }
   }
   @media (prefers-reduced-motion: reduce) {
     .running {
       animation: none;
-      outline: 2px solid var(--status-live-ink);
+      outline-color: var(--status-live-ink);
     }
   }
 </style>

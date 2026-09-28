@@ -1,8 +1,15 @@
+<script lang="ts" module>
+  /**
+   * What opened the palette: ⌘K (`key`), the rail's Jump field (`field`),
+   * or the element tapped (the phone's header button).
+   */
+  export type JumpOpener = "key" | "field" | HTMLElement;
+</script>
+
 <script lang="ts">
   import { Command as CommandPrimitive } from "bits-ui";
-  import { flip } from "svelte/animate";
   import { expoOut } from "svelte/easing";
-  import { fade, scale } from "svelte/transition";
+  import { scale } from "svelte/transition";
   import { goto } from "$app/navigation";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Command from "$lib/components/ui/command";
@@ -18,7 +25,15 @@
     IconSearch,
     IconUser,
   } from "$lib/icons";
-  import { motionOk } from "$lib/whiffle/motion/curves.svelte";
+  import {
+    crossOut,
+    dur,
+    ease,
+    motionOk,
+    popScale,
+  } from "$lib/whiffle/motion/curves.svelte";
+  import { reflow } from "$lib/whiffle/motion/rows.svelte";
+  import { land } from "$lib/whiffle/motion/share.svelte";
   import { ACTIVITY_LABEL } from "./activity";
   import { whiffle } from "./client.svelte";
   import JumpMatch from "./JumpMatch.svelte";
@@ -34,7 +49,10 @@
   } from "./jump-search.svelte";
   import { conversationHref } from "./links";
 
-  let { open = $bindable(false) }: { open?: boolean } = $props();
+  let {
+    open = $bindable(false),
+    opener = "key",
+  }: { open?: boolean; opener?: JumpOpener } = $props();
   let query = $state("");
 
   const index = $derived.by(() =>
@@ -79,15 +97,8 @@
   const plain = (snippet: string) => snippet.replaceAll(allSnippetMarkers, "");
   const leaf = (path: string) => path.split("/").filter(Boolean).pop() ?? path;
 
-  /**
-   * Motion is opt-out at the source, not only in CSS: `animate:` and
-   * `transition:` run in JS and ignore the media query on their own.
-   */
-  /** Motion is opt-in: without it, lists land in place. */
+  /** Motion is opt-in: without it, the chip lands in place. */
   const still = $derived(!motionOk.current);
-  /** Rows settle into their new rank; they never slide in from nowhere. */
-  const settle = $derived({ duration: still ? 0 : 180, easing: expoOut });
-  const arrive = $derived({ duration: still ? 0 : 140 });
   /** The chip lands rather than pops: it grows the last twentieth into place. */
   const chipMotion = $derived({
     duration: still ? 0 : 190,
@@ -150,10 +161,69 @@
     open = false;
     await goto(href);
   }
+
+  /* ── How it arrives ──────────────────────────────────────────────────
+     From the rail's field, the palette IS that field opening: it starts on
+     the field, cut to its box around the search line, and travels home as
+     the cut opens (motion/share, `grow`), over --dur-pop on the drawer
+     curve. From the phone's header button it grows out of the button: from
+     the pop scale, the button as its origin, over the same length. From ⌘K,
+     nothing travels — it is summoned often and from nowhere in particular —
+     so it only fades in, over --dur-control. The kit dialog's own entrance
+     stands down for all three (the class below). */
+  const ENTRY = { key: "fade", field: "grow" } as const;
+  const entry = $derived(typeof opener === "string" ? ENTRY[opener] : "pop");
+  let well = $state<HTMLElement | null>(null);
+  const shell = $derived(
+    well?.closest<HTMLElement>('[data-slot="dialog-content"]') ?? null
+  );
+  $effect(() => {
+    if (!shell) {
+      return;
+    }
+    if (entry === "grow") {
+      return land(() => "jump", {
+        mode: "grow",
+        anchor: ".jump-search",
+        ms: dur("--dur-pop"),
+      })(shell);
+    }
+    if (entry === "pop" && motionOk.current && opener instanceof HTMLElement) {
+      const from = opener.getBoundingClientRect();
+      const box = shell.getBoundingClientRect();
+      const origin = `${from.left + from.width / 2 - box.left}px ${from.top + from.height / 2 - box.top}px`;
+      const rise = Number.parseFloat(
+        getComputedStyle(shell).getPropertyValue("--pop-rise")
+      );
+      shell.animate(
+        [
+          {
+            transformOrigin: origin,
+            transform: `translateY(${-rise}px) scale(${popScale()})`,
+            opacity: 0,
+          },
+          { transformOrigin: origin, transform: "none", opacity: 1 },
+        ],
+        { duration: dur("--dur-pop"), easing: ease("--ease-drawer") }
+      );
+    }
+  });
+
+  /* ── The list ────────────────────────────────────────────────────────
+     Groups and rows that arrive, leave or change rank as the query changes
+     move the way every list here does (motion/rows): a group carries its
+     rows, a row moves inside it only by its own step. The dialog's own
+     height follows its content (the kit dialog's morph). */
+  let list = $state<HTMLElement | null>(null);
+  $effect(() => {
+    if (list) {
+      return reflow()(list);
+    }
+  });
 </script>
 
 <Command.Dialog
-  class="jump-dialog top-[9vh] sm:max-w-2xl"
+  class="jump-dialog jump-{entry} top-[9vh] sm:max-w-2xl"
   description="Jump to a project, machine, or session"
   loop
   shouldFilter={false}
@@ -164,7 +234,7 @@
        ONE sunken well inside the raised card, holding the search line, the
        results and the hints. The input was its own bordered control floating
        above a separately bordered list — two boxes, two radii, two insets. -->
-  <div class="jump-well">
+  <div class="jump-well" bind:this={well}>
     <!-- The search line is built here rather than taken from Command.Input:
          its input group owns the field's padding and puts the addon in flow,
          which leaves no place to put a chip except on top of the text. Icon,
@@ -201,34 +271,37 @@
       />
     </div>
 
-    <Command.List class="jump-list">
+    <Command.List class="jump-list" bind:ref={list}>
       {#if !(search.pending || fragment !== null)}
-        <Command.Empty>Nothing matches that.</Command.Empty>
+        <Command.Empty data-flip>Nothing matches that.</Command.Empty>
       {/if}
 
       <!-- Typing `@` asks who wrote the line, so the list answers that question
            and nothing else until it is settled. -->
       {#if fragment !== null}
-        <Command.Group heading="Search messages from">
+        <Command.Group data-flip heading="Search messages from">
           {#each authorChoices as author (author.token)}
             {@const AuthorMark = AUTHOR_MARK[author.token]}
-            <Command.Item
-              onSelect={() => chooseAuthor(author.token)}
-              value={`author:${author.token}`}
-            >
-              <AuthorMark class="jump-mark" height={16} width={16} />
-              <span class="jump-name">{author.label}</span>
-              <span class="jump-trail">@{author.token} · {author.detail}</span>
-            </Command.Item>
+            {@const trail = `@${author.token} · ${author.detail}`}
+            <div data-flip>
+              <Command.Item
+                onSelect={() => chooseAuthor(author.token)}
+                value={`author:${author.token}`}
+              >
+                <AuthorMark class="jump-mark" height={16} width={16} />
+                <span class="jump-name">{author.label}</span>
+                <span class="jump-trail">{trail}</span>
+              </Command.Item>
+            </div>
           {/each}
         </Command.Group>
       {/if}
 
       {#each fragment === null ? grouped : [] as group (group.name)}
-        <Command.Group heading={group.name}>
+        <Command.Group data-flip heading={group.name}>
           {#each group.rows as entry (entry.id)}
             {@const EntryMark = MARK[entry.kind]}
-            <div animate:flip={settle}>
+            <div data-flip>
               <Command.Item onSelect={() => jump(entry.href)} value={entry.id}>
                 <EntryMark class="jump-mark" height={16} width={16} />
                 <JumpMatch
@@ -249,28 +322,37 @@
 
       {#if search.pending || search.hits.length > 0}
         <Command.Group
+          class="jump-hits"
+          data-flip
           heading={scoped ? `Transcripts · from ${scoped.label}` : "Transcripts"}
         >
           {#if search.pending && search.hits.length === 0}
-            <!-- The shape of what is coming, so the list does not jump when it lands. -->
-            <div aria-hidden="true" class="jump-skeletons">
+            <!-- The shape of what is coming: rows drawn as the hit rows are,
+                 at their height, so the hits take their place without moving
+                 anything. They fade where they stand as the hits arrive. -->
+            <div aria-hidden="true" class="jump-skeletons" out:crossOut>
               {#each SKELETONS as row (row)}
-                <div class="jump-skeleton">
-                  <Skeleton
-                    class="jump-skeleton-bar"
-                    style="width: {38 - row * 6}%"
-                  />
-                  <Skeleton
-                    class="jump-skeleton-bar"
-                    style="width: {74 - row * 9}%"
-                  />
+                <div class="kit-item jump-hit jump-skeleton">
+                  <span class="jump-hit-head">
+                    <Skeleton class="jump-skeleton-mark" />
+                    <Skeleton
+                      class="jump-skeleton-bar"
+                      style="width: {38 - row * 6}%"
+                    />
+                  </span>
+                  <span class="jump-snippet">
+                    <Skeleton
+                      class="jump-skeleton-bar"
+                      style="width: {74 - row * 9}%"
+                    />
+                  </span>
                 </div>
               {/each}
             </div>
             <span class="sr-only" role="status">Searching transcripts</span>
           {/if}
           {#each search.hits as hit (hit.docId)}
-            <div in:fade={arrive} animate:flip={settle}>
+            <div data-flip>
               <Command.Item
                 class="jump-hit"
                 onSelect={() =>
@@ -499,19 +581,48 @@
     color: var(--ink-strong);
     font-weight: 500;
   }
+  /* The hit rows' own box (kit-item, jump-hit), so a skeleton row is as
+     tall as the row that replaces it; the bars sit on the lines' centres. */
+  :global(.jump-hits) {
+    position: relative;
+  }
   .jump-skeletons {
     display: flex;
     flex-direction: column;
-    gap: 10px;
-    padding: 6px 8px 10px;
   }
   .jump-skeleton {
-    display: flex;
-    flex-direction: column;
-    gap: 5px;
+    pointer-events: none;
   }
   .jump-skeleton :global(.jump-skeleton-bar) {
     height: 7px;
+    align-self: center;
+  }
+  .jump-skeleton :global(.jump-skeleton-mark) {
+    width: 16px;
+    height: 16px;
+    flex: none;
+  }
+  .jump-skeleton .jump-snippet {
+    display: flex;
+    height: 1lh;
+  }
+  .jump-skeleton .jump-hit-head {
+    height: 1lh;
+  }
+
+  /* The kit dialog's own entrance (app.css kit-dialog-in) stands down: the
+     field grows into it, the header button pops it, and ⌘K fades it in
+     over --dur-control, scrim and all. */
+  @media (prefers-reduced-motion: no-preference) {
+    :global(.jump-dialog:is(.jump-grow, .jump-pop)[data-state="open"]) {
+      animation: none;
+    }
+    :global(.jump-dialog.jump-fade[data-state="open"]) {
+      animation: kit-fade-in var(--dur-control) var(--ease-out) both;
+    }
+  }
+  :global([data-slot="dialog-overlay"][data-state="open"]:has(+ .jump-fade)) {
+    animation-duration: var(--dur-control);
   }
   /* Inside the well, divided from the results by the same hairline as the
      search line above them — the panel reads as one object, top to bottom. */

@@ -372,6 +372,7 @@
         paneVisible={bound.paneVisible}
         previewPhone={bound.previewPhone}
         prompts={bound.prompts}
+        sendError={bound.sendError}
         sending={bound.sending}
         suggest={bound.suggest}
         bind:height={composerHeight}

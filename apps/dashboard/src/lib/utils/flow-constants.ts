@@ -10,21 +10,12 @@
 /** Default width for all flow nodes */
 export const NODE_WIDTH = 320;
 
-/** Estimated node height for visibility calculations */
-export const NODE_HEIGHT_ESTIMATE = 140;
-
-/** Node center offset X (half of NODE_WIDTH) */
-export const NODE_CENTER_X = NODE_WIDTH / 2;
-
 /** Node center offset Y for centering */
 export const NODE_CENTER_Y = 60;
 
 // ============================================================
 // Zoom Thresholds
 // ============================================================
-
-/** Zoom level threshold for switching between compact and expanded layout */
-export const ZOOM_THRESHOLD_LAYOUT = 1.0;
 
 /** Zoom level threshold for overview mode (icon only) */
 export const ZOOM_THRESHOLD_OVERVIEW = 0.5;
@@ -37,9 +28,6 @@ export const ZOOM_MIN = 0.1;
 
 /** Maximum zoom level allowed */
 export const ZOOM_MAX = 2;
-
-/** Default zoom level for initial pan to last node */
-export const ZOOM_DEFAULT = 1.0;
 
 // ============================================================
 // Layout Spacing Configurations
@@ -97,9 +85,6 @@ export const FALLBACK_VIEWPORT_HEIGHT = 900;
 /** Duration for pan/zoom animations (ms) */
 export const ANIMATION_DURATION = 300;
 
-/** Delay before initial pan to let layout settle (ms) */
-export const INITIAL_PAN_DELAY = 100;
-
 /** Duration for slide transitions (ms) */
 export const SLIDE_DURATION = 150;
 
@@ -125,9 +110,6 @@ export const SUBAGENT_RESULT_MAX_CHARS = 200;
 
 /** Interval for elapsed time updates in running subagents (ms) */
 export const ELAPSED_TIME_UPDATE_INTERVAL = 1000;
-
-/** Delay before adding click-outside listener to prevent immediate close (ms) */
-export const CONTEXT_MENU_CLICK_DELAY = 10;
 
 // ============================================================
 // Branch Colors (CSS variable references)

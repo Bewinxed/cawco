@@ -2,6 +2,7 @@
   import type { RuleDraft } from "@whiffle/core";
   import { ruleHits } from "@whiffle/core";
   import { Textarea } from "$lib/components/ui/textarea";
+  import { crossIn, crossOut } from "$lib/whiffle/motion/curves.svelte";
 
   /**
    * The part of the editor that tells the truth. A pattern is a guess until it
@@ -55,6 +56,9 @@
   });
 
   const firing = $derived(hits.length > 0);
+
+  /** Where the hits are: a new set of marks cross-fades over the old. */
+  const marked = $derived(hits.map((hit) => `${hit.start}-${hit.end}`).join());
 </script>
 
 <div
@@ -83,19 +87,41 @@
   />
 
   {#if sample.trim() && draft.pattern.trim()}
-    <p
-      class="max-h-40 overflow-y-auto rounded-[var(--radius-sm)] bg-background p-3 font-mono text-label leading-relaxed break-words whitespace-pre-wrap"
+    <!-- The text, and over it the marks alone (their text transparent), in
+         one cell: when the hits move, the new marks cross-fade over the old
+         over --dur-control while the words stay put. -->
+    <div
+      class="preview relative grid max-h-40 overflow-y-auto rounded-[var(--radius-sm)] bg-background font-mono text-label leading-relaxed"
     >
-      {#each segments as segment, index (index)}
-        {#if segment.hit}
-          <mark
-            class="rounded-[var(--radius-xs)] bg-success/25 px-0.5 text-foreground"
-            >{segment.text}</mark
-          >
-        {:else}
-          {segment.text}
-        {/if}
-      {/each}
-    </p>
+      <p class="layer">{sample}</p>
+      {#key marked}
+        <p aria-hidden="true" class="layer marks" in:crossIn out:crossOut>
+          {#each segments as segment, index (index)}
+            {#if segment.hit}
+              <mark class="rounded-[var(--radius-xs)] bg-success/25"
+                >{segment.text}</mark
+              >
+            {:else}
+              {segment.text}
+            {/if}
+          {/each}
+        </p>
+      {/key}
+    </div>
   {/if}
 </div>
+
+<style>
+  .layer {
+    grid-area: 1 / 1;
+    padding: 12px;
+    overflow-wrap: break-word;
+    white-space: pre-wrap;
+  }
+  /* Only the marks' fill shows: the words are the ones drawn under them,
+     which is why a mark takes no padding of its own. */
+  .marks,
+  .marks mark {
+    color: transparent;
+  }
+</style>

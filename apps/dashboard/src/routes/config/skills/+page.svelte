@@ -193,8 +193,6 @@
           fleet.skills = fleet.skills.filter(
             (other) => other.name !== row.name
           );
-        } catch (err) {
-          toast.error(message(err));
         } finally {
           delete busy[row.name];
         }
@@ -245,8 +243,6 @@
           if (browsing === name) {
             browsing = null;
           }
-        } catch (err) {
-          toast.error(message(err));
         } finally {
           delete busy[name];
         }
@@ -296,8 +292,6 @@
           fleet.config.plugins = fleet.config.plugins.filter(
             (row) => row.id !== id
           );
-        } catch (err) {
-          toast.error(message(err));
         } finally {
           delete busy[id];
         }
