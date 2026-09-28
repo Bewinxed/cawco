@@ -172,33 +172,38 @@
   }
 
   async function askRemove() {
-    const ok = await confirm({
+    if (!fleet) {
+      return;
+    }
+    await confirm({
       title: `Delete ${fileLabel(path)}?`,
       body: "It is taken off every machine that still has Whiffle's copy. A machine's own edited copy is left where it is.",
       confirmLabel: "Delete everywhere",
       destructive: true,
+      pendingLabel: "Deleting…",
+      run: async () => {
+        deleting = true;
+        deleteFailed = false;
+        try {
+          if (main) {
+            await removeMemory();
+            fleet.memory = null;
+          } else {
+            await removeMemoryDoc(path);
+            fleet.memoryDocs = fleet.memoryDocs.filter(
+              (doc) => doc.path !== path
+            );
+          }
+          text = "";
+          delete store.memoryDrafts[path];
+          await goto("/config/memory");
+        } catch (caught) {
+          deleteFailed = true;
+          toast.error(message(caught));
+          deleting = false;
+        }
+      },
     });
-    if (!(ok && fleet)) {
-      return;
-    }
-    deleting = true;
-    deleteFailed = false;
-    try {
-      if (main) {
-        await removeMemory();
-        fleet.memory = null;
-      } else {
-        await removeMemoryDoc(path);
-        fleet.memoryDocs = fleet.memoryDocs.filter((doc) => doc.path !== path);
-      }
-      text = "";
-      delete store.memoryDrafts[path];
-      await goto("/config/memory");
-    } catch (caught) {
-      deleteFailed = true;
-      toast.error(message(caught));
-      deleting = false;
-    }
   }
 
   function keydown(event: KeyboardEvent) {
@@ -297,7 +302,10 @@
   let copies = $state<Record<string, string | null>>({});
   let peeking = $state<Record<string, boolean>>({});
   let unread = $state<Record<string, string>>({});
-  let settling = $state<Record<string, boolean>>({});
+  /** Per machine, the settle whose request is out. */
+  let settling = $state<Record<string, "adopt" | "push">>({});
+  /** Per machine, the last settle failed: its button shows no check. */
+  let settleFailed = $state<Record<string, boolean>>({});
 
   const applied = $derived(
     machines.filter((row) => memoryStateOf(row, path)?.state === "applied")
@@ -331,7 +339,8 @@
   }
 
   async function adopt(machine: Machine) {
-    settling[machine.machineId] = true;
+    settling[machine.machineId] = "adopt";
+    delete settleFailed[machine.machineId];
     try {
       const landed = main
         ? await adoptMemory(machine.machineId)
@@ -345,6 +354,7 @@
       );
       await loadHistory();
     } catch (caught) {
+      settleFailed[machine.machineId] = true;
       toast.error(message(caught));
     } finally {
       delete settling[machine.machineId];
@@ -352,7 +362,8 @@
   }
 
   async function overwrite(machine: Machine) {
-    settling[machine.machineId] = true;
+    settling[machine.machineId] = "push";
+    delete settleFailed[machine.machineId];
     try {
       await pushMemory(machine.machineId, main ? undefined : path);
       comparing = null;
@@ -361,6 +372,7 @@
         `${machineLabel(machine.hostname)} takes the fleet's copy.`
       );
     } catch (caught) {
+      settleFailed[machine.machineId] = true;
       toast.error(message(caught));
     } finally {
       delete settling[machine.machineId];
@@ -576,6 +588,7 @@
                 presence={online ? 'online' : 'off'}
               />
               {#if drifted || !saved}
+                {@const settle = settling[machine.machineId]}
                 <span class="acts">
                   {#if drifted}
                     <Button
@@ -588,22 +601,26 @@
                     </Button>
                   {/if}
                   <Button
-                    disabled={!online || settling[machine.machineId] === true}
+                    disabled={!online || settle === 'push'}
+                    failed={settleFailed[machine.machineId] === true}
+                    label="Adopt this copy"
                     onclick={() => adopt(machine)}
+                    pending={settle === 'adopt'}
+                    pendingLabel="Adopting…"
                     size="sm"
                     variant="outline"
-                  >
-                    Adopt this copy
-                  </Button>
+                  />
                   {#if drifted}
                     <Button
-                      disabled={!online || settling[machine.machineId] === true}
+                      disabled={!online || settle === 'adopt'}
+                      failed={settleFailed[machine.machineId] === true}
+                      label="Send ours"
                       onclick={() => overwrite(machine)}
+                      pending={settle === 'push'}
+                      pendingLabel="Sending…"
                       size="sm"
                       variant="outline"
-                    >
-                      Send ours
-                    </Button>
+                    />
                   {/if}
                 </span>
               {/if}

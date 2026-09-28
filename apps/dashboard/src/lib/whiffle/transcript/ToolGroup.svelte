@@ -13,6 +13,9 @@
   import MemoryBody from "$lib/components/features/tool-cards/MemoryBody.svelte";
   import ToolProse from "$lib/components/features/tool-cards/ToolProse.svelte";
   import { Badge } from "$lib/components/ui/badge";
+  import PendingContent, {
+    whileIdle,
+  } from "$lib/components/ui/button/pending-content.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Collapsible from "$lib/components/ui/collapsible";
   import { IconChevronRight, IconWindow } from "$lib/icons";
@@ -111,6 +114,24 @@
 
   /** Favicons that failed to load; their rows keep the tool's glyph. */
   const brokenIcons = new SvelteSet<string>();
+  /** Preview calls whose open request is out, and those whose last one failed. */
+  const opening = new SvelteSet<string>();
+  const openFailed = new SvelteSet<string>();
+
+  async function openArtifact(m: Message, input: PreviewSource) {
+    const key = callId(m);
+    opening.add(key);
+    openFailed.delete(key);
+    try {
+      await openPreview(m.instanceId, input);
+      revealPreview(m.instanceId);
+    } catch (error) {
+      openFailed.add(key);
+      toast.error(error instanceof Error ? error.message : String(error));
+    } finally {
+      opening.delete(key);
+    }
+  }
 
   function describe(m: Message): ToolDescriptor {
     const meta = m.metadata ?? {};
@@ -319,16 +340,25 @@
             {@const current = whiffle.previews[m.instanceId]}
             {@const preview = sameSource(current, input) ? current : undefined}
             {@const opened = preview?.state === 'open'}
+            {@const busy = opening.has(callId(m))}
             <div class="preview-tool" class:closed={!opened}>
               <button
+                aria-busy={busy || undefined}
+                aria-disabled={busy || undefined}
                 aria-label={preview?.title || 'Preview'}
                 class="artifact-open"
-                onclick={() => opened ? revealPreview(m.instanceId) : openPreview(m.instanceId, input).then(() => revealPreview(m.instanceId)).catch((error) => toast.error(error.message))}
+                onclick={whileIdle(() => busy, () => opened ? revealPreview(m.instanceId) : openArtifact(m, input))}
                 type="button"
               >
                 <span class="mark"><IconWindow /></span>
                 <span class="artifact-label"
-                  ><span>{preview?.title || 'Preview'}</span
+                  ><span class="artifact-title"
+                    ><PendingContent
+                      failed={openFailed.has(callId(m))}
+                      label={preview?.title || 'Preview'}
+                      pending={busy}
+                      pendingLabel="Opening…"
+                    /></span
                   ><span class="artifact-path"
                     >{preview?.path || ('dir' in input ? pathLeaf(input.dir) : '')}</span
                   ></span
@@ -495,6 +525,13 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+  }
+  .artifact-title {
+    display: flex;
+    align-items: center;
+    gap: var(--btn-gap);
+    --btn-gap: var(--space-1);
+    --btn-icon: 12px;
   }
   .artifact-path {
     color: var(--ink-muted);

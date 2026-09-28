@@ -73,30 +73,37 @@
     store.memoryDrafts[path] === undefined ? "" : " · unsaved draft";
 
   async function askRemove(path: string) {
-    const ok = await confirm({
+    if (!fleet) {
+      return;
+    }
+    await confirm({
       title: `Delete ${fileLabel(path)}?`,
       body: "It is taken off every machine that still has Whiffle's copy. A machine's own edited copy is left where it is.",
       confirmLabel: "Delete everywhere",
       destructive: true,
+      pendingLabel: "Deleting…",
+      run: async () => {
+        busy[path] = true;
+        try {
+          if (path === MAIN) {
+            await removeMemory();
+            fleet.memory = null;
+          } else {
+            await removeMemoryDoc(path);
+            fleet.memoryDocs = fleet.memoryDocs.filter(
+              (doc) => doc.path !== path
+            );
+          }
+          delete store.memoryDrafts[path];
+        } catch (caught) {
+          toast.error(
+            caught instanceof Error ? caught.message : String(caught)
+          );
+        } finally {
+          delete busy[path];
+        }
+      },
     });
-    if (!(ok && fleet)) {
-      return;
-    }
-    busy[path] = true;
-    try {
-      if (path === MAIN) {
-        await removeMemory();
-        fleet.memory = null;
-      } else {
-        await removeMemoryDoc(path);
-        fleet.memoryDocs = fleet.memoryDocs.filter((doc) => doc.path !== path);
-      }
-      delete store.memoryDrafts[path];
-    } catch (caught) {
-      toast.error(caught instanceof Error ? caught.message : String(caught));
-    } finally {
-      delete busy[path];
-    }
   }
 
   function created(row: FleetMemoryDocRow) {

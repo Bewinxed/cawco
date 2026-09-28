@@ -81,14 +81,22 @@
       {/snippet}
     </DropdownMenu.Trigger>
     <DropdownMenu.Content align={inEmptyState ? 'start' : 'end'} class="w-64">
-      <DropdownMenu.Item class="new-item" onSelect={() => create(GRAPH)}>
-        <span
-          >New graph<small>Draw the steps; the hub compiles them.</small></span
-        >
-      </DropdownMenu.Item>
-      <DropdownMenu.Item class="new-item" onSelect={() => create(PROGRAM)}>
-        <span>New program<small>Write the steps as TypeScript.</small></span>
-      </DropdownMenu.Item>
+      <DropdownMenu.PendingItem
+        class="new-item"
+        label="New graph"
+        pendingLabel="Creating…"
+        run={() => create(GRAPH)}
+      >
+        <small>Draw the steps; the hub compiles them.</small>
+      </DropdownMenu.PendingItem>
+      <DropdownMenu.PendingItem
+        class="new-item"
+        label="New program"
+        pendingLabel="Creating…"
+        run={() => create(PROGRAM)}
+      >
+        <small>Write the steps as TypeScript.</small>
+      </DropdownMenu.PendingItem>
     </DropdownMenu.Content>
   </DropdownMenu.Root>
 {/snippet}
@@ -244,17 +252,18 @@
   .count {
     font-variant-numeric: tabular-nums;
   }
+  /* The title (the pending content: slot and label) on one line, what it
+     makes on the next. */
   :global(.new-item) {
+    flex-wrap: wrap;
+    row-gap: var(--space-1);
     min-height: 44px;
-  }
-  :global(.new-item) span {
-    display: grid;
-    gap: var(--space-1);
     color: var(--ink-strong);
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
   }
   :global(.new-item) small {
+    flex-basis: 100%;
     color: var(--ink-muted);
     font-size: var(--text-meta);
     font-weight: var(--weight-body);

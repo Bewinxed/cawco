@@ -111,28 +111,28 @@
     if (!name) {
       return;
     }
-    const ok = await confirm({
+    await confirm({
       title: `Delete ${draft.name || "this delegate type"}?`,
       body: "A session already running keeps the type list it started with — the prompt cache is frozen for its lifetime. This only stops the name from being offered to new sessions.",
       confirmLabel: "Delete delegate type",
       destructive: true,
+      pendingLabel: "Deleting…",
+      run: async () => {
+        deleting = true;
+        try {
+          await removeDelegateType(name);
+          if (store.types.value) {
+            store.types.value = store.types.value.filter(
+              (row) => row.name !== name
+            );
+          }
+          await goto("/config/delegate-types");
+        } catch (error) {
+          failed = message(error);
+          deleting = false;
+        }
+      },
     });
-    if (!ok) {
-      return;
-    }
-    deleting = true;
-    try {
-      await removeDelegateType(name);
-      if (store.types.value) {
-        store.types.value = store.types.value.filter(
-          (row) => row.name !== name
-        );
-      }
-      await goto("/config/delegate-types");
-    } catch (error) {
-      failed = message(error);
-      deleting = false;
-    }
   }
 </script>
 

@@ -47,24 +47,15 @@
   const scratch = $derived(instance.kind === "scratch");
   const pinned = $derived(rail.isPinned("session", instance.id));
 
-  let _busy = $state(false);
-
   async function askDiscard() {
-    const ok = await confirm({
+    await confirm({
       title: "Discard this side quest?",
       body: "The session stops, and whatever the spawn created for it — its worktree, its transcript — goes with it, for good.",
       confirmLabel: "Discard side quest",
       destructive: true,
+      pendingLabel: "Discarding…",
+      run: () => discardSession(instance.id, instance.machineId),
     });
-    if (!ok) {
-      return;
-    }
-    _busy = true;
-    try {
-      await discardSession(instance.id, instance.machineId);
-    } finally {
-      _busy = false;
-    }
   }
 </script>
 
@@ -108,10 +99,12 @@
 
     {#if scratch}
       <ContextMenu.Separator />
-      <ContextMenu.Item onSelect={() => keepSession(instance.id)}>
-        <IconCheck />
-        Keep
-      </ContextMenu.Item>
+      <ContextMenu.PendingItem
+        icon={IconCheck}
+        label="Keep"
+        pendingLabel="Keeping…"
+        run={() => keepSession(instance.id)}
+      />
       <ContextMenu.Item onSelect={askDiscard} variant="destructive">
         <IconTrash />
         Discard

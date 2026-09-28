@@ -244,26 +244,28 @@
     if (!id) {
       return;
     }
-    const ok = await confirm({
+    await confirm({
       title: `Delete ${draft.name || "this rule"}?`,
       body: "This rule stops applying to every session and is removed for good. You can always write it again, but there's no undo.",
       confirmLabel: "Delete rule",
       destructive: true,
+      pendingLabel: "Deleting…",
+      run: async () => {
+        deleting = true;
+        try {
+          await removeRule(id, draft.name);
+          if (store.rules.value) {
+            store.rules.value = store.rules.value.filter(
+              (row) => row.id !== id
+            );
+          }
+          await goto("/config/rules");
+        } catch (error) {
+          failed = message(error);
+          deleting = false;
+        }
+      },
     });
-    if (!ok) {
-      return;
-    }
-    deleting = true;
-    try {
-      await removeRule(id, draft.name);
-      if (store.rules.value) {
-        store.rules.value = store.rules.value.filter((row) => row.id !== id);
-      }
-      await goto("/config/rules");
-    } catch (error) {
-      failed = message(error);
-      deleting = false;
-    }
   }
 
   /** Text-matching options fold away for a meaning rule: 300ms, settling in. */

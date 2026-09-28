@@ -7,11 +7,18 @@
  * every machine, no undo). This replaces all of that: `await confirm({...})`
  * anywhere, one `<ConfirmDialog/>` mounted once in the shell renders it.
  *
- *   if (await confirm({ title: 'Remove X?', destructive: true })) remove(x);
+ *   await confirm({
+ *     title: 'Remove X?',
+ *     destructive: true,
+ *     pendingLabel: 'Removing…',
+ *     run: () => remove(x),
+ *   });
  *
- * The promise resolves `true` on confirm, `false` on cancel/dismiss. A new ask
- * while one is open cancels the first — there is a single dialog, so there is a
- * single question at a time.
+ * The confirm button starts `run` and goes pending (spinner, `pendingLabel`)
+ * with the dialog left open until the work ends; then the dialog closes and
+ * the promise resolves `true`. Cancel or dismiss resolves `false`; work that
+ * throws leaves the dialog open. A new ask while one is open cancels the
+ * first — there is a single dialog, so there is a single question at a time.
  */
 
 export interface ConfirmRequest {
@@ -22,6 +29,10 @@ export interface ConfirmRequest {
   confirmLabel?: string;
   /** Paints the confirm button as destructive. Defaults on for a delete-shaped verb. */
   destructive?: boolean;
+  /** What the confirm button says while `run` runs ("Deleting…"). */
+  pendingLabel: string;
+  /** The work the confirm button starts. */
+  run: () => Promise<unknown>;
   /** The question, as a heading. Name the thing and its blast radius here. */
   title: string;
 }
@@ -37,15 +48,31 @@ export const confirmHost = {
   get pending(): Pending | null {
     return pending;
   },
-  /** Settle the open question. Idempotent: a second answer is a no-op. */
-  answer(ok: boolean): void {
+  /** The reader declined: the question ends unanswered. */
+  dismiss(): void {
     const settle = pending?.resolve;
     pending = null;
-    settle?.(ok);
+    settle?.(false);
+  },
+  /**
+   * The reader confirmed: the work runs, and the question ends once it has
+   * (unless it was dismissed or replaced meanwhile). Work that throws leaves
+   * the question open.
+   */
+  async accept(): Promise<void> {
+    const asked = pending;
+    if (!asked) {
+      return;
+    }
+    await asked.run();
+    if (pending === asked) {
+      pending = null;
+      asked.resolve(true);
+    }
   },
 };
 
-/** Ask the reader to confirm. Resolves true if they confirm, false otherwise. */
+/** Ask the reader to confirm, then run the work. Resolves true once it has run, false if they declined. */
 export function confirm(request: ConfirmRequest): Promise<boolean> {
   pending?.resolve(false);
   return new Promise<boolean>((resolve) => {

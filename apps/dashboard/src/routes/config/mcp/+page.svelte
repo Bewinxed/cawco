@@ -66,29 +66,29 @@
 
   /** Removing a server pulls it from every machine, so the confirm names that. */
   async function askRemove(row: FleetMcpServer) {
-    const ok = await confirm({
+    await confirm({
       title: `Remove ${row.name}?`,
       body: `This removes ${row.name} from every machine in the fleet — not just this one. It can't be undone.`,
       confirmLabel: "Remove everywhere",
       destructive: true,
+      pendingLabel: "Removing…",
+      run: async () => {
+        busy[row.name] = true;
+        try {
+          await removeMcpServer(row.name);
+          const fleet = store.fleet.value;
+          if (fleet) {
+            fleet.config.mcp = fleet.config.mcp.filter(
+              (other) => other.name !== row.name
+            );
+          }
+        } catch (caught) {
+          toast.error(message(caught));
+        } finally {
+          delete busy[row.name];
+        }
+      },
     });
-    if (!ok) {
-      return;
-    }
-    busy[row.name] = true;
-    try {
-      await removeMcpServer(row.name);
-      const fleet = store.fleet.value;
-      if (fleet) {
-        fleet.config.mcp = fleet.config.mcp.filter(
-          (other) => other.name !== row.name
-        );
-      }
-    } catch (caught) {
-      toast.error(message(caught));
-    } finally {
-      delete busy[row.name];
-    }
   }
 
   async function syncAll() {

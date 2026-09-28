@@ -73,10 +73,12 @@
   </ContextMenu.Trigger>
 
   <ContextMenu.Content>
-    <ContextMenu.Item onSelect={() => loadCatalog(machine.machineId)}>
-      <IconRefresh />
-      Reload sessions
-    </ContextMenu.Item>
+    <ContextMenu.PendingItem
+      icon={IconRefresh}
+      label="Reload sessions"
+      pendingLabel="Reloading…"
+      run={() => loadCatalog(machine.machineId)}
+    />
     <!-- The form reads `machine` out of the query and preselects it. -->
     <ContextMenu.Item
       onSelect={() => goto(`/session?machine=${machine.machineId}`)}

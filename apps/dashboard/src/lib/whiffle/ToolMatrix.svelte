@@ -40,6 +40,8 @@
     written[spec.id] ?? policyFor(policies, spec.id);
   let saving = $state<Record<string, boolean>>({});
   let asked = $state<Record<string, boolean>>({});
+  /** Cells whose last install request failed: their button shows no check. */
+  let refused = $state<Record<string, boolean>>({});
   const cellKey = (machineId: string, toolId: string): string =>
     `${machineId}:${toolId}`;
   const installedOn = (spec: ToolSpec): number =>
@@ -52,6 +54,7 @@
   async function install(machine: Machine, spec: ToolSpec) {
     const key = cellKey(machine.machineId, spec.id);
     asked[key] = true;
+    delete refused[key];
     try {
       await installTool(
         machine.machineId,
@@ -59,6 +62,7 @@
         policyOf(spec).pinnedVersion
       );
     } catch (err) {
+      refused[key] = true;
       toast.error(
         `${spec.name} on ${machineLabel(machine.hostname)}: ${message(err)}`
       );
@@ -82,7 +86,8 @@
 {#snippet cell(machine: Machine, spec: ToolSpec, online: boolean)}
   {@const toolStatus = machine.tools?.[spec.id]}
   {@const pending = asked[cellKey(machine.machineId, spec.id)] === true}
-  {@const shown = pending ? 'installing' : (toolStatus?.state ?? 'unknown')}
+  {@const shown = toolStatus?.state ?? 'unknown'}
+  {@const failed = refused[cellKey(machine.machineId, spec.id)] === true}
 
   {#if shown === 'installed'}
     <span class="flex items-center gap-[var(--space-1)]">
@@ -96,12 +101,14 @@
         <Button
           class="text-muted-foreground"
           disabled={!online}
+          {failed}
+          label="Reinstall"
           onclick={() => install(machine, spec)}
+          {pending}
+          pendingLabel="Installing…"
           size="xs"
           variant="ghost"
-        >
-          Reinstall
-        </Button>
+        />
       </span>
     </span>
   {:else if shown === 'installing'}
@@ -112,11 +119,14 @@
   {:else if shown === 'missing'}
     <Button
       disabled={!online}
+      {failed}
+      label="Install"
       onclick={() => install(machine, spec)}
+      {pending}
+      pendingLabel="Installing…"
       size="xs"
       variant="outline"
-      >Install</Button
-    >
+    />
   {:else if shown === 'failed'}
     <span class="flex items-center gap-[var(--space-1)]">
       <Popover.Root>
@@ -159,22 +169,28 @@
           >
             <Button
               disabled={!online}
+              {failed}
+              label="Retry"
               onclick={() => install(machine, spec)}
+              {pending}
+              pendingLabel="Installing…"
               size="xs"
               variant="outline"
-              >Retry</Button
-            >
+            />
           </footer>
         </Popover.Content>
       </Popover.Root>
       <Button
         class="text-muted-foreground"
         disabled={!online}
+        {failed}
+        label="Retry"
         onclick={() => install(machine, spec)}
+        {pending}
+        pendingLabel="Installing…"
         size="xs"
         variant="ghost"
-        >Retry</Button
-      >
+      />
     </span>
   {:else if shown === 'unsupported'}
     <Popover.Root>
@@ -217,11 +233,14 @@
       <Button
         class="text-muted-foreground"
         disabled={!online}
+        {failed}
+        label="Install"
         onclick={() => install(machine, spec)}
+        {pending}
+        pendingLabel="Installing…"
         size="xs"
         variant="ghost"
-        >Install</Button
-      >
+      />
     </span>
   {/if}
 {/snippet}

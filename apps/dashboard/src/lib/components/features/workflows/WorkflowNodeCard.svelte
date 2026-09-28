@@ -28,6 +28,46 @@
     workflow: IconWorkflow,
   } as const;
   const step = $derived(data.step as WorkflowStep | undefined);
+
+  /**
+   * Stacked ports sit a few screen pixels apart at fit zoom, too close for
+   * a target each. Under a mouse the port column is one target, and it acts
+   * for the port whose centre is nearest the pointer: that handle shows it
+   * on hover, and a press starts the connection from it.
+   */
+  let portsEl = $state<HTMLElement | null>(null);
+  let near = $state<string | null>(null);
+  const nearest = (y: number): HTMLElement =>
+    [
+      ...(portsEl as HTMLElement).querySelectorAll<HTMLElement>(
+        ".svelte-flow__handle"
+      ),
+    ]
+      .map((handle) => {
+        const box = handle.getBoundingClientRect();
+        return { handle, gap: Math.abs(box.top + box.height / 2 - y) };
+      })
+      .reduce((a, b) => (b.gap < a.gap ? b : a)).handle;
+  const aim = (event: MouseEvent) => {
+    near = nearest(event.clientY).dataset.handleid ?? null;
+  };
+  /** The press and the click go to the nearest port's handle, where Svelte Flow listens. */
+  const route = (event: MouseEvent) => {
+    event.preventDefault();
+    nearest(event.clientY).dispatchEvent(
+      new MouseEvent(event.type, {
+        bubbles: true,
+        cancelable: true,
+        view: window,
+        clientX: event.clientX,
+        clientY: event.clientY,
+        screenX: event.screenX,
+        screenY: event.screenY,
+        button: event.button,
+        buttons: event.buttons,
+      })
+    );
+  };
   const child = $derived(data.child as WorkflowRun | undefined);
   // A journal node has no authored ports — the journal records calls, not a
   // wiring the operator drew — so it carries one plain out handle.
@@ -129,19 +169,26 @@
     {/if}
   </div>
   {#if ports.length > 1}
-    <div class="ports">
+    <div class="ports" bind:this={portsEl}>
       {#each ports as port (port)}
-        <div class="port">
+        <div class="port" class:near={near === port}>
           {port}
           <Handle
             aria-label="{title}: {port}"
-            class="pointer-hit"
             id={port}
             position={Position.Right}
             type="source"
           />
         </div>
       {/each}
+      <div
+        aria-hidden="true"
+        class="port-hit nodrag nopan"
+        onclick={route}
+        onmousedown={route}
+        onmouseleave={() => { near = null; }}
+        onmousemove={aim}
+      ></div>
     </div>
   {:else if ports[0]}
     <Handle
@@ -221,12 +268,36 @@
     font-variant-numeric: tabular-nums;
   }
   .ports {
+    position: relative;
     padding-block: var(--space-2);
     border-top: 1px solid var(--border-hairline);
   }
+  /* The column's one target: its full height and the half-gap stops above
+     and below, 24px wide on screen at any zoom, centred on the handles. */
+  .port-hit {
+    display: none;
+  }
+  @media (pointer: fine) {
+    .port-hit {
+      --hit-gap-y: 17px;
+      display: block;
+      position: absolute;
+      inset-block: calc(var(--hit-gap-y) / -2);
+      inset-inline-end: calc(-12px / var(--hit-scale, 1));
+      inline-size: calc(24px / var(--hit-scale, 1));
+      cursor: crosshair;
+    }
+    .ports .port :global(.svelte-flow__handle) {
+      pointer-events: none;
+    }
+    .port.near :global(.svelte-flow__handle) {
+      background: var(--brand-solid);
+    }
+    .port.near {
+      color: var(--ink-strong);
+    }
+  }
   .port {
-    /* Stacked handles: each hit area stops halfway to the next port's. */
-    --hit-gap-y: 17px;
     position: relative;
     text-align: right;
     padding: var(--space-1) var(--space-4);
