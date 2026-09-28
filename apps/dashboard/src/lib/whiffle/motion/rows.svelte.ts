@@ -524,6 +524,16 @@ const travel = () => ({
   easing: ease("--ease-in-out"),
 });
 
+/**
+ * Drawn somewhere in the viewport. An element that arrives out of sight has
+ * nothing to show arriving: a long list mounting a chunk at a time past the
+ * fold would otherwise start two animations a row for rows nobody sees.
+ */
+function onScreen(element: HTMLElement): boolean {
+  const { top, bottom } = element.getBoundingClientRect();
+  return bottom > 0 && top < window.innerHeight;
+}
+
 function arrival(element: HTMLElement, still: boolean) {
   if (still) {
     element.animate([{ opacity: 0 }, { opacity: 1 }], entrance());
@@ -697,7 +707,8 @@ class Reflow {
         this.#travel(element, was, place, drawn.get(element));
       } else if (
         !was &&
-        (place.ref === this.#node || this.#placed.has(place.ref))
+        (place.ref === this.#node || this.#placed.has(place.ref)) &&
+        onScreen(element)
       ) {
         arrival(element, still);
       }
