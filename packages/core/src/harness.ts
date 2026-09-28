@@ -297,6 +297,15 @@ export interface SessionMessage {
    */
   error?: string;
   /**
+   * How many sends this entry holds the words of, when the harness joined
+   * several into one: Claude takes up the prompts queued behind a turn
+   * together and stores them as one user record under the last one's uuid,
+   * their words joined by newlines — one `dequeue` line per prompt right
+   * before the record (measured, CLI 2.1.280). Absent for an entry that is
+   * one send.
+   */
+  joined?: number;
+  /**
    * A `user`/`assistant` entry's stored message. A `system` entry's is the
    * frame the live stream carried for the same record — a
    * {@link NeutralSystemMessage}, or the error `result` a failed turn closed
@@ -306,13 +315,22 @@ export interface SessionMessage {
   parent_agent_id: string | null;
   parent_tool_use_id: string | null;
   /**
-   * The send this stored entry is ({@link SendRecord.uuid}), as the hub
-   * linked it on the way out of the history route. A reader draws the entry
-   * from that record — its words, its clock, its state — in the entry's place.
-   * Absent on everything the hub has no record for: the harness's own turns,
-   * and a message typed into the harness directly.
+   * A send the harness has written down and not yet taken up. opencode writes
+   * a message sent into a running step at once and gives it to the model when
+   * that step ends — the read its live stream says then. Every other stored
+   * send was written as it was read.
    */
-  send?: string;
+  queued?: true;
+  /**
+   * The sends this stored entry is ({@link SendRecord.uuid}), in the order
+   * the harness took them up, as the hub linked them on the way out of the
+   * history route: one, or the several a harness joined into it
+   * ({@link joined}). A reader draws each from its record — its words, its
+   * clock, its state — in the entry's place. Absent on everything the hub has
+   * no record for: the harness's own turns, and a message typed into the
+   * harness directly.
+   */
+  sends?: string[];
   session_id: string;
   /**
    * The uuid a sent message was sent under ({@link NeutralUserMessage.uuid}),
@@ -492,7 +510,11 @@ export interface SendRecord {
    * the way to the harness (a worktree line, an urgent prefix) is not in it.
    */
   body: NeutralUserMessage;
-  /** The id the harness stored the send under, where that is not its uuid. */
+  /**
+   * The id the harness stored the send under, where that is not its uuid:
+   * opencode's message id, pi's entry id, and — for a send Claude joined into
+   * another's record ({@link SessionMessage.joined}) — that record's uuid.
+   */
   harnessId?: string;
   instanceId: string;
   mode: SendMode;

@@ -33,6 +33,11 @@ export interface SDKSessionMessage {
    * `error` (`authentication_failed`, …), as the live frame carries it.
    */
   error?: string;
+  /**
+   * How many queued prompts the CLI joined into this user record
+   * ({@link joinedCounts}); absent for a record that is one.
+   */
+  joined?: number;
   message: unknown;
   parent_agent_id: string | null;
   parent_tool_use_id: string | null;
@@ -90,13 +95,16 @@ export interface RawRecord {
  * Types the SDK includes in its initial pass (before chain walking).
  * The byte prefilter is looser than the final filter so it doesn't miss
  * records needed for chain linking (system compact_boundary, attachments, etc).
+ * `queue-operation` lines are on no chain; they say how many queued prompts a
+ * user record joins ({@link joinedCounts}).
  */
 export const CHAIN_TYPES = typeFilter(
   "user",
   "assistant",
   "system",
   "progress",
-  "attachment"
+  "attachment",
+  "queue-operation"
 );
 
 // ---------------------------------------------------------------------------
@@ -621,18 +629,47 @@ function toSDKMessage(r: RawRecord): SDKSessionMessage | null {
   return msg;
 }
 
+/**
+ * The user records that join several queued prompts, by uuid, and how many.
+ *
+ * The CLI takes up everything queued behind a turn at once, as the next turn:
+ * one `queue-operation` `dequeue` line per prompt, then ONE user record under
+ * the last prompt's uuid, their words joined by newlines. Measured on CLI
+ * 2.1.280, and held for every one of 43 such records across this machine's
+ * transcripts: the record's content is exactly the dequeued prompts joined by
+ * `\n`, in queue order. The dequeue lines sit right before the record, so a
+ * window that holds the record holds them.
+ */
+function joinedCounts(raw: RawRecord[]): Map<string, number> {
+  const joined = new Map<string, number>();
+  let dequeued = 0;
+  for (const r of raw) {
+    if (r.type === "queue-operation" && r.operation === "dequeue") {
+      dequeued += 1;
+      continue;
+    }
+    if (r.type === "user" && dequeued > 1) {
+      joined.set(r.uuid, dequeued);
+    }
+    dequeued = 0;
+  }
+  return joined;
+}
+
 /** Convert located records to the SDK shape via chain walking. */
 function locatedToMessages(
   located: LocatedRecord[],
   windowed = false
 ): SDKSessionMessage[] {
   const raw = located.map((lr) => lr.record as unknown as RawRecord);
+  const joined = joinedCounts(raw);
   const chain = walkChainWindowed(raw, windowed);
   const messages: SDKSessionMessage[] = [];
   for (const r of chain) {
     const msg = toSDKMessage(r);
     if (msg) {
-      messages.push(msg);
+      const count = joined.get(r.uuid);
+      messages.push(count ? { ...msg, joined: count } : msg);
     }
   }
   return messages;

@@ -598,9 +598,16 @@ export function mapFrame(
       const text = transcriptUserText(sdk.message);
       // A message sent to the session is not a frame at all: it is its
       // record's (`send` frames, transcript/sends.ts). The harness speaking in
-      // the user's role: a subagent's prompt, or its own notice. Anything
-      // else of the main loop's is not a row.
-      if (text && (agentId || systemNote(text))) {
+      // the user's role: its line for a turn cut short, a subagent's prompt,
+      // or its own notice. Anything else of the main loop's is not a row.
+      if (!agentId && interruptLine(text)) {
+        mapping.messages.push({
+          ...base,
+          type: "ui.interrupted",
+          content: "Interrupted",
+          metadata: { noteTitle: "Interrupted" },
+        });
+      } else if (text && (agentId || systemNote(text))) {
         mapping.messages.push({
           ...base,
           ...userBody(text, transcriptUserImages(sdk.message)),
@@ -1193,6 +1200,20 @@ export function thinkingDurationMs(
 }
 
 /**
+ * Claude Code's own line for a turn the operator cut short, which it writes
+ * in the user's role, live and to the transcript — the harness's word, never
+ * the reader's. Two forms, and only these across every stored transcript on
+ * this machine (CLI 2.1.280): a turn stopped while the model wrote, and one
+ * stopped while a tool ran.
+ */
+const INTERRUPTED = /^\[Request interrupted by user(?: for tool use)?\]$/;
+
+/** Whether a user-role text is that line ({@link INTERRUPTED}). */
+export function interruptLine(text: string | null): boolean {
+  return text !== null && INTERRUPTED.test(text.trim());
+}
+
+/**
  * The words of a user-role message: a send's body, or a stored user entry.
  */
 export function transcriptUserText(message: unknown): string | null {
@@ -1392,10 +1413,11 @@ export interface Transcript {
 
 /**
  * What an entry that opens a main-loop turn said, and null for everything else —
- * including the user-role entries that carry nothing but a tool result. Only one
- * of these can begin a chunk: anywhere else a slice would open mid-turn, with
- * results arriving for a `tool.use` that is on the other side of the cut. A turn
- * that was nothing but an image still opened one.
+ * including the user-role entries that carry nothing but a tool result, and the
+ * harness's line closing a turn it was stopped in ({@link interruptLine}). Only
+ * one of these can begin a chunk: anywhere else a slice would open mid-turn,
+ * with results arriving for a `tool.use` that is on the other side of the cut.
+ * A turn that was nothing but an image still opened one.
  */
 export function turnStart(
   entry: SessionMessage
@@ -1405,7 +1427,7 @@ export function turnStart(
   }
   const text = transcriptUserText(entry.message);
   const images = transcriptUserImages(entry.message);
-  if (text === null && !images) {
+  if ((text === null && !images) || interruptLine(text)) {
     return null;
   }
   return { text: text ?? "", images };
@@ -1739,10 +1761,13 @@ export function mapTranscript(
     // The one honest clock a replayed turn has (see {@link storedAt}).
     const recorded = storedAt(entry);
 
-    // A send, stored: its place, where its record draws it (transcript/
-    // sends.ts) — the same row, under the same id, the live stream drew.
-    if (entry.send) {
-      messages.push(sendRef(instanceId, entry.send, entry.uuid));
+    // Sends, stored: each one's place, where its record draws it (transcript/
+    // sends.ts) — the same rows, under the same ids, the live stream drew,
+    // several where the harness joined them into one entry.
+    if (entry.sends) {
+      messages.push(
+        ...entry.sends.map((send) => sendRef(instanceId, send, entry.uuid))
+      );
       continue;
     }
     // A user turn the hub has no record of — typed into the harness itself,

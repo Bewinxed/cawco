@@ -2023,6 +2023,7 @@ export class OpencodeSession implements HarnessSession {
       if (!status || (status.type !== "busy" && status.type !== "retry")) {
         return;
       }
+      await this.#resumeReads();
       this.#applyStatus(status);
       this.#noteServerActivity();
       this.#ctx.frame({
@@ -2040,6 +2041,39 @@ export class OpencodeSession implements HarnessSession {
         `[opencode] could not read the status of resumed session ${this.sessionId}: ${errorText(error)}`
       );
     }
+  }
+
+  /**
+   * A turn this process did not start: which of its messages are sends still
+   * waiting behind the answer being written, as the stored session says
+   * ({@link queuedMessages}). They are read when that answer completes — the
+   * word this process would have given had it written them itself — and every
+   * message already there is one it will not count as new.
+   */
+  async #resumeReads(): Promise<void> {
+    const listed = await this.#client.session.messages({
+      // biome-ignore lint/style/noNonNullAssertion: invariant: watchResumedTurn returns before this when sessionId is null
+      path: { id: this.sessionId! },
+      query: { directory: this.#directory },
+      signal: AbortSignal.any([
+        this.#lifetime.signal,
+        AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
+      ]),
+    });
+    if (listed.error || !listed.data) {
+      throw new Error(
+        `could not list the messages of resumed session ${this.sessionId}: ${errorText(listed.error)}`
+      );
+    }
+    const rows = listed.data as { info: Message; parts: Part[] }[];
+    for (const { info } of rows) {
+      if (info.role === "user") {
+        this.#written.add(info.id);
+      }
+    }
+    const { ids, answering } = queuedMessages(rows);
+    this.#readAfter.push(...ids);
+    this.#answering = answering;
   }
 
   get directory(): string {
@@ -4440,6 +4474,33 @@ export class OpencodeHarness implements Harness {
   }
 }
 
+/**
+ * The user messages opencode has written and not yet given the model: those
+ * written behind an assistant message still being written. opencode stores a
+ * send the moment it is dispatched and takes it up when the step in flight
+ * ends — the same rule the live stream reads by (`#readAfter`, released when
+ * that answer completes). The one still being written, when there is one, is
+ * `answering`.
+ */
+function queuedMessages(rows: { info: Message }[]): {
+  answering?: string;
+  ids: Set<string>;
+} {
+  const ids = new Set<string>();
+  let answering: string | undefined;
+  for (const { info } of rows) {
+    if (info.role === "assistant") {
+      answering = (info as AssistantMessage).time.completed
+        ? undefined
+        : info.id;
+      ids.clear();
+    } else if (answering) {
+      ids.add(info.id);
+    }
+  }
+  return { ids, ...(answering ? { answering } : {}) };
+}
+
 /** opencode `{info, parts}` → the neutral transcript entries the folder reads. */
 /**
  * Exported for its own sake as well as the session's: this is the whole of what
@@ -4452,6 +4513,7 @@ export function toTranscript(
   rows: { info: Message; parts: Part[] }[]
 ): SessionMessage[] {
   const entries: SessionMessage[] = [];
+  const unread = queuedMessages(rows).ids;
   for (const { info, parts } of rows) {
     // opencode records when each message was created (`time.created`, epoch
     // ms, on UserMessage and AssistantMessage in @opencode-ai/sdk
@@ -4479,6 +4541,7 @@ export function toTranscript(
           parent_tool_use_id: null,
           parent_agent_id: null,
           timestamp,
+          ...(unread.has(info.id) ? { queued: true as const } : {}),
         });
       }
       continue;

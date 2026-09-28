@@ -279,13 +279,13 @@ export interface CommandState {
 
 /**
  * Why a transcript read ended with nothing to show. `offline` is the fleet's
- * own state — the machine is asleep — where `failed` is a fault in the read;
- * the pane says a different sentence for each.
+ * own state — the machine the hub named is not connected — where `failed` is
+ * a fault in the read; the pane says a different sentence for each, and reads
+ * again when that machine is back.
  */
-export interface ReadFault {
-  message: string;
-  reason: "offline" | "failed";
-}
+export type ReadFault =
+  | { machineId: string; message: string; reason: "offline" }
+  | { message: string; reason: "failed" };
 
 export interface SessionState {
   /** A turn is in flight (sent, no `result` yet). */
@@ -1766,6 +1766,17 @@ function handleFrame(frame: FramePayload): void {
             message,
             mapping.branch?.toolUseId
           )
+        ) {
+          continue;
+        }
+        // The harness said the turn was cut short — its interrupt line, just
+        // drawn — and the error result closing that turn is the line's
+        // receipt. It stores the line and not the result, so a reload draws
+        // the line alone, and so does this.
+        if (
+          message.type === "result.error" &&
+          !mapping.agentId &&
+          target.harnessRows.at(-1)?.type === "ui.interrupted"
         ) {
           continue;
         }
@@ -3881,12 +3892,7 @@ export type TranscriptOutcome =
    */
   | { ok: true; skipped?: boolean }
   /** `status` is the hub's HTTP answer where there was one: 404 is "no such session", not a fault. */
-  | {
-      ok: false;
-      reason: "offline" | "failed";
-      message: string;
-      status?: number;
-    };
+  | ({ ok: false; status?: number } & ReadFault);
 
 /** Puts a session back to "nothing has been said about the read" — Try again's first move. */
 export function clearReadFault(instanceId: string): void {
@@ -4150,16 +4156,21 @@ export async function streamHistory({
         (await response.text().catch(() => "")) || response.statusText;
       release();
       target.loading = false;
-      // 503 is the hub saying the machine is not connected — a state of the
-      // fleet, not a fault in the read, and a different sentence to say.
-      if (response.status === 503) {
-        const machine = state.machines.find(
-          (row) => row.machineId === machineId
-        );
+      // A 503 naming a machine is the hub saying that machine is not
+      // connected — a state of the fleet, not a fault in the read, and a
+      // different sentence to say. The hub names it: a read addressed by id
+      // alone knows no machine of its own.
+      const away =
+        response.status === 503
+          ? response.headers.get("x-whiffle-machine")
+          : null;
+      if (away) {
+        const machine = state.machines.find((row) => row.machineId === away);
         return fail(
           {
             reason: "offline",
-            message: `${machine?.hostname || machineId} is offline — its stored transcript can't be read right now.`,
+            machineId: away,
+            message: `${machine?.hostname || away} is offline — its stored transcript can't be read right now.`,
           },
           response.status
         );
@@ -4380,21 +4391,20 @@ export async function streamHistory({
 
 /**
  * Whose voice a stored entry's rows are, by the transcript's own rule — what
- * the history reader cuts its chunks by. A send's is its row's, where it
- * draws one in this place; one waiting, or retired, draws nothing here.
+ * the history reader cuts its chunks by. Sends' are their rows', where they
+ * draw one in this place; one waiting, or retired, draws nothing here.
  */
 function entryVoice(
   viewId: string,
   entry: SessionMessage,
   records: Record<string, SendRecord>
 ): Voice {
-  if (entry.send) {
-    const record = records[entry.send];
-    return record.state === "read" || record.state === "failed"
-      ? voiceOfMessage(sendRow(record))
-      : "none";
-  }
-  const voices = mapTranscript(viewId, [entry]).messages.map(voiceOfMessage);
+  const voices = entry.sends
+    ? entry.sends
+        .map((uuid) => records[uuid])
+        .filter((held) => held.state === "read" || held.state === "failed")
+        .map((held) => voiceOfMessage(sendRow(held)))
+    : mapTranscript(viewId, [entry]).messages.map(voiceOfMessage);
   if (voices.includes("you")) {
     return "you";
   }

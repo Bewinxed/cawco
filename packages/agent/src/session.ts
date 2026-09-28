@@ -1202,8 +1202,12 @@ export class SessionSupervisor {
       const session = this.#sessions.get(instanceId);
       if (session) {
         this.#forgetPulse(instanceId);
-        this.#sessions.delete(instanceId);
+        // Carried, and listed on every beat, until the stop is over: a stop
+        // waits for the turn it interrupts, and a beat that no longer listed
+        // the session meanwhile had the hub settle it as ended — what it was
+        // holding failed "ended" before this said "stopped".
         await session.stop();
+        this.#sessions.delete(instanceId);
       } else {
         const target = this.#resumable.get(instanceId);
         // A discard of an instance this machine holds nothing for — a spawn

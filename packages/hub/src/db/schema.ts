@@ -375,8 +375,9 @@ export const sentMessages = sqliteTable(
     /**
      * The id the harness stores the message under, where that is not the uuid
      * (opencode's message id, pi's entry id), as its adapter reported it
-     * (`NeutralSystemMessage.storedAs`). Null for Claude, which stores the
-     * send's uuid itself.
+     * (`NeutralSystemMessage.storedAs`) — or, for a send Claude joined into
+     * another's record, that record's uuid, as the hub found it. Null for a
+     * Claude send stored under its own uuid.
      */
     harnessId: text("harness_id"),
     /**

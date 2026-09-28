@@ -1900,17 +1900,18 @@ export const createServer = ({
   };
 
   /**
-   * Which of these sends a session's stored transcript holds — under the
-   * send's uuid (Claude, whole or folded into a turn) or the id its harness
-   * named for it. A machine that cannot be asked cannot say it stored one.
+   * Which sends a session's stored transcript holds, and whether its harness
+   * has taken each up: by send uuid, true for read, false for written down
+   * and still waiting ({@link SessionMessage.queued}). Found the way a history
+   * read links them ({@link sendFinder}). A machine that cannot be asked
+   * cannot say it stored one.
    */
   const storedIn = async (
-    instanceId: string,
-    sends: SentMessageRow[]
-  ): Promise<Set<string>> => {
+    instanceId: string
+  ): Promise<Map<string, boolean>> => {
     const [row] = db.getInstancesByIds([instanceId]);
     if (!row?.sessionId) {
-      return new Set();
+      return new Map();
     }
     const answer = await callAgent(
       row.machineId,
@@ -1920,30 +1921,26 @@ export const createServer = ({
       (row.harness || undefined) as HarnessKind | undefined
     );
     if (typeof answer === "string" || !answer.ok) {
-      return new Set();
+      return new Map();
     }
-    const ids = new Set(
-      (answer.result as SessionMessage[]).flatMap((entry) =>
-        entry.sourceUuid ? [entry.uuid, entry.sourceUuid] : [entry.uuid]
-      )
-    );
-    return new Set(
-      sends
-        .filter(
-          (send) =>
-            ids.has(send.uuid) ||
-            (send.harnessId !== null && ids.has(send.harnessId))
-        )
-        .map((send) => send.uuid)
-    );
+    const entries = answer.result as SessionMessage[];
+    const sendsOf = sendFinder(instanceId, entries);
+    const stored = new Map<string, boolean>();
+    for (const entry of entries) {
+      for (const send of sendsOf(entry)) {
+        stored.set(send.uuid, !entry.queued);
+      }
+    }
+    return stored;
   };
 
   /**
    * What a session was sent and has not read, decided now that it stopped,
-   * ended or restarted (rule c): whatever its harness wrote down as it went is
-   * read — a process can store the notes it was holding as it stops, and say
+   * ended or restarted (rule c): whatever its harness has taken up is read —
+   * a process can take up the notes it was holding as it stops, and say
    * nothing — and the rest did not go, for `why`. `keepUnstored` leaves the
-   * rest waiting instead, for a process that is still holding them.
+   * rest waiting instead, for a process that is still holding them and will
+   * say when it reads them.
    */
   const settlePending = (
     instanceId: string,
@@ -1965,7 +1962,7 @@ export const createServer = ({
       deciding.add(send.uuid);
     }
     // biome-ignore lint/complexity/noVoid: the callers are frame handlers that must not wait on a machine round trip
-    void storedIn(instanceId, sends)
+    void storedIn(instanceId)
       .then((stored) => {
         for (const send of sends) {
           // Read meanwhile, or thrown away with its session: that stands.
@@ -1973,7 +1970,7 @@ export const createServer = ({
           if (now?.state !== "pending") {
             continue;
           }
-          if (stored.has(now.uuid)) {
+          if (stored.get(now.uuid)) {
             readSend(now, false);
           } else if (!keepUnstored) {
             failSend(now, why);
@@ -2096,12 +2093,11 @@ export const createServer = ({
   /**
    * A history page's sends, and the record lines it carries.
    *
-   * Each stored entry that is a send is linked to its record
-   * (`SessionMessage.send`), found by the send's uuid (Claude stores it, or
-   * names it as a fold's source) or by the id the harness stores it under. A
-   * record from before the hub kept bodies takes the stored copy as its body.
-   * A pending send stored under its own uuid has been read: Claude writes a
-   * send down as it takes it up, so this is the read a daemon restart lost.
+   * Each stored entry that is sends is linked to their records
+   * (`SessionMessage.sends`, {@link sendFinder}). A record from before the hub
+   * kept bodies takes the stored copy as its body. A pending send in an entry
+   * its harness has taken up has been read: this is the read a restart kept
+   * from being framed.
    *
    * The page carries every record it links, every failed record whose anchor
    * is on it — and, on the page that reaches the conversation's start, every
@@ -2115,7 +2111,7 @@ export const createServer = ({
     newest: boolean,
     start: boolean
   ): { record: SendRecord }[] => {
-    const { lines, last } = linkEntries(entries);
+    const { lines, last } = linkEntries(instanceId, entries);
     if (instanceId) {
       if (newest && last && !anchors.has(instanceId)) {
         anchors.set(instanceId, last);
@@ -2157,12 +2153,14 @@ export const createServer = ({
    * The sends a page's entries are, linked, by uuid — and the last thing on
    * the page a failed send could be anchored to. A stored error that closes
    * a turn on failed sends, with nothing said in between, is theirs (rule b,
-   * read back) and draws no line of its own, as the live result frame did.
+   * read back) and draws no line of its own, as the live result frame did —
+   * a send failed that way and since tried again (`replaced`) included.
    */
   const linkEntries = (
+    instanceId: string | undefined,
     entries: SessionMessage[]
   ): { lines: Map<string, SentMessageRow>; last: string | undefined } => {
-    const sendOf = sendFinder(entries);
+    const sendsOf = sendFinder(instanceId, entries);
     const lines = new Map<string, SentMessageRow>();
     let last: string | undefined;
     let failures: string[] = [];
@@ -2173,11 +2171,9 @@ export const createServer = ({
         last = entry.uuid;
         failures = [];
       }
-      const found = sendOf(entry);
-      if (found) {
-        const send = linkEntry(entry, found.send, found.own);
+      for (const send of linkEntry(entry, sendsOf(entry))) {
         last = send.uuid;
-        if (send.state === "failed") {
+        if (send.state === "failed" || send.state === "replaced") {
           failures.push(send.uuid);
         }
         lines.set(send.uuid, send);
@@ -2209,15 +2205,20 @@ export const createServer = ({
   };
 
   /**
-   * Which send a stored entry is: found by the send's uuid (`own` — Claude
-   * stores it, or names it as a fold's source) or by the id the harness
-   * stores it under.
+   * Which sends a stored entry is, in the order its harness took them up:
+   * the one under the send's uuid (Claude stores it, or names it as a fold's
+   * source), and those stored under the entry's id — opencode's message, pi's
+   * entry, and the sends Claude joined into this record.
+   *
+   * A record that joins several ({@link SessionMessage.joined}) is stored
+   * under the last one's uuid; the others are found by their words
+   * ({@link joinedWith}), once, and kept under the record's uuid from then on
+   * (`harnessId`), so every later read finds them the same way.
    */
   const sendFinder = (
+    instanceId: string | undefined,
     entries: SessionMessage[]
-  ): ((
-    entry: SessionMessage
-  ) => { send: SentMessageRow; own: boolean } | undefined) => {
+  ): ((entry: SessionMessage) => SentMessageRow[]) => {
     const found = db.sendsFor(
       entries
         .filter((entry) => entry.type === "user" || entry.sourceUuid)
@@ -2226,44 +2227,113 @@ export const createServer = ({
         )
     );
     const byUuid = new Map(found.map((send) => [send.uuid, send]));
-    const byHarnessId = new Map(
-      found.flatMap((send) =>
-        send.harnessId ? [[send.harnessId, send] as const] : []
-      )
+    const byHarnessId = Map.groupBy(
+      found.filter((send) => send.harnessId !== null),
+      (send) => send.harnessId as string
     );
     return (entry) => {
       const own = byUuid.get(entry.sourceUuid ?? entry.uuid);
-      if (own) {
-        return { send: own, own: true };
+      const held = (byHarnessId.get(entry.uuid) ?? []).filter(
+        (send) => send.uuid !== own?.uuid
+      );
+      const sends = [...held, ...(own ? [own] : [])];
+      if (own && instanceId && entry.joined && held.length === 0) {
+        sends.push(...joinedWith(instanceId, entry, own));
       }
-      const stored = byHarnessId.get(entry.uuid);
-      return stored && { send: stored, own: false };
+      return sends.sort(
+        (a, b) => a.acceptedAt.getTime() - b.acceptedAt.getTime()
+      );
     };
   };
 
+  /** A send's words as the harness was handed them, when they are words alone. */
+  const sentWords = (send: SentMessageRow): string | null => {
+    const content = (send.body as NeutralUserMessage | null)?.message.content;
+    return typeof content === "string" ? content : null;
+  };
+
   /**
-   * One stored entry, linked to the send it is. A record from before the hub
-   * kept bodies takes the stored copy as its body. A pending send stored
-   * under its own uuid has been read: Claude writes a send down as it takes
-   * it up, so this is a read that a daemon restart kept from being framed.
+   * The sends Claude joined into `entry`, the stored record of `last`, ahead
+   * of it: the record's words are theirs and then `last`'s, each on its own
+   * line, in the order they were sent ({@link SessionMessage.joined}). Each
+   * is found by its words among this session's sends before `last`, latest
+   * first — the ones queued with it are the latest — and kept under the
+   * record's uuid from here on. Words that do not come apart into this many
+   * sends of this session join none.
+   */
+  const joinedWith = (
+    instanceId: string,
+    entry: SessionMessage,
+    last: SentMessageRow
+  ): SentMessageRow[] => {
+    const stored = (entry.message as { content?: unknown }).content;
+    const own = sentWords(last);
+    if (!(typeof stored === "string" && own && stored.endsWith(`\n${own}`))) {
+      return [];
+    }
+    // What is left to account for, ending in the newline before the next part.
+    let rest = stored.slice(0, stored.length - own.length);
+    const partners: SentMessageRow[] = [];
+    const earlier = db
+      .sendsIn(instanceId, ["pending", "read", "failed", "replaced"])
+      .filter(
+        (send) =>
+          send.harnessId === null &&
+          send.acceptedAt.getTime() < last.acceptedAt.getTime()
+      )
+      .reverse();
+    for (const send of earlier) {
+      const words = sentWords(send);
+      if (
+        words !== null &&
+        (rest === `${words}\n` || rest.endsWith(`\n${words}\n`))
+      ) {
+        partners.unshift(send);
+        rest = rest.slice(0, rest.length - words.length - 1);
+        if (partners.length === (entry.joined ?? 0) - 1) {
+          break;
+        }
+      }
+    }
+    if (rest !== "") {
+      return [];
+    }
+    for (const send of partners) {
+      db.linkSend(send.uuid, last.uuid);
+    }
+    return partners;
+  };
+
+  /**
+   * One stored entry, linked to the sends it is. A record from before the hub
+   * kept bodies takes the stored copy as its body — only an entry that is one
+   * send holds that send's words alone. A pending send in an entry its
+   * harness has taken up (not {@link SessionMessage.queued}) has been read:
+   * this is a read that a restart kept from being framed.
    */
   const linkEntry = (
     entry: SessionMessage,
-    found: SentMessageRow,
-    own: boolean
-  ): SentMessageRow => {
-    entry.send = found.uuid;
-    let send = found;
-    if (!send.body) {
-      send =
-        db.updateSend(send.uuid, {
-          body: {
-            type: "user",
-            message: entry.message as NeutralUserMessage["message"],
-          },
-        }) ?? send;
+    found: SentMessageRow[]
+  ): SentMessageRow[] => {
+    if (found.length === 0) {
+      return found;
     }
-    return own && send.state === "pending" ? readSend(send, false) : send;
+    entry.sends = found.map((send) => send.uuid);
+    return found.map((each) => {
+      let send = each;
+      if (!send.body && found.length === 1) {
+        send =
+          db.updateSend(send.uuid, {
+            body: {
+              type: "user",
+              message: entry.message as NeutralUserMessage["message"],
+            },
+          }) ?? send;
+      }
+      return send.state === "pending" && !entry.queued
+        ? readSend(send, false)
+        : send;
+    });
   };
 
   /**
@@ -5023,20 +5093,44 @@ export const createServer = ({
         publishInstances(params.machineId);
         return { sessions: gone.instanceIds.length, projects: gone.projects };
       })
-      // A session that never started — no transcript, no process — has
-      // nothing a transcript delete or a discard could act on, and every
-      // failed start used to leave one on the board for good. This removes
-      // exactly those, with the same delete Remove machine runs per session.
-      .delete("/api/instances/:id", ({ params, status }) => {
+      // A session with no transcript — one that never started, or whose
+      // transcript is gone from its machine — and no process has nothing a
+      // transcript delete or a discard could act on, and every failed start
+      // used to leave one on the board for good. This removes exactly those,
+      // with the same delete Remove machine runs per session. Whether the
+      // transcript is there is its machine's to say: the row's key only says
+      // one was named once.
+      .delete("/api/instances/:id", async ({ params, status }) => {
         const row = db.listInstances().find((r) => r.id === params.id);
         if (!row) {
           return status(404, "No session with that id on this hub.");
         }
         if (row.sessionId) {
-          return status(
-            409,
-            "This session has a transcript. Delete the transcript instead."
+          const stored = await callAgent(
+            row.machineId,
+            CONTROL_GET_SESSION_INFO,
+            [row.sessionId, row.cwd || undefined],
+            READ_TIMEOUT_MS,
+            (row.harness || undefined) as HarnessKind | undefined
           );
+          if (stored === "offline" || stored === "timeout") {
+            return status(
+              409,
+              "This session's machine is not answering, so whether its transcript is still there can't be checked. Try again once it is back."
+            );
+          }
+          if (!stored.ok) {
+            return status(
+              502,
+              `The machine could not check this session's transcript: ${stored.error ?? "no reason given"}`
+            );
+          }
+          if (stored.result) {
+            return status(
+              409,
+              "This session has a transcript. Delete the transcript instead."
+            );
+          }
         }
         if (
           row.status === "running" ||
@@ -5384,8 +5478,13 @@ export const createServer = ({
             READ_TIMEOUT_MS,
             harness
           );
+          // Named with the machine, so a reader that asked by id alone can say
+          // which one is away and hear it come back.
           if (answer === "offline") {
-            return status(503, `machine ${machineId} is not connected`);
+            return new Response(`machine ${machineId} is not connected`, {
+              status: 503,
+              headers: { "X-Whiffle-Machine": machineId },
+            });
           }
           if (answer === "timeout") {
             return status(504, `machine ${machineId} did not answer in time`);
@@ -7155,7 +7254,9 @@ export const createServer = ({
           payload: { instanceId, from },
         } satisfies Envelope);
         closePreview(instanceId).catch(console.error);
-        // What it was sent and had not read is settled by its `stopped`.
+        // A stop cuts the turn it lands in, as an interrupt does. What it
+        // was sent and had not read is settled by its `stopped`.
+        noteInterrupt(instanceId);
         return { ok: true };
       })
       .post("/api/relay/interrupt", { body: t.Any() }, ({ body, status }) => {
@@ -7476,16 +7577,20 @@ export const createServer = ({
               );
               const custody = peekCustody(message.payload);
               const heldIds = new Set(custody.instances);
+              // Whose process outlived the agent: a child sessiond kept alive,
+              // or the one opencode server, which keeps every session it holds.
+              const outlived = ({ row }: (typeof settled)[number]): boolean =>
+                heldIds.has(row.id) ||
+                (custody.opencode &&
+                  row.harness === "opencode" &&
+                  row.sessionId !== null);
               for (const orphan of settled) {
-                // A child sessiond kept alive still holds what it was sent and
-                // has not read: that waits for its read after the reattach. A
-                // send its harness wrote down is read either way — a read that
-                // happened while no agent was reading is not framed again.
-                forgetPending(
-                  orphan.row.id,
-                  UNREAD.ended,
-                  heldIds.has(orphan.row.id)
-                );
+                // A process that outlived the agent still holds what it was
+                // sent and has not read: that waits for its read after the
+                // reattach. A send its harness has taken up is read either way
+                // — a read that happened while no agent was reading is not
+                // framed again.
+                forgetPending(orphan.row.id, UNREAD.ended, outlived(orphan));
                 escalateRoutedAsks(orphan.row.id);
               }
               // Sessions that ran on while this hub was away: a read that
@@ -7514,13 +7619,7 @@ export const createServer = ({
               // A surviving child is not a fresh spawn. OpenCode's one held
               // server owns its sessions; the adapter verifies each key with
               // session.get before publishing an init frame and subscribing.
-              const held = settled.filter(
-                ({ row }) =>
-                  heldIds.has(row.id) ||
-                  (custody.opencode &&
-                    row.harness === "opencode" &&
-                    row.sessionId !== null)
-              );
+              const held = settled.filter(outlived);
               const heldRows = new Set(held.map(({ row }) => row.id));
               const fresh = settled
                 .filter(({ row }) => !heldRows.has(row.id))
@@ -8324,7 +8423,11 @@ export const createServer = ({
               if (message.verb === "stop") {
                 closePreview(row.id).catch(console.error);
               }
-              if (peek(message.payload, "method") === CONTROL_INTERRUPT) {
+              // A stop cuts the turn it lands in, as an interrupt does.
+              if (
+                message.verb === "stop" ||
+                peek(message.payload, "method") === CONTROL_INTERRUPT
+              ) {
                 noteInterrupt(row.id);
               }
               // A parent answering its delegate's ask with `answer_delegate`.
@@ -8474,6 +8577,10 @@ export const createServer = ({
             case "stop":
               if (forward(message, ws) && message.requestId) {
                 registry.rememberRequester(message.requestId, ws);
+              }
+              // A stop cuts the turn it lands in, as an interrupt does.
+              if (message.instanceId) {
+                noteInterrupt(message.instanceId);
               }
               break;
             case "control":

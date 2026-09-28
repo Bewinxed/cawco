@@ -115,10 +115,10 @@ interface CommandLifecycle {
  * original. A command's lifecycle is the one exception: `started` becomes the
  * {@link MESSAGES_READ} frame, and its other states say nothing the hub
  * needs, so they are `null` — no frame at all. Measured on CLI 2.1.280: an
- * interrupt cancels only the command it is running; each command still queued
- * behind it is then `started` as a turn of its own and stored under its uuid,
- * and one folded in before the interrupt was `started` (read) already, so its
- * later `cancelled` changes nothing.
+ * interrupt cancels only the command it is running; the commands still queued
+ * behind it are then `started` together as the next turn, stored as one
+ * record under the last one's uuid, and one folded in before the interrupt
+ * was `started` (read) already, so its later `cancelled` changes nothing.
  */
 export const toNeutral = (sdk: SDKMessage): NeutralMessage | null => {
   if ((sdk as { type: string }).type === "command_lifecycle") {
@@ -1042,6 +1042,9 @@ const toEntry = (
       : {}),
     ...((entry as SDKSessionMessage).error
       ? { error: (entry as SDKSessionMessage).error }
+      : {}),
+    ...((entry as SDKSessionMessage).joined
+      ? { joined: (entry as SDKSessionMessage).joined }
       : {}),
   };
 };

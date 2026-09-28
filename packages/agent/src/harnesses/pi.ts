@@ -156,18 +156,66 @@ const modelCatalog = async (): Promise<ModelInfo[]> =>
   }));
 
 /**
- * A stored assistant message's blocks. A turn that failed stores no content,
- * only its error; it reloads the way claude's stored API errors do — an
- * assistant message whose text is the error — in the same words the live
- * stream's `result.errors` carried.
+ * The result a stored failed attempt closed its turn with, when pi did not
+ * try again: the frame the live stream's `agent_end` carried, so a reload
+ * draws what the live stream drew — and a send it failed carries the error
+ * instead. pi stores each attempt as an assistant message with its
+ * `errorMessage` and no content, and retries as the very next assistant
+ * message (measured, pi-coding-agent 0.84.1: a 503 retried three times is
+ * four such messages in a row, and one result with the last one's error).
  */
-const assistantContent = (message: {
-  content?: unknown;
-}): ReturnType<typeof toBlocks> => {
+const failedTurn = (
+  sessionKey: string,
+  entry: { id: string; timestamp: string },
+  errorMessage: string
+): SessionMessage => ({
+  type: "system",
+  uuid: `${entry.id}:error`,
+  session_id: sessionKey,
+  message: {
+    type: "result",
+    uuid: `${entry.id}:error`,
+    session_id: sessionKey,
+    subtype: "error_during_execution",
+    is_error: true,
+    errors: [errorMessage],
+  },
+  parent_tool_use_id: null,
+  parent_agent_id: null,
+  timestamp: entry.timestamp,
+});
+
+/**
+ * A stored assistant message as what the live stream drew for it: its blocks,
+ * when it has any (`message_end`), and its error only as the result of the
+ * attempt pi did not try again (`agent_end`) — `retried` when the next
+ * message pi stored is the next attempt.
+ */
+const assistantEntries = (
+  sessionKey: string,
+  entry: { id: string; timestamp: string },
+  message: { content?: unknown },
+  retried: boolean
+): SessionMessage[] => {
+  const blocks = toBlocks(message.content);
   const { errorMessage } = message as { errorMessage?: string };
   return [
-    ...toBlocks(message.content),
-    ...(errorMessage ? [{ type: "text" as const, text: errorMessage }] : []),
+    ...(blocks.length
+      ? [
+          {
+            type: "assistant" as const,
+            uuid: entry.id,
+            session_id: sessionKey,
+            message: { role: "assistant", content: blocks },
+            parent_tool_use_id: null,
+            parent_agent_id: null,
+            timestamp: entry.timestamp,
+          },
+        ]
+      : []),
+    ...(errorMessage && !retried
+      ? [failedTurn(sessionKey, entry, errorMessage)]
+      : []),
   ];
 };
 
@@ -345,11 +393,18 @@ class PiSession implements HarnessSession {
             message.errorMessage ? [message.errorMessage] : []
           ) ?? [];
         const failed = errors.length > 0;
+        // A failure is keyed to the attempt it closed — the entry pi stored
+        // last — as a reload reads it back (`failedTurn`).
         this.#ctx.frame({
           type: "result",
           subtype: failed ? "error_during_execution" : "success",
           is_error: failed,
-          ...(failed ? { errors } : {}),
+          ...(failed
+            ? {
+                errors,
+                uuid: `${this.#session.sessionManager.getLeafId()}:error`,
+              }
+            : {}),
         });
         break;
       }
@@ -671,7 +726,18 @@ export class PiHarness implements Harness {
         });
       }
     }
-    for (const entry of manager.getEntries()) {
+    const stored = manager.getEntries();
+    /** The role of the next message stored after the one at `index`. */
+    const nextRole = (index: number): string | undefined => {
+      for (let at = index + 1; at < stored.length; at += 1) {
+        const later = stored[at];
+        if (later.type === "message") {
+          return (later as { message?: { role?: string } }).message?.role;
+        }
+      }
+      return undefined;
+    };
+    for (const [index, entry] of stored.entries()) {
       const compacted = summaries.get(entry.id);
       if (compacted) {
         entries.push({
@@ -708,15 +774,14 @@ export class PiHarness implements Harness {
           timestamp: entry.timestamp,
         });
       } else if (role === "assistant") {
-        entries.push({
-          type: "assistant",
-          uuid: entry.id,
-          session_id: sessionKey,
-          message: { role: "assistant", content: assistantContent(message) },
-          parent_tool_use_id: null,
-          parent_agent_id: null,
-          timestamp: entry.timestamp,
-        });
+        entries.push(
+          ...assistantEntries(
+            sessionKey,
+            entry,
+            message,
+            nextRole(index) === "assistant"
+          )
+        );
       } else if (role === "toolResult") {
         const tool = message as { toolCallId?: string; isError?: boolean };
         entries.push({
