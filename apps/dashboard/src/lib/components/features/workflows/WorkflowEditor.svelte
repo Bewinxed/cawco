@@ -8,7 +8,7 @@
   import { validateWorkflow } from "@whiffle/core";
   import { onMount } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
-  import { fade } from "svelte/transition";
+  import { TextMorph } from "torph/svelte";
   import { beforeNavigate, goto } from "$app/navigation";
   import { page } from "$app/state";
   import PendingContent, {
@@ -16,15 +16,19 @@
   } from "$lib/components/ui/button/pending-content.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
   import * as Dialog from "$lib/components/ui/dialog";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
+  import * as Drawer from "$lib/components/ui/drawer";
   import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
   import * as Resizable from "$lib/components/ui/resizable";
   import { Skeleton } from "$lib/components/ui/skeleton";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
+  import * as Tabs from "$lib/components/ui/tabs";
   import { whiffle } from "$lib/whiffle/client.svelte";
   import { loadDelegateTypes, message } from "$lib/whiffle/delegate-types";
   import { newId } from "$lib/whiffle/id";
-  import { appear, easeOut } from "$lib/whiffle/motion/curves.svelte";
-  import { unfold } from "$lib/whiffle/motion/fold.svelte";
+  import { crossIn, dur } from "$lib/whiffle/motion/curves.svelte";
+  import { reflow } from "$lib/whiffle/motion/rows.svelte";
   import {
     refreshWorkflows,
     workflowState,
@@ -35,6 +39,7 @@
     type WorkflowDetail,
     WorkflowProblems,
   } from "$lib/whiffle/workflows";
+  import { paneSlide, towards } from "./pane-slide";
   import WorkflowCanvas from "./WorkflowCanvas.svelte";
   import WorkflowInspector from "./WorkflowInspector.svelte";
   import WorkflowLaunch from "./WorkflowLaunch.svelte";
@@ -62,20 +67,43 @@
   let now = $state(Date.now());
   let paletteOpen = $state(false);
   let inspectorOpen = $state(false);
+  /** The edge the narrow inspector rises from: the selected node's side. */
+  let inspectorSide = $state<"left" | "right" | "bottom">("bottom");
   let paletteCollapsed = $state(false);
   let panelWidth = $state(940);
   let palettePane = $state<{ collapse: () => void; expand: () => void }>();
+  /**
+   * The palette folded to its 48px rail, as a share of the editor. paneforge
+   * keeps every size to 10 decimals and tells a folded pane (and unfolds
+   * one) by an exact match with this, so it is kept to the same 10: at full
+   * precision the match never held, the palette folded once, never came
+   * back, and never said it had folded.
+   */
+  const railSize = $derived(
+    Number.parseFloat(((48 / panelWidth) * 100).toFixed(10))
+  );
   let launch = $state(false);
+  /** The button the launch dialog grows from. */
+  let launchFrom = $state<HTMLElement>();
   let program = $state("");
   /**
    * What the hub said about the last save: the compiler's and the
    * typechecker's diagnostics, which carry the node or the line they belong
    * to. They outlive the request so they can be pinned where the mistake is.
    */
-  let hubProblems = $state<Problem[]>([]);
+  let answered = $state<Problem[]>([]);
+  /** What the hub said about the saved workflow, for when the editor is back on it. */
+  let savedProblems = $state<Problem[]>([]);
   let tab = $state(
     page.url.searchParams.get("tab") === "program" ? "program" : "editor"
   );
+  const TABS = ["editor", "program", "runs"] as const;
+  /** Which way the last tab change went, for the panes' slide. */
+  let dir = $state(1);
+  function show(next: string) {
+    dir = towards(TABS, tab, next);
+    tab = next;
+  }
   let filter = $state("all");
   let runId = $state<string>();
   let history = $state<string[]>([]);
@@ -101,8 +129,30 @@
     )
   );
   const dirty = $derived(serial !== saved);
+  /** What the save line says; its words morph in place as the editor works. */
+  const saveState = $derived.by(() => {
+    if (!workflow) {
+      return "Loading…";
+    }
+    if (saving) {
+      return "Saving…";
+    }
+    if (refused) {
+      return `Not saved · ${problems.length} ${problems.length === 1 ? "problem" : "problems"}`;
+    }
+    if (dirty) {
+      return "Unsaved changes";
+    }
+    return `Saved · ${Math.max(0, Math.floor((now - savedAt) / 1000))}s ago`;
+  });
   const live = $derived(whiffle.hub === "connected");
   /** The hub refused exactly what is on screen, with diagnostics to show. */
+  /**
+   * The hub's word on what is on screen: an edit taken back to the saved
+   * workflow reads that save's problems again, not those of the edit the
+   * hub refused on the way (which never saves again, being unchanged).
+   */
+  const hubProblems = $derived(serial === saved ? savedProblems : answered);
   const refused = $derived(serial === failedPayload && hubProblems.length > 0);
   const localProblems = $derived(
     origin === "code"
@@ -143,7 +193,8 @@
         workflow = value;
         ({ name, description, program } = value);
         root = value.graph ?? root;
-        hubProblems = value.problems;
+        answered = value.problems;
+        savedProblems = value.problems;
         // A code-origin workflow has no canvas: the program is the editor.
         if (value.origin === "code") {
           tab = "program";
@@ -197,7 +248,8 @@
       saved = payload;
       savedAt = Date.now();
       errorMessage = "";
-      hubProblems = value.problems;
+      answered = value.problems;
+      savedProblems = value.problems;
       workflowState.workflows = [
         ...workflowState.workflows.filter((entry) => entry.id !== id),
         value,
@@ -205,7 +257,7 @@
     } catch (caught) {
       failedPayload = payload;
       if (caught instanceof WorkflowProblems) {
-        hubProblems = caught.problems;
+        answered = caught.problems;
         errorMessage = "";
       } else {
         errorMessage = message(caught);
@@ -231,7 +283,9 @@
   async function validate() {
     selected = undefined;
     await persistFrom("validate");
-    inspectorOpen = narrow.current;
+    if (narrow.current) {
+      openInspector();
+    }
   }
   function commit(next: WorkflowGraph) {
     history = [...history.slice(-49), JSON.stringify(root)];
@@ -272,9 +326,46 @@
     root = JSON.parse(next);
     selected = undefined;
   }
+  /**
+   * The side of the screen a node is drawn on, for the narrow inspector to
+   * rise from; with no node on screen (the workflow's settings, an edge),
+   * from the bottom.
+   */
+  function sideOf(key?: string): "left" | "right" | "bottom" {
+    const at = key
+      ? document.querySelector(
+          `.svelte-flow__node[data-id="${CSS.escape(key)}"]`
+        )
+      : null;
+    if (!at) {
+      return "bottom";
+    }
+    const box = at.getBoundingClientRect();
+    return box.left + box.width / 2 < window.innerWidth / 2 ? "left" : "right";
+  }
+  function openInspector() {
+    inspectorSide = sideOf(selected);
+    inspectorOpen = true;
+  }
   function select(key?: string) {
     selected = key;
-    inspectorOpen = narrow.current;
+    if (narrow.current) {
+      openInspector();
+    } else {
+      inspectorOpen = false;
+    }
+  }
+  /**
+   * The palette's toggle folds it to its rail and back: every pane's width
+   * glides together (paneforge marks the pane collapsing or expanding until
+   * its flex-grow transition ends; the stylesheet below runs it).
+   */
+  function togglePalette() {
+    if (paletteCollapsed) {
+      palettePane?.expand();
+    } else {
+      palettePane?.collapse();
+    }
   }
   function add(kind: WorkflowNode["kind"], preset?: DelegateType) {
     let next = newNode(kind, {
@@ -353,12 +444,18 @@
 {#snippet palette()}
   <div class="palette wf-stack" {@attach highlight({ rows: ".palette-item" })}>
     <div class="wf-row wf-spread">
-      <h2>{paletteCollapsed ? 'Add' : 'Nodes'}</h2>
+      <h2>
+        <TextMorph
+          as="span"
+          duration={150}
+          text={paletteCollapsed ? 'Add' : 'Nodes'}
+        />
+      </h2>
       {#if !narrow.current}
         <button
           aria-label="Toggle palette"
           class="wf-btn"
-          onclick={() => { if (paletteCollapsed) { palettePane?.expand(); } else { palettePane?.collapse(); } }}
+          onclick={togglePalette}
           type="button"
         >
           {paletteCollapsed ? '›' : '‹'}
@@ -379,14 +476,16 @@
               ><entry.icon class="size-4" /></span
             >
             {#if !paletteCollapsed || narrow.current}
-              <span>{entry.title}<small>{entry.meaning}</small></span>
+              <span transition:crossIn
+                >{entry.title}<small>{entry.meaning}</small></span
+              >
             {/if}
           </button>
         {/each}
       </section>
     {/each}
     {#if !paletteCollapsed || narrow.current}
-      <section class="wf-stack">
+      <section class="wf-stack" transition:crossIn>
         <h3>Templates</h3>
         {#each types as type (type.name)}
           <button
@@ -476,7 +575,7 @@
         </button><button
           class="wf-btn wf-primary"
           disabled={!(workflow && live) || !!errorMessage || dirty || saving || problems.length > 0}
-          onclick={() => { inspectorOpen = false; paletteOpen = false; launch = true; }}
+          onclick={(event) => { inspectorOpen = false; paletteOpen = false; launchFrom = event.currentTarget; launch = true; }}
           title={live ? undefined : "Can't run while the hub is unreachable"}
           type="button"
         >
@@ -486,31 +585,15 @@
     </div>
     <div class="wf-row wf-spread">
       <div class="wf-row">
-        {#if origin === 'editor'}
-          <button
-            aria-pressed={tab === 'editor'}
-            class="wf-btn"
-            onclick={() => { tab = 'editor'; }}
-            type="button"
-          >
-            Editor
-          </button>
-        {/if}
-        <button
-          aria-pressed={tab === 'program'}
-          class="wf-btn"
-          onclick={() => { tab = 'program'; }}
-          type="button"
-        >
-          Program
-        </button><button
-          aria-pressed={tab === 'runs'}
-          class="wf-btn"
-          onclick={() => { tab = 'runs'; }}
-          type="button"
-        >
-          Runs
-        </button>
+        <Tabs.Root onValueChange={show} value={tab}>
+          <Tabs.List aria-label="Workflow views">
+            {#if origin === 'editor'}
+              <Tabs.Trigger value="editor">Editor</Tabs.Trigger>
+            {/if}
+            <Tabs.Trigger value="program">Program</Tabs.Trigger>
+            <Tabs.Trigger value="runs">Runs</Tabs.Trigger>
+          </Tabs.List>
+        </Tabs.Root>
         <!-- Narrow-only, by the stylesheet: the server renders this row
              before any media query can be asked, and a row that gained two
              buttons on hydration wrapped and pushed the page down. -->
@@ -523,7 +606,7 @@
             + Add node
           </button><button
             class="wf-btn narrow-only num"
-            onclick={() => { inspectorOpen = true; }}
+            onclick={openInspector}
             type="button"
           >
             Inspector · {problems.length}
@@ -531,18 +614,7 @@
         {/if}
       </div>
       <span class="wf-muted num save-state" role="status"
-        >{#if !workflow}
-          Loading…
-        {:else if saving}
-          Saving…
-        {:else if refused}
-          Not saved · {problems.length}
-          {problems.length === 1 ? 'problem' : 'problems'}
-        {:else if dirty}
-          Unsaved changes
-        {:else}
-          Saved · {Math.max(0, Math.floor((now - savedAt) / 1000))}s ago
-        {/if}</span
+        ><TextMorph as="span" duration={150} text={saveState} /></span
       >
     </div>
   </header>
@@ -570,109 +642,132 @@
       <Skeleton class="h-20 w-full" />
       <Skeleton class="h-20 w-full" />
     </div>
-  {:else if tab === 'program'}
-    <WorkflowProgram
-      {live}
-      onchange={(value) => { program = value; }}
-      {origin}
-      {problems}
-      {program}
-    />
-  {:else if tab === 'editor'}
-    {#if narrow.current}
-      {@render canvas()}
-    {:else}
-      <Resizable.PaneGroup class="min-h-0 flex-1" direction="horizontal"
-        ><Resizable.Pane
-          collapsedSize={48 / panelWidth * 100}
-          collapsible
-          defaultSize={232 / panelWidth * 100}
-          maxSize={30}
-          minSize={15}
-          onCollapse={() => { paletteCollapsed = true; }}
-          onExpand={() => { paletteCollapsed = false; }}
-          bind:this={palettePane}
-          >{@render palette()}</Resizable.Pane
-        ><Resizable.Handle />
-        <Resizable.Pane defaultSize={100 - 592 / panelWidth * 100} minSize={20}
-          >{@render canvas()}</Resizable.Pane
-        ><Resizable.Handle />
-        <Resizable.Pane
-          defaultSize={360 / panelWidth * 100}
-          maxSize={50}
-          minSize={25}
-          ><div class="inspector-scroll">
-            {@render inspector()}
-          </div></Resizable.Pane
-        ></Resizable.PaneGroup
-      >
-    {/if}
   {:else}
-    <div class="runs" {@attach highlight({ rows: ".run-entry" })}>
-      <aside class="run-list wf-stack">
-        <!-- The kit's ghost and pill: hover glides, and the pill follows the
-             choice (the chips draw no fill of their own here). -->
-        <div
-          class="wf-row filters"
-          {@attach highlight({ rows: '.wf-btn', selected: '[aria-pressed="true"]', axis: 'x' })}
-        >
-          {#each [{ value: 'all', label: 'All' }, { value: 'waiting', label: 'Needs you' }, { value: 'failed', label: 'Failed' }] as item (item.value)}
-            <button
-              aria-pressed={filter === item.value}
-              class="wf-btn"
-              onclick={() => { filter = item.value; }}
-              type="button"
-            >
-              {item.label}
-            </button>
-          {/each}
+    <!-- One tab's pane gives way to the next in one cell, sliding across in
+         tab order (pane-slide). -->
+    <div class="panes">
+      {#key tab}
+        <div class="pane" in:paneSlide={{ dir }} out:paneSlide={{ dir }}>
+          {#if tab === 'program'}
+            <WorkflowProgram
+              {live}
+              onchange={(value) => { program = value; }}
+              {origin}
+              {problems}
+              {program}
+            />
+          {:else if tab === 'editor'}
+            {#if narrow.current}
+              {@render canvas()}
+            {:else}
+              <Resizable.PaneGroup class="min-h-0 flex-1" direction="horizontal"
+                ><Resizable.Pane
+                  collapsedSize={railSize}
+                  collapsible
+                  defaultSize={232 / panelWidth * 100}
+                  maxSize={30}
+                  minSize={15}
+                  onCollapse={() => { paletteCollapsed = true; }}
+                  onExpand={() => { paletteCollapsed = false; }}
+                  bind:this={palettePane}
+                  >{@render palette()}</Resizable.Pane
+                ><Resizable.Handle />
+                <Resizable.Pane
+                  defaultSize={100 - 592 / panelWidth * 100}
+                  minSize={20}
+                  >{@render canvas()}</Resizable.Pane
+                ><Resizable.Handle />
+                <Resizable.Pane
+                  defaultSize={360 / panelWidth * 100}
+                  maxSize={50}
+                  minSize={25}
+                  ><div class="inspector-scroll">
+                    {@render inspector()}
+                  </div></Resizable.Pane
+                ></Resizable.PaneGroup
+              >
+            {/if}
+          {:else}
+            <div class="runs" {@attach highlight({ rows: ".run-entry" })}>
+              <!-- A run that starts, or a filter that changes what is
+                   listed, moves the rows the house way (motion/rows). -->
+              <aside class="run-list wf-stack" {@attach reflow()}>
+                <!-- The kit's ghost and pill: hover glides, and the pill
+                     follows the choice (the chips draw no fill of their own
+                     here). -->
+                <div
+                  class="wf-row filters"
+                  {@attach highlight({ rows: '.wf-btn', selected: '[aria-pressed="true"]', axis: 'x' })}
+                >
+                  {#each [{ value: 'all', label: 'All' }, { value: 'waiting', label: 'Needs you' }, { value: 'failed', label: 'Failed' }] as item (item.value)}
+                    <button
+                      aria-pressed={filter === item.value}
+                      class="wf-btn"
+                      onclick={() => { filter = item.value; }}
+                      type="button"
+                    >
+                      {item.label}
+                    </button>
+                  {/each}
+                </div>
+                {#if !runs.length}
+                  <p class="wf-muted" data-flip>
+                    No workflow runs in this view.
+                  </p>
+                {/if}
+                {#each runs as run (run.id)}
+                  <button
+                    class="run-entry wf-stack"
+                    data-flip
+                    onclick={() => { runId = run.id; }}
+                    type="button"
+                  >
+                    <div class="wf-row wf-spread">
+                      <span>{run.id.slice(0, 8)}</span>
+                      <WorkflowStatus status={run.status} />
+                    </div>
+                    <span class="wf-muted"
+                      >{new Date(run.startedAt).toLocaleString()}
+                      · {duration(run.startedAt, run.endedAt, now)}</span
+                    ><span class="wf-muted"
+                      >{run.launchedBy}
+                      ·
+                      {run.supervisorInstanceId ? `Supervisor ${run.supervisorInstanceId.slice(0, 8)}` : 'No supervisor'}</span
+                    >
+                  </button>
+                {/each}
+              </aside>
+              <div class="run-preview">
+                {#if runId}
+                  <!-- One run gives way to the next in place: they
+                       cross-fade in one cell. -->
+                  {#key runId}
+                    <div class="run-swap" transition:crossIn>
+                      <WorkflowRunView
+                        onprogram={() => { show('program'); }}
+                        {runId}
+                      />
+                    </div>
+                  {/key}
+                {:else}
+                  <p class="wf-muted">
+                    Select a workflow run to inspect its steps.
+                  </p>
+                {/if}
+              </div>
+            </div>
+          {/if}
         </div>
-        {#if !runs.length}
-          <p class="wf-muted">No workflow runs in this view.</p>
-        {/if}
-        {#each runs as run (run.id)}
-          <button
-            class="run-entry wf-stack"
-            onclick={() => { runId = run.id; }}
-            type="button"
-            transition:unfold
-          >
-            <div class="wf-row wf-spread">
-              <span>{run.id.slice(0, 8)}</span>
-              <WorkflowStatus status={run.status} />
-            </div>
-            <span class="wf-muted"
-              >{new Date(run.startedAt).toLocaleString()}
-              · {duration(run.startedAt, run.endedAt, now)}</span
-            ><span class="wf-muted"
-              >{run.launchedBy}
-              ·
-              {run.supervisorInstanceId ? `Supervisor ${run.supervisorInstanceId.slice(0, 8)}` : 'No supervisor'}</span
-            >
-          </button>
-        {/each}
-      </aside>
-      <div class="run-preview">
-        {#if runId}
-          <!-- One run gives way to the next in place: they cross-fade in one cell. -->
-          {#key runId}
-            <div
-              class="run-swap"
-              in:appear
-              out:fade={{ duration: 120, easing: easeOut }}
-            >
-              <WorkflowRunView onprogram={() => { tab = 'program'; }} {runId} />
-            </div>
-          {/key}
-        {:else}
-          <p class="wf-muted">Select a workflow run to inspect its steps.</p>
-        {/if}
-      </div>
+      {/key}
     </div>
   {/if}
 </div>
 {#if workflow && launch}
-  <WorkflowLaunch onclose={() => { launch = false; }} {workflow} />
+  <WorkflowLaunch
+    from={launchFrom}
+    onclose={() => { launch = false; }}
+    {workflow}
+  />
 {/if}
 {#if narrow.current}
   <Dialog.Root bind:open={paletteOpen}
@@ -683,14 +778,19 @@
       >
       <div class="wf">{@render palette()}</div></Dialog.Content
     ></Dialog.Root
-  ><Dialog.Root bind:open={inspectorOpen}
-    ><Dialog.Content class="max-h-[90dvh] overflow-y-auto"
-      ><Dialog.Title>Workflow inspector</Dialog.Title
-      ><Dialog.Description
-        >Edit the selected node or workflow settings.</Dialog.Description
-      >{@render inspector()}</Dialog.Content
-    ></Dialog.Root
   >
+  <!-- The inspector rises as a drawer from the side the selected node is
+       drawn on (from the bottom for the settings), and follows a drag 1:1
+       back out. -->
+  <Drawer.Root direction={inspectorSide} bind:open={inspectorOpen}>
+    <Drawer.Content class="inspector-sheet">
+      <Drawer.Title class="sr-only">Workflow inspector</Drawer.Title>
+      <Drawer.Description class="sr-only"
+        >Edit the selected node or workflow settings.</Drawer.Description
+      >
+      <div class="sheet-scroll">{@render inspector()}</div>
+    </Drawer.Content>
+  </Drawer.Root>
 {/if}
 <style>
   .editor {
@@ -792,6 +892,46 @@
   }
   .loading {
     padding: var(--space-6);
+  }
+  .panes {
+    display: grid;
+    grid-template: minmax(0, 1fr) / minmax(0, 1fr);
+    flex: 1;
+    min-height: 0;
+    overflow: hidden;
+  }
+  .pane {
+    grid-area: 1 / 1;
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+  }
+  /* The palette's toggle: while paneforge marks a pane collapsing or
+     expanding, every pane of the group glides to its new width together,
+     so their sum stays whole on every frame. A drag is left 1:1. */
+  @media (prefers-reduced-motion: no-preference) {
+    .pane
+      :global(
+        [data-pane-group]:has(
+            > [data-pane-state="collapsing"],
+            > [data-pane-state="expanding"]
+          )
+          > [data-pane]
+      ) {
+      transition: flex-grow var(--dur-panel) var(--ease-in-out);
+    }
+  }
+  :global(.inspector-sheet) {
+    min-height: 0;
+  }
+  /* The inspector scrolls up and down on its own; a sideways drag is the
+     drawer's (vaul), which a scroll box that claimed every pan cancelled
+     after its first move. */
+  .sheet-scroll {
+    min-height: 0;
+    overflow-y: auto;
+    touch-action: pan-y;
   }
   .wf-btn.narrow-only {
     display: none;

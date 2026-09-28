@@ -188,41 +188,9 @@ export interface LayoutOptions {
 // Component Props Types
 // ============================================================
 
-/** Props for FlowAutoFit component */
-export interface FlowAutoFitProps {
-  nodeCount: number;
-  nodes: Node[];
-}
-
-/** Props for FlowZoomTracker component */
-export interface FlowZoomTrackerProps {
-  nodes: Node[];
-  onZoomChange: (zoom: number) => void;
-}
-
-/** Props for FlowContextMenu component */
-export interface FlowContextMenuProps {
-  onAction: (action: string) => void;
-  onClose: () => void;
-  x: number;
-  y: number;
-}
-
 /** Props for FlowView component */
 export interface FlowViewProps {
   instanceId: string;
-}
-
-// ============================================================
-// Context Menu Types
-// ============================================================
-
-export type ContextMenuAction = "copy" | "jump";
-
-export interface ContextMenuState {
-  nodeId: string;
-  x: number;
-  y: number;
 }
 
 // ============================================================
@@ -234,14 +202,4 @@ export interface ViewportBounds {
   left: number;
   right: number;
   top: number;
-}
-
-export interface Point {
-  x: number;
-  y: number;
-}
-
-export interface PendingCompensation {
-  nodeId: string;
-  oldPosition: Point;
 }

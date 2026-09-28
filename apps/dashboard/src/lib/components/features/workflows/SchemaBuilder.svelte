@@ -1,7 +1,6 @@
 <script lang="ts">
   import type { WorkflowSchema } from "@whiffle/core";
-  import { fade } from "svelte/transition";
-  import { appear, easeOut } from "$lib/whiffle/motion/curves.svelte";
+  import { crossIn } from "$lib/whiffle/motion/curves.svelte";
   import { unfold } from "$lib/whiffle/motion/fold.svelte";
   import { morph } from "$lib/whiffle/motion/morph.svelte";
   import JsonField from "./JsonField.svelte";
@@ -56,7 +55,7 @@
        their heights. -->
   <div class="swap" {@attach morph()}>
     {#key json}
-      <div class="alt" in:appear out:fade={{ duration: 120, easing: easeOut }}>
+      <div class="alt" transition:crossIn>
         {#if json}
           <JsonField
             label="JSON Schema"
@@ -66,7 +65,7 @@
           />
         {:else}
           {#each fields as [name, schema], index (index)}
-            <div class="wf-well" transition:unfold>
+            <div class="wf-well" in:unfold out:unfold>
               <div class="wf-fields">
                 <label
                   >Field name<input
