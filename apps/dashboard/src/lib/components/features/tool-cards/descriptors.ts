@@ -243,6 +243,7 @@ const GREP_TALLY = /:(\d+)\s*$/;
 const NO_FILES_FOUND = /^no files found/i;
 const LEADING_WWW = /^www\./;
 const IPV4 = /^\d{1,3}(?:\.\d{1,3}){3}$/;
+const NUMERIC_TLD = /\.\d+$/;
 const SERVER_LABEL_SEPARATORS = /[_\-.]+/;
 const TRAILING_SLASH = /\/$/;
 const ERROR_LINE =
@@ -491,6 +492,9 @@ const reachable = (host: string): boolean =>
   host.includes(".") &&
   !host.includes(":") &&
   !IPV4.test(host) &&
+  // No top-level label is all digits: "3.100", the tail of an address a
+  // command line cut short, is not a public name either.
+  !NUMERIC_TLD.test(host) &&
   !LOCAL_ZONES.some((zone) => host === zone || host.endsWith(`.${zone}`));
 
 /** The site's icon at chip scale: one URL, s2 answers for every public host. */

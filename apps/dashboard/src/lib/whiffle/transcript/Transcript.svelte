@@ -522,13 +522,15 @@
    * So that update slides them too, on the fold's own timing: the rows after
    * the fold start where they were drawn and ride it up as one.
    *
-   * Home is worked out, not read off the page. virtua keeps its sizes by
-   * index, so right after the update the rows past the change stand where
-   * the old sizes put them until it measures them again — and a slide aimed
-   * at where they stand then would end in the wrong place. Their places are
-   * the row above the change, which did not move, plus each row's height as
-   * the update drew it. A row is placed by its bottom edge: a speaker line
-   * comes and goes at a row's top, so the words under it hold still.
+   * Each row slides from where it was drawn to where it is drawn now, by its
+   * bottom edge: a speaker line comes and goes at a row's top, so the words
+   * under it hold still. Where it is drawn now can still change: a row the
+   * update resized (a speaker line gained, a turn settling taller) is placed
+   * by virtua once it has measured it — in the same frame, or on WebKit, when
+   * a measurement slips past the frame, in the next — and every row under it
+   * moves then. That move is carried into the slides still running
+   * (`carrySlides`), so a slide starts where the row was and ends where it is,
+   * whenever the list finishes placing it.
    */
   interface Box {
     /** Its list item's layout top and height, in the list. */
@@ -571,8 +573,6 @@
     return boxes;
   }
 
-  /** The keys the list held before the update that moves rows. */
-  let listedBefore = new Set<string>();
   /**
    * A live row that settled in that update, by the key of the row it became:
    * the same object on screen, so it moves from where the live row was drawn.
@@ -609,7 +609,6 @@
     }
     beforeMove ??= measure();
     movedAfter.add(next[from - 1].key);
-    listedBefore = new Set(was.keys());
     if (ended?.into) {
       settledFrom.set(ended.into, ended.key);
     }
@@ -629,68 +628,63 @@
   }
 
   /**
-   * Every row the update moved, sliding from where it was drawn to its new
-   * place: the row above the change, plus the heights of the rows between as
-   * they are drawn now. A row new to the list stands in the count with the
-   * height it is drawn at, and arrives by its own entrance; a live row that
-   * settled moves from where the live row was. A row that was in the list
-   * but not on screen ends it — past there, the places are not known, and a
-   * move nobody saw jumps.
+   * Every row under the change that was on screen before it, sliding from
+   * where it was drawn. A row new to the list arrives by its own entrance; a
+   * live row that settled moves from where the live row was; a row that was
+   * not on screen before is not seen to move.
    */
   function slideMoves(): void {
     const boxes = beforeMove;
     const after = movedAfter;
-    const listed = listedBefore;
     const settled = settledFrom;
     const timing = foldMove
-      ? { duration: dur("--dur-exit"), easing: ease("--ease-out") }
+      ? { duration: dur("--dur-panel"), easing: ease("--ease-out") }
       : { duration: dur("--dur-panel"), easing: ease("--ease-in-out") };
     beforeMove = null;
     movedAfter = new Set();
-    listedBefore = new Set();
     settledFrom = new Map();
     foldMove = false;
     const drawn = renderedRows;
     const start = drawn.findIndex((row) => after.has(row.key));
-    const above = boxes?.get(drawn[start]?.key);
-    if (!(boxes && above && listing)) {
+    if (!(boxes && listing) || start < 0) {
       return;
     }
-    let bottom = above.top + above.height;
+    const origin = listing.getBoundingClientRect().top;
     for (const row of drawn.slice(start + 1)) {
       const box = boxes.get(settled.get(row.key) ?? row.key);
       const node = listing.querySelector<HTMLElement>(
         `[data-row="${CSS.escape(row.key)}"]`
       );
       const item = node?.parentElement;
-      if (!(node && item) || (!box && listed.has(row.key))) {
-        return;
-      }
-      const { height } = item.getBoundingClientRect();
-      bottom += height;
-      if (box) {
-        slide(
-          node,
-          box,
-          height,
-          box.top + box.shift + box.height - bottom,
-          timing
-        );
+      if (box && node && item) {
+        const now = item.getBoundingClientRect();
+        slide(node, box, now.top - origin, now.height, timing);
       }
     }
   }
 
-  /** One row sliding `delta` back to its place, drawn `height` tall now. */
+  /**
+   * Where each sliding row's list item stood, in the list, when its slide
+   * last took its place: what a later placing of the row is measured from.
+   */
+  const slidFrom = new WeakMap<HTMLElement, number>();
+
+  /**
+   * One row sliding from `box`, where it was drawn, to its item's place now
+   * (`top`, drawn `height` tall), by its bottom edge.
+   */
   function slide(
     node: HTMLElement,
     box: Box,
+    top: number,
     height: number,
-    delta: number,
     timing: KeyframeAnimationOptions
   ): void {
+    const delta = box.top + box.shift + box.height - (top + height);
     if (Math.abs(delta) <= 0.5) {
       return;
     }
+    slidFrom.set(node, top);
     // A row that gained a speaker line starts with it above where the row
     // began — over the row above. It is cut off there and opens as the row
     // travels. The sides and bottom stay open: a well bleeds past its box.
@@ -710,6 +704,52 @@
       ],
       { id: SLIDE, ...timing }
     );
+  }
+
+  /**
+   * The transcript moved its rows under a slide: virtua placed them again
+   * (it measured some), or the pin scrolled the list by `scrolled`. A slide
+   * is a path on the screen like a flight, so every row still sliding whose
+   * place on screen moved is put back where it was drawn and taken to its new
+   * place over the rest of its slide, on the slide's own curve. The reader's
+   * own scrolling is not carried: it moves the list, slides and all.
+   */
+  function carrySlides(scrolled: number): void {
+    if (!listing) {
+      return;
+    }
+    const origin = listing.getBoundingClientRect().top;
+    for (const node of listing.querySelectorAll<HTMLElement>("[data-row]")) {
+      const was = slidFrom.get(node);
+      const item = node.parentElement;
+      const slides = node
+        .getAnimations()
+        .filter((each) => each.id === SLIDE && each.playState === "running");
+      if (was === undefined || !item || slides.length === 0) {
+        slidFrom.delete(node);
+        continue;
+      }
+      const top = item.getBoundingClientRect().top - origin;
+      const moved = top - was - scrolled;
+      if (Math.abs(moved) <= 0.5) {
+        continue;
+      }
+      slidFrom.set(node, top);
+      const timing = slides[0].effect?.getComputedTiming();
+      const remaining = Math.max(
+        ...slides.map(
+          (each) =>
+            Number(each.effect?.getComputedTiming().duration) -
+            Number(each.currentTime)
+        )
+      );
+      node.animate([{ translate: `0 ${-moved}px` }, { translate: "0 0" }], {
+        id: SLIDE,
+        duration: remaining,
+        easing: timing?.easing,
+        composite: "add",
+      });
+    }
   }
 
   /** Where a build's own tail — the live row, the tool in flight, the queue — begins. */
@@ -1355,6 +1395,7 @@
       // sits right over the composer (33px of flight, 114px of jump on iOS).
       if (listing) {
         carry(listing, was - scroller.scrollTop);
+        carrySlides(scroller.scrollTop - was);
       }
     }
   }
@@ -1661,6 +1702,7 @@
   function onmeasured(): void {
     // virtua applies what it measured in the microtask behind this call.
     queueMicrotask(() => {
+      carrySlides(0);
       if (active && landed && atBottom && !jumping) {
         pinBottom();
       }

@@ -24,10 +24,16 @@
    *           opening edge for exactly as long as it runs.
    *   emerge  the reader's own message, sent from this tab: no entrance of
    *           the row's own. Its turn is the composer's text landing
-   *           (motion/share.svelte.ts, from MessageRow and Queued).
+   *           (motion/share.svelte.ts, from MessageRow).
    *
-   * A row leaving the tail (the turn's indicator, a finished tool's glance)
-   * folds shut over --dur-exit instead of vanishing, so the tail never jumps.
+   * A row leaving the list (the turn's indicator, a finished tool's glance, a
+   * replaced send) folds shut where it stands instead of vanishing — on an
+   * opening's own time and curve, --dur-panel and --ease-out, because a row
+   * leaving is most often a row handing its place to one opening under it
+   * (the indicator to the tool it announced): run on one clock, the fold and
+   * the opening add up to the same height every frame, and nothing above
+   * them moves. On --dur-exit the fold ran out first, the tail came up short
+   * for a frame, and every row above dropped 22px and climbed back.
    */
   import { type Snippet, untrack } from "svelte";
   import { dur, motionOk } from "$lib/whiffle/motion/curves.svelte";
@@ -122,7 +128,7 @@
           { blockSize: "0px", opacity: 0 },
         ],
         {
-          duration: dur("--dur-exit"),
+          duration: dur("--dur-panel"),
           easing: style.getPropertyValue("--ease-out"),
           fill: "forwards",
         }
