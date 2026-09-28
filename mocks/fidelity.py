@@ -10,10 +10,13 @@ them. This measures the SAME NAMED QUANTITIES on both images and diffs them.
 
 Landmarks are auto-detected, not hardcoded, so it survives layout drift.
 
-usage:  python3 fidelity.py <reference.png> <build.png> [--json]
+usage:  python3 fidelity.py <reference.png> <build.png> [--ink-ref <mock-2x.png>] [--json]
         images may be 1x or 2x; 2x is downsampled to CSS px automatically.
+        --ink-ref: the design's mock rendered by the build's own browser at 2x
+        (see SAME-RENDERER INK below); defaults to mocks/v2-fleet.png.
 """
 import sys, json
+from pathlib import Path
 import numpy as np
 from PIL import Image
 
@@ -28,6 +31,24 @@ TOL = {                      # px tolerance before a delta is flagged
     "band_w": 3, "band_x0": 2, "band_x1": 2, "card_pad_l": 1, "card_pad_r": 1,
 }
 INK_TOL = 12                 # luminance steps
+
+# ---------------------------------------------------------------------------
+# SAME-RENDERER INK — the stat figure's ink is judged against the design's
+# own mock (mocks/v2-fleet.html, drawn by mocks/render.mjs), not the comp.
+#
+# The comp's rasterizer draws glyphs lighter than any browser (the plan:
+# "Every one of the 20 candidates renders >=45% heavier in ink density than
+# the reference PNG ... it is the comp's rasterizer"). Measured on the stroke
+# core, the mock and the live build both sit ~14L under the comp while their
+# ink token is the plan's "stat value #404040" — a renderer offset, not a
+# drift, and no font weight closes it (500 -> 55, 400 -> 49, 350 -> 46 against
+# the comp's 68). So the reference for these quantities is the mock rendered
+# by the SAME browser at the SAME 2x scale as the build capture; pass it with
+# --ink-ref, rendered by render.mjs with CHROMIUM_BIN set to the build's
+# browser. Without it, the committed mocks/v2-fleet.png is the mock render.
+# ---------------------------------------------------------------------------
+INK_FROM_RENDER = ("stat_num_ink",)
+DEFAULT_INK_REF = str(Path(__file__).with_name("v2-fleet.png"))
 
 # ---------------------------------------------------------------------------
 # AA OVERRIDE — the reason this exists is a defect this gate once certified.
@@ -118,6 +139,28 @@ def darkest(lum, a, y0, y1, x0, x1):
     p = float(np.percentile(win, 1.0))
     v = int(round(p))
     return f"#{v:02X}{v:02X}{v:02X}", p
+
+
+def stroke_ink(lum, y0, y1, x0, x1, q=10):
+    """The ink a glyph run is drawn in: the darkest tenth of its STROKE pixels.
+
+    `darkest()` takes the 1st percentile of the whole window, which moves with
+    how much of the window the glyphs cover ("6" against "75") and with the
+    LANCZOS undershoot a sharp horizontal stroke leaves when a 2x capture is
+    halved (the tops of 7 and 5 read darker than the ink itself). Here the
+    stroke pixels are those darker than halfway between the window's
+    background (its median) and its darkest pixel, and the ink is their 10th
+    percentile: independent of glyph count, clear of the lone undershoot
+    pixels. Measured on the live board: "75" 53, "6" 55."""
+    win = lum[y0:y1, x0:x1]
+    if win.size == 0:
+        return None
+    bg, lo = float(np.median(win)), float(win.min())
+    strokes = win[win < (bg + lo) / 2]
+    if strokes.size == 0:
+        return None
+    v = int(round(float(np.percentile(strokes, q))))
+    return f"#{v:02X}{v:02X}{v:02X}"
 
 
 # ---------- landmark detection ----------
@@ -401,8 +444,8 @@ def measure(path):
                     m["well_inset"], m["well_inset_top"] = w
                 # The figure sits in the tile's lower half; st["h"] is the frame
                 # strip's height, not the card's, so the rows come from the top.
-                m["stat_num_ink"], _ = darkest(
-                    lum, a, st["top"] + 45, st["top"] + 80,
+                m["stat_num_ink"] = stroke_ink(
+                    lum, st["top"] + 45, st["top"] + 80,
                     st["x"] + 14, st["x"] + 140)
 
     # surfaces
@@ -414,16 +457,28 @@ def measure(path):
 
 # ---------- report ----------
 def main():
-    args = [x for x in sys.argv[1:] if not x.startswith("--")]
-    as_json = "--json" in sys.argv
+    argv = sys.argv[1:]
+    ink_ref = DEFAULT_INK_REF
+    if "--ink-ref" in argv:
+        i = argv.index("--ink-ref")
+        ink_ref = argv[i + 1]
+        argv = argv[:i] + argv[i + 2:]
+    args = [x for x in argv if not x.startswith("--")]
+    as_json = "--json" in argv
     ref, bld = args[0], args[1]
     R, _, _ = measure(ref)
     B, _, _ = measure(bld)
+    # Ink the comp's own rasterizer draws differently (see INK_FROM_RENDER) is
+    # judged against the design's mock drawn by the build's renderer.
+    I, _, _ = measure(ink_ref)
+    for k in INK_FROM_RENDER:
+        R[k] = I.get(k)
 
     if as_json:
         print(json.dumps({"reference": R, "build": B}, indent=1)); return
 
     print(f"reference : {ref}   {R.get('_size')}")
+    print(f"ink ref   : {ink_ref}   {I.get('_size')}  ({', '.join(INK_FROM_RENDER)})")
     print(f"build     : {bld}   {B.get('_size')}\n")
     print(f"{'quantity':<18}{'reference':>12}{'build':>12}{'delta':>10}   ")
     print("-" * 60)
