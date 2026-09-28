@@ -3,9 +3,9 @@
   import PendingContent, {
     whileIdle,
   } from "$lib/components/ui/button/pending-content.svelte";
+  import type { Trail } from "$lib/components/ui/markdown/trail";
   import { dur } from "$lib/whiffle/motion/curves.svelte";
   import { land } from "$lib/whiffle/motion/share.svelte";
-  import type { Trail } from "$lib/components/ui/markdown/trail";
   import {
     canResend,
     commandRecord,
@@ -228,7 +228,7 @@
                 type="button"
               >
                 <PendingContent
-                  failed={failed}
+                  {failed}
                   label={undelivered ? 'Try again' : 'Send anyway'}
                   pending={retrying}
                   pendingLabel="Sending…"

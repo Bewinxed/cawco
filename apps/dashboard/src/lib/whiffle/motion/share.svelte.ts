@@ -50,11 +50,11 @@ export function depart(
   // clicked. By the time the navigation it caused starts, it may be inside
   // a surface that has already left (a dialog after its exit): that later,
   // drawn-anywhere box does not replace the one the click took.
-  const waiting = departures.get(key);
+  const taken = departures.get(key);
   if (
     by === "navigation" &&
-    waiting?.by === "click" &&
-    performance.now() - waiting.at < waiting.ttl
+    taken?.by === "click" &&
+    performance.now() - taken.at < taken.ttl
   ) {
     return;
   }
@@ -102,10 +102,10 @@ export function waiting(key: string): boolean {
  * session's tab lands it — not whichever tab happens to mount first.
  */
 export function handOver(from: string, to: string): void {
-  const waiting = departures.get(from);
-  if (waiting) {
+  const taken = departures.get(from);
+  if (taken) {
     departures.delete(from);
-    departures.set(to, waiting);
+    departures.set(to, taken);
   }
 }
 
