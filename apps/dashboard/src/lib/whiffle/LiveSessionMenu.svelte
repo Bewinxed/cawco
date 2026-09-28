@@ -17,6 +17,7 @@
     IconTrash,
   } from "$lib/icons";
   import {
+    deleteTranscript,
     discardSession,
     type InstanceRow,
     keepSession,
@@ -55,6 +56,35 @@
       instance.status !== "running" &&
       instance.status !== "starting"
   );
+
+  /**
+   * Asleep with a transcript: the conversation lives on its machine, and
+   * deleting it there is how the session leaves — the hub drops the row once
+   * the machine confirms.
+   */
+  const asleepWithTranscript = $derived(
+    Boolean(instance.sessionId) &&
+      instance.status !== "running" &&
+      instance.status !== "starting"
+  );
+
+  async function askDeleteTranscript() {
+    const sessionId = instance.sessionId as string;
+    await confirm({
+      title: "Delete this transcript?",
+      body: `“${sessionName(instance.id, {}, instance.cwd).label}” is removed from ${instance.cwd || "this machine"}, for good. Nothing else on the machine is touched.`,
+      confirmLabel: "Delete transcript",
+      destructive: true,
+      pendingLabel: "Deleting…",
+      run: () =>
+        deleteTranscript(
+          instance.machineId,
+          sessionId,
+          instance.cwd || undefined,
+          (instance.harness ?? undefined) as HarnessKind | undefined
+        ),
+    });
+  }
 
   async function askRemove() {
     await confirm({
@@ -105,6 +135,14 @@
       <ContextMenu.Item onSelect={ongroup}>
         <IconFolder />
         Group into folder
+      </ContextMenu.Item>
+    {/if}
+
+    {#if asleepWithTranscript}
+      <ContextMenu.Separator />
+      <ContextMenu.Item onSelect={askDeleteTranscript} variant="destructive">
+        <IconTrash />
+        Delete transcript
       </ContextMenu.Item>
     {/if}
 

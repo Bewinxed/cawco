@@ -3524,6 +3524,28 @@ export async function removeMachine(machineId: string): Promise<void> {
 }
 
 /**
+ * Deletes a session's transcript on its machine — the one way a transcript is
+ * deleted, from a stored row or a sleeping one. The hub sees the delete go
+ * past and, once the machine confirms it, drops every row that named it; the
+ * catalog is read again here so the stored list agrees.
+ */
+export async function deleteTranscript(
+  machineId: string,
+  sessionId: string,
+  dir: string | undefined,
+  harness: HarnessKind | undefined
+): Promise<void> {
+  await machineControl(
+    machineId,
+    "deleteSession",
+    [sessionId, { dir }],
+    undefined,
+    harness
+  );
+  await loadCatalog(machineId);
+}
+
+/**
  * Removes a session that never started: no transcript, no process. The hub
  * refuses any other kind and says why; that answer is thrown as it is, for
  * the confirm dialog to show under its question.

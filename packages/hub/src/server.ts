@@ -1040,6 +1040,16 @@ const peekInstall = (payload: unknown): string | undefined => {
   return typeof id === "string" ? id : undefined;
 };
 
+/** A `control` asking a machine to delete a transcript, and the session it names. */
+const peekTranscriptDelete = (payload: unknown): string | undefined => {
+  if (peek(payload, "method") !== "deleteSession") {
+    return undefined;
+  }
+  const { args } = payload as { args?: unknown };
+  const id = Array.isArray(args) ? args[0] : undefined;
+  return typeof id === "string" ? id : undefined;
+};
+
 /** A `control` answering a permission, and the ask it answers with what it says. */
 const peekAnswer = (
   payload: unknown
@@ -1890,6 +1900,15 @@ export const createServer = ({
   const pendingInstalls = new Map<
     string,
     { machineId: string; toolId: string }
+  >();
+  /**
+   * Transcript deletes somebody is waiting on, by `requestId`: when the
+   * machine says the transcript is gone, the rows that named it go too —
+   * otherwise a sleeping row points at a conversation that no longer exists.
+   */
+  const pendingTranscriptDeletes = new Map<
+    string,
+    { machineId: string; sessionId: string }
   >();
   /**
    * Fleet syncs somebody is waiting on, by `requestId` → the machine running
@@ -3850,6 +3869,13 @@ export const createServer = ({
         answered.requestId,
         answered.result
       );
+    }
+    const deleted = peekTranscriptDelete(message.payload);
+    if (deleted) {
+      pendingTranscriptDeletes.set(message.requestId, {
+        machineId: message.machineId,
+        sessionId: deleted,
+      });
     }
     // A per-cell install or retry, clicked rather than swept: the chip
     // turns on every dashboard, not only the one that clicked it.
@@ -7523,6 +7549,34 @@ export const createServer = ({
                   publishInstances(message.machineId);
                 }
               }
+              // A transcript delete answering: once the machine says it is gone,
+              // every row that named it goes with it, through the one
+              // per-session delete, and every dashboard sees it leave.
+              const transcript = message.requestId
+                ? pendingTranscriptDeletes.get(message.requestId)
+                : undefined;
+              if (
+                transcript &&
+                kind === "control_result" &&
+                message.requestId
+              ) {
+                pendingTranscriptDeletes.delete(message.requestId);
+                if ((message.payload as { ok?: unknown }).ok === true) {
+                  const ids = db
+                    .listInstances()
+                    .filter(
+                      (row) =>
+                        row.machineId === transcript.machineId &&
+                        row.sessionId === transcript.sessionId
+                    )
+                    .map((row) => row.id);
+                  for (const id of ids) {
+                    db.deleteInstance(id);
+                  }
+                  forgetInstances(ids);
+                  publishInstances(transcript.machineId);
+                }
+              }
               // A sync answering, whoever asked for it: the machine's own account
               // of what it now has is the hub's to keep, and the reply still goes
               // wherever it was going.
@@ -7677,6 +7731,11 @@ export const createServer = ({
           for (const [requestId, install] of pendingInstalls) {
             if (install.machineId === machineId) {
               pendingInstalls.delete(requestId);
+            }
+          }
+          for (const [requestId, deleting] of pendingTranscriptDeletes) {
+            if (deleting.machineId === machineId) {
+              pendingTranscriptDeletes.delete(requestId);
             }
           }
           for (const [requestId, syncing] of pendingFleet) {

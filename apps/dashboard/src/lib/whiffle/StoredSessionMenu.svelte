@@ -23,6 +23,7 @@
     IconTrash,
   } from "$lib/icons";
   import {
+    deleteTranscript,
     forkSession,
     loadCatalog,
     machineControl,
@@ -90,14 +91,12 @@
     busy = true;
     removed = false;
     try {
-      await machineControl(
+      await deleteTranscript(
         machineId,
-        "deleteSession",
-        [info.sessionId, where],
-        undefined,
+        info.sessionId,
+        where.dir,
         info.harness
       );
-      await loadCatalog(machineId);
       removed = true;
       confirmingDelete = false;
     } finally {
