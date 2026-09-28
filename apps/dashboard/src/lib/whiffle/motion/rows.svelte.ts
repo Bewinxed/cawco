@@ -534,6 +534,22 @@ function onScreen(element: HTMLElement): boolean {
   return bottom > 0 && top < window.innerHeight;
 }
 
+/**
+ * Neither where it is drawn now nor where it is laid out now is in the
+ * viewport: a move nobody can see. Sliding it anyway is worse than wasted. A
+ * list growing a page at a time past the fold moves what sits under it on
+ * every page, and a slide still in flight when the next page lands carries on
+ * from where it is drawn, so while the reader scrolls it trails further and
+ * further behind its place until it is drawn on screen, still sliding away:
+ * the fleet board's Not running, its Show moving out from under the pointer.
+ * `dy` is how far above its place it is drawn.
+ */
+function unseen(node: HTMLElement, place: Placed, dy: number): boolean {
+  const top = node.getBoundingClientRect().top + node.clientTop + place.cy;
+  const off = (at: number) => at + place.h <= 0 || at >= window.innerHeight;
+  return off(top) && off(top + dy);
+}
+
 function arrival(element: HTMLElement, still: boolean) {
   if (still) {
     element.animate([{ opacity: 0 }, { opacity: 1 }], entrance());
@@ -769,7 +785,11 @@ class Reflow {
     const moved =
       was.ref === place.ref && (was.x !== place.x || was.y !== place.y);
     if (moved && (Math.abs(x) > 0.5 || Math.abs(y) > 0.5)) {
-      this.#slide(element, x, y);
+      if (unseen(this.#node, place, y)) {
+        this.#stop(element);
+      } else {
+        this.#slide(element, x, y);
+      }
     }
     if (!hasEdges(element)) {
       return;
