@@ -15,6 +15,7 @@
    * brings its own row.
    */
   import { onDestroy, onMount, untrack } from "svelte";
+  import type { Attachment } from "svelte/attachments";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
   import { page } from "$app/state";
@@ -180,7 +181,11 @@
       return;
     }
     clearTimeout(timer);
-    const anchor = event.currentTarget as HTMLElement;
+    // The handlers sit on the whole tab, its buttons included, so moving onto
+    // them is not leaving it; the card still hangs from the tab's link.
+    const anchor = (
+      event.currentTarget as HTMLElement
+    ).querySelector<HTMLElement>("[data-session-tab]") as HTMLElement;
     if (detailsOpen) {
       showDetails(id, anchor, false);
       return;
@@ -328,11 +333,25 @@
    * the row that opened it is landing it: that flight is started in the
    * same frame's callbacks, ahead of this one, so it is there to be seen.
    */
-  function entering(id: string) {
-    return (node: HTMLElement) => {
-      tabEls.set(id, node);
-      let frame = 0;
-      if (ready && motionOk.current && !renamedIn.delete(id)) {
+  function entering(id: string): Attachment<HTMLElement> {
+    return (node) =>
+      untrack(() => {
+        tabEls.set(id, node);
+        let frame = 0;
+        const renamed = renamedIn.delete(id);
+        if (!ready || renamed) {
+          return forget(id, node, frame);
+        }
+        // A new tab opens at the strip's end, often past its scrolled edge:
+        // it is brought into view now, before a flight measures where it is.
+        node.scrollIntoView({
+          block: "nearest",
+          inline: "nearest",
+          behavior: "instant",
+        });
+        if (!motionOk.current) {
+          return forget(id, node, frame);
+        }
         frame = requestAnimationFrame(() => {
           const flying = node
             .getAnimations()
@@ -349,15 +368,61 @@
             );
           }
         });
+        return forget(id, node, frame);
+      });
+  }
+
+  /** The cleanup of a tab's `entering`: the tab left the strip. */
+  function forget(id: string, node: HTMLElement, frame: number) {
+    return () => {
+      cancelAnimationFrame(frame);
+      if (tabEls.get(id) === node) {
+        tabEls.delete(id);
+        attachments.delete(id);
       }
-      return () => {
-        cancelAnimationFrame(frame);
-        if (tabEls.get(id) === node) {
-          tabEls.delete(id);
-        }
-      };
     };
   }
+
+  /**
+   * One pair of attachments per tab id, made once. The strip's tab objects
+   * are rebuilt whenever anything about any tab changes, and Svelte tears an
+   * attachment down and runs it again whenever the function it is given is a
+   * new one; handed the same function, a tab already in the strip keeps its
+   * attachments and does not play its arrival again.
+   */
+  interface TabAttachments {
+    enter: Attachment<HTMLElement>;
+    land: Attachment<HTMLElement>;
+  }
+  const attachments = new Map<string, TabAttachments>();
+  function attachmentsOf(id: string): TabAttachments {
+    let made = attachments.get(id);
+    if (!made) {
+      made = {
+        enter: entering(id),
+        land: land(() => `session:${id}`, { uniform: true }),
+      };
+      attachments.set(id, made);
+    }
+    return made;
+  }
+
+  // The chosen tab is always in view, however it came to be chosen.
+  $effect(() => {
+    const id = leaf.active;
+    untrack(() => {
+      if (!(ready && id)) {
+        return;
+      }
+      // A tab opened in this same change registers itself after this runs;
+      // `entering` brings that one into view.
+      tabEls.get(id)?.scrollIntoView({
+        block: "nearest",
+        inline: "nearest",
+        behavior: motionOk.current ? "smooth" : "instant",
+      });
+    });
+  });
 
   /**
    * A tab that closed, taken out of the flow where it stands so the tabs
@@ -435,16 +500,24 @@
       <!-- The caret marks where a drop would land, drawn on the side the
            pointer is nearest. Graphite, like every structural mark here:
            the one loud colour belongs to a session asking for something. -->
+      <!-- Hovering the whole tab (its buttons too) times the details card;
+           the keyboard reaches the same card from the tab's link. -->
+      <!-- svelte-ignore a11y_no_static_element_interactions -->
       <div
         class="tab"
+        onpointerenter={(event) => {
+          rebuildScheduler.prepare(tab.id);
+          hoverTab(tab.id, event);
+        }}
+        onpointerleave={leaveDetails}
         class:drop-after={dropHint.tabIndexIn(leaf.id) === i + 1 && i === tabs.length - 1}
         class:drop-before={dropHint.tabIndexIn(leaf.id) === i}
         class:needs={tab.activity === 'blocked'}
         use:dragSession={{ sessionId: tab.id, from: leaf.id }}
         use:tabDropTarget={{ leafId: leaf.id, index: i, sessionId: tab.id }}
         out:leavingTab={tab.id}
-        {@attach land(() => `session:${tab.id}`, { uniform: true })}
-        {@attach entering(tab.id)}
+        {@attach attachmentsOf(tab.id).enter}
+        {@attach attachmentsOf(tab.id).land}
       >
         <ContextMenu.Root onOpenChange={menuOpenChange}>
           <ContextMenu.Trigger class="contents">
@@ -464,11 +537,6 @@
                 }
               }}
               onpointerdown={() => rebuildScheduler.prepare(tab.id)}
-              onpointerenter={(event) => {
-                rebuildScheduler.prepare(tab.id);
-                hoverTab(tab.id, event);
-              }}
-              onpointerleave={leaveDetails}
               value={tab.id}
             >
               {#snippet lead()}
@@ -720,8 +788,8 @@
     flex: none;
     display: grid;
     place-items: center;
-    width: 22px;
-    height: 24px;
+    inline-size: 22px;
+    block-size: 24px;
     border: 0;
     border-radius: var(--radius-xs);
     background: transparent;
@@ -738,24 +806,25 @@
       opacity: 0;
       scale: var(--pop-scale);
     }
-  }
-  .tdetails :global(svg) {
-    width: 12px;
-    height: 12px;
-    @media (prefers-reduced-motion: no-preference) {
-      transition: transform var(--dur-control) var(--ease-out);
+    & :global(svg) {
+      inline-size: 12px;
+      block-size: 12px;
+
+      @media (prefers-reduced-motion: no-preference) {
+        transition: transform var(--dur-control) var(--ease-out);
+      }
     }
-  }
-  .tdetails[aria-expanded="true"] :global(svg) {
-    transform: rotate(180deg);
-  }
-  .tdetails:focus-visible {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 1px;
-  }
-  @media (hover: hover) {
-    .tdetails:hover {
-      background: var(--surface-fill);
+    &[aria-expanded="true"] :global(svg) {
+      transform: rotate(180deg);
+    }
+    &:focus-visible {
+      outline: 2px solid var(--focus-ring);
+      outline-offset: 1px;
+    }
+    @media (hover: hover) {
+      &:hover {
+        background: var(--surface-fill);
+      }
     }
   }
   .details-morph {
@@ -901,11 +970,6 @@
     flex: 0 0 auto;
     inline-size: 20px;
     block-size: 20px;
-    margin-inline-start: 4px;
-
-    @media (pointer: coarse) {
-      margin-inline: 24px 8px;
-    }
     border: 0;
     padding: 0;
     background: none;
@@ -913,6 +977,17 @@
     color: var(--ink-muted);
     cursor: pointer;
 
+    @media not (pointer: coarse) {
+      margin-inline-start: 4px;
+    }
+    @media (pointer: coarse) {
+      margin-inline: 24px 8px;
+    }
+    & :global(svg) {
+      display: block;
+      inline-size: 16px;
+      block-size: 16px;
+    }
     &:focus-visible {
       outline: 2px solid var(--focus-ring);
       outline-offset: 1px;
@@ -934,10 +1009,5 @@
         transform: scale(0.9);
       }
     }
-  }
-  .tclose :global(svg) {
-    inline-size: 12px;
-    block-size: 12px;
-    display: block;
   }
 </style>

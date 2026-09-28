@@ -132,10 +132,11 @@
     flex-shrink: 0;
     width: 28px;
     height: 28px;
-  }
-  .remove :global(svg) {
-    width: 12px;
-    height: 12px;
+
+    & :global(svg) {
+      inline-size: 16px;
+      block-size: 16px;
+    }
   }
   button:focus-visible {
     outline: 2px solid var(--focus-ring);

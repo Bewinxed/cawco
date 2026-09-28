@@ -1342,10 +1342,11 @@
     color: var(--ink-muted);
     cursor: pointer;
     flex: 0 0 auto;
-  }
-  .att button :global(svg) {
-    width: 12px;
-    height: 12px;
+
+    & :global(svg) {
+      inline-size: 16px;
+      block-size: 16px;
+    }
   }
   .att button:hover {
     background: var(--surface-recess);

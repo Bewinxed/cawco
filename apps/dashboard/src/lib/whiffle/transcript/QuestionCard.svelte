@@ -277,8 +277,8 @@
     white-space: nowrap;
 
     & :global(svg) {
-      inline-size: 12px;
-      block-size: 12px;
+      inline-size: 14px;
+      block-size: 14px;
       flex: 0 0 auto;
     }
     &.attn {

@@ -1,6 +1,7 @@
-// Not solar: the set has no bare plus (only circled/squared "add"), and an
-// enclosed glyph double-encloses inside pill buttons. Local, set-matched.
+// Not solar: the set has no bare plus or close (only circled/squared ones),
+// and an enclosed glyph double-encloses inside pill buttons. Local, set-matched.
 // biome-ignore lint/performance/noBarrelFile: central icon barrel — every consumer imports icons from this index
+export { default as IconClose } from "$lib/components/icons/Close.svelte";
 export { default as IconMinus } from "$lib/components/icons/Minus.svelte";
 export { default as IconPlus } from "$lib/components/icons/Plus.svelte";
 export { default as IconTick } from "$lib/components/icons/Tick.svelte";
@@ -34,10 +35,7 @@ export { default as IconToolTodo } from "~icons/solar/checklist-bold-duotone";
 export { default as IconReport } from "~icons/solar/clipboard-check-bold-duotone";
 export { default as IconReportFailed } from "~icons/solar/clipboard-remove-bold-duotone";
 export { default as IconClock } from "~icons/solar/clock-circle-bold-duotone";
-export {
-  default as IconClose,
-  default as IconError,
-} from "~icons/solar/close-circle-bold-duotone";
+export { default as IconError } from "~icons/solar/close-circle-bold-duotone";
 export { default as IconToolCode } from "~icons/solar/code-2-bold-duotone";
 export {
   default as IconTerminal,

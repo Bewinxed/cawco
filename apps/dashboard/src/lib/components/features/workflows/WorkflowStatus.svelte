@@ -4,8 +4,8 @@
   import {
     IconCheck,
     IconChevronUp,
-    IconClose,
     IconDot,
+    IconError,
     IconStop,
   } from "$lib/icons";
   import { crossIn } from "$lib/whiffle/motion/curves.svelte";
@@ -37,7 +37,7 @@
     live: IconDot,
     attn: IconChevronUp,
     done: IconCheck,
-    fail: IconClose,
+    fail: IconError,
     idle: IconStop,
   };
   const Glyph = $derived(icons[tone]);

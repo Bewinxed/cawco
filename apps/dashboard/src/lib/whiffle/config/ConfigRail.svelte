@@ -39,7 +39,7 @@
    */
   function badge(
     _node: Element,
-    _params: undefined,
+    _params?: undefined,
     { direction }: { direction?: "in" | "out" | "both" } = {}
   ) {
     const scale = popScale();
@@ -87,11 +87,8 @@
                   class="fault num"
                   title="{faults} failing on a machine or at the hub"
                   transition:badge
-                  ><TextMorph
-                    as="span"
-                    duration={150}
-                    text={String(faults)}
-                  /><span class="sr-only"> failing</span></span
+                  ><TextMorph as="span" duration={150} text={String(faults)} />
+                  <span class="sr-only"> failing</span></span
                 >
               {/if}
               {#if section.slug !== 'models'}
