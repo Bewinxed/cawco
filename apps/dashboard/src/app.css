@@ -474,6 +474,15 @@
     --dur-pop: 260ms;
     --dur-panel: 280ms;
     --dur-exit: 160ms;
+    /* A switch's knob and a checkbox's tick. */
+    --dur-toggle: 160ms;
+    /* A button's width following its label while it works. */
+    --dur-morph: 180ms;
+    /* Fades that carry a state change in place: a field's error, the theme
+       switch, a toast stack closing up. */
+    --dur-fade: 200ms;
+    /* How long a done state (a copied check, a saved check) stays up. */
+    --dur-hold: 1.2s;
     /* The hover ghost following the pointer from row to row. */
     --dur-ghost: 80ms;
     --c-500: 500ms;
@@ -770,13 +779,151 @@
     &[data-side="right"] {
       --kit-rise: calc(-1 * var(--pop-rise)) 0;
     }
+    /* Open and close are transitions on data-state, not keyframes: a close
+       caught mid-open turns back from the opacity and scale it has reached.
+       It opens from its @starting-style (below) over --dur-pop and leaves
+       over --dur-exit; bits-ui holds it mounted until the transition ends
+       (it waits on getAnimations()). It grows from the trigger through
+       bits' transform-origin, which each kit content sets. With reduced
+       motion only the fade runs. */
+    transition: opacity var(--dur-pop) var(--ease-drawer);
+
+    &[data-state="closed"] {
+      opacity: 0;
+      transition-duration: var(--dur-exit);
+    }
     @media (prefers-reduced-motion: no-preference) {
-      &[data-state="open"] {
-        animation: kit-pop-in var(--dur-pop) var(--ease-drawer) both;
-      }
+      transition:
+        opacity var(--dur-pop) var(--ease-drawer),
+        translate var(--dur-pop) var(--ease-drawer),
+        scale var(--dur-pop) var(--ease-drawer);
+
       &[data-state="closed"] {
-        animation: kit-pop-out var(--dur-exit) var(--ease-drawer) both;
+        translate: var(--kit-rise);
+        scale: var(--pop-scale);
       }
+    }
+  }
+
+  @starting-style {
+    .kit-pop[data-state="open"] {
+      opacity: 0;
+    }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    @starting-style {
+      .kit-pop[data-state="open"] {
+        translate: var(--kit-rise);
+        scale: var(--pop-scale);
+      }
+    }
+  }
+
+  /* Switch: a 32×18 track (24×14 small). On a pointer device its hit area
+     reaches 24px tall through a transparent ::after; the drawn track and the
+     layout do not change (a touch screen gets .touch-hit's 44px). The knob
+     travels 160ms on --ease-in-out, the track's colour turning with it. */
+  .kit-switch {
+    transition: background-color var(--dur-toggle) var(--ease-out);
+
+    @media (pointer: fine) {
+      &::after {
+        content: "";
+        position: absolute;
+        inset-inline: min(0px, calc(50% - 12px));
+        inset-block: min(0px, calc(50% - 12px));
+      }
+    }
+  }
+
+  :where(.kit-switch) .kit-switch-thumb {
+    @media (prefers-reduced-motion: no-preference) {
+      transition: translate var(--dur-toggle) var(--ease-in-out);
+    }
+  }
+
+  /* A button's icon slot (Button with `label`): its icon at rest, the
+     spinner while its work runs, the check when it is done, cross-fading in
+     one cell. A button with no icon at rest keeps the slot folded — no width
+     and no gap — and opens it as the work starts, over --dur-morph on
+     --ease-out, the pace its label morphs at. */
+  .kit-slot {
+    flex: none;
+    inline-size: var(--btn-icon);
+    --icon-swap-dur: var(--dur-control);
+
+    &[data-shown="false"] {
+      inline-size: 0;
+      margin-inline-end: calc(-1 * var(--btn-gap));
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      transition:
+        inline-size var(--dur-morph) var(--ease-out),
+        margin-inline-end var(--dur-morph) var(--ease-out);
+    }
+    > [data-active="false"] * {
+      animation-play-state: paused;
+    }
+  }
+
+  /* A tick that draws itself: a checkbox's over 160ms, a menu item's over
+     120ms. The stroke is dashed to the tick's length (Tick.svelte's path
+     measures 19.8 units): one 20-unit dash, then a gap longer than the path,
+     offset so that no dash end (and no round cap) sits on the path until it
+     draws. With reduced motion it fades in whole instead. */
+  .kit-tick {
+    opacity: 0;
+    transition: opacity var(--dur-toggle) var(--ease-out);
+
+    &[data-on="true"] {
+      opacity: 1;
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      opacity: 1;
+      transition: none;
+
+      & path {
+        stroke-dasharray: 20 30;
+        stroke-dashoffset: 22;
+        transition: stroke-dashoffset var(--dur-toggle) var(--ease-out);
+      }
+      &[data-on="true"] path {
+        stroke-dashoffset: 0;
+      }
+    }
+  }
+
+  /* A radio item's dot: fades in and grows from .6. */
+  .kit-dot {
+    display: block;
+    inline-size: 6px;
+    block-size: 6px;
+    border-radius: var(--radius-pill);
+    background: currentColor;
+    opacity: 0;
+    transition: opacity var(--dur-control) var(--ease-out);
+
+    &[data-on="true"] {
+      opacity: 1;
+    }
+    @media (prefers-reduced-motion: no-preference) {
+      scale: 0.6;
+      transition:
+        opacity var(--dur-control) var(--ease-out),
+        scale var(--dur-control) var(--ease-out);
+
+      &[data-on="true"] {
+        scale: 1;
+      }
+    }
+  }
+
+  /* In a menu the tick is quicker. */
+  :where(.kit-item) .kit-tick {
+    transition-duration: var(--dur-control);
+
+    & path {
+      transition-duration: var(--dur-control);
     }
   }
 
@@ -1162,20 +1309,6 @@
    `@media (prefers-reduced-motion: no-preference)`, and motion driven from
    JavaScript asks `motionOk` (motion/curves.svelte.ts). Opacity and colour
    fades that carry state run either way. The kit's keyframes: */
-@keyframes kit-pop-in {
-  from {
-    opacity: 0;
-    translate: var(--kit-rise);
-    scale: var(--pop-scale);
-  }
-}
-@keyframes kit-pop-out {
-  to {
-    opacity: 0;
-    translate: var(--kit-rise);
-    scale: var(--pop-scale);
-  }
-}
 @keyframes kit-tip-in {
   from {
     opacity: 0;
@@ -1209,4 +1342,21 @@
   to {
     opacity: 0;
   }
+}
+
+/* ---- The theme switch. For the length of the switch (theme.svelte.ts adds
+   the class in the same task that flips `.dark`, and takes it off once the
+   fade is over), every element's colours turn together: one --dur-fade
+   cross-fade on --ease-out, whatever timing each element keeps for its own
+   hover and state changes. Unlayered and !important so no component's own
+   transition list wins for those 200ms. Colour only, so it runs with or
+   without motion. */
+:root.theme-switching,
+:root.theme-switching *,
+:root.theme-switching *::before,
+:root.theme-switching *::after {
+  transition-property: color, background-color, border-color, fill !important;
+  transition-duration: var(--dur-fade) !important;
+  transition-timing-function: var(--ease-out) !important;
+  transition-delay: 0s !important;
 }

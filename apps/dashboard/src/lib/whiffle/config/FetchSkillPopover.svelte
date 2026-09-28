@@ -7,7 +7,6 @@
   import type { FleetSkillMeta } from "@whiffle/core";
   import { tick } from "svelte";
   import { toast } from "svelte-sonner";
-  import { TextMorph } from "torph/svelte";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
@@ -205,12 +204,14 @@
       {/if}
       <Button
         class="self-end"
-        disabled={down !== null || busy || !ready}
+        disabled={down !== null || !ready}
+        failed={failed !== undefined}
+        label="Fetch skill"
+        pending={busy}
+        pendingLabel="Fetching…"
         title={down ?? undefined}
         type="submit"
-      >
-        <TextMorph text={busy ? 'Fetching…' : 'Fetch skill'} />
-      </Button>
+      />
     </form>
   </Popover.Content>
 </Popover.Root>

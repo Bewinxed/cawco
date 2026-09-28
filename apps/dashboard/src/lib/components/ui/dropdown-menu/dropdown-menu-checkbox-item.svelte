@@ -31,8 +31,8 @@
     >
       {#if indeterminate}
         <IconMinus />
-      {:else if checked}
-        <IconTick />
+      {:else}
+        <IconTick class="kit-tick" data-on={checked} />
       {/if}
     </span>
     {@render childrenProp?.()}

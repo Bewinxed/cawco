@@ -48,6 +48,7 @@
   let reading = $state<Record<string, boolean>>({});
   let unread = $state<Record<string, string>>({});
   let busy = $state<Record<string, boolean>>({});
+  let adoptFailed = $state<Record<string, boolean>>({});
 
   const message = (error: unknown) =>
     error instanceof Error ? error.message : String(error);
@@ -77,10 +78,12 @@
   async function adoptServer(machine: Machine, row: DiscoveredMcp) {
     const key = keyOf(machine.machineId, row.scope, row.name);
     busy[key] = true;
+    adoptFailed[key] = false;
     try {
       onserver?.(await saveMcpServer(row.name, row.config, true));
       toast.success(`${row.name} is the fleet's now — every machine gets it.`);
     } catch (error) {
+      adoptFailed[key] = true;
       toast.error(message(error));
     } finally {
       delete busy[key];
@@ -90,12 +93,14 @@
   async function adopt(machine: Machine, row: DiscoveredSkill) {
     const key = keyOf(machine.machineId, row.scope, row.name);
     busy[key] = true;
+    adoptFailed[key] = false;
     try {
       onskill?.(await adoptSkill(row.name, machine.machineId));
       toast.success(
         `${row.name} is the fleet's now — its files went to the hub.`
       );
     } catch (error) {
+      adoptFailed[key] = true;
       toast.error(message(error));
     } finally {
       delete busy[key];
@@ -177,13 +182,14 @@
                     </span>
                     {#if !(row.managed || taken.includes(row.name))}
                       <Button
-                        disabled={busy[key] === true}
+                        failed={adoptFailed[key] === true}
+                        label="Adopt"
                         onclick={() => kind === 'mcp' ? adoptServer(machine, row as DiscoveredMcp) : adopt(machine, row as DiscoveredSkill)}
+                        pending={busy[key] === true}
+                        pendingLabel="Adopting…"
                         size="sm"
                         variant="outline"
-                      >
-                        {busy[key] ? 'Adopting…' : 'Adopt'}
-                      </Button>
+                      />
                     {:else if taken.includes(row.name) && !row.managed}
                       <span class="note">In the fleet</span>
                     {/if}

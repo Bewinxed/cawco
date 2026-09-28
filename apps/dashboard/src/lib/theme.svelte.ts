@@ -1,4 +1,5 @@
 import { browser } from "$app/environment";
+import { dur } from "$lib/whiffle/motion/curves.svelte";
 
 type Theme = "light" | "dark" | "system";
 
@@ -33,6 +34,32 @@ function applyTheme(themeValue: Theme) {
   }
 }
 
+/**
+ * A switch the reader makes cross-fades the whole page as one: the root
+ * carries `theme-switching` (app.css) from the task that flips the theme until
+ * the fade is over, so every colour turns on one --dur-fade curve instead of
+ * each element's own timing. The class comes off a frame after the fade's
+ * length, counted from the frame the new colours were first drawn: taking it
+ * off sooner would cut the transitions it set short.
+ */
+let switching = 0;
+function crossFade(apply: () => void) {
+  const root = document.documentElement;
+  switching += 1;
+  const mine = switching;
+  root.classList.add("theme-switching");
+  apply();
+  requestAnimationFrame(() => {
+    setTimeout(() => {
+      requestAnimationFrame(() => {
+        if (switching === mine) {
+          root.classList.remove("theme-switching");
+        }
+      });
+    }, dur("--dur-fade"));
+  });
+}
+
 class ThemeState {
   current = $state<Theme>(getInitialTheme());
 
@@ -54,7 +81,7 @@ class ThemeState {
     this.current = value;
     if (browser) {
       localStorage.setItem("whiffle-theme", value);
-      applyTheme(value);
+      crossFade(() => applyTheme(value));
     }
   }
 

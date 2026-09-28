@@ -166,6 +166,7 @@
   canSave={filled && nameProblem === undefined}
   deleteLabel={server ? 'Remove everywhere' : undefined}
   {deleting}
+  failed={failed !== undefined}
   oncancel={() => goto('/config/mcp')}
   ondelete={server ? askRemove : undefined}
   onsubmit={save}

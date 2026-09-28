@@ -11,6 +11,7 @@
     IconWarningTriangle,
   } from "$lib/icons";
   import { theme } from "$lib/theme.svelte";
+  import { dur } from "$lib/whiffle/motion/curves.svelte";
 
   let { ...restProps }: SonnerProps = $props();
 
@@ -61,6 +62,53 @@
     return () => {
       watcher.disconnect();
       base.append(toasts);
+    };
+  });
+
+  /**
+   * A toast arriving is marked `data-entering` for the length of its
+   * entrance, so the stylesheet below can give the arrival its --dur-panel
+   * rise while the toasts already there make room on the shorter stack
+   * timing: sonner draws both from the same attribute change.
+   */
+  $effect(() => {
+    if (!layer) {
+      return;
+    }
+    const timers = new Set<ReturnType<typeof setTimeout>>();
+    const enter = (toast: HTMLElement) => {
+      toast.dataset.entering = "";
+      const timer = setTimeout(() => {
+        timers.delete(timer);
+        delete toast.dataset.entering;
+      }, dur("--dur-panel"));
+      timers.add(timer);
+    };
+    // The first toast arrives inside the list sonner draws for it, so an
+    // added node is searched, not only matched.
+    const arrivals = new MutationObserver((changes) => {
+      for (const change of changes) {
+        for (const node of change.addedNodes) {
+          if (!(node instanceof HTMLElement)) {
+            continue;
+          }
+          if (node.dataset.sonnerToast !== undefined) {
+            enter(node);
+          }
+          for (const toast of node.querySelectorAll<HTMLElement>(
+            "[data-sonner-toast]"
+          )) {
+            enter(toast);
+          }
+        }
+      }
+    });
+    arrivals.observe(layer, { childList: true, subtree: true });
+    return () => {
+      arrivals.disconnect();
+      for (const timer of timers) {
+        clearTimeout(timer);
+      }
     };
   });
 </script>
@@ -125,20 +173,49 @@
     font: var(--type-body);
   }
 
-  /* Motion on the kit's scale (app.css). A toast rises in and the stack
-     restacks on a transform, easing in-out over --dur-panel; it fades in over
-     --dur-pop and out over --dur-exit, inside sonner's 200ms before unmount.
-     No height tween: the stack stands expanded (`expand`, in the root layout),
-     every toast at its own height, so an arrival grows nothing. Collapsed,
-     sonner matched each toast behind the front one to the front one's height,
-     and that tween moved their edges in the layout. A toast under a finger
-     keeps sonner's own "no transition" while it is swiped. */
+  /* Motion on the kit's scale (app.css). Sonner has no timing options, so
+     its transitions are restated here, one attribute more specific than its
+     own rules.
+     - Enter: from --pop-rise short of its place on the side of the edge it
+       comes from (below at the desktop's bottom-right, above at the phone's
+       top-centre), fading and moving over --dur-panel on --ease-out. The
+       toast is marked `data-entering` for that length (the script above).
+     - The stack closing up or making room: --dur-fade on --ease-in-out.
+     - Exit: toward the edge it came from (sonner's own direction) over
+       --dur-exit on --ease-out, inside sonner's 200ms before unmount; a toast
+       swiped away leaves the way the finger threw it, on the same timing.
+     - A toast under a finger keeps sonner's own "no transition", so it tracks
+       the finger 1:1; sonner dismisses past 45px or on a flick faster than
+       0.11px/ms.
+     No height tween: the stack stands expanded (`expand`, in the root
+     layout), every toast at its own height, so an arrival grows nothing. */
+  :global(
+    [data-sonner-toaster]
+      [data-sonner-toast][data-y-position="bottom"][data-mounted="false"]
+  ) {
+    --y: translateY(var(--pop-rise));
+  }
+  :global(
+    [data-sonner-toaster]
+      [data-sonner-toast][data-y-position="top"][data-mounted="false"]
+  ) {
+    --y: translateY(calc(-1 * var(--pop-rise)));
+  }
   :global(
     [data-sonner-toaster] [data-sonner-toast]:not([data-swiping="true"])
   ) {
     transition:
-      transform var(--dur-panel) var(--ease-in-out),
-      opacity var(--dur-pop) var(--ease-out),
+      transform var(--dur-fade) var(--ease-in-out),
+      opacity var(--dur-fade) var(--ease-out),
+      box-shadow var(--dur-control) var(--ease-out);
+  }
+  :global(
+    [data-sonner-toaster]
+      [data-sonner-toast][data-entering]:not([data-swiping="true"])
+  ) {
+    transition:
+      transform var(--dur-panel) var(--ease-out),
+      opacity var(--dur-panel) var(--ease-out),
       box-shadow var(--dur-control) var(--ease-out);
   }
   :global(
@@ -148,6 +225,21 @@
     transition:
       transform var(--dur-exit) var(--ease-out),
       opacity var(--dur-exit) var(--ease-out);
+  }
+  :global([data-sonner-toaster] [data-sonner-toast][data-swipe-out="true"]) {
+    animation-duration: var(--dur-exit);
+    animation-timing-function: var(--ease-out);
+  }
+  /* Reduced motion: sonner turns every transition off; the fades stay, and
+     a toast swiped away fades where it was let go. */
+  @media (prefers-reduced-motion: reduce) {
+    :global([data-sonner-toaster] [data-sonner-toast]) {
+      transition: opacity var(--dur-panel) var(--ease-out) !important;
+    }
+    :global([data-sonner-toaster] [data-sonner-toast][data-removed="true"]) {
+      opacity: 0;
+      transition: opacity var(--dur-exit) var(--ease-out) !important;
+    }
   }
 
   /* A phone's toast sits at the top, under the top bar: at the bottom it

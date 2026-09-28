@@ -37,6 +37,7 @@
     canSave = true,
     deleteLabel,
     deleting = false,
+    failed = false,
     ondelete,
     settling = false,
   }: {
@@ -51,6 +52,8 @@
     canSave?: boolean;
     deleteLabel?: string;
     deleting?: boolean;
+    /** The save or delete that just ended failed: its button shows no check. */
+    failed?: boolean;
     ondelete?: () => void;
     /** Parts of the editor are still arriving. */
     settling?: boolean;
@@ -165,6 +168,7 @@
     {deleteLabel}
     {deleting}
     {down}
+    {failed}
     {oncancel}
     {ondelete}
     {saveLabel}

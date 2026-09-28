@@ -29,9 +29,7 @@
 >
   {#snippet children({ checked })}
     <span class="absolute right-2 pointer-events-none">
-      {#if checked}
-        <IconTick />
-      {/if}
+      <IconTick class="kit-tick" data-on={checked} />
     </span>
     {@render childrenProp?.()}
   {/snippet}
