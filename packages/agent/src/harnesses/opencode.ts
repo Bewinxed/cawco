@@ -4339,6 +4339,11 @@ export function toTranscript(
 ): SessionMessage[] {
   const entries: SessionMessage[] = [];
   for (const { info, parts } of rows) {
+    // opencode records when each message was created (`time.created`, epoch
+    // ms, on UserMessage and AssistantMessage in @opencode-ai/sdk
+    // types.gen.d.ts): every entry of the message carries it, a tool result
+    // the moment its call ended.
+    const timestamp = new Date(info.time.created).toISOString();
     if (info.role === "user") {
       const text = parts
         .filter((part): part is TextPart => part.type === "text")
@@ -4359,6 +4364,7 @@ export function toTranscript(
           message: { role: "user", content },
           parent_tool_use_id: null,
           parent_agent_id: null,
+          timestamp,
         });
       }
       continue;
@@ -4393,6 +4399,7 @@ export function toTranscript(
         },
         parent_tool_use_id: null,
         parent_agent_id: null,
+        timestamp,
         // A compaction's summary: opencode's context restarts from here.
         ...((info as AssistantMessage).summary
           ? { compactSummary: true as const }
@@ -4442,6 +4449,7 @@ export function toTranscript(
           },
           parent_tool_use_id: null,
           parent_agent_id: null,
+          timestamp: new Date(part.state.time.end).toISOString(),
         });
       }
     }
@@ -4465,6 +4473,7 @@ export function toTranscript(
         },
         parent_tool_use_id: null,
         parent_agent_id: null,
+        timestamp,
       });
     }
   }

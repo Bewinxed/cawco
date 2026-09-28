@@ -70,6 +70,7 @@ import {
   projects,
   ruleState,
   rules,
+  sentMessages,
   skills,
   supervisorConfig,
   supervisorEvents,
@@ -83,6 +84,9 @@ import {
   workflowSteps,
   workflows,
 } from "./schema";
+
+/** Send uuids looked up per statement, well under SQLite's bound-variable limit. */
+const SEND_TIMES_BATCH = 500;
 
 /** Shipped with the package so a fresh boot never needs a drizzle-kit step. */
 const MIGRATIONS_DIR = Bun.fileURLToPath(
@@ -643,6 +647,12 @@ export interface DbShape {
     source: string;
     path?: string;
   }) => void;
+  /** Files the moment the hub accepted a send: the time that send shows everywhere. */
+  readonly recordSend: (send: {
+    uuid: string;
+    instanceId: string;
+    acceptedAt: Date;
+  }) => void;
   /** Files one supervisor evaluation result and prunes to newest 5,000 rows (plan: our choice). */
   readonly recordSupervisorEvent: (event: {
     instanceId: string;
@@ -669,6 +679,8 @@ export interface DbShape {
   readonly ruleStatesFor: (ruleId: string) => RuleState[];
   /** Per-rule totals for the list, aggregated in SQL rather than per row. */
   readonly ruleStats: () => RuleStats[];
+  /** The accepted times of whichever of these send uuids the hub delivered. */
+  readonly sendTimes: (uuids: string[]) => Map<string, Date>;
   /** A machine's own account of what it came to, from the sync it just answered. */
   readonly setAgentFleet: (machineId: string, report: FleetSyncReport) => void;
   /** What each harness on the machine can do, as its daemon's report beat said. */
@@ -2433,6 +2445,9 @@ const make = (path: string): DbShape => {
             )
             .run();
           tx.delete(ruleState).where(inArray(ruleState.instanceId, ids)).run();
+          tx.delete(sentMessages)
+            .where(inArray(sentMessages.instanceId, ids))
+            .run();
           tx.delete(supervisorEvents)
             .where(inArray(supervisorEvents.instanceId, ids))
             .run();
@@ -2482,6 +2497,36 @@ const make = (path: string): DbShape => {
           set: { blob, updatedAt: new Date() },
         })
         .run();
+    },
+    recordSend: (send) => {
+      // A retry goes out under the same uuid; its acceptance is the one the
+      // frame and the pending copy now carry, so the row takes it too.
+      db.insert(sentMessages)
+        .values(send)
+        .onConflictDoUpdate({
+          target: sentMessages.uuid,
+          set: { acceptedAt: send.acceptedAt },
+        })
+        .run();
+    },
+    sendTimes: (uuids) => {
+      const times = new Map<string, Date>();
+      // A long transcript names more ids than SQLite binds in one statement.
+      for (let at = 0; at < uuids.length; at += SEND_TIMES_BATCH) {
+        for (const row of db
+          .select({
+            uuid: sentMessages.uuid,
+            acceptedAt: sentMessages.acceptedAt,
+          })
+          .from(sentMessages)
+          .where(
+            inArray(sentMessages.uuid, uuids.slice(at, at + SEND_TIMES_BATCH))
+          )
+          .all()) {
+          times.set(row.uuid, row.acceptedAt);
+        }
+      }
+      return times;
     },
     recordDelegateEvent: (event) =>
       db.insert(delegateEvents).values(event).returning().get(),

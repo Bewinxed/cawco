@@ -1225,11 +1225,11 @@ function transcriptUserImages(message: unknown): MessageMetadata["images"] {
 }
 
 /**
- * When a stored entry was actually written, as the harness recorded it — the
- * only honest clock a replayed transcript has. `undefined` whenever the field
- * is absent (a daemon older than it, or a harness with no source for one) or
- * unparseable, because the alternative is dating the turn to the moment the
- * reader opened the session.
+ * When a stored entry was written (`SessionMessage.timestamp`: the harness's
+ * record, or for a sent message the hub's acceptance) — the only honest clock
+ * a replayed transcript has. `undefined` when the entry carries none (one the
+ * hub built itself) or it is unparseable, because the alternative is dating
+ * the turn to the moment the reader opened the session.
  */
 function storedAt(entry: SessionMessage): Date | undefined {
   if (!entry.timestamp) {
@@ -1723,8 +1723,7 @@ export function mapTranscript(
   const subagents: Record<string, SubagentState> = {};
 
   for (const entry of transcript) {
-    // The one honest clock a replayed turn has; absent on entries an older
-    // daemon or a non-Claude harness wrote (see {@link storedAt}).
+    // The one honest clock a replayed turn has (see {@link storedAt}).
     const recorded = storedAt(entry);
 
     // A stored message the session was sent, and read: keyed by the uuid it
@@ -1760,9 +1759,8 @@ export function mapTranscript(
     // `mapFrame` stamps the client's clock, which is the truth for a frame
     // arriving live and a fiction for one read back off disk — it would date
     // every turn of a year-old session to the moment the reader opened it. The
-    // entry's own recorded time replaces it: the harness's for a stored entry
-    // (none where the harness has no source for one, and then none renders),
-    // the hub's for a send it still holds (`AcceptedSend`).
+    // entry's own recorded time replaces it: the harness's for a stored entry,
+    // the hub's for a send (stored, or still held as an `AcceptedSend`).
     for (const message of mapping.messages) {
       message.timestamp = recorded;
       // A send the hub still holds for the harness is waiting on it, whether

@@ -356,6 +356,19 @@ export const delegateEvents = sqliteTable("delegate_events", {
 });
 
 /**
+ * When the hub accepted each message sent to a session: the one clock a sent
+ * message has. The live frame, the pending copy a reload draws and the stored
+ * entry a later history read returns are all dated by this row, whatever the
+ * harness recorded, so every view of the message shows the same time.
+ */
+export const sentMessages = sqliteTable("sent_messages", {
+  /** The send's own uuid (`SentMessage.uuid`), the id it keeps everywhere. */
+  uuid: text("uuid").primaryKey(),
+  instanceId: text("instance_id").notNull(),
+  acceptedAt: timestamp("accepted_at").notNull(),
+});
+
+/**
  * What the fleet is supposed to have (NEW.md §10). One row per catalog tool the
  * user has said anything about — a tool with no row is nobody's requirement,
  * which is why the catalog stays in code and only the policy is stored.

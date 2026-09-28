@@ -709,12 +709,19 @@ export class PiHarness implements Harness {
     // A compaction's summary is what the model reads in place of everything
     // before its first kept entry, so it is placed there: reading from the
     // last summary on is reading what the session holds in context.
-    const summaries = new Map<string, { id: string; summary: string }>();
+    // Every pi entry records when it was written (`SessionEntryBase.timestamp`,
+    // ISO-8601, in pi-coding-agent dist/core/session-manager.d.ts), and each
+    // neutral entry carries its own.
+    const summaries = new Map<
+      string,
+      { id: string; summary: string; timestamp: string }
+    >();
     for (const entry of manager.getEntries()) {
       if (entry.type === "compaction") {
         summaries.set(entry.firstKeptEntryId, {
           id: entry.id,
           summary: entry.summary,
+          timestamp: entry.timestamp,
         });
       }
     }
@@ -729,6 +736,7 @@ export class PiHarness implements Harness {
           parent_tool_use_id: null,
           parent_agent_id: null,
           compactSummary: true,
+          timestamp: compacted.timestamp,
         });
       }
       if (entry.type !== "message") {
@@ -751,6 +759,7 @@ export class PiHarness implements Harness {
           message: { role: "user", content: contentOf(message.content) },
           parent_tool_use_id: null,
           parent_agent_id: null,
+          timestamp: entry.timestamp,
         });
       } else if (role === "assistant") {
         entries.push({
@@ -760,6 +769,7 @@ export class PiHarness implements Harness {
           message: { role: "assistant", content: assistantContent(message) },
           parent_tool_use_id: null,
           parent_agent_id: null,
+          timestamp: entry.timestamp,
         });
       } else if (role === "toolResult") {
         const tool = message as { toolCallId?: string; isError?: boolean };
@@ -780,6 +790,7 @@ export class PiHarness implements Harness {
           },
           parent_tool_use_id: null,
           parent_agent_id: null,
+          timestamp: entry.timestamp,
         });
       }
     }

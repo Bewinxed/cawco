@@ -1845,10 +1845,14 @@ export const createServer = ({
     // Built after the send has gone: the machine is handed the image bytes,
     // the dashboards a reference to them. Dated here, once: the frame every
     // live tab draws and the pending copy a reload draws are this one object.
+    const acceptedAt = new Date();
     const message: AcceptedSend = {
       ...externalizeImages(sentFrame(envelope.payload)),
-      timestamp: new Date().toISOString(),
+      timestamp: acceptedAt.toISOString(),
     };
+    // And kept, so its stored copy reads this same time after the harness
+    // has read it (the history route dates it by this row).
+    db.recordSend({ uuid: message.uuid, instanceId, acceptedAt });
     const held =
       pendingSends.get(instanceId) ?? new Map<string, AcceptedSend>();
     held.set(message.uuid, message);
@@ -4764,6 +4768,22 @@ export const createServer = ({
               );
             }
             transcript = transcript.slice(0, cut);
+          }
+
+          // A sent message has one clock, the hub's: its stored copy is dated
+          // when the hub accepted it, whatever the harness wrote down, so the
+          // row reads the same time live, reloaded and on a fresh open.
+          const entries = transcript as SessionMessage[];
+          const sentAt = db.sendTimes(
+            entries
+              .filter((entry) => entry.type === "user" || entry.sourceUuid)
+              .map((entry) => entry.sourceUuid ?? entry.uuid)
+          );
+          for (const entry of entries) {
+            const at = sentAt.get(entry.sourceUuid ?? entry.uuid);
+            if (at) {
+              entry.timestamp = at.toISOString();
+            }
           }
 
           // A complete transcript's oldest user turn is the unambiguous answer

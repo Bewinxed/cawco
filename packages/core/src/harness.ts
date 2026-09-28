@@ -310,13 +310,14 @@ export interface SessionMessage {
    */
   sourceUuid?: string;
   /**
-   * When the turn was actually written, ISO-8601, as the harness recorded it.
-   * Optional in both directions: a daemon older than this field sends nothing,
-   * and only the Claude harness has a source for it today (pi and opencode
-   * build their entries from records that carry no time). A reader that gets
-   * nothing must render no time at all rather than substitute its own clock —
-   * stamping the read time dates every turn of an old session to the moment it
-   * was opened.
+   * When the entry was written, ISO-8601, as its harness recorded it: Claude's
+   * line time, opencode's message `time.created` (a tool result: its call's
+   * end), pi's entry `timestamp`. A message sent through the hub is the one
+   * exception: the history route dates it by when the hub accepted it, so a
+   * send reads the same time live and after any reload. An entry the hub
+   * builds itself (a custody notice) has none, and a reader that gets none
+   * renders none rather than its own clock — stamping the read time dates every
+   * turn of an old session to the moment it was opened.
    */
   timestamp?: string;
   type: "user" | "assistant" | "system";
