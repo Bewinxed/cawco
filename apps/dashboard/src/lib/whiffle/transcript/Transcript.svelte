@@ -878,7 +878,11 @@
     // cold load on a phone one of them left 5,400px of tail under the
     // landing, read as the reader scrolling up, and the transcript opened
     // stranded there with the follow let go.
-    if (!shown || jumping) {
+    if (!shown) {
+      return;
+    }
+    if (jumping) {
+      jumpScrolled(scroller);
       return;
     }
     // Every write this component makes is tagged with the position it wrote.
@@ -1584,19 +1588,32 @@
   /** Past this many screens from the tail, the jump hops to one screen short
       of it before scrolling the rest; our own call, no source sets it. */
   const JUMP_HOP_SCREENS = 3;
+  /** Keys that scroll the transcript: pressed during a jump, they are the reader's. */
+  const SCROLL_KEYS = new Set([
+    "PageUp",
+    "PageDown",
+    "ArrowUp",
+    "ArrowDown",
+    "Home",
+    "End",
+    " ",
+  ]);
   /**
    * The jump's scroll is under way. Its scroll events are not the reader's,
    * and `atBottom` stays false until it ends so that no follow or landing
    * writes over it: a `scrollTop` write stops a smooth scroll where it is.
    */
   let jumping = false;
+  /** Where the jump's smooth scroll was sent; null while the hop is in. */
+  let jumpTarget: number | null = null;
 
   /**
    * Back to the newest row, from wherever the reader is: one smooth scroll
    * to the tail when it is near, and when it is far an instant hop to a
    * screen above it, so virtua renders the last screen only, then the smooth
-   * scroll over that screen. Its end pins the true tail, rows that arrived
-   * during it included. Reduced motion lands at once.
+   * scroll over that screen. Arriving pins the true tail (`jumpScrolled`).
+   * The reader's own input takes the scroll back at once. Reduced motion
+   * lands at once.
    */
   function jump(): void {
     tickets.clear();
@@ -1609,31 +1626,90 @@
     }
     stopFollow();
     jumping = true;
+    jumpTarget = null;
+    node.addEventListener("wheel", yieldJump, { passive: true });
+    node.addEventListener("touchstart", yieldJump, { passive: true });
+    node.addEventListener("pointerdown", yieldJump);
+    node.addEventListener("keydown", yieldKey);
     const h = node.clientHeight;
-    const target = node.scrollHeight - h;
-    const finish = (): void => {
-      node.removeEventListener("scrollend", finish);
-      jumping = false;
-      atBottom = true;
-      farFromLatest = false;
-      pinBottom();
-    };
-    const glide = (): void => {
-      const to = node.scrollHeight - node.clientHeight;
-      if (Math.abs(to - node.scrollTop) < 1) {
-        finish();
-        return;
-      }
-      node.addEventListener("scrollend", finish);
-      node.scrollTo({ top: to, behavior: "smooth" });
-    };
-    if (target - node.scrollTop > JUMP_HOP_SCREENS * h) {
-      node.scrollTop = target - h;
+    const bottom = node.scrollHeight - h;
+    if (bottom - node.scrollTop > JUMP_HOP_SCREENS * h) {
+      node.scrollTop = bottom - h;
       lastWrite = node.scrollTop;
       requestAnimationFrame(glide);
       return;
     }
     glide();
+  }
+
+  /** One smooth scroll to the bottom as it stands now. */
+  function glide(): void {
+    const node = scroller;
+    if (!(jumping && node)) {
+      return;
+    }
+    const bottom = node.scrollHeight - node.clientHeight;
+    if (Math.abs(bottom - node.scrollTop) <= 1) {
+      arrive();
+      return;
+    }
+    jumpTarget = bottom;
+    node.scrollTo({ top: bottom, behavior: "smooth" });
+  }
+
+  /**
+   * A scroll event of the jump's: arrived once it reaches the target it was
+   * sent to, or the bottom when the rows shrank under it. Rows that grew the
+   * bottom past the target while it scrolled get one more smooth scroll.
+   */
+  function jumpScrolled(node: HTMLElement): void {
+    if (jumpTarget === null) {
+      return;
+    }
+    const bottom = node.scrollHeight - node.clientHeight;
+    const top = node.scrollTop;
+    if (Math.abs(top - jumpTarget) > 1 && top < bottom - 1) {
+      return;
+    }
+    if (bottom - top > 1) {
+      glide();
+      return;
+    }
+    arrive();
+  }
+
+  /** The jump is over: at the latest row, pinned there. */
+  function arrive(): void {
+    endJump();
+    atBottom = true;
+    farFromLatest = false;
+    pinBottom();
+  }
+
+  function endJump(): void {
+    jumping = false;
+    jumpTarget = null;
+    scroller?.removeEventListener("wheel", yieldJump);
+    scroller?.removeEventListener("touchstart", yieldJump);
+    scroller?.removeEventListener("pointerdown", yieldJump);
+    scroller?.removeEventListener("keydown", yieldKey);
+  }
+
+  /**
+   * The reader's own input during a jump: the jump lets go where the view
+   * is, and the reader's next scroll decides `atBottom` and the button.
+   * The write stops a smooth scroll a click would not; it is untagged, so
+   * its event is read as the reader's.
+   */
+  function yieldJump(): void {
+    endJump();
+    scroller?.scrollTo({ top: scroller.scrollTop, behavior: "instant" });
+  }
+
+  function yieldKey(event: KeyboardEvent): void {
+    if (SCROLL_KEYS.has(event.key)) {
+      yieldJump();
+    }
   }
 
   const showLatest = $derived(landed && farFromLatest && rows.length > 0);
