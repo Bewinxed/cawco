@@ -19,11 +19,17 @@ const LONG_CALLS: Record<string, string> = {
   continue_session: "Summarising the session",
 };
 
+/**
+ * Defined only in the published package's bundle (scripts/build-release.mjs),
+ * where the tool modules are folded into `cli.js` and there is no source file
+ * to reload.
+ */
+declare const __WHIFFLE_RELEASE__: boolean | undefined;
+
 export function createDelegationMcp(options: {
   instances: () => InstanceRow[];
   baseUrl?: string;
   tools?: ToolFactory;
-  watch?: boolean;
 }) {
   let tools = options.tools ?? handoffTools;
   const baseUrl = options.baseUrl ?? `http://127.0.0.1:${HUB_PORT}`;
@@ -78,7 +84,7 @@ export function createDelegationMcp(options: {
 
   const moduleUrl = new URL("./delegation-tools.ts", import.meta.url);
   const adminModuleUrl = new URL("./admin-tools.ts", import.meta.url);
-  if (options.watch !== false) {
+  if (typeof __WHIFFLE_RELEASE__ !== "boolean") {
     // Our choice: one-second polling keeps deployment updates responsive without a watcher per session.
     watchFile(moduleUrl, { interval: 1000, persistent: false }, () => {
       // biome-ignore lint/complexity/noVoid: file watcher callback cannot await; errors preserve the previous registry below

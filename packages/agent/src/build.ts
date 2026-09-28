@@ -21,9 +21,22 @@ const git = async (args: string[]): Promise<string | undefined> => {
   return ran.exitCode === 0 ? ran.stdout.toString().trim() : undefined;
 };
 
+/**
+ * Defined only in the published package's bundle (scripts/build-release.mjs),
+ * where this module is `cli.js` and the package's own manifest sits beside it.
+ */
+declare const __WHIFFLE_RELEASE__: boolean | undefined;
+
 const read = async (): Promise<BuildInfo> => {
   const manifest = (await Bun.file(
-    Bun.fileURLToPath(new URL("../package.json", import.meta.url))
+    Bun.fileURLToPath(
+      new URL(
+        typeof __WHIFFLE_RELEASE__ === "boolean"
+          ? "./package.json"
+          : "../package.json",
+        import.meta.url
+      )
+    )
   ).json()) as { version: string };
   const commit = await git(["rev-parse", "--short", "HEAD"]);
   const status = commit ? await git(["status", "--porcelain"]) : undefined;

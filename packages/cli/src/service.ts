@@ -1,7 +1,7 @@
 import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { chmod } from "node:fs/promises";
 import { homedir, platform, userInfo } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join } from "node:path";
 import type { AgentRow } from "@whiffle/core";
 import { readEnv, WHIFFLE_ENV, WHIFFLE_HUB_PORT } from "@whiffle/core";
 import { sessiondEndpoint } from "@whiffle/core/sessiond";
@@ -83,30 +83,168 @@ const launchAgentLog = (id: ServiceId): string =>
   join(homedir(), "Library", "Logs", `whiffle-${id}.log`);
 
 /**
- * The checkout this CLI is running from. The hub and the dashboard are served
- * out of it, so installing from a branch installs that branch — the same thing
- * the daemon's command does by naming `Bun.main`.
+ * The node the dashboard's server runs under, found on the installing shell's
+ * PATH and named in the unit outright — `ExecStart=` is not a shell. The prod
+ * server is node rather than the Bun running this CLI because it serves on the
+ * socket its service manager passes it, and Bun 1.4.0's node:http accepts
+ * `listen({ fd })` without ever answering on that socket; node does.
  */
-const repoRoot = (): string => {
-  let dir = dirname(Bun.main);
+const NODE = Bun.which("node");
+
+/**
+ * How a unit starts its process: the argv `ExecStart=` runs, and the file that
+ * argv cannot start without.
+ */
+interface Launch {
+  readonly command: readonly string[];
+  readonly needs: string;
+}
+
+/**
+ * Every command and path a set of units names, derived from one root. It is a
+ * function of the root rather than a set of module constants because
+ * {@link deployInit} installs units for a checkout that is *not* the one this
+ * CLI is running from: the deployment clone at {@link DEPLOY_ROOT} (C8).
+ *
+ * There are two shapes of root. A checkout runs each service from its own
+ * source; the published package (scripts/build-release.mjs) has one bundled
+ * `cli.js` that runs each of them as a verb, and carries the dashboard as
+ * `dashboard/` beside it.
+ */
+interface Layout {
+  readonly agent: Launch;
+  readonly dashboard: Launch;
+  /** What the dashboard's server imports — the adapter-node output, and the part that can be missing. */
+  readonly dashboardBuild: string;
+  /** The dashboard unit's working directory. */
+  readonly dashboardCwd: string;
+  /** What `--dev` runs from. Only a checkout has source to run, so a release has none. */
+  readonly dev?: {
+    readonly dashboardDir: string;
+    readonly hubEntry: string;
+    /**
+     * The dashboard's `dev` script is `vite dev`, and this is that vite. Named
+     * outright because `ExecStart=` is not a shell: it cannot resolve a `.bin`
+     * entry off PATH, and going through `bun run --filter` would put the port
+     * back under vite.config.ts, where `status` cannot follow it.
+     */
+    readonly vite: string;
+  };
+  readonly hub: Launch;
+  readonly root: string;
+  readonly sessiond: Launch;
+}
+
+const checkoutLayout = (
+  root: string,
+  cliEntry: string = join(root, "packages", "cli", "src", "cli.ts")
+): Layout => {
+  const hubEntry = join(root, "packages", "hub", "src", "index.ts");
+  const sessiondEntry = join(root, "packages", "sessiond", "src", "main.ts");
+  const dashboardEntry = join(root, "apps", "dashboard", "serve.js");
+  return {
+    root,
+    hub: { command: [process.execPath, hubEntry], needs: hubEntry },
+    sessiond: {
+      command: [process.execPath, sessiondEntry],
+      needs: sessiondEntry,
+    },
+    agent: { command: [process.execPath, cliEntry, "up"], needs: cliEntry },
+    dashboard: {
+      command: [NODE ?? "node", dashboardEntry],
+      needs: dashboardEntry,
+    },
+    dashboardBuild: join(root, "apps", "dashboard", "build", "handler.js"),
+    dashboardCwd: root,
+    dev: {
+      hubEntry,
+      dashboardDir: join(root, "apps", "dashboard"),
+      vite: join(
+        root,
+        "apps",
+        "dashboard",
+        "node_modules",
+        "vite",
+        "bin",
+        "vite.js"
+      ),
+    },
+  };
+};
+
+const releaseLayout = (
+  root: string,
+  cli: string = join(root, "cli.js")
+): Layout => {
+  const dashboardEntry = join(root, "dashboard", "serve.js");
+  return {
+    root,
+    hub: { command: [process.execPath, cli, "hub"], needs: cli },
+    sessiond: { command: [process.execPath, cli, "sessiond"], needs: cli },
+    agent: { command: [process.execPath, cli, "up"], needs: cli },
+    dashboard: {
+      command: [NODE ?? "node", dashboardEntry],
+      needs: dashboardEntry,
+    },
+    dashboardBuild: join(root, "dashboard", "build", "handler.js"),
+    dashboardCwd: join(root, "dashboard"),
+  };
+};
+
+const isCheckout = (dir: string): boolean => {
+  const manifest = join(dir, "package.json");
+  return (
+    existsSync(manifest) &&
+    Boolean(
+      (JSON.parse(readFileSync(manifest, "utf8")) as { workspaces?: unknown })
+        .workspaces
+    )
+  );
+};
+
+const isRelease = (dir: string): boolean =>
+  existsSync(join(dir, "dashboard", "serve.js"));
+
+/** The layout of a root named outright: a checkout or a release, never a guess. */
+const layoutAt = (root: string): Layout => {
+  if (isCheckout(root)) {
+    return checkoutLayout(root);
+  }
+  if (isRelease(root)) {
+    return releaseLayout(root);
+  }
+  throw new ServiceError(
+    `${root} is neither a whiffle checkout (a package.json with workspaces) nor a whiffle release (dashboard/serve.js)`
+  );
+};
+
+/**
+ * What this CLI is running from. A release when `dashboard/serve.js` sits
+ * beside the running `cli.js` — asked first, and of the resolved path, because
+ * a release runs through the link bun puts in its global bin directory. A
+ * checkout when a workspace manifest is found walking up; there `Bun.main`
+ * rather than the derived cli.ts, so that installing from a branch installs
+ * this very process's entry point, which is what testing a branch means.
+ */
+const here = (): Layout => {
+  const main = realpathSync(Bun.main);
+  if (isRelease(dirname(main))) {
+    return releaseLayout(dirname(main), main);
+  }
+  let dir = dirname(main);
   while (dir !== dirname(dir)) {
-    const manifest = join(dir, "package.json");
-    if (existsSync(manifest)) {
-      const { workspaces } = JSON.parse(readFileSync(manifest, "utf8")) as {
-        workspaces?: unknown;
-      };
-      if (workspaces) {
-        return dir;
-      }
+    if (isCheckout(dir)) {
+      return checkoutLayout(dir, Bun.main);
     }
     dir = dirname(dir);
   }
-  // Nothing on the way up called itself the workspace root, so fall back to
-  // where this file sits inside one: packages/cli/src/cli.ts.
-  return resolve(dirname(Bun.main), "..", "..", "..");
+  throw new ServiceError(
+    `${main} is in neither a whiffle checkout (no package.json with workspaces above it) nor a whiffle release (no dashboard/serve.js beside it)`
+  );
 };
 
-const ROOT = repoRoot();
+const HERE = here();
+const ROOT = HERE.root;
 
 /**
  * The checkout this CLI is *running from* — which is not necessarily the
@@ -115,62 +253,6 @@ const ROOT = repoRoot();
  * services for a clone it is not part of.
  */
 export const CHECKOUT_ROOT = ROOT;
-
-/**
- * Every path a set of units names, derived from one checkout root. It is a
- * function of the root rather than a set of module constants because
- * {@link deployInit} installs units for a checkout that is *not* the one this
- * CLI is running from: the deployment clone at {@link DEPLOY_ROOT} (C8). The
- * default layout — {@link HERE} — resolves to exactly what these constants were,
- * so `whiffle service install` is unchanged.
- */
-interface Layout {
-  /** The `whiffle` entry point the agent unit runs `up` with. */
-  readonly cliEntry: string;
-  /** What {@link dashboardEntry} imports — the adapter-node output, and the part that can be missing. */
-  readonly dashboardBuild: string;
-  readonly dashboardDir: string;
-  readonly dashboardEntry: string;
-  /**
-   * The dashboard's `dev` script is `vite dev`, and this is that vite. Named
-   * outright because `ExecStart=` is not a shell: it cannot resolve a `.bin`
-   * entry off PATH, and going through `bun run --filter` would put the port
-   * back under vite.config.ts, where `status` cannot follow it.
-   */
-  readonly dashboardVite: string;
-  readonly hubEntry: string;
-  readonly root: string;
-  readonly sessiondEntry: string;
-}
-
-const layoutFor = (
-  root: string,
-  cliEntry: string = join(root, "packages", "cli", "src", "cli.ts")
-): Layout => ({
-  root,
-  hubEntry: join(root, "packages", "hub", "src", "index.ts"),
-  sessiondEntry: join(root, "packages", "sessiond", "src", "main.ts"),
-  dashboardDir: join(root, "apps", "dashboard"),
-  dashboardEntry: join(root, "apps", "dashboard", "serve.js"),
-  dashboardBuild: join(root, "apps", "dashboard", "build", "handler.js"),
-  dashboardVite: join(
-    root,
-    "apps",
-    "dashboard",
-    "node_modules",
-    "vite",
-    "bin",
-    "vite.js"
-  ),
-  cliEntry,
-});
-
-/**
- * This checkout. `Bun.main` rather than the derived cli.ts so that installing
- * from a branch still installs *this* process's entry point, which is what
- * someone testing a branch means by it.
- */
-const HERE = layoutFor(ROOT, Bun.main);
 
 const LISTEN_STREAM = /^ListenStream=(.+):(\d+)$/m;
 const SOCK_NODE = /<key>SockNodeName<\/key>\s*<string>([^<]*)<\/string>/;
@@ -211,15 +293,6 @@ const DASHBOARD_PORT =
   process.env.PORT ?? installedDashboardAddress()?.port ?? "3000";
 const DASHBOARD_HOST =
   process.env.HOST ?? installedDashboardAddress()?.host ?? "0.0.0.0";
-
-/**
- * The node the dashboard's server runs under, found on the installing shell's
- * PATH and named in the unit outright — `ExecStart=` is not a shell. The prod
- * server is node rather than the Bun running this CLI because it serves on the
- * socket its service manager passes it, and Bun 1.4.0's node:http accepts
- * `listen({ fd })` without ever answering on that socket; node does.
- */
-const NODE = Bun.which("node");
 
 /**
  * The PATH the installing shell had. A launchd job otherwise inherits a nearly
@@ -380,10 +453,10 @@ export interface ServiceSpec {
   /** systemd ordering only — launchd has none, see {@link plist}. */
   readonly after: readonly string[];
   /**
-   * Asked before anything is written. A returned line is a warning worth
-   * printing; a throw refuses the install outright.
+   * Asked before anything is written. A throw refuses the install outright: a
+   * unit that could only crash-loop is never written.
    */
-  readonly check?: () => string | undefined;
+  readonly check?: () => void;
   readonly command: readonly string[];
   /** systemd `Description=`. */
   readonly description: string;
@@ -426,13 +499,15 @@ export interface ServiceSpec {
 }
 
 const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
-  const {
-    root: LAYOUT_ROOT,
-    hubEntry: HUB_ENTRY,
-    sessiondEntry: SESSIOND_ENTRY,
-    dashboardEntry: DASHBOARD_ENTRY,
-    dashboardBuild: DASHBOARD_BUILD,
-  } = layout;
+  const { root: LAYOUT_ROOT, dashboardBuild: DASHBOARD_BUILD } = layout;
+  /** A unit whose process cannot start is refused, naming what is missing. */
+  const needs = (launch: Launch, what: string) => (): void => {
+    if (!existsSync(launch.needs)) {
+      throw new ServiceError(
+        `no ${what} at ${launch.needs} — is ${LAYOUT_ROOT} a whiffle checkout or release?`
+      );
+    }
+  };
   return {
     hub: {
       id: "hub",
@@ -441,7 +516,7 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
       // `bun run --filter '@whiffle/hub' start` needs a shell for the quoting and
       // a cwd for the workspace lookup; the entry point needs neither and boots
       // the same process.
-      command: [process.execPath, HUB_ENTRY],
+      command: layout.hub.command,
       environment: {
         // The hub's DB_PATH defaults to `./whiffle.db` — relative to wherever it
         // was started. A unit that leaves this unset opens a second, empty
@@ -461,13 +536,7 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
       wants: [],
       restartOnSuccess: true,
       restartSec: 2,
-      check: (): undefined => {
-        if (!existsSync(HUB_ENTRY)) {
-          throw new ServiceError(
-            `no hub at ${HUB_ENTRY} — is ${LAYOUT_ROOT} a whiffle checkout?`
-          );
-        }
-      },
+      check: needs(layout.hub, "hub"),
       probe: probeHub,
     },
 
@@ -475,7 +544,7 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
       id: "dashboard",
       mode: "prod",
       description: "Whiffle dashboard",
-      command: [NODE ?? "node", DASHBOARD_ENTRY],
+      command: layout.dashboard.command,
       environment: {
         [WHIFFLE_ENV.previewPort]:
           readEnv(WHIFFLE_ENV.previewPort) ??
@@ -484,27 +553,28 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
       // serve.js collects this socket by name and never binds the port itself,
       // so a deploy's restart leaves the port open the whole time.
       socket: { name: "dashboard", host: DASHBOARD_HOST, port: DASHBOARD_PORT },
-      workingDirectory: LAYOUT_ROOT,
+      workingDirectory: layout.dashboardCwd,
       after: [unitName("hub"), socketName("dashboard")],
       wants: [unitName("hub")],
       requires: [socketName("dashboard")],
       restartOnSuccess: true,
       restartSec: 2,
-      // A missing build is a build away, so the unit goes in either way and says
-      // what is left to do — refusing here would only mean installing twice.
-      //
-      // What is checked is the BUILD, not the entry: the entry is `serve.js`, a
-      // checked-in file that is always present, and the thing that can actually
-      // be absent is the `build/handler.js` it imports.
-      check: () => {
+      // A unit without its build can only crash-loop, so none is written. What
+      // is checked is the BUILD as well as the entry: `serve.js` is there in any
+      // checkout or release, and the thing that can actually be absent is the
+      // `build/handler.js` it imports.
+      check: (): void => {
         if (!NODE) {
           throw new ServiceError(
             "the dashboard's server runs under node, and there is no node on PATH."
           );
         }
-        return existsSync(DASHBOARD_BUILD)
-          ? undefined
-          : `no dashboard build at ${DASHBOARD_BUILD}, so its service will restart until there is one.\nMake it with \`bun run --filter '@whiffle/dashboard' build\`.`;
+        needs(layout.dashboard, "dashboard server")();
+        if (!existsSync(DASHBOARD_BUILD)) {
+          throw new ServiceError(
+            `no dashboard build at ${DASHBOARD_BUILD}, so its service could only restart until there is one. Build it with \`bun run --filter '@whiffle/dashboard' build\`, then install again.`
+          );
+        }
       },
       probe: probeDashboard,
     },
@@ -531,7 +601,7 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
       id: "sessiond",
       mode: "prod",
       description: "Whiffle sessiond",
-      command: [process.execPath, SESSIOND_ENTRY],
+      command: layout.sessiond.command,
       environment: {},
       // Not the checkout: sessiond spawns children with a cwd the agent hands it
       // per child, and nothing it does resolves against its own.
@@ -544,13 +614,7 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
       // crash is worth restarting for (design §11: `Restart=on-failure`).
       restartOnSuccess: false,
       restartSec: 2,
-      check: (): undefined => {
-        if (!existsSync(SESSIOND_ENTRY)) {
-          throw new ServiceError(
-            `no sessiond at ${SESSIOND_ENTRY} — is ${LAYOUT_ROOT} a whiffle checkout?`
-          );
-        }
-      },
+      check: needs(layout.sessiond, "sessiond"),
       probe: probeSessiond,
     },
 
@@ -563,7 +627,7 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
        * Installing from a checkout therefore installs that checkout, which is
        * what someone testing a branch means by it.
        */
-      command: [process.execPath, layout.cliEntry, "up"],
+      command: layout.agent.command,
       environment: {},
       workingDirectory: homedir(),
       // The hub is soft: the daemon reconnects with backoff and works through an
@@ -601,13 +665,13 @@ const SERVICES = servicesFor(HERE);
 // sessiond is absent for the same reason and more sharply: restarting it kills
 // every harness child in its cgroup, so a source edit must never bounce it.
 const devFor = (
-  layout: Layout
+  dev: NonNullable<Layout["dev"]>
 ): Partial<Record<ServiceId, Partial<ServiceSpec>>> => {
   const {
     hubEntry: HUB_ENTRY,
     dashboardDir: DASHBOARD_DIR,
-    dashboardVite: DASHBOARD_VITE,
-  } = layout;
+    vite: DASHBOARD_VITE,
+  } = dev;
   return {
     hub: {
       command: [process.execPath, "--watch", HUB_ENTRY],
@@ -633,7 +697,7 @@ const devFor = (
       after: [unitName("hub")],
       requires: undefined,
       workingDirectory: DASHBOARD_DIR,
-      check: (): undefined => {
+      check: (): void => {
         if (!existsSync(DASHBOARD_VITE)) {
           throw new ServiceError(
             `no vite at ${DASHBOARD_VITE} — run \`bun install\` in ${ROOT} first.`
@@ -649,7 +713,7 @@ const devFor = (
   };
 };
 
-const DEV = devFor(HERE);
+const DEV = HERE.dev ? devFor(HERE.dev) : {};
 
 /** Whether `--dev` makes this service watch its own source. */
 const watches = (id: ServiceId): boolean => id in DEV;
@@ -664,9 +728,14 @@ const specFor = (
   if (mode === "prod") {
     return base;
   }
+  if (!layout.dev) {
+    throw new ServiceError(
+      `--dev runs the services from a checkout's source, and ${layout.root} is the published package, which has none. Install without --dev, or from a checkout.`
+    );
+  }
   // The daemon has no dev flavour to merge, and still carries the mode: it was
   // installed by the same command, and `status` should say so.
-  const dev = layout === HERE ? DEV : devFor(layout);
+  const dev = layout === HERE ? DEV : devFor(layout.dev);
   return {
     ...base,
     ...dev[id],
@@ -1554,14 +1623,8 @@ export const service = async (
     case "install": {
       // Every check first, so a refusal costs nothing rather than leaving half
       // the stack installed.
-      const warnings = specs.flatMap(
-        (spec) => spec.check?.()?.split("\n") ?? []
-      );
-      for (const line of warnings) {
-        note(line);
-      }
-      if (warnings.length > 0) {
-        note("");
+      for (const spec of specs) {
+        spec.check?.();
       }
       return mac
         ? installLaunchAgents(specs, note)
@@ -1630,7 +1693,7 @@ export const serviceDefinition = (
   init: ServiceInit,
   root?: string
 ): string => {
-  const spec = specFor(id, mode, root === undefined ? HERE : layoutFor(root));
+  const spec = specFor(id, mode, root === undefined ? HERE : layoutAt(root));
   return init === "systemd" ? unit(spec) : plist(spec);
 };
 
@@ -2306,7 +2369,7 @@ export const deployInit = async ({
     await onPulled();
   }
 
-  const layout = layoutFor(root);
+  const layout = checkoutLayout(root);
   const specs = ids.map((id) => {
     const spec = specFor(id, "prod", layout);
     return id === "agent"

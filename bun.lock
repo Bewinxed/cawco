@@ -111,6 +111,7 @@
         "@whiffle/agent": "workspace:*",
         "@whiffle/core": "workspace:*",
         "@whiffle/hub": "workspace:*",
+        "@whiffle/sessiond": "workspace:*",
         "bonjour-service": "^1.4.4",
       },
       "devDependencies": {

@@ -128,19 +128,28 @@ export const probeEndpoint = (
     socket.connect(endpoint);
   });
 
+/**
+ * Defined only in the published package's bundle (scripts/build-release.mjs),
+ * where this module is `cli.js` itself and sessiond is its `sessiond` verb.
+ */
+declare const __WHIFFLE_RELEASE__: boolean | undefined;
+
 /** The ad-hoc sessiond command: this repo's own entry point, run under bun. */
 const adhocCommand = (): { command: string; args: string[] } => ({
   command: process.execPath,
-  args: [
-    join(
-      dirname(fileURLToPath(import.meta.url)),
-      "..",
-      "..",
-      "sessiond",
-      "src",
-      "main.ts"
-    ),
-  ],
+  args:
+    typeof __WHIFFLE_RELEASE__ === "boolean"
+      ? [fileURLToPath(import.meta.url), "sessiond"]
+      : [
+          join(
+            dirname(fileURLToPath(import.meta.url)),
+            "..",
+            "..",
+            "sessiond",
+            "src",
+            "main.ts"
+          ),
+        ],
 });
 
 /**

@@ -45,12 +45,17 @@ const main = Effect.gen(function* () {
   void backfillUsage(db);
 });
 
-// This module is the entry point every service spec
-// (`packages/cli/src/service.ts`) and `bun --watch` run directly, where
-// `import.meta.main` is true.
-if (import.meta.main) {
+/** Boots the hub: what running this file does, and what `whiffle hub` calls. */
+export const startHub = async (): Promise<void> => {
   migrateLegacyDb(DB_PATH);
   await Effect.runPromise(
     Effect.provide(main, Layer.mergeAll(RegistryLayer, DbLayer, PendingLayer))
   );
+};
+
+// A checkout's service spec (`packages/cli/src/service.ts`) and `bun --watch`
+// run this file directly, where `import.meta.main` is true; the published
+// package runs `whiffle hub`, which imports it and calls `startHub`.
+if (import.meta.main) {
+  await startHub();
 }

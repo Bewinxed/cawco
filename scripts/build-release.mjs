@@ -77,6 +77,30 @@ await run([
   // published package can never disagree about what this is.
   "--define",
   `__WHIFFLE_VERSION__=${JSON.stringify(cliPkgEarly.version)}`,
+  // Code that opens a file relative to its own module asks this, because in
+  // the bundle every module is cli.js: the hub's migrations, the workflow
+  // sandbox's worker and ambient types, the package manifest, and sessiond
+  // (the `sessiond` verb) — each placed beside cli.js below.
+  "--define",
+  "__WHIFFLE_RELEASE__=true",
+  ...external.flatMap((name) => ["--external", name]),
+]);
+await cp(join(ROOT, "packages/hub/drizzle"), join(OUT, "drizzle"), {
+  recursive: true,
+});
+await cp(
+  join(ROOT, "packages/core/src/workflow-globals.d.ts"),
+  join(OUT, "workflow-globals.d.ts")
+);
+// The sandbox worker runs in its own Worker, so it is its own bundle.
+await run([
+  "bun",
+  "build",
+  join(ROOT, "packages/core/src/workflow-worker.ts"),
+  "--target",
+  "bun",
+  "--outfile",
+  join(OUT, "workflow-worker.js"),
   ...external.flatMap((name) => ["--external", name]),
 ]);
 const cli = await readFile(join(OUT, "cli.js"), "utf8");
@@ -135,7 +159,13 @@ const resolved = async (name, asked) => {
   // Asked of the resolver rather than looked for on disk, because a bun store
   // can hold several versions of the same package and the answer that matters
   // is the one the code actually loads.
-  for (const from of ["packages/hub", "packages/agent", "packages/cli", "."]) {
+  for (const from of [
+    "packages/hub",
+    "packages/agent",
+    "packages/cli",
+    "apps/dashboard",
+    ".",
+  ]) {
     try {
       const entry = Bun.resolveSync(name, join(ROOT, from));
       let dir = entry;
@@ -164,8 +194,16 @@ const cliPkg = JSON.parse(
   await readFile(join(ROOT, "packages/cli/package.json"), "utf8")
 );
 const deps = {};
-for (const pkg of ["cli", "agent", "hub", "core", "auth", "sessiond"]) {
-  const path = join(ROOT, "packages", pkg, "package.json");
+// The dashboard's `dependencies` too: adapter-node leaves them external, so
+// `dashboard/build` imports them at run time, and `serve.js` needs
+// `socket-activation`.
+for (const dir of [
+  ...["cli", "agent", "hub", "core", "auth", "sessiond"].map(
+    (pkg) => `packages/${pkg}`
+  ),
+  "apps/dashboard",
+]) {
+  const path = join(ROOT, dir, "package.json");
   if (!existsSync(path)) {
     continue;
   }
@@ -189,7 +227,14 @@ await writeFile(
       repository: root.repository ?? "https://github.com/Bewinxed/whiffle",
       type: "module",
       bin: { whiffle: "./cli.js" },
-      files: ["cli.js", "preview-overlay.js", "dashboard"],
+      files: [
+        "cli.js",
+        "preview-overlay.js",
+        "workflow-worker.js",
+        "workflow-globals.d.ts",
+        "dashboard",
+        "drizzle",
+      ],
       engines: { bun: ">=1.4.0" },
       dependencies: Object.fromEntries(
         Object.entries(deps).sort(([a], [b]) => a.localeCompare(b))

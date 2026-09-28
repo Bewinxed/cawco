@@ -40,6 +40,7 @@ const HELP = `whiffle ${CLI_VERSION} — join this machine to a whiffle fleet
 Usage
   whiffle up [--hub <url>] [--verbose]      run the agent daemon on this machine
   whiffle hub [--verbose]                   run the hub here
+  whiffle sessiond                          run this machine's session keeper
   whiffle status [--hub <url>] [--verbose]  print the hub it found, and the fleet
   whiffle service <${SERVICE_ACTIONS.join("|")}> [service...]
                                             run whiffle as per-user services
@@ -654,7 +655,17 @@ const runJoin = async (args: Args): Promise<number> => {
 
 /** Importing the hub boots it: its entry point listens, and then stays up. */
 const hub = async (): Promise<number> => {
-  await import("@whiffle/hub");
+  const { startHub } = await import("@whiffle/hub");
+  await startHub();
+  return 0;
+};
+
+/**
+ * sessiond as a verb, so the published package — one bundled `cli.js`, no
+ * source tree — can run it from a unit the way it runs the hub.
+ */
+const sessiond = async (): Promise<number> => {
+  await import("@whiffle/sessiond/main");
   return 0;
 };
 
@@ -674,6 +685,8 @@ const run = async (argv: string[]): Promise<number> => {
       return up(args);
     case "hub":
       return hub();
+    case "sessiond":
+      return sessiond();
     case "status":
       return status(args);
     case "service":

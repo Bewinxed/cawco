@@ -21,7 +21,7 @@ import type {
 } from "@whiffle/core";
 import { workflowNoticeMarker, workflowStepMarker } from "@whiffle/core";
 import { stepIdFor } from "@whiffle/core/workflow-program";
-import { writeProgram } from "@whiffle/core/workflow-sandbox";
+import { WORKER_URL, writeProgram } from "@whiffle/core/workflow-sandbox";
 import type { WorkerOut, WorkerStart } from "@whiffle/core/workflow-worker";
 import Ajv from "ajv";
 import type {
@@ -1123,10 +1123,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
   const startWorker = (run: WorkflowRunRow) => {
     killWorker(run.id);
     const path = writeProgram(run.program);
-    const worker = new Worker(
-      new URL("../../../core/src/workflow-worker.ts", import.meta.url).href,
-      { type: "module" }
-    );
+    const worker = new Worker(WORKER_URL, { type: "module" });
     const live = { worker };
     workers.set(run.id, live);
     worker.addEventListener("message", (event: MessageEvent<WorkerOut>) => {

@@ -88,9 +88,18 @@ import {
 /** Ids looked up per statement (bound twice), well under SQLite's variable limit. */
 const SENDS_FOR_BATCH = 500;
 
+/**
+ * Defined only in the published package's bundle (scripts/build-release.mjs),
+ * where this module is `cli.js` and the migrations sit beside it.
+ */
+declare const __WHIFFLE_RELEASE__: boolean | undefined;
+
 /** Shipped with the package so a fresh boot never needs a drizzle-kit step. */
 const MIGRATIONS_DIR = Bun.fileURLToPath(
-  new URL("../../drizzle", import.meta.url)
+  new URL(
+    typeof __WHIFFLE_RELEASE__ === "boolean" ? "./drizzle" : "../../drizzle",
+    import.meta.url
+  )
 );
 
 export type InstanceKind = (typeof instances.$inferSelect)["kind"];

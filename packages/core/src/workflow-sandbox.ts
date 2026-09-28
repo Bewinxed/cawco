@@ -25,8 +25,22 @@ const programDir = (): string => {
   return dir;
 };
 
+/**
+ * Defined only in the published package's bundle (scripts/build-release.mjs),
+ * where this module is `cli.js` and the worker — bundled on its own — and the
+ * ambient declarations sit beside it.
+ */
+declare const __WHIFFLE_RELEASE__: boolean | undefined;
+const RELEASE = typeof __WHIFFLE_RELEASE__ === "boolean";
+
 /** The ambient declarations every program is typechecked against. */
 const AMBIENT = new URL("./workflow-globals.d.ts", import.meta.url).pathname;
+
+/** Where the hub finds the sandbox worker module. */
+export const WORKER_URL = new URL(
+  RELEASE ? "./workflow-worker.js" : "./workflow-worker.ts",
+  import.meta.url
+).href;
 
 const hashOf = (program: string) =>
   new Bun.CryptoHasher("sha256").update(program).digest("hex").slice(0, 32);
@@ -140,10 +154,7 @@ export function typecheckProgram(program: string): Problem[] {
 /** Runs a worker to completion for one message, then terminates it. */
 function askWorker(start: WorkerStart): Promise<WorkerOut> {
   return new Promise((resolve, reject) => {
-    const worker = new Worker(
-      new URL("./workflow-worker.ts", import.meta.url).href,
-      { type: "module" }
-    );
+    const worker = new Worker(WORKER_URL, { type: "module" });
     const finish = (settle: () => void) => {
       worker.terminate();
       settle();
@@ -209,6 +220,3 @@ export function workflowProgramCheck(graph: WorkflowGraph): Problem[] {
       : { nodeId: nodeAt(problem.line) ?? undefined }),
   }));
 }
-
-/** Where the hub finds the sandbox worker module. */
-export const WORKER_URL = new URL("./workflow-worker.ts", import.meta.url).href;
