@@ -105,20 +105,9 @@ interface ClaudeAdoption {
  * `(ctx as Partial<SessiondAwareContext>).line?.(epoch, seq)`, and every other
  * adapter neither knows nor needs it.
  *
- * NOT YET CALLED. The one producer is claude's `adopt`, whose subscribe already
- * holds the line — `line: (event) => custody.ingest(event.data)` — and which
- * this leaf (D3) does not own; `harnesses/**` belongs to D2/D5. The stamp it
- * owes is one statement before that ingest:
- *
- *     line: (event) => {
- *       (ctx as Partial<SessiondAwareContext>).line?.(client.epoch!, event.seq);
- *       custody.ingest(event.data);
- *     },
- *
- * `ingest` emits its frame synchronously, so the stamp lands on that frame and
- * no other. Until it is wired, frames carry no provenance: the hub admits them
- * all and keeps no mark, which is exactly today's behaviour and exactly what
- * the honest-loss rule already covers.
+ * The one producer is claude's `adopt`: its `stamp` runs one statement before
+ * `custody.ingest`, and `ingest` emits its frame synchronously, so the stamp
+ * lands on that frame and no other.
  */
 export interface SessiondAwareContext extends HarnessContext {
   // biome-ignore lint/style/useConsistentMethodSignatures: a property signature changes parameter variance here and would break the claude adapter's implementation

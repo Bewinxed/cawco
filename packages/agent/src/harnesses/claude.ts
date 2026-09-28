@@ -1492,9 +1492,10 @@ export class ClaudeCustody implements HarnessSession {
    * One raw stdout line, from the ring's backlog or live. Replay and live use
    * the same path on purpose: the daemon's single-threaded delivery is what
    * makes backlog-then-live gapless, and a second code path would be a second
-   * place for a hole to open.
+   * place for a hole to open. `live` says the line was written after adoption
+   * (above the ring's `head` then), not replayed from the backlog.
    */
-  ingest(line: string): void {
+  ingest(line: string, live: boolean): void {
     let parsed: CustodyLine;
     try {
       parsed = JSON.parse(line) as CustodyLine;
@@ -1510,15 +1511,23 @@ export class ClaudeCustody implements HarnessSession {
       );
       return;
     }
+    // Usage data, not a transcript frame. Only a live line is read:
+    // `observeRateLimit` stamps what it reads as current, so a replayed
+    // reading would outrank a fresher poll.
+    if (parsed.type === "rate_limit_event") {
+      if (live) {
+        observeRateLimit(
+          (parsed as Extract<SDKMessage, { type: "rate_limit_event" }>)
+            .rate_limit_info
+        );
+      }
+      return;
+    }
     // A control_response is the CLI answering something the dead agent asked;
-    // nobody is waiting for it any more. A rate_limit_event is usage data, not
-    // a transcript frame, and it is not observed here either: `ingest` cannot
-    // tell a backlog line from a live one, and `observeRateLimit` stamps what
-    // it reads as current — a replayed reading would outrank a fresher poll.
+    // nobody is waiting for it any more.
     if (
       parsed.type === "control_response" ||
-      parsed.type === "control_cancel_request" ||
-      parsed.type === "rate_limit_event"
+      parsed.type === "control_cancel_request"
     ) {
       return;
     }
@@ -1755,6 +1764,9 @@ async function listAccountModels(): Promise<
   }
 }
 
+/** The `[1m]` context suffix an alias's model id may carry. */
+const CONTEXT_SUFFIX = /\[1m\]$/;
+
 /**
  * The model catalog this machine's Claude Code and account offer, probed
  * independently of any session.
@@ -1813,7 +1825,7 @@ async function probeModels(): Promise<ModelInfo[] | undefined> {
   );
   const dated = (aliases ?? []).map((alias) => {
     const released = releasedById.get(
-      (alias.resolvedModel ?? alias.value).replace(/\[1m\]$/, "")
+      (alias.resolvedModel ?? alias.value).replace(CONTEXT_SUFFIX, "")
     );
     return released ? { ...alias, released } : alias;
   });
@@ -2017,7 +2029,7 @@ export class ClaudeHarness implements Harness {
       // The hub has these lines, but its pending asks did not survive restart.
       // Only unresolved can_use_tool requests may replay without emitting frames.
       for (const line of outstanding.values()) {
-        custody.ingest(line);
+        custody.ingest(line, false);
       }
       outstanding.clear();
     };
@@ -2089,6 +2101,32 @@ export class ClaudeHarness implements Harness {
         custody.handOff();
       }, QUIET_HANDBACK_MS);
     };
+    // Peek-only: recover the session id and unanswered asks, never frames.
+    const peek = (parsed: ReturnType<typeof parseLine>, data: string): void => {
+      if (parsed?.type === "control_request") {
+        const request = parsed as Extract<
+          CustodyLine,
+          { type: "control_request" }
+        >;
+        if (request.request.subtype === "can_use_tool") {
+          outstanding.set(request.request_id, data);
+        }
+      } else if (parsed?.type === "control_cancel_request") {
+        outstanding.delete((parsed as { request_id: string }).request_id);
+      } else if (
+        parsed?.type === "assistant" ||
+        parsed?.type === "user" ||
+        parsed?.type === "result"
+      ) {
+        outstanding.clear();
+      }
+      if (
+        custody.sessionId === null &&
+        typeof parsed?.session_id === "string"
+      ) {
+        custody.sessionId = parsed.session_id;
+      }
+    };
     const listener: Parameters<SessiondClient["subscribe"]>[1] = {
       line: (event) => {
         seen = true;
@@ -2105,34 +2143,11 @@ export class ClaudeHarness implements Harness {
           verdict = idleVerdict(parsed, verdict);
         }
         if (peekSeq !== undefined && event.seq <= boundary) {
-          // Peek-only: recover the session id and unanswered asks, never frames.
-          if (parsed?.type === "control_request") {
-            const request = parsed as Extract<
-              CustodyLine,
-              { type: "control_request" }
-            >;
-            if (request.request.subtype === "can_use_tool") {
-              outstanding.set(request.request_id, event.data);
-            }
-          } else if (parsed?.type === "control_cancel_request") {
-            outstanding.delete((parsed as { request_id: string }).request_id);
-          } else if (
-            parsed?.type === "assistant" ||
-            parsed?.type === "user" ||
-            parsed?.type === "result"
-          ) {
-            outstanding.clear();
-          }
-          if (
-            custody.sessionId === null &&
-            typeof parsed?.session_id === "string"
-          ) {
-            custody.sessionId = parsed.session_id;
-          }
+          peek(parsed, event.data);
         } else {
           repark();
           stamp(event.seq);
-          custody.ingest(event.data);
+          custody.ingest(event.data, event.seq > head);
         }
         if (event.seq === head) {
           repark();
