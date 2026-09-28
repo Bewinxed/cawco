@@ -4,7 +4,6 @@
    * recess, so no field ever scrolls under it; under 640px it pins to the
    * bottom edge and Delete moves to the header's ⋯ menu.
    */
-  import { TextMorph } from "torph/svelte";
   import { Button } from "$lib/components/ui/button";
   import { IconTrash } from "$lib/icons";
 
@@ -15,6 +14,7 @@
     down,
     deleteLabel,
     deleting = false,
+    failed = false,
     ondelete,
     oncancel,
   }: {
@@ -26,6 +26,8 @@
     down: string | null;
     deleteLabel?: string;
     deleting?: boolean;
+    /** The save or delete that just ended failed (the editor says why). */
+    failed?: boolean;
     ondelete?: () => void;
     oncancel: () => void;
   } = $props();
@@ -36,19 +38,17 @@
     {#if ondelete && deleteLabel}
       <Button
         class="delete"
-        disabled={down !== null || deleting || saving}
+        disabled={down !== null || saving}
+        {failed}
+        icon={IconTrash}
+        label={deleteLabel}
         onclick={ondelete}
+        pending={deleting}
+        pendingLabel="Deleting…"
         title={down ?? undefined}
         type="button"
         variant="ghost"
-      >
-        <IconTrash />
-        <TextMorph
-          as="span"
-          duration={150}
-          text={deleting ? 'Deleting…' : deleteLabel}
-        />
-      </Button>
+      />
     {/if}
     <span class="spacer"></span>
     <Button
@@ -62,16 +62,14 @@
     </Button>
     <Button
       class="footer-btn save"
-      disabled={down !== null || saving || deleting || !canSave}
+      disabled={down !== null || deleting || !canSave}
+      {failed}
+      label={saveLabel}
+      pending={saving}
+      pendingLabel="Saving…"
       title={down ?? undefined}
       type="submit"
-    >
-      <TextMorph
-        as="span"
-        duration={150}
-        text={saving ? 'Saving…' : saveLabel}
-      />
-    </Button>
+    />
   </div>
 </footer>
 

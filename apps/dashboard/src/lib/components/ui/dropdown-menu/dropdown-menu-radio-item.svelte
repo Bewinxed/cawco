@@ -1,6 +1,5 @@
 <script lang="ts">
   import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
-  import { IconTick } from "$lib/icons";
   import { cn, type WithoutChild } from "$lib/utils.js";
 
   let {
@@ -19,12 +18,10 @@
 >
   {#snippet children({ checked })}
     <span
-      class="absolute right-2 flex items-center justify-center pointer-events-none"
+      class="absolute right-2 flex size-4 items-center justify-center pointer-events-none"
       data-slot="dropdown-menu-radio-item-indicator"
     >
-      {#if checked}
-        <IconTick />
-      {/if}
+      <span class="kit-dot" data-on={checked}></span>
     </span>
     {@render childrenProp?.({ checked })}
   {/snippet}

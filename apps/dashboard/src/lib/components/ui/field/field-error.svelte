@@ -2,6 +2,8 @@
   import type { Snippet } from "svelte";
   import type { HTMLAttributes } from "svelte/elements";
   import { cn, type WithElementRef } from "$lib/utils.js";
+  import { dur } from "$lib/whiffle/motion/curves.svelte";
+  import { unfold } from "$lib/whiffle/motion/fold.svelte";
 
   let {
     ref = $bindable(null),
@@ -39,12 +41,18 @@
   );
 </script>
 
+<!-- An error fades in over --dur-fade while its height folds open, so the
+     fields below slide down to make room instead of jumping; it folds shut
+     the same way. Global: it plays when a parent's {#if} brings the error in
+     as well as when the errors change. With reduced motion, a fade in place. -->
 {#if hasContent}
   <div
     class={cn("text-destructive text-meta", className)}
     data-slot="field-error"
     role="alert"
     bind:this={ref}
+    in:unfold|global={{ ms: dur('--dur-fade') }}
+    out:unfold|global
     {...restProps}
   >
     {#if children}

@@ -1,109 +1,71 @@
 <!--
-  The tail of a transcript that is catching up: one short assistant line,
-  in the skeleton's language, under the last row the reader left. The
-  transcript above it is already on screen; this stands where the turns
-  that arrived while they were away are about to land, and leaves when
-  they do.
+  A transcript that is catching up says so above the composer, from the
+  switch until the catch-up has appended: the transcript the reader left is
+  on screen already, and this says the rest is on its way.
+
+  It floats in the dock over the foot of the list (see `Transcript`), in the
+  flow at no height. Drawn as a line under the last row it made the list
+  taller: at the tail it sat below the view, behind the composer, where no
+  one saw it, and the rows had to be moved to show it — then moved back when
+  it went. Floating, it is seen the moment it shows and moves nothing; the
+  turns it stood for slide in beneath it as it fades.
 -->
-<div aria-busy="true" class="catchup" role="status">
-  <span class="spoken">Catching up…</span>
-  <div class="who"><span class="mark"></span><span class="name"></span></div>
-  <div class="ln"></div>
+<script lang="ts">
+  import { dur, easeOut } from "$lib/whiffle/motion/curves.svelte";
+
+  /** Fades in over --dur-control and out over --dur-exit. Opacity only, so it
+      runs with or without motion. */
+  function fade(_node: Element, token: "--dur-control" | "--dur-exit") {
+    return {
+      duration: dur(token),
+      easing: easeOut,
+      css: (t: number) => `opacity: ${t}`,
+    };
+  }
+</script>
+
+<div
+  aria-busy="true"
+  class="catchup"
+  role="status"
+  in:fade={'--dur-control'}
+  out:fade={'--dur-exit'}
+>
+  <span aria-hidden="true" class="beat"></span>Catching up…
 </div>
 
 <style>
-  /* One assistant turn's worth of the skeleton: the same top rhythm as every
-     row, the 18px mark and its name, one line. `overflow: hidden` clips the
-     band while it is off to either side. */
+  /* The same raised surface as "Jump to latest", which shares its dock. */
   .catchup {
-    position: relative;
-    overflow: hidden;
-    margin-block-start: var(--space-4);
-    opacity: 0.6;
-
-    @media (prefers-reduced-motion: no-preference) {
-      opacity: 1;
-      animation: cu-in var(--dur-panel) var(--ease-out) both;
-    }
-  }
-  @keyframes cu-in {
-    from {
-      opacity: 0;
-    }
-    to {
-      opacity: 1;
-    }
-  }
-  .who {
-    display: flex;
+    display: inline-flex;
     align-items: center;
     gap: var(--space-2);
-    block-size: 18px;
-    margin-block-end: var(--space-2);
+    padding-block: var(--space-2);
+    padding-inline: var(--space-3);
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-md);
+    background: var(--surface-raised);
+    box-shadow: var(--shadow-overlay);
+    font-size: var(--text-label);
+    font-weight: var(--weight-strong);
+    color: var(--ink-strong);
   }
-  .mark {
-    inline-size: 18px;
-    block-size: 18px;
+  /* The one thing that moves, and only for a reader who has not asked for
+     less: the dot beats on --breath. Still, the tag's presence carries it. */
+  .beat {
+    inline-size: 6px;
+    block-size: 6px;
     flex: 0 0 auto;
-    border-radius: var(--radius-xs);
-    background: oklch(from var(--brand-solid) l c h / 0.28);
-  }
-  .name {
-    inline-size: 64px;
-    block-size: 12px;
-    border-radius: var(--radius-xs);
-    background: var(--surface-hover);
-  }
-  /* --text-body at --leading-body is a 21px line box: an 11px bar with 5px
-     above and below keeps the prose pitch. Short, the way a line that is
-     still arriving is. */
-  .ln {
-    inline-size: 38%;
-    block-size: 11px;
-    margin-block: 5px;
-    border-radius: var(--radius-xs);
-    background: var(--surface-hover);
-  }
-
-  /* The one thing that moves: the skeleton's band, crossing on --breath,
-     transform only, linear so it reads as something arriving. */
-  .catchup::after {
-    content: "";
-    position: absolute;
-    inset: 0;
-    pointer-events: none;
-    background: linear-gradient(
-      90deg,
-      transparent 0 35%,
-      oklch(from var(--surface-raised) l c h / 0.55) 50%,
-      transparent 65% 100%
-    );
-    display: none;
-    translate: -100% 0;
+    border-radius: 50%;
+    background: var(--status-live-ink);
 
     @media (prefers-reduced-motion: no-preference) {
-      display: block;
-      will-change: translate;
-      animation: cu-sweep var(--breath) linear infinite;
+      animation: beat var(--breath) var(--ease-in-out) infinite;
     }
   }
-  @keyframes cu-sweep {
-    to {
-      translate: 100% 0;
+  @keyframes beat {
+    50% {
+      opacity: 0.3;
     }
-  }
-
-  /* Read, never seen: off-screen rather than `display: none`, which assistive
-     tech skips entirely. */
-  .spoken {
-    position: absolute;
-    inline-size: 1px;
-    block-size: 1px;
-    margin: -1px;
-    padding: 0;
-    border: 0;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
   }
 </style>

@@ -115,9 +115,14 @@
         >
           Cancel
         </Button>
-        <Button disabled={!password || busy} type="submit">
-          {busy ? 'Unlocking…' : 'Unlock'}
-        </Button>
+        <Button
+          disabled={!password}
+          failed={failed !== null}
+          label="Unlock"
+          pending={busy}
+          pendingLabel="Unlocking…"
+          type="submit"
+        />
       </div>
     </form>
   </Dialog.Content>

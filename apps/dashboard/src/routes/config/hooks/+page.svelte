@@ -37,6 +37,8 @@
   const machines = $derived(orderMachines(whiffle.machines));
   let busy = $state<Record<string, boolean>>({});
   let seeding = $state<string | null>(null);
+  /** The template whose last add failed: its button shows no check. */
+  let seedFailed = $state<string | null>(null);
 
   async function toggle(row: FleetHook, enabled: boolean) {
     busy[row.id] = true;
@@ -74,12 +76,14 @@
 
   async function useTemplate(template: (typeof HOOK_TEMPLATES)[number]) {
     seeding = template.title;
+    seedFailed = null;
     try {
       const saved = await saveHook(newId(), template.draft);
       store.hooks.value = [saved, ...hooks];
       store.mark(saved.id);
       toast.success(`${template.title} is written to every machine.`);
     } catch (error) {
+      seedFailed = template.title;
       toast.error(message(error));
     } finally {
       seeding = null;
@@ -120,13 +124,15 @@
         >
           {#snippet trailing()}
             <Button
-              disabled={seeding !== null}
+              disabled={seeding !== null && seeding !== template.title}
+              failed={seedFailed === template.title}
+              label="Add"
               onclick={() => useTemplate(template)}
+              pending={seeding === template.title}
+              pendingLabel="Adding…"
               size="sm"
               variant="outline"
-            >
-              {seeding === template.title ? 'Adding…' : 'Add'}
-            </Button>
+            />
           {/snippet}
         </SectionRow>
       {/each}

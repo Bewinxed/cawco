@@ -13,6 +13,10 @@ export {
   default as ContextMenuContent,
 } from "./context-menu-content.svelte";
 export {
+  default as ContextMenuCopyItem,
+  default as CopyItem,
+} from "./context-menu-copy-item.svelte";
+export {
   default as Group,
   default as ContextMenuGroup,
 } from "./context-menu-group.svelte";

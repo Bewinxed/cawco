@@ -5,7 +5,6 @@
    * seen is how a document comes into being.
    */
   import { memoryDocProblem } from "@whiffle/core";
-  import { TextMorph } from "torph/svelte";
   import { goto } from "$app/navigation";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
@@ -120,12 +119,14 @@
       {/if}
       <Button
         class="self-end"
-        disabled={down !== null || busy}
+        disabled={down !== null}
+        failed={failed !== undefined}
+        label="Create and open"
+        pending={busy}
+        pendingLabel="Creating…"
         title={down ?? undefined}
         type="submit"
-      >
-        <TextMorph text={busy ? 'Creating…' : 'Create and open'} />
-      </Button>
+      />
     </form>
   </Popover.Content>
 </Popover.Root>

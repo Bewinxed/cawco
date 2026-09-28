@@ -708,13 +708,14 @@
                   </Button>
                   <Button
                     class="shrink-0"
-                    disabled={saving}
+                    failed={docError !== null}
+                    label="Save"
                     onclick={save}
+                    pending={saving}
+                    pendingLabel="Saving…"
                     size="sm"
                     variant="outline"
-                  >
-                    {saving ? 'Saving…' : 'Save'}
-                  </Button>
+                  />
                 {/if}
               </header>
               <div class="relative border-t border-border" bind:this={bodyBox}>

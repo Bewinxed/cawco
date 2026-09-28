@@ -3,9 +3,11 @@
   import { Button } from "$lib/components/ui/button";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for importing a component group
   import * as Collapsible from "$lib/components/ui/collapsible";
+  import { Skeleton } from "$lib/components/ui/skeleton";
   /** Walks a machine's filesystem over the `fs` verb so a cwd can be picked, not typed. */
-  import { IconArrowUp, IconCheck, IconFolder, IconSpinner } from "$lib/icons";
+  import { IconArrowUp, IconCheck, IconFolder } from "$lib/icons";
   import { machineFs, whiffle } from "$lib/whiffle/client.svelte";
+  import { dur, easeDrawer, motionOk } from "$lib/whiffle/motion/curves.svelte";
 
   let {
     machineId,
@@ -19,6 +21,33 @@
   let entries = $state<FsEntry[]>([]);
   let loading = $state(false);
   let errorMessage = $state<string | null>(null);
+  /**
+   * Which way the last move went: into a folder (1), up a level (-1), or
+   * nowhere (0, the listing the panel opens on).
+   */
+  let direction = $state<-1 | 0 | 1>(0);
+
+  /**
+   * A folder's listing arrives from the side it lies on: entering a folder
+   * slides it in from 8% to the right, going up a level from 8% to the left,
+   * over --dur-panel on the drawer curve, fading in as it comes. The listing
+   * it replaces goes at once. With reduced motion, the fade alone.
+   */
+  function drill(_node: Element, from: -1 | 0 | 1) {
+    if (from === 0) {
+      return { duration: 0 };
+    }
+    const travel = motionOk.current ? from * 8 : 0;
+    return {
+      duration: dur("--dur-panel"),
+      easing: easeDrawer,
+      css: (t: number, u: number) =>
+        `opacity: ${t}; transform: translateX(${(u * travel).toFixed(2)}%)`,
+    };
+  }
+
+  /** Skeleton rows while a folder is read: a row's height, a few name widths. */
+  const SKELETON_WIDTHS = ["w-28", "w-40", "w-24"];
 
   /** Only lives while the panel is open — a directory may have changed by the next visit. */
   const cache = new Map<string, FsEntry[]>();
@@ -58,7 +87,8 @@
   /** Typed cwds arrive with trailing slashes; `parent` and `join` assume none. */
   const trim = (dir: string) => dir.replace(TRAILING_SLASHES, "");
 
-  async function go(next: string) {
+  async function go(next: string, way: -1 | 0 | 1) {
+    direction = way;
     path = next;
     errorMessage = null;
     const cached = cache.get(next);
@@ -98,7 +128,7 @@
     }
     open = true;
     // biome-ignore lint/complexity/noVoid: fire-and-forget — the panel opens immediately, the listing fills in when it arrives
-    void go(seed());
+    void go(seed(), 0);
   }
 
   function use() {
@@ -129,7 +159,7 @@
         <Button
           aria-label="Parent directory"
           disabled={!parent}
-          onclick={() => parent && go(parent)}
+          onclick={() => parent && go(parent, -1)}
           size="icon-xs"
           variant="ghost"
         >
@@ -142,35 +172,41 @@
         >
       </div>
 
-      <div class="max-h-56 overflow-y-auto">
-        {#if loading}
-          <span
-            class="flex items-center gap-2 px-2 py-1 text-meta text-muted-foreground"
-          >
-            <IconSpinner class="size-4 animate-spin" />
-            Reading directory…
-          </span>
-        {:else if errorMessage}
-          <span class="block px-2 py-1 text-meta text-destructive"
-            >{errorMessage}</span
-          >
-        {:else}
-          {#each dirs as dir (dir.name)}
-            <Button
-              class="w-full justify-start font-mono text-label font-normal"
-              onclick={() => go(join(path, dir.name))}
-              size="sm"
-              variant="ghost"
-            >
-              <IconFolder class="shrink-0 opacity-70" />
-              <span class="truncate">{dir.name}</span>
-            </Button>
-          {:else}
-            <span class="block px-2 py-1 text-meta text-muted-foreground"
-              >No subdirectories.</span
-            >
-          {/each}
-        {/if}
+      <div class="max-h-56 overflow-y-auto overflow-x-hidden">
+        {#key path}
+          <div in:drill={direction}>
+            {#if loading}
+              <div aria-label="Reading directory" role="status">
+                {#each SKELETON_WIDTHS as width (width)}
+                  <div class="flex h-[30px] items-center gap-[7px] px-[11px]">
+                    <Skeleton class="size-4 shrink-0" />
+                    <Skeleton class="h-3 {width}" />
+                  </div>
+                {/each}
+              </div>
+            {:else if errorMessage}
+              <span class="block px-2 py-1 text-meta text-destructive"
+                >{errorMessage}</span
+              >
+            {:else}
+              {#each dirs as dir (dir.name)}
+                <Button
+                  class="w-full justify-start font-mono text-label font-normal"
+                  onclick={() => go(join(path, dir.name), 1)}
+                  size="sm"
+                  variant="ghost"
+                >
+                  <IconFolder class="shrink-0 opacity-70" />
+                  <span class="truncate">{dir.name}</span>
+                </Button>
+              {:else}
+                <span class="block px-2 py-1 text-meta text-muted-foreground"
+                  >No subdirectories.</span
+                >
+              {/each}
+            {/if}
+          </div>
+        {/key}
       </div>
 
       <div class="flex justify-end">

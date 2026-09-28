@@ -11,7 +11,6 @@
   import {
     IconArrowRight,
     IconCheck,
-    IconCopy,
     IconExternal,
     IconFolder,
     IconPin,
@@ -27,7 +26,6 @@
   } from "./client.svelte";
   import { confirm } from "./confirm.svelte";
   import { continueInNewSession } from "./continue.svelte";
-  import { copyToClipboard } from "./copy";
   import { conversationHref } from "./links";
   import { rail } from "./rail.svelte";
   import { sessionName } from "./session-name";
@@ -122,18 +120,15 @@
 
     <ContextMenu.Separator />
 
-    <ContextMenu.Item
+    <ContextMenu.CopyItem
       disabled={!instance.cwd}
-      onSelect={() => copyToClipboard('Path', instance.cwd)}
+      text={instance.cwd}
+      what="Path"
     >
-      <IconCopy />
       Copy path
-    </ContextMenu.Item>
-    <ContextMenu.Item
-      onSelect={() => copyToClipboard('Session id', instance.id)}
-    >
-      <IconCopy />
+    </ContextMenu.CopyItem>
+    <ContextMenu.CopyItem text={instance.id} what="Session id">
       Copy id
-    </ContextMenu.Item>
+    </ContextMenu.CopyItem>
   </ContextMenu.Content>
 </ContextMenu.Root>

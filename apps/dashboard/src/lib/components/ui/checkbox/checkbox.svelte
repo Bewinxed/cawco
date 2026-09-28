@@ -25,10 +25,10 @@
       class="[&>svg]:size-3 grid place-content-center text-current transition-none"
       data-slot="checkbox-indicator"
     >
-      {#if checked}
-        <IconTick />
-      {:else if indeterminate}
+      {#if indeterminate}
         <IconMinus />
+      {:else}
+        <IconTick class="kit-tick" data-on={checked} />
       {/if}
     </div>
   {/snippet}

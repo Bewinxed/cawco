@@ -166,9 +166,14 @@
         >
           Cancel
         </Button>
-        <Button disabled={!code.trim() || busy || !url} type="submit">
-          {busy ? 'Finishing…' : 'Log in'}
-        </Button>
+        <Button
+          disabled={!(code.trim() && url)}
+          failed={failed !== null}
+          label="Log in"
+          pending={busy && url !== null}
+          pendingLabel="Finishing…"
+          type="submit"
+        />
       </div>
     </form>
   </Dialog.Content>

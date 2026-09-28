@@ -37,7 +37,6 @@
   } from "../activity";
   import { isFailed, isStale, whiffle } from "../client.svelte";
   import { continueInNewSession, continueSourceOf } from "../continue.svelte";
-  import { copyToClipboard } from "../copy";
   import { conversationHref } from "../links";
   import { sessionName } from "../session-name";
   import { workingSet } from "../working-set.svelte";
@@ -357,12 +356,12 @@
             Close others
           </ContextMenu.Item>
           <ContextMenu.Separator />
-          <ContextMenu.Item
-            onSelect={() =>
-              copyToClipboard('Link', new URL(tab.href, location.origin).href)}
+          <ContextMenu.CopyItem
+            text={new URL(tab.href, location.origin).href}
+            what="Link"
           >
             Copy link
-          </ContextMenu.Item>
+          </ContextMenu.CopyItem>
         </ContextMenu.Content>
       </ContextMenu.Root>
     {/each}

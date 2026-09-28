@@ -46,7 +46,9 @@
   );
 
   let pushing = $state(false);
+  let pushFailed = $state(false);
   let busy = $state<Record<string, boolean>>({});
+  let adoptFailed = $state<Record<string, boolean>>({});
   let unpushable = $state<Record<string, string>>({});
   let found = $state<Record<string, DiscoveredAgent[]>>({});
   let reading = $state<Record<string, boolean>>({});
@@ -120,6 +122,7 @@
   async function adopt(machineId: string, row: DiscoveredAgent) {
     const key = `${machineId}:${row.name}`;
     busy[key] = true;
+    adoptFailed[key] = false;
     try {
       const saved = await saveAgent(row.name, row.content);
       const fleet = store.fleet.value;
@@ -129,6 +132,7 @@
       store.mark(saved.name);
       toast.success(`${row.name} is the fleet's now — every machine gets it.`);
     } catch (caught) {
+      adoptFailed[key] = true;
       toast.error(message(caught));
     } finally {
       delete busy[key];
@@ -137,6 +141,7 @@
 
   async function push() {
     pushing = true;
+    pushFailed = false;
     try {
       ({ unpushable } = await pushAgents());
       const skipped = Object.keys(unpushable).length;
@@ -148,6 +153,7 @@
         );
       }
     } catch (caught) {
+      pushFailed = true;
       toast.error(message(caught));
     } finally {
       pushing = false;
@@ -164,13 +170,15 @@
 >
   {#snippet actions(down)}
     <Button
-      disabled={down !== null || pushing || agents.length === 0}
+      disabled={down !== null || agents.length === 0}
+      failed={pushFailed}
+      label="Push to machines"
       onclick={push}
+      pending={pushing}
+      pendingLabel="Pushing…"
       title={down ?? undefined}
       variant="outline"
-    >
-      {pushing ? 'Pushing…' : 'Push to machines'}
-    </Button>
+    />
     <Button
       disabled={down !== null}
       href="/config/subagents/new"
@@ -259,18 +267,15 @@
                   <span class="state differs">Managed · differs</span>
                 {/if}
                 <Button
-                  disabled={busy[key] === true}
+                  failed={adoptFailed[key] === true}
+                  icon={IconDownload}
+                  label={stored ? 'Adopt this copy' : 'Adopt'}
                   onclick={() => adopt(machine.machineId, row)}
+                  pending={busy[key] === true}
+                  pendingLabel="Adopting…"
                   size="sm"
                   variant="outline"
-                >
-                  <IconDownload />
-                  {#if busy[key]}
-                    Adopting…
-                  {:else}
-                    {stored ? 'Adopt this copy' : 'Adopt'}
-                  {/if}
-                </Button>
+                />
               {/if}
             {/snippet}
           </SectionRow>

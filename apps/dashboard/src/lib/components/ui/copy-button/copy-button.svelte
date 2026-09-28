@@ -9,7 +9,6 @@
     ref = $bindable(null),
     text,
     icon,
-    animationDuration = 300,
     variant = "ghost",
     size: sizeProp = "icon",
     onCopy,
@@ -50,7 +49,9 @@
   {variant}
   bind:ref
 >
-  <span class="icon-swap" style="--icon-swap-dur: {animationDuration}ms">
+  <!-- The icon cross-fades to the result over --dur-control, holds it for
+       --dur-hold (the clipboard hook), then fades back. -->
+  <span class="icon-swap" style="--icon-swap-dur: var(--dur-control)">
     <span data-active={clipboard.status === 'success'}
       ><IconCheck tabindex={-1} /></span
     >

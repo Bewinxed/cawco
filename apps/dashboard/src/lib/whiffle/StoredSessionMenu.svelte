@@ -17,7 +17,6 @@
   import { Input } from "$lib/components/ui/input";
   import {
     IconArrowRight,
-    IconCopy,
     IconExternal,
     IconFork,
     IconPenLine,
@@ -30,7 +29,6 @@
     whiffle,
   } from "./client.svelte";
   import { continueInNewSession } from "./continue.svelte";
-  import { copyToClipboard } from "./copy";
   import { conversationHref, sessionTitle } from "./links";
 
   let {
@@ -52,6 +50,8 @@
   let title = $state("");
   let confirmingDelete = $state(false);
   let busy = $state(false);
+  /** The last rename went through (a failed one leaves the dialog open). */
+  let renamed = $state(false);
 
   function openRename() {
     title = sessionTitle(info);
@@ -65,6 +65,7 @@
       return;
     }
     busy = true;
+    renamed = false;
     try {
       await machineControl(
         machineId,
@@ -74,6 +75,7 @@
         info.harness
       );
       await loadCatalog(machineId);
+      renamed = true;
       renaming = false;
     } finally {
       busy = false;
@@ -139,19 +141,16 @@
       <IconPenLine />
       Rename…
     </ContextMenu.Item>
-    <ContextMenu.Item
+    <ContextMenu.CopyItem
       disabled={!info.cwd}
-      onSelect={() => copyToClipboard('Path', info.cwd ?? '')}
+      text={info.cwd ?? ''}
+      what="Path"
     >
-      <IconCopy />
       Copy path
-    </ContextMenu.Item>
-    <ContextMenu.Item
-      onSelect={() => copyToClipboard('Session id', info.sessionId)}
-    >
-      <IconCopy />
+    </ContextMenu.CopyItem>
+    <ContextMenu.CopyItem text={info.sessionId} what="Session id">
       Copy session id
-    </ContextMenu.Item>
+    </ContextMenu.CopyItem>
 
     <ContextMenu.Separator />
 
@@ -188,7 +187,14 @@
           variant="outline"
           >Cancel</Button
         >
-        <Button disabled={busy || !title.trim()} type="submit">Rename</Button>
+        <Button
+          disabled={!title.trim()}
+          failed={!renamed}
+          label="Rename"
+          pending={busy}
+          pendingLabel="Renaming…"
+          type="submit"
+        />
       </Dialog.Footer>
     </form>
   </Dialog.Content>
