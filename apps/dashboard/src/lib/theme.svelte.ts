@@ -1,5 +1,5 @@
 import { browser } from "$app/environment";
-import { dur } from "$lib/whiffle/motion/curves.svelte";
+import { motionOk } from "$lib/whiffle/motion/curves.svelte";
 
 type Theme = "light" | "dark" | "system";
 
@@ -34,32 +34,6 @@ function applyTheme(themeValue: Theme) {
   }
 }
 
-/**
- * A switch the reader makes cross-fades the whole page as one: the root
- * carries `theme-switching` (app.css) from the task that flips the theme until
- * the fade is over, so every colour turns on one --dur-fade curve instead of
- * each element's own timing. The class comes off a frame after the fade's
- * length, counted from the frame the new colours were first drawn: taking it
- * off sooner would cut the transitions it set short.
- */
-let switching = 0;
-function crossFade(apply: () => void) {
-  const root = document.documentElement;
-  switching += 1;
-  const mine = switching;
-  root.classList.add("theme-switching");
-  apply();
-  requestAnimationFrame(() => {
-    setTimeout(() => {
-      requestAnimationFrame(() => {
-        if (switching === mine) {
-          root.classList.remove("theme-switching");
-        }
-      });
-    }, dur("--dur-fade"));
-  });
-}
-
 class ThemeState {
   current = $state<Theme>(getInitialTheme());
 
@@ -77,12 +51,33 @@ class ThemeState {
     }
   }
 
+  /**
+   * A switch the reader makes cross-fades the whole page as one: a view
+   * transition snapshots the page, flips the theme, and fades the new page in
+   * over the old one (app.css, --dur-fade on --ease-out). One composited fade,
+   * so every colour on the page turns together at no cost per element. With
+   * reduced motion the theme flips at once.
+   */
   set(value: Theme) {
-    this.current = value;
-    if (browser) {
+    const flip = () => {
+      this.current = value;
       localStorage.setItem("whiffle-theme", value);
-      crossFade(() => applyTheme(value));
+      applyTheme(value);
+    };
+    if (!motionOk.current) {
+      flip();
+      return;
     }
+    // Under the fade the page's own colour transitions (a button's hover
+    // ink, a row's pill) would start from the old theme and play inside the
+    // new snapshot: a second fade, and a style pass every frame for it. They
+    // are off for the flip, and back once the new page is drawn.
+    const root = document.documentElement;
+    const transition = document.startViewTransition(() => {
+      root.classList.add("theme-flip");
+      flip();
+    });
+    transition.ready.finally(() => root.classList.remove("theme-flip"));
   }
 
   toggle() {

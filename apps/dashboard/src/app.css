@@ -1344,19 +1344,29 @@
   }
 }
 
-/* ---- The theme switch. For the length of the switch (theme.svelte.ts adds
-   the class in the same task that flips `.dark`, and takes it off once the
-   fade is over), every element's colours turn together: one --dur-fade
-   cross-fade on --ease-out, whatever timing each element keeps for its own
-   hover and state changes. Unlayered and !important so no component's own
-   transition list wins for those 200ms. Colour only, so it runs with or
-   without motion. */
-:root.theme-switching,
-:root.theme-switching *,
-:root.theme-switching *::before,
-:root.theme-switching *::after {
-  transition-property: color, background-color, border-color, fill !important;
-  transition-duration: var(--dur-fade) !important;
-  transition-timing-function: var(--ease-out) !important;
-  transition-delay: 0s !important;
+/* ---- The theme switch (theme.svelte.ts): a view transition. The new page
+   fades in over the old one in one --dur-fade cross-fade on --ease-out; the
+   old snapshot holds opaque underneath it, so the two never add up to less
+   than the page (with normal blending two half-faded snapshots would let the
+   backdrop through at the midpoint). No scale: the root keeps its size.
+   The UA blends the pair through an animation (plus-lighter), so the whole
+   animation list is replaced, not only the blend mode. */
+::view-transition-group(root) {
+  animation: none;
+}
+::view-transition-old(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+::view-transition-new(root) {
+  animation: kit-fade-in var(--dur-fade) var(--ease-out);
+  mix-blend-mode: normal;
+}
+
+/* The flip itself starts no element transitions (theme.svelte.ts). */
+:root.theme-flip,
+:root.theme-flip *,
+:root.theme-flip *::before,
+:root.theme-flip *::after {
+  transition: none !important;
 }
