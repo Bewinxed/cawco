@@ -1212,6 +1212,14 @@ const peekRead = (frame: FramePayload & { kind: "frame" }): string[] =>
     ? (frame.message.read ?? [])
     : [];
 
+/** The ids the harness stored those sends under, by uuid, where it says. */
+const peekStoredAs = (
+  frame: FramePayload & { kind: "frame" }
+): Record<string, string> =>
+  frame.message.type === "system" && frame.message.subtype === MESSAGES_READ
+    ? (frame.message.storedAs ?? {})
+    : {};
+
 const peekInit = (
   payload: unknown
 ):
@@ -4770,19 +4778,32 @@ export const createServer = ({
             transcript = transcript.slice(0, cut);
           }
 
-          // A sent message has one clock, the hub's: its stored copy is dated
-          // when the hub accepted it, whatever the harness wrote down, so the
-          // row reads the same time live, reloaded and on a fresh open.
+          // A sent message is one record, the hub's: its stored copy is keyed
+          // by the send's uuid (found by the harness's own id for it where the
+          // harness keeps one) and dated when the hub accepted it, so the row
+          // is the same row at the same time live, reloaded, on a fresh open
+          // and after the daemon restarted.
           const entries = transcript as SessionMessage[];
-          const sentAt = db.sendTimes(
+          const sends = db.sendsFor(
             entries
               .filter((entry) => entry.type === "user" || entry.sourceUuid)
-              .map((entry) => entry.sourceUuid ?? entry.uuid)
+              .flatMap((entry) =>
+                entry.sourceUuid ? [entry.sourceUuid, entry.uuid] : [entry.uuid]
+              )
+          );
+          const byUuid = new Map(sends.map((send) => [send.uuid, send]));
+          const byHarnessId = new Map(
+            sends.map((send) => [send.harnessId, send])
           );
           for (const entry of entries) {
-            const at = sentAt.get(entry.sourceUuid ?? entry.uuid);
-            if (at) {
-              entry.timestamp = at.toISOString();
+            const send =
+              byUuid.get(entry.sourceUuid ?? entry.uuid) ??
+              byHarnessId.get(entry.uuid);
+            if (send) {
+              if (send.uuid !== entry.uuid) {
+                entry.sourceUuid = send.uuid;
+              }
+              entry.timestamp = send.acceptedAt.toISOString();
             }
           }
 
@@ -7246,12 +7267,20 @@ export const createServer = ({
                   noteActivity(message.instanceId);
                 }
               }
-              // The harness has read these: they are no longer waiting.
+              // The harness has read these: they are no longer waiting. Where
+              // it stored one under an id of its own, the send's record keeps
+              // that id, so a later history read finds the send again.
               if (kind === "frame" && message.instanceId) {
-                for (const uuid of peekRead(
-                  message.payload as FramePayload & { kind: "frame" }
-                )) {
+                const frame = message.payload as FramePayload & {
+                  kind: "frame";
+                };
+                for (const uuid of peekRead(frame)) {
                   pendingSends.get(message.instanceId)?.delete(uuid);
+                }
+                for (const [uuid, harnessId] of Object.entries(
+                  peekStoredAs(frame)
+                )) {
+                  db.linkSend(uuid, harnessId);
                 }
               }
               // A session named by what it was first asked, whether the ask came

@@ -527,6 +527,13 @@ export interface NeutralSystemMessage {
   status?: NeutralStatus | string;
   stderr?: string;
   stdout?: string;
+  /**
+   * read: the id the harness stored each read send under, by the send's
+   * uuid, where the harness keys its own record differently (opencode's
+   * message id, pi's entry id). The hub keeps it on the send's record, so a
+   * history read finds the send's uuid again whenever it happens.
+   */
+  storedAs?: Record<string, string>;
   subagent_type?: string;
   subtype: string;
   summary?: string;

@@ -171,20 +171,6 @@ const assistantContent = (message: {
   ];
 };
 
-/**
- * The uuid each message this daemon sent was sent under, by the id of the
- * entry pi stored it as — what a history read keys the message by, so it is
- * the row the live stream drew. Lives as long as the daemon does.
- */
-// ponytail: in-memory and unbounded (one short entry per send); a daemon restart forgets it, and reloads then key those messages by pi's entry id.
-const sentIds = new Map<string, string>();
-
-/** The `sourceUuid` a stored user entry carries, when this daemon sent it. */
-const sentAs = (entryId: string): { sourceUuid?: string } => {
-  const sent = sentIds.get(entryId);
-  return sent ? { sourceUuid: sent } : {};
-};
-
 /** Thin adapter over the same hub-owned definitions and handlers as MCP. */
 const piHandoffTools = async (instanceId: string): Promise<ToolDefinition[]> =>
   (await delegationTools(instanceId)).map((tool) =>
@@ -240,28 +226,27 @@ class PiSession implements HarnessSession {
             : undefined;
         if (read) {
           this.#reading = read;
-          this.#ctx.frame({
-            type: "system",
-            subtype: MESSAGES_READ,
-            read: [read],
-            session_id: this.sessionId ?? undefined,
-          });
         }
         break;
       }
-      // And the entry it is stored as, which a history read keys it by. pi
-      // tells its listeners `message_end` just before it appends the entry,
-      // in the same synchronous run, so the entry is the leaf a microtask
-      // later.
+      // Read, and stored: pi tells its listeners `message_end` just before
+      // it appends the entry, in the same synchronous run, so the entry is
+      // the leaf a microtask later. The read frame says both, so the hub
+      // keys the send to the entry a history read will return.
       case "message_end": {
         const sent = this.#reading;
         if (sent && (event.message as { role?: string }).role === "user") {
           this.#reading = undefined;
           queueMicrotask(() => {
-            sentIds.set(
-              this.#session.sessionManager.getLeafId() as string,
-              sent
-            );
+            this.#ctx.frame({
+              type: "system",
+              subtype: MESSAGES_READ,
+              read: [sent],
+              storedAs: {
+                [sent]: this.#session.sessionManager.getLeafId() as string,
+              },
+              session_id: this.sessionId ?? undefined,
+            });
           });
         }
         break;
@@ -750,11 +735,11 @@ export class PiHarness implements Harness {
       }
       const { role } = message;
       if (role === "user") {
-        // A message this daemon sent is keyed by the uuid it was sent under.
+        // A sent message is keyed back to its send's uuid by the hub, which
+        // was told this entry id when pi read it (`storedAs`).
         entries.push({
           type: "user",
           uuid: entry.id,
-          ...sentAs(entry.id),
           session_id: sessionKey,
           message: { role: "user", content: contentOf(message.content) },
           parent_tool_use_id: null,

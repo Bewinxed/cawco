@@ -149,14 +149,6 @@ export function messageId(): string {
 }
 
 /**
- * The uuid each message this daemon sent was sent under, by the opencode
- * message id it became — what a history read keys the message by, so it is
- * the row the live stream drew. Lives as long as the daemon does.
- */
-// ponytail: in-memory and unbounded (one short entry per send); a daemon restart forgets it, and reloads then key those messages by opencode's id.
-const sentIds = new Map<string, string>();
-
-/**
  * opencode's own config files — the machine profile the fleet sync converges.
  * Resolved the way opencode resolves its global config (`xdg-basedir`'s
  * `xdgConfig`, joined with "opencode") and the way `CONFIG_PATH` (../config)
@@ -1128,7 +1120,8 @@ export class OpencodeSession implements HarnessSession {
           this.#costs.set(info.id, info.cost);
           this.#lastTokens = info.tokens;
         }
-        // A send, now a message of the session's: the harness has read it.
+        // A send, now a message of the session's: the harness has read it,
+        // and stores it under this message id.
         const read = this.#unread.get(info.id);
         if (read) {
           this.#unread.delete(info.id);
@@ -1136,6 +1129,7 @@ export class OpencodeSession implements HarnessSession {
             type: "system",
             subtype: MESSAGES_READ,
             read: [read],
+            storedAs: { [read]: info.id },
             session_id: this.sessionId ?? undefined,
           });
         }
@@ -2142,7 +2136,6 @@ export class OpencodeSession implements HarnessSession {
     // The message it becomes is named up front, so opencode's word that it
     // exists says which send it was.
     const messageID = messageId();
-    sentIds.set(messageID, message.uuid);
     this.#unread.set(messageID, message.uuid);
 
     // Config convergence gate: queue everything while a reload is in progress.
@@ -4383,12 +4376,11 @@ export function toTranscript(
         parts.filter((part): part is FilePart => part.type === "file")
       );
       if (content) {
-        // A message this daemon sent is keyed by the uuid it was sent under.
-        const sent = sentIds.get(info.id);
+        // A sent message is keyed back to its send's uuid by the hub, which
+        // was told this message id when opencode read it (`storedAs`).
         entries.push({
           type: "user",
           uuid: info.id,
-          ...(sent ? { sourceUuid: sent } : {}),
           session_id: sessionKey,
           message: { role: "user", content },
           parent_tool_use_id: null,

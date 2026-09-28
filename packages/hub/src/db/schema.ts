@@ -356,17 +356,30 @@ export const delegateEvents = sqliteTable("delegate_events", {
 });
 
 /**
- * When the hub accepted each message sent to a session: the one clock a sent
- * message has. The live frame, the pending copy a reload draws and the stored
- * entry a later history read returns are all dated by this row, whatever the
- * harness recorded, so every view of the message shows the same time.
+ * One record per message sent to a session: its identity and its clock. The
+ * live frame, the pending copy a reload draws and the stored entry a later
+ * history read returns are all dated by `acceptedAt`, whatever the harness
+ * recorded, and a stored entry the harness keeps under its own id is keyed
+ * back to the send's uuid through `harnessId` — so every view of the message,
+ * across reloads and daemon restarts, is one row with one time.
  */
-export const sentMessages = sqliteTable("sent_messages", {
-  /** The send's own uuid (`SentMessage.uuid`), the id it keeps everywhere. */
-  uuid: text("uuid").primaryKey(),
-  instanceId: text("instance_id").notNull(),
-  acceptedAt: timestamp("accepted_at").notNull(),
-});
+export const sentMessages = sqliteTable(
+  "sent_messages",
+  {
+    /** The send's own uuid (`SentMessage.uuid`), the id it keeps everywhere. */
+    uuid: text("uuid").primaryKey(),
+    instanceId: text("instance_id").notNull(),
+    acceptedAt: timestamp("accepted_at").notNull(),
+    /**
+     * The id the harness stored the message under, where that is not the uuid
+     * (opencode's message id, pi's entry id), as its adapter reported it on
+     * reading the send (`NeutralSystemMessage.storedAs`). Null until then, and
+     * for Claude, which stores the send's uuid itself.
+     */
+    harnessId: text("harness_id"),
+  },
+  (table) => [index("sent_messages_harness_id").on(table.harnessId)]
+);
 
 /**
  * What the fleet is supposed to have (NEW.md §10). One row per catalog tool the
