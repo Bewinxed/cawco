@@ -803,7 +803,12 @@ const loadLaunchAgent = async (
   }
 };
 
-const installLaunchAgents = async (
+/**
+ * Writes and bootstraps LaunchAgents into the logged-in user's GUI domain.
+ * Exported so a throwaway probe can go through this exact path to show what a
+ * service the installer starts can do on a given Mac.
+ */
+export const installLaunchAgents = async (
   specs: ServiceSpec[],
   note: (line: string) => void
 ): Promise<void> => {
