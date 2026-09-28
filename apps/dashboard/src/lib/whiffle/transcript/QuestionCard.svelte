@@ -5,7 +5,7 @@
     UserQuestionResult,
   } from "@whiffle/core";
   import { IconCheck, IconClose } from "$lib/icons";
-  import { easeOut, motionOk } from "$lib/whiffle/motion/curves.svelte";
+  import { dur, easeOut, motionOk } from "$lib/whiffle/motion/curves.svelte";
   import { questionsOf } from "../question";
   /**
    * An answered (or dismissed) `AskUserQuestion` as it settled in the transcript
@@ -53,14 +53,12 @@
    * plays this on its first render.
    */
   const ledger = useLedger();
-  function pillSwap(node: Element) {
+  function pillSwap(_node: Element) {
     if (!(motionOk.current && ledger?.watched)) {
       return { duration: 0 };
     }
     return {
-      duration: Number.parseFloat(
-        getComputedStyle(node).getPropertyValue("--dur-control")
-      ),
+      duration: dur("--dur-control"),
       easing: easeOut,
       css: (t: number) => `opacity: ${t}`,
     };

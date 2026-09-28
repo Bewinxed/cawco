@@ -39,6 +39,7 @@
   import { type FleetSnapshot, inspectMachine } from "../fleet";
   import { conversationHref } from "../links";
   import { loadModelWindows, models } from "../models.svelte";
+  import { handOver } from "../motion/share.svelte";
   import { PERMISSION_MODES } from "../permission-modes";
   import { rememberSpawn, spawnPrefs } from "../spawnPrefs.svelte";
   import LifetimeChip from "./LifetimeChip.svelte";
@@ -1011,7 +1012,8 @@
   /**
    * Leave for the new session as the dialog starts to close, not after: the
    * dialog is portaled, so its exit plays out over the page arriving, and the
-   * new tab rises from where Start was pressed (motion/share, `session:new`)
+   * new tab rises from where Start was pressed (motion/share: `session:new`,
+   * handed to the session it started)
    * while the dialog fades around it. Waiting for the exit left a moment with
    * neither on screen.
    */
@@ -1019,6 +1021,7 @@
     if (!current()) {
       return;
     }
+    handOver("session:new", `session:${instanceId}`);
     close();
     await tick();
     await goto(conversationHref(instanceId, whiffle.instanceIndex));

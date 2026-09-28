@@ -17,7 +17,7 @@
    */
   import { untrack } from "svelte";
   import type { Trail } from "$lib/components/ui/markdown/trail";
-  import { motionOk } from "$lib/whiffle/motion/curves.svelte";
+  import { dur, motionOk } from "$lib/whiffle/motion/curves.svelte";
   import { useLedger } from "./arrivals.svelte";
   import MessageBody from "./MessageBody.svelte";
   import type { Row } from "./rows";
@@ -60,9 +60,6 @@
   let drawn = untrack(() => row);
   /** The height the row had when its phase changed, until the tween reads it. */
   let from: number | null = null;
-
-  const ms = (style: CSSStyleDeclaration, token: string): number =>
-    Number.parseFloat(style.getPropertyValue(token));
 
   $effect.pre(() => {
     const next = row;
@@ -111,7 +108,7 @@
       tweening = true;
       box
         .animate([{ blockSize: `${start}px` }, { blockSize: `${end}px` }], {
-          duration: ms(style, "--dur-pop"),
+          duration: dur("--dur-pop"),
           easing: style.getPropertyValue("--ease-in-out"),
         })
         .finished.then(

@@ -10,8 +10,7 @@
     ...restProps
   }: CollapsiblePrimitive.ContentProps & {
     /**
-     * Grow open (240ms) and fold shut (160ms, --dur-exit), both on
-     * --ease-out, on the Web Animations API,
+     * Grow open and fold shut (240ms, --ease-out) on the Web Animations API,
      * from whatever height is drawn at the moment, so a toggle caught
      * mid-flight turns back from where it is. bits-ui waits on the fold
      * before it unmounts the content. Each fold announces itself with a
@@ -23,9 +22,7 @@
     fade?: boolean;
   } = $props();
 
-  /** Opening, and folding shut: an exit is quicker than an entrance. */
-  const OPEN_MS = 240;
-  const SHUT_MS = 160;
+  const MS = 240;
 
   $effect(() => {
     const node = ref;
@@ -36,7 +33,7 @@
       const animation = fold(
         node,
         open,
-        { ms: open ? OPEN_MS : SHUT_MS, easing: CURVE.out, fade },
+        { ms: MS, easing: CURVE.out, fade },
         from
       );
       if (!animation) {

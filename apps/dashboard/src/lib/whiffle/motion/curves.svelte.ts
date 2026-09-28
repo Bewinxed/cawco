@@ -82,8 +82,13 @@ export const easeDrawer = bezier(0.32, 0.72, 0, 1);
  */
 const rootToken = (name: string) =>
   getComputedStyle(document.documentElement).getPropertyValue(name).trim();
-export const dur = (name: `--dur-${string}`): number =>
-  Number.parseFloat(rootToken(name));
+export const dur = (name: `--dur-${string}`): number => {
+  // In the unit it is written in: the built stylesheet's minifier rewrites
+  // `280ms` as `.28s`, so the number alone is not milliseconds.
+  const token = rootToken(name);
+  const value = Number.parseFloat(token);
+  return token.endsWith("ms") ? value : value * 1000;
+};
 export const ease = (name: `--ease-${string}`): string => rootToken(name);
 export const popScale = (): number =>
   Number.parseFloat(rootToken("--pop-scale"));

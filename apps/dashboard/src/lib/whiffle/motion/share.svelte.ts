@@ -63,6 +63,20 @@ export function depart(
   });
 }
 
+/**
+ * A departure handed from one key to another. A Start is pressed before the
+ * session it starts has an id, so it departs as `session:new`; once the
+ * session exists, its departure becomes that session's, and only that
+ * session's tab lands it — not whichever tab happens to mount first.
+ */
+export function handOver(from: string, to: string): void {
+  const waiting = departures.get(from);
+  if (waiting) {
+    departures.delete(from);
+    departures.set(to, waiting);
+  }
+}
+
 /** Every shared source on the page departs: a navigation is starting. */
 export function departAll(): void {
   for (const source of document.querySelectorAll<HTMLElement>("[data-share]")) {
@@ -131,6 +145,18 @@ function fly(node: HTMLElement, from: Departure, options: LandOptions) {
       },
       { transformOrigin: "0 0", transform: "none" },
     ];
+    // Scaled by its height, a destination wider for its height than its
+    // source would start out wider than the source; its inline end is cut
+    // back to the source's width, so the flight starts on the source's box
+    // exactly and opens to its own as it lands.
+    const spare = to.width - from.rect.width / sy;
+    if (uniform && spare > 0.5) {
+      const rtl = getComputedStyle(node).direction === "rtl";
+      const cut = rtl ? `0 0 0 ${spare}px` : `0 ${spare}px 0 0`;
+      const radius = getComputedStyle(node).borderRadius;
+      frames[0].clipPath = `inset(${cut} round ${from.radius})`;
+      frames[1].clipPath = `inset(0px 0px 0px 0px round ${radius})`;
+    }
   }
   const animation = node.animate(frames, {
     duration: ms,
@@ -155,7 +181,16 @@ export function land(key: () => string | undefined, options: LandOptions = {}) {
       if (!motionOk.current || performance.now() - from.at > from.ttl) {
         return;
       }
-      fly(node, from, options);
+      // The flight starts with the first frame that draws the destination:
+      // a destination mounted during a long task (a whole page arriving) would
+      // otherwise play its flight out before anything is painted, and first be
+      // seen already landed. The callback runs before that frame is painted,
+      // so the destination is never drawn at rest before it flies.
+      requestAnimationFrame(() => {
+        if (node.isConnected) {
+          fly(node, from, options);
+        }
+      });
     });
   };
 }

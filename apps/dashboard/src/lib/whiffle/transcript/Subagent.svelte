@@ -16,7 +16,6 @@
    * grammar as the main one (`branchRows`).
    */
   import type { Message } from "../types";
-  import { disclosure } from "./disclosure.svelte";
   import MessageBody from "./MessageBody.svelte";
   import MessageRow from "./MessageRow.svelte";
   import { branchRows } from "./rows";
@@ -26,8 +25,6 @@
   let { branch, spawn }: { branch: SubagentState; spawn: Message } = $props();
 
   const view = $derived(subagentView(branch));
-  /** Kept by the call that spawned it, so a branch the reader opened stays open. */
-  const open = $derived(disclosure(spawn));
   const rows = $derived(branchRows(branch));
   const seed = $derived(branch.toolUseId || branch.subagentType);
   const Sprite = $derived(sessionSprite(seed));
@@ -75,7 +72,7 @@
 </script>
 
 <div class="branch">
-  <Collapsible.Root bind:open={open.get, open.set}>
+  <Collapsible.Root>
     <Collapsible.Trigger class="bhead">
       <span aria-hidden="true" class="chev"><IconChevronRight /></span>
       <span aria-hidden="true" class="mark m{markHue(seed)}"><Sprite /></span>
