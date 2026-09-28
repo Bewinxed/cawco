@@ -19,6 +19,7 @@
  * `AskUserQuestion` answers without a second pass.
  */
 
+import type { NeutralSystemMessage } from "@whiffle/core";
 import type { LocatedRecord } from "@whiffle/jsonl-parser";
 import { readTranscriptEnd, typeFilter } from "@whiffle/jsonl-parser";
 import { cache } from "./transcript-cache.ts";
@@ -460,6 +461,69 @@ function walkChainWindowed(
 // Public API
 // ---------------------------------------------------------------------------
 
+/** How the block the CLI hands the model for a finished background task opens. */
+const TASK_NOTIFICATION = "<task-notification>";
+
+const isTaskNotification = (prompt: unknown): prompt is string =>
+  typeof prompt === "string" &&
+  prompt.trimStart().startsWith(TASK_NOTIFICATION);
+
+/** The text of a notification's `<tag>…</tag>`, trimmed; undefined when absent. */
+const notificationField = (text: string, tag: string): string | undefined =>
+  // biome-ignore lint/suspicious/noUnnecessaryConditions: RegExp#exec returns null for a tag the block does not carry.
+  new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`).exec(text)?.[1]?.trim();
+
+const XML_ENTITIES: Record<string, string> = {
+  "&amp;": "&",
+  "&lt;": "<",
+  "&gt;": ">",
+  "&quot;": '"',
+  "&apos;": "'",
+};
+
+/**
+ * A stored task notification as the frame the live stream carried for it.
+ *
+ * Claude Code reports a finished background task twice: a `task_notification`
+ * system frame on stdout, which is the row a live session draws, and the
+ * `<task-notification>` block it hands the model, which is the only one it
+ * writes to the transcript — a user record when it opens a turn, a
+ * `queued_command` fold when it lands mid-turn. Read back as that frame, a
+ * reload draws the row the live stream drew. The block escapes its summary as
+ * XML where the frame carries it plain, so it is unescaped to match.
+ */
+function taskNotification(
+  r: RawRecord,
+  block: string,
+  timestamp: string
+): SDKSessionMessage {
+  const toolUseId = notificationField(block, "tool-use-id");
+  const result = notificationField(block, "result");
+  const frame: NeutralSystemMessage = {
+    type: "system",
+    subtype: "task_notification",
+    uuid: r.uuid,
+    session_id: r.sessionId ?? "",
+    task_id: notificationField(block, "task-id"),
+    status: notificationField(block, "status"),
+    summary: notificationField(block, "summary")?.replace(
+      /&(?:amp|lt|gt|quot|apos);/g,
+      (entity) => XML_ENTITIES[entity]
+    ),
+    ...(toolUseId ? { tool_use_id: toolUseId } : {}),
+    ...(result ? { result } : {}),
+  };
+  return {
+    message: frame,
+    parent_agent_id: null,
+    parent_tool_use_id: null,
+    session_id: r.sessionId ?? "",
+    timestamp,
+    type: "system",
+    uuid: r.uuid,
+  };
+}
+
 interface QueuedCommand {
   isMeta?: unknown;
   prompt?: unknown;
@@ -497,6 +561,9 @@ export function absorbedMessage(r: RawRecord): SDKSessionMessage | null {
   ) {
     return null;
   }
+  if (isTaskNotification(command.prompt)) {
+    return taskNotification(r, command.prompt, command.timestamp);
+  }
   return {
     message: { role: "user", content: command.prompt },
     parent_agent_id: null,
@@ -522,12 +589,18 @@ function toSDKMessage(r: RawRecord): SDKSessionMessage | null {
   if (r.isMeta || r.isSidechain || r.teamName) {
     return null;
   }
+  const timestamp = typeof r.timestamp === "string" ? r.timestamp : "";
+  const content = (r.message as { content?: unknown } | null | undefined)
+    ?.content;
+  if (r.type === "user" && isTaskNotification(content)) {
+    return taskNotification(r, content, timestamp);
+  }
   const msg: SDKSessionMessage = {
     message: r.message ?? null,
     parent_agent_id: null,
     parent_tool_use_id: null,
     session_id: r.sessionId ?? "",
-    timestamp: typeof r.timestamp === "string" ? r.timestamp : "",
+    timestamp,
     type: r.type as "user" | "assistant",
     uuid: r.uuid,
   };

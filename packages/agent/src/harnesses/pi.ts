@@ -45,12 +45,14 @@ import type {
   SentMessage,
   SessionMessage,
   SpawnPayload,
+  SupportedCommands,
 } from "@whiffle/core";
 import {
   CONTROL_CONTEXT_USAGE,
   CONTROL_INTERRUPT,
   CONTROL_MODEL_CATALOG,
   CONTROL_SET_MODEL,
+  CONTROL_SUPPORTED_COMMANDS,
   CONTROL_SUPPORTED_MODELS,
   MESSAGES_READ,
 } from "@whiffle/core";
@@ -79,7 +81,7 @@ export const PI_CAPABILITIES: HarnessCapabilities = {
   effort: false,
   contextUsage: true,
   supportedModels: true,
-  supportedCommands: false,
+  supportedCommands: true,
   reloadSkills: false,
   mcpStatus: false,
   mcpControl: false,
@@ -495,6 +497,9 @@ class PiSession implements HarnessSession {
       }
       case CONTROL_SUPPORTED_MODELS:
         return await modelCatalog();
+      case CONTROL_SUPPORTED_COMMANDS:
+        // pi has no slash commands: its `/` menu is empty, said as a list.
+        return [] satisfies SupportedCommands;
       case CONTROL_CONTEXT_USAGE: {
         const last = [...this.#session.messages]
           .reverse()

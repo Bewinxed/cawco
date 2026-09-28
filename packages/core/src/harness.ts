@@ -146,6 +146,13 @@ export interface SlashCommand {
   name: string;
 }
 
+/**
+ * What {@link CONTROL_SUPPORTED_COMMANDS} answers, on every harness: the
+ * session's `/` menu. A harness with no slash commands (pi) answers an empty
+ * list, never nothing, so the menu reads one shape whoever answered.
+ */
+export type SupportedCommands = SlashCommand[];
+
 /* ----------------------------------------------------------- permissions — */
 
 export type PermissionUpdateDestination =
@@ -284,6 +291,11 @@ export interface SessionMessage {
    * its first kept entry begins.
    */
   compactSummary?: true;
+  /**
+   * A `user`/`assistant` entry's stored message. A `system` entry's is the
+   * {@link NeutralSystemMessage} the live stream carried for the same record,
+   * so a reader draws it with the frame's own mapping.
+   */
   message: unknown;
   parent_agent_id: string | null;
   parent_tool_use_id: string | null;
@@ -490,6 +502,11 @@ export interface NeutralSystemMessage {
   raw?: unknown;
   // read ({@link MESSAGES_READ}) — the sends the harness has now consumed
   read?: string[];
+  /**
+   * task_notification: the report a finished task handed back. Claude's live
+   * frame carries none; its stored notification (`<result>`) does.
+   */
+  result?: string;
   session_id?: string;
   skills?: string[];
   slash_commands?: string[];

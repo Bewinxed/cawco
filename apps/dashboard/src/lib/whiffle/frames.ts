@@ -791,7 +791,7 @@ export function mapFrame(
             taskId: sdk.task_id,
             status: done ? "complete" : "error",
             summary: sdk.summary,
-            result: sdk.summary,
+            result: sdk.result ?? sdk.summary,
           };
           break;
         }
@@ -1718,17 +1718,6 @@ export function mapTranscript(
   const subagents: Record<string, SubagentState> = {};
 
   for (const entry of transcript) {
-    // System messages have no transcript lines, but the `task_*` subtypes
-    // carry branch lifecycle data that stored transcripts would otherwise lose
-    // (subagentType, description, result summary).
-    if (entry.type === "system") {
-      const mapping = mapFrame(instanceId, entry as unknown as NeutralMessage);
-      if (mapping.branch) {
-        applyBranchEvent(subagents, instanceId, mapping.branch);
-      }
-      continue;
-    }
-
     // The one honest clock a replayed turn has; absent on entries an older
     // daemon or a non-Claude harness wrote (see {@link storedAt}).
     const recorded = storedAt(entry);
@@ -1752,7 +1741,13 @@ export function mapTranscript(
       continue;
     }
 
-    const mapping = mapFrame(instanceId, entry as unknown as NeutralMessage);
+    // A `system` entry holds the frame the live stream carried for the same
+    // record (a stored task notification), so it is drawn by that frame's own
+    // mapping and makes the row the live stream made.
+    const mapping = mapFrame(
+      instanceId,
+      (entry.type === "system" ? entry.message : entry) as NeutralMessage
+    );
     if (mapping.branch) {
       applyBranchEvent(subagents, instanceId, mapping.branch);
     }
@@ -1779,7 +1774,14 @@ export function mapTranscript(
     const sink = mapping.agentId
       ? branchFor(subagents, instanceId, mapping.agentId).messages
       : messages;
-    sink.push(...mapping.messages);
+    // The live stream drops a real subagent's "task done" line for its branch
+    // card (client.svelte.ts); a stored notification yields to it the same way.
+    sink.push(
+      ...mapping.messages.filter(
+        (message) =>
+          !suppressesTaskLine(subagents, message, mapping.branch?.toolUseId)
+      )
+    );
     for (const result of mapping.toolResults) {
       applyToolResult(sink, result);
       // The Task call's own tool_result is the authoritative end of its branch,

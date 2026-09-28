@@ -110,7 +110,7 @@
           <Button
             onclick={onclose}
             type="button"
-            {@attach (node) => node.focus()}
+            {@attach (node: HTMLElement) => node.focus()}
           >
             Done
           </Button>

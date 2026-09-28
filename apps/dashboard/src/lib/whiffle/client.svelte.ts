@@ -31,6 +31,7 @@ import type {
   SpawnPayload,
   StopPayload,
   SupervisorEvent,
+  SupportedCommands,
   UsageLimitsReading,
 } from "@whiffle/core";
 import {
@@ -4217,7 +4218,7 @@ export async function refreshCommands(
   };
   try {
     const [supported, reloaded] = await Promise.allSettled([
-      request<SlashCommand[]>(CONTROL_SUPPORTED_COMMANDS),
+      request<SupportedCommands>(CONTROL_SUPPORTED_COMMANDS),
       request<{ skills: SlashCommand[] } | undefined>(CONTROL_RELOAD_SKILLS),
     ]);
     if (supported.status === "fulfilled") {
