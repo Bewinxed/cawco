@@ -293,8 +293,9 @@ export interface SessionMessage {
   compactSummary?: true;
   /**
    * A `user`/`assistant` entry's stored message. A `system` entry's is the
-   * {@link NeutralSystemMessage} the live stream carried for the same record,
-   * so a reader draws it with the frame's own mapping.
+   * frame the live stream carried for the same record — a
+   * {@link NeutralSystemMessage}, or the error `result` a failed turn closed
+   * with — so a reader draws it with the frame's own mapping.
    */
   message: unknown;
   parent_agent_id: string | null;

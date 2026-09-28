@@ -1366,6 +1366,13 @@ export class OpencodeSession implements HarnessSession {
         if (sid !== undefined && sid !== this.sessionId) {
           return;
         }
+        // One failure, one result. opencode reports a prompt that dies before
+        // the model is reached (an unknown model) twice — its message, then the
+        // same error again with a stack — and the first already closed the turn.
+        // biome-ignore lint/suspicious/noUnnecessaryConditions: #turnOpen is reassigned across methods; biome's field-declaration inference doesn't see it
+        if (!this.#turnOpen) {
+          return;
+        }
         const error = p.error as { name?: string; data?: { message?: string } };
         this.#ctx.busy(false);
         // biome-ignore lint/suspicious/noUnnecessaryConditions: `as` is an unchecked cast; p.error can still be undefined at runtime even though the cast type says otherwise
@@ -4404,6 +4411,28 @@ export function toTranscript(
           parent_agent_id: null,
         });
       }
+    }
+    // A turn that failed keeps its error on the assistant message opencode
+    // stored for it. Read back as the result frame the live stream closed that
+    // turn with, a reload draws the same failure line instead of a question
+    // that was never answered. An abort is the reader's own stop, not a failure.
+    const failure = (info as AssistantMessage).error;
+    if (failure && failure.name !== "MessageAbortedError") {
+      entries.push({
+        type: "system",
+        uuid: `${info.id}:error`,
+        session_id: sessionKey,
+        message: {
+          type: "result",
+          uuid: `${info.id}:error`,
+          session_id: sessionKey,
+          subtype: "error_during_execution",
+          is_error: true,
+          errors: [errorText(failure)],
+        },
+        parent_tool_use_id: null,
+        parent_agent_id: null,
+      });
     }
   }
   return entries;
