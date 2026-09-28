@@ -31,6 +31,7 @@
     "bits-ui": "^2.19.3",
     "clsx": "^2.1.1",
     "dialkit": "2.0.0",
+    "photoswipe": "^5.4.4",
     "shiki": "^4.4.3",
     "svelte-streamdown": "^3.1.2",
     "tailwind-merge": "^3.6.0",

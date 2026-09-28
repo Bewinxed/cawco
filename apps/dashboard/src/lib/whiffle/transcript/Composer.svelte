@@ -58,6 +58,7 @@
   } from "../suggest.svelte";
   import type { ComposerDraft, PendingImage } from "./composer-draft.svelte";
   import { stand } from "./composer-presence.svelte";
+  import DocThumb from "./DocThumb.svelte";
   import SuggestionChips from "./SuggestionChips.svelte";
 
   let {
@@ -809,12 +810,14 @@
           </button>
         </span>
       {/each}
+      <!-- A file looks here as it will in the sent turn: its DocThumb, which
+           previews it the same way, with its remove on the corner. -->
       {#each draft.texts as t, i (t.name + i)}
-        <span class="att" data-flip="pop">
-          <span class="att-name">{t.name}</span>
+        <span class="doc-att" data-flip="pop">
+          <DocThumb content={t.content} name={t.name} />
           <button
-            aria-label="Remove"
-            class="touch-hit"
+            aria-label={`Remove ${t.name}`}
+            class="doc-remove touch-hit"
             onclick={() => removeText(i)}
             type="button"
           >
@@ -1351,6 +1354,35 @@
   .att button:hover {
     background: var(--surface-recess);
     color: var(--ink-strong);
+  }
+  /* A file's DocThumb with its remove sat on the corner, clear of the name. */
+  .doc-att {
+    position: relative;
+    display: inline-flex;
+    max-width: 100%;
+  }
+  .doc-remove {
+    position: absolute;
+    /* The row pads by --space-1, so the corner sits inside its clip. */
+    inset-block-start: calc(var(--space-1) * -1);
+    inset-inline-end: calc(var(--space-1) * -1);
+    display: grid;
+    place-items: center;
+    width: 20px;
+    height: 20px;
+    border: 1px solid var(--border-hairline);
+    border-radius: var(--radius-xs);
+    background: var(--surface-raised);
+    color: var(--ink-muted);
+    cursor: pointer;
+
+    & :global(svg) {
+      inline-size: 14px;
+      block-size: 14px;
+    }
+    &:hover {
+      color: var(--ink-strong);
+    }
   }
 
   /* Mobile: the composer goes full-width, edge to edge. It stays absolute

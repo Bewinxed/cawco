@@ -476,7 +476,7 @@
             </div>
           {/if}
           {#if m.metadata?.resultImages?.length}
-            <div class="shots">
+            <div class="shots" data-gallery>
               {#each m.metadata.resultImages as image, i (i)}
                 <Shot
                   alt="Image {i + 1} from {m.metadata.toolName}"

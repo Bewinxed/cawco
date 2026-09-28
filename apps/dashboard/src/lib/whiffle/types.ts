@@ -67,8 +67,12 @@ export interface MessageMetadata {
   /** A `user.delegate_ask`'s hub permission requestId — what it waits on to be answered. */
   askRequestId?: string;
   // What a user turn carried besides its typed text
-  /** Pastes the input turned into chips; the text itself went to the model, not here. */
-  attachments?: Array<{ name: string; chars: number }>;
+  /**
+   * Files the reader attached to the turn, each drawn as a DocThumb that opens
+   * in the lightbox. The local copy has them from the send; a stored turn has
+   * them parsed back out of its `<pasted-text>` blocks (frames.ts).
+   */
+  attachments?: Array<{ name: string; content: string }>;
   // Login prompt
   authUrl?: string;
   command?: string;

@@ -69,8 +69,7 @@
 </script>
 
 <script lang="ts">
-  import { depart } from "../motion/share.svelte";
-  import { lightbox } from "./lightbox-state.svelte";
+  import { type LightboxShot, lightbox } from "./lightbox-state.svelte";
 
   let {
     src,
@@ -86,9 +85,6 @@
     size?: "thumb" | "card";
   } = $props();
 
-  /** What the lightbox flies out of and back into (motion/share.svelte.ts). */
-  const uid = $props.id();
-  const share = `shot:${uid}`;
   let image = $state<HTMLImageElement>();
   let loaded = $state<string>();
   let failed = $state<string>();
@@ -143,11 +139,38 @@
     return () => watch.disconnect();
   }
 
+  /** A drawn picture as the lightbox shows it, zooming out of its own box. */
+  function shotOf(img: HTMLImageElement): LightboxShot {
+    return {
+      src: img.src,
+      alt: img.alt,
+      caption: img.dataset.caption,
+      path: img.dataset.path,
+      width: img.naturalWidth,
+      height: img.naturalHeight,
+      element: img,
+      cropped: img.dataset.shot === "thumb",
+    };
+  }
+
+  /**
+   * The lightbox opens on this picture among every picture of its message
+   * (the nearest `data-gallery`), so the reader can swipe between them.
+   */
   function open(): void {
-    if (image) {
-      depart(image);
+    if (!image) {
+      return;
     }
-    lightbox.open({ src, alt, caption, path, share });
+    const pictures = [
+      ...(image
+        .closest("[data-gallery]")
+        ?.querySelectorAll<HTMLImageElement>("img[data-shot]") ?? [image]),
+    ];
+    lightbox.open({
+      kind: "image",
+      shots: pictures.map(shotOf),
+      index: pictures.indexOf(image),
+    });
   }
 </script>
 
@@ -176,7 +199,9 @@
         <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: image load/error lifecycle events; the containing button owns interaction. -->
         <img
           {alt}
-          data-share={share}
+          data-caption={caption}
+          data-path={path}
+          data-shot={size}
           decoding="async"
           height={intrinsic?.height}
           loading="lazy"
