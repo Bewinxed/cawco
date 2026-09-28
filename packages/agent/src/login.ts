@@ -27,11 +27,12 @@ import { probeAuth } from "./auth";
  */
 
 /**
- * The verifier for the login in flight, held only in memory and only until the
- * code comes back. One at a time per machine: a second `begin` replaces the
- * first, because a reader who started over is not still holding the old URL.
+ * Verifiers for the logins in flight, keyed by the state each authorisation link
+ * carries (and that comes back after `#` in the pasted code). Held only in
+ * memory: every link this daemon handed out stays redeemable until its code is
+ * used or the daemon restarts.
  */
-let pending: { verifier: string; state: string } | null = null;
+const pending = new Map<string, string>();
 
 export interface LoginChallenge {
   /** Where the reader authorises. Opened in *their* browser, not on the machine. */
@@ -46,7 +47,7 @@ export const beginLogin = async (): Promise<LoginChallenge> => {
   // The state doubles as the value the authorize page echoes back inside the
   // pasted code, so it is generated the same way the verifier is.
   const state = generateCodeVerifier();
-  pending = { verifier, state };
+  pending.set(state, verifier);
   return { url: buildAuthorizationUrl(challenge, state) };
 };
 
@@ -57,24 +58,31 @@ export const beginLogin = async (): Promise<LoginChallenge> => {
  * until something tries to use it.
  */
 export const completeLogin = async (code: string): Promise<AuthState> => {
-  if (!pending) {
-    throw new Error(
-      "Start the login again — this machine has no login waiting."
-    );
-  }
   const trimmed = code.trim();
   if (!trimmed) {
     throw new Error("Paste the code from the authorisation page.");
   }
+  const hash = trimmed.indexOf("#");
+  const statePart = hash === -1 ? "" : trimmed.slice(hash + 1);
+  if (!statePart) {
+    throw new Error(
+      "Paste the whole code from the authorisation page, including the part after #."
+    );
+  }
+  const verifier = pending.get(statePart);
+  if (!verifier) {
+    throw new Error(
+      "That code belongs to a login this machine didn't start or already used. Open the authorisation page again."
+    );
+  }
 
-  const { verifier, state } = pending;
   try {
-    const tokens = await exchangeCodeForTokens(trimmed, verifier, state);
+    const tokens = await exchangeCodeForTokens(trimmed, verifier, statePart);
     await saveCredentials(tokens);
     await storeInKeychain(tokens);
   } finally {
     // Used or refused, the challenge is spent either way.
-    pending = null;
+    pending.delete(statePart);
   }
   return await probeAuth();
 };
