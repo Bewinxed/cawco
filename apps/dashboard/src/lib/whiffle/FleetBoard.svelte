@@ -87,6 +87,12 @@
     key: string;
     machine: string;
     machineId: string;
+    /**
+     * Where "Last active" places the row: when its current turn began while
+     * it works, else its last activity. A working session's pulses move `at`
+     * every second; its turn start stays put, so it keeps its place.
+     */
+    rank: number;
     stateLabel: string;
     status: PillStatus;
     stored: SDKSessionInfo | null;
@@ -146,6 +152,8 @@
         contextPct: stats.contextPct,
         cost: stats.cost,
         at: whiffle.pulseAt(instance.id),
+        rank:
+          whiffle.turnSince(instance.id) ?? whiffle.pulseAt(instance.id) ?? 0,
         href: conversationHref(instance.id, whiffle.instanceIndex),
         instance,
         stored: null,
@@ -175,6 +183,7 @@
             contextPct: null,
             cost: null,
             at: info.lastModified,
+            rank: info.lastModified,
             href: conversationHref(info.sessionId, whiffle.instanceIndex, {
               machineId: machine.machineId,
               cwd: info.cwd,
@@ -186,7 +195,7 @@
         )
     );
 
-    return [...live, ...stored].sort((a, b) => (b.at ?? 0) - (a.at ?? 0));
+    return [...live, ...stored];
   });
 
   const spend = $derived(
@@ -342,15 +351,15 @@
   const sorted = $derived(
     sortBy === "name"
       ? [...filtered].sort((a, b) => a.title.localeCompare(b.title))
-      : [...filtered].sort((a, b) => (b.at ?? 0) - (a.at ?? 0))
+      : [...filtered].sort((a, b) => b.rank - a.rank)
   );
 
-  /* Live pulses re-order the board many times a second, and two working
-     sessions trade places and back again inside one slide. A row sent back
-     while it is still sliding jumps from where it was half drawn, and the
-     page moves under the reader. So a live re-order that lands mid-slide
-     waits for the slide to end and a frame at rest, then shows the order
-     as it is by then;
+  /* A live re-order (a session starts or stops working, arrives or goes)
+     can land while rows are still sliding from the last one. A row sent
+     back while it is still sliding jumps from where it was half drawn, and
+     the page moves under the reader. So a live re-order that lands
+     mid-slide waits for the slide to end and a frame at rest, then shows
+     the order as it is by then;
      what the reader asks for (a search, a filter, a sort) shows at once. */
   const viewOf = () => `${query}|${machineFilter}|${stateFilter}|${sortBy}`;
   const keysOf = (list: Row[]) => list.map((row) => row.key).join("\n");
