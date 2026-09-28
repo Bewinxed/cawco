@@ -591,10 +591,113 @@ export function absorbedMessage(r: RawRecord): SDKSessionMessage | null {
   };
 }
 
+/**
+ * The id a failed session-start hook goes by, live and read back alike: the
+ * prompt its run took up first, and its place among that run's failures. The
+ * CLI stores the failures as attachments of their own, right ahead of that
+ * prompt's record, and says nothing on its live stream that names them — so
+ * the prompt they precede is what both sides can name them by.
+ */
+export const hookFailureId = (prompt: string, index: number): string =>
+  `${prompt}:hook:${index}`;
+
+interface StoredHookError {
+  command?: unknown;
+  exitCode?: unknown;
+  hookEvent?: unknown;
+  hookName?: unknown;
+  stderr?: unknown;
+  stdout?: unknown;
+  type?: unknown;
+}
+
+/**
+ * What the CLI wraps a failed hook's stderr in when it stores it (measured,
+ * 2.1.280): exit 2 as `[<command>]: <stderr>`, any other failure as
+ * `Failed with non-blocking status code: <stderr>`, and no stderr at all as
+ * that line with `No stderr output`. The live frame carries the stderr bare.
+ */
+const NON_BLOCKING = "Failed with non-blocking status code: ";
+const NO_STDERR = "No stderr output";
+
+const bareStderr = (hook: StoredHookError): string => {
+  const stored = typeof hook.stderr === "string" ? hook.stderr : "";
+  const command = typeof hook.command === "string" ? `[${hook.command}]: ` : "";
+  if (command && stored.startsWith(command)) {
+    return stored.slice(command.length);
+  }
+  if (stored.startsWith(NON_BLOCKING)) {
+    const said = stored.slice(NON_BLOCKING.length);
+    return said === NO_STDERR ? "" : said;
+  }
+  return stored;
+};
+
+/**
+ * A session-start hook that failed, read back as the frame the live stream
+ * carried for it (`hook_response`, claude.ts), under a place-holding id until
+ * {@link keyHookFailures} names it by the prompt it precedes.
+ */
+function hookFailure(r: RawRecord): SDKSessionMessage | null {
+  const hook = r.attachment as StoredHookError | undefined;
+  if (
+    !(
+      hook?.type === "hook_non_blocking_error" ||
+      hook?.type === "hook_blocking_error"
+    ) ||
+    hook.hookEvent !== "SessionStart"
+  ) {
+    return null;
+  }
+  const frame: NeutralSystemMessage = {
+    type: "system",
+    subtype: "hook_response",
+    uuid: r.uuid,
+    session_id: r.sessionId ?? "",
+    hook_name: typeof hook.hookName === "string" ? hook.hookName : undefined,
+    exit_code: typeof hook.exitCode === "number" ? hook.exitCode : undefined,
+    stdout: typeof hook.stdout === "string" ? hook.stdout : "",
+    stderr: bareStderr(hook),
+  };
+  return {
+    message: frame,
+    parent_agent_id: null,
+    parent_tool_use_id: null,
+    session_id: r.sessionId ?? "",
+    timestamp: typeof r.timestamp === "string" ? r.timestamp : "",
+    type: "system",
+    uuid: r.uuid,
+  };
+}
+
+/**
+ * Names each read-back hook failure by the prompt record that follows it —
+ * the prompt its run took up first — and its place among that run's
+ * failures ({@link hookFailureId}).
+ */
+function keyHookFailures(messages: SDKSessionMessage[]): SDKSessionMessage[] {
+  let run: SDKSessionMessage[] = [];
+  for (const msg of messages) {
+    const frame = msg.message as { subtype?: unknown } | null;
+    if (msg.type === "system" && frame?.subtype === "hook_response") {
+      run.push(msg);
+      continue;
+    }
+    if (msg.type === "user" && run.length > 0) {
+      for (const [index, failure] of run.entries()) {
+        failure.uuid = hookFailureId(msg.sourceUuid ?? msg.uuid, index);
+        (failure.message as NeutralSystemMessage).uuid = failure.uuid;
+      }
+      run = [];
+    }
+  }
+  return messages;
+}
+
 /** Map a chain-walked record to the SDK's output shape. */
 function toSDKMessage(r: RawRecord): SDKSessionMessage | null {
   if (r.type === "attachment") {
-    return absorbedMessage(r);
+    return absorbedMessage(r) ?? hookFailure(r);
   }
   if (r.type !== "user" && r.type !== "assistant") {
     return null;
@@ -672,7 +775,7 @@ function locatedToMessages(
       messages.push(count ? { ...msg, joined: count } : msg);
     }
   }
-  return messages;
+  return keyHookFailures(messages);
 }
 
 /**

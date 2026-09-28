@@ -90,6 +90,7 @@ import {
 import { resolveBin } from "../tools";
 import { claudeConfigDirs } from "../usage/scan-claude";
 import {
+  hookFailureId,
   readSessionEnd,
   readSessionFull,
   readSessionWhole,
@@ -549,6 +550,11 @@ class ClaudeSession implements HarnessSession {
   >();
   /** Denied questions, keyed by tool call, until their `tool_result` goes past. */
   readonly #dismissedQuestions = new Map<string, UserQuestionResult>();
+  /**
+   * Session-start hooks that failed, held until the first prompt of this run
+   * is taken up ({@link #hookFailure}).
+   */
+  readonly #hookFailures: NeutralMessage[] = [];
   /** The child's sessiond. */
   readonly #sessiond: { client: SessiondClient; procId: string } | undefined;
   /** The ring seq of each line the SDK was handed that carries a uuid. */
@@ -764,9 +770,27 @@ class ClaudeSession implements HarnessSession {
           observeRateLimit(message.rate_limit_info);
           continue;
         }
+        if (this.#hookFailure(message)) {
+          continue;
+        }
         const neutral = toNeutral(message);
         if (!neutral) {
           continue;
+        }
+        // The session-start hooks that failed go out as this run's first
+        // prompt is taken up: where the CLI stores them, ahead of that
+        // prompt's record, and keyed by it as a history read keys them.
+        if (
+          neutral.type === "system" &&
+          neutral.subtype === MESSAGES_READ &&
+          this.#hookFailures.length > 0
+        ) {
+          const [prompt] = neutral.read ?? [];
+          for (const [index, failure] of this.#hookFailures
+            .splice(0)
+            .entries()) {
+            ctx.frame({ ...failure, uuid: hookFailureId(prompt, index) });
+          }
         }
         // The Claude SDK emits `AskUserQuestion`'s structured output as a
         // top-level `tool_use_result` on the user message (the prose alone is
@@ -828,6 +852,46 @@ class ClaudeSession implements HarnessSession {
     } finally {
       ctx.closed?.();
     }
+  }
+
+  /**
+   * Whether `message` is a hook's frame, which a transcript does not draw: a
+   * hook's output is startup noise the CLI never stores. A session-start hook
+   * that failed is the exception — the CLI stores it
+   * (`hook_non_blocking_error`, measured 2.1.280) — so its failure is held,
+   * in the shape a history read gives it (claude-transcript.ts), for the
+   * run's first prompt.
+   */
+  #hookFailure(message: SDKMessage): boolean {
+    const hook = message as unknown as {
+      exit_code?: number;
+      hook_event?: string;
+      hook_name?: string;
+      outcome?: string;
+      session_id?: string;
+      stderr?: string;
+      stdout?: string;
+      subtype?: string;
+      type: string;
+    };
+    if (
+      hook.type !== "system" ||
+      !(hook.subtype === "hook_started" || hook.subtype === "hook_response")
+    ) {
+      return false;
+    }
+    if (hook.outcome === "error" && hook.hook_event === "SessionStart") {
+      this.#hookFailures.push({
+        type: "system",
+        subtype: "hook_response",
+        hook_name: hook.hook_name,
+        exit_code: hook.exit_code,
+        stdout: hook.stdout,
+        stderr: hook.stderr,
+        ...(hook.session_id ? { session_id: hook.session_id } : {}),
+      });
+    }
+    return true;
   }
 
   /**

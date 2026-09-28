@@ -321,6 +321,16 @@ const empty = (): FrameMapping => ({
 const uuidOf = (sdk: NeutralMessage): string | undefined =>
   "uuid" in sdk ? sdk.uuid : undefined;
 
+/**
+ * When the harness stored the record a frame is, as the frame carries it —
+ * the one clock its row shows, live and after a reload alike. A frame the
+ * harness stores nothing for carries none, and its rows show none.
+ */
+const storedTime = (sdk: NeutralMessage): { timestamp?: Date } =>
+  "timestamp" in sdk && typeof sdk.timestamp === "string"
+    ? { timestamp: new Date(sdk.timestamp) }
+    : {};
+
 const parentOf = (sdk: NeutralMessage): string | undefined =>
   "parent_tool_use_id" in sdk
     ? (sdk.parent_tool_use_id ?? undefined)
@@ -544,7 +554,7 @@ export function mapFrame(
   const base: Omit<Message, "type" | "content"> = {
     id: uuid ?? newId(),
     instanceId,
-    timestamp: new Date(),
+    ...storedTime(sdk),
     sdkUuid: uuid,
     parentToolUseId: agentId,
   };
@@ -825,18 +835,20 @@ export function mapFrame(
             })
           );
           break;
+        // A session-start hook that failed: the one hook frame a transcript
+        // draws, live and read back alike (its output when it works is startup
+        // noise the harness never stores). What it said is behind the line.
         case "hook_response":
           mapping.messages.push(
             systemLine(
               base,
-              "system.hook_response",
-              sdk.subtype.replace(/_/g, " "),
+              "ui.system_note",
+              (sdk.stderr || sdk.stdout || "").trim(),
               {
-                subtype: "hook_response",
+                noteKind: "Hook failed",
+                noteTitle: `${sdk.hook_name} hook failed (exit ${sdk.exit_code})`,
                 hookName: sdk.hook_name,
                 exitCode: sdk.exit_code,
-                stdout: sdk.stdout,
-                stderr: sdk.stderr,
               }
             )
           );

@@ -1026,6 +1026,12 @@ export class OpencodeSession implements HarnessSession {
   #answering: string | undefined;
   /** User messages opencode has written that the session has yet to be given. */
   readonly #readAfter: string[] = [];
+  /**
+   * When opencode created each message it has said this session (or one of
+   * its subagents) has, by message id — the clock a history read dates its
+   * entries by, so the live frames carry it too.
+   */
+  readonly #created = new Map<string, string>();
   /** Every user message already counted into {@link #readAfter}, so none is read twice. */
   readonly #written = new Set<string>();
   #permissionMode: string | undefined;
@@ -1147,6 +1153,7 @@ export class OpencodeSession implements HarnessSession {
           return;
         }
         this.#roles.set(info.id, info.role);
+        this.#noteCreated(info);
         if (info.role === "assistant") {
           this.#costs.set(info.id, info.cost);
           this.#lastTokens = info.tokens;
@@ -1525,6 +1532,7 @@ export class OpencodeSession implements HarnessSession {
           this.#ctx.frame({
             type: "assistant",
             uuid: part.messageID,
+            ...this.#createdOf(part.messageID),
             contentOffset: blockIndex(this.#pendingOf(part.messageID), part.id),
             message: {
               content: [
@@ -1579,6 +1587,17 @@ export class OpencodeSession implements HarnessSession {
       default:
         break;
     }
+  }
+
+  /** Keeps when opencode created a message, as {@link toTranscript} dates it. */
+  #noteCreated(info: Message): void {
+    this.#created.set(info.id, new Date(info.time.created).toISOString());
+  }
+
+  /** The stored time a frame of message `messageID` carries, once known. */
+  #createdOf(messageID: string): { timestamp?: string } {
+    const created = this.#created.get(messageID);
+    return created ? { timestamp: created } : {};
   }
 
   #pendingOf(messageID: string): PendingMessage {
@@ -1659,6 +1678,7 @@ export class OpencodeSession implements HarnessSession {
           return;
         }
         state.roles.set(info.id, info.role);
+        this.#noteCreated(info);
         break;
       }
       case "message.part.updated": {
@@ -1817,6 +1837,7 @@ export class OpencodeSession implements HarnessSession {
           this.#ctx.frame({
             type: "assistant",
             uuid: part.messageID,
+            ...this.#createdOf(part.messageID),
             contentOffset: blockIndex(
               this.#pendingChild(state, part.messageID),
               part.id
@@ -1895,6 +1916,7 @@ export class OpencodeSession implements HarnessSession {
         this.#ctx.frame({
           type: "assistant",
           uuid: messageID,
+          ...this.#createdOf(messageID),
           contentOffset: blockIndex(pending, partID),
           ...(parentToolUseId ? { parent_tool_use_id: parentToolUseId } : {}),
           message: {
@@ -2067,6 +2089,7 @@ export class OpencodeSession implements HarnessSession {
     }
     const rows = listed.data as { info: Message; parts: Part[] }[];
     for (const { info } of rows) {
+      this.#noteCreated(info);
       if (info.role === "user") {
         this.#written.add(info.id);
       }

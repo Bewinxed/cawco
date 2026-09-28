@@ -73,10 +73,11 @@ export interface Message {
   state?: SendState;
   /**
    * When the turn happened. A send: when the hub accepted it, live and stored
-   * alike (`SendRecord.acceptedAt`). Any other live frame: the client's clock
-   * on arrival, which is the truth there. A stored entry: its
-   * `SessionMessage.timestamp`, and none when the entry has none — stamping
-   * the parse time would render a time that never happened. Absent beats
+   * alike (`SendRecord.acceptedAt`). Anything else: when the harness stored
+   * its record — a live frame's `timestamp`, a stored entry's
+   * `SessionMessage.timestamp`, the same instant either way — and none when
+   * the harness gives none: the client's clock would date a row by when it
+   * was watched, and a reload would date it differently. Absent beats
    * invented; readers must handle it being unset.
    */
   timestamp?: Date;

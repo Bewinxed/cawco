@@ -258,6 +258,19 @@ class PiSession implements HarnessSession {
   /** The send pi started last, until the entry it is stored as is known. */
   #reading: string | undefined;
 
+  /**
+   * The entry pi stored last — the message a frame is about to say, since pi
+   * appends it in the same run as its `message_end` — by id and by the time
+   * it was stored, which a reload dates its row by.
+   */
+  #leaf(): { uuid: string; timestamp: string } {
+    const entry = this.#session.sessionManager.getLeafEntry() as {
+      id: string;
+      timestamp: string;
+    };
+    return { uuid: entry.id, timestamp: entry.timestamp };
+  }
+
   /** Whether a turn is running, said to the agent and kept in {@link openTurns}. */
   #setBusy(active: boolean): void {
     this.#busy = active;
@@ -325,14 +338,14 @@ class PiSession implements HarnessSession {
         }
         // A finished assistant message, drawn once and whole under its entry
         // — its reasoning, words and tool calls in the order a reload lists
-        // them, so each row keeps its id across one.
+        // them, so each row keeps its id and its clock across one.
         if (role === "assistant") {
           queueMicrotask(() => {
             const blocks = toBlocks(content);
             if (blocks.length) {
               this.#ctx.frame({
                 type: "assistant",
-                uuid: this.#session.sessionManager.getLeafId() as string,
+                ...this.#leaf(),
                 message: { content: blocks },
               });
             }
@@ -415,16 +428,14 @@ class PiSession implements HarnessSession {
           ) ?? [];
         const failed = errors.length > 0;
         // A failure is keyed to the attempt it closed — the entry pi stored
-        // last — as a reload reads it back (`failedTurn`).
+        // last — and dated by it, as a reload reads it back (`failedTurn`).
+        const leaf = this.#leaf();
         this.#ctx.frame({
           type: "result",
           subtype: failed ? "error_during_execution" : "success",
           is_error: failed,
           ...(failed
-            ? {
-                errors,
-                uuid: `${this.#session.sessionManager.getLeafId()}:error`,
-              }
+            ? { errors, uuid: `${leaf.uuid}:error`, timestamp: leaf.timestamp }
             : {}),
         });
         break;

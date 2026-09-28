@@ -437,6 +437,14 @@ export interface NeutralAssistantMessage {
   /** The harness's own event, verbatim, for renderers that need more than this. */
   raw?: unknown;
   session_id?: string;
+  /**
+   * When the harness stored this record, ISO-8601: the clock its row shows,
+   * live as after a reload ({@link SessionMessage.timestamp}). Claude's
+   * stream carries its record's own; opencode's is its message's
+   * `time.created`; pi's is its entry's. Absent on a frame the harness
+   * stores no record for.
+   */
+  timestamp?: string;
   type: "assistant";
   uuid?: string;
 }
@@ -459,6 +467,8 @@ export interface NeutralUserMessage {
   replaces?: string;
   session_id?: string;
   shouldQuery?: boolean;
+  /** When the harness stored it ({@link NeutralAssistantMessage.timestamp}). */
+  timestamp?: string;
   type: "user";
   uuid?: string;
 }
@@ -587,6 +597,8 @@ export interface NeutralResultMessage {
   session_id?: string;
   stop_reason?: string | null;
   subtype: string;
+  /** When the harness stored what it closes on ({@link NeutralAssistantMessage.timestamp}). */
+  timestamp?: string;
   total_cost_usd?: number;
   type: "result";
   uuid?: string;
@@ -610,7 +622,8 @@ export interface NeutralSystemMessage {
   description?: string;
   exit_code?: number;
   fallback_model?: string;
-  // hook_response
+  // hook_response — a session-start hook that failed, the one hook frame a
+  // transcript draws (its output is otherwise startup noise, and never stored)
   hook_name?: string;
   last_tool_name?: string;
   mcp_servers?: { name: string; status: string }[];
