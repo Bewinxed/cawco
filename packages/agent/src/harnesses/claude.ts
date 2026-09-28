@@ -555,6 +555,11 @@ class ClaudeSession implements HarnessSession {
    * is taken up ({@link #hookFailure}).
    */
   readonly #hookFailures: NeutralMessage[] = [];
+  /**
+   * The commands the CLI holds and has not taken up, oldest first, by the
+   * uuid its lifecycle names: what it takes up together next.
+   */
+  readonly #queued: string[] = [];
   /** The child's sessiond. */
   readonly #sessiond: { client: SessiondClient; procId: string } | undefined;
   /** The ring seq of each line the SDK was handed that carries a uuid. */
@@ -773,25 +778,32 @@ class ClaudeSession implements HarnessSession {
         if (this.#hookFailure(message)) {
           continue;
         }
+        const command =
+          (message as { type: string }).type === "command_lifecycle"
+            ? (message as unknown as CommandLifecycle)
+            : undefined;
+        if (command?.state === "queued") {
+          this.#queued.push(command.command_uuid);
+        }
         const neutral = toNeutral(message);
         if (!neutral) {
+          this.#dequeue(command);
           continue;
         }
         // The session-start hooks that failed go out as this run's first
-        // prompt is taken up: where the CLI stores them, ahead of that
-        // prompt's record, and keyed by it as a history read keys them.
-        if (
-          neutral.type === "system" &&
-          neutral.subtype === MESSAGES_READ &&
-          this.#hookFailures.length > 0
-        ) {
-          const [prompt] = neutral.read ?? [];
+        // prompts are taken up: where the CLI stores them, ahead of those
+        // prompts' record — one record, under the last of everything queued
+        // when it takes them up together — and keyed by it as a history read
+        // keys them.
+        if (command?.state === "started" && this.#hookFailures.length > 0) {
+          const record = this.#queued.at(-1) ?? command.command_uuid;
           for (const [index, failure] of this.#hookFailures
             .splice(0)
             .entries()) {
-            ctx.frame({ ...failure, uuid: hookFailureId(prompt, index) });
+            ctx.frame({ ...failure, uuid: hookFailureId(record, index) });
           }
         }
+        this.#dequeue(command);
         // The Claude SDK emits `AskUserQuestion`'s structured output as a
         // top-level `tool_use_result` on the user message (the prose alone is
         // what lands in the `tool_result` block's `content`). Normalise it onto
@@ -851,6 +863,16 @@ class ClaudeSession implements HarnessSession {
       ctx.failed(error);
     } finally {
       ctx.closed?.();
+    }
+  }
+
+  /** A command the CLI has taken up, or let go, is no longer one it holds. */
+  #dequeue(command: CommandLifecycle | undefined): void {
+    if (command && command.state !== "queued") {
+      const at = this.#queued.indexOf(command.command_uuid);
+      if (at >= 0) {
+        this.#queued.splice(at, 1);
+      }
     }
   }
 
