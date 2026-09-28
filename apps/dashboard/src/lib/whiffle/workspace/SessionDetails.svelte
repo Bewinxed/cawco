@@ -17,7 +17,6 @@
     latestCommandFor,
     refreshContext,
     relaunchSession,
-    streamCapable,
     submitCommand,
     whiffle,
   } from "../client.svelte";
@@ -226,10 +225,7 @@
       return true;
     }
     const record = latestCommandFor(sessionId, kinds[slot]);
-    return (
-      record?.stage === "submitted" ||
-      (streamCapable() && record?.stage === "accepted")
-    );
+    return record?.stage === "submitted" || record?.stage === "accepted";
   }
   function failure(slot: Slot) {
     if (slot === "permission" && relaunchFailure) {

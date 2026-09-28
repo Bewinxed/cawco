@@ -12,10 +12,9 @@
  * that; re-read history and follow from here".
  *
  * WHAT IT IS NOT: this does not re-plumb ingestion. Frames arrive exactly as
- * they always did; {@link StreamHubShape.sequence} wraps the existing per-frame
- * relay and nothing upstream of it changes. Legacy dashboards are untouched —
- * a socket that never sends `stream.subscribe` receives precisely today's
- * messages, and the two modes coexist on one socket.
+ * they always did; {@link StreamHubShape.sequence} wraps the per-frame relay
+ * and nothing upstream of it changes. It is the only way a session's frames
+ * reach a dashboard; everything else a dashboard hears is broadcast.
  */
 
 import {
@@ -38,7 +37,6 @@ import {
   type SendPayload,
   SessionRing,
   type SessionStreamEvent,
-  STREAM_V1,
   type StreamBacklog,
   type StreamDelta,
   type StreamReset,
@@ -47,9 +45,6 @@ import {
 import type { HubSocket } from "./registry";
 
 export { RING_SIZE };
-
-/** What this hub advertises to a dashboard that knows to look. */
-export const HUB_CAPABILITIES: readonly string[] = [STREAM_V1];
 
 /**
  * A control whose `control_result` never came stops being an ack anybody is
@@ -93,8 +88,7 @@ export type ControlResultFrame = Extract<
 /**
  * What this module needs from the hub it lives in. Narrow on purpose: the
  * stream owns ordering and acknowledgement, and borrows the relay rather than
- * reimplementing it — a command must do exactly what the legacy call does, or
- * the two paths drift and one of them starts lying.
+ * reimplementing it — a command does exactly what the hub's relay does.
  */
 export interface StreamPorts {
   /** Whether a daemon for this machine is connected right now. */
@@ -109,15 +103,6 @@ export interface StreamPorts {
     envelope: Envelope<SendPayload>,
     dashboard: HubSocket
   ) => boolean;
-  /**
-   * `registry.setSubscriptions` — replaces a dashboard's legacy per-frame
-   * subscription set. Used to subtract stream-followed sessions, so no socket
-   * is ever told the same frame twice in two dialects.
-   */
-  readonly setLegacySubscriptions: (
-    socket: HubSocket,
-    instanceIds: string[]
-  ) => void;
 }
 
 export interface StreamHubShape {
@@ -141,8 +126,8 @@ export interface StreamHubShape {
   readonly followerCount: (sessionId: string) => number;
   /**
    * Handles a message on the dashboard socket that belongs to this protocol.
-   * Returns true when it consumed it, so the legacy envelope path never sees
-   * a shape it would only log as malformed.
+   * Returns true when it consumed it, so the envelope path never sees a shape
+   * it would only log as malformed.
    */
   readonly handleClientMessage: (socket: HubSocket, raw: unknown) => boolean;
   /** The last seq assigned to a session; 0 when it has never been relayed. */
@@ -157,15 +142,6 @@ export interface StreamHubShape {
   readonly ingestedFor: (
     instanceIds: readonly string[]
   ) => Record<string, IngestMark>;
-  /**
-   * Records the legacy subscription set a dashboard asked for, and returns the
-   * set the registry should actually hold: the same list minus the sessions
-   * this socket already follows through the stream.
-   */
-  readonly noteLegacySubscriptions: (
-    socket: HubSocket,
-    instanceIds: string[]
-  ) => string[];
   /**
    * Stamps a relayed frame with the session's next `seq`, files it in the ring
    * and fans it out to that session's followers. Called for EVERY relayed
@@ -201,8 +177,6 @@ interface AwaitedCommand {
 }
 
 interface Follower {
-  /** The legacy set this socket last asked for, so the subtraction can be re-derived. */
-  legacy: string[];
   readonly sessions: Set<string>;
   socket: HubSocket;
 }
@@ -314,7 +288,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
       existing.socket = socket;
       return existing;
     }
-    const entry: Follower = { socket, sessions: new Set(), legacy: [] };
+    const entry: Follower = { socket, sessions: new Set() };
     sockets.set(socket.id, entry);
     return entry;
   };
@@ -363,15 +337,6 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     perSession.add(socket.id);
     followers.set(sessionId, perSession);
 
-    // A session this socket now follows must stop arriving in the legacy
-    // dialect too, or every frame lands twice.
-    if (entry.legacy.includes(sessionId)) {
-      ports.setLegacySubscriptions(
-        socket,
-        entry.legacy.filter((id) => !entry.sessions.has(id))
-      );
-    }
-
     const ring = ringOf(sessionId);
     // A fresh join asks for nothing: history comes through the existing read
     // paths, and this socket follows from the next frame on.
@@ -418,7 +383,7 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
   /**
    * Turns a command envelope into the relay call it names, and acknowledges it.
    *
-   * The validation here is not ceremony: `payload` is whatever the legacy op
+   * The validation here is not ceremony: `payload` is whatever the relay op
    * takes, so without a method check a `set-effort` envelope would be a
    * general-purpose remote call. A kind may only ever become its own method.
    */
@@ -623,18 +588,6 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     return false;
   };
 
-  const noteLegacySubscriptions = (
-    socket: HubSocket,
-    instanceIds: string[]
-  ): string[] => {
-    const entry = entryFor(socket);
-    entry.legacy = instanceIds;
-    // Streamed sessions are subtracted, never pruned: a client is free to stop
-    // declaring a legacy subscription the moment it follows the stream, and a
-    // hub that read that as "unsubscribe" would starve it in silence.
-    return instanceIds.filter((id) => !entry.sessions.has(id));
-  };
-
   /**
    * AT MOST ONCE, per (instanceId, epoch, srcSeq) — the invariant this whole
    * leaf exists for.
@@ -694,7 +647,6 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     admitFrame,
     ingestedFor,
     handleClientMessage,
-    noteLegacySubscriptions,
     settleCommand,
     dropSocket,
     head: (sessionId) => rings.get(sessionId)?.head ?? 0,

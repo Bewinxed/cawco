@@ -120,7 +120,7 @@ import { previewFrame, previewTargets } from "./preview";
 import type { HubSocket, RegistryShape } from "./registry";
 import { RuleEngine } from "./rules";
 import { hashFiles, resolveSkill } from "./skills";
-import { createStreamHub, HUB_CAPABILITIES } from "./stream";
+import { createStreamHub } from "./stream";
 import { suggest } from "./suggest";
 import { SupervisorEngine, type SupervisorStatusSignal } from "./supervisor";
 import type { TelegramBridge } from "./telegram";
@@ -1867,15 +1867,6 @@ export const createServer = ({
       message,
     };
     streams.sequence(instanceId, frame);
-    registry.broadcastFrame(
-      {
-        verb: "frames",
-        machineId: envelope.machineId,
-        instanceId,
-        payload: frame,
-      },
-      instanceId
-    );
     return true;
   };
   /**
@@ -1984,10 +1975,6 @@ export const createServer = ({
   ) => {
     const frame = previewFrame(instanceId, state, source);
     streams.sequence(instanceId, frame);
-    registry.broadcastFrame(
-      { verb: "frames", machineId: "", instanceId, payload: frame },
-      instanceId
-    );
     return frame;
   };
 
@@ -2948,11 +2935,6 @@ export const createServer = ({
    * session is holding. Built in one place so the snapshot a dashboard is
    * handed on connect and the snapshot it is pushed on every move are the same
    * object by construction.
-   *
-   * `capabilities` is the hub's handshake (PLAN.md, Ledger Protocol): an
-   * additive optional field a legacy dashboard ignores, and the only thing that
-   * tells a new one it may follow the sequenced stream instead of watching
-   * frames go past.
    */
   /** Everything an `instances` frame carries besides the rows themselves. */
   const boardExtras = () => ({
@@ -2967,7 +2949,6 @@ export const createServer = ({
     // lets a client tell a hub that is behind from a machine that is.
     pulses: Object.fromEntries(pulses),
     ...(hubBuild ? { hubBuild } : {}),
-    capabilities: [...HUB_CAPABILITIES],
   });
 
   const instancesFrame = (machineId: string): Envelope => ({
@@ -3900,11 +3881,9 @@ export const createServer = ({
   /**
    * The Ledger Protocol's hub half: per-session sequence, replay ring, and
    * command acknowledgement. It borrows the relays above rather than reaching
-   * past them, so a command and a legacy click are the same operation.
+   * past them.
    */
   const streams = createStreamHub({
-    setLegacySubscriptions: (socket, instanceIds) =>
-      registry.setSubscriptions(socket, instanceIds),
     isMachineConnected: (machineId) => registry.agent(machineId) !== undefined,
     relaySend,
     relayControl: (envelope, dashboard) =>
@@ -7126,7 +7105,6 @@ export const createServer = ({
                     message: custodyNotice(row, note),
                   };
                   streams.sequence(row.id, message.payload);
-                  registry.broadcastFrame(message, row.id);
                   break;
                 }
               }
@@ -7519,12 +7497,11 @@ export const createServer = ({
                 // The session's canonical order is assigned here, for every frame
                 // and whether or not anyone follows it: the ring has to be able to
                 // answer a resume from a socket that connects a minute from now.
+                // Its followers get it from there. Everything else —
+                // permission_request, instances, delegate_event, usage, pulse,
+                // error, and any kind a future build adds — broadcasts, so an
+                // unknown kind is never silently dropped.
                 streams.sequence(message.instanceId, message.payload);
-                // Instance-scoped frames go only to dashboards subscribed to that
-                // session. Everything else — permission_request, instances,
-                // delegate_event, usage, pulse, error, and any kind a future build
-                // adds — broadcasts, so an unknown kind is never silently dropped.
-                registry.broadcastFrame(message, message.instanceId);
               } else {
                 registry.broadcast(message);
               }
@@ -7628,15 +7605,11 @@ export const createServer = ({
           // The one moment the hub learns a URL that reaches its own dashboard:
           // this browser just used one. See `dashboardUrl` in telegram.ts.
           registry.noteDashboardOrigin(ws.headers.origin);
-          // The board, before it is asked for. This is the FIRST message every
-          // dashboard receives, which is what makes it the handshake: it carries
-          // `capabilities`, so a client knows on connect whether this hub speaks
-          // the Ledger Protocol rather than inferring it from silence. Legacy
-          // clients have always handled an `instances` frame; one arriving early
-          // is a rail that fills before the REST snapshot lands.
+          // The board, before it is asked for: the FIRST message every
+          // dashboard receives, so the rail fills before the REST snapshot lands.
           ws.send(instancesFrame(""));
         },
-        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches every dashboard socket message shape (stream protocol, subscribe, control, send, ack) through one handler; splitting it would scatter the ordering guarantees across several functions.
+        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches every dashboard socket message shape (stream protocol, control, send, ack) through one handler; splitting it would scatter the ordering guarantees across several functions.
         message(ws, message) {
           // The Ledger Protocol's own shapes are not envelopes and must be read
           // before the envelope check, which would otherwise log them as junk.
@@ -7705,24 +7678,6 @@ export const createServer = ({
                 registry.rememberRequester(message.requestId, ws);
               }
               break;
-            case "subscribe": {
-              // Replace-whole-set: the dashboard's open tabs *are* the subscription,
-              // so every change re-sends the lot and the hub takes it verbatim.
-              const ids = (message.payload as { instanceIds?: unknown } | null)
-                ?.instanceIds;
-              // Minus whatever this socket already follows through the stream: a
-              // session delivered in both dialects would land in the client twice.
-              registry.setSubscriptions(
-                ws,
-                streams.noteLegacySubscriptions(
-                  ws,
-                  Array.isArray(ids)
-                    ? ids.filter((id): id is string => typeof id === "string")
-                    : []
-                )
-              );
-              break;
-            }
             default:
               console.warn(`[hub] unhandled dashboard verb ${message.verb}`);
           }

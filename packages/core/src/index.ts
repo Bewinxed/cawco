@@ -71,8 +71,7 @@ export type Verb =
   | "control"
   | "frames"
   | "fs"
-  | "usage"
-  | "subscribe";
+  | "usage";
 
 /**
  * Every message on every hop. `payload` is whatever the verb carries — a neutral
@@ -250,11 +249,6 @@ export interface SendPayload {
    * it downgrades to a normal queued send.
    */
   urgent?: boolean;
-}
-
-/** `subscribe`: the open sessions a dashboard wants `frame` frames for. */
-export interface SubscribePayload {
-  instanceIds: string[];
 }
 
 /**

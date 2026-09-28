@@ -10,15 +10,10 @@
  * server state) all follow from state being duplicated or inferred client-side.
  * This protocol removes the inference: the hub assigns each session a monotonic
  * sequence, clients follow it gap-free or resynchronise explicitly, and
- * commands carry ids the hub acknowledges stage by stage.
- *
- * Compatibility is capability-negotiated: a hub that speaks this advertises
- * {@link STREAM_V1}; a client that does not see it uses the legacy paths
- * unchanged. Every shape here is additive — no existing wire type changes.
+ * commands carry ids the hub acknowledges stage by stage. It is the only way
+ * a session's frames reach a dashboard: the hub and the dashboard ship
+ * together, so there is no older dialect to negotiate.
  */
-
-/** Capability string a stream-speaking hub advertises in its handshake. */
-export const STREAM_V1 = "stream.v1";
 
 /**
  * One event on a session's canonical stream. `seq` is hub-assigned, monotonic

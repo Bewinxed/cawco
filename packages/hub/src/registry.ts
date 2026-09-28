@@ -17,12 +17,6 @@ export interface RegistryShape {
   readonly address: (machineId: string) => string | undefined;
   readonly agent: (machineId: string) => HubSocket | undefined;
   readonly broadcast: (envelope: Envelope) => void;
-  /**
-   * Fans an instance-scoped frame out only to dashboards subscribed to
-   * `instanceId`. Everything else goes through {@link broadcast} — an unknown
-   * kind must never be silently dropped, so the relay fails open.
-   */
-  readonly broadcastFrame: (envelope: Envelope, instanceId: string) => void;
   /** The most recent usable dashboard origin, or nothing if none has connected. */
   readonly dashboardOrigin: () => string | undefined;
   /** Returns the machine the socket was registered as, if it was an agent. */
@@ -42,8 +36,6 @@ export interface RegistryShape {
   ) => void;
   /** Routes the reply to a forwarded `control` back to the dashboard that asked. */
   readonly rememberRequester: (requestId: string, socket: HubSocket) => void;
-  /** Replaces a dashboard's subscription set whole — one verb, no add/remove bookkeeping. */
-  readonly setSubscriptions: (socket: HubSocket, instanceIds: string[]) => void;
   /** Consumes the route — a `requestId` is answered once. */
   readonly takeRequester: (requestId: string) => HubSocket | undefined;
 }
@@ -98,11 +90,8 @@ export class Registry extends Context.Service<Registry, RegistryShape>()(
 const make = (): RegistryShape => {
   const agents = new Map<string, HubSocket>();
   const addresses = new Map<string, string>();
-  /** One entry per dashboard socket, with the instances it subscribes to. */
-  const dashboards = new Map<
-    string,
-    { socket: HubSocket; subscriptions: Set<string> }
-  >();
+  /** One entry per dashboard socket. A session's own frames reach it through `stream.ts`. */
+  const dashboards = new Map<string, HubSocket>();
   const requesters = new Map<string, { socket: HubSocket; at: number }>();
   /**
    * The last origin a dashboard reached this hub from. Kept rather than derived
@@ -142,7 +131,7 @@ const make = (): RegistryShape => {
     address: (machineId) => addresses.get(machineId),
     machineIds: () => [...agents.keys()],
     addDashboard: (socket) => {
-      dashboards.set(socket.id, { socket, subscriptions: new Set() });
+      dashboards.set(socket.id, socket);
     },
     dropDashboard: (socket) => {
       dashboards.delete(socket.id);
@@ -153,21 +142,8 @@ const make = (): RegistryShape => {
       }
     },
     broadcast: (envelope) => {
-      for (const { socket } of dashboards.values()) {
+      for (const socket of dashboards.values()) {
         socket.send(envelope);
-      }
-    },
-    broadcastFrame: (envelope, instanceId) => {
-      for (const { socket, subscriptions } of dashboards.values()) {
-        if (subscriptions.has(instanceId)) {
-          socket.send(envelope);
-        }
-      }
-    },
-    setSubscriptions: (socket, instanceIds) => {
-      const entry = dashboards.get(socket.id);
-      if (entry) {
-        entry.subscriptions = new Set(instanceIds);
       }
     },
     noteDashboardOrigin: (origin) => {

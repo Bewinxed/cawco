@@ -1,12 +1,12 @@
 /**
  * The Ledger Protocol, client side — kept out of the runes module so it can be
- * reasoned about, and tested, on its own.
+ * reasoned about on its own.
  *
  * Everything here is structural: it moves numbers and stages around a plain
  * object and calls out through {@link StreamHost} for the two things it cannot
  * do itself (apply a frame, re-read a transcript). `client.svelte.ts` owns the
- * runes binding and the socket; this file owns the decisions. The split follows
- * `queue.ts`.
+ * runes binding and the socket; this file owns the decisions. It is the only
+ * way a session's frames reach this client, and the only way a command leaves.
  *
  * The rules it enforces, in one place:
  *
@@ -33,7 +33,6 @@ import type {
   StreamDelta,
   StreamReset,
 } from "@whiffle/core";
-import { STREAM_V1 } from "@whiffle/core";
 
 /** How long a submitted command may go unacknowledged before it is called off. */
 export const COMMAND_ACK_TIMEOUT_MS = 15_000;
@@ -68,23 +67,6 @@ export interface SessionCursor {
    * `lastSeq = 0` as a hole back to the beginning of the session.
    */
   seen: boolean;
-  /**
-   * The frame kinds this session has actually received over the stream.
-   *
-   * The hub may keep sending a subscriber the legacy per-frame envelope as well
-   * as the sequenced copy, and applying both would double every turn. But only
-   * SOME frames go through the per-session relay the stream wraps: a transcript
-   * frame is relayed to that session's subscribers, while pulses, permission
-   * requests, errors, instance lists and usage all broadcast. Assuming the
-   * stream owns everything with an instance id on it would therefore starve the
-   * rail of half of what it renders, forever.
-   *
-   * So it is learnt instead: a kind that has actually arrived on the stream for
-   * this session is a kind the legacy path no longer needs to deliver for it.
-   * The cost is at most one duplicated frame per kind per connection, and only
-   * against a hub that sends both copies; the alternative's cost is silence.
-   */
-  streamed: Set<string>;
   /** A `stream.subscribe` for this session has gone out on the current socket. */
   subscribed: boolean;
   /** A protocol violation has been reported for this session; don't repeat it. */
@@ -144,8 +126,6 @@ export interface CommandRecord {
 
 /** Everything the stream half of the store keeps. Plain data, so a runes module can `$state` it. */
 export interface StreamState {
-  /** The hub has advertised {@link STREAM_V1} on this connection. */
-  capable: boolean;
   commands: Record<string, CommandRecord>;
   cursors: Record<string, SessionCursor>;
   /**
@@ -162,9 +142,8 @@ export interface StreamState {
 /** The two things the logic cannot do itself, plus its clock and its voice. */
 export interface StreamHost {
   /**
-   * THE CHOKEPOINT. Apply one relay frame to the session it belongs to —
-   * the same function the legacy per-frame path calls, given the unwrapped
-   * frame. The stream orders; it does not reshape.
+   * THE CHOKEPOINT. Apply one relay frame to the session it belongs to,
+   * given the unwrapped frame. The stream orders; it does not reshape.
    */
   // biome-ignore lint/style/useConsistentMethodSignatures: property-style signatures check contravariantly; client.svelte.ts's streamHost object literal implements this port and a switch could reject that assignment.
   applyFrame(sessionId: string, frame: unknown): void;
@@ -172,10 +151,10 @@ export interface StreamHost {
   /**
    * Called once, the moment any command record settles at `failed`, whatever
    * killed it — a refusing ack, a dispatch that could not leave the tab, the
-   * timeout sweep, a dropped socket, a legacy rejection.
+   * timeout sweep, a dropped socket.
    *
    * It exists because `advanceStage` is the ONE place a record can reach
-   * `failed` on either dialect, and a failure surface built anywhere else
+   * `failed`, and a failure surface built anywhere else
    * would have to be built six times (once per command kind) and would still
    * miss the seventh kind somebody adds next year. A kind whose failure has
    * no inline surface of its own is heard here or nowhere.
@@ -212,7 +191,7 @@ export interface StreamHost {
 }
 
 export function createStreamState(): StreamState {
-  return { capable: false, cursors: {}, commands: {}, sweepTimer: null };
+  return { cursors: {}, commands: {}, sweepTimer: null };
 }
 
 function newCursor(): SessionCursor {
@@ -223,7 +202,6 @@ function newCursor(): SessionCursor {
     resyncAfter: null,
     resyncFailures: 0,
     warned: false,
-    streamed: new Set(),
   };
 }
 
@@ -232,79 +210,6 @@ function cursorFor(state: StreamState, sessionId: string): SessionCursor {
   // holding the literal would file every later mutation where nothing sees it.
   state.cursors[sessionId] ??= newCursor();
   return state.cursors[sessionId];
-}
-
-/* ------------------------------------------------------------------ *
- * Capability
- * ------------------------------------------------------------------ */
-
-/**
- * Feature-detection, deliberately blind to WHICH message carries the flag.
- *
- * The hub adds `capabilities` to whichever existing dashboard message a new
- * subscriber happens to receive first, and the two ends are built in parallel:
- * depending on that choice would couple them. Any inbound message carrying an
- * array with {@link STREAM_V1} in it is the handshake.
- *
- * Returns true only on the flip, so the caller can subscribe the sessions that
- * were already open — capability can arrive long after frames have been
- * flowing down the legacy path, and the switch has to be clean either way.
- */
-export function noteCapabilities(
-  state: StreamState,
-  message: unknown
-): boolean {
-  if (state.capable) {
-    return false;
-  }
-  if (!carriesStreamV1(message)) {
-    return false;
-  }
-  state.capable = true;
-  return true;
-}
-
-/**
- * Whether this message advertises {@link STREAM_V1} — at its top level OR one
- * nesting level down. The hub attaches `capabilities` to the `instances`
- * frame's PAYLOAD (the only place a legacy dashboard already parses), while a
- * future message may carry it at the top; "blind to which message" has to mean
- * blind to the nesting too, or the handshake silently never fires against the
- * real hub (defect E-1, caught by the stream e2e suite).
- */
-function carriesStreamV1(message: unknown): boolean {
-  if (typeof message !== "object" || message === null) {
-    return false;
-  }
-  const { capabilities, payload } = message as {
-    capabilities?: unknown;
-    payload?: unknown;
-  };
-  if (Array.isArray(capabilities) && capabilities.includes(STREAM_V1)) {
-    return true;
-  }
-  if (typeof payload !== "object" || payload === null) {
-    return false;
-  }
-  const nested = (payload as { capabilities?: unknown }).capabilities;
-  return Array.isArray(nested) && nested.includes(STREAM_V1);
-}
-
-/**
- * Whether the stream has taken over delivery of this kind of frame for this
- * session — i.e. whether the legacy copy of it is now a duplicate. See
- * {@link SessionCursor.streamed} for why this is learnt rather than assumed.
- */
-export function streamCarries(
-  state: StreamState,
-  sessionId: string,
-  kind: string
-): boolean {
-  if (!state.capable) {
-    return false;
-  }
-  const cursor = state.cursors[sessionId];
-  return !!cursor && cursor.subscribed && cursor.streamed.has(kind);
 }
 
 /* ------------------------------------------------------------------ *
@@ -378,9 +283,6 @@ export function syncStreamSubscriptions(
   host: StreamHost,
   sessionIds: string[]
 ): void {
-  if (!state.capable) {
-    return;
-  }
   const wanted = new Set(sessionIds);
   for (const sessionId of Object.keys(state.cursors)) {
     if (!wanted.has(sessionId)) {
@@ -401,9 +303,7 @@ export function syncStreamSubscriptions(
  *
  * Cursors keep their `lastSeq` — that number is the whole point of the ring,
  * and the reconnect resumes from it — but every subscription and every resume
- * died with the connection, and so did any acknowledgement still owed. The
- * capability is re-advertised by the new connection, so it is dropped too: until
- * it arrives the legacy path is the honest one.
+ * died with the connection, and so did any acknowledgement still owed.
  *
  * `host` is optional for the same reason it is on {@link sweepCommands}, and
  * carries the same warning: without it these failures are recorded but not
@@ -414,13 +314,9 @@ export function noteDisconnect(
   now: number,
   host?: StreamHost
 ): void {
-  state.capable = false;
   for (const cursor of Object.values(state.cursors)) {
     cursor.subscribed = false;
     cursor.resyncAfter = null;
-    // The stream is not delivering anything right now, so it owns nothing:
-    // the legacy path must be free to feed the session again.
-    cursor.streamed.clear();
   }
   for (const record of Object.values(state.commands)) {
     // Record-aware: a send already `accepted` was handed over before the socket
@@ -459,11 +355,8 @@ const STREAM_MESSAGE_TYPES = new Set([
 
 /**
  * Takes one inbound socket message if it belongs to this protocol, and says so.
- * A message it does not take is the caller's legacy business, untouched.
- *
- * Receiving one of these at all is itself evidence the hub speaks the protocol,
- * so it flips the flag: a client that missed the handshake message still ends
- * up in the right mode rather than ingesting a stream it does not believe in.
+ * A message it does not take is a broadcast envelope — the board, a pulse, a
+ * permission, a reply — for the caller to apply.
  */
 export function handleStreamMessage(
   state: StreamState,
@@ -477,7 +370,6 @@ export function handleStreamMessage(
   if (typeof type !== "string" || !STREAM_MESSAGE_TYPES.has(type)) {
     return false;
   }
-  state.capable = true;
 
   switch (type) {
     case "stream.event":
@@ -545,10 +437,6 @@ function applyEvent(
 ): void {
   const { frame } = event;
   if (typeof frame === "object" && frame !== null) {
-    const { kind } = frame as { kind?: unknown };
-    if (typeof kind === "string") {
-      cursor.streamed.add(kind);
-    }
     host.applyFrame(event.sessionId, frame);
   } else if (!cursor.warned) {
     // A sequenced event the hub could not fill. The cursor still advances: this
@@ -649,7 +537,6 @@ function applyBacklog(
     // exactly as a reset would have us do.
     cursor.resyncFailures = 0;
     cursor.seen = false;
-    cursor.streamed.clear();
     host.rereadHistory(sessionId);
     subscribeSession(state, host, sessionId);
     return;
@@ -730,7 +617,7 @@ function advanceStage(
   if (reason !== undefined) {
     record.reason = reason;
   }
-  // Stream-dialect records carry the LOCAL half of their operation (see
+  // Records carry the LOCAL half of their operation (see
   // {@link CommandSubmission.streamEffects}); settling is when its outcome
   // hooks run — including a timeout-swept failure, which must roll back an
   // optimistic value exactly like a refused one.
@@ -755,16 +642,14 @@ function advanceStage(
 }
 
 /**
- * The LOCAL half of a command, on the stream dialect only.
+ * The LOCAL half of a command.
  *
- * Every legacy relay function is really two halves — the wire call, and the
- * local bookkeeping around it (the send's transcript echo and busy flip, the
- * interrupt's busy clear, the answered permission leaving `pending`, a
- * setting's optimistic value with rollback-on-refusal). `wirePayload` extracts
- * only the wire half; a stream dialect that dispatches the envelope and skips
- * the local half renders NOTHING for a sent message — the defect this type
- * repairs. The legacy branch never reads these: its `legacy()` thunk is the
- * whole original function and already owns its own bookkeeping.
+ * Every operator action is two halves — the wire call, and the local
+ * bookkeeping around it (the send's row and busy flip, the interrupt's busy
+ * clear, the answered permission leaving `pending`, a setting's optimistic
+ * value with rollback-on-refusal). `wirePayload` builds only the wire half;
+ * dispatching the envelope and skipping the local half renders NOTHING for a
+ * sent message — the defect this type repairs.
  */
 export interface StreamEffects {
   /**
@@ -782,14 +667,6 @@ export interface StreamEffects {
 export interface CommandSubmission {
   commandId: string;
   kind: CommandKind;
-  /**
-   * What to do instead when the hub does not speak the protocol: today's call,
-   * unchanged. Its own promise semantics are the stages — a synchronous return
-   * is `accepted` (the send went out), a resolved promise is `applied` (the
-   * daemon answered), a throw or rejection is `failed`.
-   */
-  // biome-ignore lint/suspicious/noConfusingVoidType: void here means "a callback that may or may not return a value, ignored either way" — client.svelte.ts and its tests build `legacy` thunks typed plain `() => void`, and narrowing to `undefined` breaks that assignment's special-case compatibility.
-  legacy: () => void | Promise<unknown>;
   machineId: string;
   /** Exactly the payload the corresponding relay op takes today. */
   payload: unknown;
@@ -801,7 +678,7 @@ export interface CommandSubmission {
    * which is the question that, unanswered, retro-fails a delivered message.
    */
   settlesAt: SettleStage;
-  /** The command's local half, applied on the STREAM branch only. */
+  /** The command's local half. */
   streamEffects?: StreamEffects;
 }
 
@@ -820,62 +697,30 @@ export function submitCommand(
   const { commandId, sessionId, machineId, kind, payload } = submission;
   const now = host.now();
   const record = openRecord(state, submission, now);
-
-  if (state.capable) {
-    const envelope: CommandEnvelope = {
-      type: "command",
-      commandId,
-      sessionId,
-      machineId,
-      kind,
-      payload,
-    };
-    // The local half rides the record so every settling path — ack, refusal,
-    // timeout sweep — runs its outcome hook exactly once. Applied BEFORE the
-    // send, so a dispatch that fails synchronously still settles it (the
-    // rollback below the failure).
-    record.effects = submission.streamEffects;
-    submission.streamEffects?.submitted?.();
-    // Through {@link dispatch}, so a socket that shuts between the readiness
-    // check and the write is a refusal wearing its own exception rather than a
-    // throw out of the function that promised not to throw.
-    const refusal = dispatch(host, envelope);
-    if (refusal !== null) {
-      // Nothing left this tab, and that is worth recording as a FACT rather
-      // than inferring from the wording of a reason: it is what lets a retry
-      // be offered as plainly safe instead of as a possible duplicate.
-      record.undelivered = true;
-      advanceStage(record, "failed", now, refusal, host);
-    }
-    sweepCommands(state, now, host);
-    return commandId;
-  }
-
-  try {
-    const result = submission.legacy();
-    if (result instanceof Promise) {
-      result.then(
-        () => advanceStage(record, "applied", host.now(), undefined, host),
-        (error: unknown) =>
-          advanceStage(record, "failed", host.now(), messageOf(error), host)
-      );
-    } else {
-      // Nothing further will be said about it: the legacy relay ops that return
-      // nothing are fire-and-forget, and claiming `applied` for one would be the
-      // fabrication this protocol exists to remove.
-      //
-      // But "nothing further will be said" is exactly what a settle stage is,
-      // so it must be recorded as one. Left at the kind's declared `'applied'`,
-      // this record would sit unsettled forever and the sweep would call it off
-      // fifteen seconds later with "The hub never acknowledged that." — a
-      // failure invented for a call that succeeded and simply had nothing more
-      // to report. `interrupt` and `permission.answer` both return void on this
-      // dialect, so that lie was on the two most common legacy control paths.
-      record.settlesAt = "accepted";
-      advanceStage(record, "accepted", now, undefined, host);
-    }
-  } catch (error) {
-    advanceStage(record, "failed", now, messageOf(error), host);
+  const envelope: CommandEnvelope = {
+    type: "command",
+    commandId,
+    sessionId,
+    machineId,
+    kind,
+    payload,
+  };
+  // The local half rides the record so every settling path — ack, refusal,
+  // timeout sweep — runs its outcome hook exactly once. Applied BEFORE the
+  // send, so a dispatch that fails synchronously still settles it (the
+  // rollback below the failure).
+  record.effects = submission.streamEffects;
+  submission.streamEffects?.submitted?.();
+  // Through {@link dispatch}, so a socket that shuts between the readiness
+  // check and the write is a refusal wearing its own exception rather than a
+  // throw out of the function that promised not to throw.
+  const refusal = dispatch(host, envelope);
+  if (refusal !== null) {
+    // Nothing left this tab, and that is worth recording as a FACT rather
+    // than inferring from the wording of a reason: it is what lets a retry
+    // be offered as plainly safe instead of as a possible duplicate.
+    record.undelivered = true;
+    advanceStage(record, "failed", now, refusal, host);
   }
   sweepCommands(state, now, host);
   return commandId;

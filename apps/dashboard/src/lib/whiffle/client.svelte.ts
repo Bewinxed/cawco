@@ -89,12 +89,10 @@ import {
   handleStreamMessage,
   interruptedRecently,
   latestCommand,
-  noteCapabilities,
   noteDisconnect,
   SETTLED_COMMAND_LIMIT,
   SETTLED_COMMAND_TTL_MS,
   sessionCommands,
-  streamCarries,
   submitCommand as submitTrackedCommand,
   sweepCommands,
   syncStreamSubscriptions,
@@ -1800,38 +1798,10 @@ function handleFrame(frame: FramePayload): void {
  */
 const streamState = $state(createStreamState());
 
-/**
- * THE CHOKEPOINT. Every inbound relay frame reaches the store through here —
- * the legacy per-frame envelope and the sequenced stream event alike — so
- * there is exactly one place where a frame becomes state.
- *
- * The only thing the two paths do not share is the duplicate guard: a hub that
- * keeps sending a stream subscriber the legacy copy as well would otherwise
- * double every turn. See {@link SessionCursor.streamed} for why that guard is
- * learnt from what the stream has actually carried rather than assumed.
- */
-function ingestFrame(
-  sessionId: string | undefined,
-  frame: FramePayload,
-  source: "legacy" | "stream"
-): void {
-  if (
-    source === "legacy" &&
-    sessionId &&
-    streamCarries(streamState, sessionId, frame.kind)
-  ) {
-    return;
-  }
-  handleFrame(frame);
-}
-
-/** Which session a frame is about; broadcast frames (instances, usage) name none. */
-const sessionOf = (frame: FramePayload): string | undefined =>
-  (frame as { instanceId?: string }).instanceId;
-
 const streamHost: StreamHost = {
-  applyFrame: (sessionId, frame) =>
-    ingestFrame(sessionId, frame as FramePayload, "stream"),
+  // A session's own frames arrive only here, sequenced; everything broadcast
+  // (the board, pulses, permissions, replies) comes as an envelope (`bind`).
+  applyFrame: (_sessionId, frame) => handleFrame(frame as FramePayload),
   /**
    * A reset is the late-join problem the history read solves, including
    * holding the deltas that land while it reads. The latch it keeps is
@@ -2028,11 +1998,6 @@ function sweepOnTraffic(): void {
 /** Re-exported so a component reads one import for a command and its stages. */
 export type { CommandRecord, CommandStage } from "./stream";
 
-/** Whether this dashboard is following hub-sequenced streams. Read by the UI. */
-export function streamCapable(): boolean {
-  return streamState.capable;
-}
-
 /** One command's record, by the id {@link submitCommand} returned. */
 export function commandRecord(commandId: string): CommandRecord | null {
   return streamState.commands[commandId] ?? null;
@@ -2066,10 +2031,9 @@ export interface CommandIntents {
 }
 
 /**
- * The wire payload for a kind: exactly what today's relay operation takes, so
- * the hub can dispatch a command through the same code path as the legacy call.
- * `requestId` is the command id — the correlation the control path already has,
- * reused rather than a second one invented alongside it.
+ * The wire payload for a kind: exactly what the hub's relay operation for it
+ * takes. `requestId` is the command id — the correlation the control path
+ * already has, reused rather than a second one invented alongside it.
  */
 function wirePayload<K extends CommandKind>(
   kind: K,
@@ -2124,60 +2088,6 @@ function wirePayload<K extends CommandKind>(
   }
 }
 
-/** Today's call for a kind, run unchanged when the hub does not speak the protocol. */
-function legacyCall<K extends CommandKind>(
-  kind: K,
-  instanceId: string,
-  machineId: string,
-  intent: CommandIntents[K],
-  commandId: string
-): () => Promise<unknown> | undefined {
-  switch (kind) {
-    case "send": {
-      const { text, extras, replaces } = intent as CommandIntents["send"];
-      // The id travels into the echo on this dialect too, so a legacy-hub
-      // failure lands on the same row a stream-hub failure would.
-      return (): undefined => {
-        sendText(instanceId, machineId, text, extras, commandId, replaces);
-      };
-    }
-    case "permission.answer": {
-      const { requestId, result } =
-        intent as CommandIntents["permission.answer"];
-      return (): undefined => {
-        resolvePermission(instanceId, machineId, requestId, result);
-      };
-    }
-    case "interrupt":
-      return (): undefined => {
-        interrupt(instanceId, machineId);
-      };
-    case "set-model":
-      return () =>
-        setModel(
-          instanceId,
-          machineId,
-          (intent as CommandIntents["set-model"]).model
-        );
-    case "set-permission-mode":
-      return () =>
-        setPermissionMode(
-          instanceId,
-          machineId,
-          (intent as CommandIntents["set-permission-mode"]).mode
-        );
-    case "set-effort":
-      return () =>
-        setEffort(
-          instanceId,
-          machineId,
-          (intent as CommandIntents["set-effort"]).effort
-        );
-    default:
-      throw new Error(`No legacy call for command kind ${String(kind)}.`);
-  }
-}
-
 /**
  * One id per browser tab: minted once, kept only in memory (never in
  * `localStorage`, which a duplicated tab would inherit and so blur two
@@ -2194,11 +2104,7 @@ function currentClientId(): string {
 /**
  * Submits an operator action as an acknowledged transaction and returns the id
  * its stages are readable under ({@link commandRecord},
- * {@link latestCommandFor}).
- *
- * Additive: every existing caller still calls its own function, and against a
- * legacy hub this IS that function — the stages come from the call's own
- * promise. Against a stream hub the envelope goes to the hub and the hub's acks
+ * {@link latestCommandFor}). The envelope goes to the hub and the hub's acks
  * move the stages, so nothing local is fabricated on the way.
  */
 export function submitCommand<K extends CommandKind>(
@@ -2222,7 +2128,7 @@ export function submitCommand<K extends CommandKind>(
   // point of these two lines being here rather than after the submit.
   //
   // `noteFailure` fires SYNCHRONOUSLY from inside the ledger — a refused
-  // dispatch, a legacy thunk that throws, a payload that could not be built —
+  // dispatch, a payload that could not be built —
   // so anything the failure reporter needs in order to know who owns the
   // failure has to already exist when the submit is called. Registered
   // afterwards, as these were, the reporter saw an empty registry on every
@@ -2241,7 +2147,6 @@ export function submitCommand<K extends CommandKind>(
   }
 
   let payload: object;
-  let legacy: () => Promise<unknown> | undefined;
   let effects: StreamEffects | undefined;
   try {
     // `provenance` rides inside the payload rather than as a new envelope field —
@@ -2254,7 +2159,6 @@ export function submitCommand<K extends CommandKind>(
       ...(wirePayload(kind, instanceId, commandId, intent) as object),
       provenance,
     };
-    legacy = legacyCall(kind, instanceId, machineId, intent, commandId);
     effects = streamEffectsFor(instanceId, kind, intent, commandId);
   } catch (error) {
     // THE CONTRACT THIS FUNCTION SHARES WITH THE LEDGER: it never throws.
@@ -2266,13 +2170,13 @@ export function submitCommand<K extends CommandKind>(
     // a plain-http origin, so every operator action on a tailnet address threw
     // out of this line and vanished. Converting the throw into a failed record
     // makes the whole CLASS impossible — a bug in payload assembly is now a
-    // failed command wearing its own exception, for all six kinds and both
-    // dialects, instead of a dead composer.
+    // failed command wearing its own exception, for all six kinds, instead of
+    // a dead composer.
     //
-    // The echo goes in FIRST, and only here: on every other path one of the
-    // two dialects pushes it (the stream effects' `submitted`, or `sendText`),
-    // and neither ran. Without it a payload-assembly bug leaves the reason
-    // with no row to stamp, no Try again, and no Edit — recoverable text
+    // The row goes in FIRST, and only here: on every other path the effects'
+    // `submitted` draws it, and that did not run. Without it a
+    // payload-assembly bug leaves the reason with no row to stamp, no Try
+    // again, and no Edit — recoverable text
     // nobody can reach. It is wrapped because it is the one thing left that
     // could throw, and a throw from a catch block is the silence this whole
     // function exists to abolish.
@@ -2301,7 +2205,6 @@ export function submitCommand<K extends CommandKind>(
     kind,
     settlesAt,
     payload,
-    legacy,
     streamEffects: effects,
   });
   return id;
@@ -2587,18 +2490,14 @@ function announceSendFailure(record: CommandRecord): void {
 }
 
 /**
- * The LOCAL half of each command kind — everything its legacy function does
- * around the wire call. On the legacy dialect the `legacy()` thunk IS the full
- * original function and owns all of this; on the stream dialect only the
- * envelope goes out, and skipping the local half is how a sent message ended
- * up with no renderer at all (the wire's user frame defers to the local echo),
- * an answered permission stayed on screen, and a stopped session kept reading
- * "working". These closures are the missing half, run by the tracker at the
- * submit and settle transitions.
+ * The LOCAL half of each command kind — everything around the wire call. Only
+ * the envelope goes out, and skipping the local half is how a sent message
+ * ended up with no row until the hub answered, an answered permission stayed
+ * on screen, and a stopped session kept reading "working". These closures are
+ * that half, run by the tracker at the submit and settle transitions.
  *
- * Honest gap, carried to protocol v2: the legacy setters `ensureAlive` a dead
- * session before applying. The stream dialect does not revive — a command to a
- * dead session fails with the hub's own reason instead. The revive belongs on
+ * Honest gap, carried to protocol v2: a command does not revive a dead
+ * session — it fails with the hub's own reason instead. The revive belongs on
  * the hub side of the command, not in every client.
  */
 function streamEffectsFor<K extends CommandKind>(
@@ -2738,12 +2637,12 @@ function subscriptionIds(): string[] {
 let lastSubscriptionKey = "";
 
 /**
- * Re-sends the whole subscription set. Replace-whole-set on every change; a
- * no-op when the set is unchanged since the last send, and nothing at all when
- * the socket is not open — the reconnect path re-sends. The ids are read before
- * the socket is checked: the route layout's effect calls this, and a first run
- * that found the socket still connecting would otherwise track no tabs at all,
- * so closing one never sent the smaller set.
+ * Follows the streams of every session the dashboard watches, and only those.
+ * A no-op when the set is unchanged since the last sync, and nothing at all
+ * when the socket is not open — the reconnect path syncs again. The ids are
+ * read before the socket is checked: the route layout's effect calls this, and
+ * a first run that found the socket still connecting would otherwise track no
+ * tabs at all, so closing one never shrank the set.
  */
 export function syncSubscriptions(): void {
   const ids = subscriptionIds().sort();
@@ -2756,15 +2655,6 @@ export function syncSubscriptions(): void {
     return;
   }
   lastSubscriptionKey = key;
-  socket.send(
-    JSON.stringify({
-      verb: "subscribe",
-      machineId: "",
-      payload: { instanceIds: ids },
-    })
-  );
-  // The stream is subscribed per session, so the set the dashboard watches is
-  // the set it follows. A no-op against a legacy hub.
   syncStreamSubscriptions(streamState, streamHost, ids);
 }
 
@@ -2909,21 +2799,9 @@ function connect(): void {
 function bind(socket: WebSocket): void {
   socket.onmessage = (event) => {
     const message = JSON.parse(String(event.data)) as unknown;
-    // Feature-detection first, and off ANY message: the hub attaches its
-    // capabilities to whichever existing message a subscriber sees first, and
-    // that choice is not something this end should have to know. A flip
-    // subscribes what is already open, so a capability that arrives after
-    // frames have been flowing legacy still switches cleanly.
-    const wasCapable = streamState.capable;
-    noteCapabilities(streamState, message);
-    // Sequenced traffic is the stream's; everything else is the legacy spine's,
-    // untouched. Receiving sequenced traffic at all is itself a capability
-    // announcement, so both routes into the flag lead to the same subscribe.
-    const consumed = handleStreamMessage(streamState, streamHost, message);
-    if (!wasCapable && streamState.capable) {
-      syncStreamSubscriptions(streamState, streamHost, subscriptionIds());
-    }
-    if (consumed) {
+    // A session's own frames are sequenced; everything else — the board,
+    // pulses, permissions, replies — is broadcast as an envelope.
+    if (handleStreamMessage(streamState, streamHost, message)) {
       sweepOnTraffic();
       return;
     }
@@ -2931,7 +2809,7 @@ function bind(socket: WebSocket): void {
     if (envelope.verb !== "frames") {
       return;
     }
-    ingestFrame(sessionOf(envelope.payload), envelope.payload, "legacy");
+    handleFrame(envelope.payload);
     sweepOnTraffic();
   };
 
@@ -3218,29 +3096,26 @@ export function sendText(
   instanceId: string,
   machineId: string,
   text: string,
-  extras: SendExtras = {},
-  /** The tracked command this send IS, when it has one. See {@link submitCommand}. */
-  commandId = newId(),
-  /** The failed send this one retries. See {@link noteSendSubmitted}. */
-  replaces?: string
+  extras: SendExtras = {}
 ): void {
+  const uuid = newId();
   const payload: SendPayload = {
     instanceId,
-    message: userMessage(text, commandId),
+    message: userMessage(text, uuid),
     ...selectionExtras(extras),
   };
   // BEFORE the dispatch, not after: `send` throws when the socket is not open,
   // and drawing the row afterwards meant the one case that most needs a
   // visible outcome — the message that could not leave the tab — left nothing
   // on screen for the failure to be rendered on.
-  noteSendSubmitted(instanceId, text, extras, commandId, replaces);
+  noteSendSubmitted(instanceId, text, extras, uuid);
   send({ verb: "send", machineId, instanceId, payload });
 }
 
 /**
- * What a send does to the LOCAL store, on either dialect: the row it draws
- * under the message's own uuid (`sending`, until the hub's frame for it lands
- * on the same row), the busy flip, the working clock.
+ * What a send does to the LOCAL store: the row it draws under the message's
+ * own uuid (`sending`, until the hub's frame for it lands on the same row),
+ * the busy flip, the working clock.
  */
 function noteSendSubmitted(
   instanceId: string,

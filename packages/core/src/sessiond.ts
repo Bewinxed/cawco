@@ -18,8 +18,8 @@ import type { BuildInfo } from "./index";
 
 /**
  * Capability string a sessiond speaks, exchanged in `attach`/`welcome`
- * exactly as {@link import('./stream').STREAM_V1} is today (design §5). A
- * breaking revision is a new string, never a change to this one's meaning.
+ * (design §5). A breaking revision is a new string, never a change to this
+ * one's meaning.
  */
 export const SESSIOND_V1 = "sessiond.v1";
 
