@@ -2683,6 +2683,31 @@ export class OpencodeHarness implements Harness {
   #configState: "idle" | "pending" | "applying" | "applied" | "error" = "idle";
   #configError: string | null = null;
   #configWatchTimer: ReturnType<typeof setInterval> | null = null;
+  /** Whether this agent keeps the server converged; see {@link #readsThisConfig}. */
+  #converging = false;
+
+  /**
+   * Whether the server reads the opencode config this agent writes, in the
+   * server's own words: `/path` reports the global config directory it loaded.
+   */
+  async #readsThisConfig(client: OpencodeClient): Promise<boolean> {
+    const paths = await client.path.get({
+      signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
+    });
+    const reads = (paths.data as { config?: string } | undefined)?.config;
+    if (reads === OPENCODE_DIR) {
+      return true;
+    }
+    console.log(
+      JSON.stringify({
+        type: "config-convergence",
+        state: "idle",
+        detail: `server reads ${reads ?? "an unreported config"}, this agent writes ${OPENCODE_DIR}; not converging it`,
+        at: Date.now(),
+      })
+    );
+    return false;
+  }
 
   /**
    * Lock held while a config change is being applied. When non-null, spawn and
@@ -2734,6 +2759,11 @@ export class OpencodeHarness implements Harness {
    * and if different, records the desired revision and attempts to apply.
    */
   async #configTick(): Promise<void> {
+    // A fleet sync pokes this directly; only a converging agent acts on it.
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: #converging is set in #ensure, a different method biome's per-method inference doesn't see
+    if (!this.#converging) {
+      return;
+    }
     const hash = await this.#hashConfig();
     if (hash === null) {
       // Malformed or missing config — surface the error but don't stop the
@@ -3354,8 +3384,11 @@ export class OpencodeHarness implements Harness {
         // Convergence keeps the server matching the machine's global config;
         // that is the machine agent's to do. Another agent's server runs on
         // the config it was launched with and is not reconciled with a file
-        // it must not write.
-        if (await isMachineAgent()) {
+        // it must not write. And only a server that reads the config this
+        // agent writes is its to restart: an agent under another config root
+        // shares the machine's sessiond, and so the machine's server.
+        if ((await isMachineAgent()) && (await this.#readsThisConfig(client))) {
+          this.#converging = true;
           // The baseline is whatever the running server verifiably loaded.
           // A server this agent just spawned and one it adopted from an
           // earlier agent are checked the same way: the adopted one keeps
