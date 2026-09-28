@@ -559,7 +559,7 @@
               {@const entry = row.step}
               <button
                 aria-current={entry.id === selected ? 'true' : undefined}
-                class="step-row pressable"
+                class="step-row press-tint"
                 data-flip
                 onclick={() => { selected = entry.id; }}
                 type="button"

@@ -322,6 +322,7 @@
           <Button
             class="{SUMMARY_BOX} w-full justify-start rounded-none text-left font-normal whitespace-normal text-muted-foreground"
             onclick={edit}
+            press="tint"
             variant="ghost"
           >
             <span class="line-clamp-2">{emptyText}</span>
@@ -351,6 +352,7 @@
           <Button
             class="text-meta text-muted-foreground h-auto w-full justify-start rounded-none px-[var(--space-4)] py-[var(--space-6)] text-left font-normal whitespace-normal"
             onclick={edit}
+            press="tint"
             variant="ghost"
           >
             {emptyText}

@@ -58,7 +58,7 @@
     <!-- biome-ignore lint/a11y/useSemanticElements: a designed segmented control with a sliding thumb; native radios cannot render it -->
     <button
       aria-checked={item.value === value}
-      class="tab"
+      class="tab press-tint"
       onclick={() => onchange(item.value)}
       role="radio"
       tabindex={item.value === value ? 0 : -1}

@@ -224,8 +224,10 @@
         transform 160ms var(--ease-out);
     }
   }
-  :global(.rollout:active) {
-    transform: scale(var(--press-scale));
+  @media (prefers-reduced-motion: no-preference) {
+    :global(.rollout:active) {
+      transform: scale(var(--press-scale));
+    }
   }
   :global(.rollout:hover) {
     background: var(--surface-hover);
@@ -321,8 +323,10 @@
         transform 160ms var(--ease-out);
     }
   }
-  .sync:active:not(:disabled, [aria-busy="true"]) {
-    transform: scale(var(--press-scale));
+  @media (prefers-reduced-motion: no-preference) {
+    .sync:active:not(:disabled, [aria-busy="true"]) {
+      transform: scale(var(--press-scale));
+    }
   }
   .sync:hover:not(:disabled) {
     background: var(--surface-hover);

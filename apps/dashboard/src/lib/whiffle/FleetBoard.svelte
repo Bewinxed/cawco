@@ -951,9 +951,7 @@
                           <span aria-hidden="true" class="mark m{row.hue}">
                             <HarnessGlyph harness={row.harness} />
                           </span>
-                          <a
-                            class="touch-hit pointer-hit pressable"
-                            href={row.href}
+                          <a class="touch-hit pointer-hit" href={row.href}
                             ><span class="nm-title">{row.title}</span></a
                           >
                           {#if resumeFailed[row.key]}
@@ -1263,12 +1261,6 @@
     color: inherit;
     cursor: pointer;
     border-radius: var(--radius-lg);
-    @media (prefers-reduced-motion: no-preference) {
-      transition: transform 160ms var(--ease-out);
-    }
-  }
-  .attn-tile:active {
-    transform: scale(var(--press-scale));
   }
   .attn-tile :global(.st-card) {
     transition: var(--transition-control);
@@ -1281,6 +1273,12 @@
   }
   .attn-tile[aria-pressed="true"] :global(.st-value) {
     color: var(--status-attn-ink);
+  }
+  /* A card, so the press is the tint .press-tint gives (app.css), drawn on
+     the card inside, since the button itself paints nothing. After the hover
+     and chosen fills so it wins over both. */
+  .attn-tile:active :global(.st-card) {
+    background-color: var(--surface-fill);
   }
 
   /* The wrapper is layout-transparent, so an empty queue leaves no gap behind:

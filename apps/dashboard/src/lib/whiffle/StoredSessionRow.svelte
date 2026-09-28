@@ -32,7 +32,7 @@
 
 <StoredSessionMenu {info} {machineId}>
   <a
-    class="pressable flex min-h-9 items-center rounded-[var(--radius-sm)] px-4 py-1.5
+    class="press-tint flex min-h-9 items-center rounded-[var(--radius-sm)] px-4 py-1.5
       transition-colors duration-150 ease-out hover:text-accent-foreground"
     {href}
     use:dragSession={{

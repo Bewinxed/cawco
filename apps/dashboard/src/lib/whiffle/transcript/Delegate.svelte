@@ -425,7 +425,7 @@
 <div class="branch delegate">
   <Collapsible.Root onOpenChange={onToggle} {open}>
     <div class="head">
-      <Collapsible.Trigger class="bhead pressable">
+      <Collapsible.Trigger class="bhead press-tint">
         <span aria-hidden="true" class="chev"><IconChevronRight /></span>
         <span aria-hidden="true" class="mark m{markHue(seed)}"><Sprite /></span>
         <span class="tk">{label}</span>
@@ -615,6 +615,7 @@
     font-weight: var(--weight-strong);
     background: none;
     border: 0;
+    border-radius: var(--radius-xs);
     padding: 0;
     color: inherit;
     cursor: pointer;

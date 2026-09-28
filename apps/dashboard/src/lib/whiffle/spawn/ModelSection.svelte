@@ -295,7 +295,7 @@
             aria-checked={tab.id === harness}
             aria-describedby={available ? undefined : `harness-${tab.id}-why`}
             aria-label={tab.name}
-            class="tab ns-in touch-hit"
+            class="tab ns-in touch-hit press-tint"
             data-harness={tab.id}
             disabled={!available}
             onclick={() => onharness(tab.id as HarnessKind)}
@@ -406,7 +406,7 @@
              the one leaving keeps its place while the other fades in. -->
         {#if showCustomRow}
           <button
-            class="row custom"
+            class="row custom press-tint"
             data-fh="1"
             onclick={pickCustom}
             type="button"
@@ -434,7 +434,7 @@
           <button
             aria-disabled={reason ? true : undefined}
             aria-selected={entry.id === selectedId}
-            class="row"
+            class="row press-tint"
             data-fh="1"
             data-model={entry.id}
             disabled={Boolean(reason)}

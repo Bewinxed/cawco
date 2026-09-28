@@ -63,7 +63,7 @@
     {@const on = selected.includes(row.id)}
     <button
       aria-pressed={on}
-      class="row ns-in"
+      class="row ns-in press-tint"
       data-fh="1"
       disabled={!row.online}
       onclick={() => ontoggle(row.id)}

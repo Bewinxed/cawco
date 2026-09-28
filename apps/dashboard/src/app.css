@@ -731,8 +731,9 @@
   }
 
   /* A text link answers the press by dimming, since a scale does nothing to
-     an inline box; link rows and controls carry .pressable instead. */
-  :where(a[href]:not(.pressable)):active {
+     an inline box; link rows carry .press-tint and link controls .pressable
+     instead. */
+  :where(a[href]:not(.pressable, .press-tint)):active {
     opacity: 0.72;
   }
 
@@ -945,8 +946,10 @@
       background-color var(--dur-toggle) var(--ease-out),
       transform 160ms var(--ease-out);
 
-    &:active:not([data-disabled]) {
-      transform: scale(var(--press-scale));
+    @media (prefers-reduced-motion: no-preference) {
+      &:active:not([data-disabled]) {
+        transform: scale(var(--press-scale));
+      }
     }
   }
 
@@ -1095,14 +1098,8 @@
     color: var(--ink-muted);
     transition: var(--transition-control);
 
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        var(--transition-control),
-        transform 160ms var(--ease-out);
-    }
-    &:active:not(:disabled) {
-      transform: scale(var(--press-scale));
-    }
+    /* One of a group: the press is `press-tint` on the segment, never a
+       scale that would pull it off its neighbours. */
     &:is([data-state="active"], [data-state="on"]) {
       color: var(--ink-strong);
     }
@@ -1385,11 +1382,20 @@
   }
 }
 
-/* ---- Instant press feedback: the hand feels the button before release.
-   The press itself sits in the utilities layer after every generated
-   utility rather than inside @utility: Tailwind orders a utility by how many
-   declarations it has, and a second one would move `pressable` ahead of a
-   consumer's own [transition:…] class and lose to it. */
+/* ---- Instant press feedback: the hand feels the control before release.
+   Two kinds, chosen by the element's size:
+   - `pressable` scales. Only for a compact, standalone control: a button, an
+     icon button, a chip, a switch — about 44px tall at most, not full width,
+     not one of a segmented group.
+   - `press-tint` darkens the surface and moves nothing. For anything wide,
+     large or grouped: rows, cards, card heads, tabs in a strip, the usage
+     meter. A scale pulls each edge in by size × (1 − 0.97) / 2, so a 300px
+     row's edge moves 4.5px and a press near it can miss, and on a card it
+     reads as the whole block shrinking.
+   The scale sits in the utilities layer after every generated utility rather
+   than inside @utility: Tailwind orders a utility by how many declarations
+   it has, and a second one would move `pressable` ahead of a consumer's own
+   [transition:…] class and lose to it. */
 @utility pressable {
   transition:
     transform 160ms var(--ease-out),
@@ -1398,17 +1404,21 @@
 
 @layer utilities {
   .pressable {
-    &:active {
-      transform: scale(var(--press-scale));
+    @media (prefers-reduced-motion: no-preference) {
+      &:active {
+        transform: scale(var(--press-scale));
+      }
     }
   }
 }
 
-/* A row held for its menu (utils/longpress) is drawn pressed for the hold. */
+/* Important because a row's own component rule (unlayered, often
+   `background: none` or a hover fill) would otherwise win over any layer. A
+   colour change, so it runs under every motion preference. */
 @layer utilities {
+  .press-tint:active:not(:disabled, [aria-disabled="true"]),
   [data-holding] {
-    transform: scale(var(--press-scale));
-    transition: transform 160ms var(--ease-out);
+    background-color: var(--surface-fill) !important;
   }
 }
 

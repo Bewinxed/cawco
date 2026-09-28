@@ -506,9 +506,11 @@
     outline: 2px solid var(--focus-ring);
     outline-offset: 1px;
   }
-  button:active,
-  a:active {
-    transform: scale(0.96);
+  @media (prefers-reduced-motion: no-preference) {
+    button:active,
+    a:active {
+      transform: scale(0.96);
+    }
   }
   button[aria-pressed="true"] {
     background: var(--surface-fill);

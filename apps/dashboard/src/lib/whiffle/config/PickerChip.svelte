@@ -89,8 +89,10 @@
         transform 160ms var(--ease-out);
     }
   }
-  :global(.picker:active) {
-    transform: scale(var(--press-scale));
+  @media (prefers-reduced-motion: no-preference) {
+    :global(.picker:active) {
+      transform: scale(var(--press-scale));
+    }
   }
   :global(.picker:hover) {
     background: var(--surface-hover);

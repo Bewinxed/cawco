@@ -663,7 +663,10 @@
                 type="single"
                 value={open?.path ?? ''}
               >
-                <Select.Trigger class="w-full font-mono text-label">
+                <Select.Trigger
+                  class="w-full font-mono text-label"
+                  press="tint"
+                >
                   {open?.name ?? 'Select a document'}
                 </Select.Trigger>
                 <Select.Content>
@@ -850,7 +853,7 @@
                       </div>
                       {#if clipped || expanded}
                         <button
-                          class="pressable flex min-h-9 w-full items-center justify-center rounded-b-[var(--radius-lg)] text-label
+                          class="press-tint flex min-h-9 w-full items-center justify-center rounded-b-[var(--radius-lg)] text-label
                               transition-colors hover:bg-accent hover:text-accent-foreground"
                           onclick={toggleExpanded}
                           type="button"

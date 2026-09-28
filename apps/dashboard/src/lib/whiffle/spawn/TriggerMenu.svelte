@@ -41,7 +41,7 @@
   {#each items as item, i (item.key)}
     {@const Icon = item.icon}
     <button
-      class="row"
+      class="row press-tint"
       data-fh="1"
       onmousedown={(event) => { event.preventDefault(); onpick(item); }}
       tabindex="-1"

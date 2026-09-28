@@ -61,7 +61,7 @@
 
 <button
   aria-label={`Open ${name}`}
-  class="doc pressable"
+  class="doc press-tint"
   data-share={share}
   onclick={() => lightbox.open({ kind: 'text', name, content, share })}
   title={name}

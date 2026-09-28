@@ -155,7 +155,7 @@
       {@const on = row.id === projectId}
       <button
         aria-pressed={on}
-        class="row ns-in"
+        class="row ns-in press-tint"
         data-fh="1"
         onclick={() => onpick(row)}
         style={`--delay:${index * 35}ms`}
@@ -174,7 +174,7 @@
     {/each}
     <div class="divider"></div>
     <button
-      class="row add ns-in"
+      class="row add ns-in press-tint"
       data-fh="1"
       onclick={() => { draft = { name: '', path: '' }; }}
       style="--delay:110ms"

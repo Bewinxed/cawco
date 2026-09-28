@@ -576,7 +576,7 @@
              the real input. A bare input here took typing and did nothing. -->
         <button
           aria-label="Jump to session"
-          class="focus-ring touch-hit flex h-9 w-full [--hit-gap-y:8px] items-center rounded-md border border-[var(--border-control)] bg-[var(--surface-raised)] pr-14 pl-[38px] pressable text-left text-body text-muted-foreground shadow-xs outline-none [transition:var(--transition-control),transform_160ms_var(--ease-out)]"
+          class="focus-ring touch-hit flex h-9 w-full [--hit-gap-y:8px] items-center rounded-md border border-[var(--border-control)] bg-[var(--surface-raised)] pr-14 pl-[38px] press-tint text-left text-body text-muted-foreground shadow-xs outline-none [transition:var(--transition-control)]"
           data-share="jump"
           onclick={onjump}
           type="button"

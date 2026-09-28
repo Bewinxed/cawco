@@ -105,7 +105,7 @@
 >
   <svelte:element
     aria-selected={selected}
-    class="hit touch-hit pressable"
+    class="hit touch-hit press-tint"
     draggable={href ? 'false' : undefined}
     {href}
     onclick={choose}

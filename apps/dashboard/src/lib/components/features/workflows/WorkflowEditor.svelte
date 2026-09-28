@@ -467,7 +467,7 @@
         <h3>{group}</h3>
         {#each kinds.filter((entry) => entry.group === group) as entry (entry.kind)}
           <button
-            class="palette-item pressable"
+            class="palette-item press-tint"
             onclick={() => add(entry.kind)}
             title={entry.meaning}
             type="button"
@@ -489,7 +489,7 @@
         <h3>Templates</h3>
         {#each types as type (type.name)}
           <button
-            class="palette-item pressable"
+            class="palette-item press-tint"
             onclick={() => add('step', type)}
             type="button"
           >

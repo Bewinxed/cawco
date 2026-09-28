@@ -177,7 +177,7 @@
           staleNote ? ` ${staleNote}.` : ""
         }`
       : `Claude usage limits. ${emptyReason}`}
-    class="meter pressable"
+    class="meter press-tint"
   >
     {#if hasReading}
       <span class="rows">

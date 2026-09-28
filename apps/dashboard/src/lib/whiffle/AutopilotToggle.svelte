@@ -326,8 +326,10 @@
       color: var(--ink-strong);
     }
   }
-  .ap-trigger:active {
-    transform: scale(0.96);
+  @media (prefers-reduced-motion: no-preference) {
+    .ap-trigger:active {
+      transform: scale(0.96);
+    }
   }
   .ap-trigger:focus-visible {
     outline: 2px solid var(--focus-ring);

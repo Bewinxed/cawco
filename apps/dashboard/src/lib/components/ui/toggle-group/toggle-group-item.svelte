@@ -11,7 +11,7 @@
 </script>
 
 <ToggleGroupPrimitive.Item
-  class={cn("kit-segment focus-ring touch-hit shrink-0 disabled:pointer-events-none disabled:opacity-50 [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0", className)}
+  class={cn("kit-segment press-tint focus-ring touch-hit shrink-0 disabled:pointer-events-none disabled:opacity-50 [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0", className)}
   data-slot="toggle-group-item"
   {value}
   bind:ref

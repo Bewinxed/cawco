@@ -70,7 +70,7 @@
           <li>
             <a
               aria-current={current === section.slug ? 'page' : undefined}
-              class="row focus-ring"
+              class="row focus-ring press-tint"
               href="/config/{section.slug}"
             >
               <span class="tile" style="color:{section.hue}"
@@ -157,14 +157,6 @@
     color: var(--ink-strong);
     text-decoration: none;
     transition: var(--transition-control);
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        var(--transition-control),
-        transform 160ms var(--ease-out);
-    }
-  }
-  .row:active {
-    transform: scale(var(--press-scale));
   }
   [data-variant="list"] .row {
     height: 48px;

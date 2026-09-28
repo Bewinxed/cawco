@@ -231,7 +231,7 @@
           </div>
           <div class="folders fai-scroll">
             {#if canGoUp}
-              <button class="folder up" onclick={goUp} type="button">
+              <button class="folder up press-tint" onclick={goUp} type="button">
                 <Left /><span>Parent folder</span>
               </button>
             {/if}
@@ -242,7 +242,7 @@
             {:else}
               {#each folders as folder (`${path}/${folder.name}`)}
                 <button
-                  class="folder"
+                  class="folder press-tint"
                   onclick={() => enter(folder.name)}
                   title={folder.name}
                   type="button"

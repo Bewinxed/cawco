@@ -210,15 +210,12 @@
     padding: 6px 8px;
     border-radius: var(--radius-sm);
     transition: var(--transition-control);
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        var(--transition-control),
-        transform 160ms var(--ease-out);
-    }
   }
-  /* The whole row is the link's hit area, so the whole row takes the press. */
+  /* The whole row is the link's hit area, so the whole row takes the press:
+     the tint .press-tint gives (app.css), keyed on the link rather than the
+     row, because the row's own switch and buttons are pressed inside it too. */
   .row:has(.link:active) {
-    transform: scale(var(--press-scale));
+    background-color: var(--surface-fill);
   }
   .row.two {
     min-height: 56px;

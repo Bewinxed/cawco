@@ -72,9 +72,11 @@
   text-decoration: none;
   transition: transform 160ms var(--ease-out);
 }
-/* The press, as .pressable gives every other control. */
-.wf .wf-btn:active:not(:disabled, [aria-busy="true"]) {
-  transform: scale(var(--press-scale));
+/* The press, as .pressable gives every other compact control. */
+@media (prefers-reduced-motion: no-preference) {
+  .wf .wf-btn:active:not(:disabled, [aria-busy="true"]) {
+    transform: scale(var(--press-scale));
+  }
 }
 .wf .wf-primary {
   color: var(--on-brand);

@@ -405,7 +405,7 @@
           {:else if hasBody}
             {@const disclosed = disclosure(m)}
             <Collapsible.Root bind:open={disclosed.get, disclosed.set}>
-              <Collapsible.Trigger class="trow pressable">
+              <Collapsible.Trigger class="trow press-tint">
                 {@render line()}
                 <span class="chev"><IconChevronRight /></span>
               </Collapsible.Trigger>
@@ -638,6 +638,7 @@
     color: var(--ink-strong);
     background: none;
     border: 0;
+    border-radius: var(--radius-xs);
     padding: 0;
     margin: 0;
     text-align: start;

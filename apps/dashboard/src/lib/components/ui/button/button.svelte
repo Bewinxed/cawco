@@ -9,8 +9,16 @@
   import { cn, tv, type WithElementRef } from "$lib/utils.js";
 
   export const buttonVariants = tv({
-    base: "group/button focus-ring touch-hit inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-md border border-[var(--border-control)] bg-[var(--surface-raised)] bg-clip-padding font-medium text-[var(--ink-strong)] text-body leading-none tracking-[-0.01em] outline-none [transition:var(--transition-control),transform_160ms_var(--ease-out)] hover:bg-[var(--surface-hover)] disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive active:not-disabled:not-aria-busy:[transform:scale(var(--press-scale))] [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    base: "group/button focus-ring touch-hit inline-flex shrink-0 select-none items-center justify-center whitespace-nowrap rounded-md border border-[var(--border-control)] bg-[var(--surface-raised)] bg-clip-padding font-medium text-[var(--ink-strong)] text-body leading-none tracking-[-0.01em] outline-none hover:bg-[var(--surface-hover)] disabled:pointer-events-none disabled:opacity-50 aria-invalid:border-destructive [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
     variants: {
+      /* The press, by size (app.css, press feedback): a compact button
+         scales; one stretched full width, as a list row or a card's body,
+         tints instead. */
+      press: {
+        scale:
+          "[transition:var(--transition-control),transform_160ms_var(--ease-out)] motion-safe:active:not-disabled:not-aria-busy:[transform:scale(var(--press-scale))]",
+        tint: "press-tint [transition:var(--transition-control)]",
+      },
       variant: {
         default:
           "border-transparent bg-[var(--brand-solid)] text-[var(--on-brand)] hover:bg-[var(--ink-hover)]",
@@ -38,16 +46,19 @@
     defaultVariants: {
       variant: "default",
       size: "default",
+      press: "scale",
     },
   });
 
   export type ButtonVariant = VariantProps<typeof buttonVariants>["variant"];
   export type ButtonSize = VariantProps<typeof buttonVariants>["size"];
+  export type ButtonPress = VariantProps<typeof buttonVariants>["press"];
 
   export type ButtonProps = WithElementRef<HTMLButtonAttributes> &
     WithElementRef<HTMLAnchorAttributes> & {
       variant?: ButtonVariant;
       size?: ButtonSize;
+      press?: ButtonPress;
       /**
        * The button's words, for a button that runs something: with `label`
        * the button draws its own icon slot and label, and `pending` can
@@ -77,6 +88,7 @@
     class: className,
     variant = "default",
     size = "default",
+    press: pressKind = "scale",
     ref = $bindable(null),
     href,
     type = "button",
@@ -109,7 +121,7 @@
 {#if href}
   <a
     aria-disabled={disabled}
-    class={cn(buttonVariants({ variant, size }), className)}
+    class={cn(buttonVariants({ variant, size, press: pressKind }), className)}
     data-slot="button"
     href={disabled ? undefined : href}
     {onclick}
@@ -124,7 +136,7 @@
   <button
     aria-busy={pending || undefined}
     aria-disabled={pending || undefined}
-    class={cn(buttonVariants({ variant, size }), className)}
+    class={cn(buttonVariants({ variant, size, press: pressKind }), className)}
     data-slot="button"
     {disabled}
     onclick={press}

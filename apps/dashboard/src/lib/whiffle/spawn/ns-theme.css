@@ -38,8 +38,12 @@
       transform 160ms var(--ease-out);
   }
 }
-.ns-theme button:not(:disabled, [aria-busy="true"]):active {
-  transform: scale(var(--press-scale));
+/* A button scales on press; a list row, a folder and a segment take
+   .press-tint (app.css) instead and are left out here. */
+@media (prefers-reduced-motion: no-preference) {
+  .ns-theme button:not(.press-tint, :disabled, [aria-busy="true"]):active {
+    transform: scale(var(--press-scale));
+  }
 }
 .ns-theme :focus-visible {
   outline: 2px solid var(--focus-ring);

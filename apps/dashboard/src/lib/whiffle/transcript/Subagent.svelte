@@ -76,7 +76,7 @@
 
 <div class="branch">
   <Collapsible.Root bind:open={open.get, open.set}>
-    <Collapsible.Trigger class="bhead pressable">
+    <Collapsible.Trigger class="bhead press-tint">
       <span aria-hidden="true" class="chev"><IconChevronRight /></span>
       <span aria-hidden="true" class="mark m{markHue(seed)}"><Sprite /></span>
       <span class="tk">{branch.subagentType}</span>
@@ -164,13 +164,13 @@
     font-weight: var(--weight-strong);
     background: none;
     border: 0;
+    border-radius: var(--radius-xs);
     padding: 0;
     color: inherit;
     cursor: pointer;
     text-align: start;
-    /* A disclosure header toggles content — it is not a press-action, so it does
-       NOT scale on click (that read as the whole card shrinking). It reacts with
-       ink only; the chevron rotation and the panel opening are the feedback. */
+    /* A disclosure header is as wide as its card, so it does not scale on
+       press (that read as the whole card shrinking); it takes .press-tint. */
     transition: color var(--dur-control) var(--ease-out);
   }
   @media (hover: hover) and (pointer: fine) {

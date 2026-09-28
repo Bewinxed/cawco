@@ -1255,9 +1255,11 @@
   .stop:not(:disabled) :global(svg) {
     transform: translate(0.5px, -0.5px);
   }
-  .att-btn:active,
-  .stop:active:not(:disabled) {
-    transform: scale(0.96);
+  @media (prefers-reduced-motion: no-preference) {
+    .att-btn:active,
+    .stop:active:not(:disabled) {
+      transform: scale(0.96);
+    }
   }
   .stop:disabled {
     opacity: 0.55;

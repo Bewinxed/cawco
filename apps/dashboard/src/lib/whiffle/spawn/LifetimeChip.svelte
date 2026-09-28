@@ -67,7 +67,7 @@
     {@const on = option.ephemeral === ephemeral}
     <button
       aria-pressed={on}
-      class="row ns-in"
+      class="row ns-in press-tint"
       data-fh="1"
       onclick={() => { onlifetime(option.ephemeral); onchange(false); }}
       style={`--delay:${index * 35}ms`}

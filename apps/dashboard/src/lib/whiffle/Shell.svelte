@@ -1075,9 +1075,11 @@
   .burger {
     transition: background var(--dur-control) var(--ease-in-out);
   }
-  .icobtn:active,
-  .burger:active {
-    transform: scale(0.96);
+  @media (prefers-reduced-motion: no-preference) {
+    .icobtn:active,
+    .burger:active {
+      transform: scale(0.96);
+    }
   }
   .badge {
     position: absolute;

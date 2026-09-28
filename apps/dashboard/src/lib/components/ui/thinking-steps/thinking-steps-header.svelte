@@ -16,7 +16,7 @@
 
 <Collapsible.Trigger
   {...rest}
-  class="thinking-header pressable {className}"
+  class="thinking-header press-tint {className}"
   data-slot="thinking-steps-header"
 >
   {#if children}
@@ -38,6 +38,7 @@
     margin: 0;
     padding: 0;
     border: 0;
+    border-radius: var(--radius-xs);
     background: none;
     font: inherit;
     color: inherit;

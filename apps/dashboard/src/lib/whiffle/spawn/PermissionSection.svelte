@@ -48,7 +48,7 @@
     <button
       aria-checked={on}
       aria-describedby={row.reason ? `${uid}-perm-${row.value}-reason` : undefined}
-      class="row ns-in"
+      class="row ns-in press-tint"
       data-fh="1"
       data-perm={row.value}
       disabled={row.disabled}

@@ -181,8 +181,10 @@
     font: var(--type-label);
     transition: transform 160ms var(--ease-out);
 
-    &:active {
-      transform: scale(var(--press-scale));
+    @media (prefers-reduced-motion: no-preference) {
+      &:active {
+        transform: scale(var(--press-scale));
+      }
     }
   }
 

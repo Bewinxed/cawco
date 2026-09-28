@@ -193,6 +193,7 @@
                 <Button
                   class="w-full justify-start font-mono text-label font-normal"
                   onclick={() => go(join(path, dir.name), 1)}
+                  press="tint"
                   size="sm"
                   variant="ghost"
                 >

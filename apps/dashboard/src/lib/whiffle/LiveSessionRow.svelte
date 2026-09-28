@@ -169,7 +169,7 @@
 
 <LiveSessionMenu {instance}>
   <a
-    class="pressable group flex min-h-9 flex-col justify-center gap-0.5 rounded-[var(--radius-sm)] px-4 py-1.5
+    class="press-tint group flex min-h-9 flex-col justify-center gap-0.5 rounded-[var(--radius-sm)] px-4 py-1.5
       transition-colors duration-150 ease-out hover:text-accent-foreground
       {failed || activity === 'blocked' ? 'bg-error/10' : ''}"
     href={conversationHref(instance.id, whiffle.instanceIndex)}
