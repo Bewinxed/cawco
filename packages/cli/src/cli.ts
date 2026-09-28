@@ -625,6 +625,17 @@ const runJoin = async (args: Args): Promise<number> => {
   await deployInit({
     command: "whiffle join",
     force: args.force,
+    // The clone moved under this process: the join it pulled finishes the run.
+    onPulled: async () => {
+      say("running the whiffle join it just pulled");
+      const next = Bun.spawn(
+        [process.execPath, Bun.main, ...Bun.argv.slice(2)],
+        {
+          stdio: ["inherit", "inherit", "inherit"],
+        }
+      );
+      process.exit(await next.exited);
+    },
     ids: ["sessiond", "agent"],
     requireLinger: true,
     // deployInit's steps are the lines that end in an ellipsis ("bun

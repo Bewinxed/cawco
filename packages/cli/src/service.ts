@@ -1775,6 +1775,12 @@ export interface DeployInitOptions {
   readonly ids?: readonly ServiceId[];
   readonly legacyDb?: string;
   readonly note: (line: string) => void;
+  /**
+   * `join`: called when this run pulled new commits into the checkout it is
+   * running from, once they are installed. It hands the rest of the run to the
+   * code just pulled and does not return.
+   */
+  readonly onPulled?: () => Promise<never>;
   /** The remote to clone. Defaults to this checkout's `origin`. */
   readonly origin?: string;
   /**
@@ -1863,6 +1869,59 @@ const occupied = (root: string): boolean => {
  * to. It never restarts a service itself; the first actual deploy is the next
  * push to main.
  */
+/**
+ * The clone itself: a marked one is caught up rather than started over —
+ * cloning again would throw away a checkout the services are running — and a
+ * missing one is cloned. The checkout this CLI runs from is already there.
+ */
+const bringClone = async ({
+  marked,
+  running,
+  root,
+  remote,
+  branch,
+  runner,
+  note,
+}: {
+  marked: boolean;
+  running: boolean;
+  root: string;
+  remote: string;
+  branch: string;
+  runner: StepRunner;
+  note: (line: string) => void;
+}): Promise<void> => {
+  if (marked) {
+    note(`${root} is already a deployment clone; bringing it up to ${branch}`);
+    await step(
+      runner,
+      `git fetch origin ${branch}`,
+      ["git", "fetch", "origin", branch],
+      root,
+      note
+    );
+    await step(
+      runner,
+      `git merge --ff-only origin/${branch}`,
+      ["git", "merge", "--ff-only", `origin/${branch}`],
+      root,
+      note
+    );
+    return;
+  }
+  if (!running) {
+    await step(
+      runner,
+      `cloning ${remote} (${branch}) into ${root}`,
+      // `root` is absolute and git creates the leading directories itself, so
+      // the cwd only has to be somewhere that exists.
+      ["git", "clone", "--branch", branch, "--single-branch", remote, root],
+      ROOT,
+      note
+    );
+  }
+};
+
 export const deployInit = async ({
   root = deployRoot(),
   origin,
@@ -1871,6 +1930,7 @@ export const deployInit = async ({
   force = false,
   ids = SERVICE_IDS,
   requireLinger = false,
+  onPulled,
   note,
   run: runner = runStep,
   dbPath = DEFAULT_DB_PATH,
@@ -1908,35 +1968,13 @@ export const deployInit = async ({
     remote = origin;
   }
 
-  if (marked) {
-    // Re-running init on an existing clone catches it up rather than starting
-    // over: cloning again would throw away a checkout the services are running.
-    note(`${root} is already a deployment clone; bringing it up to ${branch}`);
-    await step(
-      runner,
-      `git fetch origin ${branch}`,
-      ["git", "fetch", "origin", branch],
-      root,
-      note
-    );
-    await step(
-      runner,
-      `git merge --ff-only origin/${branch}`,
-      ["git", "merge", "--ff-only", `origin/${branch}`],
-      root,
-      note
-    );
-  } else if (!running) {
-    await step(
-      runner,
-      `cloning ${remote} (${branch}) into ${root}`,
-      // `root` is absolute and git creates the leading directories itself, so
-      // the cwd only has to be somewhere that exists.
-      ["git", "clone", "--branch", branch, "--single-branch", remote, root],
-      ROOT,
-      note
-    );
-  }
+  const headOf = async (): Promise<string> =>
+    (
+      await runner({ argv: ["git", "rev-parse", "HEAD"], cwd: root })
+    ).said.trim();
+  /** Where a marked clone stood before catching up. */
+  const pulledFrom = marked ? await headOf() : undefined;
+  await bringClone({ marked, running, root, remote, branch, runner, note });
 
   await excludeMarker(root);
 
@@ -1986,6 +2024,14 @@ export const deployInit = async ({
     );
   }
 
+  // Everything from here on decides what happens to running services, and
+  // the process deciding is the code the clone held before this run pulled.
+  // When it pulled something into the checkout this very process runs from,
+  // the code that should finish the job is the code just pulled and installed.
+  if (onPulled && running && pulledFrom && pulledFrom !== (await headOf())) {
+    await onPulled();
+  }
+
   const layout = layoutFor(root);
   const specs = ids.map((id) => {
     const spec = specFor(id, "prod", layout);
@@ -2000,9 +2046,7 @@ export const deployInit = async ({
   if (requireLinger && !mac) {
     await enableLinger(note);
   }
-  const cloneHead = (
-    await runner({ argv: ["git", "rev-parse", "HEAD"], cwd: root })
-  ).said.trim();
+  const cloneHead = await headOf();
   const agentBuild = await runningAgentBuild();
   const units = await settleServices(specs, {
     // What the agent reports running, against what the clone now holds. Not
