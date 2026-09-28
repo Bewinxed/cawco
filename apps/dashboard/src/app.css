@@ -242,6 +242,27 @@
        #F1F1F1 sitting 0.036 L under the #FDFDFD card. Same step in dark. */
     --surface-band: oklch(from var(--surface-raised) calc(l - 0.036) c h);
     --surface-recess-deep: light-dark(var(--neutral-4), var(--neutral-1));
+    /* The reader's well: one run of their own messages, recess-deep cut into
+       the recess pane. The plan's stat-well radius, r7 (no radius step
+       carries 7). Its 1px edge is darker than the well by day; at night it
+       is the ink at 8%, lighter than the well. */
+    --well-r: 7px;
+    --well-edge: light-dark(
+      var(--neutral-5),
+      oklch(from var(--neutral-12) l c h / 0.08)
+    );
+    /* A message not yet said in the conversation (sending, queued). */
+    --ghost-presence: 0.7;
+    /* The reader's row mark in the action material: 17×17 at r4.6, an 11px
+       glyph (17 − 11 = 6 splits 3/3), with the plan's top-highlight
+       gradient restated as offsets from --brand-solid so dark follows it. */
+    --row-mark: 17px;
+    --row-mark-r: 4.6px;
+    --row-mark-glyph: 11px;
+    --action-grad: linear-gradient(
+      oklch(from var(--brand-solid) calc(l + 0.056) c h),
+      oklch(from var(--brand-solid) calc(l - 0.032) c h)
+    );
     /* The bar folder tabs stand on: a step below recess-deep, so bar,
        unselected tab (recess-deep) and chosen sheet (recess) are three
        steps. */

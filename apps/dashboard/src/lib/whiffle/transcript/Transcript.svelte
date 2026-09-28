@@ -69,6 +69,7 @@
     type FoldMemo,
     queuedFrom,
     type Row,
+    wellRuns,
   } from "./rows";
   import Subagent from "./Subagent.svelte";
   import SystemLine from "./SystemLine.svelte";
@@ -873,6 +874,13 @@
     };
   });
   const renderedRows = $derived(presentation.rows);
+  /**
+   * The reader's rows whose well runs on into the next. A row folding away is
+   * already out of its run: the rows either side close or join over its fold.
+   */
+  const runsOn = $derived(
+    wellRuns(renderedRows, (key) => presentation.leaving.has(key))
+  );
 
   /**
    * THE TAIL STAYS MOUNTED.
@@ -2168,6 +2176,7 @@
                 folding={ticket?.kind === 'fold'}
                 grouped={row.grouped}
                 message={row.message}
+                runsOn={runsOn.has(row.key)}
               />
             {:else if row.kind === 'tools'}
               <ToolGroup messages={row.messages} />

@@ -22,12 +22,14 @@
 <div aria-busy="true" class="skeleton" role="status">
   <span class="spoken">Reading transcript…</span>
 
-  <!-- The reader's turn: the sunken well, its mark, one short line. -->
+  <!-- The reader's turn: its mark on the pane, one short line in the well. -->
   <div class="block you">
     <div class="who">
       <Skeleton class="mark" /><Skeleton class="name" />
     </div>
-    <div class="prose"><Skeleton class="ln" style="width: 52%" /></div>
+    <div class="well">
+      <div class="prose"><Skeleton class="ln" style="width: 52%" /></div>
+    </div>
   </div>
 
   <!-- The agent's answer: two paragraphs, ragged the way prose is. -->
@@ -83,21 +85,25 @@
     margin-block-start: var(--space-4);
   }
 
-  /* The reader's well, exactly as MessageRow draws it: bleeding back out by
-     its own padding so the words sit on the ledger column. */
+  /* The reader's well, exactly as MessageRow draws a run of one: under the
+     header, bleeding into the gutter by its own padding so the words sit on
+     the ledger column. */
   .block.you {
-    margin-inline: calc(var(--space-4) * -1);
-    padding: var(--space-3) var(--space-4);
-    background: var(--surface-recess);
-    border-radius: var(--radius-sm);
+    --pad: var(--space-3);
+  }
+  .well {
+    margin-inline: calc(var(--pad) * -1);
+    padding: var(--space-2) calc(var(--pad) - 1px);
+    border: 1px solid var(--well-edge);
+    border-radius: var(--well-r);
+    background: var(--surface-recess-deep);
   }
   @media (width <= 900px) {
     .skeleton {
       padding-inline: var(--space-5);
     }
     .block.you {
-      margin-inline: calc(var(--space-3) * -1);
-      padding-inline: var(--space-3);
+      --pad: var(--space-2);
     }
   }
 

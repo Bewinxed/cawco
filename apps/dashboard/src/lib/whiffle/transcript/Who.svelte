@@ -1,8 +1,9 @@
 <script lang="ts">
   /**
-   * The role label leading every turn — an 18px mark (raised for the reader,
-   * solid brand for the agent), the speaker's name at the body step, and the
-   * turn's clock time held back until the reader asks for it.
+   * The role label leading every turn — a mark (the reader's 17px in the
+   * action material, the agent's 18px in solid brand), the speaker's name at
+   * the body step, and the turn's clock time held back until the reader asks
+   * for it.
    *
    * The mark is 18/12 rather than the mock's 14/9 for one arithmetic reason:
    * 14 − 9 = 5 cannot split evenly, so the glyph landed 2px from one edge and
@@ -115,20 +116,21 @@
       inline-size: 12px;
       block-size: 12px;
     }
-    /* The reader's mark sits inside the sunken well of its own turn, so it is
-       raised out of that surface rather than cut into it. */
+    /* The reader's mark, on the pane above their well, in the action
+       material: 17×17 with the top-highlight gradient and the pale glyph.
+       1px narrower than the agent's 18px box, so it is centred on the same
+       track by half a pixel either side. */
     &.u {
-      background: var(--surface-raised);
-      border: 1px solid var(--border-control);
-      color: var(--ink-strong);
+      inline-size: var(--row-mark);
+      block-size: var(--row-mark);
+      margin-inline: 0.5px;
+      border-radius: var(--row-mark-r);
+      background: var(--action-grad);
+      color: var(--mark-glyph);
 
-      /* solar's user glyph fills 17.5 of its 24 viewBox; the ghost fills
-         21.5. At the same 12px box the user mark read a step smaller, so it
-         is scaled rather than resized — optical over geometric, and scaling
-         from the centre leaves the 3/3 split exact where a size bump would
-         break its parity. */
       & :global(svg) {
-        transform: scale(1.1);
+        inline-size: var(--row-mark-glyph);
+        block-size: var(--row-mark-glyph);
       }
     }
     &.a {

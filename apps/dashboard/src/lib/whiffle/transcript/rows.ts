@@ -143,6 +143,34 @@ function voice(v: Voices, row: Row): boolean {
   }
 }
 
+/**
+ * The reader's rows whose well carries on into the next row: the next row
+ * that paints is the reader's too, grouped under the same header. The well is
+ * drawn a row at a time (the list is virtual, so nothing can wrap a run), and
+ * this is what tells a row whether its bottom edge is the well's or a
+ * hairline to the next message. `gone` rows are leaving and draw no part of
+ * any run.
+ */
+export function wellRuns(
+  rows: Row[],
+  gone: (key: string) => boolean = () => false
+): Set<string> {
+  const runs = new Set<string>();
+  let above: string | null = null;
+  for (const row of rows) {
+    const v = voiceOf(row);
+    if (v === "none" || gone(row.key)) {
+      continue;
+    }
+    const you = v === "you" && (row.kind === "single" || row.kind === "queued");
+    if (you && row.grouped && above !== null) {
+      runs.add(above);
+    }
+    above = you ? row.key : null;
+  }
+  return runs;
+}
+
 /** Where the voices stand after `rows`, from the top of the transcript. */
 function voicesAfter(rows: Row[]): Voices {
   const v = { ...NO_VOICE };

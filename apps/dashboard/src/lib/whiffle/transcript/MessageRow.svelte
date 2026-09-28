@@ -1,11 +1,12 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { Badge } from "$lib/components/ui/badge";
   import PendingContent, {
     whileIdle,
   } from "$lib/components/ui/button/pending-content.svelte";
   import type { Trail } from "$lib/components/ui/markdown/trail";
-  import { dur } from "$lib/whiffle/motion/curves.svelte";
-  import { land } from "$lib/whiffle/motion/share.svelte";
+  import { CURVE, dur, motionOk } from "$lib/whiffle/motion/curves.svelte";
+  import { waiting as departed, land } from "$lib/whiffle/motion/share.svelte";
   import {
     canResend,
     restoreDraft,
@@ -37,11 +38,17 @@
     folding = false,
     carry = null,
     grouped = false,
+    runsOn = false,
   }: {
     message: Message;
     agentName: string;
     /** The same speaker's turn is right above: no speaker line of its own. */
     grouped?: boolean;
+    /**
+     * The reader's next message is right below, in the same run: this row's
+     * part of the well ends on a hairline to it instead of the well's edge.
+     */
+    runsOn?: boolean;
     /** A thinking message that is the live reasoning, settled: it folds shut. */
     folding?: boolean;
     /** An answer that is the live stream, settled: the chunk fades it carries on. */
@@ -168,94 +175,151 @@
       restoreDraft(message.id);
     }
   }
+
+  /** Where the composer's text lands, when this row is that text in flight. */
+  const sent = $derived(ghost ? `sent:${message.id}` : undefined);
+  /**
+   * A send that joins a run already on screen: read once, as the row mounts
+   * and before the text's landing takes the departure. The run's well opens
+   * down to hold it while the text flies in; a send that starts a run flies
+   * in whole, header and well together.
+   */
+  const joins = untrack(
+    () => grouped && ghost && departed(`sent:${message.id}`)
+  );
+  function openWell(node: HTMLElement): void {
+    if (!(joins && motionOk.current)) {
+      return;
+    }
+    requestAnimationFrame(() => {
+      const timing = { duration: dur("--dur-pop"), easing: CURVE.drawer };
+      node.animate(
+        [{ clipPath: "inset(0 0 100% 0)" }, { clipPath: "inset(0)" }],
+        { ...timing, pseudoElement: "::before" }
+      );
+      // The hairline above it comes in with it.
+      node.animate([{ opacity: 0 }, { opacity: 1 }], {
+        ...timing,
+        pseudoElement: "::after",
+      });
+    });
+  }
 </script>
 
 {#if hidden}
 <!-- A successful result has no line; an empty assistant frame carried only a tool call. -->
 {:else if kind === 'user'}
-  <!-- The reader's own turn is the one thing worth finding on a fast scroll, so
-       it is the one thing that carries a surface: a sunken well. User messages
-       are sparse, so filling them makes the operator's own instructions the
-       landmarks. The agent's turns stay bare on the field. -->
+  <!-- The reader's own turns are the one thing worth finding on a fast scroll,
+       so they are the one thing that carries a surface: ONE well holding the
+       whole run of them, a step below the pane, with a hairline between its
+       messages. The agent's turns stay bare on the field. The list is
+       virtual, so the well is drawn a row at a time: each row is its part of
+       it — the top edge on the run's first row (under the header, which sits
+       on the pane), the bottom edge on its last, a hairline where the next
+       message follows. Every part has the same box whatever its place, so a
+       run growing or shrinking changes paint only: edges and corners follow
+       without moving a line. -->
   <!-- Sent from this tab, the turn is the composer's text landing (motion/share,
-       departed by Composer's submit under the message's own id). -->
+       departed by Composer's submit under the message's own id): the whole
+       turn when it starts a run, its words when it joins one. -->
   <section
     class="turn you"
     data-message={message.id}
     class:ghost={ghost || waiting}
     class:grouped
+    class:runs-on={runsOn}
     {@attach land(
-      () => ghost ? `sent:${message.id}` : undefined,
+      () => (grouped ? undefined : sent),
       { ms: dur('--dur-pop'), uniform: true }
     )}
   >
-    <Who
-      {grouped}
-      name="You"
-      note={whoNote}
-      timestamp={ghost || failed || waiting ? undefined : message.timestamp}
-      you
-    />
-    <MessageBody source={message.content} />
-    {#if message.metadata?.attachments?.length || message.metadata?.images?.length}
-      <div class="chips" data-gallery>
-        {#each message.metadata.attachments ?? [] as att, i (`${att.name}-${i}`)}
-          <DocThumb content={att.content} name={att.name} />
-        {/each}
-        <!-- Keyed by position: the same picture sent twice is two pictures. -->
-        {#each message.metadata.images ?? [] as img, i (`${i}:${img.src ?? img.mediaType}`)}
-          {#if img.src}
-            <Shot
-              alt="Attachment {i + 1} sent with this message"
-              size="thumb"
-              src={img.src}
-            />
-          {:else}
-            <!-- A stored transcript can name an image it no longer carries. -->
-            <Badge class={chipClass} variant="secondary"
-              >Image {i + 1} · {img.mediaType}</Badge
-            >
-          {/if}
-        {/each}
-      </div>
+    {#if !grouped}
+      <Who
+        name="You"
+        note={whoNote}
+        timestamp={ghost || failed || waiting ? undefined : message.timestamp}
+        you
+      />
     {/if}
-    <!-- Mirrors Prompt.svelte's own refusal line ("Couldn't send that
-         answer.") — a failed send is a sibling of a failed answer, not a new
-         dialect of failure. The grid-rows wrapper is what animates a height
-         that content, not JS, decides. -->
-    <div class="failure" class:open={failed || retrying}>
-      <div class="failure-inner">
-        {#if failed || retrying}
-          <p class="reason">{retrying ? heldLine : reasonLine}</p>
-          {#if recoverable}
-            <div class="actions">
-              <button
-                aria-busy={retrying || undefined}
-                aria-disabled={retrying || undefined}
-                class="pressable action"
-                onclick={whileIdle(() => retrying, tryAgain)}
-                type="button"
-              >
-                <PendingContent
-                  {failed}
-                  label="Try again"
-                  pending={retrying}
-                  pendingLabel="Sending…"
-                />
-              </button>
-              {#if editable}
-                <button
-                  class="pressable action"
-                  disabled={retrying}
-                  onclick={edit}
-                  type="button"
-                >
-                  Edit
-                </button>
-              {/if}
-            </div>
-          {/if}
+    <div class="well" {@attach openWell}>
+      <div
+        class="words"
+        {@attach land(
+          () => (grouped ? sent : undefined),
+          { ms: dur('--dur-pop'), uniform: true }
+        )}
+      >
+        {#if grouped}
+          <Who
+            grouped
+            name="You"
+            note={whoNote}
+            timestamp={ghost || failed || waiting ? undefined : message.timestamp}
+            you
+          />
         {/if}
+        <MessageBody source={message.content} />
+        {#if message.metadata?.attachments?.length || message.metadata?.images?.length}
+          <div class="chips" data-gallery>
+            {#each message.metadata.attachments ?? [] as att, i (`${att.name}-${i}`)}
+              <DocThumb content={att.content} name={att.name} />
+            {/each}
+            <!-- Keyed by position: the same picture sent twice is two pictures. -->
+            {#each message.metadata.images ?? [] as img, i (`${i}:${img.src ?? img.mediaType}`)}
+              {#if img.src}
+                <Shot
+                  alt="Attachment {i + 1} sent with this message"
+                  size="thumb"
+                  src={img.src}
+                />
+              {:else}
+                <!-- A stored transcript can name an image it no longer carries. -->
+                <Badge class={chipClass} variant="secondary"
+                  >Image {i + 1} · {img.mediaType}</Badge
+                >
+              {/if}
+            {/each}
+          </div>
+        {/if}
+        <!-- Mirrors Prompt.svelte's own refusal line ("Couldn't send that
+             answer.") — a failed send is a sibling of a failed answer, not a
+             new dialect of failure. The grid-rows wrapper is what animates a
+             height that content, not JS, decides. -->
+        <div class="failure" class:open={failed || retrying}>
+          <div class="failure-inner">
+            {#if failed || retrying}
+              <p class="reason">{retrying ? heldLine : reasonLine}</p>
+              {#if recoverable}
+                <div class="actions">
+                  <button
+                    aria-busy={retrying || undefined}
+                    aria-disabled={retrying || undefined}
+                    class="pressable action"
+                    onclick={whileIdle(() => retrying, tryAgain)}
+                    type="button"
+                  >
+                    <PendingContent
+                      {failed}
+                      label="Try again"
+                      pending={retrying}
+                      pendingLabel="Sending…"
+                    />
+                  </button>
+                  {#if editable}
+                    <button
+                      class="pressable action"
+                      disabled={retrying}
+                      onclick={edit}
+                      type="button"
+                    >
+                      Edit
+                    </button>
+                  {/if}
+                </div>
+              {/if}
+            {/if}
+          </div>
+        </div>
       </div>
     </div>
   </section>
@@ -285,35 +349,113 @@
       margin-block-start: var(--space-2);
     }
   }
-  /* The well bleeds back out by exactly its own padding, so the reader's words
-     sit on the same ledger column as the agent's and only the wash widens.
-     --space-4 (14px) fits inside the transcript's gutters (25 start / 21 end)
-     with room to spare; the narrow breakpoint clamps it below. */
+  /* The well bleeds into the gutter by exactly its own padding, so the
+     reader's words sit on the agent's text column and only the surface
+     widens. --space-3 inside the transcript's 25/21 gutters; at the narrow
+     breakpoint the gutters drop to --space-5 (18px) and the well to
+     --space-2, keeping 11px of gutter. */
   .turn.you {
-    margin-inline: calc(var(--space-4) * -1);
-    padding-block: var(--space-3);
-    padding-inline: var(--space-4);
-    background: var(--surface-recess);
-    border-radius: var(--radius-sm);
-    /* The only property a ghost or a failure ever animates on the well
-       itself — nothing translates or scales, so the row never reflows
-       against its neighbours while it settles. */
-    opacity: 1;
+    --pad: var(--space-3);
 
-    /* Sending and queued: same well, 0.7, a note chip instead of a clock.
-       Not color alone — the note text and the missing clock carry the state
-       too, so it survives grayscale and reduced motion. */
-    &.ghost {
-      opacity: 0.7;
-    }
-    /* At the narrow breakpoint the transcript's gutters drop to --space-5
-       (18px), where a --space-4 bleed would leave 4px of air. Padding and
-       bleed step down together so they stay equal — the columns stay flush
-       and the gutter keeps 7px. */
     @media (width <= 900px) {
-      margin-inline: calc(var(--space-3) * -1);
-      padding-inline: var(--space-3);
+      --pad: var(--space-2);
     }
+
+    /* The run's later messages: the row above ends on its own padding and
+       the hairline, so there is no gap of the turn's own. */
+    &.grouped {
+      margin-block-start: 0;
+    }
+  }
+  /* One row's part of the well. The surface and its edge are painted by
+     ::before, under the words, so a part can open without clipping the words
+     landing in it; ::after is the hairline from the message above. The box is
+     the same for every part — padding above (--space-2, plus the edge on a
+     run's first part) and --space-2 plus the edge's 1px below — so a part
+     becoming the last, or no longer the last, repaints and never reflows. */
+  .well {
+    position: relative;
+    isolation: isolate;
+    margin-inline: calc(var(--pad) * -1);
+    padding-block: calc(var(--space-2) + 1px);
+    padding-inline: var(--pad);
+
+    &::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+      border: 1px solid var(--well-edge);
+      border-radius: var(--well-r);
+      background: var(--surface-recess-deep);
+
+      /* A run growing or shrinking: the edge and corners follow. */
+      @media (prefers-reduced-motion: no-preference) {
+        transition:
+          border-color var(--dur-pop) var(--ease-out),
+          border-radius var(--dur-pop) var(--ease-out);
+      }
+    }
+    /* Drawn by the LOWER message, across the text column only, on the pixel
+       row the part above leaves for its edge. The list places rows at
+       fractional offsets, so a later row's surface can cover the last pixel
+       of the row above: a hairline painted by the row above went missing.
+       Painted by the row below, it is painted last. */
+    &::after {
+      content: "";
+      position: absolute;
+      inset-inline: var(--pad);
+      inset-block-start: -1px;
+      block-size: 1px;
+      background: var(--well-edge);
+      opacity: 0;
+
+      @media (prefers-reduced-motion: no-preference) {
+        transition: opacity var(--dur-pop) var(--ease-out);
+      }
+    }
+
+    /* The words run to the well's edge, not the prose measure. */
+    & :global(.msg) {
+      max-inline-size: none;
+    }
+    /* The well is the deepest step, so a code span lifts to the raised
+       surface instead of vanishing into it. */
+    & :global(.msg code) {
+      background: var(--surface-raised);
+    }
+  }
+  /* A later message: open at the top, the hairline over the part above's
+     bottom edge. */
+  .grouped .well {
+    padding-block-start: var(--space-2);
+
+    &::before {
+      border-block-start-width: 0;
+      border-start-start-radius: 0;
+      border-start-end-radius: 0;
+    }
+    &::after {
+      opacity: 1;
+    }
+  }
+  /* Another message follows: no bottom edge or corners. */
+  .runs-on .well::before {
+    border-block-end-color: transparent;
+    border-end-start-radius: 0;
+    border-end-end-radius: 0;
+  }
+  /* Holds the grouped row's clock, floated into the first line. */
+  .words {
+    display: flow-root;
+  }
+  /* Sending and queued: the words and their header at reduced presence, a
+     note instead of a clock. The well stays at full strength, so the run
+     reads as one surface. Not colour alone — the note text and the missing
+     clock carry the state too, so it survives grayscale and reduced motion. */
+  .ghost > :global(.who),
+  .ghost .words {
+    opacity: var(--ghost-presence);
   }
   .chips {
     display: flex;
@@ -341,7 +483,8 @@
   /* Motion is opt-in. Without it every state above still lands — the note,
      the reason line — it simply lands at once. */
   @media (prefers-reduced-motion: no-preference) {
-    .turn.you {
+    .turn.you > :global(.who),
+    .words {
       transition: opacity var(--dur-menu) var(--ease-out);
     }
     .failure {
@@ -368,7 +511,8 @@
   }
   /* Text actions in the chip vocabulary MessageRow already speaks (radius-mark,
      text-meta, space-2) rather than a new button style — a failed send reads as
-     a sibling of the well it sits in, not a dialog bolted onto it. */
+     a sibling of the well it sits in, not a dialog bolted onto it. Raised out
+     of the well like its code spans, edged in the well's own edge. */
   .action {
     display: inline-flex;
     align-items: center;
@@ -376,8 +520,8 @@
     --btn-gap: var(--space-1);
     --btn-icon: 12px;
     border-radius: var(--radius-xs);
-    border: 1px solid var(--border-hairline);
-    background: transparent;
+    border: 1px solid var(--well-edge);
+    background: var(--surface-raised);
     padding-block: var(--space-1);
     padding-inline: var(--space-2);
     font-size: var(--text-label);

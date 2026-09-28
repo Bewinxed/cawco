@@ -42,7 +42,7 @@
   import { disclosure } from "./disclosure.svelte";
   import MessageBody from "./MessageBody.svelte";
   import MessageRow from "./MessageRow.svelte";
-  import { foldMessages } from "./rows";
+  import { foldMessages, wellRuns } from "./rows";
   import Subagent from "./Subagent.svelte";
   import Thinking from "./Thinking.svelte";
   import ToolGroup from "./ToolGroup.svelte";
@@ -520,6 +520,8 @@
            doubled the heaviest frame of the card. -->
       <CollapsibleLazy count={shown.length + (report ? 1 : 0)} {open}>
         {#snippet children(limit)}
+          {@const drawn = shown.slice(0, limit)}
+          {@const runs = wellRuns(drawn)}
           <div class="inner">
             {#if loading}
               <p class="empty">Loading its transcript…</p>
@@ -538,7 +540,7 @@
                 {id ? 'Nothing in its transcript yet.' : 'Still starting — no transcript to show.'}
               </p>
             {/if}
-            {#each shown.slice(0, limit) as r (r.key)}
+            {#each drawn as r (r.key)}
               {#if r.kind === 'tools'}
                 <ToolGroup messages={r.messages} />
               {:else if r.kind === 'question'}
@@ -556,6 +558,7 @@
                   {agentName}
                   grouped={r.grouped}
                   message={r.message}
+                  runsOn={runs.has(r.key)}
                 />
               {/if}
             {/each}

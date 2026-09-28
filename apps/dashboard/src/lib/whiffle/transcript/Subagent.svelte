@@ -19,7 +19,7 @@
   import { disclosure } from "./disclosure.svelte";
   import MessageBody from "./MessageBody.svelte";
   import MessageRow from "./MessageRow.svelte";
-  import { branchRows } from "./rows";
+  import { branchRows, wellRuns } from "./rows";
   import Thinking from "./Thinking.svelte";
   import ToolGroup from "./ToolGroup.svelte";
 
@@ -29,6 +29,7 @@
   /** Kept by the call that spawned it, so a branch the reader opened stays open. */
   const open = $derived(disclosure(spawn));
   const rows = $derived(branchRows(branch));
+  const runs = $derived(wellRuns(rows));
   const seed = $derived(branch.toolUseId || branch.subagentType);
   const Sprite = $derived(sessionSprite(seed));
   const title = $derived(
@@ -122,6 +123,7 @@
               agentName={branch.subagentType}
               grouped={row.grouped}
               message={row.message}
+              runsOn={runs.has(row.key)}
             />
           {/if}
         {/each}
