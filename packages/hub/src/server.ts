@@ -74,6 +74,7 @@ import {
   IMAGE_GENERATION_TIMEOUT_MS,
   INSPECT_CONFIG,
   identifyBlocks,
+  MESSAGES_HELD,
   MESSAGES_READ,
   MESSAGES_STORED,
   memoryDocProblem,
@@ -1231,13 +1232,14 @@ type MemoryRead =
  * expanded it.
  */
 /**
- * What a harness said about the sends it was handed: which it stores under
- * which id and which it has read (system frames), and which one it refused
- * (a `rejected` payload). These are the hub's to turn into records; no screen
- * draws them.
+ * What a harness said about the sends it was handed: which it holds (and,
+ * `whole`, that it holds nothing else), which it stores under which id and
+ * which it has read (system frames), and which one it refused (a `rejected`
+ * payload). These are the hub's to turn into records; no screen draws them.
  */
 type SendSignal =
   | { kind: "stored"; storedAs: Record<string, string> }
+  | { kind: "held"; held: string[]; whole: boolean }
   | { kind: "read"; read: string[]; storedAs: Record<string, string> }
   | { kind: "rejected"; uuid: string; error: string };
 
@@ -1251,6 +1253,12 @@ const peekSendSignal = (
   switch (message.subtype) {
     case MESSAGES_STORED:
       return { kind: "stored", storedAs: message.storedAs ?? {} };
+    case MESSAGES_HELD:
+      return {
+        kind: "held",
+        held: message.held ?? [],
+        whole: message.whole === true,
+      };
     case MESSAGES_READ:
       return {
         kind: "read",
@@ -1298,6 +1306,7 @@ const UNREAD = {
   stopped: "The session was stopped before it read this.",
   ended: "The session ended before it read this.",
   restarted: "The session restarted before it read this.",
+  lost: "This never reached the session.",
 } as const;
 
 /**
@@ -1691,7 +1700,7 @@ export const createServer = ({
   const forgetPending = (
     instanceId: string,
     why: string,
-    stillHeld = false
+    outlived = false
   ): void => {
     for (const parked of pending.list()) {
       if (parked.instanceId === instanceId && parked.requestId) {
@@ -1707,8 +1716,12 @@ export const createServer = ({
     // itself; nothing should still be waiting to hear its first words.
     awaitingFirstTurn.delete(instanceId);
     // Nor is anything it was sent and never read going to run — unless its
-    // harness wrote it down as it went, or a process it outlived holds it.
-    settlePending(instanceId, why, stillHeld);
+    // harness wrote it down as it went. A process that outlived its agent
+    // may hold it still: custody decides that ({@link decideCustody}).
+    if (!outlived) {
+      inCustody.delete(instanceId);
+      settlePending(instanceId, why, "fail");
+    }
     // The supervisor's turn buffers for a dead session are waste.
     supervisor.forget(instanceId);
     usageCounter.forget(instanceId);
@@ -1903,12 +1916,12 @@ export const createServer = ({
    * Which sends a session's stored transcript holds, and whether its harness
    * has taken each up: by send uuid, true for read, false for written down
    * and still waiting ({@link SessionMessage.queued}). Found the way a history
-   * read links them ({@link sendFinder}). A machine that cannot be asked
-   * cannot say it stored one.
+   * read links them ({@link sendFinder}). `undefined` when the machine could
+   * not be asked: it has said nothing either way.
    */
   const storedIn = async (
     instanceId: string
-  ): Promise<Map<string, boolean>> => {
+  ): Promise<Map<string, boolean> | undefined> => {
     const [row] = db.getInstancesByIds([instanceId]);
     if (!row?.sessionId) {
       return new Map();
@@ -1921,7 +1934,7 @@ export const createServer = ({
       (row.harness || undefined) as HarnessKind | undefined
     );
     if (typeof answer === "string" || !answer.ok) {
-      return new Map();
+      return undefined;
     }
     const entries = answer.result as SessionMessage[];
     const sendsOf = sendFinder(instanceId, entries);
@@ -1935,27 +1948,59 @@ export const createServer = ({
   };
 
   /**
-   * What a session was sent and has not read, decided now that it stopped,
-   * ended or restarted (rule c): whatever its harness has taken up is read —
-   * a process can take up the notes it was holding as it stops, and say
-   * nothing — and the rest did not go, for `why`. `keepUnstored` leaves the
-   * rest waiting instead, for a process that is still holding them and will
-   * say when it reads them.
+   * What becomes of a pending send its harness has not taken up, once a
+   * transcript read has looked: `fail` — it did not go, for the reason given
+   * (the process is gone; a machine that cannot be asked cannot say it stored
+   * one); `wait` — a live process may still hand it over and say so;
+   * `unheld` — what the process holds is known, so a send it neither stored
+   * nor said it held ({@link SentMessageRow.held}), or one a later send
+   * overtook, never reached it. That is decided only on a read the machine
+   * answered.
+   */
+  type Unstored = "fail" | "wait" | "unheld";
+
+  /**
+   * Whether a later send of the session has been taken up ahead of `send`.
+   * Every harness takes up what it is sent in the order it was sent — an
+   * urgent send, which cuts ahead, excepted — so a send overtaken like this
+   * was never handed to it.
+   */
+  const overtaken = (send: SentMessageRow): boolean =>
+    db
+      .sendsIn(send.instanceId, ["read"])
+      .some(
+        (later) =>
+          later.mode !== "urgent" &&
+          later.acceptedAt.getTime() > send.acceptedAt.getTime()
+      );
+
+  /**
+   * What a session was sent and has not read, decided against its stored
+   * transcript (rule c): whatever its harness has taken up is read — a
+   * process can take up the notes it was holding as it stops, and say
+   * nothing — and the rest as `unstored` says, failing for `why`. `only`
+   * narrows the sends decided. One another read is already deciding is left
+   * to it. `decided` hears that this read decided every one.
    */
   const settlePending = (
     instanceId: string,
     why: string,
-    keepUnstored = false
+    unstored: Unstored,
+    only: (send: SentMessageRow) => boolean = () => true,
+    decided: () => void = () => undefined
   ): void => {
     // A turn that is over answers nothing it read; one a live process is
     // still running may yet.
-    if (!keepUnstored) {
+    if (unstored === "fail") {
       unanswered.delete(instanceId);
     }
-    const sends = db
-      .sendsIn(instanceId, ["pending"])
-      .filter((send) => !deciding.has(send.uuid));
+    const all = db.sendsIn(instanceId, ["pending"]).filter(only);
+    const sends = all.filter((send) => !deciding.has(send.uuid));
+    const whole = sends.length === all.length;
     if (sends.length === 0) {
+      if (whole) {
+        decided();
+      }
       return;
     }
     for (const send of sends) {
@@ -1963,18 +2008,15 @@ export const createServer = ({
     }
     // biome-ignore lint/complexity/noVoid: the callers are frame handlers that must not wait on a machine round trip
     void storedIn(instanceId)
-      .then((stored) => {
+      .then((answer) => {
+        if (!answer && unstored === "unheld") {
+          return;
+        }
         for (const send of sends) {
-          // Read meanwhile, or thrown away with its session: that stands.
-          const now = db.sendRecord(send.uuid);
-          if (now?.state !== "pending") {
-            continue;
-          }
-          if (stored.get(now.uuid)) {
-            readSend(now, false);
-          } else if (!keepUnstored) {
-            failSend(now, why);
-          }
+          settleSend(send, answer ?? new Map(), unstored, why);
+        }
+        if (whole) {
+          decided();
         }
       })
       .finally(() => {
@@ -1982,6 +2024,72 @@ export const createServer = ({
           deciding.delete(send.uuid);
         }
       });
+  };
+
+  /** One send {@link settlePending} decides, against what `stored` says was taken up. */
+  const settleSend = (
+    send: SentMessageRow,
+    stored: Map<string, boolean>,
+    unstored: Unstored,
+    why: string
+  ): void => {
+    // Read meanwhile, or thrown away with its session: that stands.
+    const now = db.sendRecord(send.uuid);
+    if (now?.state !== "pending") {
+      return;
+    }
+    const taken = stored.get(now.uuid);
+    if (taken) {
+      readSend(now, false);
+      return;
+    }
+    const lost =
+      unstored === "fail" ||
+      (unstored === "unheld" &&
+        taken === undefined &&
+        !(now.held && !overtaken(now)));
+    if (lost) {
+      failSend(now, why);
+    }
+  };
+
+  /**
+   * Sessions whose process outlived an agent restart, from the replacement's
+   * register until what they were sent before it is decided: which machine
+   * holds them, when it registered, and whether their harness has said what
+   * it holds. Opencode's transcript is all it holds — it stores every send
+   * the moment it is handed one — so it has said so at once; Claude's CLI
+   * holds sends in a queue of its own, which it names when the agent takes
+   * it over ({@link MESSAGES_HELD} with `whole`).
+   */
+  const inCustody = new Map<
+    string,
+    { machineId: string; since: number; told: boolean }
+  >();
+
+  /**
+   * An outlived session's sends from before its agent restarted, decided
+   * once its harness has said what it holds (rule: a send is read or failed,
+   * never pending for good): read if taken up, waiting if held, and
+   * otherwise it never reached the session. A machine that could not be
+   * asked is asked again at its next heartbeat.
+   */
+  const decideCustody = (instanceId: string): void => {
+    const held = inCustody.get(instanceId);
+    if (!held?.told) {
+      return;
+    }
+    settlePending(
+      instanceId,
+      UNREAD.lost,
+      "unheld",
+      (send) => send.acceptedAt.getTime() < held.since,
+      () => {
+        if (inCustody.get(instanceId) === held) {
+          inCustody.delete(instanceId);
+        }
+      }
+    );
   };
 
   /** A retry is out: the failed send it stands in for is over. */
@@ -1993,10 +2101,12 @@ export const createServer = ({
   };
 
   /**
-   * A harness's word about its sends (`SendSignal`): stored under an id,
-   * read, or refused. Read ones are read in the order named; one named by an
-   * id this hub has no record under was never a send — typed in the harness,
-   * or its own.
+   * A harness's word about its sends (`SendSignal`): held, stored under an
+   * id, read, or refused. Read ones are read in the order named; one named by
+   * an id this hub has no record under was never a send — typed in the
+   * harness, or its own. A send read overtakes every pending send accepted
+   * before it ({@link overtaken}): those are decided against the transcript
+   * at once, and any it does not hold never reached the session.
    */
   const takeSendSignal = (instanceId: string, signal: SendSignal): void => {
     if (signal.kind === "rejected") {
@@ -2006,22 +2116,68 @@ export const createServer = ({
       }
       return;
     }
+    if (signal.kind === "held") {
+      takeHeld(instanceId, signal);
+      return;
+    }
     for (const [uuid, harnessId] of Object.entries(signal.storedAs)) {
       db.linkSend(uuid, harnessId);
     }
-    if (signal.kind === "stored") {
-      return;
+    if (signal.kind === "read") {
+      takeRead(instanceId, signal.read);
     }
+  };
+
+  /**
+   * Sends the harness says it holds: they wait for their read through an
+   * agent restart. Said `whole`, by an agent taking the process over, it
+   * decides the session's custody ({@link decideCustody}).
+   */
+  const takeHeld = (
+    instanceId: string,
+    { held, whole }: { held: string[]; whole: boolean }
+  ): void => {
+    for (const row of db.sendsFor(held)) {
+      if (row.instanceId === instanceId && row.state === "pending") {
+        db.updateSend(row.uuid, { held: true });
+      }
+    }
+    const taken = inCustody.get(instanceId);
+    if (whole && taken) {
+      taken.told = true;
+      decideCustody(instanceId);
+    }
+  };
+
+  /**
+   * Sends the harness has read, read in the order named; then every pending
+   * send accepted before the latest of them that is not urgent is overtaken
+   * ({@link overtaken}), and decided against the transcript at once.
+   */
+  const takeRead = (instanceId: string, ids: string[]): void => {
     const order = (row: SentMessageRow): number => {
-      const at = signal.read.indexOf(row.uuid);
-      return at >= 0 ? at : signal.read.indexOf(row.harnessId ?? "");
+      const at = ids.indexOf(row.uuid);
+      return at >= 0 ? at : ids.indexOf(row.harnessId ?? "");
     };
     const read = db
-      .sendsFor(signal.read)
+      .sendsFor(ids)
       .filter((row) => row.instanceId === instanceId && row.state === "pending")
       .sort((a, b) => order(a) - order(b));
     for (const row of read) {
       readSend(row, true);
+    }
+    const latest = Math.max(
+      ...read
+        .filter((row) => row.mode !== "urgent")
+        .map((row) => row.acceptedAt.getTime())
+    );
+    if (Number.isFinite(latest)) {
+      settlePending(
+        instanceId,
+        UNREAD.lost,
+        "unheld",
+        (send) => send.acceptedAt.getTime() < latest
+      );
     }
   };
 
@@ -7584,20 +7740,33 @@ export const createServer = ({
                 (custody.opencode &&
                   row.harness === "opencode" &&
                   row.sessionId !== null);
+              const registeredAt = Date.now();
               for (const orphan of settled) {
-                // A process that outlived the agent still holds what it was
-                // sent and has not read: that waits for its read after the
-                // reattach. A send its harness has taken up is read either way
-                // — a read that happened while no agent was reading is not
-                // framed again.
-                forgetPending(orphan.row.id, UNREAD.ended, outlived(orphan));
+                // A process that outlived the agent holds what reached it and
+                // has not been read, and nothing else: whatever the agent that
+                // went away had not handed it yet went with that agent. What
+                // it holds is decided once its harness has said
+                // (`decideCustody`). A send its harness has taken up is read
+                // either way — a read that happened while no agent was
+                // reading is not framed again.
+                const kept = outlived(orphan);
+                forgetPending(orphan.row.id, UNREAD.ended, kept);
+                if (kept) {
+                  inCustody.set(orphan.row.id, {
+                    machineId: message.machineId,
+                    since: registeredAt,
+                    told: orphan.row.harness === "opencode",
+                  });
+                  decideCustody(orphan.row.id);
+                }
                 escalateRoutedAsks(orphan.row.id);
               }
               // Sessions that ran on while this hub was away: a read that
               // happened meanwhile was framed to nobody, and the transcript
-              // says it happened.
+              // says it happened. Their agent is the one that was handed the
+              // rest, and it is still handing them over.
               for (const instanceId of peekInstances(message.payload)) {
-                settlePending(instanceId, UNREAD.ended, true);
+                settlePending(instanceId, UNREAD.ended, "wait");
               }
               // The daemon went away and came back. A session whose conversation
               // the harness still has is not finished — it lost its process, which
@@ -7713,6 +7882,13 @@ export const createServer = ({
                 // gone, and the same goes for anything it was holding.
                 forgetPending(row.id, UNREAD.ended);
                 escalateRoutedAsks(row.id);
+              }
+              // An outlived session whose sends could not be decided because
+              // the machine did not answer the read is asked again.
+              for (const [instanceId, held] of inCustody) {
+                if (held.machineId === message.machineId) {
+                  decideCustody(instanceId);
+                }
               }
               // The deployment clone's state rides the beat (contract C8). A
               // change in it is board news on its own — `diverged` appearing
@@ -7931,7 +8107,8 @@ export const createServer = ({
                 }
                 // What it was sent and had not read did not go, unless it wrote
                 // some of it down as it stopped.
-                settlePending(message.instanceId, UNREAD.stopped);
+                inCustody.delete(message.instanceId);
+                settlePending(message.instanceId, UNREAD.stopped, "fail");
                 pulses.delete(message.instanceId);
                 touched.delete(message.instanceId);
                 escalateRoutedAsks(message.instanceId);

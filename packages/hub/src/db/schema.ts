@@ -401,6 +401,14 @@ export const sentMessages = sqliteTable(
     replaces: text("replaces"),
     /** The retry that replaced this one. */
     replacedBy: text("replaced_by"),
+    /**
+     * The harness has said it holds the send, in a queue of its own that no
+     * transcript shows yet: Claude's CLI queuing the command
+     * (`MESSAGES_HELD`). A send still pending when a process outlives its
+     * agent is waited for only if it is held or stored; otherwise it never
+     * reached the session.
+     */
+    held: integer("held", { mode: "boolean" }).notNull().default(false),
   },
   (table) => [
     index("sent_messages_harness_id").on(table.harnessId),

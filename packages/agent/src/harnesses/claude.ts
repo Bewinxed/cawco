@@ -48,6 +48,7 @@ import {
   CONTROL_SET_EFFORT,
   INSPECT_CONFIG,
   MARKETPLACE_CATALOG,
+  MESSAGES_HELD,
   MESSAGES_READ,
   READ_HOOK_SCRIPT,
   READ_MEMORY_FILE,
@@ -113,25 +114,40 @@ interface CommandLifecycle {
 
 /**
  * The neutral frame is the SDK frame re-tagged: same fields, plus the
- * original. A command's lifecycle is the one exception: `started` becomes the
- * {@link MESSAGES_READ} frame, and its other states say nothing the hub
- * needs, so they are `null` — no frame at all. Measured on CLI 2.1.280: an
- * interrupt cancels only the command it is running; the commands still queued
- * behind it are then `started` together as the next turn, stored as one
- * record under the last one's uuid, and one folded in before the interrupt
- * was `started` (read) already, so its later `cancelled` changes nothing.
+ * original. A command's lifecycle is the one exception: `queued` becomes the
+ * {@link MESSAGES_HELD} frame (the CLI has the send, in a queue no transcript
+ * shows yet), `started` the {@link MESSAGES_READ} frame, and its other states
+ * say nothing the hub needs, so they are `null` — no frame at all. Measured
+ * on CLI 2.1.280: an interrupt cancels only the command it is running; the
+ * commands still queued behind it are then `started` together as the next
+ * turn, stored as one record under the last one's uuid, and one folded in
+ * before the interrupt was `started` (read) already, so its later
+ * `cancelled` changes nothing.
  */
 export const toNeutral = (sdk: SDKMessage): NeutralMessage | null => {
   if ((sdk as { type: string }).type === "command_lifecycle") {
     const command = sdk as unknown as CommandLifecycle;
-    return command.state === "started"
-      ? {
+    const session = command.session_id
+      ? { session_id: command.session_id }
+      : {};
+    switch (command.state) {
+      case "queued":
+        return {
+          type: "system",
+          subtype: MESSAGES_HELD,
+          held: [command.command_uuid],
+          ...session,
+        };
+      case "started":
+        return {
           type: "system",
           subtype: MESSAGES_READ,
           read: [command.command_uuid],
-          ...(command.session_id ? { session_id: command.session_id } : {}),
-        }
-      : null;
+          ...session,
+        };
+      default:
+        return null;
+    }
   }
   if (sdk.type === "result") {
     // The SDK's own usage carries cache_creation/cache_read counts; re-tag them
@@ -1116,6 +1132,8 @@ const toEntry = (
 
 /** The fields of a ring line an adoption reads; `undefined` when it is not JSON. */
 interface RingLine {
+  /** A `command_lifecycle` line's command: the uuid of the send it is. */
+  command_uuid?: unknown;
   request?: { subtype?: unknown };
   request_id?: unknown;
   session_id?: unknown;
@@ -1477,14 +1495,17 @@ export class ClaudeHarness implements Harness {
    * off, and nothing waits: the `Query` takes sends and controls at once.
    *
    * The ring is read first, from {@link RING_START} through `head`, for the
-   * three things only the backlog can say:
+   * four things only the backlog can say:
    *  - whether a turn is running ({@link ChildActivity}), so the session is
    *    busy from the start, as it was before the agent went away;
    *  - the permission asks the previous host left unanswered — the turn is
    *    blocked on them, and the attached `Query` must park and answer them
    *    under the CLI's own request ids (the bridge's `prelude`);
    *  - the conversation's session id, for an attached child writes no `init`
-   *    until its next turn.
+   *    until its next turn;
+   *  - every send the CLI was handed, which is told to the hub
+   *    ({@link MESSAGES_HELD}, `whole`): the rest of what the agent before
+   *    this one was sent never reached the CLI.
    * Reading from the start cannot miss a turn line the way a fixed window
    * did: an idle child keeps writing notices after its `result`. A start
    * sessiond no longer holds is answered by its `reset`, which names the
@@ -1509,6 +1530,9 @@ export class ClaudeHarness implements Harness {
     const { head } = options;
     const activity = new ChildActivity();
     const asks = new Map<string, string>();
+    // Every send the CLI has been handed: each command it names in a
+    // lifecycle line, queued or begun.
+    const handed = new Set<string>();
     let { sessionId } = options;
     let oldest = 1;
     await new Promise<void>((done) => {
@@ -1528,6 +1552,12 @@ export class ClaudeHarness implements Harness {
           const parsed = parseLine(event.data);
           activity.read(parsed);
           readAsk(asks, parsed, event.data);
+          if (
+            parsed?.type === "command_lifecycle" &&
+            typeof parsed.command_uuid === "string"
+          ) {
+            handed.add(parsed.command_uuid);
+          }
           if (typeof parsed?.session_id === "string") {
             sessionId = parsed.session_id;
           }
@@ -1558,6 +1588,21 @@ export class ClaudeHarness implements Harness {
     });
     const replayable =
       options.afterSeq !== undefined && options.afterSeq + 1 >= oldest;
+    // What the CLI was handed is all it holds: a send the agent before this
+    // one had not written to it yet went with that agent. The list is whole
+    // when this read saw every line the hub has not — the ring still holds
+    // the line after the hub's mark, or its first line — or when no turn is
+    // running, for an idle CLI takes up what it is handed at once and so
+    // holds nothing unread. Said before the `Query` below replays a line, so
+    // the hub decides those sends against it, and the reads replayed land on
+    // what it keeps waiting.
+    ctx.frame({
+      type: "system",
+      subtype: MESSAGES_HELD,
+      held: [...handed],
+      whole: replayable || oldest <= 1 || !activity.turnRunning,
+      ...(sessionId ? { session_id: sessionId } : {}),
+    });
     // Where the `Query` reads from when it cannot replay the hub's mark: the
     // listing's `head`, unless the ring no longer holds the line after it — a
     // cursor sessiond cannot serve would end the `Query` on a reset.

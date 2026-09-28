@@ -1,0 +1,1 @@
+ALTER TABLE `sent_messages` ADD `held` integer DEFAULT false NOT NULL;

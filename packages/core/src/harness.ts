@@ -558,6 +558,14 @@ export const MESSAGES_READ = "read";
  */
 export const MESSAGES_STORED = "stored";
 
+/**
+ * The `system` subtype saying the harness now holds these sends (`held`, by
+ * uuid) in a queue of its own, before any transcript shows them: Claude's CLI
+ * queuing a command — or, `whole`, every send it has been handed. The hub
+ * keeps it on the records; it never reaches a screen.
+ */
+export const MESSAGES_HELD = "held";
+
 export interface NeutralStreamMessage {
   event:
     | {
@@ -622,6 +630,8 @@ export interface NeutralSystemMessage {
   description?: string;
   exit_code?: number;
   fallback_model?: string;
+  // held ({@link MESSAGES_HELD}) — the sends the harness now holds
+  held?: string[];
   // hook_response — a session-start hook that failed, the one hook frame a
   // transcript draws (its output is otherwise startup noise, and never stored)
   hook_name?: string;
@@ -666,6 +676,13 @@ export interface NeutralSystemMessage {
   tools?: string[];
   type: "system";
   uuid?: string;
+  /**
+   * held ({@link MESSAGES_HELD}): `held` is every send the harness has been
+   * handed. Said by an agent taking over a process that outlived the one
+   * before it, off the process's own output: a send from before then that is
+   * not in it never reached the process.
+   */
+  whole?: boolean;
 }
 
 /** A frame that has no neutral meaning yet, forwarded whole for a future renderer. */

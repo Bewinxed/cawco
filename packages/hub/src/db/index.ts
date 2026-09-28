@@ -814,7 +814,13 @@ export interface DbShape {
     change: Partial<
       Pick<
         SentMessageRow,
-        "state" | "reason" | "anchor" | "replacedBy" | "body" | "harnessId"
+        | "state"
+        | "reason"
+        | "anchor"
+        | "replacedBy"
+        | "body"
+        | "harnessId"
+        | "held"
       >
     >
   ) => SentMessageRow | undefined;
