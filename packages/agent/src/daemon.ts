@@ -275,6 +275,11 @@ export const reconnecting = <E extends { readonly reason: string }, R>(
     // `Effect.retry` re-invokes on every attempt.
     let failures = 0;
     let firstFailureAt: number | undefined;
+    // The last reason this series logged, and when. A hub restart fails the
+    // knock about ten times inside half a second; one line per reason says
+    // as much, and a reason repeated after a knock window has passed (a real
+    // outage backing off) is logged again, as every attempt used to be.
+    let said: { at: number; reason: string } | undefined;
 
     return Effect.suspend(() => {
       // Per-pass, and read only after the failure that ends the pass — nothing
@@ -283,9 +288,17 @@ export const reconnecting = <E extends { readonly reason: string }, R>(
       return session(() => {
         liveAt = now();
       }).pipe(
-        Effect.tapError((error) =>
-          Effect.logWarning(`${error.reason} — reconnecting`)
-        ),
+        Effect.tapError((error) => {
+          const at = now();
+          if (
+            said?.reason === error.reason &&
+            at - said.at <= RESTART_WINDOW_MS
+          ) {
+            return Effect.void;
+          }
+          said = { at, reason: error.reason };
+          return Effect.logWarning(`${error.reason} — reconnecting`);
+        }),
         Effect.tapError(() => {
           if (!rediscover) {
             return Effect.void;
