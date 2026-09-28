@@ -6,9 +6,11 @@
    * and opencode's real spend never sit in the same total. Each (tab, harness)
    * pair is fetched once and cached, so switching back costs no request.
    */
+  import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
+  import { Button } from "$lib/components/ui/button";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Dialog from "$lib/components/ui/dialog";
   import { Skeleton } from "$lib/components/ui/skeleton";
@@ -16,6 +18,11 @@
   import * as Table from "$lib/components/ui/table";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Tabs from "$lib/components/ui/tabs";
+  import { IconArrowDown, IconRefresh } from "$lib/icons";
+  import { crossIn, crossOut } from "../motion/curves.svelte";
+  import { morph } from "../motion/morph.svelte";
+  import { tableReflow } from "../motion/rows.svelte";
+  import { depart, land } from "../motion/share.svelte";
   import {
     compactNumber,
     totalTokensOf,
@@ -43,41 +50,64 @@
 
   const cache = new Map<string, UsageSummary>();
   let summary = $state<UsageSummary | null>(null);
-  let loading = $state(true);
+  /**
+   * What the table's slot shows: a skeleton while a (tab, harness) pair is
+   * read for the first time, the rows, or the error with a retry.
+   */
+  let status = $state<"loading" | "ready" | "error">("loading");
   let loadError = $state<string | null>(null);
+  /** A retry is running: the button shows it, the error stays put. */
+  let retrying = $state(false);
 
   async function fetchTab(): Promise<void> {
     const key = `${tab}:${harness}`;
     const known = cache.get(key);
     if (known) {
       summary = known;
-      loading = false;
+      status = "ready";
       return;
     }
-    loading = true;
-    loadError = null;
+    if (!retrying) {
+      status = "loading";
+    }
     try {
       const response = await fetch(
         `/api/usage/summary?groupBy=${tab}&harness=${harness}`
       );
       if (!response.ok) {
-        throw new Error(`the hub answered ${response.status}`);
+        throw new Error(`The hub answered ${response.status}.`);
       }
       const data = (await response.json()) as UsageSummary;
       cache.set(key, data);
-      summary = data;
+      if (key === `${tab}:${harness}`) {
+        summary = data;
+        status = "ready";
+      }
     } catch (cause) {
-      loadError = cause instanceof Error ? cause.message : String(cause);
-      summary = null;
-    } finally {
-      loading = false;
+      if (key === `${tab}:${harness}`) {
+        loadError = cause instanceof Error ? cause.message : String(cause);
+        status = "error";
+      }
     }
   }
 
   $effect(() => {
-    // biome-ignore lint/complexity/noVoid: fire-and-forget — the effect reruns on tab/harness, fetchTab() manages its own loading/error state
+    // biome-ignore lint/complexity/noVoid: fire-and-forget — the effect reruns on tab/harness, fetchTab() manages its own status
     void fetchTab();
   });
+
+  async function retry(): Promise<void> {
+    retrying = true;
+    await fetchTab();
+    retrying = false;
+  }
+
+  /**
+   * The slot's content: one per (tab, harness) once read. A new one
+   * cross-fades in over the old (motion/curves) while the slot's height
+   * morphs to it (motion/morph).
+   */
+  const view = $derived(status === "ready" ? `${tab}:${harness}` : status);
 
   function switchTab(next: string): void {
     // biome-ignore lint/complexity/noVoid: fire-and-forget navigation — the URL param drives the $derived tab, not this promise
@@ -100,6 +130,19 @@
   let sortBy = $state<SortKey>("total");
   let sortAsc = $state(false);
 
+  /**
+   * A re-sort reflows the rows to their new places (motion/rows); a new
+   * tab or harness is a new table, which cross-fades in instead.
+   */
+  let exitLayer = $state<HTMLElement | null>(null);
+  let resorting = false;
+  let sorted: UsageSummary | null = null;
+  const reflowRows = tableReflow({
+    layer: () => exitLayer,
+    rows: "tbody tr[data-key]",
+    enabled: () => resorting,
+  });
+
   const rows: Row[] = $derived.by(() => {
     const out = (summary?.rows ?? []).map((row) => ({
       ...row,
@@ -112,6 +155,9 @@
           : String(a[sortBy]).localeCompare(String(b[sortBy]));
       return sortAsc ? cmp : -cmp;
     });
+    resorting = summary === sorted;
+    sorted = summary;
+    untrack(() => reflowRows(out.map((row) => String(row.key))));
     return out;
   });
 
@@ -161,10 +207,19 @@
     session: "Session",
   };
 
+  /** The row a detail opens from: the dialog grows out of it (motion/share). */
+  const shareKey = (row: Row): string => `usage-row:${tab}:${nameOf(row)}`;
+
   function openSession(row: Row): void {
     selected = row;
     dialogOpen = true;
   }
+
+  /** The kit dialog's frame, so the whole dialog lands, not its body. */
+  const landDialog = (body: HTMLElement) =>
+    land(() => (selected ? shareKey(selected) : undefined))(
+      body.closest<HTMLElement>('[data-slot="dialog-content"]') ?? body
+    );
 </script>
 
 <div class="flex flex-col gap-3">
@@ -173,39 +228,17 @@
       <h2 class="text-title">Breakdown</h2>
       <p class="text-meta text-muted-foreground">Tokens and cost by {tab}.</p>
     </div>
-    <!-- biome-ignore lint/a11y/useSemanticElements: a fieldset's default border/padding and legend semantics don't fit this toolbar; role="group" already conveys it to AT -->
-    <div
-      aria-label="Harness"
-      class="flex gap-1 rounded-[var(--radius-sm)] bg-[var(--surface-recess-deep)] p-0.5"
-      role="group"
+    <Tabs.Root
+      onValueChange={(next) => {
+        harness = next as Harness;
+      }}
+      value={harness}
     >
-      <button
-        aria-pressed={harness === 'claude'}
-        class="touch-hit rounded-[var(--radius-xs)] px-2.5 py-1 [--hit-gap-x:4px] text-label transition-colors duration-150 ease-out
-               {harness === 'claude'
-          ? 'bg-[var(--surface-lift)] text-foreground shadow-[var(--shadow-raised)]'
-          : 'text-muted-foreground hover:text-foreground'}"
-        onclick={() => {
-          harness = 'claude';
-        }}
-        type="button"
-      >
-        Claude
-      </button>
-      <button
-        aria-pressed={harness === 'opencode'}
-        class="touch-hit rounded-[var(--radius-xs)] px-2.5 py-1 [--hit-gap-x:4px] text-label transition-colors duration-150 ease-out
-               {harness === 'opencode'
-          ? 'bg-[var(--surface-lift)] text-foreground shadow-[var(--shadow-raised)]'
-          : 'text-muted-foreground hover:text-foreground'}"
-        onclick={() => {
-          harness = 'opencode';
-        }}
-        type="button"
-      >
-        opencode
-      </button>
-    </div>
+      <Tabs.List aria-label="Harness">
+        <Tabs.Trigger value="claude">Claude</Tabs.Trigger>
+        <Tabs.Trigger value="opencode">opencode</Tabs.Trigger>
+      </Tabs.List>
+    </Tabs.Root>
   </div>
 
   <Tabs.Root onValueChange={switchTab} value={tab}>
@@ -216,83 +249,122 @@
     </Tabs.List>
   </Tabs.Root>
 
-  {#if loadError}
-    <p class="text-meta text-error" role="alert">{loadError}</p>
-  {:else if loading}
-    <Skeleton class="h-40 w-full" />
-  {:else}
-    <Table.Root class="q-break" ghostRows="tbody tr.clickable">
-      <Table.Header>
-        <Table.Row>
-          <Table.Head class="name-head">Name</Table.Head>
-          {#each COLUMNS as column (column.key)}
-            <Table.Head class="num {SPLIT.has(column.key) ? 'split' : ''}">
-              <button
-                aria-pressed={sortBy === column.key}
-                class="sortbtn touch-hit"
-                onclick={() => sort(column.key)}
-                type="button"
-              >
-                {column.label}
-                {#if sortBy === column.key}
-                  <span aria-hidden="true">{sortAsc ? '↑' : '↓'}</span>
-                {/if}
-              </button>
-            </Table.Head>
-          {/each}
-        </Table.Row>
-      </Table.Header>
-      <Table.Body>
-        {#each rows as row (String(row.key))}
-          <Table.Row
-            class={opens ? 'clickable' : ''}
-            onclick={() => (opens ? openSession(row) : undefined)}
-            onkeydown={(event) => {
-              if (opens && (event.key === 'Enter' || event.key === ' ')) {
-                event.preventDefault();
-                openSession(row);
-              }
-            }}
-            role={opens ? 'button' : undefined}
-            tabindex={opens ? 0 : undefined}
+  <div class="slot" {@attach morph()}>
+    {#key view}
+      <div class="tbl" in:crossIn out:crossOut>
+        {#if status === 'loading'}
+          <div class="flex flex-col gap-2 py-2" data-slot="skeleton-rows">
+            {#each { length: 5 }, i (i)}
+              <Skeleton class="h-7 w-full" />
+            {/each}
+          </div>
+        {:else if status === 'error'}
+          <div
+            class="flex flex-col items-start gap-3 rounded-[var(--radius-md)] bg-[var(--surface-recess)] p-5"
+            role="alert"
           >
-            <Table.Cell
-              class="name lead {tab === 'model' || tab === 'session' ? 'mono' : ''}"
-              title={nameOf(row)}
-            >
-              {nameOf(row)}
-            </Table.Cell>
-            <Table.Cell class="num split" data-label="Input"
-              >{compactNumber(row.input)}</Table.Cell
-            >
-            <Table.Cell class="num split" data-label="Output"
-              >{compactNumber(row.output)}</Table.Cell
-            >
-            <Table.Cell class="num split" data-label="Cache write"
-              >{compactNumber(row.cacheCreation)}</Table.Cell
-            >
-            <Table.Cell class="num split" data-label="Cache read"
-              >{compactNumber(row.cacheRead)}</Table.Cell
-            >
-            <Table.Cell class="num strong total" data-label="Total"
-              >{compactNumber(row.total)}</Table.Cell
-            >
-            <Table.Cell class="num messages" data-label="Messages"
-              >{row.messages.toLocaleString()}</Table.Cell
-            >
-            <Table.Cell class="num strong cost">{usd(row.costUsd)}</Table.Cell>
-          </Table.Row>
-        {/each}
-        {#if rows.length === 0}
-          <Table.Row>
-            <Table.Cell class="empty" colspan={8}>
-              Nothing recorded for this harness yet.
-            </Table.Cell>
-          </Table.Row>
+            <p class="text-meta text-muted-foreground">
+              Could not read the breakdown. {loadError}
+            </p>
+            <Button
+              icon={IconRefresh}
+              label="Retry"
+              onclick={retry}
+              pending={retrying}
+              pendingLabel="Retrying…"
+              size="sm"
+              variant="outline"
+            />
+          </div>
+        {:else}
+          <div aria-hidden="true" class="exits" bind:this={exitLayer}></div>
+          <Table.Root class="q-break" ghostRows="tbody tr.clickable">
+            <Table.Header>
+              <Table.Row>
+                <Table.Head class="name-head">Name</Table.Head>
+                {#each COLUMNS as column (column.key)}
+                  <Table.Head
+                    class="num {SPLIT.has(column.key) ? 'split' : ''}"
+                  >
+                    <button
+                      aria-pressed={sortBy === column.key}
+                      class="sortbtn touch-hit"
+                      onclick={() => sort(column.key)}
+                      type="button"
+                    >
+                      {column.label}
+                      <span
+                        aria-hidden="true"
+                        class="arrow"
+                        class:on={sortBy === column.key}
+                        class:up={sortBy === column.key && sortAsc}
+                      >
+                        <IconArrowDown />
+                      </span>
+                    </button>
+                  </Table.Head>
+                {/each}
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
+              {#each rows as row (String(row.key))}
+                <Table.Row
+                  class={opens ? 'clickable' : ''}
+                  data-key={String(row.key)}
+                  data-share={opens ? shareKey(row) : undefined}
+                  onclick={() => (opens ? openSession(row) : undefined)}
+                  onkeydown={(event) => {
+                    if (opens && (event.key === 'Enter' || event.key === ' ')) {
+                      event.preventDefault();
+                      depart(event.currentTarget);
+                      openSession(row);
+                    }
+                  }}
+                  role={opens ? 'button' : undefined}
+                  tabindex={opens ? 0 : undefined}
+                >
+                  <Table.Cell
+                    class="name lead {tab === 'model' || tab === 'session' ? 'mono' : ''}"
+                    title={nameOf(row)}
+                  >
+                    {nameOf(row)}
+                  </Table.Cell>
+                  <Table.Cell class="num split" data-label="Input"
+                    >{compactNumber(row.input)}</Table.Cell
+                  >
+                  <Table.Cell class="num split" data-label="Output"
+                    >{compactNumber(row.output)}</Table.Cell
+                  >
+                  <Table.Cell class="num split" data-label="Cache write"
+                    >{compactNumber(row.cacheCreation)}</Table.Cell
+                  >
+                  <Table.Cell class="num split" data-label="Cache read"
+                    >{compactNumber(row.cacheRead)}</Table.Cell
+                  >
+                  <Table.Cell class="num strong total" data-label="Total"
+                    >{compactNumber(row.total)}</Table.Cell
+                  >
+                  <Table.Cell class="num messages" data-label="Messages"
+                    >{row.messages.toLocaleString()}</Table.Cell
+                  >
+                  <Table.Cell class="num strong cost"
+                    >{usd(row.costUsd)}</Table.Cell
+                  >
+                </Table.Row>
+              {/each}
+              {#if rows.length === 0}
+                <Table.Row>
+                  <Table.Cell class="empty" colspan={8}>
+                    Nothing recorded for this harness yet.
+                  </Table.Cell>
+                </Table.Row>
+              {/if}
+            </Table.Body>
+          </Table.Root>
         {/if}
-      </Table.Body>
-    </Table.Root>
-  {/if}
+      </div>
+    {/key}
+  </div>
 </div>
 
 <Dialog.Root
@@ -304,7 +376,7 @@
   bind:open={dialogOpen}
 >
   <Dialog.Content class="max-w-md">
-    <Dialog.Header>
+    <Dialog.Header {@attach landDialog}>
       <Dialog.Title>{DETAIL_TITLES[tab]}</Dialog.Title>
       <Dialog.Description class="font-mono text-label"
         >{selected?.key}</Dialog.Description
@@ -348,6 +420,44 @@
      — hairline dividers, uppercase micro-label header, tabular numerics, on the
      --space ladder (never shadcn's 8/12/16). Addressed globally because the
      classes ride on child-component elements. */
+  /* The table's slot: what leaves is pinned in it while what arrives
+     takes its place (motion/curves crossOut), and its height morphs. */
+  .slot {
+    position: relative;
+  }
+  /* The box rows reflow in: the layer leaving rows close in sits at its
+     corner (motion/rows). */
+  .tbl {
+    position: relative;
+  }
+  .exits {
+    position: absolute;
+    inset-block-start: 0;
+    inset-inline-start: 0;
+  }
+  /* The sort arrow: every sortable head holds its place, so a new sort
+     column widens nothing; it fades in on the column sorted by, points
+     down for descending and turns to point up. */
+  .arrow {
+    display: inline-flex;
+    opacity: 0;
+    @media (prefers-reduced-motion: no-preference) {
+      transition:
+        opacity var(--dur-control) var(--ease-out),
+        rotate var(--dur-control) var(--ease-in-out);
+    }
+  }
+  .arrow.on {
+    opacity: 1;
+  }
+  .arrow.up {
+    rotate: 180deg;
+  }
+  .arrow :global(svg) {
+    width: 12px;
+    height: 12px;
+  }
+
   :global {
     .q-break {
       width: 100%;

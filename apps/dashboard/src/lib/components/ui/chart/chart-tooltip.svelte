@@ -52,6 +52,9 @@
     >;
   } = $props();
 
+  /** The gap between the tip's foot and the pointer on the bar. */
+  const TIP_GAP = 10;
+
   const chart = useChart();
   const chartCtx = getChartContext();
 
@@ -114,13 +117,24 @@
   {/if}
 {/snippet}
 
-<TooltipPrimitive.Root variant="none">
+<!-- The tip stands centred over the hovered bar, its foot 10px above the
+     pointer, and pops in from that point (the kit tooltip's entrance). Its
+     own fade is off: one entrance, on the house curve. -->
+<TooltipPrimitive.Root
+  anchor="bottom"
+  fadeDuration={0}
+  variant="none"
+  x="data"
+  y="pointer"
+  yOffset={TIP_GAP}
+>
   <div
     class={cn(
-			"grid min-w-[9rem] items-start gap-1.5 rounded-[var(--radius-sm)] border border-border/50 bg-background px-2.5 py-1.5 text-meta shadow-[var(--shadow-tile)]",
+			"chart-tip grid min-w-[9rem] items-start gap-1.5 rounded-[var(--radius-sm)] border border-border/50 bg-background px-2.5 py-1.5 text-meta shadow-[var(--shadow-tile)]",
 			className
 		)}
     bind:this={ref}
+    style:--tip-gap="{TIP_GAP}px"
     {...restProps}
   >
     {#if !nestLabel}
@@ -192,3 +206,12 @@
     </div>
   </div>
 </TooltipPrimitive.Root>
+
+<style>
+  .chart-tip {
+    transform-origin: 50% calc(100% + var(--tip-gap));
+    @media (prefers-reduced-motion: no-preference) {
+      animation: kit-tip-in var(--dur-menu) var(--ease-out) both;
+    }
+  }
+</style>

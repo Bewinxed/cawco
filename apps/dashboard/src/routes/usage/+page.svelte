@@ -1,17 +1,21 @@
 <script lang="ts">
   import type { LimitWindow } from "@whiffle/core";
+  import { invalidateAll } from "$app/navigation";
   import { Badge } from "$lib/components/ui/badge";
+  import { Button } from "$lib/components/ui/button";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Card from "$lib/components/ui/card";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Table from "$lib/components/ui/table";
   import { whiffle } from "$lib/whiffle/client.svelte";
   import HarnessGlyph from "$lib/whiffle/HarnessGlyph.svelte";
+  import { IconRefresh } from "$lib/icons";
   import { conversationHref } from "$lib/whiffle/links";
   import StatTile from "$lib/whiffle/StatTile.svelte";
   import { compactNumber, type UsageSummaryRow, usd } from "$lib/whiffle/usage";
   import BreakdownTable from "$lib/whiffle/usage/BreakdownTable.svelte";
   import DailyChart from "$lib/whiffle/usage/DailyChart.svelte";
+  import Figure from "$lib/whiffle/usage/Figure.svelte";
   /**
    * The usage surface: "am I about to blow the budget?" as a glance against a
    * threshold, not as a calculation.
@@ -32,6 +36,14 @@
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();
+
+  /** The hub could not be read: reading it again, shown on the button. */
+  let rereading = $state(false);
+  async function reread(): Promise<void> {
+    rereading = true;
+    await invalidateAll();
+    rereading = false;
+  }
 
   /**
    * Limits are account-scoped, not machine-scoped: every host signed in to the
@@ -247,6 +259,19 @@
   const PROJECTABLE_MS = 10 * 60 * 1000;
   const projectable = (b: { firstTs: number; lastTs: number }): boolean =>
     b.lastTs - b.firstTs >= PROJECTABLE_MS;
+
+  /** A live window's burn rate, and where it is on pace to end once that means something. */
+  const paceOf = (
+    block: (typeof allBlocks)[number],
+    costPerHour: number
+  ): string => {
+    const rate = `${usd(costPerHour)}/h`;
+    if (!(projectable(block) && block.projection)) {
+      return rate;
+    }
+    const approx = block.harness === "Claude" ? "~" : "";
+    return `${rate} · on pace for ${approx}${usd(block.projection.totalCost)}`;
+  };
 </script>
 
 <svelte:head>
@@ -261,7 +286,18 @@
     </p>
 
     {#if data.error}
-      <p class="note" role="alert">{data.error}</p>
+      <div class="page-error" role="alert">
+        <p class="note">{data.error}</p>
+        <Button
+          icon={IconRefresh}
+          label="Retry"
+          onclick={reread}
+          pending={rereading}
+          pendingLabel="Retrying…"
+          size="sm"
+          variant="outline"
+        />
+      </div>
     {/if}
 
     <!-- JOURNEY.md block 2: Spend against threshold — the lead visual. -->
@@ -286,8 +322,10 @@
         <div class="hero-main">
           {#if spendPct !== null && spendUsed !== null && spendLimit !== null}
             <div class="hero-spend">
-              <span class="hero-amount num {spendBand}">{usd(spendUsed)}</span>
-              <span class="hero-limit num">/ {usd(spendLimit)}</span>
+              <span class="hero-amount {spendBand}"
+                ><Figure text={usd(spendUsed)} /></span
+              >
+              <span class="hero-limit"><Figure text="/ {usd(spendLimit)}" /></span>
             </div>
             <span
               aria-label="Spend against threshold"
@@ -304,10 +342,12 @@
             </span>
           {:else if binding}
             <div class="hero-spend">
-              <span class="hero-amount num {band(binding.percent)}"
-                >{Math.round(binding.percent)}%</span
+              <span class="hero-amount {band(binding.percent)}"
+                ><Figure text="{Math.round(binding.percent)}%" /></span
               >
-              <span class="hero-limit num">{windowLabel(binding)} used</span>
+              <span class="hero-limit"
+                ><Figure text="{windowLabel(binding)} used" /></span
+              >
             </div>
             <span
               aria-label="{windowLabel(binding)} limit"
@@ -328,12 +368,16 @@
               <Badge class="q-tag num">{planLabel}</Badge>
             {/if}
             {#if binding}
-              <span class="hero-reset num"
-                >Resets in {resetsIn(binding.resetsAt, now) || '—'}</span
+              <span class="hero-reset"
+                ><Figure
+                  text="Resets in {resetsIn(binding.resetsAt, now) || '—'}"
+                /></span
               >
             {/if}
             {#if readingAge}
-              <span class="hero-age num">Checked {readingAge}</span>
+              <span class="hero-age"
+                ><Figure text="Checked {readingAge}" /></span
+              >
             {/if}
           </div>
         </div>
@@ -375,7 +419,7 @@
         {#if orderedWindows.length === 0 && !readingError}
           <p class="note">No limit reading yet.</p>
         {:else if orderedWindows.length > 0}
-          <Table.Root class="q-table">
+          <Table.Root class="q-table q-limits">
             <Table.Header>
               <Table.Row>
                 <Table.Head>Window</Table.Head>
@@ -406,18 +450,18 @@
                       ></span>
                     </span>
                   </Table.Cell>
-                  <Table.Cell class="num {tone}" data-label="Used"
-                    >{Math.round(w.percent)}%</Table.Cell
+                  <Table.Cell class="num used {tone}" data-label="Used"
+                    ><Figure text="{Math.round(w.percent)}%" /></Table.Cell
                   >
-                  <Table.Cell class="num muted" data-label="Resets in"
-                    >{resetsIn(w.resetsAt, now)}</Table.Cell
+                  <Table.Cell class="num muted resets" data-label="Resets in"
+                    ><Figure text={resetsIn(w.resetsAt, now)} /></Table.Cell
                   >
                 </Table.Row>
               {/each}
             </Table.Body>
           </Table.Root>
           {#if readingAge}
-            <p class="note">Last checked {readingAge}</p>
+            <p class="note"><Figure text="Last checked {readingAge}" /></p>
           {/if}
         {/if}
 
@@ -498,11 +542,13 @@
                   <Table.Cell class="muted" data-label="Machine"
                     >{row.machine}</Table.Cell
                   >
-                  <Table.Cell class="num muted" data-label="Context">
-                    {row.contextPct === null ? '—' : `${Math.round(row.contextPct)}%`}
-                  </Table.Cell>
+                  <Table.Cell class="num muted" data-label="Context"
+                    ><Figure
+                      text={row.contextPct === null ? '—' : `${Math.round(row.contextPct)}%`}
+                    /></Table.Cell
+                  >
                   <Table.Cell class="num" data-label="Cost"
-                    >{usd(row.cost)}</Table.Cell
+                    ><Figure text={usd(row.cost)} /></Table.Cell
                   >
                 </Table.Row>
               {/each}
@@ -524,7 +570,7 @@
       <Card.Content class="q-body">
         {#if openCodeTotals}
           <div class="lede">
-            <span class="big num">{usd(openCodeTotals.costUsd)}</span>
+            <span class="big"><Figure text={usd(openCodeTotals.costUsd)} /></span>
             <span class="note">
               {compactNumber(openCodeTotals.input)}
               in · {compactNumber(openCodeTotals.output)} out ·
@@ -592,7 +638,7 @@
           >
         </Card.Header>
         <Card.Content class="q-body">
-          <Table.Root class="q-table">
+          <Table.Root class="q-table q-windows">
             <Table.Header>
               <Table.Row>
                 <Table.Head>Window</Table.Head>
@@ -616,25 +662,20 @@
                       >{clock(block.startTime)}
                       – {clock(block.endTime)}</Table.Cell
                     >
-                    <Table.Cell class="muted" data-label="Harness"
+                    <Table.Cell class="muted harness" data-label="Harness"
                       >{block.harness}</Table.Cell
                     >
-                    <Table.Cell class="num" data-label="Cost">
-                      {block.harness === 'Claude' ? '~' : ''}
-                      {usd(block.costUsd)}
-                    </Table.Cell>
+                    <Table.Cell class="num cost" data-label="Cost"
+                      ><Figure
+                        text="{block.harness === 'Claude' ? '~' : ''}{usd(block.costUsd)}"
+                      /></Table.Cell
+                    >
                     <Table.Cell class="pace num" data-label="Pace">
                       {#if block.isActive && block.burnRate}
-                        {usd(block.burnRate.costPerHour)}/h
-                        {#if projectable(block) && block.projection}
-                          · on pace for
-                          {block.harness === 'Claude'
-                            ? '~'
-                            : ''}{usd(block.projection.totalCost)}
-                        {/if}
+                        <Figure text={paceOf(block, block.burnRate.costPerHour)} />
                       {/if}
                     </Table.Cell>
-                    <Table.Cell class="mono muted" data-label="Models"
+                    <Table.Cell class="mono muted models" data-label="Models"
                       >{block.models.join(' · ')}</Table.Cell
                     >
                   </Table.Row>
@@ -666,6 +707,12 @@
     display: flex;
     flex-direction: column;
     gap: var(--space-8);
+  }
+  .page-error {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-3);
   }
   .sub {
     max-width: 68ch;
@@ -1034,6 +1081,66 @@
       .q-table td[data-label]::before {
         content: attr(data-label) " ";
         color: var(--ink-muted);
+      }
+      /* A limit is two lines: the window with how full it is, then its
+         bar with when it resets. */
+      /* biome-ignore lint/style/noDescendingSpecificity: the phone layout sets display and placement; the base rules above set other properties, so their order does not decide anything. */
+      .q-limits tbody tr {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) auto;
+        align-items: center;
+      }
+      .q-limits td.lead {
+        grid-area: 1 / 1;
+      }
+      .q-limits td.used {
+        grid-area: 1 / 2;
+        font: var(--type-label);
+      }
+      .q-limits td.wide {
+        grid-area: 2 / 1;
+        min-width: 0;
+      }
+      .q-limits td.resets {
+        grid-area: 2 / 2;
+      }
+      /* A window is two lines: when it ran with what it cost, then the
+         harness and the models as one line of meta, the models cut short
+         to fit. The live window's pace and projection take that line
+         whole, and its models go under them. */
+      .q-windows tbody tr:not(.dayrow) {
+        display: grid;
+        grid-template-columns: auto minmax(0, 1fr) auto;
+        align-items: baseline;
+      }
+      .q-windows td.lead {
+        grid-area: 1 / 1 / 2 / 3;
+      }
+      .q-windows td.cost {
+        grid-area: 1 / 3;
+        font: var(--type-label);
+      }
+      .q-windows td.harness {
+        grid-area: 2 / 1;
+      }
+      .q-windows td.pace {
+        grid-area: 2 / 2 / 3 / 4;
+        text-align: start;
+      }
+      .q-windows td.models {
+        grid-area: 2 / 2 / 3 / 4;
+      }
+      .q-windows td.pace:not(:empty) + td.models {
+        grid-area: 3 / 1 / 4 / 4;
+      }
+      .q-table.q-windows td.models {
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+      .q-windows td[data-label="Models"]::before,
+      .q-windows td[data-label="Harness"]::before {
+        content: none;
       }
     }
 
