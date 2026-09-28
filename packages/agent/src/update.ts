@@ -7,7 +7,7 @@
  */
 
 import { homedir, platform } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { UpdateReport } from "@whiffle/core";
 import { REPO_ROOT } from "./build";
 import {
@@ -108,7 +108,142 @@ const failed = (step: string, ran: Ran): Error =>
   new Error(`${step} failed: ${ran.said || `exited ${ran.code}`}`);
 
 /** The three services `whiffle service install` puts on a machine, in start order. */
-type Service = "hub" | "dashboard" | "agent";
+export type Service = "hub" | "dashboard" | "agent";
+
+/**
+ * The workspace package each service runs, as the installer's units start it
+ * (`packages/cli/src/service.ts`): the hub runs `packages/hub/src/index.ts`,
+ * the dashboard `apps/dashboard/serve.js`, the agent `packages/cli/src/cli.ts
+ * up`. What else each one runs is read from the package.json files, not
+ * listed here.
+ */
+const SERVICE_PACKAGES: Record<Service, string> = {
+  hub: "packages/hub",
+  dashboard: "apps/dashboard",
+  agent: "packages/cli",
+};
+
+export const SERVICES = Object.keys(SERVICE_PACKAGES) as Service[];
+
+/** Checkout-root files every service installs from: a change to either reaches all of them. */
+const SHARED_MANIFESTS = new Set(["package.json", "bun.lock"]);
+
+interface Manifest {
+  dependencies?: Record<string, string>;
+  devDependencies?: Record<string, string>;
+  name: string;
+}
+
+/**
+ * The directories whose code each service runs: its own package and every
+ * workspace package it depends on, transitively, as the manifests on disk
+ * declare them. Dev dependencies count, because the dashboard's build takes
+ * its workspace packages that way.
+ */
+const serviceDirs = async (
+  root: string
+): Promise<Record<Service, string[]>> => {
+  const { workspaces } = (await Bun.file(
+    join(root, "package.json")
+  ).json()) as {
+    workspaces: string[];
+  };
+  const paths = (
+    await Promise.all(
+      workspaces.map((pattern) =>
+        Array.fromAsync(
+          new Bun.Glob(`${pattern}/package.json`).scan({ cwd: root })
+        )
+      )
+    )
+  ).flat();
+  const manifests = await Promise.all(
+    paths.map(async (path) => ({
+      dir: dirname(path),
+      manifest: (await Bun.file(join(root, path)).json()) as Manifest,
+    }))
+  );
+  const packages = new Map(
+    manifests.map(({ dir, manifest }) => [
+      manifest.name,
+      {
+        dir,
+        deps: Object.entries({
+          ...manifest.dependencies,
+          ...manifest.devDependencies,
+        })
+          .filter(([, version]) => version.startsWith("workspace:"))
+          .map(([name]) => name),
+      },
+    ])
+  );
+  const workspace = (name: string) => {
+    const entry = packages.get(name);
+    if (!entry) {
+      throw new Error(`${name} is not a workspace package in ${root}`);
+    }
+    return entry;
+  };
+  const named = new Map(
+    [...packages].map(([name, { dir }]) => [dir, name] as const)
+  );
+  const closure = (service: Service): string[] => {
+    const start = named.get(SERVICE_PACKAGES[service]);
+    if (!start) {
+      throw new Error(
+        `${SERVICE_PACKAGES[service]} is not a workspace package in ${root}`
+      );
+    }
+    const seen = new Set([start]);
+    const queue = [start];
+    for (let name = queue.pop(); name; name = queue.pop()) {
+      for (const dep of workspace(name).deps) {
+        if (!seen.has(dep)) {
+          seen.add(dep);
+          queue.push(dep);
+        }
+      }
+    }
+    return [...seen].map((name) => workspace(name).dir);
+  };
+  return {
+    hub: closure("hub"),
+    dashboard: closure("dashboard"),
+    agent: closure("agent"),
+  };
+};
+
+/**
+ * The services a pulled range reaches: each one whose directories
+ * ({@link serviceDirs}) hold a file the range changed, and all of them when a
+ * shared manifest changed. A deploy rebuilds and restarts exactly these. It
+ * used to restart the hub on every deploy, and a restarted hub reads every
+ * machine offline until its daemon registers again, so a day of
+ * dashboard-only pushes kept flashing the whole fleet offline.
+ */
+export const changedServices = async (
+  root: string,
+  from: string,
+  to: string
+): Promise<Service[]> => {
+  const files = (
+    await Bun.$`git diff --name-only ${`${from}..${to}`}`
+      .cwd(root)
+      .quiet()
+      .text()
+  )
+    .split("\n")
+    .filter(Boolean);
+  if (files.some((file) => SHARED_MANIFESTS.has(file))) {
+    return SERVICES;
+  }
+  const dirs = await serviceDirs(root);
+  return SERVICES.filter((service) =>
+    files.some((file) =>
+      dirs[service].some((dir) => file.startsWith(`${dir}/`))
+    )
+  );
+};
 
 /**
  * Where that install left them — the same two paths it writes, named here
@@ -305,12 +440,16 @@ export const updateCheckout = async ({
     installed: false,
     built: false,
     restarted: [],
+    // Nothing arrived, so nothing to install and nothing to build, but every
+    // service is still restarted, because being asked to update a machine that
+    // is already current is how a wedged one gets picked up off the floor.
+    changed:
+      moved.said === head.said
+        ? SERVICES
+        : await changedServices(root, head.said, moved.said),
   };
   const skipped: string[] = [];
 
-  // Nothing arrived, so nothing to install and nothing to build — but the
-  // services are still restarted, because being asked to update a machine that
-  // is already current is how a wedged one gets picked up off the floor.
   if (report.to !== report.from) {
     // Frozen, so a commit whose bun.lock disagrees with its package.json files
     // fails this one deploy instead of rewriting bun.lock and leaving the clone
@@ -325,18 +464,22 @@ export const updateCheckout = async ({
     }
     report.installed = true;
 
-    if (await buildsDashboard(root)) {
-      const built = await run(
-        [process.execPath, "run", "--filter", "@whiffle/dashboard", "build"],
-        BUILD_TIMEOUT_MS,
-        root
-      );
-      if (!built.ok) {
-        throw failed("the dashboard build", built);
+    // A range that changed nothing the dashboard runs builds nothing; the
+    // restart skip in `restartStack` says so for both.
+    if (report.changed.includes("dashboard")) {
+      if (await buildsDashboard(root)) {
+        const built = await run(
+          [process.execPath, "run", "--filter", "@whiffle/dashboard", "build"],
+          BUILD_TIMEOUT_MS,
+          root
+        );
+        if (!built.ok) {
+          throw failed("the dashboard build", built);
+        }
+        report.built = true;
+      } else {
+        skipped.push("this machine serves no dashboard, so none was built");
       }
-      report.built = true;
-    } else {
-      skipped.push("this machine serves no dashboard, so none was built");
     }
   }
 
@@ -361,12 +504,25 @@ export const restartStack = async (
   }: { restartAgent?: boolean; force?: boolean; busy?: number },
   skipped: string[]
 ): Promise<UpdateReport> => {
+  // Only what `report.changed` names comes down: a service whose code the
+  // update did not touch is still running exactly what is on disk.
+  const untouched = SERVICES.filter(
+    (service) => service !== "agent" && !report.changed.includes(service)
+  );
+  if (untouched.length > 0) {
+    skipped.push(
+      `nothing the ${untouched.join(" or ")} runs changed, so it was left running`
+    );
+  }
   // The dashboard restarts in front of whoever asked; the hub cannot. An update
   // is asked for *through* the hub, so restarting it inline kills the socket the
   // reply is still travelling on and the caller reads a timeout for an update
   // that worked. It is scheduled for a second later, exactly as this daemon
   // schedules its own restart, and for exactly the same reason.
-  if (await isInstalled("dashboard")) {
+  if (
+    report.changed.includes("dashboard") &&
+    (await isInstalled("dashboard"))
+  ) {
     const restarted = await run(
       restartCommand("dashboard"),
       SERVICE_TIMEOUT_MS
@@ -376,7 +532,7 @@ export const restartStack = async (
     }
     report.restarted.push("dashboard");
   }
-  if (await isInstalled("hub")) {
+  if (report.changed.includes("hub") && (await isInstalled("hub"))) {
     report.restarted.push("hub");
     scheduleRestart("hub");
   }
@@ -385,7 +541,9 @@ export const restartStack = async (
   // would cut in half. Reported as restarted rather than as scheduled — the
   // second it waits is only there so this report can leave first.
   if (restartAgent) {
-    if (busy > 0 && !force) {
+    if (!report.changed.includes("agent")) {
+      skipped.push("nothing the agent runs changed, so it was left running");
+    } else if (busy > 0 && !force) {
       skipped.push(
         `the agent is carrying ${busy} turn(s), so it was left running`
       );

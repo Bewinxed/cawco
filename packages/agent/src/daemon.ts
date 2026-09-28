@@ -115,8 +115,8 @@ export class ConnectionLost extends Data.TaggedError("ConnectionLost")<{
  * How often a daemon knocks while its hub is coming back from a restart, and
  * how many knocks it spends before deciding the outage is real.
  *
- * Every deploy restarts the hub (`restartStack`, update.ts), and a restarted
- * hub starts with an empty registry, which is the only place `online` is read
+ * A deploy that reaches the hub's code restarts it (`restartStack`,
+ * update.ts), and a restarted hub starts with an empty registry, which is the only place `online` is read
  * from: every machine reads offline until its daemon registers again. Measured
  * here, the hub is listening again 0.42–0.54s after systemd stops it (journal,
  * `Stopping` to `listening on`, 12 deploy restarts). The first attempt after a
