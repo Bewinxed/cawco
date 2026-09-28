@@ -1785,9 +1785,15 @@ export const createServer = ({
    * Every message sent to a session that its harness has not read yet, by
    * instance, then uuid, oldest first. Filed by {@link deliverSend}, retired
    * by the harness's `read` frame, dropped with the session; served with its
-   * history, so a reload draws what is still waiting.
+   * history, so a reload draws what is still waiting. Each carries the time
+   * it was sent (`SessionMessage.timestamp`): the row a reload draws keeps it
+   * when the session reads the message, and shows the clock every live tab
+   * shows. Without it the reloaded tab's row settled with no time at all.
    */
-  const pendingSends = new Map<string, Map<string, SentMessage>>();
+  const pendingSends = new Map<
+    string,
+    Map<string, SentMessage & { timestamp: string }>
+  >();
 
   /**
    * A send as the session's own stream carries it: the message under its
@@ -1850,8 +1856,10 @@ export const createServer = ({
     // Built after the send has gone: the machine is handed the image bytes,
     // the dashboards a reference to them.
     const message = externalizeImages(sentFrame(envelope.payload));
-    const held = pendingSends.get(instanceId) ?? new Map<string, SentMessage>();
-    held.set(message.uuid, message);
+    const held =
+      pendingSends.get(instanceId) ??
+      new Map<string, SentMessage & { timestamp: string }>();
+    held.set(message.uuid, { ...message, timestamp: new Date().toISOString() });
     pendingSends.set(instanceId, held);
     const frame: FramePayload = {
       kind: "frame",
