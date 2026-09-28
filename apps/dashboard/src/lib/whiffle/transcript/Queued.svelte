@@ -51,6 +51,7 @@
   .carried {
     margin-top: var(--space-2);
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     color: var(--ink-muted);
   }
   @media (max-width: 900px) {

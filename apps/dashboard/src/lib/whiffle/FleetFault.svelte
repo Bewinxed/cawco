@@ -361,6 +361,7 @@
     background: var(--surface-raised);
     padding: 1px var(--space-2);
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     color: var(--ink-muted);
     white-space: nowrap;
   }
@@ -375,6 +376,7 @@
   .more,
   .hint {
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     color: var(--tone-ink);
     opacity: 0.8;
   }
@@ -402,6 +404,7 @@
   }
   .tool .k {
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     color: var(--ink-muted);
   }
   .tool .line {
@@ -415,6 +418,7 @@
   }
   .tool .v {
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     font-variant-numeric: tabular-nums;
     color: var(--ink-muted);
   }
@@ -423,10 +427,12 @@
     background: var(--surface-raised);
     padding: 0 var(--space-2);
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     color: var(--ink-muted);
   }
   .shadow {
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     color: var(--ink-strong);
     padding-top: var(--space-1);
   }
@@ -449,6 +455,7 @@
     padding-inline: var(--space-2);
     border-radius: var(--radius-sm);
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     color: var(--ink-muted);
     cursor: pointer;
   }

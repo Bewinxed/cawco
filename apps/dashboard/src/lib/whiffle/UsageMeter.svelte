@@ -295,6 +295,7 @@
   .pop-empty {
     padding: 8px 12px;
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     color: var(--ink-muted);
   }
   .pop-stale {
@@ -312,6 +313,7 @@
     align-items: baseline;
     row-gap: 6px;
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     font-variant-numeric: tabular-nums;
   }
   .pop-name {
@@ -345,6 +347,7 @@
     padding: 10px 12px;
     border-top: 1px solid var(--border-hairline);
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     color: var(--ink-strong);
   }
   .pop-spend-value {
@@ -388,6 +391,7 @@
     background: transparent;
     text-align: start;
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     font-variant-numeric: tabular-nums;
     color: var(--ink-muted);
     cursor: pointer;

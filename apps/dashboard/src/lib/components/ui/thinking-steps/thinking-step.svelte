@@ -98,11 +98,13 @@
     display: flex;
     gap: var(--space-2);
     min-inline-size: 0;
-    font-size: var(--text-label);
+    font-size: var(--text-body);
+    font-weight: var(--weight-body);
     line-height: var(--leading-body);
 
     &[data-size="compact"] {
       font-size: var(--text-meta);
+      font-weight: var(--weight-body);
     }
   }
   .icon-column {

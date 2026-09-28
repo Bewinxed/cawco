@@ -16,7 +16,7 @@
 
 <Collapsible.Trigger
   {...rest}
-  class="thinking-header {className}"
+  class="thinking-header pressable {className}"
   data-slot="thinking-steps-header"
 >
   {#if children}

@@ -1159,6 +1159,7 @@
     padding: var(--space-2) var(--space-3);
     color: var(--ink-muted);
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     text-align: center;
   }
 

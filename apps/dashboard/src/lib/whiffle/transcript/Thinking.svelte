@@ -143,7 +143,7 @@
     & :global(.rail-indicator) {
       padding: 0;
       gap: var(--space-2);
-      --thinking-icon-size: 15px;
+      --thinking-icon-size: 16px;
     }
     /* The header spans the row so the tail has the width to read into. */
     & :global(.thinking-header) {
@@ -179,6 +179,7 @@
     overflow: hidden;
     color: var(--ink-muted);
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     white-space: nowrap;
     mask-image: linear-gradient(to right, transparent, oklch(0% 0 0) 30%);
 

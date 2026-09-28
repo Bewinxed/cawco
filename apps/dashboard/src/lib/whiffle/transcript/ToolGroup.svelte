@@ -729,6 +729,7 @@
     }
     & .more {
       font-size: var(--text-meta);
+      font-weight: var(--weight-body);
       color: var(--ink-muted);
     }
   }

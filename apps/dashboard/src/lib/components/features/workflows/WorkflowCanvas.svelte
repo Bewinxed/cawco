@@ -263,6 +263,7 @@
   }
   .canvas :global(.svelte-flow__attribution) {
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
   }
   .canvas :global(.svelte-flow__attribution a) {
     display: inline-flex;

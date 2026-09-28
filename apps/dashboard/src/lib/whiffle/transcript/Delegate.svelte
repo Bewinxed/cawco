@@ -351,7 +351,7 @@
 <div class="branch delegate">
   <Collapsible.Root onOpenChange={onToggle} {open}>
     <div class="head">
-      <Collapsible.Trigger class="bhead">
+      <Collapsible.Trigger class="bhead pressable">
         <span aria-hidden="true" class="chev"><IconChevronRight /></span>
         <span aria-hidden="true" class="mark m{markHue(seed)}"><Sprite /></span>
         <span class="tk">{label}</span>
@@ -598,6 +598,7 @@
   .kind {
     flex: 0 0 auto;
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     color: var(--ink-strong);
     border: 1px solid var(--border-hairline);
     border-radius: var(--radius-xs);
@@ -608,6 +609,7 @@
   .meta {
     color: var(--ink-muted);
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     flex: 0 1 auto;
     min-inline-size: 0;
     overflow: hidden;
@@ -617,6 +619,7 @@
   .may {
     flex: 0 0 auto;
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     color: var(--accent-text);
     white-space: nowrap;
   }
@@ -624,6 +627,7 @@
     margin-inline-start: auto;
     flex: 0 0 auto;
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     font-variant-numeric: tabular-nums;
     border-radius: var(--radius-xs);
     padding: 2px var(--space-2);
@@ -770,6 +774,7 @@
   .astate {
     flex: 0 0 auto;
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     color: var(--ink-muted);
     text-transform: uppercase;
     letter-spacing: 0.02em;

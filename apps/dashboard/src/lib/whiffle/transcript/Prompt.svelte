@@ -487,6 +487,7 @@
   .wait {
     margin-block-start: var(--space-2);
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     color: var(--ink-muted);
   }
   .lede {

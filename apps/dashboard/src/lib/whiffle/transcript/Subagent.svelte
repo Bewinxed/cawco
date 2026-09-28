@@ -76,7 +76,7 @@
 
 <div class="branch">
   <Collapsible.Root bind:open={open.get, open.set}>
-    <Collapsible.Trigger class="bhead">
+    <Collapsible.Trigger class="bhead pressable">
       <span aria-hidden="true" class="chev"><IconChevronRight /></span>
       <span aria-hidden="true" class="mark m{markHue(seed)}"><Sprite /></span>
       <span class="tk">{branch.subagentType}</span>
@@ -264,6 +264,7 @@
   .model {
     color: var(--ink-muted);
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     flex: 0 0 auto;
     white-space: nowrap;
   }
@@ -271,6 +272,7 @@
     margin-inline-start: auto;
     flex: 0 0 auto;
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     font-variant-numeric: tabular-nums;
     border-radius: var(--radius-xs);
     padding: 2px var(--space-2);

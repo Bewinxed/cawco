@@ -39,12 +39,14 @@
 <style>
   .msg {
     font-size: var(--text-body);
+    font-weight: var(--weight-body);
     line-height: var(--leading-body);
     color: var(--ink-strong);
     max-inline-size: 74ch;
 
     & :global(.prose) {
       font-size: var(--text-body);
+      font-weight: var(--weight-body);
       line-height: var(--leading-body);
       color: var(--ink-strong);
     }

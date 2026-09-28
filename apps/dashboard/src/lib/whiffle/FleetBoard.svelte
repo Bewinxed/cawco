@@ -1006,6 +1006,7 @@
     margin-right: auto;
     min-width: 0;
     font-size: var(--text-body);
+    font-weight: var(--weight-body);
     color: var(--ink-muted);
   }
 
@@ -1436,6 +1437,7 @@
       order: 1;
       padding-left: calc(var(--c-mark) + var(--space-3));
       font-size: var(--text-meta);
+      font-weight: var(--weight-body);
     }
     .tbl :global(table.live tbody .c-harn),
     .tbl :global(table.live tbody .c-turns),
@@ -1446,6 +1448,7 @@
       order: 2;
       padding-left: calc(var(--c-mark) + var(--space-3));
       font-size: var(--text-meta);
+      font-weight: var(--weight-body);
     }
     .tbl :global(table.live tbody .c-act) {
       order: 3;

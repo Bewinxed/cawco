@@ -128,6 +128,7 @@
     padding: var(--space-3);
     background: var(--surface-recess);
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
   }
   .path {
     font-family: var(--font-mono);
@@ -139,6 +140,7 @@
     gap: var(--space-1);
     margin-block-start: var(--space-2);
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     color: var(--ink-muted);
   }
   figure {

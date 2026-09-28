@@ -114,10 +114,12 @@
     display: inline-grid;
     overflow: hidden;
     font-size: var(--text-label);
+    font-weight: var(--weight-strong);
     line-height: var(--leading-body);
 
     &.compact {
       font-size: var(--text-meta);
+      font-weight: var(--weight-body);
     }
   }
 

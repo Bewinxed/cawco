@@ -296,6 +296,7 @@
   }
   .reason {
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     color: var(--status-fail-ink);
   }
   .actions {

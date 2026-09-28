@@ -397,6 +397,7 @@
     background: transparent;
     color: var(--ink-strong);
     font-size: var(--text-body);
+    font-weight: var(--weight-body);
     outline: none;
   }
   :global(.jump-field)::placeholder {

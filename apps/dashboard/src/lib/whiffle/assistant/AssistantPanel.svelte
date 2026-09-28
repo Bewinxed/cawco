@@ -404,6 +404,7 @@
   }
   .a-t {
     font-size: var(--text-body);
+    font-weight: var(--weight-body);
     color: var(--ink-strong);
   }
   .a-t b {
@@ -487,6 +488,7 @@
   }
   .sect-hint {
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     color: var(--ink-muted);
     line-height: var(--leading-body);
   }
@@ -554,6 +556,7 @@
     font-variant-numeric: tabular-nums;
     color: var(--ink-muted);
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
   }
   /* A fixed column, so source and verdict line up down the list. */
   .log-session {
@@ -593,6 +596,7 @@
   .log-source {
     flex: 0 0 auto;
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     color: var(--ink-muted);
   }
   .log-verdict {
@@ -628,6 +632,7 @@
     text-overflow: ellipsis;
     white-space: nowrap;
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     color: var(--ink-muted);
   }
 

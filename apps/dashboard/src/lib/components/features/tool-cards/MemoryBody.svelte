@@ -149,6 +149,7 @@
   .meta {
     flex: 0 0 auto;
     font-size: var(--text-meta);
+    font-weight: var(--weight-body);
     color: var(--ink-muted);
     font-variant-numeric: tabular-nums;
   }
