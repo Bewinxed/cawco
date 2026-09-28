@@ -31,6 +31,12 @@ export interface SDKSessionMessage {
   parent_agent_id: string | null;
   parent_tool_use_id: string | null;
   session_id: string;
+  /**
+   * The CLI's command id for a message the reader sent mid-turn — present only
+   * on the user record read off its `queued_command` attachment
+   * ({@link absorbedMessage}).
+   */
+  sourceUuid?: string;
   timestamp: string;
   /**
    * Raw structured output sidecar — present on `user` records that carry a
@@ -58,7 +64,7 @@ interface CompactMetadata {
   };
 }
 
-interface RawRecord {
+export interface RawRecord {
   compactMetadata?: CompactMetadata;
   isMeta?: boolean;
   isSidechain?: boolean;
@@ -454,8 +460,58 @@ function walkChainWindowed(
 // Public API
 // ---------------------------------------------------------------------------
 
+interface QueuedCommand {
+  origin?: { kind?: unknown };
+  prompt?: unknown;
+  source_uuid?: unknown;
+  timestamp?: unknown;
+  type?: unknown;
+}
+
+/**
+ * A message the reader sent while a turn was running, where the model read it.
+ *
+ * Claude Code does not write a user record for it. It holds the message in its
+ * own queue and, at the next tool boundary, folds it into the running turn as a
+ * `queued_command` attachment on the conversation chain, right after the tool
+ * result it arrived beside — then writes `queue-operation` `remove` with reason
+ * `absorbed_mid_turn`. Nothing is printed on stdout for it, so this line is
+ * the only record that the message was read at all. Only the reader's own
+ * words (`origin.kind: "human"`) become a user record; the prompt is a string,
+ * or content blocks when images rode with it. Any other shape is not one.
+ */
+export function absorbedMessage(r: RawRecord): SDKSessionMessage | null {
+  if (r.type !== "attachment" || r.isSidechain) {
+    return null;
+  }
+  const command = r.attachment as QueuedCommand | undefined;
+  if (
+    command?.type !== "queued_command" ||
+    command.origin?.kind !== "human" ||
+    typeof command.timestamp !== "string" ||
+    !(typeof command.prompt === "string" || Array.isArray(command.prompt))
+  ) {
+    return null;
+  }
+  return {
+    message: { role: "user", content: command.prompt },
+    parent_agent_id: null,
+    parent_tool_use_id: null,
+    session_id: r.sessionId ?? "",
+    timestamp: command.timestamp,
+    type: "user",
+    uuid: r.uuid,
+    ...(typeof command.source_uuid === "string"
+      ? { sourceUuid: command.source_uuid }
+      : {}),
+  };
+}
+
 /** Map a chain-walked record to the SDK's output shape. */
 function toSDKMessage(r: RawRecord): SDKSessionMessage | null {
+  if (r.type === "attachment") {
+    return absorbedMessage(r);
+  }
   if (r.type !== "user" && r.type !== "assistant") {
     return null;
   }

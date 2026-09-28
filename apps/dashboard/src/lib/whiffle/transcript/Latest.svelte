@@ -5,12 +5,19 @@
    * below, out of sight — so this is what says there is more, and takes them
    * there in one glide.
    */
+  import { rise } from "$lib/whiffle/motion/curves.svelte";
   import IconArrowDown from "~icons/solar/arrow-down-bold-duotone";
 
   let { onjump }: { onjump: () => void } = $props();
 </script>
 
-<button class="latest pressable" onclick={onjump} type="button">
+<button
+  class="latest pressable"
+  onclick={onjump}
+  type="button"
+  in:rise={'--dur-panel'}
+  out:rise={'--dur-exit'}
+>
   <IconArrowDown />Jump to latest
 </button>
 
@@ -43,16 +50,6 @@
     &:focus-visible {
       outline: 2px solid var(--focus-ring);
       outline-offset: 1px;
-    }
-
-    /* The catch-up's own entrance: it fades in where it stands. */
-    @media (prefers-reduced-motion: no-preference) {
-      animation: cu-in var(--dur-panel) var(--ease-out) both;
-    }
-  }
-  @keyframes cu-in {
-    from {
-      opacity: 0;
     }
   }
 </style>

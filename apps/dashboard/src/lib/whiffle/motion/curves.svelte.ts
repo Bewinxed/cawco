@@ -114,6 +114,24 @@ export function appear(_node: Element) {
 }
 
 /**
+ * A floating tag coming and going over the transcript's foot ("Jump to
+ * latest", the catch-up): it rises 8px and grows from .96 as it fades in,
+ * and sinks back out. `token` is its duration: --dur-panel in, --dur-exit
+ * out. Without motion it only fades.
+ */
+export function rise(_node: Element, token: "--dur-panel" | "--dur-exit") {
+  const travel = motionOk.current;
+  return {
+    duration: dur(token),
+    easing: easeOut,
+    css: (t: number) =>
+      travel
+        ? `opacity: ${t}; transform: translateY(${(1 - t) * 8}px) scale(${0.96 + 0.04 * t})`
+        : `opacity: ${t}`,
+  };
+}
+
+/**
  * One view handing its place to another — a skeleton to what it stood in
  * for, a document to the next, a reader to its editor: the two cross-fade
  * over --dur-control. The one leaving is taken out of the flow as it starts,
