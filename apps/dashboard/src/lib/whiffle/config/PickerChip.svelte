@@ -33,7 +33,7 @@
 <Popover.Root bind:open={expanded}>
   <Popover.Trigger aria-label="{label}: {chosen}" class="picker focus-ring">
     <span class="k">{label}</span>
-    <span class="v"><TextMorph text={chosen} /></span>
+    <span class="v num"><TextMorph text={chosen} /></span>
     <IconChevronDown />
   </Popover.Trigger>
   <Popover.Content align="start" class="max-h-80 w-64 gap-0 overflow-y-auto">
