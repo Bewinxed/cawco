@@ -73,7 +73,14 @@
   );
 </script>
 
-<div class="sysrow" class:err={row.failed}>
+<!-- Sent into a running turn and not read yet: the same row at reduced
+     presence, saying so, until the session reads it and it moves into place. -->
+<div
+  class="sysrow"
+  data-message={message.id}
+  class:err={row.failed}
+  class:waiting={message.queued}
+>
   <p class="label">
     <span class="glyph">
       {#if row.kind === 'rule'}
@@ -102,6 +109,8 @@
     </span>
     {#if row.kind === 'report' && row.failed}
       <span class="state">failed</span>
+    {:else if message.queued}
+      <span class="pending">queued</span>
     {/if}
   </p>
   <div class="body"><MessageBody source={message.content} /></div>
@@ -171,8 +180,13 @@
   .state {
     color: var(--status-fail-ink);
   }
-  .state {
+  .state,
+  .pending {
     flex: 0 0 auto;
+  }
+  /* MessageRow's queued presence, for the rows whiffle sends. */
+  .sysrow.waiting {
+    opacity: 0.7;
   }
   .body {
     margin-top: var(--space-2);

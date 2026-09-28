@@ -1769,6 +1769,11 @@ export function mapTranscript(
       } else {
         message.timestamp = undefined;
       }
+      // A send the hub still holds for the harness is waiting on it, whether
+      // or not this tab has heard yet that the session is busy.
+      if ("origin" in entry) {
+        message.queued = true;
+      }
     }
 
     const sink = mapping.agentId

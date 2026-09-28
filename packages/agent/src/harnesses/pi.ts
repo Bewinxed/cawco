@@ -247,16 +247,20 @@ class PiSession implements HarnessSession {
         }
         break;
       }
-      // And the entry it is stored as, which a history read keys it by.
-      case "entry_appended": {
-        const { entry } = event;
-        if (
-          this.#reading &&
-          entry.type === "message" &&
-          (entry.message as { role?: string }).role === "user"
-        ) {
-          sentIds.set(entry.id, this.#reading);
+      // And the entry it is stored as, which a history read keys it by. pi
+      // tells its listeners `message_end` just before it appends the entry,
+      // in the same synchronous run, so the entry is the leaf a microtask
+      // later.
+      case "message_end": {
+        const sent = this.#reading;
+        if (sent && (event.message as { role?: string }).role === "user") {
           this.#reading = undefined;
+          queueMicrotask(() => {
+            sentIds.set(
+              this.#session.sessionManager.getLeafId() as string,
+              sent
+            );
+          });
         }
         break;
       }

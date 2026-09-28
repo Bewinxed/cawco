@@ -692,9 +692,10 @@ const SEND_RANK: Record<SendState, number> = {
  * screen, a replay after a reset — only moves its send state forward.
  *
  * New rows join the end, ahead of the rows still waiting on the session:
- * those stay last until it reads them ({@link Message.queued}), which is
- * decided here, as a sent message first appears — sent into a running turn,
- * it waits. `older` rows are a history page, and go in front.
+ * those stay last until it reads them ({@link Message.queued}). A sent
+ * message waits when it first appears while a turn is running — or when it
+ * arrives already known to be waiting, as a history read's pending send
+ * does. `older` rows are a history page, and go in front.
  */
 function upsert(
   target: SessionState,
@@ -717,7 +718,7 @@ function upsert(
     }
     held.add(message.id);
     if (message.state === "sending" || message.state === "sent") {
-      message.queued = target.busy;
+      message.queued ??= target.busy;
     }
     fresh.push(message);
   }
