@@ -545,6 +545,11 @@
     --c-pill-fs: var(--text-label);
     /* A stat tile's height (plan: "stat card 280×90"). */
     --c-stat-h: 90px;
+    /* A ledger's toolbar: the plan's "toolbar zone 55" from the card's top to
+       its header band, holding the comp's 32px controls 11px in (so 12px
+       stand under them). On touch, .touch-hit still grows each to 44×44. */
+    --c-toolbar-zone: 55px;
+    --c-toolbar-ctl: 32px;
     /* A page head under the top bar: title, its line and the actions (the
        comp's bar ends at y 60 and its stat row starts at 156). */
     --c-page-head-h: 96px;

@@ -158,8 +158,10 @@ The kit is `apps/dashboard/src/lib/components/ui`; shared recipes are the
 - **Fleet board**: title and line, the four stat tiles, the attention queue,
   the machines the board has something to say about (offline, build behind or
   unknown, failed sync, diverged deploy — none on a healthy fleet; every
-  machine stays in the rail), then the sessions ledger with its 55px toolbar
-  zone and `--surface-band` header.
+  machine stays in the rail), then the sessions ledger with its toolbar
+  (`--c-toolbar-zone` 55px from the card's top to the band, controls drawn at
+  the comp's `--c-toolbar-ctl` 32px on this board only, each keeping
+  `.touch-hit`'s 44×44 on touch) and `--surface-band` header.
 - **Icons**: Solar through `$lib/icons.ts`, every product icon in the
   bold-duotone cut; linear only for the glyph-like chevrons and arrows
   (`alt-arrow-*`, `arrow-*`). Three sizes: 12 beside meta text, 16 in controls

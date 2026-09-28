@@ -902,7 +902,7 @@
             </EmptyState>
           {:else}
             <div class="bar" data-flip>
-              <!-- A label, so its touch area around the 36px field focuses it. -->
+              <!-- A label, so its touch area around the 32px field focuses it. -->
               <!-- biome-ignore lint/a11y/noLabelWithoutControl: the kit Input renders the native <input> this label wraps -->
               <label class="search touch-hit">
                 <span class="lead"><IconSearch /></span>
@@ -1266,11 +1266,15 @@
     </div>
     <div class="panel">
       <div class="bar">
-        <Skeleton class="h-9 w-[237px] max-[900px]:w-full" />
-        <Skeleton class="h-9 w-[168px]" />
-        <Skeleton class="h-9 w-[140px]" />
-        <Skeleton class="h-9 w-[150px]" />
-        <Skeleton class="ml-auto h-9 w-[124px] max-[900px]:ml-0" />
+        <Skeleton
+          class="h-[var(--c-toolbar-ctl)] w-[237px] max-[900px]:w-full"
+        />
+        <Skeleton class="h-[var(--c-toolbar-ctl)] w-[168px]" />
+        <Skeleton class="h-[var(--c-toolbar-ctl)] w-[140px]" />
+        <Skeleton class="h-[var(--c-toolbar-ctl)] w-[150px]" />
+        <Skeleton
+          class="ml-auto h-[var(--c-toolbar-ctl)] w-[124px] max-[900px]:ml-0"
+        />
       </div>
       <div class="sk-head"></div>
       {#each Array.from({ length: PAGE_SIZE }, (_, i) => i) as row (row)}
@@ -1441,7 +1445,7 @@
     background: var(--surface-raised);
     border-radius: var(--radius-lg);
     margin-top: var(--space-group);
-    padding: var(--space-2) var(--space-3) var(--space-3);
+    padding: var(--space-3);
     box-shadow: var(--shadow-tile);
   }
 
@@ -1504,15 +1508,26 @@
     border-color: var(--border-control);
   }
 
-  /* The plan's 55px toolbar zone (card top to header band). The comp's 32px
-     controls stand 11 in with 12 under them; the kit's 36px controls take
-     the same centre and the same 11px over the band, so the panel's top pad
-     is 7 (.panel) and the bar's foot 11. */
+  /* The plan's 55px toolbar zone (card top to header band): the panel's 11px,
+     the comp's 32px controls, and what is left of the zone under them. */
   .bar {
     display: flex;
     align-items: center;
     gap: var(--space-2);
-    padding-bottom: var(--space-3);
+    padding-bottom: calc(
+      var(--c-toolbar-zone) -
+      var(--space-3) -
+      var(--c-toolbar-ctl)
+    );
+  }
+  /* The comp draws this toolbar's controls at 32px, on this board only; the
+     kit keeps its 36px everywhere else. Each keeps .touch-hit's 44×44 area
+     on a touch screen. */
+  .bar
+  :global(
+    :is(.search-input, [data-slot="select-trigger"], [data-slot="button"])
+  ) {
+    block-size: var(--c-toolbar-ctl);
   }
   .search {
     position: relative;

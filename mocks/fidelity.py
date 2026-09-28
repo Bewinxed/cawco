@@ -23,7 +23,7 @@ TOL = {                      # px tolerance before a delta is flagged
     "stat_run_w": 2, "stat_run_h": 2, "stat_run_gap": 1,
     "stat_run_x": 2, "well_inset": 1, "well_inset_top": 1,
     "card_left": 2, "card_top": 6, "toolbar_gap_above_band": 2,
-    "search_w": 4, "search_h": 1,
+    "search_w": 4, "search_h": 1, "search_x": 2, "toolbar_pad_l": 2,
     "band_h": 1, "row_pitch": 1, "cell_pad_l": 2,
     "band_w": 3, "band_x0": 2, "band_x1": 2, "card_pad_l": 1, "card_pad_r": 1,
 }
@@ -261,6 +261,45 @@ def find_well(lum, st, white=250):
     return frame_in + 1 - card_left, wt - y0
 
 
+def find_search(lum, cl, band_top, W, border=240):
+    """The toolbar's first control (the search field), as (x, w, h).
+
+    Found from its own borders, not from card_top: card_top is where the
+    walk up from the band first meets a painted control, i.e. the control's
+    BOTTOM edge, so any row derived from it sits under the control and finds
+    nothing. Here the bottom border is the first dark row above the band in
+    a column a little inside the card's left pad, the top border the next
+    dark row above that; the left and right borders are the first columns
+    that stay dark down most of the control's height — a vertical line, so
+    the placeholder's glyphs, which only cover part of it, never read as one."""
+    def vline(x, y0, y1):
+        seg = lum[y0:y1, x]
+        return seg.size > 0 and float((seg < border).mean()) >= 0.8
+
+    probe = cl + 11 + 31                       # between the search icon and its text
+    yb = next((y for y in range(band_top - 1, band_top - 40, -1) if lum[y, probe] < border), None)
+    if yb is None:
+        return None
+    # A control with a drop shadow reads as border + shadow: two dark rows. The
+    # box's bottom edge is the top of that run, not the shadow under it.
+    while lum[yb - 1, probe] < border:
+        yb -= 1
+    yt = next((y for y in range(yb - 1, yb - 60, -1) if lum[y, probe] < border), None)
+    if yt is None:
+        return None
+    # The middle half of the box: clear of its rounded corners at any radius
+    # up to a quarter of its height (a 10px radius on a 32px control).
+    quarter = (yb - yt) // 4
+    y0, y1 = yt + quarter, yb - quarter
+    left = next((x for x in range(cl + 2, probe) if vline(x, y0, y1)), None)
+    if left is None:
+        return None
+    right = next((x for x in range(left + 60, min(left + 600, W - 1)) if vline(x, y0, y1)), None)
+    if right is None:
+        return None
+    return left, right - left + 1, yb - yt + 1
+
+
 # ---------- the measurement ----------
 def measure(path):
     a, lum = load(path)
@@ -327,22 +366,10 @@ def measure(path):
 
     # search field: first bordered control inside the toolbar
     if ct and cl:
-        ty = ct + (band["top"] - ct) // 2
-        row = lum[ty]
-        e = [x for x in range(cl + 2, cl + 420) if abs(row[x] - row[x - 1]) > 5]
-        if len(e) >= 2:
-            m["search_x"] = e[0]
-            m["toolbar_pad_l"] = e[0] - cl
-            edge = [x for x in range(cl + 120, min(cl + 460, W - 1))
-                    if row[x] < 238 and row[x + 1] > 248]
-            if edge:
-                m["search_w"] = edge[0] - e[0] + 1
-        col = lum[:, e[0] + 6] if e else None
-        if col is not None:
-            top = next((y for y in range(ct + 2, band["top"]) if col[y] < 244), None)
-            bot = next((y for y in range(band["top"] - 2, ct, -1) if col[y] < 244), None)
-            if top and bot:
-                m["search_h"] = bot - top + 1
+        s = find_search(lum, cl, band["top"], W)
+        if s:
+            m["search_x"], m["search_w"], m["search_h"] = s
+            m["toolbar_pad_l"] = s[0] - cl
 
     # rows
     ry = band["bottom"] + 1
