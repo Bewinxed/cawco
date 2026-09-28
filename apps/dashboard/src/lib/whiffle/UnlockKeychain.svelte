@@ -1,6 +1,5 @@
 <script lang="ts">
   import type { AuthState } from "@whiffle/core";
-  import { toast } from "svelte-sonner";
   import { Button } from "$lib/components/ui/button";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Dialog from "$lib/components/ui/dialog";
@@ -20,6 +19,7 @@
    */
   import { IconKey } from "$lib/icons";
   import { type Machine, machineControl } from "./client.svelte";
+  import { dur } from "./motion/curves.svelte";
 
   let {
     machine,
@@ -29,6 +29,17 @@
   let password = $state("");
   let busy = $state(false);
   let failed = $state<string | null>(null);
+  /** What the machine said once it unlocked, shown in place of the note. */
+  let result = $state<string | null>(null);
+  let closeTimer: ReturnType<typeof setTimeout> | undefined;
+  $effect(() => () => clearTimeout(closeTimer));
+  // A close by the bound value runs no `onOpenChange`, so the last answer is
+  // dropped as the dialog opens again, before it is drawn.
+  $effect.pre(() => {
+    if (dialogOpen) {
+      result = null;
+    }
+  });
 
   const SAID: Record<string, string> = {
     authenticated: "is logged in again",
@@ -52,8 +63,12 @@
       );
       // Cleared the moment it has been used, whatever the answer was.
       password = "";
-      dialogOpen = false;
-      toast.success(`${machine.hostname} ${SAID[state] ?? "unlocked"}.`);
+      // The button's check and the machine's answer stand for --dur-hold,
+      // then the dialog closes on its own.
+      result = `${machine.hostname} ${SAID[state] ?? "unlocked"}.`;
+      closeTimer = setTimeout(() => {
+        dialogOpen = false;
+      }, dur("--dur-hold"));
     } catch (error) {
       failed = error instanceof Error ? error.message : String(error);
     } finally {
@@ -65,8 +80,10 @@
 <Dialog.Root
   onOpenChange={(next) => {
     if (!next) {
+      clearTimeout(closeTimer);
       password = '';
       failed = null;
+      result = null;
     }
   }}
   bind:open={dialogOpen}
@@ -89,7 +106,7 @@
         aria-invalid={failed ? 'true' : undefined}
         aria-label="Login password for {machine.hostname}"
         autocomplete="current-password"
-        disabled={busy}
+        disabled={busy || result !== null}
         placeholder="Login password for {machine.hostname}"
         type="password"
         bind:value={password}
@@ -97,6 +114,10 @@
 
       {#if failed}
         <p class="text-label text-destructive" id="unlock-error">{failed}</p>
+      {:else if result}
+        <p class="text-meta text-muted-foreground" id="unlock-note" role="status">
+          {result}
+        </p>
       {:else}
         <p class="text-meta text-muted-foreground" id="unlock-note">
           Sent over your tunnel to that machine, used once, and not stored
@@ -116,7 +137,7 @@
           Cancel
         </Button>
         <Button
-          disabled={!password}
+          disabled={!password && result === null}
           failed={failed !== null}
           label="Unlock"
           pending={busy}

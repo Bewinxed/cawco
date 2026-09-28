@@ -1,9 +1,12 @@
 <script lang="ts">
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
+  import { untrack } from "svelte";
   import { Card } from "$lib/components/ui/card";
   import { isTyping } from "$lib/utils/typing";
   import ActivityDot from "./ActivityDot.svelte";
+  import { dur, ease, motionOk } from "./motion/curves.svelte";
+  import { closeInto } from "./motion/share.svelte";
   /**
    * Everything in the fleet parked on a human, in one calm list — the Whiffle
    * fleet view's whole answer to "what needs me right now". One thing parks on
@@ -60,7 +63,101 @@
   });
 
   const blocked = $derived(whiffle.blocked);
-  const total = $derived(blocked.length);
+
+  /* An answered or cleared ask goes where the answer went: into its
+     session's row on the board when that row is on screen, else it fades
+     up where it stood. What stays closes up through the board's reflow. */
+  let listEl = $state<HTMLElement | null>(null);
+  /** The asks as last drawn: key → the session each belongs to. */
+  let drawn = new Map<string, string>();
+
+  /** A copy of the item where it is drawn, over the page, for its exit. */
+  function ghostOf(item: HTMLElement): HTMLElement {
+    const rect = item.getBoundingClientRect();
+    const ghost = item.cloneNode(true) as HTMLElement;
+    for (const node of [ghost, ...ghost.querySelectorAll("*")]) {
+      node.removeAttribute("data-flip");
+      node.removeAttribute("data-share");
+      node.removeAttribute("data-key");
+    }
+    ghost.setAttribute("aria-hidden", "true");
+    ghost.inert = true;
+    Object.assign(ghost.style, {
+      position: "fixed",
+      left: `${rect.left}px`,
+      top: `${rect.top}px`,
+      width: `${rect.width}px`,
+      height: `${rect.height}px`,
+      margin: "0",
+      borderTopWidth: "0",
+      borderRadius: "var(--radius-sm)",
+      background: "var(--surface-raised)",
+      boxShadow: "var(--shadow-tile)",
+      pointerEvents: "none",
+      zIndex: "40",
+    });
+    return ghost;
+  }
+
+  const onScreen = (element: Element) => {
+    const { top, bottom, height } = element.getBoundingClientRect();
+    return height > 0 && bottom > 0 && top < window.innerHeight;
+  };
+
+  /**
+   * Called as the list is recomputed, the one moment the asks leaving are
+   * still drawn. Each leaves as a copy: the item itself is marked so the
+   * reflow leaves it to this (`data-flip-anchor`) and hidden, so a card
+   * leaving with it does not carry it out a second time.
+   */
+  function leave(next: Map<string, string>) {
+    const gone = [...drawn].filter(([key]) => !next.has(key));
+    drawn = next;
+    if (!listEl || gone.length === 0) {
+      return;
+    }
+    for (const [key, instanceId] of gone) {
+      const item = listEl.querySelector<HTMLElement>(
+        `li[data-key="${CSS.escape(key)}"]`
+      );
+      if (!item) {
+        continue;
+      }
+      const ghost = ghostOf(item);
+      item.setAttribute("data-flip-anchor", "");
+      item.style.visibility = "hidden";
+      document.body.append(ghost);
+      const done = () => ghost.remove();
+      queueMicrotask(() => {
+        const row = document.querySelector<HTMLElement>(
+          `tr[data-share="pane:${CSS.escape(instanceId)}"]`
+        );
+        if (row && onScreen(row)) {
+          const flight = closeInto(ghost, row);
+          if (flight) {
+            flight.finished.then(done, done);
+          } else {
+            done();
+          }
+          return;
+        }
+        const rise = getComputedStyle(ghost).getPropertyValue("--pop-rise");
+        ghost
+          .animate(
+            [
+              { opacity: 1, translate: "0 0" },
+              { opacity: 0, translate: motionOk.current ? `0 -${rise}` : "0 0" },
+            ],
+            {
+              duration: dur("--dur-exit"),
+              easing: ease("--ease-out"),
+              fill: "forwards",
+            }
+          )
+          .finished.then(done, done);
+      });
+    }
+  }
 
   const queue = $derived.by(() => {
     const at = Date.now();
@@ -90,10 +187,15 @@
       };
     });
 
+    untrack(() =>
+      leave(new Map(rows.map((row) => [row.key, row.item.instanceId])))
+    );
     // Longest wait first: the ask that has held a session up the longest is the
     // one the reader should answer next.
     return rows.sort((a, b) => a.since - b.since);
   });
+  /** Read through the list, so the card going away is when the last ask leaves. */
+  const total = $derived(queue.length);
 
   /** "waiting 4m" — deliberately vague under a minute, never a fake precision. */
   function waited(since: number): string {
@@ -185,12 +287,13 @@
       >
     </header>
 
-    <ul class="flex flex-col">
+    <ul bind:this={listEl} class="flex flex-col">
       {#each queue as entry (entry.key)}
         {@const item = entry.item}
         <li
           class="flex flex-wrap items-start gap-x-[var(--space-3)] gap-y-[var(--space-2)] border-t border-border/60 px-[var(--space-4)] py-[var(--space-3)] first:border-t-0"
           data-flip
+          data-key={entry.key}
           data-share="pane:{item.instanceId}"
         >
           <span class="mt-1 shrink-0">
