@@ -353,6 +353,8 @@ export const agreedHashes = (
 
 export class SessionSupervisor {
   readonly #sessions = new Map<string, HarnessSession>();
+  /** Reattaches in flight, by instance id: see {@link reattach}. */
+  readonly #adopting = new Map<string, Promise<void>>();
   /** Outlives its session: a discard can arrive after the query already ended. */
   readonly #worktrees = new Map<string, Worktree>();
   /** Side quests running here, by instance — for the same reason, same lifetime. */
@@ -1035,6 +1037,19 @@ export class SessionSupervisor {
       if (!proc) {
         continue;
       }
+      // ONE QUERY PER CHILD. A hub reconnect while a reattach is still walking
+      // its rows starts a second one, and the new ack names the same children
+      // the first is adopting. A second adopt put a second `Query` on the
+      // child: its subscribe took over the first's listener, so the first
+      // `Query` stranded with no stream while both had initialised the CLI. A
+      // child already carried, or being attached right now, is this daemon's
+      // already; it counts as adopted, so its spawn is not dispatched either.
+      // biome-ignore lint/performance/noAwaitInLoops: rows are adopted one at a time: each mutates the shared #ingested map, and another reattach's adoption of this row must land before this one decides
+      await this.#adopting.get(row.instanceId);
+      if (this.#sessions.has(row.instanceId)) {
+        adopted.push(row.instanceId);
+        continue;
+      }
       // THE HONEST-LOSS RULE (design §7). A mark in THIS child's sequence space
       // — sessiond's current boot and this process — is a cursor: replay
       // exactly the gap the hub named. Anything else is replayed as NOTHING and
@@ -1051,14 +1066,19 @@ export class SessionSupervisor {
       }
       const holder: { session: HarnessSession | null } = { session: null };
       const ctx = this.#context(row.instanceId, row.cwd, adapter, holder);
-      // biome-ignore lint/performance/noAwaitInLoops: each row mutates the shared #ingested map before the next is reattached
-      const session = await claude.adopt(row.instanceId, ctx, {
-        ...(cursor === undefined ? {} : { afterSeq: cursor }),
-        head: proc.head,
-        sessionId: row.sessionId ?? null,
-      });
-      holder.session = session;
-      this.#sessions.set(row.instanceId, session);
+      const adoption = claude
+        .adopt(row.instanceId, ctx, {
+          ...(cursor === undefined ? {} : { afterSeq: cursor }),
+          head: proc.head,
+          sessionId: row.sessionId ?? null,
+        })
+        .then((session) => {
+          holder.session = session;
+          this.#sessions.set(row.instanceId, session);
+        })
+        .finally(() => this.#adopting.delete(row.instanceId));
+      this.#adopting.set(row.instanceId, adoption);
+      await adoption;
       adopted.push(row.instanceId);
     }
     return adopted;
