@@ -1833,12 +1833,67 @@ export const createServer = ({
   };
 
   /**
+   * Wakes the session a message is for when its process is gone: sleeping,
+   * failed, or stopped with a conversation on record. The resume spawn goes
+   * out first, and the machine runs one instance's envelopes in order, so the
+   * message that follows lands in the process this starts. It comes back on
+   * the settings it last ran with, as a revive always has.
+   */
+  const wakeForSend = (
+    agent: NonNullable<ReturnType<typeof registry.agent>>,
+    machineId: string,
+    instanceId: string
+  ): void => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    if (
+      !(
+        row?.sessionId &&
+        (row.status === "sleeping" ||
+          row.status === "error" ||
+          row.status === "stopped")
+      )
+    ) {
+      return;
+    }
+    const revive: SpawnPayload = {
+      instanceId,
+      cwd: row.cwd,
+      ...(row.harness ? { harness: row.harness as HarnessKind } : {}),
+      resume: { sessionKey: row.sessionId },
+      ...(row.kind === "scratch" ? { scratch: {} } : {}),
+      ...(row.permissionMode
+        ? { permissionMode: row.permissionMode as PermissionMode }
+        : {}),
+      ...(row.model ? { model: row.model } : {}),
+      ...(row.effort ? { effort: row.effort as EffortLevel } : {}),
+    };
+    agent.send({ verb: "spawn", machineId, instanceId, payload: revive });
+    // A relaunch replaces the process; what the old one had parked is over.
+    forgetPending(instanceId);
+    db.openInstance({
+      id: instanceId,
+      machineId,
+      cwd: row.cwd,
+      sessionId: row.sessionId,
+      harness: row.harness ?? undefined,
+      kind: row.kind ?? undefined,
+      permissionMode: row.permissionMode ?? undefined,
+      model: row.model ?? undefined,
+      effort: row.effort ?? undefined,
+    });
+    publishInstances(machineId);
+  };
+
+  /**
    * THE ONE PATH A MESSAGE TAKES INTO A SESSION, whoever sent it — a reader, a
    * rule, the supervisor, a delegate's report, another session's hand-off.
-   * The machine gets it; the hub files it as pending until the harness reads
-   * it; and the session's ring gets it as a `user` frame under its uuid, so
-   * every tab, device and late joiner draws the same row with the same id.
-   * `from` hears why when the machine is not there to take it.
+   * A session whose process is gone is woken first ({@link wakeForSend}), so
+   * every sender reaches a sleeping session the same way. The machine gets it;
+   * the hub files it as
+   * pending until the harness reads it; and the session's ring gets it as a
+   * `user` frame under its uuid, so every tab, device and late joiner draws
+   * the same row with the same id. `from` hears why when the machine is not
+   * there to take it.
    */
   const deliverSend = (
     envelope: Envelope<SendPayload>,
@@ -1851,8 +1906,9 @@ export const createServer = ({
       );
       return false;
     }
-    agent.send(envelope);
     const { instanceId } = envelope.payload;
+    wakeForSend(agent, envelope.machineId, instanceId);
+    agent.send(envelope);
     // Built after the send has gone: the machine is handed the image bytes,
     // the dashboards a reference to them.
     const message = externalizeImages(sentFrame(envelope.payload));

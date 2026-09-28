@@ -37,7 +37,6 @@
     blankSession,
     clearReadFault,
     clearRestore,
-    ensureAlive,
     type HistorySource,
     interrupt,
     latestCommandFor,
@@ -810,17 +809,9 @@
     return (group && groupComposerHeights.get(group.id)) ?? 0;
   });
 
-  /**
-   * The gap in front of the send command: a dead session is revived before the
-   * message goes out, and until it does there is no record to read a stage
-   * from. Without this the composer would take a second Enter during the revive
-   * and send the same thing twice.
-   */
-  let reviving = $state(false);
-
   /** Whether this session's last message is out of this tab but not yet taken. */
   const sending = $derived(
-    reviving || latestCommandFor(viewId, "send")?.stage === "submitted"
+    latestCommandFor(viewId, "send")?.stage === "submitted"
   );
 
   async function onsubmit(
@@ -841,21 +832,11 @@
     if (sending) {
       return;
     }
-    const mid = machineId;
-    reviving = true;
-    // A message to a dead session revives it first. A revive that FAILS no
-    // longer swallows the message: the send is submitted either way, and the
-    // hub's own refusal ("machine X is not connected") becomes the command's
-    // failed stage. The ledger is the report — which is why there is nothing
-    // to catch here, and why the `.catch(() => {})` that used to sit on this
-    // chain (and ate every send made from a plain-http origin) is gone.
-    const submit = () =>
-      submitCommand(viewId, mid, "send", { text, extras }, id);
-    return await ensureAlive(viewId, mid)
-      .then(submit, submit)
-      .finally(() => {
-        reviving = false;
-      });
+    // A message to a sleeping session wakes it on the hub, in the one path every
+    // send takes, so this tab sends and nothing else. The hub's own refusal
+    // ("machine X is not connected") becomes the command's failed stage — the
+    // ledger is the report, which is why there is nothing to catch here.
+    return await submitCommand(viewId, machineId, "send", { text, extras }, id);
   }
 
   /**

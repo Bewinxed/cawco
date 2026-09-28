@@ -158,19 +158,29 @@ const toPeer = (row: InstanceRow, hosts: Map<string, string>): Peer => {
  * The fleet, read from the hub rather than from this daemon's own sessions:
  * the whole point is reaching a session that is usually somewhere else.
  */
-async function roster(
-  exceptInstanceId: string
-): Promise<{ peers: Peer[]; own: InstanceRow | undefined }> {
+async function roster(exceptInstanceId: string): Promise<{
+  peers: Peer[];
+  asleep: Peer[];
+  own: InstanceRow | undefined;
+}> {
   const { rows, hosts } = await fetchInstances();
   const own = rows.find((row) => row.id === exceptInstanceId);
-  const peers = rows
+  const others = rows.filter((row) => row.id !== exceptInstanceId);
+  const peers = others
+    .filter((row) => row.status === "running" || row.status === "starting")
+    .map((row) => toPeer(row, hosts));
+  // What a send wakes (the hub's `wakeForSend`): no process, a conversation
+  // on record.
+  const asleep = others
     .filter(
       (row) =>
-        row.id !== exceptInstanceId &&
-        (row.status === "running" || row.status === "starting")
+        row.sessionId &&
+        (row.status === "sleeping" ||
+          row.status === "error" ||
+          row.status === "stopped")
     )
     .map((row) => toPeer(row, hosts));
-  return { peers, own };
+  return { peers, asleep, own };
 }
 
 /**
@@ -214,22 +224,49 @@ async function resolveForkSource(
 /** An `@` prefix on a target name, optional. */
 const AT_PREFIX = /^@/;
 
-/** Resolves what the model typed to one session; ambiguity is reported, not guessed. */
-function resolve(peers: Peer[], target: string): Peer {
-  const needle = target.trim().toLowerCase().replace(AT_PREFIX, "");
+const needleOf = (target: string): string =>
+  target.trim().toLowerCase().replace(AT_PREFIX, "");
+
+/** The one session a full id, or a short id of six or more characters, names. */
+function resolveById(peers: Peer[], target: string): Peer | undefined {
+  const needle = needleOf(target);
   const byId = peers.find((peer) => peer.row.id === needle);
   if (byId) {
     return byId;
   }
-
   const idPart = needle.includes("#")
     ? (needle.split("#").pop() ?? "")
     : needle;
-  if (idPart.length >= 6) {
-    const byShortId = peers.filter((peer) => peer.row.id.startsWith(idPart));
-    if (byShortId.length === 1) {
-      return byShortId[0];
+  if (idPart.length < 6) {
+    return;
+  }
+  const byShortId = peers.filter((peer) => peer.row.id.startsWith(idPart));
+  return byShortId.length === 1 ? byShortId[0] : undefined;
+}
+
+/**
+ * A hand-off's target: a running session by any name {@link resolve} takes,
+ * else a sleeping one by its id. Only by id — a name would match among every
+ * session that ever ran here. The hub wakes a sleeping target to read it.
+ */
+function resolveHandoff(peers: Peer[], asleep: Peer[], target: string): Peer {
+  try {
+    return resolve(peers, target);
+  } catch (error) {
+    const sleeping = resolveById(asleep, target);
+    if (sleeping) {
+      return sleeping;
     }
+    throw error;
+  }
+}
+
+/** Resolves what the model typed to one session; ambiguity is reported, not guessed. */
+function resolve(peers: Peer[], target: string): Peer {
+  const needle = needleOf(target);
+  const byId = resolveById(peers, target);
+  if (byId) {
+    return byId;
   }
 
   const exact = peers.filter((peer) => peer.name.toLowerCase() === needle);
@@ -687,10 +724,11 @@ export const handoffActions = ({
     message: string,
     urgent = false
   ): Promise<string> {
-    const { peers } = await roster(instanceId);
+    const { peers, asleep } = await roster(instanceId);
     const peer = urgent
       ? resolveDelegate(peers, target, instanceId)
-      : resolve(peers, target);
+      : resolveHandoff(peers, asleep, target);
+    const woken = asleep.includes(peer);
     const from = leafOf(cwd);
     const body = `${handoffMarker(from)}${message}`;
     const payload: SendPayload = {
@@ -721,6 +759,9 @@ export const handoffActions = ({
         `Delivered urgently to your delegate ${peer.label}. Its current turn was interrupted to ` +
         "read it now — a claude delegate reads it mid-turn instead."
       );
+    }
+    if (woken) {
+      return `Handed to ${peer.label} (${peer.row.cwd} on ${peer.host}). It was asleep; it is being woken to read it.`;
     }
     return (
       `Handed to ${peer.label} (${peer.row.cwd} on ${peer.host}). It is queued there and will be ` +

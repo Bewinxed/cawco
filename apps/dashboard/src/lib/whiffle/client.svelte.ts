@@ -3238,16 +3238,6 @@ export async function ensureAlive(
   }
 }
 
-export async function sendOrRevive(
-  instanceId: string,
-  machineId: string,
-  text: string,
-  extras?: SendExtras
-): Promise<void> {
-  await ensureAlive(instanceId, machineId);
-  sendText(instanceId, machineId, text, extras);
-}
-
 export function stopSession(instanceId: string, machineId: string): void {
   const payload: StopPayload = { instanceId };
   send({ verb: "stop", machineId, instanceId, payload });
