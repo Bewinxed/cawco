@@ -706,12 +706,8 @@ function upsert(
   for (const message of incoming) {
     if (held.has(message.id)) {
       const row = target.messages.findLast((m) => m.id === message.id);
-      if (
-        row?.state &&
-        message.state &&
-        SEND_RANK[message.state] > SEND_RANK[row.state]
-      ) {
-        moveSend(target, row, message.state);
+      if (row) {
+        adoptCopy(target, row, message);
       }
       continue;
     }
@@ -731,6 +727,24 @@ function upsert(
     } else {
       target.messages.splice(queuedFrom(target.messages), 0, message);
     }
+  }
+}
+
+/**
+ * Another copy of a send already on screen: it only carries the row forward.
+ * The furthest copy dates the row (the hub's accepted send over this tab's
+ * own draft, the harness's stored copy over both); a copy behind the row, a
+ * replayed frame after a history read, leaves it alone.
+ */
+function adoptCopy(target: SessionState, row: Message, copy: Message): void {
+  if (!(row.state && copy.state)) {
+    return;
+  }
+  if (copy.timestamp && SEND_RANK[copy.state] >= SEND_RANK[row.state]) {
+    row.timestamp = copy.timestamp;
+  }
+  if (SEND_RANK[copy.state] > SEND_RANK[row.state]) {
+    moveSend(target, row, copy.state);
   }
 }
 

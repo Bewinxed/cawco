@@ -6,6 +6,7 @@
  * re-models them.
  */
 import type {
+  AcceptedSend,
   NeutralAssistantMessage,
   NeutralMessage,
   NeutralStatus,
@@ -600,9 +601,13 @@ export function mapFrame(
       // (`SentMessage`), and the hub streams exactly one of it, under the uuid
       // it was sent with. It is classified off its marker line exactly as a
       // stored copy is, so the row reads the same live and after a reload.
+      // Dated by the hub's clock (`AcceptedSend`), as its pending copy is.
       if (sdk.origin && uuid) {
         mapping.messages.push({
-          ...sentRow(text ?? "", sdk.message, base),
+          ...sentRow(text ?? "", sdk.message, {
+            ...base,
+            timestamp: new Date((sdk as AcceptedSend).timestamp),
+          }),
           state: "sent",
         });
         break;
@@ -1755,15 +1760,11 @@ export function mapTranscript(
     // `mapFrame` stamps the client's clock, which is the truth for a frame
     // arriving live and a fiction for one read back off disk — it would date
     // every turn of a year-old session to the moment the reader opened it. The
-    // entry's own recorded time replaces it where the harness sent one, and
-    // where it did not (an older daemon, or a harness with no source for it)
-    // the message carries none and renders none.
+    // entry's own recorded time replaces it: the harness's for a stored entry
+    // (none where the harness has no source for one, and then none renders),
+    // the hub's for a send it still holds (`AcceptedSend`).
     for (const message of mapping.messages) {
-      if (recorded) {
-        message.timestamp = recorded;
-      } else {
-        message.timestamp = undefined;
-      }
+      message.timestamp = recorded;
       // A send the hub still holds for the harness is waiting on it, whether
       // or not this tab has heard yet that the session is busy.
       if ("origin" in entry) {

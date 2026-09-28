@@ -429,6 +429,15 @@ export type SentMessage = NeutralUserMessage & {
 };
 
 /**
+ * A {@link SentMessage} as the hub accepted it, with `timestamp`, the ISO-8601
+ * moment it took the send. The sender builds the message; the hub alone dates
+ * it, streams it in this shape and serves it with the history until the
+ * harness reads it. So a tab that saw it live and a tab that reloaded while it
+ * waited date the row by the same clock.
+ */
+export type AcceptedSend = SentMessage & { timestamp: string };
+
+/**
  * The `system` subtype saying the harness has now consumed these sends: their
  * uuids, in `read`, on the frame where it happened — before whatever the model
  * says about them.

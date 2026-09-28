@@ -1,5 +1,6 @@
 import { generateCodeChallenge, generateCodeVerifier } from "@whiffle/auth";
 import type {
+  AcceptedSend,
   AgentRow,
   BuildInfo,
   ClaudeLimits,
@@ -1722,15 +1723,10 @@ export const createServer = ({
    * Every message sent to a session that its harness has not read yet, by
    * instance, then uuid, oldest first. Filed by {@link deliverSend}, retired
    * by the harness's `read` frame, dropped with the session; served with its
-   * history, so a reload draws what is still waiting. Each carries the time
-   * it was sent (`SessionMessage.timestamp`): the row a reload draws keeps it
-   * when the session reads the message, and shows the clock every live tab
-   * shows. Without it the reloaded tab's row settled with no time at all.
+   * history, so a reload draws what is still waiting, dated as the live frame
+   * dated it ({@link AcceptedSend}).
    */
-  const pendingSends = new Map<
-    string,
-    Map<string, SentMessage & { timestamp: string }>
-  >();
+  const pendingSends = new Map<string, Map<string, AcceptedSend>>();
 
   /**
    * A send as the session's own stream carries it: the message under its
@@ -1847,12 +1843,15 @@ export const createServer = ({
     wakeForSend(agent, envelope.machineId, instanceId);
     agent.send(envelope);
     // Built after the send has gone: the machine is handed the image bytes,
-    // the dashboards a reference to them.
-    const message = externalizeImages(sentFrame(envelope.payload));
+    // the dashboards a reference to them. Dated here, once: the frame every
+    // live tab draws and the pending copy a reload draws are this one object.
+    const message: AcceptedSend = {
+      ...externalizeImages(sentFrame(envelope.payload)),
+      timestamp: new Date().toISOString(),
+    };
     const held =
-      pendingSends.get(instanceId) ??
-      new Map<string, SentMessage & { timestamp: string }>();
-    held.set(message.uuid, { ...message, timestamp: new Date().toISOString() });
+      pendingSends.get(instanceId) ?? new Map<string, AcceptedSend>();
+    held.set(message.uuid, message);
     pendingSends.set(instanceId, held);
     const frame: FramePayload = {
       kind: "frame",
