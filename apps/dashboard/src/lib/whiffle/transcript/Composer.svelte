@@ -761,214 +761,220 @@
 </script>
 
 <div class="fade" transition:fade></div>
-<!-- Parked prompts stand in their own column on top of the composer, so a
-     card arriving or leaving never moves the composer itself. The column
-     reaches from the top of the pane down to the composer and stands its
-     cards on its bottom edge: it stays where it is while cards come and go,
-     so the list moves the way every list does (motion/rows.svelte.ts) — a
-     card arriving is uncovered as the cards above it slide up to make its
-     room, a card leaving closes as they slide back down. -->
-{#if prompts}
-  <div
-    class="prompts"
-    style:bottom="calc(var(--space-4) + env(safe-area-inset-bottom) + {panel}px)"
-    {@attach reflow()}
-  >
-    <div class="stack" bind:clientHeight={stack}>{@render prompts()}</div>
-  </div>
-{/if}
-<div class="composer" bind:clientHeight={panel} in:rise out:fade>
-  <!-- The row of attachments is one block above the field: it folds open
+<!-- The dock is one column from the top of the pane down to the composer's
+     resting place: the parked prompts fill it and the panel stands at its
+     foot. Parked prompts stand in their own column on top of the composer,
+     so a card arriving or leaving never moves the composer itself. The
+     column stands its cards on its bottom edge: it stays where it is while
+     cards come and go, so the list moves the way every list does
+     (motion/rows.svelte.ts) — a card arriving is uncovered as the cards
+     above it slide up to make its room, a card leaving closes as they slide
+     back down.
+     The column's foot is the panel's top by layout, not by a measured
+     height: placed from `panel`, the column resized inside the very
+     ResizeObserver pass that measured the panel, a box the pass could no
+     longer deliver ("ResizeObserver loop completed with undelivered
+     notifications", every frame the field grew), and it stood a frame
+     behind the panel. -->
+<div class="dock">
+  {#if prompts}
+    <div class="prompts" {@attach reflow()}>
+      <div class="stack" bind:clientHeight={stack}>{@render prompts()}</div>
+    </div>
+  {/if}
+  <div class="composer" bind:clientHeight={panel} in:rise out:fade>
+    <!-- The row of attachments is one block above the field: it folds open
        with its first chip and shut with its last. The chips in it are a
        list (motion/rows.svelte.ts): one added pops in, one removed shrinks
        to the pop scale as it fades, and the rest slide together. -->
-  {#if draft.images.length || draft.texts.length || draft.selections.length}
-    <div class="atts" transition:unfold {@attach reflow()}>
-      {#each draft.selections as selection (`${selection.element.url}:${selection.element.selector}`)}
-        <SelectionChip
-          onedit={() => { draft.editing = selection; draft.editorOpen = true; }}
-          onremove={() => draft.removeSelection(selection)}
-          {selection}
-          bind:anchor={draft.anchors[`${selection.element.url}:${selection.element.selector}`]}
-        />
-      {/each}
-      {#each draft.images as img, i (img.name + i)}
-        <span class="att" data-flip="pop">
-          <img alt="" src="data:{img.mediaType};base64,{img.data}">
-          <span class="att-name">{img.name}</span>
-          <button
-            aria-label="Remove"
-            class="touch-hit"
-            onclick={() => removeImage(i)}
-            type="button"
-          >
-            <IconClose />
-          </button>
-        </span>
-      {/each}
-      <!-- A file looks here as it will in the sent turn: its DocThumb, which
+    {#if draft.images.length || draft.texts.length || draft.selections.length}
+      <div class="atts" transition:unfold {@attach reflow()}>
+        {#each draft.selections as selection (`${selection.element.url}:${selection.element.selector}`)}
+          <SelectionChip
+            onedit={() => { draft.editing = selection; draft.editorOpen = true; }}
+            onremove={() => draft.removeSelection(selection)}
+            {selection}
+            bind:anchor={draft.anchors[`${selection.element.url}:${selection.element.selector}`]}
+          />
+        {/each}
+        {#each draft.images as img, i (img.name + i)}
+          <span class="att" data-flip="pop">
+            <img alt="" src="data:{img.mediaType};base64,{img.data}">
+            <span class="att-name">{img.name}</span>
+            <button
+              aria-label="Remove"
+              class="touch-hit"
+              onclick={() => removeImage(i)}
+              type="button"
+            >
+              <IconClose />
+            </button>
+          </span>
+        {/each}
+        <!-- A file looks here as it will in the sent turn: its DocThumb, which
            previews it the same way, with its remove on the corner. -->
-      {#each draft.texts as t, i (t.name + i)}
-        <span class="doc-att" data-flip="pop">
-          <DocThumb content={t.content} name={t.name} />
-          <button
-            aria-label={`Remove ${t.name}`}
-            class="doc-remove touch-hit"
-            onclick={() => removeText(i)}
-            type="button"
-          >
-            <IconClose />
-          </button>
-        </span>
-      {/each}
-    </div>
-  {/if}
-
-  {#if suggest && suggestions.enabled}
-    <SuggestionChips
-      candidates={suggest.candidates}
-      oninsert={insertSuggestion}
-      text={draft.text}
-      bind:this={chips}
-    />
-  {/if}
-
-  {#if draft.editing}
-    <SelectionPopover
-      anchor={draft.anchors[`${draft.editing.element.url}:${draft.editing.element.selector}`]}
-      onremove={() => { if (draft.editing) { draft.removeSelection(draft.editing); } }}
-      phone={previewPhone}
-      selection={draft.editing}
-      bind:open={draft.editorOpen}
-    />
-  {/if}
-
-  <!-- A send that failed says so right over the field it left. -->
-  {#if sendError}
-    <p class="send-error" role="alert" transition:unfold>{sendError}</p>
-  {/if}
-
-  <form
-    aria-label="Message the agent"
-    class="cin"
-    onsubmit={(e) => e.preventDefault()}
-  >
-    <input
-      accept="image/*,text/*,.md,.json,.csv,.log"
-      class="hidden-file"
-      multiple
-      onchange={onpick}
-      type="file"
-      bind:this={fileInput}
-    >
-
-    {#if menuOpen}
-      <!-- Above the input, not over it: the sentence being written stays legible
-           while its next word is being chosen. -->
-      <!-- Focus never leaves the textarea: the menu swallows the mousedown that
-           would blur it, so a clicked row lands on the message being written. -->
-      <!-- biome-ignore lint/a11y/noStaticElementInteractions: role="presentation" is deliberate — this wrapper is never meant to be announced; the mousedown handler only preventDefaults so focus stays on the textarea, it is not a user interaction target. -->
-      <div
-        class="menu kit-pop"
-        data-side="top"
-        data-state="open"
-        id="composer-menu"
-        onmousedown={(event) => event.preventDefault()}
-        role="presentation"
-        out:menuOut
-      >
-        <Command.Root loop shouldFilter={false} bind:value={highlight}>
-          <Command.List>
-            {#each sections as section (section.key)}
-              <Command.Group heading={section.heading}>
-                {#each section.entries as entry (entry.id)}
-                  <Command.Item
-                    id={domIds.get(entry.id)}
-                    onSelect={() => choose(entry)}
-                    value={entry.id}
-                  >
-                    <span class="e-label">{entry.label}</span>
-                    {#if entry.detail}
-                      <span class="e-detail">{entry.detail}</span>
-                    {/if}
-                  </Command.Item>
-                {/each}
-              </Command.Group>
-            {/each}
-          </Command.List>
-        </Command.Root>
+        {#each draft.texts as t, i (t.name + i)}
+          <span class="doc-att" data-flip="pop">
+            <DocThumb content={t.content} name={t.name} />
+            <button
+              aria-label={`Remove ${t.name}`}
+              class="doc-remove touch-hit"
+              onclick={() => removeText(i)}
+              type="button"
+            >
+              <IconClose />
+            </button>
+          </span>
+        {/each}
       </div>
     {/if}
 
-    <!-- A label, so the pill's padding above and below the 34px field
+    {#if suggest && suggestions.enabled}
+      <SuggestionChips
+        candidates={suggest.candidates}
+        oninsert={insertSuggestion}
+        text={draft.text}
+        bind:this={chips}
+      />
+    {/if}
+
+    {#if draft.editing}
+      <SelectionPopover
+        anchor={draft.anchors[`${draft.editing.element.url}:${draft.editing.element.selector}`]}
+        onremove={() => { if (draft.editing) { draft.removeSelection(draft.editing); } }}
+        phone={previewPhone}
+        selection={draft.editing}
+        bind:open={draft.editorOpen}
+      />
+    {/if}
+
+    <!-- A send that failed says so right over the field it left. -->
+    {#if sendError}
+      <p class="send-error" role="alert" transition:unfold>{sendError}</p>
+    {/if}
+
+    <form
+      aria-label="Message the agent"
+      class="cin"
+      onsubmit={(e) => e.preventDefault()}
+    >
+      <input
+        accept="image/*,text/*,.md,.json,.csv,.log"
+        class="hidden-file"
+        multiple
+        onchange={onpick}
+        type="file"
+        bind:this={fileInput}
+      >
+
+      {#if menuOpen}
+        <!-- Above the input, not over it: the sentence being written stays legible
+           while its next word is being chosen. -->
+        <!-- Focus never leaves the textarea: the menu swallows the mousedown that
+           would blur it, so a clicked row lands on the message being written. -->
+        <!-- biome-ignore lint/a11y/noStaticElementInteractions: role="presentation" is deliberate — this wrapper is never meant to be announced; the mousedown handler only preventDefaults so focus stays on the textarea, it is not a user interaction target. -->
+        <div
+          class="menu kit-pop"
+          data-side="top"
+          data-state="open"
+          id="composer-menu"
+          onmousedown={(event) => event.preventDefault()}
+          role="presentation"
+          out:menuOut
+        >
+          <Command.Root loop shouldFilter={false} bind:value={highlight}>
+            <Command.List>
+              {#each sections as section (section.key)}
+                <Command.Group heading={section.heading}>
+                  {#each section.entries as entry (entry.id)}
+                    <Command.Item
+                      id={domIds.get(entry.id)}
+                      onSelect={() => choose(entry)}
+                      value={entry.id}
+                    >
+                      <span class="e-label">{entry.label}</span>
+                      {#if entry.detail}
+                        <span class="e-detail">{entry.detail}</span>
+                      {/if}
+                    </Command.Item>
+                  {/each}
+                </Command.Group>
+              {/each}
+            </Command.List>
+          </Command.Root>
+        </div>
+      {/if}
+
+      <!-- A label, so the pill's padding above and below the 34px field
          focuses it: its touch area is the field's. -->
-    <label class="field touch-hit">
-      <textarea
-        aria-activedescendant={activeDescendant}
-        aria-autocomplete="list"
-        aria-controls="composer-menu"
-        aria-expanded={menuOpen}
-        aria-label="Message the agent"
-        onblur={() => {
+      <label class="field touch-hit">
+        <textarea
+          aria-activedescendant={activeDescendant}
+          aria-autocomplete="list"
+          aria-controls="composer-menu"
+          aria-expanded={menuOpen}
+          aria-label="Message the agent"
+          onblur={() => {
         dismissed = true;
       }}
-        onclick={noteCaret}
-        oninput={noteCaret}
-        {onkeydown}
-        onkeyup={noteCaret}
-        {onpaste}
-        onselect={noteCaret}
-        placeholder={hint}
-        role="combobox"
-        bind:this={field}
-        bind:value={draft.text}
-        {@attach autosize(
+          onclick={noteCaret}
+          oninput={noteCaret}
+          {onkeydown}
+          onkeyup={noteCaret}
+          {onpaste}
+          onselect={noteCaret}
+          placeholder={hint}
+          role="combobox"
+          bind:this={field}
+          bind:value={draft.text}
+          {@attach autosize(
           () => draft.text,
           () => draft
         )}
-        {@attach fitHint}
-      ></textarea>
-    </label>
+          {@attach fitHint}
+        ></textarea>
+      </label>
 
-    <div class="ctrls">
-      {@render leading?.()}
-      <button
-        aria-label="Attach a file or image"
-        class="att-btn touch-hit"
-        onclick={() => fileInput?.click()}
-        type="button"
-      >
-        <IconPlus />
-      </button>
-      <!-- Pending from the press until the hub takes the message: the glyph
+      <div class="ctrls">
+        {@render leading?.()}
+        <button
+          aria-label="Attach a file or image"
+          class="att-btn touch-hit"
+          onclick={() => fileInput?.click()}
+          type="button"
+        >
+          <IconPlus />
+        </button>
+        <!-- Pending from the press until the hub takes the message: the glyph
            slot turns to the kit spinner and presses are swallowed. -->
-      <button
-        aria-busy={sending || undefined}
-        aria-disabled={sending || undefined}
-        aria-label={busy ? 'Stop the agent' : 'Send message'}
-        class="stop touch-hit pressable"
-        disabled={held || !(busy || sending || draft.hasContent)}
-        onclick={whileIdle(() => sending, onaction)}
-        type="button"
-      >
-        <!-- The one control that changes meaning mid-turn. `{#key}` re-creates
+        <button
+          aria-busy={sending || undefined}
+          aria-disabled={sending || undefined}
+          aria-label={busy ? 'Stop the agent' : 'Send message'}
+          class="stop touch-hit pressable"
+          disabled={held || !(busy || sending || draft.hasContent)}
+          onclick={whileIdle(() => sending, onaction)}
+          type="button"
+        >
+          <!-- The one control that changes meaning mid-turn. `{#key}` re-creates
              the glyph on every flip, so BOTH directions of the swap animate in;
              the box it sits in is untouched, so send↔stop never moves or
              resizes under a thumb already travelling toward it. -->
-        {#key sending ? 'wait' : busy}
-          <span class="swap">
-            {#if sending}
-              <Spinner aria-hidden="true" role="presentation" />
-            {:else if busy}
-              <IconStop />
-            {:else}
-              <IconSend />
-            {/if}
-          </span>
-        {/key}
-      </button>
-    </div>
-  </form>
+          {#key sending ? 'wait' : busy}
+            <span class="swap">
+              {#if sending}
+                <Spinner aria-hidden="true" role="presentation" />
+              {:else if busy}
+                <IconStop />
+              {:else}
+                <IconSend />
+              {/if}
+            </span>
+          {/key}
+        </button>
+      </div>
+    </form>
+  </div>
 </div>
 
 <style>
@@ -986,12 +992,18 @@
       oklch(from var(--surface-recess) l c h / 0)
     );
   }
-  .composer {
+  .dock {
     position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
+    inset: 0 0 calc(var(--space-4) + env(safe-area-inset-bottom));
     z-index: 20;
-    bottom: calc(var(--space-4) + env(safe-area-inset-bottom));
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    align-items: center;
+    pointer-events: none;
+  }
+  .composer {
+    flex: none;
     width: min(720px, calc(100% - 50px));
     display: flex;
     flex-direction: column;
@@ -1001,14 +1013,12 @@
   .composer > :global(*) {
     pointer-events: auto;
   }
-  /* Placed like the panel, bottom edge on the panel's top; the gap to the
-     panel is its own bottom padding, so its measured height carries it. */
+  /* The rest of the dock above the panel, cards stood on its bottom edge;
+     the gap to the panel is the stack's own bottom padding, so its
+     measured height carries it. */
   .prompts {
-    position: absolute;
-    top: 0;
-    left: 50%;
-    transform: translateX(-50%);
-    z-index: 20;
+    flex: 1 1 0;
+    min-height: 0;
     width: min(720px, calc(100% - 50px));
     display: flex;
     flex-direction: column;
@@ -1395,14 +1405,19 @@
      so it sits ABOVE the thumb bar instead of overlapping it — the thumb bar
      owns the safe-area inset. */
   @media (max-width: 900px) {
-    .composer {
-      left: var(--space-3);
-      right: var(--space-3);
-      width: auto;
-      transform: none;
-      /* Clear the home indicator / gesture bar — the resting gap plus the safe
-         area inset, so the composer never sits under the rounded-screen chrome. */
+    /* Clear the home indicator / gesture bar — the resting gap plus the safe
+       area inset, so the composer never sits under the rounded-screen chrome. */
+    .dock {
       bottom: calc(var(--space-2) + env(safe-area-inset-bottom));
+    }
+    .composer {
+      align-self: stretch;
+      margin-inline: var(--space-3);
+      width: auto;
+    }
+    /* The cards keep the desktop's step off the panel. */
+    .prompts {
+      margin-bottom: calc(var(--space-4) - var(--space-2));
     }
   }
 </style>
