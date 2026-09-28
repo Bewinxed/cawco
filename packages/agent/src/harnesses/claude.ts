@@ -683,8 +683,13 @@ class ClaudeSession implements HarnessSession {
      * The sessiond connection this session's CLI child lives under. Not
      * optional in practice — `spawn()` always supplies it, and there is no
      * in-process fallback (PLAN.md C7: full cutover, rollback is a revert).
+     *
+     * `attachAfter` names a child that already exists — a custody handing its
+     * process back after an agent restart — and the ring line custody stopped
+     * at. The `Query` then attaches to that process instead of spawning one
+     * (see {@link sessiondBridge}).
      */
-    sessiond?: { client: SessiondClient; procId: string }
+    sessiond?: { client: SessiondClient; procId: string; attachAfter?: number }
   ) {
     this.instanceId = instanceId;
     this.#ctx = ctx;
@@ -790,7 +795,12 @@ class ClaudeSession implements HarnessSession {
               spawnClaudeCodeProcess: (
                 spawnOptions: import("@anthropic-ai/claude-agent-sdk").SpawnOptions
               ) =>
-                sessiondBridge(sessiond.client, sessiond.procId, spawnOptions),
+                sessiondBridge(
+                  sessiond.client,
+                  sessiond.procId,
+                  spawnOptions,
+                  sessiond.attachAfter
+                ),
             }
           : {}),
         canUseTool: (
@@ -1285,7 +1295,6 @@ interface RingLine {
   session_id?: unknown;
   skip_transcript?: unknown;
   subtype?: unknown;
-  tasks?: unknown;
   type?: unknown;
 }
 
@@ -1308,36 +1317,25 @@ const TURN_LINES: ReadonlySet<unknown> = new Set([
 ]);
 
 /**
- * WHAT THE CHILD IS RUNNING, read off its ring one line at a time. A hand-off
- * relaunches the process, and a relaunch ends everything the process runs, so
- * this is the whole of what a hand-off has to ask. Two things are cut off:
+ * WHETHER THE CHILD IS MID-TURN, read off its ring one line at a time — the
+ * one thing that keeps a custody from handing the child to a fresh `Query`,
+ * because a `Query` attached mid-stream would meet a turn it did not open and
+ * permission asks it never parked.
  *
- *  - A TURN IN FLIGHT. `result` ends one. `init` opens one: the CLI writes it
- *    when it takes up a message, not when it starts (on the isolated stack a
- *    fresh child wrote its hooks and the `initialize` control_response, and
- *    its `init` came with the first send). A `task_notification` is a turn
- *    about to open: the CLI hands it to the model as the next turn
- *    (measured: notification, `init`, the turn, `result`). The lines in
- *    {@link TURN_LINES} are the turn itself. Everything else carries the
- *    previous answer, because an idle child keeps writing hook, status,
- *    `commands_changed`, `rate_limit_event` and `control_response` lines after
- *    its `result`, so the LAST line almost never says anything about the turn.
- *  - BACKGROUND TASKS. A `run_in_background` Bash command or a Monitor is a
- *    child of the CLI and dies with it; the relaunched session is then told
- *    it "didn't finish before the previous session ended" and never hears it
- *    complete. `background_tasks_changed` is the CLI's own level signal for
- *    them, and the SDK says how to read it: "consumers that only need 'is
- *    background work running' should replace their set with each payload
- *    rather than pairing edges". Ambient tasks are left out, as the same type
- *    tells hosts to: "True for tasks that are not activity (every
- *    skip_transcript task, plus every live-update watcher, requested or
- *    auto-started)". An auto-started watcher never ends, and counting one
- *    would hold its session in custody for good.
+ * `result` ends a turn. `init` opens one: the CLI writes it when it takes up a
+ * message, not when it starts (on the isolated stack a fresh child wrote its
+ * hooks and the `initialize` control_response, and its `init` came with the
+ * first send). A `task_notification` is a turn about to open: the CLI hands
+ * it to the model as the next turn (measured: notification, `init`, the turn,
+ * `result`). The lines in {@link TURN_LINES} are the turn itself. Everything
+ * else carries the previous answer, because an idle child keeps writing hook,
+ * status, `commands_changed`, `rate_limit_event`, `background_tasks_changed`
+ * and `control_response` lines after its `result`, so the LAST line almost
+ * never says anything about the turn.
  */
 class ChildActivity {
   /** `undefined` until a line has said anything about a turn. */
   #waiting: boolean | undefined;
-  readonly #tasks = new Set<string>();
 
   read(line: RingLine | undefined): void {
     if (line === undefined) {
@@ -1359,37 +1357,16 @@ class ChildActivity {
       (line.subtype === "task_notification" && line.skip_transcript !== true)
     ) {
       this.#waiting = false;
-    } else if (
-      line.subtype === "background_tasks_changed" &&
-      Array.isArray(line.tasks)
-    ) {
-      this.#tasks.clear();
-      for (const task of line.tasks as {
-        task_id: string;
-        ambient?: boolean;
-      }[]) {
-        if (task.ambient !== true) {
-          this.#tasks.add(task.task_id);
-        }
-      }
     }
   }
 
+  /**
+   * A child that has said nothing about a turn is not running one: it has
+   * taken no turn in anything sessiond still remembers (see the head decision
+   * in {@link ClaudeHarness.adopt}).
+   */
   get turnRunning(): boolean {
     return this.#waiting === false;
-  }
-
-  get backgroundTasks(): number {
-    return this.#tasks.size;
-  }
-
-  /**
-   * Nothing a relaunch would cut off. A child that has said nothing about a
-   * turn counts as waiting: it has taken no turn in anything sessiond still
-   * remembers (see the head decision in {@link ClaudeHarness.adopt}).
-   */
-  get idle(): boolean {
-    return !this.turnRunning && this.#tasks.size === 0;
   }
 }
 
@@ -1467,45 +1444,43 @@ const DEFERRED_CONTROLS: ReadonlySet<string> = new Set([
  *    the whiffle server, a hook callback) is answered with an explicit in-band
  *    error, so the tool call FAILS VISIBLY instead of hanging forever on a
  *    handler that no longer exists;
- *  - once the child runs nothing a relaunch would cut off — no turn in
- *    flight and no background task ({@link ChildActivity}) — its stdin is
- *    EOF'd and the hand-off fires: the owner respawns through the full SDK
- *    with `resume: sessionId`. That moment is a live `result` with no
- *    background task left ({@link settle}); a task's end never is on its own,
- *    because the CLI answers it with a turn whose `result` comes after. A
- *    child that was already idle when adopted has no next `result` coming, so
- *    {@link ClaudeHarness.adopt} settles once on the ring's last line instead.
- *    Until then the child stays in custody, which is why sends are held and
- *    controls refused for as long as a background task runs.
+ *  - at the turn's next live `result` the hand-off fires: the owner builds a
+ *    full SDK `Query` on the SAME process ({@link ClaudeHarness.spawn}'s
+ *    attach), which re-sends `initialize` and reads the ring from the line
+ *    custody stopped at. Nothing is relaunched, so nothing the child runs —
+ *    a `run_in_background` command, a Monitor, a subagent — is cut off. A
+ *    child that was already between turns when adopted has no next `result`
+ *    coming, so {@link ClaudeHarness.adopt} hands off from the ring's last
+ *    line instead.
  *
- * Custody is a degraded mode measured in seconds, not a second implementation
- * of the SDK. Everything it refuses, it refuses out loud.
+ * The attach waits for a turn boundary because a `Query` attached mid-stream
+ * would meet a turn it did not open and permission asks it never parked.
+ * Custody is a degraded mode measured in one turn, not a second
+ * implementation of the SDK. Everything it refuses, it refuses out loud.
  */
 export class ClaudeCustody implements HarnessSession {
   readonly harness = "claude" as const;
   sessionId: string | null = null;
   /** requestId → the parked ask, until an answer or the hand-off clears it. */
   readonly #parked = new Set<string>();
-  /** Turns pushed during custody; delivered by the respawned session. */
+  /** Turns pushed during custody; delivered by the attached session. */
   readonly #held: {
     message: NeutralUserMessage;
     extras: Pick<SendPayload, "attachments" | "images" | "urgent">;
   }[] = [];
-  /** Controls deferred during custody; replayed by the respawned session. */
+  /** Controls deferred during custody; replayed by the attached session. */
   readonly #heldControls: { method: string; args: unknown[] }[] = [];
   #handedOff = false;
-  /** What the child is running; fed every ring line, peeked or ingested. */
+  /** Whether the child is mid-turn; fed every ring line, peeked or ingested. */
   readonly activity = new ChildActivity();
-  /** Whether the transcript has been told why this custody outlives its turn. */
-  #deferralSaid = false;
   /** Settled by {@link exited} when sessiond reports the child gone. */
   readonly #exit = Promise.withResolvers<void>();
   readonly instanceId: string;
   readonly #ctx: HarnessContext;
   readonly #write: (data: string) => void;
-  /** Ends the child's stdin — the graceful half of the boundary hand-off. */
+  /** Ends the child's stdin — how an operator's `stop` during custody ends it. */
   readonly #stdinEnd: () => void;
-  /** Fired at the turn boundary; the owner respawns with `resume: sessionId`. */
+  /** Fired at the turn boundary; the owner attaches a `Query` to the same child. */
   readonly #onHandoff: (handoff: {
     instanceId: string;
     sessionId: string | null;
@@ -1558,42 +1533,6 @@ export class ClaudeCustody implements HarnessSession {
 
   get handedOff(): boolean {
     return this.#handedOff;
-  }
-
-  /**
-   * One ring line, read for what the child is running. A turn the CLI opens
-   * on its own during custody (a background task's notification) is busy like
-   * any other; `live` keeps a replayed backlog from saying so about the past.
-   */
-  observe(line: RingLine | undefined, live: boolean): void {
-    const running = this.activity.turnRunning;
-    this.activity.read(line);
-    if (live && !running && this.activity.turnRunning) {
-      this.#ctx.busy(true);
-    }
-  }
-
-  /**
-   * The one place custody decides to hand back: now, if the child runs
-   * nothing a relaunch would cut off, and otherwise not yet — said once in
-   * the transcript when what holds it is background work rather than a turn,
-   * because that can last far longer than a turn and every send waits on it.
-   */
-  settle(): void {
-    if (this.activity.idle) {
-      this.handOff();
-      return;
-    }
-    if (this.activity.turnRunning || this.#deferralSaid) {
-      return;
-    }
-    this.#deferralSaid = true;
-    this.#ctx.frame({
-      type: "system",
-      subtype: "sessiond_custody_held",
-      ...(this.sessionId ? { session_id: this.sessionId } : {}),
-      text: `whiffle: agent restarted; this session keeps its process until its ${this.activity.backgroundTasks} background task(s) finish, so they are not cut off. Messages sent meanwhile are delivered then.`,
-    } as unknown as NeutralMessage);
   }
 
   /**
@@ -1654,11 +1593,10 @@ export class ClaudeCustody implements HarnessSession {
     if (sdk.type === "result") {
       this.#ctx.busy(false);
       // THE BOUNDARY. The turn that was in flight when the agent died has now
-      // completed and been captured; unless a background task is still
-      // running, handing the session back to a full `Query` costs nothing but
-      // a respawn.
+      // completed and been captured; this is the moment a `Query` can attach
+      // to the child without meeting a turn it did not open.
       if (live) {
-        this.settle();
+        this.handOff();
       }
     }
   }
@@ -1778,14 +1716,16 @@ export class ClaudeCustody implements HarnessSession {
     );
   }
 
-  /** stdin EOF + the hand-off, once. */
+  /**
+   * The hand-off, once. The child is left exactly as it is — stdin open, every
+   * background task running — for the `Query` the owner attaches to it.
+   */
   handOff(): void {
     // biome-ignore lint/suspicious/noUnnecessaryConditions: #handedOff is set true elsewhere in this class once a hand-off fires; the checker doesn't see that cross-method mutation
     if (this.#handedOff) {
       return;
     }
     this.#handedOff = true;
-    this.#stdinEnd();
     this.#onHandoff({
       instanceId: this.instanceId,
       sessionId: this.sessionId,
@@ -1797,8 +1737,15 @@ export class ClaudeCustody implements HarnessSession {
   }
 
   async stop(): Promise<void> {
+    // After the hand-off the child belongs to the `Query` attaching to it: the
+    // supervisor retires this custody on its way to that attach, and ending
+    // the child here would be the very relaunch the attach exists to avoid.
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: #handedOff is set true by handOff() once a hand-off fires; the checker doesn't see that cross-method mutation
+    if (this.#handedOff) {
+      return;
+    }
     // A stop during custody is the operator ending the session, not a
-    // hand-off: nothing is parked afterwards and nothing is respawned.
+    // hand-off: nothing is parked afterwards and nothing is attached.
     for (const requestId of this.#parked) {
       this.#write(controlError(requestId, "whiffle: session stopped"));
     }
@@ -1807,10 +1754,10 @@ export class ClaudeCustody implements HarnessSession {
     this.#heldControls.length = 0;
     this.#handedOff = true;
     this.#stdinEnd();
-    // Returned only once the child is actually dead. The supervisor's relaunch
-    // awaits this before spawning under the same procId, and sessiond's spawn
-    // SIGKILLs a still-alive predecessor and broadcasts its exit to whoever is
-    // subscribed under that id by then — which would be the new session.
+    // Returned only once the child is actually dead: the operator's stop is
+    // done when the process is, and a spawn that follows under the same procId
+    // must not meet a still-alive predecessor (sessiond SIGKILLs it and
+    // broadcasts its exit to whoever is subscribed under that id by then).
     if (await within(this.#exit.promise, CUSTODY_EXIT_MS)) {
       return;
     }
@@ -2033,6 +1980,13 @@ export class ClaudeHarness implements Harness {
     return this.#sessiond;
   }
 
+  /**
+   * Custodies that have handed back, by instance: the ring line each stopped
+   * at. The supervisor answers a hand-off with a `spawn` for the same
+   * instance, and that spawn attaches here instead of starting a process.
+   */
+  readonly #attachAt = new Map<string, number>();
+
   async spawn(
     spec: SpawnPayload,
     ctx: HarnessContext
@@ -2043,7 +1997,10 @@ export class ClaudeHarness implements Harness {
     // surviving child to the row it belongs to.
     const client = await this.sessiond();
     const fleetDenyList = await resolvedDenyList();
-    return new ClaudeSession(
+    const attachAfter = this.#attachAt.get(ctx.instanceId);
+    this.#attachAt.delete(ctx.instanceId);
+    const attaching = attachAfter !== undefined;
+    const session = new ClaudeSession(
       ctx.instanceId,
       ctx,
       ctx.cwd,
@@ -2053,11 +2010,18 @@ export class ClaudeHarness implements Harness {
       spec.effort,
       spec.resume,
       spec.persistSession,
-      spec.skills,
+      // An attached child loaded its skills when it was spawned.
+      attaching ? undefined : spec.skills,
       spec.denyTools,
       fleetDenyList,
-      { client, procId: ctx.instanceId }
+      { client, procId: ctx.instanceId, ...(attaching ? { attachAfter } : {}) }
     );
+    // An attached child writes no `init` until its next turn, and the
+    // conversation it carries is the one the hand-off named.
+    if (attaching && spec.resume) {
+      session.sessionId = spec.resume.sessionKey;
+    }
+    return session;
   }
 
   /**
@@ -2076,8 +2040,8 @@ export class ClaudeHarness implements Harness {
    * So the ring is read from {@link RING_START} through `head` and every line
    * is fed to the custody's {@link ChildActivity}. There is exactly one
    * decision, taken once, at the one moment the whole backlog has gone past:
-   * the custody settles ({@link ClaudeCustody.settle}), handing off unless the
-   * ring says a turn or a background task is running. Reading from the start is
+   * unless the ring says a turn is in flight, the hand-off fires and the
+   * next `spawn` for this instance attaches to the child. Reading from the start is
    * what makes that a decision rather than a guess — a fixed window can fill
    * with the notices an idle child keeps writing and answer "don't know",
    * which is the shape of the bug this replaces, whereas a full ring holding
@@ -2111,6 +2075,11 @@ export class ClaudeHarness implements Harness {
     }
   ): Promise<ClaudeCustody> {
     const client = await this.sessiond();
+    const head = options.head ?? 0;
+    // The last ring line custody has read. The `Query` attached at the
+    // hand-off reads from the line after it — and never from below `head`, so
+    // a peek that stopped short does not feed history to it as live output.
+    let lastSeq = 0;
     const custody = new ClaudeCustody(
       instanceId,
       ctx,
@@ -2120,7 +2089,10 @@ export class ClaudeHarness implements Harness {
       // biome-ignore lint/complexity/noVoid: fire-and-forget by intent; sessiond stdin-end failures are not this session's to surface, best effort only
       // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — nothing here can act on a stdin-end failure to a gone child
       () => void client.stdinEnd(instanceId).catch(() => {}),
-      options.onHandoff,
+      (handoff) => {
+        this.#attachAt.set(instanceId, Math.max(lastSeq, head));
+        options.onHandoff(handoff);
+      },
       options.sessionId ?? null,
       // biome-ignore lint/complexity/noVoid: fire-and-forget by intent; sessiond signal failures are not this session's to surface, best effort only
       // biome-ignore lint/suspicious/noEmptyBlockStatements: best effort — nothing here can act on a signal failure to a gone child
@@ -2130,7 +2102,6 @@ export class ClaudeHarness implements Harness {
     // above it is the replay the caller asked for. A cursor past `head` names
     // lines the ring never assigned — sessiond's refusal covers that, and a
     // peek would only muddle whose refusal it was.
-    const head = options.head ?? 0;
     // Raised to `head` if the replay is refused: what survives is then read
     // for the verdict and emitted to nobody (see the `reset` handler).
     let boundary = options.afterSeq ?? head;
@@ -2180,14 +2151,11 @@ export class ClaudeHarness implements Harness {
     // assistant and stream lines continuously — never reaches it, and one
     // whose replay is merely slow keeps its full peek. What fires it is the
     // child having gone quiet with the peek still outstanding, and the answer
-    // is then the same one `head` would have given: the custody settles on
-    // what was read.
-    //
-    // The two refusals above it are the two above: a turn still running is
-    // custody's to keep and the child's own `result` line hands it back; a
-    // null session key is nothing to resume, and respawning on it would orphan
-    // the conversation. Once `head` has decided there is no peek left to wait
-    // for, and the silence of a long tool call says nothing.
+    // is then the same one `head` would have given: a hand-off unless what was
+    // read says a turn is running, which is custody's to keep until the
+    // child's own `result` line hands it back. Once `head` has decided there
+    // is no peek left to wait for, and the silence of a long tool call says
+    // nothing.
     const QUIET_HANDBACK_MS = 15_000;
     let quiet: ReturnType<typeof setTimeout> | undefined;
     const stopWaiting = (): void => {
@@ -2204,17 +2172,17 @@ export class ClaudeHarness implements Harness {
           return;
         }
         repark();
-        if (custody.sessionId === null || custody.activity.turnRunning) {
+        if (custody.activity.turnRunning) {
           // Held on purpose, and said so: a custody nobody can explain looks
           // exactly like the bug this guard removes.
           ctx.frame({
             type: "system",
             subtype: "sessiond_custody_held",
-            text: `whiffle: adopted this session but sessiond's replay stopped short of line ${head}; holding it ${custody.sessionId === null ? "because there is no session id to resume" : "because its last turn reads as still running"}`,
+            text: `whiffle: adopted this session but sessiond's replay stopped short of line ${head}; holding it because its last turn reads as still running`,
           } as unknown as NeutralMessage);
           return;
         }
-        custody.settle();
+        custody.handOff();
       }, QUIET_HANDBACK_MS);
     };
     // Peek-only: recover the session id and unanswered asks, never frames.
@@ -2245,15 +2213,20 @@ export class ClaudeHarness implements Harness {
     };
     const listener: Parameters<SessiondClient["subscribe"]>[1] = {
       line: (event) => {
+        // Past the hand-off every line is the attached `Query`'s: it reads
+        // from the line after the one custody stopped at.
+        if (custody.handedOff) {
+          return;
+        }
+        lastSeq = event.seq;
         seen = true;
         if (!decided) {
           waitForQuiet();
         }
-        // Every line feeds what the child is running, peeked, replayed or
-        // live: the decision at `head` reads the whole backlog, and a live
-        // `result` reads everything up to it.
+        // Every line feeds whether a turn is running, peeked, replayed or
+        // live: the decision at `head` reads the whole backlog.
         const parsed = parseLine(event.data);
-        custody.observe(parsed, event.seq > head);
+        custody.activity.read(parsed);
         if (peekSeq !== undefined && event.seq <= boundary) {
           peek(parsed, event.data);
         } else {
@@ -2279,26 +2252,16 @@ export class ClaudeHarness implements Harness {
         // all `hook_started`/`hook_response`/`control_response`, no `init` and
         // no `result` — a strict `=== true` left it mute indefinitely.
         //
-        // NOTHING TO RESUME OUTRANKS ALL OF IT. The hand-off respawns the child
-        // with `--resume`, so without a session key it would start an empty one
-        // and orphan the conversation the custody was protecting. Staying mute
-        // is recoverable; that is not.
-        //
-        // A turn or a background task still running is held, not handed off:
-        // the relaunch would end it. A turn adopted mid-flight is busy from
-        // here, as it was before the agent went away.
-        if (
-          peekSeq !== undefined &&
-          head >= 1 &&
-          event.seq === head &&
-          custody.sessionId !== null
-        ) {
+        // A turn still running stays in custody until its own `result`, and
+        // is busy from here, as it was before the agent went away.
+        if (peekSeq !== undefined && head >= 1 && event.seq === head) {
           decided = true;
           stopWaiting();
           if (custody.activity.turnRunning) {
             ctx.busy(true);
+          } else {
+            custody.handOff();
           }
-          custody.settle();
         }
       },
       // A child that dies during custody is the session ending on its own,

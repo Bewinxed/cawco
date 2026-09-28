@@ -480,6 +480,15 @@ const assertApplied = (ack: SessiondAck, verb: string): void => {
  * `options.signal` is the SDK's own *forwarded* abort — it fires only after the
  * SDK's stdin-EOF + ~2 s grace window (`sdk.d.ts:6725-6741`), so honouring it
  * with a SIGTERM is the graceful path completing, never a child killed early.
+ *
+ * ATTACH. With `attachAfter`, nothing is spawned: `procId` is a child that
+ * outlived the agent which started it, and the SDK is handed that process,
+ * read from the ring line after `attachAfter`. The CLI takes a repeated
+ * `initialize` from a host that reconnects — the SDK documents it ("A host
+ * that re-initializes an already-running process (a repeated `initialize`
+ * control request, e.g. after reconnecting) is sent a snapshot of the current
+ * set right behind the success response") — so the `Query` drives it like one
+ * it spawned, and nothing the child runs is interrupted.
  */
 export const sessiondBridge = (
   client: SessiondClient,
@@ -490,7 +499,8 @@ export const sessiondBridge = (
     cwd?: string;
     env: Record<string, string | undefined>;
     signal?: AbortSignal;
-  }
+  },
+  attachAfter?: number
 ): import("@anthropic-ai/claude-agent-sdk").SpawnedProcess => {
   const events = new EventEmitter();
   let killed = false;
@@ -503,9 +513,10 @@ export const sessiondBridge = (
     },
   });
   // The highest sequence this wrapper has handed to the SDK. It subscribes at
-  // 0 against the child's own fresh ring, so the first line it expects is seq
-  // 1, and this is what separates a benign reset from a lost window.
-  let consumed = 0;
+  // 0 against the child's own fresh ring (or at `attachAfter`, the line the
+  // custody before it stopped at), so this is what separates a benign reset
+  // from a lost window.
+  let consumed = attachAfter ?? 0;
   const stdin = new Writable({
     write(chunk: Buffer | string, _encoding, callback) {
       client
@@ -575,20 +586,25 @@ export const sessiondBridge = (
     }
   }
 
-  const started = client
-    .spawnProc(procId, {
-      command: options.command,
-      args: options.args,
-      ...(options.cwd ? { cwd: options.cwd } : {}),
-      env,
-    })
-    .then(() => client.subscribe(procId, listener, 0))
-    .catch((error: unknown) => {
-      events.emit(
-        "error",
-        error instanceof Error ? error : new Error(String(error))
-      );
-    });
+  const started = (
+    attachAfter === undefined
+      ? client
+          .spawnProc(procId, {
+            command: options.command,
+            args: options.args,
+            ...(options.cwd ? { cwd: options.cwd } : {}),
+            env,
+          })
+          .then(() => client.subscribe(procId, listener, 0))
+      : Promise.resolve().then(() =>
+          client.subscribe(procId, listener, attachAfter)
+        )
+  ).catch((error: unknown) => {
+    events.emit(
+      "error",
+      error instanceof Error ? error : new Error(String(error))
+    );
+  });
 
   const kill = (sig: NodeJS.Signals): boolean => {
     killed = true;

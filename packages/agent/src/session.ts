@@ -794,7 +794,9 @@ export class SessionSupervisor {
       }
 
       // A spawn for an instance already running is a relaunch: replace the
-      // process under the same id, settling the old one first.
+      // process under the same id, settling the old one first. A custody that
+      // has handed off settles by letting go: the adapter attaches to its
+      // child rather than replacing it.
       const running = this.#sessions.get(instanceId);
       if (running) {
         this.#sessions.delete(instanceId);
@@ -955,10 +957,10 @@ export class SessionSupervisor {
    * REATTACH (design §4.1, §7). The agent has restarted; sessiond is still
    * holding the children. For each row the caller knows about, take custody of
    * the surviving child, replay its ring from the cursor the caller supplies,
-   * and arm the boundary hand-off: once the child runs no turn and no
-   * background task — the relaunch would end either — its stdin is EOF'd and
-   * this method's own {@link #spawn} runs with `resume: sessionId`, putting a
-   * full SDK `Query` back in charge.
+   * and arm the boundary hand-off: once the child is between turns, this
+   * method's own {@link #spawn} runs for the instance and the adapter attaches
+   * a full SDK `Query` to the same process — no relaunch, so nothing it is
+   * running (a background command, a Monitor) is cut off.
    *
    * `afterSeq` is the hub's own ingest mark when it has one (§7's ledger, leaf
    * D3); `undefined` follows from now, which is the honest-loss rule — replay
@@ -1086,8 +1088,9 @@ export class SessionSupervisor {
           heldControls,
         }) => {
           // Queued through `dispatch` so the hand-off serialises behind
-          // whatever else is in flight for this instance, exactly as an
-          // operator-issued relaunch would.
+          // whatever else is in flight for this instance. The adapter answers
+          // this spawn by attaching to the child custody held, so the spec
+          // below configures the `Query`, not a new process.
           this.dispatch({
             verb: "spawn",
             instanceId,
