@@ -345,6 +345,53 @@
       : [...filtered].sort((a, b) => (b.at ?? 0) - (a.at ?? 0))
   );
 
+  /* Live pulses re-order the board many times a second, and two working
+     sessions trade places and back again inside one slide. A row sent back
+     while it is still sliding jumps from where it was half drawn, and the
+     page moves under the reader. So a live re-order that lands mid-slide
+     waits for the slide to end and a frame at rest, then shows the order
+     as it is by then;
+     what the reader asks for (a search, a filter, a sort) shows at once. */
+  const viewOf = () => `${query}|${machineFilter}|${stateFilter}|${sortBy}`;
+  const keysOf = (list: Row[]) => list.map((row) => row.key).join("\n");
+  /** The slides the table's rows are still running. */
+  const sliding = () =>
+    [
+      ...(exitLayer?.parentElement?.querySelectorAll<HTMLElement>(
+        "tbody tr[data-key]"
+      ) ?? []),
+    ].flatMap((row) => row.getAnimations());
+  let listed = $state.raw(untrack(() => sorted));
+  let view = untrack(viewOf);
+  $effect(() => {
+    const next = sorted;
+    const asked = viewOf();
+    if (asked !== view || keysOf(next) === keysOf(untrack(() => listed))) {
+      view = asked;
+      listed = next;
+      return;
+    }
+    let current = true;
+    // A slide a newer reflow cancels rejects `finished`: it is over all the
+    // same. Then one frame is painted with the rows at rest before they move
+    // again (the second rAF runs after it), also when the last slide ended a
+    // moment ago: a move measured against a frame still drawn mid-slide
+    // jumps, and Chromium counts it as a shift.
+    const frame = () =>
+      new Promise<number>((done) => requestAnimationFrame(done));
+    Promise.allSettled(sliding().map((slide) => slide.finished))
+      .then(frame)
+      .then(frame)
+      .then(() => {
+        if (current) {
+          listed = untrack(() => sorted);
+        }
+      });
+    return () => {
+      current = false;
+    };
+  });
+
   /* A filter, a search or a re-sort reflows the table: rows that leave close where
      they were, rows that arrive open, the rest slide, and the table's
      height follows, so nothing under the table jumps (motion/rows). A page
@@ -361,12 +408,12 @@
   // The list is where the leaving rows are caught: it is recomputed as the
   // table starts to update, the one moment they are still on screen.
   const visible = $derived.by(() => {
-    const next = sorted.slice(0, shown);
+    const next = listed.slice(0, shown);
     untrack(() => tableRows(next.map((row) => row.key)));
     paging = false;
     return next;
   });
-  const more = $derived(sorted.length > visible.length);
+  const more = $derived(listed.length > visible.length);
 
   /**
    * The sentinel is watched inside `.board` rather than the viewport — the
