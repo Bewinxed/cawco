@@ -1280,54 +1280,118 @@ export const controlError = (requestId: string, error: string): string =>
 /** The in-band notice a custody refusal writes into the transcript. */
 export const CUSTODY_DEGRADED = "custody_degraded";
 
-/** The three fields of a ring line that adoption reads; `undefined` when it is not JSON. */
-const parseLine = (
-  data: string
-): { type?: unknown; subtype?: unknown; session_id?: unknown } | undefined => {
+/** The fields of a ring line that custody reads; `undefined` when it is not JSON. */
+interface RingLine {
+  session_id?: unknown;
+  skip_transcript?: unknown;
+  subtype?: unknown;
+  tasks?: unknown;
+  type?: unknown;
+}
+
+const parseLine = (data: string): RingLine | undefined => {
   try {
-    return JSON.parse(data) as {
-      type?: unknown;
-      subtype?: unknown;
-      session_id?: unknown;
-    };
+    return JSON.parse(data) as RingLine;
   } catch {
     return undefined;
   }
 };
 
-/**
- * A child whose last written line is this one is waiting for input: the CLI
- * writes nothing after a `result` until the next user message, and a child
- * that has been asked nothing yet writes its `init` and stops there.
- */
-const isWaiting = (line: { type?: unknown; subtype?: unknown }): boolean =>
-  line.type === "result" || (line.type === "system" && line.subtype === "init");
+/** Lines only a running turn writes. `system` lines are read by subtype instead. */
+const TURN_LINES: ReadonlySet<unknown> = new Set([
+  "assistant",
+  "user",
+  "stream_event",
+  "tool_progress",
+  "control_request",
+  "control_cancel_request",
+]);
 
 /**
- * The running answer to "is this child waiting?", one ring line at a time. An
- * idle child does not stay silent: the CLI keeps writing `system` notices
- * (`commands_changed` whenever a skills directory moves), `rate_limit_event`
- * and `control_response` lines after its `result`, so the LAST line almost
- * never says anything about the turn. Those carry the previous verdict
- * forward; every other line — a `result` or `init` (waiting), an
- * assistant/user/stream/control_request line (a turn in flight) — replaces
- * it. Non-JSON says nothing either.
+ * WHAT THE CHILD IS RUNNING, read off its ring one line at a time. A hand-off
+ * relaunches the process, and a relaunch ends everything the process runs, so
+ * this is the whole of what a hand-off has to ask. Two things are cut off:
+ *
+ *  - A TURN IN FLIGHT. `result` ends one. `init` opens one: the CLI writes it
+ *    when it takes up a message, not when it starts (on the isolated stack a
+ *    fresh child wrote its hooks and the `initialize` control_response, and
+ *    its `init` came with the first send). A `task_notification` is a turn
+ *    about to open: the CLI hands it to the model as the next turn
+ *    (measured: notification, `init`, the turn, `result`). The lines in
+ *    {@link TURN_LINES} are the turn itself. Everything else carries the
+ *    previous answer, because an idle child keeps writing hook, status,
+ *    `commands_changed`, `rate_limit_event` and `control_response` lines after
+ *    its `result`, so the LAST line almost never says anything about the turn.
+ *  - BACKGROUND TASKS. A `run_in_background` Bash command or a Monitor is a
+ *    child of the CLI and dies with it; the relaunched session is then told
+ *    it "didn't finish before the previous session ended" and never hears it
+ *    complete. `background_tasks_changed` is the CLI's own level signal for
+ *    them, and the SDK says how to read it: "consumers that only need 'is
+ *    background work running' should replace their set with each payload
+ *    rather than pairing edges". Ambient tasks are left out, as the same type
+ *    tells hosts to: "True for tasks that are not activity (every
+ *    skip_transcript task, plus every live-update watcher, requested or
+ *    auto-started)". An auto-started watcher never ends, and counting one
+ *    would hold its session in custody for good.
  */
-const idleVerdict = (
-  line: { type?: unknown; subtype?: unknown } | undefined,
-  previous: boolean | undefined
-): boolean | undefined => {
-  if (line === undefined) {
-    return previous;
+class ChildActivity {
+  /** `undefined` until a line has said anything about a turn. */
+  #waiting: boolean | undefined;
+  readonly #tasks = new Set<string>();
+
+  read(line: RingLine | undefined): void {
+    if (line === undefined) {
+      return;
+    }
+    if (line.type === "result") {
+      this.#waiting = true;
+      return;
+    }
+    if (TURN_LINES.has(line.type)) {
+      this.#waiting = false;
+      return;
+    }
+    if (line.type !== "system") {
+      return;
+    }
+    if (
+      line.subtype === "init" ||
+      (line.subtype === "task_notification" && line.skip_transcript !== true)
+    ) {
+      this.#waiting = false;
+    } else if (
+      line.subtype === "background_tasks_changed" &&
+      Array.isArray(line.tasks)
+    ) {
+      this.#tasks.clear();
+      for (const task of line.tasks as {
+        task_id: string;
+        ambient?: boolean;
+      }[]) {
+        if (task.ambient !== true) {
+          this.#tasks.add(task.task_id);
+        }
+      }
+    }
   }
-  if (line.type === "control_response" || line.type === "rate_limit_event") {
-    return previous;
+
+  get turnRunning(): boolean {
+    return this.#waiting === false;
   }
-  if (line.type === "system" && line.subtype !== "init") {
-    return previous;
+
+  get backgroundTasks(): number {
+    return this.#tasks.size;
   }
-  return isWaiting(line);
-};
+
+  /**
+   * Nothing a relaunch would cut off. A child that has said nothing about a
+   * turn counts as waiting: it has taken no turn in anything sessiond still
+   * remembers (see the head decision in {@link ClaudeHarness.adopt}).
+   */
+  get idle(): boolean {
+    return !this.turnRunning && this.#tasks.size === 0;
+  }
+}
 
 /**
  * Where an adoption's peek starts: the oldest line sessiond still holds.
@@ -1335,8 +1399,8 @@ const idleVerdict = (
  * It used to be a fixed 64 lines back from the caller's cursor, and that is
  * the whole of the bug this constant replaces. An idle child does not fall
  * silent after its `result` — it keeps writing `control_response`,
- * `rate_limit_event` and `system` notices, and {@link idleVerdict} carries the
- * previous verdict across those rather than replacing it. Once more than the
+ * `rate_limit_event` and `system` notices, and {@link ChildActivity} carries
+ * the previous answer across those rather than replacing it. Once more than the
  * window's worth had piled up, the window held no turn-bearing line at all,
  * the verdict was still `undefined` at `head`, and the hand-off never fired:
  * the session sat in custody for good, holding every message sent to it.
@@ -1403,12 +1467,16 @@ const DEFERRED_CONTROLS: ReadonlySet<string> = new Set([
  *    the whiffle server, a hook callback) is answered with an explicit in-band
  *    error, so the tool call FAILS VISIBLY instead of hanging forever on a
  *    handler that no longer exists;
- *  - at the turn's next `result` line the child's stdin is EOF'd and the
- *    hand-off fires: the owner respawns through the full SDK with
- *    `resume: sessionId`. The in-flight turn completed and was captured; the
- *    cost is one respawn at a turn boundary. A child that was already between
- *    turns when adopted has no next `result` coming, so {@link ClaudeHarness.adopt}
- *    fires the same hand-off from the ring's last line instead.
+ *  - once the child runs nothing a relaunch would cut off — no turn in
+ *    flight and no background task ({@link ChildActivity}) — its stdin is
+ *    EOF'd and the hand-off fires: the owner respawns through the full SDK
+ *    with `resume: sessionId`. That moment is a live `result` with no
+ *    background task left ({@link settle}); a task's end never is on its own,
+ *    because the CLI answers it with a turn whose `result` comes after. A
+ *    child that was already idle when adopted has no next `result` coming, so
+ *    {@link ClaudeHarness.adopt} settles once on the ring's last line instead.
+ *    Until then the child stays in custody, which is why sends are held and
+ *    controls refused for as long as a background task runs.
  *
  * Custody is a degraded mode measured in seconds, not a second implementation
  * of the SDK. Everything it refuses, it refuses out loud.
@@ -1426,6 +1494,10 @@ export class ClaudeCustody implements HarnessSession {
   /** Controls deferred during custody; replayed by the respawned session. */
   readonly #heldControls: { method: string; args: unknown[] }[] = [];
   #handedOff = false;
+  /** What the child is running; fed every ring line, peeked or ingested. */
+  readonly activity = new ChildActivity();
+  /** Whether the transcript has been told why this custody outlives its turn. */
+  #deferralSaid = false;
   /** Settled by {@link exited} when sessiond reports the child gone. */
   readonly #exit = Promise.withResolvers<void>();
   readonly instanceId: string;
@@ -1489,11 +1561,49 @@ export class ClaudeCustody implements HarnessSession {
   }
 
   /**
+   * One ring line, read for what the child is running. A turn the CLI opens
+   * on its own during custody (a background task's notification) is busy like
+   * any other; `live` keeps a replayed backlog from saying so about the past.
+   */
+  observe(line: RingLine | undefined, live: boolean): void {
+    const running = this.activity.turnRunning;
+    this.activity.read(line);
+    if (live && !running && this.activity.turnRunning) {
+      this.#ctx.busy(true);
+    }
+  }
+
+  /**
+   * The one place custody decides to hand back: now, if the child runs
+   * nothing a relaunch would cut off, and otherwise not yet — said once in
+   * the transcript when what holds it is background work rather than a turn,
+   * because that can last far longer than a turn and every send waits on it.
+   */
+  settle(): void {
+    if (this.activity.idle) {
+      this.handOff();
+      return;
+    }
+    if (this.activity.turnRunning || this.#deferralSaid) {
+      return;
+    }
+    this.#deferralSaid = true;
+    this.#ctx.frame({
+      type: "system",
+      subtype: "sessiond_custody_held",
+      ...(this.sessionId ? { session_id: this.sessionId } : {}),
+      text: `whiffle: agent restarted; this session keeps its process until its ${this.activity.backgroundTasks} background task(s) finish, so they are not cut off. Messages sent meanwhile are delivered then.`,
+    } as unknown as NeutralMessage);
+  }
+
+  /**
    * One raw stdout line, from the ring's backlog or live. Replay and live use
    * the same path on purpose: the daemon's single-threaded delivery is what
    * makes backlog-then-live gapless, and a second code path would be a second
    * place for a hole to open. `live` says the line was written after adoption
-   * (above the ring's `head` then), not replayed from the backlog.
+   * (above the ring's `head` then), not replayed from the backlog. Only a
+   * live `result` is a boundary: a replayed one ended a turn that may well
+   * have been followed by another still running further down the ring.
    */
   ingest(line: string, live: boolean): void {
     let parsed: CustodyLine;
@@ -1544,9 +1654,12 @@ export class ClaudeCustody implements HarnessSession {
     if (sdk.type === "result") {
       this.#ctx.busy(false);
       // THE BOUNDARY. The turn that was in flight when the agent died has now
-      // completed and been captured; this is the one moment at which handing
-      // the session back to a full `Query` costs nothing but a respawn.
-      this.handOff();
+      // completed and been captured; unless a background task is still
+      // running, handing the session back to a full `Query` costs nothing but
+      // a respawn.
+      if (live) {
+        this.settle();
+      }
     }
   }
 
@@ -1961,9 +2074,10 @@ export class ClaudeHarness implements Harness {
    * the row still reading `running` because the process is plainly there.
    *
    * So the ring is read from {@link RING_START} through `head` and every line
-   * is run through {@link idleVerdict}. There is exactly one decision, taken
-   * once, at the one moment the whole backlog has gone past: unless the ring
-   * says a turn is in flight, the hand-off fires. Reading from the start is
+   * is fed to the custody's {@link ChildActivity}. There is exactly one
+   * decision, taken once, at the one moment the whole backlog has gone past:
+   * the custody settles ({@link ClaudeCustody.settle}), handing off unless the
+   * ring says a turn or a background task is running. Reading from the start is
    * what makes that a decision rather than a guess — a fixed window can fill
    * with the notices an idle child keeps writing and answer "don't know",
    * which is the shape of the bug this replaces, whereas a full ring holding
@@ -2021,7 +2135,8 @@ export class ClaudeHarness implements Harness {
     // for the verdict and emitted to nobody (see the `reset` handler).
     let boundary = options.afterSeq ?? head;
     let peekSeq = head >= 1 && boundary <= head ? RING_START : undefined;
-    let verdict: boolean | undefined;
+    // Set once the line at `head` has been read and the adoption has decided.
+    let decided = false;
     let seen = false;
     let reopened = false;
     const outstanding = new Map<string, string>();
@@ -2065,13 +2180,14 @@ export class ClaudeHarness implements Harness {
     // assistant and stream lines continuously — never reaches it, and one
     // whose replay is merely slow keeps its full peek. What fires it is the
     // child having gone quiet with the peek still outstanding, and the answer
-    // is then the same one `head` would have given: the verdict as it stands,
-    // and a hand-off only if nothing in what was read says mid-turn.
+    // is then the same one `head` would have given: the custody settles on
+    // what was read.
     //
-    // The two refusals above it are the two above: a `verdict` of false is a
-    // turn still running, which custody is right to keep and which the child's
-    // own `result` line hands back; a null session key is nothing to resume,
-    // and respawning on it would orphan the conversation.
+    // The two refusals above it are the two above: a turn still running is
+    // custody's to keep and the child's own `result` line hands it back; a
+    // null session key is nothing to resume, and respawning on it would orphan
+    // the conversation. Once `head` has decided there is no peek left to wait
+    // for, and the silence of a long tool call says nothing.
     const QUIET_HANDBACK_MS = 15_000;
     let quiet: ReturnType<typeof setTimeout> | undefined;
     const stopWaiting = (): void => {
@@ -2084,11 +2200,11 @@ export class ClaudeHarness implements Harness {
       stopWaiting();
       quiet = setTimeout(() => {
         quiet = undefined;
-        if (peekSeq === undefined || custody.handedOff) {
+        if (peekSeq === undefined || decided || custody.handedOff) {
           return;
         }
         repark();
-        if (custody.sessionId === null || !(verdict ?? true)) {
+        if (custody.sessionId === null || custody.activity.turnRunning) {
           // Held on purpose, and said so: a custody nobody can explain looks
           // exactly like the bug this guard removes.
           ctx.frame({
@@ -2098,7 +2214,7 @@ export class ClaudeHarness implements Harness {
           } as unknown as NeutralMessage);
           return;
         }
-        custody.handOff();
+        custody.settle();
       }, QUIET_HANDBACK_MS);
     };
     // Peek-only: recover the session id and unanswered asks, never frames.
@@ -2130,18 +2246,14 @@ export class ClaudeHarness implements Harness {
     const listener: Parameters<SessiondClient["subscribe"]>[1] = {
       line: (event) => {
         seen = true;
-        waitForQuiet();
-        // Every line up to `head` feeds the verdict, peeked or really
-        // replayed: a replayed `result` hands off inside `ingest` anyway, but
-        // a replayed `init` would not, and a fresh child the hub saw nothing
-        // of is exactly that case.
-        const parsed =
-          peekSeq !== undefined && event.seq <= head
-            ? parseLine(event.data)
-            : undefined;
-        if (parsed !== undefined) {
-          verdict = idleVerdict(parsed, verdict);
+        if (!decided) {
+          waitForQuiet();
         }
+        // Every line feeds what the child is running, peeked, replayed or
+        // live: the decision at `head` reads the whole backlog, and a live
+        // `result` reads everything up to it.
+        const parsed = parseLine(event.data);
+        custody.observe(parsed, event.seq > head);
         if (peekSeq !== undefined && event.seq <= boundary) {
           peek(parsed, event.data);
         } else {
@@ -2155,12 +2267,12 @@ export class ClaudeHarness implements Harness {
         // There is no backlog-complete event; the ring's last line is it, and
         // it is the one place an adoption decides.
         //
-        // A SILENT RING IS AN IDLE CHILD. `undefined` here does not mean the
-        // evidence scrolled away — reading from {@link RING_START} is what
-        // removes that reading — it means nothing in everything sessiond still
-        // holds says anything about a turn. A child mid-turn cannot look like
-        // that: it writes assistant and stream lines continuously, and those
-        // replace the verdict rather than carry it. What CAN look like that is
+        // A SILENT RING IS AN IDLE CHILD. Nothing said about a turn does not
+        // mean the evidence scrolled away — reading from {@link RING_START} is
+        // what removes that reading — it means nothing in everything sessiond
+        // still holds says anything about a turn. A child mid-turn cannot look
+        // like that: it writes assistant and stream lines continuously, and
+        // those replace the answer rather than carry it. What CAN look like that is
         // a child that has taken no turn since its ring began and has only
         // written hook and notice lines since, which is exactly the session
         // this rule exists to hand back. Measured on a wedged one: six lines,
@@ -2171,15 +2283,22 @@ export class ClaudeHarness implements Harness {
         // with `--resume`, so without a session key it would start an empty one
         // and orphan the conversation the custody was protecting. Staying mute
         // is recoverable; that is not.
+        //
+        // A turn or a background task still running is held, not handed off:
+        // the relaunch would end it. A turn adopted mid-flight is busy from
+        // here, as it was before the agent went away.
         if (
           peekSeq !== undefined &&
           head >= 1 &&
           event.seq === head &&
-          custody.sessionId !== null &&
-          (verdict ?? true)
+          custody.sessionId !== null
         ) {
+          decided = true;
           stopWaiting();
-          custody.handOff();
+          if (custody.activity.turnRunning) {
+            ctx.busy(true);
+          }
+          custody.settle();
         }
       },
       // A child that dies during custody is the session ending on its own,

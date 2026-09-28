@@ -955,9 +955,10 @@ export class SessionSupervisor {
    * REATTACH (design §4.1, §7). The agent has restarted; sessiond is still
    * holding the children. For each row the caller knows about, take custody of
    * the surviving child, replay its ring from the cursor the caller supplies,
-   * and arm the boundary hand-off: at the turn's next `result` the child's
-   * stdin is EOF'd and this method's own {@link #spawn} runs with
-   * `resume: sessionId`, putting a full SDK `Query` back in charge.
+   * and arm the boundary hand-off: once the child runs no turn and no
+   * background task — the relaunch would end either — its stdin is EOF'd and
+   * this method's own {@link #spawn} runs with `resume: sessionId`, putting a
+   * full SDK `Query` back in charge.
    *
    * `afterSeq` is the hub's own ingest mark when it has one (§7's ledger, leaf
    * D3); `undefined` follows from now, which is the honest-loss rule — replay
