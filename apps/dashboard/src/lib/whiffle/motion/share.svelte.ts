@@ -69,21 +69,63 @@ export function depart(
 }
 
 /**
- * A source that stays where it is while what it held travels: the
- * composer's field, emptied into a send, stays drawn and ready for the next
- * message while its text flies into the row it became. Its box is taken
- * under `key`, which the destination names, and it is never hidden.
+ * A source that departs under a key it does not carry, the one its
+ * destination names. By default it stays where it is while what it held
+ * travels: the composer's field, emptied into a send, stays drawn and ready
+ * for the next message while its text flies into the row it became. A source
+ * that is leaving (`stays: false` — a failed send's words, sent again) is
+ * hidden while they travel, so there is one object, never two.
  */
-export function departBox(key: string, source: HTMLElement): void {
+export function departBox(
+  key: string,
+  source: HTMLElement,
+  stays = true
+): void {
   departures.set(key, {
     by: "click",
     rect: source.getBoundingClientRect(),
     radius: getComputedStyle(source).borderRadius,
     source,
-    stays: true,
+    stays,
     at: performance.now(),
     ttl: TTL,
   });
+}
+
+/** The id every flight runs under: see `carry`. */
+const FLIGHT = "share-flight";
+
+/**
+ * A flight is a path on the screen: from where the source was drawn to where
+ * the destination is. Scrolling the destination's container mid-flight moves
+ * the destination, and the flight — a transform off the destination's own
+ * place — with it: one frame, the whole distance. A container that scrolls
+ * itself (a transcript pinning its tail as rows land in it) says so here, with
+ * how far its content moved on screen, and every flight under way inside it
+ * is carried: put back where it was drawn and taken to the destination's new
+ * place over the rest of the flight, on the flight's own curve, added to the
+ * flight, which goes on as it was.
+ */
+export function carry(within: Element, by: number): void {
+  for (const flight of within.getAnimations({ subtree: true })) {
+    const effect = flight.effect as KeyframeEffect | null;
+    const target = effect?.target;
+    const total = Number(effect?.getComputedTiming().duration);
+    const at = Number(flight.currentTime);
+    if (
+      flight.id !== FLIGHT ||
+      flight.playState !== "running" ||
+      !target ||
+      at >= total
+    ) {
+      continue;
+    }
+    target.animate([{ translate: `0 ${-by}px` }, { translate: "0 0" }], {
+      duration: total - at,
+      easing: CURVE.drawer,
+      composite: "add",
+    });
+  }
 }
 
 /**
@@ -218,6 +260,7 @@ function fly(node: HTMLElement, from: Departure, options: LandOptions) {
     }
   }
   const animation = node.animate(frames, {
+    id: FLIGHT,
     duration: ms,
     easing: CURVE.drawer,
   });

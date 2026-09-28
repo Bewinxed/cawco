@@ -46,7 +46,7 @@
     easeOut,
     motionOk,
   } from "../motion/curves.svelte";
-  import { waiting } from "../motion/share.svelte";
+  import { carry, waiting } from "../motion/share.svelte";
   import { rebuildScheduler } from "../workspace/scheduler.svelte";
   import {
     type Motion,
@@ -443,12 +443,23 @@
     return build();
   }
 
+  /**
+   * Each settled row that a live row became, by its key, with the live row's
+   * key: on screen they are one object, so the list keeps the size it
+   * measured for the live row instead of measuring the settled row as a new
+   * one (virtua's `previousKey`, patches/virtua).
+   */
+  const renamed = new Map<string, string>();
+
   function build(): Built {
     const folded = buildRowsFrom(session, memo);
     const { rows: next } = folded;
     ({ memo } = folded);
+    if (folded.ended?.into) {
+      renamed.set(folded.ended.into, folded.ended.key);
+    }
     ledger(folded);
-    noteMoves(frozen, next);
+    noteMoves(frozen, next, folded.ended);
     // FRONT-CHANGE DETECTION for virtua's `shift` mode: an older history chunk
     // arriving puts new rows ABOVE everything on screen — without `shift`,
     // virtua keeps the scroll OFFSET and the content lurches toward the top
@@ -560,39 +571,24 @@
     return boxes;
   }
 
-  /** The keys of the sends waiting at the end of a build's rows. */
-  function waitingKeys(sequence: Row[]): Set<string> {
-    const keys = new Set<string>();
-    for (
-      let index = sequence.length - 1;
-      index >= 0 && LIVE_KINDS.has(sequence[index].kind);
-      index -= 1
-    ) {
-      if (sequence[index].kind === "queued") {
-        keys.add(sequence[index].key);
-      }
-    }
-    return keys;
-  }
+  /** The keys the list held before the update that moves rows. */
+  let listedBefore = new Set<string>();
+  /**
+   * A live row that settled in that update, by the key of the row it became:
+   * the same object on screen, so it moves from where the live row was drawn.
+   */
+  let settledFrom = new Map<string, string>();
 
   /**
-   * Whether this build moves a send in or out of the wait with the rows on
-   * screen before and after it; if so, every mounted row is measured where
-   * it stands. Only the ends are read unless a send has moved.
+   * Whether this build moves a row that was already in the list — a send
+   * between the wait and its place, a turn settling above a send still
+   * waiting, anything put in before a row rather than after it — and if so,
+   * every mounted row is measured where it stands. A build that only adds
+   * rows at the end, or changes rows in place, moves nothing and measures
+   * nothing.
    */
-  function noteMoves(prior: Row[], next: Row[]): void {
+  function noteMoves(prior: Row[], next: Row[], ended: Fold["ended"]): void {
     if (!untrack(() => landed && watched && motionOk.current)) {
-      return;
-    }
-    const waited = waitingKeys(prior);
-    const waits = waitingKeys(next);
-    const moved = [
-      ...[...waited].filter((key) => !waits.has(key)),
-      ...[...waits].filter((key) => !waited.has(key)),
-    ];
-    const was = new Set(prior.map((row) => row.key));
-    const is = new Set(next.map((row) => row.key));
-    if (!moved.some((key) => was.has(key) && is.has(key))) {
       return;
     }
     let from = 0;
@@ -603,16 +599,25 @@
     ) {
       from += 1;
     }
+    const was = new Map(prior.map((row, index) => [row.key, index]));
+    const moved = next
+      .slice(from)
+      .some((row, i) => (was.get(row.key) ?? from + i) !== from + i);
     // A change from the very first row is a different transcript, not a move.
-    if (from > 0) {
-      beforeMove ??= measure();
-      movedAfter.add(next[from - 1].key);
+    if (!moved || from === 0) {
+      return;
+    }
+    beforeMove ??= measure();
+    movedAfter.add(next[from - 1].key);
+    listedBefore = new Set(was.keys());
+    if (ended?.into) {
+      settledFrom.set(ended.into, ended.key);
     }
   }
 
   /**
-   * A replaced send starting its fold: the rows after it are measured where
-   * they stand, before the update that regroups them is drawn.
+   * A row starting its fold: the rows after it are measured where they
+   * stand, before the update that regroups them is drawn.
    */
   function noteFold(key: string): void {
     if (!untrack(() => landed && watched && motionOk.current)) {
@@ -626,17 +631,24 @@
   /**
    * Every row the update moved, sliding from where it was drawn to its new
    * place: the row above the change, plus the heights of the rows between as
-   * they are drawn now. The first row that was not on screen before ends it —
-   * past there, the places are not known, and a move nobody saw jumps.
+   * they are drawn now. A row new to the list stands in the count with the
+   * height it is drawn at, and arrives by its own entrance; a live row that
+   * settled moves from where the live row was. A row that was in the list
+   * but not on screen ends it — past there, the places are not known, and a
+   * move nobody saw jumps.
    */
   function slideMoves(): void {
     const boxes = beforeMove;
     const after = movedAfter;
+    const listed = listedBefore;
+    const settled = settledFrom;
     const timing = foldMove
       ? { duration: dur("--dur-exit"), easing: ease("--ease-out") }
       : { duration: dur("--dur-panel"), easing: ease("--ease-in-out") };
     beforeMove = null;
     movedAfter = new Set();
+    listedBefore = new Set();
+    settledFrom = new Map();
     foldMove = false;
     const drawn = renderedRows;
     const start = drawn.findIndex((row) => after.has(row.key));
@@ -646,39 +658,58 @@
     }
     let bottom = above.top + above.height;
     for (const row of drawn.slice(start + 1)) {
-      const box = boxes.get(row.key);
+      const box = boxes.get(settled.get(row.key) ?? row.key);
       const node = listing.querySelector<HTMLElement>(
         `[data-row="${CSS.escape(row.key)}"]`
       );
       const item = node?.parentElement;
-      if (!(box && node && item)) {
+      if (!(node && item) || (!box && listed.has(row.key))) {
         return;
       }
       const { height } = item.getBoundingClientRect();
       bottom += height;
-      const delta = box.top + box.shift + box.height - bottom;
-      // A row that gained a speaker line starts with it above where the row
-      // began — over the row above. It is cut off there and opens as the row
-      // travels. The sides and bottom stay open: a well bleeds past its box.
-      const gained = Math.max(0, height - box.height - node.offsetTop);
-      if (Math.abs(delta) > 0.5) {
-        for (const running of node.getAnimations()) {
-          if (running.id === SLIDE) {
-            running.cancel();
-          }
-        }
-        node.animate(
-          [
-            {
-              translate: `0 ${delta}px`,
-              clipPath: `inset(${gained}px -100vmax -100vmax)`,
-            },
-            { translate: "0 0", clipPath: "inset(0px -100vmax -100vmax)" },
-          ],
-          { id: SLIDE, ...timing }
+      if (box) {
+        slide(
+          node,
+          box,
+          height,
+          box.top + box.shift + box.height - bottom,
+          timing
         );
       }
     }
+  }
+
+  /** One row sliding `delta` back to its place, drawn `height` tall now. */
+  function slide(
+    node: HTMLElement,
+    box: Box,
+    height: number,
+    delta: number,
+    timing: KeyframeAnimationOptions
+  ): void {
+    if (Math.abs(delta) <= 0.5) {
+      return;
+    }
+    // A row that gained a speaker line starts with it above where the row
+    // began — over the row above. It is cut off there and opens as the row
+    // travels. The sides and bottom stay open: a well bleeds past its box.
+    const gained = Math.max(0, height - box.height - node.offsetTop);
+    for (const running of node.getAnimations()) {
+      if (running.id === SLIDE) {
+        running.cancel();
+      }
+    }
+    node.animate(
+      [
+        {
+          translate: `0 ${delta}px`,
+          clipPath: `inset(${gained}px -100vmax -100vmax)`,
+        },
+        { translate: "0 0", clipPath: "inset(0px -100vmax -100vmax)" },
+      ],
+      { id: SLIDE, ...timing }
+    );
   }
 
   /** Where a build's own tail — the live row, the tool in flight, the queue — begins. */
@@ -790,89 +821,153 @@
   const ROW_ESTIMATE = 21;
 
   /**
-   * TAIL ROWS LEAVE; THEY DO NOT VANISH.
+   * ROWS LEAVE WHERE THEY STAND; THEY DO NOT VANISH.
    *
    * The live tail's rows — the turn's indicator, a tool's glance, a queued
-   * message — go the moment the session says so, and virtua drops a missing
-   * key at once: the tail would lose that height in one frame. So a tail row
-   * that goes WITHOUT becoming a settled row is kept, drawn after every other
-   * row so that nothing below it can move, while it folds shut (`Row`'s
-   * `leaving`); the end of its own fold is what takes it out. A live row that
-   * settled is not leaving: the row it became is already on screen, in its
-   * place.
+   * message — go the moment the session says so, and a failed send goes as
+   * its retry replaces it; virtua drops a missing key at once, and the list
+   * would lose that height in one frame. So a row that goes WITHOUT becoming
+   * something else in the list is kept where it stood while it folds shut
+   * (`Row`'s `leaving`), the rows under it closing up over the fold, and the
+   * end of its own fold is what takes it out — at no height by then, and
+   * virtua's sizes follow their rows (patches/virtua), so taking it out moves
+   * nothing. A live row that settled is not leaving: the row it became is
+   * already on screen, in its place.
    */
   const TAIL_KINDS = new Set<Row["kind"]>(["live", "livetool", "queued"]);
-  let tail = new Map<string, Row>();
   /**
-   * A failed send's row, with the key of the row before it: the place it
-   * folds shut in when its retry replaces it, as the retry arrives.
+   * A row that can leave the list, as it was last drawn, with where it stood:
+   * the keys of the rows above it, nearest first, back to the first one that
+   * cannot leave — or none, when it was the first row.
    */
-  let failedSends = new Map<string, { row: Row; after: string | null }>();
-  /**
-   * Rows folding shut: a tail row after everything else (`after` null), a
-   * replaced send where it stood.
-   */
-  let leaving: { row: Row; after: string | null }[] = [];
+  interface Standing {
+    above: string[];
+    row: Row;
+  }
+  /** The live tail's rows and the failed sends, as last drawn. */
+  let standing = new Map<string, Standing>();
+  /** Rows folding shut where they stood. */
+  let leaving: Standing[] = [];
   let leftTick = $state(0);
+
+  /** Whether `row` can leave the list: a tail row, or a failed send its retry replaces. */
+  const canLeave = (row: Row): boolean =>
+    TAIL_KINDS.has(row.kind) ||
+    (row.kind === "single" && row.message.state === "failed");
+
+  /**
+   * Whether the row `key` has left the list, rather than become something
+   * else in it: a live row that became its settled row, or a tool's glance
+   * whose call has landed, is already on screen in its new form, and a
+   * queued message the session read is still in the list under its key.
+   */
+  function hasLeft(key: string, row: Row, ended: Fold["ended"]): boolean {
+    if (row.kind === "single") {
+      return untrack(() => session.records[key]?.state === "replaced");
+    }
+    return !(
+      (ended?.key === key && ended.into !== null) ||
+      (row.kind === "livetool" &&
+        untrack(() => called(session, row.glance.toolId)))
+    );
+  }
+
   const presentation = $derived.by(() => {
     // biome-ignore lint/complexity/noVoid: a row finishing its fold re-draws the list without it.
     void leftTick;
     const { rows: next, ended } = built;
     const present = new Set(next.map((row) => row.key));
     const folding = new Set(leaving.map(({ row }) => row.key));
-    for (const [key, row] of tail) {
-      // A live row that became its settled row, or a tool's glance whose call
-      // has landed: either is already on screen in its new form. A queued
-      // message the session read is still present, under the same key, in
-      // the place it was read.
-      const settled =
-        (ended?.key === key && ended.into !== null) ||
-        (row.kind === "livetool" &&
-          untrack(() => called(session, row.glance.toolId)));
-      if (!(present.has(key) || settled || folding.has(key))) {
-        leaving.push({ row, after: null });
-      }
-    }
-    for (const [key, sent] of failedSends) {
+    // Only a row on screen folds: one outside virtua's range has nothing to
+    // fold, and nobody to see it go.
+    for (const [key, stood] of standing) {
       if (
         !(present.has(key) || folding.has(key)) &&
-        untrack(() => session.records[key]?.state === "replaced")
+        hasLeft(key, stood.row, ended) &&
+        listing?.querySelector(`[data-row="${CSS.escape(key)}"]`)
       ) {
-        leaving.push(sent);
+        leaving.push(stood);
         noteFold(key);
       }
     }
-    tail = new Map(
-      next
-        .filter((row) => TAIL_KINDS.has(row.kind))
-        .map((row) => [row.key, row])
-    );
-    failedSends = new Map(
-      next.flatMap((row, index) =>
-        row.kind === "single" && row.message.state === "failed"
-          ? [[row.key, { row, after: next[index - 1]?.key ?? null }] as const]
-          : []
-      )
-    );
     leaving = leaving.filter(({ row }) => !present.has(row.key));
-    if (leaving.length === 0) {
-      return { rows: next, leaving: new Set<string>() };
-    }
     const drawn = [...next];
-    for (const { row, after } of leaving) {
-      const at =
-        after === null ? -1 : drawn.findIndex((each) => each.key === after);
-      if (at < 0) {
-        drawn.push(row);
-      } else {
-        drawn.splice(at + 1, 0, row);
-      }
+    // Each goes back in where it stood. One that stood under another row on
+    // its way out goes in once that one is in; one whose place is not in the
+    // list any more — the rows around it read again from history — was not
+    // seen to go, and is let go with them.
+    let unplaced = leaving;
+    let placed = true;
+    while (unplaced.length > 0 && placed) {
+      placed = false;
+      unplaced = unplaced.filter(({ above, row }) => {
+        const at = placeIn(drawn, above, ended);
+        if (at < 0) {
+          return true;
+        }
+        drawn.splice(at, 0, row);
+        placed = true;
+        return false;
+      });
     }
+    const lost = new Set(unplaced.map(({ row }) => row.key));
+    leaving = leaving.filter(({ row }) => !lost.has(row.key));
+    standing = standingIn(drawn, present);
     return {
       rows: drawn,
       leaving: new Set(leaving.map(({ row }) => row.key)),
     };
   });
+
+  /**
+   * The rows of the list (`present`) that can leave, each with the rows drawn
+   * above it — a row already folding among them. A folding row is not one of
+   * them: it has left, and counted again it would be taken out again, and
+   * fold again, every time its fold ended.
+   */
+  function standingIn(
+    drawn: Row[],
+    present: Set<string>
+  ): Map<string, Standing> {
+    const stood = new Map<string, Standing>();
+    drawn.forEach((row, index) => {
+      if (!(present.has(row.key) && canLeave(row))) {
+        return;
+      }
+      const above: string[] = [];
+      for (let i = index - 1; i >= 0; i -= 1) {
+        above.push(drawn[i].key);
+        if (!canLeave(drawn[i])) {
+          break;
+        }
+      }
+      stood.set(row.key, { above, row });
+    });
+    return stood;
+  }
+
+  /**
+   * Where a row that stood under `above` goes back in among `drawn`: under
+   * the nearest of those rows still drawn — a live row that settled stands
+   * as the row it became — first when it stood first, or -1 while none is.
+   */
+  function placeIn(
+    drawn: Row[],
+    above: string[],
+    ended: Fold["ended"]
+  ): number {
+    if (above.length === 0) {
+      return 0;
+    }
+    for (const key of above) {
+      const as = key === ended?.key && ended.into ? ended.into : key;
+      const index = drawn.findIndex((row) => row.key === as);
+      if (index >= 0) {
+        return index + 1;
+      }
+    }
+    return -1;
+  }
   const renderedRows = $derived(presentation.rows);
   /**
    * The reader's rows whose well runs on into the next. A row folding away is
@@ -895,12 +990,18 @@
    * few rows are kept mounted instead, whatever the range says.
    */
   const TAIL_MOUNTED = 8;
-  const keepMounted = $derived(
-    Array.from(
+  // A row folding shut stays mounted too, wherever it stands: virtua dropping
+  // it mid-fold cancelled the fold, it never said it had gone, and it stayed
+  // in the list at full height to fold again whenever it was next drawn.
+  const keepMounted = $derived([
+    ...Array.from(
       { length: Math.min(TAIL_MOUNTED, renderedRows.length) },
       (_, i) => renderedRows.length - 1 - i
-    )
-  );
+    ),
+    ...renderedRows.flatMap((row, index) =>
+      presentation.leaving.has(row.key) ? [index] : []
+    ),
+  ]);
 
   function left(key: string): void {
     leaving = leaving.filter(({ row }) => row.key !== key);
@@ -1244,8 +1345,17 @@
     }
     const bottom = scroller.scrollHeight - scroller.clientHeight;
     if (Math.abs(scroller.scrollTop - bottom) > 0.5) {
+      const was = scroller.scrollTop;
       scroller.scrollTop = bottom;
       lastWrite = scroller.scrollTop;
+      // A send landing at the tail is carried through the pin. The pin runs
+      // once the list has measured the row it drew, a frame after that row
+      // was first drawn and its flight begun; lifted with the list in that
+      // one frame, the flight lost most of its way on a phone, where the tail
+      // sits right over the composer (33px of flight, 114px of jump on iOS).
+      if (listing) {
+        carry(listing, was - scroller.scrollTop);
+      }
     }
   }
 
@@ -1309,6 +1419,27 @@
     }
   }
 
+  /**
+   * A row that grows on a transition of its own (`data-opens`: a failed
+   * send's reason and actions unfolding) is a row opening too: the tail is
+   * pinned to its edge for exactly as long as its rows track moves.
+   */
+  const opensRow = (event: TransitionEvent): boolean =>
+    event.propertyName === "grid-template-rows" &&
+    (event.target as Element).hasAttribute("data-opens");
+
+  function ontransitionrun(event: TransitionEvent): void {
+    if (opensRow(event)) {
+      startResizing(event.target as Element);
+    }
+  }
+
+  function ontransitionend(event: TransitionEvent): void {
+    if (opensRow(event)) {
+      endResizing(event.target as Element);
+    }
+  }
+
   $effect(() => {
     const node = scroller;
     if (!node) {
@@ -1317,6 +1448,9 @@
     node.addEventListener("animationcancel", onanimationend);
     node.addEventListener("revealstart", onrevealstart);
     node.addEventListener("revealend", onrevealend);
+    node.addEventListener("transitionrun", ontransitionrun);
+    node.addEventListener("transitionend", ontransitionend);
+    node.addEventListener("transitioncancel", ontransitionend);
     const removed = new MutationObserver(() => {
       const before = resizing.size;
       for (const element of resizing) {
@@ -1337,6 +1471,9 @@
       node.removeEventListener("animationcancel", onanimationend);
       node.removeEventListener("revealstart", onrevealstart);
       node.removeEventListener("revealend", onrevealend);
+      node.removeEventListener("transitionrun", ontransitionrun);
+      node.removeEventListener("transitionend", ontransitionend);
+      node.removeEventListener("transitioncancel", ontransitionend);
       if (landingFrame !== null) {
         cancelAnimationFrame(landingFrame);
       }
@@ -1505,6 +1642,26 @@
     following = requestAnimationFrame(() => {
       following = null;
       if (atBottom && opening === 0) {
+        pinBottom();
+      }
+    });
+  }
+
+  /**
+   * THE TAIL IS HELD IN THE FRAME THE LIST MEASURES IT. A row arriving, a
+   * streamed answer growing, a live row settling taller than it was: virtua
+   * measures each in its ResizeObserver — the rendering step of the frame
+   * that draws it, after layout — and lays the rows out again from there.
+   * `followBottom` pinned the view a frame after that, so for one frame the
+   * tail stood where the growth left it (a note under a settling answer
+   * dipped 19px and came back). The pin now runs right behind virtua's own
+   * update, still inside that rendering step, where the layout it reads is
+   * the one about to be painted.
+   */
+  function onmeasured(): void {
+    // virtua applies what it measured in the microtask behind this call.
+    queueMicrotask(() => {
+      if (active && landed && atBottom && !jumping) {
         pinBottom();
       }
     });
@@ -2128,9 +2285,12 @@
       </div>
     {/if}
   </div>
-  {#if session.loading && rows.length === 0}
+  <!-- Empty is what is drawn: a conversation whose one row is folding away
+       as its retry comes in is not empty for the frame between the two, and
+       the empty state shown there pushed the fold 53px down. -->
+  {#if session.loading && renderedRows.length === 0}
     <p class="empty">Loading transcript…</p>
-  {:else if rows.length === 0}
+  {:else if renderedRows.length === 0}
     <!-- Only once the read has said the conversation is empty, fading in
          where it stands. The two keys that do anything from the composer
          below. Left-aligned: this surface is a ledger. -->
@@ -2151,6 +2311,8 @@
       getKey={(r) => r.key}
       itemSize={ROW_ESTIMATE}
       {keepMounted}
+      onresize={onmeasured}
+      previousKey={(key) => renamed.get(String(key))}
       scrollRef={scroller}
       shift={built.shifted}
       {ssrCount}

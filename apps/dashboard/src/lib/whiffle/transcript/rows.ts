@@ -526,6 +526,11 @@ const NO_LIVE: LiveMemo = { gen: 0, on: false, answer: "", reasoning: "" };
  * looking at the same transcript grown at the end or at a different one.
  */
 export interface FoldMemo {
+  /**
+   * The waiting sends drawn above the agent's tail — its live row and the call
+   * in flight — or null when this fold had no such tail. See `tailRows`.
+   */
+  ahead: string[] | null;
   /** How many subagent branches were known: a new one can re-type an old row. */
   branches: number;
   /** How many messages those rows cover, and the first and last of them. */
@@ -540,6 +545,8 @@ export interface FoldMemo {
   starts: number[];
   /** Where the speakers stand after the settled rows. */
   voices: Voices;
+  /** The waiting sends this fold drew, by key. */
+  waited: string[];
 }
 
 /**
@@ -652,8 +659,22 @@ export function buildRowsFrom(
   const content = liveContent(session);
   const same = prior.on && content !== null && continues(prior, content);
   const gen = same ? prior.gen : prior.gen + 1;
+  const tool =
+    session.currentTool && !called(session, session.currentTool.toolId)
+      ? session.currentTool
+      : null;
+  const from = queuedFrom(session.messages);
+  const waited = session.messages
+    .slice(from)
+    .map((message, i) => keyOf(message, from + i));
+  const ahead = aheadOf(memo, waited, content !== null || tool !== null);
   return {
-    rows: [...rows, ...tailRows(session, content, gen, { ...voices })],
+    rows: [
+      ...rows,
+      ...tailRows(session, content, tool, gen, new Set(ahead), {
+        ...voices,
+      }),
+    ],
     memo: {
       rows,
       starts,
@@ -663,6 +684,8 @@ export function buildRowsFrom(
       branches,
       noted,
       voices,
+      ahead,
+      waited,
       live: content
         ? {
             gen,
@@ -857,53 +880,81 @@ export function called(session: SessionState, toolId: string): boolean {
 }
 
 /**
- * The rows that ride after the settled transcript, re-derived every time.
+ * THE TAIL KEEPS THE ORDER IT WAS DRAWN IN. A send waiting on the session
+ * that was already on screen when the agent's own tail began — its live row,
+ * a call in flight — stays above that tail; one sent while the tail is up
+ * comes in after it. A turn that opens while notes wait is the turn that
+ * reads them, so the notes are already in the place they are read at: the
+ * turn starting under them moves nothing, and neither does their read.
+ * Drawn the other way, the live row came in above the notes, pushed them
+ * down a row, and the read put them back.
+ *
+ * The keys drawn ahead are carried while the agent's tail stays up, less the
+ * ones that stopped waiting; with no tail, nothing is ahead of it.
+ */
+function aheadOf(
+  memo: FoldMemo | null,
+  waited: string[],
+  tail: boolean
+): string[] | null {
+  if (!tail) {
+    return null;
+  }
+  const before = memo?.ahead ?? memo?.waited ?? [];
+  return waited.filter((key) => before.includes(key));
+}
+
+/**
+ * The rows that ride after the settled transcript, re-derived every time:
+ * the sends drawn `ahead` of the agent's tail, the tail, the other sends.
  */
 function tailRows(
   session: SessionState,
   content: LiveContent | null,
+  tool: SessionState["currentTool"],
   gen: number,
+  ahead: Set<string>,
   voices: Voices
 ): Row[] {
-  const rows: Row[] = [];
+  // What the session has been sent and not read yet, after everything that
+  // HAS happened. Keyed by the message itself: once read, the same key is its
+  // row in the conversation, where it was read.
+  const { messages } = session;
+  const waiting: Row[] = [];
+  for (let i = queuedFrom(messages); i < messages.length; i += 1) {
+    waiting.push({
+      kind: "queued",
+      key: keyOf(messages[i], i),
+      message: messages[i],
+      grouped: false,
+    });
+  }
+  const rows: Row[] = waiting.filter((row) => ahead.has(row.key));
   if (content) {
-    const live: Row = {
+    rows.push({
       kind: "live",
       key: liveKey(gen),
       ...content,
       grouped: false,
-    };
-    live.grouped = voice(voices, live);
-    rows.push(live);
+    });
   }
   // One row per call in flight, keyed by the call: the next tool is a new
   // row arriving, not this one changing its words. It is the call before its
   // message lands; once the message is in, the call's own line in its run is
   // this row, settled, and drawing both showed the same call twice.
-  if (session.currentTool && !called(session, session.currentTool.toolId)) {
-    const tool: Row = {
+  if (tool) {
+    rows.push({
       kind: "livetool",
-      key: `tool:${session.currentTool.toolId}`,
-      glance: session.currentTool,
-    };
-    voice(voices, tool);
-    rows.push(tool);
+      key: `tool:${tool.toolId}`,
+      glance: tool,
+    });
   }
-
-  // What the session has been sent and not read yet, after everything that
-  // HAS happened. Keyed by the message itself: once read, the same key is its
-  // row in the conversation, where it was read.
-  const { messages } = session;
-  for (let i = queuedFrom(messages); i < messages.length; i += 1) {
-    const queued: Row = {
-      kind: "queued",
-      key: keyOf(messages[i], i),
-      message: messages[i],
-      grouped: false,
-    };
-    queued.grouped = voice(voices, queued);
-    rows.push(queued);
+  rows.push(...waiting.filter((row) => !ahead.has(row.key)));
+  for (const row of rows) {
+    const grouped = voice(voices, row);
+    if (row.kind === "live" || row.kind === "queued") {
+      row.grouped = grouped;
+    }
   }
-
   return rows;
 }

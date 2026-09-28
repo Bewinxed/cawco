@@ -6,7 +6,11 @@
   } from "$lib/components/ui/button/pending-content.svelte";
   import type { Trail } from "$lib/components/ui/markdown/trail";
   import { CURVE, dur, motionOk } from "$lib/whiffle/motion/curves.svelte";
-  import { waiting as departed, land } from "$lib/whiffle/motion/share.svelte";
+  import {
+    departBox,
+    waiting as departed,
+    land,
+  } from "$lib/whiffle/motion/share.svelte";
   import {
     canResend,
     restoreDraft,
@@ -158,16 +162,25 @@
     retried && !unreached && (ghost || retry?.stage !== "failed")
   );
   function tryAgain(): void {
-    if (!message.id) {
+    const { id } = message;
+    if (!id) {
       return;
     }
     heldLine = reasonLine;
     retried = true;
     if (unreached) {
-      retrySend(message.id);
+      retrySend(id);
     } else {
+      // The send again is a new row, drawn once the hub takes it, as this
+      // one folds away: these words fly into it, under the id it goes out
+      // under, known once it has gone.
       // biome-ignore lint/complexity/noVoid: fire-and-forget — the retry's own record and this row's leaving are the outcome
-      void retryFailed(message);
+      void retryFailed(message).then(() => {
+        const out = retryOf(id)?.commandId;
+        if (out && words) {
+          departBox(`sent:${out}`, words, false);
+        }
+      });
     }
   }
   function edit(): void {
@@ -176,17 +189,23 @@
     }
   }
 
-  /** Where the composer's text lands, when this row is that text in flight. */
-  const sent = $derived(ghost ? `sent:${message.id}` : undefined);
+  /**
+   * Where the words this row says land from: the composer's text sent under
+   * the message's id, or a failed send's words sent again under it. Whether
+   * a departure waits there is the one test — Transcript's `motionOf` asks
+   * it too, to hold back the row's own entrance — never the row's state,
+   * which the hub's record can have moved on before the row is first drawn.
+   */
+  const sent = $derived(`sent:${message.id}`);
   /**
    * A send that joins a run already on screen: read once, as the row mounts
    * and before the text's landing takes the departure. The run's well opens
    * down to hold it while the text flies in; a send that starts a run flies
    * in whole, header and well together.
    */
-  const joins = untrack(
-    () => grouped && ghost && departed(`sent:${message.id}`)
-  );
+  const joins = untrack(() => grouped && departed(sent));
+  /** The words, which fly on to the row a Try again draws. */
+  let words = $state<HTMLElement>();
   function openWell(node: HTMLElement): void {
     if (!(joins && motionOk.current)) {
       return;
@@ -244,6 +263,7 @@
     <div class="well" {@attach openWell}>
       <div
         class="words"
+        bind:this={words}
         {@attach land(
           () => (grouped ? sent : undefined),
           { ms: dur('--dur-pop'), uniform: true }
@@ -284,8 +304,9 @@
         <!-- Mirrors Prompt.svelte's own refusal line ("Couldn't send that
              answer.") — a failed send is a sibling of a failed answer, not a
              new dialect of failure. The grid-rows wrapper is what animates a
-             height that content, not JS, decides. -->
-        <div class="failure" class:open={failed || retrying}>
+             height that content, not JS, decides; `data-opens` tells the
+             transcript it grows, so its tail is held while it does. -->
+        <div class="failure" data-opens class:open={failed || retrying}>
           <div class="failure-inner">
             {#if failed || retrying}
               <p class="reason">{retrying ? heldLine : reasonLine}</p>

@@ -62,8 +62,10 @@ export class ComposerDraft {
   get keep(): DraftContent {
     const writing =
       this.text.length > 0 || this.images.length > 0 || this.texts.length > 0;
+    // Held in state, the unsent message is a proxy all the way down, and a
+    // proxy cannot be stored: its plain copy is what gets kept.
     if (!writing && this.unsent) {
-      return this.unsent;
+      return $state.snapshot(this.unsent);
     }
     return {
       text: this.text,
