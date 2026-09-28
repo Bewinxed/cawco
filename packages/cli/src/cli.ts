@@ -613,15 +613,6 @@ const runJoin = async (args: Args): Promise<number> => {
   if (!toHttpBase(args.hub)) {
     throw new UsageError(`--hub ${args.hub} is not a URL`);
   }
-  // Whoever was reading may be gone — the SSH session the install script ran
-  // in can close under it, and the script ignores the hangup so this keeps
-  // going. A write to the closed pipe then fails with EPIPE; that means
-  // nobody is listening any more, not that the join should stop half-way.
-  for (const stream of [process.stdout, process.stderr]) {
-    stream.on("error", () => {
-      // nobody left to tell
-    });
-  }
   const say = (line: string): void =>
     console.log(`${INSTALL_STEP_PREFIX}${line}`);
 

@@ -133,8 +133,10 @@ const DEPLOY_BRANCH = "main";
  * and every failure said with the `whiffle:` prefix the CLI's own errors use,
  * so the last step line before a failure names the step that failed.
  *
- * The body is one function called on the last line: a download cut short
- * defines part of a function and runs nothing.
+ * The body is one function, started only by the block at the very end: a
+ * download cut short defines part of a function and runs nothing. That block
+ * runs the install detached from the session that asked for it, so a dropped
+ * SSH link cannot stop it part-way.
  *
  * The deploy root is resolved exactly as `deployRoot()` resolves it. The
  * script clones only into a root that is absent or empty; a root with the
@@ -154,11 +156,6 @@ say() { printf '${INSTALL_STEP_PREFIX}%s\\n' "$*"; }
 fail() { printf 'whiffle: %s\\n' "$*" >&2; exit 1; }
 
 main() {
-  # The SSH session that started this can end under it — a dropped link, the
-  # hub restarting. Ignoring the hangup (inherited by everything below)
-  # lets the install finish what it started instead of dying half-way through
-  # replacing a running service.
-  trap '' HUP
   say "checking for git, curl and unzip"
   missing=""
   for tool in git curl; do
@@ -204,7 +201,25 @@ main() {
   bun packages/cli/src/cli.ts join --hub "$HUB"
 }
 
-main
+# The session that started this can end under it: a dropped link, or the
+# hub restarting while it runs an SSH add. So the install does not write to
+# that session at all. It runs in the background into a log, the log is
+# followed back to whoever is watching, and the exit status is the install's.
+# Losing the session loses only the follower; the install, hangup ignored,
+# finishes what it started rather than stopping half-way through replacing a
+# running service.
+trap '' HUP
+LOG="$(mktemp)"
+main > "$LOG" 2>&1 &
+INSTALL=$!
+tail -f "$LOG" &
+FOLLOWER=$!
+STATUS=0
+wait "$INSTALL" || STATUS=$?
+sleep 1
+kill "$FOLLOWER" 2>/dev/null || :
+rm -f "$LOG"
+exit "$STATUS"
 `;
 
 /** How long a finished SSH add stays readable, for a dialog opened late. */
