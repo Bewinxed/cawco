@@ -9,9 +9,9 @@
    */
   export interface MachineUpdate {
     said?: string;
-    since: number | undefined;
     /** The update ran and restarted nothing: there is no new build to wait for. */
     settled: boolean;
+    since: number | undefined;
   }
   export const machineUpdates = new SvelteMap<string, MachineUpdate>();
 
@@ -121,9 +121,9 @@
       pendingLabel="Reloading…"
       run={() => loadCatalog(machine.machineId)}
     />
-    <!-- The form reads `machine` out of the query and preselects it. -->
+    <!-- The board reads `spawn` out of the query and preselects it. -->
     <ContextMenu.Item
-      onSelect={() => goto(`/session?machine=${machine.machineId}`)}
+      onSelect={() => goto(`/session?spawn=${machine.machineId}`)}
     >
       <IconPlus />
       New session here
@@ -155,7 +155,8 @@
       {#if updateFailed}
         <span
           class="ml-auto max-w-56 truncate text-meta text-destructive"
-          title={updateFailed}>{updateFailed}</span
+          title={updateFailed}
+          >{updateFailed}</span
         >
       {/if}
     </ContextMenu.PendingItem>

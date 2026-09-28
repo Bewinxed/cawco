@@ -251,7 +251,12 @@
             />
           </span>
           {#if morphMs}
-            <TextMorph as="span" duration={morphMs} ease={CURVE.out} text={figure} />
+            <TextMorph
+              as="span"
+              duration={morphMs}
+              ease={CURVE.out}
+              text={figure}
+            />
           {:else}
             {figure}
           {/if}
@@ -276,7 +281,12 @@
       >
         <span class="shrink-0">
           {#if morphMs}
-            <TextMorph as="span" duration={morphMs} ease={CURVE.out} text={tool.name} />
+            <TextMorph
+              as="span"
+              duration={morphMs}
+              ease={CURVE.out}
+              text={tool.name}
+            />
           {:else}
             {tool.name}
           {/if}

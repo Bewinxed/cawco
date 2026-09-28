@@ -115,7 +115,11 @@
       {#if failed}
         <p class="text-label text-destructive" id="unlock-error">{failed}</p>
       {:else if result}
-        <p class="text-meta text-muted-foreground" id="unlock-note" role="status">
+        <p
+          class="text-meta text-muted-foreground"
+          id="unlock-note"
+          role="status"
+        >
           {result}
         </p>
       {:else}

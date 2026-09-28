@@ -1,12 +1,10 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
-  import { untrack } from "svelte";
   import { Card } from "$lib/components/ui/card";
   import { isTyping } from "$lib/utils/typing";
   import ActivityDot from "./ActivityDot.svelte";
-  import { dur, ease, motionOk } from "./motion/curves.svelte";
-  import { closeInto } from "./motion/share.svelte";
   /**
    * Everything in the fleet parked on a human, in one calm list — the Whiffle
    * fleet view's whole answer to "what needs me right now". One thing parks on
@@ -39,6 +37,8 @@
     whiffle,
   } from "./client.svelte";
   import { conversationHref } from "./links";
+  import { dur, ease, motionOk } from "./motion/curves.svelte";
+  import { closeInto } from "./motion/share.svelte";
   import { permissionSummary } from "./permission-summary";
   import { questionsOf } from "./question";
 
@@ -146,7 +146,10 @@
           .animate(
             [
               { opacity: 1, translate: "0 0" },
-              { opacity: 0, translate: motionOk.current ? `0 -${rise}` : "0 0" },
+              {
+                opacity: 0,
+                translate: motionOk.current ? `0 -${rise}` : "0 0",
+              },
             ],
             {
               duration: dur("--dur-exit"),
@@ -287,7 +290,7 @@
       >
     </header>
 
-    <ul bind:this={listEl} class="flex flex-col">
+    <ul class="flex flex-col" bind:this={listEl}>
       {#each queue as entry (entry.key)}
         {@const item = entry.item}
         <li

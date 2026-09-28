@@ -26,8 +26,8 @@
     isDeployDiverged,
   } from "./convergence";
   import { CAUSE, faultHref, machineFaults } from "./fleet-faults";
-  import { machineLabel } from "./machine";
   import { isUpdating, machineUpdates } from "./MachineMenu.svelte";
+  import { machineLabel } from "./machine";
   import { CURVE, dur } from "./motion/curves.svelte";
   import OsMark from "./OsMark.svelte";
 
@@ -146,7 +146,11 @@
           >
             <span class="icon-swap" style="--icon-swap-dur: var(--dur-control)">
               <span data-active={chip === 'updating'}
-                ><Spinner aria-hidden="true" class="size-3" role="presentation" /></span
+                ><Spinner
+                  aria-hidden="true"
+                  class="size-3"
+                  role="presentation"
+                /></span
               >
               <span data-active={chip === 'current'}
                 ><IconCheck class="size-3" /></span
@@ -172,7 +176,9 @@
         <div class="flex flex-col gap-1">
           <span>{chipHint}</span>
           {#if update?.said}
-            <span class="text-label opacity-80">Last update: {update.said}</span>
+            <span class="text-label opacity-80"
+              >Last update: {update.said}</span
+            >
           {/if}
         </div>
       </Tooltip.Content>

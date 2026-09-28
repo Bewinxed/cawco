@@ -1,5 +1,7 @@
 <script lang="ts">
+  import { untrack } from "svelte";
   import { dur, ease, motionOk } from "./motion/curves.svelte";
+
   /**
    * How far a session's plan has got, in the space a glyph takes.
    *
@@ -49,7 +51,7 @@
      runs on to the top, where a counted ring is read from (-90deg, one
      turn on). */
   let arcEl = $state<SVGCircleElement | null>(null);
-  let turning = indeterminate;
+  let turning = untrack(() => indeterminate);
   $effect.pre(() => {
     const now = indeterminate;
     if (turning && !now && arcEl && motionOk.current) {
@@ -88,9 +90,7 @@
         stroke-width={stroke}
       />
       <circle
-        bind:this={arcEl}
         class="arc"
-        class:spin={indeterminate}
         cx={box / 2}
         cy={box / 2}
         fill="none"
@@ -99,6 +99,8 @@
         stroke-dasharray="{arc} {circumference}"
         stroke-linecap="round"
         stroke-width={stroke}
+        bind:this={arcEl}
+        class:spin={indeterminate}
       />
     </g>
     <g class="text-success" data-shown={finished}>
