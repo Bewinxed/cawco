@@ -43,6 +43,13 @@
     /** Leaving: held on top, fading out, with the row as it last was. */
     leaving: Live | null;
     phase: Phase;
+    /**
+     * The rail a leaving face keeps: the gap and head it was drawn with. The
+     * row's continuation is read off the phase (Transcript's `railLed`), so
+     * the change that sends this face out also restyles its rail, and the
+     * fading reasoning block dropped 14px under the answer coming in.
+     */
+    rail: string | null;
   }
 
   let serial = 0;
@@ -52,8 +59,17 @@
       phase: untrack(() => phaseOf(row)),
       leaving: null,
       entering: false,
+      rail: null,
     },
   ]);
+
+  /** The rail the row draws right now, as inline custom properties. */
+  function railNow(live: HTMLElement): string {
+    const style = getComputedStyle(live);
+    const gap = style.getPropertyValue("--rail-gap").trim();
+    const head = style.getPropertyValue("--rail-head").trim();
+    return `--rail-gap: ${gap || "var(--space-4)"}; --rail-head: ${head || "var(--rail)"}`;
+  }
   let box = $state<HTMLElement>();
   let tweening = $state(false);
   /** The row as the last flush drew it — what a leaving face keeps showing. */
@@ -72,8 +88,13 @@
         if (moving && box) {
           from = box.getBoundingClientRect().height;
           faces = [
-            { ...current, leaving: drawn, entering: false },
-            { id: serial, phase, leaving: null, entering: true },
+            {
+              ...current,
+              leaving: drawn,
+              entering: false,
+              rail: railNow(box),
+            },
+            { id: serial, phase, leaving: null, entering: true, rail: null },
           ];
           if (phase === "answer" && ledger) {
             // The face fading in is the fade of the words it opens with: if
@@ -84,7 +105,9 @@
             });
           }
         } else {
-          faces = [{ id: serial, phase, leaving: null, entering: false }];
+          faces = [
+            { id: serial, phase, leaving: null, entering: false, rail: null },
+          ];
         }
       }
       drawn = next;
@@ -165,6 +188,7 @@
       class="face"
       inert={face.leaving !== null}
       onanimationend={(event) => settle(face, event)}
+      style={face.rail}
       class:entering={face.entering}
       class:leaving={face.leaving !== null}
     >

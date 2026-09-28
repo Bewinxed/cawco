@@ -69,6 +69,19 @@ export type Ticket =
    */
   | { kind: "carry"; trail: Trail };
 
+/**
+ * The height a row starts from because it took another row's place in the
+ * update that drew it: the indicator's, for the tool it gave way to; the live
+ * row's, for the row it settled into; a tool's glance and its run's, for the
+ * run that took the call in. The row tweens from there to its own height, so
+ * nothing above it moves in a jump. Handed once per update, and taken once:
+ * the same row drawn again later is not taking anyone's place.
+ */
+export interface Handoff {
+  from: number;
+  taken: boolean;
+}
+
 export interface Ledger {
   /** The arrival's entrance has run: its ticket is spent. */
   done: (id: string) => void;
