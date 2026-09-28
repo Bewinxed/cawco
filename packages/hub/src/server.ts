@@ -4422,7 +4422,7 @@ export const createServer = ({
         const gone = db.deleteMachine(params.machineId);
         // The same forgetting a stopped session gets, for every row that went.
         for (const id of gone.instanceIds) {
-          forgetQueue(id);
+          pendingSends.delete(id);
           pulses.delete(id);
           touched.delete(id);
           heldSessions.delete(id);
