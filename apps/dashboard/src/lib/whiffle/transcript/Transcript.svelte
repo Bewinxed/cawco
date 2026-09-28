@@ -913,7 +913,10 @@
     // keyboard, momentum, anything.
     const clamped =
       shrank && scroller.scrollTop >= height - scroller.clientHeight - 1;
-    if (Math.abs(scroller.scrollTop - lastWrite) <= 1 || clamped) {
+    if (
+      (lastWrite !== null && Math.abs(scroller.scrollTop - lastWrite) <= 1) ||
+      clamped
+    ) {
       return;
     }
     if (was && stillAt(was, lastTop)) {
@@ -948,7 +951,9 @@
    *  drag fires no wheel event; a tagged write needs no event taxonomy). */
   let following: number | null = null;
   let landingFrame: number | null = null;
-  let lastWrite = -1;
+  // Null until the first write: a number here (it was -1) is within a pixel
+  // of the top, and the reader's scroll to 0 read as our own write.
+  let lastWrite: number | null = null;
   function stopFollow(): void {
     if (following !== null) {
       cancelAnimationFrame(following);
