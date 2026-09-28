@@ -34,6 +34,7 @@ import {
   AGENT_BUSY,
   alreadyIngested,
   CONTROL_GIT_CHANGES,
+  CONTROL_QUERIES,
   FLEET_STATUS,
   FLEET_SYNC,
   GENERATE_IMAGE,
@@ -473,6 +474,16 @@ export class SessionSupervisor {
       : (envelope.instanceId ?? "");
     if (imageRequest) {
       this.#imageRequests.set(imageRequest, String(control?.args?.[0]));
+    }
+    // A question about the session waits for what is already on its way —
+    // the spawn that makes the session, a send before it — but nothing waits
+    // for its answer: a send behind one sat here until it came back.
+    if (control && CONTROL_QUERIES.has(control.method)) {
+      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — #control sinks its own answer, success or failure
+      void (this.#queues.get(key) ?? Promise.resolve()).then(() =>
+        this.#route(envelope)
+      );
+      return;
     }
     const queue = (this.#queues.get(key) ?? Promise.resolve())
       .then(() => this.#route(envelope))

@@ -830,6 +830,21 @@ export const CONTROL_MCP_STATUS = "mcpServerStatus";
 export const CONTROL_MCP_RECONNECT = "reconnectMcpServer";
 export const CONTROL_MCP_TOGGLE = "toggleMcpServer";
 
+/**
+ * The live-session controls that only answer a question: nothing sent after
+ * one depends on its answer. A daemon runs each after whatever is already on
+ * its way to the session, but nothing waits for it — `reloadSkills` re-reads
+ * every skill (0.7 s measured), and a send behind it sat in the daemon,
+ * never reaching the harness, for as long as that took.
+ */
+export const CONTROL_QUERIES: ReadonlySet<string> = new Set([
+  CONTROL_CONTEXT_USAGE,
+  CONTROL_SUPPORTED_MODELS,
+  CONTROL_SUPPORTED_COMMANDS,
+  CONTROL_RELOAD_SKILLS,
+  CONTROL_MCP_STATUS,
+]);
+
 /** Machine-scoped session-catalog controls, answered by whichever harness owns the id. */
 export const CONTROL_LIST_SESSIONS = "listSessions";
 export const CONTROL_GET_SESSION_INFO = "getSessionInfo";
