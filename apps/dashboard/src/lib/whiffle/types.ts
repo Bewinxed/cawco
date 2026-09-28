@@ -7,6 +7,7 @@ import type {
   AvailableCommand,
   NeutralStatus,
   NeutralSystemMessage,
+  SessionTooling,
   UserQuestionResult,
 } from "@whiffle/core";
 import type { SubagentState } from "$lib/utils/flow-types";
@@ -203,6 +204,8 @@ export interface MessageMetadata {
   // Tool messages
   toolId?: string;
   toolInput?: JsonValue;
+  /** `init` only: the MCP servers and tools behind the `/` palette. */
+  tooling?: SessionTooling;
   toolName?: string;
   toolResult?: JsonValue;
   toolStatus?: "pending" | "success" | "error";

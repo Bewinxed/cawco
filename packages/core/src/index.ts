@@ -580,12 +580,6 @@ export interface InstanceRow {
    * delegate's brief headline. Null on a session that was started without one.
    */
   title?: string | null;
-  /**
-   * The MCP servers and tool names the session's newest `init` announced,
-   * stored by the hub as each one passes. Null for a harness whose `init`
-   * carries neither (OpenCode, pi) and for a session that has not started.
-   */
-  tooling?: SessionTooling | null;
   /** When the row last moved. */
   updatedAt?: string | number | Date | null;
   workflowRunId?: string | null;

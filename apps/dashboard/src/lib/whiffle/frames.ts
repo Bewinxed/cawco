@@ -716,6 +716,16 @@ export function mapFrame(
               // not say where any of them came from.
               slashCommands: sdk.slash_commands,
               skills: sdk.skills,
+              // The `/` palette's servers and tools. Claude lists both on
+              // every `init`; a harness that lists no tools announces neither.
+              tooling: sdk.tools
+                ? {
+                    servers: (sdk.mcp_servers ?? []).map(
+                      ({ name, status }) => ({ name, status })
+                    ),
+                    tools: sdk.tools,
+                  }
+                : undefined,
             })
           );
           break;

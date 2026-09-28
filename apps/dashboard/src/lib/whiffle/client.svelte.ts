@@ -396,6 +396,13 @@ export interface SessionState {
    */
   thinkingStream: string;
   /**
+   * The MCP servers and tools the session's newest `init` announced — the `/`
+   * palette's servers and tools. Read from the hub's row when the view opens
+   * (`GET /api/instances/:id/tooling`, beside the transcript read) and replaced
+   * by every live `init` after that.
+   */
+  tooling: SessionTooling;
+  /**
    * The cumulative cost the latest `result` frame reported, in dollars.
    * `undefined` until a turn has closed with one. Frames, not transcript
    * scraping: a successful turn's cost has no transcript line.
@@ -651,6 +658,7 @@ export function blankSession(instanceId: string): SessionState {
     contextError: null,
     commands: { names: [], skills: [], detailed: null, at: 0 },
     commandsPending: false,
+    tooling: { servers: [], tools: [] },
     mcp: null,
     mcpPending: false,
     lastTurnFailed: false,
@@ -1583,6 +1591,7 @@ function handleFrame(frame: FramePayload): void {
             message.metadata?.slashCommands ?? target.commands.names;
           target.commands.skills =
             message.metadata?.skills ?? target.commands.skills;
+          target.tooling = message.metadata?.tooling ?? target.tooling;
           // A relaunch can change the MCP set; null makes the header ask again.
           target.mcp = null;
           // The process behind a relaunch is up: this is the frame it opens with.
@@ -3956,6 +3965,17 @@ export async function streamHistory({
     chunks += 1;
   };
 
+  // The `/` palette's servers and tools are read beside the transcript: the
+  // board's rows do not carry them. A session with no hub row has none.
+  // biome-ignore lint/complexity/noVoid: runs beside the transcript read; the palette reads it off the session when it lands
+  void fetch(`/api/instances/${encodeURIComponent(viewId)}/tooling`).then(
+    async (answer) => {
+      if (answer.ok) {
+        target.tooling = (await answer.json()) as SessionTooling;
+      }
+    }
+  );
+
   try {
     // Tail first: the agent parses only the newest window of the transcript
     // file, so the first paint is not behind a full-file parse. The full read
@@ -5160,12 +5180,13 @@ export const whiffle = {
   },
   /** What a session offers behind `/`, grouped the way the palette lists it. */
   /**
-   * The MCP servers and tools the session's newest `init` announced, as the hub
-   * stored them on its row — so a reload or a hub restart keeps them. Empty for
-   * a harness whose `init` carries neither.
+   * The MCP servers and tools the session's newest `init` announced: the hub's
+   * stored copy, read as the view opened, then each live `init` — so a reload
+   * or a hub restart keeps them. Empty for a harness whose `init` carries
+   * neither, and for a view not opened yet.
    */
   toolingOf: (instanceId: string): SessionTooling =>
-    instanceIndex.byId.get(instanceId)?.tooling ?? { servers: [], tools: [] },
+    state.sessions[instanceId]?.tooling ?? { servers: [], tools: [] },
   commandsOf: (instanceId: string): AvailableCommand[] => {
     const target = state.sessions[instanceId];
     return target ? availableCommands(target.commands) : [];

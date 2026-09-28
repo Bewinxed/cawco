@@ -7,7 +7,8 @@
    * shadcn-svelte primitives, token-dressed in the Quiet Ledger system: the
    * stat row is a shadcn Card recessed-well, the filter bar is ui/input +
    * ui/select, the status column is ui/badge, the eight-column ledger is
-   * ui/table, and the ledger reveals more rows as it is scrolled.
+   * ui/table, and the ledger shows a page of rows with a Show more button
+   * under it, so what sits below the table stays in reach.
    *
    * Live and stored sessions are the same kind of row here. A stored session
    * whose transcript is already running somewhere is dropped — the live row is
@@ -16,6 +17,7 @@
   import { untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { TextMorph } from "torph/svelte";
+  import { Virtualizer } from "virtua/svelte";
   import { goto, replaceState } from "$app/navigation";
   import { page } from "$app/state";
   import WorkflowStatus from "$lib/components/features/workflows/WorkflowStatus.svelte";
@@ -389,8 +391,11 @@
   /**
    * How many rows are on screen. The whole catalogue is already in memory —
    * `SESSION_CATALOG_LIMIT` is 0, so every machine sends its entire list — so
-   * this is a rendering window, not a fetch cursor. It grows as the reader
-   * reaches the bottom and resets whenever the list underneath it changes.
+   * this is a rendering window, not a fetch cursor. It grows a page per press
+   * of Show more and resets whenever a search or a filter changes the list.
+   * Never on scroll: a table that grows as it is scrolled keeps pushing Not
+   * running, under it, out of reach (on a phone, 60 wheel steps did not get
+   * there).
    */
   let shown = $state(PAGE_SIZE);
 
@@ -505,10 +510,10 @@
   });
 
   /* A filter, a search, a re-sort or the next page reflows the table: rows
-     that leave close where they were, rows that arrive open (a page the
-     scroll brings in fades in at the end, below the reader), the rest
-     slide, and the table's height follows, so nothing under the table
-     jumps (motion/rows). */
+     that leave close where they were, rows that arrive open (a page Show
+     more brings in opens at the end, above the button), the rest slide, and
+     the table's height follows, so nothing under the table jumps
+     (motion/rows). */
   let exitLayer = $state<HTMLElement | null>(null);
   const tableRows = tableReflow({
     layer: () => exitLayer,
@@ -523,118 +528,45 @@
     untrack(() => tableRows(next.map((row) => row.key)));
     return next;
   });
-  const more = $derived(listed.length > visible.length);
+  /** What Show more adds: a page, or what is left when that is less. */
+  const nextPage = $derived(
+    Math.min(PAGE_SIZE, listed.length - visible.length)
+  );
 
   /**
-   * The sentinel is watched inside `.board` rather than the viewport — the
-   * board is the scroller, so a viewport-rooted observer would never see the
-   * bottom of a list that overflows it.
+   * The board is the scroller, and Not running's rows are virtualized against
+   * it (the whole history is ~1,000 rows; drawing them at once froze the board
+   * for 0.65 s). Virtua places rows from the top of the scroller it is given,
+   * so it is told where the list starts inside the board's content: the
+   * list's layout offset within `.inner`, re-read whenever the board's content
+   * changes size — the table growing a page, a machine's notice arriving.
    */
-  let boardEl = $state<HTMLElement | null>(null);
-  let sentinelEl = $state<HTMLElement | null>(null);
-  /** A page of headroom, so the next block is already there by the time the
-   *  last row is read rather than arriving after a visible stop. */
-  const HEADROOM = 400;
-  /** Whether the list is still filling the board after being built or reset:
-   *  true from a reset until its end first passes the board's bottom edge. */
-  let filling = true;
-
-  /* A page lands only below the reader, out of sight. Not running sits under
-     the table, so a page that lands while the table's end is on screen pushes
-     it (and the Show or Show all the pointer is on its way to) half a screen
-     down. A page that lands behind a reader who has scrolled past the table,
-     into Not running, is worse: the browser's scroll anchoring holds the
-     reader where they are by scrolling down the page's height, so the table's
-     end never leaves range and every page follows at once. That was the whole
-     catalogue in one eight-second task, the board frozen under the click.
-     The one exception is the fill: a list just built (or reset by a search
-     or a filter) pages while its end is still on screen, so the table the
-     board first draws reaches past the board. */
-  $effect(() => {
-    // `from` captures the count this observer was built against, which is what
-    // makes it depend on `shown` and re-arm after every growth. An
-    // IntersectionObserver reports CROSSINGS, not states, and only a frame
-    // after it is built, so a sentinel already in range is paged here, in the
-    // same update. Each page re-runs this until the sentinel is out of range;
-    // from there the observer carries it.
-    const from = shown;
-    // Not while the board is put away. It keeps its layout there
-    // (`visibility: hidden`, so measurements survive), so the sentinel is
-    // still intersecting and an unguarded observer would quietly page the
-    // whole catalogue in behind a surface nobody is looking at.
-    if (!(active && more && boardEl && sentinelEl)) {
+  let boardEl = $state<HTMLElement>();
+  let innerEl = $state<HTMLElement>();
+  let notRunningMargin = $state(0);
+  const followListStart = (list: HTMLElement) => {
+    const content = innerEl;
+    if (!content) {
       return;
     }
-    const nextPage = () => {
-      shown = from + PAGE_SIZE;
+    const measure = () => {
+      let offset = 0;
+      for (
+        let at: HTMLElement | null = list;
+        at && at !== content;
+        at = at.offsetParent as HTMLElement | null
+      ) {
+        offset += at.offsetTop;
+      }
+      notRunningMargin = offset;
     };
-    const room = boardEl.getBoundingClientRect();
-    const mark = sentinelEl.getBoundingClientRect();
-    const below = mark.top > room.bottom;
-    if (below) {
-      filling = false;
-    } else if (from === PAGE_SIZE) {
-      filling = true;
-    }
-    const inBand = below && mark.top <= room.bottom + HEADROOM;
-    const onScreen = mark.bottom >= room.top && !below;
-    if (inBand || (filling && onScreen)) {
-      nextPage();
-      return;
-    }
-    // The band under the board's bottom edge and nothing else: the top is
-    // pulled down the board's full height, the bottom let out by the headroom.
-    const io = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          nextPage();
-        }
-      },
-      { root: boardEl, rootMargin: `-100% 0px ${HEADROOM}px 0px` }
-    );
-    io.observe(sentinelEl);
-    return () => io.disconnect();
-  });
+    const sizes = new ResizeObserver(measure);
+    sizes.observe(content);
+    return () => sizes.disconnect();
+  };
 
   /** Not running's rows before its Show all. */
   const NR_CAP = 20;
-  /** Rows Show all adds at a time: about 30ms of rendering. */
-  const NR_PAGE = 40;
-  /**
-   * How many of Not running's rows are mounted once Show all is chosen. They
-   * arrive a page at a time as the reader nears the end, the table's paging
-   * again. All of them at once was nearly a thousand rows laid out, measured
-   * and drawn in one 690ms task, the board frozen under the click that asked
-   * for them. Nothing sits under Not running, so a page landing on screen
-   * moves nothing the reader could be aiming at.
-   */
-  let nrShown = $state(NR_CAP + NR_PAGE);
-  let nrSentinelEl = $state<HTMLElement | null>(null);
-  $effect(() => {
-    // `from` makes this depend on `nrShown`: each page re-arms it.
-    const from = nrShown;
-    if (!(active && boardEl && nrSentinelEl)) {
-      return;
-    }
-    const nextPage = () => {
-      nrShown = from + NR_PAGE;
-    };
-    const room = boardEl.getBoundingClientRect();
-    if (nrSentinelEl.getBoundingClientRect().top <= room.bottom + HEADROOM) {
-      nextPage();
-      return;
-    }
-    const io = new IntersectionObserver(
-      (entries) => {
-        if (entries.some((entry) => entry.isIntersecting)) {
-          nextPage();
-        }
-      },
-      { root: boardEl, rootMargin: `0px 0px ${HEADROOM}px 0px` }
-    );
-    io.observe(nrSentinelEl);
-    return () => io.disconnect();
-  });
 
   /* ---- actions ------------------------------------------------------- */
 
@@ -799,7 +731,7 @@
        cards are `data-flip="box"`, so their edges travel too (motion/rows). -->
   <!-- The reflow starts with the board: the first read replaces the
        skeleton in one cross-fade, not as rows arriving. -->
-  <div class="inner" {@attach ready ? reflow() : undefined}>
+  <div class="inner" bind:this={innerEl} {@attach ready ? reflow() : undefined}>
     <div class="head">
       <div class="title">
         <h1>Fleet</h1>
@@ -1199,20 +1131,6 @@
                   {/each}
                 </Table.Body>
               </Table.Root>
-              <!-- The scroll target. It sits after the table but inside the
-                 scroller, so reaching it means the last row has been reached. It
-                 is kept in the tree even when the list is fully shown: removing it
-                 would tear down the observer, and the next filter that widens the
-                 list would have nothing left to watch. It is inside the table's
-                 box, so while that box morphs to a new height it is clipped with
-                 the rows and does not read as reached before they are laid out. -->
-              <div class="sentinel" bind:this={sentinelEl}>
-                {#if more}
-                  <span class="sr-only" role="status"
-                    >Loading more sessions</span
-                  >
-                {/if}
-              </div>
             </div>
             {#if filtered.length === 0}
               <!-- Sessions exist, but the search and filters leave none. -->
@@ -1231,8 +1149,23 @@
               </EmptyState>
             {/if}
 
+            <!-- The table's end: how much of the list is on screen, and the
+                 next page on a press. The button goes once nothing is left. -->
             <div class="foot" data-flip>
-              Showing {visible.length} of {filtered.length}
+              <span role="status"
+                >Showing {visible.length} of {listed.length}</span
+              >
+              {#if nextPage > 0}
+                <Button
+                  class="ml-auto"
+                  label="Show {nextPage} more"
+                  onclick={() => {
+                    shown += nextPage;
+                  }}
+                  size="sm"
+                  variant="outline"
+                />
+              {/if}
             </div>
           {/if}
         </div>
@@ -1242,7 +1175,7 @@
            sleeping or unknown session would otherwise be absent from the whole
            board. Shown apart, never folded into live work or its counts. -->
         {#if notRunning.length > 0}
-          {@const capped = notRunning.slice(0, showAllNotRunning ? nrShown : NR_CAP)}
+          {@const capped = showAllNotRunning ? notRunning : notRunning.slice(0, NR_CAP)}
           <div class="not-running" data-flip="box">
             <div class="nr-head">
               <span class="nr-count"
@@ -1277,25 +1210,33 @@
               />
             </div>
             {#if notRunningOpen}
+              <!-- Virtualized against the board's own scroller, as the rail's
+                   Not running list is against its pane: only the rows near the
+                   board's viewport are drawn, so Show all lays out a screenful,
+                   not the fleet's whole history. The buffer mounts rows well
+                   past the edge, so a scrolled-in row is already there before
+                   it is seen. -->
               <div
                 class="not-running-rows"
                 data-flip
                 {@attach highlight({ rows: "a" })}
+                {@attach followListStart}
               >
-                {#each capped as row (row.id)}
-                  <div class="nr-row" data-flip>
-                    <LiveSessionRow instance={row} />
-                  </div>
-                {/each}
+                <Virtualizer
+                  bufferSize={400}
+                  data={capped}
+                  getKey={(row) => row.id}
+                  scrollRef={boardEl}
+                  startMargin={notRunningMargin}
+                >
+                  {#snippet children(row)}
+                    <div class="nr-row" data-flip>
+                      <LiveSessionRow instance={row} />
+                    </div>
+                  {/snippet}
+                </Virtualizer>
               </div>
-              {#if showAllNotRunning && capped.length < notRunning.length}
-                <!-- The next page's trigger: reaching it mounts the next rows. -->
-                <div class="nr-sentinel" bind:this={nrSentinelEl}>
-                  <span class="sr-only" role="status"
-                    >Loading more sessions</span
-                  >
-                </div>
-              {:else if !showAllNotRunning && notRunning.length > NR_CAP}
+              {#if !showAllNotRunning && notRunning.length > NR_CAP}
                 <button
                   class="show-all"
                   data-flip
@@ -1571,9 +1512,6 @@
     border-radius: var(--radius-sm);
     cursor: pointer;
     margin-top: var(--space-2);
-  }
-  .nr-sentinel {
-    height: 1px;
   }
   .show-all:hover {
     color: var(--ink-strong);
@@ -1855,9 +1793,6 @@
     }
   }
 
-  .sentinel {
-    height: 1px;
-  }
   .foot {
     display: flex;
     align-items: center;

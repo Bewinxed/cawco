@@ -2952,6 +2952,19 @@ export const createServer = ({
     });
 
   /**
+   * The rows every reader of the board is handed: the presence overlay, and
+   * no `tooling`. A session's MCP servers and tools were 62% of the first
+   * dashboard frame (1.29 MB of 2.1 MB over 1,095 rows) and only the `/`
+   * palette of an open session reads them, so they travel per session
+   * instead: `GET /api/instances/:id/tooling` when a view opens, and the live
+   * `init` frame after that.
+   */
+  const boardRows = () =>
+    withSessionPresence(db.listInstances()).map(
+      ({ tooling: _tooling, ...row }) => row
+    );
+
+  /**
    * The whole board as one message: every row, every machine, and what each
    * session is holding. Built in one place so the snapshot a dashboard is
    * handed on connect and the snapshot it is pushed on every move are the same
@@ -2978,7 +2991,7 @@ export const createServer = ({
     machineId,
     payload: {
       kind: "instances",
-      instances: withSessionPresence(db.listInstances()),
+      instances: boardRows(),
       ...boardExtras(),
     },
   });
@@ -2996,17 +3009,14 @@ export const createServer = ({
     // Seeded from the board as the hub boots: every dashboard connects after
     // this and is handed a snapshot at least this fresh, so the first publish
     // sends what moved rather than all of it.
-    withSessionPresence(db.listInstances()).map((row) => [
-      row.id,
-      JSON.stringify(row),
-    ])
+    boardRows().map((row) => [row.id, JSON.stringify(row)])
   );
 
   const publishInstances = (machineId: string): void => {
     // A session's model, project or harness can move under a live rule; every
     // move republishes, so this is the one place that has to drop the cache.
     ruleEngine.forgetFacts();
-    const rows = withSessionPresence(db.listInstances());
+    const rows = boardRows();
     const upserts: typeof rows = [];
     const present = new Set<string>();
     for (const row of rows) {
@@ -4620,7 +4630,7 @@ export const createServer = ({
           return answer.result;
         }
       )
-      .get("/api/instances", () => withSessionPresence(db.listInstances()))
+      .get("/api/instances", () => boardRows())
       // What these conversations are called — *whether or not the board still
       // lists them*.
       //
@@ -4788,6 +4798,17 @@ export const createServer = ({
       // transcript under. An id with no row is a stored session key, located
       // the way `/location` is.
       //
+      // The MCP servers and tools the session's newest `init` announced, as
+      // stored on its row. Read when a view opens, beside its transcript: the
+      // board's rows do not carry them (see boardRows). A session whose
+      // harness announces neither answers empty lists.
+      .get("/api/instances/:id/tooling", ({ params, status }) => {
+        const [row] = db.getInstancesByIds([params.id]);
+        if (!row) {
+          return status(404, `no session ${params.id}`);
+        }
+        return row.tooling ?? { servers: [], tools: [] };
+      })
       // Where the transcript was found rides back in headers, so a reader that
       // addressed a session by id alone learns which machine can act on it
       // without a second round trip.
