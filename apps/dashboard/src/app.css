@@ -653,6 +653,11 @@
        its text colour. */
     outline-color: var(--focus-ring);
     scrollbar-width: thin;
+  }
+
+  /* Inherited, so it is set once here rather than worked out on every
+     element. */
+  :root {
     scrollbar-color: oklch(from var(--muted-foreground) l c h / 0.35)
       transparent;
   }
@@ -1466,23 +1471,17 @@
   }
 }
 
-/* ---- The theme switch (theme.svelte.ts): a view transition. The new page
-   fades in over the old one in one --dur-fade cross-fade on --ease-out; the
-   old snapshot holds opaque underneath it, so the two never add up to less
-   than the page (with normal blending two half-faded snapshots would let the
-   backdrop through at the midpoint). No scale: the root keeps its size.
-   The UA blends the pair through an animation (plus-lighter), so the whole
-   animation list is replaced, not only the blend mode. */
-::view-transition-group(root) {
-  animation: none;
-}
-::view-transition-old(root) {
-  animation: none;
-  mix-blend-mode: normal;
-}
-::view-transition-new(root) {
-  animation: kit-fade-in var(--dur-fade) var(--ease-out);
-  mix-blend-mode: normal;
+/* ---- The theme switch (theme.svelte.ts). The new theme is drawn at once,
+   under a wash of the old page's background that fades off it in one
+   --dur-fade on --ease-out: one composited layer, with no snapshot taken of
+   the page and none torn down after. The wash covers everything above the
+   app chrome and under the toasts (their layer is 1000), and takes no taps. */
+.theme-wash {
+  position: fixed;
+  inset: 0;
+  z-index: 999;
+  pointer-events: none;
+  animation: kit-fade-out var(--dur-fade) var(--ease-out) forwards;
 }
 
 /* The flip itself starts no element transitions (theme.svelte.ts). The
