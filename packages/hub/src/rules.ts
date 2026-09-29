@@ -23,10 +23,9 @@ import type { MeaningJudge } from "./meaning";
  *    rules read them, and the engine early-outs before touching the buffer when
  *    no such rule exists — which is the normal case.
  * 2. Complete `assistant` frames, once per message. `message` rules read them.
- *    A reply to a frame with a tool call goes at once, as a note the tool
- *    boundary reads. A reply to the frames after the last tool call waits
- *    ({@link FinalMessage}): a later tool call sends it as a note, the turn's
- *    end sends it as a turn of its own.
+ *    Their verdicts on the frames after the turn's last tool call — its final
+ *    message — are kept as `pending` until the turn ends; a tool call drops
+ *    them, since what came before it is no longer the final message.
  * 3. `result` frames, once per turn, through {@link RuleEngine.endTurn}.
  *    `turn` rules read the whole turn's text, and this is the timing that
  *    matters most: the session is idle, so the reply wakes it into a new turn
@@ -35,6 +34,10 @@ import type { MeaningJudge } from "./meaning";
  *    once it lands. A delegate's hand-back waits on that answer: a turn a rule
  *    replied to has not ended its work item, and its parent hears nothing of
  *    it.
+ *
+ * A reply is read whenever it lands: a running turn folds it in at its next
+ * tool boundary, and a session whose model has finished takes it as a turn of
+ * its own (every harness queries every send; see the claude harness's `send`).
  *
  * The state machine lives in `rule_state`. The session gets the rule's reply
  * as the operator wrote it and acknowledges it by answering, like any other
@@ -63,8 +66,6 @@ export interface RuleEngineDeps {
 
 /** What one session is in the middle of saying, kept only while it says it. */
 interface Buffer {
-  /** What the `message` rules make of the frames since the turn's last tool call. */
-  final: FinalMessage;
   /** Rules already fired against the message being streamed, so a delta storm fires once. */
   firedThisMessage: Set<string>;
   /**
@@ -73,38 +74,17 @@ interface Buffer {
    * missing from it when the turn ends has been answered and re-arms.
    */
   firedThisTurn: Set<string>;
+  /**
+   * Whether each `message` rule asked about the turn's final message (the
+   * frames since its last tool call) replied; a meaning rule's verdict may
+   * still be on its way. The turn's end waits on them.
+   */
+  pending: Promise<boolean>[];
   /** The current message's text so far, for `immediate` rules. */
   streaming: string;
   /** Every assistant text this turn, for `turn` rules. */
   turn: string[];
 }
-
-/**
- * The frames since a turn's last tool call: its final message, unless another
- * tool call follows. A `message` rule's reply to them waits until that is
- * known. A tool call means the turn goes on, and the reply goes as a note the
- * next tool boundary reads. The turn's end means nothing is left to read it
- * there, so the reply starts a turn of its own. Sent as a note into a turn
- * whose model had already finished, the CLI appends it unread and never
- * queries the model.
- */
-interface FinalMessage {
-  /** Rules that matched it, waiting for how the turn goes on. */
-  held: Rule[];
-  /** How the turn went on, once known. An aborted turn holds nobody to anything. */
-  outcome: "open" | "continued" | "ended" | "aborted";
-  /**
-   * Meaning verdicts on it, still in flight. Each resolves true when it sent
-   * a reply that answers the turn (one that landed after the turn ended).
-   */
-  verdicts: Promise<boolean>[];
-}
-
-const openFinal = (): FinalMessage => ({
-  held: [],
-  outcome: "open",
-  verdicts: [],
-});
 
 /** The instance facts a scope is tested against, cached off the hot path. */
 interface Facts {
@@ -125,7 +105,7 @@ const empty = (): Buffer => ({
   turn: [],
   firedThisMessage: new Set(),
   firedThisTurn: new Set(),
-  final: openFinal(),
+  pending: [],
 });
 
 /** The text blocks of an assistant message, joined. Tool calls are not speech. */
@@ -293,28 +273,25 @@ export class RuleEngine {
       if (said) {
         buffer.turn.push(said);
       }
-      // A tool call means the turn goes on: what came before it was not the
-      // final message, so the replies held for it go now, as notes the tool
-      // boundary reads. This frame's own replies go the same way.
-      const toolCall = message.message.content.some(
+      // A tool call means the turn goes on: the verdicts on what came before
+      // it are not about the final message, and this frame's are not either.
+      const final = !message.message.content.some(
         (block) => block.type === "tool_use"
       );
-      if (toolCall) {
-        this.#settle(instanceId, buffer.final, "continued");
-        buffer.final = openFinal();
+      if (!final) {
+        buffer.pending = [];
       }
-      const { final } = buffer;
-      const answer = (rule: Rule): boolean =>
-        toolCall
-          ? this.#fire(rule, instanceId, false)
-          : this.#answerFinal(instanceId, final, rule);
       for (const rule of this.#byTiming.message) {
         const text = this.#withoutOwnWords(
           rule,
           this.#readable(rule, said, thinking)
         );
-        if (text && ruleMatches(rule, text)) {
-          answer(rule);
+        // The rule fires on any frame; only a final-message frame's reply
+        // answers the turn.
+        const fired =
+          text && ruleMatches(rule, text) && this.#fire(rule, instanceId);
+        if (fired && final) {
+          buffer.pending.push(Promise.resolve(true));
         }
       }
       const facts = this.#factsFor(instanceId);
@@ -328,51 +305,13 @@ export class RuleEngine {
             this.#meaningByTiming.message,
             said,
             thinking
-          ),
-          answer
+          )
         );
-        if (!toolCall) {
-          final.verdicts.push(verdict);
+        if (final) {
+          buffer.pending.push(verdict);
         }
       }
     }
-  }
-
-  /**
-   * A `message` rule matched the frames that may be the turn's final message.
-   * Held while that is open; once the turn went on, a note; once it ended, a
-   * turn of its own, which answers the turn. True only for that last.
-   */
-  #answerFinal(instanceId: string, final: FinalMessage, rule: Rule): boolean {
-    if (final.outcome === "open") {
-      if (!final.held.includes(rule)) {
-        final.held.push(rule);
-      }
-      return false;
-    }
-    if (final.outcome === "continued") {
-      this.#fire(rule, instanceId, false);
-      return false;
-    }
-    return final.outcome === "ended" && this.#fire(rule, instanceId, true);
-  }
-
-  /** How the turn went on after `final`: its held replies go; true when one answers the turn's end. */
-  #settle(
-    instanceId: string,
-    final: FinalMessage,
-    outcome: "continued" | "ended"
-  ): boolean {
-    final.outcome = outcome;
-    const { held } = final;
-    final.held = [];
-    let replied = false;
-    for (const rule of held) {
-      if (this.#fire(rule, instanceId, outcome === "ended")) {
-        replied = true;
-      }
-    }
-    return replied;
   }
 
   #endTurn(
@@ -381,31 +320,23 @@ export class RuleEngine {
   ): Promise<boolean> {
     const buffer = this.#buffer(instanceId);
     const text = buffer.turn.join("\n\n");
-    const { final } = buffer;
+    const { pending } = buffer;
     buffer.turn = [];
-    buffer.final = openFinal();
+    buffer.pending = [];
     buffer.streaming = "";
     buffer.firedThisMessage.clear();
     // An aborted turn produced no answer to hold anyone to, and a session
     // that takes no more input is not held to anything.
-    const answerable = message.subtype !== "aborted" && this.#route(instanceId);
-    let held = false;
-    if (answerable) {
-      held = this.#settle(instanceId, final, "ended");
-    } else {
-      final.outcome = "aborted";
-      final.held = [];
-    }
     const turn =
-      answerable && text
+      message.subtype !== "aborted" && text && this.#route(instanceId)
         ? this.#fireTurn(instanceId, message, text)
         : Promise.resolve(false);
     this.#db.rearmRules(instanceId, [...buffer.firedThisTurn]);
     buffer.firedThisTurn = new Set();
     // The `message` rules on the final message answer the turn as much as the
     // `turn` rules do, including a meaning verdict still on its way.
-    return Promise.all([...final.verdicts, turn]).then(
-      (fired) => held || fired.includes(true)
+    return Promise.all([...pending, turn]).then((fired) =>
+      fired.includes(true)
     );
   }
 
@@ -425,7 +356,7 @@ export class RuleEngine {
       }
       if (
         ruleMatches(rule, this.#withoutOwnWords(rule, text)) &&
-        this.#fire(rule, instanceId, true)
+        this.#fire(rule, instanceId)
       ) {
         replied = true;
       }
@@ -435,29 +366,27 @@ export class RuleEngine {
       return this.#fireMeaning(
         instanceId,
         this.#meaningByTiming.turn,
-        this.#meaning.turn(message, instanceId, facts, text),
-        (rule) => this.#fire(rule, instanceId, true)
+        this.#meaning.turn(message, instanceId, facts, text)
       ).then((meant) => replied || meant);
     }
     return Promise.resolve(replied);
   }
 
   /**
-   * Answers each of `rules` Jev said yes to, the way a phrase match of the
-   * same timing is answered, once the verdict arrives. Resolves true when any
-   * `answer` did (sent a reply that answers the turn); never rejects.
+   * Fires each of `rules` Jev answered yes to, through the same {@link #fire}
+   * a phrase match takes, once the answer arrives. Resolves true when any of
+   * them sent its reply; never rejects.
    */
   #fireMeaning(
     instanceId: string,
     rules: Rule[],
-    verdict: Promise<Set<string>>,
-    answer: (rule: Rule) => boolean
+    answer: Promise<Set<string>>
   ): Promise<boolean> {
-    return verdict
+    return answer
       .then((yes) => {
         let replied = false;
         for (const rule of rules) {
-          if (yes.has(rule.id) && answer(rule)) {
+          if (yes.has(rule.id) && this.#fire(rule, instanceId)) {
             replied = true;
           }
         }
@@ -537,7 +466,7 @@ export class RuleEngine {
         continue;
       }
       buffer.firedThisMessage.add(rule.id);
-      this.#fire(rule, instanceId, false);
+      this.#fire(rule, instanceId);
     }
   }
 
@@ -595,13 +524,8 @@ export class RuleEngine {
     return true;
   }
 
-  /**
-   * Sends a matched rule's reply, unless its scope, shots or ceiling hold it;
-   * true when sent. `wake` sends it as a turn of its own, for a session whose
-   * turn has ended; otherwise it is a note the running turn reads at its next
-   * tool boundary.
-   */
-  #fire(rule: Rule, instanceId: string, wake: boolean): boolean {
+  /** Sends a matched rule's reply, unless its scope, shots or ceiling hold it; true when sent. */
+  #fire(rule: Rule, instanceId: string): boolean {
     const facts = this.#factsFor(instanceId);
     if (!(facts && this.#inScope(rule, facts))) {
       return false;
@@ -643,7 +567,6 @@ export class RuleEngine {
           // `system` marks it as whiffle's own word rather than the user's, so a
           // transcript can render it as the standing instruction it is.
           origin: { kind: "system", name: `rule:${rule.name}` },
-          shouldQuery: wake,
         },
         urgent: rule.timing === "immediate" && rule.interrupt,
       },

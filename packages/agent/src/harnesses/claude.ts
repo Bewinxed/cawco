@@ -980,15 +980,24 @@ class ClaudeSession implements HarnessSession {
   ): void {
     // The uuid rides on the message: the CLI keeps it as the command's own id
     // and names it in the `command_lifecycle` that says it was consumed.
-    const sdk = message as unknown as SDKUserMessage;
-    const queued = (message as { shouldQuery?: boolean }).shouldQuery === false;
+    // Every send goes to the CLI as a query, whatever its `shouldQuery`. Into a
+    // running turn, the CLI folds it in at the next tool boundary without
+    // cutting the tool short; after the model's last word, it opens a turn of
+    // its own. A `shouldQuery: false` append does neither once the model has
+    // finished: the CLI stores it unread and answers with an empty result
+    // (measured, agent SDK 0.3.284: `num_turns 0`, `duration_api_ms 0`), so a
+    // hand-off, report or rule reply landing then was never read.
+    const outgoing = withExtras(
+      { ...(message as unknown as SDKUserMessage), shouldQuery: undefined },
+      extras.attachments,
+      extras.images
+    );
 
     // A mid-turn injection: the model reads it at the next tool boundary without
     // losing work. The CLI queues it and says `started` when it is read, as it
     // does for any send (measured 2.1.280). A stream that refuses it is that
     // send's failure.
     if (extras.urgent && this.#turn.busy) {
-      const outgoing = withExtras(sdk, extras.attachments, extras.images);
       // biome-ignore lint/suspicious/useAwait: must stay an async generator — streamInput's signature requires AsyncGenerator<SDKUserMessage>, not the plain Generator a non-async function* would produce
       const stream = (async function* (): AsyncGenerator<SDKUserMessage> {
         yield outgoing;
@@ -1000,18 +1009,9 @@ class ClaudeSession implements HarnessSession {
       return;
     }
 
-    // A queued hand-off picked up while the session is idle is the turn that
-    // wakes it; otherwise it stays out of the way of the turn in flight.
-    const wake = queued && !this.#turn.busy;
-    if (!queued || wake) {
-      this.#ctx.busy(true);
-    }
-    const outgoing = wake
-      ? ({ ...sdk, shouldQuery: undefined } as typeof sdk)
-      : sdk;
-
+    this.#ctx.busy(true);
     this.#turn.start();
-    this.#input.push(withExtras(outgoing, extras.attachments, extras.images));
+    this.#input.push(outgoing);
   }
 
   async control(method: string, args: unknown[]): Promise<unknown> {
