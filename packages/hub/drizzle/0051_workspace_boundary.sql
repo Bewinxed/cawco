@@ -1,0 +1,1 @@
+ALTER TABLE `workspaces` ADD `boundary_pid` integer;

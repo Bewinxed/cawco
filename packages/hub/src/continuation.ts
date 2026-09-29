@@ -125,7 +125,14 @@ type ToolResult = Extract<NeutralContentBlock, { type: "tool_result" }>;
 const messageOf = (entry: SessionMessage): StoredMessage =>
   entry.message as StoredMessage;
 
+/**
+ * A user or assistant entry's content blocks. A `system` entry carries a
+ * frame (a failed turn's `result`, a notice), not a message, and has none.
+ */
 const blocksOf = (entry: SessionMessage): NeutralContentBlock[] => {
+  if (entry.type === "system") {
+    return [];
+  }
   const { content } = messageOf(entry);
   return typeof content === "string"
     ? [{ type: "text", text: content }]
@@ -517,6 +524,30 @@ const SECTIONS = [
   "## Current state",
   "## Open items and next step",
 ];
+
+/**
+ * What a session's last turn answered with, as its transcript stores it: the
+ * text blocks of the assistant entries after the last user entry (the prompt,
+ * or the last tool result), in order. Read from storage because a harness's
+ * live frames can repeat what they carry (opencode streams a block's text as
+ * it grows), and the summary handed on must be the words themselves.
+ */
+export function turnAnswer(entries: SessionMessage[]): string {
+  let start = entries.length;
+  while (start > 0 && entries[start - 1].type !== "user") {
+    start -= 1;
+  }
+  return entries
+    .slice(start)
+    .filter((entry) => entry.type === "assistant")
+    .flatMap((entry) =>
+      blocksOf(entry).flatMap((block) =>
+        block.type === "text" ? [block.text] : []
+      )
+    )
+    .join("\n\n")
+    .trim();
+}
 
 /** What the summariser is asked, in one pass: the middle first, instructions last. */
 export function summariserPrompt(

@@ -881,18 +881,43 @@ export type GitChanges =
   | { repo: true; status: string; log: string };
 
 /**
- * Makes a delegation workspace's checkout: a git worktree of the repository at
- * `cwd`, at `~/.worktrees/<repo>-<id8>` on a new branch `ws/<id8>` cut from
- * `origin/main`. Args `[cwd, workspaceId]`; answers {@link WorkspaceCheckout}.
- * Machine-scoped; a directory that is not in a git repository is refused.
+ * Makes a delegation workspace: a shared clone (`git clone --shared`) of the
+ * repository at `cwd`, at `~/.worktrees/<repo>-<id8>` on a new branch
+ * `ws/<id8>` cut from the repository's `origin/main`, its `origin` the
+ * repository's own remote — and the workspace's boundary, which every shell
+ * command of its work items runs inside. Args `[cwd, workspaceId]`; answers
+ * {@link WorkspaceCheckout}. Machine-scoped; a directory that is not in a git
+ * repository with an `origin` is refused, and so is a machine that cannot
+ * hold the boundary.
  */
 export const CONTROL_WORKSPACE_CREATE = "workspaceCreate";
 
 /** Where {@link CONTROL_WORKSPACE_CREATE} put a workspace. */
 export interface WorkspaceCheckout {
+  /** The boundary's anchor: the process its commands join. */
+  boundaryPid: number;
   branch: string;
-  /** The worktree's own root, where every work item of the workspace runs. */
+  /** The clone's root, where every work item of the workspace runs. */
   path: string;
-  /** The repository the worktree was cut from. */
+  /** The repository the clone was cut from. */
   repoRoot: string;
 }
+
+/** A workspace as the machine that holds it is told about it. */
+export interface WorkspaceRef {
+  id: string;
+  path: string;
+}
+
+/**
+ * The workspace's boundary, running: started again when it is not (after a
+ * reboot, or a sessiond restart). Args `[WorkspaceRef]`; answers the anchor's
+ * pid. Refused — with the reason — when the machine cannot hold one.
+ */
+export const CONTROL_WORKSPACE_BOUNDARY = "workspaceBoundary";
+
+/**
+ * Archives a workspace on its machine: its boundary is killed, with every
+ * process in it, and its clone is deleted. Args `[WorkspaceRef]`.
+ */
+export const CONTROL_WORKSPACE_ARCHIVE = "workspaceArchive";

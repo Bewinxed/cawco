@@ -11,6 +11,7 @@
     busyLabel = "Starting…",
     disabled,
     busy,
+    cancellable = false,
     failed,
   }: {
     oncancel: () => void;
@@ -20,6 +21,8 @@
     busyLabel?: string;
     disabled: boolean;
     busy: boolean;
+    /** The running work can be cancelled: Cancel stays live while busy. */
+    cancellable?: boolean;
     /** The start that just ended failed (the dialog says why): no check. */
     failed: boolean;
   } = $props();
@@ -33,7 +36,7 @@
 <div class="footer" data-ns-footer>
   <button
     class="ns-btn touch-hit"
-    inert={busy}
+    inert={busy && !cancellable}
     onclick={oncancel}
     type="button"
   >

@@ -294,6 +294,11 @@
       chips.clear();
     }
     syncLead();
+    // A prompt the form set itself (a failed continuation's, restored) is
+    // shown as the text it serialises to.
+    if (element && value && value !== text()) {
+      element.append(document.createTextNode(value));
+    }
   });
 </script>
 

@@ -520,20 +520,21 @@ export const handoffActions = ({
     if (!response.ok) {
       throw new Error(await response.text());
     }
-    // NDJSON: stage and heartbeat lines while it runs, then one `result` or `error`.
-    const lines = (await response.text()).trim().split("\n");
-    const last = JSON.parse(lines.at(-1) ?? "{}") as {
-      result?: {
-        summariserInstanceId: string | null;
-        targetInstanceId: string;
-        opening: string;
-      };
-      error?: string;
+    // The hub runs the continuation as its own job; this waits for its report.
+    const { continuationId } = (await response.json()) as {
+      continuationId: string;
     };
-    if (!last.result) {
-      throw new Error(last.error);
+    const outcome = await fetch(
+      `${hubHttpUrl()}/api/continuations/${encodeURIComponent(continuationId)}/outcome`
+    );
+    if (!outcome.ok) {
+      throw new Error(await outcome.text());
     }
-    const { result: done } = last;
+    const done = (await outcome.json()) as {
+      summariserInstanceId: string | null;
+      targetInstanceId: string;
+      opening: string;
+    };
     return {
       summariserInstanceId: done.summariserInstanceId,
       targetInstanceId: done.targetInstanceId,

@@ -1178,13 +1178,16 @@
   onclose={() => {
     spawnOpen = false;
     continuing.source = null;
+    continuing.restore = null;
   }}
   onexitcontinue={() => {
     spawnOpen = true;
     continuing.source = null;
+    continuing.restore = null;
   }}
   open={spawnOpen || continuing.source !== null}
   prefill={continuing.source ? undefined : spawnPrefill}
+  restore={continuing.restore ?? undefined}
 />
 
 <style>

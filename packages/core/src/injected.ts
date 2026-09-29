@@ -26,14 +26,32 @@ export const workflowStepMarker = (workflow: string, step: string): string =>
 const HANDOFF =
   /^\[Hand-off from the (.+?) (?:session — another agent|workflow — step (.+?)), not the user\]\s+/;
 
+/** `text` with `line` right after any hand-off marker it opens with. */
+const afterMarker = (text: string, line: string): string => {
+  const at = HANDOFF.exec(text)?.[0].length ?? 0;
+  return `${text.slice(0, at)}${line}\n\n${text.slice(at)}`;
+};
+
 /**
- * The opening of a session the daemon started in a fresh git worktree of
+ * The opening of a side quest the daemon started in a fresh git worktree of
  * `cwd`, with the line that says so right after any hand-off marker.
  */
-export const withWorktreeLine = (text: string, cwd: string): string => {
-  const at = HANDOFF.exec(text)?.[0].length ?? 0;
-  return `${text.slice(0, at)}You work in your own git worktree (your current directory). Paths under ${cwd} in this brief mean the same path in your worktree. Land with \`git fetch origin && git rebase origin/main && git push origin HEAD:main\`. Compare against main with \`git show origin/main:<path>\`; the stash list is shared by every worktree of the repo.\n\n${text.slice(at)}`;
-};
+export const withWorktreeLine = (text: string, cwd: string): string =>
+  afterMarker(
+    text,
+    `You work in your own git worktree (your current directory). Paths under ${cwd} in this brief mean the same path in your worktree. Land with \`git fetch origin && git rebase origin/main && git push origin HEAD:main\`. Compare against main with \`git show origin/main:<path>\`; the stash list is shared by every worktree of the repo.`
+  );
+
+/**
+ * The opening of a work item's session, in its workspace's shared clone of
+ * `repoRoot` and inside its boundary, with the line that says so right after
+ * any hand-off marker.
+ */
+export const withWorkspaceLine = (text: string, repoRoot: string): string =>
+  afterMarker(
+    text,
+    `You work in your own clone of ${repoRoot} (your current directory), on its own branch; its stash is its own. Paths under ${repoRoot} in this brief mean the same path in your clone. Land with \`git fetch origin && git rebase origin/main && git push origin HEAD:main\`. Compare against main with \`git show origin/main:<path>\`. Your shell commands run inside this workspace's boundary: they can write only this clone, /tmp (the workspace's own), ~/.cache, ~/.bun and ~/.npm; they see and signal only this workspace's processes; they cannot reach the service manager; the hub and the internet are reachable.`
+  );
 
 /**
  * A hand-off read back into who sent it and what it says. `from` names the

@@ -191,6 +191,13 @@ export interface SpawnPayload {
   title?: string;
   workflowRunId?: string;
   workflowStepId?: string;
+  /**
+   * The workspace whose boundary every shell command of this session runs
+   * inside. Set on each spawn of a work item's session — the first, and every
+   * restore, revive and relaunch after it — and on no other session. A
+   * machine that cannot hold the boundary refuses the spawn and says why.
+   */
+  workspace?: import("./harness").WorkspaceRef;
 }
 
 /** One repository a machine can {@link SpawnPayload.bootstrap} from. */
@@ -508,6 +515,22 @@ export type InstanceStatus =
   | "discarded"
   | "unknown"
   | "error";
+
+/**
+ * A "continue in new session" the hub is carrying, as every dashboard follows
+ * it: summarise the source, then start the target seeded with the summary.
+ * The hub owns it from the POST that starts it to its end; only a Cancel
+ * (`DELETE /api/continuations/:id`) stops it.
+ */
+export interface ContinuationJob {
+  error?: string;
+  id: string;
+  sourceInstanceId: string;
+  stage: "summarising" | "starting" | "started" | "failed" | "cancelled";
+  /** Absent when the source is short enough that nothing is summarised. */
+  summariserInstanceId?: string;
+  targetInstanceId: string;
+}
 
 /**
  * A session the hub knows about — one row of its `instances` table.
