@@ -897,10 +897,6 @@
     &[aria-expanded="true"] :global(svg) {
       transform: rotate(180deg);
     }
-    &:focus-visible {
-      outline: 2px solid var(--focus-ring);
-      outline-offset: 1px;
-    }
     @media (hover: hover) {
       &:hover {
         background: var(--surface-fill);
@@ -1045,10 +1041,6 @@
       display: block;
       inline-size: 16px;
       block-size: 16px;
-    }
-    &:focus-visible {
-      outline: 2px solid var(--focus-ring);
-      outline-offset: 1px;
     }
 
     @media (hover: hover) and (pointer: fine) {

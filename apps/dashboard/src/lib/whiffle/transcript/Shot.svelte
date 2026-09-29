@@ -269,11 +269,6 @@
   }
   button {
     cursor: pointer;
-
-    &:focus-visible {
-      outline: 2px solid var(--focus-ring);
-      outline-offset: 1px;
-    }
   }
   /* The picture's box. Unsized, it is the whole card box and the picture
      fits inside it; sized, it is the picture's own box at contain scale. */

@@ -355,10 +355,6 @@
       &:hover {
         background: var(--surface-hover);
       }
-      &:focus-visible {
-        outline: 2px solid var(--focus-ring);
-        outline-offset: 1px;
-      }
     }
     .whiffle-pswp .pswp__button--arrow {
       inline-size: 44px;

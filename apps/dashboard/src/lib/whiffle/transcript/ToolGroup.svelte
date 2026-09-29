@@ -532,14 +532,16 @@
       inset: 0;
       border-radius: var(--radius-md);
     }
+    /* The button is the whole card (its ::after), so the card is what
+       focus lights: the card's own border takes the ring, as a field
+       frame's does (app.css field-shell), and the button draws nothing. */
     &:focus-visible {
       outline: none;
-
-      &::after {
-        outline: 2px solid var(--focus-ring);
-        outline-offset: 1px;
-      }
     }
+  }
+  .preview-tool:has(> .artifact-open:focus-visible) {
+    outline: var(--focus-ring-width) solid var(--focus-ring);
+    outline-offset: var(--focus-ring-inset);
   }
   .artifact-label {
     display: flex;
@@ -648,11 +650,6 @@
   .row {
     & :global(button.trow) {
       cursor: pointer;
-    }
-    & :global(.trow:focus-visible) {
-      outline: 2px solid var(--focus-ring);
-      outline-offset: 1px;
-      border-radius: var(--radius-xs);
     }
     & :global([data-slot="badge"]) {
       flex: 0 0 auto;

@@ -855,7 +855,7 @@
 
     <form
       aria-label="Message the agent"
-      class="cin"
+      class="cin field-shell"
       onsubmit={(e) => e.preventDefault()}
     >
       <input
@@ -1042,7 +1042,10 @@
 
   /* One shape, always. --radius-lg outside, --space-2 of inset, and the
      controls inside carry (panel − inset) so the curves are concentric rather
-     than two unrelated roundings stacked. Nothing here changes on focus. */
+     than two unrelated roundings stacked. The shell is the text field
+     (app.css field-shell): keyboard focus in the textarea draws the ring over
+     the shell's own border, an outline that moves nothing, and the textarea
+     itself draws none. */
   .cin {
     --cin-pad: var(--space-2);
     --cin-ctl: 34px;
@@ -1066,7 +1069,6 @@
   textarea {
     flex: 1 1 auto;
     border: 0;
-    outline: 0;
     background: transparent;
     resize: none;
     font-family: var(--font-body);
@@ -1289,12 +1291,6 @@
     box-shadow: none;
     background-image: none;
   }
-  .att-btn:focus-visible,
-  .stop:focus-visible {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 1px;
-  }
-
   .send-error {
     padding-inline: var(--space-3);
     color: var(--status-fail-ink);

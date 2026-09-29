@@ -98,10 +98,6 @@
     &:hover {
       background: var(--surface-hover);
     }
-    &:focus-visible {
-      outline: 2px solid var(--focus-ring);
-      outline-offset: 1px;
-    }
   }
   @media (prefers-reduced-motion: no-preference) {
     .doc {

@@ -345,11 +345,6 @@
       color: var(--ink-strong);
     }
 
-    &:focus-visible {
-      outline: 2px solid var(--focus-ring);
-      outline-offset: 1px;
-    }
-
     & :global(.glyph) {
       inline-size: 16px;
       block-size: 16px;
