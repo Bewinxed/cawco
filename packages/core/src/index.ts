@@ -36,8 +36,7 @@ export * from "./question";
 // sessiond.ts) can reuse the identical class.
 export * from "./ring";
 // Standing instructions the hub enforces on every session: a phrase to watch
-// for, a reply to send back, and an acknowledgement that has to come from the
-// session before the rule goes quiet. The matcher lives here so the hub and the
+// for and a reply to send back. The matcher lives here so the hub and the
 // editor's test box decide identically.
 export * from "./rules";
 // The Ledger Protocol: canonical session streams + acknowledged commands.

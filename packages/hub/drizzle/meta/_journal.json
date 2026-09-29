@@ -337,6 +337,13 @@
       "when": 1790657026616,
       "tag": "0047_work_items",
       "breakpoints": true
+    },
+    {
+      "idx": 48,
+      "version": "6",
+      "when": 1790659963318,
+      "tag": "0048_rule_repeat",
+      "breakpoints": true
     }
   ]
 }

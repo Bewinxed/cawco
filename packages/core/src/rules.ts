@@ -9,13 +9,12 @@ import type { HarnessKind } from "./harness";
  * answer it. A rule is a phrase to watch for and a sentence to send back when
  * it shows up.
  *
- * The part that makes a rule stick is the acknowledgement. A nudge the model
- * can read and move past is a nudge the model will read and move past, so a
- * fired rule stays *pending* until the session calls `note_for_user` and
- * says what it did about it — the reply it receives ends by asking for exactly
- * that. While it is pending every further match fires
- * again — the rule nags. Acknowledging re-arms it, so the same rule can catch
- * the same habit later in the same session.
+ * The session receives the reply exactly as the operator wrote it and
+ * acknowledges it the way it would any message from the operator: by answering
+ * and acting on it. A fired rule is *pending* until a later turn of that
+ * session ends without matching it again; then it re-arms. A rule set to
+ * {@link Rule.repeat} fires again on every later match, so a session that keeps
+ * the habit keeps hearing about it, up to {@link RULE_FIRE_CEILING} in a row.
  */
 
 /**
@@ -63,8 +62,8 @@ export type RuleTrigger = "pattern" | "every-turn";
  *   always fired.
  * - `llm` — hand the turn to the supervisor and send back whatever it
  *   decides. Only fires at the `turn` timing (the supervisor judges a
- *   finished turn, not a half-typed message) and never waits for an
- *   acknowledgement (it decides fresh every time, rather than nagging).
+ *   finished turn, not a half-typed message) and never repeats a fixed
+ *   reply (it decides fresh every time).
  */
 export type RuleAction = "reply" | "llm";
 
@@ -106,13 +105,13 @@ export interface Rule {
   pattern: string;
   /** `action: 'llm'` only: the operator's standing instructions for the supervisor. */
   prompt: string | null;
+  /**
+   * Fire again on every later match. Off makes the rule fire once per session
+   * and then go quiet.
+   */
+  repeat: boolean;
   /** What the session is sent when the rule fires. Ignored (and not required) when `action` is `'llm'`. */
   reply: string;
-  /**
-   * Stay pending until the session acknowledges, firing again on every further
-   * match. Off makes the rule fire once per session and then go quiet.
-   */
-  requireAck: boolean;
   scope: RuleScope;
   timing: RuleTiming;
   /** What starts the evaluation. Default `'pattern'` — every rule before this existed. */
@@ -127,24 +126,23 @@ export type RuleDraft = Omit<Rule, "id" | "createdAt">;
 
 /** Where one rule stands with one session. */
 export interface RuleState {
+  /** When a turn last ended without matching the rule again, re-arming it. */
   ackedAt: number | null;
-  /** What the session said it did about it, when it acknowledged. */
-  ackNote: string | null;
-  /** Fires since the last acknowledgement. Drives the escalating reminder. */
+  /** Fires in a row, each in a turn that matched again. Stops at {@link RULE_FIRE_CEILING}. */
   fireCount: number;
   instanceId: string;
   lastFiredAt: number | null;
   ruleId: string;
-  /** `pending` means fired and not yet acknowledged — it will fire again. */
+  /** `pending` means fired, and no turn has since ended without matching it. */
   status: "armed" | "pending";
-  /** Fires over the session's whole life, which acknowledging does not reset. */
+  /** Fires over the session's whole life, which re-arming does not reset. */
   totalFires: number;
 }
 
 /** What the list needs to show about a rule without loading every session's state. */
 export interface RuleStats {
   lastFiredAt: number | null;
-  /** Sessions that have fired this rule and not answered for it yet. */
+  /** Sessions that fired this rule and have not yet finished a turn without it. */
   pending: number;
   ruleId: string;
   /** Every fire, ever. */
@@ -159,7 +157,7 @@ export interface RuleRow extends Rule {
 /** How long a body of text a rule will read. Longer than this and it reads the tail. */
 export const RULE_SCAN_LIMIT = 200_000;
 
-/** The most times a rule nags one session before the hub gives up on it. */
+/** The most times in a row a rule fires on one session before the hub goes quiet for it. */
 export const RULE_FIRE_CEILING = 10;
 
 const RESERVED = /[.*+?^${}()|[\]\\]/g;
@@ -236,10 +234,8 @@ export const ruleMatches = (
 
 /**
  * The shortest an LLM rule's prompt (or an autopilot standing prompt) can be
- * and still count as an instruction rather than noise. Matches the
- * acknowledgement-note floor the hub already enforces
- * (`packages/hub/src/server.ts`, `/api/rules/ack`) — under ten characters is
- * not a sentence there either.
+ * and still count as an instruction rather than noise — under ten characters
+ * is not a sentence.
  */
 const MIN_LLM_PROMPT = 10;
 
@@ -313,9 +309,9 @@ export function ruleProblem(draft: Partial<RuleDraft>): Record<string, string> {
       wrong.prompt =
         "Tell the supervisor what to watch for and how to respond — that is too short to be an instruction.";
     }
-    if (draft.requireAck) {
-      wrong.requireAck =
-        "The supervisor decides fresh every time it fires — it does not wait for the session to acknowledge.";
+    if (draft.repeat) {
+      wrong.repeat =
+        "The supervisor decides fresh at every turn end — there is no fixed reply to repeat.";
     }
   }
 
@@ -391,8 +387,8 @@ export function ruleSentence(rule: Partial<RuleDraft>): string {
   } else {
     when = "wait for the turn to end, then wake it with";
   }
-  const nag = rule.requireAck
-    ? " It keeps firing until the session acknowledges it."
+  const nag = rule.repeat
+    ? " It fires again every time it matches."
     : " It fires once per session.";
   return `When a session ${where} ${what}, ${when} your reply.${scope}${nag}`;
 }
@@ -424,7 +420,7 @@ export const RULE_TEMPLATES: {
       prompt: null,
       timing: "turn",
       interrupt: false,
-      requireAck: true,
+      repeat: true,
       scope: {},
     },
   },
@@ -446,7 +442,7 @@ export const RULE_TEMPLATES: {
       prompt: null,
       timing: "turn",
       interrupt: false,
-      requireAck: true,
+      repeat: true,
       scope: {},
     },
   },
@@ -468,7 +464,7 @@ export const RULE_TEMPLATES: {
       prompt: null,
       timing: "turn",
       interrupt: false,
-      requireAck: true,
+      repeat: true,
       scope: {},
     },
   },
@@ -509,21 +505,11 @@ export function ruleInScope(scope: RuleScope, facts: RuleFacts): boolean {
  */
 export const ruleMarker = (name: string): string => `[Rule: ${name}]\n\n`;
 
-/**
- * The line a rule that waits on an acknowledgement ends with, naming the
- * acknowledging tool in the harness's own spelling.
- */
-export const ruleAckLine = (tool: string): string =>
-  `\n\nWhen you have acted on this, call ${tool} with one or two sentences saying what you changed.`;
-
 const RULE_MARKER = /^\[Rule: (.+?)\]\n\n/;
-const RULE_ACK_LINE =
-  /\n\nWhen you have acted on this, call \S+ with one or two sentences saying what you changed\.$/;
 
 /**
- * A rule message read back into its rule's name and the reply itself — the
- * marker line and the trailing acknowledgement line are both dropped. Null
- * when the text does not open with {@link ruleMarker}.
+ * A rule message read back into its rule's name and the reply itself, with the
+ * marker line dropped. Null when the text does not open with {@link ruleMarker}.
  */
 export function parseRuleMarker(
   text: string
@@ -534,6 +520,6 @@ export function parseRuleMarker(
   }
   return {
     name: marker[1],
-    body: text.slice(marker[0].length).replace(RULE_ACK_LINE, "").trim(),
+    body: text.slice(marker[0].length).trim(),
   };
 }

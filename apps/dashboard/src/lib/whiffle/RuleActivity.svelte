@@ -10,13 +10,8 @@
   } from "./rules";
 
   /**
-   * What the rule has caught, and what each session said it did about it.
-   *
-   * This panel is load-bearing rather than decorative. A session reads the
-   * reply and is asked to acknowledge it, but never sees the rule's name, id or
-   * fire count, so this is the only surface where the mechanism is visible. It is also
-   * what makes the tool a session calls honest: that tool says the note reaches
-   * the user, and this is the place it reaches.
+   * What the rule has caught, per session. A session reads the reply but never
+   * sees the rule's fire count, so this is the only surface where it is visible.
    */
   let { ruleId }: { ruleId: string } = $props();
 
@@ -59,8 +54,8 @@
 </script>
 
 <p class="note">
-  Sessions see the reply but never this rule's name or history, so this is the
-  only place it is visible. Anything a session wrote back appears here.
+  Sessions see the reply but never this rule's history, so this is the only
+  place it is visible.
 </p>
 
 <!-- Rows that arrive, leave or move (a catch coming in, Show all) go
@@ -80,7 +75,7 @@
       <p class="caution num" data-flip>
         {waiting}
         {waiting === 1 ? 'session is' : 'sessions are'}
-        still being reminded — nothing written back yet.
+        still pending — it clears when their next turn ends without matching.
       </p>
     {/if}
     <ul class="list">
@@ -99,17 +94,7 @@
           </div>
 
           {#if row.status === 'pending'}
-            <p class="caution">
-              Reminded {times(row.fireCount)} since it last wrote back.
-            </p>
-          {/if}
-
-          {#if row.ackNote}
-            <!-- The session's own words, quoted rather than paraphrased. -->
-            <blockquote class="quote">{row.ackNote}</blockquote>
-            <span class="muted">Written back {since(row.ackedAt)}.</span>
-          {:else if row.status !== 'pending'}
-            <p class="muted">Settled without a note.</p>
+            <p class="caution">Fired {times(row.fireCount)} in a row.</p>
           {/if}
         </li>
       {/each}
@@ -183,11 +168,5 @@
     font-size: var(--text-meta);
     color: var(--ink-strong);
     overflow-wrap: anywhere;
-  }
-  .quote {
-    padding-left: 10px;
-    border-left: 1px solid var(--border-control);
-    font: var(--type-body);
-    color: var(--ink-strong);
   }
 </style>

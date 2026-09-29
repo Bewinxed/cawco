@@ -369,7 +369,7 @@ const ruleBody = t.Object({
     t.Literal("immediate"),
   ]),
   interrupt: t.Boolean(),
-  requireAck: t.Boolean(),
+  repeat: t.Boolean(),
   scope: t.Object({
     machineId: t.Optional(t.String()),
     projectId: t.Optional(t.String()),
@@ -6092,28 +6092,9 @@ export const createServer = ({
         return { ok: true };
       })
       /**
-       * What one session still owes an answer for, and the acknowledgement
-       * itself. The agent's `note_for_user` tool is the only real caller —
-       * a rule is cleared by the session that tripped it, never from the UI,
-       * because being answered by the model is the whole point of the mechanism.
-       */
-      .get("/api/rules/pending/:instanceId", ({ params }) => {
-        const rules = new Map(db.listRules().map((rule) => [rule.id, rule]));
-        return {
-          pending: db.pendingRuleStates(params.instanceId).map((state) => ({
-            ...state,
-            name: rules.get(state.ruleId)?.name ?? "a deleted rule",
-            reply: rules.get(state.ruleId)?.reply ?? "",
-          })),
-        };
-      })
-      /**
-       * What a rule has actually been doing, per session: fires, and what each
-       * session said it did about it.
-       *
-       * A session is asked to acknowledge a reply but never sees the rule's
-       * name or fire count, so this listing is the only window onto it. It is also what makes the tool the sessions call
-       * honest — it promises the note reaches the user, and this is where.
+       * What a rule has actually been doing, per session: fires, and whether
+       * each session is still pending on it. A session never sees the rule's
+       * fire count, so this listing is the only window onto it.
        */
       .get("/api/rules/:id/activity", ({ params, status }) => {
         const rule = db.getRule(params.id);
@@ -6132,61 +6113,6 @@ export const createServer = ({
           }),
         };
       })
-      /**
-       * Acknowledge everything this session still owes an answer for, without
-       * naming a rule.
-       *
-       * The reply a session receives ends by asking it to call `note_for_user`,
-       * but it never names the rule, so the tool takes no rule id and this
-       * settles whatever is pending for the caller. Rules are judged on what a
-       * message means, so knowing it is being asked costs the rule nothing. The note is what the reader sees in
-       * the dashboard, which is the only place any of this is visible.
-       */
-      .post(
-        "/api/rules/ack",
-        { body: t.Object({ instanceId: t.String(), note: t.String() }) },
-        ({ body, status }) => {
-          const note = body.note.trim();
-          if (note.length < 10) {
-            return status(
-              400,
-              "Say what you actually did about it — an acknowledgement of under ten characters is not one."
-            );
-          }
-          const outstanding = db.pendingRuleStates(body.instanceId);
-          if (outstanding.length === 0) {
-            return status(
-              400,
-              "There is nothing outstanding for this session."
-            );
-          }
-          const settled = outstanding
-            .map((state) => db.ackRule(state.ruleId, body.instanceId, note))
-            .filter((state) => state !== undefined);
-          return { acknowledged: settled.length };
-        }
-      )
-      .post(
-        "/api/rules/:id/ack",
-        { body: t.Object({ instanceId: t.String(), note: t.String() }) },
-        ({ params, body, status }) => {
-          const note = body.note.trim();
-          if (note.length < 10) {
-            return status(
-              400,
-              "Say what you actually did about it — an acknowledgement of under ten characters is not one."
-            );
-          }
-          const state = db.ackRule(params.id, body.instanceId, note);
-          if (!state) {
-            return status(
-              400,
-              "That rule is not waiting on this session, so there is nothing to acknowledge."
-            );
-          }
-          return state;
-        }
-      )
       // ── OpenRouter (OAuth PKCE; the key never leaves the hub) ─────────────
       .get("/api/openrouter", () => {
         const connection = db.getOpenRouterConnection();

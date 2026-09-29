@@ -661,29 +661,6 @@ export function handoffTools(deps: HandoffDeps) {
         };
       }
     ),
-    tool(
-      "note_for_user",
-      "Record a note for the user saying what you actually did about something they raised. " +
-        "Call it in two cases: after you have acted on something the user pushed back on, and " +
-        "whenever a message from the user ends by asking you to call this tool — do what that " +
-        "message asks first, then call this. Name the file you fixed, what you ran, what you " +
-        "found. The note is shown to the user, so write what changed, not that you understood.",
-      {
-        note: z
-          .string()
-          .describe(
-            "What you actually did about it, in a sentence or two. Ten characters minimum."
-          ),
-      },
-      async ({ note }) => ({
-        content: [
-          {
-            type: "text" as const,
-            text: await actions.acknowledgeConcern(note),
-          },
-        ],
-      })
-    ),
   ];
   return all.filter(
     (entry) =>

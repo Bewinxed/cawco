@@ -812,14 +812,10 @@ export const rules = sqliteTable("rules", {
   /** `immediate` only: deliver mid-turn instead of waiting for a boundary. */
   interrupt: integer("interrupt", { mode: "boolean" }).notNull().default(false),
   /**
-   * The teeth. On, a fired rule stays pending and fires again on every further
-   * match until the session calls `note_for_user`, which the reply asks it
-   * to. Off, it fires once per
-   * session and goes quiet — which is a nudge a model can simply walk past.
+   * On, the rule fires again on every later match (up to the ceiling). Off, it
+   * fires once per session and goes quiet.
    */
-  requireAck: integer("require_ack", { mode: "boolean" })
-    .notNull()
-    .default(true),
+  repeat: integer("repeat", { mode: "boolean" }).notNull().default(true),
   /** Optional narrowing — machine, project, harness, model. Empty means everywhere. */
   scope: text("scope", { mode: "json" })
     .$type<RuleScope>()
@@ -834,9 +830,9 @@ export const rules = sqliteTable("rules", {
 });
 
 /**
- * Where one rule stands with one session: the state machine behind the nagging.
- * `armed` fires on the next match; `pending` has fired and is waiting to be
- * acknowledged, and fires again every time it matches until it is.
+ * Where one rule stands with one session. `armed` fires on the next match;
+ * `pending` has fired and re-arms when a later turn of the session ends
+ * without matching it again.
  *
  * Rows are keyed by `${ruleId}:${instanceId}` rather than a composite primary
  * key so the upsert path is the same single-column `onConflictDoUpdate` every
@@ -853,14 +849,13 @@ export const ruleState = sqliteTable(
       .$type<"armed" | "pending">()
       .notNull()
       .default("armed"),
-    /** Fires since the last acknowledgement — what makes the reminder escalate. */
+    /** Fires in a row, each in a turn that matched again — what the ceiling counts. */
     fireCount: integer("fire_count").notNull().default(0),
-    /** Fires over the session's whole life, which acknowledging does not reset. */
+    /** Fires over the session's whole life, which re-arming does not reset. */
     totalFires: integer("total_fires").notNull().default(0),
     lastFiredAt: timestamp("last_fired_at"),
+    /** When a turn last ended without matching the rule again, re-arming it. */
     ackedAt: timestamp("acked_at"),
-    /** What the session said it did about it, in its own words. */
-    ackNote: text("ack_note"),
   },
   (table) => [
     index("rule_state_rule_idx").on(table.ruleId),

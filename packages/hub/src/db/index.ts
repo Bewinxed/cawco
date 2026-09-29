@@ -225,15 +225,6 @@ export interface UsageSummary {
 }
 
 export interface DbShape {
-  /**
-   * Re-arms the rule for that session and files what it said it did. Returns
-   * nothing when the session had nothing pending, so the tool can say so.
-   */
-  readonly ackRule: (
-    ruleId: string,
-    instanceId: string,
-    note: string
-  ) => RuleState | undefined;
   /** Adds counted capability uses, summing into any row already there. */
   readonly addCapabilityUsage: (
     rows: {
@@ -477,13 +468,13 @@ export interface DbShape {
   ) => void;
   /**
    * Records a fire and returns the session's new standing. `pending` is set
-   * whenever the rule wants an acknowledgement; `fireCount` is what makes the
-   * reminder escalate, and only an acknowledgement resets it.
+   * when the rule repeats; `fireCount` is what the ceiling counts, and only
+   * {@link DbShape.rearmRules} resets it.
    */
   readonly noteRuleFire: (
     ruleId: string,
     instanceId: string,
-    requireAck: boolean
+    repeat: boolean
   ) => RuleState;
   readonly openInstance: (instance: {
     id: string;
@@ -521,8 +512,6 @@ export interface DbShape {
       effort?: string;
     }
   ) => typeof instances.$inferSelect | undefined;
-  /** Every rule one session still owes an answer for — what the ack tool lists. */
-  readonly pendingRuleStates: (instanceId: string) => RuleState[];
   readonly putCredential: (id: string, blob: Record<string, unknown>) => void;
   /** Upsert of one definition's file; the hash and the size are read off it. */
   readonly putFleetAgent: (agent: {
@@ -625,6 +614,11 @@ export interface DbShape {
    * says, and recovery is register's job (see {@link settleInstances}).
    * Returns what actually moved, so the caller only republishes on news.
    */
+  /**
+   * A turn of this session ended: every rule pending on it, except those the
+   * turn matched again (`matched`), re-arms with its fire count reset.
+   */
+  readonly rearmRules: (instanceId: string, matched: string[]) => void;
   readonly reconcileHeartbeat: (
     machineId: string,
     liveIds: string[],
@@ -897,7 +891,7 @@ const ruleOf = (row: typeof rules.$inferSelect): Rule => ({
   prompt: row.prompt,
   timing: row.timing,
   interrupt: row.interrupt,
-  requireAck: row.requireAck,
+  repeat: row.repeat,
   scope: row.scope,
   createdAt: row.createdAt.getTime(),
 });
@@ -911,7 +905,6 @@ const ruleStateOf = (row: typeof ruleState.$inferSelect): RuleState => ({
   totalFires: row.totalFires,
   lastFiredAt: row.lastFiredAt?.getTime() ?? null,
   ackedAt: row.ackedAt?.getTime() ?? null,
-  ackNote: row.ackNote,
 });
 
 /** A skill row as everything outside the hub reads it: the row, minus its files. */
@@ -3137,7 +3130,7 @@ const make = (path: string): DbShape => {
         prompt: rule.prompt,
         timing: rule.timing,
         interrupt: rule.interrupt,
-        requireAck: rule.requireAck,
+        repeat: rule.repeat,
         scope: rule.scope,
         createdAt: new Date(rule.createdAt),
         updatedAt: new Date(),
@@ -3162,7 +3155,7 @@ const make = (path: string): DbShape => {
             prompt: values.prompt,
             timing: values.timing,
             interrupt: values.interrupt,
-            requireAck: values.requireAck,
+            repeat: values.repeat,
             scope: values.scope,
             updatedAt: values.updatedAt,
           },
@@ -3195,7 +3188,7 @@ const make = (path: string): DbShape => {
       }));
     },
 
-    noteRuleFire: (ruleId, instanceId, requireAck) => {
+    noteRuleFire: (ruleId, instanceId, repeat) => {
       const id = `${ruleId}:${instanceId}`;
       const now = new Date();
       const before = db
@@ -3207,15 +3200,14 @@ const make = (path: string): DbShape => {
         id,
         ruleId,
         instanceId,
-        // A rule that wants no acknowledgement still records the fire; it just
-        // stays armed-looking, and the engine's own once-per-session check is
-        // what keeps it quiet afterwards.
-        status: (requireAck ? "pending" : "armed") as "armed" | "pending",
+        // A rule that does not repeat still records the fire; it just stays
+        // armed-looking, and the engine's own once-per-session check is what
+        // keeps it quiet afterwards.
+        status: (repeat ? "pending" : "armed") as "armed" | "pending",
         fireCount: (before?.fireCount ?? 0) + 1,
         totalFires: (before?.totalFires ?? 0) + 1,
         lastFiredAt: now,
         ackedAt: before?.ackedAt ?? null,
-        ackNote: before?.ackNote ?? null,
       };
       db.insert(ruleState)
         .values(next)
@@ -3241,19 +3233,6 @@ const make = (path: string): DbShape => {
       return row ? ruleStateOf(row) : undefined;
     },
 
-    pendingRuleStates: (instanceId) =>
-      db
-        .select()
-        .from(ruleState)
-        .where(
-          and(
-            eq(ruleState.instanceId, instanceId),
-            eq(ruleState.status, "pending")
-          )
-        )
-        .all()
-        .map(ruleStateOf),
-
     ruleStatesFor: (ruleId) =>
       db
         .select()
@@ -3263,27 +3242,20 @@ const make = (path: string): DbShape => {
         .all()
         .map(ruleStateOf),
 
-    ackRule: (ruleId, instanceId, note) => {
-      const id = `${ruleId}:${instanceId}`;
-      const row = db.select().from(ruleState).where(eq(ruleState.id, id)).get();
-      if (row?.status !== "pending") {
-        return;
-      }
-      const now = new Date();
+    rearmRules: (instanceId, matched) => {
       db.update(ruleState)
         // Re-armed, not retired: the same rule can catch the same habit again
-        // later in the same session, and `fireCount` starts the next escalation
-        // from zero. `totalFires` is the history and is left alone.
-        .set({ status: "armed", fireCount: 0, ackedAt: now, ackNote: note })
-        .where(eq(ruleState.id, id))
+        // later in the same session, and `fireCount` starts the next run from
+        // zero. `totalFires` is the history and is left alone.
+        .set({ status: "armed", fireCount: 0, ackedAt: new Date() })
+        .where(
+          and(
+            eq(ruleState.instanceId, instanceId),
+            eq(ruleState.status, "pending"),
+            notInArray(ruleState.ruleId, matched)
+          )
+        )
         .run();
-      return ruleStateOf({
-        ...row,
-        status: "armed",
-        fireCount: 0,
-        ackedAt: now,
-        ackNote: note,
-      });
     },
   };
 };

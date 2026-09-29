@@ -65,7 +65,7 @@
    * The rule editor. A rule is a sentence, and this screen is that sentence
    * twice: read back in English at the top, live, and as the fields that
    * compose it. The English is the one place the interaction between timing,
-   * interruption and acknowledgement is legible at a glance.
+   * interruption and repetition is legible at a glance.
    */
   let { rule, taken }: { rule: RuleRow | null; taken: string[] } = $props();
 
@@ -171,7 +171,7 @@
       draft.action = "llm";
       draft.timing = "turn";
       draft.interrupt = false;
-      draft.requireAck = false;
+      draft.repeat = false;
     }
   }
 
@@ -180,7 +180,7 @@
     if (next === "llm") {
       draft.timing = "turn";
       draft.interrupt = false;
-      draft.requireAck = false;
+      draft.repeat = false;
     }
   }
 
@@ -202,7 +202,7 @@
     draft.prompt = preset.prompt;
     draft.timing = "turn";
     draft.interrupt = false;
-    draft.requireAck = false;
+    draft.repeat = false;
     draft.enabled = true;
     await tick();
     const title = document.querySelector<HTMLElement>(
@@ -696,19 +696,17 @@
     <div class="fold" in:unfold out:unfold>
       <EditorSection hue={HUE} icon={IconPin} label="Making it stick">
         <SwitchField
-          id="rule-ack"
-          label="Keep firing until the session acknowledges"
-          bind:checked={draft.requireAck}
+          id="rule-repeat"
+          label="Fire again every time it matches"
+          bind:checked={draft.repeat}
         >
           {#snippet hint()}
             <!-- The two readings cross-fade in one box, its height following. -->
             <span class="swap" {@attach morph()}>
-              {#if draft.requireAck}
+              {#if draft.repeat}
                 <span in:crossIn out:crossOut>
-                  The reply asks the session to call
-                  <span class="font-mono">note_for_user</span>
-                  and say what it did about it. Until then the rule fires again
-                  every time it is tripped. It stops after ten in one session.
+                  The session gets your reply each time it is tripped. It stops
+                  after ten in a row in one session.
                 </span>
               {:else}
                 <span in:crossIn out:crossOut>

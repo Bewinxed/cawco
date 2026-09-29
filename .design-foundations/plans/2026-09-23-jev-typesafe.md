@@ -116,10 +116,15 @@ always-included new installs), 14 tools, 2 MCP servers; 17 used skills fall outs
   $0.000023–0.000028 per message → ~$2/month at ~2,700 messages/day, ~$0.27 on the busiest day (10,480 messages).
 - 2026-09-23 — "there has been 0 instances where the models actually acknoweldged … it doesn't even tell the model that it
   needs to acknowledge them". Verified: 3 acks out of 100 requireAck fires; 97 pending across 81 sessions. Cause:
-  `rules.ts#body` sends the reply verbatim by design ("no mention of whiffle or of a tool") and `note_for_user` is described
-  as being for user concerns only. Orchestrator cleared the 97 stale pending fires through `/api/rules/ack` with a note
-  saying who cleared them and why. Fix briefed (branch `rule-ack`): requireAck replies end with a line naming the
-  harness's `note_for_user` tool; the tool's description covers rule messages.
+  `rules.ts#body` sends the reply verbatim by design ("no mention of whiffle or of a tool") and the note tool is described
+  as being for user concerns only. Orchestrator cleared the 97 stale pending fires through the hub's ack endpoint with a
+  note saying who cleared them and why. Fix briefed (branch `rule-ack`): requireAck replies end with a line naming the
+  harness's note tool; the tool's description covers rule messages.
+- 2026-09-29 — reversed: "agents keep using a 'note for user' tool in whiffle instead of simply replying to me, they are
+  talking to the wall … they need to just acknoweldge it, i don't read these notes nor do i need them". The note tool, the
+  ack endpoints, the appended line and the stored note are deleted. The reply goes out exactly as written; a pending rule
+  re-arms when a later turn of that session ends without matching it again. `requireAck` is renamed `repeat` (fire again
+  on every later match vs once per session); the ten-in-a-row ceiling stays.
 - 2026-09-23 — `eff3036` live. Measured: combined top-50 by raw decayed score was mostly browser tools (tool calls ≈270× skill
   invocations), dropping 37 of 47 used skills — misses "top 50 i'm actually using often". Orchestrator decision: rank by
   share within kind (score ÷ kind's total), no quotas. Briefed to the suggestions delegate.

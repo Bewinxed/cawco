@@ -440,11 +440,11 @@ export function adminTools() {
           .boolean()
           .optional()
           .describe("For immediate: cut into the running turn."),
-        requireAck: z
+        repeat: z
           .boolean()
           .optional()
           .describe(
-            "Stay pending until the session acknowledges; fires again on every further match."
+            "Fire again on every later match. Off fires once per session."
           ),
         scope: z
           .object({
@@ -508,7 +508,7 @@ export function adminTools() {
           reply: args.reply ?? "",
           timing: args.timing ?? "turn",
           interrupt: args.interrupt ?? false,
-          requireAck: args.requireAck ?? false,
+          repeat: args.repeat ?? false,
           scope: args.scope ?? {},
           trigger: args.trigger ?? "pattern",
           action: args.ruleAction ?? "reply",

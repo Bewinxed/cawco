@@ -307,15 +307,6 @@ export interface HandoffDeps {
 /** The three hand-off actions, each answering with the text the tool returns. */
 export interface HandoffActions {
   /**
-   * Records what the session did about a concern the user raised, or about a
-   * rule reply that asked for an acknowledgement. It is session-scoped: the
-   * reply asks the session to acknowledge but never names the rule, so the
-   * caller has no id to pass — the hub settles everything outstanding for the
-   * session from the note alone.
-   */
-  // biome-ignore lint/style/useConsistentMethodSignatures: this interface is implemented by the handoffActions object literal below; property-style would change parameter variance against that implementation
-  acknowledgeConcern(note: string): Promise<string>;
-  /**
    * Answers a delegate's parked ask. `answers` is keyed by the exact question
    * text, each value the chosen option label; `deny` refuses it. Neither means
    * "allow with no changes" — the tool ask's own input stands.
@@ -928,23 +919,5 @@ export const handoffActions = ({
       },
     });
     return "Sent to the user — it lands in their Telegram when the hub has a bridge, and is dropped otherwise.";
-  },
-
-  async acknowledgeConcern(note: string): Promise<string> {
-    const res = await fetch(`${hubHttpUrl()}/api/rules/ack`, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ instanceId, note }),
-      signal: AbortSignal.timeout(5000),
-    });
-    // A refusal comes back as the hub's own bare sentence; it says the useful
-    // thing better than anything this side could invent, so pass it through.
-    if (res.status === 400) {
-      return await res.text();
-    }
-    if (!res.ok) {
-      throw new Error(`the hub answered ${res.status}`);
-    }
-    return "Recorded. The user sees this note in their dashboard.";
   },
 });

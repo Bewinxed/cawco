@@ -23,14 +23,11 @@ export interface RulesPayload {
 /**
  * One session's history with a rule, as the activity trail shows it.
  *
- * A session reads a rule's reply and is asked to acknowledge it, but never sees
- * the rule's name or its history, so this listing is the only place any of it
- * is visible — and the reason the note a session writes is worth writing: this
- * is where it lands.
+ * A session reads a rule's reply but never sees the rule's history, so this
+ * listing is the only place it is visible.
  */
 export interface RuleActivity {
   ackedAt: number | null;
-  ackNote: string | null;
   fireCount: number;
   harness: string | null;
   instanceId: string;
@@ -130,7 +127,7 @@ export const blankRule = (): RuleDraft => ({
   // the other two timings are for the cases where that is too late.
   timing: "turn",
   interrupt: false,
-  requireAck: true,
+  repeat: true,
   scope: {},
 });
 
@@ -149,7 +146,7 @@ export const draftOf = (rule: Rule): RuleDraft => ({
   prompt: rule.prompt,
   timing: rule.timing,
   interrupt: rule.interrupt,
-  requireAck: rule.requireAck,
+  repeat: rule.repeat,
   scope: { ...rule.scope },
 });
 

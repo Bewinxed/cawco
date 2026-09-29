@@ -5,12 +5,7 @@ import type {
   RuleTiming,
   SendPayload,
 } from "@whiffle/core";
-import {
-  RULE_FIRE_CEILING,
-  ruleAckLine,
-  ruleMarker,
-  ruleMatches,
-} from "@whiffle/core";
+import { RULE_FIRE_CEILING, ruleMarker, ruleMatches } from "@whiffle/core";
 import type { DbShape } from "./db";
 import type { MeaningJudge } from "./meaning";
 
@@ -32,11 +27,13 @@ import type { MeaningJudge } from "./meaning";
  *    and this is the timing that matters most: the session is idle, so the
  *    reply wakes it into a new turn and it keeps working.
  *
- * The state machine behind the nagging lives in `rule_state`. A rule that wants
- * an acknowledgement goes `pending` when it fires and fires again on every
- * further match until the session calls `note_for_user`, which the reply
- * itself asks for. {@link RULE_FIRE_CEILING} is the stop: past it the engine goes quiet for that
- * session rather than talking to a model that is plainly not listening.
+ * The state machine lives in `rule_state`. The session gets the rule's reply
+ * as the operator wrote it and acknowledges it by answering, like any other
+ * message. A `repeat` rule goes `pending` when it fires and re-arms at the end
+ * of the first later turn that does not match it again; every turn that does
+ * match fires it again and counts toward {@link RULE_FIRE_CEILING}, past which
+ * the engine goes quiet for that session rather than talking to a model that is
+ * plainly not listening. A rule without `repeat` fires once per session.
  */
 
 /** What the engine needs from the socket registry to reach a machine. */
@@ -56,6 +53,12 @@ export interface RuleEngineDeps {
 interface Buffer {
   /** Rules already fired against the message being streamed, so a delta storm fires once. */
   firedThisMessage: Set<string>;
+  /**
+   * Rules that matched during the turn in flight, including one whose answer
+   * (a meaning rule's) landed after the previous turn ended. A pending rule
+   * missing from it when the turn ends has been answered and re-arms.
+   */
+  firedThisTurn: Set<string>;
   /** The current message's text so far, for `immediate` rules. */
   streaming: string;
   /** Every assistant text this turn, for `turn` rules. */
@@ -71,18 +74,6 @@ interface Facts {
 }
 
 /**
- * `note_for_user` as each harness spells it. Claude mounts whiffle as an MCP
- * server named `whiffle`, OpenCode prefixes its plugin tools with `whiffle_`, and
- * pi registers the hub's definitions under their bare names (`piHandoffTools`).
- * An instance with no recorded harness predates the column and is Claude.
- */
-const ACK_TOOL: Record<string, string> = {
-  claude: "mcp__whiffle__note_for_user",
-  opencode: "whiffle_note_for_user",
-  pi: "note_for_user",
-};
-
-/**
  * Where a streaming buffer's thinking begins. NUL-fenced so no model text can
  * forge it, and written as an escape so the source stays text to git.
  */
@@ -92,6 +83,7 @@ const empty = (): Buffer => ({
   streaming: "",
   turn: [],
   firedThisMessage: new Set(),
+  firedThisTurn: new Set(),
 });
 
 /** The text blocks of an assistant message, joined. Tool calls are not speech. */
@@ -189,6 +181,10 @@ export class RuleEngine {
 
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches all three message shapes (stream_event, assistant, result) rule-observation handles; splitting it would scatter one state machine across several methods.
   #observe(instanceId: string, message: NeutralMessage): void {
+    if (message.type === "result") {
+      this.#endTurn(instanceId, message);
+      return;
+    }
     if (this.#rules.length === 0) {
       return;
     }
@@ -253,43 +249,54 @@ export class RuleEngine {
           )
         );
       }
-      return;
     }
+  }
 
-    if (message.type === "result") {
-      const buffer = this.#buffers.get(instanceId);
-      const text = buffer?.turn.join("\n\n") ?? "";
-      if (buffer) {
-        buffer.turn = [];
-        buffer.streaming = "";
-        buffer.firedThisMessage.clear();
+  /**
+   * A turn ended: fire the `turn` rules on what it said, then re-arm every
+   * rule pending on this session that the turn did not match again — the
+   * session has had its turn to answer, and answered.
+   */
+  #endTurn(
+    instanceId: string,
+    message: NeutralMessage & { type: "result" }
+  ): void {
+    const buffer = this.#buffer(instanceId);
+    const text = buffer.turn.join("\n\n");
+    buffer.turn = [];
+    buffer.streaming = "";
+    buffer.firedThisMessage.clear();
+    // An aborted turn produced no answer to hold anyone to.
+    if (message.subtype !== "aborted" && text) {
+      this.#fireTurn(instanceId, message, text);
+    }
+    this.#db.rearmRules(instanceId, [...buffer.firedThisTurn]);
+    buffer.firedThisTurn = new Set();
+  }
+
+  #fireTurn(
+    instanceId: string,
+    message: NeutralMessage & { type: "result" },
+    text: string
+  ): void {
+    for (const rule of this.#byTiming.turn) {
+      // `turn` rules read the turn's speech; thinking does not survive to here
+      // as a separate stream, so a thinking-only rule is left to the other two
+      // timings, which see it block by block.
+      if (rule.watch === "thinking") {
+        continue;
       }
-      // An aborted turn produced no answer to hold anyone to.
-      if (message.subtype === "aborted") {
-        return;
+      if (ruleMatches(rule, this.#withoutOwnWords(rule, text))) {
+        this.#fire(rule, instanceId);
       }
-      if (!text) {
-        return;
-      }
-      for (const rule of this.#byTiming.turn) {
-        // `turn` rules read the turn's speech; thinking does not survive to here
-        // as a separate stream, so a thinking-only rule is left to the other two
-        // timings, which see it block by block.
-        if (rule.watch === "thinking") {
-          continue;
-        }
-        if (ruleMatches(rule, this.#withoutOwnWords(rule, text))) {
-          this.#fire(rule, instanceId);
-        }
-      }
-      const facts = this.#factsFor(instanceId);
-      if (this.#meaningByTiming.turn.length > 0 && facts) {
-        this.#fireMeaning(
-          instanceId,
-          this.#meaningByTiming.turn,
-          this.#meaning.turn(message, instanceId, facts, text)
-        );
-      }
+    }
+    const facts = this.#factsFor(instanceId);
+    if (this.#meaningByTiming.turn.length > 0 && facts) {
+      this.#fireMeaning(
+        instanceId,
+        this.#meaningByTiming.turn,
+        this.#meaning.turn(message, instanceId, facts, text)
+      );
     }
   }
 
@@ -438,17 +445,19 @@ export class RuleEngine {
       return;
     }
 
+    // A match keeps the rule pending through this turn's end, even when the
+    // ceiling below keeps it from firing again.
+    this.#buffer(instanceId).firedThisTurn.add(rule.id);
     const standing = this.#db.ruleStateFor(rule.id, instanceId);
-    // Without an acknowledgement to wait for, the rule gets one shot per
-    // session; nagging is the thing the acknowledgement buys.
-    if (!rule.requireAck && standing && standing.totalFires > 0) {
+    // Without `repeat`, the rule gets one shot per session.
+    if (!rule.repeat && standing && standing.totalFires > 0) {
       return;
     }
     if (standing && standing.fireCount >= RULE_FIRE_CEILING) {
       return;
     }
 
-    this.#db.noteRuleFire(rule.id, instanceId, rule.requireAck);
+    this.#db.noteRuleFire(rule.id, instanceId, rule.repeat);
     const sender = this.#agent(facts.machineId);
     if (!sender) {
       return;
@@ -463,7 +472,10 @@ export class RuleEngine {
         message: {
           type: "user",
           uuid: crypto.randomUUID(),
-          message: { role: "user", content: this.#body(rule, facts.harness) },
+          message: {
+            role: "user",
+            content: `${ruleMarker(rule.name)}${rule.reply}`,
+          },
           parent_tool_use_id: null,
           // `system` marks it as whiffle's own word rather than the user's, so a
           // transcript can render it as the standing instruction it is.
@@ -476,24 +488,5 @@ export class RuleEngine {
         urgent: rule.timing === "immediate" && rule.interrupt,
       },
     });
-  }
-
-  /**
-   * What the session actually reads: the rule's marker line, its reply, and —
-   * when the rule waits for an acknowledgement — one line naming the tool that
-   * gives it, in the harness's own spelling (the name the model sees in its
-   * tool list). Rules are judged by Jev on what a message means, so naming the
-   * rule gives the session no phrase to steer around; the marker is what lets
-   * a stored transcript render the message as this rule's.
-   *
-   * Repeat fires resend the same words rather than counting up; the escalation
-   * lives in `rule_state.fireCount`, where the reader can see it and the
-   * session cannot.
-   */
-  #body(rule: Rule, harness: string | null): string {
-    const reply = `${ruleMarker(rule.name)}${rule.reply}`;
-    return rule.requireAck
-      ? `${reply}${ruleAckLine(ACK_TOOL[harness ?? "claude"])}`
-      : reply;
   }
 }
