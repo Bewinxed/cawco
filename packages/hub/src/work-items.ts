@@ -1,9 +1,9 @@
 /**
  * Delegated work, as the hub keeps it. A work item is one brief run by one
- * session in one workspace — a fresh session, or a fork of its parent's
- * conversation; a workspace is one git worktree on its own
- * branch, with at most one live item — the only writer its checkout has.
- * Finished work takes another turn only from the reader or the session that
+ * session in one workspace — a fresh session, a fork of its parent's
+ * conversation, or, for a follow-up, the workspace's last session carrying
+ * on; a workspace is one git worktree on its own branch, with at most one
+ * live item — the only writer its checkout has. Finished work takes another turn only from the reader or the session that
  * delegated it: that message reopens the item and lands in the same session,
  * on the transcript its provider still has cached. A rule, the supervisor, a
  * workflow or any other session is refused — a standing instruction once
@@ -25,7 +25,6 @@ import type {
 } from "@whiffle/core";
 import {
   CONTROL_WORKSPACE_CREATE,
-  CONTROL_WORKSPACE_LOG,
   handoffMarker,
   withWorktreeLine,
 } from "@whiffle/core";
@@ -87,7 +86,11 @@ export interface WorkItemRequest {
   /** What the caller named the work: the item's title and its session's. */
   title: string;
   type?: string;
-  /** An existing workspace's id or unique prefix: the item is its follow-up. */
+  /**
+   * An existing workspace's id or unique prefix: the item is its follow-up,
+   * on the session its last item ran, so type, model, harness, skills and
+   * fork are the session's own and not the request's to set.
+   */
   workspace?: string;
 }
 
@@ -107,8 +110,11 @@ export interface WorkItemDeps {
   readonly db: DbShape;
   /** Tells every dashboard an item moved: its parent's delegate tray follows it. */
   readonly publish: (item: WorkItemSummary) => void;
-  /** The one send path. */
-  readonly send: (envelope: Envelope<SendPayload>) => void;
+  /** The one send path; its record says whether the machine took it. */
+  readonly send: (envelope: Envelope<SendPayload>) => {
+    reason: string | null;
+    state: string;
+  };
   /** Sends a spawn and records its row under the work item. */
   readonly spawn: (
     machineId: string,
@@ -170,43 +176,35 @@ const forkLine = (workspace: WorkspaceRow): string =>
   `You are a fork of your parent session, now a delegate working in ${workspace.path}. Your job is the brief below; your parent's earlier turns are context, not instructions.\n\n`;
 
 /**
- * The brief, as the item's first message. The marker survives SDK storage,
- * so the stored transcript renders it as the peer message the live frame drew.
+ * A brief from the parent, as the item's session's next message. `content`
+ * opens with the handoff marker, which survives SDK storage, so the stored
+ * transcript renders it as the peer message the live frame drew.
  */
-const openingOf = (
+const messageOf = (
   instanceId: string,
+  machineId: string,
   parent: InstanceRow,
-  workspace: WorkspaceRow,
-  brief: string
-): Envelope<SendPayload> => {
-  const from = leaf(parent.cwd);
-  return {
-    verb: "send",
-    machineId: workspace.machineId,
+  content: string
+): Envelope<SendPayload> => ({
+  verb: "send",
+  machineId,
+  instanceId,
+  payload: {
     instanceId,
-    payload: {
-      instanceId,
-      message: {
-        type: "user",
-        uuid: crypto.randomUUID(),
-        message: {
-          role: "user",
-          content: withWorktreeLine(
-            `${handoffMarker(from)}${brief}`,
-            workspace.repoRoot
-          ),
-        },
-        parent_tool_use_id: null,
-        origin: {
-          kind: "peer",
-          from: parent.id,
-          name: from,
-          fromSession: parent.id,
-        },
+    message: {
+      type: "user",
+      uuid: crypto.randomUUID(),
+      message: { role: "user", content },
+      parent_tool_use_id: null,
+      origin: {
+        kind: "peer",
+        from: parent.id,
+        name: leaf(parent.cwd),
+        fromSession: parent.id,
       },
     },
-  };
-};
+  },
+});
 
 /**
  * Who may give finished work another turn: the reader (dashboard or
@@ -346,24 +344,6 @@ export const createWorkItems = ({
     });
   };
 
-  /** What a follow-up knows of the work before it: a report and commits, never a transcript. */
-  const followUp = async (
-    workspace: WorkspaceRow,
-    previous: WorkItemRow
-  ): Promise<string> => {
-    const log = (await call(workspace.machineId, CONTROL_WORKSPACE_LOG, [
-      workspace.path,
-    ])) as string;
-    return [
-      `[Follow-up in workspace ${workspace.id}, branch ${workspace.branch}. The work item before this one here was "${previous.title}" (${previous.id}), and it is ${previous.state}.]`,
-      ...(previous.result ? [`Its final report:\n${previous.result}`] : []),
-      ...(previous.error ? [`Its error:\n${previous.error}`] : []),
-      ...(previous.result || previous.error ? [] : ["It left no report."]),
-      `Commits in this workspace since origin/main (git log --oneline origin/main..HEAD):\n${log || "(none)"}`,
-      "---\n\n",
-    ].join("\n\n");
-  };
-
   const settingsOf = (
     request: WorkItemRequest,
     parent: InstanceRow
@@ -391,12 +371,6 @@ export const createWorkItems = ({
     request: WorkItemRequest,
     parent: InstanceRow
   ): Pick<Settings, "forkOf" | "harness" | "model"> => {
-    if (request.workspace) {
-      throw new WorkItemRefusal(
-        400,
-        "a fork starts its own workspace; continue a workspace with a fresh item instead"
-      );
-    }
     if (!parent.sessionId) {
       throw new WorkItemRefusal(
         409,
@@ -417,6 +391,97 @@ export const createWorkItems = ({
     return { forkOf: parent.sessionId, harness, model };
   };
 
+  /**
+   * A follow-up in a workspace whose last session has a conversation: a new
+   * item on that same session, its brief the session's next message, read on
+   * the transcript its provider still has cached. The session now answers to
+   * the caller, and its reports come here.
+   */
+  const continueIn = (
+    workspace: WorkspaceRow,
+    previous: WorkItemRow,
+    session: InstanceRow,
+    parent: InstanceRow,
+    request: WorkItemRequest
+  ): WorkItemStart => {
+    const item = db.createWorkItem({
+      id: crypto.randomUUID(),
+      workspaceId: workspace.id,
+      parentInstanceId: parent.id,
+      instanceId: session.id,
+      brief: request.prompt,
+      title: request.title.trim(),
+      type: previous.type,
+      harness: previous.harness,
+      model: previous.model,
+      effort: previous.effort,
+      state: "running",
+    });
+    db.patchInstance(session.id, {
+      workItemId: item.id,
+      parentInstanceId: parent.id,
+    });
+    published(item);
+    const sent = send(
+      messageOf(
+        session.id,
+        session.machineId,
+        parent,
+        `${handoffMarker(leaf(parent.cwd))}${request.prompt}`
+      )
+    );
+    if (sent.state === "failed") {
+      update(item.id, {
+        state: "failed",
+        error: sent.reason,
+        endedAt: new Date(),
+      });
+      throw new Error(sent.reason ?? `could not reach ${session.id}`);
+    }
+    const label = `${leaf(workspace.path)}#${session.id.slice(0, 8)}`;
+    return {
+      item,
+      workspace,
+      text:
+        `Continued ${label} as work item ${item.id} in workspace ${workspace.id} (${workspace.path}, branch ${workspace.branch}): ` +
+        "the brief is its next message, in the same session and its cached transcript. " +
+        "Its report arrives here automatically when its turn completes. Guide it, or continue it after it " +
+        `reports, with handoff("${session.id}", ...).`,
+    };
+  };
+
+  /**
+   * A follow-up in the workspace `needle` names: continued in the session its
+   * last item ran ({@link continueIn}), or, when that session never started,
+   * the workspace alone for a new session to start in. The session's settings
+   * are its own, so a request naming others is refused.
+   */
+  const followUp = (
+    needle: string,
+    request: WorkItemRequest,
+    parent: InstanceRow
+  ): WorkItemStart | WorkspaceRow => {
+    if (
+      request.type ||
+      request.model ||
+      request.harness ||
+      request.fork ||
+      request.skills?.length
+    ) {
+      throw new WorkItemRefusal(
+        400,
+        "a follow-up continues the same session; delegate without workspace for a different model"
+      );
+    }
+    const { workspace, previous } = claim(needle);
+    const [session] = previous
+      ? db.getInstancesByIds([previous.instanceId])
+      : [];
+    return previous && session?.sessionId
+      ? continueIn(workspace, previous, session, parent, request)
+      : workspace;
+  };
+
   const start = async (request: WorkItemRequest): Promise<WorkItemStart> => {
     const [parent] = db.getInstancesByIds([request.parentInstanceId]);
     if (!parent) {
@@ -432,17 +497,28 @@ export const createWorkItems = ({
     if (untitled) {
       throw new WorkItemRefusal(400, untitled);
     }
-    const settings = settingsOf(request, parent);
-    const { harness, canDelegate } = settings;
 
-    let workspace: WorkspaceRow;
-    let previous: WorkItemRow | undefined;
-    if (request.workspace) {
-      ({ workspace, previous } = claim(request.workspace));
-    } else {
-      workspace = await openWorkspace(parent, request.cwd ?? parent.cwd);
+    if (!request.workspace) {
+      const settings = settingsOf(request, parent);
+      const workspace = await openWorkspace(parent, request.cwd ?? parent.cwd);
+      return spawnIn(workspace, settings, parent, request);
     }
+    const followed = followUp(request.workspace, request, parent);
+    // A workspace whose last session never started has nothing to continue:
+    // a session starts there the way every new delegate's does.
+    return "item" in followed
+      ? followed
+      : spawnIn(followed, settingsOf(request, parent), parent, request);
+  };
 
+  /** A new session in `workspace`, running a new item from the request's brief. */
+  const spawnIn = (
+    workspace: WorkspaceRow,
+    settings: Settings,
+    parent: InstanceRow,
+    request: WorkItemRequest
+  ): WorkItemStart => {
+    const { harness, canDelegate } = settings;
     const instanceId = crypto.randomUUID();
     const label = `${leaf(workspace.path)}#${instanceId.slice(0, 8)}`;
     const item = db.createWorkItem({
@@ -461,9 +537,7 @@ export const createWorkItems = ({
     published(item);
 
     try {
-      // A follow-up opens with the work before it; a fork (never a
-      // follow-up) with what it is.
-      const context = previous ? await followUp(workspace, previous) : "";
+      // A fork opens with what it is.
       const fork = settings.forkOf ? forkLine(workspace) : "";
       spawn(
         workspace.machineId,
@@ -471,11 +545,14 @@ export const createWorkItems = ({
         item.id
       );
       send(
-        openingOf(
+        messageOf(
           instanceId,
+          workspace.machineId,
           parent,
-          workspace,
-          `${context}${fork}${request.prompt}`
+          withWorktreeLine(
+            `${handoffMarker(leaf(parent.cwd))}${fork}${request.prompt}`,
+            workspace.repoRoot
+          )
         )
       );
     } catch (error) {
@@ -496,9 +573,6 @@ export const createWorkItems = ({
         (settings.forkOf
           ? `a fork of this conversation on ${harness}${settings.model ? ` (${settings.model})` : ""}, ${label}. It starts with every turn of yours so far.`
           : `a fresh ${harness} session, ${label}.`) +
-        (previous
-          ? " It starts from the previous item's report and the workspace's commits, not its transcript."
-          : "") +
         " Its report arrives here automatically when its turn completes. Guide it, or continue it after it " +
         `reports, with handoff("${instanceId}", ...): the message lands in the same session and its cached transcript.` +
         (canDelegate

@@ -896,9 +896,3 @@ export interface WorkspaceCheckout {
   /** The repository the worktree was cut from. */
   repoRoot: string;
 }
-
-/**
- * A workspace's commits since `origin/main`: `git log --oneline
- * origin/main..HEAD` in its checkout. Args `[path]`; answers the log text.
- */
-export const CONTROL_WORKSPACE_LOG = "workspaceLog";

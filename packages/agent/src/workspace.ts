@@ -1,8 +1,7 @@
 /**
  * A delegation workspace's checkout, on the machine that holds it. The hub
- * owns the workspace record; these two git calls are all it needs the
- * machine for: cutting the worktree once, and reading what has been
- * committed on it when a follow-up item starts.
+ * owns the workspace record; cutting the worktree, once, is all it needs the
+ * machine for. The checkout stays as long as its sessions can be continued.
  */
 import { basename } from "node:path";
 import type { WorkspaceCheckout } from "@whiffle/core";
@@ -36,16 +35,4 @@ export const createWorkspace = async (
     );
   }
   return { repoRoot, path, branch };
-};
-
-/** {@link CONTROL_WORKSPACE_LOG}: `git log --oneline origin/main..HEAD` in the checkout. */
-export const workspaceLog = async (path: unknown): Promise<string> => {
-  const log =
-    await Bun.$`git -C ${String(path)} log --oneline origin/main..HEAD`
-      .quiet()
-      .nothrow();
-  if (log.exitCode !== 0) {
-    throw new Error(`git log failed: ${log.stderr.toString().trim()}`);
-  }
-  return log.text().trim();
 };
