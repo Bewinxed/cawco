@@ -3,10 +3,11 @@
  * session in one workspace — a fresh session, or a fork of its parent's
  * conversation; a workspace is one git worktree on its own
  * branch, with at most one live item — the only writer its checkout has.
- * Finished work never takes another turn from a tool: a message to it is
- * refused with its state, and continuing it means a new item in the same
- * workspace, which starts from the last item's report and the workspace's
- * commits, never from a transcript.
+ * Finished work takes another turn only from the reader or the session that
+ * delegated it: that message reopens the item and lands in the same session,
+ * on the transcript its provider still has cached. A rule, the supervisor, a
+ * workflow or any other session is refused — a standing instruction once
+ * woke a finished leaf into a checkout a newer item owned.
  *
  * The hub is the one authority: `delegate` is a request to {@link start}, and
  * the frames that move a session move its item.
@@ -16,6 +17,7 @@ import type {
   Envelope,
   HarnessKind,
   InstanceRow,
+  NeutralOrigin,
   SendPayload,
   SpawnPayload,
   WorkItemSummary,
@@ -206,15 +208,30 @@ const openingOf = (
   };
 };
 
-/** What a message to finished work is answered with. */
+/**
+ * Who may give finished work another turn: the reader (dashboard or
+ * Telegram), or the session that delegated it.
+ */
+const reopens = (
+  parentInstanceId: string | null,
+  origin: NeutralOrigin
+): boolean =>
+  origin.kind === "human" ||
+  (origin.kind === "peer" && origin.fromSession === parentInstanceId);
+
+/** What anyone else's message to finished work is answered with. */
 const finishedText = (item: WorkItemRow): string =>
-  `${item.title} (${item.id}) is ${item.state}. Start a follow-up with delegate(..., workspace: "${item.workspaceId}").`;
+  `${item.title} (${item.id}) is ${item.state}. Only the reader or the session that delegated it can continue it.`;
+
+/** What a message to finished work is answered with once a newer item holds its workspace. */
+const supersededText = (item: WorkItemRow, latest: WorkItemRow): string =>
+  `${item.title} (${item.id}) is ${item.state}, and workspace ${item.workspaceId} has moved on to ${latest.title} (${latest.id}, ${latest.state}). Message that one.`;
 
 /** The line a parent's report carries about the item behind it. */
 const reportLine = (item: WorkItemRow): string =>
   LIVE.has(item.state)
     ? `\n\n[Work item ${item.id} is ${item.state} in workspace ${item.workspaceId}.]`
-    : `\n\n[Work item ${item.id} is ${item.state} in workspace ${item.workspaceId}. It takes no more messages; continue with delegate(..., workspace: "${item.workspaceId}").]`;
+    : `\n\n[Work item ${item.id} is ${item.state} in workspace ${item.workspaceId}. A handoff to it continues this same session.]`;
 
 /** The first line with words on it. */
 const firstLine = (text: string | null): string =>
@@ -482,9 +499,8 @@ export const createWorkItems = ({
         (previous
           ? " It starts from the previous item's report and the workspace's commits, not its transcript."
           : "") +
-        " Its report arrives here automatically when its turn completes; while it runs, guide it with " +
-        `handoff("${instanceId}", ...). Once it finishes it takes no more messages: continue the work with ` +
-        `delegate(..., workspace: "${workspace.id}").` +
+        " Its report arrives here automatically when its turn completes. Guide it, or continue it after it " +
+        `reports, with handoff("${instanceId}", ...): the message lands in the same session and its cached transcript.` +
         (canDelegate
           ? " It may spawn delegates of its own."
           : " It is a leaf: it cannot delegate further."),
@@ -508,22 +524,54 @@ export const createWorkItems = ({
     start,
 
     /**
-     * THE gate on input to a session: why nothing may give it a turn — a
-     * reader, a rule, the supervisor, Telegram, a workflow, another session —
-     * or nothing when it may. A session whose work item has ended takes no
-     * more input from anyone, and neither does a delegate from before work
-     * items. Every other session is not delegated work, and takes messages as
-     * it always has.
+     * THE gate on input to a session: why a message from `origin` may not
+     * give it a turn, or nothing when it may. A live item takes input from
+     * anyone. Finished work takes it from the reader or its parent only
+     * ({@link reopens}), and only while it is still its workspace's latest
+     * item — one writer per checkout; the send that passes reopens it
+     * ({@link reopen}). A delegate from before work items follows the same
+     * who-may rule. Every other session is not delegated work, and takes
+     * messages as it always has.
      */
-    refusal(row: InstanceRow): string | undefined {
+    refusal(row: InstanceRow, origin: NeutralOrigin): string | undefined {
       const item = itemOf(row);
       if (item) {
-        return LIVE.has(item.state) ? undefined : finishedText(item);
+        if (LIVE.has(item.state)) {
+          return undefined;
+        }
+        if (!reopens(item.parentInstanceId, origin)) {
+          return finishedText(item);
+        }
+        const [latest] = db.workItemsIn(item.workspaceId);
+        return latest.id === item.id ? undefined : supersededText(item, latest);
       }
-      if (row.parentInstanceId && !row.workflowStepId) {
-        return `${leaf(row.cwd)}#${row.id.slice(0, 8)} predates work items and is closed. Start a new delegate.`;
+      if (
+        row.parentInstanceId &&
+        !row.workflowStepId &&
+        !reopens(row.parentInstanceId, origin)
+      ) {
+        return `${leaf(row.cwd)}#${row.id.slice(0, 8)} predates work items; only the reader or its parent can message it.`;
       }
       return undefined;
+    },
+
+    /**
+     * A send {@link refusal} let through reached finished work: the item runs
+     * again, in the same session, and ends again the usual way — on a turn
+     * nothing answers — with a new report to its parent.
+     */
+    reopen(instanceId: string): void {
+      const [row] = db.getInstancesByIds([instanceId]);
+      const item = row ? itemOf(row) : undefined;
+      if (item && !LIVE.has(item.state)) {
+        update(item.id, {
+          state: "running",
+          result: null,
+          error: null,
+          endedAt: null,
+          dismissedAt: null,
+        });
+      }
     },
 
     /** Its session is up: the item is running. */

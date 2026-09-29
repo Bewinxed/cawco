@@ -25,6 +25,7 @@ import type {
   MachineMemorySet,
   ModelInfo,
   NeutralAssistantMessage,
+  NeutralOrigin,
   NeutralResultMessage,
   NeutralSessionInfo,
   NeutralUserMessage,
@@ -1579,21 +1580,25 @@ export const createServer = ({
    */
   let openrouterVerifier: string | undefined;
   /**
-   * Why a session takes no input now, or nothing when it does: its work item
-   * has ended ({@link WorkItems.refusal}). Every sender asks this, by way of
+   * Why a session takes no input from `origin` now, or nothing when it does
+   * ({@link WorkItems.refusal}). Every sender asks this, by way of
    * {@link deliverSend} or {@link sendRoute}.
    */
-  const inputRefusal = (instanceId: string): string | undefined => {
+  const inputRefusal = (
+    instanceId: string,
+    origin: NeutralOrigin
+  ): string | undefined => {
     const [row] = db.getInstancesByIds([instanceId]);
-    return row ? workItems.refusal(row) : undefined;
+    return row ? workItems.refusal(row, origin) : undefined;
   };
   /**
    * A session's standing instructions reach it through the one send path,
-   * while its machine is connected and the session still takes input. A
-   * rule or supervisor verdict with no route is not sent and not counted.
+   * while its machine is connected and the session takes whiffle's own word:
+   * never finished work. A rule or supervisor verdict with no route is not
+   * sent and not counted.
    */
   const sendRoute = (machineId: string, instanceId: string) =>
-    registry.agent(machineId) && !inputRefusal(instanceId)
+    registry.agent(machineId) && !inputRefusal(instanceId, { kind: "system" })
       ? { send: deliverSend }
       : undefined;
   const ruleEngine = new RuleEngine({
@@ -2659,9 +2664,9 @@ export const createServer = ({
    * is not there to take it — and says so on the session's stream, so every
    * tab, device and late joiner draws the same row under the same id.
    *
-   * Nobody reaches finished work: a send to a session whose work item is
-   * over fails with that item's state ({@link inputRefusal}), and nothing
-   * wakes.
+   * Finished work is reached by the reader or its parent only: their send
+   * reopens the item and wakes the same session; anyone else's fails with
+   * the item's state ({@link inputRefusal}), and nothing wakes.
    *
    * A uuid the hub already has a record for is the same send again (a tab
    * trying once more after its socket dropped): the machine is not handed it
@@ -2674,9 +2679,10 @@ export const createServer = ({
       publishSend(known);
       return known;
     }
-    const refused = inputRefusal(instanceId);
+    const refused = inputRefusal(instanceId, message.origin);
     const agent = refused ? undefined : registry.agent(envelope.machineId);
     if (agent) {
+      workItems.reopen(instanceId);
       wakeForSend(agent, envelope.machineId, instanceId);
       agent.send(envelope);
     }
@@ -7421,7 +7427,10 @@ export const createServer = ({
         if (!(instanceId && from && row) || row.parentInstanceId !== from) {
           return status(403, "you can only interrupt your own delegates");
         }
-        const retired = workItems.refusal(row);
+        const retired = workItems.refusal(row, {
+          kind: "peer",
+          fromSession: from,
+        });
         if (retired) {
           return status(409, retired);
         }
@@ -7470,7 +7479,10 @@ export const createServer = ({
         ) {
           return status(403, "you can only answer your own delegates");
         }
-        const retired = workItems.refusal(row);
+        const retired = workItems.refusal(row, {
+          kind: "peer",
+          fromSession: from,
+        });
         if (retired) {
           return status(409, retired);
         }
@@ -8148,7 +8160,10 @@ export const createServer = ({
                   parent !== undefined &&
                   (parent.status === "running" ||
                     parent.status === "starting") &&
-                  !workItems.refusal(parent);
+                  !workItems.refusal(parent, {
+                    kind: "peer",
+                    fromSession: sender.id,
+                  });
                 if (routed) {
                   (message.payload as Record<string, unknown>).routedTo =
                     "parent";

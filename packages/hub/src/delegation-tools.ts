@@ -268,7 +268,7 @@ export function handoffTools(deps: HandoffDeps) {
         "The listing shows where each session works, not what it is currently doing, how busy it " +
         "is, or how likely it is to pick up a handoff — and recency is not an ownership signal. " +
         "Use it to find a session that already owns the work, or to name a delegate. For configured delegate types and model mappings, use list_delegate_types. " +
-        "A delegate's session runs one work item; once that item is finished the session refuses messages, and its work continues as a new item in its workspace: delegate(..., workspace).",
+        "A finished delegate still takes a handoff from its parent or the user: the message continues its own session.",
       {},
       async () => ({
         content: [
@@ -284,8 +284,8 @@ export function handoffTools(deps: HandoffDeps) {
         "reads everything queued in one wake turn. Write the message as a brief " +
         "for another engineer who cannot see your conversation: what you found, where (file " +
         "and line), and what you are asking them to do. For new standalone work, use delegate instead. " +
-        "A delegate whose work item is done, failed or cancelled refuses messages; continue that work " +
-        "with delegate(..., workspace).",
+        "To follow up on your own delegate after it reports (done, failed or cancelled), hand off to it: " +
+        "the message reopens its work item in the same session, on its cached transcript.",
       {
         target: z
           .string()
@@ -372,7 +372,7 @@ export function handoffTools(deps: HandoffDeps) {
         "A delegate that is not a fork cannot see this conversation, so `prompt` must stand alone: intent, constraints, acceptance criteria, and what not to do. Keep the decisions yourself and ask for evidence and conclusions, not file dumps.\n\n" +
         "Prefer `type` over raw harness/model — it routes by what the work needs rather than a model string you must already know; use list_delegate_types for the live catalog. Prefer this over start_session when the work must report back, and over handoff for new standalone work (set cwd for another repository).\n\n" +
         "Each call starts one work item in a workspace: a git worktree on its own branch. Without `workspace` the item gets a new one; with `workspace` it is the follow-up there, starting from the previous item's report and commits, never its transcript. " +
-        "A workspace runs one item at a time, and finished work refuses messages: continue it with a new item in its workspace.\n\n" +
+        "A workspace runs one item at a time. To follow up on a delegate's work, handoff to that delegate: it continues its own session and cached transcript.\n\n" +
         "Set `fork: true` when the work needs what this conversation already holds: the delegate starts as a copy of this conversation (on this session's harness and model, so the prompt cache carries over) and reads the brief as its next turn, in a new workspace of its own." +
         delegateTypeLine(deps.delegateTypes),
       {
@@ -532,8 +532,7 @@ export function handoffTools(deps: HandoffDeps) {
     tool(
       "stop_delegate",
       "Stop one of YOUR delegates (a session you spawned with delegate). Only your own delegates " +
-        "can be stopped. Its work item is cancelled and takes no more messages; its workspace keeps " +
-        "the checkout, and the work continues as a new item there: delegate(..., workspace).",
+        "can be stopped. Its work item is cancelled; a later handoff to it reopens the item in the same session.",
       {
         target: z
           .string()
@@ -713,7 +712,7 @@ export function handoffInstructions(deps: HandoffDeps): string {
     "Use Whiffle's delegate tool for bounded fleet work that must report back to its parent. Native harness subagents are a separate mechanism and do not resolve Whiffle presets.",
     'Call list_delegate_types for current model/effort mappings. Claude names these tools mcp__whiffle__list_delegate_types and mcp__whiffle__delegate; if deferred, use ToolSearch(query="select:mcp__whiffle__delegate"). OpenCode names them whiffle_list_delegate_types and whiffle_delegate. These are tools, not MCP resources. list_sessions lists running sessions, not configured types.',
     "Delegate substantial bounded work — multi-file implementation, wide sweeps, builds with verification, browser audits — with a brief that keeps intent, decisions, and acceptance with the parent and returns evidence and conclusions rather than file dumps. Menial reads and checks (git status, a grep, a file, a port) are the parent's own work, run inline.",
-    "Prefer the configured type and omit model/harness overrides unless the user requested them. Give each delegate a concrete deliverable and bounded file ownership. Keep independent parent work moving; reports arrive automatically. Each delegate runs one work item in a workspace; use mcp__whiffle__handoff to guide it while that item runs, and continue finished work as a new item in its workspace with delegate(..., workspace) — finished work refuses messages. Use start_session only for a separate persistent session.",
+    "Prefer the configured type and omit model/harness overrides unless the user requested them. Give each delegate a concrete deliverable and bounded file ownership. Keep independent parent work moving; reports arrive automatically. Each delegate runs one work item in a workspace; use mcp__whiffle__handoff to guide it while that item runs, and handoff again to follow up after it reports — that continues its own session on its cached transcript. Use start_session only for a separate persistent session.",
     "The catalog below is a session-start snapshot of configured routes, not confirmation of the model that will serve a request. If delegation fails or no suitable route is available, report the blocker; do not silently move bulk exploration onto the parent model.",
     catalog,
   ].join("\n\n");
