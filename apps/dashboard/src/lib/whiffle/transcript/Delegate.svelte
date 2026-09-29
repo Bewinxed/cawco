@@ -423,20 +423,20 @@
   const Sprite = $derived(sessionSprite(seed));
 </script>
 
-<div class="branch delegate">
+<div class="branch delegate rail-row">
   <Collapsible.Root onOpenChange={onToggle} {open}>
     <div class="head">
-      <Collapsible.Trigger class="bhead press-tint">
-        <span aria-hidden="true" class="chev"><IconChevronRight /></span>
+      <Collapsible.Trigger class="bhead rail-line press-tint">
         <!-- The mark the delegate tray's chip flies out of, the first time
              this card leaves the view (tray.svelte.ts). -->
         <span
           aria-hidden="true"
-          class="mark m{markHue(seed)}"
+          class="mark rail-cell m{markHue(seed)}"
           {@attach trayCard(() => id)}
           ><Sprite /></span
         >
         <span class="tk">{label}</span>
+        <span aria-hidden="true" class="chev"><IconChevronRight /></span>
         {#if started}
           <span class="kind">session</span>
         {:else if type}
@@ -499,17 +499,26 @@
     </div>
 
     {#if brief}
-      <p class="brief">{headline(brief)}</p>
+      <p class="brief rail-hang">{headline(brief)}</p>
     {/if}
 
+    <!-- The lines under the head: their words at the text column, a live
+         beat or an ask's dot in the glyph column under the mark. -->
     {#if status}
       <div class="status">
         {#key status.kind}
-          <p class="now" class:err={status.err} in:lineSwap out:lineSwap>
-            {#if status.beat}
-              <span aria-hidden="true" class="beat"></span>
-            {/if}
-            {status.text}
+          <p
+            class="now rail-line"
+            class:err={status.err}
+            in:lineSwap
+            out:lineSwap
+          >
+            <span aria-hidden="true" class="rail-cell"
+              >{#if status.beat}
+                <span class="beat"></span>
+              {/if}</span
+            >
+            <span>{status.text}</span>
           </p>
         {/key}
       </div>
@@ -517,8 +526,10 @@
 
     <ul class="asks" {@attach reflow()}>
       {#each waiting as ask (ask.key)}
-        <li class="ask" data-flip title={ask.detail}>
-          <span aria-hidden="true" class="dot"></span>
+        <li class="ask rail-line" data-flip title={ask.detail}>
+          <span aria-hidden="true" class="rail-cell"
+            ><span class="dot"></span></span
+          >
           <span class="astate">{ask.status}</span>
           <span class="ashort">{ask.short}</span>
         </li>
@@ -606,17 +617,9 @@
     --rail-head: var(--rail);
     --rail-gap: var(--space-4);
   }
-  /* The same rail every branch block sits on — the subagent fold's grammar,
-     with a second row for the brief and a register for the asks. */
-  .branch {
-    /* Where the mark starts: the chevron and the head row's gap. Every line
-       under the head indents to it. */
-    --glyph: calc(13px + var(--space-2));
-    margin-block: var(--rail-gap, var(--space-4)) 0;
-    margin-inline: var(--space-2) 0;
-    padding-inline-start: var(--space-3);
-    background: var(--rail-head, var(--rail)) left top / 2px 100% no-repeat;
-  }
+  /* The same rail row every branch block sits on (app.css `.rail-row`) — the
+     subagent fold's grammar, with a second row for the brief and a register
+     for the asks, all at the text column. */
 
   /* The head row: the trigger takes the width, the jump link beside it keeps
      its own 26px so a click on it never toggles. The trigger is a bits-ui
@@ -631,9 +634,6 @@
     min-block-size: 26px;
     flex: 1 1 auto;
     min-inline-size: 0;
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
     background: none;
@@ -670,19 +670,15 @@
     display: block;
   }
 
+  /* The delegate's identity: its sprite on its hue, filling the glyph cell. */
   .mark {
-    inline-size: 17px;
-    block-size: 17px;
     border-radius: var(--radius-xs);
-    flex: 0 0 auto;
-    display: grid;
-    place-items: center;
     background-image: var(--mark-overlay);
     background-color: var(--mark-1);
   }
   .mark :global(svg) {
-    inline-size: 12px;
-    block-size: 12px;
+    inline-size: 11px;
+    block-size: 11px;
     display: block;
     color: var(--mark-glyph);
   }
@@ -815,11 +811,10 @@
     }
   }
 
-  /* The brief: the first line of what it was asked, indented under the glyph
-     column. headline() bounds its length; the wrap is the layout's. */
+  /* The brief: the first line of what it was asked, at the text column.
+     headline() bounds its length; the wrap is the layout's. */
   .brief {
     margin-block: var(--space-1) 0;
-    margin-inline: var(--glyph) 0;
     font-size: var(--text-body);
     font-weight: var(--weight-body);
     color: var(--ink-muted);
@@ -829,11 +824,8 @@
   }
 
   .now {
-    display: flex;
-    align-items: baseline;
-    gap: var(--space-2);
+    align-items: start;
     margin-block: var(--space-1) 0;
-    margin-inline: var(--glyph) 0;
     font-size: var(--text-meta);
     font-weight: var(--weight-body);
     color: var(--ink-strong);
@@ -850,6 +842,12 @@
     & > .now {
       grid-area: 1 / 1;
     }
+  }
+  /* A line's glyph cell is one line tall, so its mark sits on the first
+     line of a line that wraps. */
+  .now > .rail-cell,
+  .ask > .rail-cell {
+    block-size: 1lh;
   }
   .beat {
     inline-size: 5px;
@@ -873,8 +871,7 @@
      warm colour. */
   .asks {
     list-style: none;
-    margin-block: 0;
-    margin-inline: var(--glyph) 0;
+    margin: 0;
     padding: 0;
     display: flex;
     flex-direction: column;
@@ -882,9 +879,7 @@
     max-inline-size: 68ch;
   }
   .ask {
-    display: flex;
     align-items: baseline;
-    gap: var(--space-2);
     font-size: var(--text-body);
     font-weight: var(--weight-body);
     line-height: var(--leading-body);
@@ -900,10 +895,8 @@
   .dot {
     inline-size: 5px;
     block-size: 5px;
-    flex: 0 0 auto;
     border-radius: 50%;
     background: var(--status-attn-ink);
-    align-self: center;
   }
   .astate {
     flex: 0 0 auto;
@@ -918,10 +911,13 @@
     overflow-wrap: anywhere;
   }
 
-  /* Its transcript, in a well of its own — concentric with the report inside. */
+  /* Its transcript, in a well of its own — concentric with the report
+     inside. The transcript's own x=0 is the text column: the well reaches
+     out past it by its padding, and every row inside repeats the columns
+     from there. */
   .inner {
     margin-block: var(--space-2) 0;
-    margin-inline: var(--glyph) 0;
+    margin-inline: calc(var(--x-hang) - var(--space-1)) 0;
     padding: var(--space-1);
     border-radius: var(--radius-sm);
     background: var(--surface-recess);
@@ -934,16 +930,6 @@
   }
   .say {
     margin-block-start: var(--space-4);
-  }
-  /* The hand-off and every follow-up are user turns. In the main column a
-     user turn bleeds into the gutters and sits in a sunken well; in here the
-     well is already sunken and there are no gutters, so the turn stays flush
-     and lifts instead — the report's own surface, concentric with the well. */
-  .inner :global(section.turn.you) {
-    margin-inline: 0;
-    border-radius: var(--radius-xs);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-tile);
   }
 
   .report {
@@ -966,9 +952,6 @@
   }
 
   @media (width <= 900px) {
-    .branch {
-      margin-inline-start: 0;
-    }
     /* Narrow: the model and harness give way before the name does. */
     .meta {
       display: none;

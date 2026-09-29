@@ -1,7 +1,13 @@
 <script lang="ts">
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Collapsible from "$lib/components/ui/collapsible";
-  import { IconChevronRight, IconInfo, IconStop } from "$lib/icons";
+  import {
+    IconChevronRight,
+    IconError,
+    IconInfo,
+    IconStop,
+    IconTerminal,
+  } from "$lib/icons";
   /**
    * The quiet ledger's non-turn lines: a command's output in a recessed well, a
    * system note folded on the rail, and a failure or refusal as a named card
@@ -70,14 +76,17 @@
   const open = $derived(disclosed.get());
 </script>
 
+<!-- Every line here is a rail row (app.css `.rail-row`): its mark in the
+     glyph cell, its words at the text column, a disclosure chevron after the
+     words, and whatever opens under it hung at the text column. -->
 {#if harness}
   <!-- Harness plumbing, folded onto the rail: the summary and how it went on
        one quiet line, the report itself behind it. -->
-  <div class="note fold">
+  <div class="note rail-row">
     {#if harness.body}
       <Collapsible.Root bind:open={disclosed.get, disclosed.set}>
-        <Collapsible.Trigger class="ftrig hn">
-          <IconInfo />
+        <Collapsible.Trigger class="ftrig hn rail-line">
+          <span class="rail-cell"><IconInfo /></span>
           <span class="ftitle">{harness.title}</span>
           {#if harness.status}
             <span class="hstatus" class:bad={harness.status === 'failed'}
@@ -87,14 +96,16 @@
           <span class="hchev" class:open={open}><IconChevronRight /></span>
         </Collapsible.Trigger>
         <Collapsible.Content reveal>
-          <div class="hbody"><MessageBody source={harness.body} /></div>
+          <div class="hbody rail-hang">
+            <MessageBody source={harness.body} />
+          </div>
         </Collapsible.Content>
       </Collapsible.Root>
     {:else}
       <!-- Nothing to open, so nothing that looks openable: a chevron over an
            empty body is the dead disclosure the tool rows already refuse. -->
-      <span class="hline">
-        <IconInfo />
+      <span class="hline rail-line">
+        <span class="rail-cell"><IconInfo /></span>
         <span class="ftitle">{harness.title}</span>
         {#if harness.status}
           <span class="hstatus" class:bad={harness.status === 'failed'}
@@ -107,9 +118,9 @@
 {:else if type === 'system.task'}
   <!-- A plain task's completion: the verb AND the task it reports. A bare
        "task done" with no reference to which task is a line that says nothing. -->
-  <div class="note fold">
-    <span class="hline">
-      <IconInfo />
+  <div class="note rail-row">
+    <span class="hline rail-line">
+      <span class="rail-cell"><IconInfo /></span>
       <span class="tverb" class:bad={message?.content === 'task failed'}
         >{message?.content}</span
       >
@@ -119,33 +130,47 @@
     </span>
   </div>
 {:else if isOutput}
-  <pre class="well">{message?.content}</pre>
+  <!-- A command's output: the command it answers on the line, the output in
+       its recessed well under it. -->
+  <div class="note rail-row">
+    <span class="hline rail-line">
+      <span class="rail-cell"><IconTerminal /></span>
+      <span class="ftitle">{foldCommand ?? 'Output'}</span>
+    </span>
+    <pre class="well">{message?.content}</pre>
+  </div>
 {:else if isInterrupted}
   <!-- One quiet word for a deliberate act. The colour budget is for things
        that happened TO the operator, not things they did. -->
-  <div class="note fold">
-    <span class="hline">
-      <IconStop />
+  <div class="note rail-row">
+    <span class="hline rail-line">
+      <span class="rail-cell"><IconStop /></span>
       <span class="ftitle">Interrupted</span>
     </span>
   </div>
 {:else if isFail}
-  <div class="failcard">
-    <b>{failTitle}</b>
-    <span class="handoff">{message?.content}</span>
+  <!-- A failure takes the rail like every other line, in the fail colours:
+       what failed on the line, why under it. -->
+  <div class="note fail rail-row">
+    <span class="hline rail-line">
+      <span class="rail-cell"><IconError /></span>
+      <b class="ftitle">{failTitle}</b>
+    </span>
+    <p class="handoff rail-hang">{message?.content}</p>
   </div>
 {:else if foldCommand || foldBody}
-  <div class="note fold">
+  <div class="note rail-row">
     <Collapsible.Root bind:open={disclosed.get, disclosed.set}>
-      <Collapsible.Trigger class="ftrig">
-        <span class="hchev" class:open={open}><IconChevronRight /></span>
+      <Collapsible.Trigger class="ftrig rail-line">
+        <span class="rail-cell"><IconInfo /></span>
         <span class="ftitle">{foldTitle}</span>
+        <span class="hchev" class:open={open}><IconChevronRight /></span>
       </Collapsible.Trigger>
       <Collapsible.Content reveal>
         {#if foldCommand}
           <pre class="well">{foldCommand}</pre>
         {:else if foldBody}
-          <div class="hbody"><MessageBody source={foldBody} /></div>
+          <div class="hbody rail-hang"><MessageBody source={foldBody} /></div>
         {/if}
       </Collapsible.Content>
     </Collapsible.Root>
@@ -153,21 +178,23 @@
 {:else}
   <!-- Nothing to open, so nothing that looks openable — the same dead-disclosure
        refusal the harness line and the tool rows already make. -->
-  <div class="note fold">
-    <span class="hline">
-      <IconInfo />
+  <div class="note rail-row">
+    <span class="hline rail-line">
+      <span class="rail-cell"><IconInfo /></span>
       <span class="ftitle">{foldTitle}</span>
     </span>
   </div>
 {/if}
 
 <style>
+  /* A recessed well under the line: its text at the text column, the well
+     reaching out past it by its own padding. */
   .well {
     background: var(--surface-recess);
     border-radius: var(--radius-sm);
     padding: var(--space-3);
-    margin-block-start: var(--rail-gap, var(--space-4));
-    margin-inline-start: var(--space-2);
+    margin-block-start: var(--space-2);
+    margin-inline-start: calc(var(--x-hang) - var(--space-3));
     overflow-x: auto;
     font-family: var(--font-mono);
     font-size: var(--text-label);
@@ -175,31 +202,7 @@
     color: var(--ink-strong);
     white-space: pre-wrap;
   }
-  .failcard {
-    border-inline-start: 3px solid var(--status-fail-ink);
-    background: var(--status-fail-bg);
-    color: var(--status-fail-ink);
-    border-radius: var(--radius-sm);
-    padding: var(--space-3);
-    margin-block-start: var(--space-4);
-
-    & b {
-      display: block;
-      font-weight: var(--weight-strong);
-      margin-block-end: 2px;
-    }
-    & .handoff {
-      font-size: var(--text-label);
-      font-weight: var(--weight-strong);
-      opacity: 0.92;
-      white-space: pre-wrap;
-    }
-  }
   .note {
-    margin-block-start: var(--rail-gap, var(--space-4));
-    margin-inline-start: var(--space-2);
-    padding-inline-start: var(--space-3);
-    background: var(--rail-head, var(--rail)) left top / 2px 100% no-repeat;
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
     color: var(--ink-muted);
@@ -211,8 +214,6 @@
     }
     & :global(.ftrig) {
       display: inline-flex;
-      align-items: center;
-      gap: var(--space-2);
       background: none;
       border: 0;
       padding: 0;
@@ -238,8 +239,6 @@
      under it to open. */
   .hline {
     display: inline-flex;
-    align-items: center;
-    gap: var(--space-2);
     max-inline-size: 100%;
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
@@ -283,22 +282,31 @@
       transition: transform var(--dur-control) var(--ease-out);
     }
   }
-  /* The report sits on the rail the fold already draws, and keeps MessageBody's
-     own 74ch measure — a subagent's write-up is prose, not a dump, so it reads
-     at the same width as every turn above it rather than running the full pane. */
+  /* The report hangs at the text column under the line that opens it, and
+     keeps MessageBody's own 74ch measure — a subagent's write-up is prose,
+     not a dump. */
   .hbody {
     margin-block-start: var(--space-3);
   }
+  /* A failure: the rail, the mark, the title and the reason, all in the
+     fail ink — last, so it wins over the note's muted ink on the same
+     elements. */
+  .note.fail {
+    --rail-head: linear-gradient(
+      var(--status-fail-ink),
+      var(--status-fail-ink)
+    );
+    color: var(--status-fail-ink);
 
-  /* The ledger's rail column is narrower on a phone, and every other rail
-     block already knows it — ToolGroup, Thinking, Subagent, Delegate all drop
-     this inset at the same breakpoint. These two did not, so on a narrow
-     screen a note sat 7px to the inline end of the line above it and the run
-     read as a broken column. */
-  @media (width <= 900px) {
-    .note,
-    .well {
-      margin-inline-start: 0;
+    & .hline {
+      color: inherit;
+    }
+    & .handoff {
+      margin-block: var(--space-1) 0;
+      font-size: var(--text-label);
+      font-weight: var(--weight-strong);
+      line-height: var(--leading-body);
+      white-space: pre-wrap;
     }
   }
 </style>

@@ -11,36 +11,31 @@
    * ticket is spent, and the reader scrolling back to the row, or a pane
    * coming back into view, finds none.
    *
-   * The motions, all on the root tokens and all opt-in:
+   * THE ARRIVAL: THE RAIL FIRST, THEN WHAT STANDS ON IT. Every row that
+   * arrives opens its place first — from nothing, or from the height of the
+   * row it took over, to its own measured height over --dur-rail on
+   * --ease-out — and a rail row's rail, being its own background, draws down
+   * with that opening as one stroke. Only once the place is open does the
+   * content fade up into it (--dur-menu, 3px). A rail row's content is what
+   * stands on the rail — its children — so the rail is never faded with it;
+   * any other row's content is the row. The rows above make room on that one
+   * clock instead of jumping by the row's height in the frame it lands: the
+   * transcript pins its bottom to the opening edge for as long as it runs.
+   * Without motion nothing opens: the content fades in over --dur-control.
    *
-   *   rise    a turn, a note, a card: fades up 6px over --dur-panel, --ease-out.
-   *   settle  a card that asks for the reader: the prompt's own settle, 8px
-   *           over two --dur-control.
-   *   open    a tool call: its content fades in, so a run's rail grows one
-   *           call at a time.
-   *
-   *   emerge  the reader's own message, sent from this tab: no entrance of
-   *           the row's own. Its turn is the composer's text landing
-   *           (motion/share.svelte.ts, from MessageRow).
-   *
-   * Each of them opens the row's place too: from nothing to its measured
-   * height over --dur-panel, so the rows above make room on one clock
-   * instead of jumping by the row's height in the frame it lands. The
-   * transcript pins its bottom to the opening edge for exactly as long as it
-   * runs. The reader's own message opens on the composer's clock instead
-   * (--dur-control, --ease-out: the field's own collapse), because the room
-   * it takes is the room the composer gives back in the same moment — drawn
-   * whole at once, it lifted every row above by its height and the collapse
-   * dropped them straight back, 115px up and 82px down on a three-line send.
-   * It opens unclipped: its words are in flight from the composer into it.
+   * The reader's own message (`emerge`) opens on the composer's clock instead
+   * (--dur-control, --ease-out: the field's own collapse), because the room it
+   * takes is the room the composer gives back in the same moment. It opens
+   * unclipped and plays no fade: its words are in flight from the composer
+   * into it.
    *
    * A row leaving the list (the turn's indicator, a finished tool's glance, a
    * replaced send) folds shut where it stands instead of vanishing, over
-   * --dur-panel on --ease-out. A row that takes another's place in the update
-   * that draws it (`handoff`: the indicator giving way to the tool it
-   * announced, the live row settling, a glance landing in its run) starts at
-   * the height it took over and tweens to its own, one height on one clock, so
-   * nothing above it moves in a jump.
+   * --dur-panel on --ease-out — unless another row takes its place in the
+   * update that draws it (`handoff`): then the taker starts at the height it
+   * took over and tweens to its own, one height on one clock, and the row it
+   * replaced stays on top of the place, out of the flow, fading as the taker
+   * opens under it. There is never a frame with the place empty.
    *
    * Every height here is a measured `block-size` animated on the row itself,
    * never a grid track: WebKit sized a `0fr → 1fr` track off a stale
@@ -59,7 +54,7 @@
   let {
     id,
     rowKey,
-    motion = "rise",
+    motion = "draw",
     continues = false,
     leaving = false,
     handoff,
@@ -90,13 +85,7 @@
   const ledger = useLedger();
   /** Taken at mount. See the component note. */
   const ticket = untrack(() => (id && ledger ? ledger.take(id) : null));
-  const opens = untrack(() => motion) === "open";
-  /**
-   * Until its entrance has run. A reasoning block folding shut, or an answer
-   * settling, is a row already on screen: it does not arrive. An opening is
-   * played from here (`open`), not by a class.
-   */
-  let arriving = $state(ticket?.kind === "arrive" && !opens);
+  const emerges = untrack(() => motion) === "emerge";
   /**
    * Where the entrance starts: its place in the burst, less however long the
    * arrival has already been playing on an earlier mount — a negative delay
@@ -107,63 +96,69 @@
       ? ticket.lead - ((document.timeline.currentTime as number) - ticket.start)
       : 0;
   let node = $state<HTMLElement>();
-  const emerges = untrack(() => motion) === "emerge";
   /** The height tween running on the row, if any: a fold takes over from it. */
   let growing: Animation | null = null;
 
-  /** The entrance has run — or will not, without motion: the ticket is spent. */
+  /** The entrance has run: the ticket is spent. */
   function spent(): void {
-    arriving = false;
     if (id) {
       ledger?.done(id);
     }
   }
-  /** The opening of the row's place still owed: this mount plays it once. */
-  let toOpen = ticket?.kind === "arrive" && motionOk.current;
-  // The reader's own message plays no entrance: its content lands the
-  // composer's text (motion/share.svelte.ts).
-  if (ticket?.kind === "arrive" && (!motionOk.current || emerges)) {
-    spent();
-  }
-
-  interface Growth {
-    /** Clipped to the height it has got to. */
-    clip: boolean;
-    /** Starts after this long; negative resumes an arrival mid-way. */
-    delay: number;
-    /** Its content fades in with it. */
-    fade: boolean;
-    /** The duration token it runs over. */
-    over: "--dur-panel" | "--dur-control";
-  }
-  const PLACE: Growth = {
-    delay: 0,
-    fade: false,
-    clip: true,
-    over: "--dur-panel",
-  };
+  /** The entrance still owed: this mount plays it once. */
+  let toDraw = ticket?.kind === "arrive";
 
   /**
-   * The row from `from` to its own height: the one height motion every
-   * opening and every handoff plays.
+   * What fades in once the place is open. A rail row's content is what
+   * stands on its rail (its children), found through the single-child
+   * wrappers a row can sit in (the live row's face); a surface that draws
+   * its own frame (`data-frame`) is the same. Anything else is the row.
    */
-  function grow(
+  function contentOf(row: HTMLElement): Element[] {
+    let element = row.firstElementChild;
+    while (
+      element &&
+      !(
+        element.classList.contains("rail-row") ||
+        element.hasAttribute("data-frame")
+      ) &&
+      element.childElementCount === 1
+    ) {
+      element = element.firstElementChild;
+    }
+    if (
+      element &&
+      (element.classList.contains("rail-row") ||
+        element.hasAttribute("data-frame"))
+    ) {
+      return [...element.children];
+    }
+    return row.firstElementChild ? [row.firstElementChild] : [];
+  }
+
+  interface Draw {
+    /** Clipped to the height it has got to. */
+    clip: boolean;
+    /** Its content fades in once the place is open. */
+    content: boolean;
+    /** Starts after this long; negative resumes an arrival mid-way. */
+    delay: number;
+    /** The height the place opens from. */
+    from: number;
+    /** The duration token the place opens over. */
+    over: "--dur-rail" | "--dur-control";
+  }
+
+  /** The row's place from `from` to its own height. */
+  function open(
     row: HTMLElement,
     from: number,
-    { delay, fade, clip, over }: Growth
+    timing: KeyframeAnimationOptions,
+    clip: boolean
   ): Animation | null {
     const own = row.getBoundingClientRect().height;
-    const timing: KeyframeAnimationOptions = {
-      duration: dur(over),
-      easing: getComputedStyle(row).getPropertyValue("--ease-out"),
-      delay,
-      fill: "backwards",
-    };
-    const fading = fade
-      ? row.animate([{ opacity: 0 }, { opacity: 1 }], timing)
-      : null;
     if (Math.abs(own - from) <= 0.5) {
-      return fading;
+      return null;
     }
     growing?.cancel();
     row.style.overflow = clip ? "hidden" : "";
@@ -182,6 +177,129 @@
     return tween;
   }
 
+  /**
+   * The one arrival: the place opens, then the content fades up into it.
+   * Resolves with the last of its animations, or null when nothing plays.
+   */
+  function draw(
+    row: HTMLElement,
+    { from, delay, content, clip, over }: Draw
+  ): Animation | null {
+    const easing = getComputedStyle(row).getPropertyValue("--ease-out");
+    const moving = motionOk.current;
+    const opening = moving ? dur(over) : 0;
+    const place = moving
+      ? open(
+          row,
+          from,
+          { duration: opening, easing, delay, fill: "backwards" },
+          clip
+        )
+      : null;
+    if (!content) {
+      return place;
+    }
+    let last: Animation | null = null;
+    const frames = moving
+      ? [
+          { opacity: 0, translate: "0 3px" },
+          { opacity: 1, translate: "0 0" },
+        ]
+      : [{ opacity: 0 }, { opacity: 1 }];
+    // Held back until the place has opened; with nothing to open, at once.
+    const after = place ? delay + opening : Math.max(delay, 0);
+    for (const element of contentOf(row)) {
+      last = element.animate(frames, {
+        duration: dur(moving ? "--dur-menu" : "--dur-control"),
+        easing,
+        delay: moving ? after : 0,
+        fill: "backwards",
+      });
+    }
+    return last ?? place;
+  }
+
+  /**
+   * The row this one took the place of, on top of the place and out of the
+   * flow, fading as this one opens under it — inside this row, so the
+   * opening's own clip holds it and it never reaches past the list's end.
+   */
+  function fadeGhost(row: HTMLElement, ghost: HTMLElement): void {
+    const easing = getComputedStyle(row).getPropertyValue("--ease-out");
+    row.style.position = "relative";
+    Object.assign(ghost.style, {
+      position: "absolute",
+      insetBlockStart: "0",
+      insetInline: "0",
+      margin: "0",
+      pointerEvents: "none",
+    });
+    row.append(ghost);
+    const gone = () => {
+      ghost.remove();
+      row.style.position = "";
+    };
+    ghost
+      .animate([{ opacity: 1 }, { opacity: 0 }], {
+        duration: dur("--dur-exit"),
+        easing,
+        fill: "forwards",
+      })
+      .finished.then(gone, gone);
+  }
+
+  /**
+   * It takes the place it was handed: no entrance of its own. A new row fades
+   * in over that place once it has opened; a row that was already the object
+   * on screen (a settled answer, a run taking its call in) only resizes.
+   */
+  function takePlace(row: HTMLElement, given: Handoff): void {
+    given.taken = true;
+    const arrives = toDraw;
+    toDraw = false;
+    if (!ledger?.watched) {
+      spent();
+      return;
+    }
+    if (given.ghost && motionOk.current) {
+      fadeGhost(row, given.ghost);
+    }
+    const played = draw(row, {
+      from: given.from,
+      delay: 0,
+      content: arrives,
+      clip: true,
+      over: "--dur-rail",
+    });
+    if (!arrives) {
+      return;
+    }
+    if (played) {
+      played.finished.then(spent, spent);
+    } else {
+      spent();
+    }
+  }
+
+  /** Its own entrance, from nothing. */
+  function arrive(row: HTMLElement): void {
+    toDraw = false;
+    const played = draw(row, {
+      from: 0,
+      delay: lead,
+      content: !emerges,
+      clip: !emerges,
+      over: emerges ? "--dur-control" : "--dur-rail",
+    });
+    if (played) {
+      played.finished.then(spent, () => {
+        /* taken down before it had run: a remount plays on from its ticket */
+      });
+    } else {
+      spent();
+    }
+  }
+
   $effect(() => {
     const row = node;
     const given = handoff;
@@ -190,33 +308,9 @@
     }
     untrack(() => {
       if (given && !given.taken) {
-        // It takes the place it was handed: no entrance of its own. A new row
-        // fades in over that place; a row that was already the object on
-        // screen (a settled answer, a run taking its call in) only resizes.
-        given.taken = true;
-        toOpen = false;
-        const fade = ticket?.kind === "arrive";
-        if (fade) {
-          spent();
-        }
-        if (motionOk.current && ledger?.watched) {
-          grow(row, given.from, { ...PLACE, fade });
-        }
-        return;
-      }
-      if (toOpen) {
-        // A rise or a settle fades by its own keyframes over the place
-        // opening, a call's line fades with it, and the reader's own words
-        // are flying in from the composer (see the component note).
-        toOpen = false;
-        grow(row, 0, {
-          delay: lead,
-          fade: opens,
-          clip: !emerges,
-          over: emerges ? "--dur-control" : "--dur-panel",
-        })?.finished.then(spent, () => {
-          /* taken down before it opened: a remount plays on from its ticket */
-        });
+        takePlace(row, given);
+      } else if (toDraw) {
+        arrive(row);
       }
     });
   });
@@ -277,19 +371,7 @@
   });
 </script>
 
-<div
-  class="row {motion}"
-  data-row={rowKey}
-  onanimationend={(event) => {
-  if (event.target === node) {
-    spent();
-  }
-}}
-  bind:this={node}
-  style:--lead="{lead}ms"
-  class:arriving={arriving}
-  class:continues={continues}
->
+<div class="row" data-row={rowKey} bind:this={node} class:continues={continues}>
   {@render children(ticket)}
 </div>
 
@@ -305,30 +387,6 @@
     &.continues {
       --rail-head: var(--rail-body);
       --rail-gap: 0px;
-    }
-
-    @media (prefers-reduced-motion: no-preference) {
-      &.arriving.rise {
-        animation: row-rise var(--dur-panel) var(--ease-out) var(--lead)
-          backwards;
-      }
-      &.arriving.settle {
-        animation: row-settle calc(var(--dur-control) * 2) var(--ease-out)
-          var(--lead) backwards;
-      }
-    }
-  }
-
-  @keyframes row-rise {
-    from {
-      opacity: 0;
-      translate: 0 6px;
-    }
-  }
-  @keyframes row-settle {
-    from {
-      opacity: 0;
-      translate: 0 8px;
     }
   }
 </style>

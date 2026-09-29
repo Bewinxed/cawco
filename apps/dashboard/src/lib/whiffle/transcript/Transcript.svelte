@@ -882,6 +882,17 @@
   let leftTick = $state(0);
   /** The keys the list drew last: a row not among them is new. */
   let drawnKeys = new Set<string>();
+  /**
+   * The row that takes a leaving row's place: whether it takes the place in
+   * on top of its own (`absorbs`), and whether it is a different row from
+   * the one that left (`replaces`), which then fades over the place as the
+   * taker opens.
+   */
+  interface Taker {
+    absorbs: boolean;
+    key: string;
+    replaces: boolean;
+  }
 
   /** Whether `row` can leave the list: a tail row, or a failed send its retry replaces. */
   const canLeave = (row: Row): boolean =>
@@ -969,15 +980,16 @@
    */
   function handOn(
     node: HTMLElement,
-    taker: { key: string; absorbs: boolean } | null,
+    taker: Taker | null,
     handed: Map<string, Handoff>
   ): boolean {
     if (!taker) {
       return false;
     }
     const { height } = node.getBoundingClientRect();
+    const ghost = taker.replaces ? ghostOf(node) : null;
     if (!taker.absorbs) {
-      handed.set(taker.key, { from: height, taken: false });
+      handed.set(taker.key, { from: height, ghost, taken: false });
       return true;
     }
     const own = drawnRow(taker.key)?.getBoundingClientRect().height;
@@ -985,9 +997,35 @@
       own !== undefined &&
       untrack(() => landed && watched && motionOk.current)
     ) {
-      handed.set(taker.key, { from: own + height, taken: false });
+      // The run's place grows out of the one it took over, under it: the
+      // ghost stands where the row stood, below the run's own lines.
+      if (ghost) {
+        ghost.style.transform = `translateY(${own}px)`;
+      }
+      handed.set(taker.key, { from: own + height, ghost, taken: false });
     }
     return true;
+  }
+
+  /**
+   * The row drawn as `node`, copied as it is on screen, to stand over its
+   * place while it fades (`Row`'s handoff): inert, unheard, and carrying none
+   * of the hooks the list and the flights find rows by.
+   */
+  function ghostOf(node: HTMLElement): HTMLElement {
+    const copy = node.cloneNode(true) as HTMLElement;
+    copy.removeAttribute("data-row");
+    copy.inert = true;
+    copy.setAttribute("aria-hidden", "true");
+    for (const hooked of copy.querySelectorAll(
+      "[data-row], [data-share], [data-message], [aria-live]"
+    )) {
+      hooked.removeAttribute("data-row");
+      hooked.removeAttribute("data-share");
+      hooked.removeAttribute("data-message");
+      hooked.removeAttribute("aria-live");
+    }
+    return copy;
   }
 
   /**
@@ -1002,10 +1040,15 @@
     if (handed) {
       return handed.from;
     }
-    const ticket = tickets.get(key);
-    return ticket?.kind === "arrive" &&
-      ticket.start === null &&
-      motionOk.current
+    // Until the row is drawn: the list reads this on every update, and a
+    // row already drawn is one it measures — held at nothing again, it lost
+    // its height mid-opening and the tail jumped. Keyed off the ticket's
+    // start instead, a row whose mount had stamped it before the list first
+    // laid it out stood at the 21px estimate for that frame, then dropped to
+    // the nothing its opening starts from.
+    return tickets.get(key)?.kind === "arrive" &&
+      motionOk.current &&
+      !drawnRow(key)
       ? 0
       : undefined;
   }
@@ -1031,16 +1074,21 @@
    * The taker of the row `key` that is no longer in the list, or null: the
    * row its live content settled into, the run its call landed in — which
    * takes the glance's height in on top of its own when it was already drawn
-   * (`absorbs`) — or the new tail row standing where it stood.
+   * (`absorbs`) — or the new row standing where it stood. The turn's live
+   * row and a glance give their place to whatever the turn did next, in the
+   * same frame: a new row where they stood, or the run just above them that
+   * took the new call in. Waiting on their fold before the next row opened
+   * left the place empty between the two, and the tail dipped and jumped.
+   * A queued message gives its place only to another tail row.
    */
   function takerOf(
     key: string,
     stood: Standing,
     next: Row[],
     ended: Fold["ended"]
-  ): { key: string; absorbs: boolean } | null {
+  ): Taker | null {
     if (ended?.key === key && ended.into) {
-      return { key: ended.into, absorbs: false };
+      return { key: ended.into, absorbs: false, replaces: false };
     }
     const { row } = stood;
     if (row.kind === "livetool") {
@@ -1052,16 +1100,36 @@
           )
       );
       if (holder) {
-        return { key: holder.key, absorbs: drawnKeys.has(holder.key) };
+        return {
+          key: holder.key,
+          absorbs: drawnKeys.has(holder.key),
+          replaces: false,
+        };
       }
     }
     if (!(TAIL_KINDS.has(row.kind) && hasLeft(key, row, ended))) {
       return null;
     }
-    const heir = next[placeIn(next, stood.above, ended)];
-    return heir && TAIL_KINDS.has(heir.kind) && !drawnKeys.has(heir.key)
-      ? { key: heir.key, absorbs: false }
-      : null;
+    const at = placeIn(next, stood.above, ended);
+    const heir = next[at];
+    const turns = row.kind !== "queued";
+    if (
+      heir &&
+      !drawnKeys.has(heir.key) &&
+      (turns || TAIL_KINDS.has(heir.kind))
+    ) {
+      return { key: heir.key, absorbs: false, replaces: true };
+    }
+    const runAbove = next[at - 1];
+    if (
+      turns &&
+      runAbove?.kind === "tools" &&
+      drawnKeys.has(runAbove.key) &&
+      runAbove.messages.some((m) => tickets.get(callId(m))?.kind === "arrive")
+    ) {
+      return { key: runAbove.key, absorbs: true, replaces: true };
+    }
+    return null;
   }
 
   /**
@@ -2121,17 +2189,13 @@
     // landing from the field in the one row the send drew, keyed by the
     // message's id: no entrance of the row's own.
     if (
-      (row.kind === "single" && row.message.type === "user") ||
-      row.kind === "queued"
+      ((row.kind === "single" && row.message.type === "user") ||
+        row.kind === "queued") &&
+      waiting(`sent:${row.message.id}`)
     ) {
-      return waiting(`sent:${row.message.id}`) ? "emerge" : "rise";
+      return "emerge";
     }
-    if (row.kind === "question") {
-      return "settle";
-    }
-    // A tool's glance is the call's own line, opening before its message
-    // lands: it opens as a call does, and the call it becomes does not.
-    return row.kind === "livetool" ? "open" : "rise";
+    return "draw";
   }
 
   provideLedger({
@@ -2448,7 +2512,7 @@
 
 <div
   aria-label="Session transcript"
-  class="tr"
+  class="tr tx-columns"
   {onanimationend}
   {onanimationstart}
   {onscroll}
@@ -2543,8 +2607,8 @@
             {:else if row.kind === 'livetool'}
               {@const d = describeTool(row.glance.name, undefined, undefined, 'pending')}
               {@const LiveIcon = d.icon}
-              <div class="livetool">
-                <span class="ic breathe {d.color}"><LiveIcon /></span>
+              <div class="livetool rail-row rail-line">
+                <span class="ic rail-cell breathe {d.color}"><LiveIcon /></span>
                 <!-- The same anatomy the settled ToolGroup row has: the
                      descriptor's verb, then the mono argument, the verb
                      omitted where the object is the whole sentence. Printing
@@ -2691,45 +2755,28 @@
     }
   }
 
-  /* The in-flight tool sits on the same rail column as the calls it becomes,
-     at every width — see the breakpoint below. */
+  /* The in-flight tool is a rail row on the same columns as the calls it
+     becomes (app.css `.rail-row`, `.rail-line`): one line, 26px tall. */
   .livetool {
-    /* one rhythm value (--space-4) tops every row type; the rail indent is
-       --space-2 margin + --space-3 padding, shared across every rail block. */
-    margin-block-start: var(--rail-gap, var(--space-4));
-    margin-inline-start: var(--space-2);
-    padding-inline-start: var(--space-3);
-    background: var(--rail-head, var(--rail)) left top / 2px 100% no-repeat;
     min-block-size: 26px;
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
     color: var(--ink-strong);
 
-    @media (width <= 900px) {
-      margin-inline-start: 0;
-    }
-
     /* No `color` here: the tool family's `text-tool-*` tint governs the
        glyph; the generic case inherits --ink-strong from .livetool. */
-    & .ic {
-      inline-size: 16px;
-      block-size: 16px;
-      flex: 0 0 auto;
-      display: grid;
-      place-items: center;
-
-      & :global(svg) {
-        inline-size: 16px;
-        block-size: 16px;
-      }
+    & .ic :global(svg) {
+      inline-size: var(--w-glyph);
+      block-size: var(--w-glyph);
     }
     & .tk {
       font-weight: var(--weight-strong);
       color: var(--ink-strong);
-      flex: 0 0 auto;
+      flex: 0 1 auto;
+      min-inline-size: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
     & .arg {
       font-family: var(--font-mono);

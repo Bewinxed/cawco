@@ -35,17 +35,18 @@ import type { Trail } from "$lib/components/ui/markdown/trail";
 
 /** What a row does as it arrives. Chosen by the row's kind, not by the ticket. */
 export type Motion =
-  /** Fades up 6px: every turn, note and card that lands on the ledger. */
-  | "rise"
   /**
-   * The reader's own message, sent from this tab: the row plays no entrance;
-   * its content is the composer's text landing (motion/share.svelte.ts).
+   * Every row that lands on the ledger, and every call opening its line in
+   * its run: the row's place opens first, its rail drawing down with it,
+   * and only then does what stands on the rail fade up into it (`Row`).
    */
-  | "emerge"
-  /** A card that asks for the reader: the prompt's settle. */
-  | "settle"
-  /** A tool call opening its own line in the run it belongs to. */
-  | "open";
+  | "draw"
+  /**
+   * The reader's own message, sent from this tab: its place opens on the
+   * composer's clock and the row plays no entrance of its own; its content
+   * is the composer's text landing (motion/share.svelte.ts).
+   */
+  | "emerge";
 
 export type Ticket =
   /**
@@ -79,6 +80,12 @@ export type Ticket =
  */
 export interface Handoff {
   from: number;
+  /**
+   * The row that gave the place up, as it was last drawn, when the taker is
+   * a different row rather than the same one settling: it stays on top of
+   * the place, out of the flow, and fades as the taker opens under it.
+   */
+  ghost: HTMLElement | null;
   taken: boolean;
 }
 

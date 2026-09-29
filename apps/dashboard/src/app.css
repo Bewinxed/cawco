@@ -259,6 +259,11 @@
     --row-mark: 17px;
     --row-mark-r: 4.6px;
     --row-mark-glyph: 11px;
+    /* The speaker line's mark cell: the agent's 18px mark fills it, the
+       reader's 17px mark is centred in it. The reader's well starts on the
+       edge of the reader's mark. */
+    --row-mark-box: 18px;
+    --well-x: calc((var(--row-mark-box) - var(--row-mark)) / 2);
     --action-grad: linear-gradient(
       oklch(from var(--brand-solid) calc(l + 0.056) c h),
       oklch(from var(--brand-solid) calc(l - 0.032) c h)
@@ -553,6 +558,9 @@
     --dur-toggle: 160ms;
     /* A button's width following its label while it works. */
     --dur-morph: 180ms;
+    /* A transcript row's place opening, its rail drawing down with it,
+       before anything on the rail shows. */
+    --dur-rail: 180ms;
     /* Fades that carry a state change in place: a field's error, the theme
        switch, a toast stack closing up. */
     --dur-fade: 200ms;
@@ -1376,6 +1384,53 @@
 
   :where(.kit-highlight) .kit-pill-trail.kit-fade {
     transition: opacity var(--dur-control) var(--ease-out);
+  }
+
+  /* ---- The transcript's columns. Every row kind lays out on these four
+     edges, measured from the row's own inline start: the rail, the glyph
+     cell 11px past it, the 16px cell, and the text column 7px past the
+     cell. Avatars and prose stand at 0. An inner transcript (a delegate's,
+     a subagent's) starts at its parent's text column and repeats them, so
+     every level of nesting steps in by exactly one text column. */
+  .tx-columns {
+    --x-rail: var(--space-2);
+    --x-glyph: calc(var(--x-rail) + var(--space-3));
+    --w-glyph: 16px;
+    --x-text: calc(var(--x-glyph) + var(--w-glyph) + var(--space-2));
+    /* How far a hung body sits from the rail row's content edge (the glyph
+       column): the text column, relative. */
+    --x-hang: calc(var(--x-text) - var(--x-glyph));
+
+    @media (width <= 900px) {
+      --x-rail: 0px;
+    }
+  }
+
+  /* A rail-led row: its 2px rail at --x-rail, its content from the glyph
+     column. The head line is the identity mark in the glyph cell, then the
+     row's words at the text column; a disclosure chevron trails the words.
+     Everything the head owns hangs at the text column. */
+  .rail-row {
+    margin-block-start: var(--rail-gap, var(--space-4));
+    margin-inline-start: var(--x-rail);
+    padding-inline-start: calc(var(--x-glyph) - var(--x-rail));
+    background: var(--rail-head, var(--rail)) left top / 2px 100% no-repeat;
+  }
+  .rail-line {
+    display: flex;
+    align-items: center;
+    gap: calc(var(--x-text) - var(--x-glyph) - var(--w-glyph));
+    min-inline-size: 0;
+  }
+  .rail-cell {
+    inline-size: var(--w-glyph);
+    block-size: var(--w-glyph);
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+  }
+  .rail-hang {
+    margin-inline-start: var(--x-hang);
   }
 }
 

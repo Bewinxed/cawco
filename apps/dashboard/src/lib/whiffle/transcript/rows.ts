@@ -833,15 +833,29 @@ function liveContent(session: SessionState): LiveContent | null {
     (session.openBlock === "thinking" || session.thinkingClosing) &&
     !session.streaming;
   const last = session.messages[queuedFrom(session.messages) - 1];
+  // The agent's own words are the latest thing. Whatever it does next opens
+  // a block of its own — reasoning, text, a tool — which this row or a tool
+  // row shows the moment it starts; a turn it has finished ends a frame
+  // later. A "working" row between the two would only flash: arrive, and
+  // fold away before it could be read. A frame with no words in it — a
+  // redacted reasoning block, the frame that only carried a call — says
+  // nothing: the turn goes on after it, and ending the row there left its
+  // place empty until the next block opened a new one.
+  const spoke =
+    (last?.type === "assistant" || last?.type === "thinking") &&
+    last.content.trim() !== "";
   const indicating =
     session.busy &&
-    // The agent's own words are the latest thing. Whatever it does next opens
-    // a block of its own — reasoning, text, a tool — which this row or a tool
-    // row shows the moment it starts; a turn it has finished ends a frame
-    // later. A "working" row between the two would only flash: arrive, and
-    // fold away before it could be read.
-    last?.type !== "assistant" &&
-    last?.type !== "thinking" &&
+    !spoke &&
+    // A call whose message is in and has no result yet is already on screen
+    // as its own pending line. Its message lands a moment before the session
+    // names it the current tool, and the indicator drawn in that moment
+    // arrived only to fold away again, leaving its place empty until the
+    // call came back.
+    !(
+      last?.type === "tool.use" &&
+      (last.metadata?.toolStatus ?? "pending") === "pending"
+    ) &&
     session.pending.length === 0 &&
     session.sdkStatus !== "compacting" &&
     !last?.metadata?.sendFailed &&

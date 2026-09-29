@@ -75,12 +75,14 @@
   };
 </script>
 
-<div class="branch">
+<div class="branch rail-row">
   <Collapsible.Root bind:open={open.get, open.set}>
-    <Collapsible.Trigger class="bhead press-tint">
-      <span aria-hidden="true" class="chev"><IconChevronRight /></span>
-      <span aria-hidden="true" class="mark m{markHue(seed)}"><Sprite /></span>
+    <Collapsible.Trigger class="bhead rail-line press-tint">
+      <span aria-hidden="true" class="mark rail-cell m{markHue(seed)}"
+        ><Sprite /></span
+      >
       <span class="tk">{branch.subagentType}</span>
+      <span aria-hidden="true" class="chev"><IconChevronRight /></span>
       {#if title !== branch.subagentType}
         <span class="arg">{title}</span>
       {/if}
@@ -97,14 +99,18 @@
     </Collapsible.Trigger>
 
     <!-- Always visible: the observability at a glance, no expand needed. -->
+    <!-- The live line: its words at the text column, the beat in the glyph
+         column under the mark. -->
     {#if view.running}
-      <p class="now">
-        <span aria-hidden="true" class="beat"></span>{view.currentStep}
+      <p class="now rail-line">
+        <span aria-hidden="true" class="rail-cell"
+          ><span class="beat"></span></span
+        ><span>{view.currentStep}</span>
       </p>
     {:else if failed && branch.error}
-      <p class="now err">{headline(branch.error)}</p>
+      <p class="now err rail-hang">{headline(branch.error)}</p>
     {:else if view.report}
-      <p class="now">{headline(view.report)}</p>
+      <p class="now rail-hang">{headline(view.report)}</p>
     {/if}
 
     <Collapsible.Content reveal>
@@ -149,23 +155,13 @@
     --rail-head: var(--rail);
     --rail-gap: var(--space-4);
   }
-  /* The spine: a structural 2px rail, the same indent every rail block uses. */
-  .branch {
-    --glyph: calc(13px + var(--space-2));
-    margin-block: var(--rail-gap, var(--space-4)) 0;
-    margin-inline: var(--space-2) 0;
-    padding-inline-start: var(--space-3);
-    background: var(--rail-head, var(--rail)) left top / 2px 100% no-repeat;
-  }
-
-  /* The trigger is a component's element, so the scoped selector cannot reach
-     it — everything under `.branch` here is addressed globally on purpose. */
+  /* The spine is the rail row every rail block uses (app.css `.rail-row`).
+     The trigger is a component's element, so the scoped selector cannot
+     reach it — everything under `.branch` here is addressed globally on
+     purpose. */
   :global(.branch .bhead) {
     min-block-size: 26px;
     inline-size: 100%;
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
     background: none;
@@ -207,20 +203,16 @@
     display: block;
   }
 
-  /* The per-session identity sprite, on its --mark-N hue square. */
+  /* The per-session identity sprite, on its --mark-N hue square, filling
+     the glyph cell. */
   .mark {
-    inline-size: 17px;
-    block-size: 17px;
     border-radius: var(--radius-xs);
-    flex: 0 0 auto;
-    display: grid;
-    place-items: center;
     background-image: var(--mark-overlay);
     background-color: var(--mark-1);
   }
   .mark :global(svg) {
-    inline-size: 12px;
-    block-size: 12px;
+    inline-size: 11px;
+    block-size: 11px;
     display: block;
     color: var(--mark-glyph);
   }
@@ -298,13 +290,11 @@
     color: var(--status-fail-ink);
   }
 
-  /* The live line, indented under the head's glyph column. */
+  /* The live line, at the head's text column. Its glyph cell is one line
+     tall, so the beat sits on the first line of a line that wraps. */
   .now {
-    display: flex;
-    align-items: baseline;
-    gap: var(--space-2);
+    align-items: start;
     margin-block: var(--space-1) 0;
-    margin-inline: var(--glyph) 0;
     font-size: var(--text-meta);
     font-weight: var(--weight-body);
     color: var(--ink-strong);
@@ -313,6 +303,9 @@
   }
   .now.err {
     color: var(--status-fail-ink);
+  }
+  .now > .rail-cell {
+    block-size: 1lh;
   }
   /* The beat is the second cue, never the only one: the pill already says
      "running" in words beside it. */
@@ -333,12 +326,14 @@
     }
   }
 
-  /* The delegate's own transcript, in a well of its own. Concentric: the well's
-     --radius-sm (8px) less its --space-1 (4px) padding is the --radius-xs
-     the report inside it carries, so no two nested corners share a radius. */
+  /* The subagent's own transcript, in a well of its own. Concentric: the
+     well's --radius-sm (8px) less its --space-1 (4px) padding is the
+     --radius-xs the report inside it carries, so no two nested corners share
+     a radius. The transcript's own x=0 is the text column; the well reaches
+     out past it by its padding. */
   .inner {
     margin-block: var(--space-2) 0;
-    margin-inline: var(--glyph) 0;
+    margin-inline: calc(var(--x-hang) - var(--space-1)) 0;
     padding: var(--space-1);
     border-radius: var(--radius-sm);
     background: var(--surface-recess);
@@ -373,11 +368,6 @@
     white-space: pre-wrap;
   }
 
-  @media (width <= 900px) {
-    .branch {
-      margin-inline-start: 0;
-    }
-  }
   /* The head is the only control on the card, so on a touch screen it is a real
      target. Scoped `.bhead` never matched the trigger — this is the same rule
      the old card carried, written so it applies. */

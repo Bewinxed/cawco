@@ -394,11 +394,9 @@
       margin-block-start: var(--space-2);
     }
   }
-  /* The well bleeds into the gutter by exactly its own padding, so the
-     reader's words sit on the agent's text column and only the surface
-     widens. --space-3 inside the transcript's 25/21 gutters; at the narrow
-     breakpoint the gutters drop to --space-5 (18px) and the well to
-     --space-2, keeping 11px of gutter. */
+  /* The well's start edge is the reader's mark's edge (--well-x), with no
+     bleed into the gutter; the words sit inside at its padding: --space-3,
+     or --space-2 at the narrow breakpoint. */
   .turn.you {
     --pad: var(--space-3);
 
@@ -421,7 +419,7 @@
   .well {
     position: relative;
     isolation: isolate;
-    margin-inline: calc(var(--pad) * -1);
+    margin-inline-start: var(--well-x);
     padding-block: calc(var(--space-2) + 1px);
     padding-inline: var(--pad);
 

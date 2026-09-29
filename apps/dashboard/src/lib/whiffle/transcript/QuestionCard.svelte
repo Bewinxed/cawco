@@ -5,7 +5,7 @@
     UserQuestionResult,
   } from "@whiffle/core";
   import { untrack } from "svelte";
-  import { IconCheck, IconClose } from "$lib/icons";
+  import { IconAsk, IconCheck, IconClose } from "$lib/icons";
   import {
     CURVE,
     crossIn,
@@ -179,27 +179,41 @@
   };
 </script>
 
-<section aria-label="Question from the agent" class="hitl" bind:this={section}>
-  <h2>
+<!-- `data-frame`: the card's surface is its frame, opened before what is
+     on it (Row's arrival). -->
+<section
+  aria-label="Question from the agent"
+  class="hitl"
+  data-frame
+  bind:this={section}
+>
+  <!-- The card's head is a rail line: its state's mark in the glyph cell,
+       the title at the text column, the state in words after it. -->
+  <h2 class="rail-line">
+    <span class="state rail-cell">
+      {#if answered}
+        <span class="mark done" in:pillSwap out:pillSwap><IconCheck /></span>
+      {:else if dismissed}
+        <span class="mark muted" in:pillSwap out:pillSwap><IconClose /></span>
+      {:else}
+        <span class="mark attn" in:pillSwap out:pillSwap><IconAsk /></span>
+      {/if}
+    </span>
+    Question from the agent
     <span class="state">
       {#if answered}
-        <span class="pill done" in:pillSwap out:pillSwap
-          ><IconCheck />answered</span
-        >
+        <span class="pill done" in:pillSwap out:pillSwap>answered</span>
       {:else if dismissed}
-        <span class="pill muted" in:pillSwap out:pillSwap
-          ><IconClose />dismissed</span
-        >
+        <span class="pill muted" in:pillSwap out:pillSwap>dismissed</span>
       {:else}
         <span class="pill attn" in:pillSwap out:pillSwap>needs you</span>
       {/if}
     </span>
-    Question from the agent
   </h2>
 
   {#each questions as q (q.question)}
-    <p class="lede">{q.question}</p>
-    <div class="qopts" data-question={q.question}>
+    <p class="lede rail-hang">{q.question}</p>
+    <div class="qopts rail-hang" data-question={q.question}>
       {#each settled ? [] : q.options as opt, i (opt.label)}
         <span class="opt" data-key={shareKey(q.question, opt.label)} out:leave>
           <span class="kc">{i + 1}</span><span>{opt.label}</span>
@@ -218,43 +232,41 @@
       {/if}
     </div>
     {#if otherText(q)}
-      <p class="answer-free" in:crossIn>
+      <p class="answer-free rail-hang" in:crossIn>
         <span class="lbl">Answered</span>{otherText(q)}
       </p>
     {/if}
   {/each}
 
   {#if freeform}
-    <p class="answer-free" in:crossIn>
+    <p class="answer-free rail-hang" in:crossIn>
       <span class="lbl">In your own words</span>{freeform}
     </p>
   {/if}
 </section>
 
 <style>
+  /* The surface starts on the rail's edge; inside it, the content starts on
+     the glyph column, so the head and everything under it sit on the same
+     columns as every rail row around the card. */
   .hitl {
     border: 1px solid var(--border-control);
     border-radius: var(--radius-lg);
     background: var(--surface-raised);
     margin-block-start: var(--space-4);
-    margin-inline-start: var(--space-2);
+    margin-inline-start: var(--x-rail);
     padding: var(--space-3);
+    padding-inline-start: calc(var(--x-glyph) - var(--x-rail) - 1px);
     box-shadow: var(--shadow-hairline, var(--shadow-tile));
-
-    @media (width <= 900px) {
-      margin-inline-start: 0;
-    }
   }
   h2 {
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
     color: var(--ink-strong);
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
     margin-block-end: var(--space-2);
   }
-  /* One cell, so the outgoing pill and the incoming one cross-fade in place. */
+  /* One cell, so the outgoing mark or word and the incoming one cross-fade
+     in place. */
   .state {
     display: inline-grid;
 
@@ -262,10 +274,27 @@
       grid-area: 1 / 1;
     }
   }
+  .mark {
+    display: grid;
+    place-items: center;
+
+    & :global(svg) {
+      inline-size: var(--w-glyph);
+      block-size: var(--w-glyph);
+    }
+    &.attn {
+      color: var(--status-attn-ink);
+    }
+    &.done {
+      color: var(--status-done-ink, var(--ink-strong));
+    }
+    &.muted {
+      color: var(--ink-muted);
+    }
+  }
   .pill {
     display: inline-flex;
     align-items: center;
-    gap: var(--space-1);
     block-size: 20px;
     padding-block: 0;
     padding-inline: var(--space-2);
@@ -274,11 +303,6 @@
     font-weight: var(--weight-strong);
     white-space: nowrap;
 
-    & :global(svg) {
-      inline-size: 14px;
-      block-size: 14px;
-      flex: 0 0 auto;
-    }
     &.attn {
       background: var(--status-attn-bg);
       color: var(--status-attn-ink);

@@ -3,8 +3,10 @@
   import { getContext } from "svelte";
   import { SvelteSet } from "svelte/reactivity";
   import { toast } from "svelte-sonner";
+  import DiffView from "$lib/components/features/DiffView.svelte";
   import {
     describeTool,
+    getDiffInfo,
     memoryResult,
     pathLeaf,
     type ToolDescriptor,
@@ -285,7 +287,7 @@
   }
 </script>
 
-<div class="tools">
+<div class="tools rail-row">
   {#each messages as m (m.id ?? m.toolCallId)}
     {@const d = describe(m)}
     {@const Icon = d.icon}
@@ -293,9 +295,10 @@
     {@const fields = inputFields(m.metadata?.toolInput)}
     {@const result = resultText(m.metadata?.toolResult)}
     {@const toolInput = (m.metadata?.toolInput ?? undefined) as Record<string, unknown> | undefined}
-    {@const hasBody = bodyFor(d.expanded, failed, toolInput, fields, result, m.metadata?.toolResult)}
+    {@const changes = d.expanded === 'diff' && !failed ? getDiffInfo(toolInput, m.metadata?.toolName) : []}
+    {@const hasBody = changes.length > 0 || bodyFor(d.expanded, failed, toolInput, fields, result, m.metadata?.toolResult)}
     {#snippet line()}
-      <span class="ic">
+      <span class="ic rail-cell">
         {#key m.metadata?.toolStatus}
           <span class="glyph" class:err={failed} in:glyphIn out:glyphOut
             >{#if d.favicon && !brokenIcons.has(d.favicon)}
@@ -347,7 +350,7 @@
       {/if}
     {/snippet}
     <!-- The call opens its own line, so a run's rail grows one call at a time. -->
-    <TranscriptRow id={callId(m)} motion="open">
+    <TranscriptRow id={callId(m)}>
       {#snippet children()}
         <div class="row" class:err={failed}>
           {#if SHOW_PREVIEW_TOOLS.has(m.metadata?.toolName ?? '')}
@@ -403,12 +406,24 @@
           {:else if hasBody}
             {@const disclosed = disclosure(m)}
             <Collapsible.Root bind:open={disclosed.get, disclosed.set}>
-              <Collapsible.Trigger class="trow press-tint">
+              <Collapsible.Trigger class="trow rail-line press-tint">
                 {@render line()}
                 <span class="chev"><IconChevronRight /></span>
               </Collapsible.Trigger>
               <Collapsible.Content reveal>
-                {#if d.expanded === 'memory' && !failed}
+                {#if changes.length > 0}
+                  <!-- What the call changed, as the file's own diff: one per
+                       replacement a multi-edit made. -->
+                  <div class="diffs">
+                    {#each changes as change, i (i)}
+                      <DiffView
+                        filePath={change.filePath}
+                        newContent={change.newContent}
+                        oldContent={change.oldContent}
+                      />
+                    {/each}
+                  </div>
+                {:else if d.expanded === 'memory' && !failed}
                   <MemoryBody
                     input={toolInput}
                     result={m.metadata?.toolResult}
@@ -448,7 +463,7 @@
               </Collapsible.Content>
             </Collapsible.Root>
           {:else}
-            <div class="trow flat">{@render line()}</div>
+            <div class="trow rail-line flat">{@render line()}</div>
           {/if}
           {#if SHOW_IMAGE_TOOLS.has(m.metadata?.toolName ?? '') && machine}
             {@const input = m.metadata?.toolInput as { path: string; caption?: string }}
@@ -604,7 +619,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-2);
-    margin-inline-start: calc(15px + var(--space-2));
+    margin-inline-start: var(--x-hang);
     margin-block-start: var(--space-2);
 
     & > :global(*) {
@@ -613,25 +628,13 @@
       max-inline-size: 100%;
     }
   }
-  .tools {
-    margin-block-start: var(--rail-gap, var(--space-4));
-    margin-inline-start: var(--space-2);
-    padding-inline-start: var(--space-3);
-    background: var(--rail-head, var(--rail)) left top / 2px 100% no-repeat;
-
-    @media (width <= 900px) {
-      margin-inline-start: 0;
-    }
-  }
   /* The row's shape is shared by the plain <div> and the Collapsible trigger
-     (a <button>, so it needs its chrome stripped back to the ledger's). */
+     (a <button>, so it needs its chrome stripped back to the ledger's). Its
+     inline geometry is the rail line's (app.css `.rail-line`). */
   .trow,
   .row :global(.trow) {
     inline-size: 100%;
     min-block-size: 26px;
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
     font-family: inherit;
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
@@ -658,15 +661,8 @@
       transform: rotate(90deg);
     }
   }
-  /* The glyph sits in one cell, so a status change can cross-fade two of
-     them on the same spot. */
-  .ic {
-    inline-size: 16px;
-    block-size: 16px;
-    flex: 0 0 auto;
-    display: grid;
-    place-items: center;
-  }
+  /* The glyph sits in the one rail cell, so a status change can cross-fade
+     two of them on the same spot. */
   .glyph {
     grid-area: 1 / 1;
     display: grid;
@@ -700,11 +696,17 @@
     display: grid;
     place-items: center;
   }
+  /* The verb gives way before the row does: on a phone the argument, the
+     fact and the chevron stay inside the row. */
   .tk {
     font-weight: var(--weight-strong);
     color: var(--ink-strong);
     font-size: var(--text-label);
-    flex: 0 0 auto;
+    flex: 0 1 auto;
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
   .arg {
     font-family: var(--font-mono);
@@ -756,24 +758,35 @@
     }
   }
 
-  /* The disclosed payload — same anatomy as Prompt.svelte's "What this touches",
-     indented past the glyph so it hangs under the row's text, not its icon. */
+  /* The disclosed payload — same anatomy as Prompt.svelte's "What this touches".
+     Its words hang at the row's text column; the well reaches out past them
+     by its own padding. */
   .fields {
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
     margin-block: var(--space-2) var(--space-3);
-    margin-inline-start: calc(15px + var(--space-2));
+    margin-inline-start: calc(var(--x-hang) - var(--space-3));
     padding: var(--space-3);
     border-radius: var(--radius-sm);
     background: var(--surface-recess);
   }
-  /* A skill's arguments are the agent's own words to it: prose at the fields'
-     inline-start edge, with no well around them. */
+  /* A skill's arguments are the agent's own words to it: prose at the text
+     column, with no well around them. */
   .skill-args {
     margin-block: var(--space-1) var(--space-3);
-    margin-inline-start: calc(15px + var(--space-2));
+    margin-inline-start: var(--x-hang);
     max-inline-size: 70ch;
+  }
+  /* An edit's diffs: the file path in each header reads at the text column,
+     the diff's frame reaching out past it by its 1px border and its header's
+     12px inset (DiffView's `px-3`). */
+  .diffs {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin-block: var(--space-2) var(--space-3);
+    margin-inline-start: calc(var(--x-hang) - 13px);
   }
   .field {
     display: flex;

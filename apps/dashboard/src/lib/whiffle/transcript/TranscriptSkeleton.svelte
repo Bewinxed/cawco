@@ -19,7 +19,7 @@
   const AFTER = ["72%", "35%"];
 </script>
 
-<div aria-busy="true" class="skeleton" role="status">
+<div aria-busy="true" class="skeleton tx-columns" role="status">
   <span class="spoken">Reading transcript…</span>
 
   <!-- The reader's turn: its mark on the pane, one short line in the well. -->
@@ -45,10 +45,10 @@
   </div>
 
   <!-- Its tool calls, one row each, on the rail. -->
-  <div class="tools">
+  <div class="tools rail-row">
     {#each TOOLS as width (width)}
-      <div class="trow">
-        <Skeleton class="ic" /><Skeleton class="tk" />
+      <div class="trow rail-line">
+        <Skeleton class="ic rail-cell" /><Skeleton class="tk" />
         <Skeleton class="arg" style="width: {width}" />
       </div>
     {/each}
@@ -86,13 +86,13 @@
   }
 
   /* The reader's well, exactly as MessageRow draws a run of one: under the
-     header, bleeding into the gutter by its own padding so the words sit on
-     the ledger column. */
+     header, its start edge on the reader's mark, the words inside at its
+     padding. */
   .block.you {
     --pad: var(--space-3);
   }
   .well {
-    margin-inline: calc(var(--pad) * -1);
+    margin-inline-start: var(--well-x);
     padding: var(--space-2) calc(var(--pad) - 1px);
     border: 1px solid var(--well-edge);
     border-radius: var(--well-r);
@@ -146,23 +146,12 @@
     border-radius: var(--radius-xs);
   }
 
-  /* The tool rail, as ToolGroup draws it: the rail's indent and hairline,
-     26px rows, a 16px glyph, the verb, then the mono argument. */
-  .tools {
-    margin-inline-start: var(--space-2);
-    padding-inline-start: var(--space-3);
-    background: var(--rail) left top / 2px 100% no-repeat;
-  }
+  /* The tool rail, as ToolGroup draws it (app.css `.rail-row`): 26px rows,
+     the glyph in the rail cell, the verb, then the mono argument. */
   .trow {
     min-block-size: 26px;
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
   }
   .trow :global(.ic) {
-    inline-size: 16px;
-    block-size: 16px;
-    flex: 0 0 auto;
     border-radius: var(--radius-xs);
   }
   .trow :global(.tk) {

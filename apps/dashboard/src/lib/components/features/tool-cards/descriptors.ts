@@ -230,6 +230,7 @@ const FAMILIES: Record<FamilyId, Omit<ToolFamily, "id">> = {
 
 const EDIT_TOOLS = new Set([
   "edit",
+  "multiedit",
   "str_replace_editor",
   "str_replace",
   "file_edit",
@@ -339,35 +340,50 @@ export function isFileDiffTool(toolName: string | undefined): boolean {
 }
 
 /** The old and new sides a diff view needs, or null when the input has none. */
+export interface FileChange {
+  filePath: string;
+  newContent: string;
+  oldContent: string;
+}
+
+const textOf = (value: unknown): string =>
+  typeof value === "string" ? value : "";
+
+/**
+ * The file changes an edit or write call made, one per replacement. The
+ * harnesses name the same inputs three ways: Claude Code `file_path` with
+ * `old_string`/`new_string` (MultiEdit: an `edits` list of those); OpenCode
+ * `filePath` with `oldString`/`newString`, and `content` for a write; pi
+ * `path` with an `edits` list of `oldText`/`newText`.
+ */
 export function getDiffInfo(
   input: Record<string, unknown> | undefined,
   toolName: string | undefined
-): { filePath: string; oldContent: string; newContent: string } | null {
-  if (!input) {
-    return null;
+): FileChange[] {
+  const filePath =
+    str(input?.file_path) ??
+    str(input?.filePath) ??
+    str(input?.path) ??
+    str(input?.filename);
+  if (!(input && filePath)) {
+    return [];
   }
-  const filePath = (input.file_path || input.path || input.filename) as
-    | string
-    | undefined;
-  if (!filePath) {
-    return null;
-  }
-
   if (isWriteTool(toolName)) {
+    return [{ filePath, oldContent: "", newContent: textOf(input.content) }];
+  }
+  const edits: unknown[] = Array.isArray(input.edits) ? input.edits : [input];
+  return edits.map((edit) => {
+    const each = (edit ?? {}) as Record<string, unknown>;
     return {
       filePath,
-      oldContent: "",
-      newContent: (input.content || "") as string,
+      oldContent: textOf(
+        each.old_string ?? each.old_str ?? each.oldString ?? each.oldText
+      ),
+      newContent: textOf(
+        each.new_string ?? each.new_str ?? each.newString ?? each.newText
+      ),
     };
-  }
-  return {
-    filePath,
-    oldContent: (input.old_string || input.old_str || "") as string,
-    newContent: (input.new_string ||
-      input.new_str ||
-      input.content ||
-      "") as string,
-  };
+  });
 }
 
 /** Past this a line is a payload, not a sentence — and it only has to truncate. */
@@ -661,16 +677,14 @@ function sentence(
     case "edit":
     case "write": {
       const write = family === "write";
-      const path =
-        str(input?.file_path) ?? str(input?.path) ?? str(input?.filename);
-      const added = spanLines(
-        write
-          ? str(input?.content)
-          : (str(input?.new_string) ?? str(input?.new_str))
-      );
-      const removed = write
-        ? 0
-        : spanLines(str(input?.old_string) ?? str(input?.old_str));
+      const changes = getDiffInfo(input, toolName);
+      let added = 0;
+      let removed = 0;
+      for (const change of changes) {
+        added += spanLines(change.newContent);
+        removed += spanLines(change.oldContent);
+      }
+      const path = changes[0]?.filePath;
       return {
         ...base,
         label: write ? "Wrote" : "Edited",

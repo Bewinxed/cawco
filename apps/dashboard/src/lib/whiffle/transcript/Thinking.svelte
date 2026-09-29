@@ -176,7 +176,7 @@
   );
 </script>
 
-<div class="think">
+<div class="think rail-row">
   <ThinkingSteps
     onOpenChange={(value) => { expanded = value; }}
     open={expanded}
@@ -197,8 +197,8 @@
             /></span
           >
         {:else}
-          <span class="face identity" in:faceIn out:faceOut
-            ><span class="icon"><IconCpu /></span>Reasoning</span
+          <span class="face identity rail-line" in:faceIn out:faceOut
+            ><span class="icon rail-cell"><IconCpu /></span>Reasoning</span
           >
         {/if}
       </span>
@@ -220,19 +220,13 @@
 
 <style>
   .think {
-    margin-block-start: var(--rail-gap, var(--space-4));
-    margin-inline-start: var(--space-2);
-    padding-inline-start: var(--space-3);
-    background: var(--rail-head, var(--rail)) left top / 2px 100% no-repeat;
     max-inline-size: 70ch;
 
-    @media (width <= 900px) {
-      margin-inline-start: 0;
-    }
+    /* The live face: its mark in the rail cell, its word at the text column. */
     & :global(.rail-indicator) {
       padding: 0;
-      gap: var(--space-2);
-      --thinking-icon-size: 16px;
+      gap: calc(var(--x-text) - var(--x-glyph) - var(--w-glyph));
+      --thinking-icon-size: var(--w-glyph);
     }
     /* The header spans the row so the tail has the width to read into. */
     & :global(.thinking-header) {
@@ -253,18 +247,10 @@
     white-space: nowrap;
   }
   .identity {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
   }
   .icon {
-    display: grid;
-    place-items: center;
-    inline-size: 16px;
-    block-size: 16px;
-
     & :global(svg) {
       inline-size: 16px;
       block-size: 16px;

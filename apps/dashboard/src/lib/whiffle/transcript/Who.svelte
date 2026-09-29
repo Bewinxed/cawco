@@ -101,8 +101,8 @@
     }
   }
   .dot {
-    inline-size: 18px;
-    block-size: 18px;
+    inline-size: var(--row-mark-box);
+    block-size: var(--row-mark-box);
     border-radius: var(--radius-xs);
     display: flex;
     align-items: center;
@@ -123,7 +123,7 @@
     &.u {
       inline-size: var(--row-mark);
       block-size: var(--row-mark);
-      margin-inline: 0.5px;
+      margin-inline: var(--well-x);
       border-radius: var(--row-mark-r);
       background: var(--action-grad);
       color: var(--mark-glyph);

@@ -89,12 +89,12 @@
 </div>
 
 <style>
-  /* Hangs under the row's text, past the glyph, like the fields well. */
+  /* Hangs at the row's text column, like the fields well. */
   .memory {
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
-    margin: var(--space-2) 0 var(--space-3) calc(15px + var(--space-2));
+    margin: var(--space-2) 0 var(--space-3) var(--x-hang);
     min-width: 0;
   }
   .label {
