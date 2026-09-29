@@ -278,6 +278,16 @@ const CHECK_TIMEOUT_MAX_SEC = 3600;
 /** How long the report's git reads may take. */
 const GIT_TIMEOUT_MS = 60_000;
 
+/**
+ * A HEAD-reflog line (`%H %gd %gs`, dates as unix seconds) whose action made
+ * or rewrote a commit: the hash, and when the entry was written.
+ */
+const REFLOG_ENTRY =
+  /^([0-9a-f]{40}) HEAD@\{(\d+)\} (?:commit|commit \((?:amend|merge)\)|cherry-pick|rebase(?: -i)? \((?:pick|reword|edit|squash|fixup)\)): /;
+
+/** Splits the commit list from the diffstat in one command's output. */
+const DIFFSTAT_MARK = "@@whiffle-diffstat@@";
+
 /** Quiet turns in a row an item survives: the next one fails it. */
 const QUIET_TURNS = 3;
 
@@ -391,21 +401,6 @@ export const createWorkItems = ({
   const quiet = new Map<string, number>();
   /** Items whose checks are running now: a second `finish_item` waits its turn. */
   const finishing = new Set<string>();
-  /** The worktree's HEAD: where an item starting there begins. */
-  const headOf = async (workspace: WorkspaceRow): Promise<string> => {
-    const head = await command(
-      workspace.machineId,
-      workspace.path,
-      "git rev-parse HEAD",
-      GIT_TIMEOUT_MS
-    );
-    if (head.exitCode !== 0) {
-      throw new Error(
-        `git rev-parse HEAD failed in ${workspace.path}: ${head.stderr.trim()}`
-      );
-    }
-    return head.stdout.trim();
-  };
   /** Every write to an item goes out to the dashboards as it lands. */
   const published = (
     item: WorkItemRow | undefined
@@ -568,8 +563,7 @@ export const createWorkItems = ({
     previous: WorkItemRow,
     session: InstanceRow,
     parent: InstanceRow,
-    request: WorkItemRequest,
-    baseCommit: string
+    request: WorkItemRequest
   ): WorkItemStart => {
     const item = db.createWorkItem({
       id: crypto.randomUUID(),
@@ -584,7 +578,6 @@ export const createWorkItems = ({
       effort: previous.effort,
       state: "running",
       checks: request.checks,
-      baseCommit,
     });
     db.patchInstance(session.id, {
       workItemId: item.id,
@@ -628,8 +621,7 @@ export const createWorkItems = ({
   const followUp = (
     needle: string,
     request: WorkItemRequest,
-    parent: InstanceRow,
-    baseCommit: string
+    parent: InstanceRow
   ): WorkItemStart | WorkspaceRow => {
     if (
       request.type ||
@@ -648,7 +640,7 @@ export const createWorkItems = ({
       ? db.getInstancesByIds([previous.instanceId])
       : [];
     return previous && session?.sessionId
-      ? continueIn(workspace, previous, session, parent, request, baseCommit)
+      ? continueIn(workspace, previous, session, parent, request)
       : workspace;
   };
 
@@ -675,32 +667,17 @@ export const createWorkItems = ({
     if (!request.workspace) {
       const settings = settingsOf(request, parent);
       const workspace = await openWorkspace(parent, request.cwd ?? parent.cwd);
-      return spawnIn(
-        workspace,
-        settings,
-        parent,
-        request,
-        await headOf(workspace)
-      );
+      return spawnIn(workspace, settings, parent, request);
     }
     // Awaited before the claim, which files the item in the same step as
-    // its one-writer check. A workspace that is missing or archived is the
-    // claim's to refuse, in its own words.
+    // its one-writer check.
     await boundaryUp(request.workspace);
-    const [named] = db.workspacesNamed(request.workspace.trim());
-    const baseCommit = named?.state === "active" ? await headOf(named) : "";
-    const followed = followUp(request.workspace, request, parent, baseCommit);
+    const followed = followUp(request.workspace, request, parent);
     // A workspace whose last session never started has nothing to continue:
     // a session starts there the way every new delegate's does.
     return "item" in followed
       ? followed
-      : spawnIn(
-          followed,
-          settingsOf(request, parent),
-          parent,
-          request,
-          baseCommit
-        );
+      : spawnIn(followed, settingsOf(request, parent), parent, request);
   };
 
   /** A new session in `workspace`, running a new item from the request's brief. */
@@ -708,8 +685,7 @@ export const createWorkItems = ({
     workspace: WorkspaceRow,
     settings: Settings,
     parent: InstanceRow,
-    request: WorkItemRequest,
-    baseCommit: string
+    request: WorkItemRequest
   ): WorkItemStart => {
     const { harness, canDelegate } = settings;
     const instanceId = crypto.randomUUID();
@@ -727,7 +703,6 @@ export const createWorkItems = ({
       effort: settings.type?.effort,
       state: "starting",
       checks: request.checks,
-      baseCommit,
     });
     published(item);
 
@@ -900,30 +875,49 @@ export const createWorkItems = ({
     return outcomes;
   };
 
-  /** The report's commits and diffstat: the worktree since the item began. */
+  /**
+   * The report's commits and diffstat: only what the item's own session
+   * made. A range from a starting commit cannot say that — a rebase onto a
+   * newer main pulls other people's commits into it, and after the push that
+   * lands the work, `merge-base origin/main HEAD` is HEAD itself. The
+   * worktree's HEAD reflog can: every commit its session made, or rewrote by
+   * rebasing, is an entry there. The ones since the item began that HEAD still
+   * holds are the item's; the diffstat runs from the oldest of them.
+   */
   const changesSince = async (
     workspace: WorkspaceRow,
     item: WorkItemRow
   ): Promise<string> => {
-    const range = `${item.baseCommit}..HEAD`;
-    const [commits, diffstat] = await Promise.all([
-      command(
-        workspace.machineId,
-        workspace.path,
-        `git log --oneline ${range}`,
-        GIT_TIMEOUT_MS
-      ),
-      command(
-        workspace.machineId,
-        workspace.path,
-        `git diff --stat ${range}`,
-        GIT_TIMEOUT_MS
-      ),
-    ]);
-    return (
-      `\n\nCommits:${fenced(commits.stdout.trim() || "(none)")}` +
-      `\n\nDiffstat:${fenced(diffstat.stdout.trim() || "(no changes)")}`
+    const since = Math.floor(item.createdAt.getTime() / 1000);
+    const reflog = await command(
+      workspace.machineId,
+      workspace.path,
+      "git reflog --date=unix --format='%H %gd %gs' HEAD",
+      GIT_TIMEOUT_MS
     );
+    const made = new Set<string>();
+    for (const line of reflog.stdout.split("\n")) {
+      const entry = REFLOG_ENTRY.exec(line);
+      if (entry && Number(entry[2]) >= since) {
+        made.add(entry[1]);
+      }
+    }
+    const none = `\n\nCommits:${fenced("(none)")}\n\nDiffstat:${fenced("(no changes)")}`;
+    if (made.size === 0) {
+      return none;
+    }
+    const listed = await command(
+      workspace.machineId,
+      workspace.path,
+      `kept=""; for c in ${[...made].join(" ")}; do git merge-base --is-ancestor "$c" HEAD && kept="$kept $c"; done; ` +
+        `[ -n "$kept" ] || exit 0; git log --oneline --no-walk $kept; echo "${DIFFSTAT_MARK}"; ` +
+        `git diff --stat "$(git merge-base --octopus $kept)^" HEAD`,
+      GIT_TIMEOUT_MS
+    );
+    const [commits = "", diffstat = ""] = listed.stdout.split(DIFFSTAT_MARK);
+    return commits.trim()
+      ? `\n\nCommits:${fenced(commits.trim())}\n\nDiffstat:${fenced(diffstat.trim() || "(no changes)")}`
+      : none;
   };
 
   return {

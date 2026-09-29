@@ -425,8 +425,6 @@ export const workItems = sqliteTable(
      * still ends on a turn nothing answers.
      */
     checks: text("checks", { mode: "json" }).$type<WorkItemCheck[]>(),
-    /** The worktree's HEAD when the item started: its report's commits and diffstat run from here. */
-    baseCommit: text("base_commit"),
     /**
      * The final report: the summary, check results, commits and findings the
      * hub built when the checks passed (an item without checks: its session's
