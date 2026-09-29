@@ -20,15 +20,8 @@
     fades = false,
     trail,
     carry = null,
-    hang = false,
   }: {
     source: string;
-    /**
-     * The words are on the transcript's line B, with the mark track's gap
-     * before them: a list's markers hang into that gap, so its words stay on
-     * B with the prose around them.
-     */
-    hang?: boolean;
     streaming?: boolean;
     /** While streaming: each chunk's words fade in as they land. */
     fades?: boolean;
@@ -39,7 +32,7 @@
   } = $props();
 </script>
 
-<div class="msg" class:hang={hang}>
+<div class="msg">
   <Markdown {carry} {fades} {source} {streaming} {trail} />
 </div>
 
@@ -101,9 +94,6 @@
     & :global(ul),
     & :global(ol) {
       padding-inline-start: var(--space-5);
-    }
-    &.hang :global(.prose > :is(ul, ol)) {
-      padding-inline-start: 0;
     }
 
     /* A reply is not a document: its headings are emphasis, not a title page. */

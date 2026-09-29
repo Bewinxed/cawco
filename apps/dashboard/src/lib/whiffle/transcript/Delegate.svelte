@@ -426,9 +426,9 @@
   <Collapsible.Root onOpenChange={onToggle} {open}>
     <div class="head">
       <Collapsible.Trigger class="bhead press-tint">
+        <span aria-hidden="true" class="chev"><IconChevronRight /></span>
         <span aria-hidden="true" class="mark m{markHue(seed)}"><Sprite /></span>
         <span class="tk">{label}</span>
-        <span aria-hidden="true" class="chev"><IconChevronRight /></span>
         {#if started}
           <span class="kind">session</span>
         {:else if type}
@@ -560,9 +560,7 @@
               {:else if r.kind === 'thinking'}
                 <Thinking live={r.live} text={r.text} />
               {:else if r.kind === 'stream'}
-                <div class="say">
-                  <MessageBody hang source={r.text} streaming />
-                </div>
+                <div class="say"><MessageBody source={r.text} streaming /></div>
               {:else if r.kind === 'single'}
                 <MessageRow
                   {agentName}
@@ -602,24 +600,24 @@
   }
   /* The same rail every branch block sits on — the subagent fold's grammar,
      with a second row for the brief and a register for the asks. */
-  /* The rail on line A; every line of the card on line B. */
   .branch {
+    /* Where the mark starts: the chevron and the head row's gap. Every line
+       under the head indents to it. */
+    --glyph: calc(13px + var(--space-2));
     margin-block: var(--rail-gap, var(--space-4)) 0;
-    padding-inline-start: var(--line-ab);
+    margin-inline: var(--space-2) 0;
+    padding-inline-start: var(--space-3);
     background: var(--rail-head, var(--rail)) left top / 2px 100% no-repeat;
   }
 
   /* The head row: the trigger takes the width, the jump link beside it keeps
      its own 26px so a click on it never toggles. The trigger is a bits-ui
-     element, so it is addressed globally on purpose. It hangs back to line
-     A: the delegate's mark in the mark track, its name on B, and the
-     disclosure chevron after the name, as a tool row carries its own. */
+     element, so it is addressed globally on purpose. */
   .head {
     --hit-gap-x: var(--space-1);
     display: flex;
     align-items: center;
     gap: var(--space-1);
-    margin-inline-start: calc(var(--line-ab) * -1);
   }
   :global(.delegate .bhead) {
     min-block-size: 26px;
@@ -665,9 +663,8 @@
   }
 
   .mark {
-    inline-size: var(--row-mark);
-    block-size: var(--row-mark);
-    margin-inline-end: calc(var(--col-mark) - var(--row-mark));
+    inline-size: 17px;
+    block-size: 17px;
     border-radius: var(--radius-xs);
     flex: 0 0 auto;
     display: grid;
@@ -810,10 +807,11 @@
     }
   }
 
-  /* The brief: the first line of what it was asked, on line B under the
-     name. headline() bounds its length; the wrap is the layout's. */
+  /* The brief: the first line of what it was asked, indented under the glyph
+     column. headline() bounds its length; the wrap is the layout's. */
   .brief {
     margin-block: var(--space-1) 0;
+    margin-inline: var(--glyph) 0;
     font-size: var(--text-body);
     font-weight: var(--weight-body);
     color: var(--ink-muted);
@@ -827,6 +825,7 @@
     align-items: baseline;
     gap: var(--space-2);
     margin-block: var(--space-1) 0;
+    margin-inline: var(--glyph) 0;
     font-size: var(--text-meta);
     font-weight: var(--weight-body);
     color: var(--ink-strong);
@@ -867,6 +866,7 @@
   .asks {
     list-style: none;
     margin-block: 0;
+    margin-inline: var(--glyph) 0;
     padding: 0;
     display: flex;
     flex-direction: column;
@@ -910,12 +910,10 @@
     overflow-wrap: anywhere;
   }
 
-  /* Its transcript, in a well of its own — concentric with the report inside.
-     The reader's well inside it reaches only as far as this padding, so the
-     avatar and the well's edges sit on its edges rather than past them. */
+  /* Its transcript, in a well of its own — concentric with the report inside. */
   .inner {
-    --well-pad: var(--space-1);
     margin-block: var(--space-2) 0;
+    margin-inline: var(--glyph) 0;
     padding: var(--space-1);
     border-radius: var(--radius-sm);
     background: var(--surface-recess);
@@ -926,10 +924,18 @@
     font-weight: var(--weight-body);
     color: var(--ink-muted);
   }
-  /* The streaming answer, on the inner transcript's own line B. */
   .say {
     margin-block-start: var(--space-4);
-    padding-inline-start: var(--line-ab);
+  }
+  /* The hand-off and every follow-up are user turns. In the main column a
+     user turn bleeds into the gutters and sits in a sunken well; in here the
+     well is already sunken and there are no gutters, so the turn stays flush
+     and lifts instead — the report's own surface, concentric with the well. */
+  .inner :global(section.turn.you) {
+    margin-inline: 0;
+    border-radius: var(--radius-xs);
+    background: var(--surface-raised);
+    box-shadow: var(--shadow-tile);
   }
 
   .report {

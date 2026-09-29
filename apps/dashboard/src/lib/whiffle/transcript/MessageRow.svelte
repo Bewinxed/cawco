@@ -299,7 +299,7 @@
             you
           />
         {/if}
-        <MessageBody hang source={message.content} />
+        <MessageBody source={message.content} />
         {#if message.metadata?.attachments?.length || message.metadata?.images?.length}
           <div class="chips" data-gallery>
             {#each message.metadata.attachments ?? [] as att, i (`${att.name}-${i}`)}
@@ -371,7 +371,7 @@
 {:else if kind === 'assistant'}
   <section class="turn" class:grouped>
     <Who {grouped} name={agentName} timestamp={message.timestamp} />
-    <MessageBody {carry} hang source={message.content} />
+    <MessageBody {carry} source={message.content} />
   </section>
 {:else if kind === 'thinking'}
   {#if message.content.trim()}
@@ -386,8 +386,6 @@
 <style>
   .turn {
     margin-block-start: var(--space-4);
-    /* A turn's words are on line B; Who hangs its speaker line back to A. */
-    padding-inline-start: var(--line-ab);
 
     /* A later turn in the same speaker's group sits closer to the one above,
        and holds its floated clock inside its own box. */
@@ -396,7 +394,18 @@
       margin-block-start: var(--space-2);
     }
   }
+  /* The well bleeds into the gutter by exactly its own padding, so the
+     reader's words sit on the agent's text column and only the surface
+     widens. --space-3 inside the transcript's 25/21 gutters; at the narrow
+     breakpoint the gutters drop to --space-5 (18px) and the well to
+     --space-2, keeping 11px of gutter. */
   .turn.you {
+    --pad: var(--space-3);
+
+    @media (width <= 900px) {
+      --pad: var(--space-2);
+    }
+
     /* The run's later messages: the row above ends on its own padding and
        the hairline, so there is no gap of the turn's own. */
     &.grouped {
@@ -412,11 +421,9 @@
   .well {
     position: relative;
     isolation: isolate;
-    /* From line A, under the avatar, with the words on line B; past the
-       words' end by --well-pad. */
-    margin-inline: calc(var(--line-ab) * -1) calc(var(--well-pad) * -1);
+    margin-inline: calc(var(--pad) * -1);
     padding-block: calc(var(--space-2) + 1px);
-    padding-inline: var(--line-ab) var(--well-pad);
+    padding-inline: var(--pad);
 
     &::before {
       content: "";
@@ -442,7 +449,7 @@
     &::after {
       content: "";
       position: absolute;
-      inset-inline: var(--line-ab) var(--well-pad);
+      inset-inline: var(--pad);
       inset-block-start: -1px;
       block-size: 1px;
       background: var(--well-edge);

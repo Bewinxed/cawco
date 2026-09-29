@@ -163,7 +163,6 @@
       <Who grouped={live.grouped} name={agentName} />
       <MessageBody
         fades={ledger?.watched ?? false}
-        hang
         source={live.text}
         streaming
         {trail}
@@ -239,10 +238,8 @@
       opacity: 0;
     }
   }
-  /* MessageRow's turn: words on line B, the speaker line hung back to A. */
   .turn {
     margin-block-start: var(--space-4);
-    padding-inline-start: var(--line-ab);
 
     /* MessageRow's grouped turn, so the answer settles without moving. */
     &.grouped {

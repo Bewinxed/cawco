@@ -2557,9 +2557,9 @@
     flex: 1 1 auto;
     overflow-y: auto;
     /* asymmetric content padding is the DESIGN.md ledger signature:
-       inline start --line-a (--space-7, 25), inline end --space-6 (21). */
+       inline start --space-7 (25), inline end --space-6 (21). */
     padding-block-start: 0;
-    padding-inline: var(--line-a) var(--space-6);
+    padding-inline: var(--space-7) var(--space-6);
     /* The foot clears the floating composer COLUMN, not the bare pill: a
        permission card stacks above the input inside it and can stand 400px
        tall, which used to bury the very message that raised it.
@@ -2574,7 +2574,7 @@
     position: relative;
 
     @media (width <= 900px) {
-      padding-inline-end: var(--space-5);
+      padding-inline: var(--space-5);
     }
   }
   .empty {
@@ -2666,11 +2666,14 @@
     }
   }
 
-  /* The in-flight tool sits on the same rail as the calls it becomes: the
-     rail on line A, the glyph centred in the mark track, the words on B. */
+  /* The in-flight tool sits on the same rail column as the calls it becomes,
+     at every width — see the breakpoint below. */
   .livetool {
-    /* one rhythm value (--space-4) tops every row type. */
+    /* one rhythm value (--space-4) tops every row type; the rail indent is
+       --space-2 margin + --space-3 padding, shared across every rail block. */
     margin-block-start: var(--rail-gap, var(--space-4));
+    margin-inline-start: var(--space-2);
+    padding-inline-start: var(--space-3);
     background: var(--rail-head, var(--rail)) left top / 2px 100% no-repeat;
     min-block-size: 26px;
     display: flex;
@@ -2680,10 +2683,14 @@
     font-weight: var(--weight-strong);
     color: var(--ink-strong);
 
+    @media (width <= 900px) {
+      margin-inline-start: 0;
+    }
+
     /* No `color` here: the tool family's `text-tool-*` tint governs the
        glyph; the generic case inherits --ink-strong from .livetool. */
     & .ic {
-      inline-size: var(--col-mark);
+      inline-size: 16px;
       block-size: 16px;
       flex: 0 0 auto;
       display: grid;

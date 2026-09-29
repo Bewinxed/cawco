@@ -234,16 +234,18 @@
 </section>
 
 <style>
-  /* The card's surface starts on line A; its words start on line B. */
   .hitl {
-    --edge: 1px;
-    border: var(--edge) solid var(--border-control);
+    border: 1px solid var(--border-control);
     border-radius: var(--radius-lg);
     background: var(--surface-raised);
     margin-block-start: var(--space-4);
+    margin-inline-start: var(--space-2);
     padding: var(--space-3);
-    padding-inline-start: calc(var(--line-ab) - var(--edge));
     box-shadow: var(--shadow-hairline, var(--shadow-tile));
+
+    @media (width <= 900px) {
+      margin-inline-start: 0;
+    }
   }
   h2 {
     font-size: var(--text-label);

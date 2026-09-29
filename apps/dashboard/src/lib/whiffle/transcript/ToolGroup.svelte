@@ -491,7 +491,6 @@
     min-block-size: 80px;
     padding: var(--space-2);
     margin-block: var(--space-2);
-    margin-inline-start: var(--line-ab);
     border: 1px solid var(--border-hairline);
     border-radius: var(--radius-md);
     background: var(--surface-raised);
@@ -605,7 +604,7 @@
     display: flex;
     flex-wrap: wrap;
     gap: var(--space-2);
-    margin-inline-start: var(--line-ab);
+    margin-inline-start: calc(15px + var(--space-2));
     margin-block-start: var(--space-2);
 
     & > :global(*) {
@@ -614,12 +613,15 @@
       max-inline-size: 100%;
     }
   }
-  /* The run's rail is on line A; each call's glyph sits centred in the mark
-     track and its words start on line B. What a call opens (its fields, its
-     pictures, its preview) hangs on B under the words. */
   .tools {
     margin-block-start: var(--rail-gap, var(--space-4));
+    margin-inline-start: var(--space-2);
+    padding-inline-start: var(--space-3);
     background: var(--rail-head, var(--rail)) left top / 2px 100% no-repeat;
+
+    @media (width <= 900px) {
+      margin-inline-start: 0;
+    }
   }
   /* The row's shape is shared by the plain <div> and the Collapsible trigger
      (a <button>, so it needs its chrome stripped back to the ledger's). */
@@ -664,7 +666,7 @@
   /* The glyph sits in one cell, so a status change can cross-fade two of
      them on the same spot. */
   .ic {
-    inline-size: var(--col-mark);
+    inline-size: 16px;
     block-size: 16px;
     flex: 0 0 auto;
     display: grid;
@@ -766,7 +768,7 @@
     flex-direction: column;
     gap: var(--space-2);
     margin-block: var(--space-2) var(--space-3);
-    margin-inline-start: var(--line-ab);
+    margin-inline-start: calc(15px + var(--space-2));
     padding: var(--space-3);
     border-radius: var(--radius-sm);
     background: var(--surface-recess);
@@ -775,7 +777,7 @@
      inline-start edge, with no well around them. */
   .skill-args {
     margin-block: var(--space-1) var(--space-3);
-    margin-inline-start: var(--line-ab);
+    margin-inline-start: calc(15px + var(--space-2));
     max-inline-size: 70ch;
   }
   .field {

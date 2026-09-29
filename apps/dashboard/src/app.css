@@ -247,23 +247,6 @@
        carries 7). Its 1px edge is darker than the well by day; at night it
        is the ink at 8%, lighter than the well. */
     --well-r: 7px;
-    /* The transcript's two vertical lines. Line A is where every row starts:
-       the avatars, the rails, and the surfaces of cards and wells. Line B is
-       where every row's words start: names, prose, bullets, tool rows,
-       notes, the text inside cards and wells. --line-a is A's inset from the
-       transcript's edge (its 25/21 gutters; --space-5 at the narrow
-       breakpoint, below). Between A and B is the mark track (--col-mark, the
-       18px avatar) and the --space-2 gap after it: a row's glyph sits
-       centred in the track, and its words start at B. */
-    --line-a: var(--space-7);
-    --col-mark: 18px;
-    --line-ab: calc(var(--col-mark) + var(--space-2));
-    /* How far the reader's well reaches past the words on its inline END,
-       which is also its padding there (its start is on A, its words on B).
-       --space-3 inside the transcript's gutters, --space-2 at the narrow
-       breakpoint (below). A delegate or subagent card sets it to its own
-       inner padding, so the well stays inside the card. */
-    --well-pad: var(--space-3);
     --well-edge: light-dark(
       var(--neutral-5),
       oklch(from var(--neutral-12) l c h / 0.08)
@@ -601,10 +584,6 @@
 
     @media (pointer: coarse), (width < 640px) {
       --c-nav-h: 44px;
-    }
-    @media (width <= 900px) {
-      --line-a: var(--space-5);
-      --well-pad: var(--space-2);
     }
   }
 }
