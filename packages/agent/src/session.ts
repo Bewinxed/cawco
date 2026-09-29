@@ -35,6 +35,7 @@ import {
   alreadyIngested,
   CONTROL_GIT_CHANGES,
   CONTROL_QUERIES,
+  CONTROL_RUN_COMMAND,
   FLEET_STATUS,
   FLEET_SYNC,
   GENERATE_IMAGE,
@@ -469,10 +470,16 @@ export class SessionSupervisor {
         : undefined;
     const imageRequest =
       control?.method === GENERATE_IMAGE ? control.requestId : undefined;
-    // A slow image request must not block machine busy probes or other controls.
-    const key = imageRequest
-      ? `image:${imageRequest}`
-      : (envelope.instanceId ?? "");
+    // A slow image request must not block machine busy probes or other
+    // controls. Nor may a command the hub runs (a check, a workflow exec, up
+    // to an hour): commands in one directory run one after another, and
+    // nothing else waits for them.
+    let key = envelope.instanceId ?? "";
+    if (imageRequest) {
+      key = `image:${imageRequest}`;
+    } else if (control?.method === CONTROL_RUN_COMMAND) {
+      key = `command:${String(control.args?.[0])}`;
+    }
     if (imageRequest) {
       this.#imageRequests.set(imageRequest, String(control?.args?.[0]));
     }

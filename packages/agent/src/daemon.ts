@@ -38,7 +38,7 @@ import { SessiondClient } from "./sessiond-client";
 import { probeTools } from "./tools";
 import { consumeRestartMarker } from "./update";
 import { UsageScanner } from "./usage/scanner";
-import { runWorkflowCommand } from "./workflow-command";
+import { abandonCommands, runWorkflowCommand } from "./workflow-command";
 import {
   archiveWorkspace,
   createWorkspace,
@@ -788,7 +788,12 @@ const attach = (
     // probe anyway: a session that cannot answer says so in its own turn,
     // where it is unambiguous and costs nothing to learn.
 
-    return yield* closed(socket, url);
+    // A command the hub ran over this connection answers nobody once it ends,
+    // and the hub runs its checks again from the first when it is back: the
+    // commands go with the connection. Sessions are not commands and stay.
+    return yield* closed(socket, url).pipe(
+      Effect.tapError(() => Effect.sync(abandonCommands))
+    );
   });
 
 /**
