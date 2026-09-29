@@ -213,6 +213,8 @@
       case "set":
       case "set_doc":
         return typeof input.content === "string";
+      case "remove_doc":
+        return true;
       case "get":
         return memoryResult(raw).kind === "doc";
       case "list_docs":
@@ -425,6 +427,7 @@
                   </div>
                 {:else if d.expanded === 'memory' && !failed}
                   <MemoryBody
+                    at={m.timestamp}
                     input={toolInput}
                     result={m.metadata?.toolResult}
                   />
