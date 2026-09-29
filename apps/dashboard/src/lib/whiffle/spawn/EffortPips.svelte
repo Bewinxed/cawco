@@ -169,15 +169,26 @@
           </span>
           <span class="content">
             {#if n}
-              <span aria-hidden="true" class="level-bars">
+              <!-- One bar per level, all the same size on whole pixels; the lit
+                   ones say where the level sits. -->
+              <svg
+                aria-hidden="true"
+                class="level-bars"
+                height="10"
+                viewBox={`0 0 ${n * 4 - 2} 10`}
+                width={n * 4 - 2}
+              >
                 {#each efforts as level, i (level)}
-                  <span
+                  <rect
                     class="bar"
-                    style={`height:${35 + (n > 1 ? i / (n - 1) : 1) * 65}%`}
                     class:lit={i <= effortIdx}
-                  ></span>
+                    height="10"
+                    rx="1"
+                    width="2"
+                    x={i * 4}
+                  />
                 {/each}
-              </span>
+              </svg>
             {/if}
             <span class="lvl">{label}</span>
           </span>
@@ -320,7 +331,7 @@
   .ghost {
     display: grid;
     visibility: hidden;
-    padding-inline-start: calc(var(--bars) * 2px + (var(--bars) - 1) * 1.5px + 5px);
+    padding-inline-start: calc(var(--bars) * 4px - 2px + 5px);
   }
   .ghost > span {
     grid-area: 1 / 1;
@@ -336,24 +347,15 @@
   /* As many bars as the model has levels, lit up to the one it sits on. The
      ramp is set inline so it spans 4→12px whether the model offers three
      levels or five. */
-  /* The icon is as tall as a capital letter of the label beside it. */
+  /* Equal bars on whole pixels, about as tall as a capital letter beside it. */
   .level-bars {
-    display: flex;
-    align-items: flex-end;
-    gap: 1.5px;
-    height: 1cap;
+    display: block;
+    flex: none;
   }
   .bar {
-    width: 2px;
-    border-radius: 1px;
-    background: var(--ink-strong);
+    fill: var(--ink-strong);
     opacity: 0.22;
     transition: opacity 160ms ease;
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        opacity 160ms ease,
-        height 160ms var(--ease-in-out);
-    }
   }
   .bar.lit {
     opacity: 1;
