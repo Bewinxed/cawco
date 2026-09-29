@@ -339,6 +339,10 @@
 <style>
   .editor-wrap {
     position: relative;
+    /* The prompt's type, defined once: the text, the placeholder and the chips
+       (which size themselves to the line) all read the same two values. */
+    --prompt-fs: var(--text-body);
+    --prompt-lh: calc(var(--prompt-fs) * 1.55);
   }
   .editor {
     width: 100%;
@@ -348,7 +352,7 @@
     outline: none;
     background: transparent;
     border-radius: 12px 12px 0 0;
-    font: 400 var(--text-body) / 1.55 var(--font-body);
+    font: 400 var(--prompt-fs) / var(--prompt-lh) var(--font-body);
     color: var(--ink-strong);
     white-space: pre-wrap;
     word-break: break-word;
@@ -361,7 +365,7 @@
     left: 16px;
     top: 12px;
     right: 16px;
-    font: 400 var(--text-body) / 1.55 var(--font-body);
+    font: 400 var(--prompt-fs) / var(--prompt-lh) var(--font-body);
     color: var(--ink-subtle);
     pointer-events: none;
     white-space: nowrap;
@@ -371,43 +375,47 @@
   .hint {
     color: var(--ink-subtle);
   }
+  /* A chip is centred on its line by construction, not tuned to a baseline.
+     It is the line minus 1px of margin above and below, pinned to the line's
+     top: the margin box is exactly one line tall, so the chip never grows the
+     line box and its centre is the line's centre, which is also the centre of
+     the text's content area (half-leading is symmetric). Nothing depends on the
+     chip's own font, the icon's size or the prompt's size, so it holds at the
+     desktop 14px, the mobile 16px and any font the token stack resolves to.
+     (Flex alignment inside the chip centres the icon and the label together;
+     a flex chip's own baseline is never consulted because it is top-aligned.) */
   .editor :global(.ns-chip) {
-    /* inline-block, not inline-flex: a flex chip takes its baseline from the
-       icon (no text, so its bottom edge), which is what pushed it off the
-       line. Here the label's own baseline sits on the prompt's baseline. */
-    display: inline-block;
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    vertical-align: top;
+    block-size: calc(var(--prompt-lh) - 2px);
+    margin: 1px;
     padding-inline: 5px 7px;
-    margin-inline: 1px;
     border-radius: var(--radius-sm);
     background: var(--surface-fill);
     border: 1px solid var(--border-control);
-    font: 500 var(--text-label) / 20px var(--font-body);
+    font: 500 var(--text-label) / 1 var(--font-body);
     color: var(--ink-strong);
     white-space: nowrap;
     user-select: all;
   }
   .editor :global(.ns-chip-icon) {
-    /* As tall as the chip's 20px line, centred inside it: the icon shares the
-       label's centre whatever its size (HarnessLogo is 16px, the rest 12px). */
     display: inline-flex;
-    align-items: center;
-    block-size: 20px;
-    margin-inline-end: 5px;
-    vertical-align: top;
   }
+  /* The harness logo sizes itself (16px); every other icon is a bare svg. */
   .editor :global(.ns-chip-icon > svg) {
     inline-size: 12px;
     block-size: 12px;
   }
   @media (max-width: 640px) {
+    .editor-wrap {
+      --prompt-fs: 1rem;
+    }
     .editor {
       height: 120px;
       overscroll-behavior: contain;
       transition: none;
-    }
-    .editor,
-    .placeholder {
-      font-size: 1rem;
     }
     /* The hint would only ellipsise at this width; the question survives whole. */
     .hint {
