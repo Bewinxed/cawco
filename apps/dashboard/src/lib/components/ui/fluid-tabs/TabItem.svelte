@@ -78,6 +78,36 @@
   });
   // The list's props land on the hit, not the box; `class` is the box's.
 
+  let hitEl = $state<HTMLElement | undefined>();
+  /**
+   * The whole segment chooses, not only the label: the end padding and the
+   * sheet's flared foot belong to the tab but lie outside the hit. A click
+   * that lands on them (not on the hit, not on a trailing control) is
+   * handed to the hit.
+   */
+  function forward(event: MouseEvent): void {
+    const target = event.target as Element;
+    if (
+      event.defaultPrevented ||
+      !hitEl ||
+      hitEl.contains(target) ||
+      target.closest("button, a, input, [role=button]")
+    ) {
+      return;
+    }
+    hitEl.dispatchEvent(
+      new MouseEvent("click", {
+        bubbles: false,
+        cancelable: true,
+        button: event.button,
+        metaKey: event.metaKey,
+        ctrlKey: event.ctrlKey,
+        shiftKey: event.shiftKey,
+        altKey: event.altKey,
+      }),
+    );
+  }
+
   function choose(event: MouseEvent): void {
     onclick?.(event);
     if (event.defaultPrevented || event.button !== 0) {
@@ -102,8 +132,10 @@
   bind:this={node}
   style:--ride={ride ? `${ride.size * 100}%` : undefined}
   style:--ride-at={ride?.at}
+  onclick={forward}
 >
   <svelte:element
+    bind:this={hitEl}
     aria-selected={selected}
     class="hit touch-hit press-tint"
     draggable={href ? 'false' : undefined}
@@ -143,12 +175,12 @@
     flex: 0 1 auto;
     min-inline-size: 0;
     block-size: var(--item);
-    padding-inline-end: calc(var(--px) - 6px);
     border-radius: var(--shape);
     color: var(--ink-muted);
 
-    &:has(.hit:last-child) {
-      padding-inline-end: 0;
+    /* Only a tab with something after its hit carries end padding. */
+    &:not(:has(.hit:last-child)) {
+      padding-inline-end: calc(var(--px) - 6px);
     }
     /* Chosen, or under the list's hover ghost (the kit highlight marks
        the row it stands under). A tap leaves no ghost behind to ink. */
@@ -270,7 +302,7 @@
     gap: calc(var(--gap) + 4px);
     min-inline-size: 0;
     padding-block: 0;
-    padding-inline: var(--px);
+    padding-inline-start: var(--px);
     border: 0;
     border-radius: inherit;
     background: transparent;
@@ -283,10 +315,10 @@
     cursor: pointer;
     outline: none;
 
-    /* Followed by a trailing control: the box's own end padding, not
-       the hit's, is what keeps the control off the segment's edge. */
-    &:not(:last-child) {
-      padding-inline-end: 0;
+    /* Last in the box: the hit's own end padding. When a trailing control
+       follows, the box's end padding keeps it off the segment's edge. */
+    &:last-child {
+      padding-inline-end: var(--px);
     }
   }
   .ff-tab :global(.ff-tab-icon) {
