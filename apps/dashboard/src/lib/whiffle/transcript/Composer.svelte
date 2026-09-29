@@ -1072,9 +1072,11 @@
       pointer-events: auto;
     }
   }
-  /* One conversation's tray over the next while they cross-fade. */
+  /* One conversation's tray over the next while they cross-fade, in a column
+     the composer's width: an auto column grew to the chips' own width. */
   .tray-slot {
     display: grid;
+    grid-template-columns: minmax(0, 1fr);
   }
   /* What the column measures into the composer's height: the cards and
      the step under them, and nothing at all with no card parked. */

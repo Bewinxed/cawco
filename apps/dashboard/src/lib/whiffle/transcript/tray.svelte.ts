@@ -139,6 +139,9 @@ export function trayCard(instanceId: () => string | null) {
   };
 }
 
+/** A report the tray asks its parent's transcript to bring into view: message id, by parent. */
+export const trayReveal = new SvelteMap<string, string>();
+
 /**
  * What the tray says out loud, for the transcript's live regions to read:
  * one polite and one assertive line per parent, each replaced by the next.

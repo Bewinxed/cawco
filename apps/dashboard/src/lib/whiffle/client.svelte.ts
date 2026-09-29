@@ -2927,13 +2927,13 @@ function streamEffectsFor<K extends CommandKind>(
 let peekedId = $state<string | null>(null);
 
 /**
- * Delegates whose cards are expanded. A delegate is a full instance, but its
- * parent's transcript is what the reader is in — so it is not an open tab,
- * and without this it receives no frames and its expanded card stays empty.
- * Watching on expand (and stopping on collapse) is what feeds the card its
- * transcript without opening the session as a tab.
+ * Delegates something on screen is reading live: an expanded card, the tray's
+ * open panel. A delegate is a full instance, but its parent's transcript is
+ * what the reader is in — so it is not an open tab, and without this it
+ * receives no frames. Counted by watcher, so the tray's panel closing never
+ * stops the frames an expanded card is still reading.
  */
-const watchedDelegates = new Set<string>();
+const watchedDelegates = new Map<string, number>();
 
 /**
  * A session is "open" when a tab the workspace holds or the peek pane is
@@ -2952,7 +2952,7 @@ function subscriptionIds(): string[] {
   if (peekedId) {
     ids.add(peekedId);
   }
-  for (const id of watchedDelegates) {
+  for (const id of watchedDelegates.keys()) {
     ids.add(id);
   }
   return [...ids];
@@ -2992,17 +2992,23 @@ export function setPeeked(id: string | null): void {
   syncSubscriptions();
 }
 
-/** A delegate card expanded: watch this instance's frames so its card can render them. */
+/** One more reader of this delegate: its frames stream while any reader remains. */
 export function watchDelegate(instanceId: string): void {
-  watchedDelegates.add(instanceId);
+  watchedDelegates.set(instanceId, (watchedDelegates.get(instanceId) ?? 0) + 1);
   syncSubscriptions();
 }
 
-/** A delegate card collapsed: stop watching, so the instance's frames no longer stream. */
+/** A reader let go; the last one stops the instance's frames. */
 export function unwatchDelegate(instanceId: string): void {
-  if (!watchedDelegates.delete(instanceId)) {
+  const count = watchedDelegates.get(instanceId);
+  if (count === undefined) {
     return;
   }
+  if (count > 1) {
+    watchedDelegates.set(instanceId, count - 1);
+    return;
+  }
+  watchedDelegates.delete(instanceId);
   syncSubscriptions();
 }
 

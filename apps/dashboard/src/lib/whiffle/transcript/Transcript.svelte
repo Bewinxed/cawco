@@ -76,7 +76,7 @@
   import SystemLine from "./SystemLine.svelte";
   import Thinking from "./Thinking.svelte";
   import ToolGroup from "./ToolGroup.svelte";
-  import { trayNews } from "./tray.svelte";
+  import { trayNews, trayReveal } from "./tray.svelte";
 
   let {
     session,
@@ -2450,6 +2450,24 @@
   // Following it either way is what keeps `wasBusy` honest: dropping the
   // bookkeeping while hidden would make the next switch announce a turn that
   // finished minutes ago.
+  // A finished chip pressed while its delegate's report is off screen: the
+  // report comes into view (and the chip, seeing it, flies there).
+  $effect(() => {
+    const want = trayReveal.get(session.instanceId);
+    if (!(want && active)) {
+      return;
+    }
+    untrack(() => {
+      trayReveal.delete(session.instanceId);
+      const index = renderedRows.findIndex(
+        (row) => row.kind === "single" && row.message.id === want
+      );
+      if (index >= 0) {
+        list?.scrollToIndex(index, { align: "center", smooth: true });
+      }
+    });
+  });
+
   // The delegate tray's news: a delegate started, finished or failed (polite),
   // or has a question for the reader (assertive, cleared once it is said).
   let trayAlert = $state("");

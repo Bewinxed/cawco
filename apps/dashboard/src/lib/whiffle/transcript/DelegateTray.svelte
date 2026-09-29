@@ -16,18 +16,27 @@
   import { Button } from "$lib/components/ui/button";
   import {
     IconAsk,
+    IconExternal,
     IconStop,
     IconSuccess,
     IconWarningTriangle,
   } from "$lib/icons";
-  import { dismissWorkItem, whiffle } from "../client.svelte";
-  import { askDetailOf, askShortOf } from "../frames";
+  import {
+    dismissWorkItem,
+    preloadHistory,
+    unwatchDelegate,
+    watchDelegate,
+    whiffle,
+  } from "../client.svelte";
+  import { askDetailOf, askShortOf, matchesSession } from "../frames";
   import { conversationHref } from "../links";
   import { markHue, sessionSprite } from "../mark";
-  import { dur, easeOut, motionOk } from "../motion/curves.svelte";
+  import { CURVE, dur, easeOut, motionOk } from "../motion/curves.svelte";
   import { unfold } from "../motion/fold.svelte";
+  import { morph } from "../motion/morph.svelte";
   import { reflow } from "../motion/rows.svelte";
   import { land } from "../motion/share.svelte";
+  import DelegateTail, { type TailNote } from "./DelegateTail.svelte";
   import {
     admit,
     cardVisible,
@@ -36,6 +45,7 @@
     flightKey,
     left,
     trayNews,
+    trayReveal,
   } from "./tray.svelte";
 
   let {
@@ -52,7 +62,11 @@
   const HOLD = 6000;
   /** How long a new delegate's card has to come on screen before its chip simply appears. */
   const SETTLE = 1500;
-  /** One chip's width and the gap after it, for the overflow count; the "+N" chip and its gap. */
+  /**
+   * A chip's floor (it shrinks to it, its title ellipsised) and the gap after
+   * it, for the overflow count; the "+N" chip and its gap. What does not fit
+   * at the floor goes into "+N", so the row never passes the composer's edge.
+   */
   const CHIP = 120;
   const GAP = 7;
   const MORE = 59;
@@ -64,7 +78,6 @@
     /** The pending question: the delegate's own (needs you), or the one it put to this session. */
     question: string;
     questions: number;
-    step: string;
     tone: Tone;
   }
 
@@ -78,7 +91,6 @@
     const pending = whiffle.session(item.instanceId)?.pending ?? [];
     const own = pending.filter((each) => !each.routedTo);
     const routed = pending.filter((each) => each.routedTo === "parent");
-    const live = item.state === "starting" || item.state === "running";
     let tone: Tone;
     if (item.state === "failed") {
       tone = "failed";
@@ -94,7 +106,6 @@
       tone = "running";
     }
     const asking = own[0] ?? routed[0];
-    const tool = live ? whiffle.currentToolOf(item.instanceId) : null;
     return {
       item,
       tone,
@@ -106,7 +117,6 @@
             asking.input as Parameters<typeof askShortOf>[1]
           )
         : "",
-      step: tool ? `${tool.name} ${tool.glance}`.trim() : "",
     };
   };
 
@@ -160,7 +170,12 @@
     }
   }
 
-  /** Counts a finished chip's time on screen; paused while it is not being seen, or is being read. */
+  /**
+   * Counts a finished chip's time on screen; paused while it is not being
+   * seen, or is being read. A chip that finished while the tray watched,
+   * once its check has had LIFT to be seen, flies to its report if that row
+   * is in view; otherwise it stays out its hold and goes.
+   */
   function holdFinished(now: number): void {
     const paused = document.hidden || hovering || openKey !== null;
     for (const { item, tone, entry } of chips) {
@@ -175,10 +190,116 @@
       const sofar = shownFor.get(item.id) ?? start;
       const next = paused || focusedKey === item.id ? sofar : sofar + TICK;
       shownFor.set(item.id, next);
-      if (next >= HOLD) {
+      const target =
+        tone === "done" &&
+        next >= LIFT &&
+        openKey !== item.id &&
+        (item.endedAt ?? 0) > mountedAt
+          ? reportInView(item)
+          : null;
+      if (target) {
+        fly(item, target);
+      } else if (next >= HOLD) {
         left.add(item.id);
       }
     }
+  }
+
+  /* ---- the flight home ------------------------------------------------ */
+
+  /** The seen time a finished chip holds its check before it may fly: the pulse, then a beat. */
+  const LIFT = 1000;
+
+  /** The delegate's newest report in this session's transcript. */
+  const reportOf = (item: WorkItemSummary) =>
+    (whiffle.session(parentId)?.messages ?? []).findLast(
+      (m) =>
+        m.type === "user.peer" &&
+        m.metadata?.reportKind !== undefined &&
+        matchesSession(m.metadata?.peerSession, item.instanceId)
+    );
+
+  /** The report's row, when it is drawn inside its transcript's view, above the composer. */
+  function reportInView(item: WorkItemSummary): HTMLElement | null {
+    const id = reportOf(item)?.id;
+    if (!(id && root)) {
+      return null;
+    }
+    const foot = root.getBoundingClientRect().top;
+    for (const row of document.querySelectorAll<HTMLElement>(
+      `[data-message="${CSS.escape(id)}"]`
+    )) {
+      const view = row.closest('[role="log"]')?.getBoundingClientRect();
+      const box = row.getBoundingClientRect();
+      if (
+        view &&
+        view.height > 0 &&
+        box.height > 0 &&
+        box.top >= view.top &&
+        box.top + Math.min(box.height, 28) <= Math.min(view.bottom, foot)
+      ) {
+        return row;
+      }
+    }
+    return null;
+  }
+
+  /**
+   * The chip lifts off and lands on its report's label line: a copy flies
+   * (translate and scale on one clock) while the chip's slot closes, then
+   * fades as the row, held clear while it flew, fades in.
+   */
+  function fly(item: WorkItemSummary, target: HTMLElement): void {
+    const chip = chipEl(item.id);
+    if (!(chip && motionOk.current)) {
+      left.add(item.id);
+      target.animate([{ opacity: 0 }, { opacity: 1 }], {
+        duration: 160,
+        easing: CURVE.out,
+      });
+      return;
+    }
+    const from = chip.getBoundingClientRect();
+    const copy = chip.cloneNode(true) as HTMLElement;
+    for (const name of ["data-key", "data-flip", "data-flip-enter", "id"]) {
+      copy.removeAttribute(name);
+    }
+    copy.setAttribute("aria-hidden", "true");
+    copy.inert = true;
+    copy.style.cssText = `position:fixed;left:${from.left}px;top:${from.top}px;inline-size:${from.width}px;block-size:${from.height}px;margin:0;z-index:50;pointer-events:none;transform-origin:0 0`;
+    document.body.append(copy);
+    chip.style.visibility = "hidden";
+    target.style.opacity = "0";
+    left.add(item.id);
+    // biome-ignore lint/complexity/noVoid: the flight runs on its own; nothing waits on it.
+    void flight(copy, from, target.getBoundingClientRect(), target);
+  }
+  async function flight(
+    copy: HTMLElement,
+    from: DOMRect,
+    to: DOMRect,
+    target: HTMLElement
+  ): Promise<void> {
+    const line = Math.min(to.height, 26);
+    const scale = Math.min(1, line / from.height);
+    const dy = to.top + (line - from.height * scale) / 2 - from.top;
+    await copy.animate(
+      [
+        { transform: "none" },
+        {
+          transform: `translate(${to.left - from.left}px, ${dy}px) scale(${scale})`,
+        },
+      ],
+      { duration: 420, easing: CURVE.inOut, fill: "forwards" }
+    ).finished;
+    const landing = { duration: 160, easing: CURVE.out };
+    target.style.removeProperty("opacity");
+    target.animate([{ opacity: 0 }, { opacity: 1 }], landing);
+    await copy.animate([{ opacity: 1 }, { opacity: 0 }], {
+      ...landing,
+      fill: "forwards",
+    }).finished;
+    copy.remove();
   }
 
   $effect(() => {
@@ -312,7 +433,7 @@
   let row = $state<HTMLElement>();
   let pinned = $state(false);
   let gliding = $state(false);
-  let place = $state({ x: 0, origin: 0, room: 320 });
+  let place = $state({ x: 0, span: 0, origin: 0, room: 320 });
   let dwell: ReturnType<typeof setTimeout> | undefined;
   let closing: ReturnType<typeof setTimeout> | undefined;
 
@@ -327,18 +448,17 @@
     if (!(chip && row && root)) {
       return;
     }
-    const width = Math.min(360, row.clientWidth);
-    const x = Math.min(
-      Math.max(0, chip.offsetLeft),
-      Math.max(0, row.clientWidth - width)
-    );
+    // The panel stands at its chip; its own width (it sizes to its content)
+    // pulls it back inside the row's right edge, in CSS.
+    const x = Math.max(0, chip.offsetLeft);
     const dock = root.closest(".dock") ?? document.documentElement;
     const room =
       root.getBoundingClientRect().top - dock.getBoundingClientRect().top;
     gliding = openKey !== null && openKey !== key;
     place = {
       x,
-      origin: chip.offsetLeft + chip.offsetWidth / 2 - x,
+      span: row.clientWidth,
+      origin: chip.offsetWidth / 2,
       room: Math.min(320, room - 16),
     };
     openKey = key;
@@ -386,6 +506,16 @@
     }
   }
   function onpress(key: string): void {
+    // A finished chip whose report is in the transcript takes the reader there.
+    const done = chips.find(
+      (chip) => chip.item.id === key && chip.tone === "done"
+    );
+    const report = done ? reportOf(done.item)?.id : undefined;
+    if (report) {
+      close();
+      trayReveal.set(parentId, report);
+      return;
+    }
     if (openKey === key && pinned) {
       close();
     } else {
@@ -456,20 +586,32 @@
   function panelOut(_node: Element): TransitionConfig {
     return { duration: 120, easing: easeOut, css: (t) => `opacity: ${t}` };
   }
-  /** The panel's content, when it glides to another chip. */
-  function swap(_node: Element): TransitionConfig {
+  /** The panel's content, when it glides to another chip: the new one fades in. */
+  function swapIn(_node: Element): TransitionConfig {
     return { duration: 100, easing: easeOut, css: (t) => `opacity: ${t}` };
   }
-  /** The state slot's check: in over 240ms, from 0.8 and a 2px blur. */
-  function slotIn(_node: Element, check: boolean): TransitionConfig {
-    if (!(check && motionOk.current)) {
+  /**
+   * The old content fades out of the flow, so the panel's size tweens once,
+   * straight to the new content's (morph), under both.
+   */
+  function swapOut(node: HTMLElement): TransitionConfig {
+    node.style.position = "absolute";
+    node.style.inset = "var(--space-3) var(--space-3) auto";
+    return { duration: 100, easing: easeOut, css: (t) => `opacity: ${t}` };
+  }
+  /**
+   * The check or the triangle taking the dot's place: drawn in from its
+   * leading edge over 240ms as it grows from 0.6.
+   */
+  function slotIn(_node: Element, ends: boolean): TransitionConfig {
+    if (!(ends && motionOk.current)) {
       return { duration: 120, easing: easeOut, css: (t) => `opacity: ${t}` };
     }
     return {
       duration: 240,
       easing: easeOut,
       css: (t, u) =>
-        `opacity: ${t}; transform: scale(${(0.8 + 0.2 * t).toFixed(3)}); filter: blur(${(u * 2).toFixed(2)}px)`,
+        `transform: scale(${(0.6 + 0.4 * t).toFixed(3)}); clip-path: inset(0 ${(u * 100).toFixed(1)}% 0 0)`,
     };
   }
   function slotOut(_node: Element): TransitionConfig {
@@ -481,6 +623,61 @@
   const openChip = $derived(
     chips.find((chip) => chip.item.id === openKey) ?? null
   );
+
+  /**
+   * The open panel's delegate is watched live, so its tail moves; it stays
+   * watched for 2s after the panel closes, so a pointer that wanders off
+   * and back does not drop and re-open the stream.
+   */
+  const openInstance = $derived(openChip?.item.instanceId ?? null);
+  const releases = new Map<string, ReturnType<typeof setTimeout>>();
+  $effect(() => {
+    const id = openInstance;
+    if (!id) {
+      return;
+    }
+    untrack(() => {
+      const release = releases.get(id);
+      if (release) {
+        clearTimeout(release);
+        releases.delete(id);
+        return;
+      }
+      watchDelegate(id);
+      if (!whiffle.session(id)?.messages.length) {
+        // biome-ignore lint/complexity/noVoid: fire-and-forget; the tail draws whatever has arrived.
+        void preloadHistory(id);
+      }
+    });
+    return () => {
+      releases.set(
+        id,
+        setTimeout(() => {
+          releases.delete(id);
+          unwatchDelegate(id);
+        }, 2000)
+      );
+    };
+  });
+
+  /** The row the tail ends on: the question waiting, or the failure. */
+  const noteOf = ({ item, tone, question }: Chip): TailNote | null => {
+    if (tone === "needs" || tone === "asked") {
+      return {
+        key: `${tone}:${question}`,
+        kind: tone === "needs" ? "ask" : "asked",
+        text: question,
+      };
+    }
+    if (tone === "failed") {
+      return {
+        key: "fail",
+        kind: "fail",
+        text: item.firstLines.error || "It failed without saying why.",
+      };
+    }
+    return null;
+  };
 
   async function dismiss(item: WorkItemSummary): Promise<void> {
     try {
@@ -546,6 +743,7 @@
             onpointerenter={() => onchipenter(item.id)}
             tabindex={current === i ? 0 : -1}
             type="button"
+            class:finished={tone === 'done' && (item.endedAt ?? 0) > mountedAt}
             class:fly={entry === 'fly'}
           >
             {@render mark(item, entry === 'fly')}
@@ -559,7 +757,11 @@
             </span>
             <span aria-hidden="true" class="slot">
               {#key slotOf(tone)}
-                <span class="glyph" in:slotIn={tone === 'done'} out:slotOut>
+                <span
+                  class="glyph"
+                  in:slotIn={tone === 'done' || tone === 'failed'}
+                  out:slotOut
+                >
                   {#if tone === 'running'}
                     <span
                       class="dot"
@@ -611,21 +813,23 @@
           role="presentation"
           style:--origin="{place.origin}px"
           style:--room="{place.room}px"
+          style:--span="{place.span}px"
           style:--x="{place.x}px"
           class:gliding={gliding}
           in:panelIn
           out:panelOut
+          {@attach morph({ width: true })}
         >
           <div class="cell">
             {#key openKey}
-              <div class="pbody" in:swap out:swap>
+              <div class="pbody" in:swapIn out:swapOut>
                 {#if openKey === 'more'}
                   <ul class="list">
                     {#each hidden as chip (chip.item.id)}
                       <li>
                         <a class="prow" href={hrefOf(chip.item)}>
                           {@render mark(chip.item, false)}
-                          <span class="ptitle one">{chip.item.title}</span>
+                          <span class="ptitle">{chip.item.title}</span>
                           <span class="pstate">{stateWords(chip)}</span>
                         </a>
                       </li>
@@ -633,56 +837,59 @@
                   </ul>
                 {:else if openChip}
                   {@const { item, tone } = openChip}
+                  <div class="phead">
+                    {@render mark(item, false)}
+                    <span class="ptitle">{item.title}</span>
+                    <span
+                      aria-label={stateWords(openChip)}
+                      class="pstate {tone}"
+                      role="img"
+                    >
+                      {#if tone === 'running'}
+                        <span
+                          class="dot"
+                          style:animation-delay="-{Date.now() % 2000}ms"
+                        ></span>
+                      {:else if tone === 'asked' || tone === 'needs'}
+                        <IconAsk />
+                      {:else if tone === 'done'}
+                        <IconSuccess />
+                      {:else if tone === 'failed'}
+                        <IconWarningTriangle />
+                      {:else}
+                        <IconStop />
+                      {/if}
+                    </span>
+                    <span class="elapsed"
+                      >{span(item.createdAt, item.endedAt ?? minute)}</span
+                    >
+                    <a
+                      aria-label="Open {item.title} in its own view"
+                      class="jump touch-hit"
+                      href={hrefOf(item)}
+                      title="Open {item.title} in its own view"
+                    >
+                      <IconExternal />
+                    </a>
+                  </div>
+                  <DelegateTail
+                    instanceId={item.instanceId}
+                    note={noteOf(openChip)}
+                  />
                   {#if tone === 'needs'}
-                    <p class="question">{openChip.question}</p>
                     <div class="acts">
                       <Button href={hrefOf(item)} size="sm" variant="outline"
                         >Open question</Button
                       >
                     </div>
-                  {:else}
-                    {#if tone === 'running' || tone === 'asked'}
-                      <p class="ptitle">{item.title}</p>
-                      <p class="meta">
-                        running · {span(item.createdAt, minute)}
-                      </p>
-                      {#if openChip.step}
-                        <p class="line step">{openChip.step}</p>
-                      {/if}
-                      {#if item.firstLines.brief}
-                        <p class="line">{item.firstLines.brief}</p>
-                      {/if}
-                      {#if tone === 'asked'}
-                        <p class="line muted">
-                          Asked this session: {openChip.question}
-                        </p>
-                      {/if}
-                    {:else if tone === 'done' || tone === 'cancelled'}
-                      <p class="meta">
-                        {tone === 'done' ? 'finished' : 'cancelled'}
-                        ·
-                        {span(item.createdAt, item.endedAt ?? minute)}
-                      </p>
-                      {#if item.firstLines.result}
-                        <p class="line">{item.firstLines.result}</p>
-                      {/if}
-                    {:else}
-                      <p class="line fail">
-                        {item.firstLines.error || 'It failed without saying why.'}
-                      </p>
-                    {/if}
+                  {:else if tone === 'failed'}
                     <div class="acts">
-                      <Button href={hrefOf(item)} size="sm" variant="outline"
-                        >Open transcript</Button
+                      <Button
+                        onclick={() => dismiss(item)}
+                        size="sm"
+                        variant="ghost"
+                        >Dismiss</Button
                       >
-                      {#if tone === 'failed'}
-                        <Button
-                          onclick={() => dismiss(item)}
-                          size="sm"
-                          variant="ghost"
-                          >Dismiss</Button
-                        >
-                      {/if}
                     </div>
                   {/if}
                 {/if}
@@ -725,7 +932,7 @@
     position: relative;
     isolation: isolate;
     flex: 0 1 auto;
-    min-inline-size: 0;
+    min-inline-size: 120px;
     max-inline-size: 224px;
     block-size: 28px;
     display: inline-flex;
@@ -872,8 +1079,20 @@
     }
   }
 
+  /* Finished while watched: one soft pulse of the success tint (after the
+     arrival rules, which it replaces on a chip that flew in). */
+  .chip.finished::before {
+    animation: finish 400ms var(--ease-out);
+  }
+  @keyframes finish {
+    35% {
+      background-color: var(--status-done-bg);
+    }
+  }
+
   .more {
     flex: none;
+    min-inline-size: 0;
     inline-size: 52px;
     justify-content: center;
     font-variant-numeric: tabular-nums;
@@ -920,13 +1139,15 @@
   }
 
   /* The house popover, standing 4px off the chips, growing from the chip
-     it belongs to. It glides between chips; its content cross-fades. */
+     it belongs to, as wide as its content up to 440px or the row. Between
+     chips one surface glides and takes the new content's size (morph) on
+     one clock, 220ms --ease-drawer, while the content cross-fades. */
   .panel {
     position: absolute;
     inset-block-end: calc(100% + 4px);
     inset-inline-start: 0;
-    inline-size: min(360px, 100%);
-    translate: var(--x) 0;
+    inline-size: max-content;
+    translate: max(0px, min(var(--x), calc(var(--span) - 100%))) 0;
     transform-origin: var(--origin) 100%;
     z-index: 2;
     pointer-events: auto;
@@ -945,11 +1166,19 @@
       block-size: 4px;
     }
   }
-  .panel.gliding {
-    transition: translate 140ms var(--ease-out);
+  @media (prefers-reduced-motion: no-preference) {
+    .panel.gliding {
+      transition: translate 220ms var(--ease-drawer);
+    }
   }
+  /* The content's own width, capped at 440px or the row (less the panel's
+     border): never the panel's, so the panel's size tween (morph, which
+     watches this box) does not resize what it is watching. */
   .cell {
+    position: relative;
     display: grid;
+    inline-size: max-content;
+    max-inline-size: calc(min(440px, var(--span)) - 2px);
     max-block-size: var(--room);
     overflow-y: auto;
     overscroll-behavior: contain;
@@ -961,55 +1190,77 @@
     }
   }
   .ptitle {
+    flex: 1 1 auto;
+    min-inline-size: 0;
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
     color: var(--ink-strong);
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 2;
-    line-clamp: 2;
     overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
   }
-  .ptitle.one {
-    -webkit-line-clamp: 1;
-    line-clamp: 1;
-    flex: 1 1 auto;
-    min-inline-size: 0;
+  /* The panel's head: the mark, the title, and at the end the time it has
+     taken and its state as a glyph. */
+  .phead {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin-block-end: var(--space-2);
   }
-  .meta {
-    margin-block-start: var(--space-1);
+  .elapsed {
+    flex: none;
     font-size: var(--text-meta);
     color: var(--ink-muted);
     font-variant-numeric: tabular-nums;
   }
-  .line {
-    margin-block-start: var(--space-2);
-    font-size: var(--text-meta);
-    line-height: var(--leading-body);
-    color: var(--ink-strong);
-    overflow-wrap: anywhere;
-  }
-  .line:first-child,
-  .meta:first-child {
-    margin-block-start: 0;
-  }
-  .line.muted,
-  .step {
+  .pstate {
+    flex: none;
+    inline-size: 16px;
+    block-size: 16px;
+    display: grid;
+    place-items: center;
     color: var(--ink-muted);
+
+    & :global(svg) {
+      inline-size: 16px;
+      block-size: 16px;
+      display: block;
+    }
   }
-  .line.fail {
+  /* The delegate card's way out to its own view, as the card draws it. */
+  .jump {
+    flex: 0 0 auto;
+    inline-size: 26px;
+    block-size: 26px;
+    margin-block: -5px;
+    display: grid;
+    place-items: center;
+    border-radius: var(--radius-xs);
+    color: var(--ink-muted);
+    transition:
+      color var(--dur-control) var(--ease-out),
+      background var(--dur-control) var(--ease-out);
+
+    & :global(svg) {
+      inline-size: 12px;
+      block-size: 12px;
+      display: block;
+    }
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .jump:hover {
+      color: var(--accent-text);
+      background: var(--surface-hover);
+    }
+  }
+  .pstate.needs {
+    color: var(--status-attn-ink);
+  }
+  .pstate.done {
+    color: var(--status-done-ink);
+  }
+  .pstate.failed {
     color: var(--status-fail-ink);
-  }
-  .question {
-    font-size: var(--text-body);
-    line-height: var(--leading-body);
-    color: var(--ink-strong);
-    display: -webkit-box;
-    -webkit-box-orient: vertical;
-    -webkit-line-clamp: 3;
-    line-clamp: 3;
-    overflow: hidden;
-    overflow-wrap: anywhere;
   }
   .acts {
     margin-block-start: var(--space-3);
