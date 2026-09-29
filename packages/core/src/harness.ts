@@ -921,3 +921,12 @@ export const CONTROL_WORKSPACE_BOUNDARY = "workspaceBoundary";
  * process in it, and its clone is deleted. Args `[WorkspaceRef]`.
  */
 export const CONTROL_WORKSPACE_ARCHIVE = "workspaceArchive";
+
+/**
+ * At an agent's start, its machine's active workspaces: each one still a git
+ * worktree from before workspaces were clones becomes a shared clone in
+ * place — same path, branch, HEAD, index and working files — and the
+ * repository it was cut from forgets the worktree. A workspace whose folder
+ * is gone is skipped and named in the machine's log. Args `[WorkspaceRef[]]`.
+ */
+export const CONTROL_WORKSPACE_MIGRATE = "workspaceMigrate";

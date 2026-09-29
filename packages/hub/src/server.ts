@@ -7897,6 +7897,15 @@ export const createServer = ({
                 }
               }
               registry.registerAgent(message.machineId, ws, ws.remoteAddress);
+              // Workspaces from before clones become clones as their agent
+              // starts; a spawn that gets there first converts its own.
+              workItems
+                .convertWorktrees(message.machineId)
+                .catch((error: unknown) =>
+                  console.warn(
+                    `[hub] converting ${message.machineId}'s worktree workspaces failed: ${error instanceof Error ? error.message : String(error)}`
+                  )
+                );
               reconcilePreviews(
                 message.machineId,
                 ws.remoteAddress,

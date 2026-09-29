@@ -225,6 +225,8 @@ export interface UsageSummary {
 }
 
 export interface DbShape {
+  /** A machine's workspaces that still have their checkout. */
+  readonly activeWorkspacesOn: (machineId: string) => WorkspaceRow[];
   /** Adds counted capability uses, summing into any row already there. */
   readonly addCapabilityUsage: (
     rows: {
@@ -2675,6 +2677,17 @@ const make = (path: string): DbShape => {
         .where(eq(workItems.id, id))
         .returning()
         .get(),
+    activeWorkspacesOn: (machineId) =>
+      db
+        .select()
+        .from(workspaces)
+        .where(
+          and(
+            eq(workspaces.machineId, machineId),
+            eq(workspaces.state, "active")
+          )
+        )
+        .all(),
     updateWorkspace: (id, change) =>
       db
         .update(workspaces)

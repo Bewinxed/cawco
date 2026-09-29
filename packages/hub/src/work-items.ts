@@ -30,6 +30,7 @@ import {
   CONTROL_WORKSPACE_ARCHIVE,
   CONTROL_WORKSPACE_BOUNDARY,
   CONTROL_WORKSPACE_CREATE,
+  CONTROL_WORKSPACE_MIGRATE,
   handoffMarker,
   withWorkspaceLine,
 } from "@whiffle/core";
@@ -809,6 +810,19 @@ export const createWorkItems = ({
           boundaryPid: null,
         }) ?? workspace
       );
+    },
+
+    /**
+     * An agent has started: its machine's active workspaces go to it, and each
+     * one still a git worktree from before workspaces were clones becomes a
+     * clone in place. The machine logs each workspace it converts, skips or
+     * cannot convert.
+     */
+    async convertWorktrees(machineId: string): Promise<void> {
+      const refs = db.activeWorkspacesOn(machineId).map(refOf);
+      if (refs.length > 0) {
+        await call(machineId, CONTROL_WORKSPACE_MIGRATE, [refs]);
+      }
     },
 
     /**

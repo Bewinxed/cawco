@@ -39,6 +39,7 @@ import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { WorkspaceRef } from "@whiffle/core";
 import { type ProcSpec, sessiondEndpoint } from "@whiffle/core/sessiond";
+import { cloneInPlace } from "./clone";
 import { ensureSessiond, SessiondClient } from "./sessiond-client";
 
 /** A running boundary, as a harness uses it. */
@@ -220,13 +221,14 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
     );
   }
   const git = await stat(join(ref.path, ".git")).catch(() => undefined);
-  if (!git?.isDirectory()) {
-    throw refusal(
-      ref.id,
-      git
-        ? `${ref.path} is a git worktree from before workspaces were clones; its commits live in the repository it was cut from, which a bounded delegate cannot write. Start a new workspace.`
-        : `${ref.path} is not a git checkout`
-    );
+  if (!git) {
+    throw refusal(ref.id, `${ref.path} is not a git checkout`);
+  }
+  // A workspace from before clones — a spawn racing the agent's start-up
+  // pass over them — becomes one first: a worktree's commits would land in
+  // the repository it was cut from, which the boundary keeps read-only.
+  if (!git.isDirectory()) {
+    await cloneInPlace(ref.path);
   }
   const client = await sessiond();
   const held = await readHeld(ref.id);

@@ -12,6 +12,7 @@ import {
   CONTROL_WORKSPACE_ARCHIVE,
   CONTROL_WORKSPACE_BOUNDARY,
   CONTROL_WORKSPACE_CREATE,
+  CONTROL_WORKSPACE_MIGRATE,
   WHIFFLE_ENV,
   WHIFFLE_HUB_PORT,
 } from "@whiffle/core";
@@ -20,6 +21,7 @@ import { fetchClaudeLimits } from "@whiffle/core/usage/limits";
 import { mergeObserved } from "@whiffle/core/usage/observed";
 import { Data, Duration, Effect, Fiber, Schedule } from "effect";
 import { buildInfo } from "./build";
+import { convertWorktrees } from "./clone";
 import { readConfig } from "./config";
 import { convergeDeniedTools } from "./denied-tools";
 import { deployRoot, latestDeploy } from "./deploy";
@@ -898,6 +900,10 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     supervisor.registerDaemonFunction(
       CONTROL_WORKSPACE_ARCHIVE,
       archiveWorkspace
+    );
+    supervisor.registerDaemonFunction(
+      CONTROL_WORKSPACE_MIGRATE,
+      convertWorktrees
     );
     supervisor.registerDaemonFunction(
       CONTROL_SEARCH_TRANSCRIPTS,
