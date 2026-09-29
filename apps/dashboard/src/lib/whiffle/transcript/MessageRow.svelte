@@ -156,17 +156,38 @@
    * back with why.
    */
   let retried = $state(false);
-  /** The reason line as it read when the retry went out, held while it is out. */
+  /**
+   * The reason line as it read when the retry went out: held while it is out,
+   * and while the line folds away once it has gone.
+   */
   let heldLine = $state("");
+  /** Whether Edit was offered when the retry went out, held the same way. */
+  let heldEdit = $state(false);
+  /**
+   * A retry is out until the hub answers it. A failed send's retry is its own
+   * command, out until that command is taken or fails. One that never reached
+   * the hub goes again as this row, out while the row is a ghost: taken, the
+   * row is queued and the reason folds away; not taken, it is unreached again.
+   */
   const retrying = $derived(
-    retried && !unreached && (ghost || retry?.stage !== "failed")
+    retried && (message.state === "failed" ? retry?.stage !== "failed" : ghost)
   );
+  /** Something to say under the words: the failure, or the retry for it. */
+  const open = $derived(failed || retrying);
+  /**
+   * What the reason line reads: the failure as it stands, or the line the
+   * retry went out under — kept while the retry is out and while the fold
+   * closes, so the block folds shut on the words it opened with instead of
+   * losing them (and its height) in one frame.
+   */
+  const line = $derived(failed && !retrying ? reasonLine : heldLine);
   function tryAgain(): void {
     const { id } = message;
     if (!id) {
       return;
     }
     heldLine = reasonLine;
+    heldEdit = editable;
     retried = true;
     if (unreached) {
       retrySend(id);
@@ -278,7 +299,7 @@
             you
           />
         {/if}
-        <MessageBody source={message.content} />
+        <MessageBody hang source={message.content} />
         {#if message.metadata?.attachments?.length || message.metadata?.images?.length}
           <div class="chips" data-gallery>
             {#each message.metadata.attachments ?? [] as att, i (`${att.name}-${i}`)}
@@ -305,12 +326,14 @@
              answer.") — a failed send is a sibling of a failed answer, not a
              new dialect of failure. The grid-rows wrapper is what animates a
              height that content, not JS, decides; `data-opens` tells the
-             transcript it grows, so its tail is held while it does. -->
-        <div class="failure" data-opens class:open={failed || retrying}>
+             transcript it grows, so its tail is held while it does. Once a
+             retry has gone out its contents stay, inert, for the fold to
+             close over; a row that never failed renders none of it. -->
+        <div class="failure" data-opens inert={!open} class:open>
           <div class="failure-inner">
-            {#if failed || retrying}
-              <p class="reason">{retrying ? heldLine : reasonLine}</p>
-              {#if recoverable}
+            {#if failed || retried}
+              <p class="reason">{line}</p>
+              {#if recoverable || retried}
                 <div class="actions">
                   <button
                     aria-busy={retrying || undefined}
@@ -319,14 +342,15 @@
                     onclick={whileIdle(() => retrying, tryAgain)}
                     type="button"
                   >
+                    <!-- A retry that went through keeps its word as it folds away. -->
                     <PendingContent
                       {failed}
                       label="Try again"
-                      pending={retrying}
+                      pending={retrying || (retried && !failed)}
                       pendingLabel="Sending…"
                     />
                   </button>
-                  {#if editable}
+                  {#if editable || (retried && heldEdit)}
                     <button
                       class="pressable action"
                       disabled={retrying}
@@ -347,7 +371,7 @@
 {:else if kind === 'assistant'}
   <section class="turn" class:grouped>
     <Who {grouped} name={agentName} timestamp={message.timestamp} />
-    <MessageBody {carry} source={message.content} />
+    <MessageBody {carry} hang source={message.content} />
   </section>
 {:else if kind === 'thinking'}
   {#if message.content.trim()}
@@ -362,6 +386,8 @@
 <style>
   .turn {
     margin-block-start: var(--space-4);
+    /* A turn's words are on line B; Who hangs its speaker line back to A. */
+    padding-inline-start: var(--line-ab);
 
     /* A later turn in the same speaker's group sits closer to the one above,
        and holds its floated clock inside its own box. */
@@ -370,18 +396,7 @@
       margin-block-start: var(--space-2);
     }
   }
-  /* The well bleeds into the gutter by exactly its own padding, so the
-     reader's words sit on the agent's text column and only the surface
-     widens. --space-3 inside the transcript's 25/21 gutters; at the narrow
-     breakpoint the gutters drop to --space-5 (18px) and the well to
-     --space-2, keeping 11px of gutter. */
   .turn.you {
-    --pad: var(--space-3);
-
-    @media (width <= 900px) {
-      --pad: var(--space-2);
-    }
-
     /* The run's later messages: the row above ends on its own padding and
        the hairline, so there is no gap of the turn's own. */
     &.grouped {
@@ -397,9 +412,11 @@
   .well {
     position: relative;
     isolation: isolate;
-    margin-inline: calc(var(--pad) * -1);
+    /* From line A, under the avatar, with the words on line B; past the
+       words' end by --well-pad. */
+    margin-inline: calc(var(--line-ab) * -1) calc(var(--well-pad) * -1);
     padding-block: calc(var(--space-2) + 1px);
-    padding-inline: var(--pad);
+    padding-inline: var(--line-ab) var(--well-pad);
 
     &::before {
       content: "";
@@ -425,7 +442,7 @@
     &::after {
       content: "";
       position: absolute;
-      inset-inline: var(--pad);
+      inset-inline: var(--line-ab) var(--well-pad);
       inset-block-start: -1px;
       block-size: 1px;
       background: var(--well-edge);

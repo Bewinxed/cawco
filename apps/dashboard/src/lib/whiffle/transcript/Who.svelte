@@ -84,6 +84,9 @@
     color: var(--ink-muted);
     font-weight: var(--weight-strong);
     margin-block-end: var(--space-2);
+    /* A turn's words are on line B; its speaker line hangs back to line A,
+       the mark in the track between them and the name on B. */
+    margin-inline-start: calc(var(--line-ab) * -1);
 
     /* One line box of the body tall, so the clock sits centred on the turn's
        first line; the body wraps around it rather than moving down. As wide
@@ -101,8 +104,8 @@
     }
   }
   .dot {
-    inline-size: 18px;
-    block-size: 18px;
+    inline-size: var(--col-mark);
+    block-size: var(--col-mark);
     border-radius: var(--radius-xs);
     display: flex;
     align-items: center;
@@ -118,12 +121,12 @@
     }
     /* The reader's mark, on the pane above their well, in the action
        material: 17×17 with the top-highlight gradient and the pale glyph.
-       1px narrower than the agent's 18px box, so it is centred on the same
-       track by half a pixel either side. */
+       Its left edge is on line A with the well's, and the track's spare
+       pixel goes after it, so the name still starts on line B. */
     &.u {
       inline-size: var(--row-mark);
       block-size: var(--row-mark);
-      margin-inline: 0.5px;
+      margin-inline-end: calc(var(--col-mark) - var(--row-mark));
       border-radius: var(--row-mark-r);
       background: var(--action-grad);
       color: var(--mark-glyph);

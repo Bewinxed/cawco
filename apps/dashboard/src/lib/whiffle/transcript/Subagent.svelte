@@ -78,9 +78,9 @@
 <div class="branch">
   <Collapsible.Root bind:open={open.get, open.set}>
     <Collapsible.Trigger class="bhead press-tint">
-      <span aria-hidden="true" class="chev"><IconChevronRight /></span>
       <span aria-hidden="true" class="mark m{markHue(seed)}"><Sprite /></span>
       <span class="tk">{branch.subagentType}</span>
+      <span aria-hidden="true" class="chev"><IconChevronRight /></span>
       {#if title !== branch.subagentType}
         <span class="arg">{title}</span>
       {/if}
@@ -117,7 +117,9 @@
           {:else if row.kind === 'thinking'}
             <Thinking live={row.live} text={row.text} />
           {:else if row.kind === 'stream'}
-            <div class="say"><MessageBody source={row.text} streaming /></div>
+            <div class="say">
+              <MessageBody hang source={row.text} streaming />
+            </div>
           {:else if row.kind === 'single'}
             <MessageRow
               agentName={branch.subagentType}
@@ -149,12 +151,11 @@
     --rail-head: var(--rail);
     --rail-gap: var(--space-4);
   }
-  /* The spine: a structural 2px rail, the same indent every rail block uses. */
+  /* The spine: a structural 2px rail on line A. The head's mark sits in the
+     mark track and its name on line B, the disclosure chevron after the name
+     as a tool row carries its own; every line under the head is on B. */
   .branch {
-    --glyph: calc(13px + var(--space-2));
     margin-block: var(--rail-gap, var(--space-4)) 0;
-    margin-inline: var(--space-2) 0;
-    padding-inline-start: var(--space-3);
     background: var(--rail-head, var(--rail)) left top / 2px 100% no-repeat;
   }
 
@@ -209,8 +210,9 @@
 
   /* The per-session identity sprite, on its --mark-N hue square. */
   .mark {
-    inline-size: 17px;
-    block-size: 17px;
+    inline-size: var(--row-mark);
+    block-size: var(--row-mark);
+    margin-inline-end: calc(var(--col-mark) - var(--row-mark));
     border-radius: var(--radius-xs);
     flex: 0 0 auto;
     display: grid;
@@ -298,13 +300,13 @@
     color: var(--status-fail-ink);
   }
 
-  /* The live line, indented under the head's glyph column. */
+  /* The live line, on line B under the name. */
   .now {
     display: flex;
     align-items: baseline;
     gap: var(--space-2);
     margin-block: var(--space-1) 0;
-    margin-inline: var(--glyph) 0;
+    margin-inline: var(--line-ab) 0;
     font-size: var(--text-meta);
     font-weight: var(--weight-body);
     color: var(--ink-strong);
@@ -335,16 +337,21 @@
 
   /* The delegate's own transcript, in a well of its own. Concentric: the well's
      --radius-sm (8px) less its --space-1 (4px) padding is the --radius-xs
-     the report inside it carries, so no two nested corners share a radius. */
+     the report inside it carries, so no two nested corners share a radius.
+     The reader's well inside it reaches only as far as this padding, so the
+     avatar and the well's edges sit on its edges rather than past them. */
   .inner {
+    --well-pad: var(--space-1);
     margin-block: var(--space-2) 0;
-    margin-inline: var(--glyph) 0;
+    margin-inline: var(--line-ab) 0;
     padding: var(--space-1);
     border-radius: var(--radius-sm);
     background: var(--surface-recess);
   }
+  /* The streaming answer, on the inner transcript's own line B. */
   .say {
     margin-block-start: var(--space-4);
+    padding-inline-start: var(--line-ab);
   }
   .report {
     margin-block-start: var(--space-4);

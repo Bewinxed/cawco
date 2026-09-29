@@ -121,15 +121,15 @@
   {#if message.state === 'failed' && meta.sendFailed}
     <p class="reason">{meta.sendFailed}</p>
   {/if}
-  <div class="body"><MessageBody source={message.content} /></div>
+  <div class="body"><MessageBody hang source={message.content} /></div>
 </div>
 
 <style>
-  /* The rail note every other system line uses (SystemLine `.note`): same
-     inset, same 2px rail, same muted small label. */
+  /* The rail note every other system line uses (SystemLine `.note`): the
+     2px rail on line A, the kind's glyph centred in the mark track, the
+     label and the body on line B. */
   .sysrow {
-    margin: var(--rail-gap, var(--space-4)) 0 0 var(--space-2);
-    padding-left: var(--space-3);
+    margin: var(--rail-gap, var(--space-4)) 0 0;
     background: var(--rail-head, var(--rail)) left top / 2px 100% no-repeat;
   }
   .label {
@@ -143,7 +143,9 @@
     color: var(--ink-muted);
   }
   .glyph {
+    inline-size: var(--col-mark);
     display: inline-flex;
+    justify-content: center;
     flex: 0 0 auto;
     color: var(--accent-text);
   }
@@ -194,7 +196,7 @@
   }
   /* Why it did not go, in MessageRow's own reason line. */
   .reason {
-    margin: var(--space-1) 0 0;
+    margin: var(--space-1) 0 0 var(--line-ab);
     font-size: var(--text-meta);
     font-weight: var(--weight-body);
     color: var(--status-fail-ink);
@@ -205,11 +207,6 @@
   }
   .body {
     margin-top: var(--space-2);
-  }
-  /* Same narrow-rail inset drop as SystemLine's notes. */
-  @media (max-width: 900px) {
-    .sysrow {
-      margin-left: 0;
-    }
+    margin-inline-start: var(--line-ab);
   }
 </style>

@@ -219,20 +219,20 @@
 </div>
 
 <style>
+  /* The rail on line A; the header's glyph and each step's mark centred in
+     the mark track, the words on line B. */
   .think {
     margin-block-start: var(--rail-gap, var(--space-4));
-    margin-inline-start: var(--space-2);
-    padding-inline-start: var(--space-3);
     background: var(--rail-head, var(--rail)) left top / 2px 100% no-repeat;
     max-inline-size: 70ch;
 
-    @media (width <= 900px) {
-      margin-inline-start: 0;
-    }
     & :global(.rail-indicator) {
       padding: 0;
       gap: var(--space-2);
-      --thinking-icon-size: 16px;
+      --thinking-icon-size: var(--col-mark);
+    }
+    & :global(.step .icon-column) {
+      flex-basis: var(--col-mark);
     }
     /* The header spans the row so the tail has the width to read into. */
     & :global(.thinking-header) {
@@ -262,7 +262,7 @@
   .icon {
     display: grid;
     place-items: center;
-    inline-size: 16px;
+    inline-size: var(--col-mark);
     block-size: 16px;
 
     & :global(svg) {

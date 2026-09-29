@@ -79,47 +79,46 @@
     overflow: hidden;
     padding-block: 0
       max(calc(var(--space-8) * 3), var(--composer-clearance, 0px));
-    padding-inline: var(--space-7) var(--space-6);
+    padding-inline: var(--line-a) var(--space-6);
+
+    @media (width <= 900px) {
+      padding-inline-end: var(--space-5);
+    }
   }
+  /* A turn's words on line B, as MessageRow sets them. */
   .block {
     margin-block-start: var(--space-4);
+    padding-inline-start: var(--line-ab);
   }
 
   /* The reader's well, exactly as MessageRow draws a run of one: under the
-     header, bleeding into the gutter by its own padding so the words sit on
-     the ledger column. */
-  .block.you {
-    --pad: var(--space-3);
-  }
+     header, from line A with the words on line B, past their end by
+     --well-pad. */
   .well {
-    margin-inline: calc(var(--pad) * -1);
-    padding: var(--space-2) calc(var(--pad) - 1px);
-    border: 1px solid var(--well-edge);
+    --edge: 1px;
+    margin-inline: calc(var(--line-ab) * -1) calc(var(--well-pad) * -1);
+    padding-block: var(--space-2);
+    padding-inline: calc(var(--line-ab) - var(--edge))
+      calc(var(--well-pad) - var(--edge));
+    border: var(--edge) solid var(--well-edge);
     border-radius: var(--well-r);
     background: var(--surface-recess-deep);
   }
-  @media (width <= 900px) {
-    .skeleton {
-      padding-inline: var(--space-5);
-    }
-    .block.you {
-      --pad: var(--space-2);
-    }
-  }
 
-  /* Who: the 18px mark at --radius-xs and the speaker's name, on the line box
-     Who.svelte's label sets. */
+  /* Who: the mark on line A, filling the mark track, and the speaker's name
+     on line B, on the line box Who.svelte's label sets. */
   .who {
     display: flex;
     align-items: center;
     gap: var(--space-2);
     font-size: var(--text-label);
-    block-size: max(18px, 1lh);
+    block-size: max(var(--col-mark), 1lh);
     margin-block-end: var(--space-2);
+    margin-inline-start: calc(var(--line-ab) * -1);
   }
   .who :global(.mark) {
-    inline-size: 18px;
-    block-size: 18px;
+    inline-size: var(--col-mark);
+    block-size: var(--col-mark);
     flex: 0 0 auto;
     border-radius: var(--radius-xs);
   }
@@ -127,6 +126,13 @@
     inline-size: 64px;
     block-size: 12px;
     border-radius: var(--radius-xs);
+  }
+  /* The reader's 17px row mark, on line A, the track's spare pixel after it. */
+  .block.you .who :global(.mark) {
+    inline-size: var(--row-mark);
+    block-size: var(--row-mark);
+    margin-inline-end: calc(var(--col-mark) - var(--row-mark));
+    border-radius: var(--row-mark-r);
   }
 
   /* A paragraph as MessageBody sets it: --text-body at --leading-body in a
@@ -146,11 +152,11 @@
     border-radius: var(--radius-xs);
   }
 
-  /* The tool rail, as ToolGroup draws it: the rail's indent and hairline,
-     26px rows, a 16px glyph, the verb, then the mono argument. */
+  /* The tool rail, as ToolGroup draws it: the hairline on line A, 26px
+     rows, a 16px glyph centred in the mark track, the verb on line B, then
+     the mono argument. */
   .tools {
-    margin-inline-start: var(--space-2);
-    padding-inline-start: var(--space-3);
+    --glyph: 16px;
     background: var(--rail) left top / 2px 100% no-repeat;
   }
   .trow {
@@ -160,8 +166,9 @@
     gap: var(--space-2);
   }
   .trow :global(.ic) {
-    inline-size: 16px;
-    block-size: 16px;
+    inline-size: var(--glyph);
+    block-size: var(--glyph);
+    margin-inline: calc((var(--col-mark) - var(--glyph)) / 2);
     flex: 0 0 auto;
     border-radius: var(--radius-xs);
   }

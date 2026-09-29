@@ -77,24 +77,24 @@
     {#if harness.body}
       <Collapsible.Root bind:open={disclosed.get, disclosed.set}>
         <Collapsible.Trigger class="ftrig hn">
-          <IconInfo />
+          <span class="cell"><IconInfo /></span>
           <span class="ftitle">{harness.title}</span>
           {#if harness.status}
             <span class="hstatus" class:bad={harness.status === 'failed'}
               >{harness.status}</span
             >
           {/if}
-          <span class="hchev" class:open><IconChevronRight /></span>
+          <span class="hchev" class:open={open}><IconChevronRight /></span>
         </Collapsible.Trigger>
         <Collapsible.Content reveal>
-          <div class="hbody"><MessageBody source={harness.body} /></div>
+          <div class="hbody"><MessageBody hang source={harness.body} /></div>
         </Collapsible.Content>
       </Collapsible.Root>
     {:else}
       <!-- Nothing to open, so nothing that looks openable: a chevron over an
            empty body is the dead disclosure the tool rows already refuse. -->
       <span class="hline">
-        <IconInfo />
+        <span class="cell"><IconInfo /></span>
         <span class="ftitle">{harness.title}</span>
         {#if harness.status}
           <span class="hstatus" class:bad={harness.status === 'failed'}
@@ -109,7 +109,7 @@
        "task done" with no reference to which task is a line that says nothing. -->
   <div class="note fold">
     <span class="hline">
-      <IconInfo />
+      <span class="cell"><IconInfo /></span>
       <span class="tverb" class:bad={message?.content === 'task failed'}
         >{message?.content}</span
       >
@@ -125,7 +125,7 @@
        that happened TO the operator, not things they did. -->
   <div class="note fold">
     <span class="hline">
-      <IconStop />
+      <span class="cell"><IconStop /></span>
       <span class="ftitle">Interrupted</span>
     </span>
   </div>
@@ -138,14 +138,14 @@
   <div class="note fold">
     <Collapsible.Root bind:open={disclosed.get, disclosed.set}>
       <Collapsible.Trigger class="ftrig">
-        <span class="hchev" class:open><IconChevronRight /></span>
+        <span class="cell hchev" class:open={open}><IconChevronRight /></span>
         <span class="ftitle">{foldTitle}</span>
       </Collapsible.Trigger>
       <Collapsible.Content reveal>
         {#if foldCommand}
           <pre class="well">{foldCommand}</pre>
         {:else if foldBody}
-          <div class="hbody"><MessageBody source={foldBody} /></div>
+          <div class="hbody"><MessageBody hang source={foldBody} /></div>
         {/if}
       </Collapsible.Content>
     </Collapsible.Root>
@@ -155,19 +155,21 @@
        refusal the harness line and the tool rows already make. -->
   <div class="note fold">
     <span class="hline">
-      <IconInfo />
+      <span class="cell"><IconInfo /></span>
       <span class="ftitle">{foldTitle}</span>
     </span>
   </div>
 {/if}
 
 <style>
+  /* A command's output: its surface from line A, its text on line B. Under a
+     note's fold it hangs on B instead, off the note's rail. */
   .well {
     background: var(--surface-recess);
     border-radius: var(--radius-sm);
     padding: var(--space-3);
+    padding-inline-start: var(--line-ab);
     margin-block-start: var(--rail-gap, var(--space-4));
-    margin-inline-start: var(--space-2);
     overflow-x: auto;
     font-family: var(--font-mono);
     font-size: var(--text-label);
@@ -175,12 +177,15 @@
     color: var(--ink-strong);
     white-space: pre-wrap;
   }
+  /* From line A, its rule on A and its words on line B. */
   .failcard {
-    border-inline-start: 3px solid var(--status-fail-ink);
+    --rule: 3px;
+    border-inline-start: var(--rule) solid var(--status-fail-ink);
     background: var(--status-fail-bg);
     color: var(--status-fail-ink);
     border-radius: var(--radius-sm);
     padding: var(--space-3);
+    padding-inline-start: calc(var(--line-ab) - var(--rule));
     margin-block-start: var(--space-4);
 
     & b {
@@ -195,10 +200,10 @@
       white-space: pre-wrap;
     }
   }
+  /* The rail on line A; the note's icon (or its fold's chevron) centred in
+     the mark track, its words on line B, and what it opens hung on B. */
   .note {
     margin-block-start: var(--rail-gap, var(--space-4));
-    margin-inline-start: var(--space-2);
-    padding-inline-start: var(--space-3);
     background: var(--rail-head, var(--rail)) left top / 2px 100% no-repeat;
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
@@ -229,6 +234,16 @@
     & :global(.ftrig.hn) {
       max-inline-size: 100%;
     }
+  }
+  .cell {
+    inline-size: var(--col-mark);
+    flex: 0 0 auto;
+    display: grid;
+    place-items: center;
+  }
+  .note .well {
+    margin-inline-start: var(--line-ab);
+    padding-inline-start: var(--space-3);
   }
   .ftitle {
     overflow: hidden;
@@ -274,6 +289,7 @@
   }
   .hchev {
     display: inline-flex;
+    justify-content: center;
     flex: 0 0 auto;
 
     &.open {
@@ -288,17 +304,6 @@
      at the same width as every turn above it rather than running the full pane. */
   .hbody {
     margin-block-start: var(--space-3);
-  }
-
-  /* The ledger's rail column is narrower on a phone, and every other rail
-     block already knows it — ToolGroup, Thinking, Subagent, Delegate all drop
-     this inset at the same breakpoint. These two did not, so on a narrow
-     screen a note sat 7px to the inline end of the line above it and the run
-     read as a broken column. */
-  @media (width <= 900px) {
-    .note,
-    .well {
-      margin-inline-start: 0;
-    }
+    margin-inline-start: var(--line-ab);
   }
 </style>
