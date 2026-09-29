@@ -58,6 +58,7 @@ import {
 import { sessiondEndpoint } from "@whiffle/core/sessiond";
 import { observeRateLimit } from "@whiffle/core/usage/observed";
 import { probeAuth, unlockKeychain } from "../auth";
+import { claudeBoundaryOptions } from "../boundary";
 import { delegationMcp, MCP_SERVER_NAME } from "../delegation";
 import { resolvedDenyList } from "../denied-tools";
 import {
@@ -704,6 +705,9 @@ class ClaudeSession implements HarnessSession {
         }),
         cwd: workdir,
         includePartialMessages: true,
+        // A work item's session runs every shell command inside its
+        // workspace's boundary: a hook the CLI itself runs rewrites each one.
+        ...claudeBoundaryOptions(ctx.boundary),
         // THE SEAM (design §4.1). The SDK builds the CLI's command line and
         // hands it here instead of spawning it; we forward it to sessiond and
         // hand back a `SpawnedProcess` over the socket. Nothing downstream —

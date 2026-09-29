@@ -329,23 +329,30 @@ export const instances = sqliteTable("instances", {
   workItemId: text("work_item_id"),
 });
 
-/** A workspace's life: `active` while its checkout is kept. */
+/** A workspace's life: `active` while its checkout is kept; `archived` once its boundary and clone are gone. */
 export type WorkspaceState = "active" | "archived";
 
 /**
- * Where delegated work lives: one git worktree on its own branch, on one
- * machine. A workspace has at most one work item in `starting`/`running` at a
+ * Where delegated work lives: one shared clone on its own branch, on one
+ * machine, with the boundary every shell command of its work items runs
+ * inside. A workspace has at most one work item in `starting`/`running` at a
  * time — the one writer its checkout ever has — and it owns the checkout:
- * stopping or discarding a session never removes it.
+ * stopping or discarding a session never removes it; archiving does.
  */
 export const workspaces = sqliteTable("workspaces", {
   id: text("id").primaryKey(),
   machineId: text("machine_id").notNull(),
-  /** The repository the worktree was cut from. */
+  /** The repository the clone was cut from. */
   repoRoot: text("repo_root").notNull(),
-  /** The worktree's root, where every work item of the workspace runs. */
+  /** The clone's root, where every work item of the workspace runs. */
   path: text("path").notNull(),
   branch: text("branch").notNull(),
+  /**
+   * The boundary's anchor (Linux) or runner (macOS), as the machine last
+   * named it to the hub: when the workspace was made, and as each follow-up
+   * started. Null once archived.
+   */
+  boundaryPid: integer("boundary_pid"),
   state: text("state").$type<WorkspaceState>().notNull().default("active"),
   /** Ports the workspace's processes listen on, recorded when they start. */
   ports: text("ports", { mode: "json" })

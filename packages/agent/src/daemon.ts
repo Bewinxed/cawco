@@ -9,6 +9,8 @@ import type {
 } from "@whiffle/core";
 import {
   CONTROL_SEARCH_TRANSCRIPTS,
+  CONTROL_WORKSPACE_ARCHIVE,
+  CONTROL_WORKSPACE_BOUNDARY,
   CONTROL_WORKSPACE_CREATE,
   WHIFFLE_ENV,
   WHIFFLE_HUB_PORT,
@@ -34,7 +36,11 @@ import { probeTools } from "./tools";
 import { consumeRestartMarker } from "./update";
 import { UsageScanner } from "./usage/scanner";
 import { runWorkflowCommand } from "./workflow-command";
-import { createWorkspace } from "./workspace";
+import {
+  archiveWorkspace,
+  createWorkspace,
+  workspaceBoundary,
+} from "./workspace";
 
 const DEFAULT_HUB_URL = `ws://localhost:${WHIFFLE_HUB_PORT}/ws`;
 const HEARTBEAT_INTERVAL = Duration.seconds(15);
@@ -884,6 +890,14 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     supervisor.registerDaemonFunction(
       CONTROL_WORKSPACE_CREATE,
       createWorkspace
+    );
+    supervisor.registerDaemonFunction(
+      CONTROL_WORKSPACE_BOUNDARY,
+      workspaceBoundary
+    );
+    supervisor.registerDaemonFunction(
+      CONTROL_WORKSPACE_ARCHIVE,
+      archiveWorkspace
     );
     supervisor.registerDaemonFunction(
       CONTROL_SEARCH_TRANSCRIPTS,

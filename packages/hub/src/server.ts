@@ -227,9 +227,10 @@ const UPDATE_TIMEOUT_MS = 10 * 60_000;
 /** Reading one file off a machine: it answers about as fast as a disk does. */
 const READ_TIMEOUT_MS = 10_000;
 /**
- * Cutting a workspace's worktree checks out the whole tree, which on a large
- * repository takes seconds; reading its log is faster. Ours: a minute covers
- * both with room, and stays inside a tool call's own deadline.
+ * Cutting a workspace's clone checks out the whole tree and starts its
+ * boundary, which on a large repository takes seconds; reading its log is
+ * faster. Ours: a minute covers both with room, and stays inside a tool
+ * call's own deadline.
  */
 const WORKSPACE_TIMEOUT_MS = 60_000;
 /**
@@ -2582,6 +2583,19 @@ export const createServer = ({
   };
 
   /**
+   * A spawn for a session that runs a work item, bounded to its workspace:
+   * every spawn that reaches a machine for such a session — its restore after
+   * an agent restart, a revive for a send, a relaunch from a dashboard or a
+   * relay — carries the workspace, so the machine runs its shell commands
+   * inside the boundary or refuses to start it. Any other spawn passes as is.
+   */
+  const bounded = (payload: SpawnPayload): SpawnPayload => {
+    const [row] = db.getInstancesByIds([payload.instanceId]);
+    const workspace = row ? workItems.workspaceOf(row) : undefined;
+    return workspace ? { ...payload, workspace } : payload;
+  };
+
+  /**
    * Wakes the session a message is for when its process is gone: sleeping,
    * failed, or stopped with a conversation on record. The resume spawn goes
    * out first, and the machine runs one instance's envelopes in order, so the
@@ -2616,7 +2630,12 @@ export const createServer = ({
       ...(row.model ? { model: row.model } : {}),
       ...(row.effort ? { effort: row.effort as EffortLevel } : {}),
     };
-    agent.send({ verb: "spawn", machineId, instanceId, payload: revive });
+    agent.send({
+      verb: "spawn",
+      machineId,
+      instanceId,
+      payload: bounded(revive),
+    });
     // A relaunch replaces the process; what the old one had parked is over.
     forgetPending(instanceId, UNREAD.restarted);
     db.openInstance({
@@ -3183,7 +3202,7 @@ export const createServer = ({
       verb: "spawn",
       machineId,
       instanceId: payload.instanceId,
-      payload,
+      payload: bounded(payload),
     } satisfies Envelope<SpawnPayload>);
     db.openInstance({
       id: payload.instanceId,
@@ -3850,7 +3869,7 @@ export const createServer = ({
       verb: "spawn",
       machineId: row.machineId,
       instanceId: row.id,
-      payload,
+      payload: bounded(payload),
     });
     // A probe of a previously lost handle is not a spawn. Leave its history
     // alone until the daemon confirms the server still has a turn in flight.
@@ -7473,6 +7492,20 @@ export const createServer = ({
         const item = workItems.item(params.id);
         return item ?? status(404, `no work item ${params.id}`);
       })
+      // Archiving a workspace: its machine kills the boundary with every
+      // process in it and deletes the clone. Refused while an item runs there.
+      .post("/api/workspaces/:id/archive", async ({ params, status }) => {
+        try {
+          return await workItems.archive(params.id);
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          return status(
+            error instanceof WorkItemRefusal ? error.status : 502,
+            message
+          );
+        }
+      })
       // A session's own tools reach the fleet over plain HTTP — the hub's MCP
       // server forwards `start_session`'s spawn here, and the workflow runtime
       // spawns its steps the same way — and the hub relays them like the
@@ -8790,7 +8823,11 @@ export const createServer = ({
                 toDashboard(ws, failure(message, refusal));
                 break;
               }
-              if (forward(message, ws) && message.instanceId) {
+              const relaunch = {
+                ...message,
+                payload: bounded(message.payload as SpawnPayload),
+              };
+              if (forward(relaunch, ws) && message.instanceId) {
                 // A relaunch replaces the process — questions the old one had
                 // open are settled by its teardown and must not replay.
                 forgetPending(message.instanceId, UNREAD.restarted);

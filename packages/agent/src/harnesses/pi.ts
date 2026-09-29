@@ -25,6 +25,8 @@ import {
   type AgentSessionEvent,
   createAgentSession,
   createAgentSessionServices,
+  createBashToolDefinition,
+  createLocalBashOperations,
   defineTool,
   ModelRuntime,
   SessionManager,
@@ -56,6 +58,7 @@ import {
   CONTROL_SUPPORTED_MODELS,
   MESSAGES_READ,
 } from "@whiffle/core";
+import { type Boundary, boundaryCommand } from "../boundary";
 import { callDelegationTool, delegationTools } from "../delegation";
 import type { Harness, HarnessContext, HarnessSession } from "../harness";
 import { resolveBin } from "../tools";
@@ -225,6 +228,21 @@ const assistantEntries = (
 };
 
 /** Thin adapter over the same hub-owned definitions and handlers as MCP. */
+/**
+ * A work item's `bash`: pi's own tool, whose commands go through the
+ * workspace's executor, inside its boundary. A custom tool replaces the
+ * built-in of the same name.
+ */
+const boundedBash = (cwd: string, boundary: Boundary): ToolDefinition => {
+  const local = createLocalBashOperations();
+  return createBashToolDefinition(cwd, {
+    operations: {
+      exec: (command, dir, options) =>
+        local.exec(boundaryCommand(boundary, command), dir, options),
+    },
+  }) as unknown as ToolDefinition;
+};
+
 const piHandoffTools = async (instanceId: string): Promise<ToolDefinition[]> =>
   (await delegationTools(instanceId)).map((tool) =>
     defineTool({
@@ -680,7 +698,10 @@ export class PiHarness implements Harness {
       ...(sessionManager
         ? { sessionManager }
         : { sessionManager: SessionManager.create(ctx.cwd) }),
-      customTools: await piHandoffTools(ctx.instanceId),
+      customTools: [
+        ...(await piHandoffTools(ctx.instanceId)),
+        ...(ctx.boundary ? [boundedBash(ctx.cwd, ctx.boundary)] : []),
+      ],
     });
 
     return new PiSession(ctx, session);

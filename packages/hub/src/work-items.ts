@@ -2,12 +2,14 @@
  * Delegated work, as the hub keeps it. A work item is one brief run by one
  * session in one workspace — a fresh session, a fork of its parent's
  * conversation, or, for a follow-up, the workspace's last session carrying
- * on; a workspace is one git worktree on its own branch, with at most one
- * live item — the only writer its checkout has. Finished work takes another turn only from the reader or the session that
- * delegated it: that message reopens the item and lands in the same session,
- * on the transcript its provider still has cached. A rule, the supervisor, a
- * workflow or any other session is refused — a standing instruction once
- * woke a finished leaf into a checkout a newer item owned.
+ * on; a workspace is one shared clone on its own branch, with a boundary
+ * every shell command of its items runs inside, and at most one live item —
+ * the only writer its checkout has. Finished work takes another turn only
+ * from the reader or the session that delegated it: that message reopens the
+ * item and lands in the same session, on the transcript its provider still
+ * has cached. A rule, the supervisor, a workflow or any other session is
+ * refused — a standing instruction once woke a finished leaf into a checkout
+ * a newer item owned.
  *
  * The hub is the one authority: `delegate` is a request to {@link start}, and
  * the frames that move a session move its item.
@@ -22,11 +24,14 @@ import type {
   SpawnPayload,
   WorkItemSummary,
   WorkspaceCheckout,
+  WorkspaceRef,
 } from "@whiffle/core";
 import {
+  CONTROL_WORKSPACE_ARCHIVE,
+  CONTROL_WORKSPACE_BOUNDARY,
   CONTROL_WORKSPACE_CREATE,
   handoffMarker,
-  withWorktreeLine,
+  withWorkspaceLine,
 } from "@whiffle/core";
 import type { DbShape, WorkItemRow, WorkspaceRow } from "./db";
 
@@ -143,7 +148,16 @@ interface Settings {
   type?: DelegateType;
 }
 
-/** The item's session: nested under its parent, working in the workspace's checkout. */
+/** A workspace as its machine is told about it. */
+const refOf = (workspace: WorkspaceRow): WorkspaceRef => ({
+  id: workspace.id,
+  path: workspace.path,
+});
+
+/**
+ * The item's session: nested under its parent, working in the workspace's
+ * checkout, every shell command inside the workspace's boundary.
+ */
 const spawnOf = (
   instanceId: string,
   title: string,
@@ -169,6 +183,7 @@ const spawnOf = (
   // Autonomous by definition: it must never sit waiting on a tool permission
   // prompt nobody is watching for. Questions still ask.
   permissionMode: "bypassPermissions",
+  workspace: refOf(workspace),
 });
 
 /** What a fork reads before its brief: its parent's turns are behind it, and they are not its orders. */
@@ -312,6 +327,12 @@ export const createWorkItems = ({
       );
     }
     const [workspace] = named;
+    if (workspace.state === "archived") {
+      throw new WorkItemRefusal(
+        409,
+        `Workspace ${workspace.id} is archived: its clone and boundary are gone. Delegate without workspace to start a new one.`
+      );
+    }
     const items = db.workItemsIn(workspace.id);
     const live = items.find((item) => LIVE.has(item.state));
     if (live) {
@@ -323,7 +344,26 @@ export const createWorkItems = ({
     return { workspace, previous: items[0] };
   };
 
-  /** A new workspace: its machine cuts the checkout, then the hub files it. */
+  /**
+   * A follow-up's boundary, running before its item is filed: the machine
+   * starts it again when it has gone (a reboot, a sessiond restart), or says
+   * why it cannot and the follow-up is refused. A workspace that is missing or
+   * archived is left to {@link claim}, which refuses it in its own words.
+   */
+  const boundaryUp = async (needle: string): Promise<void> => {
+    const [workspace] = db.workspacesNamed(needle.trim());
+    if (workspace?.state !== "active") {
+      return;
+    }
+    const boundaryPid = (await call(
+      workspace.machineId,
+      CONTROL_WORKSPACE_BOUNDARY,
+      [refOf(workspace)]
+    )) as number;
+    db.updateWorkspace(workspace.id, { boundaryPid });
+  };
+
+  /** A new workspace: its machine cuts the clone and starts its boundary, then the hub files it. */
   const openWorkspace = async (
     parent: InstanceRow,
     cwd: string
@@ -339,6 +379,7 @@ export const createWorkItems = ({
       repoRoot: checkout.repoRoot,
       path: checkout.path,
       branch: checkout.branch,
+      boundaryPid: checkout.boundaryPid,
       state: "active",
       createdByInstanceId: parent.id,
     });
@@ -503,6 +544,9 @@ export const createWorkItems = ({
       const workspace = await openWorkspace(parent, request.cwd ?? parent.cwd);
       return spawnIn(workspace, settings, parent, request);
     }
+    // Awaited before the claim, which files the item in the same step as
+    // its one-writer check.
+    await boundaryUp(request.workspace);
     const followed = followUp(request.workspace, request, parent);
     // A workspace whose last session never started has nothing to continue:
     // a session starts there the way every new delegate's does.
@@ -549,7 +593,7 @@ export const createWorkItems = ({
           instanceId,
           workspace.machineId,
           parent,
-          withWorktreeLine(
+          withWorkspaceLine(
             `${handoffMarker(leaf(parent.cwd))}${fork}${request.prompt}`,
             workspace.repoRoot
           )
@@ -615,6 +659,10 @@ export const createWorkItems = ({
         }
         if (!reopens(item.parentInstanceId, origin)) {
           return finishedText(item);
+        }
+        const [workspace] = db.workspacesNamed(item.workspaceId);
+        if (workspace?.state === "archived") {
+          return `${item.title} (${item.id}) is ${item.state}, and its workspace ${item.workspaceId} is archived: its clone and boundary are gone.`;
         }
         const [latest] = db.workItemsIn(item.workspaceId);
         return latest.id === item.id ? undefined : supersededText(item, latest);
@@ -709,6 +757,59 @@ export const createWorkItems = ({
 
     /** One item, as `stop_delegate` and its callers read it. */
     item: (id: string): WorkItemRow | undefined => db.workItem(id),
+
+    /**
+     * The workspace a session's spawn is bounded to: every spawn of a work
+     * item's session — a restore, a revive, a relaunch — carries it, so no
+     * way back into a session runs its commands outside the boundary.
+     */
+    workspaceOf(row: InstanceRow): WorkspaceRef | undefined {
+      const item = itemOf(row);
+      const [workspace] = item ? db.workspacesNamed(item.workspaceId) : [];
+      return workspace ? refOf(workspace) : undefined;
+    },
+
+    /**
+     * Archives a workspace: its machine kills the boundary with every process
+     * in it and deletes the clone. Refused while an item there is live — stop
+     * it first — and for a workspace already archived.
+     */
+    async archive(needle: string): Promise<WorkspaceRow> {
+      const named = db.workspacesNamed(needle.trim());
+      if (named.length !== 1) {
+        throw new WorkItemRefusal(
+          404,
+          named.length
+            ? `"${needle}" names ${named.length} workspaces. Pass the full workspace id.`
+            : `No workspace "${needle}".`
+        );
+      }
+      const [workspace] = named;
+      if (workspace.state === "archived") {
+        throw new WorkItemRefusal(
+          409,
+          `Workspace ${workspace.id} is already archived.`
+        );
+      }
+      const live = db
+        .workItemsIn(workspace.id)
+        .find((item) => LIVE.has(item.state));
+      if (live) {
+        throw new WorkItemRefusal(
+          409,
+          `Workspace ${workspace.id} has a live work item: ${live.title} (${live.id}) is ${live.state}. Stop it before archiving the workspace.`
+        );
+      }
+      await call(workspace.machineId, CONTROL_WORKSPACE_ARCHIVE, [
+        refOf(workspace),
+      ]);
+      return (
+        db.updateWorkspace(workspace.id, {
+          state: "archived",
+          boundaryPid: null,
+        }) ?? workspace
+      );
+    },
 
     /**
      * What a parent's delegate tray shows when it opens: live work, failures

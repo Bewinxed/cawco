@@ -49,6 +49,7 @@ import {
   withWorktreeLine,
 } from "@whiffle/core";
 import { Effect } from "effect";
+import { type Boundary, boundaryFor } from "./boundary";
 import { DEPLOY_BRANCH } from "./deploy";
 import { expandHome, runFs } from "./fs";
 import type { Harness, HarnessContext, HarnessSession } from "./harness";
@@ -815,8 +816,11 @@ export class SessionSupervisor {
         await running.stop();
       }
 
+      // A work item's session runs every shell command inside its workspace's
+      // boundary, and does not start without one: the refusal is the spawn's.
+      const boundary = await boundaryFor(payload.workspace);
       const holder: { session: HarnessSession | null } = { session: null };
-      const ctx = this.#context(instanceId, workdir, adapter, holder);
+      const ctx = this.#context(instanceId, workdir, adapter, holder, boundary);
 
       if (payload.resume) {
         this.#resumable.set(instanceId, {
@@ -876,11 +880,13 @@ export class SessionSupervisor {
     instanceId: string,
     workdir: string,
     adapter: Harness,
-    holder: { session: HarnessSession | null }
+    holder: { session: HarnessSession | null },
+    boundary?: Boundary
   ): SessiondAwareContext {
     return {
       instanceId,
       cwd: workdir,
+      ...(boundary ? { boundary } : {}),
       /**
        * The sessiond line the NEXT frame is derived from. Optional on purpose:
        * an adapter that does not read its frames off a ring never calls it,

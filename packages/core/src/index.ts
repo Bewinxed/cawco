@@ -191,6 +191,13 @@ export interface SpawnPayload {
   title?: string;
   workflowRunId?: string;
   workflowStepId?: string;
+  /**
+   * The workspace whose boundary every shell command of this session runs
+   * inside. Set on each spawn of a work item's session — the first, and every
+   * restore, revive and relaunch after it — and on no other session. A
+   * machine that cannot hold the boundary refuses the spawn and says why.
+   */
+  workspace?: import("./harness").WorkspaceRef;
 }
 
 /** One repository a machine can {@link SpawnPayload.bootstrap} from. */

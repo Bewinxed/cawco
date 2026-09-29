@@ -33,6 +33,12 @@ import type {
 
 /** Everything a harness needs from the supervisor while it owns a session. */
 export interface HarnessContext {
+  /**
+   * The workspace boundary a work item's session runs every shell command
+   * inside (`./boundary`). Absent on every other session, which runs its
+   * commands as it always has.
+   */
+  readonly boundary?: import("./boundary").Boundary;
   /** Whether a turn is in flight — the supervisor's busy set and drain read this. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   busy(active: boolean): void;

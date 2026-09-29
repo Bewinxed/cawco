@@ -854,6 +854,11 @@ export interface DbShape {
       >
     >
   ) => WorkItemRow | undefined;
+  /** Records what the workspace's machine says of its boundary, or its archive. */
+  readonly updateWorkspace: (
+    id: string,
+    change: Partial<Pick<WorkspaceRow, "boundaryPid" | "state">>
+  ) => WorkspaceRow | undefined;
   readonly upsertAgent: (agent: {
     machineId: string;
     hostname: string;
@@ -2668,6 +2673,13 @@ const make = (path: string): DbShape => {
         .update(workItems)
         .set(change)
         .where(eq(workItems.id, id))
+        .returning()
+        .get(),
+    updateWorkspace: (id, change) =>
+      db
+        .update(workspaces)
+        .set(change)
+        .where(eq(workspaces.id, id))
         .returning()
         .get(),
     sendsFor: (ids) => {

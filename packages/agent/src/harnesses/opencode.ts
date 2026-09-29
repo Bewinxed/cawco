@@ -87,6 +87,7 @@ import {
 // The protocol subpath, never the `@whiffle/core` barrel: `sessiond.ts` reaches
 // for `node:os` and the barrel is imported by the browser bundle (see f2e1c4c).
 import { type ProcSpec, sessiondEndpoint } from "@whiffle/core/sessiond";
+import { workspacesDir } from "../boundary";
 import { delegationHubUrl } from "../delegation";
 import type { Harness, HarnessContext, HarnessSession } from "../harness";
 import { isMachineAgent } from "../machine-agent";
@@ -540,11 +541,67 @@ export const attachOpencodeServer = async (options: {
   return { url, freshlySpawned };
 };
 
-/** Supplies MCP caller identity and the workflow-only tool enabled by each session's tool mask. */
+/**
+ * Supplies MCP caller identity, the workflow-only tool enabled by each
+ * session's tool mask, and — in a delegation workspace's clone — the `bash`
+ * that runs every command through the workspace's executor, inside its
+ * boundary. A plugin tool named like a built-in takes its place
+ * (opencode.ai/docs/plugins: "If a plugin tool uses the same name as a
+ * built-in tool, the plugin tool takes precedence"); arguments are never
+ * rewritten in `tool.execute.before`, which has not reliably taken effect.
+ * The plugin is set up once per directory, which is the workspace's clone
+ * for every session a work item runs there.
+ */
 export const buildHandoffPluginSource =
-  (): string => `import { tool } from "@opencode-ai/plugin";
+  (): string => `import { spawn } from "node:child_process";
+import { readdirSync, readFileSync } from "node:fs";
+import { tool } from "@opencode-ai/plugin";
 const whiffleBase = ${JSON.stringify(delegationHubUrl())};
+const whiffleWorkspaces = ${JSON.stringify(workspacesDir())};
+const boundaryOf = (directory) => {
+  let ids = [];
+  try { ids = readdirSync(whiffleWorkspaces); } catch { return undefined; }
+  for (const id of ids) {
+    try {
+      const held = JSON.parse(readFileSync(whiffleWorkspaces + "/" + id + "/boundary.json", "utf8"));
+      if (held.path === directory) return held;
+    } catch {}
+  }
+  return undefined;
+};
+const OUTPUT_LIMIT = 30000;
+const boundedBash = (held) => tool({
+  description: "Runs a bash command inside this workspace's boundary, in the workspace's clone unless workdir says otherwise. The command can write only the clone, /tmp (the workspace's own), ~/.cache, ~/.bun and ~/.npm; it sees and signals only this workspace's processes, and cannot reach the service manager. Each call is a fresh shell. The output is stdout and stderr together, cut at 30000 characters.",
+  args: {
+    command: tool.schema.string().describe("The command to run"),
+    timeout: tool.schema.number().optional().describe("Milliseconds before the command is killed: 120000 unless given, at most 600000"),
+    workdir: tool.schema.string().optional().describe("The directory to run in; the workspace's clone unless given"),
+    description: tool.schema.string().describe("What the command does, in 5-10 words"),
+  },
+  async execute(args, context) {
+    const timeout = Math.min(args.timeout ?? 120000, 600000);
+    const child = spawn(held.exec, [args.command], { cwd: args.workdir ?? context.directory, detached: true, stdio: ["ignore", "pipe", "pipe"] });
+    let output = "";
+    const take = (chunk) => { output += chunk.toString(); };
+    child.stdout.on("data", take);
+    child.stderr.on("data", take);
+    const stop = () => { try { process.kill(-child.pid, "SIGKILL"); } catch {} };
+    let timedOut = false;
+    const timer = setTimeout(() => { timedOut = true; stop(); }, timeout);
+    context.abort.addEventListener("abort", stop, { once: true });
+    const exit = await new Promise((resolve) => {
+      child.on("error", (error) => { output += String(error); resolve(127); });
+      child.on("close", (code, signal) => resolve(code ?? signal));
+    });
+    clearTimeout(timer);
+    context.abort.removeEventListener("abort", stop);
+    const cut = output.length > OUTPUT_LIMIT ? output.slice(0, OUTPUT_LIMIT) + "\\n[output cut at " + OUTPUT_LIMIT + " characters]" : output;
+    const notes = (timedOut ? "\\n[killed after " + timeout + "ms]" : "") + (exit === 0 ? "" : "\\n[exit " + exit + "]");
+    return { title: args.description, output: cut + notes, metadata: { exit, description: args.description } };
+  },
+});
 export const WhiffleContext = async ({ directory }) => {
+const bounded = boundaryOf(directory);
 const whiffleStep = async (context) => {
   const response = await fetch(whiffleBase + "/api/instances");
   if (!response.ok) throw new Error(await response.text());
@@ -586,7 +643,8 @@ return ({
         });
         return written.text();
       }
-    })
+    }),
+    ...(bounded ? { bash: boundedBash(bounded) } : {})
   },
   "tool.execute.before": async (input, output) => {
     if (input.tool.startsWith("whiffle_")) {
