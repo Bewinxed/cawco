@@ -76,6 +76,7 @@
   import SystemLine from "./SystemLine.svelte";
   import Thinking from "./Thinking.svelte";
   import ToolGroup from "./ToolGroup.svelte";
+  import { trayNews } from "./tray.svelte";
 
   let {
     session,
@@ -2385,6 +2386,28 @@
   // Following it either way is what keeps `wasBusy` honest: dropping the
   // bookkeeping while hidden would make the next switch announce a turn that
   // finished minutes ago.
+  // The delegate tray's news: a delegate started, finished or failed (polite),
+  // or has a question for the reader (assertive, cleared once it is said).
+  let trayAlert = $state("");
+  $effect(() => {
+    const news = trayNews.get(session.instanceId);
+    if (!(news && active && landed)) {
+      return;
+    }
+    untrack(() => {
+      if (news.polite) {
+        announcement = news.polite;
+      }
+      trayAlert = news.assertive;
+    });
+    if (news.assertive) {
+      const clear = setTimeout(() => {
+        trayAlert = "";
+      }, 5000);
+      return () => clearTimeout(clear);
+    }
+  });
+
   let wasBusy = false;
   $effect(() => {
     const { busy } = session;
@@ -2419,7 +2442,9 @@
 <p aria-atomic="true" aria-live="polite" class="spoken" role="status">
   {announcement}
 </p>
-<p aria-atomic="true" aria-live="assertive" class="spoken">{blockedNote}</p>
+<p aria-atomic="true" aria-live="assertive" class="spoken">
+  {blockedNote || trayAlert}
+</p>
 
 <div
   aria-label="Session transcript"

@@ -369,6 +369,9 @@ export function tableReflow(options: {
  *   is inside it grows or shrinks, its edge travels to the new size; with
  *   "pop" as well (`data-flip="pop box"`, a count's pill) it pops in and out
  *   and its width travels as the count grows a digit.
+ * - `data-flip-enter="own"` beside any of these: it arrives with an entrance
+ *   of its own, so it is not popped or uncovered here; it still slides, and
+ *   still leaves the way its mark says.
  *
  * Layout changes once, in the update that changes the DOM, and everything
  * marked that moved starts, in that same update, on a transform that holds
@@ -551,6 +554,11 @@ function unseen(node: HTMLElement, place: Placed, dy: number): boolean {
 }
 
 function arrival(element: HTMLElement, still: boolean) {
+  // It brings its own entrance (a delegate chip whose mark flew in, or one
+  // that was simply there when the page loaded); its neighbours still slide.
+  if (element.dataset.flipEnter === "own") {
+    return;
+  }
   if (still) {
     element.animate([{ opacity: 0 }, { opacity: 1 }], entrance());
   } else if (pops(element)) {

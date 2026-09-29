@@ -59,6 +59,7 @@
   } from "../suggest.svelte";
   import type { ComposerDraft, PendingImage } from "./composer-draft.svelte";
   import { stand } from "./composer-presence.svelte";
+  import DelegateTray from "./DelegateTray.svelte";
   import DocThumb from "./DocThumb.svelte";
   import SuggestionChips from "./SuggestionChips.svelte";
 
@@ -80,6 +81,7 @@
     prompts,
     leading,
     suggest,
+    delegatesOf,
   }: {
     /**
      * The conversation's half-written message. The composer draws it and
@@ -141,6 +143,11 @@
      * suggestion chips. Absent on surfaces with no session behind them.
      */
     suggest?: { candidates: SuggestCandidate[] };
+    /**
+     * The session whose delegates the tray above the composer shows; absent
+     * on surfaces with no session behind them.
+     */
+    delegatesOf?: string;
   } = $props();
 
   $effect(() => {
@@ -743,14 +750,28 @@
     }
   }
 
-  /** The panel's own height, and the prompt stack's standing on it. */
+  /**
+   * The panel's own height, the delegate tray's standing on it, and the
+   * prompt stack's standing on that.
+   */
   let panel = $state(0);
+  let lift = $state(0);
   let stack = $state(0);
-  // The column the transcript makes room for is both of them, as it was
+  // The column the transcript makes room for is all of them, as it was
   // when the prompts stood inside the panel.
   $effect(() => {
-    height = panel + stack;
+    height = panel + lift + stack;
   });
+
+  /** One conversation's tray handing its place to the next: a crossfade. */
+  function trayFade(node: HTMLElement): TransitionConfig {
+    node.style.gridArea = "1 / 1";
+    return {
+      duration: dur("--dur-exit"),
+      easing: easeOut,
+      css: (t) => `opacity: ${t}`,
+    };
+  }
 
   const removeImage = (i: number) => {
     draft.images = draft.images.filter((_, n) => n !== i);
@@ -782,6 +803,28 @@
       <div class="stack" bind:clientHeight={stack}>{@render prompts()}</div>
     </div>
   {/if}
+  <!-- The row standing on the composer, outside its box: the delegate tray,
+       and the suggestion chips standing on the tray (out of flow, they never
+       change what this row measures). Prompts stand on top of both. -->
+  <div class="lift" bind:clientHeight={lift}>
+    {#if suggest && suggestions.enabled}
+      <SuggestionChips
+        candidates={suggest.candidates}
+        oninsert={insertSuggestion}
+        text={draft.text}
+        bind:this={chips}
+      />
+    {/if}
+    {#if delegatesOf}
+      <div class="tray-slot">
+        {#key delegatesOf}
+          <div in:trayFade out:trayFade>
+            <DelegateTray {held} parentId={delegatesOf} />
+          </div>
+        {/key}
+      </div>
+    {/if}
+  </div>
   <div class="composer" bind:clientHeight={panel} in:rise out:fade>
     <!-- The row of attachments is one block above the field: it folds open
        with its first chip and shut with its last. The chips in it are a
@@ -827,15 +870,6 @@
           </span>
         {/each}
       </div>
-    {/if}
-
-    {#if suggest && suggestions.enabled}
-      <SuggestionChips
-        candidates={suggest.candidates}
-        oninsert={insertSuggestion}
-        text={draft.text}
-        bind:this={chips}
-      />
     {/if}
 
     {#if draft.editing}
@@ -1024,6 +1058,23 @@
     flex-direction: column;
     justify-content: flex-end;
     pointer-events: none;
+  }
+  /* The delegate tray's row, on the composer's width and left edge. It is
+     the positioned box the suggestion chips stand on. */
+  .lift {
+    position: relative;
+    flex: none;
+    width: min(720px, calc(100% - 50px));
+    pointer-events: none;
+
+    /* The suggestion row takes the pointer; the tray's chips take it themselves. */
+    & > :global(.suggest) {
+      pointer-events: auto;
+    }
+  }
+  /* One conversation's tray over the next while they cross-fade. */
+  .tray-slot {
+    display: grid;
   }
   /* What the column measures into the composer's height: the cards and
      the step under them, and nothing at all with no card parked. */
@@ -1406,7 +1457,10 @@
     .dock {
       bottom: calc(var(--space-2) + env(safe-area-inset-bottom));
     }
-    .composer {
+    /* The tray and the parked cards keep the composer's edges. */
+    .composer,
+    .lift,
+    .prompts {
       align-self: stretch;
       margin-inline: var(--space-3);
       width: auto;

@@ -806,6 +806,14 @@ export interface DbShape {
    */
   readonly touchInstanceActivity: (id: string) => void;
   /**
+   * What a parent's delegate tray can still show, oldest first: live and
+   * undismissed failed items, and any other that ended at or after `endedSince`.
+   */
+  readonly trayItemsOf: (
+    parentInstanceId: string,
+    endedSince: Date
+  ) => WorkItemRow[];
+  /**
    * The machine's sessions that nothing has ever put a name to, however old
    * they are — a stored conversation the hub could name off the machine's own
    * catalog, and the only rows worth spending a catalog read on. Empty is the
@@ -835,7 +843,12 @@ export interface DbShape {
   /** Moves a work item; the hub is its only writer. */
   readonly updateWorkItem: (
     id: string,
-    change: Partial<Pick<WorkItemRow, "state" | "result" | "error" | "endedAt">>
+    change: Partial<
+      Pick<
+        WorkItemRow,
+        "state" | "result" | "error" | "endedAt" | "dismissedAt"
+      >
+    >
   ) => WorkItemRow | undefined;
   readonly upsertAgent: (agent: {
     machineId: string;
@@ -2629,6 +2642,22 @@ const make = (path: string): DbShape => {
             inArray(workItems.state, ["starting", "running"])
           )
         )
+        .all(),
+    trayItemsOf: (parentInstanceId, endedSince) =>
+      db
+        .select()
+        .from(workItems)
+        .where(
+          and(
+            eq(workItems.parentInstanceId, parentInstanceId),
+            isNull(workItems.dismissedAt),
+            or(
+              inArray(workItems.state, ["starting", "running", "failed"]),
+              gte(workItems.endedAt, endedSince)
+            )
+          )
+        )
+        .orderBy(workItems.createdAt)
         .all(),
     updateWorkItem: (id, change) =>
       db

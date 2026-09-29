@@ -35,6 +35,7 @@ import type {
   SupervisorEvent,
   SupportedCommands,
   UsageLimitsReading,
+  WorkItemSummary,
 } from "@whiffle/core";
 import {
   CONTROL_RELOAD_SKILLS,
@@ -538,6 +539,11 @@ const state = $state({
    */
   delegateEvents: {} as Record<string, DelegateEvent[]>,
   /**
+   * Every work item a parent's delegate tray has been told of, by item id:
+   * read when the parent's view opens, then kept by `work_item` frames.
+   */
+  workItems: {} as Record<string, WorkItemSummary>,
+  /**
    * The supervisor's intervention log, newest first, capped at 200 in memory
    * (PLAN §C9). Seeded from REST and kept live by `supervisor_event` frames.
    */
@@ -1034,6 +1040,8 @@ export function openSession(instanceId: string): void {
   hydrate(session(instanceId));
   // biome-ignore lint/complexity/noVoid: fire-and-forget — the view is already hydrated, delegate events fill in when they land
   void loadDelegateEvents(instanceId);
+  // biome-ignore lint/complexity/noVoid: fire-and-forget — the tray fills in when the read lands
+  void loadWorkItems(instanceId);
   // Opening a view is the moment its frames become this browser's to render.
   // (The subscription effect in the route layout already names its tab; this makes
   // the direct route the only trigger the store needs to know about.)
@@ -1065,6 +1073,43 @@ async function loadDelegateEvents(instanceId: string): Promise<void> {
   for (const event of events) {
     recordDelegateEvent(event);
   }
+}
+
+/** Views whose delegate tray has been read — frames keep it after that. */
+const trayRead = new Set<string>();
+
+/** The work items a view's delegate tray opens with (`GET /api/work-items`). */
+async function loadWorkItems(instanceId: string): Promise<void> {
+  if (trayRead.has(instanceId)) {
+    return;
+  }
+  trayRead.add(instanceId);
+  const items = await load<WorkItemSummary[]>(
+    `/api/work-items?parent=${instanceId}`
+  );
+  if (!items) {
+    trayRead.delete(instanceId);
+    return;
+  }
+  for (const item of items) {
+    state.workItems[item.id] = item;
+  }
+}
+
+/** Takes a chip off its tray on every screen: the hub records the dismissal. */
+export async function dismissWorkItem(id: string): Promise<void> {
+  const response = await fetch(
+    `/api/work-items/${encodeURIComponent(id)}/dismiss`,
+    { method: "POST" }
+  );
+  if (!response.ok) {
+    throw new Error(
+      (await response.text()) ||
+        `The hub answered ${response.status}, so the delegate was not dismissed.`
+    );
+  }
+  const item = (await response.json()) as WorkItemSummary;
+  state.workItems[item.id] = item;
 }
 
 async function load<T>(path: string): Promise<T | null> {
@@ -1531,6 +1576,11 @@ function handleFrame(frame: FramePayload): void {
   if (frame.kind === "usage") {
     // The small limits frame the hub pushes on each report (USAGE-SPEC.md §6.4).
     state.usageLimits = usageLimitReadings(frame.limits);
+    return;
+  }
+
+  if (frame.kind === "work_item") {
+    state.workItems[frame.item.id] = frame.item;
     return;
   }
 
@@ -5315,6 +5365,16 @@ export const whiffle = {
    */
   delegateEventsOf: (instanceId: string): DelegateEvent[] =>
     state.delegateEvents[instanceId] ?? [],
+  /** The work items a session delegated that its tray knows of, oldest first. */
+  workItemsOf: (parentInstanceId: string): WorkItemSummary[] =>
+    Object.values(state.workItems)
+      .filter((item) => item.parentInstanceId === parentInstanceId)
+      .sort((a, b) => a.createdAt - b.createdAt),
+  /** The work item a delegate session runs, when its parent's tray was told of it. */
+  workItemFor: (instanceId: string): WorkItemSummary | undefined =>
+    Object.values(state.workItems).find(
+      (item) => item.instanceId === instanceId
+    ),
   /** The supervisor's intervention log, newest first, capped in memory. */
   get supervisorEvents(): SupervisorEvent[] {
     return state.supervisorEvents;

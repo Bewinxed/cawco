@@ -18,6 +18,7 @@ import type {
   InstanceRow,
   SendPayload,
   SpawnPayload,
+  WorkItemSummary,
   WorkspaceCheckout,
 } from "@whiffle/core";
 import {
@@ -83,6 +84,8 @@ export interface WorkItemDeps {
     args: unknown[]
   ) => Promise<unknown>;
   readonly db: DbShape;
+  /** Tells every dashboard an item moved: its parent's delegate tray follows it. */
+  readonly publish: (item: WorkItemSummary) => void;
   /** The one send path. */
   readonly send: (envelope: Envelope<SendPayload>) => void;
   /** Sends a spawn and records its row under the work item. */
@@ -194,13 +197,54 @@ const reportLine = (item: WorkItemRow): string =>
     ? `\n\n[Work item ${item.id} is ${item.state} in workspace ${item.workspaceId}.]`
     : `\n\n[Work item ${item.id} is ${item.state} in workspace ${item.workspaceId}. It takes no more messages; continue with delegate(..., workspace: "${item.workspaceId}").]`;
 
+/** The first line with words on it. */
+const firstLine = (text: string | null): string =>
+  (text ?? "")
+    .split("\n")
+    .map((line) => line.trim())
+    .find(Boolean) ?? "";
+
+/** An item as its parent's delegate tray reads it. */
+export const summaryOf = (item: WorkItemRow): WorkItemSummary => ({
+  id: item.id,
+  parentInstanceId: item.parentInstanceId,
+  instanceId: item.instanceId,
+  title: item.title,
+  state: item.state,
+  createdAt: item.createdAt.getTime(),
+  endedAt: item.endedAt?.getTime() ?? null,
+  dismissedAt: item.dismissedAt?.getTime() ?? null,
+  firstLines: {
+    brief: firstLine(item.brief),
+    result: firstLine(item.result),
+    error: firstLine(item.error),
+  },
+});
+
+/** How long a tray shows a finished item before it leaves (the dashboard's hold). */
+const TRAY_HOLD_MS = 6000;
+
 export const createWorkItems = ({
   call,
   db,
+  publish,
   send,
   spawn,
   types,
 }: WorkItemDeps) => {
+  /** Every write to an item goes out to the dashboards as it lands. */
+  const published = (
+    item: WorkItemRow | undefined
+  ): WorkItemRow | undefined => {
+    if (item) {
+      publish(summaryOf(item));
+    }
+    return item;
+  };
+  const update = (
+    id: string,
+    change: Parameters<DbShape["updateWorkItem"]>[1]
+  ): WorkItemRow | undefined => published(db.updateWorkItem(id, change));
   const typeNamed = (name: string): DelegateType => {
     const known = types();
     const found = known.find((type) => type.name === name);
@@ -374,6 +418,7 @@ export const createWorkItems = ({
       effort: settings.type?.effort,
       state: "starting",
     });
+    published(item);
 
     try {
       // A follow-up opens with the work before it; a fork (never a
@@ -395,7 +440,7 @@ export const createWorkItems = ({
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      db.updateWorkItem(item.id, {
+      update(item.id, {
         state: "failed",
         error: message,
         endedAt: new Date(),
@@ -433,7 +478,7 @@ export const createWorkItems = ({
     change: Parameters<DbShape["updateWorkItem"]>[1]
   ): WorkItemRow =>
     LIVE.has(item.state)
-      ? (db.updateWorkItem(item.id, { ...change, endedAt: new Date() }) ?? item)
+      ? (update(item.id, { ...change, endedAt: new Date() }) ?? item)
       : item;
 
   return {
@@ -460,7 +505,7 @@ export const createWorkItems = ({
     started(row: InstanceRow): void {
       const item = itemOf(row);
       if (item?.state === "starting") {
-        db.updateWorkItem(item.id, { state: "running" });
+        update(item.id, { state: "running" });
       }
     },
 
@@ -508,6 +553,21 @@ export const createWorkItems = ({
 
     /** One item, as `stop_delegate` and its callers read it. */
     item: (id: string): WorkItemRow | undefined => db.workItem(id),
+
+    /**
+     * What a parent's delegate tray shows when it opens: live work, failures
+     * nobody has dismissed yet, and what finished within the tray's hold.
+     */
+    trayOf: (parentInstanceId: string): WorkItemSummary[] =>
+      db
+        .trayItemsOf(parentInstanceId, new Date(Date.now() - TRAY_HOLD_MS))
+        .map(summaryOf),
+
+    /** The reader dismissed its chip: gone from the tray on every screen. */
+    dismiss(id: string): WorkItemSummary | undefined {
+      const item = update(id, { dismissedAt: new Date() });
+      return item ? summaryOf(item) : undefined;
+    },
   };
 };
 

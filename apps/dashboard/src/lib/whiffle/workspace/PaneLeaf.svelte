@@ -372,6 +372,7 @@
       <Composer
         busy={bound.busy}
         commands={bound.commands}
+        delegatesOf={bound.delegatesOf}
         draft={bound.draft}
         held={swipe.moving}
         leading={bound.leading}

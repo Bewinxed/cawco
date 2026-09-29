@@ -46,6 +46,7 @@
   import Subagent from "./Subagent.svelte";
   import Thinking from "./Thinking.svelte";
   import ToolGroup from "./ToolGroup.svelte";
+  import { trayCard } from "./tray.svelte";
 
   let { message }: { message: Message } = $props();
 
@@ -427,7 +428,14 @@
     <div class="head">
       <Collapsible.Trigger class="bhead press-tint">
         <span aria-hidden="true" class="chev"><IconChevronRight /></span>
-        <span aria-hidden="true" class="mark m{markHue(seed)}"><Sprite /></span>
+        <!-- The mark the delegate tray's chip flies out of, the first time
+             this card leaves the view (tray.svelte.ts). -->
+        <span
+          aria-hidden="true"
+          class="mark m{markHue(seed)}"
+          {@attach trayCard(() => id)}
+          ><Sprite /></span
+        >
         <span class="tk">{label}</span>
         {#if started}
           <span class="kind">session</span>

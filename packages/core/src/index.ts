@@ -588,6 +588,25 @@ export interface InstanceRow {
 }
 
 /**
+ * One delegate's work item as its parent's delegate tray reads it: the hub's
+ * `work_items` row cut to what a chip and its panel say, pushed as a
+ * `work_item` frame on every change and read back over
+ * `GET /api/work-items?parent=`. Times are epoch ms.
+ */
+export interface WorkItemSummary {
+  createdAt: number;
+  dismissedAt: number | null;
+  endedAt: number | null;
+  /** The first line of each: what it was asked, what it reported, why it failed. */
+  firstLines: { brief: string; result: string; error: string };
+  id: string;
+  instanceId: string;
+  parentInstanceId: string;
+  state: "starting" | "running" | "done" | "failed" | "cancelled";
+  title: string;
+}
+
+/**
  * One line of the supervisor's intervention log — `supervisor_events`
  * (packages/hub `db/schema.ts`), read over `GET /api/supervisor/events` and
  * pushed as a `supervisor_event` frame. Silent verdicts are recorded too: the
@@ -780,6 +799,15 @@ export type FramePayload =
       kind: "pulse";
       instanceId: string;
       pulse: SessionPulse;
+    }
+  | {
+      /**
+       * Hub-originated: a work item as it stands after its latest change —
+       * started, running, finished, dismissed. `instanceId` is its parent's.
+       */
+      kind: "work_item";
+      instanceId: string;
+      item: WorkItemSummary;
     }
   /** Hub-originated workflow run transition (§7.2). */
   | import("./workflow").WorkflowFrame;

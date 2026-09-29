@@ -4778,6 +4778,17 @@ export const createServer = ({
   const delegateTypes = makeDelegateTypes();
   const workItems = createWorkItems({
     db,
+    // To every dashboard, as delegate events go: the parent's tray may be open
+    // on any of them.
+    publish: (item) => {
+      const [parent] = db.getInstancesByIds([item.parentInstanceId]);
+      registry.broadcast({
+        verb: "frames",
+        machineId: parent?.machineId ?? "",
+        instanceId: item.parentInstanceId,
+        payload: { kind: "work_item", instanceId: item.parentInstanceId, item },
+      });
+    },
     types: () => delegateTypes.list(),
     spawn: issueSpawn,
     send: deliverSend,
@@ -5952,6 +5963,17 @@ export const createServer = ({
           return db.listDelegateEvents(query);
         }
       )
+      // A parent's delegate tray as it opens; `work_item` frames keep it live.
+      .get(
+        "/api/work-items",
+        { query: t.Object({ parent: t.String() }) },
+        ({ query }) => workItems.trayOf(query.parent)
+      )
+      // Dismissed from the tray: gone from it on every screen, and after reload.
+      .post("/api/work-items/:id/dismiss", ({ params, status }) => {
+        const item = workItems.dismiss(params.id);
+        return item ?? status(404, `no work item ${params.id}`);
+      })
       // The catalog is code, so it ships with the answer rather than being stored:
       // a dashboard reads what tools exist and what the fleet has decided about
       // them here, and each machine's own status off the `instances` frame.

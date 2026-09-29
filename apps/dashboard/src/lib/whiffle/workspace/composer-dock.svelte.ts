@@ -23,6 +23,8 @@ import type { ComposerDraft } from "../transcript/composer-draft.svelte";
 export interface ComposerBinding {
   readonly busy: boolean;
   readonly commands: AvailableCommand[];
+  /** The session whose delegates the composer's tray shows. */
+  readonly delegatesOf: string;
   readonly draft: ComposerDraft;
   leading: Snippet;
   readonly mentions: Mention[];

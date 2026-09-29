@@ -400,6 +400,11 @@ export const workItems = sqliteTable(
       .notNull()
       .$defaultFn(() => new Date()),
     endedAt: timestamp("ended_at"),
+    /**
+     * When the reader dismissed its chip from the parent's delegate tray: a
+     * failed item stays there until then, on every screen at once.
+     */
+    dismissedAt: timestamp("dismissed_at"),
   },
   (table) => [
     index("work_items_workspace").on(table.workspaceId, table.state),

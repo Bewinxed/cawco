@@ -955,6 +955,9 @@
     get transcriptShare() {
       return (100 - previewShare) / 100;
     },
+    get delegatesOf() {
+      return viewId;
+    },
     onsubmit,
     oninterruptsend,
     onmenu: refreshMenu,
@@ -1101,6 +1104,7 @@
               <Composer
                 busy={session.busy}
                 {commands}
+                delegatesOf={viewId}
                 {draft}
                 leading={autopilot}
                 {mentions}

@@ -74,16 +74,19 @@ export function depart(
  * travels: the composer's field, emptied into a send, stays drawn and ready
  * for the next message while its text flies into the row it became. A source
  * that is leaving (`stays: false` — a failed send's words, sent again) is
- * hidden while they travel, so there is one object, never two.
+ * hidden while they travel, so there is one object, never two. `rect` is
+ * where it was last drawn, for a source already gone from the page (a row a
+ * long list has just unmounted).
  */
 export function departBox(
   key: string,
   source: HTMLElement,
-  stays = true
+  stays = true,
+  rect: DOMRect = source.getBoundingClientRect()
 ): void {
   departures.set(key, {
     by: "click",
-    rect: source.getBoundingClientRect(),
+    rect,
     radius: getComputedStyle(source).borderRadius,
     source,
     stays,
