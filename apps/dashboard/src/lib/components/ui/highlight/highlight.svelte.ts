@@ -9,8 +9,9 @@
  *   --ease-in-out) and fades in place when the pointer leaves, or, with
  *   `hovered`, follows the row carrying that attribute (a menu's
  *   `data-highlighted`, set by pointer and arrow keys alike). Keyboard focus
- *   moves it too. Where nothing hovers (touch), it never shows (app.css)
- *   and a touch never aims it.
+ *   on a row is the focus ring's (app.css), never the ghost's. Where
+ *   nothing hovers (touch), it never shows (app.css) and a touch never
+ *   aims it.
  * - The pill sits under the selected row and glides to the next one
  *   (120ms, --ease-drawer). A row picked with the pointer is already under
  *   the ghost: there the pill takes the ghost's place at once and the old
@@ -180,15 +181,8 @@ export function highlight(options: HighlightOptions) {
           row.offsetParent !== null &&
           (!laidOut || laidOut().has(row))
       );
-    const rowOf = (node: EventTarget | null) =>
-      node instanceof Element
-        ? (node.closest<HTMLElement>(rows) ?? null)
-        : null;
-
     let ghostBox: Box | null = null;
     let ghostRow: HTMLElement | null = null;
-    /** What put the ghost where it is: a blur only takes back its own. */
-    let ghostBy: "pointer" | "focus" | "attribute" | null = null;
     let pendingHide = 0;
     let pillBox: Box | null = null;
     let pillRow: HTMLElement | null = null;
@@ -302,7 +296,6 @@ export function highlight(options: HighlightOptions) {
       pointer = { x: event.clientX, y: event.clientY };
       const best = nearest(event.clientX, event.clientY);
       if (again || best !== ghostRow) {
-        ghostBy = best ? "pointer" : null;
         showGhost(best);
       }
     };
@@ -329,32 +322,10 @@ export function highlight(options: HighlightOptions) {
         onMove({ clientX: pointer.x, clientY: pointer.y }, true);
       }
     };
-    const onFocus = (event: FocusEvent) => {
-      const target = event.target as Element;
-      if (!hovered && target.matches(":focus-visible")) {
-        ghostBy = "focus";
-        showGhost(rowOf(target));
-      }
-    };
-    // Focus leaving the list takes back a ghost that focus put there. A
-    // ghost under the pointer stays: a click that navigates moves focus,
-    // and the ghost under the pointer is the one that becomes the pill.
-    const onBlur = (event: FocusEvent) => {
-      if (
-        !hovered &&
-        ghostBy === "focus" &&
-        !container.contains(event.relatedTarget as Node)
-      ) {
-        ghostBy = null;
-        showGhost(null);
-      }
-    };
     container.addEventListener("pointermove", onPointer);
     // Also sent, with no move, when the rows shift under a still pointer.
     container.addEventListener("pointerover", onPointer);
     container.addEventListener("pointerleave", onLeave);
-    container.addEventListener("focusin", onFocus);
-    container.addEventListener("focusout", onBlur);
     container.addEventListener("scroll", onScroll, {
       capture: true,
       passive: true,
@@ -370,7 +341,6 @@ export function highlight(options: HighlightOptions) {
         const row = container.querySelector<HTMLElement>(hovered);
         cancelAnimationFrame(pendingHide);
         if (row) {
-          ghostBy = "attribute";
           showGhost(row);
         } else {
           // A highlight moving from one row to the next can clear the old
@@ -431,7 +401,7 @@ export function highlight(options: HighlightOptions) {
     syncPill(false);
 
     // A list that measures its rows moves the layers each time it does: the
-    // ghost glides to the row under the pointer now (or under focus, or
+    // ghost glides to the row under the pointer now (or its own row, or
     // away if its row has gone), and the pill onto the selected row.
     if (laidOut) {
       $effect(() => {
@@ -454,8 +424,6 @@ export function highlight(options: HighlightOptions) {
       container.removeEventListener("pointermove", onPointer);
       container.removeEventListener("pointerover", onPointer);
       container.removeEventListener("pointerleave", onLeave);
-      container.removeEventListener("focusin", onFocus);
-      container.removeEventListener("focusout", onBlur);
       container.removeEventListener("scroll", onScroll, { capture: true });
       watch.disconnect();
       sizes.disconnect();

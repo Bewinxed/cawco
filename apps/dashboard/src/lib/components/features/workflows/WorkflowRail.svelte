@@ -12,7 +12,9 @@
   }: { run: WorkflowRun; activeSession: string | null } = $props();
 </script>
 <li data-flip>
-  <a class="run press-tint" href="/workflows/{run.workflowId}/runs/{run.id}"
+  <a
+    class="run focus-inset press-tint"
+    href="/workflows/{run.workflowId}/runs/{run.id}"
     ><IconWorkflow class="size-4 shrink-0" />
     <span
       >{workflowState.workflows.find((entry) => entry.id === run.workflowId)?.name ?? 'Workflow'}
@@ -24,7 +26,7 @@
       <li data-flip>
         <a
           aria-current={instance.id === activeSession ? 'page' : undefined}
-          class="session press-tint"
+          class="session focus-inset press-tint"
           href="/session/{instance.id}"
           >{instance.title ?? instance.id.slice(0, 8)}</a
         >

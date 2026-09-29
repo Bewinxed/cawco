@@ -311,6 +311,16 @@
     --accent-text: var(--accent-11);
     --accent-bg-subtle: var(--accent-3);
     --focus-ring: light-dark(var(--accent-solid), var(--accent-11));
+    /* Focus is one ring, on keyboard focus only. A control carries it
+       outside its edge at --focus-ring-offset. A text field (or the frame
+       around a borderless editor), a row in a list and a control flush
+       against its container carry it at --focus-ring-inset: drawn over the
+       element's own border, so the border itself turns the ring's colour
+       and weight and nothing is stacked on it or on the container's
+       edge. */
+    --focus-ring-width: 2px;
+    --focus-ring-offset: 2px;
+    --focus-ring-inset: calc(-1 * var(--focus-ring-width));
     --brand-solid: var(--neutral-12);
     --on-brand: var(--neutral-1);
     /* The action is never flat (plan 2026-08-18, measured reference: "action
@@ -783,13 +793,45 @@
     caret-color: var(--primary);
   }
 
-  /* The one focus indicator. No `border-radius: inherit`: it reshapes the
-     focused element to its parent's radius (ballooning focus rings, and
-     clipping a borderless textarea's text to the composer pill's corners).
-     The outline already tracks each element's own radius. */
+  /* The one focus indicator (tokens: --focus-ring*). An outline, so it
+     tracks each element's own radius and survives forced colours; never a
+     box-shadow ring, a border-colour change or a background on focus as
+     well. Pointer focus shows nothing: only :focus-visible draws it, and
+     the browser matches that on a click only for text entry, whose ring
+     is its border. */
   :focus-visible {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 1px;
+    outline: var(--focus-ring-width) solid var(--focus-ring);
+    outline-offset: var(--focus-ring-offset);
+    /* A scroller brings a focused control in with room for its ring, so
+       the scroller's edge never cuts it. */
+    scroll-margin: calc(var(--focus-ring-offset) + var(--focus-ring-width));
+  }
+
+  /* Text entry and rows: the ring sits on the element's own border box. */
+  :is(
+    input:not(
+      [type="checkbox"],
+      [type="radio"],
+      [type="range"],
+      [type="button"],
+      [type="submit"],
+      [type="reset"],
+      [type="color"],
+      [type="file"],
+      [type="image"]
+    ),
+    textarea,
+    select,
+    [contenteditable]
+  ):focus-visible,
+  :is(
+    [role="option"],
+    [role="tab"],
+    [role="treeitem"],
+    [role="row"],
+    [role="gridcell"]
+  ):focus-visible {
+    outline-offset: var(--focus-ring-inset);
   }
 
   /* Icons come in three sizes: 12 (beside meta text), 16 (controls and
@@ -1506,12 +1548,41 @@
   }
 }
 
-/* The one focus indicator: a solid outline, for elements that also set
-   `outline-none` for mouse focus. */
-@utility focus-ring {
+/* The focus ring drawn over the element's own border box, for a control or
+   row that sits flush against its container's edge or inside a clipping
+   scroller, where the outside ring would cross the edge or be cut. */
+@utility focus-inset {
   &:focus-visible {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 1px;
+    outline-offset: var(--focus-ring-inset);
+  }
+}
+
+/* A field that frames a borderless editor with its own controls beside it
+   (a composer, a search box with an icon): the frame is the text field. Its
+   border takes the ring while the text inside has focus, not while one of
+   its chips does, and the editor itself draws nothing. */
+@utility field-shell {
+  &:has(:is(input, textarea, select, [contenteditable]):focus-visible) {
+    outline: var(--focus-ring-width) solid var(--focus-ring);
+    outline-offset: var(--focus-ring-inset);
+  }
+  & :is(input, textarea, select, [contenteditable]):focus-visible {
+    outline: none;
+  }
+}
+
+/* The same for a search strip whose only border is the rule under it: the
+   rule takes the ring's colour and weight. Important, because the strip's
+   own (unlayered) rule sets that border and would otherwise win over any
+   layer. */
+@utility field-underline {
+  &:has(:is(input, textarea, [contenteditable]):focus-visible) {
+    border-bottom-color: var(--focus-ring) !important;
+    box-shadow: inset 0 calc(-1 * (var(--focus-ring-width) - 1px)) 0
+      var(--focus-ring) !important;
+  }
+  & :is(input, textarea, [contenteditable]):focus-visible {
+    outline: none;
   }
 }
 

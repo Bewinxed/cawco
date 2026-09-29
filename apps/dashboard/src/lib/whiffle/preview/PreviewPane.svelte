@@ -501,11 +501,6 @@
     width: 16px;
     height: 16px;
   }
-  button:focus-visible,
-  a:focus-visible {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 1px;
-  }
   @media (prefers-reduced-motion: no-preference) {
     button:active,
     a:active {
@@ -528,7 +523,10 @@
     border: 1px solid var(--border-hairline);
     border-radius: var(--radius-sm);
     background: var(--surface-recess);
-    outline: 2px solid transparent;
+    /* Selecting turns the well's own border the accent, 2px, inside its
+       box: never a second ring round it. */
+    outline: var(--focus-ring-width) solid transparent;
+    outline-offset: var(--focus-ring-inset);
     transition: outline-color var(--dur-control) var(--ease-in-out);
   }
   .selecting .well {

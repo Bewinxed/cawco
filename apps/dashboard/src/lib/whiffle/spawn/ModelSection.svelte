@@ -105,7 +105,6 @@
   let slideDir = $state(1);
   let gen = $state(0);
   let query = $state("");
-  let searchFocus = $state(false);
   let list = $state<HTMLDivElement>();
   /** The rows the last harness had, still on screen while the new ones arrive. */
   let leaving = $state<ModelEntry[]>([]);
@@ -340,7 +339,7 @@
       </div>
     {/if}
     <div class="pick">
-      <label class="search" class:focus={searchFocus}>
+      <label class="search field-underline">
         <Search class="lead" />
         <input
           aria-controls={`${uid}-models`}
@@ -348,8 +347,6 @@
           autocapitalize="off"
           autocorrect="off"
           id={`${uid}-search`}
-          onblur={() => { searchFocus = false; }}
-          onfocus={() => { searchFocus = true; }}
           oninput={(event) => { query = event.currentTarget.value; }}
           onkeydown={(event) => { if (event.key === 'Enter' && showCustomRow) { event.preventDefault(); pickCustom(); } else if (event.key === 'Escape' && query) { event.stopPropagation(); query = ''; } }}
           placeholder={`Search ${harnessName(listHarness)} models or paste a model id…`}
@@ -621,9 +618,6 @@
     height: 16px;
     flex: none;
     color: var(--ink-subtle);
-  }
-  .search.focus :global(svg.lead) {
-    color: var(--ink-strong);
   }
   .search input {
     flex: 1;

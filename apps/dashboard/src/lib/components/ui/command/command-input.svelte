@@ -17,7 +17,7 @@
   <InputGroup.Root>
     <CommandPrimitive.Input
       class={cn(
-				"w-full text-label outline-hidden disabled:cursor-not-allowed disabled:opacity-50",
+				"w-full text-label disabled:cursor-not-allowed disabled:opacity-50",
 				className
 			)}
       data-slot="command-input"

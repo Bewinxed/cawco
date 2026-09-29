@@ -214,13 +214,20 @@
     color: var(--ink-strong);
     font-size: var(--text-body);
     font-weight: var(--weight-body);
-    /* The selection ring is always drawn; choosing a node fades its colour
-       in over --dur-control, and the one let go fades out the same way. */
-    outline: 2px solid transparent;
+    /* The selection ring is always drawn, over the card's own border (so
+       the border itself turns the colour, never a second ring round it);
+       choosing a node fades its colour in over --dur-control, and the one
+       let go fades out the same way. Keyboard focus on the node uses the
+       same ring in the focus colour. */
+    outline: var(--focus-ring-width) solid transparent;
+    outline-offset: var(--focus-ring-inset);
     transition: outline-color var(--dur-control) var(--ease-out);
   }
   .selected {
     outline-color: var(--brand-solid);
+  }
+  :global(.svelte-flow__node:focus-visible) .wf-node {
+    outline-color: var(--focus-ring);
   }
   header {
     display: flex;

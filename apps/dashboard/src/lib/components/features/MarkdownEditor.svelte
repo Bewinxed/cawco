@@ -262,9 +262,13 @@
     border: 1px solid var(--border-control);
     box-shadow: var(--shadow-tile);
   }
+  /* Crepe's own focus styles give way to the app's one ring. */
   .crepe-host :global(.milkdown :focus-visible) {
-    outline: 2px solid var(--focus-ring) !important;
-    outline-offset: 1px;
+    outline: var(--focus-ring-width) solid var(--focus-ring) !important;
+    outline-offset: var(--focus-ring-offset);
+  }
+  .crepe-host :global(.milkdown :is(input, [contenteditable]):focus-visible) {
+    outline-offset: var(--focus-ring-inset);
   }
   .crepe-host :global(.milkdown :is(button, [role="button"]):active) {
     background: var(--surface-fill);

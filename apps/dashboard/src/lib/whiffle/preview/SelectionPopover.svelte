@@ -284,11 +284,6 @@
     max-width: 100%;
     object-fit: contain;
   }
-  input:focus-visible,
-  button:focus-visible {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 1px;
-  }
   :global(.selection-note-sheet) input {
     font-size: 16px;
   }

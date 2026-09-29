@@ -51,11 +51,6 @@
     &:hover:not(:disabled) {
       color: var(--ink-strong);
     }
-    &:focus-visible {
-      outline: 2px solid var(--focus-ring);
-      outline-offset: 1px;
-      border-radius: var(--radius-xs);
-    }
 
     /* A 44px target for a finger, without the header growing to it: the
        live header turns enabled as its first words land, and a header that

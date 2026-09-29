@@ -135,11 +135,6 @@
     text-align: left;
     cursor: pointer;
   }
-  .docs :global(.doc:focus-visible) {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 1px;
-    border-radius: var(--radius-xs);
-  }
   .path {
     flex: 1 1 auto;
     min-width: 0;

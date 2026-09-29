@@ -861,11 +861,6 @@
   .grip:hover {
     background: var(--border-control);
   }
-  .grip:focus-visible {
-    background: var(--border-control);
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 1px;
-  }
 
   .main {
     position: relative;

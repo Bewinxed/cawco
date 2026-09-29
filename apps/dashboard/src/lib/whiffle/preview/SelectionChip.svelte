@@ -138,10 +138,6 @@
       block-size: 16px;
     }
   }
-  button:focus-visible {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 1px;
-  }
   @media (hover: hover) {
     button:hover {
       background: var(--surface-hover);

@@ -56,6 +56,11 @@
   </div>
 </EdgeLabel>
 <style>
+  /* Keyboard focus on an edge turns its line the ring colour, over the
+     inline stroke that carries the edge's own state. */
+  :global(.svelte-flow__edge:focus-visible .svelte-flow__edge-path) {
+    stroke: var(--focus-ring) !important;
+  }
   .edge-label {
     pointer-events: all;
     display: flex;

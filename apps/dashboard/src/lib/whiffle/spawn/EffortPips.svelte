@@ -249,10 +249,11 @@
   .track:not(.ready) * {
     transition: none;
   }
+  /* The range input is invisible over the track, so the track is the
+     field: its border takes the ring. */
   .track.focus {
-    border-color: var(--neutral-8);
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 1px;
+    outline: var(--focus-ring-width) solid var(--focus-ring);
+    outline-offset: var(--focus-ring-inset);
   }
   .fill {
     position: absolute;

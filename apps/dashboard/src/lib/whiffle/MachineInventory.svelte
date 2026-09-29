@@ -121,7 +121,7 @@
         <li class="machine">
           <button
             aria-expanded={open[machine.machineId] === true}
-            class="head focus-ring press-tint"
+            class="head focus-inset press-tint"
             disabled={machine.status !== 'online' && !open[machine.machineId]}
             onclick={() => expand(machine)}
             type="button"

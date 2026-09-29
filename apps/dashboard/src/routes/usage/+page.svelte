@@ -839,8 +839,6 @@
       padding: var(--space-5);
       gap: var(--space-4);
       overflow: visible;
-      /* neutralise the stock ring/border shadcn ships on the card */
-      --tw-ring-shadow: 0 0 transparent;
     }
     .q-head {
       display: flex;

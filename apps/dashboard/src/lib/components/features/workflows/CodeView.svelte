@@ -88,8 +88,8 @@
       fontSize: "var(--text-label)",
     },
     "&.cm-focused": {
-      outline: "2px solid var(--focus-ring)",
-      outlineOffset: "-2px",
+      outline: "var(--focus-ring-width) solid var(--focus-ring)",
+      outlineOffset: "var(--focus-ring-inset)",
     },
     ".cm-scroller": {
       fontFamily: "var(--font-mono)",

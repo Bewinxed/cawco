@@ -352,16 +352,7 @@
     ></div>
   {/if}
   {#if focusRect}
-    <div
-      aria-hidden="true"
-      class="ring"
-      style={px({
-        left: focusRect.left - 2,
-        top: focusRect.top - 2,
-        width: focusRect.width + 4,
-        height: focusRect.height + 4,
-      })}
-    ></div>
+    <div aria-hidden="true" class="ring" style={px(focusRect)}></div>
   {/if}
   {@render children()}
 </div>
@@ -528,10 +519,12 @@
     z-index: 1;
     background: var(--tab-hover, var(--surface-hover));
   }
+  /* The focus ring, gliding from tab to tab: the app's one ring, drawn on
+     the tab's own box (a tab sits flush in the strip). */
   .ring {
     z-index: 4;
-    border: 1px solid var(--focus-ring);
-    border-radius: calc(var(--radius) - var(--pad) + 2px);
+    border: var(--focus-ring-width) solid var(--focus-ring);
+    border-radius: var(--shape);
 
     @media (prefers-reduced-motion: no-preference) {
       transition:

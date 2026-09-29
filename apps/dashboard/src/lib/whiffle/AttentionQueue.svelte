@@ -306,7 +306,7 @@
           <div class="min-w-0 flex-1">
             <div class="flex flex-wrap items-baseline gap-x-2">
               <a
-                class="text-body truncate font-medium text-foreground transition-colors hover:text-primary focus-visible:outline-none focus-ring"
+                class="text-body truncate font-medium text-foreground transition-colors hover:text-primary"
                 href={conversationHref(item.instanceId, whiffle.instanceIndex)}
                 onkeydown={(event) => onKeydown(event, item, entry.isQuestion)}
               >

@@ -109,7 +109,6 @@
     class="flex h-7 shrink-0 items-center gap-1.5 rounded-[var(--radius-sm)] px-1.5
            text-label tabular-nums
            hover:bg-muted
-           focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring
            transition-[background-color,color] duration-150 ease-out
            {compacting ? 'text-foreground' : TEXT[band]}"
     title={meterTitle}

@@ -10,7 +10,7 @@
 </script>
 
 <TabsPrimitive.Content
-  class={cn("focus-ring flex-1 rounded-lg text-body outline-none", className)}
+  class={cn("focus-inset flex-1 rounded-lg text-body", className)}
   data-slot="tabs-content"
   bind:ref
   {...restProps}

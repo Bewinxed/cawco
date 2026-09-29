@@ -406,10 +406,6 @@
         background: var(--surface-hover);
       }
     }
-    &:focus-visible {
-      outline: 2px solid var(--focus-ring);
-      outline-offset: 1px;
-    }
     /* A thumb gets a full-height target. */
     @media (pointer: coarse) {
       --meter-pad: 10px;

@@ -148,14 +148,19 @@
             {@const on = folderPrefs.hue(cwd) === hue}
             <button
               aria-pressed={on}
-              class="flex size-8 items-center justify-center rounded-full transition-colors
-                     duration-150"
+              class="focus-inset flex size-8 items-center justify-center rounded-full transition-colors
+                     duration-150
+                     aria-pressed:outline-solid aria-pressed:outline-[length:var(--focus-ring-width)]
+                     aria-pressed:outline-offset-[var(--focus-ring-inset)] aria-pressed:outline-[var(--ink-strong)]
+                     aria-pressed:focus-visible:outline-[var(--focus-ring)]"
               onclick={() => folderPrefs.setHue(cwd, hue)}
               title="Hue {hue}{pickedHue === undefined && on ? ' (automatic)' : ''}"
               type="button"
             >
+              <!-- The chosen hue is ringed where the focus ring would be, in
+                   ink; focus on it recolours that one ring. -->
               <span
-                class="identity-ink size-5 rounded-full bg-current {on ? 'ring-2 ring-ring ring-offset-2 ring-offset-[var(--surface-raised)]' : ''}"
+                class="identity-ink size-5 rounded-full bg-current"
                 style={swatch(hue)}
               ></span>
             </button>

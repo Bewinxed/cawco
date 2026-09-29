@@ -527,10 +527,6 @@
       color: var(--ink-strong);
     }
   }
-  .a-x:focus-visible {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 1px;
-  }
 
   /* ---- BODY ---- */
   .body {
@@ -669,11 +665,6 @@
       text-decoration: underline;
       text-underline-offset: 2px;
     }
-  }
-  .log-session:focus-visible {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 1px;
-    border-radius: 2px;
   }
   .log-session-gone {
     flex: 0 0 100px;

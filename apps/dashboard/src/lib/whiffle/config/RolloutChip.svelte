@@ -107,7 +107,7 @@
 <Popover.Root>
   <Popover.Trigger
     aria-label="{what}: on {applied} of {machines.length} machines{failed > 0 ? `, ${failed} refused` : ''}"
-    class="rollout focus-ring"
+    class="rollout"
     data-fail={failed > 0 ? '' : undefined}
   >
     <span aria-hidden="true" class="glyph" data-glyph={glyph}>
@@ -153,7 +153,7 @@
                   aria-busy={syncing || undefined}
                   aria-disabled={syncing || undefined}
                   aria-label="Sync {machineLabel(machine.hostname)}"
-                  class="sync focus-ring"
+                  class="sync"
                   disabled={!online}
                   onclick={whileIdle(() => syncing, () => resync(machine))}
                   type="button"

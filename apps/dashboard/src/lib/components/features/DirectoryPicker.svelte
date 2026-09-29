@@ -147,7 +147,7 @@
 
 <Collapsible.Root class="flex flex-col" onOpenChange={toggle} {open}>
   <Collapsible.Trigger
-    class="flex items-center gap-1.5 self-start text-meta text-muted-foreground transition-colors hover:text-foreground focus-ring"
+    class="flex items-center gap-1.5 self-start text-meta text-muted-foreground transition-colors hover:text-foreground"
   >
     <IconFolder class="size-4" />
     Browse

@@ -62,17 +62,12 @@
     font: var(--type-title);
     letter-spacing: -0.01em;
     color: var(--ink-strong);
-    outline: none;
   }
   .title-input.mono {
     font-family: var(--font-mono);
   }
   .title-input::placeholder {
     color: var(--ink-subtle);
-  }
-  .title-input:focus-visible {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 1px;
   }
   .title-input:disabled {
     color: var(--ink-strong);

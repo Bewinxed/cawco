@@ -18,7 +18,6 @@
     lead,
     onleadremove,
     onsubmit,
-    onmenu,
   }: {
     value?: string;
     element?: HTMLDivElement;
@@ -26,7 +25,6 @@
     lead?: LeadChip;
     onleadremove?: () => void;
     onsubmit: () => void;
-    onmenu?: (open: boolean) => void;
   } = $props();
   interface Menu {
     end: number;
@@ -48,9 +46,6 @@
   const anchor = $derived(
     menu ? { getBoundingClientRect: () => (menu as Menu).rect } : null
   );
-  $effect(() => {
-    onmenu?.(menu !== null);
-  });
   const chips = new Map<HTMLElement, Record<string, unknown>>();
 
   function serialize(node: Node): string {

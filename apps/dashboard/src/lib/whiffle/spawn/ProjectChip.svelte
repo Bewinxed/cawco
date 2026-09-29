@@ -101,7 +101,7 @@
   {/snippet}
   {#if draft}
     <div class="ns-panel form">
-      <label class="field">
+      <label class="field field-shell">
         <Files />
         <input
           aria-label="Project name"
@@ -112,7 +112,7 @@
           value={draft.name}
         >
       </label>
-      <label class="field">
+      <label class="field field-shell">
         <Folder />
         <input
           aria-label="Project path"

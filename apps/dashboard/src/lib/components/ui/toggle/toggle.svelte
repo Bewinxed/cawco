@@ -3,7 +3,7 @@
   import { tv } from "$lib/utils.js";
 
   export const toggleVariants = tv({
-    base: "group/toggle focus-ring touch-hit inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-sm font-medium text-[var(--ink-strong)] text-label outline-none [transition:var(--transition-control),transform_160ms_var(--ease-out)] hover:bg-[var(--surface-hover)] disabled:pointer-events-none disabled:opacity-50 aria-pressed:bg-[var(--surface-fill)] data-[state=on]:bg-[var(--surface-fill)] motion-safe:active:not-disabled:[transform:scale(var(--press-scale))] [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
+    base: "group/toggle touch-hit inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-sm font-medium text-[var(--ink-strong)] text-label [transition:var(--transition-control),transform_160ms_var(--ease-out)] hover:bg-[var(--surface-hover)] disabled:pointer-events-none disabled:opacity-50 aria-pressed:bg-[var(--surface-fill)] data-[state=on]:bg-[var(--surface-fill)] motion-safe:active:not-disabled:[transform:scale(var(--press-scale))] [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
     variants: {
       variant: {
         default: "bg-transparent",

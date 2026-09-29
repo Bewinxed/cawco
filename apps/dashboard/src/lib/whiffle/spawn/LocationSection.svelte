@@ -158,7 +158,7 @@
     </Segmented>
   {/snippet}
 
-  <div class="field" class:locked={locked}>
+  <div class="field field-shell" class:locked={locked}>
     <div class="row">
       <FolderOpen class="lead" />
       <input

@@ -788,11 +788,6 @@
     border-top: 1px solid var(--border-hairline);
     background: var(--surface-raised);
   }
-  button:focus-visible,
-  a:focus-visible {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 1px;
-  }
   @media (hover: hover) {
     .icon-action:hover {
       background: var(--surface-hover);

@@ -70,7 +70,7 @@
           <li>
             <a
               aria-current={current === section.slug ? 'page' : undefined}
-              class="row focus-ring press-tint"
+              class="row focus-inset press-tint"
               href="/config/{section.slug}"
             >
               <span class="tile" style="color:{section.hue}"

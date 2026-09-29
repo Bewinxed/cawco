@@ -281,8 +281,8 @@
     border-radius: inherit;
   }
   .link:focus-visible::after {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 1px;
+    outline: var(--focus-ring-width) solid var(--focus-ring);
+    outline-offset: var(--focus-ring-inset);
   }
   .meta {
     overflow: hidden;

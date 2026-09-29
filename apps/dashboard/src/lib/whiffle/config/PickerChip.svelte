@@ -31,7 +31,7 @@
 </script>
 
 <Popover.Root bind:open={expanded}>
-  <Popover.Trigger aria-label="{label}: {chosen}" class="picker focus-ring">
+  <Popover.Trigger aria-label="{label}: {chosen}" class="picker">
     <span class="k">{label}</span>
     <span class="v num"><TextMorph text={chosen} /></span>
     <IconChevronDown />
@@ -51,7 +51,7 @@
         {/if}
         <button
           aria-selected={option.value === value}
-          class="kit-item item focus-ring"
+          class="kit-item item focus-inset"
           onclick={() => {
           onpick(option.value);
           expanded = false;

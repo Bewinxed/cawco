@@ -110,7 +110,6 @@
   let popover = $state<"machines" | "project" | "location" | "lifetime" | null>(
     null
   );
-  let menuOpen = $state(false);
   let skills = $state<string[]>([]);
   let plugins = $state<string[]>([]);
   /** Continue mode: who writes the summary. Reset on every open; never remembered. */
@@ -424,7 +423,6 @@
       busy = false;
       error = "";
       popover = null;
-      menuOpen = false;
       verifiedLocation = "";
       if (continueFrom) {
         loadEstimate(continueFrom.instanceId, submission);
@@ -1000,15 +998,11 @@
         label={continueFrom ? "Next step (optional)" : "First prompt"}
       />
       <div class="fai-comb"></div>
-      <div
-        class="composer"
-        class:focus={editor === document.activeElement || menuOpen}
-      >
+      <div class="composer field-shell">
         <PromptEditor
           lead={sourceChip}
           {menuItems}
           onleadremove={onexitcontinue}
-          onmenu={(value) => { menuOpen = value; }}
           onsubmit={start}
           bind:element={editor}
           bind:value={prompt}
@@ -1290,15 +1284,7 @@
     border: 1px solid var(--border-control);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-xs);
-    transition:
-      var(--transition-control),
-      box-shadow 120ms ease;
-  }
-  .composer:focus-within,
-  .composer.focus {
-    border-color: var(--neutral-8);
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 1px;
+    transition: var(--transition-control);
   }
   /* 30px chips that wrap: on a coarse pointer the rows open to 14px apart,
      so each chip's touch area reaches 44px tall. */

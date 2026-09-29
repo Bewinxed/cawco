@@ -867,7 +867,7 @@
                     {:else}
                       <Textarea
                         aria-label={open?.name}
-                        class="h-[60vh] min-h-0 rounded-none border-0 bg-transparent px-[var(--space-6)] py-[var(--space-4)] font-mono text-[length:var(--text-label)] text-foreground focus-visible:ring-inset md:px-[var(--space-7)]"
+                        class="h-[60vh] min-h-0 rounded-none border-0 bg-transparent px-[var(--space-6)] py-[var(--space-4)] font-mono text-[length:var(--text-label)] text-foreground md:px-[var(--space-7)]"
                         spellcheck="false"
                         bind:value={draft}
                       />

@@ -331,10 +331,6 @@
       transform: scale(0.96);
     }
   }
-  .ap-trigger:focus-visible {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 1px;
-  }
   /* Active state: accent-colored glyph, no solid fill. */
   .ap-active {
     color: var(--accent-text);
@@ -381,11 +377,6 @@
     padding: var(--space-2) var(--space-3);
     resize: vertical;
     min-height: 80px;
-    outline: none;
-  }
-  .ap-prompt:focus {
-    border-color: var(--ring);
-    box-shadow: 0 0 0 2px oklch(from var(--ring) l c h / 0.15);
   }
   .ap-prompt::placeholder {
     color: var(--ink-muted);

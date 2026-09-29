@@ -52,8 +52,4 @@
   .orb:active {
     background: var(--surface-hover);
   }
-  .orb:focus-visible {
-    outline: 2px solid var(--focus-ring);
-    outline-offset: 1px;
-  }
 </style>

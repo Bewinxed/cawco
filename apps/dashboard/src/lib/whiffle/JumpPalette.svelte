@@ -240,7 +240,7 @@
          which leaves no place to put a chip except on top of the text. Icon,
          chip and field are flex siblings, so nothing overlaps and nothing
          needs measuring. -->
-    <div class="jump-search">
+    <div class="jump-search field-underline">
       <IconSearch class="jump-search-icon" height={16} width={16} />
       {#if scoped}
         {@const ScopedMark = AUTHOR_MARK[scoped.token]}
@@ -480,7 +480,6 @@
     color: var(--ink-strong);
     font-size: var(--text-body);
     font-weight: var(--weight-body);
-    outline: none;
   }
   :global(.jump-field)::placeholder {
     color: var(--ink-muted);

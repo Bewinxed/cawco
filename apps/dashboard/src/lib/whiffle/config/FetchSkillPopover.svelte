@@ -189,7 +189,7 @@
           >
           {#each choices as choice (choice)}
             <button
-              class="kit-item choice focus-ring"
+              class="kit-item choice focus-inset"
               disabled={busy}
               onclick={() => choose(choice)}
               type="button"
