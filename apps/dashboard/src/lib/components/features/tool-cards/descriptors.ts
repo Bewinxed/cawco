@@ -685,6 +685,15 @@ function sentence(
         removed += spanLines(change.oldContent);
       }
       const path = changes[0]?.filePath;
+      // A failed call changed nothing: it says so, and carries no line count.
+      if (status === "error") {
+        return {
+          ...base,
+          label: write ? "Write failed" : "Edit failed",
+          object: path ? pathLeaf(path) : undefined,
+          expanded: "diff",
+        };
+      }
       return {
         ...base,
         label: write ? "Wrote" : "Edited",

@@ -203,6 +203,13 @@
       : { text, more: 0 };
   }
 
+  /** A failed call's reason as the sentence it is: Claude Code wraps it in
+   *  `<tool_use_error>` tags, which are markup, not words. */
+  const toolError = (
+    result: { text: string } | undefined
+  ): string | undefined =>
+    result?.text.replace(/<\/?tool_use_error>/g, "").trim() || undefined;
+
   /* What a settled memory call has to open into: the document it wrote or
      read, or the list it got back. A removal says everything in its sentence. */
   function memoryHasBody(
@@ -297,8 +304,9 @@
     {@const fields = inputFields(m.metadata?.toolInput)}
     {@const result = resultText(m.metadata?.toolResult)}
     {@const toolInput = (m.metadata?.toolInput ?? undefined) as Record<string, unknown> | undefined}
-    {@const changes = d.expanded === 'diff' && !failed ? getDiffInfo(toolInput, m.metadata?.toolName) : []}
-    {@const hasBody = changes.length > 0 || bodyFor(d.expanded, failed, toolInput, fields, result, m.metadata?.toolResult)}
+    {@const changes = d.expanded === 'diff' ? getDiffInfo(toolInput, m.metadata?.toolName) : []}
+    {@const refusal = d.expanded === 'diff' && failed ? toolError(result) : undefined}
+    {@const hasBody = d.expanded === 'diff' ? changes.length > 0 || !!refusal : bodyFor(d.expanded, failed, toolInput, fields, result, m.metadata?.toolResult)}
     {#snippet line()}
       <span class="ic rail-cell">
         {#key m.metadata?.toolStatus}
@@ -413,10 +421,14 @@
                 <span class="chev"><IconChevronRight /></span>
               </Collapsible.Trigger>
               <Collapsible.Content reveal>
-                {#if changes.length > 0}
+                {#if d.expanded === 'diff'}
                   <!-- What the call changed, as the file's own diff: one per
-                       replacement a multi-edit made. -->
+                       replacement a multi-edit made. A failed call is the diff
+                       it attempted, under the harness's reason. -->
                   <div class="diffs">
+                    {#if refusal}
+                      <p class="refusal">{refusal}</p>
+                    {/if}
                     {#each changes as change, i (i)}
                       <DiffView
                         filePath={change.filePath}
@@ -790,6 +802,13 @@
     gap: var(--space-2);
     margin-block: var(--space-2) var(--space-3);
     margin-inline-start: calc(var(--x-hang) - 13px);
+  }
+  .refusal {
+    margin: 0;
+    margin-inline-start: 13px;
+    font-size: var(--text-label);
+    color: var(--data-bad);
+    overflow-wrap: anywhere;
   }
   .field {
     display: flex;
