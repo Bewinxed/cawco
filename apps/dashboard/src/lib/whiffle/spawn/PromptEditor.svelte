@@ -372,27 +372,32 @@
     color: var(--ink-subtle);
   }
   .editor :global(.ns-chip) {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    height: 22px;
-    padding: 0 7px 0 5px;
-    margin: 0 1px;
-    vertical-align: -5px;
+    /* inline-block, not inline-flex: a flex chip takes its baseline from the
+       icon (no text, so its bottom edge), which is what pushed it off the
+       line. Here the label's own baseline sits on the prompt's baseline. */
+    display: inline-block;
+    padding-inline: 5px 7px;
+    margin-inline: 1px;
     border-radius: var(--radius-sm);
     background: var(--surface-fill);
     border: 1px solid var(--border-control);
-    font: 500 var(--text-label) / 1 var(--font-body);
+    font: 500 var(--text-label) / 20px var(--font-body);
     color: var(--ink-strong);
     white-space: nowrap;
     user-select: all;
   }
   .editor :global(.ns-chip-icon) {
+    /* As tall as the chip's 20px line, centred inside it: the icon shares the
+       label's centre whatever its size (HarnessLogo is 16px, the rest 12px). */
     display: inline-flex;
+    align-items: center;
+    block-size: 20px;
+    margin-inline-end: 5px;
+    vertical-align: top;
   }
-  .editor :global(.ns-chip-icon svg) {
-    width: 12px;
-    height: 12px;
+  .editor :global(.ns-chip-icon > svg) {
+    inline-size: 12px;
+    block-size: 12px;
   }
   @media (max-width: 640px) {
     .editor {
