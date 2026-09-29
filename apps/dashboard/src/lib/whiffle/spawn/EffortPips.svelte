@@ -231,7 +231,7 @@
   }
   .track {
     position: relative;
-    height: 34px;
+    height: 30px;
     background: var(--surface-raised);
     border: 1px solid var(--border-control);
     border-radius: var(--radius-md);
@@ -291,8 +291,8 @@
     height: 100%;
     display: flex;
     align-items: center;
-    gap: 5px;
-    padding: 0 6px;
+    gap: 4px;
+    padding: 0 5px;
     border-radius: var(--radius-sm);
     background: var(--surface-lift);
     box-shadow:
@@ -359,7 +359,7 @@
       height: 64px;
     }
     .track {
-      height: 42px;
+      height: 38px;
     }
     .lvl {
       font-size: var(--text-label);
