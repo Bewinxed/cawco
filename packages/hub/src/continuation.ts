@@ -5,9 +5,12 @@
  *
  * Scope is the source's live context: its last compaction summary and every
  * message after it — what its model holds now. From that scope, code takes:
- * - the tail, the last user turns verbatim with their tool calls and output;
- * - the middle, everything before the tail with old tool output hidden (it is
- *   re-fetchable from disk and git), which alone is summarised, in one pass.
+ * - the tail, the newest user turns that fit {@link TAIL_CHARS}: what was
+ *   said, verbatim, and one line per tool call (no tool output — it is
+ *   re-fetchable from disk and git, and a busy turn's output ran to 200k
+ *   characters of opening message);
+ * - the middle, every turn before the tail, rendered the same way, which alone
+ *   is summarised, in one pass.
  * The artifact index (files changed and read, commands run) is built from the
  * WHOLE transcript by code, so identifiers are copied, never paraphrased, and
  * what a compaction forgot about files is still there.
@@ -72,13 +75,14 @@ export interface Extracted {
   artifacts: string;
   /** Everything before the tail, one string per user turn. */
   middle: string[];
-  /** The last user turns, verbatim. */
+  /** The newest user turns that fit the tail budget. */
   tail: string;
 }
 
-/** User turns at the end carried verbatim into the new session. */
+/** At most this many user turns at the end are carried into the new session… */
 const TAIL_USER_TURNS = 6;
-const TAIL_OUTPUT_CHARS = 2000;
+/** …and only as many of them as fit here, newest first; the newest always goes. */
+const TAIL_CHARS = 16_000;
 const ERROR_CHARS = 300;
 const TOOL_ARGUMENT_CHARS = 300;
 const FILES_READ_SHOWN = 30;
@@ -398,25 +402,10 @@ const COMPACTED_LABEL =
   "## Earlier in this session (compacted by the source session)";
 
 /**
- * One tool call as the new session reads it. Verbatim (the tail): the call's
- * input and its output, each cut at 2000 characters. Otherwise (the middle):
- * one line naming what it acted on, and the head of its error if it failed.
+ * One tool call as a reader of the transcript sees it: one line naming what
+ * it acted on, and the head of its error if it failed. Never its output.
  */
-function callLines(
-  call: ToolUse,
-  result: ToolResult | undefined,
-  verbatim: boolean
-): string[] {
-  if (verbatim) {
-    return [
-      `→ ${call.name}: ${clip(JSON.stringify(call.input), TAIL_OUTPUT_CHARS)}`,
-      ...(result
-        ? [
-            `${result.is_error ? "✗" : "←"} ${clip(resultText(result.content), TAIL_OUTPUT_CHARS)}`,
-          ]
-        : []),
-    ];
-  }
+function callLines(call: ToolUse, result: ToolResult | undefined): string[] {
   const argument = mainArgument(call.input);
   return [
     `→ ${call.name}${argument ? `: ${argument}` : ""}`,
@@ -429,15 +418,14 @@ function callLines(
 /** What one assistant entry said and did, as lines. */
 const assistantLines = (
   entry: SessionMessage,
-  results: Map<string, ToolResult>,
-  verbatim: boolean
+  results: Map<string, ToolResult>
 ): string[] =>
   blocksOf(entry).flatMap((block) => {
     if (block.type === "text") {
       return block.text.trim() ? [block.text.trim()] : [];
     }
     return block.type === "tool_use"
-      ? callLines(block, results.get(block.id), verbatim)
+      ? callLines(block, results.get(block.id))
       : [];
   });
 
@@ -447,8 +435,7 @@ const assistantLines = (
  */
 function renderTurn(
   turn: SessionMessage[],
-  results: Map<string, ToolResult>,
-  verbatim: boolean
+  results: Map<string, ToolResult>
 ): string {
   const lines: string[] = [];
   let speaker: string | null = null;
@@ -474,7 +461,7 @@ function renderTurn(
       const text = userText(entry);
       say("## User", text ? [text] : []);
     } else if (entry.type === "assistant") {
-      say("## Assistant", assistantLines(entry, results, verbatim));
+      say("## Assistant", assistantLines(entry, results));
     }
   }
   return lines.join("\n");
@@ -538,18 +525,25 @@ export function extractTranscript(
       current.push(entry);
     }
   }
-  const split = Math.max(0, turns.length - TAIL_USER_TURNS);
+  const rendered = turns
+    .map((turn) => renderTurn(turn, results))
+    .filter(Boolean);
+  // The tail grows back from the newest turn while it fits; what does not fit
+  // is the summariser's to read.
+  let split = rendered.length;
+  let size = 0;
+  while (split > Math.max(0, rendered.length - TAIL_USER_TURNS)) {
+    const next = size + rendered[split - 1].length;
+    if (split < rendered.length && next > TAIL_CHARS) {
+      break;
+    }
+    size = next;
+    split -= 1;
+  }
   return {
     artifacts: artifactIndex(ownMessages(whole)),
-    middle: turns
-      .slice(0, split)
-      .map((turn) => renderTurn(turn, results, false))
-      .filter(Boolean),
-    tail: turns
-      .slice(split)
-      .map((turn) => renderTurn(turn, results, true))
-      .filter(Boolean)
-      .join("\n\n"),
+    middle: rendered.slice(0, split),
+    tail: rendered.slice(split).join("\n\n"),
   };
 }
 
