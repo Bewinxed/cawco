@@ -56,7 +56,7 @@
     >
       <div class="lift">
         <div class="clip">
-          <PaneLeaf docked {leaf} swipeable={focused} />
+          <PaneLeaf {leaf} swipeable={focused} />
         </div>
       </div>
     </div>

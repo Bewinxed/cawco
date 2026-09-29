@@ -84,7 +84,6 @@
 
 {#if node.t === 'l'}
   <PaneLeaf
-    docked={coarse.current}
     hosted={workspace.root.id === node.id}
     leaf={node}
     swipeable={coarse.current && workspace.focusedLeafId === node.id}

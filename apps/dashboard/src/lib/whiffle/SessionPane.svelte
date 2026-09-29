@@ -12,14 +12,16 @@
    * scroll offset and half-typed message survive a switch — nothing here
    * unmounts on navigation.
    *
-   * Where a finger can swipe between a group's conversations, the composer
-   * is not drawn here: the group draws one for all of them, so a swipe moves
-   * the transcript and never the box being typed in. This pane then lends
-   * that composer its session instead (`composer-dock.svelte.ts`). The
-   * half-typed message is this pane's either way — `draft` below.
+   * The composer is not drawn here: the group draws one for all of its
+   * conversations, so a tab switch or a swipe changes the transcript and
+   * never the box being typed in. This pane lends that composer its session
+   * (`composer-dock.svelte.ts`). Only the server's first paint, which has no
+   * group composer yet, draws one here. The half-typed message is this
+   * pane's either way — `draft` below.
    */
   import { untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
+  import { browser } from "$app/environment";
   import { Button } from "$lib/components/ui/button";
   import { EmptyState } from "$lib/components/ui/empty";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group.
@@ -86,16 +88,10 @@
     browsingHarness,
     visible,
     focused,
-    docked,
     serverTail = null,
     serverHistory = null,
   }: {
     viewId: string;
-    /**
-     * The group draws the composer (its tabs can be swiped under a finger);
-     * this pane lends it this session rather than drawing one of its own.
-     */
-    docked: boolean;
     browsing: string | null;
     browsingCwd: string;
     browsingHarness: string;
@@ -131,7 +127,7 @@
   /**
    * The side preview's share of this pane's width, in percent, as the layout
    * has it this moment: 0 while it is closed or a sheet. What is left is the
-   * transcript's, and the deck's composer sits over exactly that much.
+   * transcript's, and the group's composer sits over exactly that much.
    */
   let previewShare = $state(0);
   let resizing = $state(false);
@@ -842,9 +838,9 @@
    * row that raised a permission is never the row the permission covers.
    */
   let composerHeight = $state(0);
-  /** The composer column this pane's transcript makes room for: its own, or its group's. */
+  /** The composer column this pane's transcript makes room for: its group's, or on the server its own. */
   const clearance = $derived.by(() => {
-    if (!docked) {
+    if (!browser) {
       return composerHeight;
     }
     const group = workspace.leafOf(viewId);
@@ -923,7 +919,7 @@
   );
 
   /**
-   * This conversation, as the deck's composer sees it. Read through getters,
+   * This conversation, as its group's composer sees it. Read through getters,
    * so the composer follows the session live while it is in front.
    */
   const binding: ComposerBinding = {
@@ -967,7 +963,7 @@
   };
 
   $effect(() => {
-    if (!(docked && writable)) {
+    if (!(browser && writable)) {
       return;
     }
     const id = viewId;
@@ -1093,14 +1089,14 @@
               {/if}
             </div>
 
-            <!-- Composer stays outside the slide — it's shared structure. On
-                 the deck it is not here at all: the deck draws it. -->
+            <!-- The group draws the composer; only the server's first paint,
+                 before any group composer exists, draws one here. -->
             {#if !fault && (unaddressable || readOnly)}
               <p class="readonly" in:crossIn out:crossOut>
                 This transcript is stored; the session isn't reachable from
                 here.
               </p>
-            {:else if writable && !docked}
+            {:else if writable && !browser}
               <Composer
                 busy={session.busy}
                 {commands}

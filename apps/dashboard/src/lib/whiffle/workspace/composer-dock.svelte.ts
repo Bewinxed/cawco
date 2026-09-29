@@ -2,14 +2,12 @@
  * A group's one composer, and the conversations that lend it their
  * sessions.
  *
- * Under a cursor every pane draws its own composer. Wherever a finger can
- * swipe between a group's conversations — the phone's deck, a tablet's
- * grid — the composer is not part of a pane at all: the swipe moves the
- * transcripts, and the box being typed in stays exactly where it is,
- * keyboard up. So such a pane draws no composer; it publishes what its
- * composer would have been given — its draft, its send, its parked
- * prompts, its controls — under its id, and its group (`PaneLeaf`) draws
- * one composer over whichever id is its active tab.
+ * The composer is not part of a pane: on every device, a tab switch or a
+ * swipe changes the transcript, and the box being typed in stays exactly
+ * where it is, focus and keyboard with it. So a pane draws no composer; it
+ * publishes what its composer would have been given — its draft, its send,
+ * its parked prompts, its controls — under its id, and its group
+ * (`PaneLeaf`) draws one composer over whichever id is its active tab.
  */
 import type { AvailableCommand } from "@whiffle/core";
 import type { Snippet } from "svelte";
