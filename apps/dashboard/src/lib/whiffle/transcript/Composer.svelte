@@ -988,10 +988,10 @@
            slot turns to the kit spinner and presses are swallowed. -->
         <button
           aria-busy={sending || undefined}
-          aria-disabled={sending || undefined}
+          aria-disabled={sending || held || undefined}
           aria-label={busy ? 'Stop the agent' : 'Send message'}
           class="stop touch-hit pressable"
-          disabled={held || !(busy || sending || draft.hasContent)}
+          disabled={!(busy || sending || draft.hasContent)}
           onclick={whileIdle(() => sending, onaction)}
           type="button"
         >
