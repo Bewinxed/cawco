@@ -3329,6 +3329,17 @@ export const createServer = ({
   };
 
   /**
+   * A summariser the continuation is done with: stopped on its machine, and
+   * recorded stopped here whether or not the machine still held it — one a
+   * restarted agent had already lost would otherwise sit `sleeping` forever.
+   */
+  const retireSummariser = (machineId: string, instanceId: string): void => {
+    stopFromHub(machineId, instanceId);
+    db.stopInstance(instanceId);
+    publishInstances(machineId);
+  };
+
+  /**
    * The summariser, start to stop: a fresh internal session `id` on the
    * chosen harness and model in the source's directory, asked `prompt`,
    * answered with what its transcript stores for that turn, then stopped
@@ -3384,7 +3395,7 @@ export const createServer = ({
       return text;
     } finally {
       turnWaiters.delete(id);
-      stopFromHub(source.machineId, id);
+      retireSummariser(source.machineId, id);
     }
   };
 
@@ -3865,7 +3876,7 @@ export const createServer = ({
       );
     }
     const answered = await storedAnswer(current, false);
-    stopFromHub(source.machineId, current);
+    retireSummariser(source.machineId, current);
     if (answered) {
       return answered;
     }
@@ -3944,7 +3955,7 @@ export const createServer = ({
       turnWaiters
         .get(row.summariserInstanceId)
         ?.reject(new Error(CONTINUATION_CANCELLED));
-      stopFromHub(row.prepared.source.machineId, row.summariserInstanceId);
+      retireSummariser(row.prepared.source.machineId, row.summariserInstanceId);
     }
     return { row: cancelled };
   };
