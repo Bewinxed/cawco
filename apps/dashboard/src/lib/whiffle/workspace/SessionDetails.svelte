@@ -481,12 +481,16 @@
           }}
           />
         </div>
-        {@render feedback('model')}
-        {@render feedback('effort')}
-        {@render feedback('permission')}
-        {#if !editable}
-          <p class="feedback">Controls unlock while the session is running.</p>
-        {/if}
+        <!-- One line is always held for what a change says, so its pending,
+             done and failed lines arriving or leaving never resize the card. -->
+        <div class="feedback-slot">
+          {@render feedback('model')}
+          {@render feedback('effort')}
+          {@render feedback('permission')}
+          {#if !editable}
+            <p class="feedback">Controls unlock while the session is running.</p>
+          {/if}
+        </div>
       </div>
     {/if}
   </div>
@@ -703,6 +707,14 @@
   }
   .model-pop :global(.row) {
     scroll-snap-align: start;
+  }
+  .feedback-slot {
+    position: relative;
+    display: grid;
+    font-size: var(--text-body);
+    line-height: var(--leading-body);
+    /* The margin above the line plus the line itself. */
+    min-block-size: calc(var(--space-2) + 1lh);
   }
   .feedback,
   .failure {
