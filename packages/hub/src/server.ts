@@ -8214,18 +8214,19 @@ export const createServer = ({
                 }
               }
               registry.registerAgent(message.machineId, ws, ws.remoteAddress);
+              // Checks a stopped hub left running on this machine run again
+              // the moment it can run commands — waiting on nothing else the
+              // register asks of the agent.
+              workItems.resumeChecks(message.machineId);
               // Workspaces from before clones become clones as their agent
-              // starts; a spawn that gets there first converts its own. Then
-              // checks a stopped hub left running on this machine run again:
-              // the machine is where they run.
+              // starts; a spawn that gets there first converts its own.
               workItems
                 .convertWorktrees(message.machineId)
                 .catch((error: unknown) =>
                   console.warn(
                     `[hub] converting ${message.machineId}'s worktree workspaces failed: ${error instanceof Error ? error.message : String(error)}`
                   )
-                )
-                .then(() => workItems.resumeChecks(message.machineId));
+                );
               reconcilePreviews(
                 message.machineId,
                 ws.remoteAddress,

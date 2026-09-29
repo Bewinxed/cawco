@@ -332,7 +332,10 @@ interface CheckOutcome {
 const fenced = (text: string): string =>
   `\n\`\`\`\`\n${text.trimEnd()}\n\`\`\`\``;
 
-/** A check's line: its name, pass or fail, exit code and duration. */
+/**
+ * A check's line: its name, pass or fail, exit code and duration. A failure
+ * carries its stdout tail under it; a pass is the line alone.
+ */
 const checkLine = ({
   check,
   passed,
@@ -345,7 +348,10 @@ const checkLine = ({
       ? `, stdout does not contain ${JSON.stringify(check.expect)}`
       : "";
   const line = `- ${check.name}: ${passed ? "pass" : "fail"} (exit ${exitCode}, ${(durationMs / 1000).toFixed(1)}s${missing})`;
-  return result.stdout.trim() ? `${line}${fenced(result.stdout)}` : line;
+  // A pass is its line: its output is the report's length, not its news.
+  return !passed && result.stdout.trim()
+    ? `${line}${fenced(result.stdout)}`
+    : line;
 };
 
 /** A check as the delegate reads it: a failure carries its stderr too. */
