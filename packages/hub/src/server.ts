@@ -3,6 +3,7 @@ import type {
   AgentRow,
   BuildInfo,
   ClaudeLimits,
+  ContinuationJob,
   ControlPayload,
   DeployInfo,
   DeployKind,
@@ -113,6 +114,7 @@ import {
   scopeChars,
   summariserPrompt,
   transcriptModel,
+  turnAnswer,
 } from "./continuation";
 import type {
   AgentAuth,
@@ -236,8 +238,14 @@ const WORKSPACE_TIMEOUT_MS = 60_000;
  * past this the machine is not going to answer.
  */
 const CONTINUE_SPAWN_TIMEOUT_MS = 120_000;
-/** How often a running continuation's stream says it is still there. */
-const CONTINUE_HEARTBEAT_MS = 20_000;
+/**
+ * How long a settled continuation stays in the table dashboards follow. Ours:
+ * five minutes lets a dashboard that was reconnecting when it settled still
+ * hear how it ended, and keeps the table to the few jobs of the moment.
+ */
+const CONTINUATION_KEPT_MS = 5 * 60_000;
+/** The words a continuation stopped by its Cancel ends with. */
+const CONTINUATION_CANCELLED = "the continuation was cancelled";
 /** The largest frame a machine may send the hub (see the agent socket). */
 const AGENT_FRAME_LIMIT_BYTES = 512 * 1024 * 1024;
 
@@ -3113,14 +3121,26 @@ export const createServer = ({
 
   /**
    * Summariser turns a continuation is waiting on, by instance id. Settled by
-   * frames the hub already reads: the turn's `result` (with the assistant
-   * text accumulated for delegate reports), an `error` frame, or the session
-   * stopping before it answered.
+   * frames the hub already reads: the turn's `result`, an `error` frame, or
+   * the session stopping before it answered. What it answered is then read
+   * from its transcript.
    */
   const turnWaiters = new Map<
     string,
-    { resolve: (text: string) => void; reject: (error: Error) => void }
+    { resolve: () => void; reject: (error: Error) => void }
   >();
+
+  /**
+   * Every summariser session this hub has started, its rows' kind: internal
+   * workers no rule, supervisor, usage count, hand-back or Telegram hears, and
+   * no board lists. Seeded from the rows, so a hub restart still knows them.
+   */
+  const summarisers = new Set(
+    db
+      .listInstances()
+      .filter((row) => row.kind === "summariser")
+      .map((row) => row.id)
+  );
 
   /** Sends something a machine answers under `requestId`, and waits for that answer. */
   const awaitReply = (
@@ -3197,7 +3217,8 @@ export const createServer = ({
    */
   const spawnFromHub = async (
     machineId: string,
-    payload: SpawnPayload
+    payload: SpawnPayload,
+    kind: InstanceKind
   ): Promise<void> => {
     const agent = registry.agent(machineId);
     if (!agent) {
@@ -3211,7 +3232,7 @@ export const createServer = ({
       harness: payload.harness,
       projectId: payload.projectId,
       title: payload.title,
-      kind: payload.scratch ? "scratch" : "mainline",
+      kind,
       permissionMode: payload.permissionMode,
       model: payload.model,
       effort: payload.effort,
@@ -3278,35 +3299,58 @@ export const createServer = ({
   };
 
   /**
-   * The summariser, start to stop: a fresh session on the chosen harness and
-   * model in the source's directory, asked `prompt`, answered with its turn's
-   * text, then stopped whatever happened.
+   * The summariser, start to stop: a fresh internal session `id` on the
+   * chosen harness and model in the source's directory, asked `prompt`,
+   * answered with what its transcript stores for that turn, then stopped
+   * whatever happened. Its transcript is tagged as scratch, so the stored
+   * catalogs leave it out too. A cancel rejects the wait and stops it from
+   * outside ({@link startContinuation}); `cancelled` keeps a spawn that was
+   * still in flight from being asked anything.
    */
   const summariserRun = async (
     source: ContinuationSource & { machineId: string },
     summarizer: { harness: HarnessKind; model: string },
-    prompt: string
-  ): Promise<{ id: string; text: string }> => {
-    const id = crypto.randomUUID();
-    const answered = new Promise<string>((resolve, reject) => {
+    prompt: string,
+    id: string,
+    cancelled: () => boolean
+  ): Promise<string> => {
+    const answered = new Promise<void>((resolve, reject) => {
       turnWaiters.set(id, { resolve, reject });
     });
     // Never unhandled: a spawn that fails first leaves this to be abandoned.
     answered.catch(() => undefined);
+    summarisers.add(id);
     try {
-      await spawnFromHub(source.machineId, {
-        instanceId: id,
-        cwd: source.cwd,
-        harness: summarizer.harness,
-        model: summarizer.model,
-        title: `Summary of ${source.title}`,
-        spawnedBy: { instanceId: source.instanceId },
-      });
+      await spawnFromHub(
+        source.machineId,
+        {
+          instanceId: id,
+          cwd: source.cwd,
+          harness: summarizer.harness,
+          model: summarizer.model,
+          title: `Summary of ${source.title}`,
+          scratch: {},
+          spawnedBy: { instanceId: source.instanceId },
+        },
+        "summariser"
+      );
+      if (cancelled()) {
+        throw new Error(CONTINUATION_CANCELLED);
+      }
       sendFromHub(source.machineId, id, prompt, {
         id: source.instanceId,
         cwd: source.cwd,
       });
-      return { id, text: await answered };
+      await answered;
+      const where = await locateSession(id);
+      if (!where) {
+        throw new Error("the summariser's transcript could not be found");
+      }
+      const text = turnAnswer(await readMessages(where, false));
+      if (!text) {
+        throw new Error("the summariser answered with no text");
+      }
+      return text;
     } finally {
       turnWaiters.delete(id);
       stopFromHub(source.machineId, id);
@@ -3555,60 +3599,172 @@ export const createServer = ({
   };
 
   /**
-   * Continue in new session: summarise the source's live context once with
-   * the summariser the caller chose (skipped when there is nothing before the
-   * tail), then start the target session seeded with the summary, the
-   * artifact index and the tail. The source is only read.
+   * The continuations this hub is carrying, by id: the job every dashboard
+   * follows, the machine its news is published under, how it ends, and its
+   * Cancel. Settled ones stay {@link CONTINUATION_KEPT_MS}, then go.
    */
-  const continueSession = async (
+  interface Continuation {
+    cancel: () => boolean;
+    job: ContinuationJob;
+    machineId: string;
+    outcome: Promise<ContinueOutcome>;
+  }
+  const continuations = new Map<string, Continuation>();
+
+  const continuationTable = (): ContinuationJob[] =>
+    [...continuations.values()].map((entry) => entry.job);
+
+  const moveContinuation = (
+    entry: Continuation,
+    patch: Partial<ContinuationJob>
+  ): void => {
+    entry.job = { ...entry.job, ...patch };
+    publishInstances(entry.machineId);
+  };
+
+  /**
+   * Continue in new session, as a job the hub owns: summarise the source's
+   * live context once with the summariser the caller chose (skipped when
+   * there is nothing before the tail), then start the target session seeded
+   * with the summary, the artifact index and the tail. Returns at once; the
+   * job runs to a started target whatever happens to whoever asked, and only
+   * its Cancel — while it is still summarising — stops it. The source is
+   * only read.
+   */
+  const startContinuation = (
+    prepared: Awaited<ReturnType<typeof prepareContinuation>>,
+    request: ContinueRequest
+  ): Continuation => {
+    const { source, prompt } = prepared;
+    const summariserId = prompt ? crypto.randomUUID() : undefined;
+    let cancelled = false;
+    const settled = Promise.withResolvers<ContinueOutcome>();
+    // Never unhandled: a job's failure is on its row of the table.
+    settled.promise.catch(() => undefined);
+    const entry: Continuation = {
+      machineId: source.machineId,
+      job: {
+        id: crypto.randomUUID(),
+        sourceInstanceId: source.instanceId,
+        targetInstanceId: crypto.randomUUID(),
+        ...(summariserId ? { summariserInstanceId: summariserId } : {}),
+        stage: summariserId ? "summarising" : "starting",
+      },
+      outcome: settled.promise,
+      cancel: () => {
+        if (entry.job.stage !== "summarising") {
+          return false;
+        }
+        cancelled = true;
+        if (summariserId) {
+          turnWaiters
+            .get(summariserId)
+            ?.reject(new Error(CONTINUATION_CANCELLED));
+          stopFromHub(source.machineId, summariserId);
+        }
+        moveContinuation(entry, { stage: "cancelled" });
+        return true;
+      },
+    };
+    continuations.set(entry.job.id, entry);
+    publishInstances(entry.machineId);
+    runContinuation(
+      entry,
+      prepared,
+      request,
+      summariserId && prompt
+        ? () =>
+            summariserRun(
+              source,
+              request.summarizer,
+              prompt,
+              summariserId,
+              () => cancelled
+            )
+        : undefined,
+      () => cancelled
+    ).then(settled.resolve, settled.reject);
+    return entry;
+  };
+
+  const runContinuation = async (
+    entry: Continuation,
     prepared: Awaited<ReturnType<typeof prepareContinuation>>,
     request: ContinueRequest,
-    stage: (name: "summarising" | "starting") => void,
+    summarise: (() => Promise<string>) | undefined,
     cancelled: () => boolean
   ): Promise<ContinueOutcome> => {
-    const { source, extracted, prompt } = prepared;
-    if (prompt) {
-      stage("summarising");
+    const { source, extracted } = prepared;
+    try {
+      const summary = summarise ? await summarise() : undefined;
+      if (cancelled()) {
+        throw new Error(CONTINUATION_CANCELLED);
+      }
+      moveContinuation(entry, { stage: "starting" });
+      const targetMachine = request.target.machineId ?? source.machineId;
+      const targetId = entry.job.targetInstanceId;
+      await spawnFromHub(
+        targetMachine,
+        targetSpawn(request, source, targetId),
+        request.target.scratch ? "scratch" : "mainline"
+      );
+      const opening = openingMessage(source, summary, extracted, request.note);
+      sendFromHub(targetMachine, targetId, opening, {
+        id: source.instanceId,
+        cwd: source.cwd,
+      });
+      moveContinuation(entry, { stage: "started" });
+      return outcomeOf(entry.job, prepared, summary ?? null, opening);
+    } catch (error) {
+      moveContinuation(
+        entry,
+        cancelled()
+          ? { stage: "cancelled" }
+          : {
+              stage: "failed",
+              error: error instanceof Error ? error.message : String(error),
+            }
+      );
+      throw error;
+    } finally {
+      setTimeout(() => {
+        continuations.delete(entry.job.id);
+        publishInstances(entry.machineId);
+      }, CONTINUATION_KEPT_MS);
     }
-    const summariser = prompt
-      ? await summariserRun(source, request.summarizer, prompt)
-      : undefined;
-    if (cancelled()) {
-      throw new Error("the continuation was cancelled");
-    }
-    stage("starting");
-    const { target } = request;
-    const targetMachine = target.machineId ?? source.machineId;
-    const targetId = crypto.randomUUID();
-    await spawnFromHub(targetMachine, {
-      instanceId: targetId,
-      cwd: target.cwd ?? source.cwd,
-      harness: target.harness,
-      model: target.model,
-      ...(target.effort ? { effort: target.effort } : {}),
-      ...(target.permissionMode
-        ? { permissionMode: target.permissionMode }
-        : {}),
-      ...(target.scratch ? { scratch: target.scratch } : {}),
-      ...(target.bootstrap ? { bootstrap: target.bootstrap } : {}),
-      ...(target.projectId ? { projectId: target.projectId } : {}),
-      title: `${source.title} (continued)`,
-      spawnedBy: { instanceId: source.instanceId },
-    });
-    const opening = openingMessage(
-      source,
-      summariser?.text,
-      extracted,
-      request.note
-    );
-    sendFromHub(targetMachine, targetId, opening, {
-      id: source.instanceId,
-      cwd: source.cwd,
-    });
+  };
+
+  /** The continuation's new session, with the options the caller's form chose. */
+  const targetSpawn = (
+    { target }: ContinueRequest,
+    source: ContinuationSource,
+    instanceId: string
+  ): SpawnPayload => ({
+    instanceId,
+    cwd: target.cwd ?? source.cwd,
+    harness: target.harness,
+    model: target.model,
+    ...(target.effort ? { effort: target.effort } : {}),
+    ...(target.permissionMode ? { permissionMode: target.permissionMode } : {}),
+    ...(target.scratch ? { scratch: target.scratch } : {}),
+    ...(target.bootstrap ? { bootstrap: target.bootstrap } : {}),
+    ...(target.projectId ? { projectId: target.projectId } : {}),
+    title: `${source.title} (continued)`,
+    spawnedBy: { instanceId: source.instanceId },
+  });
+
+  /** What a started continuation reports: its sessions, and what it carried. */
+  const outcomeOf = (
+    job: ContinuationJob,
+    prepared: Awaited<ReturnType<typeof prepareContinuation>>,
+    summary: string | null,
+    opening: string
+  ): ContinueOutcome => {
+    const { extracted } = prepared;
     return {
-      summariserInstanceId: summariser?.id ?? null,
-      targetInstanceId: targetId,
-      summary: summariser?.text ?? null,
+      summariserInstanceId: job.summariserInstanceId ?? null,
+      targetInstanceId: job.targetInstanceId,
+      summary,
       opening,
       liveContextTokens: prepared.liveContextTokens,
       summariseInputTokens: prepared.summariseInputTokens,
@@ -3828,9 +3984,9 @@ export const createServer = ({
    * `init` frame after that.
    */
   const boardRows = () =>
-    withSessionPresence(db.listInstances()).map(
-      ({ tooling: _tooling, ...row }) => row
-    );
+    withSessionPresence(
+      db.listInstances().filter((row) => row.kind !== "summariser")
+    ).map(({ tooling: _tooling, ...row }) => row);
 
   /**
    * The whole board as one message: every row, every machine, and what each
@@ -3845,6 +4001,9 @@ export const createServer = ({
       previewFrame(id, "open", target.source)
     ),
     handoffs: Object.fromEntries(handoffs),
+    // Carried on every publish, so a dashboard follows a continuation it
+    // started over the socket rather than over the request that started it.
+    continuations: continuationTable(),
     // `pulses` seeds the rail's now-state on connect instead of leaving it
     // blank until the next beat. `hubBuild` lets a client tell a hub that is
     // behind from a machine that is, and lets a page running an older build
@@ -5198,10 +5357,10 @@ export const createServer = ({
         }
       })
       // Continue in new session. The fit of both models is checked before
-      // anything starts (a plain 409); the answer is then NDJSON:
-      // `{stage: "summarising" | "starting"}` as each begins, `{heartbeat}`
-      // every 20s, and last `{result: ContinueOutcome}` or `{error}` carrying
-      // the failure's own words.
+      // anything starts (a plain 409); then the hub starts the job and
+      // answers with its ids at once. The job's stages reach every dashboard
+      // on the `instances` frames (`continuations`); nothing about the
+      // request that started it can stop it — only its Cancel.
       .post(
         "/api/instances/:id/continue",
         {
@@ -5231,8 +5390,7 @@ export const createServer = ({
             }
           },
         },
-        async ({ params, body, request, server, status }) => {
-          server?.timeout(request, 0);
+        async ({ params, body, status }) => {
           let prepared: Awaited<ReturnType<typeof prepareContinuation>>;
           let refusal: string | undefined;
           try {
@@ -5247,55 +5405,54 @@ export const createServer = ({
           if (refusal) {
             return status(409, refusal);
           }
-          const encoder = new TextEncoder();
-          let gone = false;
-          let heartbeat: ReturnType<typeof setInterval> | undefined;
-          const stream = new ReadableStream<Uint8Array>({
-            async start(controller) {
-              const line = (value: unknown) => {
-                if (!gone) {
-                  controller.enqueue(
-                    encoder.encode(`${JSON.stringify(value)}\n`)
-                  );
-                }
-              };
-              // A proxy between here and the caller (the dashboard's) drops a
-              // body that goes quiet for minutes; a summariser can take that.
-              heartbeat = setInterval(
-                () => line({ heartbeat: Date.now() }),
-                CONTINUE_HEARTBEAT_MS
-              );
-              try {
-                line({
-                  result: await continueSession(
-                    prepared,
-                    body,
-                    (stage) => line({ stage }),
-                    () => gone
-                  ),
-                });
-              } catch (error) {
-                line({
-                  error: error instanceof Error ? error.message : String(error),
-                });
-              }
-              clearInterval(heartbeat);
-              if (!gone) {
-                controller.close();
-              }
-            },
-            cancel() {
-              // The caller walked away: nothing after this point may start.
-              gone = true;
-              clearInterval(heartbeat);
-            },
-          });
-          return new Response(stream, {
-            headers: {
-              "Content-Type": "application/x-ndjson",
-              "Cache-Control": "no-store",
-            },
-          });
+          const { job } = startContinuation(prepared, body);
+          return {
+            continuationId: job.id,
+            targetInstanceId: job.targetInstanceId,
+            summariserInstanceId: job.summariserInstanceId ?? null,
+          };
+        }
+      )
+      // The continuations the hub is carrying: what a dashboard that connects
+      // late reads before the next publish reaches it.
+      .get("/api/continuations", () => continuationTable())
+      // Cancel: the summariser's wait ends, it is stopped, and nothing starts.
+      // Only while summarising — a target already starting is past stopping.
+      .delete("/api/continuations/:id", ({ params, status }) => {
+        const entry = continuations.get(params.id);
+        if (!entry) {
+          return status(404, "That continuation is not running.");
+        }
+        if (!entry.cancel()) {
+          return status(
+            409,
+            entry.job.stage === "starting"
+              ? "The new session is already starting."
+              : `That continuation already ended (${entry.job.stage}).`
+          );
+        }
+        return entry.job;
+      })
+      // A started continuation's report, once it has one: what the
+      // `continue_session` tool waits on. The job runs whether or not anyone
+      // waits here.
+      .get(
+        "/api/continuations/:id/outcome",
+        async ({ params, request, server, status }) => {
+          const entry = continuations.get(params.id);
+          if (!entry) {
+            return status(404, "That continuation is not running.");
+          }
+          // A summariser can take minutes; the wait must outlast Bun's idle cut.
+          server?.timeout(request, 0);
+          try {
+            return await entry.outcome;
+          } catch (error) {
+            return status(
+              422,
+              error instanceof Error ? error.message : String(error)
+            );
+          }
         }
       )
       .post(
@@ -7818,12 +7975,23 @@ export const createServer = ({
                 )
                 .filter((orphan) => orphan.row.updatedAt.getTime() >= cutoff)
                 .slice(0, RESTORE_MAX);
+              // A summariser is never brought back: its continuation lives in
+              // this hub's memory, so one still running with no continuation
+              // waiting on it (the hub restarted mid-summary) is stopped.
               const revivable = [
                 ...held,
                 ...fresh.filter(({ row }) => !row.workflowStepId),
-              ];
+              ].filter(({ row }) => row.kind !== "summariser");
               for (const orphan of revivable) {
                 restore(ws, orphan.row, heldRows.has(orphan.row.id));
+              }
+              for (const instanceId of peekInstances(message.payload)) {
+                if (
+                  summarisers.has(instanceId) &&
+                  !turnWaiters.has(instanceId)
+                ) {
+                  stopFromHub(message.machineId, instanceId);
+                }
               }
               // Rows still live at disconnect (now settled above) retain custody.
               // A previously sleeping row only recovers within the fresh-spawn
@@ -7835,6 +8003,7 @@ export const createServer = ({
                   if (
                     row.machineId === message.machineId &&
                     !row.workflowStepId &&
+                    row.kind !== "summariser" &&
                     row.harness === "opencode" &&
                     row.sessionId &&
                     (row.status === "sleeping" || row.status === "error")
@@ -7968,6 +8137,11 @@ export const createServer = ({
             }
             case "frames": {
               const kind = peek(message.payload, "kind");
+              // A continuation's summariser: an internal worker only its
+              // continuation talks to (see `summarisers`).
+              const internal =
+                message.instanceId !== undefined &&
+                summarisers.has(message.instanceId);
               // One send did not go: its record says so, and nothing else does.
               if (kind === "rejected" && message.instanceId) {
                 const { uuid, error } = message.payload as FramePayload & {
@@ -8168,7 +8342,7 @@ export const createServer = ({
                   (message.payload as Record<string, unknown>).routedTo =
                     "parent";
                   deliverDelegateAsk(sender, parent, message);
-                } else {
+                } else if (!internal) {
                   telegram?.onAsk(message);
                 }
               }
@@ -8195,11 +8369,35 @@ export const createServer = ({
                   (message.payload as FramePayload & { kind: "frame" }).message
                 );
               }
+              // A continuation's summariser: its turn's end settles the
+              // continuation's wait, and what it answered is read from its
+              // transcript. Nothing else answers or hears an internal session.
+              if (kind === "frame" && message.instanceId && internal) {
+                const neutral = (
+                  message.payload as FramePayload & { kind: "frame" }
+                ).message;
+                const waiter = turnWaiters.get(message.instanceId);
+                if (neutral.type === "result" && waiter) {
+                  const { errors } = neutral as { errors?: string[] };
+                  if (neutral.is_error) {
+                    waiter.reject(
+                      new Error(
+                        errors?.length
+                          ? errors.join("\n")
+                          : (neutral.result ??
+                              `Harness error (${neutral.subtype}).`)
+                      )
+                    );
+                  } else {
+                    waiter.resolve();
+                  }
+                }
+              }
               // A turn's end, in this order: the standing instructions answer
               // it first, then the delegate hand-back delivers the turn's text
               // to the parent as a queued peer report — once, on the turn that
               // ends the work (aborted turns carry no answer and are skipped).
-              if (kind === "frame" && message.instanceId) {
+              if (kind === "frame" && message.instanceId && !internal) {
                 const neutral = (
                   message.payload as FramePayload & { kind: "frame" }
                 ).message;
@@ -8238,27 +8436,6 @@ export const createServer = ({
                   const parts = lastAssistant.get(message.instanceId);
                   lastAssistant.delete(message.instanceId);
                   const text = parts?.length ? parts.join("\n\n") : undefined;
-                  // A continuation's summariser: its turn's text is the answer.
-                  const waiter = turnWaiters.get(message.instanceId);
-                  if (waiter) {
-                    const { errors } = neutral as { errors?: string[] };
-                    if (neutral.is_error) {
-                      waiter.reject(
-                        new Error(
-                          errors?.length
-                            ? errors.join("\n")
-                            : (neutral.result ??
-                                `Harness error (${neutral.subtype}).`)
-                        )
-                      );
-                    } else if (text) {
-                      waiter.resolve(text);
-                    } else {
-                      waiter.reject(
-                        new Error("the summariser answered with no text")
-                      );
-                    }
-                  }
                   const row = db
                     .listInstances()
                     .find((r) => r.id === message.instanceId);
@@ -8338,7 +8515,7 @@ export const createServer = ({
               }
               // Standing instructions read the frames inside a turn as the
               // dashboards do; a turn's end is answered above.
-              if (kind === "frame" && message.instanceId) {
+              if (kind === "frame" && message.instanceId && !internal) {
                 ruleEngine.observe(
                   message.instanceId,
                   (message.payload as FramePayload & { kind: "frame" }).message
@@ -8376,12 +8553,14 @@ export const createServer = ({
                 workflowRuntime.observe(message.instanceId, reason);
                 forgetPending(message.instanceId, reason);
                 escalateRoutedAsks(message.instanceId);
-                telegram?.onError(message.instanceId, reason);
+                if (!internal) {
+                  telegram?.onError(message.instanceId, reason);
+                }
                 publishInstances(message.machineId);
               }
               // A session's message to the owner, pushed without an ask: straight
               // to the bridge, tracked so a reply reaches the session that wrote it.
-              if (kind === "user_message") {
+              if (kind === "user_message" && !internal) {
                 telegram?.onUserMessage(message);
               }
               // An install answering, whoever asked for it: the cell is the hub's

@@ -239,9 +239,12 @@ export const instances = sqliteTable("instances", {
    * written over `title`, and never rewritten — a given title always wins.
    */
   derivedTitle: text("derived_title"),
-  /** `scratch`: a side quest (NEW.md §1), shown apart from mainline work. */
+  /**
+   * `scratch`: a side quest (NEW.md §1), shown apart from mainline work.
+   * `summariser`: a continuation's internal worker, never on the board.
+   */
   kind: text("kind")
-    .$type<"mainline" | "scratch">()
+    .$type<"mainline" | "scratch" | "summariser">()
     .notNull()
     .default("mainline"),
   /**

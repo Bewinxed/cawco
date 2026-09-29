@@ -38,7 +38,14 @@
     spawnSession,
     whiffle,
   } from "../client.svelte";
-  import type { ContinueSource } from "../continue.svelte";
+  import {
+    type ContinueSource,
+    cancelContinuation,
+    detachContinuation,
+    releaseContinuation,
+    type SessionDraft,
+    startContinuation,
+  } from "../continue.svelte";
   import { EFFORT_LEVELS } from "../effort-levels";
   import { type FleetSnapshot, inspectMachine } from "../fleet";
   import { conversationHref } from "../links";
@@ -69,6 +76,7 @@
     open,
     prefill,
     continueFrom,
+    restore,
     onclose,
     onexitcontinue,
   }: {
@@ -79,6 +87,8 @@
      * of this one. Mutually exclusive with `prefill` — the source says where.
      */
     continueFrom?: ContinueSource;
+    /** Continue mode: the form a failed continuation was submitted with, opened as it was. */
+    restore?: SessionDraft;
     onclose: () => void;
     /** The operator deleted the source chip: the dialog stays open as a plain New Session. */
     onexitcontinue?: () => void;
@@ -121,8 +131,12 @@
     summariseInputTokens: number;
     openingTokens: number;
   } | null>(null);
-  /** The continuation request in flight, aborted when the dialog closes. */
-  let inflight: AbortController | null = null;
+  /**
+   * The continuation this dialog started and follows, by id. Closing the
+   * dialog hands it to the tab (`detachContinuation`); only Cancel stops it.
+   */
+  let job = $state<string | null>(null);
+  const followed = $derived(job ? whiffle.continuation(job) : undefined);
   const machineId = $derived(machineIds[0] ?? "");
   const locationKey = $derived(JSON.stringify([machineIds, cwd.trim()]));
   const locationUnverified = $derived(
@@ -424,6 +438,21 @@
       error = "";
       popover = null;
       verifiedLocation = "";
+      if (continueFrom && restore) {
+        ({ repo, projectId, harness, effort, permissionMode, prompt } =
+          restore);
+        ({ harness: summarizerHarness, model: summarizerModel } =
+          restore.summarizer);
+        machineIds = [...restore.machineIds];
+        machinesTouched = true;
+        cwd = restore.baseCwd;
+        model = restore.usedModel;
+        sideQuest = restore.scratch !== undefined;
+        editing =
+          restore.baseCwd !== continueFrom.cwd ||
+          restore.machineIds[0] !== continueFrom.machineId;
+        lastMachine = restore.machineIds[0] ?? "";
+      }
       if (continueFrom) {
         loadEstimate(continueFrom.instanceId, submission);
       } else if (
@@ -441,8 +470,36 @@
     });
     return () => {
       submission += 1;
-      inflight?.abort();
+      // Dismissed while a continuation runs: it runs on, and the tab opens
+      // its new session when it starts.
+      if (job) {
+        detachContinuation(job);
+        job = null;
+      }
     };
+  });
+  // The continuation this dialog follows, stage by stage, as the hub publishes it.
+  $effect(() => {
+    const current = followed;
+    if (!current) {
+      return;
+    }
+    untrack(() => {
+      if (current.stage === "started") {
+        releaseContinuation(current.id);
+        job = null;
+        exitTo(current.targetInstanceId, () => open);
+      } else if (current.stage === "failed") {
+        releaseContinuation(current.id);
+        job = null;
+        error = current.error ?? "";
+        busy = false;
+      } else if (current.stage === "cancelled") {
+        releaseContinuation(current.id);
+        job = null;
+        busy = false;
+      }
+    });
   });
   // The fleet arrives over the websocket, so the dialog can open before any
   // machine is known. Adopt the first one that shows up until the operator picks.
@@ -574,8 +631,22 @@
   }
   function close() {
     submission += 1;
-    inflight?.abort();
     onclose();
+  }
+  /** Cancel while a continuation runs: the hub stops it, and the dialog closes. */
+  async function cancelContinue() {
+    const id = job;
+    if (!id) {
+      return;
+    }
+    try {
+      await cancelContinuation(id);
+      job = null;
+      busy = false;
+      close();
+    } catch (cause) {
+      error = cause instanceof Error ? cause.message : String(cause);
+    }
   }
   function toggleMachine(id: string) {
     machinesTouched = true;
@@ -712,23 +783,7 @@
       return false;
     }
   }
-  interface Draft {
-    baseCwd: string;
-    cwd: string;
-    effort: EffortLevel | null;
-    harness: HarnessKind;
-    machineIds: string[];
-    model: string;
-    permissionMode: PermissionMode;
-    projectId: string | undefined;
-    prompt: string;
-    repo: string | undefined;
-    scratch: { baseCwd: string; worktree: boolean } | undefined;
-    summarizer: { harness: HarnessKind; model: string };
-    usedModel: string;
-  }
-
-  function spawnOne(target: string, draft: Draft): string {
+  function spawnOne(target: string, draft: SessionDraft): string {
     const toAttach =
       draft.projectId && whiffle.project(draft.projectId)?.machineId === target
         ? draft.projectId
@@ -761,7 +816,7 @@
     submission += 1;
     const id = submission;
     const current = () => open && id === submission;
-    const draft: Draft = {
+    const draft: SessionDraft = {
       machineIds: [...machineIds],
       baseCwd: cwd.trim(),
       cwd: workdir,
@@ -819,12 +874,13 @@
   }
   /**
    * Continue in new session: the hub summarises the source with the chosen
-   * summariser and starts the new session with this form's options, then the
-   * dialog leaves for it exactly as a spawn does.
+   * summariser and starts the new session with this form's options, as a job
+   * it owns. The dialog follows the job's stages over the socket and leaves
+   * for the new session exactly as a spawn does once it has started.
    */
   async function startContinue(
     source: ContinueSource,
-    draft: Draft,
+    draft: SessionDraft,
     current: () => boolean
   ) {
     const [target] = draft.machineIds;
@@ -832,51 +888,32 @@
     if (!(ok && current())) {
       return;
     }
-    const request = new AbortController();
-    inflight = request;
     const toAttach =
       draft.projectId && whiffle.project(draft.projectId)?.machineId === target
         ? draft.projectId
         : undefined;
-    const response = await fetch(
-      `/api/instances/${encodeURIComponent(source.instanceId)}/continue`,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        signal: request.signal,
-        body: JSON.stringify({
-          summarizer: draft.summarizer,
-          target: {
-            machineId: target,
-            cwd: draft.cwd,
-            harness: draft.harness,
-            model: draft.usedModel,
-            permissionMode: draft.permissionMode,
-            ...(draft.effort ? { effort: draft.effort } : {}),
-            ...(draft.scratch ? { scratch: draft.scratch } : {}),
-            ...(draft.repo === undefined
-              ? {}
-              : { bootstrap: { repo: draft.repo, baseDir: draft.baseCwd } }),
-            ...(toAttach ? { projectId: toAttach } : {}),
-          },
-          ...(draft.prompt.trim() ? { note: draft.prompt.trim() } : {}),
-        }),
-      }
-    );
-    if (!response.ok) {
-      throw new Error(await response.text());
-    }
-    // NDJSON: stage and heartbeat lines while it runs, then `result` or `error`.
-    const lines = (await response.text()).trim().split("\n");
-    const last = JSON.parse(lines.at(-1) ?? "{}") as {
-      result?: { targetInstanceId: string };
-      error?: string;
-    };
-    if (!last.result) {
-      throw new Error(last.error);
-    }
-    if (!current()) {
-      return;
+    const id = await startContinuation(source, draft, {
+      summarizer: draft.summarizer,
+      target: {
+        machineId: target,
+        cwd: draft.cwd,
+        harness: draft.harness,
+        model: draft.usedModel,
+        permissionMode: draft.permissionMode,
+        ...(draft.effort ? { effort: draft.effort } : {}),
+        ...(draft.scratch ? { scratch: draft.scratch } : {}),
+        ...(draft.repo === undefined
+          ? {}
+          : { bootstrap: { repo: draft.repo, baseDir: draft.baseCwd } }),
+        ...(toAttach ? { projectId: toAttach } : {}),
+      },
+      ...(draft.prompt.trim() ? { note: draft.prompt.trim() } : {}),
+    });
+    // Dismissed while the hub was starting it: the tab sees it through.
+    if (current()) {
+      job = id;
+    } else {
+      detachContinuation(id);
     }
     recordModelUse(draft.summarizer.harness, draft.summarizer.model);
     recordModelUse(draft.harness, draft.usedModel);
@@ -888,7 +925,6 @@
       permissionMode: draft.permissionMode,
       effort: draft.effort,
     });
-    await exitTo(last.result.targetInstanceId, current);
   }
   /**
    * Leave for the new session as the dialog starts to close, not after: the
@@ -1111,10 +1147,13 @@
   <div class="footer" data-vaul-no-drag>
     <SessionFooter
       {busy}
-      busyLabel={continueFrom ? "Summarising…" : "Starting…"}
+      busyLabel={continueFrom && followed?.stage !== "starting"
+        ? "Summarising…"
+        : "Starting…"}
+      cancellable={job !== null}
       disabled={cantStart}
       failed={startFailed}
-      oncancel={close}
+      oncancel={job ? cancelContinue : close}
       onstart={start}
       {startLabel}
     />

@@ -8,6 +8,7 @@ import type {
   BuildInfo,
   ClaudeLimits,
   CommandKind,
+  ContinuationJob,
   ControlPayload,
   EffortLevel,
   Envelope,
@@ -515,6 +516,12 @@ const state = $state({
    * and check for, which is the thing it was supposed to replace.
    */
   handoffs: {} as Record<string, { from: string; at: number }>,
+  /**
+   * The continuations the hub is carrying, as it publishes them: what the
+   * Continue dialog follows, and what opens the new session of one this tab
+   * started after its dialog was dismissed.
+   */
+  continuations: [] as ContinuationJob[],
   projects: [] as ProjectRow[],
   sessions: {} as Record<string, SessionState>,
   /**
@@ -1190,6 +1197,25 @@ function usageLimitReadings(
   return next;
 }
 
+/** Who hears the continuation table each time it moves (see {@link followContinuations}). */
+let continuationFollower: ((table: ContinuationJob[]) => void) | null = null;
+
+/**
+ * Hands `follower` the continuation table every time the hub's word on it
+ * lands — a publish, or the read on connect. One follower: the Continue
+ * flow's (continue.svelte.ts).
+ */
+export function followContinuations(
+  follower: (table: ContinuationJob[]) => void
+): void {
+  continuationFollower = follower;
+}
+
+function adoptContinuations(table: ContinuationJob[]): void {
+  state.continuations = table;
+  continuationFollower?.(table);
+}
+
 /**
  * Registry reads: on connect and again after every reconnect. True once the
  * three reads the board waits on (machines, sessions, projects) all landed.
@@ -1197,7 +1223,7 @@ function usageLimitReadings(
 async function refresh(): Promise<boolean> {
   // Registry hydration also recovers workflow transitions missed while disconnected.
   refreshWorkflows();
-  const [machines, rows, projects, pending, handoffs, usage] =
+  const [machines, rows, projects, pending, handoffs, usage, continuations] =
     await Promise.all([
       load<Machine[]>("/api/agents"),
       load<InstanceRow[]>("/api/instances"),
@@ -1210,10 +1236,15 @@ async function refresh(): Promise<boolean> {
       load<{ machines: { machineId: string; limits: ClaudeLimits }[] }>(
         "/api/usage/limits"
       ),
+      // Same reason: a continuation that moved while this tab was away.
+      load<ContinuationJob[]>("/api/continuations"),
     ]);
 
   if (handoffs) {
     state.handoffs = handoffs;
+  }
+  if (continuations) {
+    adoptContinuations(continuations);
   }
   if (machines) {
     state.machines = machines;
@@ -1544,6 +1575,9 @@ function handleFrame(frame: FramePayload): void {
     state.handoffs =
       (frame as { handoffs?: Record<string, { from: string; at: number }> })
         .handoffs ?? {};
+    adoptContinuations(
+      (frame as { continuations?: ContinuationJob[] }).continuations ?? []
+    );
     if (frame.kind === "instances") {
       adoptInstances(frame.instances);
     } else {
@@ -5272,6 +5306,13 @@ export const whiffle = {
   /** What a session has been handed and not yet answered; `null` for most. */
   handoffFor: (instanceId: string): { from: string; at: number } | null =>
     state.handoffs[instanceId] ?? null,
+  /** The continuations the hub is carrying, settled ones for a few minutes after. */
+  get continuations(): ContinuationJob[] {
+    return state.continuations;
+  },
+  /** One continuation the hub is carrying, while it keeps it in its table. */
+  continuation: (id: string): ContinuationJob | undefined =>
+    state.continuations.find((job) => job.id === id),
   get machines() {
     return state.machines;
   },

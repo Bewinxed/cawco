@@ -510,6 +510,22 @@ export type InstanceStatus =
   | "error";
 
 /**
+ * A "continue in new session" the hub is carrying, as every dashboard follows
+ * it: summarise the source, then start the target seeded with the summary.
+ * The hub owns it from the POST that starts it to its end; only a Cancel
+ * (`DELETE /api/continuations/:id`) stops it.
+ */
+export interface ContinuationJob {
+  error?: string;
+  id: string;
+  sourceInstanceId: string;
+  stage: "summarising" | "starting" | "started" | "failed" | "cancelled";
+  /** Absent when the source is short enough that nothing is summarised. */
+  summariserInstanceId?: string;
+  targetInstanceId: string;
+}
+
+/**
  * A session the hub knows about — one row of its `instances` table.
  */
 /** What a session's `init` says about its MCP servers and tools. */
