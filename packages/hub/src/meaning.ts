@@ -104,6 +104,11 @@ export class MeaningJudge {
         return said !== "" || thinking !== "";
       })
       .map((rule) => ({ rule, subject: SUBJECT[rule.watch] }));
+    // Every assistant frame comes through here; the state is built only for
+    // a frame some rule is asked about.
+    if (asked.length === 0) {
+      return Promise.resolve(new Set());
+    }
     const state: Record<string, string> = {
       live_delegated_work: this.#liveDelegatedWork(instanceId),
     };
