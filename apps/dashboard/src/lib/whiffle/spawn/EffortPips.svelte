@@ -155,26 +155,31 @@
       >
         <div
           class="knob"
-          style={`opacity:${n ? 1 : 0.7}`}
+          style={`opacity:${n ? 1 : 0.7};--bars:${n}`}
           class:active={active}
           bind:offsetWidth={knobWidth}
         >
-          {#if n}
-            <span aria-hidden="true" class="level-bars">
-              {#each efforts as level, i (level)}
-                <span
-                  class="bar"
-                  style={`height:${4 + (n > 1 ? i / (n - 1) : 1) * 8}px`}
-                  class:lit={i <= effortIdx}
-                ></span>
-              {/each}
-            </span>
-          {/if}
-          <span class="lvl">
+          <!-- The chip is as wide as its longest label so the rail never moves.
+               The ghost holds that width; the icon and the label sit together,
+               centred in it, so a short label leaves no gap beside it. -->
+          <span aria-hidden="true" class="ghost">
             {#each efforts as level (level)}
-              <span aria-hidden="true" class="sizer">{level}</span>
+              <span>{level}</span>
             {/each}
-            <span>{label}</span>
+          </span>
+          <span class="content">
+            {#if n}
+              <span aria-hidden="true" class="level-bars">
+                {#each efforts as level, i (level)}
+                  <span
+                    class="bar"
+                    style={`height:${35 + (n > 1 ? i / (n - 1) : 1) * 65}%`}
+                    class:lit={i <= effortIdx}
+                  ></span>
+                {/each}
+              </span>
+            {/if}
+            <span class="lvl">{label}</span>
           </span>
         </div>
       </div>
@@ -289,21 +294,41 @@
   .knob {
     flex-shrink: 0;
     height: 100%;
-    display: flex;
-    align-items: center;
-    gap: 4px;
-    padding: 0 5px;
+    display: grid;
+    place-items: center;
+    padding: 0 8px;
     border-radius: var(--radius-sm);
     background: var(--surface-lift);
     box-shadow:
       inset 0 0 0 1px var(--neutral-8),
       var(--shadow-raised);
     color: var(--ink-muted);
+    font: 500 var(--text-label) / 1 var(--font-body);
+    text-transform: capitalize;
+    font-variant-numeric: tabular-nums;
     transition:
       color 120ms ease,
       opacity 120ms ease;
     pointer-events: none;
     white-space: nowrap;
+  }
+  .knob > * {
+    grid-area: 1 / 1;
+  }
+  /* Every label stacked, so the chip is as wide as the longest and space
+     for the icon is held beside it. */
+  .ghost {
+    display: grid;
+    visibility: hidden;
+    padding-inline-start: calc(var(--bars) * 2px + (var(--bars) - 1) * 1.5px + 5px);
+  }
+  .ghost > span {
+    grid-area: 1 / 1;
+  }
+  .content {
+    display: flex;
+    align-items: center;
+    gap: 5px;
   }
   .knob.active {
     color: var(--ink-strong);
@@ -311,11 +336,12 @@
   /* As many bars as the model has levels, lit up to the one it sits on. The
      ramp is set inline so it spans 4→12px whether the model offers three
      levels or five. */
+  /* The icon is as tall as a capital letter of the label beside it. */
   .level-bars {
     display: flex;
     align-items: flex-end;
-    gap: 2px;
-    height: 12px;
+    gap: 1.5px;
+    height: 1cap;
   }
   .bar {
     width: 2px;
@@ -331,19 +357,6 @@
   }
   .bar.lit {
     opacity: 1;
-  }
-  .lvl {
-    /* Reserve every label's width so a switch keeps the chip and rail stable. */
-    display: grid;
-    font: 500 var(--text-label) / 1 var(--font-body);
-    text-transform: capitalize;
-    font-variant-numeric: tabular-nums;
-  }
-  .lvl > span {
-    grid-area: 1 / 1;
-  }
-  .sizer {
-    visibility: hidden;
   }
   input[type="range"] {
     position: absolute;
@@ -361,8 +374,7 @@
     .track {
       height: 38px;
     }
-    .lvl {
-      font-size: var(--text-label);
+    .knob {
       font-weight: var(--weight-strong);
     }
   }
