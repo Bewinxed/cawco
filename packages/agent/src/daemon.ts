@@ -8,6 +8,7 @@ import type {
   SpawnPayload,
 } from "@whiffle/core";
 import {
+  CONTROL_RUN_COMMAND,
   CONTROL_SEARCH_TRANSCRIPTS,
   CONTROL_WORKSPACE_ARCHIVE,
   CONTROL_WORKSPACE_BOUNDARY,
@@ -888,7 +889,7 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
       TranscriptSearchService.create()
     );
     search.start();
-    supervisor.registerDaemonFunction("runCommand", runWorkflowCommand);
+    supervisor.registerDaemonFunction(CONTROL_RUN_COMMAND, runWorkflowCommand);
     supervisor.registerDaemonFunction(
       CONTROL_WORKSPACE_CREATE,
       createWorkspace

@@ -12,9 +12,14 @@
  * a newer item owned.
  *
  * The hub is the one authority: `delegate` is a request to {@link start}, and
- * the frames that move a session move its item.
+ * the frames that move a session move its item. An item carries acceptance
+ * checks; it is `done` only when its session calls `finish_item` and the hub
+ * has run every check in the item's worktree and seen it pass. The parent's
+ * report is built by the hub from those results, never from the session's
+ * prose.
  */
 import type {
+  CommandResult,
   DelegateType,
   Envelope,
   HarnessKind,
@@ -35,6 +40,7 @@ import {
   withWorkspaceLine,
 } from "@whiffle/core";
 import type { DbShape, WorkItemRow, WorkspaceRow } from "./db";
+import type { WorkItemCheck } from "./db/schema";
 
 /** How long the name a caller gives a delegate or a started session may run. */
 export const SESSION_TITLE_MAX = 48;
@@ -76,6 +82,8 @@ export class WorkItemRefusal extends Error {
 /** What `delegate` asks for. */
 export interface WorkItemRequest {
   canDelegate?: boolean;
+  /** Its acceptance checks: at least one. */
+  checks: WorkItemCheck[];
   /** The repository a new workspace is cut from; the parent's directory by default. */
   cwd?: string;
   /**
@@ -113,9 +121,18 @@ export interface WorkItemDeps {
     method: string,
     args: unknown[]
   ) => Promise<unknown>;
+  /** Runs a command on a machine, in a directory; throws when the machine cannot. */
+  readonly command: (
+    machineId: string,
+    cwd: string,
+    cmd: string,
+    timeoutMs?: number
+  ) => Promise<CommandResult>;
   readonly db: DbShape;
   /** Tells every dashboard an item moved: its parent's delegate tray follows it. */
   readonly publish: (item: WorkItemSummary) => void;
+  /** Hands a report to the parent of the item's session. */
+  readonly report: (row: InstanceRow, body: string, failed: boolean) => void;
   /** The one send path; its record says whether the machine took it. */
   readonly send: (envelope: Envelope<SendPayload>) => {
     reason: string | null;
@@ -254,6 +271,92 @@ const firstLine = (text: string | null): string =>
     .map((line) => line.trim())
     .find(Boolean) ?? "";
 
+/** How long a check runs when it names no limit, and the most it may name. */
+const CHECK_TIMEOUT_SEC = 600;
+const CHECK_TIMEOUT_MAX_SEC = 3600;
+
+/** How long the report's git reads may take. */
+const GIT_TIMEOUT_MS = 60_000;
+
+/** Quiet turns in a row an item survives: the next one fails it. */
+const QUIET_TURNS = 3;
+
+const QUIET_ERROR = "ended three turns in a row without finish_item";
+
+const WORD = /\s+/;
+
+/** Why a `delegate` call's checks cannot stand, or nothing when they can. */
+export const checksProblem = (checks: WorkItemCheck[]): string | undefined => {
+  if (checks.length === 0) {
+    return "checks is empty: give at least one acceptance check.";
+  }
+  for (const check of checks) {
+    const words = check.name.trim().split(WORD).filter(Boolean).length;
+    if (words < 2 || words > 6) {
+      return `check "${check.name}": name it in 2 to 6 plain words.`;
+    }
+    if (!check.command.trim()) {
+      return `check "${check.name}": command is blank.`;
+    }
+    const limit = check.timeoutSec;
+    if (
+      limit !== undefined &&
+      !(Number.isInteger(limit) && limit >= 1 && limit <= CHECK_TIMEOUT_MAX_SEC)
+    ) {
+      return `check "${check.name}": timeoutSec must be a whole number from 1 to ${CHECK_TIMEOUT_MAX_SEC}.`;
+    }
+  }
+  return undefined;
+};
+
+/** What `finish_item` is called with. */
+export interface FinishRequest {
+  blocked?: { command: string; error: string };
+  findings?: { title: string; detail: string }[];
+  summary: string;
+}
+
+/** One check, as the hub ran it. */
+interface CheckOutcome {
+  check: WorkItemCheck;
+  durationMs: number;
+  exitCode: number;
+  passed: boolean;
+  result: CommandResult;
+}
+
+/** A fenced block that no command output can close early. */
+const fenced = (text: string): string =>
+  `\n\`\`\`\`\n${text.trimEnd()}\n\`\`\`\``;
+
+/** A check's line: its name, pass or fail, exit code and duration. */
+const checkLine = ({
+  check,
+  passed,
+  exitCode,
+  durationMs,
+  result,
+}: CheckOutcome): string => {
+  const missing =
+    exitCode === 0 && !passed && check.expect !== undefined
+      ? `, stdout does not contain ${JSON.stringify(check.expect)}`
+      : "";
+  const line = `- ${check.name}: ${passed ? "pass" : "fail"} (exit ${exitCode}, ${(durationMs / 1000).toFixed(1)}s${missing})`;
+  return result.stdout.trim() ? `${line}${fenced(result.stdout)}` : line;
+};
+
+/** A check as the delegate reads it: a failure carries its stderr too. */
+const checkResultLine = (outcome: CheckOutcome): string =>
+  !outcome.passed && outcome.result.stderr.trim()
+    ? `${checkLine(outcome)}\nstderr:${fenced(outcome.result.stderr)}`
+    : checkLine(outcome);
+
+/** The findings, numbered; nothing when there are none. */
+const findingsBlock = (findings: FinishRequest["findings"]): string =>
+  findings?.length
+    ? `\n\nFindings:\n${findings.map((finding, index) => `${index + 1}. ${finding.title}: ${finding.detail}`).join("\n")}`
+    : "";
+
 /** An item as its parent's delegate tray reads it. */
 export const summaryOf = (item: WorkItemRow): WorkItemSummary => ({
   id: item.id,
@@ -276,12 +379,33 @@ const TRAY_HOLD_MS = 6000;
 
 export const createWorkItems = ({
   call,
+  command,
   db,
   publish,
+  report,
   send,
   spawn,
   types,
 }: WorkItemDeps) => {
+  /** Turns in a row each live item's session ended without `finish_item`, by item. */
+  const quiet = new Map<string, number>();
+  /** Items whose checks are running now: a second `finish_item` waits its turn. */
+  const finishing = new Set<string>();
+  /** The worktree's HEAD: where an item starting there begins. */
+  const headOf = async (workspace: WorkspaceRow): Promise<string> => {
+    const head = await command(
+      workspace.machineId,
+      workspace.path,
+      "git rev-parse HEAD",
+      GIT_TIMEOUT_MS
+    );
+    if (head.exitCode !== 0) {
+      throw new Error(
+        `git rev-parse HEAD failed in ${workspace.path}: ${head.stderr.trim()}`
+      );
+    }
+    return head.stdout.trim();
+  };
   /** Every write to an item goes out to the dashboards as it lands. */
   const published = (
     item: WorkItemRow | undefined
@@ -444,7 +568,8 @@ export const createWorkItems = ({
     previous: WorkItemRow,
     session: InstanceRow,
     parent: InstanceRow,
-    request: WorkItemRequest
+    request: WorkItemRequest,
+    baseCommit: string
   ): WorkItemStart => {
     const item = db.createWorkItem({
       id: crypto.randomUUID(),
@@ -458,6 +583,8 @@ export const createWorkItems = ({
       model: previous.model,
       effort: previous.effort,
       state: "running",
+      checks: request.checks,
+      baseCommit,
     });
     db.patchInstance(session.id, {
       workItemId: item.id,
@@ -487,7 +614,7 @@ export const createWorkItems = ({
       text:
         `Continued ${label} as work item ${item.id} in workspace ${workspace.id} (${workspace.path}, branch ${workspace.branch}): ` +
         "the brief is its next message, in the same session and its cached transcript. " +
-        "Its report arrives here automatically when its turn completes. Guide it, or continue it after it " +
+        "Its report arrives when the hub has run its acceptance checks. Guide it, or continue it after it " +
         `reports, with handoff("${session.id}", ...).`,
     };
   };
@@ -501,7 +628,8 @@ export const createWorkItems = ({
   const followUp = (
     needle: string,
     request: WorkItemRequest,
-    parent: InstanceRow
+    parent: InstanceRow,
+    baseCommit: string
   ): WorkItemStart | WorkspaceRow => {
     if (
       request.type ||
@@ -520,7 +648,7 @@ export const createWorkItems = ({
       ? db.getInstancesByIds([previous.instanceId])
       : [];
     return previous && session?.sessionId
-      ? continueIn(workspace, previous, session, parent, request)
+      ? continueIn(workspace, previous, session, parent, request, baseCommit)
       : workspace;
   };
 
@@ -539,21 +667,40 @@ export const createWorkItems = ({
     if (untitled) {
       throw new WorkItemRefusal(400, untitled);
     }
+    const unchecked = checksProblem(request.checks);
+    if (unchecked) {
+      throw new WorkItemRefusal(400, unchecked);
+    }
 
     if (!request.workspace) {
       const settings = settingsOf(request, parent);
       const workspace = await openWorkspace(parent, request.cwd ?? parent.cwd);
-      return spawnIn(workspace, settings, parent, request);
+      return spawnIn(
+        workspace,
+        settings,
+        parent,
+        request,
+        await headOf(workspace)
+      );
     }
     // Awaited before the claim, which files the item in the same step as
-    // its one-writer check.
+    // its one-writer check. A workspace that is missing or archived is the
+    // claim's to refuse, in its own words.
     await boundaryUp(request.workspace);
-    const followed = followUp(request.workspace, request, parent);
+    const [named] = db.workspacesNamed(request.workspace.trim());
+    const baseCommit = named?.state === "active" ? await headOf(named) : "";
+    const followed = followUp(request.workspace, request, parent, baseCommit);
     // A workspace whose last session never started has nothing to continue:
     // a session starts there the way every new delegate's does.
     return "item" in followed
       ? followed
-      : spawnIn(followed, settingsOf(request, parent), parent, request);
+      : spawnIn(
+          followed,
+          settingsOf(request, parent),
+          parent,
+          request,
+          baseCommit
+        );
   };
 
   /** A new session in `workspace`, running a new item from the request's brief. */
@@ -561,7 +708,8 @@ export const createWorkItems = ({
     workspace: WorkspaceRow,
     settings: Settings,
     parent: InstanceRow,
-    request: WorkItemRequest
+    request: WorkItemRequest,
+    baseCommit: string
   ): WorkItemStart => {
     const { harness, canDelegate } = settings;
     const instanceId = crypto.randomUUID();
@@ -578,6 +726,8 @@ export const createWorkItems = ({
       model: settings.model,
       effort: settings.type?.effort,
       state: "starting",
+      checks: request.checks,
+      baseCommit,
     });
     published(item);
 
@@ -618,7 +768,7 @@ export const createWorkItems = ({
         (settings.forkOf
           ? `a fork of this conversation on ${harness}${settings.model ? ` (${settings.model})` : ""}, ${label}. It starts with every turn of yours so far.`
           : `a fresh ${harness} session, ${label}.`) +
-        " Its report arrives here automatically when its turn completes. Guide it, or continue it after it " +
+        " Its report arrives when the hub has run its acceptance checks. Guide it, or continue it after it " +
         `reports, with handoff("${instanceId}", ...): the message lands in the same session and its cached transcript.` +
         (canDelegate
           ? " It may spawn delegates of its own."
@@ -638,6 +788,143 @@ export const createWorkItems = ({
     LIVE.has(item.state)
       ? (update(item.id, { ...change, endedAt: new Date() }) ?? item)
       : item;
+
+  /**
+   * Whether the session still has something coming as its turn ends at
+   * `endedAt`: a send it has not read, one it read since, or its own
+   * delegated work still live.
+   */
+  const busyAfter = (row: InstanceRow, endedAt: Date): boolean =>
+    db.sendsIn(row.id, ["pending"]).length > 0 ||
+    db
+      .sendsIn(row.id, ["read"])
+      .some((handed) => handed.acceptedAt > endedAt) ||
+    db.liveWorkItemsOf(row.id).length > 0;
+
+  /**
+   * A turn of an item filed before checks existed: unless the session is
+   * busy, it ends the item with the turn's text, and the report carries it.
+   */
+  const uncheckedTurn = (
+    item: WorkItemRow,
+    turn: { text: string; error?: string },
+    busy: boolean
+  ): { body: string; failed: boolean } => {
+    const failed = turn.error !== undefined;
+    const ended = busy
+      ? item
+      : finish(
+          item,
+          failed
+            ? { state: "failed", error: turn.text }
+            : { state: "done", result: turn.text }
+        );
+    return { body: `${turn.text}${reportLine(ended)}`, failed };
+  };
+
+  /** Tells an item's session that its turn ended with the item still open. */
+  const stillOpen = (row: InstanceRow, checks: WorkItemCheck[]): void => {
+    const names = checks.map((check) => check.name).join(", ");
+    send({
+      verb: "send",
+      machineId: row.machineId,
+      instanceId: row.id,
+      payload: {
+        instanceId: row.id,
+        message: {
+          type: "user",
+          uuid: crypto.randomUUID(),
+          message: {
+            role: "user",
+            content: `Your work item is still open. Its checks: ${names}. Finish the work and call finish_item, or call it with \`blocked\` and the exact command and error.`,
+          },
+          parent_tool_use_id: null,
+          origin: { kind: "system", name: "work-item" },
+        },
+      },
+    });
+  };
+
+  /** The session's live, checked item that `finish_item` may finish, or the refusal. */
+  const finishable = (
+    instanceId: string
+  ): { row: InstanceRow; item: WorkItemRow; checks: WorkItemCheck[] } => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    const item = row ? itemOf(row) : undefined;
+    if (!(row && item?.checks)) {
+      throw new WorkItemRefusal(
+        409,
+        "This session has no work item with acceptance checks."
+      );
+    }
+    if (!LIVE.has(item.state)) {
+      throw new WorkItemRefusal(
+        409,
+        `${item.title} (${item.id}) is ${item.state}; finish_item finishes live work only.`
+      );
+    }
+    if (finishing.has(item.id)) {
+      throw new WorkItemRefusal(
+        409,
+        "finish_item is already running this item's checks."
+      );
+    }
+    return { row, item, checks: item.checks };
+  };
+
+  /** Runs `checks` in order in the workspace's worktree, on its machine. */
+  const runChecks = async (
+    workspace: WorkspaceRow,
+    checks: WorkItemCheck[]
+  ): Promise<CheckOutcome[]> => {
+    const outcomes: CheckOutcome[] = [];
+    for (const check of checks) {
+      const started = Date.now();
+      // biome-ignore lint/performance/noAwaitInLoops: checks run in order, one at a time, in one worktree
+      const result = await command(
+        workspace.machineId,
+        workspace.path,
+        check.command,
+        (check.timeoutSec ?? CHECK_TIMEOUT_SEC) * 1000
+      );
+      outcomes.push({
+        check,
+        result,
+        exitCode: result.exitCode,
+        durationMs: Date.now() - started,
+        passed:
+          result.exitCode === 0 &&
+          (check.expect === undefined || result.stdout.includes(check.expect)),
+      });
+    }
+    return outcomes;
+  };
+
+  /** The report's commits and diffstat: the worktree since the item began. */
+  const changesSince = async (
+    workspace: WorkspaceRow,
+    item: WorkItemRow
+  ): Promise<string> => {
+    const range = `${item.baseCommit}..HEAD`;
+    const [commits, diffstat] = await Promise.all([
+      command(
+        workspace.machineId,
+        workspace.path,
+        `git log --oneline ${range}`,
+        GIT_TIMEOUT_MS
+      ),
+      command(
+        workspace.machineId,
+        workspace.path,
+        `git diff --stat ${range}`,
+        GIT_TIMEOUT_MS
+      ),
+    ]);
+    return (
+      `\n\nCommits:${fenced(commits.stdout.trim() || "(none)")}` +
+      `\n\nDiffstat:${fenced(diffstat.stdout.trim() || "(no changes)")}`
+    );
+  };
 
   return {
     start,
@@ -706,38 +993,118 @@ export const createWorkItems = ({
     },
 
     /**
-     * A turn of the item's session ended at `endedAt`, not by an interrupt,
-     * and no standing instruction answered it. With nothing queued for the
-     * session, nothing handed to it since that turn ended, and none of its own
-     * delegated work still live, the item is finished: `done` with this turn's
-     * report as its result, or `failed` with the harness's error. Answers the
-     * line the parent's report carries about the item.
+     * A turn of a delegated session ended at `endedAt`, not by an interrupt,
+     * and no standing instruction answered it. `turn.error` is the harness's
+     * error when the turn failed; `turn.text` is what a report from a session
+     * without checks carries. Answers what the parent is sent, or nothing.
+     *
+     * An item with checks ends only through {@link finishItem}, or here when
+     * its turn failed. A turn that ends it quietly, with nothing queued for
+     * the session, nothing handed to it since, and none of its own delegated
+     * work live, gets the "still open" message; the third in a row fails it.
+     *
+     * An item filed before checks existed, and a delegate from before work
+     * items, end as they always did: on a turn nothing answers, with that
+     * turn's text as the report.
      */
     turnEnded(
       row: InstanceRow,
-      report: string,
-      failed: boolean,
+      turn: { text: string; error?: string },
       endedAt: Date
-    ): string {
-      let item = itemOf(row);
+    ): { body: string; failed: boolean } | undefined {
+      const item = itemOf(row);
       if (!item) {
-        return "";
+        return { body: turn.text, failed: turn.error !== undefined };
       }
-      const busy =
-        db.sendsIn(row.id, ["pending"]).length > 0 ||
-        db
-          .sendsIn(row.id, ["read"])
-          .some((handed) => handed.acceptedAt > endedAt) ||
-        db.liveWorkItemsOf(row.id).length > 0;
-      if (!busy) {
-        item = finish(
-          item,
-          failed
-            ? { state: "failed", error: report }
-            : { state: "done", result: report }
+      const busy = busyAfter(row, endedAt);
+      if (!item.checks) {
+        return uncheckedTurn(item, turn, busy);
+      }
+      if (!LIVE.has(item.state)) {
+        return undefined;
+      }
+      if (turn.error !== undefined) {
+        quiet.delete(item.id);
+        const ended = busy
+          ? item
+          : finish(item, { state: "failed", error: turn.error });
+        return { body: `${turn.error}${reportLine(ended)}`, failed: true };
+      }
+      if (busy) {
+        return undefined;
+      }
+      const turns = (quiet.get(item.id) ?? 0) + 1;
+      if (turns >= QUIET_TURNS) {
+        quiet.delete(item.id);
+        const failed = finish(item, { state: "failed", error: QUIET_ERROR });
+        return { body: `${QUIET_ERROR}${reportLine(failed)}`, failed: true };
+      }
+      quiet.set(item.id, turns);
+      stillOpen(row, item.checks);
+      return undefined;
+    },
+
+    /**
+     * A message reached a session: one from its parent or the reader starts
+     * its item's count of quiet turns over.
+     */
+    heard(instanceId: string, origin: NeutralOrigin): void {
+      const [row] = db.getInstancesByIds([instanceId]);
+      const item = row ? itemOf(row) : undefined;
+      if (item && reopens(item.parentInstanceId, origin)) {
+        quiet.delete(item.id);
+      }
+    },
+
+    /**
+     * `finish_item` from the session `instanceId`: with `blocked`, the item
+     * fails with that command and error; otherwise the hub runs its checks in
+     * order, in its worktree on its machine. All passing, the item is `done`
+     * and the parent gets the report the hub builds from the results; any
+     * failing, it stays `running` and only the session hears. Answers what
+     * the tool returns.
+     */
+    async finishItem(
+      instanceId: string,
+      request: FinishRequest
+    ): Promise<string> {
+      const { row, item, checks: listed } = finishable(instanceId);
+      quiet.delete(item.id);
+      const findings = findingsBlock(request.findings);
+
+      if (request.blocked) {
+        const error = `Blocked: ${request.blocked.command}${fenced(request.blocked.error)}`;
+        const failed = finish(item, { state: "failed", error });
+        report(
+          row,
+          `${request.summary}\n\n${error}${findings}${reportLine(failed)}`,
+          true
         );
+        return "The item failed as blocked; your parent has the command and the error. End your turn.";
       }
-      return reportLine(item);
+
+      const [workspace] = db.workspacesNamed(item.workspaceId);
+      finishing.add(item.id);
+      try {
+        const outcomes = await runChecks(workspace, listed);
+        const failing = outcomes.filter((outcome) => !outcome.passed);
+        if (failing.length > 0) {
+          const passing = outcomes.filter((outcome) => outcome.passed);
+          return `${failing.length} of ${outcomes.length} checks failed. The item is still running: fix the cause and call finish_item again.\n\n${[...failing, ...passing].map(checkResultLine).join("\n")}`;
+        }
+        const checks = outcomes.map(checkLine).join("\n");
+        const body = `${request.summary}\n\nChecks:\n${checks}${await changesSince(workspace, item)}${findings}`;
+        // The checks took their time: the item may have been stopped since.
+        const current = db.workItem(item.id) ?? item;
+        if (!LIVE.has(current.state)) {
+          return `The checks passed, but ${current.title} is ${current.state} now; nothing was reported.`;
+        }
+        const done = finish(current, { state: "done", result: body });
+        report(row, `${body}${reportLine(done)}`, false);
+        return `All ${outcomes.length} checks passed.\n\n${checks}\n\nThe item is done. End your turn.`;
+      } finally {
+        finishing.delete(item.id);
+      }
     },
 
     /** Its session never started: the item failed, and the report says why. */

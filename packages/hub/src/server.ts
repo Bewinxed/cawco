@@ -3,6 +3,7 @@ import type {
   AgentRow,
   BuildInfo,
   ClaudeLimits,
+  CommandResult,
   ContinuationJob,
   ControlPayload,
   DeployInfo,
@@ -62,6 +63,7 @@ import {
   CONTROL_INTERRUPT,
   CONTROL_LIST_SESSIONS,
   CONTROL_MODEL_CATALOG,
+  CONTROL_RUN_COMMAND,
   CONTROL_SEARCH_TRANSCRIPTS,
   contextFitRefusal,
   delegateAskText,
@@ -2656,7 +2658,8 @@ export const createServer = ({
    * one place it is done. The reader's hand clears a supervisor's mute; a
    * session's first words name it; a queued hand-off is work the target now
    * carries, and a send that starts a turn reads it; an urgent send cuts into
-   * the turn it lands in.
+   * the turn it lands in; the parent's or the reader's word to a delegate
+   * starts its item's count of quiet turns over.
    */
   const afterSend = (
     { machineId, payload }: Envelope<SendPayload>,
@@ -2669,6 +2672,7 @@ export const createServer = ({
     if (message.origin.kind === "human") {
       supervisor.noteHumanSend(instanceId);
     }
+    workItems.heard(instanceId, message.origin);
     if (!hasAttachments(payload)) {
       nameFromLiveTurn(machineId, instanceId, message);
     }
@@ -5202,8 +5206,37 @@ export const createServer = ({
   // route group, mounted rather than folded into the routes below — see
   // delegate-types.ts for why it keeps its own connection.
   const delegateTypes = makeDelegateTypes();
+  /**
+   * THE way the hub runs a command on a machine: in `cwd`, killed after
+   * `timeoutMs` (the machine's default when not given), answering bounded
+   * tails of what it wrote. A workflow's `w.exec` and a work item's
+   * acceptance checks both go through it.
+   */
+  const runOnMachine = async (
+    machineId: string,
+    cwd: string,
+    cmd: string,
+    timeoutMs?: number
+  ): Promise<CommandResult> => {
+    const response = await callAgent(
+      machineId,
+      CONTROL_RUN_COMMAND,
+      [cwd, cmd, timeoutMs],
+      (timeoutMs ?? 300_000) + 10_000
+    );
+    if (typeof response === "string") {
+      throw new Error(`Command refused: machine ${response}.`);
+    }
+    if (response.error) {
+      throw new Error(String(response.error));
+    }
+    return response.result as CommandResult;
+  };
+
   const workItems = createWorkItems({
     db,
+    command: runOnMachine,
+    report: (row, body, failed) => reportToParent(row, body, failed),
     // To every dashboard, as delegate events go: the parent's tray may be open
     // on any of them.
     publish: (item) => {
@@ -5297,21 +5330,7 @@ export const createServer = ({
           payload: { instanceId, requestId },
         });
       }),
-    command: async (machineId, cwd, cmd, timeoutMs) => {
-      const response = await callAgent(
-        machineId,
-        "runCommand",
-        [cwd, cmd],
-        timeoutMs ?? 310_000
-      );
-      if (typeof response === "string") {
-        throw new Error(`Command refused: machine ${response}.`);
-      }
-      if (response.error) {
-        throw new Error(String(response.error));
-      }
-      return response.result as { exitCode: number; output: string };
-    },
+    command: runOnMachine,
     park: (envelope) => {
       if (!envelope.requestId) {
         throw new Error("Workflow question has no request id.");
@@ -5398,6 +5417,8 @@ export const createServer = ({
   );
   const delegationMcp = createDelegationMcp({
     instances: () => db.listInstances(),
+    // finish_item is a tool of a session whose work item carries checks.
+    checked: (row) => !!(row.workItemId && db.workItem(row.workItemId)?.checks),
   });
 
   /**
@@ -5521,7 +5542,8 @@ export const createServer = ({
           };
           if (
             input.name === "generate_image" ||
-            input.name === "continue_session"
+            input.name === "continue_session" ||
+            input.name === "finish_item"
           ) {
             server?.timeout(request, 0);
           }
@@ -7661,6 +7683,15 @@ export const createServer = ({
             cwd: t.Optional(t.String()),
             workspace: t.Optional(t.String()),
             fork: t.Optional(t.Boolean()),
+            checks: t.Array(
+              t.Object({
+                name: t.String(),
+                command: t.String(),
+                expect: t.Optional(t.String()),
+                timeoutSec: t.Optional(t.Number()),
+              }),
+              { minItems: 1 }
+            ),
           }),
           // A 400 that says which field is missing or malformed, in words:
           // a delegate without a title is refused, never named from its brief.
@@ -7688,6 +7719,9 @@ export const createServer = ({
         async ({ body, status }) => {
           try {
             const started = await workItems.start(body);
+            // A follow-up lands in a session whose tool list was read before
+            // this item existed: it re-reads it, and finds finish_item.
+            delegationMcp.toolsChanged(started.item.instanceId);
             return {
               workItemId: started.item.id,
               workspaceId: started.workspace.id,
@@ -7700,6 +7734,38 @@ export const createServer = ({
               error instanceof Error ? error.message : String(error);
             // Anything that is not the hub's own refusal is the machine's:
             // offline, or git turning the checkout down.
+            return status(
+              error instanceof WorkItemRefusal ? error.status : 502,
+              message
+            );
+          }
+        }
+      )
+      // `finish_item`: the hub runs the item's checks and answers what the
+      // tool returns. The checks may run for an hour each, so the HTTP idle
+      // timer does not apply.
+      .post(
+        "/api/work-items/finish",
+        {
+          body: t.Object({
+            instanceId: t.String({ minLength: 1 }),
+            summary: t.String(),
+            findings: t.Optional(
+              t.Array(t.Object({ title: t.String(), detail: t.String() }))
+            ),
+            blocked: t.Optional(
+              t.Object({ command: t.String(), error: t.String() })
+            ),
+          }),
+        },
+        async ({ body, status, request, server }) => {
+          server?.timeout(request, 0);
+          const { instanceId, ...finished } = body;
+          try {
+            return { text: await workItems.finishItem(instanceId, finished) };
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : String(error);
             return status(
               error instanceof WorkItemRefusal ? error.status : 502,
               message
@@ -8755,18 +8821,33 @@ export const createServer = ({
                   // words — "(no text)" once stood in for a 403 that was
                   // sitting right in the result frame.
                   const { errors } = neutral as { errors?: string[] };
-                  const body =
-                    text ||
-                    (errors?.length
-                      ? errors.join("\n")
-                      : "(the delegate produced no text this turn)");
+                  const harnessError = errors?.length
+                    ? errors.join("\n")
+                    : undefined;
                   const failed = !!neutral.is_error;
-                  const handBack = (from: InstanceRow): void =>
-                    reportToParent(
-                      from,
-                      `${body}${workItems.turnEnded(from, body, failed, endedAt)}`,
-                      failed
-                    );
+                  const turn = {
+                    text:
+                      text ||
+                      harnessError ||
+                      "(the delegate produced no text this turn)",
+                    ...(failed
+                      ? {
+                          error:
+                            harnessError ??
+                            neutral.result ??
+                            `Harness error (${neutral.subtype}).`,
+                        }
+                      : {}),
+                  };
+                  // What the parent hears of the turn, if anything: an item
+                  // with checks reports only through finish_item, or when its
+                  // turn failed (work-items.ts turnEnded).
+                  const handBack = (from: InstanceRow): void => {
+                    const handed = workItems.turnEnded(from, turn, endedAt);
+                    if (handed) {
+                      reportToParent(from, handed.body, handed.failed);
+                    }
+                  };
                   if (delegate?.workItemId && !failed) {
                     // A work item's turn is answered before it is handed
                     // back: a rule's or the supervisor's reply keeps the item

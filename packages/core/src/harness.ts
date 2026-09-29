@@ -939,3 +939,22 @@ export const CONTROL_WORKSPACE_ARCHIVE = "workspaceArchive";
  * is gone is skipped and named in the machine's log. Args `[WorkspaceRef[]]`.
  */
 export const CONTROL_WORKSPACE_MIGRATE = "workspaceMigrate";
+
+/**
+ * Runs a shell command on a machine, in a directory, killed with its process
+ * group after a limit (exit 124). Args `[cwd, command, timeoutMs?]`; answers
+ * {@link CommandResult}. The hub's one way to run something on a machine: a
+ * workflow's `w.exec`, and a work item's acceptance checks.
+ */
+export const CONTROL_RUN_COMMAND = "runCommand";
+
+/** What {@link CONTROL_RUN_COMMAND} answers: bounded tails, drained as the command runs. */
+export interface CommandResult {
+  exitCode: number;
+  /** Stdout and stderr interleaved, the last 4,096 bytes. */
+  output: string;
+  /** The last 4,000 characters of stderr. */
+  stderr: string;
+  /** The last 4,000 characters of stdout. */
+  stdout: string;
+}

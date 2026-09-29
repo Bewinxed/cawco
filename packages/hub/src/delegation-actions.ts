@@ -29,6 +29,8 @@ import {
   WHIFFLE_ENV,
   WHIFFLE_HUB_PORT,
 } from "@whiffle/core";
+import type { WorkItemCheck } from "./db/schema";
+import type { FinishRequest } from "./work-items";
 
 const WS_SCHEME = /^ws/;
 const WS_PATH_SUFFIX = /\/ws$/;
@@ -302,6 +304,8 @@ export interface HandoffDeps {
   readonly instanceId: string;
   readonly workflowRunId?: string;
   readonly workflowStepId?: string;
+  /** Whether this session runs a work item with acceptance checks: it gets finish_item. */
+  readonly workItem?: boolean;
 }
 
 /** The three hand-off actions, each answering with the text the tool returns. */
@@ -367,8 +371,15 @@ export interface HandoffActions {
       workspace?: string;
       /** The item's session forks this conversation, in a new workspace. */
       fork?: boolean;
+      /** The item's acceptance checks, run by the hub at finish_item. */
+      checks: WorkItemCheck[];
     }
   ): Promise<DelegateResult>;
+  /**
+   * Finishes this session's work item: the hub runs its checks, or fails it
+   * as blocked. Answers what the hub says of the results.
+   */
+  readonly finishItem: (request: FinishRequest) => Promise<string>;
   readonly generateImage: (
     request: ImageGenerationRequest
   ) => Promise<GeneratedImage>;
@@ -821,6 +832,21 @@ export const handoffActions = ({
       workItemId: started.workItemId,
       workspaceId: started.workspaceId,
     };
+  },
+
+  async finishItem(request) {
+    const response = await fetch(`${hubHttpUrl()}/api/work-items/finish`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...request, instanceId }),
+      // The checks may run for hours between them; Bun's fetch would drop a
+      // response silent for five minutes.
+      timeout: false,
+    });
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+    return ((await response.json()) as { text: string }).text;
   },
 
   async stopDelegate(target: string): Promise<string> {

@@ -365,7 +365,7 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "delegate",
-      "Run a task as a SUB-AGENT: a new temporary fleet session with its own fresh context (or, with `fork`, a copy of this one), which reports back here automatically when its turn completes.\n\n" +
+      "Run a task as a SUB-AGENT: a new temporary fleet session with its own fresh context (or, with `fork`, a copy of this one), which reports back when the hub has run its acceptance checks and they pass.\n\n" +
         "Use this for SUBSTANTIAL bounded work that must report back: multi-file implementation, a sweep that would take dozens of reads across a codebase, builds or deploys with verification loops, browser audits, evidence you must interpret across many files or logs. A delegate answers those in its own fresh context and hands back conclusions.\n\n" +
         "Run menial work yourself: git status/log/diff, ls/grep/find, reading a file or a handful of files, port and process checks, tailing a log, a dev-server restart, and the reads needed to write a brief. Ten read-only commands in a row is normal prep; a delegate for that costs more than the task and its report costs more to read than the output.\n\n" +
         "Do NOT delegate: a single command or file read whose exact output you need; edits to files you are actively changing; anything the user asked to watch you do directly.\n\n" +
@@ -448,6 +448,32 @@ export function handoffTools(deps: HandoffDeps) {
               'visible here. A type marked "may delegate by default" flips that default; an explicit ' +
               "value here wins either way. Set true only for an orchestrator-style delegate that must fan out."
           ),
+        checks: z
+          .array(
+            z.object({
+              name: z.string().describe("2 to 6 plain words."),
+              command: z
+                .string()
+                .describe(
+                  "A shell command, run with the item's worktree as its working directory."
+                ),
+              expect: z
+                .string()
+                .optional()
+                .describe("A literal string stdout must contain."),
+              timeoutSec: z
+                .number()
+                .int()
+                .min(1)
+                .max(3600)
+                .optional()
+                .describe("Seconds before the command is killed. Default 600."),
+            })
+          )
+          .min(1)
+          .describe(
+            "The item's acceptance checks. The hub runs each command in the item's worktree when the delegate calls finish_item; the item is done only when every command exits 0 and its stdout contains `expect` where one is given. Write the checks a reviewer would run: build, lint, type-check, a grep that proves a removal, one script run for a live assertion. The delegate runs nothing beyond these to prove the work."
+          ),
       },
       async ({
         prompt,
@@ -460,6 +486,7 @@ export function handoffTools(deps: HandoffDeps) {
         workspace,
         fork,
         can_delegate,
+        checks,
       }) => {
         const result = await actions.delegate(prompt, {
           title,
@@ -471,6 +498,7 @@ export function handoffTools(deps: HandoffDeps) {
           fork,
           type,
           canDelegate: can_delegate,
+          checks,
         });
         const sc = {
           delegateInstanceId: result.id,
@@ -483,6 +511,28 @@ export function handoffTools(deps: HandoffDeps) {
           structuredContent: sc,
         };
       }
+    ),
+    tool(
+      "finish_item",
+      "Finish your work item. The hub runs the item's acceptance checks in your worktree and returns each result. When all pass the item is done and your parent receives the results. When one fails you get its output back: fix the cause and call finish_item again. Pass `blocked` with the exact command and error text only when something outside your control stops the work; the item then fails with that reason. Anything you noticed outside your brief goes in `findings`, not in the work.",
+      {
+        summary: z.string().describe("What was done, in plain words."),
+        findings: z
+          .array(z.object({ title: z.string(), detail: z.string() }))
+          .optional()
+          .describe("Things noticed outside the brief."),
+        blocked: z
+          .object({ command: z.string(), error: z.string() })
+          .optional()
+          .describe(
+            "The exact command and error text of what stops the work, when it is outside your control."
+          ),
+      },
+      async (request) => ({
+        content: [
+          { type: "text" as const, text: await actions.finishItem(request) },
+        ],
+      })
     ),
     tool(
       "continue_session",
@@ -692,7 +742,8 @@ export function handoffTools(deps: HandoffDeps) {
   return all.filter(
     (entry) =>
       (!STEP_TOOLS.has(entry.name) || !!deps.workflowStepId) &&
-      (deps.canDelegate !== false || !SPAWNING_TOOLS.has(entry.name))
+      (deps.canDelegate !== false || !SPAWNING_TOOLS.has(entry.name)) &&
+      (entry.name !== "finish_item" || !!deps.workItem)
   );
 }
 
@@ -700,7 +751,7 @@ export function handoffInstructions(deps: HandoffDeps): string {
   const images =
     "Whiffle can generate images regardless of your model: use generate_image (Claude: mcp__whiffle__generate_image; OpenCode: whiffle_generate_image). It uses the machine's ChatGPT subscription login only. Pass reference_images for edits or visual guidance, then show the returned path with show_image. Discover deferred tools before claiming image generation is unavailable. Do not delegate image generation to a different model.";
   if (deps.canDelegate === false) {
-    return `This session is a leaf delegate. Do the assigned work yourself; delegate and start_session are unavailable. Use mcp__whiffle__handoff to reach your parent or a session that already owns related work.\n\n${images}`;
+    return `This session is a leaf delegate. Do the assigned work yourself and call finish_item when it is done; delegate and start_session are unavailable. Use mcp__whiffle__handoff to reach your parent or a session that already owns related work.\n\n${images}`;
   }
   let catalog = deps.delegateTypes?.length
     ? delegateTypeLine(deps.delegateTypes).trim()

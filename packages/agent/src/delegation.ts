@@ -12,6 +12,9 @@ export const delegationHubUrl = () =>
   (readEnv(WHIFFLE_ENV.hubUrl) ?? `ws://localhost:${WHIFFLE_HUB_PORT}/ws`)
     .replace(WS_SCHEME, "http")
     .replace(WS_PATH, "");
+/** How long any call to the hub's tools may run: finish_item's checks set it. */
+const DELEGATION_CALL_TIMEOUT_MS = 24 * 60 * 60 * 1000;
+
 export const delegationMcp = (instanceId: string) => ({
   type: "http" as const,
   url: `${delegationHubUrl()}/mcp/whiffle?instanceId=${encodeURIComponent(instanceId)}`,
@@ -23,8 +26,10 @@ export const delegationMcp = (instanceId: string) => ({
   // alternative (`ENABLE_TOOL_SEARCH=false`) would load all 133 and reintroduce
   // the context cost this exists to avoid.
   alwaysLoad: true,
-  // Claude's HTTP first-response timeout is otherwise 60s, shorter than image generation.
-  timeout: IMAGE_GENERATION_TIMEOUT_MS + 60_000,
+  // A hard wall clock on every call to this server, and the floor of its idle
+  // limit: finish_item runs a work item's checks, up to an hour each, and
+  // image generation runs minutes. Claude's own default would cut both.
+  timeout: DELEGATION_CALL_TIMEOUT_MS,
 });
 
 export async function delegationTools(instanceId?: string) {
@@ -61,9 +66,11 @@ export async function callDelegationTool(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name, arguments: args }),
-      // A continuation summarises a whole session and has no bound to give.
-      ...(name === "continue_session"
-        ? {}
+      // A continuation summarises a whole session, and finish_item runs a
+      // work item's checks: neither has a bound to give, and neither writes
+      // a byte until it is done.
+      ...(name === "continue_session" || name === "finish_item"
+        ? { timeout: false }
         : {
             signal: AbortSignal.timeout(
               name === "generate_image"

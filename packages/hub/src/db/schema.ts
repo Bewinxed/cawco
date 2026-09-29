@@ -381,9 +381,24 @@ export type WorkItemState =
   | "cancelled";
 
 /**
+ * One acceptance check of a work item: a shell command the hub runs in the
+ * item's worktree when its session calls `finish_item`. It passes when it
+ * exits 0 and, where `expect` is given, its stdout contains it.
+ */
+export interface WorkItemCheck {
+  command: string;
+  expect?: string;
+  /** Two to six plain words. */
+  name: string;
+  /** Seconds before the command is killed; 600 when not given. */
+  timeoutSec?: number;
+}
+
+/**
  * One piece of delegated work: a brief, run by one session in one workspace,
  * ending in a report. A follow-up is a new item in the same workspace, run by
  * the same session; the reader or the parent can also reopen finished work.
+ * It is `done` only when the hub has run its checks and every one passed.
  */
 export const workItems = sqliteTable(
   "work_items",
@@ -404,7 +419,19 @@ export const workItems = sqliteTable(
     model: text("model"),
     effort: text("effort"),
     state: text("state").$type<WorkItemState>().notNull().default("starting"),
-    /** The final report: its session's last turn, in its own words. */
+    /**
+     * Its acceptance checks, run by the hub when its session calls
+     * `finish_item`. Null on an item filed before checks existed: that item
+     * still ends on a turn nothing answers.
+     */
+    checks: text("checks", { mode: "json" }).$type<WorkItemCheck[]>(),
+    /** The worktree's HEAD when the item started: its report's commits and diffstat run from here. */
+    baseCommit: text("base_commit"),
+    /**
+     * The final report: the summary, check results, commits and findings the
+     * hub built when the checks passed (an item without checks: its session's
+     * last turn, in its own words).
+     */
     result: text("result"),
     /** Why it failed. */
     error: text("error"),

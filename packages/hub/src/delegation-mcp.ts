@@ -17,6 +17,7 @@ type ToolFactory = typeof handoffTools;
 const LONG_CALLS: Record<string, string> = {
   generate_image: "Generating image through ChatGPT",
   continue_session: "Summarising the session",
+  finish_item: "Running the work item's acceptance checks",
 };
 
 /**
@@ -28,6 +29,8 @@ declare const __WHIFFLE_RELEASE__: boolean | undefined;
 
 export function createDelegationMcp(options: {
   instances: () => InstanceRow[];
+  /** Whether the session runs a work item with acceptance checks: it gets finish_item. */
+  checked: (row: InstanceRow) => boolean;
   baseUrl?: string;
   tools?: ToolFactory;
 }) {
@@ -44,11 +47,16 @@ export function createDelegationMcp(options: {
   let admin = adminTools();
   let adminNames = new Set(admin.map((t) => t.name));
 
-  const describe = (canDelegate?: boolean, workflowStepId?: string) => [
+  const describe = (
+    canDelegate?: boolean,
+    workflowStepId?: string,
+    workItem?: boolean
+  ) => [
     ...tools({
       instanceId: "",
       cwd: "",
       canDelegate,
+      workItem,
       workflowStepId,
       workflowRunId: workflowStepId ? "" : undefined,
       emit: () => {
@@ -214,6 +222,7 @@ export function createDelegationMcp(options: {
         cwd: actor.cwd,
         harness: actor.harness as "claude" | "opencode" | "pi",
         canDelegate: actor.canDelegate ?? undefined,
+        workItem: options.checked(actor),
         workflowStepId: actor.workflowStepId ?? undefined,
         workflowRunId: actor.workflowRunId ?? undefined,
         emit: (envelope) => emitted.push(envelope),
@@ -306,15 +315,29 @@ export function createDelegationMcp(options: {
         sessions.delete(sessionId);
       },
     });
+    // Read when the tools are listed, not when the connection opened: a
+    // session given a work item later lists finish_item once told to
+    // ({@link toolsChanged}). A connection bound to no session (OpenCode's,
+    // resolved per call) always offers it, and a call refuses it there for a
+    // session with no work item.
+    const workItem = (): boolean => {
+      if (!binding) {
+        return true;
+      }
+      const row = options.instances().find((r) => r.id === binding);
+      return row ? options.checked(row) : false;
+    };
     server.setRequestHandler(ListToolsRequestSchema, async () => ({
-      tools: describe(canDelegate, bound?.workflowStepId ?? undefined).map(
-        ({ name, description, inputSchema, ...entry }) => ({
-          name,
-          description,
-          inputSchema: inputSchema as { type: "object" },
-          ...("annotations" in entry ? { annotations: entry.annotations } : {}),
-        })
-      ),
+      tools: describe(
+        canDelegate,
+        bound?.workflowStepId ?? undefined,
+        workItem()
+      ).map(({ name, description, inputSchema, ...entry }) => ({
+        name,
+        description,
+        inputSchema: inputSchema as { type: "object" },
+        ...("annotations" in entry ? { annotations: entry.annotations } : {}),
+      })),
     }));
     server.setRequestHandler(CallToolRequestSchema, async (message, extra) => {
       const token = message.params._meta?.progressToken;
@@ -365,7 +388,8 @@ export function createDelegationMcp(options: {
     return {
       tools: describe(
         actor?.canDelegate ?? undefined,
-        actor?.workflowStepId ?? undefined
+        actor?.workflowStepId ?? undefined,
+        actor ? options.checked(actor) : false
       ).map(({ name, description, inputSchema, ...entry }) => ({
         name,
         description,
@@ -374,5 +398,17 @@ export function createDelegationMcp(options: {
       })),
     };
   };
-  return { handle, call, replaceTools, close, list };
+  /** Tells the connections bound to one session that its tool list moved. */
+  const toolsChanged = (instanceId: string): void => {
+    for (const { server, binding } of sessions.values()) {
+      if (binding === instanceId) {
+        server
+          .notification({ method: "notifications/tools/list_changed" })
+          .catch((error) =>
+            console.warn("[delegation-mcp] notification failed", error)
+          );
+      }
+    }
+  };
+  return { handle, call, replaceTools, close, list, toolsChanged };
 }
