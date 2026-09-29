@@ -3329,6 +3329,17 @@ export const createServer = ({
   };
 
   /**
+   * A summariser the continuation is done with: stopped on its machine, and
+   * recorded stopped here whether or not the machine still held it — one a
+   * restarted agent had already lost would otherwise sit `sleeping` forever.
+   */
+  const retireSummariser = (machineId: string, instanceId: string): void => {
+    stopFromHub(machineId, instanceId);
+    db.stopInstance(instanceId);
+    publishInstances(machineId);
+  };
+
+  /**
    * The summariser, start to stop: a fresh internal session `id` on the
    * chosen harness and model in the source's directory, asked `prompt`,
    * answered with what its transcript stores for that turn, then stopped
@@ -3375,7 +3386,7 @@ export const createServer = ({
         crypto.randomUUID()
       );
       await answered;
-      const text = await storedAnswer(id);
+      const text = await storedAnswer(id, true);
       if (!text) {
         throw new Error(
           "the summariser's turn ended without a finished answer in its transcript"
@@ -3384,18 +3395,24 @@ export const createServer = ({
       return text;
     } finally {
       turnWaiters.delete(id);
-      stopFromHub(source.machineId, id);
+      retireSummariser(source.machineId, id);
     }
   };
 
   /**
    * The answer a summariser's stored transcript holds for its turn, once
-   * that turn has ended ({@link finishedAnswer}); undefined before then, or
-   * when it never got as far as a transcript.
+   * that turn has ended ({@link finishedAnswer}; `ended` when its `result`
+   * frame was seen); undefined before then, or when it never got as far as a
+   * transcript.
    */
-  const storedAnswer = async (id: string): Promise<string | undefined> => {
+  const storedAnswer = async (
+    id: string,
+    ended: boolean
+  ): Promise<string | undefined> => {
     const where = await locateSession(id);
-    return where ? finishedAnswer(await readMessages(where, false)) : undefined;
+    return where
+      ? finishedAnswer(await readMessages(where, false), ended)
+      : undefined;
   };
 
   /**
@@ -3858,8 +3875,8 @@ export const createServer = ({
         cancelled
       );
     }
-    const answered = await storedAnswer(current);
-    stopFromHub(source.machineId, current);
+    const answered = await storedAnswer(current, false);
+    retireSummariser(source.machineId, current);
     if (answered) {
       return answered;
     }
@@ -3938,7 +3955,7 @@ export const createServer = ({
       turnWaiters
         .get(row.summariserInstanceId)
         ?.reject(new Error(CONTINUATION_CANCELLED));
-      stopFromHub(row.prepared.source.machineId, row.summariserInstanceId);
+      retireSummariser(row.prepared.source.machineId, row.summariserInstanceId);
     }
     return { row: cancelled };
   };

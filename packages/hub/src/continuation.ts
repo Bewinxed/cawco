@@ -559,13 +559,19 @@ const SECTIONS = [
 /**
  * What a session's last turn answered with, as its transcript stores it: the
  * text blocks of the assistant entries after the last user entry (the prompt,
- * or the last tool result), in order — once that turn has ended
- * ({@link SessionMessage.turnEnd}); before then, nothing. Read from storage
- * because a harness's live frames can repeat what they carry (opencode
- * streams a block's text as it grows), and because the transcript is the one
- * record of an answer that finished while the hub was not listening.
+ * or the last tool result), in order — once that turn has ended; before then,
+ * nothing. `ended` is the live word that it has (the turn's `result` frame);
+ * without it, the transcript's own {@link SessionMessage.turnEnd} must say so,
+ * as it must for an answer that finished while the hub was not listening. A
+ * harness writes that mark after the frame goes out (opencode stamps the
+ * message complete a beat later), so a reader that just saw the frame must not
+ * wait on it. Read from storage because a harness's live frames can repeat
+ * what they carry (opencode streams a block's text as it grows).
  */
-export function finishedAnswer(entries: SessionMessage[]): string | undefined {
+export function finishedAnswer(
+  entries: SessionMessage[],
+  ended: boolean
+): string | undefined {
   let start = entries.length;
   while (start > 0 && entries[start - 1].type !== "user") {
     start -= 1;
@@ -575,7 +581,7 @@ export function finishedAnswer(entries: SessionMessage[]): string | undefined {
     .filter((entry) => entry.type === "assistant");
   // Only a turn its model ended: one still being written, stopped on a tool
   // call, or cut short has no answer yet.
-  if (!answer.at(-1)?.turnEnd) {
+  if (!(ended || answer.at(-1)?.turnEnd)) {
     return undefined;
   }
   const text = answer
