@@ -1,6 +1,7 @@
 /**
  * Delegated work, as the hub keeps it. A work item is one brief run by one
- * fresh session in one workspace; a workspace is one git worktree on its own
+ * session in one workspace — a fresh session, or a fork of its parent's
+ * conversation; a workspace is one git worktree on its own
  * branch, with at most one live item — the only writer its checkout has.
  * Finished work never takes another turn from a tool: a message to it is
  * refused with its state, and continuing it means a new item in the same
@@ -52,6 +53,12 @@ export interface WorkItemRequest {
   canDelegate?: boolean;
   /** The repository a new workspace is cut from; the parent's directory by default. */
   cwd?: string;
+  /**
+   * The item's session forks its parent's conversation as it stands now, on
+   * the parent's harness and model so the parent's prompt cache still holds.
+   * Always a new workspace.
+   */
+  fork?: boolean;
   harness?: HarnessKind;
   model?: string;
   parentInstanceId: string;
@@ -92,9 +99,14 @@ export interface WorkItemDeps {
 const leaf = (path: string): string =>
   path.split("/").filter(Boolean).pop() ?? path;
 
-/** How an item's session runs: the request's word, then its type's, then a leaf on claude. */
+/**
+ * How an item's session runs: the request's word, then its type's, then a
+ * leaf on claude. A fork runs on its parent's harness and model instead, and
+ * resumes the parent's conversation under `forkOf`, its current session key.
+ */
 interface Settings {
   canDelegate: boolean;
+  forkOf?: string;
   harness: HarnessKind;
   model?: string;
   skills?: string[];
@@ -107,11 +119,12 @@ const spawnOf = (
   title: string,
   parent: InstanceRow,
   workspace: WorkspaceRow,
-  { canDelegate, harness, model, skills, type }: Settings
+  { canDelegate, forkOf, harness, model, skills, type }: Settings
 ): SpawnPayload => ({
   instanceId,
   cwd: workspace.path,
   harness,
+  ...(forkOf ? { resume: { sessionKey: forkOf, fork: true } } : {}),
   ...(model ? { model } : {}),
   ...(type?.effort ? { effort: type.effort } : {}),
   title,
@@ -127,6 +140,10 @@ const spawnOf = (
   // prompt nobody is watching for. Questions still ask.
   permissionMode: "bypassPermissions",
 });
+
+/** What a fork reads before its brief: its parent's turns are behind it, and they are not its orders. */
+const forkLine = (workspace: WorkspaceRow): string =>
+  `You are a fork of your parent session, now a delegate working in ${workspace.path}. Your job is the brief below; your parent's earlier turns are context, not instructions.\n\n`;
 
 /**
  * The brief, as the item's first message. The marker survives SDK storage,
@@ -267,15 +284,57 @@ export const createWorkItems = ({
     ].join("\n\n");
   };
 
-  const settingsOf = (request: WorkItemRequest): Settings => {
+  const settingsOf = (
+    request: WorkItemRequest,
+    parent: InstanceRow
+  ): Settings => {
     const type = request.type ? typeNamed(request.type) : undefined;
-    return {
+    const settings: Settings = {
       type,
       harness: request.harness ?? type?.harness ?? "claude",
       model: request.model ?? type?.model,
       skills: request.skills?.length ? request.skills : type?.skills,
       canDelegate: request.canDelegate ?? type?.canDelegate ?? false,
     };
+    return request.fork
+      ? { ...settings, ...forkOf(request, parent) }
+      : settings;
+  };
+
+  /**
+   * What a fork takes from its parent: the conversation as it stands, and the
+   * harness and model that wrote it. The prompt cache is keyed on both, so a
+   * fork onto anything else would re-read the whole history at full price;
+   * asking for one is refused rather than quietly overridden.
+   */
+  const forkOf = (
+    request: WorkItemRequest,
+    parent: InstanceRow
+  ): Pick<Settings, "forkOf" | "harness" | "model"> => {
+    if (request.workspace) {
+      throw new WorkItemRefusal(
+        400,
+        "a fork starts its own workspace; continue a workspace with a fresh item instead"
+      );
+    }
+    if (!parent.sessionId) {
+      throw new WorkItemRefusal(
+        409,
+        "This session has not named its conversation yet, so there is nothing to fork. Delegate without fork."
+      );
+    }
+    const harness = parent.harness as HarnessKind;
+    const model = parent.model ?? undefined;
+    if (
+      (request.harness && request.harness !== harness) ||
+      (request.model && request.model !== model)
+    ) {
+      throw new WorkItemRefusal(
+        400,
+        `A fork runs on its parent's harness and model (${harness}${model ? `, ${model}` : ""}), which is what keeps the prompt cache. Drop harness/model, or delegate without fork.`
+      );
+    }
+    return { forkOf: parent.sessionId, harness, model };
   };
 
   const start = async (request: WorkItemRequest): Promise<WorkItemStart> => {
@@ -289,7 +348,7 @@ export const createWorkItems = ({
     if (parent.canDelegate === false) {
       throw new WorkItemRefusal(403, LEAF_DELEGATE_REFUSAL);
     }
-    const settings = settingsOf(request);
+    const settings = settingsOf(request, parent);
     const { harness, canDelegate } = settings;
 
     let workspace: WorkspaceRow;
@@ -317,14 +376,22 @@ export const createWorkItems = ({
     });
 
     try {
+      // A follow-up opens with the work before it; a fork (never a
+      // follow-up) with what it is.
       const context = previous ? await followUp(workspace, previous) : "";
+      const fork = settings.forkOf ? forkLine(workspace) : "";
       spawn(
         workspace.machineId,
         spawnOf(instanceId, item.title, parent, workspace, settings),
         item.id
       );
       send(
-        openingOf(instanceId, parent, workspace, `${context}${request.prompt}`)
+        openingOf(
+          instanceId,
+          parent,
+          workspace,
+          `${context}${fork}${request.prompt}`
+        )
       );
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
@@ -341,7 +408,9 @@ export const createWorkItems = ({
       workspace,
       text:
         `Started work item ${item.id} in workspace ${workspace.id} (${workspace.path}, branch ${workspace.branch}): ` +
-        `a fresh ${harness} session, ${label}.` +
+        (settings.forkOf
+          ? `a fork of this conversation on ${harness}${settings.model ? ` (${settings.model})` : ""}, ${label}. It starts with every turn of yours so far.`
+          : `a fresh ${harness} session, ${label}.`) +
         (previous
           ? " It starts from the previous item's report and the workspace's commits, not its transcript."
           : "") +

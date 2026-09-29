@@ -353,20 +353,21 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "delegate",
-      "Run a task as a SUB-AGENT: a new temporary fleet session with its own fresh context, which reports back here automatically when its turn completes.\n\n" +
+      "Run a task as a SUB-AGENT: a new temporary fleet session with its own fresh context (or, with `fork`, a copy of this one), which reports back here automatically when its turn completes.\n\n" +
         "Use this for SUBSTANTIAL bounded work that must report back: multi-file implementation, a sweep that would take dozens of reads across a codebase, builds or deploys with verification loops, browser audits, evidence you must interpret across many files or logs. A delegate answers those in its own fresh context and hands back conclusions.\n\n" +
         "Run menial work yourself: git status/log/diff, ls/grep/find, reading a file or a handful of files, port and process checks, tailing a log, a dev-server restart, and the reads needed to write a brief. Ten read-only commands in a row is normal prep; a delegate for that costs more than the task and its report costs more to read than the output.\n\n" +
-        "Do NOT delegate: a single command or file read whose exact output you need; work that depends on conversation context you cannot write into the brief; edits to files you are actively changing; anything the user asked to watch you do directly.\n\n" +
-        "The delegate cannot see this conversation, so `prompt` must stand alone: intent, constraints, acceptance criteria, and what not to do. Keep the decisions yourself and ask for evidence and conclusions, not file dumps.\n\n" +
+        "Do NOT delegate: a single command or file read whose exact output you need; edits to files you are actively changing; anything the user asked to watch you do directly.\n\n" +
+        "A delegate that is not a fork cannot see this conversation, so `prompt` must stand alone: intent, constraints, acceptance criteria, and what not to do. Keep the decisions yourself and ask for evidence and conclusions, not file dumps.\n\n" +
         "Prefer `type` over raw harness/model — it routes by what the work needs rather than a model string you must already know; use list_delegate_types for the live catalog. Prefer this over start_session when the work must report back, and over handoff for new standalone work (set cwd for another repository).\n\n" +
         "Each call starts one work item in a workspace: a git worktree on its own branch. Without `workspace` the item gets a new one; with `workspace` it is the follow-up there, starting from the previous item's report and commits, never its transcript. " +
-        "A workspace runs one item at a time, and finished work refuses messages: continue it with a new item in its workspace." +
+        "A workspace runs one item at a time, and finished work refuses messages: continue it with a new item in its workspace.\n\n" +
+        "Set `fork: true` when the work needs what this conversation already holds: the delegate starts as a copy of this conversation (on this session's harness and model, so the prompt cache carries over) and reads the brief as its next turn, in a new workspace of its own." +
         delegateTypeLine(deps.delegateTypes),
       {
         prompt: z
           .string()
           .describe(
-            "The full brief. The delegate cannot see this conversation."
+            "The full brief. Unless it is a fork, the delegate cannot see this conversation."
           ),
         type: z
           .string()
@@ -415,6 +416,15 @@ export function handoffTools(deps: HandoffDeps) {
               "follow-up: a fresh session in that workspace's checkout, briefed with the previous item's " +
               "report and the workspace's commits. Refused while an item there is still running."
           ),
+        fork: z
+          .boolean()
+          .optional()
+          .describe(
+            "Start the delegate as a fork of this conversation: every turn so far, then the brief. It runs " +
+              "on this session's harness and model (an explicit different harness/model is refused, since " +
+              "the prompt cache would not carry over); `type` still sets effort, skills and denied tools. " +
+              "Always a new workspace, so not with `workspace`."
+          ),
         can_delegate: z
           .boolean()
           .optional()
@@ -433,6 +443,7 @@ export function handoffTools(deps: HandoffDeps) {
         cwd,
         skills,
         workspace,
+        fork,
         can_delegate,
       }) => {
         const result = await actions.delegate(prompt, {
@@ -441,6 +452,7 @@ export function handoffTools(deps: HandoffDeps) {
           model,
           skills,
           workspace,
+          fork,
           type,
           canDelegate: can_delegate,
         });

@@ -1240,10 +1240,25 @@ const UNREAD = {
  */
 const STORED_TAIL = 50;
 
-const peekInit = (
+/**
+ * The conversation a frame says its session is writing, when it says so. Two
+ * frames do: every `init` — a new process, a fork, a `/clear` that starts a
+ * new conversation in the same process, and each later turn — and the
+ * `held` an agent opens with when it takes over a claude child that outlived
+ * the agent before it, which carries the key off the child's own output
+ * because the child writes no `init` until its next turn. Each one is the
+ * harness's current word, so the row follows it whether or not it changed.
+ */
+const peekSessionKey = (
   payload: unknown
 ):
-  | { sessionId: string; cwd?: string; tooling?: SessionTooling }
+  | {
+      sessionId: string;
+      cwd?: string;
+      tooling?: SessionTooling;
+      /** An `init`: a process answering right now. */
+      init: boolean;
+    }
   | undefined => {
   if (typeof payload !== "object" || payload === null) {
     return undefined;
@@ -1253,16 +1268,21 @@ const peekInit = (
     return undefined;
   }
   const sdk = message as Record<string, unknown>;
-  if (sdk.type !== "system" || sdk.subtype !== "init") {
+  if (
+    sdk.type !== "system" ||
+    !(sdk.subtype === "init" || sdk.subtype === MESSAGES_HELD) ||
+    typeof sdk.session_id !== "string"
+  ) {
     return undefined;
   }
-  if (typeof sdk.session_id !== "string") {
-    return undefined;
+  if (sdk.subtype === MESSAGES_HELD) {
+    return { sessionId: sdk.session_id, init: false };
   }
   return {
     sessionId: sdk.session_id,
     cwd: typeof sdk.cwd === "string" ? sdk.cwd : undefined,
     tooling: initTooling(sdk),
+    init: true,
   };
 };
 
@@ -7201,6 +7221,7 @@ export const createServer = ({
             canDelegate: t.Optional(t.Boolean()),
             cwd: t.Optional(t.String()),
             workspace: t.Optional(t.String()),
+            fork: t.Optional(t.Boolean()),
           }),
         },
         async ({ body, status }) => {
@@ -7969,6 +7990,38 @@ export const createServer = ({
               ) {
                 break;
               }
+              // The conversation the session is writing, whenever it names one —
+              // read before anything below can consume the frame, since a
+              // `held` naming it is also a send signal.
+              if (kind === "frame" && message.instanceId) {
+                const named = peekSessionKey(message.payload);
+                if (named) {
+                  db.noteInstanceSession(
+                    message.instanceId,
+                    named.sessionId,
+                    named.cwd,
+                    peek(message.payload, "harness"),
+                    named.tooling
+                  );
+                  if (named.init) {
+                    // The session naming its own conversation is the daemon's word
+                    // that a process exists — first-hand, and the earliest such word
+                    // there is. Promoting on it means a fresh spawn reads `running`
+                    // in a second rather than waiting up to a beat for the heartbeat
+                    // to say the same thing. The row is left alone if it is already
+                    // there; `markInstanceLive` only touches the states a live
+                    // process can be wrongly filed under.
+                    db.markInstanceLive(message.instanceId);
+                    workflowRuntime.instanceLive(message.instanceId);
+                    const [live] = db.getInstancesByIds([message.instanceId]);
+                    if (live) {
+                      workItems.started(live);
+                    }
+                    heldSessions.delete(message.instanceId);
+                  }
+                  publishInstances(message.machineId);
+                }
+              }
               // The harness's word on its sends becomes their records, and goes
               // no further: every screen hears it as the records' `send` frames.
               // Everything else the session says is read for what its turn
@@ -8042,33 +8095,6 @@ export const createServer = ({
                   deliverDelegateAsk(sender, parent, message);
                 } else {
                   telegram?.onAsk(message);
-                }
-              }
-              if (kind === "frame" && message.instanceId) {
-                const init = peekInit(message.payload);
-                if (init) {
-                  db.noteInstanceSession(
-                    message.instanceId,
-                    init.sessionId,
-                    init.cwd,
-                    peek(message.payload, "harness"),
-                    init.tooling
-                  );
-                  // The session naming its own conversation is the daemon's word
-                  // that a process exists — first-hand, and the earliest such word
-                  // there is. Promoting on it means a fresh spawn reads `running`
-                  // in a second rather than waiting up to a beat for the heartbeat
-                  // to say the same thing. The row is left alone if it is already
-                  // there; `markInstanceLive` only touches the states a live
-                  // process can be wrongly filed under.
-                  db.markInstanceLive(message.instanceId);
-                  workflowRuntime.instanceLive(message.instanceId);
-                  const [live] = db.getInstancesByIds([message.instanceId]);
-                  if (live) {
-                    workItems.started(live);
-                  }
-                  heldSessions.delete(message.instanceId);
-                  publishInstances(message.machineId);
                 }
               }
               // The daemon's live reading of one session. Kept in memory only, so

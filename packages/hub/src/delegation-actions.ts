@@ -337,7 +337,7 @@ export interface HandoffActions {
   }>;
   readonly createWorkflow: (name: string, program: string) => Promise<unknown>;
   /**
-   * Starts a work item: a fresh session in a new workspace, or the follow-up
+   * Starts a work item: a fresh session or a fork of this one in a new workspace, or the follow-up
    * in an existing one. The hub decides and files everything; this is its
    * request.
    */
@@ -363,6 +363,8 @@ export interface HandoffActions {
       canDelegate?: boolean;
       /** An existing workspace's id: the new item is its follow-up. */
       workspace?: string;
+      /** The item's session forks this conversation, in a new workspace. */
+      fork?: boolean;
     }
   ): Promise<DelegateResult>;
   readonly generateImage: (
