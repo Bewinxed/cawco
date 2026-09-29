@@ -398,6 +398,7 @@
     void draft;
     untrack(() => {
       dismissed = true;
+      caret = draft.text.length;
     });
   });
 
@@ -808,12 +809,16 @@
        change what this row measures). Prompts stand on top of both. -->
   <div class="lift" bind:clientHeight={lift}>
     {#if suggest && suggestions.enabled}
-      <SuggestionChips
-        candidates={suggest.candidates}
-        oninsert={insertSuggestion}
-        text={draft.text}
-        bind:this={chips}
-      />
+      <!-- Keyed by conversation: the ranking is of one chat's words, and the
+           shared phone composer must not carry it into the next chat. -->
+      {#key draft}
+        <SuggestionChips
+          candidates={suggest.candidates}
+          oninsert={insertSuggestion}
+          text={draft.text}
+          bind:this={chips}
+        />
+      {/key}
     {/if}
     {#if delegatesOf}
       <div class="tray-slot">
