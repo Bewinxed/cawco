@@ -11,6 +11,11 @@ import { askNouls } from "./jev";
  * supervisor composes `llm` ones — and both see the same turn end. So the
  * judge asks once per turn frame, every in-scope meaning rule in the one call,
  * and hands each engine the same answer.
+ *
+ * Besides what the session said, Jev reads `live_delegated_work`: the titles
+ * of the session's work items still starting or running, or `none`. A rule
+ * that exempts work already handed to someone doing it now judges that from
+ * this fact, not from how the session describes its delegates.
  */
 
 /** A noul at or above this fires the rule. */
@@ -66,7 +71,10 @@ export class MeaningJudge {
     const answer = this.#ask(
       instanceId,
       rules.map((rule) => ({ rule, subject: SUBJECT.text })),
-      { agent_output: tail(text) }
+      {
+        agent_output: tail(text),
+        live_delegated_work: this.#liveDelegatedWork(instanceId),
+      }
     );
     this.#turns.set(frame, answer);
     return answer;
@@ -96,7 +104,9 @@ export class MeaningJudge {
         return said !== "" || thinking !== "";
       })
       .map((rule) => ({ rule, subject: SUBJECT[rule.watch] }));
-    const state: Record<string, string> = {};
+    const state: Record<string, string> = {
+      live_delegated_work: this.#liveDelegatedWork(instanceId),
+    };
     if (asked.some(({ rule }) => rule.watch !== "thinking")) {
       state.agent_output = tail(said);
     }
@@ -104,6 +114,12 @@ export class MeaningJudge {
       state.agent_thinking = tail(thinking);
     }
     return this.#ask(instanceId, asked, state);
+  }
+
+  /** The titles of the session's work items still starting or running, or `none`. */
+  #liveDelegatedWork(instanceId: string): string {
+    const live = this.#db.liveWorkItemsOf(instanceId);
+    return live.length > 0 ? live.map((item) => item.title).join("; ") : "none";
   }
 
   async #ask(
