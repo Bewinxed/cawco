@@ -143,6 +143,7 @@ import { UsageCounter } from "./usage-count";
 import {
   createWorkItems,
   LEAF_DELEGATE_REFUSAL,
+  SESSION_TITLE_DESCRIPTION,
   WorkItemRefusal,
 } from "./work-items";
 import { workflowRoutes } from "./workflows/routes";
@@ -7250,6 +7251,7 @@ export const createServer = ({
           body: t.Object({
             parentInstanceId: t.String({ minLength: 1 }),
             prompt: t.String(),
+            title: t.String(),
             type: t.Optional(t.String()),
             harness: t.Optional(harnessSchema),
             model: t.Optional(t.String()),
@@ -7259,6 +7261,28 @@ export const createServer = ({
             workspace: t.Optional(t.String()),
             fork: t.Optional(t.Boolean()),
           }),
+          // A 400 that says which field is missing or malformed, in words:
+          // a delegate without a title is refused, never named from its brief.
+          error({ error, status }) {
+            if (error instanceof ValidationError) {
+              const [first] = error.all as {
+                path: string;
+                message: string;
+                params?: { requiredProperties?: string[] };
+              }[];
+              // A missing field has no path of its own; its name is in params.
+              const field =
+                first?.params?.requiredProperties?.[0] ??
+                first?.path.slice(1) ??
+                "";
+              return status(
+                400,
+                field === "title"
+                  ? `title is required: ${SESSION_TITLE_DESCRIPTION}`
+                  : `${field || "body"}: ${first?.message ?? error.message}`
+              );
+            }
+          },
         },
         async ({ body, status }) => {
           try {

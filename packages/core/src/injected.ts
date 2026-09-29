@@ -26,10 +26,6 @@ export const workflowStepMarker = (workflow: string, step: string): string =>
 const HANDOFF =
   /^\[Hand-off from the (.+?) (?:session — another agent|workflow — step (.+?)), not the user\]\s+/;
 
-/** A message without the hand-off marker it opens with. */
-export const withoutHandoffMarker = (text: string): string =>
-  text.replace(HANDOFF, "");
-
 /**
  * The opening of a session the daemon started in a fresh git worktree of
  * `cwd`, with the line that says so right after any hand-off marker.

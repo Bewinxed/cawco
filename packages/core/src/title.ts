@@ -8,8 +8,6 @@
  * deriving it on the hub is meant to remove.
  */
 
-import { withoutHandoffMarker } from "./injected";
-
 /** How long a title derived from a first message runs before it is cut. */
 export const TITLE_LIMIT = 80;
 
@@ -21,15 +19,13 @@ const WHITESPACE_RUN = /\s+/g;
 /**
  * A session's first message as a title. A slash command's first message is the
  * harness echo, which wraps the invocation in `<command-message>` /
- * `<command-name>` — show the command, not the raw XML. A session another
- * session started opens with the hand-off marker, which says who sent it, not
- * what it is for: the title is the brief after it. Anything else has its
- * markup stripped and is folded onto one line.
+ * `<command-name>` — show the command, not the raw XML. Anything else has its
+ * markup stripped and is folded onto one line. A session another session
+ * started or delegated to is named by its caller, so it never gets here.
  */
 export function deriveTitleFromFirstMessage(raw: string): string {
-  const said = withoutHandoffMarker(raw);
-  const command = COMMAND_ECHO.exec(said)?.[1]?.trim();
-  const cleaned = (command ?? said.replace(ANY_TAG, " "))
+  const command = COMMAND_ECHO.exec(raw)?.[1]?.trim();
+  const cleaned = (command ?? raw.replace(ANY_TAG, " "))
     .replace(WHITESPACE_RUN, " ")
     .trim();
   return cleaned.slice(0, TITLE_LIMIT);

@@ -27,8 +27,25 @@ import {
   handoffMarker,
   withWorktreeLine,
 } from "@whiffle/core";
-import { briefTitle } from "./brief-title";
 import type { DbShape, WorkItemRow, WorkspaceRow } from "./db";
+
+/** How long the name a caller gives a delegate or a started session may run. */
+export const SESSION_TITLE_MAX = 48;
+
+/** What the caller's model is asked for when it names a delegate or a started session. */
+export const SESSION_TITLE_DESCRIPTION =
+  "What this delegate is doing, in 3–6 plain words, verb first, e.g. 'Fix tray chip overflow'. It names the session in the sidebar and the tray chip.";
+
+/** Why a title a caller gave cannot name a session, or nothing when it can. */
+export const titleProblem = (title: string): string | undefined => {
+  const { length } = title.trim();
+  if (!length) {
+    return "title is blank. Name the work in 3–6 plain words, verb first, e.g. 'Fix tray chip overflow'.";
+  }
+  return length > SESSION_TITLE_MAX
+    ? `title runs ${length} characters; the limit is ${SESSION_TITLE_MAX}. Name the work in 3–6 plain words, verb first.`
+    : undefined;
+};
 
 /** What a leaf delegate hears when it tries to spawn — relayed verbatim to the model. */
 export const LEAF_DELEGATE_REFUSAL =
@@ -65,6 +82,8 @@ export interface WorkItemRequest {
   parentInstanceId: string;
   prompt: string;
   skills?: string[];
+  /** What the caller named the work: the item's title and its session's. */
+  title: string;
   type?: string;
   /** An existing workspace's id or unique prefix: the item is its follow-up. */
   workspace?: string;
@@ -392,6 +411,10 @@ export const createWorkItems = ({
     if (parent.canDelegate === false) {
       throw new WorkItemRefusal(403, LEAF_DELEGATE_REFUSAL);
     }
+    const untitled = titleProblem(request.title);
+    if (untitled) {
+      throw new WorkItemRefusal(400, untitled);
+    }
     const settings = settingsOf(request, parent);
     const { harness, canDelegate } = settings;
 
@@ -411,7 +434,7 @@ export const createWorkItems = ({
       parentInstanceId: parent.id,
       instanceId,
       brief: request.prompt,
-      title: briefTitle(request.prompt) ?? label,
+      title: request.title.trim(),
       type: settings.type?.name,
       harness,
       model: settings.model,

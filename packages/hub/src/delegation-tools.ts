@@ -7,6 +7,16 @@ import {
   handoffActions,
   SPAWNING_TOOLS,
 } from "./delegation-actions";
+import { SESSION_TITLE_DESCRIPTION, SESSION_TITLE_MAX } from "./work-items";
+
+/** The name the caller gives a session it starts or delegates to; never cut from the brief. */
+const sessionTitle = () =>
+  z
+    .string()
+    .trim()
+    .min(1)
+    .max(SESSION_TITLE_MAX)
+    .describe(SESSION_TITLE_DESCRIPTION);
 
 function tool<T extends z.ZodRawShape>(
   name: string,
@@ -325,6 +335,7 @@ export function handoffTools(deps: HandoffDeps) {
           .describe(
             "The opening instruction. Write it as a full brief: the new session cannot see this conversation."
           ),
+        title: sessionTitle(),
         sideQuest: z
           .boolean()
           .optional()
@@ -337,10 +348,11 @@ export function handoffTools(deps: HandoffDeps) {
           .optional()
           .describe("Model id. Omit to let the SDK choose."),
       },
-      async ({ cwd, prompt, sideQuest, model }) => {
+      async ({ cwd, prompt, title, sideQuest, model }) => {
         const result = await actions.startSession(
           cwd,
           prompt,
+          title,
           sideQuest,
           model
         );
@@ -369,6 +381,7 @@ export function handoffTools(deps: HandoffDeps) {
           .describe(
             "The full brief. Unless it is a fork, the delegate cannot see this conversation."
           ),
+        title: sessionTitle(),
         type: z
           .string()
           .optional()
@@ -437,6 +450,7 @@ export function handoffTools(deps: HandoffDeps) {
       },
       async ({
         prompt,
+        title,
         type,
         harness,
         model,
@@ -447,6 +461,7 @@ export function handoffTools(deps: HandoffDeps) {
         can_delegate,
       }) => {
         const result = await actions.delegate(prompt, {
+          title,
           cwd,
           harness,
           model,

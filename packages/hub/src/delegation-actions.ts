@@ -344,7 +344,9 @@ export interface HandoffActions {
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   delegate(
     prompt: string,
-    opts?: {
+    opts: {
+      /** What the caller named the work: the item's and its session's title. */
+      title: string;
       /** The repository a new workspace is cut from; this session's directory by default. */
       cwd?: string;
       harness?: "claude" | "opencode" | "pi";
@@ -392,6 +394,7 @@ export interface HandoffActions {
   startSession(
     cwd: string,
     prompt: string,
+    title: string,
     sideQuest?: boolean,
     model?: string
   ): Promise<HandoffResult>;
@@ -745,6 +748,7 @@ export const handoffActions = ({
   async startSession(
     workdir: string,
     prompt: string,
+    title: string,
     sideQuest = false,
     model?: string
   ): Promise<HandoffResult> {
@@ -753,6 +757,7 @@ export const handoffActions = ({
     const payload: SpawnPayload = {
       instanceId: id,
       cwd: workdir,
+      title,
       ...(callerHarness ? { harness: callerHarness } : {}),
       ...(model ? { model } : {}),
       ...(sideQuest ? { scratch: { baseCwd: workdir } } : {}),
@@ -784,9 +789,9 @@ export const handoffActions = ({
     emit({ verb: "send", machineId: "", instanceId: id, payload: opening });
     return {
       id,
-      title: leafOf(workdir),
+      title,
       text:
-        `Started ${leafOf(workdir)}${sideQuest ? " as a side quest" : ""} in ${workdir}. ` +
+        `Started "${title}" (${leafOf(workdir)})${sideQuest ? " as a side quest" : ""} in ${workdir}. ` +
         "It is in the sidebar now and the user can open its transcript. " +
         `Hand it more work later with handoff("${id}", ...).`,
     };
