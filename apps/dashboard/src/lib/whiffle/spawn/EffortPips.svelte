@@ -23,8 +23,6 @@
     embedded?: boolean;
   } = $props();
 
-  /** From a stop to the fill end it marks: the fill's 3px inset plus the chip's padding. */
-  const STOP_INSET = 12;
   let knobWidth = $state(0);
   /** Transitions wait for the chip's first measurement, so nothing slides in from zero. */
   let ready = $state(false);
@@ -45,14 +43,16 @@
     Math.max(0, efforts.indexOf(displayed as EffortLevel))
   );
   const frac = (i: number) => (n > 1 ? i / (n - 1) : 0);
-  const p = $derived(frac(effortIdx));
-  let hover = $state(-1);
+  /** While dragging the fill follows the pointer freely; on release it settles on a level. */
+  let dragFrac = $state<number | null>(null);
+  const p = $derived(dragFrac ?? frac(effortIdx));
+  let hover = $state(false);
   let drag = $state(false);
   /** Keyboard focus only; a pointer or an opening popover focusing the input is not shown. */
   let focused = $state(false);
-  /** Where on the chip it was grabbed, so a drag moves it from there rather than jumping. */
+  /** Offset from the pointer to the chip's centre at grab, so a drag moves it from there. */
   let grab = 0;
-  const active = $derived(hover >= 0 || drag || focused);
+  const active = $derived(hover || drag || focused);
   /** Stops still ahead of the level, so the track says where else it can go. */
   const pips = $derived(
     efforts.map((_, i) => ({ frac: frac(i), on: i > effortIdx }))
@@ -72,62 +72,61 @@
     }
   }
 
-  /** The pointer's x inside the track, and whether it is over the chip. */
+  /** The pointer's x inside the track, and the rail the chip's centre travels. */
   function locate(event: PointerEvent) {
     const el = event.currentTarget as HTMLElement;
     const x = event.clientX - el.getBoundingClientRect().left - el.clientLeft;
-    const rail = el.clientWidth - kw;
-    const end = kw + p * rail - 3;
-    return { x, rail, onKnob: x >= end - knobWidth && x <= end };
+    return { x, rail: Math.max(1, el.clientWidth - kw) };
   }
-  /** The level whose stop is nearest `x`. */
-  function levelAt(x: number, rail: number) {
-    const f = (x - kw + STOP_INSET) / rail;
-    return Math.min(n - 1, Math.max(0, Math.round(f * (n - 1))));
+  const clamp01 = (f: number) => Math.min(1, Math.max(0, f));
+  /** The chip's centre sits at kw/2 + f * rail. */
+  function fracAt(x: number, rail: number) {
+    return clamp01((x - kw / 2) / rail);
   }
+  const levelOf = (f: number) => Math.round(f * (n - 1));
   function down(event: PointerEvent) {
     if (!n || (event.pointerType === "mouse" && event.button !== 0)) {
       return;
     }
     event.preventDefault();
-    const { x, rail, onKnob } = locate(event);
-    grab = onKnob ? kw + p * rail - STOP_INSET - x : 0;
+    const { x, rail } = locate(event);
+    const centre = kw / 2 + p * rail;
+    const onKnob = Math.abs(x - centre) <= kw / 2;
+    grab = onKnob ? centre - x : 0;
     try {
       (event.currentTarget as HTMLElement).setPointerCapture(event.pointerId);
     } catch {
       // Pointer capture is a nicety; the move handler still tracks the pointer.
     }
     drag = true;
-    hover = -1;
-    if (!onKnob) {
-      change(efforts[levelAt(x, rail)]);
-    }
+    hover = false;
+    dragFrac = fracAt(x + grab, rail);
+    change(efforts[levelOf(dragFrac)]);
   }
   function move(event: PointerEvent) {
     if (!n) {
       return;
     }
-    const { x, rail, onKnob } = locate(event);
     if (drag) {
-      const idx = levelAt(x + grab, rail);
-      if (efforts[idx] !== displayed) {
-        change(efforts[idx]);
+      const { x, rail } = locate(event);
+      dragFrac = fracAt(x + grab, rail);
+      const level = efforts[levelOf(dragFrac)];
+      if (level !== displayed) {
+        change(level);
       }
       return;
     }
-    const idx = onKnob ? effortIdx : levelAt(x, rail);
-    if (idx !== hover) {
-      hover = idx;
-    }
+    hover = true;
   }
   function up() {
     commit();
     drag = false;
-    hover = -1;
+    dragFrac = null;
+    hover = false;
   }
   function leave() {
     if (!drag) {
-      hover = -1;
+      hover = false;
     }
   }
 </script>
@@ -139,7 +138,7 @@
   >
     <div
       class="track"
-      onpointercancel={() => { draft = null; drag = false; hover = -1; }}
+      onpointercancel={() => { draft = null; drag = false; dragFrac = null; hover = false; }}
       onpointerdown={down}
       onpointerleave={leave}
       onpointermove={move}
@@ -147,6 +146,7 @@
       role="presentation"
       style={`--kw:${kw}px`}
       class:focus={focused}
+      class:dragging={drag}
       class:ready={ready}
     >
       <div
@@ -160,7 +160,7 @@
           bind:offsetWidth={knobWidth}
         >
           {#if n}
-            <span aria-hidden="true" class="meter">
+            <span aria-hidden="true" class="level-bars">
               {#each efforts as level, i (level)}
                 <span
                   class="bar"
@@ -182,7 +182,7 @@
         <span
           class="pip"
           data-pip={i}
-          style={`left:calc(var(--kw) - ${STOP_INSET + 2.5}px + ${pip.frac} * (100% - var(--kw)));opacity:${pip.on ? 0.3 : 0}`}
+          style={`left:calc(var(--kw) / 2 - 2.5px + ${pip.frac} * (100% - var(--kw)));opacity:${pip.on ? 0.3 : 0}`}
         ></span>
       {/each}
       <input
@@ -246,7 +246,9 @@
       box-shadow 120ms ease;
   }
   .track:not(.ready),
-  .track:not(.ready) * {
+  .track:not(.ready) *,
+  .track.dragging .fill,
+  .track.dragging .pip {
     transition: none;
   }
   /* The range input is invisible over the track, so the track is the
@@ -312,7 +314,7 @@
   /* As many bars as the model has levels, lit up to the one it sits on. The
      ramp is set inline so it spans 4→12px whether the model offers three
      levels or five. */
-  .meter {
+  .level-bars {
     display: flex;
     align-items: flex-end;
     gap: 2px;
