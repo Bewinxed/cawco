@@ -279,14 +279,22 @@ const CHECK_TIMEOUT_MAX_SEC = 3600;
 const GIT_TIMEOUT_MS = 60_000;
 
 /**
- * A HEAD-reflog line (`%H %gd %gs`, dates as unix seconds) whose action made
- * or rewrote a commit: the hash, and when the entry was written.
+ * The commits a worktree's session made since `since` (unix seconds) that
+ * HEAD still holds, one hash per line. It runs on the machine and prints
+ * only the hashes, because a command's answer keeps the last 4,000
+ * characters of stdout and the reflog runs past that: its HEAD entries whose
+ * action made or rewrote a commit (commit, amend, merge, cherry-pick, a
+ * rebase pick), written at or after `since`, each once, kept while
+ * `git merge-base --is-ancestor` says HEAD holds it.
  */
-const REFLOG_ENTRY =
-  /^([0-9a-f]{40}) HEAD@\{(\d+)\} (?:commit|commit \((?:amend|merge)\)|cherry-pick|rebase(?: -i)? \((?:pick|reword|edit|squash|fixup)\)): /;
+const keptCommits = (since: number): string =>
+  `git reflog --date=unix --format='%H %gd %gs' HEAD` +
+  ` | grep -E '^[0-9a-f]{40} HEAD@\\{[0-9]+\\} (commit|commit \\((amend|merge)\\)|cherry-pick|rebase( -i)? \\((pick|reword|edit|squash|fixup)\\)): '` +
+  ` | awk -v since=${since} '{ t = $2; gsub(/[^0-9]/, "", t) } t + 0 >= since && !seen[$1]++ { print $1 }'` +
+  ` | while read -r c; do git merge-base --is-ancestor "$c" HEAD && echo "$c"; done`;
 
-/** Splits the commit list from the diffstat in one command's output. */
-const DIFFSTAT_MARK = "@@whiffle-diffstat@@";
+/** Lines of diffstat a report keeps: the last, its summary, always among them. */
+const DIFFSTAT_LINES = 40;
 
 /** Quiet turns in a row an item survives: the next one fails it. */
 const QUIET_TURNS = 3;
@@ -889,42 +897,32 @@ export const createWorkItems = ({
    * lands the work, `merge-base origin/main HEAD` is HEAD itself. The
    * worktree's HEAD reflog can: every commit its session made, or rewrote by
    * rebasing, is an entry there. The ones since the item began that HEAD still
-   * holds are the item's; the diffstat runs from the oldest of them.
+   * holds are the item's ({@link keptCommits}); the diffstat runs from the
+   * oldest of them. Each command prints only what the report shows, so none
+   * of it depends on the tail a command's answer keeps.
    */
   const changesSince = async (
     workspace: WorkspaceRow,
     item: WorkItemRow
   ): Promise<string> => {
+    const git = (cmd: string) =>
+      command(workspace.machineId, workspace.path, cmd, GIT_TIMEOUT_MS);
     const since = Math.floor(item.createdAt.getTime() / 1000);
-    const reflog = await command(
-      workspace.machineId,
-      workspace.path,
-      "git reflog --date=unix --format='%H %gd %gs' HEAD",
-      GIT_TIMEOUT_MS
-    );
-    const made = new Set<string>();
-    for (const line of reflog.stdout.split("\n")) {
-      const entry = REFLOG_ENTRY.exec(line);
-      if (entry && Number(entry[2]) >= since) {
-        made.add(entry[1]);
-      }
+    const kept = (await git(keptCommits(since))).stdout
+      .split("\n")
+      .map((line) => line.trim())
+      .filter(Boolean)
+      .join(" ");
+    if (!kept) {
+      return `\n\nCommits:${fenced("(none)")}\n\nDiffstat:${fenced("(no changes)")}`;
     }
-    const none = `\n\nCommits:${fenced("(none)")}\n\nDiffstat:${fenced("(no changes)")}`;
-    if (made.size === 0) {
-      return none;
-    }
-    const listed = await command(
-      workspace.machineId,
-      workspace.path,
-      `kept=""; for c in ${[...made].join(" ")}; do git merge-base --is-ancestor "$c" HEAD && kept="$kept $c"; done; ` +
-        `[ -n "$kept" ] || exit 0; git log --oneline --no-walk $kept; echo "${DIFFSTAT_MARK}"; ` +
-        `git diff --stat "$(git merge-base --octopus $kept)^" HEAD`,
-      GIT_TIMEOUT_MS
-    );
-    const [commits = "", diffstat = ""] = listed.stdout.split(DIFFSTAT_MARK);
-    return commits.trim()
-      ? `\n\nCommits:${fenced(commits.trim())}\n\nDiffstat:${fenced(diffstat.trim() || "(no changes)")}`
-      : none;
+    const [commits, diffstat] = await Promise.all([
+      git(`git log --oneline --no-walk ${kept}`),
+      git(
+        `git diff --stat "$(git merge-base --octopus ${kept})^" HEAD | tail -n ${DIFFSTAT_LINES}`
+      ),
+    ]);
+    return `\n\nCommits:${fenced(commits.stdout.trim())}\n\nDiffstat:${fenced(diffstat.stdout.trim() || "(no changes)")}`;
   };
 
   /**

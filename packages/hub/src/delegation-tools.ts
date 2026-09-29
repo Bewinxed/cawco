@@ -32,7 +32,9 @@ const checksParameter = () =>
         expect: z
           .string()
           .optional()
-          .describe("A literal string stdout must contain."),
+          .describe(
+            "A literal string the last 4,000 characters of stdout must contain."
+          ),
         timeoutSec: z
           .number()
           .int()
