@@ -2743,11 +2743,13 @@ export const createServer = ({
     return record;
   };
   /**
-   * Each delegate session's assistant texts, accumulated while its turn runs
-   * so the report delivered to its parent carries everything it said — not
-   * just the last assistant message (a turn can produce several).
+   * Each session's final message of the turn in flight: the text frames that
+   * followed its last tool call. A tool call empties it, so what came before
+   * (narration of work still under way) never reaches the parent. It is a
+   * list because Claude emits one frame per content block, so one final
+   * message can arrive as several text frames.
    */
-  const lastAssistant = new Map<string, string[]>();
+  const finalMessage = new Map<string, string[]>();
   /**
    * Installs somebody is waiting on, by `requestId`: what keeps a machine from
    * being sent the same install twice while the first is still running, and
@@ -8436,9 +8438,10 @@ export const createServer = ({
                 }
               }
               // A turn's end, in this order: the standing instructions answer
-              // it first, then the delegate hand-back delivers the turn's text
-              // to the parent as a queued peer report — once, on the turn that
-              // ends the work (aborted turns carry no answer and are skipped).
+              // it first, then the delegate hand-back delivers the turn's final
+              // message to the parent as a queued peer report — once, on the
+              // turn that ends the work (aborted turns carry no answer and are
+              // skipped).
               if (kind === "frame" && message.instanceId && !internal) {
                 const neutral = (
                   message.payload as FramePayload & { kind: "frame" }
@@ -8451,12 +8454,20 @@ export const createServer = ({
                     .filter((block) => block.type === "text")
                     .map((block) => block.text)
                     .join("");
-                  if (text) {
-                    const acc = lastAssistant.get(message.instanceId);
+                  // A tool call means the turn goes on: everything said up
+                  // to it, this frame's own text included, was narration.
+                  if (
+                    neutral.message.content.some(
+                      (block) => block.type === "tool_use"
+                    )
+                  ) {
+                    finalMessage.delete(message.instanceId);
+                  } else if (text) {
+                    const acc = finalMessage.get(message.instanceId);
                     if (acc) {
                       acc.push(text);
                     } else {
-                      lastAssistant.set(message.instanceId, [text]);
+                      finalMessage.set(message.instanceId, [text]);
                     }
                   }
                 } else if (neutral.type === "result") {
@@ -8475,8 +8486,8 @@ export const createServer = ({
                       }
                     }
                   }
-                  const parts = lastAssistant.get(message.instanceId);
-                  lastAssistant.delete(message.instanceId);
+                  const parts = finalMessage.get(message.instanceId);
+                  finalMessage.delete(message.instanceId);
                   const text = parts?.length ? parts.join("\n\n") : undefined;
                   const row = db
                     .listInstances()
