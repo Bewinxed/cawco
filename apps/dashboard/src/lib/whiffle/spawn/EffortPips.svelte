@@ -5,6 +5,8 @@
    * level nearest the pointer; its centre sits at kw/2 + f * (width - kw).
    */
   import type { EffortLevel } from "@whiffle/core";
+  import { untrack } from "svelte";
+  import { TextMorph } from "torph/svelte";
 
   let {
     efforts,
@@ -51,9 +53,35 @@
   let grab = 0;
   const active = $derived(hover || drag || focused);
   let trackWidth = $state(0);
-  /** Each label's own width, so the chip can ease between them. */
-  let labelWidths = $state<number[]>([]);
-  const labelWidth = $derived(labelWidths[effortIdx]);
+  /**
+   * The level the bars last rested on, so a move fills the bars between there
+   * and the new level in order (or drains them from the top down), rather than
+   * every bar switching at once.
+   */
+  let restedOn = $state(0);
+  let cameFrom = $state(0);
+  $effect.pre(() => {
+    const next = effortIdx;
+    untrack(() => {
+      if (next !== restedOn) {
+        cameFrom = restedOn;
+        restedOn = next;
+      }
+    });
+  });
+  /** Wait per bar, counted from the bar the move starts at; bars that do not change wait for nothing. */
+  const BAR_STEP_MS = 40;
+  const barDelay = (i: number) => {
+    if (effortIdx > cameFrom && i > cameFrom && i <= effortIdx) {
+      return (i - cameFrom - 1) * BAR_STEP_MS;
+    }
+    if (effortIdx < cameFrom && i > effortIdx && i <= cameFrom) {
+      return (cameFrom - i) * BAR_STEP_MS;
+    }
+    return 0;
+  };
+  const capital = (word: string) =>
+    word.charAt(0).toUpperCase() + word.slice(1);
   /** Gap kept between the chip's edge and the next stop marker. */
   const PIP_CLEARANCE = 10;
   /** A stop shows only where it lands in the empty track, clear of the chip. */
@@ -147,10 +175,10 @@
       onpointermove={move}
       onpointerup={up}
       role="presentation"
-      bind:clientWidth={trackWidth}
       style={`--kw:${kw}px`}
       class:focus={focused}
       class:ready={ready}
+      bind:clientWidth={trackWidth}
     >
       <div
         class="fill"
@@ -167,7 +195,7 @@
                centred in it, so a short label leaves no gap beside it. -->
           <span aria-hidden="true" class="ghost">
             {#each efforts as level, i (level)}
-              <span bind:clientWidth={labelWidths[i]}>{level}</span>
+              <span>{level}</span>
             {/each}
           </span>
           <span class="content">
@@ -182,30 +210,28 @@
                 width={n * 4 - 2}
               >
                 {#each efforts as level, i (level)}
+                  <rect class="bar" height="10" rx="1" width="2" x={i * 4} />
                   <rect
-                    class="bar"
-                    class:lit={i <= effortIdx}
-                    style={`--delay:${(i <= effortIdx ? i : n - 1 - i) * 24}ms`}
+                    class="bar-fill"
                     height="10"
                     rx="1"
+                    style={`--delay:${barDelay(i)}ms`}
                     width="2"
                     x={i * 4}
+                    class:lit={i <= effortIdx}
                   />
                 {/each}
               </svg>
             {/if}
             {#if n}
-              <!-- The words stack in one cell and cross-fade; the cell eases to the
-                   new word's width, so the icon and label re-centre smoothly. -->
-              <span
-                aria-hidden="true"
+              <!-- The word morphs letter by letter into the next. The chip is as wide
+                   as its longest label, so the word never leaves it. -->
+              <TextMorph
+                as="span"
                 class="lvl"
-                style={labelWidth ? `width:${labelWidth}px` : undefined}
-              >
-                {#each efforts as level, i (level)}
-                  <span class="word" class:on={i === effortIdx}>{level}</span>
-                {/each}
-              </span>
+                duration={220}
+                text={capital(label)}
+              />
               <span class="sr-only">{label}</span>
             {:else}
               <span class="lvl">{label}</span>
@@ -358,22 +384,9 @@
   .ghost > span {
     grid-area: 1 / 1;
   }
-  .lvl {
-    display: grid;
-    justify-items: start;
-    @media (prefers-reduced-motion: no-preference) {
-      transition: width var(--ns-fill-ms) var(--ease-in-out);
-    }
-  }
-  .word {
-    grid-area: 1 / 1;
-    opacity: 0;
-    @media (prefers-reduced-motion: no-preference) {
-      transition: opacity 140ms ease;
-    }
-  }
-  .word.on {
-    opacity: 1;
+  .knob :global(.lvl) {
+    text-transform: none;
+    white-space: nowrap;
   }
   .sr-only {
     position: absolute;
@@ -402,13 +415,21 @@
   .bar {
     fill: var(--ink-strong);
     opacity: 0.22;
-    /* Bars fill left to right and drain right to left, one after another. */
+  }
+  /* A lit bar fills up from its foot and drains back down into it; the wait
+     per bar (set inline) makes a rise climb bar by bar and a fall drain from
+     the top bar down. */
+  .bar-fill {
+    fill: var(--ink-strong);
+    transform-box: fill-box;
+    transform-origin: 50% 100%;
+    transform: scaleY(0);
     @media (prefers-reduced-motion: no-preference) {
-      transition: opacity 140ms ease var(--delay, 0ms);
+      transition: transform 180ms var(--ease-out) var(--delay, 0ms);
     }
   }
-  .bar.lit {
-    opacity: 1;
+  .bar-fill.lit {
+    transform: scaleY(1);
   }
   input[type="range"] {
     position: absolute;
