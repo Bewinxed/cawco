@@ -390,7 +390,11 @@
         {@attach (node) => { if (key === frameKey) { iframe = node; } }}
       ></iframe>
     {/each}
-    <div aria-hidden="true" class="cover" class:ready={connected || standing !== null}>
+    <div
+      aria-hidden="true"
+      class="cover"
+      class:ready={connected || standing !== null}
+    >
       <span
         class="kit-skeleton block h-[11px] w-[42%] rounded-[var(--radius-xs)]"
       ></span>

@@ -127,7 +127,7 @@ const SCENARIOS = {
   prose: {
     what: "4 assistant paragraphs arriving",
     async drive(bench) {
-      for (let i = 0; i < 4; i++) {
+      for (let i = 0; i < 4; i += 1) {
         await bench.evaluate(
           (n) =>
             window.__traffic.assistant(

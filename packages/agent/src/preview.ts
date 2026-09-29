@@ -22,6 +22,7 @@ const LOOPBACK = new Set(["localhost", "127.0.0.1", "[::1]"]);
 const HEAD_OPEN = /<head(\s[^>]*)?\s*>/i;
 const HEAD_CLOSE = /<\/head\s*>/i;
 const BODY = /<\/body\s*>/i;
+const PREVIEW_PREFIX = /^\/preview\/[^/]+\//;
 let overlay: Promise<string> | undefined;
 
 /**
@@ -137,16 +138,14 @@ export async function startPreview(options: {
         if (headers.has("origin")) {
           headers.set("origin", `http://localhost:${source.port}`);
         }
-        if (headers.has("referer")) {
+        const referer = headers.get("referer");
+        if (referer) {
           try {
-            const ref = new URL(headers.get("referer")!);
-            const stripped = ref.pathname.replace(
-              /^\/preview\/[^/]+\//,
-              "/",
-            );
+            const ref = new URL(referer);
+            const stripped = ref.pathname.replace(PREVIEW_PREFIX, "/");
             headers.set(
               "referer",
-              `http://localhost:${source.port}${stripped}${ref.search}`,
+              `http://localhost:${source.port}${stripped}${ref.search}`
             );
           } catch {
             // malformed Referer — drop it rather than forward a dashboard URL

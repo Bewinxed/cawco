@@ -254,7 +254,7 @@
       <div class="tbl" in:crossIn out:crossOut>
         {#if status === 'loading'}
           <div class="flex flex-col gap-2 py-2" data-slot="skeleton-rows">
-            {#each { length: 5 }, i (i)}
+            {#each [0, 1, 2, 3, 4] as row (row)}
               <Skeleton class="h-7 w-full" />
             {/each}
           </div>

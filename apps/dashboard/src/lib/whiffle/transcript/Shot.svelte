@@ -8,61 +8,83 @@
    * `data:` image carries its size in its first bytes, so its box is known
    * before it decodes; null when the header says nothing this reads.
    */
-  export function dataImageSize(
-    src: string
-  ): { width: number; height: number } | null {
+  interface Size {
+    height: number;
+    width: number;
+  }
+  /** 14-bit fields in WebP headers: 2^14. */
+  const FOURTEEN_BITS = 16_384;
+
+  function webpSize(text: string, view: DataView): Size | null {
+    const chunk = text.slice(12, 16);
+    const le24 = (i: number) =>
+      view.getUint16(i, true) + view.getUint8(i + 2) * 65_536;
+    if (chunk === "VP8X") {
+      return { width: le24(24) + 1, height: le24(27) + 1 };
+    }
+    if (chunk === "VP8L") {
+      const bits = view.getUint32(21, true);
+      return {
+        width: (bits % FOURTEEN_BITS) + 1,
+        height: (Math.floor(bits / FOURTEEN_BITS) % FOURTEEN_BITS) + 1,
+      };
+    }
+    if (chunk === "VP8 ") {
+      return {
+        width: view.getUint16(26, true) % FOURTEEN_BITS,
+        height: view.getUint16(28, true) % FOURTEEN_BITS,
+      };
+    }
+    return null;
+  }
+
+  /**
+   * JPEG: walk the segments to the frame header (SOF0–SOF15, less the DHT,
+   * JPG and DAC markers that share the range).
+   */
+  function jpegSize(view: DataView): Size | null {
+    let i = 2;
+    while (i + 9 < view.byteLength) {
+      if (view.getUint8(i) !== 0xff) {
+        return null;
+      }
+      const marker = view.getUint8(i + 1);
+      if (
+        marker >= 0xc0 &&
+        marker <= 0xcf &&
+        marker !== 0xc4 &&
+        marker !== 0xc8 &&
+        marker !== 0xcc
+      ) {
+        return { width: view.getUint16(i + 7), height: view.getUint16(i + 5) };
+      }
+      i += 2 + view.getUint16(i + 2);
+    }
+    return null;
+  }
+
+  export function dataImageSize(src: string): Size | null {
     const comma = src.indexOf(",");
     const b64 = src.slice(comma + 1, comma + 1 + HEAD - (HEAD % 4));
     const text = atob(b64);
-    const at = (i: number) => text.charCodeAt(i);
-    const be16 = (i: number) => (at(i) << 8) | at(i + 1);
-    const le16 = (i: number) => at(i) | (at(i + 1) << 8);
-    const be32 = (i: number) => be16(i) * 65_536 + be16(i + 2);
-    const le24 = (i: number) => at(i) | (at(i + 1) << 8) | (at(i + 2) << 16);
+    const view = new DataView(
+      Uint8Array.from(text, (char) => char.charCodeAt(0)).buffer
+    );
     // PNG: the IHDR chunk follows the 8-byte signature.
     if (text.startsWith("\x89PNG")) {
-      return { width: be32(16), height: be32(20) };
+      return { width: view.getUint32(16), height: view.getUint32(20) };
     }
     if (text.startsWith("GIF8")) {
-      return { width: le16(6), height: le16(8) };
+      return {
+        width: view.getUint16(6, true),
+        height: view.getUint16(8, true),
+      };
     }
     if (text.startsWith("RIFF") && text.slice(8, 12) === "WEBP") {
-      const chunk = text.slice(12, 16);
-      if (chunk === "VP8X") {
-        return { width: le24(24) + 1, height: le24(27) + 1 };
-      }
-      if (chunk === "VP8L") {
-        const bits = at(21) | (at(22) << 8) | (at(23) << 16) | (at(24) << 24);
-        return {
-          width: (bits & 0x3f_ff) + 1,
-          height: ((bits >> 14) & 0x3f_ff) + 1,
-        };
-      }
-      if (chunk === "VP8 ") {
-        return { width: le16(26) & 0x3f_ff, height: le16(28) & 0x3f_ff };
-      }
-      return null;
+      return webpSize(text, view);
     }
-    // JPEG: walk the segments to the frame header (SOF0–SOF15, less the
-    // DHT, JPG and DAC markers that share the range).
-    if (at(0) === 0xff && at(1) === 0xd8) {
-      let i = 2;
-      while (i + 9 < text.length) {
-        if (at(i) !== 0xff) {
-          return null;
-        }
-        const marker = at(i + 1);
-        if (
-          marker >= 0xc0 &&
-          marker <= 0xcf &&
-          marker !== 0xc4 &&
-          marker !== 0xc8 &&
-          marker !== 0xcc
-        ) {
-          return { width: be16(i + 7), height: be16(i + 5) };
-        }
-        i += 2 + be16(i + 2);
-      }
+    if (text.startsWith("\xff\xd8")) {
+      return jpegSize(view);
     }
     return null;
   }
@@ -186,9 +208,9 @@
     <button aria-label={`Open ${alt}`} class="box" onclick={open} type="button">
       <span
         class="frame"
-        class:sized={intrinsic !== null}
-        style:--w={intrinsic?.width}
         style:--h={intrinsic?.height}
+        style:--w={intrinsic?.width}
+        class:sized={intrinsic !== null}
       >
         {#if loaded !== src}
           <span
@@ -264,7 +286,11 @@
     border-radius: inherit;
 
     &.sized {
-      inline-size: min(100%, calc(var(--w) * 1px), calc(240px * var(--w) / var(--h)));
+      inline-size: min(
+        100%,
+        calc(var(--w) * 1px),
+        calc(240px * var(--w) / var(--h))
+      );
       block-size: auto;
       aspect-ratio: var(--w) / var(--h);
     }

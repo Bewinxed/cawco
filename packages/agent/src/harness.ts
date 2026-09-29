@@ -41,7 +41,7 @@ export interface HarnessContext {
   closed?(): void;
   /** The resolved working directory (after worktree / bootstrap). */
   readonly cwd: string;
-  /** Put an arbitrary envelope on the daemon's hub socket (hand-offs). */
+  /** Put an envelope the harness built itself on the daemon's hub socket. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   emit(envelope: Envelope): void;
   /** The session itself died of something the reader should see. */

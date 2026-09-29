@@ -11,7 +11,7 @@ import { flushSync } from "svelte";
 
 export interface Drawer {
   /** Draws one more unit; says whether any remain. */
-  step(): boolean;
+  step: () => boolean;
 }
 
 /** What a frame may spend drawing, in ms. */

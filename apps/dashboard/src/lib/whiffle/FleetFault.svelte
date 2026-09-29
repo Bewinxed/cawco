@@ -85,28 +85,30 @@
    * An always-mounted part held open or shut by `open`: the first state lands
    * still, every change after it folds from where the part is drawn.
    */
-  const disclose = (open: () => boolean, gap = 0) => (node: HTMLElement) => {
-    let first = true;
-    $effect(() => {
-      const next = open();
-      if (first) {
-        first = false;
-        if (!next) {
-          node.style.overflow = "hidden";
-          node.style.height = "0px";
-          node.style.marginBottom = `${-gap}px`;
-          node.style.opacity = "0";
+  const disclose =
+    (open: () => boolean, gap = 0) =>
+    (node: HTMLElement) => {
+      let first = true;
+      $effect(() => {
+        const next = open();
+        if (first) {
+          first = false;
+          if (!next) {
+            node.style.overflow = "hidden";
+            node.style.height = "0px";
+            node.style.marginBottom = `${-gap}px`;
+            node.style.opacity = "0";
+          }
+          return;
         }
-        return;
-      }
-      fold(node, next, {
-        ms: next ? 240 : 160,
-        easing: CURVE.out,
-        fade: true,
-        gap,
+        fold(node, next, {
+          ms: next ? 240 : 160,
+          easing: CURVE.out,
+          fade: true,
+          gap,
+        });
       });
-    });
-  };
+    };
 
   async function resync() {
     if (!group.machineId) {
@@ -232,132 +234,136 @@
 
   <div class="body" inert={!whole} {@attach disclose(() => whole)}>
     <div class="inner">
-    <p class="rows">
-      <span class="noun"
-        >{SCOPE_NOUN[group.scope]}{group.faults.length === 1 ? '' : 's'}:</span
-      >
-      {#each shown as fault (fault.scope + fault.key)}
-        <code>{faultLabel(fault)}</code>
-      {/each}
-      {#if extra > 0}
-        <span class="more">and {extra} more</span>
-      {/if}
-    </p>
-
-    <p class="why">{copy.why}</p>
-
-    {#if copy.toolchain && toolchain}
-      <!-- The attribution that was missing: which binary said it, and whether a
-         newer one is sitting on the same machine behind it. -->
-      <div class="tool">
-        <span class="k">claude on this machine</span>
-        {#if toolchain.used}
-          <span class="line used">
-            <code>{toolchain.used.path}</code>
-            <span class="v">{toolchain.used.version ?? 'version unknown'}</span>
-            <span class="badge">ran this sync</span>
-          </span>
-        {/if}
-        {#each toolchain.others as other (other.path)}
-          <span class="line">
-            <code>{other.path}</code>
-            <span class="v">{other.version ?? 'version unknown'}</span>
-          </span>
+      <p class="rows">
+        <span class="noun"
+          >{SCOPE_NOUN[group.scope]}
+          {group.faults.length === 1 ? '' : 's'}:</span
+        >
+        {#each shown as fault (fault.scope + fault.key)}
+          <code>{faultLabel(fault)}</code>
         {/each}
-        {#if toolchain.shadowed}
-          <p class="shadow">
-            A newer claude is installed on this machine and is not the one PATH
-            resolves first. Until that changes, updating again will not help.
-          </p>
+        {#if extra > 0}
+          <span class="more">and {extra} more</span>
         {/if}
-      </div>
-    {/if}
+      </p>
 
-    {#if group.faults[0]?.detail}
-      {#if group.cause === 'unknown'}
-        <pre class="said">{group.faults[0].detail}</pre>
-      {:else}
-        <button
-          aria-expanded={disclosureOpen}
-          class="disclose touch-hit"
-          onclick={() => { disclosureOpen = !disclosureOpen; }}
-          type="button"
-        >
-          <IconChevronRight class="chevron size-4 shrink-0" />
-          What it said
-        </button>
-        <div
-          class="saids"
-          inert={!disclosureOpen}
-          {@attach disclose(() => disclosureOpen, 7)}
-        >
-          {#each shown as fault (fault.scope + fault.key)}
-            {#if fault.detail}
-              <pre
-                class="said"
-              ><span class="for">{faultLabel(fault)}</span>{fault.detail}</pre>
-            {/if}
+      <p class="why">{copy.why}</p>
+
+      {#if copy.toolchain && toolchain}
+        <!-- The attribution that was missing: which binary said it, and whether a
+         newer one is sitting on the same machine behind it. -->
+        <div class="tool">
+          <span class="k">claude on this machine</span>
+          {#if toolchain.used}
+            <span class="line used">
+              <code>{toolchain.used.path}</code>
+              <span class="v"
+                >{toolchain.used.version ?? 'version unknown'}</span
+              >
+              <span class="badge">ran this sync</span>
+            </span>
+          {/if}
+          {#each toolchain.others as other (other.path)}
+            <span class="line">
+              <code>{other.path}</code>
+              <span class="v">{other.version ?? 'version unknown'}</span>
+            </span>
           {/each}
+          {#if toolchain.shadowed}
+            <p class="shadow">
+              A newer claude is installed on this machine and is not the one
+              PATH resolves first. Until that changes, updating again will not
+              help.
+            </p>
+          {/if}
         </div>
       {/if}
-    {/if}
 
-    <p class="fix">{copy.fix}</p>
-
-    <div class="acts">
-      {#if copy.action === 'resync'}
-        <Button
-          disabled={!online}
-          failed={actFailed}
-          icon={IconRefresh}
-          label={actionLabel}
-          onclick={resync}
-          pending={busy}
-          pendingLabel="Syncing…"
-          size="xs"
-          variant="outline"
-        />
-        <span class="hint"
-          >{online ? actionHint : 'It syncs on its own the moment it comes back.'}</span
-        >
-      {:else if copy.action === 'refresh'}
-        <Button
-          class="num"
-          failed={actFailed}
-          icon={IconRefresh}
-          label={actionLabel}
-          onclick={refresh}
-          pending={busy}
-          pendingLabel="Fetching…"
-          size="xs"
-          variant="outline"
-        />
-        <span class="hint">{actionHint}</span>
-      {:else if copy.action === 'settle'}
-        <Button href={faultHref(group.faults[0])} size="xs" variant="outline"
-          >Compare the two copies</Button
-        >
-        <span class="hint"
-          >Adopt this machine’s copy into the fleet, or overwrite it with the
-          fleet’s.</span
-        >
-      {:else}
-        <Button href={faultHref(group.faults[0])} size="xs" variant="outline"
-          >Open the section</Button
-        >
+      {#if group.faults[0]?.detail}
+        {#if group.cause === 'unknown'}
+          <pre class="said">{group.faults[0].detail}</pre>
+        {:else}
+          <button
+            aria-expanded={disclosureOpen}
+            class="disclose touch-hit"
+            onclick={() => { disclosureOpen = !disclosureOpen; }}
+            type="button"
+          >
+            <IconChevronRight class="chevron size-4 shrink-0" />
+            What it said
+          </button>
+          <div
+            class="saids"
+            inert={!disclosureOpen}
+            {@attach disclose(() => disclosureOpen, 7)}
+          >
+            {#each shown as fault (fault.scope + fault.key)}
+              {#if fault.detail}
+                <pre
+                  class="said"
+                ><span class="for">{faultLabel(fault)}</span>{fault.detail}</pre>
+              {/if}
+            {/each}
+          </div>
+        {/if}
       {/if}
-    </div>
-    {#if result}
-      <p
-        class="result"
-        data-flip
-        data-tone={result.tone}
-        role={result.tone === 'fail' ? 'alert' : 'status'}
-        in:appear
-      >
-        {result.text}
-      </p>
-    {/if}
+
+      <p class="fix">{copy.fix}</p>
+
+      <div class="acts">
+        {#if copy.action === 'resync'}
+          <Button
+            disabled={!online}
+            failed={actFailed}
+            icon={IconRefresh}
+            label={actionLabel}
+            onclick={resync}
+            pending={busy}
+            pendingLabel="Syncing…"
+            size="xs"
+            variant="outline"
+          />
+          <span class="hint"
+            >{online ? actionHint : 'It syncs on its own the moment it comes back.'}</span
+          >
+        {:else if copy.action === 'refresh'}
+          <Button
+            class="num"
+            failed={actFailed}
+            icon={IconRefresh}
+            label={actionLabel}
+            onclick={refresh}
+            pending={busy}
+            pendingLabel="Fetching…"
+            size="xs"
+            variant="outline"
+          />
+          <span class="hint">{actionHint}</span>
+        {:else if copy.action === 'settle'}
+          <Button href={faultHref(group.faults[0])} size="xs" variant="outline"
+            >Compare the two copies</Button
+          >
+          <span class="hint"
+            >Adopt this machine’s copy into the fleet, or overwrite it with the
+            fleet’s.</span
+          >
+        {:else}
+          <Button href={faultHref(group.faults[0])} size="xs" variant="outline"
+            >Open the section</Button
+          >
+        {/if}
+      </div>
+      {#if result}
+        <p
+          class="result"
+          data-flip
+          data-tone={result.tone}
+          role={result.tone === 'fail' ? 'alert' : 'status'}
+          in:appear
+        >
+          {result.text}
+        </p>
+      {/if}
     </div>
   </div>
 </div>

@@ -7,8 +7,8 @@
   } from "svelte-streamdown";
   import OutputBlock from "$lib/components/features/tool-cards/OutputBlock.svelte";
   import { PROSE } from "$lib/prose";
-  import { draw, stepping } from "../collapsible/draw";
   import { dur, motionOk } from "$lib/whiffle/motion/curves.svelte";
+  import { draw, stepping } from "../collapsible/draw";
   import type { Trail } from "./trail";
 
   let {

@@ -84,7 +84,7 @@
               >{harness.status}</span
             >
           {/if}
-          <span class="hchev" class:open><IconChevronRight /></span>
+          <span class="hchev" class:open={open}><IconChevronRight /></span>
         </Collapsible.Trigger>
         <Collapsible.Content reveal>
           <div class="hbody"><MessageBody source={harness.body} /></div>
@@ -138,7 +138,7 @@
   <div class="note fold">
     <Collapsible.Root bind:open={disclosed.get, disclosed.set}>
       <Collapsible.Trigger class="ftrig">
-        <span class="hchev" class:open><IconChevronRight /></span>
+        <span class="hchev" class:open={open}><IconChevronRight /></span>
         <span class="ftitle">{foldTitle}</span>
       </Collapsible.Trigger>
       <Collapsible.Content reveal>

@@ -359,16 +359,16 @@
          URL it is actually about. Every field of the tool input is here, one
          disclosure away, so the grant is informed. -->
     <details class="disclose">
-          <summary>What this touches</summary>
-          <div class="fields">
-            {#each Object.entries(input) as [key, value]}
-              {@const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2)}
-              <div class="field">
-                <span class="k">{key}</span>
-                <pre class="v">{text}</pre>
-              </div>
-            {/each}
+      <summary>What this touches</summary>
+      <div class="fields">
+        {#each Object.entries(input) as [key, value]}
+          {@const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2)}
+          <div class="field">
+            <span class="k">{key}</span>
+            <pre class="v">{text}</pre>
           </div>
+        {/each}
+      </div>
     </details>
     <div class="choice">
       <Button

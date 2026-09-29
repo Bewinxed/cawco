@@ -40,6 +40,7 @@ if (command === "dump") {
     name: string;
   }[];
   for (const workflow of saved) {
+    // biome-ignore lint/performance/noAwaitInLoops: one save at a time, so a workflow that calls another finds it already saved and the log reads in order.
     const response = await fetch(`${target}/api/workflows`, {
       method: "POST",
       headers: { "content-type": "application/json" },

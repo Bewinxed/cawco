@@ -486,15 +486,6 @@ const peek = (payload: unknown, key: string): string | undefined => {
   return typeof value === "string" ? value : undefined;
 };
 
-/** A spawn's `canDelegate`, which `peek` cannot read: it is a boolean, not a string. */
-const peekCanDelegate = (payload: unknown): boolean | undefined => {
-  if (typeof payload !== "object" || payload === null) {
-    return undefined;
-  }
-  const value = (payload as Record<string, unknown>).canDelegate;
-  return typeof value === "boolean" ? value : undefined;
-};
-
 /** The last path segment — how the rail names a session. */
 const leaf = (path: string): string =>
   path.split("/").filter(Boolean).pop() ?? path;
@@ -7956,114 +7947,6 @@ export const createServer = ({
               });
               break;
             }
-            // A hand-off: one machine's session addressing another's. Routed on
-            // `machineId` like a dashboard's `send`, because that is what it is —
-            // the sender happens to be an agent rather than a reader, which the
-            // payload says for itself in the message's `origin` and the hub does
-            // not need to know. Cross-machine falls out for free: the envelope
-            // names its target's machine, and the registry has the socket.
-            case "send": {
-              // Urgency is only honoured toward the caller's own delegate; anything
-              // else downgrades to a normal queued send.
-              if (
-                typeof message.payload === "object" &&
-                message.payload !== null &&
-                (message.payload as { urgent?: unknown }).urgent === true
-              ) {
-                const from = peek(message.payload, "from");
-                const row = message.instanceId
-                  ? db.listInstances().find((r) => r.id === message.instanceId)
-                  : undefined;
-                if (!(from && row) || row.parentInstanceId !== from) {
-                  console.warn(
-                    `[hub] downgraded urgent send to ${message.instanceId}: not its delegate`
-                  );
-                  // biome-ignore lint/performance/noDelete: an undefined assignment would leave the key present, and the check above reads `.urgent === true` — a present-but-undefined value must still read as not urgent, but the field must not ride along into what gets relayed.
-                  delete (message.payload as Record<string, unknown>).urgent;
-                }
-              }
-              const record = deliverSend(message as Envelope<SendPayload>);
-              // The sending session hears why its hand-off did not go.
-              if (record.state === "failed" && record.reason) {
-                ws.send(failure(message, record.reason));
-              }
-              break;
-            }
-            // A session starting another session. Recorded exactly like a
-            // dashboard's spawn — the row is what puts it in the rail, with a
-            // transcript of its own the reader can open.
-            case "spawn": {
-              // A delegate that names no permission mode inherits the ROOT of its
-              // delegate tree (see the relay route — same rule, same reason).
-              const parent = peekParent(message.payload);
-              if (
-                !peek(message.payload, "permissionMode") &&
-                parent.parentInstanceId
-              ) {
-                const mode = resolveDelegatePermissionMode(
-                  db.listInstances(),
-                  parent.parentInstanceId
-                );
-                if (mode) {
-                  (message.payload as Record<string, unknown>).permissionMode =
-                    mode;
-                }
-              }
-              // A leaf delegate may not delegate or start sessions (see the
-              // relay route — same rule, same requester). Nothing here can
-              // answer the sender, so the spawn is dropped, neither forwarded
-              // nor given a row.
-              const requester = resolveRequester(
-                message.payload as SpawnPayload
-              );
-              if (
-                requester &&
-                !resolveCanDelegate(db.listInstances(), requester)
-              ) {
-                console.warn(
-                  `[hub] refused spawn ${message.instanceId ?? "?"} from leaf delegate ${requester}: ${LEAF_DELEGATE_REFUSAL}`
-                );
-                break;
-              }
-              // The row's key, not the client's — see `enforceRowSessionKey`.
-              // Nothing here can answer the sender, so a refused resume is
-              // dropped, the same way a leaf's spawn is.
-              const refusal = enforceRowSessionKey(
-                message.instanceId
-                  ? db.getInstancesByIds([message.instanceId])[0]
-                  : undefined,
-                message.payload
-              );
-              if (refusal) {
-                console.warn(`[hub] refused spawn: ${refusal}`);
-                break;
-              }
-              if (forward(message, ws) && message.instanceId) {
-                db.openInstance({
-                  id: message.instanceId,
-                  machineId: message.machineId,
-                  cwd: peek(message.payload, "cwd") ?? "",
-                  sessionId: peekResume(message.payload),
-                  harness: peekHarness(message.payload),
-                  projectId: peek(message.payload, "projectId"),
-                  title: peek(message.payload, "title"),
-                  kind: peekKind(message.payload),
-                  permissionMode: peek(message.payload, "permissionMode"),
-                  model: peek(message.payload, "model"),
-                  effort: peek(message.payload, "effort"),
-                  canDelegate: peekCanDelegate(message.payload),
-                  workflowRunId: peek(message.payload, "workflowRunId"),
-                  workflowStepId: peek(message.payload, "workflowStepId"),
-                  ...peekParent(message.payload),
-                });
-                // A conversation that starts here: its first turn is its name.
-                if (!peekResume(message.payload)) {
-                  awaitingFirstTurn.add(message.instanceId);
-                }
-                publishInstances(message.machineId);
-              }
-              break;
-            }
             case "frames": {
               const kind = peek(message.payload, "kind");
               // One send did not go: its record says so, and nothing else does.
@@ -8555,54 +8438,6 @@ export const createServer = ({
                 streams.sequence(message.instanceId, message.payload);
               } else {
                 registry.broadcast(message);
-              }
-              break;
-            }
-            // A session braking one of its own delegates, across machines. Honoured
-            // only when the caller is the target's recorded parent.
-            case "stop":
-            case "control": {
-              const from = peek(message.payload, "from");
-              const row = message.instanceId
-                ? db.listInstances().find((r) => r.id === message.instanceId)
-                : undefined;
-              if (!(from && row) || row.parentInstanceId !== from) {
-                console.warn(
-                  `[hub] refused ${message.verb} from ${message.machineId}: not its delegate`
-                );
-                break;
-              }
-              // Finished work takes no interrupt and no answer; the sender
-              // hears why.
-              const retired =
-                message.verb === "control" ? workItems.refusal(row) : undefined;
-              if (retired) {
-                ws.send(failure(message, retired));
-                break;
-              }
-              registry
-                .agent(row.machineId)
-                ?.send({ ...message, machineId: row.machineId });
-              if (message.verb === "stop") {
-                closePreview(row.id).catch(console.error);
-                workItems.cancelled(row);
-              }
-              // A stop cuts the turn it lands in, as an interrupt does.
-              if (
-                message.verb === "stop" ||
-                peek(message.payload, "method") === CONTROL_INTERRUPT
-              ) {
-                noteInterrupt(row.id);
-              }
-              // A parent answering its delegate's ask with `answer_delegate`.
-              const answered = peekAnswer(message.payload);
-              if (answered) {
-                recordDelegateAnswer(
-                  row.machineId,
-                  row.id,
-                  answered.requestId,
-                  answered.result
-                );
               }
               break;
             }

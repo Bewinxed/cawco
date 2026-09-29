@@ -9,6 +9,9 @@ import { Elysia, t } from "elysia";
 import type { DbShape } from "../db";
 import { type createWorkflowRuntime, publicRun } from "./runtime";
 
+const NOT_SLUG = /[^a-z0-9]+/g;
+const SLUG_EDGES = /^-|-$/g;
+
 export function workflowRoutes(
   db: DbShape,
   runtime: ReturnType<typeof createWorkflowRuntime>,
@@ -29,6 +32,64 @@ export function workflowRoutes(
       return refusal(error);
     }
   };
+  /**
+   * A graph compiles to its program. A graph whose *authoring* rules fail
+   * still saves and is refused at launch instead (§9.3), because the editor
+   * autosaves; one the compiler cannot take, or a call cycle, is refused now.
+   */
+  const compileGraph = (
+    graph: WorkflowGraph,
+    id: string,
+    name: string
+  ): Response | { program: string; problems: Problem[] } => {
+    const fatal = workflowProgramCheck(graph);
+    if (fatal.length) {
+      return Response.json({ problems: fatal }, { status: 400 });
+    }
+    const problems = validateWorkflow(graph, {
+      workflowId: id,
+      resolveWorkflow: (target) =>
+        target === id ? { id, name, graph } : db.getWorkflow(target),
+    });
+    // A call cycle is the one graph problem that cannot be left for launch:
+    // it is a property of the fleet's saved graphs, not of this one.
+    const cycle = problems.find((problem) =>
+      problem.message.startsWith("Workflow call cycle:")
+    );
+    if (cycle) {
+      return Response.json({ problems: [cycle] }, { status: 400 });
+    }
+    return { program: compileWorkflow(graph).program, problems };
+  };
+  /** A workflow is authored as exactly one of a graph or a program. */
+  const compile = (
+    input: { graph?: WorkflowGraph; program?: string },
+    id: string,
+    name: string
+  ): Response | { program: string; problems: Problem[] } => {
+    if (input.graph && input.program) {
+      throw new Error(
+        "A workflow is authored either as a graph or as a program, never both."
+      );
+    }
+    if (input.graph) {
+      return compileGraph(input.graph, id, name);
+    }
+    if (!input.program) {
+      throw new Error(
+        "A workflow needs either a graph (the editor's model) or a program."
+      );
+    }
+    // A program that will not typecheck is refused with the diagnostics.
+    const fatal = typecheckProgram(input.program);
+    return fatal.length
+      ? Response.json({ problems: fatal }, { status: 400 })
+      : { program: input.program, problems: [] };
+  };
+  /**
+   * A new workflow (POST) names itself in the body. An existing one (PUT) is
+   * the row its path names; a `name` in that body renames it.
+   */
   const save = async (
     input: {
       description?: string;
@@ -36,66 +97,25 @@ export function workflowRoutes(
       name?: string;
       program?: string;
     },
-    id: string = crypto.randomUUID()
+    old?: NonNullable<ReturnType<DbShape["getWorkflow"]>>
   ) => {
-    if (!input.name?.trim()) {
+    const id = old?.id ?? crypto.randomUUID();
+    const name = (input.name ?? old?.name)?.trim();
+    if (!name) {
       throw new Error("A workflow needs a name.");
     }
-    if (!(input.graph || input.program)) {
-      throw new Error(
-        "A workflow needs either a graph (the editor's model) or a program."
-      );
+    const compiled = compile(input, id, name);
+    if (compiled instanceof Response) {
+      return compiled;
     }
-    if (input.graph && input.program) {
-      throw new Error(
-        "A workflow is authored either as a graph or as a program, never both."
-      );
-    }
-    // A program that will not compile or typecheck is refused with the
-    // diagnostics; a graph whose *authoring* rules fail still saves and is
-    // refused at launch instead (§9.3), because the editor autosaves.
-    let problems: Problem[] = [];
-    let program = input.program ?? "";
-    if (input.graph) {
-      const fatal = workflowProgramCheck(input.graph);
-      if (fatal.length) {
-        return Response.json({ problems: fatal }, { status: 400 });
-      }
-      problems = validateWorkflow(input.graph, {
-        workflowId: id,
-        resolveWorkflow: (target) =>
-          target === id
-            ? {
-                id,
-                name: input.name ?? id,
-                graph: input.graph as WorkflowGraph,
-              }
-            : db.getWorkflow(target),
-      });
-      // A call cycle is the one graph problem that cannot be left for launch:
-      // it is a property of the fleet's saved graphs, not of this one.
-      const cycle = problems.find((problem) =>
-        problem.message.startsWith("Workflow call cycle:")
-      );
-      if (cycle) {
-        return Response.json({ problems: [cycle] }, { status: 400 });
-      }
-      ({ program } = compileWorkflow(input.graph));
-    } else {
-      const fatal = typecheckProgram(program);
-      if (fatal.length) {
-        return Response.json({ problems: fatal }, { status: 400 });
-      }
-    }
-    const slug = input.name
-      .trim()
+    const { program, problems } = compiled;
+    const slug = name
       .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")
-      .replace(/^-|-$/g, "");
+      .replace(NOT_SLUG, "-")
+      .replace(SLUG_EDGES, "");
     if (!slug) {
       throw new Error("The workflow name needs at least one letter or number.");
     }
-    const old = db.getWorkflow(id);
     await skills.check(`wf-${slug}`, old?.id);
     if (db.listSkills().some((skill) => skill.name === `wf-${slug}`)) {
       throw new Error(
@@ -104,7 +124,7 @@ export function workflowRoutes(
     }
     const stored = db.putWorkflow({
       id,
-      name: input.name.trim(),
+      name,
       slug,
       graph: input.graph ?? null,
       program,
@@ -167,7 +187,16 @@ export function workflowRoutes(
         if (!row) {
           throw new Error("Workflow not found.");
         }
-        return save(body as Parameters<typeof save>[0], row.id);
+        const input = body as Parameters<typeof save>[0];
+        // No program compiles back to a graph: a program saved over a canvas
+        // would drop the canvas.
+        if (row.origin === "editor" && input.program !== undefined) {
+          return new Response(
+            "This workflow is authored as a graph; edit it in the canvas or save a graph.",
+            { status: 409 }
+          );
+        }
+        return save(input, row);
       })
     )
     .delete("/api/workflows/:id", ({ params }) =>

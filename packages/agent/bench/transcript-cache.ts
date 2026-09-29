@@ -7,21 +7,19 @@
  * so it must run in its own process (not imported into another bench).
  */
 
-import { readFileSync, writeFileSync, unlinkSync, copyFileSync } from "node:fs";
+import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
+import { homedir } from "node:os";
 import { join } from "node:path";
 import { readTranscript } from "@whiffle/jsonl-parser";
 import {
+  CHAIN_TYPES,
   readSessionEnd,
   readSessionFull,
 } from "../src/harnesses/claude-transcript";
-import {
-  TranscriptCache,
-  cache,
-} from "../src/harnesses/transcript-cache";
-import { CHAIN_TYPES } from "../src/harnesses/claude-transcript";
+import { TranscriptCache } from "../src/harnesses/transcript-cache";
 
 const BIG_SESSION = join(
-  process.env.HOME!,
+  homedir(),
   ".claude/projects/-home-bewinxed-cockpit/300c7b00-dd82-492d-9a69-b3bece69eb50.jsonl"
 );
 
@@ -88,9 +86,7 @@ const midFiles = allFiles
   .sort((a, b) => b.size - a.size);
 
 const midFile = midFiles[0]?.f;
-if (!midFile) {
-  console.log("(no mid-size transcript found, skipping 3b)");
-} else {
+if (midFile) {
   const lines = readFileSync(midFile, "utf-8").split("\n");
   const split = Math.floor(lines.length * 0.8);
   const partial = lines.slice(0, split).join("\n");
@@ -149,6 +145,8 @@ if (!midFile) {
   // Cleanup.
   unlinkSync(tmpPartial);
   unlinkSync(tmpFull);
+} else {
+  console.log("(no mid-size transcript found, skipping 3b)");
 }
 
 // ---------------------------------------------------------------------------

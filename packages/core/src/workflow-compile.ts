@@ -426,9 +426,15 @@ export function compileWorkflow(graph: WorkflowGraph): CompiledWorkflow {
         );
         const path = match[1].trim();
         const expr = pathExpr(path, node);
-        parts.push(
-          `\${${path.endsWith(".result") || path === "attempt.gateFindings" ? expr : `String(${expr})`}}`
-        );
+        // A whole result is an object, and reads as its JSON, as
+        // `renderPrompt` renders it; the findings are already JSON text.
+        let rendered = `String(${expr})`;
+        if (path.endsWith(".result")) {
+          rendered = `JSON.stringify(${expr}, null, 2)`;
+        } else if (path === "attempt.gateFindings") {
+          rendered = expr;
+        }
+        parts.push(`\${${rendered}}`);
         last = (match.index ?? 0) + match[0].length;
       }
       parts.push(

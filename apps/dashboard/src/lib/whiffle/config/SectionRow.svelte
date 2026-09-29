@@ -129,7 +129,8 @@
             class="label"
             {@attach land(() => (share ? `title:${share}` : undefined), {
               uniform: true,
-            })}>{name}</span
+            })}
+            >{name}</span
           >
         {/if}
         {#if badge}

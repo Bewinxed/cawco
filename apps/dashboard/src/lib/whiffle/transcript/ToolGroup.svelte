@@ -310,9 +310,7 @@
                 out:iconSwap
               >
             {:else}
-              <span class="tool-glyph" in:iconSwap out:iconSwap
-                ><Icon
-              /></span>
+              <span class="tool-glyph" in:iconSwap out:iconSwap><Icon /></span>
             {/if}</span
           >
         {/key}

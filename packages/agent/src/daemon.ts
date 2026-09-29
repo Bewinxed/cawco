@@ -572,8 +572,8 @@ const attach = (
     };
     supervisor.reannounce();
 
-    // A hand-off leaves as a `send` addressed at the target's machine; the hub
-    // relays it the same way it relays a dashboard's.
+    // An envelope a harness builds itself (opencode's custody inspection
+    // frame); hand-offs and spawns go through the hub's MCP, never this socket.
     supervisor.emit = (envelope) => {
       if (socket.readyState !== WebSocket.OPEN) {
         return;

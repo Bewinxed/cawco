@@ -12,7 +12,6 @@
   import PendingContent, {
     whileIdle,
   } from "$lib/components/ui/button/pending-content.svelte";
-  import { Spinner } from "$lib/components/ui/spinner";
   import {
     MachineRow,
     machineHue,
@@ -20,6 +19,7 @@
   } from "$lib/components/ui/machine-row";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Popover from "$lib/components/ui/popover";
+  import { Spinner } from "$lib/components/ui/spinner";
   import {
     IconCheck,
     IconInfo,
@@ -82,9 +82,7 @@
     if (failed > 0) {
       return "fail";
     }
-    return machines.length > 0 && applied === machines.length
-      ? "done"
-      : "none";
+    return machines.length > 0 && applied === machines.length ? "done" : "none";
   });
 
   let asked = $state<Record<string, boolean>>({});

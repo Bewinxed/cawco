@@ -94,33 +94,41 @@
   >();
   /** Each options row's height as the card settled, by its question. */
   const rowHeights = new Map<string, number>();
+  /** Every options row's height and every option's place, as the card settles. */
+  function measure(root: HTMLElement): void {
+    for (const row of root.querySelectorAll<HTMLElement>(".qopts")) {
+      rowHeights.set(row.dataset.question ?? "", row.offsetHeight);
+      for (const option of row.querySelectorAll<HTMLElement>(".opt")) {
+        stood.set(option, {
+          top: option.offsetTop,
+          left: option.offsetLeft,
+          width: option.offsetWidth,
+        });
+      }
+    }
+  }
+  /** The picked options leave for the answer that replaces the card. */
+  function departChosen(root: HTMLElement): void {
+    for (const q of questions) {
+      for (const label of chosen(q.question)) {
+        const option = root.querySelector<HTMLElement>(
+          `.opt[data-key="${CSS.escape(shareKey(q.question, label))}"]`
+        );
+        if (option) {
+          option.dataset.share = shareKey(q.question, label);
+          depart(option);
+        }
+      }
+    }
+  }
   let wasSettled = untrack(() => settled);
   $effect.pre(() => {
     const now = settled;
-    if (now && !wasSettled && section) {
+    const root = section;
+    if (now && !wasSettled && root) {
       untrack(() => {
-        for (const row of section?.querySelectorAll<HTMLElement>(".qopts") ??
-          []) {
-          rowHeights.set(row.dataset.question ?? "", row.offsetHeight);
-          for (const option of row.querySelectorAll<HTMLElement>(".opt")) {
-            stood.set(option, {
-              top: option.offsetTop,
-              left: option.offsetLeft,
-              width: option.offsetWidth,
-            });
-          }
-        }
-        for (const q of questions) {
-          for (const label of chosen(q.question)) {
-            const option = section?.querySelector<HTMLElement>(
-              `.opt[data-key="${CSS.escape(shareKey(q.question, label))}"]`
-            );
-            if (option) {
-              option.dataset.share = shareKey(q.question, label);
-              depart(option);
-            }
-          }
-        }
+        measure(root);
+        departChosen(root);
       });
     }
     wasSettled = now;
@@ -132,12 +140,7 @@
     if (was === undefined || !motionOk.current) {
       return;
     }
-    fold(
-      row,
-      !dismissed,
-      { ms: dur("--dur-exit"), easing: CURVE.out },
-      was
-    );
+    fold(row, !dismissed, { ms: dur("--dur-exit"), easing: CURVE.out }, was);
   }
   /** An option not picked fades where it stood, out of the flow. */
   function leave(node: HTMLElement) {
@@ -176,11 +179,7 @@
   };
 </script>
 
-<section
-  aria-label="Question from the agent"
-  class="hitl"
-  bind:this={section}
->
+<section aria-label="Question from the agent" class="hitl" bind:this={section}>
   <h2>
     <span class="state">
       {#if answered}
@@ -212,9 +211,8 @@
             class="opt sel"
             {@attach land(() => shareKey(q.question, opt.label), { ms: dur('--dur-pop') })}
           >
-            <span class="kc">{q.options.indexOf(opt) + 1}</span><span
-              >{opt.label}</span
-            >
+            <span class="kc">{q.options.indexOf(opt) + 1}</span
+            ><span>{opt.label}</span>
           </span>
         {/each}
       {/if}
