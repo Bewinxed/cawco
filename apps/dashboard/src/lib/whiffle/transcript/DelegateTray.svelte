@@ -14,6 +14,7 @@
   import type { TransitionConfig } from "svelte/transition";
   import { toast } from "svelte-sonner";
   import { Button } from "$lib/components/ui/button";
+  import { Spinner } from "$lib/components/ui/spinner";
   import {
     IconAsk,
     IconExternal,
@@ -71,7 +72,14 @@
   const GAP = 7;
   const MORE = 59;
 
-  type Tone = "running" | "asked" | "needs" | "done" | "cancelled" | "failed";
+  type Tone =
+    | "starting"
+    | "running"
+    | "asked"
+    | "needs"
+    | "done"
+    | "cancelled"
+    | "failed";
   interface Chip {
     entry: Entry;
     item: WorkItemSummary;
@@ -102,6 +110,8 @@
       tone = "needs";
     } else if (routed.length > 0) {
       tone = "asked";
+    } else if (item.state === "starting") {
+      tone = "starting";
     } else {
       tone = "running";
     }
@@ -762,7 +772,9 @@
                   in:slotIn={tone === 'done' || tone === 'failed'}
                   out:slotOut
                 >
-                  {#if tone === 'running'}
+                  {#if tone === 'starting'}
+                    <Spinner aria-hidden="true" role="presentation" />
+                  {:else if tone === 'running'}
                     <span
                       class="dot"
                       style:animation-delay="-{Date.now() % 2000}ms"
@@ -845,7 +857,9 @@
                       class="pstate {tone}"
                       role="img"
                     >
-                      {#if tone === 'running'}
+                      {#if tone === 'starting'}
+                        <Spinner aria-hidden="true" role="presentation" />
+                      {:else if tone === 'running'}
                         <span
                           class="dot"
                           style:animation-delay="-{Date.now() % 2000}ms"
@@ -1036,6 +1050,7 @@
       display: block;
     }
   }
+  .starting .slot,
   .running .slot,
   .asked .slot,
   .cancelled .slot {

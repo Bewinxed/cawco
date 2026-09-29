@@ -22,6 +22,7 @@
     describeTool,
     type ToolStatus,
   } from "$lib/components/features/tool-cards/descriptors";
+  import { Skeleton } from "$lib/components/ui/skeleton";
   import { IconCpu, IconHandoff, IconReport, IconRules } from "$lib/icons";
   import { whiffle } from "../client.svelte";
   import { CURVE, motionOk } from "../motion/curves.svelte";
@@ -124,6 +125,8 @@
   }
 
   const branch = $derived(whiffle.session(instanceId));
+  /** The read is still under way (or not begun) and nothing has arrived to show. */
+  const loading = $derived(!branch || branch.loading || branch.hydrating);
 
   /** The newest rows, oldest first: a few more than the tail shows, for the one leaving. */
   const rows = $derived.by((): Row[] => {
@@ -293,6 +296,15 @@
           {:else if row}
             <span class="text">{row.text}</span>
           {/if}
+        </div>
+      {/each}
+    </div>
+  {:else if loading}
+    <!-- Its transcript is on the way: three rows' worth of the house skeleton. -->
+    <div aria-label="Loading its transcript" class="column" role="status">
+      {#each [240, 180, 280] as width (width)}
+        <div class="row">
+          <Skeleton class="h-3" style="inline-size: {width}px" />
         </div>
       {/each}
     </div>
