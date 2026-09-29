@@ -4556,6 +4556,14 @@ export class OpencodeHarness implements Harness {
 }
 
 /**
+ * Whether an assistant message is the one its model ended the turn with: it
+ * has completed, without an error, and finished on `stop` (not `tool-calls`,
+ * `length` or `unknown`).
+ */
+const endsTurn = (info: AssistantMessage): boolean =>
+  Boolean(info.time.completed) && !info.error && info.finish === "stop";
+
+/**
  * The user messages opencode has written and not yet given the model: those
  * written behind an assistant message still being written. opencode stores a
  * send the moment it is dispatched and takes it up when the step in flight
@@ -4661,6 +4669,9 @@ export function toTranscript(
         // A compaction's summary: opencode's context restarts from here.
         ...((info as AssistantMessage).summary
           ? { compactSummary: true as const }
+          : {}),
+        ...(endsTurn(info as AssistantMessage)
+          ? { turnEnd: true as const }
           : {}),
       });
     }

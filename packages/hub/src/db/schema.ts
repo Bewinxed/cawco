@@ -2,6 +2,7 @@ import type {
   AuthState,
   BuildInfo,
   ClaudeLimits,
+  ContinuationJob,
   FleetMcpConfig,
   FleetScope,
   FleetSyncReport,
@@ -35,6 +36,7 @@ import {
   sqliteTable,
   text,
 } from "drizzle-orm/sqlite-core";
+import type { ContinueRequest, PreparedContinuation } from "../continuation";
 
 const timestamp = (column: string) => integer(column, { mode: "timestamp_ms" });
 
@@ -1052,4 +1054,33 @@ export const claudeContextWindows = sqliteTable("claude_context_windows", {
   model: text("model").primaryKey(),
   contextWindow: integer("context_window").notNull(),
   observedAt: timestamp("observed_at").notNull(),
+});
+
+/**
+ * "Continue in new session" jobs: the one record of each, so a hub that
+ * restarts mid-way resumes it rather than forgetting it. A job moves
+ * summarising → starting → started, or ends failed/cancelled; a settled one
+ * is kept a few minutes so a dashboard that was away can still hear how it
+ * ended, then deleted.
+ */
+export const continuations = sqliteTable("continuations", {
+  id: text("id").primaryKey(),
+  sourceInstanceId: text("source_instance_id").notNull(),
+  /** The request as asked, and its inputs as read then (continuation.ts). */
+  request: text("request", { mode: "json" }).$type<ContinueRequest>().notNull(),
+  prepared: text("prepared", { mode: "json" })
+    .$type<PreparedContinuation>()
+    .notNull(),
+  /** The summariser answering now; a resumed job may have replaced it. */
+  summariserInstanceId: text("summariser_instance_id"),
+  /** Minted when the job is: the new session is started under this id. */
+  targetInstanceId: text("target_instance_id").notNull(),
+  /** The send the opening goes out as, so it is sent once whatever restarts. */
+  openingUuid: text("opening_uuid").notNull(),
+  /** The summariser's answer, kept once read so a restart never asks again. */
+  summary: text("summary"),
+  stage: text("stage").$type<ContinuationJob["stage"]>().notNull(),
+  error: text("error"),
+  createdAt: timestamp("created_at").notNull(),
+  updatedAt: timestamp("updated_at").notNull(),
 });

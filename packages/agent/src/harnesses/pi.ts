@@ -204,7 +204,10 @@ const assistantEntries = (
   next: string | undefined
 ): SessionMessage[] => {
   const blocks = toBlocks(message.content);
-  const { errorMessage } = message as { errorMessage?: string };
+  const { errorMessage, stopReason } = message as {
+    errorMessage?: string;
+    stopReason?: string;
+  };
   const retried =
     next === "assistant" || (next === undefined && openTurns.has(sessionKey));
   return [
@@ -218,6 +221,8 @@ const assistantEntries = (
             parent_tool_use_id: null,
             parent_agent_id: null,
             timestamp: entry.timestamp,
+            // The message pi's model ended the turn with, of its own accord.
+            ...(stopReason === "stop" ? { turnEnd: true as const } : {}),
           },
         ]
       : []),

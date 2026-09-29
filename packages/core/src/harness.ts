@@ -349,6 +349,15 @@ export interface SessionMessage {
    * the moment it was opened.
    */
   timestamp?: string;
+  /**
+   * An assistant entry of the message its model ended the turn with, of its
+   * own accord: Claude's `stop_reason` `end_turn`/`stop_sequence`, opencode's
+   * completed message with `finish` `stop`, pi's `stopReason` `stop`. Absent
+   * on a message still being written, one that stopped for a tool call, and
+   * one cut short (length, error, abort) — so a turn whose last assistant
+   * entry carries this is a finished answer.
+   */
+  turnEnd?: true;
   type: "user" | "assistant" | "system";
   uuid: string;
 }

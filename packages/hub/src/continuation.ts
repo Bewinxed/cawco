@@ -13,9 +13,11 @@
  * what a compaction forgot about files is still there.
  */
 import {
+  type EffortLevel,
   type GitChanges,
   type HarnessKind,
   type NeutralContentBlock,
+  type PermissionMode,
   type SessionMessage,
   SUMMARY_CAP_TOKENS,
 } from "@whiffle/core";
@@ -27,6 +29,41 @@ export interface ContinuationSource {
   instanceId: string;
   model: string;
   title: string;
+}
+
+/** What "continue in new session" is asked: who summarises, what starts. */
+export interface ContinueRequest {
+  note?: string;
+  summarizer: { harness: HarnessKind; model: string };
+  /** The same options a dashboard spawn sends; machine and cwd default to the source's. */
+  target: {
+    bootstrap?: { repo: string; baseDir: string };
+    cwd?: string;
+    effort?: EffortLevel;
+    harness: HarnessKind;
+    machineId?: string;
+    model: string;
+    permissionMode?: PermissionMode;
+    projectId?: string;
+    scratch?: { worktree?: boolean; baseCwd?: string };
+  };
+}
+
+/**
+ * A continuation's inputs as read when it was asked for: the source, what was
+ * extracted from it, the summariser's prompt (none when there is nothing
+ * before the tail) and the sizes the fit was judged by. Kept with the job, so
+ * a job resumed after a restart hands on exactly what it was started with.
+ */
+export interface PreparedContinuation {
+  compacted: boolean;
+  entries: { live: number; whole: number; scope: number };
+  extracted: Extracted;
+  liveContextTokens: number;
+  openingTokens: number;
+  prompt: string | undefined;
+  source: ContinuationSource & { machineId: string };
+  summariseInputTokens: number;
 }
 
 /** What code extracts from a transcript, before any model reads it. */
@@ -528,18 +565,26 @@ const SECTIONS = [
 /**
  * What a session's last turn answered with, as its transcript stores it: the
  * text blocks of the assistant entries after the last user entry (the prompt,
- * or the last tool result), in order. Read from storage because a harness's
- * live frames can repeat what they carry (opencode streams a block's text as
- * it grows), and the summary handed on must be the words themselves.
+ * or the last tool result), in order — once that turn has ended
+ * ({@link SessionMessage.turnEnd}); before then, nothing. Read from storage
+ * because a harness's live frames can repeat what they carry (opencode
+ * streams a block's text as it grows), and because the transcript is the one
+ * record of an answer that finished while the hub was not listening.
  */
-export function turnAnswer(entries: SessionMessage[]): string {
+export function finishedAnswer(entries: SessionMessage[]): string | undefined {
   let start = entries.length;
   while (start > 0 && entries[start - 1].type !== "user") {
     start -= 1;
   }
-  return entries
+  const answer = entries
     .slice(start)
-    .filter((entry) => entry.type === "assistant")
+    .filter((entry) => entry.type === "assistant");
+  // Only a turn its model ended: one still being written, stopped on a tool
+  // call, or cut short has no answer yet.
+  if (!answer.at(-1)?.turnEnd) {
+    return undefined;
+  }
+  const text = answer
     .flatMap((entry) =>
       blocksOf(entry).flatMap((block) =>
         block.type === "text" ? [block.text] : []
@@ -547,6 +592,7 @@ export function turnAnswer(entries: SessionMessage[]): string {
     )
     .join("\n\n")
     .trim();
+  return text || undefined;
 }
 
 /** What the summariser is asked, in one pass: the middle first, instructions last. */

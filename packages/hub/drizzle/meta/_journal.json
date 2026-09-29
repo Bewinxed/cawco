@@ -365,6 +365,13 @@
       "when": 1790662751776,
       "tag": "0051_workspace_boundary",
       "breakpoints": true
+    },
+    {
+      "idx": 52,
+      "version": "6",
+      "when": 1790675147919,
+      "tag": "0052_continuations",
+      "breakpoints": true
     }
   ]
 }

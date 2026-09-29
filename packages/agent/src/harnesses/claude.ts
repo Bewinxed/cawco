@@ -1142,7 +1142,20 @@ const toEntry = (
     ...((entry as SDKSessionMessage).joined
       ? { joined: (entry as SDKSessionMessage).joined }
       : {}),
+    ...(entry.type === "assistant" && endsTurn(entry.message)
+      ? { turnEnd: true as const }
+      : {}),
   };
+};
+
+/**
+ * Whether a stored assistant message is the one its model ended the turn
+ * with: Claude writes each of its lines with the message's final
+ * `stop_reason`, `null` while it is still being written.
+ */
+const endsTurn = (message: unknown): boolean => {
+  const reason = (message as { stop_reason?: unknown } | null)?.stop_reason;
+  return reason === "end_turn" || reason === "stop_sequence";
 };
 
 /** The fields of a ring line an adoption reads; `undefined` when it is not JSON. */

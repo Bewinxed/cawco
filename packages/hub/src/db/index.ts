@@ -55,6 +55,7 @@ import {
   agents,
   capabilityUsageDaily,
   claudeContextWindows,
+  continuations,
   credentials,
   delegateEvents,
   fleetAgents,
@@ -106,6 +107,7 @@ const MIGRATIONS_DIR = Bun.fileURLToPath(
 );
 
 export type InstanceKind = (typeof instances.$inferSelect)["kind"];
+export type ContinuationRow = typeof continuations.$inferSelect;
 export type WorkflowRow = typeof workflows.$inferSelect;
 export type WorkflowRunRow = typeof workflowRuns.$inferSelect;
 export type WorkflowStepRow = typeof workflowSteps.$inferSelect;
@@ -249,6 +251,9 @@ export interface DbShape {
   readonly clearFleetMemory: () => void;
   /** Forget the OpenRouter key. */
   readonly clearOpenRouterConnection: () => void;
+  readonly continuationRow: (id: string) => ContinuationRow | undefined;
+  /** Every continuation job, oldest first. */
+  readonly continuationRows: () => ContinuationRow[];
   readonly createProject: (project: {
     id: string;
     machineId: string;
@@ -263,6 +268,7 @@ export interface DbShape {
   ) => WorkspaceRow;
   /** The ask a `requestId` opened, so its answer is filed under the same parent. */
   readonly delegateAsk: (requestId: string) => DelegateEvent | undefined;
+  readonly deleteContinuation: (id: string) => void;
   readonly deleteFleetAgent: (name: string) => void;
   readonly deleteFleetHook: (id: string) => void;
   readonly deleteFleetMemoryDoc: (path: string) => void;
@@ -345,6 +351,9 @@ export interface DbShape {
   ) => WorkflowEffectRow | undefined;
   readonly getWorkflowRun: (id: string) => WorkflowRunRow | undefined;
   readonly getWorkflowStep: (id: string) => WorkflowStepRow | undefined;
+  readonly insertContinuation: (
+    row: Omit<ContinuationRow, "createdAt" | "updatedAt">
+  ) => ContinuationRow;
   /** Look up a single non-discarded instance by its harness sessionId. */
   readonly instanceBySessionId: (
     sessionId: string
@@ -830,6 +839,16 @@ export interface DbShape {
   ) => (typeof instances.$inferSelect)[];
   /** Enabled plugins with no resolved files and no recorded failure — what a resolve is for. */
   readonly unresolvedPlugins: () => string[];
+  /** Moves one job; the row as it now is, or undefined when it is gone. */
+  readonly updateContinuation: (
+    id: string,
+    patch: Partial<
+      Pick<
+        ContinuationRow,
+        "stage" | "error" | "summary" | "summariserInstanceId"
+      >
+    >
+  ) => ContinuationRow | undefined;
   /** One change to a send's record — the hub's only kind of write to one. */
   readonly updateSend: (
     uuid: string,
@@ -3082,6 +3101,28 @@ const make = (path: string): DbShape => {
           .all()
           .map((row) => [row.model, row.contextWindow])
       ),
+    continuationRows: () =>
+      db.select().from(continuations).orderBy(continuations.createdAt).all(),
+    continuationRow: (id) =>
+      db.select().from(continuations).where(eq(continuations.id, id)).get(),
+    deleteContinuation: (id) => {
+      db.delete(continuations).where(eq(continuations.id, id)).run();
+    },
+    insertContinuation: (row) => {
+      const now = new Date();
+      return db
+        .insert(continuations)
+        .values({ ...row, createdAt: now, updatedAt: now })
+        .returning()
+        .get();
+    },
+    updateContinuation: (id, patch) =>
+      db
+        .update(continuations)
+        .set({ ...patch, updatedAt: new Date() })
+        .where(eq(continuations.id, id))
+        .returning()
+        .get(),
     noteClaudeContextWindow: (model, contextWindow) => {
       db.insert(claudeContextWindows)
         .values({ model, contextWindow, observedAt: new Date() })
