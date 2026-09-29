@@ -871,7 +871,14 @@ export interface DbShape {
     change: Partial<
       Pick<
         WorkItemRow,
-        "state" | "result" | "error" | "endedAt" | "dismissedAt"
+        | "state"
+        | "result"
+        | "error"
+        | "endedAt"
+        | "dismissedAt"
+        | "checks"
+        | "checkingSince"
+        | "submission"
       >
     >
   ) => WorkItemRow | undefined;

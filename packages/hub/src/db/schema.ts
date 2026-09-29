@@ -394,6 +394,13 @@ export interface WorkItemCheck {
   timeoutSec?: number;
 }
 
+/** What a delegate hands in with `finish_item`. */
+export interface WorkItemSubmission {
+  blocked?: { command: string; error: string };
+  findings?: { title: string; detail: string }[];
+  summary: string;
+}
+
 /**
  * One piece of delegated work: a brief, run by one session in one workspace,
  * ending in a report. A follow-up is a new item in the same workspace, run by
@@ -425,6 +432,16 @@ export const workItems = sqliteTable(
      * still ends on a turn nothing answers.
      */
     checks: text("checks", { mode: "json" }).$type<WorkItemCheck[]>(),
+    /**
+     * When the hub began running its checks for a `finish_item`, while they
+     * run. Set, the item is checking: a hub that starts finds it here and runs
+     * the checks again from the first, on {@link submission}.
+     */
+    checkingSince: timestamp("checking_since"),
+    /** The `finish_item` the running checks answer, kept while they run. */
+    submission: text("submission", {
+      mode: "json",
+    }).$type<WorkItemSubmission>(),
     /**
      * The final report: the summary, check results, commits and findings the
      * hub built when the checks passed (an item without checks: its session's

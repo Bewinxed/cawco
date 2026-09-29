@@ -40,7 +40,7 @@ import {
   withWorkspaceLine,
 } from "@whiffle/core";
 import type { DbShape, WorkItemRow, WorkspaceRow } from "./db";
-import type { WorkItemCheck } from "./db/schema";
+import type { WorkItemCheck, WorkItemSubmission } from "./db/schema";
 
 /** How long the name a caller gives a delegate or a started session may run. */
 export const SESSION_TITLE_MAX = 48;
@@ -319,13 +319,6 @@ export const checksProblem = (checks: WorkItemCheck[]): string | undefined => {
   return undefined;
 };
 
-/** What `finish_item` is called with. */
-export interface FinishRequest {
-  blocked?: { command: string; error: string };
-  findings?: { title: string; detail: string }[];
-  summary: string;
-}
-
 /** One check, as the hub ran it. */
 interface CheckOutcome {
   check: WorkItemCheck;
@@ -362,7 +355,7 @@ const checkResultLine = (outcome: CheckOutcome): string =>
     : checkLine(outcome);
 
 /** The findings, numbered; nothing when there are none. */
-const findingsBlock = (findings: FinishRequest["findings"]): string =>
+const findingsBlock = (findings: WorkItemSubmission["findings"]): string =>
   findings?.length
     ? `\n\nFindings:\n${findings.map((finding, index) => `${index + 1}. ${finding.title}: ${finding.detail}`).join("\n")}`
     : "";
@@ -399,7 +392,7 @@ export const createWorkItems = ({
 }: WorkItemDeps) => {
   /** Turns in a row each live item's session ended without `finish_item`, by item. */
   const quiet = new Map<string, number>();
-  /** Items whose checks are running now: a second `finish_item` waits its turn. */
+  /** Items whose checks this hub process is running now: a resume leaves them to that run. */
   const finishing = new Set<string>();
   /** Every write to an item goes out to the dashboards as it lands. */
   const published = (
@@ -797,9 +790,8 @@ export const createWorkItems = ({
     return { body: `${turn.text}${reportLine(ended)}`, failed };
   };
 
-  /** Tells an item's session that its turn ended with the item still open. */
-  const stillOpen = (row: InstanceRow, checks: WorkItemCheck[]): void => {
-    const names = checks.map((check) => check.name).join(", ");
+  /** A word from the hub about an item, to the item's session. */
+  const tell = (row: InstanceRow, content: string): void => {
     send({
       verb: "send",
       machineId: row.machineId,
@@ -809,10 +801,7 @@ export const createWorkItems = ({
         message: {
           type: "user",
           uuid: crypto.randomUUID(),
-          message: {
-            role: "user",
-            content: `Your work item is still open. Its checks: ${names}. Finish the work and call finish_item, or call it with \`blocked\` and the exact command and error.`,
-          },
+          message: { role: "user", content },
           parent_tool_use_id: null,
           origin: { kind: "system", name: "work-item" },
         },
@@ -820,10 +809,19 @@ export const createWorkItems = ({
     });
   };
 
-  /** The session's live, checked item that `finish_item` may finish, or the refusal. */
+  /** The names of an item's checks, as its session is told them. */
+  const checkNames = (checks: WorkItemCheck[]): string =>
+    checks.map((check) => check.name).join(", ");
+
+  /**
+   * The session's live, checked item that `finish_item` may finish; the done
+   * result, when it is done already; or the refusal.
+   */
   const finishable = (
     instanceId: string
-  ): { row: InstanceRow; item: WorkItemRow; checks: WorkItemCheck[] } => {
+  ):
+    | { row: InstanceRow; item: WorkItemRow; checks: WorkItemCheck[] }
+    | string => {
     const [row] = db.getInstancesByIds([instanceId]);
     const item = row ? itemOf(row) : undefined;
     if (!(row && item?.checks)) {
@@ -832,16 +830,19 @@ export const createWorkItems = ({
         "This session has no work item with acceptance checks."
       );
     }
+    if (item.state === "done") {
+      return `The item is done.\n\n${item.result ?? ""}\n\nEnd your turn.`;
+    }
     if (!LIVE.has(item.state)) {
       throw new WorkItemRefusal(
         409,
         `${item.title} (${item.id}) is ${item.state}; finish_item finishes live work only.`
       );
     }
-    if (finishing.has(item.id)) {
+    if (item.checkingSince) {
       throw new WorkItemRefusal(
         409,
-        "finish_item is already running this item's checks."
+        "checks are already running for this item"
       );
     }
     return { row, item, checks: item.checks };
@@ -918,6 +919,60 @@ export const createWorkItems = ({
     return commits.trim()
       ? `\n\nCommits:${fenced(commits.trim())}\n\nDiffstat:${fenced(diffstat.trim() || "(no changes)")}`
       : none;
+  };
+
+  /**
+   * THE run of a `finish_item`: the item's checks, in order, against the
+   * submission stored on its row, to an outcome. The live call and a hub
+   * start-up resume both come here. All passing, the item is done and the
+   * parent gets the report the hub builds; any failing, it is back to running
+   * and the answer names the failures. Either way the row stops checking —
+   * also when a check cannot run at all, which throws. Answers the text the
+   * delegate reads, and whether the item is done.
+   */
+  const settleChecks = async (
+    item: WorkItemRow,
+    checks: WorkItemCheck[],
+    submission: WorkItemSubmission
+  ): Promise<{ done: boolean; text: string }> => {
+    const [row] = db.getInstancesByIds([item.instanceId]);
+    const [workspace] = db.workspacesNamed(item.workspaceId);
+    const settled = { checkingSince: null, submission: null };
+    finishing.add(item.id);
+    try {
+      const outcomes = await runChecks(workspace, checks);
+      const failing = outcomes.filter((outcome) => !outcome.passed);
+      if (failing.length > 0) {
+        update(item.id, settled);
+        const passing = outcomes.filter((outcome) => outcome.passed);
+        return {
+          done: false,
+          text: `${failing.length} of ${outcomes.length} checks failed. The item is still running: fix the cause and call finish_item again.\n\n${[...failing, ...passing].map(checkResultLine).join("\n")}`,
+        };
+      }
+      const lines = outcomes.map(checkLine).join("\n");
+      const body = `${submission.summary}\n\nChecks:\n${lines}${await changesSince(workspace, item)}${findingsBlock(submission.findings)}`;
+      // The checks took their time: the item may have been stopped since.
+      const current = db.workItem(item.id) ?? item;
+      if (!LIVE.has(current.state)) {
+        update(item.id, settled);
+        return {
+          done: false,
+          text: `The checks passed, but ${current.title} is ${current.state} now; nothing was reported.`,
+        };
+      }
+      const done = finish(current, { state: "done", result: body, ...settled });
+      report(row, `${body}${reportLine(done)}`, false);
+      return {
+        done: true,
+        text: `All ${outcomes.length} checks passed.\n\n${lines}\n\nThe item is done. End your turn.`,
+      };
+    } catch (error) {
+      update(item.id, settled);
+      throw error;
+    } finally {
+      finishing.delete(item.id);
+    }
   };
 
   return {
@@ -1014,7 +1069,9 @@ export const createWorkItems = ({
       if (!item.checks) {
         return uncheckedTurn(item, turn, busy);
       }
-      if (!LIVE.has(item.state)) {
+      // A finished item has reported; one whose checks are running reports
+      // when they settle (its session's own call may have died with the hub).
+      if (!LIVE.has(item.state) || item.checkingSince) {
         return undefined;
       }
       if (turn.error !== undefined) {
@@ -1034,7 +1091,10 @@ export const createWorkItems = ({
         return { body: `${QUIET_ERROR}${reportLine(failed)}`, failed: true };
       }
       quiet.set(item.id, turns);
-      stillOpen(row, item.checks);
+      tell(
+        row,
+        `Your work item is still open. Its checks: ${checkNames(item.checks)}. Finish the work and call finish_item, or call it with \`blocked\` and the exact command and error.`
+      );
       return undefined;
     },
 
@@ -1052,53 +1112,123 @@ export const createWorkItems = ({
 
     /**
      * `finish_item` from the session `instanceId`: with `blocked`, the item
-     * fails with that command and error; otherwise the hub runs its checks in
-     * order, in its worktree on its machine. All passing, the item is `done`
-     * and the parent gets the report the hub builds from the results; any
-     * failing, it stays `running` and only the session hears. Answers what
+     * fails with that command and error. Otherwise the submission is stored
+     * and the item marked checking before the first check starts, so a hub
+     * that dies mid-run resumes it ({@link resumeChecks}); then
+     * {@link settleChecks} runs it to its outcome. An item done already
+     * answers its done result; one checking already is refused. Answers what
      * the tool returns.
      */
     async finishItem(
       instanceId: string,
-      request: FinishRequest
+      request: WorkItemSubmission
     ): Promise<string> {
-      const { row, item, checks: listed } = finishable(instanceId);
+      const open = finishable(instanceId);
+      if (typeof open === "string") {
+        return open;
+      }
+      const { row, item, checks } = open;
       quiet.delete(item.id);
-      const findings = findingsBlock(request.findings);
 
       if (request.blocked) {
         const error = `Blocked: ${request.blocked.command}${fenced(request.blocked.error)}`;
         const failed = finish(item, { state: "failed", error });
         report(
           row,
-          `${request.summary}\n\n${error}${findings}${reportLine(failed)}`,
+          `${request.summary}\n\n${error}${findingsBlock(request.findings)}${reportLine(failed)}`,
           true
         );
         return "The item failed as blocked; your parent has the command and the error. End your turn.";
       }
 
-      const [workspace] = db.workspacesNamed(item.workspaceId);
-      finishing.add(item.id);
-      try {
-        const outcomes = await runChecks(workspace, listed);
-        const failing = outcomes.filter((outcome) => !outcome.passed);
-        if (failing.length > 0) {
-          const passing = outcomes.filter((outcome) => outcome.passed);
-          return `${failing.length} of ${outcomes.length} checks failed. The item is still running: fix the cause and call finish_item again.\n\n${[...failing, ...passing].map(checkResultLine).join("\n")}`;
+      update(item.id, { submission: request, checkingSince: new Date() });
+      return (await settleChecks(item, checks, request)).text;
+    },
+
+    /**
+     * An agent has registered: every item on its machine left checking by a
+     * hub that stopped mid-run has its checks run again from the first, on
+     * the stored submission, through {@link settleChecks}. A pass needs no
+     * word to the session — its parent has the report; a failure, or checks
+     * that cannot run, is sent to the session as the tool would have
+     * answered. An item this hub is running now is left to that run.
+     */
+    resumeChecks(machineId: string): void {
+      for (const workspace of db.activeWorkspacesOn(machineId)) {
+        for (const item of db.workItemsIn(workspace.id)) {
+          const { checks, submission } = item;
+          if (
+            !(item.checkingSince && checks && submission) ||
+            finishing.has(item.id)
+          ) {
+            continue;
+          }
+          console.log(`resumed checks for item ${item.id}`);
+          const [row] = db.getInstancesByIds([item.instanceId]);
+          settleChecks(item, checks, submission)
+            .then(({ done, text }) => {
+              if (!done) {
+                tell(row, text);
+              }
+            })
+            .catch((error: unknown) => {
+              const reason =
+                error instanceof Error ? error.message : String(error);
+              console.error(`[work-items] ${item.id}: ${reason}`);
+              tell(
+                row,
+                `Your work item's checks could not run: ${reason}. Call finish_item again.`
+              );
+            });
         }
-        const checks = outcomes.map(checkLine).join("\n");
-        const body = `${request.summary}\n\nChecks:\n${checks}${await changesSince(workspace, item)}${findings}`;
-        // The checks took their time: the item may have been stopped since.
-        const current = db.workItem(item.id) ?? item;
-        if (!LIVE.has(current.state)) {
-          return `The checks passed, but ${current.title} is ${current.state} now; nothing was reported.`;
-        }
-        const done = finish(current, { state: "done", result: body });
-        report(row, `${body}${reportLine(done)}`, false);
-        return `All ${outcomes.length} checks passed.\n\n${checks}\n\nThe item is done. End your turn.`;
-      } finally {
-        finishing.delete(item.id);
       }
+    },
+
+    /**
+     * The parent replaces the whole list of a running item's checks — one
+     * written for a design that changed since. Refused to anyone else, while
+     * the checks run, and on finished work. The session is told the new list,
+     * and the still-open reminder and `finish_item` read it from then on.
+     * Answers what the tool returns.
+     */
+    setChecks(
+      instanceId: string,
+      from: string,
+      checks: WorkItemCheck[]
+    ): string {
+      const [row] = db.getInstancesByIds([instanceId]);
+      const item = row ? itemOf(row) : undefined;
+      if (!(row && item)) {
+        throw new WorkItemRefusal(404, `${instanceId} runs no work item.`);
+      }
+      if (item.parentInstanceId !== from) {
+        throw new WorkItemRefusal(
+          403,
+          "Only the session that delegated an item can replace its checks."
+        );
+      }
+      if (item.checkingSince) {
+        throw new WorkItemRefusal(
+          409,
+          "checks are running; wait for the outcome"
+        );
+      }
+      if (!LIVE.has(item.state)) {
+        throw new WorkItemRefusal(
+          409,
+          `${item.title} (${item.id}) is ${item.state}; only a running item's checks can be replaced.`
+        );
+      }
+      const unchecked = checksProblem(checks);
+      if (unchecked) {
+        throw new WorkItemRefusal(400, unchecked);
+      }
+      update(item.id, { checks });
+      tell(
+        row,
+        `Your work item's checks were replaced by your parent. Its checks: ${checkNames(checks)}.`
+      );
+      return `Replaced the checks of ${item.title} (${item.id}): ${checkNames(checks)}. Its session was told.`;
     },
 
     /** Its session never started: the item failed, and the report says why. */

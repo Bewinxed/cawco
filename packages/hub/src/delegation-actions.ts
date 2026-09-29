@@ -29,8 +29,7 @@ import {
   WHIFFLE_ENV,
   WHIFFLE_HUB_PORT,
 } from "@whiffle/core";
-import type { WorkItemCheck } from "./db/schema";
-import type { FinishRequest } from "./work-items";
+import type { WorkItemCheck, WorkItemSubmission } from "./db/schema";
 
 const WS_SCHEME = /^ws/;
 const WS_PATH_SUFFIX = /\/ws$/;
@@ -280,6 +279,7 @@ export const SPAWNING_TOOLS: ReadonlySet<string> = new Set([
   "stop_delegate",
   "interrupt_delegate",
   "answer_delegate",
+  "set_item_checks",
 ]);
 
 export interface HandoffDeps {
@@ -379,7 +379,7 @@ export interface HandoffActions {
    * Finishes this session's work item: the hub runs its checks, or fails it
    * as blocked. Answers what the hub says of the results.
    */
-  readonly finishItem: (request: FinishRequest) => Promise<string>;
+  readonly finishItem: (request: WorkItemSubmission) => Promise<string>;
   readonly generateImage: (
     request: ImageGenerationRequest
   ) => Promise<GeneratedImage>;
@@ -400,6 +400,14 @@ export interface HandoffActions {
   /** Pushes a note to the owner's Telegram — no peer, no ask, fire-and-forget. */
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   sendToUser(message: string, attachments?: string[]): Promise<string>;
+  /**
+   * Replaces the whole list of acceptance checks on one of this session's
+   * delegates' running work items. Answers what the hub says it did.
+   */
+  readonly setItemChecks: (
+    target: string,
+    checks: WorkItemCheck[]
+  ) => Promise<string>;
   readonly showPreview: (source: PreviewSource) => Promise<string>;
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   startSession(
@@ -842,6 +850,24 @@ export const handoffActions = ({
       // The checks may run for hours between them; Bun's fetch would drop a
       // response silent for five minutes.
       timeout: false,
+    });
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+    return ((await response.json()) as { text: string }).text;
+  },
+
+  async setItemChecks(target, checks) {
+    const { peers } = await roster(instanceId);
+    const peer = resolveDelegate(peers, target, instanceId);
+    const response = await fetch(`${hubHttpUrl()}/api/work-items/checks`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({
+        from: instanceId,
+        instanceId: peer.row.id,
+        checks,
+      }),
     });
     if (!response.ok) {
       throw new Error(await response.text());

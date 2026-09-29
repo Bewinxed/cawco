@@ -18,6 +18,32 @@ const sessionTitle = () =>
     .max(SESSION_TITLE_MAX)
     .describe(SESSION_TITLE_DESCRIPTION);
 
+/** A work item's acceptance checks: `delegate` files them, `set_item_checks` replaces them. */
+const checksParameter = () =>
+  z
+    .array(
+      z.object({
+        name: z.string().describe("2 to 6 plain words."),
+        command: z
+          .string()
+          .describe(
+            "A shell command, run with the item's worktree as its working directory."
+          ),
+        expect: z
+          .string()
+          .optional()
+          .describe("A literal string stdout must contain."),
+        timeoutSec: z
+          .number()
+          .int()
+          .min(1)
+          .max(3600)
+          .optional()
+          .describe("Seconds before the command is killed. Default 600."),
+      })
+    )
+    .min(1);
+
 function tool<T extends z.ZodRawShape>(
   name: string,
   description: string,
@@ -448,32 +474,9 @@ export function handoffTools(deps: HandoffDeps) {
               'visible here. A type marked "may delegate by default" flips that default; an explicit ' +
               "value here wins either way. Set true only for an orchestrator-style delegate that must fan out."
           ),
-        checks: z
-          .array(
-            z.object({
-              name: z.string().describe("2 to 6 plain words."),
-              command: z
-                .string()
-                .describe(
-                  "A shell command, run with the item's worktree as its working directory."
-                ),
-              expect: z
-                .string()
-                .optional()
-                .describe("A literal string stdout must contain."),
-              timeoutSec: z
-                .number()
-                .int()
-                .min(1)
-                .max(3600)
-                .optional()
-                .describe("Seconds before the command is killed. Default 600."),
-            })
-          )
-          .min(1)
-          .describe(
-            "The item's acceptance checks. The hub runs each command in the item's worktree when the delegate calls finish_item; the item is done only when every command exits 0 and its stdout contains `expect` where one is given. Write the checks a reviewer would run: build, lint, type-check, a grep that proves a removal, one script run for a live assertion. The delegate runs nothing beyond these to prove the work."
-          ),
+        checks: checksParameter().describe(
+          "The item's acceptance checks. The hub runs each command in the item's worktree when the delegate calls finish_item; the item is done only when every command exits 0 and its stdout contains `expect` where one is given. Write the checks a reviewer would run: build, lint, type-check, a grep that proves a removal, one script run for a live assertion. The delegate runs nothing beyond these to prove the work."
+        ),
       },
       async ({
         prompt,
@@ -579,6 +582,28 @@ export function handoffTools(deps: HandoffDeps) {
           },
         };
       }
+    ),
+    tool(
+      "set_item_checks",
+      "Replace the whole list of acceptance checks on one of YOUR delegates' running work items; the delegate is told, and finish_item runs the new list from then on. Use it when a check was written for a design that was then changed, instead of stopping the delegate.",
+      {
+        target: z
+          .string()
+          .describe(
+            'The delegate whose item it is: its directory name, e.g. "keeboard", or its id.'
+          ),
+        checks: checksParameter().describe(
+          "The item's new acceptance checks, replacing every one it had."
+        ),
+      },
+      async ({ target, checks }) => ({
+        content: [
+          {
+            type: "text" as const,
+            text: await actions.setItemChecks(target, checks),
+          },
+        ],
+      })
     ),
     tool(
       "stop_delegate",

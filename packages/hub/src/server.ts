@@ -320,6 +320,16 @@ const harnessSchema = t.Union([
   t.Literal("opencode"),
   t.Literal("pi"),
 ]);
+/** A work item's acceptance checks: `delegate`'s and `set_item_checks`'s. */
+const checksSchema = t.Array(
+  t.Object({
+    name: t.String(),
+    command: t.String(),
+    expect: t.Optional(t.String()),
+    timeoutSec: t.Optional(t.Number()),
+  }),
+  { minItems: 1 }
+);
 /** Continue in new session: every field of the summariser and target is the caller's to name. */
 const continueBody = t.Object({
   summarizer: t.Object({
@@ -7683,15 +7693,7 @@ export const createServer = ({
             cwd: t.Optional(t.String()),
             workspace: t.Optional(t.String()),
             fork: t.Optional(t.Boolean()),
-            checks: t.Array(
-              t.Object({
-                name: t.String(),
-                command: t.String(),
-                expect: t.Optional(t.String()),
-                timeoutSec: t.Optional(t.Number()),
-              }),
-              { minItems: 1 }
-            ),
+            checks: checksSchema,
           }),
           // A 400 that says which field is missing or malformed, in words:
           // a delegate without a title is refused, never named from its brief.
@@ -7763,6 +7765,36 @@ export const createServer = ({
           const { instanceId, ...finished } = body;
           try {
             return { text: await workItems.finishItem(instanceId, finished) };
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            return status(
+              error instanceof WorkItemRefusal ? error.status : 502,
+              message
+            );
+          }
+        }
+      )
+      // `set_item_checks`: the parent replaces a running item's checks.
+      .post(
+        "/api/work-items/checks",
+        {
+          body: t.Object({
+            from: t.String({ minLength: 1 }),
+            instanceId: t.String({ minLength: 1 }),
+            checks: checksSchema,
+          }),
+        },
+        ({ body, status }) => {
+          try {
+            const text = workItems.setChecks(
+              body.instanceId,
+              body.from,
+              body.checks
+            );
+            // An item from before checks gains finish_item with its first list.
+            delegationMcp.toolsChanged(body.instanceId);
+            return { text };
           } catch (error) {
             const message =
               error instanceof Error ? error.message : String(error);
@@ -8183,14 +8215,17 @@ export const createServer = ({
               }
               registry.registerAgent(message.machineId, ws, ws.remoteAddress);
               // Workspaces from before clones become clones as their agent
-              // starts; a spawn that gets there first converts its own.
+              // starts; a spawn that gets there first converts its own. Then
+              // checks a stopped hub left running on this machine run again:
+              // the machine is where they run.
               workItems
                 .convertWorktrees(message.machineId)
                 .catch((error: unknown) =>
                   console.warn(
                     `[hub] converting ${message.machineId}'s worktree workspaces failed: ${error instanceof Error ? error.message : String(error)}`
                   )
-                );
+                )
+                .then(() => workItems.resumeChecks(message.machineId));
               reconcilePreviews(
                 message.machineId,
                 ws.remoteAddress,

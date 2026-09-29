@@ -2399,6 +2399,7 @@ export class OpencodeSession implements HarnessSession {
                 "stop_delegate",
                 "interrupt_delegate",
                 "answer_delegate",
+                "set_item_checks",
                 "run_workflow",
                 "steer_workflow",
                 "list_workflows",
