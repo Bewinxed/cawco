@@ -48,13 +48,6 @@
     editBody: (id: string) => void;
   } = $props();
   const paths = $derived(node ? templatePaths(graph, node.id) : []);
-  const continuations = $derived(
-    node?.kind === "step"
-      ? upstream(graph, node.id).filter(
-          (entry) => entry.kind === "step" && entry.harness === node?.harness
-        )
-      : []
-  );
   const child = $derived(
     node?.kind === "workflow"
       ? workflows.find((workflow) => workflow.id === node?.workflowId)
@@ -248,19 +241,6 @@
                 ></label
               >
             </div>
-            <label
-              >Context<select
-                onchange={(event) => patch({ context: event.currentTarget.value ? { mode: 'continue', from: event.currentTarget.value } : { mode: 'fresh' } })}
-                value={node.context.mode === 'fresh' ? '' : node.context.from}
-              >
-                <option value="">Fresh</option>
-                {#each continuations as source (source.id)}
-                  <option value={source.id}>
-                    Continue from {source.title}
-                  </option>
-                {/each}
-              </select></label
-            >
             <TemplateInput
               label="Prompt"
               multiline

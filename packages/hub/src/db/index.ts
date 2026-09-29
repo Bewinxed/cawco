@@ -84,6 +84,8 @@ import {
   workflowRuns,
   workflowSteps,
   workflows,
+  workItems,
+  workspaces,
 } from "./schema";
 
 /** Ids looked up per statement (bound twice), well under SQLite's variable limit. */
@@ -109,6 +111,8 @@ export type WorkflowRunRow = typeof workflowRuns.$inferSelect;
 export type WorkflowStepRow = typeof workflowSteps.$inferSelect;
 export type WorkflowAttemptRow = typeof workflowAttempts.$inferSelect;
 export type WorkflowEffectRow = typeof workflowEffects.$inferSelect;
+export type WorkItemRow = typeof workItems.$inferSelect;
+export type WorkspaceRow = typeof workspaces.$inferSelect;
 
 /**
  * A session the returning daemon no longer carries. `resumes` is the whole
@@ -258,6 +262,12 @@ export interface DbShape {
     name: string;
     cwd: string;
   }) => typeof projects.$inferSelect | undefined;
+  /** Files a work item as the hub accepted it. */
+  readonly createWorkItem: (item: typeof workItems.$inferInsert) => WorkItemRow;
+  /** Files a workspace whose checkout its machine has just made. */
+  readonly createWorkspace: (
+    workspace: typeof workspaces.$inferInsert
+  ) => WorkspaceRow;
   /** The ask a `requestId` opened, so its answer is filed under the same parent. */
   readonly delegateAsk: (requestId: string) => DelegateEvent | undefined;
   readonly deleteFleetAgent: (name: string) => void;
@@ -413,6 +423,8 @@ export interface DbShape {
   readonly listWorkflowRuns: (workflowId?: string) => WorkflowRunRow[];
   readonly listWorkflowSteps: (runId: string) => WorkflowStepRow[];
   readonly listWorkflows: () => WorkflowRow[];
+  /** The work items a session delegated that are still `starting`/`running`. */
+  readonly liveWorkItemsOf: (parentInstanceId: string) => WorkItemRow[];
   readonly markAgentOffline: (machineId: string) => void;
   /**
    * Every row back to `offline`, for the one moment it is unconditionally true:
@@ -492,6 +504,8 @@ export interface DbShape {
     canDelegate?: boolean;
     workflowRunId?: string;
     workflowStepId?: string;
+    /** The work item the session runs; set once, at its spawn. */
+    workItemId?: string;
   }) => void;
   /**
    * The fields a dashboard may move on a live row: "Keep" — a side quest that
@@ -824,6 +838,11 @@ export interface DbShape {
       >
     >
   ) => SentMessageRow | undefined;
+  /** Moves a work item; the hub is its only writer. */
+  readonly updateWorkItem: (
+    id: string,
+    change: Partial<Pick<WorkItemRow, "state" | "result" | "error" | "endedAt">>
+  ) => WorkItemRow | undefined;
   readonly upsertAgent: (agent: {
     machineId: string;
     hostname: string;
@@ -853,6 +872,11 @@ export interface DbShape {
     attempt?: typeof workflowAttempts.$inferInsert,
     steps?: WorkflowStepRow[]
   ) => void;
+  readonly workItem: (id: string) => WorkItemRow | undefined;
+  /** A workspace's items, newest first. */
+  readonly workItemsIn: (workspaceId: string) => WorkItemRow[];
+  /** The workspaces an id names: itself exactly, else every one it prefixes. */
+  readonly workspacesNamed: (idOrPrefix: string) => WorkspaceRow[];
 }
 
 export class Db extends Context.Service<Db, DbShape>()("Db") {}
@@ -1405,6 +1429,7 @@ const make = (path: string): DbShape => {
       canDelegate,
       workflowRunId,
       workflowStepId,
+      workItemId,
       // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: opens (or reuses) the one live row for a conversation across every optional field a spawn can carry — see the "one conversation, one live row" invariant below.
     }) => {
       const now = new Date();
@@ -1454,6 +1479,7 @@ const make = (path: string): DbShape => {
           canDelegate,
           workflowRunId,
           workflowStepId,
+          workItemId,
           // `starting`, not `running` — this row is written when a spawn is
           // *issued*, and issuing a spawn is not evidence that a process exists.
           // Writing `running` here is the original sin behind the 178-vs-42
@@ -2571,6 +2597,51 @@ const make = (path: string): DbShape => {
         .update(sentMessages)
         .set(change)
         .where(eq(sentMessages.uuid, uuid))
+        .returning()
+        .get(),
+    createWorkspace: (workspace) =>
+      db.insert(workspaces).values(workspace).returning().get(),
+    workspacesNamed: (idOrPrefix) => {
+      const exact = db
+        .select()
+        .from(workspaces)
+        .where(eq(workspaces.id, idOrPrefix))
+        .all();
+      return exact.length
+        ? exact
+        : db
+            .select()
+            .from(workspaces)
+            .where(sql`${workspaces.id} LIKE ${`${idOrPrefix}%`}`)
+            .all();
+    },
+    createWorkItem: (item) =>
+      db.insert(workItems).values(item).returning().get(),
+    workItem: (id) =>
+      db.select().from(workItems).where(eq(workItems.id, id)).get(),
+    workItemsIn: (workspaceId) =>
+      db
+        .select()
+        .from(workItems)
+        .where(eq(workItems.workspaceId, workspaceId))
+        .orderBy(desc(workItems.createdAt))
+        .all(),
+    liveWorkItemsOf: (parentInstanceId) =>
+      db
+        .select()
+        .from(workItems)
+        .where(
+          and(
+            eq(workItems.parentInstanceId, parentInstanceId),
+            inArray(workItems.state, ["starting", "running"])
+          )
+        )
+        .all(),
+    updateWorkItem: (id, change) =>
+      db
+        .update(workItems)
+        .set(change)
+        .where(eq(workItems.id, id))
         .returning()
         .get(),
     sendsFor: (ids) => {

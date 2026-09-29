@@ -114,7 +114,6 @@ export function newNode(
         model: "",
         prompt: "",
         outputSchema: { type: "object", properties: {} },
-        context: { mode: "fresh" },
         retries: 2,
         timeoutMinutes: 60,
       };

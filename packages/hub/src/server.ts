@@ -140,6 +140,11 @@ import { suggest } from "./suggest";
 import { SupervisorEngine, type SupervisorStatusSignal } from "./supervisor";
 import type { TelegramBridge } from "./telegram";
 import { UsageCounter } from "./usage-count";
+import {
+  createWorkItems,
+  LEAF_DELEGATE_REFUSAL,
+  WorkItemRefusal,
+} from "./work-items";
 import { workflowRoutes } from "./workflows/routes";
 import { createWorkflowRuntime } from "./workflows/runtime";
 
@@ -217,6 +222,12 @@ const UPDATE_TIMEOUT_MS = 10 * 60_000;
 
 /** Reading one file off a machine: it answers about as fast as a disk does. */
 const READ_TIMEOUT_MS = 10_000;
+/**
+ * Cutting a workspace's worktree checks out the whole tree, which on a large
+ * repository takes seconds; reading its log is faster. Ours: a minute covers
+ * both with room, and stays inside a tool call's own deadline.
+ */
+const WORKSPACE_TIMEOUT_MS = 60_000;
 /**
  * How long a continuation waits for a session it spawned to be in place. A
  * cold harness (opencode starting its server, claude its CLI) takes seconds;
@@ -673,83 +684,10 @@ export const resolveCanDelegate = (
 
 /**
  * The session a spawn came FROM — `spawnedBy` when the payload carries it,
- * `parent` otherwise. An `instanceId` names the row outright; a `sessionKey`
- * is the harness's own session id (all the opencode plugin knows about
- * itself), resolved here to the live row carrying it — scoped to `machineId`
- * when one is known, fleet-wide (newest first) when it is not, so an HTTP
- * relay caller that omits its machine still resolves. Live —
- * `running`/`starting` — because `openInstance` keeps one live row per session
- * key, so that filter is what makes the answer unique; a row that lost the
- * race is the newest of the rest. Undefined when nothing names a requester.
- * Pure, so it is exercised directly.
+ * `parent` otherwise. Undefined when nothing names a requester.
  */
-export const resolveRequester = (
-  rows: InstanceRow[],
-  machineId: string | undefined,
-  payload: unknown
-): string | undefined => {
-  const spawnedBy =
-    typeof payload === "object" && payload !== null
-      ? ((
-          payload as {
-            spawnedBy?: { instanceId?: unknown; sessionKey?: unknown };
-          }
-        ).spawnedBy ?? undefined)
-      : undefined;
-  if (typeof spawnedBy?.instanceId === "string") {
-    return spawnedBy.instanceId;
-  }
-  if (typeof spawnedBy?.sessionKey === "string") {
-    const byKey = rows.filter((row) => row.sessionId === spawnedBy.sessionKey);
-    const scoped = machineId
-      ? byKey.filter((row) => row.machineId === machineId)
-      : byKey;
-    const live = scoped
-      .filter((row) => row.status === "running" || row.status === "starting")
-      .sort(
-        (a, b) =>
-          new Date(b.updatedAt ?? 0).getTime() -
-          new Date(a.updatedAt ?? 0).getTime()
-      );
-    if (live[0]) {
-      return live[0].id;
-    }
-  }
-  return peekParent(payload).parentInstanceId;
-};
-
-/**
- * The machine an HTTP relay call belongs on, without trusting the caller to
- * say so. The relay body comes over plain HTTP from a plugin that may not
- * know its own machine (no env to read it from); the hub's own instance
- * table does. Order: an explicit `machineId` still wins (older plugins send
- * one), then the spawn's parent row, then whoever asked (`spawnedBy`), then —
- * for a send — the target session's own row. Undefined when nothing on the
- * body names a session the hub knows. Pure, so it is exercised directly.
- */
-export const resolveRelayMachine = (
-  rows: InstanceRow[],
-  body: unknown,
-  explicit?: string
-): string | undefined => {
-  if (explicit) {
-    return explicit;
-  }
-  const byId = new Map(rows.map((row) => [row.id, row]));
-  const parent = peekParent(body).parentInstanceId;
-  const parentRow = parent ? byId.get(parent) : undefined;
-  if (parentRow) {
-    return parentRow.machineId;
-  }
-  const requester = resolveRequester(rows, undefined, body);
-  const requesterRow = requester ? byId.get(requester) : undefined;
-  if (requesterRow) {
-    return requesterRow.machineId;
-  }
-  const target = peek(body, "instanceId");
-  const targetRow = target ? byId.get(target) : undefined;
-  return targetRow?.machineId;
-};
+const resolveRequester = (payload: SpawnPayload): string | undefined =>
+  payload.spawnedBy?.instanceId ?? payload.parent?.instanceId;
 
 /**
  * Urgency is only honoured toward the caller's own delegate; anything else
@@ -773,10 +711,6 @@ const downgradeNonDelegateUrgent = (
     delete (body as Record<string, unknown>).urgent;
   }
 };
-
-/** What a leaf delegate hears when it tries to spawn — relayed verbatim to the model. */
-const LEAF_DELEGATE_REFUSAL =
-  "This session is a leaf delegate — it was spawned with can_delegate=false and may not delegate or start sessions. Do the work yourself, or handoff to your parent session.";
 
 /** The report beat's word on what each harness adapter on the machine can do. */
 const peekHarnesses = (payload: unknown): HarnessReport[] | undefined => {
@@ -1824,6 +1758,58 @@ export const createServer = ({
   };
 
   /**
+   * A delegate's report to its parent, as a queued peer message: what its
+   * turn said (or why it never started), under the marker the parent's
+   * transcript renders as a report.
+   */
+  const reportToParent = (
+    delegate: InstanceRow,
+    body: string,
+    failed: boolean
+  ): void => {
+    const parent = delegate.parentInstanceId
+      ? db.getInstancesByIds([delegate.parentInstanceId])[0]
+      : undefined;
+    if (!parent) {
+      return;
+    }
+    const label = `${leaf(delegate.cwd)}#${delegate.id.slice(0, 8)}`;
+    deliverSend({
+      verb: "send",
+      machineId: parent.machineId,
+      instanceId: parent.id,
+      payload: {
+        instanceId: parent.id,
+        message: {
+          type: "user",
+          uuid: crypto.randomUUID(),
+          message: {
+            role: "user",
+            content: `${reportMarker(label, failed)}${body}`,
+          },
+          parent_tool_use_id: null,
+          origin: {
+            kind: "peer",
+            from: delegate.id,
+            name: leaf(delegate.cwd),
+            fromSession: delegate.id,
+          },
+          shouldQuery: false,
+        },
+      },
+    });
+    publishDelegateEvent(
+      delegate.machineId,
+      db.recordDelegateEvent({
+        instanceId: delegate.id,
+        parentInstanceId: parent.id,
+        kind: "report",
+        payload: { body, failed },
+      })
+    );
+  };
+
+  /**
    * Sessions that have been handed work and have not answered it yet, kept here
    * rather than in a browser: a hand-off learnt by whichever tab happened to be
    * watching is invisible on every other device, and gone after a reload.
@@ -2646,6 +2632,9 @@ export const createServer = ({
    * is not there to take it — and says so on the session's stream, so every
    * tab, device and late joiner draws the same row under the same id.
    *
+   * Another session never reaches finished work: a peer's send to a session
+   * whose work item is over fails with that item's state, and nothing wakes.
+   *
    * A uuid the hub already has a record for is the same send again (a tab
    * trying once more after its socket dropped): the machine is not handed it
    * twice, and the record it has is said again for whoever asked.
@@ -2657,7 +2646,10 @@ export const createServer = ({
       publishSend(known);
       return known;
     }
-    const agent = registry.agent(envelope.machineId);
+    const [target] =
+      message.origin.kind === "peer" ? db.getInstancesByIds([instanceId]) : [];
+    const refused = target ? workItems.refusal(target) : undefined;
+    const agent = refused ? undefined : registry.agent(envelope.machineId);
     if (agent) {
       wakeForSend(agent, envelope.machineId, instanceId);
       agent.send(envelope);
@@ -2676,7 +2668,7 @@ export const createServer = ({
         ? { state: "pending" as const }
         : {
             state: "failed" as const,
-            reason: `machine ${envelope.machineId} is not connected`,
+            reason: refused ?? `machine ${envelope.machineId} is not connected`,
             anchor: anchors.get(instanceId) ?? null,
           }),
     });
@@ -3120,6 +3112,50 @@ export const createServer = ({
       });
       send();
     });
+
+  /**
+   * A spawn sent on a session's behalf — a relayed one, or a work item's —
+   * recorded as every spawn is: the row is what puts it in the rail. A
+   * conversation that starts here is named by its first turn.
+   */
+  const issueSpawn = (
+    machineId: string,
+    payload: SpawnPayload,
+    workItemId?: string
+  ): void => {
+    const agent = registry.agent(machineId);
+    if (!agent) {
+      throw new Error(`machine ${machineId} is not connected`);
+    }
+    agent.send({
+      verb: "spawn",
+      machineId,
+      instanceId: payload.instanceId,
+      payload,
+    } satisfies Envelope<SpawnPayload>);
+    db.openInstance({
+      id: payload.instanceId,
+      machineId,
+      cwd: payload.cwd,
+      sessionId: peekResume(payload),
+      harness: payload.harness,
+      projectId: payload.projectId,
+      title: payload.title,
+      kind: peekKind(payload),
+      permissionMode: payload.permissionMode,
+      model: payload.model,
+      effort: payload.effort,
+      canDelegate: payload.canDelegate,
+      workflowRunId: payload.workflowRunId,
+      workflowStepId: payload.workflowStepId,
+      ...peekParent(payload),
+      ...(workItemId ? { workItemId } : {}),
+    });
+    if (!peekResume(payload)) {
+      awaitingFirstTurn.add(payload.instanceId);
+    }
+    publishInstances(machineId);
+  };
 
   /**
    * Spawns a session from the hub itself — a continuation's summarisers and
@@ -4729,6 +4765,32 @@ export const createServer = ({
   // route group, mounted rather than folded into the routes below — see
   // delegate-types.ts for why it keeps its own connection.
   const delegateTypes = makeDelegateTypes();
+  const workItems = createWorkItems({
+    db,
+    types: () => delegateTypes.list(),
+    spawn: issueSpawn,
+    send: deliverSend,
+    call: async (machineId, method, args) => {
+      const answer = await callAgent(
+        machineId,
+        method,
+        args,
+        WORKSPACE_TIMEOUT_MS
+      );
+      if (answer === "offline") {
+        throw new Error(`machine ${machineId} is not connected`);
+      }
+      if (answer === "timeout") {
+        throw new Error(
+          `machine ${machineId} did not answer ${method} within ${WORKSPACE_TIMEOUT_MS / 1000}s`
+        );
+      }
+      if (!answer.ok) {
+        throw new Error(answer.error ?? `${method} failed on ${machineId}`);
+      }
+      return answer.result;
+    },
+  });
   const workflowRuntime = createWorkflowRuntime({
     db,
     online: (machineId) => !!registry.agent(machineId),
@@ -7206,185 +7268,103 @@ export const createServer = ({
         db.deleteProject(params.id);
         return { ok: true };
       })
-      // A session's own hand-off tools reach the fleet over plain HTTP: the
-      // opencode plugin (and anything else outside the WebSocket tunnel) forwards
-      // its spawns and sends through here, and the hub relays them like the
-      // dashboard's own. Fire-and-forget — the tool has nothing to wait on.
-      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: validates and relays every field of a spawn request in one place; splitting it would scatter the validation order this route depends on.
-      .post("/api/relay/spawn", { body: t.Any() }, ({ body, status }) => {
-        // `machineId` is optional: older plugins send one, current ones omit
-        // it and the hub resolves the parent/requester row's own machine
-        // instead — the table is fresher than the caller's environment.
-        // `instanceId` is minted here when absent so a caller never has to
-        // invent one; a supplied id still wins.
-        let instanceId = peek(body, "instanceId");
-        if (!instanceId) {
-          instanceId = crypto.randomUUID();
-          (body as Record<string, unknown>).instanceId = instanceId;
-        }
-        const rows = db.listInstances();
-        const machineId = resolveRelayMachine(
-          rows,
-          body,
-          peek(body, "machineId")
-        );
-        if (!machineId) {
-          return status(
-            400,
-            "could not determine the target machine: send no machineId only when the spawn names a known parent or spawnedBy session"
-          );
-        }
-
-        // Explicit fields already on the body win; the type only fills gaps.
-        const typeName = peek(body, "type");
-        if (typeName) {
-          const known = delegateTypes.list();
-          const resolved = known.find((type) => type.name === typeName);
-          if (!resolved) {
-            // Same wording delegation-actions.ts's own `delegate()` refuses an
-            // unknown type with (see its `resolvedType` block) — one refusal
-            // vocabulary whichever side resolved the name.
-            const names =
-              known.map((type) => type.name).join(", ") ||
-              "none are configured";
+      // Delegation: one work item, in a new workspace or as the follow-up in
+      // an existing one. The hub validates, files and spawns it all here —
+      // `delegate` is nothing but this request (see work-items.ts).
+      .post(
+        "/api/work-items",
+        {
+          body: t.Object({
+            parentInstanceId: t.String({ minLength: 1 }),
+            prompt: t.String(),
+            type: t.Optional(t.String()),
+            harness: t.Optional(harnessSchema),
+            model: t.Optional(t.String()),
+            skills: t.Optional(t.Array(t.String())),
+            canDelegate: t.Optional(t.Boolean()),
+            cwd: t.Optional(t.String()),
+            workspace: t.Optional(t.String()),
+          }),
+        },
+        async ({ body, status }) => {
+          try {
+            const started = await workItems.start(body);
+            return {
+              workItemId: started.item.id,
+              workspaceId: started.workspace.id,
+              instanceId: started.item.instanceId,
+              title: started.item.title,
+              text: started.text,
+            };
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            // Anything that is not the hub's own refusal is the machine's:
+            // offline, or git turning the checkout down.
             return status(
-              400,
-              `No delegate type "${typeName}". Available: ${names}.`
+              error instanceof WorkItemRefusal ? error.status : 502,
+              message
             );
           }
-          const rec = body as Record<string, unknown>;
-          if (!rec.harness) {
-            rec.harness = resolved.harness;
-          }
-          if (!rec.model) {
-            rec.model = resolved.model;
-          }
-          if (!rec.effort && resolved.effort) {
-            rec.effort = resolved.effort;
-          }
-          if (
-            !(Array.isArray(rec.skills) && rec.skills.length) &&
-            resolved.skills
-          ) {
-            rec.skills = resolved.skills;
-          }
-          if (
-            !(Array.isArray(rec.denyTools) && rec.denyTools.length) &&
-            resolved.denyTools
-          ) {
-            rec.denyTools = resolved.denyTools;
-          }
-          if (
-            rec.canDelegate === undefined &&
-            resolved.canDelegate !== undefined
-          ) {
-            rec.canDelegate = resolved.canDelegate;
-          }
         }
-        // `type` is a relay-only convenience: SpawnPayload itself has no such
-        // field, and it must not ride along into the envelope the daemon spawns
-        // from — it already did its one job resolving harness/model/etc above.
-        // biome-ignore lint/performance/noDelete: an undefined assignment would leave the key present on `body`, which is forwarded to the daemon verbatim — the field must be genuinely absent.
-        delete (body as Record<string, unknown>).type;
-
-        const parent = peekParent(body);
+      )
+      .get("/api/work-items/:id", ({ params, status }) => {
+        const item = workItems.item(params.id);
+        return item ?? status(404, `no work item ${params.id}`);
+      })
+      // A session's own tools reach the fleet over plain HTTP — the hub's MCP
+      // server forwards `start_session`'s spawn here, and the workflow runtime
+      // spawns its steps the same way — and the hub relays them like the
+      // dashboard's own. Fire-and-forget: the tool has nothing to wait on.
+      .post("/api/relay/spawn", { body: t.Any() }, ({ body, status }) => {
+        const payload = body as SpawnPayload & { machineId?: string };
+        const { machineId } = payload;
+        if (!(machineId && payload.instanceId)) {
+          return status(
+            400,
+            "relay spawn needs the target machineId and the new instanceId"
+          );
+        }
         // A leaf delegate may not delegate OR start sessions: the check is
         // against whoever asked (`spawnedBy`, falling back to `parent`), so
-        // `start_session` — which nests nothing — is held to the same rule. And
-        // a delegate that does not say whether its child may is spawning a leaf:
-        // the hub applies the default, so a plugin predating the field still
-        // produces leaves.
-        const requester = resolveRequester(rows, machineId, body);
+        // `start_session` — which nests nothing — is held to the same rule.
+        const rows = db.listInstances();
+        const requester = resolveRequester(payload);
         if (requester && !resolveCanDelegate(rows, requester)) {
           return status(403, LEAF_DELEGATE_REFUSAL);
-        }
-        // The plugin names its `parent` from its own roster guess (`meOf`); the
-        // hub's resolution of the same session key is the fresher word, so a
-        // delegate nests under the row the hub found, not the one the plugin did.
-        if (
-          requester &&
-          parent.parentInstanceId &&
-          parent.parentInstanceId !== requester
-        ) {
-          (body as { parent?: { instanceId?: string } }).parent = {
-            ...(body as { parent?: object }).parent,
-            instanceId: requester,
-          };
-          parent.parentInstanceId = requester;
-        }
-        if (parent.parentInstanceId && peekCanDelegate(body) === undefined) {
-          (body as Record<string, unknown>).canDelegate = false;
         }
 
         // A delegate that names no permission mode inherits the ROOT of its
         // delegate tree, so a nested delegate of a bypassing session stays
         // autonomous instead of parking tool asks nobody is watching for.
-        if (!peek(body, "permissionMode") && parent.parentInstanceId) {
-          const mode = resolveDelegatePermissionMode(
-            db.listInstances(),
-            parent.parentInstanceId
-          );
+        const { parentInstanceId } = peekParent(payload);
+        if (!payload.permissionMode && parentInstanceId) {
+          const mode = resolveDelegatePermissionMode(rows, parentInstanceId);
           if (mode) {
-            (body as Record<string, unknown>).permissionMode = mode;
+            payload.permissionMode = mode as PermissionMode;
           }
         }
 
         const refusal = enforceRowSessionKey(
-          rows.find((row) => row.id === instanceId),
-          body
+          rows.find((row) => row.id === payload.instanceId),
+          payload
         );
         if (refusal) {
           return status(409, refusal);
         }
-
-        const agent = registry.agent(machineId);
-        if (!agent) {
+        if (!registry.agent(machineId)) {
           return status(404, `machine ${machineId} is not connected`);
         }
-
-        agent.send({
-          verb: "spawn",
-          machineId,
-          instanceId,
-          payload: body,
-        } satisfies Envelope);
-        // A delegate that names no cwd works where its parent does.
-        const parentRow = parent.parentInstanceId
-          ? rows.find((row) => row.id === parent.parentInstanceId)
-          : undefined;
-        db.openInstance({
-          id: instanceId,
-          machineId,
-          cwd: peek(body, "cwd") ?? parentRow?.cwd ?? "",
-          sessionId: peekResume(body),
-          harness: peekHarness(body),
-          projectId: peek(body, "projectId"),
-          title: peek(body, "title"),
-          kind: peekKind(body),
-          permissionMode: peek(body, "permissionMode"),
-          model: peek(body, "model"),
-          effort: peek(body, "effort"),
-          canDelegate: peekCanDelegate(body),
-          workflowRunId: peek(body, "workflowRunId"),
-          workflowStepId: peek(body, "workflowStepId"),
-          ...peekParent(body),
-        });
-        // A conversation that starts here: its first turn is its name.
-        if (!peekResume(body)) {
-          awaitingFirstTurn.add(instanceId);
-        }
-        publishInstances(machineId);
-        return { ok: true, instanceId, machineId };
+        issueSpawn(machineId, payload);
+        return { ok: true, instanceId: payload.instanceId, machineId };
       })
       .post("/api/relay/send", { body: t.Any() }, ({ body, status }) => {
-        // `machineId` is optional here too: the target session's own row names
-        // the machine it lives on. An explicit value still wins, so older
-        // plugins keep working unchanged.
         const instanceId = peek(body, "instanceId");
-        if (!instanceId) {
+        const machineId = peek(body, "machineId");
+        if (!(instanceId && machineId)) {
           return status(
             400,
-            "relay send needs the target session's instanceId"
+            "relay send needs the target session's instanceId and machineId"
           );
         }
         // Before anything else reads `message`: a shape the far end would
@@ -7393,17 +7373,8 @@ export const createServer = ({
         if (malformed) {
           return status(400, malformed);
         }
-        const rows = db.listInstances();
-        const machineId = resolveRelayMachine(
-          rows,
-          body,
-          peek(body, "machineId")
-        );
-        if (!machineId) {
-          return status(404, `unknown session ${instanceId}: no such instance`);
-        }
 
-        downgradeNonDelegateUrgent(rows, body, instanceId);
+        downgradeNonDelegateUrgent(db.listInstances(), body, instanceId);
 
         const record = deliverSend({
           verb: "send",
@@ -7439,6 +7410,8 @@ export const createServer = ({
         // A stop cuts the turn it lands in, as an interrupt does. What it
         // was sent and had not read is settled by its `stopped`.
         noteInterrupt(instanceId);
+        // Its work is over the moment its parent stops it.
+        workItems.cancelled(row);
         return { ok: true };
       })
       .post("/api/relay/interrupt", { body: t.Any() }, ({ body, status }) => {
@@ -7449,6 +7422,10 @@ export const createServer = ({
           : undefined;
         if (!(instanceId && from && row) || row.parentInstanceId !== from) {
           return status(403, "you can only interrupt your own delegates");
+        }
+        const retired = workItems.refusal(row);
+        if (retired) {
+          return status(409, retired);
         }
         const agent = registry.agent(row.machineId);
         if (!agent) {
@@ -7494,6 +7471,10 @@ export const createServer = ({
           row.parentInstanceId !== from
         ) {
           return status(403, "you can only answer your own delegates");
+        }
+        const retired = workItems.refusal(row);
+        if (retired) {
+          return status(409, retired);
         }
         const agent = registry.agent(row.machineId);
         if (!agent) {
@@ -8029,13 +8010,11 @@ export const createServer = ({
                 }
               }
               // A leaf delegate may not delegate or start sessions (see the
-              // relay route — same rule, same requester, same default). Nothing
-              // here can answer the sender, so the spawn is dropped, neither
-              // forwarded nor given a row.
+              // relay route — same rule, same requester). Nothing here can
+              // answer the sender, so the spawn is dropped, neither forwarded
+              // nor given a row.
               const requester = resolveRequester(
-                db.listInstances(),
-                message.machineId,
-                message.payload
+                message.payload as SpawnPayload
               );
               if (
                 requester &&
@@ -8045,13 +8024,6 @@ export const createServer = ({
                   `[hub] refused spawn ${message.instanceId ?? "?"} from leaf delegate ${requester}: ${LEAF_DELEGATE_REFUSAL}`
                 );
                 break;
-              }
-              if (
-                parent.parentInstanceId &&
-                peekCanDelegate(message.payload) === undefined
-              ) {
-                (message.payload as Record<string, unknown>).canDelegate =
-                  false;
               }
               // The row's key, not the client's — see `enforceRowSessionKey`.
               // Nothing here can answer the sender, so a refused resume is
@@ -8093,16 +8065,6 @@ export const createServer = ({
               break;
             }
             case "frames": {
-              // Legacy agents predating the harness rework frame their sessions as
-              // `kind: 'sdk'`. Their messages are structurally the neutral shapes,
-              // so the shim only re-tags the frame with its harness.
-              if (peek(message.payload, "kind") === "sdk") {
-                message.payload = {
-                  ...(message.payload as object),
-                  kind: "frame",
-                  harness: "claude",
-                } as FramePayload;
-              }
               const kind = peek(message.payload, "kind");
               // One send did not go: its record says so, and nothing else does.
               if (kind === "rejected" && message.instanceId) {
@@ -8126,6 +8088,12 @@ export const createServer = ({
                   );
                 heldSessions.delete(message.instanceId);
                 closePreview(message.instanceId).catch(console.error);
+                // Stopped by anyone while its work was live: the work is over.
+                // Read before the row is filed away, which a discard hides.
+                const [ended] = db.getInstancesByIds([message.instanceId]);
+                if (ended) {
+                  workItems.cancelled(ended);
+                }
                 if (peekDiscard(message.payload)) {
                   db.discardInstance(message.instanceId);
                 } else {
@@ -8252,10 +8220,13 @@ export const createServer = ({
                   parentId && parentId !== message.instanceId
                     ? db.listInstances().find((r) => r.id === parentId)
                     : undefined;
+                // A parent whose own work is finished cannot take the ask.
                 const routed =
                   sender !== undefined &&
                   parent !== undefined &&
-                  (parent.status === "running" || parent.status === "starting");
+                  (parent.status === "running" ||
+                    parent.status === "starting") &&
+                  !workItems.refusal(parent);
                 if (routed) {
                   (message.payload as Record<string, unknown>).routedTo =
                     "parent";
@@ -8283,6 +8254,10 @@ export const createServer = ({
                   // process can be wrongly filed under.
                   db.markInstanceLive(message.instanceId);
                   workflowRuntime.instanceLive(message.instanceId);
+                  const [live] = db.getInstancesByIds([message.instanceId]);
+                  if (live) {
+                    workItems.started(live);
+                  }
                   heldSessions.delete(message.instanceId);
                   publishInstances(message.machineId);
                 }
@@ -8412,54 +8387,21 @@ export const createServer = ({
                     parentId !== message.instanceId &&
                     neutral.subtype !== "aborted"
                   ) {
-                    const parent = db
-                      .listInstances()
-                      .find((r) => r.id === parentId);
-                    if (parent) {
-                      const label = `${leaf(row.cwd)}#${row.id.slice(0, 8)}`;
-                      // A failed turn's report carries the harness's own error
-                      // words — "(no text)" once stood in for a 403 that was
-                      // sitting right in the result frame.
-                      const { errors } = neutral as { errors?: string[] };
-                      const body =
-                        text ||
-                        (errors?.length
-                          ? errors.join("\n")
-                          : "(the delegate produced no text this turn)");
-                      deliverSend({
-                        verb: "send",
-                        machineId: parent.machineId,
-                        instanceId: parent.id,
-                        payload: {
-                          instanceId: parent.id,
-                          message: {
-                            type: "user",
-                            uuid: crypto.randomUUID(),
-                            message: {
-                              role: "user",
-                              content: `${reportMarker(label, !!neutral.is_error)}${body}`,
-                            },
-                            parent_tool_use_id: null,
-                            origin: {
-                              kind: "peer",
-                              from: row.id,
-                              name: leaf(row.cwd),
-                              fromSession: row.id,
-                            },
-                            shouldQuery: false,
-                          },
-                        },
-                      });
-                      publishDelegateEvent(
-                        row.machineId,
-                        db.recordDelegateEvent({
-                          instanceId: row.id,
-                          parentInstanceId: parent.id,
-                          kind: "report",
-                          payload: { body, failed: neutral.is_error },
-                        })
-                      );
-                    }
+                    // A failed turn's report carries the harness's own error
+                    // words — "(no text)" once stood in for a 403 that was
+                    // sitting right in the result frame.
+                    const { errors } = neutral as { errors?: string[] };
+                    const body =
+                      text ||
+                      (errors?.length
+                        ? errors.join("\n")
+                        : "(the delegate produced no text this turn)");
+                    const failed = !!neutral.is_error;
+                    reportToParent(
+                      row,
+                      `${body}${workItems.turnEnded(row, body, failed)}`,
+                      failed
+                    );
                   }
                 }
               }
@@ -8474,6 +8416,16 @@ export const createServer = ({
                   peek(message.payload, "message") ?? "the session failed";
                 turnWaiters.get(message.instanceId)?.reject(new Error(reason));
                 db.failInstance(message.instanceId, reason);
+                // A work item whose session never started failed, and its
+                // parent hears why rather than waiting on a report forever.
+                const [unstarted] = db.getInstancesByIds([message.instanceId]);
+                if (unstarted?.workItemId) {
+                  reportToParent(
+                    unstarted,
+                    `${reason}${workItems.spawnFailed(unstarted, reason)}`,
+                    true
+                  );
+                }
                 workflowRuntime.observe(message.instanceId, reason);
                 forgetPending(message.instanceId, reason);
                 escalateRoutedAsks(message.instanceId);
@@ -8620,11 +8572,20 @@ export const createServer = ({
                 );
                 break;
               }
+              // Finished work takes no interrupt and no answer; the sender
+              // hears why.
+              const retired =
+                message.verb === "control" ? workItems.refusal(row) : undefined;
+              if (retired) {
+                ws.send(failure(message, retired));
+                break;
+              }
               registry
                 .agent(row.machineId)
                 ?.send({ ...message, machineId: row.machineId });
               if (message.verb === "stop") {
                 closePreview(row.id).catch(console.error);
+                workItems.cancelled(row);
               }
               // A stop cuts the turn it lands in, as an interrupt does.
               if (

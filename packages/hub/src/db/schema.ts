@@ -261,8 +261,8 @@ export const instances = sqliteTable("instances", {
   /**
    * Whether the session may delegate or start sessions of its own. `false` on a
    * leaf delegate — one spawned with `can_delegate: false`, which is what a
-   * `delegate` call means unless it says otherwise. Null on a session nobody
-   * delegated, or on a row predating the column; both read as allowed.
+   * `delegate` call means unless it says otherwise. Every spawn with a parent
+   * says which; null is a session nobody delegated, and it may.
    */
   canDelegate: integer("can_delegate", { mode: "boolean" }),
   /**
@@ -318,7 +318,94 @@ export const instances = sqliteTable("instances", {
    * grace measures from here: asking for a process is not session activity.
    */
   spawnedAt: timestamp("spawned_at"),
+  /**
+   * The work item this session runs ({@link workItems}). Every delegate is one
+   * work item in one fresh session; null on a session nobody delegated, and on
+   * a delegate from before work items existed.
+   */
+  workItemId: text("work_item_id"),
 });
+
+/** A workspace's life: `active` while its checkout is kept. */
+export type WorkspaceState = "active" | "archived";
+
+/**
+ * Where delegated work lives: one git worktree on its own branch, on one
+ * machine. A workspace has at most one work item in `starting`/`running` at a
+ * time — the one writer its checkout ever has — and it owns the checkout:
+ * stopping or discarding a session never removes it.
+ */
+export const workspaces = sqliteTable("workspaces", {
+  id: text("id").primaryKey(),
+  machineId: text("machine_id").notNull(),
+  /** The repository the worktree was cut from. */
+  repoRoot: text("repo_root").notNull(),
+  /** The worktree's root, where every work item of the workspace runs. */
+  path: text("path").notNull(),
+  branch: text("branch").notNull(),
+  state: text("state").$type<WorkspaceState>().notNull().default("active"),
+  /** Ports the workspace's processes listen on, recorded when they start. */
+  ports: text("ports", { mode: "json" })
+    .$type<number[]>()
+    .notNull()
+    .default([]),
+  /** Directories outside the checkout the workspace's work wrote to. */
+  scratchPaths: text("scratch_paths", { mode: "json" })
+    .$type<string[]>()
+    .notNull()
+    .default([]),
+  createdByInstanceId: text("created_by_instance_id").notNull(),
+  createdAt: timestamp("created_at")
+    .notNull()
+    .$defaultFn(() => new Date()),
+});
+
+/** A work item's life. Only `starting` and `running` take messages. */
+export type WorkItemState =
+  | "starting"
+  | "running"
+  | "done"
+  | "failed"
+  | "cancelled";
+
+/**
+ * One piece of delegated work: a brief, run by exactly one fresh session in
+ * one workspace, ending in a report. Finished work never runs again — a
+ * follow-up is a new item in the same workspace.
+ */
+export const workItems = sqliteTable(
+  "work_items",
+  {
+    id: text("id").primaryKey(),
+    workspaceId: text("workspace_id")
+      .notNull()
+      .references(() => workspaces.id),
+    /** The session that delegated it, and that its reports go to. */
+    parentInstanceId: text("parent_instance_id").notNull(),
+    /** Its one session. */
+    instanceId: text("instance_id").notNull(),
+    brief: text("brief").notNull(),
+    title: text("title").notNull(),
+    /** The delegate type it was asked for by name, if any. */
+    type: text("type"),
+    harness: text("harness").notNull(),
+    model: text("model"),
+    effort: text("effort"),
+    state: text("state").$type<WorkItemState>().notNull().default("starting"),
+    /** The final report: its session's last turn, in its own words. */
+    result: text("result"),
+    /** Why it failed. */
+    error: text("error"),
+    createdAt: timestamp("created_at")
+      .notNull()
+      .$defaultFn(() => new Date()),
+    endedAt: timestamp("ended_at"),
+  },
+  (table) => [
+    index("work_items_workspace").on(table.workspaceId, table.state),
+    index("work_items_parent").on(table.parentInstanceId, table.state),
+  ]
+);
 
 /** The three things a delegate and its parent ever say to each other. */
 export type DelegateEventKind = "ask" | "answer" | "report";

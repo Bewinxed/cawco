@@ -14,7 +14,6 @@ const Hasher = Bun.CryptoHasher;
 
 /** What `w.run` / `w.spawn` are given. Mirrors the `step` node's fields. */
 export interface StepSpec<Output extends ZodTypeAny = ZodTypeAny> {
-  continueFrom?: StepHandle<ZodTypeAny>;
   denyTools?: string[];
   effort?: EffortLevel;
   harness: "claude" | "opencode" | "pi";

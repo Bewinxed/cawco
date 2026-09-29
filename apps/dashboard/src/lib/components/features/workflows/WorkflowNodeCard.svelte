@@ -139,9 +139,6 @@
       <p class="meta">{node.harness} · {node.model || 'Choose a model'}</p>
     {/if}
     <p class="summary">{summary}</p>
-    {#if node?.kind === 'step' && node.context.mode === 'continue'}
-      <p class="meta">continues {node.context.from}</p>
-    {/if}
     {#if node?.kind === 'map'}
       <p class="group">{node.body.nodes.length} nodes in body</p>
     {/if}

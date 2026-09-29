@@ -29,7 +29,6 @@ import {
   WHIFFLE_ENV,
   WHIFFLE_HUB_PORT,
 } from "@whiffle/core";
-import { briefTitle } from "./brief-title";
 
 const WS_SCHEME = /^ws/;
 const WS_PATH_SUFFIX = /\/ws$/;
@@ -181,44 +180,6 @@ async function roster(exceptInstanceId: string): Promise<{
     )
     .map((row) => toPeer(row, hosts));
   return { peers, asleep, own };
-}
-
-/**
- * Resolves `fork_of` against every row the caller owns, regardless of
- * status — `stopDelegate`'s own text promises "delegate again to resume from
- * it", so a stopped delegate has to still be forkable. Unlike `roster()`,
- * this is not filtered to running/starting; only `delegate()`'s fork lookup
- * uses it.
- */
-async function resolveForkSource(
-  instanceId: string,
-  target: string
-): Promise<Peer> {
-  const { rows, hosts } = await fetchInstances();
-  const mine = rows
-    .filter((row) => row.parentInstanceId === instanceId)
-    .map((row) => toPeer(row, hosts));
-  try {
-    return resolve(mine, target);
-  } catch (error) {
-    let outside = false;
-    try {
-      resolve(
-        rows.map((row) => toPeer(row, hosts)),
-        target
-      );
-      outside = true;
-    } catch {
-      outside = false;
-    }
-    if (outside) {
-      throw new Error(
-        `"${target}" is not your delegate — you can only fork your own delegates.`,
-        { cause: error }
-      );
-    }
-    throw error;
-  }
 }
 
 /** An `@` prefix on a target name, optional. */
@@ -384,20 +345,22 @@ export interface HandoffActions {
     text: string;
   }>;
   readonly createWorkflow: (name: string, program: string) => Promise<unknown>;
+  /**
+   * Starts a work item: a fresh session in a new workspace, or the follow-up
+   * in an existing one. The hub decides and files everything; this is its
+   * request.
+   */
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   delegate(
     prompt: string,
     opts?: {
+      /** The repository a new workspace is cut from; this session's directory by default. */
       cwd?: string;
       harness?: "claude" | "opencode" | "pi";
       model?: string;
       skills?: string[];
-      /** An earlier delegate's instanceId — the new one forks its full conversation. */
-      forkOf?: string;
-      /** Default true: run in its own git worktree of `cwd`. Ignored by a fork. */
-      worktree?: boolean;
       /**
-       * A named preset from `HandoffDeps.delegateTypes`. Its harness/model/
+       * A named preset from the fleet's delegate types. Its harness/model/
        * effort/skills/denyTools apply first; an explicit `harness`/`model`/
        * `skills` above still overrides what the type says.
        */
@@ -407,8 +370,10 @@ export interface HandoffActions {
        * false — a delegate is a leaf unless granted.
        */
       canDelegate?: boolean;
+      /** An existing workspace's id: the new item is its follow-up. */
+      workspace?: string;
     }
-  ): Promise<HandoffResult>;
+  ): Promise<DelegateResult>;
   readonly generateImage: (
     request: ImageGenerationRequest
   ) => Promise<GeneratedImage>;
@@ -456,6 +421,20 @@ export interface HandoffResult {
   id: string;
   text: string;
   title: string;
+}
+
+/** A delegation's result: its session, and the work item and workspace it runs in. */
+export interface DelegateResult extends HandoffResult {
+  workItemId: string;
+  workspaceId: string;
+}
+
+/** A work item as the hub answers for it (`GET /api/work-items/:id`). */
+interface WorkItemView {
+  id: string;
+  state: string;
+  title: string;
+  workspaceId: string;
 }
 
 /** Resolves a target among the caller's own delegates; anything else is refused. */
@@ -820,145 +799,28 @@ export const handoffActions = ({
     };
   },
 
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: resolves a delegate type, a fork source, and every spawn option in one pass, so the model gets one refusal naming exactly what's wrong
-  async delegate(
-    prompt: string,
-    opts?: {
-      cwd?: string;
-      harness?: "claude" | "opencode" | "pi";
-      model?: string;
-      skills?: string[];
-      forkOf?: string;
-      worktree?: boolean;
-      type?: string;
-      canDelegate?: boolean;
+  async delegate(prompt, opts) {
+    const response = await fetch(`${hubHttpUrl()}/api/work-items`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify({ ...opts, parentInstanceId: instanceId, prompt }),
+    });
+    if (!response.ok) {
+      throw new Error(await response.text());
     }
-  ): Promise<HandoffResult> {
-    const id = crypto.randomUUID();
-    let workdir = opts?.cwd ?? cwd;
-    const from = leafOf(cwd);
-    // The brief is the only thing that says what this session is for, and the
-    // rail would otherwise have nothing to call it but its directory and its id.
-    const title = briefTitle(prompt);
-
-    // A named type resolves first; an explicit harness/model/skills below
-    // still overrides what it says. Unknown name: a clear refusal listing
-    // what is actually available, never a spawn with half-applied settings.
-    let resolvedType: DelegateType | undefined;
-    if (opts?.type) {
-      // Resolve at dispatch so a saved model/effort change reaches existing sessions.
-      const types = await fetchDelegateTypes((message) => {
-        throw new Error(message);
-      });
-      resolvedType = types.find((type) => type.name === opts.type);
-      if (!resolvedType) {
-        const known =
-          types.map((type) => type.name).join(", ") || "none are configured";
-        throw new Error(
-          `No delegate type "${opts.type}". Available: ${known}.`
-        );
-      }
-    }
-
-    // A fork resumes the source delegate's own stored session, so its sessionKey
-    // has to come from the fleet — the only place this session's own daemon
-    // reports another instance's harness session id.
-    let resume: SpawnPayload["resume"];
-    let modelNote = "";
-    let harness = opts?.harness ?? resolvedType?.harness;
-    if (opts?.forkOf) {
-      const source = await resolveForkSource(instanceId, opts.forkOf);
-      if (!source.row.sessionId) {
-        throw new Error(
-          `Your delegate ${source.label} has no session yet to fork — it never started, or hasn't ` +
-            "emitted one. Delegate fresh instead of forking it."
-        );
-      }
-      // A fork resumes the source's own stored transcript; that transcript
-      // belongs to one harness, so the spawn has to land on the same one.
-      const sourceHarness = source.row.harness ?? undefined;
-      if (opts.harness && sourceHarness && opts.harness !== sourceHarness) {
-        throw new Error(
-          `cannot fork a ${sourceHarness} delegate into ${opts.harness} — transcripts don't transfer ` +
-            "across harnesses."
-        );
-      }
-      harness = opts.harness ?? (sourceHarness as typeof harness);
-      resume = { sessionKey: source.row.sessionId, fork: true };
-      // The directory its init reported: the source's worktree, where its
-      // uncommitted work and its transcript both are.
-      workdir = source.row.cwd;
-      if (source.row.model && opts.model && source.row.model !== opts.model) {
-        modelNote =
-          ` Forked from a ${source.row.model} delegate onto ${opts.model} — the conversation carries ` +
-          "over, but the prompt cache does not; the transcript re-ingests at full cost.";
-      }
-    }
-
-    const model = opts?.model ?? resolvedType?.model;
-    const canDelegate = opts?.canDelegate ?? resolvedType?.canDelegate ?? false;
-    const skills = opts?.skills?.length ? opts.skills : resolvedType?.skills;
-    const worktree = !resume && (opts?.worktree ?? true);
-    const payload: SpawnPayload = {
-      instanceId: id,
-      cwd: workdir,
-      ...(harness ? { harness } : {}),
-      ...(model ? { model } : {}),
-      ...(resolvedType?.effort ? { effort: resolvedType.effort } : {}),
-      ...(title ? { title } : {}),
-      ...(skills?.length ? { skills } : {}),
-      ...(resolvedType?.denyTools?.length
-        ? { denyTools: resolvedType.denyTools }
-        : {}),
-      ...(resume ? { resume } : {}),
-      scratch: { baseCwd: workdir, worktree },
-      parent: { instanceId },
-      spawnedBy: { instanceId },
-      // Always explicit for a delegate: the call's word, else the type's
-      // default, else a leaf.
-      canDelegate,
-      // A delegate is autonomous by definition: it must never sit waiting on a
-      // tool-permission prompt nobody is watching for. Questions still ask.
-      permissionMode: "bypassPermissions",
+    const started = (await response.json()) as {
+      instanceId: string;
+      text: string;
+      title: string;
+      workItemId: string;
+      workspaceId: string;
     };
-    emit({ verb: "spawn", machineId: "", instanceId: id, payload });
-
-    // Same marker as `handoff()` and `startSession()` — survives SDK storage so
-    // stored transcripts render the opening as `user.peer`, the row the live
-    // frame drew under the same uuid.
-    // The daemon adds `withWorktreeLine` if it actually made a worktree.
-    const body = `${handoffMarker(from)}${prompt}`;
-    const opening: SendPayload = {
-      instanceId: id,
-      message: {
-        type: "user",
-        uuid: crypto.randomUUID(),
-        message: { role: "user", content: body },
-        parent_tool_use_id: null,
-        origin: {
-          kind: "peer",
-          from: instanceId,
-          name: from,
-          fromSession: instanceId,
-        },
-      },
-    };
-    emit({ verb: "send", machineId: "", instanceId: id, payload: opening });
-
     return {
-      id,
-      title: title || `${leafOf(workdir)}#${shortId(id)}`,
-      text:
-        `Delegated to ${harness ?? "claude"} session ${leafOf(workdir)}#${shortId(id)}.` +
-        (resume
-          ? " It starts with the full conversation of the forked delegate."
-          : "") +
-        modelNote +
-        " It runs as a temporary session nested under this one; its report arrives here automatically " +
-        `when each of its turns completes. Guide it or send follow-ups with handoff("${id}", ...).` +
-        (canDelegate
-          ? " It may spawn delegates of its own."
-          : " It is a leaf: it cannot delegate further."),
+      id: started.instanceId,
+      title: started.title,
+      text: started.text,
+      workItemId: started.workItemId,
+      workspaceId: started.workspaceId,
     };
   },
 
@@ -971,7 +833,23 @@ export const handoffActions = ({
       instanceId: peer.row.id,
       payload: { instanceId: peer.row.id, from: instanceId },
     });
-    return `Stopped your delegate ${peer.label}. Its transcript is preserved; delegate again to resume from it.`;
+    if (!peer.row.workItemId) {
+      return `Stopped your delegate ${peer.label}.`;
+    }
+    const response = await fetch(
+      `${hubHttpUrl()}/api/work-items/${encodeURIComponent(peer.row.workItemId)}`
+    );
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+    const item = (await response.json()) as WorkItemView;
+    const live = item.state === "starting" || item.state === "running";
+    return (
+      `Stopped your delegate ${peer.label}. Its work item ${item.id} ` +
+      (live ? "is cancelled" : `was already ${item.state}`) +
+      `, and its workspace ${item.workspaceId} keeps the checkout. To carry the work on, start a ` +
+      `follow-up item there with delegate(..., workspace: "${item.workspaceId}").`
+    );
   },
 
   async interruptDelegate(target: string): Promise<string> {

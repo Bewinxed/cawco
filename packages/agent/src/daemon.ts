@@ -9,6 +9,8 @@ import type {
 } from "@whiffle/core";
 import {
   CONTROL_SEARCH_TRANSCRIPTS,
+  CONTROL_WORKSPACE_CREATE,
+  CONTROL_WORKSPACE_LOG,
   WHIFFLE_ENV,
   WHIFFLE_HUB_PORT,
 } from "@whiffle/core";
@@ -33,6 +35,7 @@ import { probeTools } from "./tools";
 import { consumeRestartMarker } from "./update";
 import { UsageScanner } from "./usage/scanner";
 import { runWorkflowCommand } from "./workflow-command";
+import { createWorkspace, workspaceLog } from "./workspace";
 
 const DEFAULT_HUB_URL = `ws://localhost:${WHIFFLE_HUB_PORT}/ws`;
 const HEARTBEAT_INTERVAL = Duration.seconds(15);
@@ -879,6 +882,11 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     );
     search.start();
     supervisor.registerDaemonFunction("runCommand", runWorkflowCommand);
+    supervisor.registerDaemonFunction(
+      CONTROL_WORKSPACE_CREATE,
+      createWorkspace
+    );
+    supervisor.registerDaemonFunction(CONTROL_WORKSPACE_LOG, workspaceLog);
     supervisor.registerDaemonFunction(
       CONTROL_SEARCH_TRANSCRIPTS,
       (query, options) =>

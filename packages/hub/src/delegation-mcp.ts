@@ -160,6 +160,10 @@ export function createDelegationMcp(options: {
     if (envelope.verb === "frames") {
       operation = "message";
       body = { ...body, machineId: actor.machineId };
+    } else if (envelope.verb === "spawn" || envelope.verb === "send") {
+      // A send names its target's machine; a session it starts runs on the
+      // caller's.
+      body = { ...body, machineId: envelope.machineId || actor.machineId };
     } else if (envelope.verb === "control") {
       if (body.method === "interrupt") {
         operation = "interrupt";
@@ -179,8 +183,12 @@ export function createDelegationMcp(options: {
       signal: AbortSignal.timeout(15_000),
     });
     if (!response.ok) {
+      const text = await response.text();
+      // A 4xx is the hub refusing, in words written for the calling model.
       throw new Error(
-        `Whiffle ${operation}: HTTP ${response.status}: ${await response.text()}`
+        response.status < 500
+          ? text
+          : `Whiffle ${operation}: HTTP ${response.status}: ${text}`
       );
     }
   };

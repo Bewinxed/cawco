@@ -96,17 +96,10 @@ function makeBridge(runId: string, inputs: Record<string, unknown>) {
     return { id: stepIdFor(runId, seq), result };
   };
   /** A spec crosses the boundary as plain JSON: zod becomes JSON Schema. */
-  const strip = ({
-    output,
-    continueFrom,
-    ...spec
-  }: Record<string, unknown>) => ({
+  const strip = ({ output, ...spec }: Record<string, unknown>) => ({
     ...spec,
     // biome-ignore lint/suspicious/noExplicitAny: the program hands us its own zod schema, untyped at this boundary
     outputSchema: zodToJsonSchema(output as any),
-    ...(continueFrom
-      ? { continueFrom: (continueFrom as { id: string }).id }
-      : {}),
   });
   return {
     inputs,

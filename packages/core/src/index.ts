@@ -182,12 +182,9 @@ export interface SpawnPayload {
    * The session that asked for this spawn — provenance, not nesting. Unlike
    * {@link parent}, it neither nests the child nor routes reports; it is what
    * the hub checks {@link canDelegate} against, so a leaf cannot `start_session`
-   * its way around the rule. `instanceId` when the caller knows its own row;
-   * `sessionKey` (the harness's own session id, on the spawn's machine) when it
-   * only knows that — the opencode plugin — and the hub resolves it to the one
-   * live row carrying it.
+   * its way around the rule.
    */
-  spawnedBy?: { instanceId?: string; sessionKey?: string };
+  spawnedBy?: { instanceId: string };
   /**
    * What the session is for, one line — a delegate's brief headline. Display
    * only.
@@ -533,8 +530,7 @@ export interface InstanceRow {
   /**
    * Whether the session may spawn delegates of its own — `false` on a leaf
    * delegate (spawned with `can_delegate: false`, the default). Null on a
-   * session nobody delegated, or on a hub that predates the column: both read
-   * as allowed.
+   * session nobody delegated, which may.
    */
   canDelegate?: boolean | null;
   cwd: string;
@@ -584,6 +580,12 @@ export interface InstanceRow {
   updatedAt?: string | number | Date | null;
   workflowRunId?: string | null;
   workflowStepId?: string | null;
+  /**
+   * The work item this session runs: every delegate is one, and a session
+   * never runs more than one. Null on a session nobody delegated, and on a
+   * delegate from before work items existed.
+   */
+  workItemId?: string | null;
 }
 
 /**

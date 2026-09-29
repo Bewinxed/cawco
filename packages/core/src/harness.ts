@@ -879,3 +879,26 @@ export const CONTROL_GIT_CHANGES = "gitChanges";
 export type GitChanges =
   | { repo: false }
   | { repo: true; status: string; log: string };
+
+/**
+ * Makes a delegation workspace's checkout: a git worktree of the repository at
+ * `cwd`, at `~/.worktrees/<repo>-<id8>` on a new branch `ws/<id8>` cut from
+ * `origin/main`. Args `[cwd, workspaceId]`; answers {@link WorkspaceCheckout}.
+ * Machine-scoped; a directory that is not in a git repository is refused.
+ */
+export const CONTROL_WORKSPACE_CREATE = "workspaceCreate";
+
+/** Where {@link CONTROL_WORKSPACE_CREATE} put a workspace. */
+export interface WorkspaceCheckout {
+  branch: string;
+  /** The worktree's own root, where every work item of the workspace runs. */
+  path: string;
+  /** The repository the worktree was cut from. */
+  repoRoot: string;
+}
+
+/**
+ * A workspace's commits since `origin/main`: `git log --oneline
+ * origin/main..HEAD` in its checkout. Args `[path]`; answers the log text.
+ */
+export const CONTROL_WORKSPACE_LOG = "workspaceLog";

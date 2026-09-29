@@ -198,7 +198,6 @@ export type WorkflowNode = WorkflowNodeBase &
         denyTools?: string[];
         prompt: string;
         outputSchema: WorkflowSchema;
-        context: { mode: "fresh" } | { mode: "continue"; from: string };
         retries?: number;
         timeoutMinutes?: number;
       }
@@ -586,11 +585,6 @@ export function validateWorkflow(
       ) {
         add("A step needs a supported harness and a model.", node.id);
       }
-      if (
-        !(node.context && ["fresh", "continue"].includes(node.context.mode))
-      ) {
-        add("A step needs a fresh or continue context policy.", node.id);
-      }
       templates.push(node.prompt);
       if (node.outputSchema?.type !== "object") {
         add("Result schema must have an object root.", node.id);
@@ -611,20 +605,6 @@ export function validateWorkflow(
       }
       if (node.harness === "pi" && node.effort) {
         add("The pi harness cannot enforce an effort level.", node.id);
-      }
-      if (node.context?.mode === "continue") {
-        const source = nodes.get(node.context.from);
-        if (
-          source?.kind !== "step" ||
-          source.harness !== node.harness ||
-          source.id === node.id ||
-          !reaches(source.id, node.id)
-        ) {
-          add(
-            "Continue requires an upstream step using the same harness.",
-            node.id
-          );
-        }
       }
     } else if (node.kind === "ask") {
       if (

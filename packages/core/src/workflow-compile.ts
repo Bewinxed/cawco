@@ -507,9 +507,6 @@ export function compileWorkflow(graph: WorkflowGraph): CompiledWorkflow {
         ...(node.timeoutMinutes === undefined
           ? []
           : [`timeoutMinutes: ${node.timeoutMinutes}`]),
-        ...(node.context.mode === "continue"
-          ? [`continueFrom: ${nameOf(node.context.from)}Handle`]
-          : []),
       ];
       return entries;
     };
@@ -679,10 +676,7 @@ export function compileWorkflow(graph: WorkflowGraph): CompiledWorkflow {
     const counterOf = (edge: WorkflowEdge) =>
       `Loop${[...back].indexOf(edge) + 1}`;
 
-    const emitNode = (
-      node: WorkflowNode
-      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one emission rule per node kind is the compiler's contract (§13.4)
-    ) => {
+    const emitNode = (node: WorkflowNode) => {
       switch (node.kind) {
         case "start":
           break;
@@ -695,31 +689,13 @@ export function compileWorkflow(graph: WorkflowGraph): CompiledWorkflow {
             `let ${nameOf(node.id)}!: z.infer<typeof ${schemaName}>;`
           );
           const entries = stepSpec(node, schemaName);
-          const continued = scopeGraph.nodes.some(
-            (entry) =>
-              entry.kind === "step" &&
-              entry.context.mode === "continue" &&
-              entry.context.from === node.id
-          );
-          emitter.push(
-            continued
-              ? `${nameOf(node.id)}Handle = w.spawn({`
-              : `${nameOf(node.id)} = await w.run({`
-          );
+          emitter.push(`${nameOf(node.id)} = await w.run({`);
           emitter.indent += 1;
           for (const entry of entries) {
             emitter.push(`${entry},`);
           }
           emitter.indent -= 1;
           emitter.push("});");
-          if (continued) {
-            declarations.push(
-              `let ${nameOf(node.id)}Handle!: StepHandle<typeof ${schemaName}>;`
-            );
-            emitter.push(
-              `${nameOf(node.id)} = await ${nameOf(node.id)}Handle.result;`
-            );
-          }
           break;
         }
         case "check":

@@ -69,7 +69,6 @@ export type PublicRun = WorkflowRunRow & Pick<WorkflowRun, "edges" | "loops">;
 
 /** The spec a `run` / `spawn` effect carries, already reduced to JSON. */
 interface StepArgs {
-  continueFrom?: string;
   denyTools?: string[];
   effort?: EffortLevel;
   harness: "claude" | "opencode" | "pi";
@@ -454,15 +453,6 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
         );
       }
       resume = { sessionKey: instance.sessionId };
-    } else if (!step.instanceId && spec.continueFrom) {
-      const source = stepOf(spec.continueFrom);
-      const sourceInstance = source.instanceId
-        ? db.getInstancesByIds([source.instanceId])[0]
-        : undefined;
-      if (!sourceInstance?.sessionId) {
-        throw new Error("The upstream step has no session key to fork.");
-      }
-      resume = { sessionKey: sourceInstance.sessionId, fork: true };
     }
     step.instanceId ??= crypto.randomUUID();
     step.status = "running";

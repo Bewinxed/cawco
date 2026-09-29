@@ -74,7 +74,6 @@ export interface JournalLogLine {
 }
 
 interface StepSpec {
-  continueFrom?: string;
   denyTools?: string[];
   effort?: EffortLevel;
   harness: "claude" | "opencode" | "pi";
@@ -174,9 +173,6 @@ function nodeOf(effect: WorkflowEffect): JournalNode {
       ...(spec.denyTools ? { denyTools: spec.denyTools } : {}),
       prompt: spec.prompt,
       outputSchema: spec.outputSchema,
-      context: spec.continueFrom
-        ? { mode: "continue", from: spec.continueFrom }
-        : { mode: "fresh" },
       retries: spec.retries ?? 2,
       timeoutMinutes: spec.timeoutMinutes ?? 60,
     },
