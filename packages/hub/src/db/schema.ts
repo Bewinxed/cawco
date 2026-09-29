@@ -369,9 +369,9 @@ export type WorkItemState =
   | "cancelled";
 
 /**
- * One piece of delegated work: a brief, run by exactly one fresh session in
- * one workspace, ending in a report. Finished work never runs again — a
- * follow-up is a new item in the same workspace.
+ * One piece of delegated work: a brief, run by one session in one workspace,
+ * ending in a report. A follow-up is a new item in the same workspace, run by
+ * the same session; the reader or the parent can also reopen finished work.
  */
 export const workItems = sqliteTable(
   "work_items",

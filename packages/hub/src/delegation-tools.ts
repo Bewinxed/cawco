@@ -371,8 +371,8 @@ export function handoffTools(deps: HandoffDeps) {
         "Do NOT delegate: a single command or file read whose exact output you need; edits to files you are actively changing; anything the user asked to watch you do directly.\n\n" +
         "A delegate that is not a fork cannot see this conversation, so `prompt` must stand alone: intent, constraints, acceptance criteria, and what not to do. Keep the decisions yourself and ask for evidence and conclusions, not file dumps.\n\n" +
         "Prefer `type` over raw harness/model — it routes by what the work needs rather than a model string you must already know; use list_delegate_types for the live catalog. Prefer this over start_session when the work must report back, and over handoff for new standalone work (set cwd for another repository).\n\n" +
-        "Each call starts one work item in a workspace: a git worktree on its own branch. Without `workspace` the item gets a new one; with `workspace` it is the follow-up there, starting from the previous item's report and commits, never its transcript. " +
-        "A workspace runs one item at a time. To follow up on a delegate's work, handoff to that delegate: it continues its own session and cached transcript.\n\n" +
+        "Each call starts one work item in a workspace: a git worktree on its own branch. Without `workspace` the item gets a new one; with `workspace` it is the follow-up there: a new item, under its own title, in the workspace's last session, which reads the brief as its next message on its cached transcript. " +
+        "A workspace runs one item at a time, and keeps its checkout while its session can be continued. To follow up on a delegate's work, handoff to that delegate, or delegate with its `workspace` to file the follow-up as its own item: either way it continues its own session and cached transcript.\n\n" +
         "Set `fork: true` when the work needs what this conversation already holds: the delegate starts as a copy of this conversation (on this session's harness and model, so the prompt cache carries over) and reads the brief as its next turn, in a new workspace of its own." +
         delegateTypeLine(deps.delegateTypes),
       {
@@ -426,8 +426,9 @@ export function handoffTools(deps: HandoffDeps) {
           .optional()
           .describe(
             "A workspace id from an earlier delegate's result or report. The new work item is its " +
-              "follow-up: a fresh session in that workspace's checkout, briefed with the previous item's " +
-              "report and the workspace's commits. Refused while an item there is still running."
+              "follow-up: the brief goes to the session that workspace's last item ran, as its next message " +
+              "on its cached transcript. Refused while an item there is still running, and with type, " +
+              "model, harness, skills or fork, which are that session's own; delegate without workspace for a different model."
           ),
         fork: z
           .boolean()
@@ -436,7 +437,7 @@ export function handoffTools(deps: HandoffDeps) {
             "Start the delegate as a fork of this conversation: every turn so far, then the brief. It runs " +
               "on this session's harness and model (an explicit different harness/model is refused, since " +
               "the prompt cache would not carry over); `type` still sets effort, skills and denied tools. " +
-              "Always a new workspace, so not with `workspace`."
+              "Always a new workspace, so not with `workspace`: a follow-up continues its own session instead."
           ),
         can_delegate: z
           .boolean()

@@ -338,8 +338,8 @@ export interface HandoffActions {
   readonly createWorkflow: (name: string, program: string) => Promise<unknown>;
   /**
    * Starts a work item: a fresh session or a fork of this one in a new workspace, or the follow-up
-   * in an existing one. The hub decides and files everything; this is its
-   * request.
+   * in an existing one, on the session that workspace's last item ran. The
+   * hub decides and files everything; this is its request.
    */
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   delegate(
@@ -845,8 +845,8 @@ export const handoffActions = ({
     return (
       `Stopped your delegate ${peer.label}. Its work item ${item.id} ` +
       (live ? "is cancelled" : `was already ${item.state}`) +
-      `, and its workspace ${item.workspaceId} keeps the checkout. To carry the work on, start a ` +
-      `follow-up item there with delegate(..., workspace: "${item.workspaceId}").`
+      `, and its workspace ${item.workspaceId} keeps the checkout. To carry the work on, handoff to it, ` +
+      `or delegate(..., workspace: "${item.workspaceId}"): either continues its own session.`
     );
   },
 

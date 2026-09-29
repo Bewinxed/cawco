@@ -501,7 +501,9 @@ export interface DbShape {
   /**
    * The fields a dashboard may move on a live row: "Keep" — a side quest that
    * earned its place stops being treated as scratch — and the three settings the
-   * user keeps changing on a session that is already running.
+   * user keeps changing on a session that is already running. Also where a
+   * delegate's session takes on a follow-up: its new work item, and the
+   * session that delegated it.
    */
   readonly patchInstance: (
     id: string,
@@ -510,6 +512,8 @@ export interface DbShape {
       permissionMode?: string;
       model?: string;
       effort?: string;
+      workItemId?: string;
+      parentInstanceId?: string;
     }
   ) => typeof instances.$inferSelect | undefined;
   readonly putCredential: (id: string, blob: Record<string, unknown>) => void;
