@@ -137,7 +137,7 @@
   <svelte:element
     bind:this={hitEl}
     aria-selected={selected}
-    class="hit touch-hit press-tint"
+    class="hit touch-hit"
     draggable={href ? 'false' : undefined}
     {href}
     onclick={choose}
@@ -191,6 +191,12 @@
       &[data-ghosted] {
         color: var(--ink-strong);
       }
+    }
+
+    /* The press tints the whole segment (trailing controls included), not
+       the label's hit alone. A press on a trailing control leaves it be. */
+    &:has(.hit:active:not(:disabled, [aria-disabled="true"])) {
+      background-color: var(--surface-fill);
     }
 
     @media (prefers-reduced-motion: no-preference) {
@@ -272,6 +278,17 @@
     &.selected::after {
       mask-size: 100% 100%;
       mask-position: var(--wipe-in, left);
+    }
+    /* Pressed: the tab's own shapes take the tint — the card, and the sheet
+       with its shoulders and flared foot — so it fills the whole tab and its
+       outside curve; the box itself stays clear behind them. */
+    &:has(.hit:active:not(:disabled, [aria-disabled="true"])) {
+      background-color: transparent;
+
+      &::before,
+      &::after {
+        background: var(--surface-fill);
+      }
     }
     /* A switch past a neighbour: the sheets swap at once and TabsList
        slides the chosen one over from the tab it left. */
