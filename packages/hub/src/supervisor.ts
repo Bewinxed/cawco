@@ -283,8 +283,8 @@ export class SupervisorEngine {
   }
 
   /**
-   * One frame — called right after `ruleEngine.observe`, same throw-nothing
-   * envelope. Never awaits the LLM; evaluation is fire-and-forget.
+   * One frame inside a turn — called right after `ruleEngine.observe`, same
+   * throw-nothing envelope. A turn's `result` frame is {@link endTurn}'s.
    */
   observe(instanceId: string, message: NeutralMessage): void {
     try {
@@ -297,69 +297,74 @@ export class SupervisorEngine {
   }
 
   #observe(instanceId: string, message: NeutralMessage): void {
-    if (message.type === "assistant") {
-      // Subagent frames excluded — same discipline as RuleEngine (rules.ts:152).
-      if (message.parent_tool_use_id) {
-        return;
-      }
-      const state = this.#ensureState(instanceId);
-      const text = spoken(message);
-      if (text) {
-        state.turn.push(text);
-      }
-      this.#extractFiles(state, message);
+    // Subagent frames excluded — same discipline as RuleEngine.
+    if (message.type !== "assistant" || message.parent_tool_use_id) {
       return;
     }
+    const state = this.#ensureState(instanceId);
+    const text = spoken(message);
+    if (text) {
+      state.turn.push(text);
+    }
+    this.#extractFiles(state, message);
+  }
 
-    if (message.type === "result") {
-      const state = this.#ensureState(instanceId);
-      const [row] = this.#db.getInstancesByIds([instanceId]);
-      if (
-        message.subtype === "aborted" ||
-        !(row && this.#agent(row.machineId, instanceId))
-      ) {
-        // Aborted, or nobody to answer (offline, or the session takes no
-        // more input): flush buffers, no evaluation.
-        state.turn = [];
-        state.files.clear();
-        state.commands = [];
-        return;
-      }
-      // Schedule evaluation — fire-and-forget, off the frame path.
-      const turnText = state.turn.join("\n\n");
-      const files = [...state.files].slice(0, FILES_CAP);
-      const commands = [...state.commands];
-      const now = Date.now();
-      state.resultTimestamp = now;
-      // Flush buffers for the next turn.
+  /**
+   * A turn ended: evaluate it off the frame path. Resolves true when the
+   * evaluation sent a reply into the session, which answers the turn — a
+   * delegate's hand-back waits on this. Never rejects.
+   */
+  endTurn(
+    instanceId: string,
+    message: NeutralMessage & { type: "result" }
+  ): Promise<boolean> {
+    const state = this.#ensureState(instanceId);
+    const [row] = this.#db.getInstancesByIds([instanceId]);
+    if (
+      message.subtype === "aborted" ||
+      !(row && this.#agent(row.machineId, instanceId))
+    ) {
+      // Aborted, or nobody to answer (offline, or the session takes no
+      // more input): flush buffers, no evaluation.
       state.turn = [];
       state.files.clear();
       state.commands = [];
-      // Attribution: consume the initiatedTurn flag.
-      if (state.initiatedTurn) {
-        state.consecutive += 1;
-        state.initiatedTurn = false;
-      } else {
-        // A non-supervisor turn resets the streak, but NOT the mute: rules
-        // and delegates also start turns, and letting them unmute would let
-        // the supervisor ping-pong with another automated sender forever.
-        // Only an actual human send (noteHumanSend, called from the hub's
-        // relay points) takes the mute off.
-        state.consecutive = 0;
-      }
-      // biome-ignore lint/complexity/noVoid: fire-and-forget; the caller (a frame handler) has nowhere to route this promise
-      void this.#evaluate(
-        message,
-        instanceId,
-        turnText,
-        files,
-        commands,
-        now
-      ).catch(
-        // biome-ignore lint/suspicious/noEmptyBlockStatements: #evaluate already reports its own failures (see its body); this is only the last-resort guard against an unhandled rejection
-        () => {}
-      );
+      return Promise.resolve(false);
     }
+    const turnText = state.turn.join("\n\n");
+    const files = [...state.files].slice(0, FILES_CAP);
+    const commands = [...state.commands];
+    const now = Date.now();
+    state.resultTimestamp = now;
+    // Flush buffers for the next turn.
+    state.turn = [];
+    state.files.clear();
+    state.commands = [];
+    // Attribution: consume the initiatedTurn flag.
+    if (state.initiatedTurn) {
+      state.consecutive += 1;
+      state.initiatedTurn = false;
+    } else {
+      // A non-supervisor turn resets the streak, but NOT the mute: rules
+      // and delegates also start turns, and letting them unmute would let
+      // the supervisor ping-pong with another automated sender forever.
+      // Only an actual human send (noteHumanSend, called from the hub's
+      // relay points) takes the mute off.
+      state.consecutive = 0;
+    }
+    return this.#evaluate(
+      message,
+      instanceId,
+      turnText,
+      files,
+      commands,
+      now
+    ).catch((error) => {
+      console.error(
+        `[supervisor] ${instanceId}: ${error instanceof Error ? error.message : error}`
+      );
+      return false;
+    });
   }
 
   /** Walk assistant frames for tool_use blocks to extract file paths and commands. */
@@ -393,6 +398,7 @@ export class SupervisorEngine {
 
   // ── evaluation ─────────────────────────────────────────────────────────
 
+  /** One full evaluation of a turn; true when it sent a reply into the session. */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: runs one full evaluation — builds facts, calls the LLM, applies mute/consecutive/timeout policy, and publishes the verdict
   async #evaluate(
     frame: NeutralMessage,
@@ -401,7 +407,7 @@ export class SupervisorEngine {
     files: string[],
     commands: string[],
     resultTimestamp: number
-  ): Promise<void> {
+  ): Promise<boolean> {
     const state = this.#ensureState(instanceId);
 
     // Loop guard 1: one in flight per instance.
@@ -412,7 +418,7 @@ export class SupervisorEngine {
         note: "in-flight",
       });
       this.#publish(instanceId, event);
-      return;
+      return false;
     }
 
     // Loop guard: muted until the operator sends into the session
@@ -424,19 +430,19 @@ export class SupervisorEngine {
         note: "muted (consecutive cap reached)",
       });
       this.#publish(instanceId, event);
-      return;
+      return false;
     }
 
     // Resolve config at evaluation time — DB wins, env fallback.
     const config = this.#resolveConfig();
     if (!config) {
-      return; // Not configured — engine inert.
+      return false; // Not configured — engine inert.
     }
 
     // Look up the instance row for facts and autopilot.
     const row = this.#db.listInstances().find((r) => r.id === instanceId);
     if (!row) {
-      return;
+      return false;
     }
 
     const facts: RuleFacts = {
@@ -462,7 +468,7 @@ export class SupervisorEngine {
       meaningYes
     );
     if (!selection) {
-      return;
+      return false;
     }
     // Attribution shorthand: a single composed rule keeps its identity on the
     // event row; a composed set is attributed in the note, not a column.
@@ -490,7 +496,7 @@ export class SupervisorEngine {
         note: "semaphore queue full",
       });
       this.#publish(instanceId, event);
-      return;
+      return false;
     }
 
     try {
@@ -509,7 +515,7 @@ export class SupervisorEngine {
       // (operator order 2026-09-02). Autopilot instead absorbs the rules as
       // context and answers with one composed verdict below.
       if (!selection.autopilot) {
-        await this.#evaluateRuleStream(
+        return await this.#evaluateRuleStream(
           instanceId,
           state,
           selection.rules,
@@ -517,7 +523,6 @@ export class SupervisorEngine {
           config,
           resultTimestamp
         );
-        return;
       }
 
       // Assemble the prompt.
@@ -542,7 +547,7 @@ export class SupervisorEngine {
           note: "stale (newer result arrived)",
         });
         this.#publish(instanceId, event);
-        return;
+        return false;
       }
 
       if ("error" in result) {
@@ -555,7 +560,7 @@ export class SupervisorEngine {
           model: config.model,
         });
         this.#publish(instanceId, event);
-        return;
+        return false;
       }
 
       const { verdict } = result;
@@ -589,7 +594,7 @@ export class SupervisorEngine {
           latencyMs: result.latencyMs,
         });
         this.#publish(instanceId, event);
-        return;
+        return false;
       }
 
       if (effectiveVerdict === "reply") {
@@ -611,7 +616,7 @@ export class SupervisorEngine {
             latencyMs: result.latencyMs,
           });
           this.#publish(instanceId, event);
-          return;
+          return false;
         }
 
         // Deliver: same envelope shape as RuleEngine.#fire (rules.ts:284-304).
@@ -662,7 +667,7 @@ export class SupervisorEngine {
           latencyMs: result.latencyMs,
         });
         this.#publish(instanceId, event);
-        return;
+        return true;
       }
 
       // escalate / ask_operator
@@ -693,6 +698,7 @@ export class SupervisorEngine {
 
       // Telegram notification for escalate/ask.
       this.#telegram?.onSupervisor(instanceId, verdict.message);
+      return false;
     } finally {
       this.#semaphore.release();
       // Safety: ensure inFlight is cleared even on unexpected errors.
@@ -711,6 +717,7 @@ export class SupervisorEngine {
    * the first rule's reply is in the session while the model still writes
    * the second's. Guided decoding pins the array shape, so the explicit
    * array contract below overrides the preamble's single-object wording.
+   * Resolves true when any element's reply went into the session.
    */
   async #evaluateRuleStream(
     instanceId: string,
@@ -719,8 +726,9 @@ export class SupervisorEngine {
     user: string,
     config: { baseUrl: string; apiKey?: string; model: string },
     resultTimestamp: number
-  ): Promise<void> {
+  ): Promise<boolean> {
     const streamStart = Date.now();
+    let replied = false;
     const sections = rules
       .map((r) => `— Rule: ${r.name} —\n${r.prompt}`)
       .join("\n\n");
@@ -830,6 +838,7 @@ export class SupervisorEngine {
           },
         });
         state.initiatedTurn = true;
+        replied = true;
       }
 
       if (effective !== "silent") {
@@ -883,6 +892,7 @@ export class SupervisorEngine {
       this.#publish(instanceId, event);
     }
     state.inFlight = false;
+    return replied;
   }
 
   /**

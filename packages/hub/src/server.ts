@@ -8180,9 +8180,10 @@ export const createServer = ({
                   (message.payload as FramePayload & { kind: "frame" }).message
                 );
               }
-              // Delegate hand-back: remember each parented session's final text,
-              // and when its turn ends, auto-deliver it to the parent as a queued
-              // peer report (aborted turns are skipped — they carry no answer).
+              // A turn's end, in this order: the standing instructions answer
+              // it first, then the delegate hand-back delivers the turn's text
+              // to the parent as a queued peer report — once, on the turn that
+              // ends the work (aborted turns carry no answer and are skipped).
               if (kind === "frame" && message.instanceId) {
                 const neutral = (
                   message.payload as FramePayload & { kind: "frame" }
@@ -8257,35 +8258,71 @@ export const createServer = ({
                       neutral.is_error ? workflowFailure : undefined
                     );
                   }
-                  if (
+                  const turnId = message.instanceId;
+                  const endedAt = new Date();
+                  /** Whether a rule or the supervisor answered the turn with a reply. */
+                  const answered = (): Promise<boolean> =>
+                    Promise.all([
+                      ruleEngine.endTurn(turnId, neutral),
+                      supervisor.endTurn(turnId, neutral),
+                    ]).then(([rule, supervised]) => rule || supervised);
+                  const delegate =
                     row &&
                     !row.workflowStepId &&
                     parentId &&
-                    parentId !== message.instanceId &&
+                    parentId !== turnId &&
                     neutral.subtype !== "aborted"
-                  ) {
-                    // A failed turn's report carries the harness's own error
-                    // words — "(no text)" once stood in for a 403 that was
-                    // sitting right in the result frame.
-                    const { errors } = neutral as { errors?: string[] };
-                    const body =
-                      text ||
-                      (errors?.length
-                        ? errors.join("\n")
-                        : "(the delegate produced no text this turn)");
-                    const failed = !!neutral.is_error;
+                      ? row
+                      : undefined;
+                  // A failed turn's report carries the harness's own error
+                  // words — "(no text)" once stood in for a 403 that was
+                  // sitting right in the result frame.
+                  const { errors } = neutral as { errors?: string[] };
+                  const body =
+                    text ||
+                    (errors?.length
+                      ? errors.join("\n")
+                      : "(the delegate produced no text this turn)");
+                  const failed = !!neutral.is_error;
+                  const handBack = (from: InstanceRow): void =>
                     reportToParent(
-                      row,
-                      `${body}${workItems.turnEnded(row, body, failed)}`,
+                      from,
+                      `${body}${workItems.turnEnded(from, body, failed, endedAt)}`,
                       failed
                     );
+                  if (delegate?.workItemId && !failed) {
+                    // A work item's turn is answered before it is handed
+                    // back: a rule's or the supervisor's reply keeps the item
+                    // running and wakes its session into the next turn, and
+                    // the parent hears nothing of this one. Only a turn no
+                    // standing instruction answers goes back, and may end
+                    // the item. Meaning rules and the supervisor answer once
+                    // their model does; the hand-back waits for them.
+                    answered()
+                      .then((replied) => {
+                        if (!replied) {
+                          handBack(delegate);
+                        }
+                      })
+                      .catch((error) => {
+                        console.error(
+                          `[hand-back] ${turnId}: ${error instanceof Error ? error.message : error}`
+                        );
+                      });
+                  } else {
+                    // A failed turn goes back at once and ends its item, so
+                    // nothing answers it; a session that is not delegated
+                    // work has its turn answered as it always has.
+                    if (delegate) {
+                      handBack(delegate);
+                    }
+                    // biome-ignore lint/complexity/noVoid: nothing waits on whether a rule answered a turn that is not held
+                    void answered();
                   }
                 }
               }
-              // Standing instructions read the same frames the dashboards do.
-              // Deliberately after the delegate hand-back above: a turn that
-              // ends a work item has ended it by the time a rule or the
-              // supervisor reads it, so nothing answers finished work.
+              // Standing instructions read the frames inside a turn as the
+              // dashboards do; a turn's end is answered above.
               if (kind === "frame" && message.instanceId) {
                 ruleEngine.observe(
                   message.instanceId,

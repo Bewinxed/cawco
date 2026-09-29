@@ -23,9 +23,11 @@ import type { MeaningJudge } from "./meaning";
  *    rules read them, and the engine early-outs before touching the buffer when
  *    no such rule exists — which is the normal case.
  * 2. Complete `assistant` frames, once per message. `message` rules read them.
- * 3. `result` frames, once per turn. `turn` rules read the whole turn's text,
- *    and this is the timing that matters most: the session is idle, so the
- *    reply wakes it into a new turn and it keeps working.
+ * 3. `result` frames, once per turn, through {@link RuleEngine.endTurn}.
+ *    `turn` rules read the whole turn's text, and this is the timing that
+ *    matters most: the session is idle, so the reply wakes it into a new turn
+ *    and it keeps working. A delegate's hand-back waits on this answer: a turn
+ *    a rule replied to has not ended its work item.
  *
  * The state machine lives in `rule_state`. The session gets the rule's reply
  * as the operator wrote it and acknowledges it by answering, like any other
@@ -172,8 +174,9 @@ export class RuleEngine {
   }
 
   /**
-   * One frame. Returns nothing and throws nothing — a rule that cannot fire
-   * must never cost the frame its trip to the dashboards.
+   * One frame inside a turn; a turn's `result` frame is {@link endTurn}'s.
+   * Returns nothing and throws nothing — a rule that cannot fire must never
+   * cost the frame its trip to the dashboards.
    */
   observe(instanceId: string, message: NeutralMessage): void {
     try {
@@ -185,12 +188,29 @@ export class RuleEngine {
     }
   }
 
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches all three message shapes (stream_event, assistant, result) rule-observation handles; splitting it would scatter one state machine across several methods.
-  #observe(instanceId: string, message: NeutralMessage): void {
-    if (message.type === "result") {
-      this.#endTurn(instanceId, message);
-      return;
+  /**
+   * A turn ended: fire the `turn` rules on what it said, then re-arm every
+   * rule pending on this session that the turn did not match again — the
+   * session has had its turn to answer, and answered. Resolves true when a
+   * rule's reply went to the session, which answers the turn: a phrase rule
+   * at once, a meaning rule when Jev does. Never rejects.
+   */
+  endTurn(
+    instanceId: string,
+    message: NeutralMessage & { type: "result" }
+  ): Promise<boolean> {
+    try {
+      return this.#endTurn(instanceId, message);
+    } catch (error) {
+      console.error(
+        `[rules] ${instanceId}: ${error instanceof Error ? error.message : error}`
+      );
+      return Promise.resolve(false);
     }
+  }
+
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches both in-turn message shapes (stream_event, assistant) rule-observation handles; splitting it would scatter one state machine across several methods.
+  #observe(instanceId: string, message: NeutralMessage): void {
     if (this.#rules.length === 0) {
       return;
     }
@@ -246,7 +266,8 @@ export class RuleEngine {
       }
       const facts = this.#factsFor(instanceId);
       if (this.#meaningByTiming.message.length > 0 && facts) {
-        this.#fireMeaning(
+        // biome-ignore lint/complexity/noVoid: a message rule answers inside a live turn; nothing waits on whether it fired
+        void this.#fireMeaning(
           instanceId,
           this.#meaningByTiming.message,
           this.#meaning.message(
@@ -261,15 +282,10 @@ export class RuleEngine {
     }
   }
 
-  /**
-   * A turn ended: fire the `turn` rules on what it said, then re-arm every
-   * rule pending on this session that the turn did not match again — the
-   * session has had its turn to answer, and answered.
-   */
   #endTurn(
     instanceId: string,
     message: NeutralMessage & { type: "result" }
-  ): void {
+  ): Promise<boolean> {
     const buffer = this.#buffer(instanceId);
     const text = buffer.turn.join("\n\n");
     buffer.turn = [];
@@ -277,18 +293,22 @@ export class RuleEngine {
     buffer.firedThisMessage.clear();
     // An aborted turn produced no answer to hold anyone to, and a session
     // that takes no more input is not held to anything.
-    if (message.subtype !== "aborted" && text && this.#route(instanceId)) {
-      this.#fireTurn(instanceId, message, text);
-    }
+    const answered =
+      message.subtype !== "aborted" && text && this.#route(instanceId)
+        ? this.#fireTurn(instanceId, message, text)
+        : Promise.resolve(false);
     this.#db.rearmRules(instanceId, [...buffer.firedThisTurn]);
     buffer.firedThisTurn = new Set();
+    return answered;
   }
 
+  /** Fires the `turn` rules on a turn's speech; true once any reply was sent. */
   #fireTurn(
     instanceId: string,
     message: NeutralMessage & { type: "result" },
     text: string
-  ): void {
+  ): Promise<boolean> {
+    let replied = false;
     for (const rule of this.#byTiming.turn) {
       // `turn` rules read the turn's speech; thinking does not survive to here
       // as a separate stream, so a thinking-only rule is left to the other two
@@ -296,42 +316,49 @@ export class RuleEngine {
       if (rule.watch === "thinking") {
         continue;
       }
-      if (ruleMatches(rule, this.#withoutOwnWords(rule, text))) {
-        this.#fire(rule, instanceId);
+      if (
+        ruleMatches(rule, this.#withoutOwnWords(rule, text)) &&
+        this.#fire(rule, instanceId)
+      ) {
+        replied = true;
       }
     }
     const facts = this.#factsFor(instanceId);
     if (this.#meaningByTiming.turn.length > 0 && facts) {
-      this.#fireMeaning(
+      return this.#fireMeaning(
         instanceId,
         this.#meaningByTiming.turn,
         this.#meaning.turn(message, instanceId, facts, text)
-      );
+      ).then((meant) => replied || meant);
     }
+    return Promise.resolve(replied);
   }
 
   /**
    * Fires each of `rules` Jev answered yes to, through the same {@link #fire}
-   * a phrase match takes. Off the frame path: the answer arrives later.
+   * a phrase match takes, once the answer arrives. Resolves true when any of
+   * them sent its reply; never rejects.
    */
   #fireMeaning(
     instanceId: string,
     rules: Rule[],
     answer: Promise<Set<string>>
-  ): void {
-    // biome-ignore lint/complexity/noVoid: fire-and-forget; the frame handler has nowhere to route this promise
-    void answer
+  ): Promise<boolean> {
+    return answer
       .then((yes) => {
+        let replied = false;
         for (const rule of rules) {
-          if (yes.has(rule.id)) {
-            this.#fire(rule, instanceId);
+          if (yes.has(rule.id) && this.#fire(rule, instanceId)) {
+            replied = true;
           }
         }
+        return replied;
       })
       .catch((error) => {
         console.error(
           `[rules] ${instanceId}: ${error instanceof Error ? error.message : error}`
         );
+        return false;
       });
   }
 
@@ -459,10 +486,11 @@ export class RuleEngine {
     return true;
   }
 
-  #fire(rule: Rule, instanceId: string): void {
+  /** Sends a matched rule's reply, unless its scope, shots or ceiling hold it; true when sent. */
+  #fire(rule: Rule, instanceId: string): boolean {
     const facts = this.#factsFor(instanceId);
     if (!(facts && this.#inScope(rule, facts))) {
-      return;
+      return false;
     }
 
     // A match keeps the rule pending through this turn's end, even when the
@@ -471,17 +499,17 @@ export class RuleEngine {
     const standing = this.#db.ruleStateFor(rule.id, instanceId);
     // Without `repeat`, the rule gets one shot per session.
     if (!rule.repeat && standing && standing.totalFires > 0) {
-      return;
+      return false;
     }
     if (standing && standing.fireCount >= RULE_FIRE_CEILING) {
-      return;
+      return false;
     }
 
     // Asked again here: a meaning rule's answer lands after its frame, and
     // the session may have stopped taking input in between. Unsent is uncounted.
     const sender = this.#agent(facts.machineId, instanceId);
     if (!sender) {
-      return;
+      return false;
     }
     this.#db.noteRuleFire(rule.id, instanceId, rule.repeat);
     sender.send({
@@ -509,5 +537,6 @@ export class RuleEngine {
         urgent: rule.timing === "immediate" && rule.interrupt,
       },
     });
+    return true;
   }
 }

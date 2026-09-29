@@ -511,12 +511,19 @@ export const createWorkItems = ({
      * THE gate on input to a session: why nothing may give it a turn — a
      * reader, a rule, the supervisor, Telegram, a workflow, another session —
      * or nothing when it may. A session whose work item has ended takes no
-     * more input from anyone; a session with no work item is not delegated
-     * work, and takes messages as it always has.
+     * more input from anyone, and neither does a delegate from before work
+     * items. Every other session is not delegated work, and takes messages as
+     * it always has.
      */
     refusal(row: InstanceRow): string | undefined {
       const item = itemOf(row);
-      return item && !LIVE.has(item.state) ? finishedText(item) : undefined;
+      if (item) {
+        return LIVE.has(item.state) ? undefined : finishedText(item);
+      }
+      if (row.parentInstanceId && !row.workflowStepId) {
+        return `${leaf(row.cwd)}#${row.id.slice(0, 8)} predates work items and is closed. Start a new delegate.`;
+      }
+      return undefined;
     },
 
     /** Its session is up: the item is running. */
@@ -528,19 +535,28 @@ export const createWorkItems = ({
     },
 
     /**
-     * A turn of the item's session ended, not by an interrupt. With nothing
-     * queued for the session and none of its own delegated work still live,
-     * the item is finished: `done` with this turn's report as its result, or
-     * `failed` with the harness's error. Answers the line the parent's report
-     * carries about the item.
+     * A turn of the item's session ended at `endedAt`, not by an interrupt,
+     * and no standing instruction answered it. With nothing queued for the
+     * session, nothing handed to it since that turn ended, and none of its own
+     * delegated work still live, the item is finished: `done` with this turn's
+     * report as its result, or `failed` with the harness's error. Answers the
+     * line the parent's report carries about the item.
      */
-    turnEnded(row: InstanceRow, report: string, failed: boolean): string {
+    turnEnded(
+      row: InstanceRow,
+      report: string,
+      failed: boolean,
+      endedAt: Date
+    ): string {
       let item = itemOf(row);
       if (!item) {
         return "";
       }
       const busy =
         db.sendsIn(row.id, ["pending"]).length > 0 ||
+        db
+          .sendsIn(row.id, ["read"])
+          .some((handed) => handed.acceptedAt > endedAt) ||
         db.liveWorkItemsOf(row.id).length > 0;
       if (!busy) {
         item = finish(
