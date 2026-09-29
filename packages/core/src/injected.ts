@@ -19,8 +19,16 @@ export const handoffMarker = (from: string): string =>
 export const workflowStepMarker = (workflow: string, step: string): string =>
   `[Hand-off from the ${workflow} workflow — step ${step}, not the user]\n\n`;
 
+/**
+ * The marker and the break after it, however that break was kept: written as
+ * a blank line, and folded to spaces in a harness catalog's first prompt.
+ */
 const HANDOFF =
-  /^\[Hand-off from the (.+?) (?:session — another agent|workflow — step (.+?)), not the user\]\n\n/;
+  /^\[Hand-off from the (.+?) (?:session — another agent|workflow — step (.+?)), not the user\]\s+/;
+
+/** A message without the hand-off marker it opens with. */
+export const withoutHandoffMarker = (text: string): string =>
+  text.replace(HANDOFF, "");
 
 /**
  * The opening of a session the daemon started in a fresh git worktree of
