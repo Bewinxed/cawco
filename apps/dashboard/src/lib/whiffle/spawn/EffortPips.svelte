@@ -51,6 +51,9 @@
   let grab = 0;
   const active = $derived(hover || drag || focused);
   let trackWidth = $state(0);
+  /** Each label's own width, so the chip can ease between them. */
+  let labelWidths = $state<number[]>([]);
+  const labelWidth = $derived(labelWidths[effortIdx]);
   /** Gap kept between the chip's edge and the next stop marker. */
   const PIP_CLEARANCE = 10;
   /** A stop shows only where it lands in the empty track, clear of the chip. */
@@ -163,8 +166,8 @@
                The ghost holds that width; the icon and the label sit together,
                centred in it, so a short label leaves no gap beside it. -->
           <span aria-hidden="true" class="ghost">
-            {#each efforts as level (level)}
-              <span>{level}</span>
+            {#each efforts as level, i (level)}
+              <span bind:clientWidth={labelWidths[i]}>{level}</span>
             {/each}
           </span>
           <span class="content">
@@ -182,6 +185,7 @@
                   <rect
                     class="bar"
                     class:lit={i <= effortIdx}
+                    style={`--delay:${(i <= effortIdx ? i : n - 1 - i) * 24}ms`}
                     height="10"
                     rx="1"
                     width="2"
@@ -190,7 +194,22 @@
                 {/each}
               </svg>
             {/if}
-            <span class="lvl">{label}</span>
+            {#if n}
+              <!-- The words stack in one cell and cross-fade; the cell eases to the
+                   new word's width, so the icon and label re-centre smoothly. -->
+              <span
+                aria-hidden="true"
+                class="lvl"
+                style={labelWidth ? `width:${labelWidth}px` : undefined}
+              >
+                {#each efforts as level, i (level)}
+                  <span class="word" class:on={i === effortIdx}>{level}</span>
+                {/each}
+              </span>
+              <span class="sr-only">{label}</span>
+            {:else}
+              <span class="lvl">{label}</span>
+            {/if}
           </span>
         </div>
       </div>
@@ -333,8 +352,36 @@
     visibility: hidden;
     padding-inline-start: calc(var(--bars) * 4px - 2px + 5px);
   }
+  .ghost {
+    justify-items: start;
+  }
   .ghost > span {
     grid-area: 1 / 1;
+  }
+  .lvl {
+    display: grid;
+    justify-items: start;
+    @media (prefers-reduced-motion: no-preference) {
+      transition: width var(--ns-fill-ms) var(--ease-in-out);
+    }
+  }
+  .word {
+    grid-area: 1 / 1;
+    opacity: 0;
+    @media (prefers-reduced-motion: no-preference) {
+      transition: opacity 140ms ease;
+    }
+  }
+  .word.on {
+    opacity: 1;
+  }
+  .sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
   }
   .content {
     display: flex;
@@ -355,7 +402,10 @@
   .bar {
     fill: var(--ink-strong);
     opacity: 0.22;
-    transition: opacity 160ms ease;
+    /* Bars fill left to right and drain right to left, one after another. */
+    @media (prefers-reduced-motion: no-preference) {
+      transition: opacity 140ms ease var(--delay, 0ms);
+    }
   }
   .bar.lit {
     opacity: 1;
