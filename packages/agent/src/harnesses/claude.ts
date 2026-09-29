@@ -675,7 +675,18 @@ class ClaudeSession implements HarnessSession {
                 permissionMode as import("@anthropic-ai/claude-agent-sdk").PermissionMode,
             }
           : {}),
-        ...(model && { model }),
+        ...(model && {
+          model,
+          env: {
+            ...process.env,
+            ...(
+              options as
+                | { env?: Record<string, string | undefined> }
+                | undefined
+            )?.env,
+            WHIFFLE_MODEL: model,
+          },
+        }),
         // Left out entirely when nobody chose: the SDK's own default is the
         // model's, and writing a level here would put whiffle's guess in its
         // place on every model whose scale we cannot see.

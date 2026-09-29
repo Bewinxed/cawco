@@ -1451,16 +1451,16 @@ const syncMemoryDocs = async (
 };
 
 /**
- * The SessionStart hook, verbatim. Claude Code hands the hook its JSON on
- * stdin, and SessionStart is the only event that carries the model at all — no
- * environment variable names it and CLAUDE.md itself is loaded flat, so this is
- * the whole of how a document reaches only the sessions it is for.
+ * The SessionStart hook, verbatim. Claude Code's SessionStart input carries no
+ * model (measured on 2.1.280 and 2.1.284: only session_id, transcript_path,
+ * cwd, hook_event_name and source), and CLAUDE.md itself is loaded flat. The
+ * Claude harness therefore passes the session's model to the hook as the
+ * `WHIFFLE_MODEL` environment variable, and the script prints the document
+ * whose name is the longest prefix of that id — the whole of how a document
+ * reaches only the sessions it is for.
  *
  * POSIX sh and nothing else: it runs on every machine the fleet has, including
  * the ones where the daemon's own Bun is the only Bun there is.
- *
- * Exported so a test can run the real text under a real `sh` — the escaping in
- * here is the kind that is wrong quietly, on somebody else's machine.
  */
 export const MEMORY_HOOK = `#!/bin/sh
 # Written by whiffle. Edits are overwritten — the fleet's documents are in
@@ -1470,13 +1470,11 @@ set -u
 dir="\${HOME}/.claude/memories/models"
 [ -d "$dir" ] || exit 0
 
-input=$(cat)
-# The model id, whether it arrives as a string or as an object with an \`id\`.
-# It is not guaranteed to be there at all, and a session without one is shown
-# nothing: the main CLAUDE.md carries the pointer for that case.
-flat=$(printf '%s' "$input" | tr -d '\\n')
-model=$(printf '%s' "$flat" | sed -n 's/.*"model"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p')
-[ -n "$model" ] || model=$(printf '%s' "$flat" | sed -n 's/.*"model"[[:space:]]*:[[:space:]]*{[^}]*"id"[[:space:]]*:[[:space:]]*"\\([^"]*\\)".*/\\1/p')
+# Claude Code's SessionStart input carries no model, so the harness that
+# started this session names it in WHIFFLE_MODEL. A session started
+# without one is shown nothing.
+cat >/dev/null
+model="\${WHIFFLE_MODEL:-}"
 [ -n "$model" ] || exit 0
 
 # Longest prefix wins, so \`claude-opus-5-20260315\` takes claude-opus-5.md over
