@@ -42,8 +42,11 @@ export interface RuleSender {
 }
 
 export interface RuleEngineDeps {
-  /** The live agent socket for a machine, or nothing when it is offline. */
-  agent: (machineId: string) => RuleSender | undefined;
+  /**
+   * The route a reply to this session takes, or nothing when its machine is
+   * offline or the session takes no more input (its work item has ended).
+   */
+  agent: (machineId: string, instanceId: string) => RuleSender | undefined;
   db: DbShape;
   /** Answers meaning rules; shared with the supervisor so a turn is asked about once. */
   meaning: MeaningJudge;
@@ -107,7 +110,10 @@ const thought = (message: NeutralMessage & { type: "assistant" }): string =>
 
 export class RuleEngine {
   readonly #db: DbShape;
-  readonly #agent: (machineId: string) => RuleSender | undefined;
+  readonly #agent: (
+    machineId: string,
+    instanceId: string
+  ) => RuleSender | undefined;
   /** The enabled rules, reloaded whenever one is written. */
   #rules: Rule[] = [];
   #byTiming: Record<RuleTiming, Rule[]> = {
@@ -197,6 +203,9 @@ export class RuleEngine {
       }
       const { event } = message;
       if (event.type === "content_block_delta") {
+        if (!this.#route(instanceId)) {
+          return;
+        }
         const buffer = this.#buffer(instanceId);
         const { delta } = event;
         buffer.streaming +=
@@ -215,7 +224,7 @@ export class RuleEngine {
     if (message.type === "assistant") {
       // A subagent's own message is its parent's tool call, not the session
       // speaking. Rules watch what the session says to the user.
-      if (message.parent_tool_use_id) {
+      if (message.parent_tool_use_id || !this.#route(instanceId)) {
         return;
       }
       const buffer = this.#buffer(instanceId);
@@ -266,8 +275,9 @@ export class RuleEngine {
     buffer.turn = [];
     buffer.streaming = "";
     buffer.firedThisMessage.clear();
-    // An aborted turn produced no answer to hold anyone to.
-    if (message.subtype !== "aborted" && text) {
+    // An aborted turn produced no answer to hold anyone to, and a session
+    // that takes no more input is not held to anything.
+    if (message.subtype !== "aborted" && text && this.#route(instanceId)) {
       this.#fireTurn(instanceId, message, text);
     }
     this.#db.rearmRules(instanceId, [...buffer.firedThisTurn]);
@@ -417,6 +427,16 @@ export class RuleEngine {
     return facts;
   }
 
+  /**
+   * Where a reply to this session would go, or nothing when none can: its
+   * machine is offline, or it takes no more input. Rules are not read for a
+   * session with no route, and never fire at one.
+   */
+  #route(instanceId: string): RuleSender | undefined {
+    const facts = this.#factsFor(instanceId);
+    return facts ? this.#agent(facts.machineId, instanceId) : undefined;
+  }
+
   #inScope(rule: Rule, facts: Facts): boolean {
     const { scope } = rule;
     if (scope.machineId && scope.machineId !== facts.machineId) {
@@ -457,12 +477,13 @@ export class RuleEngine {
       return;
     }
 
-    this.#db.noteRuleFire(rule.id, instanceId, rule.repeat);
-    const sender = this.#agent(facts.machineId);
+    // Asked again here: a meaning rule's answer lands after its frame, and
+    // the session may have stopped taking input in between. Unsent is uncounted.
+    const sender = this.#agent(facts.machineId, instanceId);
     if (!sender) {
       return;
     }
-
+    this.#db.noteRuleFire(rule.id, instanceId, rule.repeat);
     sender.send({
       verb: "send",
       machineId: facts.machineId,

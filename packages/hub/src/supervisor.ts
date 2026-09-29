@@ -58,7 +58,14 @@ export interface SupervisorStatusSignal {
 }
 
 export interface SupervisorEngineDeps {
-  agent: (machineId: string) => SupervisorSender | undefined;
+  /**
+   * The route a reply to this session takes, or nothing when its machine is
+   * offline or the session takes no more input (its work item has ended).
+   */
+  agent: (
+    machineId: string,
+    instanceId: string
+  ) => SupervisorSender | undefined;
   db: DbShape;
   /** Answers `meaning` rules — the same judge the rule engine asks, so a turn is asked about once. */
   meaning: MeaningJudge;
@@ -219,7 +226,10 @@ Return a JSON object with fields: verdict, message, note.`;
 
 export class SupervisorEngine {
   readonly #db: DbShape;
-  readonly #agent: (machineId: string) => SupervisorSender | undefined;
+  readonly #agent: (
+    machineId: string,
+    instanceId: string
+  ) => SupervisorSender | undefined;
   readonly #telegram?: {
     onSupervisor: (instanceId: string, text: string) => void;
   };
@@ -303,8 +313,13 @@ export class SupervisorEngine {
 
     if (message.type === "result") {
       const state = this.#ensureState(instanceId);
-      if (message.subtype === "aborted") {
-        // Aborted: flush buffers, no evaluation.
+      const [row] = this.#db.getInstancesByIds([instanceId]);
+      if (
+        message.subtype === "aborted" ||
+        !(row && this.#agent(row.machineId, instanceId))
+      ) {
+        // Aborted, or nobody to answer (offline, or the session takes no
+        // more input): flush buffers, no evaluation.
         state.turn = [];
         state.files.clear();
         state.commands = [];
@@ -582,7 +597,9 @@ export class SupervisorEngine {
         const freshRow = this.#db
           .listInstances()
           .find((r) => r.id === instanceId);
-        const sender = freshRow ? this.#agent(freshRow.machineId) : undefined;
+        const sender = freshRow
+          ? this.#agent(freshRow.machineId, instanceId)
+          : undefined;
         if (!(sender && freshRow)) {
           state.inFlight = false;
           const event = this.#record(instanceId, {
@@ -777,7 +794,9 @@ export class SupervisorEngine {
         const freshRow = this.#db
           .listInstances()
           .find((r) => r.id === instanceId);
-        const sender = freshRow ? this.#agent(freshRow.machineId) : undefined;
+        const sender = freshRow
+          ? this.#agent(freshRow.machineId, instanceId)
+          : undefined;
         if (!(sender && freshRow)) {
           const event = this.#record(instanceId, {
             source: "rule",

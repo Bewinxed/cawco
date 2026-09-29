@@ -485,20 +485,15 @@ export const createWorkItems = ({
     start,
 
     /**
-     * Why a tool may not give this session a turn, or nothing when it may.
-     * A session whose item is finished is retired; a delegate from before
-     * work items is closed. Every other session is not delegated work, and
-     * takes messages as it always has.
+     * THE gate on input to a session: why nothing may give it a turn — a
+     * reader, a rule, the supervisor, Telegram, a workflow, another session —
+     * or nothing when it may. A session whose work item has ended takes no
+     * more input from anyone; a session with no work item is not delegated
+     * work, and takes messages as it always has.
      */
     refusal(row: InstanceRow): string | undefined {
       const item = itemOf(row);
-      if (item) {
-        return LIVE.has(item.state) ? undefined : finishedText(item);
-      }
-      if (row.parentInstanceId && !row.workflowStepId) {
-        return `${leaf(row.cwd)}#${row.id.slice(0, 8)} predates work items and is closed. Start a new delegate.`;
-      }
-      return undefined;
+      return item && !LIVE.has(item.state) ? finishedText(item) : undefined;
     },
 
     /** Its session is up: the item is running. */

@@ -1577,9 +1577,24 @@ export const createServer = ({
    * new connect replaces it, and a finished exchange spends it.
    */
   let openrouterVerifier: string | undefined;
-  /** A machine to send to, while it is connected: through the one send path. */
-  const sendRoute = (machineId: string) =>
-    registry.agent(machineId) ? { send: deliverSend } : undefined;
+  /**
+   * Why a session takes no input now, or nothing when it does: its work item
+   * has ended ({@link WorkItems.refusal}). Every sender asks this, by way of
+   * {@link deliverSend} or {@link sendRoute}.
+   */
+  const inputRefusal = (instanceId: string): string | undefined => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    return row ? workItems.refusal(row) : undefined;
+  };
+  /**
+   * A session's standing instructions reach it through the one send path,
+   * while its machine is connected and the session still takes input. A
+   * rule or supervisor verdict with no route is not sent and not counted.
+   */
+  const sendRoute = (machineId: string, instanceId: string) =>
+    registry.agent(machineId) && !inputRefusal(instanceId)
+      ? { send: deliverSend }
+      : undefined;
   const ruleEngine = new RuleEngine({
     db,
     meaning: meaningJudge,
@@ -2643,8 +2658,9 @@ export const createServer = ({
    * is not there to take it — and says so on the session's stream, so every
    * tab, device and late joiner draws the same row under the same id.
    *
-   * Another session never reaches finished work: a peer's send to a session
-   * whose work item is over fails with that item's state, and nothing wakes.
+   * Nobody reaches finished work: a send to a session whose work item is
+   * over fails with that item's state ({@link inputRefusal}), and nothing
+   * wakes.
    *
    * A uuid the hub already has a record for is the same send again (a tab
    * trying once more after its socket dropped): the machine is not handed it
@@ -2657,9 +2673,7 @@ export const createServer = ({
       publishSend(known);
       return known;
     }
-    const [target] =
-      message.origin.kind === "peer" ? db.getInstancesByIds([instanceId]) : [];
-    const refused = target ? workItems.refusal(target) : undefined;
+    const refused = inputRefusal(instanceId);
     const agent = refused ? undefined : registry.agent(envelope.machineId);
     if (agent) {
       wakeForSend(agent, envelope.machineId, instanceId);
@@ -8142,24 +8156,6 @@ export const createServer = ({
                   (message.payload as FramePayload & { kind: "frame" }).message
                 );
               }
-              // Standing instructions read the same frames the dashboards do.
-              // Deliberately before the delegate hand-back below: a rule that
-              // wakes a session should be queued ahead of the report that would
-              // otherwise be the only thing waiting for it.
-              if (kind === "frame" && message.instanceId) {
-                ruleEngine.observe(
-                  message.instanceId,
-                  (message.payload as FramePayload & { kind: "frame" }).message
-                );
-                usageCounter.observe(
-                  message.instanceId,
-                  (message.payload as FramePayload & { kind: "frame" }).message
-                );
-                supervisor.observe(
-                  message.instanceId,
-                  (message.payload as FramePayload & { kind: "frame" }).message
-                );
-              }
               // Delegate hand-back: remember each parented session's final text,
               // and when its turn ends, auto-deliver it to the parent as a queued
               // peer report (aborted turns are skipped — they carry no answer).
@@ -8261,6 +8257,24 @@ export const createServer = ({
                     );
                   }
                 }
+              }
+              // Standing instructions read the same frames the dashboards do.
+              // Deliberately after the delegate hand-back above: a turn that
+              // ends a work item has ended it by the time a rule or the
+              // supervisor reads it, so nothing answers finished work.
+              if (kind === "frame" && message.instanceId) {
+                ruleEngine.observe(
+                  message.instanceId,
+                  (message.payload as FramePayload & { kind: "frame" }).message
+                );
+                usageCounter.observe(
+                  message.instanceId,
+                  (message.payload as FramePayload & { kind: "frame" }).message
+                );
+                supervisor.observe(
+                  message.instanceId,
+                  (message.payload as FramePayload & { kind: "frame" }).message
+                );
               }
               // An agent only frames an error about a session that failed to start
               // or died on its own, so the row records it for whoever looks later.
