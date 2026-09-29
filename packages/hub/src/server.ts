@@ -3375,7 +3375,7 @@ export const createServer = ({
         crypto.randomUUID()
       );
       await answered;
-      const text = await storedAnswer(id);
+      const text = await storedAnswer(id, true);
       if (!text) {
         throw new Error(
           "the summariser's turn ended without a finished answer in its transcript"
@@ -3390,12 +3390,18 @@ export const createServer = ({
 
   /**
    * The answer a summariser's stored transcript holds for its turn, once
-   * that turn has ended ({@link finishedAnswer}); undefined before then, or
-   * when it never got as far as a transcript.
+   * that turn has ended ({@link finishedAnswer}; `ended` when its `result`
+   * frame was seen); undefined before then, or when it never got as far as a
+   * transcript.
    */
-  const storedAnswer = async (id: string): Promise<string | undefined> => {
+  const storedAnswer = async (
+    id: string,
+    ended: boolean
+  ): Promise<string | undefined> => {
     const where = await locateSession(id);
-    return where ? finishedAnswer(await readMessages(where, false)) : undefined;
+    return where
+      ? finishedAnswer(await readMessages(where, false), ended)
+      : undefined;
   };
 
   /**
@@ -3858,7 +3864,7 @@ export const createServer = ({
         cancelled
       );
     }
-    const answered = await storedAnswer(current);
+    const answered = await storedAnswer(current, false);
     stopFromHub(source.machineId, current);
     if (answered) {
       return answered;
