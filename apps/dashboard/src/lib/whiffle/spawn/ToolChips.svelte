@@ -41,6 +41,17 @@
   } = $props();
   let pop = $state<"effort" | "permission" | null>(null);
   const look = $derived(permissionLook(tools.permission ?? ""));
+  /** Apply the level now, but keep the picker open while the chip settles on it. */
+  const SETTLE_MS = 260;
+  let closeTimer: ReturnType<typeof setTimeout> | undefined;
+  function commitEffort(level: EffortLevel) {
+    tools.oneffort(level);
+    clearTimeout(closeTimer);
+    closeTimer = setTimeout(() => {
+      pop = null;
+    }, SETTLE_MS);
+  }
+  $effect(() => () => clearTimeout(closeTimer));
 </script>
 
 {#snippet effortChip()}
@@ -86,7 +97,7 @@
                 efforts={tools.efforts}
                 embedded
                 onchange={tools.oneffort}
-                oncommit={closeOnCommit ? (level) => { tools.oneffort(level); pop = null; } : undefined}
+                oncommit={closeOnCommit ? commitEffort : undefined}
                 value={tools.effort}
               />
             </div>

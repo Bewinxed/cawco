@@ -1,10 +1,8 @@
 <script lang="ts">
   /**
    * The chip lives inside the fill so the level and its filled track read as
-   * one object, and the fill's right end is the value. Each stop marks where
-   * that end lands for its level — just inside the chip's right edge — so the
-   * stops ahead sit in the empty track rather than under a chip wider than a
-   * step. Pointing and stops use that one geometry.
+   * one object, and the fill's right end is the value. The chip snaps to the
+   * level nearest the pointer; its centre sits at kw/2 + f * (width - kw).
    */
   import type { EffortLevel } from "@whiffle/core";
 
@@ -36,16 +34,15 @@
   });
   let draft = $state<EffortLevel | null>(null);
   const displayed = $derived(draft ?? value);
-  const kw = $derived(knobWidth + 6);
+  const kw = $derived(knobWidth + 4);
 
   const n = $derived(efforts.length);
   const effortIdx = $derived(
     Math.max(0, efforts.indexOf(displayed as EffortLevel))
   );
   const frac = (i: number) => (n > 1 ? i / (n - 1) : 0);
-  /** While dragging the fill follows the pointer freely; on release it settles on a level. */
-  let dragFrac = $state<number | null>(null);
-  const p = $derived(dragFrac ?? frac(effortIdx));
+  /** The chip always sits on a level; the pointer picks the nearest one. */
+  const p = $derived(frac(effortIdx));
   let hover = $state(false);
   let drag = $state(false);
   /** Keyboard focus only; a pointer or an opening popover focusing the input is not shown. */
@@ -53,9 +50,15 @@
   /** Offset from the pointer to the chip's centre at grab, so a drag moves it from there. */
   let grab = 0;
   const active = $derived(hover || drag || focused);
-  /** Stops still ahead of the level, so the track says where else it can go. */
+  let trackWidth = $state(0);
+  /** Gap kept between the chip's edge and the next stop marker. */
+  const PIP_CLEARANCE = 10;
+  /** A stop shows only where it lands in the empty track, clear of the chip. */
   const pips = $derived(
-    efforts.map((_, i) => ({ frac: frac(i), on: i > effortIdx }))
+    efforts.map((_, i) => {
+      const dist = (i - effortIdx) * (Math.max(1, trackWidth - kw) * frac(1));
+      return { frac: frac(i), on: dist >= kw / 2 + PIP_CLEARANCE };
+    })
   );
   const label = $derived(n ? (efforts[effortIdx] ?? "") : "Default");
   function change(level: EffortLevel) {
@@ -100,8 +103,7 @@
     }
     drag = true;
     hover = false;
-    dragFrac = fracAt(x + grab, rail);
-    change(efforts[levelOf(dragFrac)]);
+    change(efforts[levelOf(fracAt(x + grab, rail))]);
   }
   function move(event: PointerEvent) {
     if (!n) {
@@ -109,8 +111,7 @@
     }
     if (drag) {
       const { x, rail } = locate(event);
-      dragFrac = fracAt(x + grab, rail);
-      const level = efforts[levelOf(dragFrac)];
+      const level = efforts[levelOf(fracAt(x + grab, rail))];
       if (level !== displayed) {
         change(level);
       }
@@ -121,7 +122,6 @@
   function up() {
     commit();
     drag = false;
-    dragFrac = null;
     hover = false;
   }
   function leave() {
@@ -138,15 +138,15 @@
   >
     <div
       class="track"
-      onpointercancel={() => { draft = null; drag = false; dragFrac = null; hover = false; }}
+      onpointercancel={() => { draft = null; drag = false; hover = false; }}
       onpointerdown={down}
       onpointerleave={leave}
       onpointermove={move}
       onpointerup={up}
       role="presentation"
+      bind:clientWidth={trackWidth}
       style={`--kw:${kw}px`}
       class:focus={focused}
-      class:dragging={drag}
       class:ready={ready}
     >
       <div
@@ -181,7 +181,6 @@
       {#each pips as pip, i (i)}
         <span
           class="pip"
-          data-pip={i}
           style={`left:calc(var(--kw) / 2 - 2.5px + ${pip.frac} * (100% - var(--kw)));opacity:${pip.on ? 0.3 : 0}`}
         ></span>
       {/each}
@@ -246,9 +245,7 @@
       box-shadow 120ms ease;
   }
   .track:not(.ready),
-  .track:not(.ready) *,
-  .track.dragging .fill,
-  .track.dragging .pip {
+  .track:not(.ready) * {
     transition: none;
   }
   /* The range input is invisible over the track, so the track is the
@@ -262,7 +259,7 @@
     display: flex;
     justify-content: flex-end;
     align-items: center;
-    padding: 3px;
+    padding: 2px;
     border-radius: calc(var(--radius-md) - 1px);
     left: 0;
     top: 0;
@@ -294,8 +291,8 @@
     height: 100%;
     display: flex;
     align-items: center;
-    gap: 7px;
-    padding: 0 9px;
+    gap: 5px;
+    padding: 0 6px;
     border-radius: var(--radius-sm);
     background: var(--surface-lift);
     box-shadow:
