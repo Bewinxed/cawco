@@ -5,12 +5,15 @@
  *
  * Scope is the source's live context: its last compaction summary and every
  * message after it — what its model holds now. From that scope, code takes:
- * - the tail, the newest user turns that fit {@link TAIL_CHARS}: what was
- *   said, verbatim, and one line per tool call (no tool output — it is
- *   re-fetchable from disk and git, and a busy turn's output ran to 200k
- *   characters of opening message);
- * - the middle, every turn before the tail, rendered the same way, which alone
- *   is summarised, in one pass.
+ * - the tail, the newest user turns that fit {@link TAIL_CHARS}: only what was
+ *   said, verbatim. No tool calls and no tool output: they are re-fetchable
+ *   from disk and git, the artifact index already names every file and
+ *   command, and a busy turn's calls ran to 200k characters of opening
+ *   message ("clearing tool calls and results" is Anthropic's first example
+ *   of superfluous context: anthropic.com/engineering/effective-context-engineering-for-ai-agents);
+ * - the middle, every turn before the tail, with one line per tool call so
+ *   the summariser can say what was done, which alone is summarised, in one
+ *   pass.
  * The artifact index (files changed and read, commands run) is built from the
  * WHOLE transcript by code, so identifiers are copied, never paraphrased, and
  * what a compaction forgot about files is still there.
@@ -415,27 +418,33 @@ function callLines(call: ToolUse, result: ToolResult | undefined): string[] {
   ];
 }
 
-/** What one assistant entry said and did, as lines. */
+/**
+ * What one assistant entry said, as lines — and, with `calls`, what it did,
+ * one line per tool call.
+ */
 const assistantLines = (
   entry: SessionMessage,
-  results: Map<string, ToolResult>
+  results: Map<string, ToolResult>,
+  calls: boolean
 ): string[] =>
   blocksOf(entry).flatMap((block) => {
     if (block.type === "text") {
       return block.text.trim() ? [block.text.trim()] : [];
     }
-    return block.type === "tool_use"
+    return calls && block.type === "tool_use"
       ? callLines(block, results.get(block.id))
       : [];
   });
 
 /**
  * One turn — a user message and everything up to the next. The source's
- * compaction summary is its own turn, verbatim under its label.
+ * compaction summary is its own turn, verbatim under its label. `calls` for
+ * the summariser's reading; without, for the new session's.
  */
 function renderTurn(
   turn: SessionMessage[],
-  results: Map<string, ToolResult>
+  results: Map<string, ToolResult>,
+  calls: boolean
 ): string {
   const lines: string[] = [];
   let speaker: string | null = null;
@@ -461,7 +470,7 @@ function renderTurn(
       const text = userText(entry);
       say("## User", text ? [text] : []);
     } else if (entry.type === "assistant") {
-      say("## Assistant", assistantLines(entry, results));
+      say("## Assistant", assistantLines(entry, results, calls));
     }
   }
   return lines.join("\n");
@@ -525,16 +534,14 @@ export function extractTranscript(
       current.push(entry);
     }
   }
-  const rendered = turns
-    .map((turn) => renderTurn(turn, results))
-    .filter(Boolean);
+  const said = turns.map((turn) => renderTurn(turn, results, false));
   // The tail grows back from the newest turn while it fits; what does not fit
   // is the summariser's to read.
-  let split = rendered.length;
+  let split = said.length;
   let size = 0;
-  while (split > Math.max(0, rendered.length - TAIL_USER_TURNS)) {
-    const next = size + rendered[split - 1].length;
-    if (split < rendered.length && next > TAIL_CHARS) {
+  while (split > Math.max(0, said.length - TAIL_USER_TURNS)) {
+    const next = size + said[split - 1].length;
+    if (split < said.length && next > TAIL_CHARS) {
       break;
     }
     size = next;
@@ -542,8 +549,11 @@ export function extractTranscript(
   }
   return {
     artifacts: artifactIndex(ownMessages(whole)),
-    middle: rendered.slice(0, split),
-    tail: rendered.slice(split).join("\n\n"),
+    middle: turns
+      .slice(0, split)
+      .map((turn) => renderTurn(turn, results, true))
+      .filter(Boolean),
+    tail: said.slice(split).filter(Boolean).join("\n\n"),
   };
 }
 
