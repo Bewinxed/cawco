@@ -190,9 +190,10 @@
     if (step === undefined || !node) {
       return;
     }
-    const items = [
-      ...node.querySelectorAll<HTMLElement>("[data-tab-index] > .hit"),
-    ];
+    // The tabs in the order (`rects.items`), which a leaving tab has left.
+    const items = rects.items.flatMap(
+      (item) => item.querySelector<HTMLElement>(":scope > .hit") ?? []
+    );
     if (items.length === 0) {
       return;
     }

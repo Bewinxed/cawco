@@ -136,7 +136,18 @@
    * click and the paint. Nearest first also parks the swipe neighbours
    * before anything further away. One pane per slot, so no single task
    * carries more than one mount.
+   *
+   * Each mount is a whole transcript built in one task, ~100ms on a long
+   * one, and a click that lands during it waits for it. So they start only
+   * once the strip has been left alone for `QUIET` — every open, close or
+   * switch starts the wait again — and stand `GAP` apart, so a hand going
+   * back to the strip mid-queue finds the page free more often than not.
+   * Where the group swipes, the first of them is a neighbour the next swipe
+   * reveals, so the queue starts at once there (`SOON`).
    */
+  const QUIET = 800;
+  const SOON = 120;
+  const GAP = 300;
   $effect(() => {
     const here = leaf.active;
     if (!here) {
@@ -158,10 +169,10 @@
           return;
         }
         mounted.push(id);
-        timer = setTimeout(next, 120);
+        timer = setTimeout(next, GAP);
       });
     };
-    timer = setTimeout(next, 120);
+    timer = setTimeout(next, swipeable ? SOON : QUIET);
     return () => clearTimeout(timer);
   });
 

@@ -383,8 +383,15 @@ export function highlight(options: HighlightOptions) {
           });
         }
       }
-      syncPill(true);
+      // The pill follows in the next frame's callbacks, where that frame
+      // lays the page out anyway. Placed from here, in the microtask after
+      // the change that moved the selection (a tab switch showing another
+      // conversation), measuring the row laid the whole page out a second
+      // time before the change could paint.
+      cancelAnimationFrame(pendingSync);
+      pendingSync = requestAnimationFrame(() => syncPill(true));
     });
+    let pendingSync = 0;
     watch.observe(container, {
       subtree: true,
       childList: true,
@@ -443,6 +450,7 @@ export function highlight(options: HighlightOptions) {
     return () => {
       cancelAnimationFrame(pendingResize);
       cancelAnimationFrame(pendingHide);
+      cancelAnimationFrame(pendingSync);
       container.removeEventListener("pointermove", onPointer);
       container.removeEventListener("pointerover", onPointer);
       container.removeEventListener("pointerleave", onLeave);

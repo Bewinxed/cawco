@@ -14,7 +14,7 @@
    * hold them. Hosted, the strip is the top bar's content; in a group it
    * brings its own row.
    */
-  import { onDestroy, onMount, untrack } from "svelte";
+  import { onMount, untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
@@ -75,6 +75,8 @@
     harness: string;
     href: string;
     id: string;
+    /** The tab's key in the strip: its id and which arrival of that id it is (`arrivals`). */
+    key: string;
     label: string;
     named: boolean;
     stale: boolean;
@@ -104,6 +106,7 @@
     }
     return {
       id,
+      key: `${id}:${arrivals.get(id) ?? 0}`,
       href: conversationHref(id, whiffle.instanceIndex, {
         machineId: ctx?.machine,
         cwd: ctx?.cwd,
@@ -118,7 +121,27 @@
     };
   }
 
-  const tabs = $derived(leaf.tabs.map(resolve));
+  /**
+   * Every time a conversation arrives in the strip it is a new tab, keyed
+   * apart from the last one it had. Keyed by id alone, a conversation opened
+   * again while its closing tab was still leaving took that tab back: the
+   * exit is cancelled and the element kept, still pinned where `leavingTab`
+   * took it out of the flow — drawn over a neighbour at the place it was
+   * closed from, and not taking clicks. Now the closing tab finishes leaving
+   * and the new one arrives where the strip puts it.
+   */
+  const arrivals = new Map<string, number>();
+  let present = new Set<string>();
+  const tabs = $derived.by(() => {
+    const ids = leaf.tabs;
+    for (const id of ids) {
+      if (!present.has(id)) {
+        arrivals.set(id, (arrivals.get(id) ?? 0) + 1);
+      }
+    }
+    present = new Set(ids);
+    return ids.map(resolve);
+  });
 
   // Remember every name the strip works out, so a tab on a conversation the
   // board no longer lists is called by its name and not eight characters of
@@ -154,8 +177,16 @@
   /** A tab's context menu is open; hovering must not open the card under it. */
   let menuOpen = false;
   const detailTab = $derived(tabs.find((tab) => tab.id === detailId));
+  /** An open card's move to another tab, waiting for the frame in hand to paint. */
+  let moveFrame = 0;
+  let moveTask: ReturnType<typeof setTimeout> | undefined;
+  function holdMove() {
+    cancelAnimationFrame(moveFrame);
+    clearTimeout(moveTask);
+  }
   function closeDetails() {
     clearTimeout(timer);
+    holdMove();
     restoreFocus = pinned;
     detailsOpen = false;
     pinned = false;
@@ -163,18 +194,32 @@
   }
   function showDetails(id: string, anchor: HTMLElement, pin: boolean) {
     clearTimeout(timer);
-    if (detailsOpen && detailId !== id) {
-      morphing = true;
-      detailDir =
-        tabs.findIndex((tab) => tab.id === id) >
-        tabs.findIndex((tab) => tab.id === detailId)
-          ? 1
-          : -1;
-    }
-    detailId = id;
-    detailAnchor = anchor;
+    holdMove();
     pinned = pin;
-    detailsOpen = true;
+    if (!(detailsOpen && detailId !== id)) {
+      detailId = id;
+      detailAnchor = anchor;
+      detailsOpen = true;
+      return;
+    }
+    // An open card moving to another tab re-measures every line it morphs
+    // (`SessionDetails`), each a layout of the whole page. Moved in the
+    // change that chose the tab, that work held the tab and its
+    // conversation off the screen; it follows them a frame later instead.
+    // A frame's callbacks run before it paints; a task queued from them
+    // runs after.
+    moveFrame = requestAnimationFrame(() => {
+      moveTask = setTimeout(() => {
+        morphing = true;
+        detailDir =
+          tabs.findIndex((tab) => tab.id === id) >
+          tabs.findIndex((tab) => tab.id === detailId)
+            ? 1
+            : -1;
+        detailId = id;
+        detailAnchor = anchor;
+      });
+    });
   }
   function hoverTab(id: string, event: PointerEvent) {
     if (touch.current || event.pointerType !== "mouse" || pinned || menuOpen) {
@@ -235,7 +280,10 @@
       closeDetails();
     }
   });
-  onDestroy(() => clearTimeout(timer));
+  onMount(() => () => {
+    clearTimeout(timer);
+    holdMove();
+  });
 
   /* ── Tabs arriving and leaving ────────────────────────────────────
      A tab that opens grows from nothing at its place in the strip while
@@ -257,27 +305,34 @@
     });
     return () => cancelAnimationFrame(frame);
   });
-  /** Where each tab stood before a change to the strip, by id. */
-  let before = new Map<string, number>();
+  /**
+   * A change to the strip waiting for the next frame to slide its tabs:
+   * where each tab stood before it, by id, and what kind of change it was.
+   * Several changes inside one frame (a burst of closes) are one slide, from
+   * where the tabs were last painted.
+   */
+  let flip: {
+    added: boolean;
+    frame: number;
+    from: Map<string, number>;
+    removed: boolean;
+  } | null = null;
   let lastTabs = untrack(() => [...leaf.tabs]);
   /** The two ids of a tab re-addressed in place. */
   const renamedOut = new Set<string>();
   const renamedIn = new Set<string>();
   /** How far a clip reaches past the tab's box: its sheet's flared foot and shoulders. */
   const REACH = "-12px";
+  /** The id of a tab's slide to its new place, so a later slide can take over from it. */
+  const SLIDE = "tab-slide";
 
+  // Before the strip changes: where every tab stands, read while the layout
+  // is still the one on screen.
   $effect.pre(() => {
     const next = [...leaf.tabs];
     untrack(() => {
       const prev = lastTabs;
       lastTabs = next;
-      before = new Map();
-      if (!(ready && motionOk.current)) {
-        return;
-      }
-      for (const [id, el] of tabEls) {
-        before.set(id, el.getBoundingClientRect().left);
-      }
       if (prev.length === next.length) {
         const moved = prev.flatMap((id, i) => (next[i] === id ? [] : [i]));
         if (moved.length === 1 && !prev.includes(next[moved[0]])) {
@@ -285,47 +340,87 @@
           renamedIn.add(next[moved[0]]);
         }
       }
+      if (!(ready && motionOk.current) || flip) {
+        return;
+      }
+      const from = new Map<string, number>();
+      for (const [id, el] of tabEls) {
+        from.set(id, el.getBoundingClientRect().left);
+      }
+      flip = { from, added: false, removed: false, frame: 0 };
     });
   });
 
   // After the strip has its new shape, with any closing tab already out of
-  // the flow: every tab that was there before starts where it stood.
+  // the flow: every tab that was there before starts where it stood. The
+  // new places are read in the next frame's callbacks, where the frame lays
+  // the page out anyway, rather than here, where reading them would lay it
+  // out a second time inside the change — pane and all.
   $effect(() => {
     const next = [...leaf.tabs];
     untrack(() => {
-      const was = before;
-      before = new Map();
-      if (was.size === 0) {
+      const pending = flip;
+      if (!pending) {
         return;
       }
-      const removed = [...was.keys()].some(
+      pending.removed ||= [...pending.from.keys()].some(
         (id) => !(next.includes(id) || renamedOut.has(id))
       );
-      const added = next.some((id) => !(was.has(id) || renamedIn.has(id)));
-      let duration = dur("--dur-panel");
-      let easing = ease("--ease-drawer");
-      if (removed) {
-        duration = dur("--dur-fade");
-        easing = ease("--ease-in-out");
-      } else if (added) {
-        duration = dur("--dur-morph");
-        easing = ease("--ease-out");
-      }
-      for (const id of next) {
-        const el = tabEls.get(id);
-        const from = was.get(id);
-        if (!el || from === undefined) {
-          continue;
-        }
-        const dx = from - el.getBoundingClientRect().left;
-        if (Math.abs(dx) > 0.5) {
-          el.animate(
-            [{ transform: `translateX(${dx}px)` }, { transform: "none" }],
-            { duration, easing }
-          );
-        }
-      }
+      pending.added ||= next.some(
+        (id) => !(pending.from.has(id) || renamedIn.has(id))
+      );
+      cancelAnimationFrame(pending.frame);
+      pending.frame = requestAnimationFrame(() => {
+        flip = null;
+        slide(pending.from, pending.removed, pending.added);
+      });
     });
+  });
+
+  /** Every tab that stood somewhere else before the change slides from there to where it lies. */
+  function slide(from: Map<string, number>, removed: boolean, added: boolean) {
+    let duration = dur("--dur-panel");
+    let easing = ease("--ease-drawer");
+    if (removed) {
+      duration = dur("--dur-fade");
+      easing = ease("--ease-in-out");
+    } else if (added) {
+      duration = dur("--dur-morph");
+      easing = ease("--ease-out");
+    }
+    const tabsNow = leaf.tabs.flatMap((id) => {
+      const el = tabEls.get(id);
+      const was = from.get(id);
+      return el && was !== undefined ? [{ el, was }] : [];
+    });
+    // A slide still playing is replaced from where it has the tab drawn
+    // (`from`, read with it applied); its own offset is not part of where
+    // the tab now lies. All are stopped, then all read, then all started,
+    // so the page is laid out once for the lot.
+    for (const { el } of tabsNow) {
+      for (const running of el.getAnimations()) {
+        if (running.id === SLIDE) {
+          running.cancel();
+        }
+      }
+    }
+    const moves = tabsNow.map(({ el, was }) => ({
+      el,
+      dx: was - el.getBoundingClientRect().left,
+    }));
+    for (const { el, dx } of moves) {
+      if (Math.abs(dx) > 0.5) {
+        el.animate(
+          [{ transform: `translateX(${dx}px)` }, { transform: "none" }],
+          { id: SLIDE, duration, easing }
+        );
+      }
+    }
+  }
+  onMount(() => () => {
+    if (flip) {
+      cancelAnimationFrame(flip.frame);
+    }
   });
 
   /**
@@ -407,23 +502,6 @@
     return made;
   }
 
-  // The chosen tab is always in view, however it came to be chosen.
-  $effect(() => {
-    const id = leaf.active;
-    untrack(() => {
-      if (!(ready && id)) {
-        return;
-      }
-      // A tab opened in this same change registers itself after this runs;
-      // `entering` brings that one into view.
-      tabEls.get(id)?.scrollIntoView({
-        block: "nearest",
-        inline: "nearest",
-        behavior: motionOk.current ? "smooth" : "instant",
-      });
-    });
-  });
-
   /**
    * A tab that closed, taken out of the flow where it stands so the tabs
    * after it can close the gap: it narrows toward its start as it fades.
@@ -495,7 +573,7 @@
   variant="folder"
 >
   <TabsList aria-label="Open sessions in this group" scrollable>
-    {#each tabs as tab, i (tab.id)}
+    {#each tabs as tab, i (tab.key)}
       {@const chosen = leaf.active === tab.id}
       <!-- The caret marks where a drop would land, drawn on the side the
            pointer is nearest. Graphite, like every structural mark here:

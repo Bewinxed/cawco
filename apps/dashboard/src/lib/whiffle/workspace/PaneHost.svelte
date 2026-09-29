@@ -9,7 +9,7 @@
    * than collapsed, so a transcript that measures before its first dock
    * measures a real viewport and not a zero one.
    */
-  import { untrack } from "svelte";
+  import { onMount, untrack } from "svelte";
   import type { HistorySource } from "../client.svelte";
   import SessionPane from "../SessionPane.svelte";
   import Lightbox from "../transcript/Lightbox.svelte";
@@ -31,24 +31,59 @@
   } = $props();
 
   let hosted = $state<string[]>([]);
+  /** Whether the page has painted: what is asked for before then is built with it. */
+  let entered = false;
+  onMount(() => {
+    const frame = requestAnimationFrame(() => {
+      entered = true;
+    });
+    return () => cancelAnimationFrame(frame);
+  });
 
+  /**
+   * A pane asked for after the page is up is built once the frame that
+   * answered the ask has painted. Building one is a whole transcript — rows,
+   * virtualiser, a first layout, ~100ms on a long one — and done in the
+   * change that opened or chose its tab, the tab itself was not drawn until
+   * it finished. The tab answers in its own frame now and the conversation
+   * follows it. An ask withdrawn before then (a tab passed over in a burst
+   * of switching, or closed) builds nothing. The panes of the first render
+   * are built with it, so a reload paints its conversation at once.
+   */
   $effect.pre(() => {
     const asked = [...slots.keys()];
     const open = new Set(workspace.openIds);
-    untrack(() => {
+    const arriving = untrack(() => {
       const keep = hosted.filter((id) => open.has(id));
-      for (const id of asked) {
-        if (open.has(id) && !keep.includes(id)) {
-          keep.push(id);
-        }
-      }
       if (
         keep.length !== hosted.length ||
         keep.some((id, i) => id !== hosted[i])
       ) {
         hosted = keep;
       }
+      return asked.filter((id) => open.has(id) && !keep.includes(id));
     });
+    if (arriving.length === 0) {
+      return;
+    }
+    if (!entered) {
+      untrack(() => {
+        hosted = [...hosted, ...arriving];
+      });
+      return;
+    }
+    let task: ReturnType<typeof setTimeout> | undefined;
+    const frame = requestAnimationFrame(() => {
+      // A frame's callbacks run before it paints; a task queued from them
+      // runs after.
+      task = setTimeout(() => {
+        hosted = [...hosted, ...arriving.filter((id) => !hosted.includes(id))];
+      });
+    });
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(task);
+    };
   });
 </script>
 

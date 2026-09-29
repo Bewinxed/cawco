@@ -69,6 +69,8 @@ export interface WorkspaceV1 {
 }
 
 const KEY = "whiffle-workspace";
+/** The cookie the addresses (`ctx`) ride in, apart from the tree. */
+const CTX_KEY = "whiffle-workspace-ctx";
 /** A year: the layout is a habit, not a session. Matches the working set. */
 const COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
@@ -99,15 +101,22 @@ function blank(): WorkspaceV1 {
 }
 
 /* ── Persistence ──────────────────────────────────────────────────────
-   localStorage is the source; the cookie is the copy the SERVER renders
+   localStorage is the source; the cookies are the copy the SERVER renders
    from. Both are written on every mutation, exactly as the working set
-   does, so the first paint and the first client render agree. */
+   does, so the first paint and the first client render agree.
 
-const fromCookie = (): string | null => {
+   The tree and the addresses are two cookies. A browser refuses a cookie
+   over 4KB outright and keeps the one it had, and an address runs to a
+   hundred bytes and more: in one cookie, a strip with a couple of dozen
+   stored conversations open stopped being saved for the server, which
+   then drew every reload in an older order and the client reshuffled it
+   on hydration. The tree alone is ~45 bytes a tab. */
+
+const cookie = (key: string): string | null => {
   if (typeof document === "undefined") {
     return null;
   }
-  const match = new RegExp(`(?:^|;\\s*)${KEY}=([^;]*)`).exec(document.cookie);
+  const match = new RegExp(`(?:^|;\\s*)${key}=([^;]*)`).exec(document.cookie);
   // biome-ignore lint/suspicious/noUnnecessaryConditions: exec() can return null at runtime when the cookie is absent; Biome's inference here is narrower than the real type
   if (!match) {
     return null;
@@ -168,7 +177,24 @@ function load(): WorkspaceV1 {
   } catch {
     // A browser that will not read storage still has the cookie.
   }
-  return parse(stored) ?? parse(fromCookie()) ?? blank();
+  return parse(stored) ?? fromCookies() ?? blank();
+}
+
+/** The tree the server was sent, with its addresses put back. */
+function fromCookies(): WorkspaceV1 | null {
+  const tree = parse(cookie(KEY));
+  if (!tree) {
+    return null;
+  }
+  try {
+    tree.ctx = JSON.parse(cookie(CTX_KEY) ?? "{}") as Record<
+      string,
+      SessionContext
+    >;
+  } catch {
+    tree.ctx = {};
+  }
+  return tree;
 }
 
 const held = $state<WorkspaceV1>(load());
@@ -185,9 +211,18 @@ function save(): void {
   } catch {
     // A browser that will not store just starts the layout over next time.
   }
+  const tree = JSON.stringify({
+    v: held.v,
+    root: held.root,
+    focusedLeaf: held.focusedLeaf,
+  });
+  const ctx = JSON.stringify(held.ctx ?? {});
+  const attributes = `path=/; max-age=${COOKIE_MAX_AGE}; samesite=lax`;
   try {
     // biome-ignore lint/suspicious/noDocumentCookie: Cookie Store API is async and unsupported in Safari; this write must stay synchronous with the try/catch fallback below
-    document.cookie = `${KEY}=${encodeURIComponent(payload)}; path=/; max-age=${COOKIE_MAX_AGE}; samesite=lax`;
+    document.cookie = `${KEY}=${encodeURIComponent(tree)}; ${attributes}`;
+    // biome-ignore lint/suspicious/noDocumentCookie: as above
+    document.cookie = `${CTX_KEY}=${encodeURIComponent(ctx)}; ${attributes}`;
   } catch {
     // Cookies refused: SSR falls back to the URL's session alone.
   }

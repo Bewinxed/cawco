@@ -68,7 +68,7 @@ export class TabRects {
       childList: true,
       subtree: true,
       attributes: true,
-      attributeFilter: ["style", "class"],
+      attributeFilter: ["style", "class", "inert"],
     });
     this.#schedule();
     return {
@@ -129,10 +129,29 @@ export class TabRects {
     return holds(record.target);
   }
 
+  /**
+   * Whether a tab is on its way out: Svelte makes an element inert for the
+   * length of its exit. A leaving tab is still drawn, but it is no longer
+   * in the order — arrow keys must not land on it and choose it again, and
+   * the tabs after it are already a place further along.
+   */
+  #leaving(element: HTMLElement): boolean {
+    for (
+      let node: HTMLElement | null = element;
+      node && node !== this.#container;
+      node = node.parentElement
+    ) {
+      if (node.inert) {
+        return true;
+      }
+    }
+    return false;
+  }
+
   /** The tabs in document order, and their values handed to the root. */
   #sort(): void {
     const next = [...this.#values.keys()]
-      .filter((el) => el.isConnected)
+      .filter((el) => el.isConnected && !this.#leaving(el))
       // Tabs never hold one another, so `b` is either after `a` or before it.
       .sort((a, b) =>
         a.compareDocumentPosition(b) === Node.DOCUMENT_POSITION_FOLLOWING

@@ -19,6 +19,8 @@ const RAIL_DEFAULT = 228;
  * module-level `$state`) into a request. The shapes mirror that module's.
  */
 const WORKSPACE_KEY = "whiffle-workspace";
+/** The addresses of what the tree holds, kept apart from it (workspace.svelte.ts, Persistence). */
+const WORKSPACE_CTX_KEY = "whiffle-workspace-ctx";
 
 const SESSION_PATH = /^\/session\/([^/]+)/;
 
@@ -112,6 +114,16 @@ function parse(raw: string | null | undefined): WorkspaceV1 | null {
   }
 }
 
+function parseCtx(
+  raw: string | null | undefined
+): Record<string, SessionContext> {
+  try {
+    return JSON.parse(raw ?? "{}") as Record<string, SessionContext>;
+  } catch {
+    return {};
+  }
+}
+
 function leavesOf(node: PaneNode, out: LeafNode[] = []): LeafNode[] {
   if (node.t === "l") {
     out.push(node);
@@ -180,6 +192,9 @@ export const load: LayoutServerLoad = async ({
   const usage = await usageLimits(fetch);
 
   let workspace = parse(cookies.get(WORKSPACE_KEY));
+  if (workspace) {
+    workspace.ctx = parseCtx(cookies.get(WORKSPACE_CTX_KEY));
+  }
 
   // Untrack URL access: a switch between conversations is a shallow pushState
   // and the client store is authoritative after hydration. This load exists
