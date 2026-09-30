@@ -1,6 +1,7 @@
 <script lang="ts">
   import type {
     DelegateType,
+    JevNodeQuestion,
     Problem,
     Workflow,
     WorkflowCheckRule,
@@ -18,7 +19,7 @@
   import SchemaBuilder from "./SchemaBuilder.svelte";
   import TemplateInput from "./TemplateInput.svelte";
   import WhenFields from "./WhenFields.svelte";
-  import { templatePaths, upstream } from "./workflow-ui";
+  import { JEV_TYPE_NAMES, templatePaths, upstream } from "./workflow-ui";
 
   let {
     graph,
@@ -111,6 +112,36 @@
       command: { kind: "command", cmd: "", expectExit: 0 },
     };
     patch({ rules: [...node.rules, rules[kind]] });
+  }
+  function question(index: number, next: JevNodeQuestion) {
+    if (node?.kind === "jev") {
+      patch({
+        questions: node.questions.map((entry, i) =>
+          i === index ? next : entry
+        ),
+      });
+    }
+  }
+  /** A new type starts from that type's smallest valid criteria. */
+  function retype(index: number, type: JevNodeQuestion["type"]) {
+    if (node?.kind !== "jev") {
+      return;
+    }
+    const { id, instructions } = node.questions[index];
+    const fresh: Record<JevNodeQuestion["type"], JevNodeQuestion> = {
+      noul: { id, type: "noul", instructions },
+      choice: {
+        id,
+        type: "choice",
+        instructions,
+        criteria: [
+          { option: "", meaning: "" },
+          { option: "", meaning: "" },
+        ],
+      },
+      score: { id, type: "score", instructions, criteria: ["", ""] },
+    };
+    question(index, fresh[type]);
   }
   function preset(name: string) {
     const type = types.find((entry) => entry.name === name);
@@ -548,6 +579,152 @@
                 oninput={(event) => patch({ waitFor: event.currentTarget.value ? event.currentTarget.valueAsNumber : undefined })}
                 type="number"
                 value={node.waitFor ?? ''}
+              ></label
+            >
+          {:else if node.kind === 'jev'}
+            <TemplateInput
+              label="State"
+              multiline
+              onchange={(state) => patch({ state })}
+              {paths}
+              value={node.state}
+            />
+            <p class="wf-muted">
+              What every question below is asked about. Text that is a JSON
+              object or array goes as structured data.
+            </p>
+            <h3>Questions · asked in one call</h3>
+            {#each node.questions as entry, index (index)}
+              <div class="wf-well">
+                <div class="wf-fields">
+                  <label
+                    >ID<input
+                      class="wf-mono"
+                      oninput={(event) => question(index, { ...entry, id: event.currentTarget.value })}
+                      value={entry.id}
+                    ></label
+                  ><label
+                    >Type<select
+                      onchange={(event) => retype(index, event.currentTarget.value as JevNodeQuestion['type'])}
+                      value={entry.type}
+                    >
+                      {#each Object.entries(JEV_TYPE_NAMES) as [type, name] (type)}
+                        <option value={type}>{name}</option>
+                      {/each}
+                    </select></label
+                  >
+                </div>
+                <label
+                  >Instructions<textarea
+                    oninput={(event) => question(index, { ...entry, instructions: event.currentTarget.value })}
+                    value={entry.instructions}
+                  ></textarea></label
+                >
+                {#if entry.type === 'noul'}
+                  <div class="wf-fields">
+                    <label
+                      >Yes means (optional)<input
+                        oninput={(event) => question(index, { ...entry, criteria: { true: event.currentTarget.value, false: entry.criteria?.false ?? '' } })}
+                        value={entry.criteria?.true ?? ''}
+                      ></label
+                    ><label
+                      >No means (optional)<input
+                        oninput={(event) => question(index, { ...entry, criteria: { true: entry.criteria?.true ?? '', false: event.currentTarget.value } })}
+                        value={entry.criteria?.false ?? ''}
+                      ></label
+                    >
+                  </div>
+                {:else if entry.type === 'choice'}
+                  {#each entry.criteria as row, rowIndex (rowIndex)}
+                    <div class="wf-fields">
+                      <label
+                        >Option {rowIndex + 1}
+                        <input
+                          oninput={(event) => question(index, { ...entry, criteria: entry.criteria.map((item, i) => i === rowIndex ? { ...item, option: event.currentTarget.value } : item) })}
+                          value={row.option}
+                        ></label
+                      ><label
+                        >Meaning<input
+                          oninput={(event) => question(index, { ...entry, criteria: entry.criteria.map((item, i) => i === rowIndex ? { ...item, meaning: event.currentTarget.value } : item) })}
+                          value={row.meaning}
+                        ></label
+                      >
+                    </div>
+                    <button
+                      class="wf-btn"
+                      disabled={entry.criteria.length <= 2}
+                      onclick={() => question(index, { ...entry, criteria: entry.criteria.filter((_, i) => i !== rowIndex) })}
+                      type="button"
+                    >
+                      Remove option
+                    </button>
+                  {/each}
+                  <button
+                    class="wf-btn"
+                    onclick={() => question(index, { ...entry, criteria: [...entry.criteria, { option: '', meaning: '' }] })}
+                    type="button"
+                  >
+                    Add option
+                  </button>
+                {:else}
+                  <p class="wf-muted">Levels run lowest first.</p>
+                  {#each entry.criteria as level, levelIndex (levelIndex)}
+                    <label
+                      >Level {levelIndex}
+                      <input
+                        oninput={(event) => question(index, { ...entry, criteria: entry.criteria.map((item, i) => i === levelIndex ? event.currentTarget.value : item) })}
+                        value={level}
+                      ></label
+                    >
+                    <div class="wf-row">
+                      <button
+                        class="wf-btn"
+                        disabled={levelIndex === 0}
+                        onclick={() => { const criteria = [...entry.criteria]; [criteria[levelIndex - 1], criteria[levelIndex]] = [criteria[levelIndex], criteria[levelIndex - 1]]; question(index, { ...entry, criteria }); }}
+                        type="button"
+                      >
+                        Move up
+                      </button><button
+                        class="wf-btn"
+                        disabled={entry.criteria.length <= 2}
+                        onclick={() => question(index, { ...entry, criteria: entry.criteria.filter((_, i) => i !== levelIndex) })}
+                        type="button"
+                      >
+                        Remove level
+                      </button>
+                    </div>
+                  {/each}
+                  <button
+                    class="wf-btn"
+                    disabled={entry.criteria.length >= 10}
+                    onclick={() => question(index, { ...entry, criteria: [...entry.criteria, ''] })}
+                    type="button"
+                  >
+                    Add level
+                  </button>
+                {/if}
+                <button
+                  class="wf-btn"
+                  disabled={node.questions.length <= 1}
+                  onclick={() => node?.kind === 'jev' && patch({ questions: node.questions.filter((_, i) => i !== index) })}
+                  type="button"
+                >
+                  Remove question
+                </button>
+              </div>
+            {/each}
+            <button
+              class="wf-btn"
+              onclick={() => node?.kind === 'jev' && patch({ questions: [...node.questions, { id: `question${node.questions.length + 1}`, type: 'noul', instructions: '' }] })}
+              type="button"
+            >
+              Add question
+            </button>
+            <label
+              >Model<input
+                oninput={(event) => patch({ model: event.currentTarget.value || undefined })}
+                placeholder="jev-latest"
+                value={node.model ?? ''}
               ></label
             >
           {:else if node.kind === 'end'}

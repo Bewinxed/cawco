@@ -25,6 +25,7 @@ export type WorkflowEffectKind =
   | "ask"
   | "exec"
   | "exists"
+  | "jev"
   | "workflow"
   | "state-get"
   | "state-set"
@@ -184,9 +185,44 @@ export type WorkflowCheckRule =
   | { kind: "forbidden-words"; path: string; words: string[] }
   | { kind: "file-exists"; path: string }
   | { kind: "command"; cmd: string; expectExit: number };
+/**
+ * One question on a Jev node, as the editor holds it. Choice options are rows
+ * (name + meaning) so a half-typed option can exist while it is edited; the
+ * compiler turns them into the API's `{ name: meaning }` criteria.
+ */
+export type JevNodeQuestion =
+  | {
+      id: string;
+      type: "noul";
+      instructions: string;
+      criteria?: { true?: string; false?: string };
+    }
+  | {
+      id: string;
+      type: "choice";
+      instructions: string;
+      criteria: { option: string; meaning: string }[];
+    }
+  | { id: string; type: "score"; instructions: string; criteria: string[] };
+/** The fields each Jev answer type carries, for paths and the editor. */
+export const JEV_ANSWER_FIELDS: Record<JevNodeQuestion["type"], string[]> = {
+  noul: ["type", "noul"],
+  choice: ["type", "choice", "probabilities", "confidence"],
+  score: ["type", "score", "legend", "probabilities", "confidence"],
+};
+/** TypeSafe's limits on a question's criteria (https://docs.typesafe.ai/api.md). */
+export const JEV_CHOICE_MAX = 255;
+export const JEV_SCORE_LEVELS = [2, 10] as const;
 export type WorkflowNode = WorkflowNodeBase &
   (
     | { kind: "workflow"; workflowId: string; inputs: Record<string, string> }
+    | {
+        kind: "jev";
+        /** A template; text that parses as a JSON object or array goes as structured state. */
+        state: string;
+        questions: JevNodeQuestion[];
+        model?: string;
+      }
     | { kind: "start"; inputs: WorkflowInput[] }
     | {
         kind: "step";
@@ -339,6 +375,9 @@ export function workflowPorts(node: WorkflowNode): string[] {
     case "map":
     case "workflow":
       return ["out", "fail"];
+    case "jev":
+      // A failed call fails the run, as any effect error does.
+      return ["out"];
     case "check":
       return ["pass", "fail"];
     case "branch":
@@ -375,6 +414,124 @@ function schemaPath(schema: unknown, parts: string[]): boolean {
     schemaPath(properties[key], rest)
   );
 }
+const JEV_ID = /^[A-Za-z][\w-]*$/;
+const JEV_USAGE = ["inputTokens", "outputTokens", "costUsd"];
+
+/** Whether `steps.<jev>.result.<parts>` names something a Jev call returns. */
+function jevPath(
+  node: Extract<WorkflowNode, { kind: "jev" }>,
+  parts: string[]
+): boolean {
+  const [head, id, field, key, ...rest] = parts;
+  if (head === undefined) {
+    return true;
+  }
+  if (head === "model") {
+    return id === undefined;
+  }
+  if (head === "usage") {
+    return id === undefined || (JEV_USAGE.includes(id) && field === undefined);
+  }
+  if (head !== "answers") {
+    return false;
+  }
+  if (id === undefined) {
+    return true;
+  }
+  const question = node.questions.find((entry) => entry.id === id);
+  if (!question) {
+    return false;
+  }
+  if (field === undefined) {
+    return true;
+  }
+  if (!JEV_ANSWER_FIELDS[question.type].includes(field)) {
+    return false;
+  }
+  if (key === undefined) {
+    return true;
+  }
+  if (rest.length) {
+    return false;
+  }
+  if (question.type === "choice") {
+    return (
+      field === "probabilities" &&
+      question.criteria.some((entry) => entry.option === key)
+    );
+  }
+  if (question.type === "score") {
+    return (
+      (field === "probabilities" || field === "legend") &&
+      ARRAY_INDEX.test(key) &&
+      Number(key) < question.criteria.length
+    );
+  }
+  return false;
+}
+
+/** A Jev node's question rules: what TypeSafe would refuse, said up front. */
+export function jevProblems(questions: JevNodeQuestion[]): string[] {
+  const problems: string[] = [];
+  if (!questions.length) {
+    problems.push("A Jev node needs at least one question.");
+  }
+  const ids = new Set<string>();
+  for (const question of questions) {
+    const name = question.id || "(unnamed)";
+    if (!JEV_ID.test(question.id)) {
+      problems.push(
+        `Question id "${name}" must start with a letter and use only letters, digits, _ or -.`
+      );
+    }
+    if (ids.has(question.id)) {
+      problems.push(`Question id "${name}" is used twice.`);
+    }
+    ids.add(question.id);
+    if (!question.instructions.trim()) {
+      problems.push(`Question "${name}" needs instructions.`);
+    }
+    problems.push(...criteriaProblems(question, name));
+  }
+  return problems;
+}
+
+/** What each question type's criteria must hold. */
+function criteriaProblems(question: JevNodeQuestion, name: string): string[] {
+  const problems: string[] = [];
+  if (question.type === "noul") {
+    if (
+      !question.criteria?.true?.trim() !== !question.criteria?.false?.trim()
+    ) {
+      problems.push(
+        `Noul "${name}" needs both what yes means and what no means, or neither.`
+      );
+    }
+  } else if (question.type === "choice") {
+    const options = question.criteria.map((entry) => entry.option.trim());
+    if (options.length < 2 || options.length > JEV_CHOICE_MAX) {
+      problems.push(
+        `Choice "${name}" needs between 2 and ${JEV_CHOICE_MAX} options.`
+      );
+    }
+    if (options.some((option) => !option)) {
+      problems.push(`Every option of "${name}" needs a name.`);
+    }
+    if (new Set(options).size !== options.length) {
+      problems.push(`Choice "${name}" names an option twice.`);
+    }
+  } else {
+    const [min, max] = JEV_SCORE_LEVELS;
+    if (question.criteria.length < min || question.criteria.length > max) {
+      problems.push(`Score "${name}" needs between ${min} and ${max} levels.`);
+    }
+    if (question.criteria.some((level) => !level.trim())) {
+      problems.push(`Every level of "${name}" needs a description.`);
+    }
+  }
+  return problems;
+}
+
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: this validator accumulates all graph authoring problems instead of stopping at the first invalid node or edge.
 export function validateWorkflow(
   graph: WorkflowGraph,
@@ -534,11 +691,16 @@ export function validateWorkflow(
     if (source.kind === "map") {
       return ["items", "failed"].includes(parts[3]);
     }
+    if (source.kind === "jev") {
+      return jevPath(source, parts.slice(3));
+    }
     return true;
   };
   for (const node of graph.nodes) {
     const templates: string[] = [];
-    if (["step", "check", "branch", "ask", "workflow"].includes(node.kind)) {
+    if (
+      ["step", "check", "branch", "ask", "workflow", "jev"].includes(node.kind)
+    ) {
       for (const port of workflowPorts(node)) {
         if (
           !(
@@ -605,6 +767,11 @@ export function validateWorkflow(
       }
       if (node.harness === "pi" && node.effort) {
         add("The pi harness cannot enforce an effort level.", node.id);
+      }
+    } else if (node.kind === "jev") {
+      templates.push(node.state);
+      for (const message of jevProblems(node.questions)) {
+        add(message, node.id);
       }
     } else if (node.kind === "ask") {
       if (

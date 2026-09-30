@@ -33,6 +33,7 @@
     type JournalCheckpoint,
     journalCheckpoints,
     journalGraph,
+    journalJev,
     journalLog,
     journalStateTouches,
   } from "./journal-graph";
@@ -100,6 +101,7 @@
     return byNode;
   });
   const logLines = $derived(journalLog(effects));
+  const jevCalls = $derived(journalJev(effects));
   const stateTouches = $derived(journalStateTouches(effects));
   const slots = $derived(
     Object.entries((run?.state.slots ?? {}) as Record<string, unknown>)
@@ -597,6 +599,7 @@
           {costs}
           executionScope={scope}
           graph={graph ?? { nodes: [], edges: [] }}
+          jev={jevCalls}
           {journal}
           {now}
           onselect={(id) => { selected = scopedSteps.find((entry) => entry.nodeId === id)?.id; }}

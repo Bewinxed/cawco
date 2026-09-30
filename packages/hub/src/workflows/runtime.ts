@@ -20,7 +20,7 @@ import type {
   WorkflowRun,
 } from "@whiffle/core";
 import { workflowNoticeMarker, workflowStepMarker } from "@whiffle/core";
-import { stepIdFor } from "@whiffle/core/workflow-program";
+import { type JevSpec, stepIdFor } from "@whiffle/core/workflow-program";
 import { WORKER_URL, writeProgram } from "@whiffle/core/workflow-sandbox";
 import type { WorkerOut, WorkerStart } from "@whiffle/core/workflow-worker";
 import Ajv from "ajv";
@@ -31,6 +31,10 @@ import type {
   WorkflowRunRow,
   WorkflowStepRow,
 } from "../db";
+import { askJev } from "../jev";
+
+/** A workflow waits on Jev longer than a meaning rule does. */
+const WORKFLOW_JEV_TIMEOUT_MS = 60_000;
 
 export interface WorkflowRuntimeDeps {
   broadcast: (frame: {
@@ -138,6 +142,8 @@ const journalArgs = (
       return keep("cmd", "timeoutMinutes");
     case "exists":
       return keep("path");
+    case "jev":
+      return keep("node", "state", "questions", "model");
     case "notify":
     case "log":
       return keep("text");
@@ -826,6 +832,19 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
             : Number(args.timeoutMinutes) * 60_000
         );
         return { result: { code: exitCode, output } };
+      }
+      case "jev": {
+        const connection = db.getOpenRouterConnection();
+        if (!connection) {
+          throw new Error("Jev needs OpenRouter connected in Settings");
+        }
+        const spec = args as unknown as JevSpec;
+        return {
+          result: await askJev(connection.apiKey, spec.state, spec.questions, {
+            model: spec.model,
+            timeoutMs: WORKFLOW_JEV_TIMEOUT_MS,
+          }),
+        };
       }
       case "exists": {
         const path = String(args.path).replaceAll("'", "'\\''");

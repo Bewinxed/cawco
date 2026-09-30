@@ -125,6 +125,7 @@ export { default as IconRefresh } from "~icons/solar/refresh-bold-duotone";
 export { default as IconRocket } from "~icons/solar/rocket-2-bold-duotone";
 /** Hooks: a lifecycle event branching into what runs. */
 export { default as IconHook } from "~icons/solar/routing-2-bold-duotone";
+export { default as IconJev } from "~icons/solar/scale-bold-duotone";
 export { default as IconServer } from "~icons/solar/server-2-bold-duotone";
 export { default as IconSettings } from "~icons/solar/settings-bold-duotone";
 export { default as IconWorkflow } from "~icons/solar/share-circle-bold-duotone";

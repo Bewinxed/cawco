@@ -4,13 +4,18 @@
   import { Handle, type NodeProps, Position } from "@xyflow/svelte";
   import {
     IconCpu,
+    IconJev,
     IconToolQuestion,
     IconToolTodo,
     IconWorkflow,
   } from "$lib/icons";
-  import type { JournalCheckpoint, JournalNode } from "./journal-graph";
+  import type {
+    JournalCheckpoint,
+    JournalJev,
+    JournalNode,
+  } from "./journal-graph";
   import WorkflowStatus from "./WorkflowStatus.svelte";
-  import { kinds } from "./workflow-ui";
+  import { JEV_TYPE_NAMES, kinds } from "./workflow-ui";
 
   let { data, selected }: NodeProps = $props();
   /** Present for an authored node, and for the journal's `run`/`spawn` steps. */
@@ -18,6 +23,8 @@
   /** Present only on a code-origin run, where the journal is the graph. */
   const journal = $derived(data.journal as JournalNode | undefined);
   const checkpoints = $derived((data.checkpoints ?? []) as JournalCheckpoint[]);
+  /** What a Jev call on this node answered, once it has. */
+  const jevCall = $derived(data.jev as JournalJev | undefined);
   /** A call the journal records but no authored node stands behind. */
   const effectGlyphs = {
     run: IconCpu,
@@ -25,6 +32,7 @@
     ask: IconToolQuestion,
     exec: IconToolTodo,
     exists: IconToolTodo,
+    jev: IconJev,
     workflow: IconWorkflow,
   } as const;
   const step = $derived(data.step as WorkflowStep | undefined);
@@ -107,6 +115,12 @@
         return node.over || "Choose an array";
       case "workflow":
         return `${String(data.childName || "Choose a workflow")} · ${Object.keys(node.inputs).length} inputs`;
+      case "jev":
+        return `${node.questions.length} ${node.questions.length === 1 ? "question" : "questions"} · ${[
+          ...new Set(
+            node.questions.map((question) => JEV_TYPE_NAMES[question.type])
+          ),
+        ].join(", ")}`;
       default:
         return "";
     }
@@ -144,6 +158,21 @@
     {/if}
     {#if step && node?.kind === 'step'}
       <p class="meta">{String(data.duration)} · {String(data.cost)}</p>
+    {/if}
+    {#if jevCall?.failure}
+      <div class="problem">
+        <WorkflowStatus status="failed" /><span>{jevCall.failure}</span>
+      </div>
+    {:else if jevCall}
+      <dl class="answers">
+        {#each jevCall.answers as answer (answer.id)}
+          <div>
+            <dt>{answer.id}</dt>
+            <dd>{answer.text}</dd>
+          </div>
+        {/each}
+      </dl>
+      <p class="meta">{jevCall.cost}</p>
     {/if}
     {#each checkpoints as mark (mark.seq)}
       <p class="checkpoint">
@@ -311,6 +340,29 @@
     padding: var(--space-1) var(--space-4);
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
+  }
+  /* A Jev call's answers: the question id, then what came back. */
+  .answers {
+    display: grid;
+    gap: var(--space-1);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
+    font-variant-numeric: tabular-nums;
+  }
+  .answers div {
+    display: flex;
+    gap: var(--space-2);
+    align-items: baseline;
+  }
+  .answers dt {
+    color: var(--ink-muted);
+    overflow-wrap: anywhere;
+  }
+  .answers dd {
+    margin-inline-start: auto;
+    text-align: right;
+    overflow-wrap: anywhere;
+    color: var(--ink-strong);
   }
   .problem {
     display: grid;

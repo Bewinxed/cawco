@@ -109,6 +109,7 @@ function makeBridge(runId: string, inputs: Record<string, unknown>) {
     exec: (cmd: string, options?: { timeoutMinutes?: number }) =>
       effect("exec", { cmd, timeoutMinutes: options?.timeoutMinutes }),
     exists: (path: string) => effect("exists", { path }),
+    jev: (spec: unknown) => effect("jev", spec),
     workflow: (slug: string, values: unknown) =>
       effect("workflow", { slug, inputs: values }),
     state: (name: string, schema: unknown) => {

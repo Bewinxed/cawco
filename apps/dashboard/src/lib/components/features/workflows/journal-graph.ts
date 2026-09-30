@@ -11,8 +11,10 @@ import type {
   EffortLevel,
   WorkflowEffect,
   WorkflowEffectKind,
+  WorkflowFailure,
   WorkflowNode,
 } from "@whiffle/core";
+import type { JevAnswer, JevResult } from "@whiffle/core/workflow-program";
 
 /** The 260px node of §9.2, and the rank/row gaps that keep edges readable. */
 const NODE_WIDTH = 260;
@@ -27,6 +29,7 @@ const NODE_KINDS: WorkflowEffectKind[] = [
   "ask",
   "exec",
   "exists",
+  "jev",
   "workflow",
 ];
 
@@ -93,9 +96,15 @@ const specOf = (effect: WorkflowEffect): StepSpec | undefined => {
   return result?.spec;
 };
 
-/** The node a `run`/`spawn` effect stands for, in either origin's terms. */
+/**
+ * The node a canvas call stands for, in either origin's terms: the authored
+ * node the compiler named on it (`run`/`spawn` on their spec, `jev` on its
+ * arguments), else the journal's own node for that sequence.
+ */
 export const stepNodeIdOf = (effect: WorkflowEffect): string =>
-  specOf(effect)?.node ?? journalNodeId(effect.seq);
+  specOf(effect)?.node ??
+  (typeof effect.args?.node === "string" ? effect.args.node : undefined) ??
+  journalNodeId(effect.seq);
 
 const firstLine = (text: string) => text.split("\n").find(Boolean) ?? "";
 
@@ -131,9 +140,73 @@ function describe(effect: WorkflowEffect): { lines: string[]; title: string } {
         lines: [arg(effect, "path"), effect.result === true ? "Found" : absent],
       };
     }
+    case "jev": {
+      const count = Object.keys(
+        (effect.args?.questions as Record<string, unknown> | undefined) ?? {}
+      ).length;
+      return {
+        title: "Jev",
+        lines: [`${count} ${count === 1 ? "question" : "questions"}`],
+      };
+    }
     default:
       return { title: "Child workflow", lines: [arg(effect, "slug")] };
   }
+}
+
+/** What a Jev call came back with, as its node card lists it. */
+export interface JournalJev {
+  answers: { id: string; text: string }[];
+  /** The call's price and tokens, once it answered. */
+  cost?: string;
+  failure?: string;
+}
+
+const percent = (value: number) => `${Math.round(value * 100)}%`;
+
+/** One answer in words: the choice, the score or the yes-probability. */
+function answerText(answer: JevAnswer): string {
+  switch (answer.type) {
+    case "noul":
+      return `${percent(answer.noul)} yes`;
+    case "choice":
+      return `${answer.choice} · ${percent(answer.confidence)} confident`;
+    default: {
+      const nearest = answer.legend[String(Math.round(answer.score))];
+      const level = typeof nearest === "string" ? ` (${nearest})` : "";
+      return `${answer.score.toFixed(2)}${level} · ${percent(answer.confidence)} confident`;
+    }
+  }
+}
+
+/** Every Jev call the journal holds, by the node it stands for. */
+export function journalJev(
+  effects: WorkflowEffect[]
+): Record<string, JournalJev> {
+  const calls: Record<string, JournalJev> = {};
+  for (const effect of effects) {
+    if (effect.kind !== "jev") {
+      continue;
+    }
+    const nodeId = stepNodeIdOf(effect);
+    if (effect.failure) {
+      const failure = JSON.parse(effect.failure) as WorkflowFailure;
+      calls[nodeId] = { answers: [], failure: failure.message };
+      continue;
+    }
+    const result = effect.result as JevResult | null;
+    if (!result) {
+      continue;
+    }
+    calls[nodeId] = {
+      answers: Object.entries(result.answers).map(([id, answer]) => ({
+        id,
+        text: answerText(answer),
+      })),
+      cost: `$${result.usage.costUsd.toFixed(6)} · ${result.usage.inputTokens} in / ${result.usage.outputTokens} out`,
+    };
+  }
+  return calls;
 }
 
 /**

@@ -25,7 +25,11 @@
   import { theme } from "$lib/theme.svelte";
   import { newId } from "$lib/whiffle/id";
   import { workflowState } from "$lib/whiffle/workflow-state.svelte";
-  import type { JournalCheckpoint, JournalGraph } from "./journal-graph";
+  import type {
+    JournalCheckpoint,
+    JournalGraph,
+    JournalJev,
+  } from "./journal-graph";
   import WorkflowCanvasTools from "./WorkflowCanvasTools.svelte";
   import WorkflowEdge from "./WorkflowEdge.svelte";
   import WorkflowNodeCard from "./WorkflowNodeCard.svelte";
@@ -35,6 +39,7 @@
     graph,
     journal,
     checkpoints = {},
+    jev = {},
     selection,
     problems = [],
     readonly = false,
@@ -54,6 +59,8 @@
     /** A code-origin run: the shape read back out of the effect journal. */
     journal?: JournalGraph;
     checkpoints?: Record<string, JournalCheckpoint[]>;
+    /** Each Jev call's answers, by the node it ran on. */
+    jev?: Record<string, JournalJev>;
     selection?: string;
     problems?: Problem[];
     readonly?: boolean;
@@ -109,6 +116,7 @@
       step,
       child,
       checkpoints: checkpoints[id],
+      jev: jev[id],
       duration: step ? duration(step.startedAt, step.endedAt, now) : "",
       cost:
         step?.instanceId && costs[step.instanceId] !== undefined

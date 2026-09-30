@@ -1,8 +1,10 @@
 import type { WorkflowGraph, WorkflowNode } from "@whiffle/core";
+import { JEV_ANSWER_FIELDS } from "@whiffle/core";
 import {
   IconBox,
   IconCpu,
   IconHook,
+  IconJev,
   IconRocket,
   IconSubagent,
   IconToolQuestion,
@@ -60,6 +62,13 @@ export const kinds = [
     group: "Work",
     meaning: "Verify a result with code",
     icon: IconToolTodo,
+  },
+  {
+    kind: "jev",
+    title: "Jev",
+    group: "Work",
+    meaning: "Ask Jev typed questions in one call",
+    icon: IconJev,
   },
   {
     kind: "ask",
@@ -138,6 +147,13 @@ export function newNode(
       };
     case "workflow":
       return { ...base, kind, workflowId: "", inputs: {} };
+    case "jev":
+      return {
+        ...base,
+        kind,
+        state: "",
+        questions: [{ id: "answer", type: "noul", instructions: "" }],
+      };
     case "ask":
       return {
         ...base,
@@ -197,10 +213,34 @@ export function templatePaths(graph: WorkflowGraph, nodeId: string): string[] {
     ...(start?.kind === "start"
       ? start.inputs.map((input) => `inputs.${input.name}`)
       : []),
-    ...upstream(graph, nodeId).flatMap((node) =>
-      node.kind === "step"
-        ? schemaPaths(node.outputSchema, `steps.${node.id}.result`)
-        : [`steps.${node.id}.result`]
+    ...upstream(graph, nodeId).flatMap((node) => {
+      if (node.kind === "step") {
+        return schemaPaths(node.outputSchema, `steps.${node.id}.result`);
+      }
+      if (node.kind === "jev") {
+        return jevPaths(node);
+      }
+      return [`steps.${node.id}.result`];
+    }),
+  ];
+}
+
+/** A Jev question type as the editor names it. */
+export const JEV_TYPE_NAMES = {
+  noul: "Noul",
+  choice: "Choice",
+  score: "Score",
+} as const;
+
+/** What a Jev node's result offers downstream: each answer's own fields. */
+export function jevPaths(node: Extract<WorkflowNode, { kind: "jev" }>) {
+  const result = `steps.${node.id}.result`;
+  return [
+    result,
+    ...node.questions.flatMap((question) =>
+      JEV_ANSWER_FIELDS[question.type]
+        .filter((field) => field !== "type" && field !== "legend")
+        .map((field) => `${result}.answers.${question.id}.${field}`)
     ),
   ];
 }

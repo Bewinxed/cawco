@@ -1,7 +1,11 @@
 import type { NeutralMessage, Rule, RuleFacts } from "@whiffle/core";
 import { ruleInScope } from "@whiffle/core";
+import type { JevResult } from "@whiffle/core/workflow-program";
 import type { DbShape } from "./db";
-import { askNouls } from "./jev";
+import { askJev } from "./jev";
+
+/** A meaning rule answers inside the turn it judges, so it is asked briefly. */
+const MEANING_TIMEOUT_MS = 10_000;
 
 /**
  * Meaning rules: a yes/no question put to Jev about what the session said,
@@ -142,29 +146,34 @@ export class MeaningJudge {
       );
       return new Set();
     }
-    const result = await askNouls(
-      connection.apiKey,
-      state,
+    const questions: Record<string, { type: "noul"; instructions: string }> =
       Object.fromEntries(
         asked.map(({ rule, subject }) => [
           rule.id,
-          { instructions: `${rule.pattern} answered about ${subject}` },
+          {
+            type: "noul" as const,
+            instructions: `${rule.pattern} answered about ${subject}`,
+          },
         ])
-      )
-    );
-    if ("error" in result) {
+      );
+    let result: JevResult<typeof questions>;
+    try {
+      result = await askJev(connection.apiKey, state, questions, {
+        timeoutMs: MEANING_TIMEOUT_MS,
+      });
+    } catch (error) {
       console.error(
         `[meaning] ${instanceId}: Jev failed for rules ${asked
           .map(({ rule }) => rule.id)
-          .join(", ")}: ${result.error}`
+          .join(", ")}: ${error instanceof Error ? error.message : error}`
       );
       return new Set();
     }
     const yes = new Set<string>();
     for (const { rule } of asked) {
-      const noul = result.answers[rule.id];
+      const { noul } = result.answers[rule.id];
       console.debug(
-        `[meaning] ${instanceId}: rule ${rule.id} noul=${noul} cost=$${result.costUsd}`
+        `[meaning] ${instanceId}: rule ${rule.id} noul=${noul} cost=$${result.usage.costUsd}`
       );
       if (noul >= MEANING_THRESHOLD) {
         yes.add(rule.id);

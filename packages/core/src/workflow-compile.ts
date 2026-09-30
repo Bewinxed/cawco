@@ -9,6 +9,7 @@
  * produced the line.
  */
 import type {
+  JevNodeQuestion,
   Problem,
   WorkflowEdge,
   WorkflowGraph,
@@ -238,8 +239,50 @@ interface Context {
   stop: Set<string>;
 }
 
+/** An editor question as the API takes it: choice rows become `{ name: meaning }`. */
+function jevQuestion(question: JevNodeQuestion): Record<string, unknown> {
+  const { type, instructions } = question;
+  if (question.type === "choice") {
+    return {
+      type,
+      instructions,
+      criteria: Object.fromEntries(
+        question.criteria.map((row) => [
+          row.option.trim(),
+          row.meaning.trim() || null,
+        ])
+      ),
+    };
+  }
+  if (question.type === "score") {
+    return { type, instructions, criteria: question.criteria };
+  }
+  const yes = question.criteria?.true?.trim();
+  const no = question.criteria?.false?.trim();
+  // Both or neither; the validator refuses one alone.
+  return yes && no
+    ? { type, instructions, criteria: { true: yes, false: no } }
+    : { type, instructions };
+}
+
+/**
+ * A Jev node's rendered state goes as structured data when it is a JSON
+ * object or array, and as text otherwise.
+ */
+const JEV_STATE_HELPER = [
+  "const jevState = (text: string): WorkflowJevSpec['state'] => {",
+  "  try {",
+  "    const parsed: unknown = JSON.parse(text);",
+  "    return typeof parsed === 'object' && parsed !== null ? (parsed as Record<string, unknown>) : text;",
+  "  } catch {",
+  "    return text;",
+  "  }",
+  "};",
+];
+
 export function compileWorkflow(graph: WorkflowGraph): CompiledWorkflow {
   const problems: Problem[] = [];
+  let usesJev = false;
   const lines: Record<string, [number, number]> = {};
   const add = (message: string, nodeId?: string, edgeId?: string) => {
     problems.push({ message, nodeId, edgeId });
@@ -682,6 +725,37 @@ export function compileWorkflow(graph: WorkflowGraph): CompiledWorkflow {
     const counterOf = (edge: WorkflowEdge) =>
       `Loop${[...back].indexOf(edge) + 1}`;
 
+    /**
+     * One `w.jev` call for the node. The questions are fixed text, so they sit
+     * at the top as one typed constant: the answers then type as their
+     * questions do, and a branch on `answers.<id>.noul` typechecks.
+     */
+    const emitJev = (node: Extract<WorkflowNode, { kind: "jev" }>) => {
+      const questions = `${nameOf(node.id)}Questions`;
+      schemas.push(
+        `const ${questions} = {`,
+        ...node.questions.map(
+          (question) =>
+            `  ${IDENTIFIER.test(question.id) ? question.id : quote(question.id)}: ${JSON.stringify(jevQuestion(question))},`
+        ),
+        "} as const satisfies Record<string, WorkflowJevQuestion>;"
+      );
+      declarations.push(
+        `let ${nameOf(node.id)}!: WorkflowJevResult<typeof ${questions}>;`
+      );
+      usesJev = true;
+      emitter.push(`${nameOf(node.id)} = await w.jev({`);
+      emitter.indent += 1;
+      emitter.push(`node: ${quote(node.id)},`);
+      emitter.push(`state: jevState(${templateExpr(node.state, node)}),`);
+      emitter.push(`questions: ${questions},`);
+      if (node.model?.trim()) {
+        emitter.push(`model: ${quote(node.model.trim())},`);
+      }
+      emitter.indent -= 1;
+      emitter.push("});");
+    };
+
     const emitNode = (node: WorkflowNode) => {
       switch (node.kind) {
         case "start":
@@ -735,6 +809,9 @@ export function compileWorkflow(graph: WorkflowGraph): CompiledWorkflow {
           emitter.push("});");
           break;
         }
+        case "jev":
+          emitJev(node);
+          break;
         case "workflow": {
           declarations.push(`let ${nameOf(node.id)}: unknown;`);
           const entries = Object.entries(node.inputs).map(
@@ -969,6 +1046,7 @@ export function compileWorkflow(graph: WorkflowGraph): CompiledWorkflow {
     "",
     ...root.schemas,
     ...(root.schemas.length ? [""] : []),
+    ...(usesJev ? [...JEV_STATE_HELPER, ""] : []),
     "export default async function (w: Workflow<typeof inputs>) {",
     ...root.declarations.map((line) => `  ${line}`),
   ];

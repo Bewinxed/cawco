@@ -105,7 +105,7 @@ export function handoffTools(deps: HandoffDeps) {
   const all = [
     tool(
       "create_workflow",
-      'Create a workflow from a TypeScript program: `import { z } from "zod"`, `export const inputs = z.object({…})`, and a default-exported async function taking the Workflow runtime (w.run, w.spawn, w.ask, w.exec, w.exists, w.workflow, w.state, w.checkpoint, w.sleep, w.now, w.notify, w.notes, w.log). zod is the only import allowed; the program must be deterministic. Returns the saved workflow, or line-numbered typecheck problems verbatim.',
+      'Create a workflow from a TypeScript program: `import { z } from "zod"`, `export const inputs = z.object({…})`, and a default-exported async function taking the Workflow runtime (w.run, w.spawn, w.ask, w.exec, w.exists, w.jev, w.workflow, w.state, w.checkpoint, w.sleep, w.now, w.notify, w.notes, w.log). `w.jev({ state, questions: { id: { type: "noul" | "choice" | "score", instructions, criteria } } })` asks TypeSafe\'s Jev and returns typed `answers.<id>` (noul; choice + probabilities + confidence; score + legend + probabilities + confidence) and `usage`; put every question over one state in ONE call — they are evaluated in parallel for one price. zod is the only import allowed; the program must be deterministic. Returns the saved workflow, or line-numbered typecheck problems verbatim.',
       { name: z.string(), program: z.string() },
       async ({ name, program }) => ({
         content: [

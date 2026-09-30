@@ -1,6 +1,10 @@
+import type { JevResult } from "@whiffle/core/workflow-program";
 import type { DbShape } from "./db";
-import { askNouls } from "./jev";
+import { askJev } from "./jev";
 import { usageScores } from "./usage-count";
+
+/** Suggestions answer while the reader types, so they are asked briefly. */
+const SUGGEST_TIMEOUT_MS = 10_000;
 
 /**
  * Composer suggestions: which of the session's skills, tools and MCP servers
@@ -118,33 +122,38 @@ export async function suggest(
   if (asked.length === 0) {
     return { suggestions: [] };
   }
-  const result = await askNouls(
-    key,
-    { prompt: text },
-    Object.fromEntries(
-      asked.map((candidate) => [
-        candidate.id,
-        {
-          instructions: {
-            candidate: {
-              kind: candidate.kind,
-              name: candidate.name,
-              description: candidate.description,
-            },
-            // "Would the agent need to use" scored deep-research 0.39 for
-            // "we should really research this"; this wording scored it 0.74
-            // and kept typo/rename/commit prompts under the threshold.
-            question: "Is `candidate` made for the task `prompt` describes?",
+  const questions: Record<
+    string,
+    { type: "noul"; instructions: Record<string, unknown> }
+  > = Object.fromEntries(
+    asked.map((candidate) => [
+      candidate.id,
+      {
+        type: "noul" as const,
+        instructions: {
+          candidate: {
+            kind: candidate.kind,
+            name: candidate.name,
+            description: candidate.description,
           },
+          // "Would the agent need to use" scored deep-research 0.39 for
+          // "we should really research this"; this wording scored it 0.74
+          // and kept typo/rename/commit prompts under the threshold.
+          question: "Is `candidate` made for the task `prompt` describes?",
         },
-      ])
-    )
+      },
+    ])
   );
-  if ("error" in result) {
-    return result;
+  let result: JevResult<typeof questions>;
+  try {
+    result = await askJev(key, { prompt: text }, questions, {
+      timeoutMs: SUGGEST_TIMEOUT_MS,
+    });
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : String(error) };
   }
   console.debug(
-    `[suggest] ${asked.length} of ${candidates.length} candidates asked, ${result.inputTokens} input tokens, cost=$${result.costUsd}`
+    `[suggest] ${asked.length} of ${candidates.length} candidates asked, ${result.usage.inputTokens} input tokens, cost=$${result.usage.costUsd}`
   );
   // One chip per capability: a name offered as both an MCP server and a skill
   // (claude-in-chrome) keeps only its likelier entry.
@@ -154,7 +163,7 @@ export async function suggest(
       .map((candidate) => ({
         id: candidate.id,
         name: candidate.name.toLowerCase(),
-        noul: result.answers[candidate.id],
+        noul: result.answers[candidate.id].noul,
       }))
       .filter((entry) => entry.noul >= SUGGEST_THRESHOLD)
       .sort((a, b) => b.noul - a.noul)

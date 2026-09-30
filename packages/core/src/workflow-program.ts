@@ -51,6 +51,95 @@ export interface AskAnswer {
   note?: string;
 }
 
+/**
+ * One question to TypeSafe's Jev (https://docs.typesafe.ai/api.md).
+ * `instructions` and every criterion may be text or structured data.
+ */
+export type JevText =
+  | string
+  | Readonly<Record<string, unknown>>
+  | readonly unknown[];
+export type JevQuestion =
+  | {
+      readonly type: "noul";
+      readonly instructions: JevText;
+      /**
+       * What a yes and a no mean, when the instructions leave it open. Both or
+       * neither: the API refuses one without the other.
+       */
+      readonly criteria?: { readonly true: string; readonly false: string };
+    }
+  | {
+      readonly type: "choice";
+      readonly instructions: JevText;
+      /** Option name → what it means; up to 255 options. */
+      readonly criteria: Readonly<Record<string, JevText | null>>;
+    }
+  | {
+      readonly type: "score";
+      readonly instructions: JevText;
+      /** 2–10 ordered levels, lowest first. */
+      readonly criteria: readonly JevText[];
+    };
+
+/**
+ * What `w.jev` is given: every question over one `state`, asked in ONE
+ * request and evaluated in parallel (https://docs.typesafe.ai/patterns/fan-out.md).
+ */
+export interface JevSpec<
+  Questions extends Readonly<Record<string, JevQuestion>> = Readonly<
+    Record<string, JevQuestion>
+  >,
+> {
+  /** `jev-latest` when left out. */
+  model?: string;
+  /** The editor node this call came from; the compiler fills it. */
+  node?: string;
+  questions: Questions;
+  /** Text, or structured data the questions are asked about. */
+  state: JevText;
+}
+
+export interface JevNoulAnswer {
+  /** The calibrated probability that the answer is yes. */
+  noul: number;
+  type: "noul";
+}
+export interface JevChoiceAnswer<Option extends string = string> {
+  choice: Option;
+  confidence: number;
+  probabilities: Record<Option, number>;
+  type: "choice";
+}
+export interface JevScoreAnswer {
+  confidence: number;
+  /** Level index → the level as it was given. */
+  legend: Record<string, JevText>;
+  probabilities: Record<string, number>;
+  score: number;
+  type: "score";
+}
+export type JevAnswer = JevNoulAnswer | JevChoiceAnswer | JevScoreAnswer;
+/** The answer a question of this shape comes back as. */
+export type JevAnswerOf<Question> = Question extends { type: "noul" }
+  ? JevNoulAnswer
+  : Question extends { type: "choice"; criteria: infer Criteria }
+    ? JevChoiceAnswer<Extract<keyof Criteria, string>>
+    : Question extends { type: "score" }
+      ? JevScoreAnswer
+      : never;
+
+export interface JevResult<
+  Questions extends Readonly<Record<string, JevQuestion>> = Readonly<
+    Record<string, JevQuestion>
+  >,
+> {
+  answers: { [Id in keyof Questions]: JevAnswerOf<Questions[Id]> };
+  /** The model version that answered, e.g. `typesafe/jev-1.13-20260917`. */
+  model: string;
+  usage: { costUsd: number; inputTokens: number; outputTokens: number };
+}
+
 /** A named, zod-typed slot shared between the program and its step sessions. */
 export interface WorkflowState<Schema extends ZodTypeAny> {
   get: () => Promise<z.infer<Schema> | undefined>;
@@ -74,6 +163,14 @@ export interface Workflow<Inputs extends ZodTypeAny = ZodTypeAny> {
   exists: (path: string) => Promise<boolean>;
   /** The launch inputs, already validated against the program's `inputs`. */
   readonly inputs: z.infer<Inputs>;
+  /**
+   * Asks Jev every question over one state in a single request and returns
+   * one typed answer per question. Put all the questions a state needs in one
+   * call: they are evaluated in parallel for one price.
+   */
+  jev: <const Questions extends Readonly<Record<string, JevQuestion>>>(
+    spec: JevSpec<Questions>
+  ) => Promise<JevResult<Questions>>;
   /** One line in the run log. */
   log: (text: string) => Promise<void>;
   /** The supervisor's unconsumed notes, drained on read. */
