@@ -373,7 +373,7 @@ export function handoffTools(deps: HandoffDeps) {
         target: z
           .string()
           .describe(
-            'The session to hand to: its directory name, e.g. "keeboard", or its id.'
+            'The session to hand to: its id, or its directory name, e.g. "keeboard". A name reaches your own parent when it is theirs; a name that more than one session answers to is refused with their ids.'
           ),
         message: z
           .string()

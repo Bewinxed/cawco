@@ -206,40 +206,103 @@ function resolveById(peers: Peer[], target: string): Peer | undefined {
   return byShortId.length === 1 ? byShortId[0] : undefined;
 }
 
+/** The sessions a bare name picks out: those it names exactly, else those whose name holds it. */
+function named(peers: Peer[], target: string): Peer[] {
+  const needle = needleOf(target);
+  const exact = peers.filter((peer) => peer.name.toLowerCase() === needle);
+  return exact.length
+    ? exact
+    : peers.filter((peer) => peer.name.toLowerCase().includes(needle));
+}
+
 /**
- * A hand-off's target: a running session by any name {@link resolve} takes,
- * else a sleeping one by its id. Only by id — a name would match among every
- * session that ever ran here. The hub wakes a sleeping target to read it.
+ * How many sessions a refused name lists by id. A directory's name can match
+ * hundreds of sessions that ever ran there; the rest are counted.
  */
-function resolveHandoff(peers: Peer[], asleep: Peer[], target: string): Peer {
-  try {
-    return resolve(peers, target);
-  } catch (error) {
-    const sleeping = resolveById(asleep, target);
-    if (sleeping) {
-      return sleeping;
-    }
-    throw error;
+const LISTED_AT_MOST = 12;
+
+/**
+ * The refusal of a name more than one session answers to: the sessions by
+ * id, in the order given, and how many more there are.
+ */
+function ambiguous(
+  target: string,
+  candidates: Peer[],
+  asleep: ReadonlySet<Peer> = new Set()
+): Error {
+  const listed = candidates
+    .slice(0, LISTED_AT_MOST)
+    .map(
+      (peer) =>
+        `${peer.label} on ${peer.host} (${asleep.has(peer) ? "asleep, " : ""}${ageOf(peer.row.updatedAt)})`
+    )
+    .join(", ");
+  const more = candidates.length - LISTED_AT_MOST;
+  return new Error(
+    `"${target}" matches ${candidates.length} sessions: ${listed}${more > 0 ? `, and ${more} more, less recent` : ""}. ` +
+      "Name one by its short id — and if you cannot tell them apart, ask rather than guess."
+  );
+}
+
+/** When a row last moved, for ordering: the most recent first. */
+const movedAt = (peer: Peer) =>
+  peer.row.updatedAt ? new Date(peer.row.updatedAt).getTime() || 0 : 0;
+
+/**
+ * A hand-off's target, running or asleep. An id — full, or a short id of six
+ * or more characters — names one session. A bare name is looked up among
+ * both: the caller's own parent when it answers to the name, else the one
+ * session that does. A name more than one session answers to is refused with
+ * every one of them by id; it is never guessed. The hub wakes a sleeping
+ * target to read it.
+ */
+function resolveHandoff(
+  peers: Peer[],
+  asleep: Peer[],
+  target: string,
+  own: InstanceRow | undefined
+): Peer {
+  const all = [...peers, ...asleep];
+  const byId = resolveById(all, target);
+  if (byId) {
+    return byId;
   }
+  const candidates = named(all, target);
+  const parent = candidates.find(
+    (peer) => peer.row.id === own?.parentInstanceId
+  );
+  if (parent) {
+    return parent;
+  }
+  if (candidates.length === 1) {
+    return candidates[0];
+  }
+  if (candidates.length === 0) {
+    const known =
+      peers.map((peer) => peer.label).join(", ") || "none are running";
+    throw new Error(
+      `No session, running or asleep, matches "${target}". Running now: ${known}.`
+    );
+  }
+  const sleeping = new Set(asleep);
+  throw ambiguous(
+    target,
+    candidates.toSorted(
+      (a, b) =>
+        Number(sleeping.has(a)) - Number(sleeping.has(b)) ||
+        movedAt(b) - movedAt(a)
+    ),
+    sleeping
+  );
 }
 
 /** Resolves what the model typed to one session; ambiguity is reported, not guessed. */
 function resolve(peers: Peer[], target: string): Peer {
-  const needle = needleOf(target);
   const byId = resolveById(peers, target);
   if (byId) {
     return byId;
   }
-
-  const exact = peers.filter((peer) => peer.name.toLowerCase() === needle);
-  if (exact.length === 1) {
-    return exact[0];
-  }
-
-  const partial = peers.filter((peer) =>
-    peer.name.toLowerCase().includes(needle)
-  );
-  const candidates = exact.length > 1 ? exact : partial;
+  const candidates = named(peers, target);
   if (candidates.length === 1) {
     return candidates[0];
   }
@@ -250,15 +313,7 @@ function resolve(peers: Peer[], target: string): Peer {
       `No running session matches "${target}". Running now: ${known}.`
     );
   }
-  const listed = candidates
-    .map(
-      (peer) => `${peer.label} on ${peer.host} (${ageOf(peer.row.updatedAt)})`
-    )
-    .join(", ");
-  throw new Error(
-    `"${target}" matches ${candidates.length} sessions: ${listed}. ` +
-      "Name one by its short id — and if you cannot tell them apart, ask rather than guess."
-  );
+  throw ambiguous(target, candidates);
 }
 
 /**
@@ -750,11 +805,13 @@ export const handoffActions = ({
     message: string,
     urgent = false
   ): Promise<string> {
-    const { peers, asleep } = await roster(instanceId);
+    const { peers, asleep, own } = await roster(instanceId);
     const peer = urgent
       ? resolveDelegate(peers, target, instanceId)
-      : resolveHandoff(peers, asleep, target);
+      : resolveHandoff(peers, asleep, target, own);
     const woken = asleep.includes(peer);
+    const whose =
+      peer.row.id === own?.parentInstanceId ? ", your parent session" : "";
     const from = leafOf(cwd);
     const body = `${handoffMarker(from)}${message}`;
     const payload: SendPayload = {
@@ -787,10 +844,10 @@ export const handoffActions = ({
       );
     }
     if (woken) {
-      return `Handed to ${peer.label} (${peer.row.cwd} on ${peer.host}). It was asleep; it is being woken to read it.`;
+      return `Handed to ${peer.label} (${peer.row.cwd} on ${peer.host}${whose}). It was asleep; it is being woken to read it.`;
     }
     return (
-      `Handed to ${peer.label} (${peer.row.cwd} on ${peer.host}). It is queued there and will be ` +
+      `Handed to ${peer.label} (${peer.row.cwd} on ${peer.host}${whose}). It is queued there and will be ` +
       "picked up when that session finishes its current turn — it was not interrupted."
     );
   },
