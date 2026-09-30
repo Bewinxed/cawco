@@ -487,6 +487,15 @@ export function createSwipe(
     get moving() {
       return moving;
     },
+    /** How long the settle in flight has left to run, in ms; 0 at rest. */
+    get settleMs(): number {
+      const at =
+        animations[panes.findIndex((pane) => pane.delta === 0)]?.currentTime;
+      if (typeof at !== "number" || path.length === 0) {
+        return 0;
+      }
+      return Math.max(0, (path.at(-1)?.t ?? 0) * 1000 - at);
+    },
     /** Panes in reach that are not painted yet (see `veiled` above). */
     get veiled() {
       return veiled;

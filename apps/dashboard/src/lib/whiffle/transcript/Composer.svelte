@@ -84,6 +84,7 @@
     suggest,
     delegatesOf,
     switchDir = 0,
+    landing = { done: Promise.resolve(), ms: () => 0 },
   }: {
     /**
      * The conversation's half-written message. The composer draws it and
@@ -156,6 +157,12 @@
      * the left, 0 where there is no strip or no known side.
      */
     switchDir?: number;
+    /**
+     * The transcript's motion for that switch: the field keeps its height
+     * until `done`, then glides to the new draft's; `ms` is how long the
+     * motion has left.
+     */
+    landing?: { done: Promise<void>; ms: () => number };
   } = $props();
 
   $effect(() => {
@@ -431,7 +438,8 @@
    * transcript does: the words that stood there slide 16px away from the
    * incoming tab's side as they fade, and the new ones slide in from that
    * side and fade up, typed out so the last character lands as the field's
-   * height glide ends (its own transition, on the same curve). Both are
+   * height glide ends: the field holds its height until the transcript has
+   * landed ({@link holdUntil}), then glides on its own transition. Both are
    * drawn on an overlay laid over the field's text box, each laid out as its
    * full text with the part not yet typed clear, so every line already
    * stands where the field will put it and nothing moves vertically. The
@@ -486,17 +494,18 @@
     Math.max(0, whole - box - scrolled);
 
   /**
-   * Where the arriving text will rest once the field has fitted it: its
-   * drop, and the characters in view, as offsets into it. The field's own
-   * box and scroll at rest are worked out from the layer, laid out whole at
-   * the field's width, and the field's min and max height; the scroll is
-   * the field's own, as its bounds at rest will hold it.
+   * Where the arriving text will rest once the field has fitted it: the
+   * field's height, the text's drop, and the characters in view, as offsets
+   * into it. The field's own box and scroll at rest are worked out from the
+   * layer, laid out whole at the field's width, and the field's min and max
+   * height; the scroll is the field's own, as its bounds at rest will hold
+   * it.
    */
   function restOf(
     node: HTMLTextAreaElement,
     layer: HTMLElement,
     text: string
-  ): { drop: number; from: number; to: number } {
+  ): { fitted: number; drop: number; from: number; to: number } {
     const style = getComputedStyle(node);
     const padTop = Number.parseFloat(style.paddingTop);
     const border = node.offsetHeight - node.clientHeight;
@@ -508,12 +517,13 @@
         Math.max(whole + border, Number.parseFloat(style.minHeight) || 0),
         cap
       ) - border;
+    const fitted = box + border;
     if (whole <= box) {
-      return { drop: 0, from: 0, to: text.length };
+      return { fitted, drop: 0, from: 0, to: text.length };
     }
     const scrolled = Math.min(node.scrollTop, whole - box);
     const [from, to] = inView(layer, text, scrolled - padTop, box);
-    return { drop: scrollDrop(whole, box, scrolled), from, to };
+    return { fitted, drop: scrollDrop(whole, box, scrolled), from, to };
   }
 
   /**
@@ -572,6 +582,30 @@
     flight = null;
   }
 
+  /**
+   * The field keeps its height while the transcript's switch motion runs
+   * (`landing`), so fitting the new draft never moves a transcript still
+   * sliding in: from a switch until that motion lands, or until the text
+   * changes in place. A newer switch holds on to its own landing.
+   */
+  let holding = $state(false);
+  let holdFor: Promise<void> | null = null;
+
+  function holdUntil(done: Promise<void>): void {
+    holding = true;
+    holdFor = done;
+    done.then(() => {
+      if (holdFor === done) {
+        letGo();
+      }
+    });
+  }
+
+  function letGo(): void {
+    holdFor = null;
+    holding = false;
+  }
+
   function fly(from: string, to: string, dir: number): void {
     cancelAnimationFrame(flightFrame);
     const was = flight;
@@ -598,11 +632,10 @@
     inDrop = 0;
     flight = { dir, out, outDrop, outRest, from: start, text: to };
     flightFrame = requestAnimationFrame((began) => {
-      const ms = field ? heightMs(field) : 0;
-      const rest =
-        field && flightIn
-          ? restOf(field, flightIn, to)
-          : { drop: 0, from: 0, to: to.length };
+      // Both are on the page: the overlay rendered with the switch.
+      const node = field as HTMLTextAreaElement;
+      const ms = heightMs(node);
+      const rest = restOf(node, flightIn as HTMLElement, to);
       inDrop = rest.drop;
       const timing = {
         duration: ms,
@@ -620,19 +653,30 @@
         ],
         timing
       );
+      // The typing runs from the slide to the end of the field's glide,
+      // which starts when the transcript lands: until then its end is where
+      // the landing is expected, and once landed it is that frame plus the
+      // glide, or that frame alone when the height does not change.
+      const glide = Math.abs(rest.fitted - node.offsetHeight) > 0.5 ? ms : 0;
+      const expected = began + landing.ms() + glide;
+      let glideEnd: number | null = null;
+      let count = rest.from;
       const type = (now: number) => {
-        const progress = ms > 0 ? Math.min(1, (now - began) / ms) : 1;
+        if (glideEnd === null && !holding) {
+          glideEnd = now + glide;
+        }
+        const end = glideEnd ?? Math.max(expected, now + glide + 1);
+        const landed = glideEnd !== null && now >= glideEnd;
+        const progress =
+          end > began ? Math.min(1, (now - began) / (end - began)) : 1;
         // Typed across what the field will show; what stands above it is
         // there from the start, so the typing is never spent out of view.
-        typed =
-          progress < 1
-            ? to.slice(
-                0,
-                rest.from +
-                  Math.floor((rest.to - rest.from) * easeOut(progress))
-              )
-            : to;
-        flightFrame = requestAnimationFrame(progress < 1 ? type : endFlight);
+        count = Math.max(
+          count,
+          rest.from + Math.floor((rest.to - rest.from) * easeOut(progress))
+        );
+        typed = landed ? to : to.slice(0, count);
+        flightFrame = requestAnimationFrame(landed ? endFlight : type);
       };
       type(began);
     });
@@ -643,13 +687,15 @@
     const { text } = draft;
     untrack(() => {
       if (shown !== undefined && next !== shownDraft) {
+        holdUntil(landing.done);
         if (motionOk.current && (flight || text !== shown)) {
           fly(shown, text, switchDir);
         } else {
           endFlight();
         }
-      } else if (flight && text !== shown) {
+      } else if (text !== shown) {
         endFlight();
+        letGo();
       }
       shown = text;
       shownDraft = next;
@@ -1223,7 +1269,10 @@
           bind:this={field}
           class:flying={flight !== null}
           bind:value={draft.text}
-          {@attach autosize(() => draft.text)}
+          {@attach autosize(
+            () => draft.text,
+            () => holding
+          )}
           {@attach fitHint}
         ></textarea>
         {#if flight}

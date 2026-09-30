@@ -201,6 +201,19 @@
    */
   let switchDir = $state(0);
 
+  /**
+   * The last switch's transcript motion, for the composer: it keeps the
+   * height it had until `done`, so a field fitting the new draft never
+   * moves a transcript that is still sliding in. `done` settles when the
+   * glide or the swipe's settle lands, at once when none runs, and when a
+   * newer switch takes over; `ms` is how long the motion has left.
+   */
+  let landing = $state<{ done: Promise<void>; ms: () => number }>({
+    done: Promise.resolve(),
+    ms: () => 0,
+  });
+  let landed: () => void = () => undefined;
+
   // Before the switch renders, so what the settle paints is decided in the
   // same pass as the switch itself and no pane is revealed and hidden again.
   $effect.pre(() => {
@@ -216,10 +229,25 @@
       switchDir = order
         ? Math.sign(order.indexOf(id) - order.indexOf(from))
         : 0;
-      if (swipeable && tabSwitch(from, id)) {
+      landed();
+      const settle = swipeable && tabSwitch(from, id);
+      landing = {
+        done: new Promise((resolve) => {
+          landed = resolve;
+        }),
+        ms: () => (settle ? swipe.settleMs : SWITCH_MS),
+      };
+      if (settle) {
         swipe.prepare(from, id);
       }
     });
+  });
+
+  // A swipe's settle has landed.
+  $effect(() => {
+    if (swipeable && !swipe.moving) {
+      untrack(() => landed());
+    }
   });
 
   // The glide is started in the next frame's callbacks, never in the task
@@ -231,6 +259,8 @@
     const id = viewId;
     const tabs = [...leaf.tabs];
     let frame = 0;
+    /** This switch's landing, until its glide has started. */
+    let unstarted: (() => void) | null = null;
     untrack(() => {
       const from = shownId;
       const settle = swipeable && tabSwitch(from, id);
@@ -241,15 +271,22 @@
       }
       if (settle) {
         swipe.arrive(from, id);
+        if (!swipe.moving) {
+          landed();
+        }
         return;
       }
       const track = stack;
       const dir = switchDir;
       if (!(dir && track && motionOk.current)) {
+        landed();
         return;
       }
+      const done = landed;
+      unstarted = done;
       frame = requestAnimationFrame(() => {
-        track
+        unstarted = null;
+        const glide = track
           .querySelector<HTMLElement>(
             `:scope > .pane[data-pane="${CSS.escape(id)}"]`
           )
@@ -263,9 +300,18 @@
               easing: getComputedStyle(track).getPropertyValue("--ease-drawer"),
             }
           );
+        if (glide) {
+          glide.finished.then(done, done);
+        } else {
+          done();
+        }
       });
     });
-    return () => cancelAnimationFrame(frame);
+    // A glide that never started never lands: its composer lets go now.
+    return () => {
+      cancelAnimationFrame(frame);
+      unstarted?.();
+    };
   });
 
   $effect(() => {
@@ -381,6 +427,7 @@
         delegatesOf={bound.delegatesOf}
         draft={bound.draft}
         held={swipe.moving}
+        {landing}
         leading={bound.leading}
         mentions={bound.mentions}
         oninterruptsend={bound.oninterruptsend}

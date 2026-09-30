@@ -49,9 +49,13 @@ function nextFrame(node: HTMLElement, fit: () => void) {
  * A field handed a different text wholesale (a group's one composer, lent
  * to whichever conversation its swipe lands on) glides to the new text's
  * size as it does for a typed line. Only the first fit, on mount, lands
- * still.
+ * still. While `held` says so, a new value keeps the size the field has,
+ * and it glides to the value's size once let go; typing fits at once.
  */
-export function autosize(value: () => unknown) {
+export function autosize(
+  value: () => unknown,
+  held: () => boolean = () => false
+) {
   return (node: HTMLTextAreaElement) => {
     // Measured on a hidden twin, never on the field: collapsing the field to
     // measure it would cancel the height transition it is running.
@@ -86,6 +90,9 @@ export function autosize(value: () => unknown) {
     let first = true;
     $effect(() => {
       value();
+      if (held()) {
+        return;
+      }
       later.request(first);
       first = false;
     });
