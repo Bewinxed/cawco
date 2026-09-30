@@ -8,7 +8,6 @@ import type {
   ControlPayload,
   DeployInfo,
   DeployKind,
-  EffortLevel,
   Envelope,
   FleetConfig,
   FleetHook,
@@ -68,6 +67,8 @@ import {
   contextFitRefusal,
   delegateAskText,
   deriveTitleFromFirstMessage,
+  EFFORT_NONE,
+  EFFORT_READ,
   estimateTokens,
   FLEET_STATUS,
   FLEET_SYNC,
@@ -78,6 +79,7 @@ import {
   IMAGE_GENERATION_TIMEOUT_MS,
   INSPECT_CONFIG,
   identifyBlocks,
+  isEffortLevel,
   MESSAGES_HELD,
   MESSAGES_READ,
   MESSAGES_STORED,
@@ -2639,7 +2641,7 @@ export const createServer = ({
         ? { permissionMode: row.permissionMode as PermissionMode }
         : {}),
       ...(row.model ? { model: row.model } : {}),
-      ...(row.effort ? { effort: row.effort as EffortLevel } : {}),
+      ...(isEffortLevel(row.effort) ? { effort: row.effort } : {}),
     };
     agent.send({
       verb: "spawn",
@@ -2658,7 +2660,6 @@ export const createServer = ({
       kind: row.kind ?? undefined,
       permissionMode: row.permissionMode ?? undefined,
       model: row.model ?? undefined,
-      effort: row.effort ?? undefined,
     });
     publishInstances(machineId);
   };
@@ -3234,7 +3235,6 @@ export const createServer = ({
       kind: peekKind(payload),
       permissionMode: payload.permissionMode,
       model: payload.model,
-      effort: payload.effort,
       canDelegate: payload.canDelegate,
       workflowRunId: payload.workflowRunId,
       workflowStepId: payload.workflowStepId,
@@ -3273,7 +3273,6 @@ export const createServer = ({
       kind,
       permissionMode: payload.permissionMode,
       model: payload.model,
-      effort: payload.effort,
     });
     publishInstances(machineId);
     const reply = await awaitReply(
@@ -4099,7 +4098,7 @@ export const createServer = ({
         ? { permissionMode: row.permissionMode as PermissionMode }
         : {}),
       ...(row.model ? { model: row.model } : {}),
-      ...(row.effort ? { effort: row.effort as EffortLevel } : {}),
+      ...(isEffortLevel(row.effort) ? { effort: row.effort } : {}),
       ...(row.projectId ? { projectId: row.projectId } : {}),
       // A leaf stays a leaf across a restart: the daemon builds the toolset
       // from the payload, and a restore that dropped this would hand a leaf
@@ -4127,7 +4126,6 @@ export const createServer = ({
       kind: row.kind === "scratch" ? "scratch" : "mainline",
       permissionMode: row.permissionMode ?? undefined,
       model: row.model ?? undefined,
-      effort: row.effort ?? undefined,
       canDelegate: row.canDelegate ?? undefined,
     });
   };
@@ -6301,16 +6299,14 @@ export const createServer = ({
             // the session reported it is answering with, whatever that grows into.
             permissionMode: t.Optional(t.String()),
             model: t.Optional(t.String()),
-            effort: t.Optional(t.String()),
           }),
         },
         ({ params, body, status }) => {
-          const { kind, permissionMode, model, effort } = body;
+          const { kind, permissionMode, model } = body;
           if (
             kind === undefined &&
             permissionMode === undefined &&
-            model === undefined &&
-            effort === undefined
+            model === undefined
           ) {
             return status(400, "name a field to change");
           }
@@ -6318,7 +6314,6 @@ export const createServer = ({
             kind,
             permissionMode,
             model,
-            effort,
           });
           if (row) {
             publishInstances(row.machineId);
@@ -8659,6 +8654,23 @@ export const createServer = ({
                   takeSendSignal(message.instanceId, signal);
                   break;
                 }
+                // The session's effort as its agent read it back: the row's
+                // word on it, and no screen's line.
+                if (
+                  frame.message.type === "system" &&
+                  frame.message.subtype === EFFORT_READ
+                ) {
+                  const { effort } = frame.message;
+                  if (
+                    db.noteInstanceEffort(
+                      message.instanceId,
+                      isEffortLevel(effort) ? effort : EFFORT_NONE
+                    )
+                  ) {
+                    publishInstances(message.machineId);
+                  }
+                  break;
+                }
                 observeTurn(message.instanceId, frame);
               }
               if (message.requestId && kind === "permission_request") {
@@ -9217,7 +9229,6 @@ export const createServer = ({
                   kind: peekKind(message.payload),
                   permissionMode: peek(message.payload, "permissionMode"),
                   model: peek(message.payload, "model"),
-                  effort: peek(message.payload, "effort"),
                   ...peekParent(message.payload),
                 });
                 // A conversation that starts here: its first turn is its name.

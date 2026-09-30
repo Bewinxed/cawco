@@ -4,6 +4,7 @@
 
 <script lang="ts">
   import type { EffortLevel, HarnessKind, PermissionMode } from "@whiffle/core";
+  import { EFFORT_NONE, isEffortLevel } from "@whiffle/core";
   import { onDestroy, untrack } from "svelte";
   import { cubicOut } from "svelte/easing";
   import { MediaQuery } from "svelte/reactivity";
@@ -29,7 +30,11 @@
   import ModelSection from "../spawn/ModelSection.svelte";
   import { modelName } from "../spawn/model-entries";
   import NsPopover from "../spawn/NsPopover.svelte";
-  import ToolChips from "../spawn/ToolChips.svelte";
+  import ToolChips, {
+    type EffortOff,
+    effortNotExposed,
+    NO_EFFORT_MODEL,
+  } from "../spawn/ToolChips.svelte";
   import "../spawn/ns-theme.css";
   import SessionStatus from "./SessionStatus.svelte";
   import { contextOf } from "./workspace.svelte";
@@ -86,6 +91,33 @@
   const efforts = $derived(
     report?.capabilities.effort ? (modelInfo?.supportedEffortLevels ?? []) : []
   );
+  /**
+   * Why the effort chip shows no level, when it shows none: the harness has no
+   * effort, the session sends none, or its reading has not landed yet.
+   */
+  const effortOff = $derived.by((): EffortOff | null => {
+    if (harness && report?.capabilities.effort === false) {
+      return effortNotExposed(harness);
+    }
+    const effort = session?.effort ?? null;
+    if (effort === EFFORT_NONE) {
+      return {
+        label: "No effort",
+        reason: efforts.length
+          ? "Effort is off for this session"
+          : NO_EFFORT_MODEL.reason,
+      };
+    }
+    if (effort === null) {
+      return editable
+        ? { label: "Effort…", reason: "Reading the session's effort" }
+        : {
+            label: "Effort unknown",
+            reason: "Effort is read while the session runs",
+          };
+    }
+    return null;
+  });
   const modes = $derived(
     PERMISSION_MODES.filter((mode) =>
       report?.capabilities.permissionModes.includes(mode.value)
@@ -444,7 +476,7 @@
               id="details-model"
               onchange={(value) => { modelOpen = value; }}
               open={modelOpen}
-              triggerClass="ns-chip-btn tool"
+              triggerClass="ns-chip-btn tool model-chip"
               width={360}
             >
               {#snippet trigger()}
@@ -465,7 +497,9 @@
               </div>
             </NsPopover>
           {:else}
-            <span class="ns-chip-btn tool static">{@render modelChip()}</span>
+            <span class="ns-chip-btn tool static model-chip"
+              >{@render modelChip()}</span
+            >
           {/if}
           <ToolChips
             closeOnCommit
@@ -473,7 +507,8 @@
             readonly={!editable}
             tools={{
             efforts,
-            effort: session?.effort ?? null,
+            effort: isEffortLevel(session?.effort) ? session.effort : null,
+            effortOff,
             oneffort: changeEffort,
             modes: modes.map(mode => ({ value: mode.value, disabled: !editable || pending('permission') })),
             permission: shownPermission,
@@ -667,12 +702,18 @@
     border-top: 1px solid var(--border-hairline);
     padding: var(--space-3) var(--space-5);
   }
-  /* Model, effort and permission on one line, wrapping between chips. */
+  /* Model, effort and permission on one line, never wrapping: the model chip
+     gives up room (its name ellipsized), effort and permission keep theirs. */
   .settings {
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     align-items: center;
     gap: 6px;
+    min-width: 0;
+  }
+  .settings :global(.model-chip) {
+    flex: 0 1 auto;
+    min-width: 0;
   }
   .settings :global(.ns-chip-btn) {
     height: 28px;

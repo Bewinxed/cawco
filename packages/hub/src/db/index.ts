@@ -17,6 +17,7 @@ import type {
   Rule,
   RuleState,
   RuleStats,
+  SessionEffort,
   SessionTooling,
   SkillFile,
   SupervisorEvent,
@@ -465,6 +466,12 @@ export interface DbShape {
    */
   readonly noteDerivedTitle: (id: string, derivedTitle: string) => boolean;
   /**
+   * The effort the session's agent read back from its harness (`EFFORT_READ`).
+   * Returns whether the row moved, so a reading repeated at every turn's end
+   * does not re-publish the board.
+   */
+  readonly noteInstanceEffort: (id: string, effort: SessionEffort) => boolean;
+  /**
    * The SDK session an `init` frame named, so the row can be read back from —
    * with the directory it really opened in, which is the agent's word on where
    * the spawn's `cwd` resolved to, and the MCP servers and tools it announced
@@ -501,7 +508,6 @@ export interface DbShape {
     kind: InstanceKind;
     permissionMode?: string;
     model?: string;
-    effort?: string;
     /** `false` makes the row a leaf delegate; absent leaves the column alone. */
     canDelegate?: boolean;
     workflowRunId?: string;
@@ -511,8 +517,9 @@ export interface DbShape {
   }) => void;
   /**
    * The fields a dashboard may move on a live row: "Keep" — a side quest that
-   * earned its place stops being treated as scratch — and the three settings the
-   * user keeps changing on a session that is already running. Also where a
+   * earned its place stops being treated as scratch — and the model and
+   * permission mode the session confirmed (its effort is the agent's reading,
+   * {@link DbShape.noteInstanceEffort}). Also where a
    * delegate's session takes on a follow-up: its new work item, and the
    * session that delegated it.
    */
@@ -522,7 +529,6 @@ export interface DbShape {
       kind?: InstanceKind;
       permissionMode?: string;
       model?: string;
-      effort?: string;
       workItemId?: string;
       parentInstanceId?: string;
     }
@@ -1468,7 +1474,6 @@ const make = (path: string): DbShape => {
       kind,
       permissionMode,
       model,
-      effort,
       canDelegate,
       workflowRunId,
       workflowStepId,
@@ -1518,7 +1523,6 @@ const make = (path: string): DbShape => {
           kind,
           permissionMode,
           model,
-          effort,
           canDelegate,
           workflowRunId,
           workflowStepId,
@@ -1543,7 +1547,6 @@ const make = (path: string): DbShape => {
             kind,
             ...(permissionMode ? { permissionMode } : {}),
             ...(model ? { model } : {}),
-            ...(effort ? { effort } : {}),
             // Presence, not truth: a leaf's `false` has to land.
             ...(canDelegate === undefined ? {} : { canDelegate }),
             ...(workflowRunId ? { workflowRunId } : {}),
@@ -1618,6 +1621,19 @@ const make = (path: string): DbShape => {
         .where(eq(instances.id, id))
         .returning()
         .get(),
+    // `updatedAt` deliberately untouched: a reading is not the session moving.
+    noteInstanceEffort: (id, effort) =>
+      db
+        .update(instances)
+        .set({ effort })
+        .where(
+          and(
+            eq(instances.id, id),
+            or(isNull(instances.effort), ne(instances.effort, effort))
+          )
+        )
+        .returning({ id: instances.id })
+        .all().length > 0,
     noteInstanceSession: (id, sessionId, cwd, harness, tooling) => {
       // A harness key naming the row itself is confusion, never identity: hub
       // ids are hub-minted, harness sids are harness-minted, and the two only

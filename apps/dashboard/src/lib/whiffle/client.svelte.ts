@@ -27,6 +27,7 @@ import type {
   PreviewSource,
   SendPayload,
   SendRecord,
+  SessionEffort,
   SessionMessage,
   SessionPulse,
   SessionTooling,
@@ -42,6 +43,7 @@ import {
   CONTROL_RELOAD_SKILLS,
   CONTROL_SUPPORTED_COMMANDS,
   classifyCommand,
+  isEffortLevel,
   RESOLVE_PERMISSION,
   WHIFFLE_SCRATCH_TAG,
 } from "@whiffle/core";
@@ -306,12 +308,11 @@ export interface SessionState {
   currentTool: ToolGlance | null;
   cwd: string;
   /**
-   * How hard that model thinks. Learnt the same way with one difference that
-   * matters: no `init` reports effort back, so nothing ever corrects this — it
-   * is the last level asked for, and `null` means nobody has asked, not that the
-   * session is running at the API default.
+   * How hard that model thinks: what the session actually sends, as its agent
+   * read it back and the hub wrote it on the row — a level, or `none` when it
+   * sends no effort. `null` until the first reading lands.
    */
-  effort: EffortLevel | null;
+  effort: SessionEffort | null;
   /** Which harness owns {@link sessionId} — what a resume and a catalog read route on. */
   harness: HarnessKind;
   /**
@@ -984,10 +985,17 @@ function adoptSettings(target: SessionState, row: InstanceRow): void {
   if (target.model === null && row.model) {
     target.model = row.model;
   }
-  // The row is the *only* source for effort — no init carries it — so this is
-  // not a blank being filled ahead of the session's own word, it is the record.
-  if (target.effort === null && row.effort) {
-    target.effort = row.effort as EffortLevel;
+  // Effort on the row is the agent's reading of what the session sends — its
+  // own word, so it replaces what this view held rather than filling a blank.
+  // Held back only while a switch made here is still on its way, whose
+  // reading follows it.
+  const switching = latestCommandFor(target.instanceId, "set-effort");
+  if (
+    row.effort &&
+    switching?.stage !== "submitted" &&
+    switching?.stage !== "accepted"
+  ) {
+    target.effort = row.effort;
   }
 }
 
@@ -1001,7 +1009,6 @@ async function persistSettings(
   settings: {
     permissionMode?: PermissionMode;
     model?: string;
-    effort?: EffortLevel;
   }
 ): Promise<void> {
   const row = instanceIndex.byId.get(instanceId);
@@ -1018,9 +1025,6 @@ async function persistSettings(
   }
   if (settings.model && settings.model !== row.model) {
     patch.model = settings.model;
-  }
-  if (settings.effort && settings.effort !== row.effort) {
-    patch.effort = settings.effort;
   }
   if (Object.keys(patch).length === 0) {
     return;
@@ -2942,12 +2946,11 @@ function streamEffectsFor<K extends CommandKind>(
         submitted: () => {
           target.effort = effort;
         },
+        // A switch that lands is followed by the agent's reading of it, which
+        // the hub writes on the row; only a refused one is undone here.
         settled: (stage) => {
           if (stage === "failed") {
             target.effort = previous;
-          } else {
-            // biome-ignore lint/complexity/noVoid: fire-and-forget — the local state already switched, this just persists it
-            void persistSettings(instanceId, { effort });
           }
         },
       };
@@ -3318,7 +3321,6 @@ function start({
   // What the form chose, so the header shows it during the wait for the first
   // init — which then corrects it to whatever the harness resolved it to.
   created.model = spawn.model ?? null;
-  created.effort = spawn.effort ?? null;
   created.scratch = Boolean(spawn.scratch);
   return created;
 }
@@ -3574,9 +3576,7 @@ export async function ensureAlive(
         row?.permissionMode ??
         undefined) as PermissionMode | undefined,
       model: target.model ?? row?.model ?? undefined,
-      effort: (target.effort ?? row?.effort ?? undefined) as
-        | EffortLevel
-        | undefined,
+      effort: effortToResend(target.effort ?? row?.effort),
       requestId,
     };
     target.relaunching = true;
@@ -4807,40 +4807,14 @@ export async function setModel(
 }
 
 /**
- * Changes how hard the session thinks, from the next turn on. Awaited like the
- * model and the permission mode, and for the same reason — but with one more:
- * the row is the only record effort has, so a switch the machine refused must
- * not be written down as one it took.
+ * The effort a new process for this session is started at: the level it was
+ * sending, and nothing when it sent none or was never read — the harness then
+ * starts it on the model's own default.
  */
-export async function setEffort(
-  instanceId: string,
-  machineId: string,
-  effort: EffortLevel
-): Promise<void> {
-  // Switching a setting on a session whose process died must not fail:
-  // revive it first, then apply.
-  await ensureAlive(instanceId, machineId);
-  const target = session(instanceId);
-  const previous = target.effort;
-  target.effort = effort;
-
-  const requestId = newId();
-  const payload: ControlPayload = {
-    instanceId,
-    requestId,
-    method: "setEffort",
-    args: [effort],
-  };
-  try {
-    await ask<void>(requestId, "setEffort", CONTROL_TIMEOUT_MS, () =>
-      send({ verb: "control", machineId, instanceId, requestId, payload })
-    );
-  } catch (error) {
-    target.effort = previous;
-    throw error;
-  }
-  // biome-ignore lint/complexity/noVoid: fire-and-forget — the daemon already took it, this just persists it
-  void persistSettings(instanceId, { effort });
+function effortToResend(
+  effort: SessionEffort | null | undefined
+): EffortLevel | undefined {
+  return isEffortLevel(effort) ? effort : undefined;
 }
 
 /**
@@ -4877,7 +4851,7 @@ export async function relaunchSession(
     // and the level it was thinking at both carry over — the spawn is the row's
     // new word on all three.
     model: target.model ?? undefined,
-    effort: target.effort ?? undefined,
+    effort: effortToResend(target.effort),
     requestId,
   };
 
@@ -5032,7 +5006,7 @@ export async function editAndResend(
     scratch: target.scratch ? {} : undefined,
     permissionMode: target.permissionMode ?? undefined,
     model: target.model ?? undefined,
-    effort: target.effort ?? undefined,
+    effort: effortToResend(target.effort),
     requestId,
   };
 

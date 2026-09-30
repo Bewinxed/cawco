@@ -18,6 +18,7 @@ import type {
   RuleWatch,
   SendMode,
   SendState,
+  SessionEffort,
   SessionTooling,
   SkillFile,
   ToolStatus,
@@ -258,11 +259,12 @@ export const instances = sqliteTable("instances", {
   permissionMode: text("permission_mode"),
   model: text("model"),
   /**
-   * The third: how hard that model thinks. No `init` reports it back, so this
-   * column is the only place it is written down — and what a restart reads to
-   * hand the session back at the level it was working at.
+   * The third: how hard that model thinks, as the session's agent last read it
+   * back from the harness (`EFFORT_READ`) — a level, or `none` when the session
+   * sends no effort. Null until the first reading. A restart hands a level back
+   * to the new process, so it keeps working at the one it was on.
    */
-  effort: text("effort"),
+  effort: text("effort").$type<SessionEffort>(),
   /**
    * Whether the session may delegate or start sessions of its own. `false` on a
    * leaf delegate — one spawned with `can_delegate: false`, which is what a

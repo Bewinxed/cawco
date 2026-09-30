@@ -563,11 +563,12 @@ export interface InstanceRow {
    */
   derivedTitle?: string | null;
   /**
-   * The effort level its last spawn or switch asked for. No `init` frame reports
-   * effort back, so unlike its two neighbours this row is the only record of it
-   * — and what a restart has to read to hand the session back as it was.
+   * The effort the session actually sends, as its agent last read it back from
+   * the harness ({@link import("./harness").EFFORT_READ}): a level, `none` when
+   * it sends no effort, null until the first reading lands. A restart hands a
+   * level back to the new process, so it keeps working at the one it was on.
    */
-  effort?: string | null;
+  effort?: import("./harness").SessionEffort | null;
   /** Which harness owns {@link sessionId} — what a resume and a catalog read route on. */
   harness?: string | null;
   /** First-hand custody on the current agent connection, never stored liveness. */

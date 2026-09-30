@@ -70,6 +70,7 @@
   import ProjectChip from "./ProjectChip.svelte";
   import PromptEditor from "./PromptEditor.svelte";
   import SessionFooter from "./SessionFooter.svelte";
+  import { effortNotExposed } from "./ToolChips.svelte";
   import "./ns-theme.css";
 
   let {
@@ -1088,6 +1089,7 @@
             tools={{
             efforts,
             effort: effortShown,
+            effortOff: report?.capabilities.effort === false ? effortNotExposed(harness) : null,
             oneffort: (level) => { effort = level; },
             modes,
             permission: permissionMode,

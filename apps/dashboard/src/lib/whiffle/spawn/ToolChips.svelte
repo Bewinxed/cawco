@@ -1,9 +1,39 @@
 <script lang="ts" module>
-  import type { EffortLevel, PermissionMode } from "@whiffle/core";
+  import type { EffortLevel, HarnessKind, PermissionMode } from "@whiffle/core";
+
+  /** Why the effort chip offers no level, in the chip's words and its title's. */
+  export interface EffortOff {
+    label: string;
+    reason: string;
+  }
+
+  /** A model with no effort scale: nothing to pick, and the chip says so. */
+  export const NO_EFFORT_MODEL: EffortOff = {
+    label: "No effort",
+    reason: "This model has no effort setting",
+  };
+
+  const HARNESS_NAMES: Record<HarnessKind, string> = {
+    claude: "Claude Code",
+    opencode: "OpenCode",
+    pi: "Pi",
+  };
+
+  /** A harness that can neither report nor change effort. */
+  export const effortNotExposed = (harness: HarnessKind): EffortOff => ({
+    label: "Effort n/a",
+    reason: `${HARNESS_NAMES[harness]} doesn't expose effort`,
+  });
 
   /** The run settings that ride on a model: its effort and the session's permission mode. */
   export interface ModelTools {
     effort: EffortLevel | null;
+    /**
+     * Set when the chip cannot show a level: the harness has no effort, the
+     * session sends none, or it has not been read yet. Absent with an empty
+     * {@link efforts} and no {@link effort} reads as {@link NO_EFFORT_MODEL}.
+     */
+    effortOff?: EffortOff | null;
     efforts: EffortLevel[];
     modes: { value: PermissionMode; disabled: boolean; reason?: string }[];
     oneffort: (level: EffortLevel) => void;
@@ -41,6 +71,15 @@
   } = $props();
   let pop = $state<"effort" | "permission" | null>(null);
   const look = $derived(permissionLook(tools.permission ?? ""));
+  /** The effort chip is always there; when it has no level, it says why. */
+  const effortOff = $derived(
+    tools.effortOff ??
+      (tools.efforts.length || tools.effort ? null : NO_EFFORT_MODEL)
+  );
+  /** A scale to pick from, on a chip that can change it. */
+  const effortPicker = $derived(
+    !(readonly || effortOff) && tools.efforts.length > 0
+  );
   /** Apply the level now, but keep the picker open while the chip settles on it. */
   const SETTLE_MS = 260;
   let closeTimer: ReturnType<typeof setTimeout> | undefined;
@@ -58,6 +97,22 @@
   <Tuning style="color:var(--hue-orange-500)" />
   <span class="chip-label level">{tools.effort ?? "Default"}</span>
 {/snippet}
+<!-- The level as plain text, or why there is none: never a picker. -->
+{#snippet effortStatic()}
+  {#if effortOff}
+    <span
+      aria-disabled="true"
+      class={["ns-chip-btn tool off", readonly && "static"]}
+      title={effortOff.reason}
+    >
+      <Tuning style="color:var(--hue-orange-500)" />
+      <span class="chip-label">{effortOff.label}</span>
+      <span class="sr-only">: {effortOff.reason}</span>
+    </span>
+  {:else}
+    <span class="ns-chip-btn tool static">{@render effortChip()}</span>
+  {/if}
+{/snippet}
 {#snippet permissionChip()}
   {@const Icon = look.icon}
   <Icon style={`color:${look.hue}`} />
@@ -68,17 +123,18 @@
 <span class="tool-chips">
   {#if readonly}
     <span class="swap" in:crossIn out:crossOut>
-      {#if tools.efforts.length}
-        <span class="ns-chip-btn tool static">{@render effortChip()}</span>
-      {/if}
+      {@render effortStatic()}
       {#if tools.modes.length}
         <span class="ns-chip-btn tool static">{@render permissionChip()}</span>
       {/if}
     </span>
   {:else}
     <span class="swap" in:crossIn out:crossOut>
+      {#if !effortPicker}
+        {@render effortStatic()}
+      {/if}
       <NsPopoverGroup>
-        {#if tools.efforts.length}
+        {#if effortPicker}
           <NsPopover
             align="end"
             id={`${id}-effort`}
@@ -131,11 +187,26 @@
 </span>
 
 <style>
-  /* The chips keep the gap of the row they sit in. */
+  /* The chips keep the gap of the row they sit in, and never shrink or wrap
+     in it: a row that runs short gives the room up from its other chips. */
   .tool-chips {
     position: relative;
     display: inline-flex;
+    flex: none;
     gap: inherit;
+  }
+  /* Unavailable: the chip's own look, faded as a disabled control is. */
+  .off {
+    cursor: not-allowed;
+    opacity: 0.55;
+  }
+  @media (hover: hover) {
+    .tool-chips .off:hover {
+      background: var(--surface-raised);
+    }
+    .tool-chips .off.static:hover {
+      background: transparent;
+    }
   }
   .swap {
     display: inline-flex;

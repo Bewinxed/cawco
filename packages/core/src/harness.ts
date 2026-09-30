@@ -57,6 +57,29 @@ export const EFFORT_LEVELS: readonly EffortLevel[] = [
   "max",
 ];
 
+/**
+ * The effort a session actually sends, as its instance row records it: a level,
+ * or {@link EFFORT_NONE} when it sends no effort parameter at all (a model
+ * without effort, or effort switched off). A row with no value has not been
+ * read yet.
+ */
+export const EFFORT_NONE = "none";
+export type SessionEffort = EffortLevel | typeof EFFORT_NONE;
+
+/** Whether a stored or wire value is one of the {@link EFFORT_LEVELS}. */
+export const isEffortLevel = (value: unknown): value is EffortLevel =>
+  EFFORT_LEVELS.includes(value as EffortLevel);
+
+/**
+ * The `system` subtype an agent says a session's effort in, read back from the
+ * harness rather than remembered from a request: `effort` is the level the
+ * session will send on its next request, or `null` when it sends none. Said
+ * when the session opens, after every effort or model switch, and at each
+ * turn's end. The hub writes it on the session's row; it never reaches a
+ * screen.
+ */
+export const EFFORT_READ = "effort";
+
 /** A session's own word on what it is doing right now. */
 export type NeutralStatus = "compacting" | "requesting" | null;
 
@@ -639,6 +662,8 @@ export interface NeutralSystemMessage {
   content?: string;
   cwd?: string;
   description?: string;
+  // effort ({@link EFFORT_READ}) — the level the session sends, null for none
+  effort?: EffortLevel | null;
   exit_code?: number;
   fallback_model?: string;
   // held ({@link MESSAGES_HELD}) — the sends the harness now holds

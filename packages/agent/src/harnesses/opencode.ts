@@ -80,6 +80,7 @@ import {
   CONTROL_SET_PERMISSION_MODE,
   CONTROL_SUPPORTED_COMMANDS,
   CONTROL_SUPPORTED_MODELS,
+  EFFORT_READ,
   IMAGE_GENERATION_TIMEOUT_MS,
   MESSAGES_READ,
   MESSAGES_STORED,
@@ -1159,6 +1160,19 @@ export class OpencodeSession implements HarnessSession {
     this.#isConfigGateHeld = isConfigGateHeld;
     this.#workflowStepId = workflowStepId;
     this.#canDelegate = canDelegate;
+  }
+
+  /**
+   * Says the effort this session sends ({@link EFFORT_READ}): the variant every
+   * prompt and command carries, or null when it carries none and the server
+   * answers on the model's own default.
+   */
+  sayEffort(): void {
+    this.#ctx.frame({
+      type: "system",
+      subtype: EFFORT_READ,
+      effort: this.#effort ?? null,
+    });
   }
 
   /**
@@ -2581,6 +2595,7 @@ export class OpencodeSession implements HarnessSession {
           throw new Error(`Unsupported OpenCode effort: ${String(args[0])}`);
         }
         this.#effort = args[0] as EffortLevel;
+        this.sayEffort();
         return undefined;
       case CONTROL_SET_PERMISSION_MODE:
         this.#permissionMode = args[0] as string;
@@ -4151,6 +4166,7 @@ export class OpencodeHarness implements Harness {
         ...(spec.model ? { model: spec.model } : {}),
         ...(spec.permissionMode ? { permissionMode: spec.permissionMode } : {}),
       });
+      session.sayEffort();
 
       // biome-ignore lint/complexity/noVoid: the command prefill must not block attachment
       void session

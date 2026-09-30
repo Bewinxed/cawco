@@ -46,6 +46,8 @@ import type {
 import {
   ASK_USER_QUESTION,
   CONTROL_SET_EFFORT,
+  CONTROL_SET_MODEL,
+  EFFORT_READ,
   INSPECT_CONFIG,
   MARKETPLACE_CATALOG,
   MESSAGES_HELD,
@@ -775,6 +777,43 @@ class ClaudeSession implements HarnessSession {
     }
 
     this.#pump = this.#pumpMessages(ctx, handle, turn);
+    // biome-ignore lint/complexity/noVoid: the reading is said as a frame when it lands; nothing waits for it
+    void this.#readEffort();
+  }
+
+  /**
+   * Says the effort the session will send on its next request
+   * ({@link EFFORT_READ}), read back from the CLI rather than remembered from
+   * a spawn: `get_settings` reports it as `applied.effort`, after env
+   * overrides, session state, org caps and model-support downgrades, and null
+   * when no effort parameter is sent (measured, SDK 0.3.284: a default Opus
+   * 5.5 reads `medium`, Haiku 4.5 `null`; answered before the first turn).
+   * `getSettings` is on the `Query` at runtime but missing from its type.
+   * A CLI that does not report the field says nothing, so the session reads
+   * as not yet known rather than as sending none.
+   */
+  async #readEffort(): Promise<void> {
+    try {
+      const settings = await (
+        this.#handle as unknown as {
+          getSettings: () => Promise<{
+            applied?: { effort?: EffortLevel | null };
+          }>;
+        }
+      ).getSettings();
+      const effort = settings.applied?.effort;
+      if (effort === undefined) {
+        console.warn(
+          `[claude] ${this.instanceId}: get_settings reported no applied.effort`
+        );
+        return;
+      }
+      this.#ctx.frame({ type: "system", subtype: EFFORT_READ, effort });
+    } catch (error) {
+      console.warn(
+        `[claude] ${this.instanceId}: effort read failed: ${String(error)}`
+      );
+    }
   }
 
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the session's whole live-frame pipeline — question dismissal, structured-result folding, busy/failed reporting — one pass per SDK message
@@ -873,6 +912,9 @@ class ClaudeSession implements HarnessSession {
         if (message.type === "result") {
           turn.end();
           ctx.busy(false);
+          // Cheap, and what catches a `/effort` or `/model` run in the turn.
+          // biome-ignore lint/complexity/noVoid: the reading is said as a frame when it lands
+          void this.#readEffort();
         }
         this.#stamp(message);
         ctx.frame(neutral);
@@ -1020,9 +1062,13 @@ class ClaudeSession implements HarnessSession {
     // to any of them, which is exactly a session-scoped switch. `max` is only
     // reachable this way — the persisted setting excludes it.
     if (method === CONTROL_SET_EFFORT) {
-      return await this.#handle.applyFlagSettings({
+      await this.#handle.applyFlagSettings({
         effortLevel: args[0] as EffortLevel,
       });
+      // What the session now sends, which a model's own ceiling can make
+      // lower than what was asked.
+      await this.#readEffort();
+      return undefined;
     }
     const handle = this.#handle as unknown as Record<
       string,
@@ -1031,7 +1077,13 @@ class ClaudeSession implements HarnessSession {
     if (typeof handle[method] !== "function") {
       throw new Error(`unknown control method: ${method}`);
     }
-    return await handle[method](...args);
+    const answer = await handle[method](...args);
+    // A model switch moves the effort with it: onto a model without effort,
+    // or down to the new model's ceiling.
+    if (method === CONTROL_SET_MODEL) {
+      await this.#readEffort();
+    }
+    return answer;
   }
 
   resolvePermission(requestId: string, result: PermissionResult): void {
