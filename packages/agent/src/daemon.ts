@@ -648,6 +648,19 @@ const attach = (
      */
     const heldSpawns: Envelope[] = [];
     let awaitingRegisterAck = true;
+    /**
+     * WHAT IS SENT TO A SESSION WHILE ITS CUSTODY IS TAKEN WAITS FOR IT.
+     *
+     * A held spawn names a session this daemon is about to attach to or start,
+     * and until that settles the supervisor holds nothing under its id. A send
+     * the hub routed meanwhile (a delegate's report to its parent, an
+     * operator's message) failed `no session` and was dropped, though the
+     * session was attached seconds later: 19:48:13 send failed, 19:48:29
+     * attached. So every envelope for a held session waits here, in order, and
+     * goes to the supervisor after the attach or the spawn it was waiting on.
+     */
+    const custodyIds = new Set<string>();
+    const custodyWaiting: Envelope[] = [];
 
     const takeCustody = (ackPayload: unknown, spawns: Envelope[]): void => {
       const named = spawns.map((envelope) =>
@@ -696,6 +709,10 @@ const attach = (
               supervisor.dispatch(envelope);
             }
           }
+          custodyIds.clear();
+          for (const envelope of custodyWaiting.splice(0)) {
+            supervisor.dispatch(envelope);
+          }
         });
     };
 
@@ -713,8 +730,17 @@ const attach = (
           adoptable(envelope.payload as SpawnPayload | undefined)
         ) {
           heldSpawns.push(envelope);
+          custodyIds.add((envelope.payload as SpawnPayload).instanceId);
           return;
         }
+      }
+      if (
+        envelope.verb !== "spawn" &&
+        envelope.instanceId &&
+        custodyIds.has(envelope.instanceId)
+      ) {
+        custodyWaiting.push(envelope);
+        return;
       }
       supervisor.dispatch(envelope);
     });

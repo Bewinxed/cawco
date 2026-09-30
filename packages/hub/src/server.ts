@@ -9049,15 +9049,14 @@ export const createServer = ({
                   peek(message.payload, "message") ?? "the session failed";
                 turnWaiters.get(message.instanceId)?.reject(new Error(reason));
                 db.failInstance(message.instanceId, reason);
-                // A work item whose session never started failed, and its
+                // A live work item whose session never started failed, and its
                 // parent hears why rather than waiting on a report forever.
                 const [unstarted] = db.getInstancesByIds([message.instanceId]);
-                if (unstarted?.workItemId) {
-                  reportToParent(
-                    unstarted,
-                    `${reason}${workItems.spawnFailed(unstarted, reason)}`,
-                    true
-                  );
+                const line = unstarted?.workItemId
+                  ? workItems.spawnFailed(unstarted, reason)
+                  : undefined;
+                if (unstarted && line !== undefined) {
+                  reportToParent(unstarted, `${reason}${line}`, true);
                 }
                 workflowRuntime.observe(message.instanceId, reason);
                 forgetPending(message.instanceId, reason);

@@ -1244,12 +1244,17 @@ export const createWorkItems = ({
       return `Replaced the checks of ${item.title} (${item.id}): ${checkNames(checks)}. Its session was told.`;
     },
 
-    /** Its session never started: the item failed, and the report says why. */
-    spawnFailed(row: InstanceRow, reason: string): string {
+    /**
+     * Its session never started: a live item failed, and the report line says
+     * why. An item that already ended has reported, so a session of it that
+     * does not come back (a restore after an agent restart, into a workspace
+     * since removed) is news for nobody: no line, and no report.
+     */
+    spawnFailed(row: InstanceRow, reason: string): string | undefined {
       const item = itemOf(row);
-      return item
+      return item && LIVE.has(item.state)
         ? reportLine(finish(item, { state: "failed", error: reason }))
-        : "";
+        : undefined;
     },
 
     /** Its session was stopped while the work was live. */

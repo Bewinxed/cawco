@@ -773,23 +773,41 @@ export class SessionSupervisor {
     return adapter;
   }
 
+  /**
+   * The directory a spawn runs in, made when it may be. Undefined for a probe
+   * that has nothing to find; a throw for a spawn that has nowhere to run.
+   */
+  async #workdir(payload: SpawnPayload): Promise<string | undefined> {
+    const { bootstrap, reattachOnly, workspace } = payload;
+    const workdir = bootstrap
+      ? await this.#clone(bootstrap)
+      : expandHome(payload.cwd);
+    // A workspace's directory is its clone: one that is gone was removed
+    // after its work landed, and an empty folder made in its place would be
+    // a session resumed into nothing.
+    if (!(bootstrap || reattachOnly || workspace)) {
+      await mkdir(workdir, { recursive: true });
+    }
+    if (await isDirectory(workdir)) {
+      return workdir;
+    }
+    // A probe for a turn a lost handle may still be running finds nothing
+    // where there is no directory, and says nothing, as it does when the
+    // server holds no such turn: the hub left the row's history alone until
+    // something was found, and a probe is not a spawn to fail.
+    if (reattachOnly) {
+      return undefined;
+    }
+    throw new Error(`working directory does not exist: ${workdir}`);
+  }
+
   async #spawn(payload: SpawnPayload): Promise<void> {
-    const {
-      instanceId,
-      cwd,
-      harness: kind,
-      scratch,
-      bootstrap,
-      requestId: ack,
-    } = payload;
+    const { instanceId, cwd, harness: kind, scratch, requestId: ack } = payload;
     const adapter = this.#adapter(kind);
     try {
-      let workdir = bootstrap ? await this.#clone(bootstrap) : expandHome(cwd);
-      if (!(bootstrap || payload.reattachOnly)) {
-        await mkdir(workdir, { recursive: true });
-      }
-      if (!(await isDirectory(workdir))) {
-        throw new Error(`working directory does not exist: ${workdir}`);
+      let workdir = await this.#workdir(payload);
+      if (workdir === undefined) {
+        return;
       }
       // A relaunch stays in the checkout the side quest has been working in.
       const cut = this.#worktrees.get(instanceId);
