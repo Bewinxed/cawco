@@ -1430,8 +1430,8 @@
           placeholder={hint}
           role="combobox"
           bind:this={field}
-          class:cue-bottom={cueBottom}
-          class:cue-top={cueTop}
+          class:cue-bottom={cueBottom && !folded}
+          class:cue-top={cueTop && !folded}
           class:flying={flight !== null}
           class:folding
           bind:clientHeight={fieldHeight}
@@ -1724,7 +1724,7 @@
     white-space: nowrap;
   }
   /* The scroll cue: the edge with text out of sight fades over about a
-     line. A folded draft keeps its own fade (below, later, so it wins). */
+     line. A folded draft has no cue: it keeps its own fade (below). */
   textarea.cue-top {
     mask-image: linear-gradient(to bottom, transparent, #000 1lh);
   }
