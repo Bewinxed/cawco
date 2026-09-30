@@ -193,13 +193,31 @@
   const tabSwitch = (from: string, to: string) =>
     from !== to && leaf.tabs.includes(from) && shownTabs.includes(to);
 
+  /**
+   * Which way the last switch went along the strip: 1 to a tab on the
+   * right, -1 to one on the left, 0 when either end is not on it. Read off
+   * the strip as it was, else as it is, and set before the switch renders,
+   * so the composer handed the new draft in that same pass knows the side.
+   */
+  let switchDir = $state(0);
+
   // Before the switch renders, so what the settle paints is decided in the
   // same pass as the switch itself and no pane is revealed and hidden again.
   $effect.pre(() => {
     const id = viewId;
     untrack(() => {
-      if (swipeable && shownId && id && tabSwitch(shownId, id)) {
-        swipe.prepare(shownId, id);
+      const from = shownId;
+      if (!(from && id) || from === id) {
+        return;
+      }
+      const order = [shownTabs, leaf.tabs].find(
+        (tabs) => tabs.includes(from) && tabs.includes(id)
+      );
+      switchDir = order
+        ? Math.sign(order.indexOf(id) - order.indexOf(from))
+        : 0;
+      if (swipeable && tabSwitch(from, id)) {
+        swipe.prepare(from, id);
       }
     });
   });
@@ -215,7 +233,6 @@
     let frame = 0;
     untrack(() => {
       const from = shownId;
-      const was = shownTabs;
       const settle = swipeable && tabSwitch(from, id);
       shownId = id;
       shownTabs = tabs;
@@ -226,17 +243,11 @@
         swipe.arrive(from, id);
         return;
       }
-      let order: string[] | null = null;
-      if (was.includes(from) && was.includes(id)) {
-        order = was;
-      } else if (tabs.includes(from) && tabs.includes(id)) {
-        order = tabs;
-      }
       const track = stack;
-      if (!(order && track && motionOk.current)) {
+      const dir = switchDir;
+      if (!(dir && track && motionOk.current)) {
         return;
       }
-      const dir = Math.sign(order.indexOf(id) - order.indexOf(from));
       frame = requestAnimationFrame(() => {
         track
           .querySelector<HTMLElement>(
@@ -382,6 +393,7 @@
         sendError={bound.sendError}
         sending={bound.sending}
         suggest={bound.suggest}
+        {switchDir}
         bind:height={composerHeight}
       />
     </div>

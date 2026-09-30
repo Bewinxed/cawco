@@ -37,6 +37,7 @@
   import { IconClose, IconPlus, IconSend, IconStop } from "$lib/icons";
   import { autosize } from "$lib/whiffle/motion/autosize.svelte";
   import {
+    CURVE,
     dur,
     ease,
     easeDrawer,
@@ -82,6 +83,7 @@
     leading,
     suggest,
     delegatesOf,
+    switchDir = 0,
   }: {
     /**
      * The conversation's half-written message. The composer draws it and
@@ -148,6 +150,12 @@
      * on surfaces with no session behind them.
      */
     delegatesOf?: string;
+    /**
+     * Which way the tab strip moved when this composer was last handed
+     * another conversation's draft: 1 to a tab on the right, -1 to one on
+     * the left, 0 where there is no strip or no known side.
+     */
+    switchDir?: number;
   } = $props();
 
   $effect(() => {
@@ -417,6 +425,123 @@
       caret = draft.text.length;
     });
   });
+
+  /**
+   * Another conversation's words take the field's place the way its
+   * transcript does: the words that stood there slide 16px away from the
+   * incoming tab's side as they fade, and the new ones slide in from that
+   * side and fade up, typed out so the last character lands as the field's
+   * height glide ends (its own transition, on the same curve). Both are
+   * drawn on an overlay laid over the field's text box, each laid out as its
+   * full text with the part not yet typed clear, so every line already
+   * stands where the field will put it and nothing moves vertically. The
+   * field keeps its layout, height tween and focus underneath, its own text
+   * clear. A switch mid-flight sends off what is on screen, from where it
+   * is; the text changing in place (typing, a send, a chip) lands it at once.
+   */
+  interface Flight {
+    dir: number;
+    /** Where the words leaving stand as they start to go. */
+    from: { transform: string; opacity: string };
+    /** The words leaving, and the part of them that was never typed. */
+    out: string;
+    outRest: string;
+    text: string;
+  }
+  const FLIGHT_PX = 16;
+  let flight = $state<Flight | null>(null);
+  let typed = $state("");
+  let flightOut = $state<HTMLElement>();
+  let flightIn = $state<HTMLElement>();
+  let flightFrame = 0;
+  /** The text the field last showed, and whose; undefined until it has shown one. */
+  let shown: string | undefined;
+  let shownDraft: ComposerDraft | undefined;
+
+  /** The field's height transition, in the unit the stylesheet wrote it in. */
+  function heightMs(node: HTMLElement): number {
+    const style = getComputedStyle(node);
+    const props = style.transitionProperty.split(",").map((p) => p.trim());
+    const durations = style.transitionDuration.split(",").map((d) => d.trim());
+    const at = props.findIndex((p) => p === "height" || p === "all");
+    if (at < 0) {
+      return 0;
+    }
+    const token = durations[at % durations.length];
+    const value = Number.parseFloat(token);
+    return token.endsWith("ms") ? value : value * 1000;
+  }
+
+  function endFlight(): void {
+    cancelAnimationFrame(flightFrame);
+    flight = null;
+  }
+
+  function fly(from: string, to: string, dir: number): void {
+    cancelAnimationFrame(flightFrame);
+    const was = flight;
+    let start = { transform: "none", opacity: "1" };
+    let out = from;
+    let outRest = "";
+    if (was && flightIn) {
+      const style = getComputedStyle(flightIn);
+      start = { transform: style.transform, opacity: style.opacity };
+      out = typed;
+      outRest = was.text.slice(typed.length);
+    }
+    for (const node of [flightOut, flightIn]) {
+      for (const running of node?.getAnimations() ?? []) {
+        running.cancel();
+      }
+    }
+    typed = "";
+    flight = { dir, out, outRest, from: start, text: to };
+    flightFrame = requestAnimationFrame((began) => {
+      const ms = field ? heightMs(field) : 0;
+      const timing = {
+        duration: ms,
+        easing: CURVE.out,
+        fill: "forwards",
+      } as const;
+      flightOut?.animate(
+        [start, { transform: `translateX(${-dir * FLIGHT_PX}px)`, opacity: 0 }],
+        timing
+      );
+      flightIn?.animate(
+        [
+          { transform: `translateX(${dir * FLIGHT_PX}px)`, opacity: 0 },
+          { transform: "none", opacity: 1 },
+        ],
+        timing
+      );
+      const type = (now: number) => {
+        const progress = ms > 0 ? Math.min(1, (now - began) / ms) : 1;
+        typed = to.slice(0, Math.round(to.length * easeOut(progress)));
+        flightFrame = requestAnimationFrame(progress < 1 ? type : endFlight);
+      };
+      type(began);
+    });
+  }
+
+  $effect.pre(() => {
+    const next = draft;
+    const { text } = draft;
+    untrack(() => {
+      if (shown !== undefined && next !== shownDraft) {
+        if (motionOk.current && (flight || text !== shown)) {
+          fly(shown, text, switchDir);
+        } else {
+          endFlight();
+        }
+      } else if (flight && text !== shown) {
+        endFlight();
+      }
+      shown = text;
+      shownDraft = next;
+    });
+  });
+
+  $effect(() => () => cancelAnimationFrame(flightFrame));
 
   /**
    * The `/…` or `@…` the caret sits in the middle of, or null.
@@ -981,13 +1106,34 @@
           placeholder={hint}
           role="combobox"
           bind:this={field}
+          class:flying={flight !== null}
           bind:value={draft.text}
-          {@attach autosize(
-          () => draft.text,
-          () => draft
-        )}
+          {@attach autosize(() => draft.text)}
           {@attach fitHint}
         ></textarea>
+        {#if flight}
+          <!-- Each layer is its text and, drawn clear after it, the rest of
+               the text it will be (`data-rest`), so it lays out whole. The
+               trailing zero-width space holds a final empty line open, as
+               the field does. -->
+          <span aria-hidden="true" class="flight">
+            <span
+              class="flight-text"
+              data-rest="{flight.outRest}&#8203;"
+              bind:this={flightOut}
+              style:opacity={flight.from.opacity}
+              style:transform={flight.from.transform}
+              >{flight.out}</span
+            >
+            <span
+              class="flight-text"
+              data-rest="{flight.text.slice(typed.length)}&#8203;"
+              bind:this={flightIn}
+              style:opacity="0"
+              >{typed}</span
+            >
+          </span>
+        {/if}
       </label>
 
       <div class="ctrls">
@@ -1010,6 +1156,7 @@
           disabled={!(busy || sending || draft.hasContent)}
           onclick={whileIdle(() => sending, onaction)}
           type="button"
+          class:working={busy && !sending}
         >
           <!-- The one control that changes meaning mid-turn. `{#key}` re-creates
              the glyph on every flip, so BOTH directions of the swap animate in;
@@ -1136,9 +1283,49 @@
     box-shadow: var(--shadow-tile);
   }
   .field {
+    position: relative;
     display: flex;
     flex: 1 1 auto;
     min-width: 0;
+  }
+  /* One draft handing the field to the next, laid exactly over the field's
+     text box: its padding, face, size, leading and wrapping. Both texts
+     stand on the box's foot, where the field's fitted text ends, and clip
+     to its top as it glides; sideways they travel past it. The field under
+     it keeps its box with its text, hint and caret clear. */
+  .flight {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: unsafe end;
+    padding: calc((var(--cin-ctl) - 1lh) / 2) 0;
+    font-family: var(--font-body);
+    font-size: 16px;
+    line-height: var(--leading-ui);
+    color: var(--ink-strong);
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    overflow-x: visible;
+    overflow-y: clip;
+    pointer-events: none;
+  }
+  .flight-text {
+    grid-area: 1 / 1;
+
+    &::after {
+      content: attr(data-rest);
+      color: transparent;
+    }
+  }
+  textarea.flying {
+    color: transparent;
+    caret-color: transparent;
+
+    &::placeholder {
+      color: transparent;
+    }
   }
   /* Above the label's .touch-hit area, which covers the field: a press on
      the text lands on the textarea itself, so iOS's hold-to-select and its
@@ -1324,6 +1511,7 @@
   }
   /* The flat brand stays under the gradient: `.stop:disabled` drops the image. */
   .stop {
+    position: relative;
     border: 0;
     background-color: var(--brand-solid);
     background-image: var(--action-surface);
@@ -1355,6 +1543,47 @@
       opacity: 1;
       transform: scale(1);
       filter: blur(0);
+    }
+  }
+  /* While the agent works, a 2px arc runs round Stop, 3px out and concentric
+     with it: a third of a turn in the brand colour, fading along its tail.
+     It is a conic gradient masked to a band, turned by its angle, so it
+     keeps the button's own rounding. It fades in and out over --dur-control;
+     idle, it holds still where it stopped. Reduced motion draws no ring:
+     the stop glyph says the agent is working. */
+  @property --ring-a {
+    syntax: "<angle>";
+    inherits: false;
+    initial-value: 0deg;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .stop::before {
+      content: "";
+      position: absolute;
+      inset: -3px;
+      padding: 2px;
+      border-radius: calc(var(--radius-lg) - var(--cin-pad) + 3px);
+      background: conic-gradient(
+        from var(--ring-a),
+        transparent 0 70%,
+        var(--brand-solid)
+      );
+      mask:
+        linear-gradient(#000 0 0) content-box exclude,
+        linear-gradient(#000 0 0);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity var(--dur-control) var(--ease-out);
+      animation: ring-turn 1.2s linear infinite paused;
+    }
+    .stop.working::before {
+      opacity: 1;
+      animation-play-state: running;
+    }
+  }
+  @keyframes ring-turn {
+    to {
+      --ring-a: 360deg;
     }
   }
   /* Optical centring: the send plane's mass sits low-left of its box, so the
