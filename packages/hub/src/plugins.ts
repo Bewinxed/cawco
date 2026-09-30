@@ -25,9 +25,10 @@
  * own `installed_plugins.json` — but it no longer fetches anything.
  */
 
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, normalize } from "node:path";
+import { fileURLToPath } from "node:url";
 import type { FleetPluginPayload, MarketplacePluginInfo } from "@whiffle/core";
 import { downloadRepo, get, readTree, unpack } from "./skills";
 
@@ -60,14 +61,39 @@ interface Manifest {
 }
 
 /**
- * The marketplace repo, downloaded. Sources the hub understands are the ones a
- * marketplace is actually declared with: an `owner/repo` slug and a git URL.
+ * A marketplace linked from a directory on the hub's own disk: an absolute
+ * path or a `file://` URL. It is read where it stands, on every resolve, so a
+ * refresh picks up whatever the directory holds now. The hub reads it and sync
+ * carries the bytes, so a machine that has no such directory still gets them.
+ */
+const localRoot = async (source: string): Promise<string | undefined> => {
+  const path = source.startsWith("file://") ? fileURLToPath(source) : source;
+  if (!isAbsolute(path)) {
+    return undefined;
+  }
+  const found = await stat(path).catch(() => undefined);
+  if (!found?.isDirectory()) {
+    throw new Error(`${path} is not a directory on the hub`);
+  }
+  return normalize(path);
+};
+
+/**
+ * The marketplace, as a directory. Sources the hub understands are the ones
+ * `claude plugin marketplace add` takes: an `owner/repo` slug, a git URL, and
+ * a local directory (absolute, or `file://`, since the hub has no working
+ * directory a relative path could mean). The manifest is read from the root,
+ * `.claude-plugin/marketplace.json`, as Claude Code reads it.
  */
 const marketplaceRoot = async (
   source: string,
   work: string
 ): Promise<string> => {
   const trimmed = source.trim();
+  const local = await localRoot(trimmed);
+  if (local) {
+    return local;
+  }
   const slug = GITHUB_SLUG.exec(trimmed);
   if (slug?.[1] && slug[2]) {
     return await downloadRepo(slug[1], slug[2], slug[3], work);
@@ -91,7 +117,8 @@ const marketplaceRoot = async (
     return await unpack(response, work, url.pathname);
   }
   throw new Error(
-    `${source} is not a marketplace source whiffle knows how to fetch`
+    `${source} is not a marketplace source whiffle knows how to fetch — ` +
+      "give owner/repo, a git URL, or an absolute directory path on the hub"
   );
 };
 

@@ -62,9 +62,6 @@ const FETCH_TIMEOUT_MS = 60_000;
 const MAX_FILES = 512;
 const MAX_BYTES = 8 * 1024 * 1024;
 
-/** Refs codeload takes for a source that pinned none, in the order they are tried. */
-const REFS = ["HEAD", "main", "master"];
-
 /**
  * Where a repo keeps its skills, in the order the skills CLI looks — except
  * that `.claude/skills` comes before `.agents/skills`: a repo that ships one
@@ -182,6 +179,15 @@ export const unpack = async (
 ): Promise<string> => {
   const archive = join(work, "archive");
   await Bun.write(archive, response);
+  return await extract(archive, work, name);
+};
+
+/** An archive already on disk, extracted, with its one wrapping directory stripped. */
+const extract = async (
+  archive: string,
+  work: string,
+  name: string
+): Promise<string> => {
   const into = join(work, "src");
   await mkdir(into, { recursive: true });
   if (ZIP_NAME_RE.test(name)) {
@@ -198,36 +204,17 @@ export const unpack = async (
 };
 
 /**
- * A GitHub repo's tarball. A source that pinned no ref takes what codeload will
- * give it — `HEAD` is a ref it accepts, so the usual case costs no extra call.
- */
-const repoRoot = async (
-  source: SkillSource & { kind: "repo" },
-  work: string
-): Promise<string> => {
-  const refs = source.ref ? [source.ref] : REFS;
-  for (const ref of refs) {
-    const url = `https://codeload.github.com/${source.owner}/${source.repo}/tar.gz/${ref}`;
-    // biome-ignore lint/performance/noAwaitInLoops: refs are tried in order and the loop stops at the first that resolves; a later ref is only fetched once an earlier one has answered not-ok.
-    const response = await get(url);
-    if (response.ok) {
-      return await unpack(response, work, "archive.tar.gz");
-    }
-    await response.body?.cancel();
-  }
-  throw new Error(
-    `github.com/${describe(source)} has no ${refs.join(" or ")} to download`
-  );
-};
-
-/**
- * Any GitHub repo's tarball, extracted — the same anonymous `codeload` fetch
- * {@link repoRoot} makes, without a {@link SkillSource} to describe it.
+ * A GitHub repo's tarball, extracted, fetched through the hub's own `gh`.
  *
- * Anonymous is the point. A public repository needs no account to read, so the
- * hub reads it with none: no `gh`, no ssh key, no credential that can expire on
- * one machine and not another. It is also why this happens HERE — resolving
- * once at the hub means a machine never needs reachability to github at all.
+ * `gh` because a fleet's plugins and skills live in private repositories as
+ * often as public ones, and the hub machine's `gh` login is the credential the
+ * owner already keeps. It is still read HERE, once: a machine never needs
+ * reachability to github or an account of its own, which is what resolving at
+ * the hub is for. A source that pinned no ref takes the repository's real
+ * default branch, as GitHub reports it, rather than a guess at its name.
+ *
+ * No `gh`, or a `gh` that is not logged in, is a failure that says so. There
+ * is no anonymous second attempt: one fetch path, one sentence when it fails.
  */
 export const downloadRepo = async (
   owner: string,
@@ -235,18 +222,23 @@ export const downloadRepo = async (
   ref: string | undefined,
   work: string
 ): Promise<string> => {
-  for (const candidate of ref ? [ref] : REFS) {
-    const url = `https://codeload.github.com/${owner}/${repo}/tar.gz/${candidate}`;
-    // biome-ignore lint/performance/noAwaitInLoops: candidates are tried in order and the loop stops at the first that resolves; a later ref is only fetched once an earlier one has answered not-ok.
-    const response = await get(url);
-    if (response.ok) {
-      return await unpack(response, work, "archive.tar.gz");
+  const slug = `${owner}/${repo}`;
+  const gh = async (args: string[], out?: string): Promise<string> => {
+    const run = out
+      ? await $`gh api ${args} > ${out}`.nothrow().quiet()
+      : await $`gh api ${args}`.nothrow().quiet();
+    if (run.exitCode !== 0) {
+      const why = run.stderr.toString().trim() || `exit ${run.exitCode}`;
+      throw new Error(`gh api ${args.join(" ")} failed for ${slug}: ${why}`);
     }
-    await response.body?.cancel();
-  }
-  throw new Error(
-    `github.com/${owner}/${repo} has no ${ref ?? REFS.join(" or ")} to download`
-  );
+    return run.stdout.toString().trim();
+  };
+
+  const branch =
+    ref ?? (await gh([`repos/${slug}`, "--jq", ".default_branch"]));
+  const archive = join(work, "archive.tar.gz");
+  await gh([`repos/${slug}/tarball/${branch}`], archive);
+  return await extract(archive, work, "archive.tar.gz");
 };
 
 /**
@@ -524,7 +516,7 @@ const fetchSkill = async (
   const root =
     source.kind === "npm"
       ? await npmRoot(source, work)
-      : await repoRoot(source, work);
+      : await downloadRepo(source.owner, source.repo, source.ref, work);
   const picked = await pickSkillDir(root, source);
   return "error" in picked ? picked : await readSkill(picked.dir);
 };
