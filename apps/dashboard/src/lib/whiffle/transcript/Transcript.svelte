@@ -31,7 +31,7 @@
    * genuine arrivals — and blocked-on-you — through a dedicated live region
    * beside the log, never through the virtualized container itself.
    */
-  import { onDestroy, setContext, tick, untrack } from "svelte";
+  import { flushSync, onDestroy, setContext, tick, untrack } from "svelte";
   import { Virtualizer, type VirtualizerHandle } from "virtua/svelte";
   import { browser } from "$app/environment";
   import { describeTool } from "$lib/components/features/tool-cards/descriptors";
@@ -1299,6 +1299,24 @@
   let list = $state<VirtualizerHandle | undefined>();
   /** The box around the list; its first child is virtua's container. */
   let listing = $state<HTMLElement>();
+  /**
+   * The part of a pixel that makes the list a whole number of pixels tall,
+   * laid above its first row. The list is the sum of its rows' measured
+   * heights, which is rarely whole, and a scroll offset is: pinned to the
+   * bottom, the last row stood off the foot by the list's fraction (a row
+   * arriving moved the tail 0.56px). Taken up at the top, where no reader
+   * sees a sub-pixel, it puts the tail on the foot exactly, every time.
+   */
+  let spare = $state(0);
+  function spareOf(): number {
+    const inner = listing?.firstElementChild as HTMLElement | null;
+    const height = Number.parseFloat(inner?.style.height ?? "");
+    if (!Number.isFinite(height)) {
+      return 0;
+    }
+    const off = Math.ceil(height - 0.001) - height;
+    return off < 0.001 ? 0 : off;
+  }
   let atBottom = $state(true);
   /** How many screens from the tail the reader goes before "Jump to latest"
       shows; our own call, no source sets it. */
@@ -1875,6 +1893,11 @@
     // virtua applies what it measured in the microtask behind this call.
     queueMicrotask(() => {
       carrySlides(0);
+      const off = spareOf();
+      if (Math.abs(off - spare) > 0.001) {
+        spare = off;
+        flushSync();
+      }
       if (active && landed && atBottom && !jumping) {
         pinBottom();
       }
@@ -2567,7 +2590,12 @@
   {/if}
 
   <!-- The list's own box: what the pin reads virtua's container off. -->
-  <div class="listing" bind:this={listing} class:shown>
+  <div
+    class="listing"
+    bind:this={listing}
+    style:padding-top={spare ? `${spare}px` : undefined}
+    class:shown
+  >
     <Virtualizer
       {cache}
       data={renderedRows}
@@ -2579,6 +2607,7 @@
       shift={built.shifted}
       sizeOf={(key) => heldSize(String(key))}
       {ssrCount}
+      startMargin={spare}
       bind:this={
         () => list,
         (value) => { list = value as unknown as VirtualizerHandle; }
