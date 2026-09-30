@@ -457,6 +457,11 @@
     outDrop: number;
     outRest: string;
     text: string;
+    /**
+     * The width the field's text wraps at: its client width less its inline
+     * padding, so no scrollbar is counted. Both layers wrap at it.
+     */
+    wrap: number;
   }
   const FLIGHT_PX = 16;
   let flight = $state<Flight | null>(null);
@@ -593,6 +598,20 @@
     return typeof run?.startTime === "number" ? run.startTime + ms : null;
   }
 
+  /**
+   * The width the field's text wraps at. The field keeps its scrollbar's
+   * gutter whether it scrolls or not (its stylesheet), so this is one width
+   * for the words leaving and the words arriving alike.
+   */
+  function wrapOf(node: HTMLTextAreaElement): number {
+    const style = getComputedStyle(node);
+    return (
+      node.clientWidth -
+      Number.parseFloat(style.paddingInlineStart) -
+      Number.parseFloat(style.paddingInlineEnd)
+    );
+  }
+
   function endFlight(): void {
     cancelAnimationFrame(flightFrame);
     flight = null;
@@ -632,6 +651,7 @@
     let outDrop = field
       ? scrollDrop(field.scrollHeight, field.clientHeight, field.scrollTop)
       : 0;
+    const wrap = field ? wrapOf(field) : 0;
     if (was && flightIn) {
       const style = getComputedStyle(flightIn);
       start = { transform: style.transform, opacity: style.opacity };
@@ -646,7 +666,7 @@
     }
     typed = "";
     inDrop = 0;
-    flight = { dir, out, outDrop, outRest, from: start, text: to };
+    flight = { dir, out, outDrop, outRest, from: start, text: to, wrap };
     flightFrame = requestAnimationFrame((began) => {
       // Both are on the page: the overlay rendered with the switch.
       const node = field as HTMLTextAreaElement;
@@ -1390,7 +1410,11 @@
                the text it will be (`data-rest`), so it lays out whole. The
                trailing zero-width space holds a final empty line open, as
                the field does. -->
-          <span aria-hidden="true" class="flight">
+          <span
+            aria-hidden="true"
+            class="flight"
+            style:inline-size="{flight.wrap}px"
+          >
             <span
               class="flight-text"
               data-rest="{flight.outRest}&#8203;"
@@ -1573,7 +1597,8 @@
      with its text, hint and caret clear. */
   .flight {
     position: absolute;
-    inset: 0;
+    inset-block: 0;
+    inset-inline-start: 0;
     z-index: 2;
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -1621,6 +1646,11 @@
        single line sits on the buttons' midline. */
     height: var(--cin-ctl);
     min-height: var(--cin-ctl);
+    /* Where scrollbars take room, the field keeps the room whether it
+       scrolls, fits or is folded, so its text wraps at one width: a draft
+       crossing the ceiling never re-wraps, and the switch overlay and the
+       autosize twin (a copy of the field) wrap where it does. */
+    scrollbar-gutter: stable;
     max-height: 200px;
     padding: calc((var(--cin-ctl) - 1lh) / 2) 0;
     min-width: 0;
