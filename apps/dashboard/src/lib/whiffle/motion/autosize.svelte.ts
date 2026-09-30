@@ -99,7 +99,12 @@ export function autosize(
       natural = twin.scrollHeight + border;
       measured?.(natural);
       const folded = fold(natural);
-      const next = folded ? "" : `${natural}px`;
+      // Set no taller than the ceiling, so the glide runs over the height
+      // the field shows rather than spending its start past the ceiling.
+      const cap =
+        Number.parseFloat(getComputedStyle(node).maxHeight) ||
+        Number.POSITIVE_INFINITY;
+      const next = folded ? "" : `${Math.min(natural, cap)}px`;
       if (node.style.height !== next) {
         node.style.height = next;
       }
