@@ -373,10 +373,10 @@ export function workflowPorts(node: WorkflowNode): string[] {
     case "step":
     case "map":
     case "workflow":
-      return ["out", "fail"];
     case "jev":
-      // A failed call fails the run, as any effect error does.
-      return ["out"];
+      // `fail` is taken when the node's call rejects: a step out of retries,
+      // a failed child run, a Jev error. Unwired, the failure fails the run.
+      return ["out", "fail"];
     case "check":
       return ["pass", "fail"];
     case "branch":
@@ -647,6 +647,24 @@ export function validateWorkflow(
   for (const node of graph.nodes) {
     visit(node.id);
   }
+  /**
+   * `steps.<source>.failure[.message|.kind]`: only where the source's `fail`
+   * edge leads, since only there did the source fail.
+   */
+  const failurePath = (
+    sourceId: string,
+    rest: string[],
+    node: WorkflowNode
+  ): boolean =>
+    sourceId !== node.id &&
+    graph.edges.some(
+      (edge) =>
+        edge.from.node === sourceId &&
+        edge.from.port === "fail" &&
+        reaches(edge.to.node, node.id)
+    ) &&
+    (rest.length === 0 ||
+      (rest.length === 1 && ["message", "kind"].includes(rest[0])));
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: each template namespace has its own structural contract and upstream check.
   const validPath = (path: string, node: WorkflowNode): boolean => {
     const parts = path.replace(ARRAY_PATH, ".$1").split(".");
@@ -670,6 +688,9 @@ export function validateWorkflow(
         (!!starts[0]?.inputs.some((input) => input.name === parts[1]) ||
           !!options.inputNames?.includes(parts[1]))
       );
+    }
+    if (parts[0] === "steps" && parts[2] === "failure") {
+      return failurePath(parts[1], parts.slice(3), node);
     }
     if (parts[0] !== "steps" || parts[2] !== "result") {
       return false;

@@ -204,6 +204,16 @@ function schemaPaths(schema: unknown, path: string): string[] {
 }
 export function templatePaths(graph: WorkflowGraph, nodeId: string): string[] {
   const start = graph.nodes.find((node) => node.kind === "start");
+  const above = upstream(graph, nodeId);
+  const upstreamIds = new Set(above.map((node) => node.id));
+  /** A node failed on the way here only if its `fail` edge leads here. */
+  const failedOnTheWay = (id: string) =>
+    graph.edges.some(
+      (edge) =>
+        edge.from.node === id &&
+        edge.from.port === "fail" &&
+        (edge.to.node === nodeId || upstreamIds.has(edge.to.node))
+    );
   return [
     "workspace",
     "attempt.number",
@@ -213,7 +223,7 @@ export function templatePaths(graph: WorkflowGraph, nodeId: string): string[] {
     ...(start?.kind === "start"
       ? start.inputs.map((input) => `inputs.${input.name}`)
       : []),
-    ...upstream(graph, nodeId).flatMap((node) => {
+    ...above.flatMap((node) => {
       if (node.kind === "step") {
         return schemaPaths(node.outputSchema, `steps.${node.id}.result`);
       }
@@ -222,6 +232,13 @@ export function templatePaths(graph: WorkflowGraph, nodeId: string): string[] {
       }
       return [`steps.${node.id}.result`];
     }),
+    ...above
+      .filter((node) => failedOnTheWay(node.id))
+      .flatMap((node) => [
+        `steps.${node.id}.failure`,
+        `steps.${node.id}.failure.message`,
+        `steps.${node.id}.failure.kind`,
+      ]),
   ];
 }
 

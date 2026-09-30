@@ -79,6 +79,9 @@ const quote = (value: string) => JSON.stringify(value);
 /** A member access that stays readable when the key is a plain identifier. */
 const member = (base: string, key: string) =>
   IDENTIFIER.test(key) ? `${base}.${key}` : `${base}[${quote(key)}]`;
+/** The same access, reading `undefined` through an unset base. */
+const optionalMember = (base: string, key: string) =>
+  IDENTIFIER.test(key) ? `${base}?.${key}` : `${base}?.[${quote(key)}]`;
 
 /**
  * JSON Schema → zod source (§13.6). Deliberately narrow: the shapes the
@@ -280,9 +283,25 @@ const JEV_STATE_HELPER = [
   "};",
 ];
 
+/**
+ * What a failed node leaves for its `fail` edge: the error's message, and its
+ * kind — a StepError's or ChildError's own (`no-result`, `failed`, …), else
+ * the error's name.
+ */
+const FAILURE_HELPER = [
+  "type NodeFailure = { message: string; kind: string };",
+  "const nodeFailure = (error: unknown): NodeFailure => ({",
+  "  message: error instanceof Error ? error.message : String(error),",
+  "  kind: typeof error === 'object' && error !== null && typeof (error as { kind?: unknown }).kind === 'string'",
+  "    ? (error as { kind: string }).kind",
+  "    : error instanceof Error ? error.name : 'Error',",
+  "});",
+];
+
 export function compileWorkflow(graph: WorkflowGraph): CompiledWorkflow {
   const problems: Problem[] = [];
   let usesJev = false;
+  let usesFailure = false;
   const lines: Record<string, [number, number]> = {};
   const add = (message: string, nodeId?: string, edgeId?: string) => {
     problems.push({ message, nodeId, edgeId });
@@ -386,6 +405,16 @@ export function compileWorkflow(graph: WorkflowGraph): CompiledWorkflow {
     const schemas: string[] = [];
     const findingsVars = new Set<string>();
 
+    /**
+     * Whether the node's failure is routed rather than thrown: it has a `fail`
+     * port and an edge leaves it. A node without one fails the run, as before.
+     */
+    const routesFailure = (node: WorkflowNode) =>
+      workflowPorts(node).includes("fail") &&
+      outgoing(node.id).some((edge) => edge.from.port === "fail");
+    /** The variable a routed node's failure is caught into. */
+    const failureOf = (id: string) => `${nameOf(id)}Failure`;
+
     /** Where a node's `steps.<id>.result` lives once the node has run. */
     const resultExpr = (id: string, seen = new Set<string>()): string => {
       const node = nodes.get(id);
@@ -405,17 +434,21 @@ export function compileWorkflow(graph: WorkflowGraph): CompiledWorkflow {
       return nameOf(id);
     };
 
-    /** Applies a dotted path to an expression; `*` maps over an array. */
-    const walk = (base: string, parts: string[]): string => {
+    /**
+     * Applies a dotted path to an expression; `*` maps over an array.
+     * `optional` reads with `?.`: the base may be unset, as a routed node's
+     * result is on the path its failure took.
+     */
+    const walk = (base: string, parts: string[], optional = false): string => {
+      const step = (acc: string, part: string) =>
+        optional ? optionalMember(acc, part) : member(acc, part);
       const star = parts.indexOf("*");
       if (star === -1) {
-        return parts.reduce((acc, part) => member(acc, part), base);
+        return parts.reduce(step, base);
       }
-      const head = parts
-        .slice(0, star)
-        .reduce((acc, part) => member(acc, part), base);
+      const head = parts.slice(0, star).reduce(step, base);
       const tail = walk("entry", parts.slice(star + 1));
-      return `${head}.map((entry) => ${tail})`;
+      return `${head}${optional ? "?." : "."}map((entry) => ${tail})`;
     };
 
     /** `{{path}}` and `when.path` → a TypeScript expression. */
@@ -445,11 +478,24 @@ export function compileWorkflow(graph: WorkflowGraph): CompiledWorkflow {
           parts.slice(1)
         );
       }
+      if (parts[0] === "steps" && parts[2] === "failure") {
+        const source = nodes.get(parts[1]);
+        if (source && routesFailure(source)) {
+          return walk(failureOf(source.id), parts.slice(3), true);
+        }
+        add(`"${path}" names a node whose fail port is not wired.`, node.id);
+        return "undefined";
+      }
       if (parts[0] === "steps" && parts[2] === "result") {
-        return walk(resultExpr(parts[1]), parts.slice(3));
+        const source = nodes.get(parts[1]);
+        return walk(
+          resultExpr(parts[1]),
+          parts.slice(3),
+          !!source && routesFailure(source)
+        );
       }
       add(
-        `A program has no "${path}"; only inputs, step results, map item/index and attempt.gateFindings survive the compile.`,
+        `A program has no "${path}"; only inputs, step results, failures of routed nodes, map item/index and attempt.gateFindings survive the compile.`,
         node.id
       );
       return "undefined";
@@ -472,7 +518,7 @@ export function compileWorkflow(graph: WorkflowGraph): CompiledWorkflow {
         // A whole result is an object, and reads as its JSON, as
         // `renderPrompt` renders it; the findings are already JSON text.
         let rendered = `String(${expr})`;
-        if (path.endsWith(".result")) {
+        if (path.endsWith(".result") || path.endsWith(".failure")) {
           rendered = `JSON.stringify(${expr}, null, 2)`;
         } else if (path === "attempt.gateFindings") {
           rendered = expr;
@@ -716,7 +762,11 @@ export function compileWorkflow(graph: WorkflowGraph): CompiledWorkflow {
           continue;
         }
         openLine(node.id);
-        emitNode(node);
+        if (routesFailure(node)) {
+          emitCaught(node);
+        } else {
+          emitNode(node);
+        }
         closeLine(node.id);
         current = emitRouting(node, context);
       }
@@ -754,6 +804,28 @@ export function compileWorkflow(graph: WorkflowGraph): CompiledWorkflow {
       }
       emitter.indent -= 1;
       emitter.push("});");
+    };
+
+    /**
+     * A node whose `fail` port is wired: its call's rejection — a StepError
+     * after the retries, a ChildError, a failed Jev call — is caught into its
+     * failure variable, and routing takes the fail edge on it. Cleared first,
+     * so a loop's next pass never routes on the last pass's failure.
+     */
+    const emitCaught = (node: WorkflowNode) => {
+      const failure = failureOf(node.id);
+      usesFailure = true;
+      declarations.push(`let ${failure}: NodeFailure | undefined;`);
+      emitter.push(`${failure} = undefined;`);
+      emitter.push("try {");
+      emitter.indent += 1;
+      emitNode(node);
+      emitter.indent -= 1;
+      emitter.push("} catch (error) {");
+      emitter.indent += 1;
+      emitter.push(`${failure} = nodeFailure(error);`);
+      emitter.indent -= 1;
+      emitter.push("}");
     };
 
     const emitNode = (node: WorkflowNode) => {
@@ -890,6 +962,13 @@ export function compileWorkflow(graph: WorkflowGraph): CompiledWorkflow {
         // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: each node kind contributes its own port condition
       ): string => {
         const parts: string[] = [];
+        if (routesFailure(node)) {
+          parts.push(
+            edge.from.port === "fail"
+              ? `${failureOf(node.id)} !== undefined`
+              : `${failureOf(node.id)} === undefined`
+          );
+        }
         if (node.kind === "check") {
           parts.push(
             edge.from.port === "pass"
@@ -1047,6 +1126,7 @@ export function compileWorkflow(graph: WorkflowGraph): CompiledWorkflow {
     ...root.schemas,
     ...(root.schemas.length ? [""] : []),
     ...(usesJev ? [...JEV_STATE_HELPER, ""] : []),
+    ...(usesFailure ? [...FAILURE_HELPER, ""] : []),
     "export default async function (w: Workflow<typeof inputs>) {",
     ...root.declarations.map((line) => `  ${line}`),
   ];
