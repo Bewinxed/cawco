@@ -1,8 +1,8 @@
 import { spawn } from "node:child_process";
 import type { CommandResult } from "@whiffle/core";
 
-/** How much of each stream a result keeps. */
-const TAIL = 4000;
+/** The most a command may write, stdout and stderr together, in bytes. */
+const OUTPUT_LIMIT = 8 * 1024 * 1024;
 
 /** How long a command runs when its caller names no limit. */
 const DEFAULT_TIMEOUT_MS = 300_000;
@@ -29,7 +29,9 @@ export function abandonCommands(): void {
 
 /**
  * `CONTROL_RUN_COMMAND`: runs `cmd` in `cwd` on this machine, killed with its
- * whole process group after `timeoutMs` (exit 124).
+ * whole process group after `timeoutMs` (exit 124). Answers complete stdout
+ * and complete stderr; a command that writes more than {@link OUTPUT_LIMIT}
+ * bytes across both is killed the same way and rejects.
  */
 export function runWorkflowCommand(
   cwd: unknown,
@@ -58,28 +60,45 @@ export function runWorkflowCommand(
     if (pid) {
       live.add(pid);
     }
-    let output = Buffer.alloc(0);
-    let stdout = "";
-    let stderr = "";
+    const stdout: Buffer[] = [];
+    const stderr: Buffer[] = [];
+    let written = 0;
     let expired = false;
-    child.stdout.on("data", (chunk: Buffer) => {
-      output = Buffer.concat([output, chunk]).subarray(-4096);
-      stdout = (stdout + chunk.toString("utf8")).slice(-TAIL);
-    });
-    child.stderr.on("data", (chunk: Buffer) => {
-      output = Buffer.concat([output, chunk]).subarray(-4096);
-      stderr = (stderr + chunk.toString("utf8")).slice(-TAIL);
-    });
+    let overflowed = false;
+    const killGroup = () => {
+      if (child.pid) {
+        try {
+          process.kill(-child.pid, "SIGKILL");
+        } catch (error) {
+          reject(error);
+        }
+      }
+    };
+    const collect = (into: Buffer[]) => (chunk: Buffer) => {
+      if (overflowed) {
+        return;
+      }
+      written += chunk.length;
+      if (written > OUTPUT_LIMIT) {
+        overflowed = true;
+        stdout.length = 0;
+        stderr.length = 0;
+        killGroup();
+        reject(
+          new Error(
+            `Command output passed ${OUTPUT_LIMIT} bytes: ${cmd.slice(0, 200)}`
+          )
+        );
+        return;
+      }
+      into.push(chunk);
+    };
+    child.stdout.on("data", collect(stdout));
+    child.stderr.on("data", collect(stderr));
     const timer = setTimeout(
       () => {
         expired = true;
-        if (child.pid) {
-          try {
-            process.kill(-child.pid, "SIGKILL");
-          } catch (error) {
-            reject(error);
-          }
-        }
+        killGroup();
       },
       typeof timeoutMs === "number" ? timeoutMs : DEFAULT_TIMEOUT_MS
     );
@@ -95,11 +114,13 @@ export function runWorkflowCommand(
       if (pid) {
         live.delete(pid);
       }
+      if (overflowed) {
+        return;
+      }
       resolve({
         exitCode: expired ? 124 : (code ?? 1),
-        output: output.toString("utf8"),
-        stdout,
-        stderr,
+        stdout: Buffer.concat(stdout).toString("utf8"),
+        stderr: Buffer.concat(stderr).toString("utf8"),
       });
     });
   });

@@ -943,18 +943,22 @@ export const CONTROL_WORKSPACE_MIGRATE = "workspaceMigrate";
 /**
  * Runs a shell command on a machine, in a directory, killed with its process
  * group after a limit (exit 124). Args `[cwd, command, timeoutMs?]`; answers
- * {@link CommandResult}. The hub's one way to run something on a machine: a
+ * {@link CommandResult}. A command that writes more than 8 MiB across stdout
+ * and stderr is killed with its process group and the call fails with an
+ * error naming the limit. The hub's one way to run something on a machine: a
  * workflow's `w.exec`, and a work item's acceptance checks.
  */
 export const CONTROL_RUN_COMMAND = "runCommand";
 
-/** What {@link CONTROL_RUN_COMMAND} answers: bounded tails, drained as the command runs. */
+/**
+ * What {@link CONTROL_RUN_COMMAND} answers: both streams complete, each
+ * decoded as UTF-8 once the command has ended. Never truncated: past 8 MiB
+ * across the two, the call fails instead.
+ */
 export interface CommandResult {
   exitCode: number;
-  /** Stdout and stderr interleaved, the last 4,096 bytes. */
-  output: string;
-  /** The last 4,000 characters of stderr. */
+  /** Everything the command wrote to stderr. */
   stderr: string;
-  /** The last 4,000 characters of stdout. */
+  /** Everything the command wrote to stdout. */
   stdout: string;
 }

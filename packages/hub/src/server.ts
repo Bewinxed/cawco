@@ -5218,8 +5218,8 @@ export const createServer = ({
   const delegateTypes = makeDelegateTypes();
   /**
    * THE way the hub runs a command on a machine: in `cwd`, killed after
-   * `timeoutMs` (the machine's default when not given), answering bounded
-   * tails of what it wrote. A workflow's `w.exec` and a work item's
+   * `timeoutMs` (the machine's default when not given), answering its
+   * complete stdout and stderr (past 8 MiB it fails). A workflow's `w.exec` and a work item's
    * acceptance checks both go through it.
    */
   const runOnMachine = async (

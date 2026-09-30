@@ -154,11 +154,15 @@ export interface Workflow<Inputs extends ZodTypeAny = ZodTypeAny> {
   ask: (spec: AskSpec) => Promise<AskAnswer>;
   /** A progress marker: a `workflow` frame, a supervisor line, a run-view row. */
   checkpoint: (label: string, data?: unknown) => Promise<void>;
-  /** Runs a command in the run's workspace on its machine. */
+  /**
+   * Runs a command in the run's workspace on its machine. Answers its exit
+   * code and its complete stdout and stderr, apart; a command that writes more
+   * than 8 MiB across the two is killed and the call throws.
+   */
   exec: (
     cmd: string,
     options?: { timeoutMinutes?: number }
-  ) => Promise<{ code: number; output: string }>;
+  ) => Promise<{ code: number; stdout: string; stderr: string }>;
   /** Whether a path exists in the run's workspace. */
   exists: (path: string) => Promise<boolean>;
   /** The launch inputs, already validated against the program's `inputs`. */

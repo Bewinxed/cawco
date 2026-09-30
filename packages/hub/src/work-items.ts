@@ -281,8 +281,7 @@ const GIT_TIMEOUT_MS = 60_000;
 /**
  * The commits a worktree's session made since `since` (unix seconds) that
  * HEAD still holds, one hash per line. It runs on the machine and prints
- * only the hashes, because a command's answer keeps the last 4,000
- * characters of stdout and the reflog runs past that: its HEAD entries whose
+ * only the hashes, so the whole reflog never crosses the wire: its HEAD entries whose
  * action made or rewrote a commit (commit, amend, merge, cherry-pick, a
  * rebase pick), written at or after `since`, each once, kept while
  * `git merge-base --is-ancestor` says HEAD holds it.
@@ -327,7 +326,17 @@ export const checksProblem = (checks: WorkItemCheck[]): string | undefined => {
   return undefined;
 };
 
-/** One check, as the hub ran it. */
+/** How much of each stream a check keeps: `expect` and the report read this. */
+const CHECK_TAIL = 4000;
+
+/** A check's command result, each stream cut to its last {@link CHECK_TAIL} characters. */
+const checkTails = (result: CommandResult): CommandResult => ({
+  exitCode: result.exitCode,
+  stdout: result.stdout.slice(-CHECK_TAIL),
+  stderr: result.stderr.slice(-CHECK_TAIL),
+});
+
+/** One check, as the hub ran it: `result` holds the stream tails. */
 interface CheckOutcome {
   check: WorkItemCheck;
   durationMs: number;
@@ -871,12 +880,13 @@ export const createWorkItems = ({
     for (const check of checks) {
       const started = Date.now();
       // biome-ignore lint/performance/noAwaitInLoops: checks run in order, one at a time, in one worktree
-      const result = await command(
+      const complete = await command(
         workspace.machineId,
         workspace.path,
         check.command,
         (check.timeoutSec ?? CHECK_TIMEOUT_SEC) * 1000
       );
+      const result = checkTails(complete);
       outcomes.push({
         check,
         result,
@@ -898,8 +908,7 @@ export const createWorkItems = ({
    * worktree's HEAD reflog can: every commit its session made, or rewrote by
    * rebasing, is an entry there. The ones since the item began that HEAD still
    * holds are the item's ({@link keptCommits}); the diffstat runs from the
-   * oldest of them. Each command prints only what the report shows, so none
-   * of it depends on the tail a command's answer keeps.
+   * oldest of them. Each command prints only what the report shows.
    */
   const changesSince = async (
     workspace: WorkspaceRow,

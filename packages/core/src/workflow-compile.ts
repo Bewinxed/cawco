@@ -664,7 +664,7 @@ export function compileWorkflow(graph: WorkflowGraph): CompiledWorkflow {
           emitter.push(`const cmd = ${templateExpr(rule.cmd, node)};`);
           emitter.push("const gate = await w.exec(cmd);");
           emitter.push(
-            `if (gate.code !== ${rule.expectExit}) { ${findings}.push(\`\${cmd}: exit \${gate.code}\\n\${gate.output}\`); }`
+            `if (gate.code !== ${rule.expectExit}) { ${findings}.push(\`\${cmd}: exit \${gate.code}\\n\${gate.stdout}\${gate.stderr}\`); }`
           );
           emitter.indent -= 1;
           emitter.push("}");

@@ -7,6 +7,7 @@
  * scheduler.
  */
 import type {
+  CommandResult,
   EffortLevel,
   Envelope,
   PermissionResult,
@@ -50,7 +51,7 @@ export interface WorkflowRuntimeDeps {
     cwd: string,
     cmd: string,
     timeoutMs?: number
-  ) => Promise<{ exitCode: number; output: string }>;
+  ) => Promise<CommandResult>;
   db: DbShape;
   emit: (envelope: Envelope) => void;
   halt: (machineId: string, instanceId: string) => Promise<void>;
@@ -823,7 +824,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
         return await settled;
       }
       case "exec": {
-        const { exitCode, output } = await deps.command(
+        const { exitCode, stdout, stderr } = await deps.command(
           run.machineId,
           run.workspace,
           String(args.cmd),
@@ -831,7 +832,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
             ? undefined
             : Number(args.timeoutMinutes) * 60_000
         );
-        return { result: { code: exitCode, output } };
+        return { result: { code: exitCode, stdout, stderr } };
       }
       case "jev": {
         const connection = db.getOpenRouterConnection();
