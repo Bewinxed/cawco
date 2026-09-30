@@ -879,6 +879,54 @@ const writeTag = async (
   await Bun.write(TAGS_PATH, JSON.stringify(tags));
 };
 
+/**
+ * The opencode sessions with a turn this agent opened and has not ended: the
+ * hub is waiting on each for its `result`. On disk because an agent restart
+ * loses the process that would have sent it; the process that reattaches the
+ * session reads it here, and ends that turn from the server's own history if
+ * the server finished it meanwhile (see `watchResumedTurn`).
+ */
+const OPEN_TURNS_PATH = join(OPENCODE_DIR, "whiffle-open-turns.json");
+let openTurns: Promise<Set<string>> | undefined;
+let openTurnsWritten: Promise<void> = Promise.resolve();
+
+const loadOpenTurns = (): Promise<Set<string>> => {
+  openTurns ??= Bun.file(OPEN_TURNS_PATH)
+    .exists()
+    .then(async (exists) =>
+      exists
+        ? new Set((await Bun.file(OPEN_TURNS_PATH).json()) as string[])
+        : new Set<string>()
+    );
+  return openTurns;
+};
+
+/** Records that `sessionId`'s turn is open (the hub is owed its end) or closed. */
+const markTurn = (sessionId: string, open: boolean): void => {
+  openTurnsWritten = openTurnsWritten
+    .then(async () => {
+      const ids = await loadOpenTurns();
+      if (open === ids.has(sessionId)) {
+        return;
+      }
+      if (open) {
+        ids.add(sessionId);
+      } else {
+        ids.delete(sessionId);
+      }
+      await Bun.write(OPEN_TURNS_PATH, JSON.stringify([...ids]));
+    })
+    .catch((error: unknown) =>
+      console.warn(`[opencode] open-turn record for ${sessionId}: ${error}`)
+    );
+};
+
+/** Whether an earlier process left `sessionId` with a turn it never ended. */
+const turnWasOpen = async (sessionId: string): Promise<boolean> => {
+  await openTurnsWritten;
+  return (await loadOpenTurns()).has(sessionId);
+};
+
 const sessionToInfo = (session: Session, tag?: string): NeutralSessionInfo => ({
   sessionId: session.id,
   harness: "opencode",
@@ -1081,7 +1129,28 @@ export class OpencodeSession implements HarnessSession {
   #busy = false;
   /** The last provider-retry note surfaced, so a repeating retry says it once. */
   #lastRetryNote = "";
-  #turnOpen = false;
+  /** The message id of the prompt this process sent that the open turn answers. */
+  #turnPrompt: string | undefined;
+  #open = false;
+  /**
+   * A turn is open: the hub is owed its end (a `result` frame). Recorded on
+   * disk as well, so an agent restart that loses this process does not lose
+   * the debt — the process that reattaches the session reads it back.
+   */
+  get #turnOpen(): boolean {
+    return this.#open;
+  }
+  set #turnOpen(open: boolean) {
+    if (!open) {
+      this.#turnPrompt = undefined;
+    }
+    if (open !== this.#open) {
+      this.#open = open;
+      if (this.sessionId) {
+        markTurn(this.sessionId, open);
+      }
+    }
+  }
   /** Armed while a turn is open without any server event; see STALLED_TURN_MS. */
   #stallTimer: ReturnType<typeof setTimeout> | undefined;
   /**
@@ -1465,7 +1534,6 @@ export class OpencodeSession implements HarnessSession {
         // One failure, one result. opencode reports a prompt that dies before
         // the model is reached (an unknown model) twice — its message, then the
         // same error again with a stack — and the first already closed the turn.
-        // biome-ignore lint/suspicious/noUnnecessaryConditions: #turnOpen is reassigned across methods; biome's field-declaration inference doesn't see it
         if (!this.#turnOpen) {
           return;
         }
@@ -2004,7 +2072,6 @@ export class OpencodeSession implements HarnessSession {
     // A ghost idle (e.g. the idle that trails an abort) has no open turn and must
     // not emit a result frame; only a real turn close or an explicit abort/error
     // does. Assistant-block replay above is unaffected.
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: #turnOpen is reassigned elsewhere in the class; biome's per-method inference doesn't see that
     if (!(this.#turnOpen || result)) {
       return;
     }
@@ -2099,6 +2166,11 @@ export class OpencodeSession implements HarnessSession {
       }
       const status = result.data?.[this.sessionId];
       if (!status || (status.type !== "busy" && status.type !== "retry")) {
+        // Idle on the server, yet the hub is still owed this turn's end: it
+        // ended while nothing here was subscribed.
+        if (this.#turnOpen) {
+          await this.#endMissedTurn();
+        }
         return;
       }
       await this.#resumeReads();
@@ -2119,6 +2191,85 @@ export class OpencodeSession implements HarnessSession {
         `[opencode] could not read the status of resumed session ${this.sessionId}: ${errorText(error)}`
       );
     }
+  }
+
+  /**
+   * A turn the hub is owed ended on the server while nothing was subscribed —
+   * the agent restarted, the server was respawned, or the subscription was
+   * down. Its replies are replayed from the server's history through the path
+   * live events take, and the turn ends as it ended there: done, failed, or —
+   * a reply the idle server never finished — cut off with its server.
+   *
+   * Only the replies to the prompt this turn is for: a prompt this process
+   * has just sent and the server has not stored yet is not answered by the
+   * replies to the one before it, and is left to its own events.
+   */
+  async #endMissedTurn(): Promise<void> {
+    const listed = await reached(
+      this.#client.session.messages(
+        // biome-ignore lint/style/noNonNullAssertion: invariant: watchResumedTurn returns before this when sessionId is null
+        { sessionID: this.sessionId!, directory: this.#directory },
+        {
+          signal: AbortSignal.any([
+            this.#lifetime.signal,
+            AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
+          ]),
+        }
+      )
+    );
+    if (listed.error || !listed.data) {
+      throw new Error(
+        `could not list the messages of session ${this.sessionId}: ${errorText(listed.error)}`
+      );
+    }
+    const rows = listed.data as { info: Message; parts: Part[] }[];
+    const prompt = rows.findLast((row) => row.info.role === "user")?.info;
+    if (!prompt || (this.#turnPrompt && prompt.id !== this.#turnPrompt)) {
+      return;
+    }
+    const replies = rows.filter(
+      (row) => row.info.role === "assistant" && row.info.parentID === prompt.id
+    );
+    const last = replies.at(-1)?.info as AssistantMessage | undefined;
+    if (!last) {
+      return;
+    }
+    const replay = (type: string, properties: object) =>
+      this.handle({ type, properties } as unknown as Event);
+    for (const { info, parts } of replies) {
+      replay("message.updated", {
+        info: { ...info, time: { ...info.time, completed: undefined } },
+      });
+      for (const part of parts) {
+        replay("message.part.updated", { part });
+      }
+      replay("message.updated", { info });
+    }
+    if (last.error) {
+      replay("session.error", { sessionID: this.sessionId, error: last.error });
+    } else if (last.time.completed) {
+      replay("session.idle", { sessionID: this.sessionId });
+    } else {
+      this.#ctx.busy(false);
+      this.#busy = false;
+      this.#flushResult({
+        subtype: "error_during_execution",
+        is_error: true,
+        errors: [
+          "The opencode server stopped before this turn finished; its reply is incomplete.",
+        ],
+      });
+      this.#drainQueue();
+    }
+  }
+
+  /**
+   * A turn an earlier agent process opened on this session and never ended:
+   * the hub is still owed its end, and the reconcile after this session's
+   * subscription comes up pays it (see {@link watchResumedTurn}).
+   */
+  inheritOpenTurn(): void {
+    this.#open = true;
   }
 
   /**
@@ -2229,14 +2380,12 @@ export class OpencodeSession implements HarnessSession {
 
   /** Any server event is progress: re-arm the stall notice while a turn is open. */
   #noteServerActivity(): void {
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: #turnOpen is reassigned across methods; biome's field-declaration inference doesn't see it
     if (!this.#turnOpen) {
       return;
     }
     this.#clearStallTimer();
     this.#stallTimer = setTimeout(() => {
       this.#stallTimer = undefined;
-      // biome-ignore lint/suspicious/noUnnecessaryConditions: #turnOpen is reassigned across methods; biome's field-declaration inference doesn't see it
       if (!this.#turnOpen) {
         return;
       }
@@ -2376,6 +2525,7 @@ export class OpencodeSession implements HarnessSession {
     model?: { providerID?: string; modelID?: string }
   ): void {
     this.#turnOpen = true;
+    this.#turnPrompt = messageID;
     this.#noteServerActivity();
     // biome-ignore lint/complexity/noVoid: fire-and-forget: #prompt itself is not awaited by its callers
     void reached(
@@ -2514,6 +2664,7 @@ export class OpencodeSession implements HarnessSession {
       return;
     }
     this.#turnOpen = true;
+    this.#turnPrompt = messageID;
     // biome-ignore lint/complexity/noVoid: fire-and-forget: #commandOrPrompt itself is not awaited by its callers
     void this.#client.session
       .command({
@@ -4158,6 +4309,11 @@ export class OpencodeHarness implements Harness {
       spec.workflowStepId,
       spec.canDelegate
     );
+    // A session an earlier agent left mid-turn: the hub still waits on that
+    // turn's end, which the reconcile after its subscription comes up pays.
+    if (spec.resume && !spec.resume.fork && (await turnWasOpen(sessionId))) {
+      session.inheritOpenTurn();
+    }
     session.attached = () => {
       this.#sessions.set(ctx.instanceId, session);
       ctx.session(sessionId);
