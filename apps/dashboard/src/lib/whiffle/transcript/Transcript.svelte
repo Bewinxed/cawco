@@ -330,7 +330,7 @@
     const last = session.messages[settled - 1];
     return (
       `${arrayOf(session.messages)}:${session.messages.length}:${settled}:${last?.id ?? ""}:${session.streaming.length}:` +
-      `${session.thinkingStream.length}:${session.busy ? 1 : 0}:${session.pending.map((ask) => `${ask.requestId}${ask.routedTo ?? ""}`).join(",")}:` +
+      `${session.thinkingStream.length}:${session.busy ? 1 : 0}:${session.pending.map((ask) => `${ask.requestId}${ask.routedTo ?? ""}`).join(",")}:${session.permissionMode}:` +
       `${session.openBlock}:${session.thinkingClosing}:${session.currentTool?.toolId ?? ""}:${session.sdkStatus}:` +
       `${last?.metadata?.sendFailed ?? ""}`
     );
@@ -1308,14 +1308,35 @@
    * sees a sub-pixel, it puts the tail on the foot exactly, every time.
    */
   let spare = $state(0);
-  function spareOf(): number {
-    const inner = listing?.firstElementChild as HTMLElement | null;
-    const height = Number.parseFloat(inner?.style.height ?? "");
-    if (!Number.isFinite(height)) {
-      return 0;
+  /**
+   * Keeps `spare` on the list's height, whatever changed it — a row measured,
+   * arriving, or leaving (a parked ask's call taken out moves no row's size,
+   * only the list's). Read in the rendering step that laid the list out, and
+   * the tail pinned again from the whole height, before the frame is painted.
+   */
+  function wholeHeight(node: HTMLElement) {
+    const inner = node.firstElementChild as HTMLElement | null;
+    if (!inner) {
+      return;
     }
-    const off = Math.ceil(height - 0.001) - height;
-    return off < 0.001 ? 0 : off;
+    const watch = new ResizeObserver(() => {
+      const height = Number.parseFloat(inner.style.height);
+      if (!Number.isFinite(height)) {
+        return;
+      }
+      const whole = Math.ceil(height - 0.001) - height;
+      const next = whole < 0.001 ? 0 : whole;
+      if (Math.abs(next - spare) <= 0.001) {
+        return;
+      }
+      spare = next;
+      flushSync();
+      if (active && landed && atBottom && !jumping) {
+        pinBottom();
+      }
+    });
+    watch.observe(inner);
+    return () => watch.disconnect();
   }
   let atBottom = $state(true);
   /** How many screens from the tail the reader goes before "Jump to latest"
@@ -1893,11 +1914,6 @@
     // virtua applies what it measured in the microtask behind this call.
     queueMicrotask(() => {
       carrySlides(0);
-      const off = spareOf();
-      if (Math.abs(off - spare) > 0.001) {
-        spare = off;
-        flushSync();
-      }
       if (active && landed && atBottom && !jumping) {
         pinBottom();
       }
@@ -2595,6 +2611,7 @@
     bind:this={listing}
     style:padding-top={spare ? `${spare}px` : undefined}
     class:shown
+    {@attach wholeHeight}
   >
     <Virtualizer
       {cache}

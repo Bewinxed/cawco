@@ -38,6 +38,13 @@
   );
   const answered = $derived(result?.outcome === "answered");
   const dismissed = $derived(result?.outcome === "dismissed");
+  /**
+   * The call failed before anyone was asked (the tool refused its input):
+   * nothing waits on the reader, so the card says so instead of "needs you".
+   */
+  const failed = $derived(
+    !(answered || dismissed) && message.metadata?.toolStatus === "error"
+  );
   const answers = $derived<UserAnswers>(
     result?.outcome === "answered" ? result.answers : {}
   );
@@ -195,7 +202,7 @@
     <span class="state rail-cell">
       {#if answered}
         <span class="mark done" in:pillSwap out:pillSwap><IconCheck /></span>
-      {:else if dismissed}
+      {:else if dismissed || failed}
         <span class="mark muted" in:pillSwap out:pillSwap><IconClose /></span>
       {:else}
         <span class="mark attn" in:pillSwap out:pillSwap><IconAsk /></span>
@@ -207,6 +214,8 @@
         <span class="pill done" in:pillSwap out:pillSwap>answered</span>
       {:else if dismissed}
         <span class="pill muted" in:pillSwap out:pillSwap>dismissed</span>
+      {:else if failed}
+        <span class="pill muted" in:pillSwap out:pillSwap>not asked</span>
       {:else}
         <span class="pill attn" in:pillSwap out:pillSwap>needs you</span>
       {/if}

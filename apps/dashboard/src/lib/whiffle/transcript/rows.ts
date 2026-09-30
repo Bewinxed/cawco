@@ -336,6 +336,13 @@ const settledOf = (messages: Message[]): Message[] => {
  * ask is parked on the composer. The card is that call until it is answered,
  * so the call takes no room here while it waits, and its row arrives as the
  * card settles into it.
+ *
+ * A question is the composer's from the moment it is asked, not from the
+ * moment its ask lands: its call reaches the transcript a frame or two before
+ * the ask does, and drawing it there meant a "needs you" card flashed in the
+ * transcript and the tail jumped twice as it came and went. So an unanswered
+ * question is left out whenever the session's asks reach the reader — every
+ * mode but bypass, where no ask is ever raised and the row is all there is.
  */
 const drawnOf = (session: SessionState): Message[] => {
   const settled = settledOf(session.messages);
@@ -344,9 +351,16 @@ const drawnOf = (session: SessionState): Message[] => {
       ask.toolUseId ? [ask.toolUseId] : []
     )
   );
-  return gated.size === 0
+  const asksReachReader = session.permissionMode !== "bypassPermissions";
+  const waiting = (m: Message): boolean =>
+    asksReachReader &&
+    isQuestionMsg(m) &&
+    (m.metadata?.toolStatus ?? "pending") === "pending";
+  return gated.size === 0 && !asksReachReader
     ? settled
-    : settled.filter((m) => !(m.toolCallId && gated.has(m.toolCallId)));
+    : settled.filter(
+        (m) => !((m.toolCallId && gated.has(m.toolCallId)) || waiting(m))
+      );
 };
 
 /**
