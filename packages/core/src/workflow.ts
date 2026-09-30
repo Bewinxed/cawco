@@ -21,7 +21,6 @@ export type WorkflowOrigin = "editor" | "code";
 export type WorkflowEffectKind =
   | "run"
   | "spawn"
-  | "await"
   | "ask"
   | "exec"
   | "exists"
