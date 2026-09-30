@@ -456,18 +456,17 @@
     /** How far the words leaving drop from the field's foot ({@link scrollDrop}). */
     outDrop: number;
     outRest: string;
+    /** The width the words leaving wrapped at in the field ({@link wrapOf}). */
+    outWrap: number;
     text: string;
-    /**
-     * The width the field's text wraps at: its client width less its inline
-     * padding, so no scrollbar is counted. Both layers wrap at it.
-     */
-    wrap: number;
   }
   const FLIGHT_PX = 16;
   let flight = $state<Flight | null>(null);
   let typed = $state("");
   /** How far the words arriving drop from the field's foot ({@link scrollDrop}). */
   let inDrop = $state(0);
+  /** The width the words arriving wrap at ({@link wrapOf}). */
+  let inWrap = 0;
   let flightOut = $state<HTMLElement>();
   let flightIn = $state<HTMLElement>();
   let flightFrame = 0;
@@ -599,9 +598,11 @@
   }
 
   /**
-   * The width the field's text wraps at. The field keeps its scrollbar's
-   * gutter whether it scrolls or not (its stylesheet), so this is one width
-   * for the words leaving and the words arriving alike.
+   * The width the field's text wraps at: its client width less its inline
+   * padding. The field keeps its scrollbar's gutter whether it scrolls or
+   * not (its stylesheet), so this is its width in every state; it changes
+   * only with the row around it, which is why the words leaving are read
+   * before a switch and the words arriving after it.
    */
   function wrapOf(node: HTMLTextAreaElement): number {
     const style = getComputedStyle(node);
@@ -651,13 +652,14 @@
     let outDrop = field
       ? scrollDrop(field.scrollHeight, field.clientHeight, field.scrollTop)
       : 0;
-    const wrap = field ? wrapOf(field) : 0;
+    let outWrap = field ? wrapOf(field) : 0;
     if (was && flightIn) {
       const style = getComputedStyle(flightIn);
       start = { transform: style.transform, opacity: style.opacity };
       out = typed;
       outRest = was.text.slice(typed.length);
       outDrop = inDrop;
+      outWrap = inWrap;
     }
     for (const node of [flightOut, flightIn]) {
       for (const running of node?.getAnimations() ?? []) {
@@ -666,12 +668,17 @@
     }
     typed = "";
     inDrop = 0;
-    flight = { dir, out, outDrop, outRest, from: start, text: to, wrap };
+    flight = { dir, out, outDrop, outRest, outWrap, from: start, text: to };
     flightFrame = requestAnimationFrame((began) => {
       // Both are on the page: the overlay rendered with the switch.
       const node = field as HTMLTextAreaElement;
+      const layer = flightIn as HTMLElement;
       const ms = heightMs(node);
-      const rest = restOf(node, flightIn as HTMLElement, to);
+      // The words arriving wrap where the field, now in its new row, does;
+      // set before the layer is measured.
+      inWrap = wrapOf(node);
+      layer.style.inlineSize = `${inWrap}px`;
+      const rest = restOf(node, layer, to);
       inDrop = rest.drop;
       const timing = {
         duration: ms,
@@ -1410,15 +1417,12 @@
                the text it will be (`data-rest`), so it lays out whole. The
                trailing zero-width space holds a final empty line open, as
                the field does. -->
-          <span
-            aria-hidden="true"
-            class="flight"
-            style:inline-size="{flight.wrap}px"
-          >
+          <span aria-hidden="true" class="flight">
             <span
               class="flight-text"
               data-rest="{flight.outRest}&#8203;"
               bind:this={flightOut}
+              style:inline-size="{flight.outWrap}px"
               style:opacity={flight.from.opacity}
               style:transform={flight.from.transform}
               style:translate="0 {flight.outDrop}px"
@@ -1434,6 +1438,14 @@
             >
           </span>
         {/if}
+        {#if folded}
+          <!-- What the folded field keeps out of sight, over its faded line
+               end: standing in the field, it takes none of the field's width,
+               so the text wraps as it does unfolded. -->
+          <span aria-hidden="true" class="more"
+            >+{lines - 1} {lines === 2 ? 'line' : 'lines'}</span
+          >
+        {/if}
       </label>
 
       <div class="ctrls">
@@ -1446,12 +1458,6 @@
         >
           <IconPlus />
         </button>
-        {#if folded}
-          <!-- What the folded field keeps out of sight. -->
-          <span class="more"
-            >+{lines - 1} {lines === 2 ? 'line' : 'lines'}</span
-          >
-        {/if}
         <!-- Pending from the press until the hub takes the message: the glyph
            slot turns to the kit spinner and presses are swallowed. -->
         <button
@@ -1597,8 +1603,7 @@
      with its text, hint and caret clear. */
   .flight {
     position: absolute;
-    inset-block: 0;
-    inset-inline-start: 0;
+    inset: 0;
     z-index: 2;
     display: grid;
     grid-template-columns: minmax(0, 1fr);
@@ -1618,8 +1623,11 @@
     clip-path: inset(0 calc(-1 * var(--space-2)) 0 calc(-1 * var(--space-3)));
     pointer-events: none;
   }
+  /* Each layer as wide as the field's text runs (`inline-size`, set from
+     the field), never the overlay's own width. */
   .flight-text {
     grid-area: 1 / 1;
+    justify-self: start;
 
     &::after {
       content: attr(data-rest);
@@ -1684,27 +1692,40 @@
       color: transparent;
     }
   }
-  /* A folded draft shows its first line, fading out where the line ends,
-     and never a scrollbar. */
+  /* A folded draft shows its first line, fading out where the line ends
+     and clear under the "+N lines" standing there, and never a scrollbar. */
   .folded textarea,
   .folded .flight {
     mask-image: linear-gradient(
       to right,
-      #000 calc(100% - var(--space-8)),
-      transparent
+      #000 calc(100% - var(--more-room) - var(--space-8)),
+      transparent calc(100% - var(--more-room))
     );
   }
   .folded textarea {
     overflow: hidden;
   }
-  /* How much of a folded draft is out of sight. */
+  .field {
+    /* The folded line's end the "+N lines" stands on. */
+    --more-room: 4.5rem;
+  }
+  /* How much of a folded draft is out of sight, on the folded line's end. */
   .more {
-    flex: none;
+    position: absolute;
+    inset-inline-end: 0;
+    inset-block-end: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    inline-size: var(--more-room);
+    block-size: var(--cin-ctl);
     color: var(--ink-muted);
     font-size: var(--text-meta);
     font-weight: var(--weight-body);
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
+    pointer-events: none;
   }
   .hidden-file {
     display: none;
