@@ -80,6 +80,7 @@
     composerBindings,
     groupComposerHeights,
   } from "./workspace/composer-dock.svelte";
+  import { rebuildScheduler } from "./workspace/scheduler.svelte";
   import { workspace } from "./workspace/workspace.svelte";
 
   let {
@@ -134,9 +135,32 @@
   let resizing = $state(false);
   const phone = $derived(paneWidth > 0 && paneWidth < 900);
   const previewOpen = $derived(whiffle.previews[viewId]?.state === "open");
-  const desktopPreview = $derived(
-    previewOpen && previewVisible && !phone && visible
-  );
+  /**
+   * The side preview beside the transcript, on screen or not. A pane going
+   * off screen keeps its split: collapsing it there and opening it again on
+   * the way back narrowed the transcript, the preview and the group's
+   * composer over 300ms on every visit — the switch into or out of the tab
+   * moved all three.
+   */
+  const desktopPreview = $derived(previewOpen && previewVisible && !phone);
+  /**
+   * The split was sized while this pane was off screen, where no style is
+   * computed: the first frame it is shown would run the `flex-grow`
+   * transition from the old size. It takes the size without one, and the
+   * transition is back once that frame has painted.
+   */
+  let sizedAway = $state(false);
+  $effect(() => {
+    if (!(visible && sizedAway)) {
+      return;
+    }
+    let frame = requestAnimationFrame(() => {
+      frame = requestAnimationFrame(() => {
+        sizedAway = false;
+      });
+    });
+    return () => cancelAnimationFrame(frame);
+  });
   let previewMounted = $state(false);
   /**
    * The side preview is opening out of its tool row
@@ -179,6 +203,9 @@
     }
     let settle = 0;
     const frame = requestAnimationFrame(() => {
+      if (!untrack(() => visible)) {
+        sizedAway = true;
+      }
       if (open) {
         pane.resize(Math.max(savedWidth, (320 / paneWidth) * 100));
       } else {
@@ -509,6 +536,31 @@
   );
 
   /**
+   * Whether the transcript may be built. On screen, at once. Off screen, a
+   * history read landing used to build the whole transcript in the task
+   * that delivered it — rows, virtualiser, every row's body, one flush of
+   * up to 500ms at whatever moment the read came back. A pane nobody can
+   * see builds it when its turn at the scheduler's slow tier comes round
+   * instead, or the moment it is shown, whichever is first; built once, it
+   * stays built.
+   */
+  let turned = $state(untrack(() => visible));
+  const buildable = $derived(visible || turned);
+  $effect(() => {
+    if (visible) {
+      turned = true;
+    }
+  });
+  $effect(() => {
+    if (turned || waiting) {
+      return;
+    }
+    return rebuildScheduler.once(`land:${viewId}`, () => {
+      turned = true;
+    });
+  });
+
+  /**
    * Hears the transcript's list being drawn, and lets the placeholder go:
    * it fades over --dur-control on top of rows already in place, which is
    * the cross-fade, and nothing under it moves.
@@ -655,8 +707,13 @@
    * What the composer may suggest: the session's skills, its connected MCP
    * servers described by their tool names, and its tools. Whiffle's own
    * server is not one. The hub ranks and caps them by usage.
+   *
+   * Built when the suggestion chips first read it — to ask the hub about a
+   * draft, or to draw its answer — not when the composer is handed this
+   * conversation: every tab switch built the whole list, every skill, server
+   * and tool, for chips that mostly had nothing to show.
    */
-  const suggest = $derived.by(() => {
+  const candidates = $derived.by((): SuggestCandidate[] => {
     const tooling = whiffle.toolingOf(viewId);
     const skills: SuggestCandidate[] = commands
       .filter((command) => command.type === "skill")
@@ -697,8 +754,13 @@
         name: tool,
         description: "",
       }));
-    return { candidates: [...skills, ...servers, ...tools] };
+    return [...skills, ...servers, ...tools];
   });
+  const suggest = {
+    get candidates() {
+      return candidates;
+    },
+  };
 
   /**
    * Every operator action on this conversation goes out as ONE tracked command
@@ -1022,7 +1084,7 @@
       class="session-content"
       bind:this={content}
       class:preview-shown={desktopPreview}
-      class:resizing={resizing || fromRow}
+      class:resizing={resizing || fromRow || sizedAway}
     >
       <Resizable.PaneGroup class="preview-group" direction="horizontal">
         <Resizable.Pane class="transcript-pane" defaultSize={100} minSize={30}>
@@ -1082,7 +1144,7 @@
                     title="Nothing has been said here yet"
                   />
                 </div>
-              {:else if !waiting}
+              {:else if !waiting && buildable}
                 <div class="state" {@attach reveals}>
                   <Transcript {agentName} {focused} {session} {visible} />
                 </div>

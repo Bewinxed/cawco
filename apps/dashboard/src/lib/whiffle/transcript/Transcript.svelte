@@ -661,6 +661,28 @@
   const slidFrom = new WeakMap<HTMLElement, number>();
 
   /**
+   * How many slide animations are running. The list is re-placed on every
+   * row it measures — each row a scroll mounts — and with nothing sliding
+   * there is nothing to carry: `carrySlides` reads no layout then.
+   */
+  let sliding = 0;
+
+  /** A slide on `node`, counted for as long as it runs. */
+  function startSlide(
+    node: HTMLElement,
+    keyframes: Keyframe[],
+    options: KeyframeAnimationOptions
+  ): void {
+    sliding += 1;
+    const settled = () => {
+      sliding -= 1;
+    };
+    node
+      .animate(keyframes, { id: SLIDE, ...options })
+      .finished.then(settled, settled);
+  }
+
+  /**
    * One row sliding from `box`, where it was drawn, to its item's place now
    * (`top`, drawn `height` tall), by its bottom edge.
    */
@@ -685,7 +707,8 @@
         running.cancel();
       }
     }
-    node.animate(
+    startSlide(
+      node,
       [
         {
           translate: `0 ${delta}px`,
@@ -693,7 +716,7 @@
         },
         { translate: "0 0", clipPath: "inset(0px -100vmax -100vmax)" },
       ],
-      { id: SLIDE, ...timing }
+      timing
     );
   }
 
@@ -706,7 +729,7 @@
    * own scrolling is not carried: it moves the list, slides and all.
    */
   function carrySlides(scrolled: number): void {
-    if (!listing) {
+    if (sliding === 0 || !listing) {
       return;
     }
     const origin = listing.getBoundingClientRect().top;
@@ -734,8 +757,7 @@
             Number(each.currentTime)
         )
       );
-      node.animate([{ translate: `0 ${-moved}px` }, { translate: "0 0" }], {
-        id: SLIDE,
+      startSlide(node, [{ translate: `0 ${-moved}px` }, { translate: "0 0" }], {
         duration: remaining,
         easing: timing?.easing,
         composite: "add",
@@ -1749,6 +1771,14 @@
    * right behind virtua's write, still before the frame is painted. The
    * scroller's own box (the window, the composer column's clearance) is the
    * one thing observed for size, and nothing here resizes it.
+   *
+   * The box is pinned in the resize itself. Its observer runs after the
+   * frame's layout, before its paint, so the tail is put back in the frame
+   * the box changed: a switch hands the group's composer the arriving
+   * conversation's tray, the clearance under this transcript
+   * changes in the first frame of the glide, and that frame already shows
+   * the tail where it stays. Left to the next frame, the tail stood behind
+   * the new clearance for a frame and then jumped.
    */
   $effect(() => {
     const node = scroller;
@@ -1768,7 +1798,11 @@
     };
     const grew = new MutationObserver(follow);
     grew.observe(container, { attributes: true, attributeFilter: ["style"] });
-    const box = new ResizeObserver(follow);
+    const box = new ResizeObserver(() => {
+      if (landed && atBottom && !jumping) {
+        pinBottom();
+      }
+    });
     box.observe(node);
     return () => {
       grew.disconnect();

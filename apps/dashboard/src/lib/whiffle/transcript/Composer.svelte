@@ -1205,15 +1205,19 @@
    * What the transcript makes room for: the tray, the chip row, and the
    * panel with the field at its one-line height. The draft's further lines
    * and the parked prompt cards stand over the transcript's foot and never
-   * move it. It stands still while a switch is landing ({@link holdUntil}):
-   * a tray handing over to the next conversation's must not move a
-   * transcript that is still sliding in.
+   * move it.
+   *
+   * Published the frame a switch hands this composer the next
+   * conversation's tray, not when the transcript's glide lands: the
+   * arriving transcript is laid out and pinned at its own foot-room before
+   * the glide's first frame paints, so nothing under it moves while it
+   * slides or once it has. Held until the glide landed, the room was the
+   * last conversation's for the whole glide and changed in the frame it
+   * ended: the rows under a pinned tail jumped by a tray's height (35px) as
+   * the glide finished.
    */
   $effect(() => {
-    const next = panel - Math.max(0, fieldHeight - floor) + lift + chipRow;
-    if (!holding) {
-      height = next;
-    }
+    height = panel - Math.max(0, fieldHeight - floor) + lift + chipRow;
   });
 
   /** One conversation's tray handing its place to the next: a crossfade. */
@@ -1224,6 +1228,18 @@
       easing: easeOut,
       css: (t) => `opacity: ${t}`,
     };
+  }
+  /**
+   * The tray going fades out of the flow, standing on the composer where it
+   * stood, so the row's height is the arriving tray's from the switch on:
+   * that height is the transcript's foot-room ({@link height}), and in the
+   * flow the leaving tray held the room open until its fade ended, mid-glide.
+   */
+  function trayLeave(node: HTMLElement): TransitionConfig {
+    node.style.position = "absolute";
+    node.style.insetInline = "0";
+    node.style.insetBlockEnd = "0";
+    return trayFade(node);
   }
 
   const removeImage = (i: number) => {
@@ -1275,7 +1291,7 @@
     {#if delegatesOf}
       <div class="tray-slot">
         {#key delegatesOf}
-          <div in:trayFade out:trayFade>
+          <div in:trayFade out:trayLeave>
             <DelegateTray {held} parentId={delegatesOf} />
           </div>
         {/key}
@@ -1501,7 +1517,6 @@
           disabled={!(busy || sending || draft.hasContent)}
           onclick={whileIdle(() => sending, onaction)}
           type="button"
-          class:working={busy && !sending}
         >
           <!-- The one control that changes meaning mid-turn. `{#key}` re-creates
              the glyph on every flip, so BOTH directions of the swap animate in;
@@ -1583,6 +1598,7 @@
   /* One conversation's tray over the next while they cross-fade, in a column
      the composer's width: an auto column grew to the chips' own width. */
   .tray-slot {
+    position: relative;
     display: grid;
     grid-template-columns: minmax(0, 1fr);
   }
@@ -1958,47 +1974,6 @@
       opacity: 1;
       transform: scale(1);
       filter: blur(0);
-    }
-  }
-  /* While the agent works, a 2px arc runs round Stop, 3px out and concentric
-     with it: a third of a turn in the brand colour, fading along its tail.
-     It is a conic gradient masked to a band, turned by its angle, so it
-     keeps the button's own rounding. It fades in and out over --dur-control;
-     idle, it holds still where it stopped. Reduced motion draws no ring:
-     the stop glyph says the agent is working. */
-  @property --ring-a {
-    syntax: "<angle>";
-    inherits: false;
-    initial-value: 0deg;
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .stop::before {
-      content: "";
-      position: absolute;
-      inset: -3px;
-      padding: 2px;
-      border-radius: calc(var(--radius-lg) - var(--cin-pad) + 3px);
-      background: conic-gradient(
-        from var(--ring-a),
-        transparent 0 70%,
-        var(--brand-solid)
-      );
-      mask:
-        linear-gradient(#000 0 0) content-box exclude,
-        linear-gradient(#000 0 0);
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity var(--dur-control) var(--ease-out);
-      animation: ring-turn 1.2s linear infinite paused;
-    }
-    .stop.working::before {
-      opacity: 1;
-      animation-play-state: running;
-    }
-  }
-  @keyframes ring-turn {
-    to {
-      --ring-a: 360deg;
     }
   }
   /* Optical centring: the send plane's mass sits low-left of its box, so the

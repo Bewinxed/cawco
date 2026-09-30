@@ -15,31 +15,46 @@
  */
 import { SvelteMap } from "svelte/reactivity";
 
-export interface Slot {
-  el: HTMLElement;
-  /** Whether the group is showing this pane — on screen or mid-swipe. */
-  shown: boolean;
-}
+/**
+ * Each tab's slot, by conversation id: where its pane is docked. Changes only
+ * when a slot is registered or goes, never on a switch.
+ */
+export const slots = new SvelteMap<string, HTMLElement>();
 
-export const slots = new SvelteMap<string, Slot>();
+/**
+ * Whether each group is showing its tab's pane — on screen or mid-swipe. Kept
+ * apart from `slots` and written only when a value changes, so a switch
+ * wakes the two panes whose answer changed and nothing else. Stored with
+ * the element, every switch handed every slot a new record: each pane's
+ * props were evaluated again, and so was everything that read the slots.
+ */
+export const shownPanes = new SvelteMap<string, boolean>();
 
 /** A group's slot for one tab. Registered while the group keeps it mounted. */
 export function slot(node: HTMLElement, param: { id: string; shown: boolean }) {
   let { id } = param;
-  slots.set(id, { el: node, shown: param.shown });
+  slots.set(id, node);
+  shownPanes.set(id, param.shown);
+  const release = () => {
+    if (slots.get(id) === node) {
+      slots.delete(id);
+      shownPanes.delete(id);
+    }
+  };
   return {
     update(next: { id: string; shown: boolean }) {
-      if (next.id !== id && slots.get(id)?.el === node) {
-        slots.delete(id);
+      if (next.id !== id) {
+        release();
+        ({ id } = next);
       }
-      ({ id } = next);
-      slots.set(id, { el: node, shown: next.shown });
-    },
-    destroy() {
-      if (slots.get(id)?.el === node) {
-        slots.delete(id);
+      if (slots.get(id) !== node) {
+        slots.set(id, node);
+      }
+      if (shownPanes.get(id) !== next.shown) {
+        shownPanes.set(id, next.shown);
       }
     },
+    destroy: release,
   };
 }
 
@@ -54,24 +69,43 @@ const TAIL = 120;
  * detached box reports zero for everything. A box that was at its tail is
  * put back at the tail rather than at the same number, because the new
  * slot may be a different width.
+ *
+ * The scroll listener reads nothing. It hears every scroll of every box in
+ * the pane, and any geometry read there — the offset getters included —
+ * laid the page out inside the event, once per scroll event of a streaming
+ * transcript. The boxes that scrolled are read together in a task queued
+ * behind the frame that scrolled them, where the layout that frame drew is
+ * still the page's.
  */
 export function dock(node: HTMLElement, id: string) {
   const scrolled = new Map<
     HTMLElement,
     { top: number; left: number; tail: boolean }
   >();
+  const unread = new Set<HTMLElement>();
+  let reading: ReturnType<typeof setTimeout> | undefined;
   let focused: HTMLElement | null = null;
 
+  const read = () => {
+    reading = undefined;
+    for (const el of unread) {
+      if (el.isConnected) {
+        scrolled.set(el, {
+          top: el.scrollTop,
+          left: el.scrollLeft,
+          tail: el.scrollHeight - el.scrollTop - el.clientHeight < TAIL,
+        });
+      }
+    }
+    unread.clear();
+  };
   const onscroll = (event: Event) => {
     const el = event.target;
     if (!(el instanceof HTMLElement)) {
       return;
     }
-    scrolled.set(el, {
-      top: el.scrollTop,
-      left: el.scrollLeft,
-      tail: el.scrollHeight - el.scrollTop - el.clientHeight < TAIL,
-    });
+    unread.add(el);
+    reading ??= setTimeout(read, 0);
   };
   const onfocusin = (event: FocusEvent) => {
     focused = event.target instanceof HTMLElement ? event.target : null;
@@ -89,7 +123,7 @@ export function dock(node: HTMLElement, id: string) {
   node.addEventListener("focusout", onfocusout);
 
   $effect(() => {
-    const into = slots.get(id)?.el;
+    const into = slots.get(id);
     if (!into || into === node.parentElement) {
       return;
     }
@@ -109,6 +143,7 @@ export function dock(node: HTMLElement, id: string) {
 
   return {
     destroy() {
+      clearTimeout(reading);
       node.removeEventListener("scroll", onscroll, true);
       node.removeEventListener("focusin", onfocusin);
       node.removeEventListener("focusout", onfocusout);

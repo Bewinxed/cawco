@@ -20,7 +20,12 @@
   import type { TransitionConfig } from "svelte/transition";
   import { browser } from "$app/environment";
   import { page } from "$app/state";
-  import { dur, easeOut, motionOk } from "$lib/whiffle/motion/curves.svelte";
+  import {
+    dur,
+    ease,
+    easeOut,
+    motionOk,
+  } from "$lib/whiffle/motion/curves.svelte";
   import { land } from "$lib/whiffle/motion/share.svelte";
   import type { HistorySource } from "../client.svelte";
   import SessionPane from "../SessionPane.svelte";
@@ -251,9 +256,8 @@
   });
 
   // The glide is started in the next frame's callbacks, never in the task
-  // that made the switch: the curve is read off the stylesheet, and reading
-  // style there restyles the page mid-task. The callbacks run before that
-  // frame's style, so the first frame the arriving transcript paints is
+  // that made the switch: the pane it moves is found and animated before
+  // that frame's style, so the first frame the arriving transcript paints is
   // already the glide's first.
   $effect(() => {
     const id = viewId;
@@ -295,10 +299,7 @@
               { transform: `translateX(${dir * NUDGE_PX}px)`, opacity: 0.4 },
               { transform: "none", opacity: 1 },
             ],
-            {
-              duration: SWITCH_MS,
-              easing: getComputedStyle(track).getPropertyValue("--ease-drawer"),
-            }
+            { duration: SWITCH_MS, easing: ease("--ease-drawer") }
           );
         if (glide) {
           glide.finished.then(done, done);

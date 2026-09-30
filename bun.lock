@@ -188,6 +188,7 @@
     "socket-activation",
   ],
   "patchedDependencies": {
+    "torph@0.1.0": "patches/torph@0.1.0.patch",
     "virtua@0.50.0": "patches/virtua@0.50.0.patch",
     "dialkit@2.0.0": "patches/dialkit@2.0.0.patch",
     "@opencode-ai/sdk@1.18.18": "patches/@opencode-ai%2Fsdk@1.18.18.patch",

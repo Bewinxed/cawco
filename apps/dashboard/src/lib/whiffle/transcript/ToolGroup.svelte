@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { PreviewSource } from "@whiffle/core";
-  import { getContext } from "svelte";
+  import { getContext, untrack } from "svelte";
   import { SvelteSet } from "svelte/reactivity";
   import { toast } from "svelte-sonner";
   import DiffView from "$lib/components/features/DiffView.svelte";
@@ -20,6 +20,7 @@
   } from "$lib/components/ui/button/pending-content.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Collapsible from "$lib/components/ui/collapsible";
+  import CollapsibleLazy from "$lib/components/ui/collapsible/collapsible-lazy.svelte";
   import { IconChevronRight, IconWindow } from "$lib/icons";
   import {
     openPreview,
@@ -63,6 +64,26 @@
    * nothing in them arrives.
    */
   const callId = (m: Message): string => `call:${m.id ?? m.toolCallId}`;
+
+  /**
+   * The calls in this run whose body has been opened. A call never opened
+   * mounts no Content at all: a scroll mounts tool rows by the dozen, and
+   * each closed Content still built its disclosure state, asked for a frame
+   * and measured itself. Opened once, it stays, so a fold shut plays and a
+   * reopen turns back from where it is.
+   */
+  const opened = new SvelteSet<string>(
+    untrack(() => messages.filter((m) => disclosure(m).get()).map(callId))
+  );
+  /** The ones already open when the row was built: drawn open, not grown. */
+  const openAtMount = new Set(opened);
+  $effect(() => {
+    for (const m of messages) {
+      if (disclosure(m).get()) {
+        untrack(() => opened.add(callId(m)));
+      }
+    }
+  });
 
   const ledger = useLedger();
   /** Only a change the reader is watching is shown moving. */
@@ -420,62 +441,74 @@
                 {@render line()}
                 <span class="chev"><IconChevronRight /></span>
               </Collapsible.Trigger>
-              <Collapsible.Content reveal>
-                {#if d.expanded === 'diff'}
-                  <!-- What the call changed, as the file's own diff: one per
+              {#if disclosed.get() || opened.has(callId(m))}
+                <Collapsible.Content
+                  entering={!openAtMount.has(callId(m))}
+                  reveal
+                >
+                  <!-- The body exists only while the call is open (and folding
+                     shut): bits-ui keeps a closed Content's children mounted,
+                     so every tool row the list mounted built its diff, its
+                     highlighting and its fields for a body nobody opened. -->
+                  <CollapsibleLazy count={1} open={disclosed.get()}>
+                    {#if d.expanded === 'diff'}
+                      <!-- What the call changed, as the file's own diff: one per
                        replacement a multi-edit made. A failed call is the diff
                        it attempted, under the harness's reason. -->
-                  <div class="diffs">
-                    {#if refusal}
-                      <p class="refusal">{refusal}</p>
-                    {/if}
-                    {#each changes as change, i (i)}
-                      <DiffView
-                        filePath={change.filePath}
-                        newContent={change.newContent}
-                        oldContent={change.oldContent}
-                      />
-                    {/each}
-                  </div>
-                {:else if d.expanded === 'memory' && !failed}
-                  <MemoryBody
-                    at={m.timestamp}
-                    input={toolInput}
-                    result={m.metadata?.toolResult}
-                  />
-                {:else if d.expanded === 'memory' && result}
-                  <div class="fields">
-                    <div class="field">
-                      <span class="k">result</span>
-                      <pre class="v">{result.text}</pre>
-                    </div>
-                  </div>
-                {:else if d.expanded === 'skill' && !failed}
-                  <div class="skill-args">
-                    <ToolProse source={skillArgs(toolInput) ?? ''} />
-                  </div>
-                {:else}
-                  <div class="fields">
-                    {#each fields as f (f.key)}
-                      <div class="field">
-                        <span class="k">{f.key}</span>
-                        <pre class="v">{f.text}</pre>
+                      <div class="diffs">
+                        {#if refusal}
+                          <p class="refusal">{refusal}</p>
+                        {/if}
+                        {#each changes as change, i (i)}
+                          <DiffView
+                            filePath={change.filePath}
+                            newContent={change.newContent}
+                            oldContent={change.oldContent}
+                          />
+                        {/each}
                       </div>
-                    {/each}
-                    {#if result}
-                      <div class="field">
-                        <span class="k">result</span>
-                        <pre class="v">{result.text}</pre>
-                        {#if result.more}
-                          <span class="more"
-                            >… {result.more.toLocaleString()} more chars</span
-                          >
+                    {:else if d.expanded === 'memory' && !failed}
+                      <MemoryBody
+                        at={m.timestamp}
+                        input={toolInput}
+                        result={m.metadata?.toolResult}
+                      />
+                    {:else if d.expanded === 'memory' && result}
+                      <div class="fields">
+                        <div class="field">
+                          <span class="k">result</span>
+                          <pre class="v">{result.text}</pre>
+                        </div>
+                      </div>
+                    {:else if d.expanded === 'skill' && !failed}
+                      <div class="skill-args">
+                        <ToolProse source={skillArgs(toolInput) ?? ''} />
+                      </div>
+                    {:else}
+                      <div class="fields">
+                        {#each fields as f (f.key)}
+                          <div class="field">
+                            <span class="k">{f.key}</span>
+                            <pre class="v">{f.text}</pre>
+                          </div>
+                        {/each}
+                        {#if result}
+                          <div class="field">
+                            <span class="k">result</span>
+                            <pre class="v">{result.text}</pre>
+                            {#if result.more}
+                              <span class="more"
+                                >… {result.more.toLocaleString()} more
+                                chars</span
+                              >
+                            {/if}
+                          </div>
                         {/if}
                       </div>
                     {/if}
-                  </div>
-                {/if}
-              </Collapsible.Content>
+                  </CollapsibleLazy>
+                </Collapsible.Content>
+              {/if}
             </Collapsible.Root>
           {:else}
             <div class="trow rail-line flat">{@render line()}</div>

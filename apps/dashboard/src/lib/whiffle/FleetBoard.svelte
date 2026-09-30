@@ -166,7 +166,24 @@
     }
   }
 
+  /**
+   * The board's rows and spend as they stood when it was last on screen.
+   * Under a conversation the board is not drawn, and it reads no session's
+   * stats: `statsOf` walks a session's messages, once per running session,
+   * on every change to any of them. Shown again, it builds them afresh.
+   */
+  let heldRows: Row[] = [];
+  let heldSpend = 0;
+
   const rows = $derived.by<Row[]>(() => {
+    if (!active) {
+      return heldRows;
+    }
+    heldRows = buildRows();
+    return heldRows;
+  });
+
+  function buildRows(): Row[] {
     const live = whiffle.runningInstances.map((instance): Row => {
       const stats = whiffle.statsOf(instance.id);
       const state = liveState(instance);
@@ -232,14 +249,18 @@
     );
 
     return [...live, ...stored];
-  });
+  }
 
-  const spend = $derived(
-    whiffle.runningInstances.reduce(
+  const spend = $derived.by(() => {
+    if (!active) {
+      return heldSpend;
+    }
+    heldSpend = whiffle.runningInstances.reduce(
       (sum, row) => sum + (whiffle.statsOf(row.id).cost ?? 0),
       0
-    )
-  );
+    );
+    return heldSpend;
+  });
 
   /** The machines the board has something to say about (the roster panel). */
   const noticed = $derived(

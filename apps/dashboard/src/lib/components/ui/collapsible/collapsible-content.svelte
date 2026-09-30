@@ -1,5 +1,6 @@
 <script lang="ts">
   import { Collapsible as CollapsiblePrimitive } from "bits-ui";
+  import { untrack } from "svelte";
   import { CURVE } from "$lib/whiffle/motion/curves.svelte";
   import { fold } from "$lib/whiffle/motion/fold.svelte";
 
@@ -7,8 +8,15 @@
     ref = $bindable(null),
     reveal = false,
     fade = false,
+    entering = false,
     ...restProps
   }: CollapsiblePrimitive.ContentProps & {
+    /**
+     * Mounted by the opening itself — a disclosure that builds its content
+     * only once it is first opened: it grows open from nothing as it
+     * mounts, as a mounted one does when it opens.
+     */
+    entering?: boolean;
     /**
      * Grow open (240ms) and fold shut (160ms, --dur-exit), both on
      * --ease-out, on the Web Animations API,
@@ -53,7 +61,11 @@
     // open (a first render, a row the virtualiser rebuilt) does not animate.
     const openNow = () =>
       node.getAttribute("data-state") === "open" && !node.hidden;
-    let shown = openNow();
+    let shown = untrack(() => !entering) && openNow();
+    if (!shown && openNow()) {
+      shown = true;
+      run(true, 0);
+    }
     const watch = new MutationObserver(() => {
       const open = openNow();
       if (open !== shown) {

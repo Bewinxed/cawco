@@ -147,6 +147,36 @@ export const rebuildScheduler = {
   },
 
   /**
+   * One turn, once: `run` is called the next time a turn at `tier` comes
+   * round, in place of a rebuild, and the registrant leaves the rotation.
+   * For work that has to happen once and must not land in whatever task
+   * made it possible — a hidden pane's transcript built when its history
+   * read comes in. The returned function withdraws it before its turn.
+   */
+  once(id: string, run: () => void, tier: Tier = "hidden"): () => void {
+    const leave = () => {
+      if (registry.get(id) === entry) {
+        registry.delete(id);
+        if (registry.size === 0) {
+          stop();
+        }
+      }
+    };
+    const entry: Registrant = {
+      fingerprint: () => "due",
+      last: "",
+      tier,
+      bump: () => {
+        leave();
+        run();
+      },
+    };
+    registry.set(id, entry);
+    start();
+    return leave;
+  },
+
+  /**
    * Bring one pane's rows up to date now, out of turn — called when the reader
    * reaches for its tab. Pointer-enter and pointer-down both come before the
    * click that switches, so the rebuild lands in that gap and the switch

@@ -394,16 +394,28 @@
     min-height: 0;
   }
 
-  /* `visibility`, never `display`: a hidden surface still lays out, so the
-     virtualisers inside it keep their measurements and revealing one costs
-     nothing.
-     Only the HIDDEN state is declared, here and everywhere below this.
-     `visibility` inherits, but a descendant re-declaring `visible` un-hides
-     itself through a hidden ancestor — so a single `visibility: visible`
-     deeper in the tree is enough to paint a whole surface that is supposed
-     to be put away. */
+  /* Never `display`: a surface put away keeps its layout, so the
+     virtualisers inside it keep their measurements, its scroll stays where
+     it was, and revealing it costs nothing. */
   .hidden-surface {
-    visibility: hidden;
     pointer-events: none;
+  }
+  /* The board under a conversation is skipped outright: its style, layout
+     and paint leave every frame, and its rendering state — layout, scroll
+     offsets — is kept for its return. `visibility: hidden` left the whole
+     board in each restyle, reflow and layerize of the page while the
+     conversation above it streamed. A skipped subtree cannot be painted by
+     a descendant either, which `visibility` allowed. */
+  .board.hidden-surface {
+    content-visibility: hidden;
+  }
+  /* The groups under the board keep laying out while it is shown, so a
+     conversation streaming behind it is measured and current when it comes
+     back. Only the HIDDEN state is declared: `visibility` inherits, but a
+     descendant re-declaring `visible` un-hides itself through a hidden
+     ancestor, so a single `visibility: visible` deeper in the tree would
+     paint a surface that is supposed to be put away. */
+  .groups.hidden-surface {
+    visibility: hidden;
   }
 </style>

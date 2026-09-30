@@ -13,7 +13,7 @@
   import type { HistorySource } from "../client.svelte";
   import SessionPane from "../SessionPane.svelte";
   import Lightbox from "../transcript/Lightbox.svelte";
-  import { dock, slots } from "./dock.svelte";
+  import { dock, shownPanes, slots } from "./dock.svelte";
   import { contextOf, workspace } from "./workspace.svelte";
 
   let {
@@ -98,7 +98,7 @@
         serverHistory={id === entryId ? entryHistory : null}
         serverTail={id === entryId ? entryTail : null}
         viewId={id}
-        visible={slots.get(id)?.shown ?? false}
+        visible={shownPanes.get(id) ?? false}
       />
     </div>
   {/each}

@@ -10,12 +10,16 @@
     size?: SizeVariant;
   };
 
-  const circleA =
+  const circle =
     "M 12 8 C 14.21 8 16 9.79 16 12 C 16 14.21 14.21 16 12 16 C 9.79 16 8 14.21 8 12 C 8 9.79 9.79 8 12 8 Z";
   const infinity =
     "M 12 12 C 14 8.5 19 8.5 19 12 C 19 15.5 14 15.5 12 12 C 10 8.5 5 8.5 5 12 C 5 15.5 10 15.5 12 12 Z";
-  const circleB =
-    "M 12 16 C 14.21 16 16 14.21 16 12 C 16 9.79 14.21 8 12 8 C 9.79 8 8 9.79 8 12 C 8 14.21 9.79 16 12 16 Z";
+  /** The two marks that hand over to each other; with reduced motion, the infinity alone, still. */
+  const MORPHING = [
+    { name: "circle", d: circle },
+    { name: "lemniscate", d: infinity },
+  ];
+  const STILL = [{ name: "still", d: infinity }];
   const words = ["Thinking", "Moonwalking", "Planning", "Refining"];
 </script>
 
@@ -51,32 +55,28 @@
 >
   <span class="sr-only">Thinking&#8230;</span>
   {#if showIcon}
-    <svg
-      aria-hidden="true"
-      class="shrink-0"
-      fill="none"
-      height={compact ? 18 : 20}
-      stroke="currentColor"
-      stroke-linecap="round"
-      stroke-linejoin="round"
-      stroke-width="1.5"
-      viewBox="0 0 24 24"
-      width={compact ? 18 : 20}
-    >
-      <path d={motion.current ? circleA : infinity}>
-        {#if motion.current}
-          <animate
-            attributeName="d"
-            calcMode="spline"
-            dur="6s"
-            keySplines="0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1;0.42 0 0.58 1"
-            keyTimes="0;0.25;0.5;0.75;1"
-            repeatCount="indefinite"
-            values={`${circleA};${infinity};${circleB};${infinity};${circleA}`}
-          />
-        {/if}
-      </path>
-    </svg>
+    <!-- Two marks in one cell, the circle and the infinity, handing over to
+         each other on a 6s breath. Each is its own <svg> so its transform
+         and opacity run on the compositor; morphing the path itself
+         repainted the page every frame. -->
+    <span aria-hidden="true" class="mark">
+      {#each motion.current ? MORPHING : STILL as mark (mark.name)}
+        <svg
+          aria-hidden="true"
+          class={mark.name}
+          fill="none"
+          height={compact ? 18 : 20}
+          stroke="currentColor"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="1.5"
+          viewBox="0 0 24 24"
+          width={compact ? 18 : 20}
+        >
+          <path d={mark.d} />
+        </svg>
+      {/each}
+    </span>
   {/if}
   <span aria-hidden="true" class="labels" class:compact>
     {#each words as word, index}
@@ -85,7 +85,17 @@
         style:--delay={`${index * 4 - 0.24}s`}
         class:first={index === 0}
       >
-        <span class="shimmer">{word}</span>
+        <!-- The light passing over the word: the word again in the strong
+             ink, masked to a band. The band slides and the word inside it
+             slides back the same distance on the same curve, so the letters
+             stand still and only the light moves, all of it on the
+             compositor. -->
+        <span class="shimmer"
+          >{word}
+          {#if motion.current}
+            <span class="sheen"><span class="sheen-word">{word}</span></span>
+          {/if}</span
+        >
       </span>
     {/each}
   </span>
@@ -101,8 +111,15 @@
     font-family: inherit;
     font-weight: var(--weight-body);
   }
-  .indicator svg {
+  .mark {
+    display: grid;
     flex: 0 0 auto;
+
+    & > svg {
+      grid-area: 1 / 1;
+    }
+  }
+  .indicator svg {
     width: var(--thinking-icon-size, 20px);
     height: var(--thinking-icon-size, 20px);
   }
@@ -140,17 +157,73 @@
       animation-delay: var(--delay);
     }
 
+    /* The circle and the infinity trade places every 1.5s, each easing in
+       and out: the circle widens and flattens as it fades, the infinity
+       settles out of a narrower, taller shape as it comes up. */
+    .circle,
+    .lemniscate {
+      transform-origin: 50% 50%;
+    }
+    .circle {
+      animation: circle 6s cubic-bezier(0.42, 0, 0.58, 1) infinite both;
+    }
+    .lemniscate {
+      animation: lemniscate 6s cubic-bezier(0.42, 0, 0.58, 1) infinite both;
+    }
+
+    /* The band is the old gradient's geometry: three words wide, ink-strong
+       at its middle, fading to nothing 15% of its width either side. It
+       enters from the right and leaves on the left over 1.5s, as the
+       background it replaces did. */
     .shimmer {
-      color: transparent;
-      background: linear-gradient(
+      position: relative;
+      display: inline-block;
+    }
+    .sheen {
+      position: absolute;
+      inset-block: 0;
+      inset-inline-start: 0;
+      inline-size: 300%;
+      color: var(--ink-strong);
+      mask-image: linear-gradient(
         90deg,
-        var(--ink-muted) 0% 35%,
-        var(--ink-strong) 50%,
-        var(--ink-muted) 65% 100%
+        transparent 35%,
+        #000 50%,
+        transparent 65%
       );
-      background-size: 300% 100%;
-      background-clip: text;
-      animation: shimmer 1.5s ease-in-out infinite;
+      pointer-events: none;
+      animation: sheen 1.5s ease-in-out infinite;
+    }
+    .sheen-word {
+      display: inline-block;
+      animation: sheen-hold 1.5s ease-in-out infinite;
+    }
+  }
+
+  @keyframes circle {
+    0%,
+    50%,
+    100% {
+      opacity: 1;
+      transform: none;
+    }
+    25%,
+    75% {
+      opacity: 0;
+      transform: scale(1.15, 0.8);
+    }
+  }
+  @keyframes lemniscate {
+    0%,
+    50%,
+    100% {
+      opacity: 0;
+      transform: scale(0.7, 1.1);
+    }
+    25%,
+    75% {
+      opacity: 1;
+      transform: none;
     }
   }
 
@@ -171,12 +244,15 @@
     }
   }
 
-  @keyframes shimmer {
-    from {
-      background-position: 0% 0;
-    }
+  /* The band two words to the left; the word inside it two words back. */
+  @keyframes sheen {
     to {
-      background-position: 100% 0;
+      transform: translateX(-66.6667%);
+    }
+  }
+  @keyframes sheen-hold {
+    to {
+      transform: translateX(200%);
     }
   }
 </style>

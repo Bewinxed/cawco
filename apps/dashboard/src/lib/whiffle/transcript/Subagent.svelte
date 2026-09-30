@@ -1,6 +1,7 @@
 <script lang="ts">
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Collapsible from "$lib/components/ui/collapsible";
+  import CollapsibleLazy from "$lib/components/ui/collapsible/collapsible-lazy.svelte";
   import { IconChevronRight } from "$lib/icons";
   import type { SubagentState } from "$lib/utils/flow-types";
   import { formatDuration } from "$lib/utils/time";
@@ -114,35 +115,39 @@
     {/if}
 
     <Collapsible.Content reveal>
-      <div class="inner">
-        {#each rows as row (row.key)}
-          {#if row.kind === 'tools'}
-            <ToolGroup messages={row.messages} />
-          {:else if row.kind === 'question'}
-            <ToolGroup messages={[row.message]} />
-          {:else if row.kind === 'thinking'}
-            <Thinking live={row.live} text={row.text} />
-          {:else if row.kind === 'stream'}
-            <div class="say"><MessageBody source={row.text} streaming /></div>
-          {:else if row.kind === 'single'}
-            <MessageRow
-              agentName={branch.subagentType}
-              grouped={row.grouped}
-              message={row.message}
-              runsOn={runs.has(row.key)}
-            />
-          {/if}
-        {/each}
+      <!-- The branch's transcript exists only while it is open (and folding
+           shut): bits-ui keeps a closed Content's children mounted. -->
+      <CollapsibleLazy count={1} open={open.get()}>
+        <div class="inner">
+          {#each rows as row (row.key)}
+            {#if row.kind === 'tools'}
+              <ToolGroup messages={row.messages} />
+            {:else if row.kind === 'question'}
+              <ToolGroup messages={[row.message]} />
+            {:else if row.kind === 'thinking'}
+              <Thinking live={row.live} text={row.text} />
+            {:else if row.kind === 'stream'}
+              <div class="say"><MessageBody source={row.text} streaming /></div>
+            {:else if row.kind === 'single'}
+              <MessageRow
+                agentName={branch.subagentType}
+                grouped={row.grouped}
+                message={row.message}
+                runsOn={runs.has(row.key)}
+              />
+            {/if}
+          {/each}
 
-        {#if failed && branch.error}
-          <p class="fail">{branch.error}</p>
-        {:else if view.report}
-          <section class="report">
-            <h4>Report</h4>
-            <MessageBody source={view.report} />
-          </section>
-        {/if}
-      </div>
+          {#if failed && branch.error}
+            <p class="fail">{branch.error}</p>
+          {:else if view.report}
+            <section class="report">
+              <h4>Report</h4>
+              <MessageBody source={view.report} />
+            </section>
+          {/if}
+        </div>
+      </CollapsibleLazy>
     </Collapsible.Content>
   </Collapsible.Root>
 </div>

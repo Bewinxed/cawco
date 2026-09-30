@@ -16,15 +16,21 @@ import { CURVE, motionOk } from "./curves.svelte";
 
 export function morph({ width = false, ms = 220 } = {}) {
   return (node: HTMLElement) => {
-    let natural = { w: node.offsetWidth, h: node.offsetHeight };
+    /**
+     * The size the container last settled at: unknown until the observer's
+     * first delivery, which comes after the frame's layout. Read when it was
+     * attached, it laid the page out in the middle of whatever task mounted
+     * it — every diff a scrolling transcript mounted paid a forced layout.
+     */
+    let natural: { w: number; h: number } | null = null;
     let running: Animation | undefined;
 
-    const tween = () => {
+    const tween = (settled: { w: number; h: number }) => {
       // The size to start from: where a tween in flight has the box right
       // now, else the size it last settled at (layout already holds the new
       // one by the time an observer hears of the change).
       const drawn = running ? node.getBoundingClientRect() : null;
-      const from = drawn ? { w: drawn.width, h: drawn.height } : natural;
+      const from = drawn ? { w: drawn.width, h: drawn.height } : settled;
       running?.cancel();
       running = undefined;
       const next = { w: node.offsetWidth, h: node.offsetHeight };
@@ -65,7 +71,13 @@ export function morph({ width = false, ms = 220 } = {}) {
       animation.finished.then(done, done);
     };
 
-    const sizes = new ResizeObserver(tween);
+    const sizes = new ResizeObserver(() => {
+      if (natural === null) {
+        natural = { w: node.offsetWidth, h: node.offsetHeight };
+      } else {
+        tween(natural);
+      }
+    });
     const watchChildren = () => {
       sizes.disconnect();
       for (const child of node.children) {
@@ -76,7 +88,11 @@ export function morph({ width = false, ms = 220 } = {}) {
     // Content added or removed: a new child to watch, and a new size.
     const children = new MutationObserver(() => {
       watchChildren();
-      tween();
+      // Before the first delivery there is no size to tween from: the
+      // observer's first delivery takes it.
+      if (natural !== null) {
+        tween(natural);
+      }
     });
     children.observe(node, { childList: true });
     return () => {

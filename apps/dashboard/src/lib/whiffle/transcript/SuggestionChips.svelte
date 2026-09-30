@@ -70,16 +70,23 @@
   const byId = $derived(new Map(candidates.map((c) => [c.id, c])));
   /**
    * What to show, in the hub's order (highest noul first): ranked, still a
-   * candidate, and not already named in the draft.
+   * candidate, and not already named in the draft. With nothing ranked the
+   * candidates are not read at all: the conversation builds them on first
+   * read (SessionPane), and a row with no answer has no use for them.
    */
   const shown = $derived(
-    ranked
-      .map((entry) => ({ candidate: byId.get(entry.id), noul: entry.noul }))
-      .filter(
-        (entry): entry is { candidate: SuggestCandidate; noul: number } =>
-          entry.candidate !== undefined &&
-          !text.toLowerCase().includes(entry.candidate.name.toLowerCase())
-      )
+    ranked.length === 0
+      ? []
+      : ranked
+          .map((entry) => ({
+            candidate: byId.get(entry.id),
+            noul: entry.noul,
+          }))
+          .filter(
+            (entry): entry is { candidate: SuggestCandidate; noul: number } =>
+              entry.candidate !== undefined &&
+              !text.toLowerCase().includes(entry.candidate.name.toLowerCase())
+          )
   );
 
   /** The hub only returns nouls at or above this; the tint spans from it to 1. */

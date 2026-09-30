@@ -75,13 +75,54 @@ export const easeInOut = bezier(0.77, 0, 0.175, 1);
 export const easeDrawer = bezier(0.32, 0.72, 0, 1);
 
 /**
- * A motion token as the stylesheet defines it (app.css), read where it is
- * used, so JS motion and CSS motion stand on one scale: `--dur-*` as
- * milliseconds, `--ease-*` as the easing string `element.animate()` takes,
- * `--pop-scale` as a number.
+ * A motion token as the stylesheet defines it (app.css), so JS motion and
+ * CSS motion stand on one scale: `--dur-*` as milliseconds, `--ease-*` as
+ * the easing string `element.animate()` takes, `--pop-scale` as a number.
+ *
+ * Read off the root once, all of them in one pass, and again only after the
+ * root's class changes — the theme is a class on it (theme.svelte.ts). Read
+ * where each was used, every call restyled the whole page in the middle of
+ * whatever task asked: a tab switch asked several times.
  */
-const rootToken = (name: string) =>
-  getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+const TOKENS = [
+  "--dur-control",
+  "--dur-menu",
+  "--dur-pop",
+  "--dur-panel",
+  "--dur-exit",
+  "--dur-toggle",
+  "--dur-morph",
+  "--dur-rail",
+  "--dur-fade",
+  "--dur-hold",
+  "--dur-ghost",
+  "--ease-out",
+  "--ease-in-out",
+  "--ease-drawer",
+  "--pop-scale",
+  "--pop-rise",
+];
+const tokens = new Map<string, string>();
+let watched = false;
+const rootToken = (name: string): string => {
+  const held = tokens.get(name);
+  if (held !== undefined) {
+    return held;
+  }
+  const root = document.documentElement;
+  if (!watched) {
+    watched = true;
+    new MutationObserver(() => tokens.clear()).observe(root, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+  }
+  const style = getComputedStyle(root);
+  for (const token of tokens.size === 0 ? [...TOKENS, name] : [name]) {
+    tokens.set(token, style.getPropertyValue(token).trim());
+  }
+  return tokens.get(name) as string;
+};
 export const dur = (name: `--dur-${string}`): number => {
   // In the unit it is written in: the built stylesheet's minifier rewrites
   // `280ms` as `.28s`, so the number alone is not milliseconds.
