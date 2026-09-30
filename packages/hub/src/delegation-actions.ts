@@ -270,6 +270,7 @@ function resolve(peers: Peer[], target: string): Peer {
 export const SPAWNING_TOOLS: ReadonlySet<string> = new Set([
   "run_workflow",
   "steer_workflow",
+  "workflow_read",
   "list_workflows",
   "create_workflow",
   "update_workflow",
@@ -391,6 +392,16 @@ export interface HandoffActions {
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   listSessions(): Promise<string>;
   readonly listWorkflows: () => Promise<unknown>;
+  /** A window into one result of a run this session supervises. */
+  readonly readWorkflow: (
+    runId: string,
+    request: {
+      ref: number | "result";
+      path?: string;
+      offset?: number;
+      limit?: number;
+    }
+  ) => Promise<string>;
   readonly readWorkflowState: (name: string) => Promise<{ value: unknown }>;
   readonly runWorkflow: (
     name: string,
@@ -633,6 +644,25 @@ export const handoffActions = ({
       throw new Error(await response.text());
     }
     return (await response.json()) as { runId: string };
+  },
+  async readWorkflow(runId, { ref, path, offset, limit }) {
+    const query = new URLSearchParams({ instanceId, ref: String(ref) });
+    if (path) {
+      query.set("path", path);
+    }
+    if (offset !== undefined) {
+      query.set("offset", String(offset));
+    }
+    if (limit !== undefined) {
+      query.set("limit", String(limit));
+    }
+    const response = await fetch(
+      `${hubHttpUrl()}/api/workflow-runs/${encodeURIComponent(runId)}/read?${query}`
+    );
+    if (!response.ok) {
+      throw new Error(await response.text());
+    }
+    return response.text();
   },
   async steerWorkflow(runId, action) {
     const response = await fetch(

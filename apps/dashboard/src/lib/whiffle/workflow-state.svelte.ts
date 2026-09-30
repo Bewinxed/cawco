@@ -1,11 +1,11 @@
 import type {
   Workflow,
-  WorkflowEffect,
   WorkflowFrame,
+  WorkflowLogEntry,
   WorkflowRun,
 } from "@whiffle/core";
 import {
-  loadWorkflowEffects,
+  loadWorkflowLog,
   loadWorkflowRun,
   loadWorkflowRuns,
   loadWorkflows,
@@ -16,8 +16,8 @@ export const workflowState = $state({
   workflows: [] as Workflow[],
   runs: {} as Record<string, WorkflowRun>,
   details: {} as Record<string, WorkflowRunDetail>,
-  /** The effect journal per run: the code-origin graph, checkpoints and log. */
-  effects: {} as Record<string, WorkflowEffect[]>,
+  /** Each run's log: the code-origin graph, checkpoints, Jev answers, log lines. */
+  logs: {} as Record<string, WorkflowLogEntry[]>,
   error: "",
   /** The first read of every workflow and its runs has come back, or failed. */
   loaded: false,
@@ -62,10 +62,10 @@ export async function refreshWorkflowRun(runId: string) {
   workflowState.runs[runId] = detail;
   return detail;
 }
-export async function refreshWorkflowEffects(runId: string) {
-  const { effects } = await loadWorkflowEffects(runId);
-  workflowState.effects[runId] = effects;
-  return effects;
+export async function refreshWorkflowLog(runId: string) {
+  const { log } = await loadWorkflowLog(runId);
+  workflowState.logs[runId] = log;
+  return log;
 }
 export async function refreshWorkflows() {
   // A read under way answers for itself: an error left by a read that failed

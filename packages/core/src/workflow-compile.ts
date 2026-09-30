@@ -663,8 +663,11 @@ export function compileWorkflow(graph: WorkflowGraph): CompiledWorkflow {
           emitter.indent += 1;
           emitter.push(`const cmd = ${templateExpr(rule.cmd, node)};`);
           emitter.push("const gate = await w.exec(cmd);");
+          // The last 4,000 characters, the tail a work item's checks keep: a
+          // gate's verdict is at the end of its output, and a whole build log
+          // would bury the prompt the finding is handed back in.
           emitter.push(
-            `if (gate.code !== ${rule.expectExit}) { ${findings}.push(\`\${cmd}: exit \${gate.code}\\n\${gate.stdout}\${gate.stderr}\`); }`
+            `if (gate.code !== ${rule.expectExit}) { ${findings}.push(\`\${cmd}: exit \${gate.code}\\n\${(gate.stdout + gate.stderr).slice(-4000)}\`); }`
           );
           emitter.indent -= 1;
           emitter.push("}");

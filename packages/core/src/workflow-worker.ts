@@ -6,8 +6,13 @@
  * loader refuses a program that imports anything but zod.
  *
  * Every `w.*` call takes the next sequence number and posts an effect request
- * to the hub thread, which answers it from the journal on replay or executes
- * it live and journals the outcome.
+ * to the hub thread, whose workflow engine answers it from storage on replay
+ * or performs it live.
+ *
+ * After the program starts, and after every answer it is handed, the worker
+ * posts `idle` once the program has run as far as that answer takes it — all
+ * of its microtasks drained. The hub orders a replay by it: it hands the next
+ * answer only once the program has issued every call the last one led to.
  */
 
 import { zodToJsonSchema } from "zod-to-json-schema";
@@ -25,6 +30,8 @@ export type WorkerOut =
   | { type: "effect"; id: number; seq: number; kind: string; args: unknown }
   | { type: "done"; result: unknown }
   | { type: "failed"; failure: WorkflowFailure }
+  /** The program has run as far as its first `answered` answers take it. */
+  | { type: "idle"; answered: number }
   | { type: "inputs"; shape: unknown }
   | { type: "ready" };
 
@@ -51,25 +58,44 @@ const STRIPPED = [
 
 declare const self: DedicatedWorkerGlobalScope;
 
+/**
+ * Kept before the preamble strips timers from the program: a timer callback
+ * runs only after every microtask the last message queued has drained.
+ */
+const later = setTimeout;
+
 const pending = new Map<
   number,
   { resolve: (value: unknown) => void; reject: (error: unknown) => void }
 >();
 let nextCall = 0;
 let nextSeq = 0;
+let answered = 0;
+
+/** Tells the hub the program has gone as far as `answered` answers take it. */
+const postIdle = () => {
+  const upTo = answered;
+  later(() => {
+    self.postMessage({ type: "idle", answered: upTo } satisfies WorkerOut);
+  }, 0);
+};
 
 self.addEventListener("message", (event: MessageEvent<WorkerIn>) => {
   const message = event.data;
-  const entry = pending.get(message.id);
-  if (!entry) {
+  if (message?.type !== "effect-result" && message?.type !== "effect-error") {
     return;
   }
-  pending.delete(message.id);
-  if (message.type === "effect-result") {
-    entry.resolve(message.result);
-  } else {
-    entry.reject(errorOf(message.failure));
+  answered += 1;
+  const entry = pending.get(message.id);
+  if (entry) {
+    pending.delete(message.id);
+    if (message.type === "effect-result") {
+      entry.resolve(message.result);
+    } else {
+      entry.reject(errorOf(message.failure));
+    }
   }
+  postIdle();
 });
 
 const effect = (kind: string, args: unknown): Promise<unknown> => {
@@ -105,7 +131,17 @@ function makeBridge(runId: string, inputs: Record<string, unknown>) {
     inputs,
     run: (spec: Record<string, unknown>) => effect("run", strip(spec)),
     spawn: (spec: Record<string, unknown>) => handleOf(strip(spec)),
-    ask: (spec: unknown) => effect("ask", spec),
+    ask: ({ answer, ...spec }: Record<string, unknown>) =>
+      effect(
+        "ask",
+        answer === undefined
+          ? spec
+          : {
+              ...spec,
+              // biome-ignore lint/suspicious/noExplicitAny: the program hands us its own zod schema, untyped at this boundary
+              answerSchema: zodToJsonSchema(answer as any),
+            }
+      ),
     exec: (cmd: string, options?: { timeoutMinutes?: number }) =>
       effect("exec", { cmd, timeoutMinutes: options?.timeoutMinutes }),
     exists: (path: string) => effect("exists", { path }),
@@ -219,9 +255,9 @@ self.addEventListener("message", async function boot(event: MessageEvent) {
         "A program must default-export an async function taking the workflow runtime."
       );
     }
-    const result = await module.default(
-      makeBridge(start.runId, start.inputs ?? {})
-    );
+    const running = module.default(makeBridge(start.runId, start.inputs ?? {}));
+    postIdle();
+    const result = await running;
     self.postMessage({ type: "done", result } satisfies WorkerOut);
   } catch (error) {
     self.postMessage({

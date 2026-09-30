@@ -23,6 +23,7 @@ import type {
   SkillFile,
   ToolStatus,
   WorkflowEffectKind,
+  WorkflowFailure,
   WorkflowGraph,
   WorkflowInput,
   WorkflowOrigin,
@@ -93,9 +94,15 @@ export const workflowSteps = sqliteTable("workflow_steps", {
     .notNull()
     .references(() => workflowRuns.id),
   nodeId: text("node_id").notNull(),
-  /** The effect sequence that owns this step, and so its spec in the journal. */
+  /** The effect sequence that owns this step: `ref` N in its run. */
   seq: integer("seq").notNull(),
   kind: text("kind").$type<WorkflowGraph["nodes"][number]["kind"]>().notNull(),
+  /**
+   * What the call that opened the step asked for: a `run`/`spawn` step's
+   * spec (prompt, schema, retries, timeout), an `ask`'s question. The attempt
+   * machinery reads it for every retry, timeout and result check.
+   */
+  spec: text("spec", { mode: "json" }).$type<Record<string, unknown>>(),
   status: text("status").$type<WorkflowStepStatus>().notNull(),
   instanceId: text("instance_id"),
   result: text("result", { mode: "json" }).$type<unknown>(),
@@ -105,33 +112,30 @@ export const workflowSteps = sqliteTable("workflow_steps", {
   endedAt: timestamp("ended_at"),
 });
 /**
- * The effect journal (proposal §13.3): every `w.*` call a run's program made,
- * in order. A replay answers from these rows until the first unsettled one.
+ * A run's log: every `w.*` call its program made, what it asked and what it
+ * came back with. Written by the engine's driver when a call is performed —
+ * once, never on a replay — and completed when a step or question settles.
+ * For the run view and `workflow_read` only: the workflow engine's own
+ * storage is what a run replays from, never this.
  */
-export const workflowEffects = sqliteTable(
-  "workflow_effects",
+export const workflowRunLog = sqliteTable(
+  "workflow_run_log",
   {
     runId: text("run_id")
       .notNull()
       .references(() => workflowRuns.id),
     seq: integer("seq").notNull(),
     kind: text("kind").$type<WorkflowEffectKind>().notNull(),
-    argsHash: text("args_hash").notNull(),
-    /**
-     * The call's own arguments, kept beside its outcome so the run view can
-     * say what was asked, run or stored without re-reading the program.
-     * `argsHash` stays the replay key; this column is for the reader.
-     */
     args: text("args", { mode: "json" }).$type<Record<string, unknown>>(),
     result: text("result", { mode: "json" }).$type<unknown>(),
-    failure: text("failure"),
+    failure: text("failure", { mode: "json" }).$type<WorkflowFailure>(),
     at: timestamp("at")
       .notNull()
       .$defaultFn(() => new Date()),
   },
   (table) => [
     primaryKey({ columns: [table.runId, table.seq] }),
-    index("workflow_effects_run").on(table.runId),
+    index("workflow_run_log_run").on(table.runId),
   ]
 );
 export const workflowAttempts = sqliteTable("workflow_attempts", {

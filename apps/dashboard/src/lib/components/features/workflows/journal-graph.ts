@@ -1,17 +1,16 @@
 /**
  * The run view for a code-origin run (proposal §13.4). A hand-written program
- * has no graph, so the shape on the canvas is read back out of the effect
- * journal: one node per `run`/`spawn`, `ask`/`exec`/`exists`/`workflow` as
- * their own kinds, and data flow taken from the order the program made the
- * calls in. Nothing here infers a status — the step rows carry those.
+ * has no graph, so the shape on the canvas is read back out of the run's log:
+ * one node per `run`/`spawn`, `ask`/`exec`/`exists`/`workflow` as their own
+ * kinds, and data flow taken from the order the program made the calls in.
+ * Nothing here infers a status — the step rows carry those.
  */
 
 import dagre from "@dagrejs/dagre";
 import type {
   EffortLevel,
-  WorkflowEffect,
   WorkflowEffectKind,
-  WorkflowFailure,
+  WorkflowLogEntry,
   WorkflowNode,
 } from "@whiffle/core";
 import type { JevAnswer, JevResult } from "@whiffle/core/workflow-program";
@@ -40,7 +39,7 @@ export interface JournalNode {
   id: string;
   kind: WorkflowEffectKind;
   lines: string[];
-  /** A real step node when the journal carries the spec; absent otherwise. */
+  /** A real step node when the log carries the spec; absent otherwise. */
   node?: WorkflowNode;
   position: { x: number; y: number };
   seq: number;
@@ -90,29 +89,31 @@ interface StepSpec {
   title: string;
 }
 
-/** The step spec a `run`/`spawn` effect journals beside its value. */
-const specOf = (effect: WorkflowEffect): StepSpec | undefined => {
-  const result = effect.result as { spec?: StepSpec } | null;
-  return result?.spec;
-};
+/** A `run`/`spawn` call's spec: the arguments the log keeps for it. */
+const specOf = (effect: WorkflowLogEntry): StepSpec | undefined =>
+  effect.kind === "run" || effect.kind === "spawn"
+    ? ((effect.args as unknown as StepSpec | null) ?? undefined)
+    : undefined;
 
 /**
  * The node a canvas call stands for, in either origin's terms: the authored
- * node the compiler named on it (`run`/`spawn` on their spec, `jev` on its
- * arguments), else the journal's own node for that sequence.
+ * node the compiler named on it (`run`/`spawn` and `jev` carry it in their
+ * arguments), else the log's own node for that sequence.
  */
-export const stepNodeIdOf = (effect: WorkflowEffect): string =>
-  specOf(effect)?.node ??
+export const stepNodeIdOf = (effect: WorkflowLogEntry): string =>
   (typeof effect.args?.node === "string" ? effect.args.node : undefined) ??
   journalNodeId(effect.seq);
 
 const firstLine = (text: string) => text.split("\n").find(Boolean) ?? "";
 
-/** One argument of the call, as journaled beside its result. */
-const arg = (effect: WorkflowEffect, name: string): string =>
+/** One argument of the call, as the log keeps it. */
+const arg = (effect: WorkflowLogEntry, name: string): string =>
   String(effect.args?.[name] ?? "");
 
-function describe(effect: WorkflowEffect): { lines: string[]; title: string } {
+function describe(effect: WorkflowLogEntry): {
+  lines: string[];
+  title: string;
+} {
   const result = effect.result as Record<string, unknown> | null;
   switch (effect.kind) {
     case "ask":
@@ -179,9 +180,9 @@ function answerText(answer: JevAnswer): string {
   }
 }
 
-/** Every Jev call the journal holds, by the node it stands for. */
+/** Every Jev call the log holds, by the node it stands for. */
 export function journalJev(
-  effects: WorkflowEffect[]
+  effects: WorkflowLogEntry[]
 ): Record<string, JournalJev> {
   const calls: Record<string, JournalJev> = {};
   for (const effect of effects) {
@@ -190,8 +191,7 @@ export function journalJev(
     }
     const nodeId = stepNodeIdOf(effect);
     if (effect.failure) {
-      const failure = JSON.parse(effect.failure) as WorkflowFailure;
-      calls[nodeId] = { answers: [], failure: failure.message };
+      calls[nodeId] = { answers: [], failure: effect.failure.message };
       continue;
     }
     const result = effect.result as JevResult | null;
@@ -214,8 +214,8 @@ export function journalJev(
  * `Promise.all` fan-out looks like in the journal — and every other call
  * blocks, so it opens a rank of its own.
  */
-/** One node, from the call the journal records at this sequence. */
-function nodeOf(effect: WorkflowEffect): JournalNode {
+/** One node, from the call the log records at this sequence. */
+function nodeOf(effect: WorkflowLogEntry): JournalNode {
   const id = journalNodeId(effect.seq);
   const spec = specOf(effect);
   if (!spec) {
@@ -257,7 +257,7 @@ function nodeOf(effect: WorkflowEffect): JournalNode {
  * `Promise.all` fan-out looks like in the journal — and every other call
  * blocks, so it opens a rank of its own.
  */
-function ranksOf(effects: WorkflowEffect[]): JournalNode[][] {
+function ranksOf(effects: WorkflowLogEntry[]): JournalNode[][] {
   const ranks: JournalNode[][] = [];
   for (const effect of effects) {
     if (!NODE_KINDS.includes(effect.kind)) {
@@ -308,7 +308,7 @@ function place(nodes: JournalNode[], edges: JournalEdge[]): void {
 }
 
 /** The canvas a code-origin run is painted on: nodes, edges and positions. */
-export function journalGraph(effects: WorkflowEffect[]): JournalGraph {
+export function journalGraph(effects: WorkflowLogEntry[]): JournalGraph {
   const ranks = ranksOf([...effects].sort((a, b) => a.seq - b.seq));
   const edges: JournalEdge[] = [];
   for (const [index, rank] of ranks.entries()) {
@@ -329,7 +329,7 @@ export function journalGraph(effects: WorkflowEffect[]): JournalGraph {
 
 /** Checkpoints, each pinned to the step the program was past when it marked. */
 export function journalCheckpoints(
-  effects: WorkflowEffect[]
+  effects: WorkflowLogEntry[]
 ): JournalCheckpoint[] {
   const ordered = [...effects].sort((a, b) => a.seq - b.seq);
   const marks: JournalCheckpoint[] = [];
@@ -354,7 +354,7 @@ export function journalCheckpoints(
 }
 
 /** The run's own narration: `w.log` lines and the notices it sent. */
-export function journalLog(effects: WorkflowEffect[]): JournalLogLine[] {
+export function journalLog(effects: WorkflowLogEntry[]): JournalLogLine[] {
   return [...effects]
     .sort((a, b) => a.seq - b.seq)
     .filter((effect) => effect.kind === "log" || effect.kind === "notify")
@@ -372,7 +372,7 @@ export function journalLog(effects: WorkflowEffect[]): JournalLogLine[] {
  * from `run.state`.
  */
 export function journalStateTouches(
-  effects: WorkflowEffect[]
+  effects: WorkflowLogEntry[]
 ): Record<string, JournalStateTouch> {
   const ordered = [...effects].sort((a, b) => a.seq - b.seq);
   const touches: Record<string, JournalStateTouch> = {};

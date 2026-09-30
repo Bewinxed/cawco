@@ -82,7 +82,7 @@ import {
   usageLimitHistory,
   usageLimits,
   workflowAttempts,
-  workflowEffects,
+  workflowRunLog,
   workflowRuns,
   workflowSteps,
   workflows,
@@ -113,7 +113,7 @@ export type WorkflowRow = typeof workflows.$inferSelect;
 export type WorkflowRunRow = typeof workflowRuns.$inferSelect;
 export type WorkflowStepRow = typeof workflowSteps.$inferSelect;
 export type WorkflowAttemptRow = typeof workflowAttempts.$inferSelect;
-export type WorkflowEffectRow = typeof workflowEffects.$inferSelect;
+export type WorkflowLogRow = typeof workflowRunLog.$inferSelect;
 export type WorkItemRow = typeof workItems.$inferSelect;
 export type WorkspaceRow = typeof workspaces.$inferSelect;
 
@@ -346,10 +346,11 @@ export interface DbShape {
       }
     | undefined;
   readonly getWorkflow: (id: string) => WorkflowRow | undefined;
-  readonly getWorkflowEffect: (
+  /** One call's row in a run's log, by its effect sequence. */
+  readonly getWorkflowLog: (
     runId: string,
     seq: number
-  ) => WorkflowEffectRow | undefined;
+  ) => WorkflowLogRow | undefined;
   readonly getWorkflowRun: (id: string) => WorkflowRunRow | undefined;
   readonly getWorkflowStep: (id: string) => WorkflowStepRow | undefined;
   readonly insertContinuation: (
@@ -422,7 +423,8 @@ export interface DbShape {
   /** Every machine's latest limit reading. */
   readonly listUsageLimits: () => UsageLimitRow[];
   readonly listWorkflowAttempts: (stepId: string) => WorkflowAttemptRow[];
-  readonly listWorkflowEffects: (runId: string) => WorkflowEffectRow[];
+  /** A run's log, in effect order. */
+  readonly listWorkflowLog: (runId: string) => WorkflowLogRow[];
   readonly listWorkflowRuns: (workflowId?: string) => WorkflowRunRow[];
   readonly listWorkflowSteps: (runId: string) => WorkflowStepRow[];
   readonly listWorkflows: () => WorkflowRow[];
@@ -608,9 +610,8 @@ export interface DbShape {
   /** Stores the machine's latest limit reading; one row per machine. */
   readonly putUsageLimits: (machineId: string, limits: ClaudeLimits) => void;
   readonly putWorkflow: (row: typeof workflows.$inferInsert) => WorkflowRow;
-  readonly putWorkflowEffect: (
-    row: typeof workflowEffects.$inferInsert
-  ) => void;
+  /** Records a call in its run's log, or completes the row it already has. */
+  readonly putWorkflowLog: (row: typeof workflowRunLog.$inferInsert) => void;
   /**
    * The daemon's own word, arriving every 15s: `liveIds` is exactly what its
    * supervisor is carrying right now (`HeartbeatPayload.instances`).
@@ -1345,8 +1346,8 @@ const make = (path: string): DbShape => {
               .run();
           }
           tx.delete(workflowSteps).where(eq(workflowSteps.runId, run.id)).run();
-          tx.delete(workflowEffects)
-            .where(eq(workflowEffects.runId, run.id))
+          tx.delete(workflowRunLog)
+            .where(eq(workflowRunLog.runId, run.id))
             .run();
         }
         tx.delete(workflowRuns).where(eq(workflowRuns.workflowId, id)).run();
@@ -1376,26 +1377,26 @@ const make = (path: string): DbShape => {
         .where(eq(workflowAttempts.stepId, stepId))
         .orderBy(workflowAttempts.number)
         .all(),
-    getWorkflowEffect: (runId, seq) =>
+    getWorkflowLog: (runId, seq) =>
       db
         .select()
-        .from(workflowEffects)
+        .from(workflowRunLog)
         .where(
-          and(eq(workflowEffects.runId, runId), eq(workflowEffects.seq, seq))
+          and(eq(workflowRunLog.runId, runId), eq(workflowRunLog.seq, seq))
         )
         .get(),
-    listWorkflowEffects: (runId) =>
+    listWorkflowLog: (runId) =>
       db
         .select()
-        .from(workflowEffects)
-        .where(eq(workflowEffects.runId, runId))
-        .orderBy(workflowEffects.seq)
+        .from(workflowRunLog)
+        .where(eq(workflowRunLog.runId, runId))
+        .orderBy(workflowRunLog.seq)
         .all(),
-    putWorkflowEffect: (row) => {
-      db.insert(workflowEffects)
+    putWorkflowLog: (row) => {
+      db.insert(workflowRunLog)
         .values(row)
         .onConflictDoUpdate({
-          target: [workflowEffects.runId, workflowEffects.seq],
+          target: [workflowRunLog.runId, workflowRunLog.seq],
           set: row,
         })
         .run();

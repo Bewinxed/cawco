@@ -108,7 +108,7 @@ import {
 } from "@whiffle/core";
 import { Elysia, t, ValidationError } from "elysia";
 import { websocket } from "elysia/websocket";
-import { HUB_VERSION } from "./config";
+import { DB_PATH, HUB_VERSION } from "./config";
 import {
   type ContinuationSource,
   type ContinueRequest,
@@ -5282,6 +5282,7 @@ export const createServer = ({
   });
   const workflowRuntime = createWorkflowRuntime({
     db,
+    dbPath: DB_PATH,
     online: (machineId) => !!registry.agent(machineId),
     emit: (envelope) => {
       const agent = registry.agent(envelope.machineId);
@@ -5423,6 +5424,10 @@ export const createServer = ({
   onWorkflowAnswer(pending, (id, result) =>
     workflowRuntime.settleQuestion(id, result)
   );
+  // Runs that were live when the hub stopped: the engine resumes them itself;
+  // this puts back what only lived in memory — attempt timeouts, parked
+  // questions.
+  workflowRuntime.resume().catch(console.error);
   const delegationMcp = createDelegationMcp({
     instances: () => db.listInstances(),
     // finish_item is a tool of a session whose work item carries checks.

@@ -200,18 +200,16 @@ export function workflowRoutes(
       })
     )
     .delete("/api/workflows/:id", ({ params }) =>
-      attempt(() => {
+      attempt(async () => {
         const row = db.getWorkflow(params.id);
         if (!row) {
           throw new Error("Workflow not found.");
         }
-        if (
-          db
-            .listWorkflowRuns(row.id)
-            .some((run) => ["running", "waiting"].includes(run.status))
-        ) {
+        const runs = db.listWorkflowRuns(row.id);
+        if (runs.some((run) => ["running", "waiting"].includes(run.status))) {
           throw new Error("A workflow with a live run cannot be deleted.");
         }
+        await runtime.forget(runs.map((run) => run.id));
         db.deleteWorkflow(row.id);
         skills.changed();
         return { ok: true };
@@ -220,7 +218,7 @@ export function workflowRoutes(
     .get("/api/workflows/:id/runs", ({ params }) => ({
       runs: db
         .listWorkflowRuns(db.getWorkflow(params.id)?.id ?? params.id)
-        .map((run) => publicRun(run, db.listWorkflowEffects(run.id))),
+        .map((run) => publicRun(run, db.listWorkflowLog(run.id))),
     }))
     .post("/api/workflows/:id/runs", { body: t.Any() }, ({ params, body }) =>
       attempt(() => {
@@ -267,9 +265,33 @@ export function workflowRoutes(
         };
       })
     )
-    .get("/api/workflow-runs/:id/effects", ({ params }) => ({
-      effects: runtime.effects(params.id),
+    .get("/api/workflow-runs/:id/log", ({ params }) => ({
+      log: runtime.log(params.id),
     }))
+    .get("/api/workflow-runs/:id/read", ({ params, query }) =>
+      attempt(() => {
+        const caller = String(query.instanceId ?? "");
+        if (!caller) {
+          throw new Error("workflow_read is for the run's supervisor session.");
+        }
+        const ref = String(query.ref ?? "");
+        const number = (value: unknown) =>
+          value === undefined || value === "" ? undefined : Number(value);
+        return new Response(
+          runtime.read(
+            params.id,
+            {
+              ref: ref === "result" ? "result" : Number(ref),
+              path: query.path ? String(query.path) : undefined,
+              offset: number(query.offset),
+              limit: number(query.limit),
+            },
+            caller
+          ),
+          { headers: { "content-type": "text/plain; charset=utf-8" } }
+        );
+      })
+    )
     .post("/api/workflow-runs/:id/cancel", ({ params }) =>
       attempt(() => runtime.cancel(params.id))
     )
@@ -278,13 +300,18 @@ export function workflowRoutes(
       {
         body: t.Object({
           stepId: t.String(),
-          choice: t.String(),
+          choice: t.Optional(t.String()),
           note: t.Optional(t.String()),
+          value: t.Optional(t.Unknown()),
         }),
       },
       ({ params, body }) =>
         attempt(async () => {
-          await runtime.answer(params.id, body.stepId, body.choice, body.note);
+          await runtime.answer(params.id, body.stepId, {
+            choice: body.choice,
+            note: body.note,
+            value: body.value,
+          });
           return { ok: true };
         })
     )
@@ -308,11 +335,8 @@ export function workflowRoutes(
           );
         })
     )
-    .post(
-      "/api/workflow-runs/:id/rerun",
-      { body: t.Object({ fromNodeId: t.Optional(t.String()) }) },
-      ({ params, body }) =>
-        attempt(() => runtime.rerun(params.id, body.fromNodeId))
+    .post("/api/workflow-runs/:id/rerun", ({ params }) =>
+      attempt(() => runtime.rerun(params.id))
     )
     .post(
       "/api/workflow-steps/:id/result",

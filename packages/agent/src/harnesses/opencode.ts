@@ -2397,6 +2397,7 @@ export class OpencodeSession implements HarnessSession {
               "set_item_checks",
               "run_workflow",
               "steer_workflow",
+              "workflow_read",
               "list_workflows",
             ].map((name) => [`whiffle_${name}`, this.#canDelegate !== false])
           ),

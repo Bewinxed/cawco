@@ -1,14 +1,13 @@
 /**
- * The program runtime (proposal §13.3). One Bun `Worker` per active run
- * executes the stored program; every `w.*` call crosses back here as an
- * effect, is answered from `workflow_effects` on replay or executed live and
- * journaled. Steps, attempts and sessions are exactly what §3.1/§5 already
- * described — what changed is who decides the order: the program, not a
- * scheduler.
+ * The workflow runtime (proposal §13.3): runs, their steps and questions, and
+ * the hub side of every `w.*` call. The workflow engine (`./engine`) owns a
+ * run's execution and its durability; this module is what it performs calls
+ * against — commands, Jev, state, step sessions, questions, child runs — and
+ * everything the dashboard and the supervisor see of a run: its rows, its
+ * log, and the receipts its supervisor is sent.
  */
 import type {
   CommandResult,
-  EffortLevel,
   Envelope,
   PermissionResult,
   Problem,
@@ -18,21 +17,34 @@ import type {
   WorkflowEffectKind,
   WorkflowFailure,
   WorkflowGraph,
+  WorkflowInput,
   WorkflowRun,
 } from "@whiffle/core";
-import { workflowNoticeMarker, workflowStepMarker } from "@whiffle/core";
-import { type JevSpec, stepIdFor } from "@whiffle/core/workflow-program";
-import { WORKER_URL, writeProgram } from "@whiffle/core/workflow-sandbox";
-import type { WorkerOut, WorkerStart } from "@whiffle/core/workflow-worker";
+import { workflowNoticeMarker } from "@whiffle/core";
+import {
+  failureOf,
+  type JevSpec,
+  stepIdFor,
+} from "@whiffle/core/workflow-program";
 import Ajv from "ajv";
 import type {
   DbShape,
   WorkflowAttemptRow,
-  WorkflowEffectRow,
+  WorkflowLogRow,
   WorkflowRunRow,
   WorkflowStepRow,
 } from "../db";
 import { askJev } from "../jev";
+import { createWorkflowEngine, type Outcome } from "./engine";
+import {
+  expandRefs,
+  expandRefsDeep,
+  failureText,
+  readSlice,
+  receiptOf,
+  valueAt,
+} from "./refs";
+import { createSteps, durationText, type StepSpec } from "./steps";
 
 /** A workflow waits on Jev longer than a meaning rule does. */
 const WORKFLOW_JEV_TIMEOUT_MS = 60_000;
@@ -53,6 +65,8 @@ export interface WorkflowRuntimeDeps {
     timeoutMs?: number
   ) => Promise<CommandResult>;
   db: DbShape;
+  /** The hub's SQLite file, which the workflow engine stores its messages in. */
+  dbPath: string;
   emit: (envelope: Envelope) => void;
   halt: (machineId: string, instanceId: string) => Promise<void>;
   notifyUser: (text: string) => void;
@@ -72,63 +86,48 @@ export interface WorkflowRuntimeDeps {
 
 export type PublicRun = WorkflowRunRow & Pick<WorkflowRun, "edges" | "loops">;
 
-/** The spec a `run` / `spawn` effect carries, already reduced to JSON. */
-interface StepArgs {
-  denyTools?: string[];
-  effort?: EffortLevel;
-  harness: "claude" | "opencode" | "pi";
-  model: string;
-  node?: string;
-  outputSchema: Record<string, unknown>;
-  prompt: string;
-  retries?: number;
-  skills?: string[];
-  timeoutMinutes?: number;
-  title: string;
+/** What an `ask` call carried across the worker boundary. */
+interface AskArgs {
+  allowOther?: boolean;
+  answeredBy?: "operator" | "supervisor";
+  answerSchema?: Record<string, unknown>;
+  options?: { description?: string; label: string }[];
+  question?: string;
+  waitFor?: number;
 }
+
+/** How a run is launched: from the dashboard, a supervisor, or a parent run. */
+export interface LaunchOptions {
+  id?: string;
+  inputs?: Record<string, unknown>;
+  launchedBy?: string;
+  parentRunId?: string;
+  parentStepId?: string | null;
+  rerunOfRunId?: string;
+  supervisor?: { instanceId: string } | { delegateType: string } | null;
+  workspace?: { path: string; machineId: string };
+}
+
+/** Calls whose result comes later: a step, a question, a sleep, a child run. */
+const WAITS: ReadonlySet<WorkflowEffectKind> = new Set([
+  "run",
+  "spawn",
+  "ask",
+  "sleep",
+  "workflow",
+]);
 
 const active = (run: WorkflowRunRow) =>
   run.status === "running" || run.status === "waiting";
 const reason = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
 
-/** Stable JSON so an argument object always hashes the same way. */
-const canonical = (value: unknown): string => {
-  if (value === null || typeof value !== "object") {
-    return JSON.stringify(value) ?? "null";
-  }
-  if (Array.isArray(value)) {
-    return `[${value.map(canonical).join(",")}]`;
-  }
-  return `{${Object.entries(value as Record<string, unknown>)
-    .filter(([, entry]) => entry !== undefined)
-    .sort(([a], [b]) => (a < b ? -1 : 1))
-    .map(([key, entry]) => `${JSON.stringify(key)}:${canonical(entry)}`)
-    .join(",")}}`;
-};
-/** What a settled effect keeps: a step keeps its spec beside its value. */
-const journalResult = (
-  kind: WorkflowEffectKind,
-  stored: WorkflowEffectRow | undefined,
-  outcome: { failure?: WorkflowFailure; result?: unknown }
-) => {
-  if (outcome.failure) {
-    return stored?.result ?? null;
-  }
-  if (kind === "run" || kind === "spawn") {
-    return { ...(stored?.result as object), value: outcome.result };
-  }
-  return outcome.result;
-};
-
 /**
- * What a settled effect keeps of its *arguments*. The run view has to say
- * what was asked, run, stored or slept on; `argsHash` can only say whether
- * two calls matched. `run`/`spawn` already keep their whole spec under
- * `result.spec`, and the schemas a `state` call carries are the program's
- * business, not the reader's — everything else is journaled verbatim.
+ * What a run's log keeps of a call's arguments: enough for the run view to
+ * say what was asked, run, stored or slept on. A step keeps its whole spec;
+ * the schemas a `state` call carries are the program's business.
  */
-const journalArgs = (
+const loggedArgs = (
   kind: WorkflowEffectKind,
   args: Record<string, unknown>
 ): Record<string, unknown> | null => {
@@ -137,8 +136,18 @@ const journalArgs = (
       names.filter((name) => args[name] !== undefined).map((n) => [n, args[n]])
     );
   switch (kind) {
+    case "run":
+    case "spawn":
+      return args;
     case "ask":
-      return keep("question", "options", "allowOther", "answeredBy", "waitFor");
+      return keep(
+        "question",
+        "options",
+        "allowOther",
+        "answeredBy",
+        "waitFor",
+        "answerSchema"
+      );
     case "exec":
       return keep("cmd", "timeoutMinutes");
     case "exists":
@@ -163,25 +172,22 @@ const journalArgs = (
   }
 };
 
-const hashArgs = (args: unknown) =>
-  new Bun.CryptoHasher("sha256").update(canonical(args)).digest("hex");
-
 /**
- * `run.edges` / `run.loops` (§7.2a), now read off the `trace` effects the
- * compiled program emits. A code-origin run traces nothing, so both are empty
- * and the dashboard lays its graph out from the journal instead.
+ * `run.edges` / `run.loops` (§7.2a), read off the `trace` calls in the run's
+ * log. A code-origin run traces nothing, so both are empty and the dashboard
+ * lays its graph out from the log instead.
  */
 export function publicRun(
   run: WorkflowRunRow,
-  effects: WorkflowEffectRow[]
+  log: WorkflowLogRow[]
 ): PublicRun {
   const edges: Record<string, Record<string, "fired" | "skipped">> = {};
   const loops: Record<string, Record<string, number>> = {};
-  for (const effect of effects) {
-    if (effect.kind !== "trace") {
+  for (const entry of log) {
+    if (entry.kind !== "trace") {
       continue;
     }
-    const { edgeId, scope } = (effect.result ?? {}) as {
+    const { edgeId, scope } = (entry.result ?? {}) as {
       edgeId?: string;
       scope?: string;
     };
@@ -211,21 +217,58 @@ export function publicRun(
   return { ...run, edges, loops };
 }
 
+/**
+ * The notice a supervisor-answered question sends: the question, its options,
+ * the typed answer's schema if it has one, and the exact call that answers it.
+ */
+function questionNotice(
+  workflow: string,
+  run: WorkflowRunRow,
+  step: WorkflowStepRow,
+  spec: AskArgs
+): string {
+  const options = spec.options ?? [];
+  const labels = options.map((option) => option.label).join(" | ") || "none";
+  const other = spec.allowOther ? " (or any other answer)" : "";
+  const schema = spec.answerSchema
+    ? `\nTyped answer schema: ${JSON.stringify(spec.answerSchema)}`
+    : "";
+  let how = 'choice: "<label>"';
+  if (spec.answerSchema) {
+    how = `value: <a value matching the schema above>${options.length ? ', choice: "<label>"' : ""}`;
+  }
+  return `${workflowNoticeMarker(workflow, "question")}run ${run.id} · step ${step.id}\n${spec.question ?? ""}\nOptions: ${labels}${other}${schema}\nAnswer with steer_workflow {runId: "${run.id}", action: {type: "answer", stepId: "${step.id}", ${how}}}.`;
+}
+
+/** A launch's inputs: defaults filled, every required one present, selects in range. */
+function resolveInputs(
+  declared: WorkflowInput[],
+  given: Record<string, unknown> | undefined
+): Record<string, unknown> {
+  const inputs = { ...given };
+  for (const input of declared) {
+    if (inputs[input.name] === undefined && input.default !== undefined) {
+      inputs[input.name] = input.default;
+    }
+    const value = inputs[input.name];
+    if (input.required && (value === undefined || value === "")) {
+      throw new Error(`Input ${input.name} is required.`);
+    }
+    if (
+      input.type === "select" &&
+      value !== undefined &&
+      !input.options?.includes(String(value))
+    ) {
+      throw new Error(`Input ${input.name} must be one of its options.`);
+    }
+  }
+  return inputs;
+}
+
 export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
   const { db } = deps;
   const ajv = new Ajv({ allErrors: true, strict: false });
-  const timers = new Map<string, ReturnType<typeof setTimeout>>();
   const locks = new Map<string, Promise<unknown>>();
-  /** Effects still waiting on the world: step id, child run id, or sleep key. */
-  const waiters = new Map<
-    string,
-    {
-      reject: (failure: WorkflowFailure) => void;
-      resolve: (value: unknown) => void;
-      runId: string;
-    }
-  >();
-  const workers = new Map<string, { worker: Worker }>();
 
   const runOf = (id: string): WorkflowRunRow => {
     const run = db.getWorkflowRun(id);
@@ -241,17 +284,12 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
     }
     return step;
   };
-  const latest = (step: WorkflowStepRow) =>
-    db.listWorkflowAttempts(step.id).at(-1);
-  const clearTimer = (id: string) => {
-    clearTimeout(timers.get(id));
-    timers.delete(id);
-  };
+  const nameOf = (run: WorkflowRunRow) =>
+    db.getWorkflow(run.workflowId)?.name ?? run.workflowId;
   /**
    * The question a waiting run is parked on, read off the rows: the waiting
-   * `ask` step plus the arguments its effect journaled. A code-origin run has
-   * no graph to read the question from, so this is the only source, and both
-   * the detail route and the `workflow` frame use it.
+   * `ask` step and the spec it was opened with. A code-origin run has no graph
+   * to read the question from, so this is the only source.
    */
   const askOf = (run: WorkflowRunRow): WorkflowAsk | undefined => {
     if (run.status !== "waiting") {
@@ -263,17 +301,31 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
     if (!step) {
       return undefined;
     }
-    const args = (db.getWorkflowEffect(run.id, step.seq)?.args ??
-      {}) as Partial<WorkflowAsk>;
+    const spec = (step.spec ?? {}) as AskArgs;
     return {
       stepId: step.id,
-      question: args.question ?? "",
-      options: args.options ?? [],
-      allowOther: args.allowOther ?? false,
-      answeredBy: args.answeredBy ?? "operator",
+      question: spec.question ?? "",
+      options: spec.options ?? [],
+      allowOther: spec.allowOther ?? false,
+      answeredBy: spec.answeredBy ?? "operator",
+      ...(spec.answerSchema ? { answerSchema: spec.answerSchema } : {}),
       parkedAt: step.startedAt ?? run.startedAt,
     };
   };
+  const announce = (
+    run: WorkflowRunRow,
+    step?: WorkflowStepRow,
+    attempt?: WorkflowAttemptRow,
+    checkpoint?: { data: unknown; label: string }
+  ) =>
+    deps.broadcast({
+      runId: run.id,
+      run: publicRun(run, db.listWorkflowLog(run.id)),
+      step,
+      attempt,
+      checkpoint,
+      ask: askOf(run),
+    });
   const write = (
     run: WorkflowRunRow,
     step?: WorkflowStepRow,
@@ -281,14 +333,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
     checkpoint?: { data: unknown; label: string }
   ) => {
     db.workflowTransition(run, step, attempt);
-    deps.broadcast({
-      runId: run.id,
-      run: publicRun(run, db.listWorkflowEffects(run.id)),
-      step,
-      attempt,
-      checkpoint,
-      ask: askOf(run),
-    });
+    announce(run, step, attempt, checkpoint);
   };
   const serial = <T>(
     runId: string,
@@ -327,7 +372,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
           origin: {
             kind: "peer",
             from: run.id,
-            name: db.getWorkflow(run.workflowId)?.name ?? run.workflowId,
+            name: nameOf(run),
             fromSession: run.supervisorInstanceId ?? run.id,
           },
           ...(queued ? { shouldQuery: false } : {}),
@@ -335,6 +380,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
       },
     });
   };
+  /** A receipt or question for the run's supervisor, queued for its next turn. */
   const notify = (run: WorkflowRunRow, body: string) => {
     if (!run.supervisorInstanceId) {
       return;
@@ -348,323 +394,107 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
       send(run, supervisor.id, body, true);
     }
   };
-  const nameOf = (run: WorkflowRunRow) =>
-    db.getWorkflow(run.workflowId)?.name ?? run.workflowId;
 
-  const stopStep = (run: WorkflowRunRow, step: WorkflowStepRow) => {
-    clearTimer(step.id);
-    deps.settle(step.id);
-    if (step.instanceId && deps.online(run.machineId)) {
-      deps.emit({
-        verb: "stop",
-        machineId: run.machineId,
-        instanceId: step.instanceId,
-        payload: { instanceId: step.instanceId },
-      });
-    }
-  };
+  // -------------------------------------------------------------------- log
 
-  const killWorker = (runId: string) => {
-    const live = workers.get(runId);
-    if (live) {
-      live.worker.terminate();
-      workers.delete(runId);
-    }
-    for (const [key, waiter] of waiters) {
-      if (waiter.runId === runId) {
-        waiters.delete(key);
-      }
-    }
-  };
-
-  const finish = (
-    run: WorkflowRunRow,
-    status: "done" | "failed" | "cancelled",
-    failure: string | null = null,
-    result: unknown = null
-
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: a terminal transition stops sessions, cascades to children, settles waiters and reports in one sweep
+  /** Records a call in the run's log, settled or not. */
+  const logCall = (
+    runId: string,
+    seq: number,
+    kind: WorkflowEffectKind,
+    args: Record<string, unknown>,
+    outcome?: Outcome
   ) => {
-    run.status = status;
-    run.failure = failure;
-    run.result = result;
-    run.endedAt = new Date();
-    killWorker(run.id);
-    for (const child of db
-      .listWorkflowRuns()
-      .filter((entry) => entry.parentRunId === run.id && active(entry))) {
-      finish(child, "cancelled");
-    }
-    for (const step of db.listWorkflowSteps(run.id)) {
-      if (!["pending", "running", "waiting"].includes(step.status)) {
-        continue;
-      }
-      stopStep(run, step);
-      step.status = step.status === "pending" ? "skipped" : "cancelled";
-      step.endedAt = new Date();
-      const attempt = latest(step);
-      if (attempt && !attempt.endedAt) {
-        attempt.endedAt = new Date();
-        attempt.failure = status;
-      }
-      write(run, step, attempt);
-    }
-    write(run);
-    notify(
-      run,
-      `${workflowNoticeMarker(nameOf(run), run.status)}${run.failure ?? JSON.stringify(run.result, null, 2)}`
-    );
-    if (run.parentRunId && run.parentStepId) {
-      const waiter = waiters.get(run.id);
-      if (waiter) {
-        waiters.delete(run.id);
-        if (status === "done") {
-          waiter.resolve(run.result);
-        } else {
-          waiter.reject({
-            name: "ChildError",
-            kind: status === "cancelled" ? "cancelled" : "failed",
-            childRunId: run.id,
-            message: run.failure ?? status,
-          });
-        }
-      }
-    }
-  };
-
-  // ---------------------------------------------------------------- steps
-
-  /**
-   * Starts the step's next attempt, inside `serial(run.id)`. The attempt is
-   * recorded first; then its session is spawned (or resumed) and sent the
-   * prompt. Whatever stops that start — a spawn the transport drops, a send
-   * with no session to take it — is the attempt's own failure and ends it
-   * through {@link ended}, so the step's `retries` cover every way an attempt
-   * fails, the first included.
-   */
-  const attemptStep = async (
-    run: WorkflowRunRow,
-    step: WorkflowStepRow,
-    spec: StepArgs,
-    previousError = ""
-  ) => {
-    const number = (latest(step)?.number ?? 0) + 1;
-    const notes = (run.state.__notes as string[] | undefined) ?? [];
-    run.state = { ...run.state, __notes: [] };
-    const body = `${workflowStepMarker(nameOf(run), spec.title)}${spec.prompt}\n\nWhen the work is done, call submit_result exactly once with an object matching this schema, then end your turn. Do not describe the result in prose instead of calling it.\n${JSON.stringify(spec.outputSchema, null, 2)}${run.supervisorInstanceId ? "" : "\nThere is nobody to ask. Decide, and record any assumption in your result."}${notes.length ? `\nSupervisor note: ${notes.join("\n")}` : ""}${previousError ? `\nPrevious attempt: ${previousError}\n${previousError === "no-result" ? "You ended without calling submit_result. Call it now with an object matching the schema." : "Correct the error and call submit_result."}` : ""}`;
-    step.instanceId ??= crypto.randomUUID();
-    step.status = "running";
-    step.startedAt ??= new Date();
-    step.endedAt = null;
-    const attempt: WorkflowAttemptRow = {
-      id: crypto.randomUUID(),
-      stepId: step.id,
-      number,
-      renderedPrompt: body,
-      result: null,
-      failure: null,
-      startedAt: new Date(),
-      endedAt: null,
-    };
-    write(run, step, attempt);
-    try {
-      await startAttempt(run, step, step.instanceId, spec, body);
-    } catch (failure) {
-      await ended(run, step, reason(failure));
-    }
-  };
-
-  /**
-   * Puts an attempt's prompt in front of the step's session. A live session
-   * takes it as its next turn. One that is gone is resumed — a step that has
-   * a conversation keeps it across attempts, so a retry never starts over.
-   * A step whose session never came to be (its spawn failed before the
-   * harness named a conversation) is spawned, as its first attempt was.
-   */
-  const startAttempt = async (
-    run: WorkflowRunRow,
-    step: WorkflowStepRow,
-    instanceId: string,
-    spec: StepArgs,
-    body: string
-  ) => {
-    const [instance] = db.getInstancesByIds([instanceId]);
-    if (!(instance && ["running", "starting"].includes(instance.status))) {
-      await deps.spawn(run.machineId, {
-        instanceId,
-        cwd: run.workspace,
-        harness: spec.harness,
-        model: spec.model,
-        effort: spec.effort,
-        skills: spec.skills,
-        denyTools:
-          spec.harness === "claude"
-            ? [
-                ...(spec.denyTools ?? []),
-                ...(run.supervisorInstanceId ? [] : ["AskUserQuestion"]),
-              ]
-            : undefined,
-        ...(instance?.sessionId
-          ? { resume: { sessionKey: instance.sessionId } }
-          : {}),
-        permissionMode: "bypassPermissions",
-        canDelegate: false,
-        title: `${nameOf(run)} · ${spec.title}`,
-        ...(run.supervisorInstanceId
-          ? { parent: { instanceId: run.supervisorInstanceId } }
-          : {}),
-        workflowRunId: run.id,
-        workflowStepId: step.id,
-      });
-    }
-    if (!active(runOf(run.id))) {
-      stopStep(run, step);
-      return;
-    }
-    send(run, instanceId, body);
-    arm(run, step, Date.now() + (spec.timeoutMinutes ?? 60) * 60_000);
-  };
-
-  const arm = (
-    run: WorkflowRunRow,
-    step: WorkflowStepRow,
-    deadline: number,
-    ask = false
-  ) => {
-    clearTimer(step.id);
-    timers.set(
-      step.id,
-      setTimeout(
-        () => {
-          serial(run.id, async () => {
-            const current = runOf(run.id);
-            const currentStep = stepOf(step.id);
-            if (
-              !(
-                active(current) &&
-                ["running", "waiting"].includes(currentStep.status)
-              )
-            ) {
-              return;
-            }
-            if (ask) {
-              settleAsk(current, currentStep, {
-                name: "AskError",
-                kind: "timeout",
-                message: "ask-timeout",
-              });
-              return;
-            }
-            if (currentStep.instanceId) {
-              await deps.halt(current.machineId, currentStep.instanceId);
-            }
-            await ended(current, currentStep, "attempt-timeout");
-          }).catch((error) => {
-            const current = runOf(run.id);
-            if (active(current)) {
-              finish(current, "failed", reason(error));
-            }
-          });
-        },
-        Math.max(1, deadline - Date.now())
-      )
-    );
-  };
-
-  const specOf = (step: WorkflowStepRow): StepArgs => {
-    const effect = db.getWorkflowEffect(step.runId, step.seq);
-    if (!effect?.result) {
-      throw new Error(`Workflow step ${step.id} has no recorded spec.`);
-    }
-    return (effect.result as { spec: StepArgs }).spec;
-  };
-
-  const settleStep = (
-    step: WorkflowStepRow,
-    outcome: { result?: unknown; failure?: WorkflowFailure }
-  ) => {
-    const waiter = waiters.get(step.id);
-    if (!waiter) {
-      return;
-    }
-    waiters.delete(step.id);
-    if (outcome.failure) {
-      waiter.reject(outcome.failure);
-    } else {
-      waiter.resolve(outcome.result);
-    }
-  };
-
-  /** A step's turn ended: record, retry on the same session, or fail. */
-  const ended = async (
-    run: WorkflowRunRow,
-    step: WorkflowStepRow,
-    error?: string
-  ) => {
-    if (!active(run) || step.status !== "running") {
-      return;
-    }
-    const attempt = latest(step);
-    if (!attempt || attempt.endedAt) {
-      return;
-    }
-    const spec = specOf(step);
-    clearTimer(step.id);
-    attempt.endedAt = new Date();
-    if (!error && attempt.result !== null) {
-      step.status = "passed";
-      step.result = attempt.result;
-      step.endedAt = new Date();
-      write(run, step, attempt);
-      notify(
-        run,
-        `${workflowNoticeMarker(nameOf(run), `step ${spec.title} passed`)}${JSON.stringify(step.result, null, 2)}`
-      );
-      settleStep(step, { result: attempt.result });
-      return;
-    }
-    attempt.failure = error ?? "no-result";
-    if (attempt.number <= (spec.retries ?? 2)) {
-      write(run, step, attempt);
-      await attemptStep(run, step, spec, attempt.failure);
-      return;
-    }
-    step.status = "failed";
-    step.failure = attempt.failure;
-    step.endedAt = new Date();
-    write(run, step, attempt);
-    notify(
-      run,
-      `${workflowNoticeMarker(nameOf(run), `step ${spec.title} failed`)}${step.failure}`
-    );
-    settleStep(step, {
-      failure: {
-        name: "StepError",
-        kind:
-          attempt.failure === "no-result" ||
-          attempt.failure === "attempt-timeout"
-            ? attempt.failure
-            : "harness-error",
-        stepId: step.id,
-        attempts: attempt.number,
-        message: attempt.failure,
-      },
+    db.putWorkflowLog({
+      runId,
+      seq,
+      kind,
+      args: loggedArgs(kind, args),
+      result: outcome && "result" in outcome ? (outcome.result ?? null) : null,
+      failure: outcome && "failure" in outcome ? outcome.failure : null,
+      at: new Date(),
     });
   };
-
-  // ----------------------------------------------------------------- ask
-
-  const parkAsk = (
-    run: WorkflowRunRow,
-    step: WorkflowStepRow,
-    spec: {
-      allowOther?: boolean;
-      answeredBy?: "operator" | "supervisor";
-      options: { description?: string; label: string }[];
-      question: string;
-      waitFor?: number;
+  /** A waited-on call settled: its log row gets what it came back with. */
+  const settleLog = (runId: string, seq: number, outcome: Outcome) => {
+    const row = db.getWorkflowLog(runId, seq);
+    if (row) {
+      db.putWorkflowLog({
+        ...row,
+        result: "result" in outcome ? (outcome.result ?? null) : null,
+        failure: "failure" in outcome ? outcome.failure : null,
+      });
     }
-  ) => {
+  };
+  /**
+   * The value `ref` N stands for: what the run's effect N came back with, or
+   * its failure. One still waiting has nothing to read yet.
+   */
+  const refValue = (runId: string, seq: number): unknown => {
+    const row = db.getWorkflowLog(runId, seq);
+    if (!row) {
+      throw new Error(`This run has no effect ${seq}.`);
+    }
+    if (row.failure) {
+      return { failure: row.failure };
+    }
+    if (row.result === null && WAITS.has(row.kind) && row.kind !== "sleep") {
+      const step =
+        db.getWorkflowStep(stepIdFor(runId, seq)) ??
+        db.getWorkflowStep(`step-${stepIdFor(runId, seq)}`);
+      if (!step || ["pending", "running", "waiting"].includes(step.status)) {
+        throw new Error(
+          `Effect ${seq} (${row.kind}) has not settled yet; it has no result to read.`
+        );
+      }
+    }
+    return row.result;
+  };
+  const expand = (run: WorkflowRunRow, text: string) =>
+    expandRefs(text, (seq) => refValue(run.id, seq));
+
+  // ------------------------------------------------------------------- steps
+
+  const steps = createSteps({
+    db,
+    expand,
+    halt: deps.halt,
+    nameOf,
+    notify,
+    online: deps.online,
+    send,
+    serial,
+    spawn: deps.spawn,
+    stopSession: (run, instanceId) => {
+      if (deps.online(run.machineId)) {
+        deps.emit({
+          verb: "stop",
+          machineId: run.machineId,
+          instanceId,
+          payload: { instanceId },
+        });
+      }
+    },
+    write,
+    settled: (run, step, outcome) => {
+      settleLog(run.id, step.seq, outcome);
+      announce(run, step);
+      engine.settle(run.id, step.seq, "step", outcome).catch((error) => {
+        finish(
+          runOf(run.id),
+          "failed",
+          `The workflow engine could not record step ${step.id}: ${reason(error)}`
+        );
+      });
+    },
+  });
+
+  // --------------------------------------------------------------- questions
+
+  const parkAsk = (run: WorkflowRunRow, step: WorkflowStepRow, tell = true) => {
+    const spec = (step.spec ?? {}) as AskArgs;
+    const question = spec.question ?? "";
+    const options = spec.options ?? [];
     deps.park({
       verb: "frames",
       machineId: run.machineId,
@@ -681,9 +511,9 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
         input: {
           questions: [
             {
-              question: spec.question,
-              header: spec.question.slice(0, 30),
-              options: spec.options,
+              question,
+              header: question.slice(0, 30),
+              options,
               multiSelect: false,
               allowOther: spec.allowOther ?? false,
             },
@@ -692,137 +522,322 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
         ...(spec.answeredBy === "supervisor" ? { routedTo: "parent" } : {}),
       },
     });
-    if (spec.answeredBy === "supervisor") {
-      notify(
-        run,
-        `${workflowNoticeMarker(nameOf(run), "question")}${spec.question}\n${JSON.stringify(spec.options)}\nAnswer with steer_workflow using action {type:"answer",stepId:"${step.id}",choice:"<label>"}.`
-      );
-    }
-    if (spec.waitFor) {
-      arm(
-        run,
-        step,
-        (step.startedAt?.getTime() ?? Date.now()) + spec.waitFor * 3_600_000,
-        true
-      );
+    if (tell && spec.answeredBy === "supervisor") {
+      notify(run, questionNotice(nameOf(run), run, step, spec));
     }
   };
+
+  /** Whether any other question of the run is still waiting for an answer. */
+  const stillWaiting = (run: WorkflowRunRow, except: string) =>
+    db
+      .listWorkflowSteps(run.id)
+      .some(
+        (row) =>
+          row.kind === "ask" && row.status === "waiting" && row.id !== except
+      );
 
   const settleAsk = (
     run: WorkflowRunRow,
     step: WorkflowStepRow,
-    outcome: { choice: string; note?: string } | WorkflowFailure
+    answer: { choice?: string; note?: string; value?: unknown }
   ) => {
+    const spec = (step.spec ?? {}) as AskArgs;
+    if (spec.answerSchema) {
+      if (answer.value === undefined) {
+        throw new Error(
+          `This question takes a typed value matching ${JSON.stringify(spec.answerSchema)}.`
+        );
+      }
+      const validate = ajv.compile(spec.answerSchema);
+      if (!validate(answer.value)) {
+        throw new Error(ajv.errorsText(validate.errors, { separator: "\n" }));
+      }
+    } else if (answer.value !== undefined) {
+      throw new Error(
+        "This question takes a choice; it declared no typed value."
+      );
+    } else if (!answer.choice) {
+      throw new Error("A workflow question needs a choice.");
+    }
     deps.settle(step.id);
-    clearTimer(step.id);
-    const failed = "name" in outcome;
-    step.status = failed ? "failed" : "passed";
-    step.result = failed ? null : outcome;
-    step.failure = failed ? outcome.message : null;
+    const result = {
+      choice: answer.choice ?? "",
+      ...(answer.note ? { note: answer.note } : {}),
+      ...(answer.value === undefined ? {} : { value: answer.value }),
+    };
+    step.status = "passed";
+    step.result = result;
+    step.failure = null;
     step.endedAt = new Date();
-    run.status = "running";
+    run.status = stillWaiting(run, step.id) ? "waiting" : "running";
+    settleLog(run.id, step.seq, { result });
     write(run, step);
-    settleStep(step, failed ? { failure: outcome } : { result: outcome });
+    engine.settle(run.id, step.seq, "ask", { result }).catch((error) => {
+      finish(
+        runOf(run.id),
+        "failed",
+        `The workflow engine could not record the answer to ${step.id}: ${reason(error)}`
+      );
+    });
   };
 
-  // ------------------------------------------------------------- effects
+  // ------------------------------------------------------------------- finish
 
-  const stepRow = (
+  /** Ends a run's execution in the engine; a failure to is logged, not thrown. */
+  const interrupt = (runId: string) => {
+    engine.interrupt(runId).catch((error) => {
+      console.error(
+        `[workflows] could not interrupt run ${runId}: ${reason(error)}`
+      );
+    });
+  };
+
+  /** Every step still open when its run ends: its session stopped, its row closed. */
+  const closeSteps = (
     run: WorkflowRunRow,
-    seq: number,
-    id: string,
-    kind: "step" | "ask" | "workflow",
-    nodeId: string
-  ): WorkflowStepRow =>
-    db.getWorkflowStep(id) ?? {
+    status: WorkflowRunRow["status"]
+  ) => {
+    for (const step of db.listWorkflowSteps(run.id)) {
+      if (!["pending", "running", "waiting"].includes(step.status)) {
+        continue;
+      }
+      steps.stop(run, step);
+      if (step.kind === "ask") {
+        deps.settle(step.id);
+      }
+      step.status = step.status === "pending" ? "skipped" : "cancelled";
+      step.endedAt = new Date();
+      const attempt = db.listWorkflowAttempts(step.id).at(-1);
+      if (attempt && !attempt.endedAt) {
+        attempt.endedAt = new Date();
+        attempt.failure = status;
+      }
+      write(run, step, attempt);
+    }
+  };
+
+  /** A child run ended: the step its parent opened on it says how. */
+  const reportToParent = (run: WorkflowRunRow) => {
+    const parent = run.parentRunId && db.getWorkflowRun(run.parentRunId);
+    const step = run.parentStepId && db.getWorkflowStep(run.parentStepId);
+    if (!(parent && step) || step.status !== "running") {
+      return;
+    }
+    const done = run.status === "done";
+    step.status = done ? "passed" : "failed";
+    step.result = done ? run.result : null;
+    step.failure = done ? null : (run.failure ?? run.status);
+    step.endedAt = new Date();
+    settleLog(
+      parent.id,
+      step.seq,
+      done
+        ? { result: run.result }
+        : {
+            failure: {
+              name: "ChildError",
+              kind: run.status === "cancelled" ? "cancelled" : "failed",
+              childRunId: run.id,
+              message: run.failure ?? run.status,
+            },
+          }
+    );
+    write(parent, step);
+  };
+
+  const finish = (
+    run: WorkflowRunRow,
+    status: "done" | "failed" | "cancelled",
+    failure: string | null = null,
+    result: unknown = null
+  ) => {
+    if (!active(run)) {
+      return;
+    }
+    run.status = status;
+    run.failure = failure;
+    run.result = result;
+    run.endedAt = new Date();
+    closeSteps(run, status);
+    write(run);
+    for (const child of db
+      .listWorkflowRuns()
+      .filter((entry) => entry.parentRunId === run.id && active(entry))) {
+      finish(child, "cancelled");
+      interrupt(child.id);
+    }
+    const took = durationText(Date.now() - run.startedAt.getTime());
+    const outcome =
+      status === "done"
+        ? receiptOf(result, "result")
+        : failureText(failure ?? status);
+    notify(
+      run,
+      `${workflowNoticeMarker(nameOf(run), status)}run ${run.id} · ${took} · ${outcome}`
+    );
+    reportToParent(run);
+  };
+
+  // ------------------------------------------------------------------ launch
+
+  /** How many runs deep a run started under `parentRunId` would be. */
+  const depthUnder = (parentRunId: string | undefined) => {
+    let depth = 1;
+    for (
+      let ancestor = parentRunId;
+      ancestor;
+      ancestor = runOf(ancestor).parentRunId ?? undefined
+    ) {
+      depth += 1;
+    }
+    return depth;
+  };
+
+  /** The session that supervises a new run: a live one named, or one spawned. */
+  const supervisorFor = async (
+    chosen: LaunchOptions["supervisor"],
+    workflow: { name: string; description: string },
+    workspace: { path: string; machineId: string },
+    runId: string
+  ): Promise<string | null> => {
+    if (!chosen) {
+      return null;
+    }
+    if ("instanceId" in chosen) {
+      const [instance] = db.getInstancesByIds([chosen.instanceId]);
+      if (
+        !(
+          instance &&
+          deps.online(instance.machineId) &&
+          ["running", "starting"].includes(instance.status)
+        )
+      ) {
+        throw new Error("The supervisor must be a live session.");
+      }
+      return instance.id;
+    }
+    return await deps.supervisor(
+      chosen.delegateType,
+      workspace.path,
+      workspace.machineId,
+      `${workflowNoticeMarker(workflow.name, "supervisor brief")}Supervise workflow ${workflow.name}, run ${runId}.\n${workflow.description}\nYou receive a receipt for each step, checkpoint and the run's end: its status, attempt, time, a \`ref\`, and the result itself when it is 1,000 characters or less. Read more of a result only when you need it, with workflow_read {runId, ref, path}. Pass a result on to a later step as {{ref:N.path}} in what you hand the program; the hub fills it in when the step starts. Answer its questions and steer it with steer_workflow (note, retry, answer, cancel); the program controls routing.`
+    );
+  };
+
+  /**
+   * A run's row, after every refusal launch owes: problems in the graph, a
+   * bad input, too deep a call chain, a supervisor that is not live. The row
+   * is written; its execution is not started.
+   */
+  const prepare = async (
+    workflowId: string,
+    options: LaunchOptions
+  ): Promise<WorkflowRunRow> => {
+    const workflow = db.getWorkflow(workflowId);
+    if (!workflow) {
+      throw new Error(`No workflow ${workflowId}.`);
+    }
+    const problems = workflow.graph
+      ? deps.problems(workflow.graph, workflow.id)
+      : [];
+    if (problems.length) {
+      throw new Error(problems.map((problem) => problem.message).join("\n"));
+    }
+    const { workspace } = options;
+    if (!(workspace?.path && deps.online(workspace.machineId))) {
+      throw new Error("Choose a workspace directory on a connected machine.");
+    }
+    const inputs = resolveInputs(workflow.inputs, options.inputs);
+    const id = options.id ?? crypto.randomUUID();
+    if (depthUnder(options.parentRunId) > 8) {
+      throw new Error("workflow-depth");
+    }
+    const supervisorInstanceId = await supervisorFor(
+      options.supervisor === undefined && !options.parentRunId
+        ? workflow.graph?.settings?.defaultSupervisor
+        : options.supervisor,
+      workflow,
+      workspace,
+      id
+    );
+    const run: WorkflowRunRow = {
       id,
-      runId: run.id,
-      seq,
-      nodeId,
-      kind,
-      status: "pending",
-      instanceId: null,
-      childRunId: null,
+      workflowId: workflow.id,
+      graph: workflow.graph,
+      program: workflow.program,
+      inputs,
+      workspace: workspace.path,
+      machineId: workspace.machineId,
+      supervisorInstanceId,
+      status: "running",
       result: null,
       failure: null,
-      mapIndex: null,
-      startedAt: null,
+      state: {},
+      startedAt: new Date(),
       endedAt: null,
+      rerunOfRunId: options.rerunOfRunId ?? null,
+      parentRunId: options.parentRunId ?? null,
+      parentStepId: options.parentStepId ?? null,
+      launchedBy: options.launchedBy ?? "dashboard",
     };
+    write(run);
+    return run;
+  };
 
-  /** Executes one effect for real and answers with its journaled outcome. */
-  const execute = async (
+  // ------------------------------------------------------------------ calls
+
+  /** `w.jev`: every question over one state, its refs filled first. */
+  const jev = (run: WorkflowRunRow, args: Record<string, unknown>) => {
+    const connection = db.getOpenRouterConnection();
+    if (!connection) {
+      throw new Error("Jev needs OpenRouter connected in Settings");
+    }
+    const spec = args as unknown as JevSpec;
+    const state = expandRefsDeep(spec.state, (seq) =>
+      refValue(run.id, seq)
+    ) as JevSpec["state"];
+    return askJev(connection.apiKey, state, spec.questions, {
+      model: spec.model,
+      timeoutMs: WORKFLOW_JEV_TIMEOUT_MS,
+    });
+  };
+
+  /**
+   * A state slot read (`value` absent) or written. Either declares the slot:
+   * the step sessions' state tools refuse a name the program never named.
+   */
+  const slot = (
     run: WorkflowRunRow,
-    seq: number,
+    args: Record<string, unknown>,
+    writing: boolean
+  ) => {
+    const name = String(args.name);
+    const slots = (run.state.slots ?? {}) as Record<string, unknown>;
+    if (writing) {
+      const validate = ajv.compile(args.schema as Record<string, unknown>);
+      if (!validate(args.value)) {
+        throw new Error(ajv.errorsText(validate.errors));
+      }
+    }
+    run.state = {
+      ...run.state,
+      schemas: {
+        ...((run.state.schemas ?? {}) as Record<string, unknown>),
+        [name]: args.schema,
+      },
+      ...(writing ? { slots: { ...slots, [name]: args.value } } : {}),
+    };
+    write(run);
+    return writing ? null : (slots[name] ?? null);
+  };
+
+  /** A call whose answer is immediate, performed for real. */
+  const perform = async (
+    run: WorkflowRunRow,
     kind: WorkflowEffectKind,
     args: Record<string, unknown>
-
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the effect kinds are one dispatch table sharing the run, journal and waiter tables
-  ): Promise<{ result?: unknown; failure?: WorkflowFailure }> => {
+  ): Promise<unknown> => {
     switch (kind) {
-      case "run":
-      case "spawn": {
-        const spec = args as unknown as StepArgs;
-        const id = stepIdOf(run.id, seq);
-        const step = stepRow(run, seq, id, "step", spec.node ?? `seq-${seq}`);
-        db.putWorkflowEffect({
-          runId: run.id,
-          seq,
-          kind,
-          argsHash: hashArgs(args),
-          args: null,
-          result: { spec },
-          failure: null,
-          at: new Date(),
-        });
-        const settled = new Promise<{
-          result?: unknown;
-          failure?: WorkflowFailure;
-        }>((resolve) => {
-          waiters.set(id, {
-            runId: run.id,
-            resolve: (value) => resolve({ result: value }),
-            reject: (failure) => resolve({ failure }),
-          });
-        });
-        // Under the run's lock like every later attempt: a start that fails
-        // ends through `ended`, which may settle the waiter above at once.
-        await serial(run.id, () => attemptStep(runOf(run.id), step, spec));
-        return await settled;
-      }
-      case "ask": {
-        const spec = args as unknown as Parameters<typeof parkAsk>[2];
-        const id = stepIdOf(run.id, seq);
-        const step = stepRow(run, seq, id, "ask", `seq-${seq}`);
-        // The question is journaled *before* it parks: a waiting run must be
-        // answerable from the rows alone, with no worker and no graph.
-        db.putWorkflowEffect({
-          runId: run.id,
-          seq,
-          kind,
-          argsHash: hashArgs(args),
-          args: journalArgs(kind, args),
-          result: null,
-          failure: null,
-          at: new Date(),
-        });
-        step.status = "waiting";
-        step.startedAt ??= new Date();
-        run.status = "waiting";
-        write(run, step);
-        const settled = new Promise<{
-          result?: unknown;
-          failure?: WorkflowFailure;
-        }>((resolve) => {
-          waiters.set(id, {
-            runId: run.id,
-            resolve: (value) => resolve({ result: value }),
-            reject: (failure) => resolve({ failure }),
-          });
-        });
-        parkAsk(run, step, spec);
-        return await settled;
-      }
       case "exec": {
         const { exitCode, stdout, stderr } = await deps.command(
           run.machineId,
@@ -832,20 +847,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
             ? undefined
             : Number(args.timeoutMinutes) * 60_000
         );
-        return { result: { code: exitCode, stdout, stderr } };
-      }
-      case "jev": {
-        const connection = db.getOpenRouterConnection();
-        if (!connection) {
-          throw new Error("Jev needs OpenRouter connected in Settings");
-        }
-        const spec = args as unknown as JevSpec;
-        return {
-          result: await askJev(connection.apiKey, spec.state, spec.questions, {
-            model: spec.model,
-            timeoutMs: WORKFLOW_JEV_TIMEOUT_MS,
-          }),
-        };
+        return { code: exitCode, stdout, stderr };
       }
       case "exists": {
         const path = String(args.path).replaceAll("'", "'\\''");
@@ -854,111 +856,18 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
           run.workspace,
           `test -e '${path}'`
         );
-        return { result: exitCode === 0 };
+        return exitCode === 0;
       }
-      case "workflow": {
-        const childId = stepIdOf(run.id, seq);
-        const step = stepRow(
-          run,
-          seq,
-          `step-${childId}`,
-          "workflow",
-          `seq-${seq}`
-        );
-        step.status = "running";
-        step.startedAt ??= new Date();
-        step.childRunId = childId;
-        write(run, step);
-        const settled = new Promise<{
-          result?: unknown;
-          failure?: WorkflowFailure;
-        }>((resolve) => {
-          waiters.set(childId, {
-            runId: run.id,
-            resolve: (value) => resolve({ result: value }),
-            reject: (failure) => resolve({ failure }),
-          });
-        });
-        await runtime.launch(String(args.slug), {
-          id: childId,
-          inputs: args.inputs as Record<string, unknown>,
-          workspace: { path: run.workspace, machineId: run.machineId },
-          supervisor: run.supervisorInstanceId
-            ? { instanceId: run.supervisorInstanceId }
-            : undefined,
-          parentRunId: run.id,
-          parentStepId: step.id,
-        });
-        const outcome = await settled;
-        step.status = outcome.failure ? "failed" : "passed";
-        step.result = outcome.result ?? null;
-        step.failure = outcome.failure?.message ?? null;
-        step.endedAt = new Date();
-        write(run, step);
-        return outcome;
-      }
-      case "state-get": {
-        // Reading a slot declares it: the step sessions' state tools refuse a
-        // name the program never named.
-        run.state = {
-          ...run.state,
-          schemas: {
-            ...((run.state.schemas ?? {}) as Record<string, unknown>),
-            [String(args.name)]: args.schema,
-          },
-        };
-        write(run);
-        const slots = (run.state.slots ?? {}) as Record<string, unknown>;
-        return { result: slots[String(args.name)] ?? null };
-      }
-      case "state-set": {
-        const validate = ajv.compile(args.schema as Record<string, unknown>);
-        if (!validate(args.value)) {
-          throw new Error(ajv.errorsText(validate.errors));
-        }
-        run.state = {
-          ...run.state,
-          schemas: {
-            ...((run.state.schemas ?? {}) as Record<string, unknown>),
-            [String(args.name)]: args.schema,
-          },
-          slots: {
-            ...((run.state.slots ?? {}) as Record<string, unknown>),
-            [String(args.name)]: args.value,
-          },
-        };
-        write(run);
-        return { result: null };
-      }
-      case "checkpoint": {
-        const checkpoint = {
-          label: String(args.label),
-          data: args.data ?? null,
-        };
-        write(run, undefined, undefined, checkpoint);
-        notify(
-          run,
-          `${workflowNoticeMarker(nameOf(run), `checkpoint ${checkpoint.label}`)}${JSON.stringify(checkpoint.data, null, 2)}`
-        );
-        return { result: checkpoint };
-      }
-      case "sleep": {
-        const due = Date.now() + Number(args.ms);
-        db.putWorkflowEffect({
-          runId: run.id,
-          seq,
-          kind,
-          argsHash: hashArgs(args),
-          args: journalArgs(kind, args),
-          result: { due },
-          failure: null,
-          at: new Date(),
-        });
-        await sleepUntil(run.id, seq, due);
-        return { result: { due } };
-      }
+      case "jev":
+        return await jev(run, args);
+      case "state-get":
+        return slot(run, args, false);
+      case "state-set":
+        return slot(run, args, true);
+      case "checkpoint":
+        return { label: String(args.label), data: args.data ?? null };
       case "now":
-        return { result: Date.now() };
+        return Date.now();
       case "notify": {
         const text = `${workflowNoticeMarker(nameOf(run), "note")}${String(args.text)}`;
         if (run.supervisorInstanceId) {
@@ -966,259 +875,220 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
         } else {
           deps.notifyUser(text);
         }
-        return { result: null };
+        return null;
       }
       case "notes": {
         const notes = (run.state.__notes as string[] | undefined) ?? [];
         run.state = { ...run.state, __notes: [] };
         write(run);
-        return { result: notes };
+        return notes;
       }
       case "log":
-        return { result: { text: String(args.text) } };
+        return { text: String(args.text) };
       case "trace":
-        return { result: { edgeId: args.edgeId, scope: args.scope } };
+        return { edgeId: args.edgeId, scope: args.scope };
       default:
         throw new Error(`Unknown workflow effect ${kind}.`);
     }
   };
 
-  const sleepUntil = (runId: string, seq: number, due: number) =>
-    new Promise<void>((resolve) => {
-      const key = `sleep:${runId}:${seq}`;
-      waiters.set(key, {
-        runId,
-        resolve: () => resolve(),
-        reject: () => resolve(),
-      });
-      timers.set(
-        key,
-        setTimeout(
-          () => {
-            timers.delete(key);
-            waiters.delete(key);
-            resolve();
-          },
-          Math.max(1, due - Date.now())
-        )
-      );
-    });
-
-  /** The step row id a `run`/`spawn`/`ask`/`workflow` effect at `seq` owns. */
-  const stepIdOf = stepIdFor;
-
-  /**
-   * The replay rule (§13.3): a journaled effect answers from the journal; a
-   * mismatch at a sequence fails the run; anything else runs live and is
-   * journaled.
-   */
-  const decide = (
-    runId: string,
-    message: Extract<WorkerOut, { type: "effect" }>,
-    argsHash: string
-  ): {
-    reply?: { failure?: WorkflowFailure; result?: unknown };
-    run?: WorkflowRunRow;
-    sleepUntil?: number;
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the replay rule is one decision over journal presence, kind, hash and settledness
-  } => {
-    const run = runOf(runId);
-    if (!active(run)) {
-      return {};
-    }
-    const journaled = db.getWorkflowEffect(runId, message.seq);
-    if (
-      journaled &&
-      (journaled.kind !== message.kind || journaled.argsHash !== argsHash)
-    ) {
-      finish(
-        run,
-        "failed",
-        journaled.kind === message.kind
-          ? `nondeterministic: effect ${message.seq} is the same ${message.kind} call with different arguments than the journal records.`
-          : `nondeterministic: effect ${message.seq} was ${journaled.kind} on the first run and is ${message.kind} now.`
-      );
-      return {};
-    }
-    const settledBefore =
-      journaled &&
-      (journaled.failure !== null ||
-        !["run", "spawn", "ask", "workflow", "sleep"].includes(journaled.kind));
-    if (settledBefore) {
-      return {
-        reply: journaled.failure
-          ? { failure: JSON.parse(journaled.failure) as WorkflowFailure }
-          : {
-              result:
-                journaled.kind === "run" || journaled.kind === "spawn"
-                  ? (journaled.result as { value: unknown }).value
-                  : journaled.result,
-            },
-      };
-    }
-    if (journaled?.result && journaled.kind === "sleep") {
-      const { due } = journaled.result as { due: number };
-      return due <= Date.now()
-        ? { reply: { result: journaled.result } }
-        : { run, sleepUntil: due };
-    }
-    if (
-      journaled &&
-      ["run", "spawn"].includes(journaled.kind) &&
-      db.getWorkflowStep(stepIdOf(runId, message.seq))?.status === "passed"
-    ) {
-      return { reply: { result: stepOf(stepIdOf(runId, message.seq)).result } };
-    }
-    return { run };
-  };
-
-  const onEffect = async (
-    runId: string,
-    message: Extract<WorkerOut, { type: "effect" }>
-  ) => {
-    const live = workers.get(runId);
-    const reply = (payload: {
-      failure?: WorkflowFailure;
-      result?: unknown;
-    }) => {
-      if (workers.get(runId) !== live) {
-        return;
-      }
-      live?.worker.postMessage(
-        payload.failure
-          ? { type: "effect-error", id: message.id, failure: payload.failure }
-          : { type: "effect-result", id: message.id, result: payload.result }
-      );
-    };
-    const argsHash = hashArgs(message.args);
-    // Only the replay decision is serialised per run. Executing an effect —
-    // a step that runs for an hour, an ask that waits for a person — must not
-    // hold the lock, or the very frames that settle it queue behind it.
-    const decided = await serial(runId, () => decide(runId, message, argsHash));
-    if (decided.reply) {
-      reply(decided.reply);
+  /** A question: its step parked, its question in the ledger. */
+  const openAsk = (run: WorkflowRunRow, seq: number, args: AskArgs) => {
+    const id = stepIdFor(run.id, seq);
+    if (db.getWorkflowStep(id)) {
       return;
     }
-    if (!decided.run) {
-      return;
-    }
-    const { run } = decided;
-    if (decided.sleepUntil !== undefined) {
-      await sleepUntil(runId, message.seq, decided.sleepUntil);
-      reply({ result: { due: decided.sleepUntil } });
-      return;
-    }
-    const kind = message.kind as WorkflowEffectKind;
-    let outcome: { failure?: WorkflowFailure; result?: unknown };
-    try {
-      outcome = await execute(
-        run,
-        message.seq,
-        kind,
-        (message.args ?? {}) as Record<string, unknown>
-      );
-    } catch (error) {
-      outcome = { failure: { name: "Error", message: reason(error) } };
-    }
-    await serial(runId, () => {
-      const stored = db.getWorkflowEffect(runId, message.seq);
-      db.putWorkflowEffect({
-        runId,
-        seq: message.seq,
-        kind,
-        argsHash,
-        args:
-          stored?.args ??
-          journalArgs(kind, (message.args ?? {}) as Record<string, unknown>),
-        result: journalResult(kind, stored, outcome),
-        failure: outcome.failure ? JSON.stringify(outcome.failure) : null,
-        at: stored?.at ?? new Date(),
-      });
-    });
-    reply(outcome);
-  };
-
-  /** Starts (or restarts) the worker for a run and replays its journal. */
-  const startWorker = (run: WorkflowRunRow) => {
-    killWorker(run.id);
-    const path = writeProgram(run.program);
-    const worker = new Worker(WORKER_URL, { type: "module" });
-    const live = { worker };
-    workers.set(run.id, live);
-    worker.addEventListener("message", (event: MessageEvent<WorkerOut>) => {
-      const message = event.data;
-      if (message.type === "effect") {
-        onEffect(run.id, message).catch((error) => {
-          const current = db.getWorkflowRun(run.id);
-          if (current && active(current)) {
-            finish(current, "failed", reason(error));
-          }
-        });
-        return;
-      }
-      if (message.type === "done" || message.type === "failed") {
-        serial(run.id, () => {
-          const current = db.getWorkflowRun(run.id);
-          if (!(current && active(current))) {
-            return;
-          }
-          if (message.type === "done") {
-            finish(current, "done", null, message.result);
-          } else {
-            finish(
-              current,
-              "failed",
-              message.failure.kind
-                ? `${message.failure.kind}: ${message.failure.message}`
-                : message.failure.message
-            );
-          }
-        }).catch(console.error);
-      }
-    });
-    worker.addEventListener("error", (event) => {
-      serial(run.id, () => {
-        const current = db.getWorkflowRun(run.id);
-        if (current && active(current)) {
-          finish(current, "failed", String(event.message ?? event));
-        }
-      }).catch(console.error);
-    });
-    worker.postMessage({
-      mode: "run",
-      path,
+    const step: WorkflowStepRow = {
+      id,
       runId: run.id,
-      inputs: run.inputs,
-    } satisfies WorkerStart);
+      seq,
+      nodeId: `seq-${seq}`,
+      kind: "ask",
+      spec: args as Record<string, unknown>,
+      status: "waiting",
+      instanceId: null,
+      childRunId: null,
+      result: null,
+      failure: null,
+      mapIndex: null,
+      startedAt: new Date(),
+      endedAt: null,
+    };
+    run.status = "waiting";
+    logCall(run.id, seq, "ask", args as Record<string, unknown>);
+    write(run, step);
+    parkAsk(run, step);
   };
+
+  /** A child run: its row prepared and its parent's step opened on it. */
+  const openChild = async (
+    run: WorkflowRunRow,
+    seq: number,
+    args: Record<string, unknown>
+  ) => {
+    const childId = stepIdFor(run.id, seq);
+    const stepId = `step-${childId}`;
+    const existing = db.getWorkflowStep(stepId);
+    if (existing?.childRunId) {
+      return { childRunId: existing.childRunId };
+    }
+    logCall(run.id, seq, "workflow", args);
+    try {
+      await prepare(String(args.slug), {
+        id: childId,
+        inputs: args.inputs as Record<string, unknown>,
+        workspace: { path: run.workspace, machineId: run.machineId },
+        supervisor: run.supervisorInstanceId
+          ? { instanceId: run.supervisorInstanceId }
+          : undefined,
+        parentRunId: run.id,
+        parentStepId: stepId,
+      });
+    } catch (error) {
+      settleLog(run.id, seq, { failure: failureOf(error) });
+      throw error;
+    }
+    write(run, {
+      id: stepId,
+      runId: run.id,
+      seq,
+      nodeId: `seq-${seq}`,
+      kind: "workflow",
+      spec: args,
+      status: "running",
+      instanceId: null,
+      childRunId: childId,
+      result: null,
+      failure: null,
+      mapIndex: null,
+      startedAt: new Date(),
+      endedAt: null,
+    });
+    return { childRunId: childId };
+  };
+
+  const engine = createWorkflowEngine(deps.dbPath, {
+    run: (runId) => db.getWorkflowRun(runId),
+    async perform(runId, seq, kind, args) {
+      const run = runOf(runId);
+      let outcome: Outcome;
+      try {
+        outcome = { result: await perform(run, kind, args) };
+      } catch (error) {
+        outcome = { failure: failureOf(error) };
+      }
+      logCall(runId, seq, kind, args, outcome);
+      if (kind === "checkpoint" && "result" in outcome) {
+        const checkpoint = outcome.result as { data: unknown; label: string };
+        announce(runOf(runId), undefined, undefined, checkpoint);
+        notify(
+          runOf(runId),
+          `${workflowNoticeMarker(nameOf(run), `checkpoint ${checkpoint.label}`)}run ${runId} · ${receiptOf(checkpoint.data, seq)}`
+        );
+      } else {
+        announce(runOf(runId));
+      }
+      return outcome;
+    },
+    async open(runId, seq, kind, args) {
+      const run = runOf(runId);
+      if (!active(run)) {
+        throw new Error("This workflow run has ended.");
+      }
+      switch (kind) {
+        case "run":
+        case "spawn":
+          if (!db.getWorkflowLog(runId, seq)) {
+            logCall(runId, seq, kind, args);
+          }
+          await steps.open(run, seq, stepIdFor(runId, seq), {
+            ...(args as unknown as StepSpec),
+          });
+          return {};
+        case "ask":
+          openAsk(run, seq, args as AskArgs);
+          return {};
+        case "sleep":
+          logCall(runId, seq, kind, args, {
+            result: { due: Date.now() + Math.max(0, Number(args.ms) || 0) },
+          });
+          announce(run);
+          return {};
+        case "workflow":
+          return await openChild(run, seq, args);
+        default:
+          throw new Error(`${kind} is not a call a run waits on.`);
+      }
+    },
+    askTimedOut(runId, seq) {
+      const run = db.getWorkflowRun(runId);
+      const step = db.getWorkflowStep(stepIdFor(runId, seq));
+      if (!(run && step?.status === "waiting")) {
+        return;
+      }
+      deps.settle(step.id);
+      step.status = "failed";
+      step.failure = "ask-timeout";
+      step.endedAt = new Date();
+      if (run.status === "waiting" && !stillWaiting(run, step.id)) {
+        run.status = "running";
+      }
+      settleLog(runId, seq, {
+        failure: { name: "AskError", kind: "timeout", message: "ask-timeout" },
+      });
+      write(run, step);
+    },
+    childOutcome(childRunId) {
+      const child = db.getWorkflowRun(childRunId);
+      if (!child || active(child)) {
+        return;
+      }
+      if (child.status === "done") {
+        return { result: child.result };
+      }
+      return {
+        failure: {
+          name: "ChildError",
+          kind: child.status === "cancelled" ? "cancelled" : "failed",
+          childRunId,
+          message: child.failure ?? child.status,
+        },
+      };
+    },
+    finished(runId, outcome) {
+      const run = db.getWorkflowRun(runId);
+      if (!run) {
+        return;
+      }
+      if ("failure" in outcome) {
+        const failure: WorkflowFailure = outcome.failure;
+        finish(
+          run,
+          "failed",
+          failure.kind ? `${failure.kind}: ${failure.message}` : failure.message
+        );
+      } else {
+        finish(run, "done", null, outcome.result ?? null);
+      }
+    },
+  });
 
   // --------------------------------------------------------------- public
 
   const runtime = {
-    effects: (runId: string) => db.listWorkflowEffects(runId),
+    /** A run's log, for the run view. */
+    log: (runId: string) => db.listWorkflowLog(runId),
     instanceLive(instanceId: string) {
       const [instance] = db.getInstancesByIds([instanceId]);
       if (instance?.workflowRunId && instance.workflowStepId) {
         const run = db.getWorkflowRun(instance.workflowRunId);
-        if (run && !active(run)) {
-          stopStep(run, stepOf(instance.workflowStepId));
+        const step = db.getWorkflowStep(instance.workflowStepId);
+        if (run && step && !active(run)) {
+          steps.stop(run, step);
         }
       }
     },
-    specFor(stepId: string) {
-      const spec = specOf(stepOf(stepId));
-      const run = runOf(stepOf(stepId).runId);
-      return {
-        skills: spec.skills,
-        denyTools:
-          spec.harness === "claude"
-            ? [
-                ...(spec.denyTools ?? []),
-                ...(run.supervisorInstanceId ? [] : ["AskUserQuestion"]),
-              ]
-            : undefined,
-      };
-    },
+    specFor: (stepId: string) => steps.specFor(stepId),
     /** The named slots a program declared, for the step-facing state tools. */
     stateSchemas(runId: string) {
       return (db.getWorkflowRun(runId)?.state.schemas ?? {}) as Record<
@@ -1266,198 +1136,80 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
     },
     detail(id: string) {
       const run = runOf(id);
-      const steps = db.listWorkflowSteps(id);
+      const rows = db.listWorkflowSteps(id);
       const ask = askOf(run);
       return {
-        ...publicRun(run, db.listWorkflowEffects(id)),
-        steps,
-        attempts: steps.flatMap((step) => db.listWorkflowAttempts(step.id)),
+        ...publicRun(run, db.listWorkflowLog(id)),
+        steps: rows,
+        attempts: rows.flatMap((step) => db.listWorkflowAttempts(step.id)),
         ...(ask ? { ask } : {}),
       };
     },
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: launch refuses bad inputs, depth and supervision before pinning the program and seeding a re-run journal
-    async launch(
-      workflowId: string,
-      options: {
-        id?: string;
-        inputs?: Record<string, unknown>;
-        workspace?: { path: string; machineId: string };
-        supervisor?: { instanceId: string } | { delegateType: string } | null;
-        launchedBy?: string;
-        rerunOfRunId?: string;
-        /** A copied journal prefix, for a re-run (§3.9). */
-        seed?: WorkflowEffectRow[];
-        parentRunId?: string;
-        parentStepId?: string | null;
-      }
-    ): Promise<{ runId: string }> {
-      const workflow = db.getWorkflow(workflowId);
-      if (!workflow) {
-        throw new Error(`No workflow ${workflowId}.`);
-      }
-      if (workflow.graph) {
-        const problems = deps.problems(workflow.graph, workflow.id);
-        if (problems.length) {
-          throw new Error(
-            problems.map((problem) => problem.message).join("\n")
-          );
-        }
-      }
-      let chosen = options.supervisor;
-      if (chosen === undefined && !options.parentRunId) {
-        chosen = workflow.graph?.settings?.defaultSupervisor;
-      }
-      if (
-        !(options.workspace?.path && deps.online(options.workspace.machineId))
-      ) {
-        throw new Error("Choose a workspace directory on a connected machine.");
-      }
-      const declared = workflow.inputs;
-      const inputs = { ...options.inputs };
-      for (const input of declared) {
-        if (inputs[input.name] === undefined && input.default !== undefined) {
-          inputs[input.name] = input.default;
-        }
-        if (
-          input.required &&
-          (inputs[input.name] === undefined || inputs[input.name] === "")
-        ) {
-          throw new Error(`Input ${input.name} is required.`);
-        }
-        if (
-          input.type === "select" &&
-          inputs[input.name] !== undefined &&
-          !input.options?.includes(String(inputs[input.name]))
-        ) {
-          throw new Error(`Input ${input.name} must be one of its options.`);
-        }
-      }
-      const id = options.id ?? crypto.randomUUID();
-      let depth = 1;
-      for (
-        let ancestor = options.parentRunId;
-        ancestor;
-        ancestor = runOf(ancestor).parentRunId ?? undefined
-      ) {
-        depth += 1;
-      }
-      if (depth > 8) {
-        throw new Error("workflow-depth");
-      }
-      let supervisorInstanceId: string | null = null;
-      if (chosen && "instanceId" in chosen) {
-        const [instance] = db.getInstancesByIds([chosen.instanceId]);
-        if (
-          !(
-            instance &&
-            deps.online(instance.machineId) &&
-            ["running", "starting"].includes(instance.status)
-          )
-        ) {
-          throw new Error("The supervisor must be a live session.");
-        }
-        supervisorInstanceId = instance.id;
-      } else if (chosen) {
-        supervisorInstanceId = await deps.supervisor(
-          chosen.delegateType,
-          options.workspace.path,
-          options.workspace.machineId,
-          `${workflowNoticeMarker(workflow.name, "supervisor brief")}Supervise workflow ${workflow.name}, run ${id}.\n${workflow.description}\nReceive its reports and answer its questions. Use steer_workflow for note, retry, answer, or cancel; the program controls routing.`
+    /**
+     * `workflow_read`: a window into one result of a run the caller
+     * supervises — effect `ref`'s, or the run's own (`"result"`) — at `path`.
+     */
+    read(
+      runId: string,
+      request: {
+        ref: number | "result";
+        path?: string;
+        offset?: number;
+        limit?: number;
+      },
+      caller?: string
+    ) {
+      const run = runOf(runId);
+      if (caller && caller !== run.supervisorInstanceId) {
+        throw new Error(
+          "Only this workflow run's supervisor may read its results."
         );
       }
-      const run: WorkflowRunRow = {
-        id,
-        workflowId: workflow.id,
-        graph: workflow.graph,
-        program: workflow.program,
-        inputs,
-        workspace: options.workspace.path,
-        machineId: options.workspace.machineId,
-        supervisorInstanceId,
-        status: "running",
-        result: null,
-        failure: null,
-        state: {},
-        startedAt: new Date(),
-        endedAt: null,
-        rerunOfRunId: options.rerunOfRunId ?? null,
-        parentRunId: options.parentRunId ?? null,
-        parentStepId: options.parentStepId ?? null,
-        launchedBy: options.launchedBy ?? "dashboard",
-      };
-      write(run);
-      for (const effect of options.seed ?? []) {
-        db.putWorkflowEffect({ ...effect, runId: id });
+      let value: unknown;
+      if (request.ref === "result") {
+        if (run.status !== "done") {
+          throw new Error("This run has not returned a result.");
+        }
+        value = run.result;
+      } else {
+        value = refValue(run.id, request.ref);
       }
-      startWorker(run);
-      return { runId: id };
+      return `ref ${request.ref}${request.path ? ` · path ${request.path}` : ""} · ${readSlice(valueAt(value, request.path), request)}`;
     },
-    /**
-     * Re-run: a new run whose journal starts as a copy of the old one up to
-     * the chosen step, so the program replays every earlier effect from the
-     * record and executes live from there (§3.9 in the program model).
-     */
-    async rerun(runId: string, fromStepId?: string) {
+    async launch(
+      workflowId: string,
+      options: LaunchOptions
+    ): Promise<{ runId: string }> {
+      await engine.ready;
+      const run = await prepare(workflowId, options);
+      try {
+        await engine.start(run.id);
+      } catch (error) {
+        finish(
+          runOf(run.id),
+          "failed",
+          `The workflow engine could not start the run: ${reason(error)}`
+        );
+        throw error;
+      }
+      return { runId: run.id };
+    },
+    /** Starts the run again, from its start, with the inputs it had. */
+    rerun(runId: string) {
       const old = runOf(runId);
-      const until = fromStepId ? stepOf(fromStepId).seq : 0;
-      const started = await runtime.launch(old.workflowId, {
+      return runtime.launch(old.workflowId, {
         inputs: old.inputs,
         workspace: { path: old.workspace, machineId: old.machineId },
         supervisor: old.supervisorInstanceId
           ? { instanceId: old.supervisorInstanceId }
           : undefined,
         rerunOfRunId: old.id,
-        seed: db
-          .listWorkflowEffects(old.id)
-          .filter((effect) => effect.seq < until),
       });
-      return started;
     },
-    submitResult(stepId: string, instanceId: string, result: unknown) {
-      const step = stepOf(stepId);
-      const run = runOf(step.runId);
-      const [instance] = db.getInstancesByIds([instanceId]);
-      if (
-        !instance ||
-        instance.workflowStepId !== step.id ||
-        step.instanceId !== instanceId
-      ) {
-        throw new Error("This instance does not own the workflow step.");
-      }
-      if (!active(run) || step.status !== "running") {
-        throw new Error("This workflow step is not running.");
-      }
-      const attempt = latest(step);
-      if (!attempt || attempt.endedAt) {
-        throw new Error("There is no active attempt.");
-      }
-      if (attempt.result !== null) {
-        throw new Error("A result was already recorded. End your turn now.");
-      }
-      const validate = ajv.compile(specOf(step).outputSchema);
-      if (!validate(result)) {
-        throw new Error(ajv.errorsText(validate.errors, { separator: "\n" }));
-      }
-      attempt.result = result;
-      write(run, step, attempt);
-      return "Recorded. End your turn now.";
-    },
-    observe(instanceId: string, error?: string) {
-      const [instance] = db.getInstancesByIds([instanceId]);
-      if (!(instance?.workflowStepId && instance.workflowRunId)) {
-        return false;
-      }
-      const { workflowRunId, workflowStepId } = instance;
-      const observedAttempt = latest(stepOf(workflowStepId))?.id;
-      serial(workflowRunId, async () => {
-        const step = stepOf(workflowStepId);
-        if (latest(step)?.id !== observedAttempt) {
-          return;
-        }
-        await ended(runOf(workflowRunId), step, error);
-      }).catch(console.error);
-      return true;
-    },
+    submitResult: (stepId: string, instanceId: string, result: unknown) =>
+      steps.submitResult(stepId, instanceId, result),
+    observe: (instanceId: string, error?: string) =>
+      steps.observe(instanceId, error),
     cancel(id: string) {
       return serial(id, () => {
         const run = runOf(id);
@@ -1465,17 +1217,22 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
           throw new Error("This workflow run has already ended.");
         }
         finish(run, "cancelled");
-        return publicRun(run, db.listWorkflowEffects(id));
+        interrupt(id);
+        return publicRun(run, db.listWorkflowLog(id));
       });
     },
-    answer(id: string, stepId: string, choice: string, note?: string) {
+    answer(
+      id: string,
+      stepId: string,
+      answer: { choice?: string; note?: string; value?: unknown }
+    ) {
       return serial(id, () => {
         const run = runOf(id);
         const step = stepOf(stepId);
         if (step.runId !== id || step.status !== "waiting" || !active(run)) {
           throw new Error("This workflow step is not waiting for an answer.");
         }
-        settleAsk(run, step, { choice, ...(note ? { note } : {}) });
+        settleAsk(run, step, answer);
       });
     },
     settleQuestion(stepId: string, result: PermissionResult) {
@@ -1490,6 +1247,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
         }
         if (result.behavior === "deny") {
           finish(run, "cancelled");
+          interrupt(run.id);
           return;
         }
         const answers = (
@@ -1532,6 +1290,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
               throw new Error("This workflow run has already ended.");
             }
             finish(run, "cancelled");
+            interrupt(id);
             break;
           case "answer": {
             const step = stepOf(action.stepId);
@@ -1540,22 +1299,24 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
             }
             settleAsk(run, step, {
               choice: action.choice,
-              ...(action.note ? { note: action.note } : {}),
+              note: action.note,
+              value: action.value,
             });
             break;
           }
           case "retry": {
             const step = stepOf(action.stepId);
-            if (step.runId !== id || step.status !== "failed" || !active(run)) {
+            if (
+              step.runId !== id ||
+              step.kind !== "step" ||
+              step.status !== "failed" ||
+              !active(run)
+            ) {
               throw new Error(
                 "Retry requires a failed step of a live workflow run."
               );
             }
-            step.status = "running";
-            step.failure = null;
-            step.endedAt = null;
-            write(run, step);
-            await attemptStep(run, step, specOf(step), "retry");
+            await steps.retry(run, step);
             break;
           }
           default:
@@ -1563,53 +1324,47 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
               "Steering supports note, retry, answer, and cancel only."
             );
         }
-        return publicRun(run, db.listWorkflowEffects(id));
+        return publicRun(runOf(id), db.listWorkflowLog(id));
       });
     },
+    /** A machine came back: attempts whose session died while it was away end. */
+    recover: (machineId: string) => steps.recover(machineId),
+    /** A deleted workflow's ended runs: their executions leave the engine's storage too. */
+    forget: (runIds: string[]) =>
+      Promise.all(runIds.map((runId) => engine.forget(runId))),
     /**
-     * A machine came back. Live attempts keep their timeout, dead ones end,
-     * parked questions are re-parked, and every active run's worker is
-     * re-created so the program replays to where it left off.
+     * At hub start, once the engine is up: running attempts get their timeout
+     * back, parked questions go back in the ledger, and every top-level run
+     * is made sure of an execution — the engine resumes the rest itself.
      */
-    recover(machineId: string) {
-      for (const row of db
-        .listWorkflowRuns()
-        .filter((run) => active(run) && run.machineId === machineId)) {
-        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: recovery distinguishes live attempts, dead sessions and parked questions before restarting the worker
-        serial(row.id, async () => {
-          const run = runOf(row.id);
-          for (const step of db.listWorkflowSteps(run.id)) {
-            if (step.status === "waiting" && step.kind === "ask") {
-              continue;
-            }
-            if (step.status !== "running" || !step.instanceId) {
-              continue;
-            }
-            const [instance] = db.getInstancesByIds([step.instanceId]);
-            if (
-              instance &&
-              ["sleeping", "error", "stopped"].includes(instance.status)
-            ) {
-              // biome-ignore lint/performance/noAwaitInLoops: each dead attempt must settle before the next is examined
-              await ended(
-                run,
-                step,
-                instance.lastError ??
-                  "Session stopped before the attempt completed."
-              );
-            }
-          }
-          if (!workers.has(run.id)) {
-            startWorker(run);
-          }
-        }).catch(console.error);
+    async resume() {
+      // The engine logs its own failure to start; with it down nothing runs.
+      const up = await engine.ready.then(
+        () => true,
+        () => false
+      );
+      if (!up) {
+        return;
       }
-    },
-    /** Every active run gets its worker back at hub start. */
-    resumeAll() {
-      for (const run of db.listWorkflowRuns().filter(active)) {
-        if (!workers.has(run.id)) {
-          serial(run.id, () => startWorker(runOf(run.id))).catch(console.error);
+      steps.resume();
+      const live = db.listWorkflowRuns().filter(active);
+      for (const run of live) {
+        for (const step of db.listWorkflowSteps(run.id)) {
+          if (step.kind === "ask" && step.status === "waiting") {
+            parkAsk(run, step, false);
+          }
+        }
+      }
+      const starts = await Promise.allSettled(
+        live
+          .filter((run) => !run.parentRunId)
+          .map((run) => engine.start(run.id))
+      );
+      for (const start of starts) {
+        if (start.status === "rejected") {
+          console.error(
+            `[workflows] could not resume a run: ${reason(start.reason)}`
+          );
         }
       }
     },

@@ -14,6 +14,7 @@
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.41",
+    "@effect/sql-sqlite-bun": "4.0.0-beta.107",
     "@modelcontextprotocol/sdk": "1.25.2",
     "@whiffle/auth": "workspace:*",
     "@whiffle/core": "workspace:*",

@@ -17,7 +17,7 @@ export type WorkflowStepStatus =
 export type WorkflowAttemptStatus = "running" | "passed" | "failed";
 export type WorkflowOrigin = "editor" | "code";
 
-/** Every effect kind the bridge can carry. One row in `workflow_effects`. */
+/** Every effect kind the bridge can carry: one `w.*` call. */
 export type WorkflowEffectKind =
   | "run"
   | "spawn"
@@ -37,17 +37,18 @@ export type WorkflowEffectKind =
   | "trace";
 
 /**
- * The journal row. `argsHash` pins the call's arguments so a replay that asks
- * something different at the same `seq` is refused as non-deterministic rather
- * than silently answered from another call's outcome.
+ * One row of a run's log: what a `w.*` call asked and what it came back with,
+ * for the run view and the supervisor's `workflow_read`. A display record
+ * only — a run is replayed by the workflow engine, never from this log.
  */
-export interface WorkflowEffect {
-  /** The call's arguments as made; null for `run`/`spawn`, whose spec is on `result`. */
+export interface WorkflowLogEntry {
+  /** The call's arguments as made; a step's are its whole spec. */
   args: Record<string, unknown> | null;
-  argsHash: string;
   at: Date | string;
-  failure: string | null;
+  /** The typed rejection, when the call failed. */
+  failure: WorkflowFailure | null;
   kind: WorkflowEffectKind;
+  /** Null until the call settles: a running step, a parked question. */
   result: unknown;
   runId: string;
   seq: number;
@@ -71,6 +72,11 @@ export interface WorkflowFailure {
 export interface WorkflowAsk {
   allowOther: boolean;
   answeredBy: "operator" | "supervisor";
+  /**
+   * JSON Schema for a typed answer, when the program gave `w.ask` an `answer`
+   * schema: the answer then carries a `value` validated against it.
+   */
+  answerSchema?: Record<string, unknown>;
   options: { description?: string; label: string }[];
   parkedAt: Date | string;
   question: string;
@@ -271,7 +277,15 @@ export interface Problem {
 export type WorkflowAction =
   | { type: "note"; text: string }
   | { type: "retry"; stepId: string }
-  | { type: "answer"; stepId: string; choice: string; note?: string }
+  | {
+      type: "answer";
+      stepId: string;
+      /** The option label; may be left out when the ask takes a typed `value`. */
+      choice?: string;
+      note?: string;
+      /** Validated against the ask's `answerSchema`; required when it has one. */
+      value?: unknown;
+    }
   | { type: "cancel" };
 
 const TEMPLATE = /\{\{\s*([^{}]+?)\s*\}\}/g;

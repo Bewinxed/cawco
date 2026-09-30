@@ -105,7 +105,7 @@ export function handoffTools(deps: HandoffDeps) {
   const all = [
     tool(
       "create_workflow",
-      'Create a workflow from a TypeScript program: `import { z } from "zod"`, `export const inputs = z.object({…})`, and a default-exported async function taking the Workflow runtime (w.run, w.spawn, w.ask, w.exec, w.exists, w.jev, w.workflow, w.state, w.checkpoint, w.sleep, w.now, w.notify, w.notes, w.log). `w.jev({ state, questions: { id: { type: "noul" | "choice" | "score", instructions, criteria } } })` asks TypeSafe\'s Jev and returns typed `answers.<id>` (noul; choice + probabilities + confidence; score + legend + probabilities + confidence) and `usage`; put every question over one state in ONE call — they are evaluated in parallel for one price. zod is the only import allowed; the program must be deterministic. Returns the saved workflow, or line-numbered typecheck problems verbatim.',
+      'Create a workflow from a TypeScript program: `import { z } from "zod"`, `export const inputs = z.object({…})`, and a default-exported async function taking the Workflow runtime (w.run, w.spawn, w.ask, w.exec, w.exists, w.jev, w.workflow, w.state, w.checkpoint, w.sleep, w.now, w.notify, w.notes, w.log). `w.jev({ state, questions: { id: { type: "noul" | "choice" | "score", instructions, criteria } } })` asks TypeSafe\'s Jev and returns typed `answers.<id>` (noul; choice + probabilities + confidence; score + legend + probabilities + confidence) and `usage`; put every question over one state in ONE call — they are evaluated in parallel for one price. `w.ask({ question, options, answer: z.object({…}) })` takes a typed answer: the answer\'s `value` is validated against that schema, which is how a supervisor fills in a decision. A step prompt or Jev state may name an earlier call\'s result as `{{ref:N.path}}` (N is the call\'s effect number); the hub fills it in when the step starts. Every call is a durable workflow-engine step and a run replays its program after a restart or resume, so zod is the only import allowed and the program must be deterministic. Returns the saved workflow, or line-numbered typecheck problems verbatim.',
       { name: z.string(), program: z.string() },
       async ({ name, program }) => ({
         content: [
@@ -167,7 +167,7 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "run_workflow",
-      "Run a saved workflow by name or slug. You become its supervisor and receive step reports and its final outcome as queued peer messages.",
+      "Run a saved workflow by name or slug. You become its supervisor and receive a receipt, as a queued peer message, for each step, checkpoint and the run's end: status, attempt, time, a `ref`, the result's size and the names of its top-level keys, or the whole result when it is 1,000 characters or less. Read more of a result with workflow_read only when you need it.",
       {
         name: z.string(),
         inputs: z.record(z.unknown()),
@@ -187,8 +187,50 @@ export function handoffTools(deps: HandoffDeps) {
       })
     ),
     tool(
+      "workflow_read",
+      "Read part of a result from a workflow run you supervise, by the `ref` its receipt named (or `result` for the run's own result). `path` narrows it to one field, e.g. `results[0].url`. Returns up to `limit` characters from `offset` and where the next window starts. To hand a result to a later step without reading it, put `{{ref:N.path}}` in what you give the program instead.",
+      {
+        runId: z.string(),
+        ref: z
+          .union([z.number().int().min(0), z.literal("result")])
+          .describe(
+            "The effect number a receipt named, or `result` for the run's own result."
+          ),
+        path: z
+          .string()
+          .optional()
+          .describe("A path into the result, e.g. `queries[2].query`."),
+        offset: z
+          .number()
+          .int()
+          .min(0)
+          .optional()
+          .describe("Character to start at. Default 0."),
+        limit: z
+          .number()
+          .int()
+          .min(1)
+          .max(20_000)
+          .optional()
+          .describe("Characters to return. Default 4,000, at most 20,000."),
+      },
+      async ({ runId, ref, path, offset, limit }) => ({
+        content: [
+          {
+            type: "text" as const,
+            text: await actions.readWorkflow(runId, {
+              ref,
+              path,
+              offset,
+              limit,
+            }),
+          },
+        ],
+      })
+    ),
+    tool(
       "steer_workflow",
-      "Steer a workflow you supervise: note for the next step, retry a failed step, answer a supervisor question, or cancel. Routing remains controlled by the saved graph.",
+      "Steer a workflow you supervise: note for the next step, retry a failed step, answer a question routed to you, or cancel. An answer names the option label as `choice`; a question that declared a typed answer takes `value`, validated against the schema its question notice shows. The program controls routing.",
       {
         runId: z.string(),
         action: z.discriminatedUnion("type", [
@@ -197,7 +239,13 @@ export function handoffTools(deps: HandoffDeps) {
           z.object({
             type: z.literal("answer"),
             stepId: z.string(),
-            choice: z.string(),
+            choice: z.string().optional(),
+            value: z
+              .unknown()
+              .optional()
+              .describe(
+                "The typed answer, for a question that declared an answer schema."
+              ),
             note: z.string().optional(),
           }),
           z.object({ type: z.literal("cancel") }),

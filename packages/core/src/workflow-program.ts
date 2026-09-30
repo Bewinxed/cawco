@@ -3,7 +3,8 @@
  * TypeScript module: `export const inputs` (a zod object) and a default export
  * taking this interface. The hub executes it in a Worker where `w` and `z` are
  * the only capabilities; every method here is an *effect* that crosses back to
- * the hub thread, is journaled, and replays from the journal after a restart.
+ * the hub thread and runs there as a durable workflow-engine primitive, so a
+ * replay after a restart or a resume answers it from the engine's storage.
  */
 import type { ZodTypeAny, z } from "zod";
 import type { EffortLevel } from "./harness";
@@ -25,6 +26,11 @@ export interface StepSpec<Output extends ZodTypeAny = ZodTypeAny> {
    */
   node?: string;
   output: Output;
+  /**
+   * The step's instructions. `{{ref:N.path}}` names the result of this run's
+   * effect N (a path into it is optional) and is filled in by the hub when it
+   * hands the step its prompt, so a large result travels by reference.
+   */
   prompt: string;
   retries?: number;
   skills?: string[];
@@ -40,15 +46,25 @@ export interface StepHandle<Output extends ZodTypeAny = ZodTypeAny> {
 
 export interface AskSpec {
   allowOther?: boolean;
+  /**
+   * A zod schema for a typed answer. The answer then carries `value`,
+   * validated against it: how a supervisor fills in a decision rather than
+   * picking a label. With one, `options` may be empty.
+   */
+  answer?: ZodTypeAny;
   answeredBy?: "operator" | "supervisor";
   options: { description?: string; label: string }[];
   question: string;
+  /** Hours to wait before the ask rejects with `AskError` kind `timeout`. */
   waitFor?: number;
 }
 
-export interface AskAnswer {
+export interface AskAnswer<Value = unknown> {
+  /** The option label picked; empty when only a typed value was given. */
   choice: string;
   note?: string;
+  /** Present when the ask declared an `answer` schema. */
+  value?: Value;
 }
 
 /**
@@ -96,7 +112,10 @@ export interface JevSpec<
   /** The editor node this call came from; the compiler fills it. */
   node?: string;
   questions: Questions;
-  /** Text, or structured data the questions are asked about. */
+  /**
+   * Text, or structured data the questions are asked about. `{{ref:N.path}}`
+   * in its text is filled in by the hub from this run's effect N.
+   */
   state: JevText;
 }
 
@@ -150,8 +169,16 @@ export interface WorkflowState<Schema extends ZodTypeAny> {
 }
 
 export interface Workflow<Inputs extends ZodTypeAny = ZodTypeAny> {
-  /** Human choice: parks in the hub's pending ledger until answered. */
-  ask: (spec: AskSpec) => Promise<AskAnswer>;
+  /**
+   * Human or supervisor choice: parks in the hub's pending ledger until
+   * answered. With an `answer` schema the answer's `value` is typed by it.
+   */
+  ask: {
+    <Answer extends ZodTypeAny>(
+      spec: AskSpec & { answer: Answer }
+    ): Promise<AskAnswer<z.infer<Answer>> & { value: z.infer<Answer> }>;
+    (spec: AskSpec): Promise<AskAnswer>;
+  };
   /** A progress marker: a `workflow` frame, a supervisor line, a run-view row. */
   checkpoint: (label: string, data?: unknown) => Promise<void>;
   /**
@@ -181,7 +208,7 @@ export interface Workflow<Inputs extends ZodTypeAny = ZodTypeAny> {
   notes: () => Promise<string[]>;
   /** A message to the supervisor if there is one, else the operator. */
   notify: (text: string) => Promise<void>;
-  /** Journaled clock: the same value on replay. */
+  /** Recorded clock: the same value on replay. */
   now: () => Promise<number>;
   /** One step, blocking until it returns a validated result. */
   run: <Output extends ZodTypeAny>(

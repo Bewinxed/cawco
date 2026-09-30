@@ -19,7 +19,7 @@
   import { reflow } from "$lib/whiffle/motion/rows.svelte";
   import type { UsageSummary } from "$lib/whiffle/usage";
   import {
-    refreshWorkflowEffects,
+    refreshWorkflowLog,
     refreshWorkflowRun,
     workflowState,
   } from "$lib/whiffle/workflow-state.svelte";
@@ -63,6 +63,8 @@
   let now = $state(Date.now());
   let other = $state("");
   let note = $state("");
+  /** A typed answer, as JSON, for a question that declared an answer schema. */
+  let valueText = $state("");
   let sessionCosts = $state<Record<string, number>>({});
   const costs = $derived(
     Object.fromEntries(
@@ -81,8 +83,8 @@
     workflowState.workflows.find((entry) => entry.id === run?.workflowId)
   );
   const origin = $derived(workflow?.origin ?? "editor");
-  const effects = $derived(workflowState.effects[runId] ?? []);
-  // A code-origin run has no graph to paint: the shape comes from the journal.
+  const effects = $derived(workflowState.logs[runId] ?? []);
+  // A code-origin run has no graph to paint: the shape comes from its log.
   const journal = $derived(
     origin === "code" ? journalGraph(effects) : undefined
   );
@@ -188,12 +190,12 @@
       errorMessage = message(caught);
     });
   });
-  // The journal is re-read whenever the run moves: a checkpoint, a log line or
-  // a new call arrives as a frame without a step row of its own.
+  // The log is re-read whenever the run moves: a checkpoint, a log line or a
+  // new call arrives as a frame without a step row of its own.
   $effect(() => {
     const moved = run;
     if (moved) {
-      refreshWorkflowEffects(runId).catch((caught) => {
+      refreshWorkflowLog(runId).catch((caught) => {
         errorMessage = message(caught);
       });
     }
@@ -270,15 +272,18 @@
     });
   }
   async function rerun() {
-    if (!(step && run)) {
+    if (!run) {
       return;
     }
-    const selectedNode = step.nodeId;
     const { workflowId } = run;
     await act("rerun", async () => {
-      const result = await rerunWorkflow(runId, selectedNode);
+      const result = await rerunWorkflow(runId);
       await goto(`/workflows/${workflowId}/runs/${result.runId}`);
     });
+  }
+  /** The typed answer's JSON, parsed; undefined when the field is empty. */
+  function typedValue(): unknown {
+    return valueText.trim() ? JSON.parse(valueText) : undefined;
   }
 </script>
 {#snippet drawer()}
@@ -383,24 +388,6 @@
           >{attempt.failure ?? JSON.stringify(attempt.result, null, 2)}</pre>
         </details>
       {/each}
-      {#if step.kind !== 'start'}
-        <button
-          aria-busy={acting === 'rerun' || undefined}
-          aria-disabled={acting === 'rerun' || undefined}
-          class="wf-btn"
-          disabled={(busy && acting !== 'rerun') || !live}
-          onclick={whileIdle(() => acting === 'rerun', rerun)}
-          title={live ? undefined : "Can't re-run while the hub is unreachable"}
-          type="button"
-        >
-          <PendingContent
-            failed={errorMessage !== ''}
-            label="Re-run from step"
-            pending={acting === 'rerun'}
-            pendingLabel="Re-running…"
-          />
-        </button>
-      {/if}
       <button
         class="wf-btn"
         onclick={() => { selected = undefined; }}
@@ -455,6 +442,23 @@
             >
               Cancel run
             </button>
+          {:else}
+            <button
+              aria-busy={acting === 'rerun' || undefined}
+              aria-disabled={acting === 'rerun' || undefined}
+              class="wf-btn"
+              disabled={(busy && acting !== 'rerun') || !live}
+              onclick={whileIdle(() => acting === 'rerun', rerun)}
+              title={live ? 'Start this workflow again with the same inputs' : "Can't re-run while the hub is unreachable"}
+              type="button"
+            >
+              <PendingContent
+                failed={errorMessage !== ''}
+                label="Re-run"
+                pending={acting === 'rerun'}
+                pendingLabel="Re-running…"
+              />
+            </button>
           {/if}
           {#if onprogram}
             <button class="wf-btn" onclick={onprogram} type="button">
@@ -506,7 +510,7 @@
               aria-disabled={acting === key || undefined}
               class="wf-btn"
               disabled={(busy && acting !== key) || !live}
-              onclick={whileIdle(() => acting === key, () => act(key, () => answerWorkflow(runId, ask.stepId, option.label, note)))}
+              onclick={whileIdle(() => acting === key, () => act(key, () => answerWorkflow(runId, ask.stepId, { choice: option.label, note, value: typedValue() })))}
               title={live ? undefined : "Can't answer while the hub is unreachable"}
               type="button"
             >
@@ -525,6 +529,37 @@
           {/each}
         </div>
         <label>Note (optional)<input bind:value={note}></label>
+        {#if ask.answerSchema}
+          <!-- A typed answer: its JSON is checked by the hub against the
+               schema the program declared, shown here as the placeholder. -->
+          <div class="wf-row">
+            <label class="typed"
+              >Answer value (JSON)<textarea
+                placeholder={JSON.stringify(ask.answerSchema)}
+                rows="3"
+                bind:value={valueText}
+              ></textarea></label
+            >
+            {#if !ask.options.length}
+              <button
+                aria-busy={acting === 'value' || undefined}
+                aria-disabled={acting === 'value' || undefined}
+                class="wf-btn"
+                disabled={!valueText.trim() || (busy && acting !== 'value') || !live}
+                onclick={whileIdle(() => acting === 'value', () => act('value', () => answerWorkflow(runId, ask.stepId, { note, value: typedValue() })))}
+                title={live ? undefined : "Can't answer while the hub is unreachable"}
+                type="button"
+              >
+                <PendingContent
+                  failed={errorMessage !== ''}
+                  label="Send answer"
+                  pending={acting === 'value'}
+                  pendingLabel="Sending…"
+                />
+              </button>
+            {/if}
+          </div>
+        {/if}
         {#if ask.allowOther}
           <div class="wf-row">
             <label>Other answer<input bind:value={other}></label
@@ -533,7 +568,7 @@
               aria-disabled={acting === 'answer' || undefined}
               class="wf-btn"
               disabled={!other || (busy && acting !== 'answer') || !live}
-              onclick={whileIdle(() => acting === 'answer', () => act('answer', () => answerWorkflow(runId, ask.stepId, other, note)))}
+              onclick={whileIdle(() => acting === 'answer', () => act('answer', () => answerWorkflow(runId, ask.stepId, { choice: other, note, value: typedValue() })))}
               title={live ? undefined : "Can't answer while the hub is unreachable"}
               type="button"
             >
@@ -867,6 +902,14 @@
     display: inline-flex;
     align-items: center;
     gap: var(--btn-gap);
+  }
+  .answer .typed {
+    flex: 1;
+    min-width: 0;
+  }
+  .answer .typed textarea {
+    width: 100%;
+    resize: vertical;
   }
   .answer .options small {
     color: var(--ink-muted);

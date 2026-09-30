@@ -4,8 +4,8 @@ import type {
   WorkflowAction,
   WorkflowAsk,
   WorkflowAttempt,
-  WorkflowEffect,
   WorkflowGraph,
+  WorkflowLogEntry,
   WorkflowRun,
   WorkflowStep,
 } from "@whiffle/core";
@@ -95,26 +95,23 @@ export const loadWorkflowRuns = (key: string) =>
   request<{ runs: WorkflowRun[] }>(`workflows/${id(key)}/runs`);
 export const launchWorkflow = (key: string, body: WorkflowLaunch) =>
   request<{ runId: string }>(`workflows/${id(key)}/runs`, "POST", body);
-export const loadWorkflowEffects = (key: string) =>
-  request<{ effects: WorkflowEffect[] }>(`workflow-runs/${id(key)}/effects`);
+export const loadWorkflowLog = (key: string) =>
+  request<{ log: WorkflowLogEntry[] }>(`workflow-runs/${id(key)}/log`);
 export const loadWorkflowRun = (key: string) =>
   request<WorkflowRunDetail>(`workflow-runs/${id(key)}`);
 export const cancelWorkflowRun = (key: string) =>
   request<unknown>(`workflow-runs/${id(key)}/cancel`, "POST");
-export const rerunWorkflow = (key: string, fromNodeId: string) =>
-  request<{ runId: string }>(`workflow-runs/${id(key)}/rerun`, "POST", {
-    fromNodeId,
-  });
+/** Starts the run again from its start, with the inputs it had. */
+export const rerunWorkflow = (key: string) =>
+  request<{ runId: string }>(`workflow-runs/${id(key)}/rerun`, "POST");
 export const answerWorkflow = (
   key: string,
   stepId: string,
-  choice: string,
-  note?: string
+  answer: { choice?: string; note?: string; value?: unknown }
 ) =>
   request<{ ok: boolean }>(`workflow-runs/${id(key)}/answer`, "POST", {
     stepId,
-    choice,
-    note,
+    ...answer,
   });
 export const steerWorkflow = (key: string, action: WorkflowAction) =>
   request<unknown>(`workflow-runs/${id(key)}/steer`, "POST", { action });
