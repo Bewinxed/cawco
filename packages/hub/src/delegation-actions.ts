@@ -166,8 +166,16 @@ async function roster(exceptInstanceId: string): Promise<{
   const { rows, hosts } = await fetchInstances();
   const own = rows.find((row) => row.id === exceptInstanceId);
   const others = rows.filter((row) => row.id !== exceptInstanceId);
+  // `unknown` is a live session whose machine is not connected right now —
+  // an agent restart, the two seconds between its socket closing and its
+  // register — and a send to it waits for that register at the hub.
   const peers = others
-    .filter((row) => row.status === "running" || row.status === "starting")
+    .filter(
+      (row) =>
+        row.status === "running" ||
+        row.status === "starting" ||
+        row.status === "unknown"
+    )
     .map((row) => toPeer(row, hosts));
   // What a send wakes (the hub's `wakeForSend`): no process, a conversation
   // on record.
@@ -845,6 +853,12 @@ export const handoffActions = ({
     }
     if (woken) {
       return `Handed to ${peer.label} (${peer.row.cwd} on ${peer.host}${whose}). It was asleep; it is being woken to read it.`;
+    }
+    if (peer.row.status === "unknown") {
+      return (
+        `Handed to ${peer.label} (${peer.row.cwd} on ${peer.host}${whose}). Its machine is not connected ` +
+        "right now; the message goes to it when the machine registers again, and fails if it is not back within a minute."
+      );
     }
     return (
       `Handed to ${peer.label} (${peer.row.cwd} on ${peer.host}${whose}). It is queued there and will be ` +

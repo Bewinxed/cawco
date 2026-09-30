@@ -197,6 +197,15 @@ const BUSY_TIMEOUT_MS = 5000;
 const RESTORE_HORIZON_MS = 30 * 60_000;
 
 /**
+ * How long a send to a machine whose socket just closed waits for it to
+ * register again. An agent restart (every deploy) is a socket closed and a
+ * register about two seconds later; a send in that gap used to fail "not
+ * connected" though its session survived the restart. A machine not back
+ * within this is away, and what waited for it fails as it always did.
+ */
+const RECONNECT_GRACE_MS = 60_000;
+
+/**
  * At most one activity write per session per minute. The daemon pulses up to
  * once a second while a session is working, and `updatedAt` is read in minutes
  * by everything that reads it at all — the rail's age column, the restore
@@ -2722,6 +2731,29 @@ export const createServer = ({
       return known;
     }
     const refused = inputRefusal(instanceId, message.origin);
+    // A machine that closed its socket moments ago is restarting its agent:
+    // the send waits for its register and goes then, through this same path
+    // ({@link releaseAwaiting}). It is written down when it goes, not now: the
+    // register settles what its sessions held, and a record already pending
+    // would be settled as a send the restart lost.
+    const reconnecting = awaitingMachine.get(envelope.machineId);
+    if (!refused && reconnecting && !registry.agent(envelope.machineId)) {
+      reconnecting.push(envelope);
+      return {
+        uuid: message.uuid,
+        instanceId,
+        acceptedAt: new Date(),
+        harnessId: null,
+        body: sentFrame(envelope.payload),
+        mode: sendMode(envelope.payload),
+        state: "pending",
+        reason: null,
+        anchor: null,
+        replaces: message.replaces ?? null,
+        replacedBy: null,
+        held: false,
+      };
+    }
     const agent = refused ? undefined : registry.agent(envelope.machineId);
     if (agent) {
       workItems.reopen(instanceId);
@@ -2756,6 +2788,27 @@ export const createServer = ({
       afterSend(envelope, mode);
     }
     return record;
+  };
+
+  /**
+   * Sends waiting on a machine whose agent is restarting, by machine: there
+   * from the moment its socket closes until it registers again or
+   * {@link RECONNECT_GRACE_MS} runs out, whichever is first.
+   */
+  const awaitingMachine = new Map<string, Envelope<SendPayload>[]>();
+
+  /**
+   * What waited on a machine, sent now through {@link deliverSend}: after its
+   * register, where it reaches the agent behind the restores (the agent holds
+   * a send for a session it is still taking custody of); or, when the grace
+   * ran out, failed "not connected" as any send to an absent machine is.
+   */
+  const releaseAwaiting = (machineId: string): void => {
+    const waited = awaitingMachine.get(machineId);
+    awaitingMachine.delete(machineId);
+    for (const envelope of waited ?? []) {
+      deliverSend(envelope);
+    }
   };
   /**
    * Each session's final message of the turn in flight: the text frames that
@@ -8462,6 +8515,9 @@ export const createServer = ({
                 revivable.map((orphan) => orphan.row.id)
               );
               ws.send(registerAck(message, streams.ingestedFor(reattaching)));
+              // Behind the restores and the ack, so the agent reads each send
+              // after the spawn it waits on.
+              releaseAwaiting(message.machineId);
               workflowRuntime.recover(message.machineId);
               // Continuations waiting on this machine — for their summary, or
               // for their new session — go on from where their record says.
@@ -9204,6 +9260,14 @@ export const createServer = ({
           if (!machineId) {
             return;
           }
+          // Sends to it wait for its next register, within the grace.
+          const awaiting: Envelope<SendPayload>[] = [];
+          awaitingMachine.set(machineId, awaiting);
+          setTimeout(() => {
+            if (awaitingMachine.get(machineId) === awaiting) {
+              releaseAwaiting(machineId);
+            }
+          }, RECONNECT_GRACE_MS);
           for (const [requestId, machine] of waitingMachines) {
             if (machine === machineId) {
               waiting.get(requestId)?.({
