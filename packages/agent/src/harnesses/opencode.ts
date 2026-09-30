@@ -1364,6 +1364,7 @@ export class OpencodeSession implements HarnessSession {
           toolName: asked.permission,
           input: asked.metadata ?? {},
           requestKind: "tool",
+          ...(asked.tool ? { toolUseId: asked.tool.callID } : {}),
         });
         break;
       }
@@ -1385,6 +1386,7 @@ export class OpencodeSession implements HarnessSession {
             options: { label: string; description: string }[];
             multiple?: boolean;
           }[];
+          tool?: { messageID: string; callID: string };
         };
         this.#questions.add(asked.id);
         const questions: UserQuestion[] = asked.questions.map((q) => ({
@@ -1403,6 +1405,7 @@ export class OpencodeSession implements HarnessSession {
           toolName: ASK_USER_QUESTION,
           input: { questions },
           requestKind: "question",
+          ...(asked.tool ? { toolUseId: asked.tool.callID } : {}),
         });
         break;
       }

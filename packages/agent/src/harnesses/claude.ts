@@ -756,6 +756,7 @@ class ClaudeSession implements HarnessSession {
               toolName,
               input: toolInput,
               suggestions,
+              toolUseId: toolUseID,
             });
           }),
       },

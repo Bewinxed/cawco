@@ -310,6 +310,16 @@ export function routedToParent(request: { routedTo?: string }): boolean {
   return request.routedTo === "parent";
 }
 
+/**
+ * The asks a session's own composer parks: every pending ask but the ones
+ * routed to its parent. The composer's stack draws exactly these, and the
+ * transcript leaves out the rows of the calls they gate, so a parked ask is
+ * drawn once, on the composer, until it settles into its row.
+ */
+export function parkedAsks<T extends { routedTo?: string }>(pending: T[]): T[] {
+  return pending.filter((request) => !routedToParent(request));
+}
+
 const empty = (): FrameMapping => ({
   messages: [],
   toolResults: [],

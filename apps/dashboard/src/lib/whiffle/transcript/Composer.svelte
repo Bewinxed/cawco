@@ -93,9 +93,9 @@
      */
     draft: ComposerDraft;
     /**
-     * The floating column's measured height, published upward. The transcript
-     * behind it reserves exactly this much foot-room, so a permission card
-     * stacked above the input never covers the message that raised it.
+     * The floating column's measured height, published upward, less what
+     * stands over the transcript's foot (a grown draft, parked prompt
+     * cards). The transcript behind it reserves exactly this much foot-room.
      */
     height?: number;
     busy?: boolean;
@@ -1176,7 +1176,7 @@
 
   /**
    * The panel's own height, the delegate tray's standing on it, and the
-   * prompt stack's standing on that.
+   * prompt stack's standing on that (what the desk's toasts rise above).
    */
   let panel = $state(0);
   let lift = $state(0);
@@ -1202,18 +1202,15 @@
         : 0;
   });
   /**
-   * What the transcript makes room for: the prompt cards, the tray, the
-   * chip row, and the panel with the field at its one-line height. The
-   * draft's further lines stand over the transcript and never move it,
-   * except while a prompt card is parked: the card stands on the field, so
-   * its lines count then, and the card never covers the row that raised it.
-   * It stands still while a switch is landing ({@link holdUntil}): a tray
-   * or card handing over to the next conversation's must not move a
+   * What the transcript makes room for: the tray, the chip row, and the
+   * panel with the field at its one-line height. The draft's further lines
+   * and the parked prompt cards stand over the transcript's foot and never
+   * move it. It stands still while a switch is landing ({@link holdUntil}):
+   * a tray handing over to the next conversation's must not move a
    * transcript that is still sliding in.
    */
   $effect(() => {
-    const draftLines = stack > 0 ? 0 : Math.max(0, fieldHeight - floor);
-    const next = panel - draftLines + lift + stack + chipRow;
+    const next = panel - Math.max(0, fieldHeight - floor) + lift + chipRow;
     if (!holding) {
       height = next;
     }

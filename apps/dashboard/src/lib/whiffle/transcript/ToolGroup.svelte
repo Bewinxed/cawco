@@ -362,7 +362,7 @@
     <!-- The call opens its own line, so a run's rail grows one call at a time. -->
     <TranscriptRow id={callId(m)}>
       {#snippet children()}
-        <div class="row" class:err={failed}>
+        <div class="row" data-call={m.toolCallId} class:err={failed}>
           {#if SHOW_PREVIEW_TOOLS.has(m.metadata?.toolName ?? '')}
             {@const input = m.metadata?.toolInput as PreviewSource}
             {@const current = whiffle.previews[m.instanceId]}

@@ -58,7 +58,7 @@
     whiffle,
   } from "./client.svelte";
   import { cleanDetail } from "./command-detail";
-  import { mapTranscript, routedToParent } from "./frames";
+  import { mapTranscript, parkedAsks } from "./frames";
   import { delegateHandle } from "./links";
   import PreviewPane from "./preview/PreviewPane.svelte";
   import PreviewSheet from "./preview/PreviewSheet.svelte";
@@ -72,6 +72,7 @@
   } from "./transcript/draft-store";
   import Prompt from "./transcript/Prompt.svelte";
   import { placeSends } from "./transcript/sends";
+  import { settleInto } from "./transcript/settle";
   import Transcript from "./transcript/Transcript.svelte";
   import TranscriptSkeleton from "./transcript/TranscriptSkeleton.svelte";
   import {
@@ -727,7 +728,7 @@
 
   // A delegate's ask belongs to its parent, never the reader's queue.
   const parked = $derived<PendingPermission[]>(
-    (session?.pending ?? []).filter((p) => !routedToParent(p))
+    parkedAsks(session?.pending ?? [])
   );
 
   /** What this conversation has half-written, whichever composer draws it. */
@@ -831,13 +832,12 @@
 
   /**
    * The room the floating composer column takes, as the composer publishes
-   * it: its parked prompts, tray, suggestion row and attachments, and the
-   * input at its one-line height (a longer draft stands over the transcript
-   * instead). The bare input is ~50px; a parked permission stacks above it
-   * and can stand several hundred. Published to the body as `--composer-clearance` — the
-   * measured height plus the column's bottom offset and one more step of
-   * breathing room — which is what the transcript reserves at its foot, so the
-   * row that raised a permission is never the row the permission covers.
+   * it: its tray, suggestion row and attachments, and the input at its
+   * one-line height. A longer draft and the parked prompt cards stand over
+   * the transcript's foot instead, so neither ever moves it. Published to the
+   * body as `--composer-clearance` — the measured height plus the column's
+   * bottom offset and one more step of breathing room — which is what the
+   * transcript reserves at its foot.
    */
   let composerHeight = $state(0);
   /** The composer column this pane's transcript makes room for: its group's, or on the server its own. */
@@ -1005,9 +1005,12 @@
   <AutopilotToggle instance={instanceRow} instanceId={viewId} />
 {/snippet}
 
+<!-- A parked ask is drawn here only: the transcript leaves out the row of the
+     call it gates until it is answered, and the card then settles into that
+     row (transcript/settle.ts). -->
 {#snippet parkedPrompts()}
   {#each parked as request (request.requestId)}
-    <div class="parked" data-flip>
+    <div class="parked" data-flip out:settleInto={request.toolUseId}>
       <Prompt onanswer={(result) => onanswer(request, result)} {request} />
     </div>
   {/each}

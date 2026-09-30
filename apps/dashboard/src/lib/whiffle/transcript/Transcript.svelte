@@ -330,7 +330,7 @@
     const last = session.messages[settled - 1];
     return (
       `${arrayOf(session.messages)}:${session.messages.length}:${settled}:${last?.id ?? ""}:${session.streaming.length}:` +
-      `${session.thinkingStream.length}:${session.busy ? 1 : 0}:${session.pending.length}:` +
+      `${session.thinkingStream.length}:${session.busy ? 1 : 0}:${session.pending.map((ask) => `${ask.requestId}${ask.routedTo ?? ""}`).join(",")}:` +
       `${session.openBlock}:${session.thinkingClosing}:${session.currentTool?.toolId ?? ""}:${session.sdkStatus}:` +
       `${last?.metadata?.sendFailed ?? ""}`
     );
@@ -1506,8 +1506,7 @@
    * virtua's box math stops at the list. So the landing is two moves — virtua
    * measures its way to the true last row, then one more frame runs the scroller
    * to its own maximum, past the padding band, which is exactly the height of
-   * the composer column. A tall permission card therefore never sits on top of
-   * the message that raised it.
+   * the composer column.
    */
   /** The frame the next write to the tail is waiting for, and this
    *  component's LAST WRITE — the tag that tells its own scroll events from
@@ -1957,8 +1956,8 @@
 
   // Follow the tail while the reader is already at the bottom — a scroll up to
   // read history is never yanked back by the next frame. `clearance` is a
-  // dependency too: when a permission card grows the composer column, the row
-  // that was flush with the composer is now behind it, so the tail re-lands.
+  // dependency too: when the composer column grows (a tray, a chip row), the
+  // row that was flush with the composer is now behind it, so the tail re-lands.
   //
   // `active` is read FIRST, before the tail it follows. Reading `session.streaming`
   // ahead of the guard re-ran this effect on every streamed frame of a pane
@@ -2667,12 +2666,12 @@
        inline start --space-7 (25), inline end --space-6 (21). */
     padding-block-start: 0;
     padding-inline: var(--space-7) var(--space-6);
-    /* The foot clears the floating composer COLUMN, not the bare pill: a
-       permission card stacks above the input inside it and can stand 400px
-       tall, which used to bury the very message that raised it.
-       `--composer-clearance` is that column's measured height plus its offsets,
-       published by the pane; the old fixed reserve is the floor, so a bare
-       composer looks exactly as it did. */
+    /* The foot clears the floating composer COLUMN, not the bare pill: the
+       tray and chip row stand on the input inside it. Parked prompt cards
+       and a grown draft stand over the transcript's foot instead and move
+       nothing. `--composer-clearance` is that column's measured height plus
+       its offsets, published by the pane; the old fixed reserve is the
+       floor, so a bare composer looks exactly as it did. */
     padding-block-end: max(
       calc(var(--space-8) * 3),
       var(--composer-clearance, 0px)

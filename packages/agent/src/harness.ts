@@ -65,6 +65,8 @@ export interface HarnessContext {
     input: Record<string, unknown>;
     suggestions?: PermissionUpdate[];
     requestKind?: "tool" | "question";
+    /** The tool call the ask gates: its `tool_use` id, which names its transcript row. */
+    toolUseId?: string;
   }): void;
   /** A gate was answered elsewhere, or by the adapter's own policy. */
   // biome-ignore lint/style/useConsistentMethodSignatures: matches the context callbacks

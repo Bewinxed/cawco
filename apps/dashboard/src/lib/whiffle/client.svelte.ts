@@ -236,6 +236,11 @@ export interface PendingPermission {
   routedTo?: "parent";
   suggestions?: PermissionUpdate[];
   toolName: string;
+  /**
+   * The call the ask gates, as its message's `toolCallId`: while the ask is
+   * parked on the composer, that call has no row in the transcript.
+   */
+  toolUseId?: string;
 }
 
 /** A permission parked anywhere in the fleet, with the context to act on it. */
@@ -2071,6 +2076,7 @@ function handleFrame(frame: FramePayload): void {
         input: frame.input,
         suggestions: frame.suggestions,
         routedTo,
+        toolUseId: frame.toolUseId,
       });
       break;
     }

@@ -9,7 +9,7 @@
 import { ASK_USER_QUESTION } from "@whiffle/core";
 import type { SubagentState } from "$lib/utils/flow-types";
 import type { SessionState } from "../client.svelte";
-import type { ToolGlance } from "../frames";
+import { parkedAsks, type ToolGlance } from "../frames";
 import type { Message } from "../types";
 
 /**
@@ -332,6 +332,24 @@ const settledOf = (messages: Message[]): Message[] => {
 };
 
 /**
+ * The messages the transcript draws: the settled ones, less every call whose
+ * ask is parked on the composer. The card is that call until it is answered,
+ * so the call takes no room here while it waits, and its row arrives as the
+ * card settles into it.
+ */
+const drawnOf = (session: SessionState): Message[] => {
+  const settled = settledOf(session.messages);
+  const gated = new Set(
+    parkedAsks(session.pending).flatMap((ask) =>
+      ask.toolUseId ? [ask.toolUseId] : []
+    )
+  );
+  return gated.size === 0
+    ? settled
+    : settled.filter((m) => !(m.toolCallId && gated.has(m.toolCallId)));
+};
+
+/**
  * The row grammar itself: a list of messages folded into rows, with no live tail
  * and no session. The main transcript and a subagent's own mini-transcript both
  * go through this, so a delegate's tool calls and reasoning read exactly like
@@ -646,7 +664,7 @@ export function buildRowsFrom(
   session: SessionState,
   memo: FoldMemo | null
 ): Fold {
-  const messages = settledOf(session.messages);
+  const messages = drawnOf(session);
   const branches = Object.keys(session.subagents).length;
   const cut = memo ? cutFor(messages, memo, branches) : -1;
   const appended = memo !== null && cut >= 0;

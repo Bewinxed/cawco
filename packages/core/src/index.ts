@@ -768,6 +768,11 @@ export type FramePayload =
       suggestions?: import("./harness").PermissionUpdate[];
       /** `tool` for a permission, `question` for an AskUserQuestion-shaped prompt. */
       requestKind?: "tool" | "question";
+      /**
+       * The tool call the ask gates, as its transcript message names it
+       * (`toolCallId`): while the ask is parked, that call's row is the card.
+       */
+      toolUseId?: string;
     }
   | {
       /**
