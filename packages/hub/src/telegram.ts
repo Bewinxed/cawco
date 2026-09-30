@@ -511,15 +511,24 @@ export const createTelegramBridge = ({
   /** Set by the server: the one path a message takes into a session. */
   let sendMessage: ((envelope: Envelope<SendPayload>) => boolean) | undefined;
 
+  /**
+   * Settles an ask: true when it reached its session or workflow, false when
+   * its machine is offline, and the reason when a workflow question refused
+   * the answer (it then stays open to be answered again).
+   */
   const resolve = (
     envelope: Envelope,
     requestId: string,
     result: PermissionResult
-  ): boolean => {
+  ): boolean | Error => {
     const request = envelope.payload as PermissionRequest;
-    if (answerWorkflow(pending, requestId, result)) {
-      settledHere.add(requestId);
-      return true;
+    try {
+      if (answerWorkflow(pending, requestId, result)) {
+        settledHere.add(requestId);
+        return true;
+      }
+    } catch (error) {
+      return error instanceof Error ? error : new Error(String(error));
     }
     const payload: ControlPayload = {
       instanceId: request.instanceId,
@@ -785,7 +794,12 @@ export const createTelegramBridge = ({
       return;
     }
 
-    if (!resolve(envelope, requestId, result)) {
+    const settled = resolve(envelope, requestId, result);
+    if (settled instanceof Error) {
+      await send(`⚠️ ${esc(settled.message)}`);
+      return;
+    }
+    if (!settled) {
       await close(requestId, "⚠️ That machine is offline");
       return;
     }
@@ -849,7 +863,12 @@ export const createTelegramBridge = ({
         : // The reader's own words, which is what a denial is for: the model is
           // told why, not merely that it was refused.
           { behavior: "deny", message: text };
-      if (!resolve(open, entry.requestId, result)) {
+      const settled = resolve(open, entry.requestId, result);
+      if (settled instanceof Error) {
+        await send(`${heard}⚠️ ${esc(settled.message)}`);
+        return;
+      }
+      if (!settled) {
         await close(entry.requestId, `${heard}⚠️ That machine is offline`);
         return;
       }

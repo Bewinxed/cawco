@@ -5124,20 +5124,38 @@ export const createServer = ({
    * command's `applied` ack, and routing it as a legacy `control_result` too
    * would report the same outcome twice in two dialects.
    */
+  /**
+   * Whether a dashboard's answer was a workflow question's, which settles it
+   * here. A question that refuses the answer stays open, and the card is told
+   * why.
+   */
+  const answeredWorkflow = (
+    message: Envelope<ControlPayload>,
+    dashboard: HubSocket
+  ): boolean => {
+    const answer = peekAnswer(message.payload);
+    if (!answer) {
+      return false;
+    }
+    try {
+      return answerWorkflow(
+        pending,
+        answer.requestId,
+        answer.result as import("@whiffle/core").PermissionResult
+      );
+    } catch (error) {
+      dashboard.send(
+        failure(message, error instanceof Error ? error.message : String(error))
+      );
+      return true;
+    }
+  };
   const relayControl = (
     message: Envelope<ControlPayload>,
     dashboard: HubSocket,
     remember = true
   ): boolean => {
-    const workflowAnswer = peekAnswer(message.payload);
-    if (
-      workflowAnswer &&
-      answerWorkflow(
-        pending,
-        workflowAnswer.requestId,
-        workflowAnswer.result as import("@whiffle/core").PermissionResult
-      )
-    ) {
+    if (answeredWorkflow(message, dashboard)) {
       return true;
     }
     if (!(forward(message, dashboard) && message.requestId)) {
@@ -7962,17 +7980,24 @@ export const createServer = ({
       })
       .post("/api/relay/answer", { body: t.Any() }, ({ body, status }) => {
         const workflowRequestId = peek(body, "requestId");
-        if (
-          workflowRequestId &&
-          pending.get(workflowRequestId) &&
-          answerWorkflow(
-            pending,
-            workflowRequestId,
-            (body as { result: import("@whiffle/core").PermissionResult })
-              .result
-          )
-        ) {
-          return { ok: true };
+        try {
+          if (
+            workflowRequestId &&
+            pending.get(workflowRequestId) &&
+            answerWorkflow(
+              pending,
+              workflowRequestId,
+              (body as { result: import("@whiffle/core").PermissionResult })
+                .result
+            )
+          ) {
+            return { ok: true };
+          }
+        } catch (error) {
+          return status(
+            400,
+            error instanceof Error ? error.message : String(error)
+          );
         }
         const instanceId = peek(body, "instanceId");
         const from = peek(body, "from");

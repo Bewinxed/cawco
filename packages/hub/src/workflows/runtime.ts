@@ -31,6 +31,7 @@ import type {
   DbShape,
   WorkflowAttemptRow,
   WorkflowLogRow,
+  WorkflowRow,
   WorkflowRunRow,
   WorkflowStepRow,
 } from "../db";
@@ -103,9 +104,20 @@ export interface LaunchOptions {
   launchedBy?: string;
   parentRunId?: string;
   parentStepId?: string | null;
+  /**
+   * A re-run from a step: every call before effect `before` is answered with
+   * what run `runId` got there, and the run goes live from that step on.
+   */
+  rerunFrom?: RerunFrom;
   rerunOfRunId?: string;
   supervisor?: { instanceId: string } | { delegateType: string } | null;
   workspace?: { path: string; machineId: string };
+}
+
+/** Where a re-run's own calls start: kept in its state as `__rerun`. */
+interface RerunFrom {
+  before: number;
+  runId: string;
 }
 
 /** Calls whose result comes later: a step, a question, a sleep, a child run. */
@@ -238,6 +250,31 @@ function questionNotice(
     how = `value: <a value matching the schema above>${options.length ? ', choice: "<label>"' : ""}`;
   }
   return `${workflowNoticeMarker(workflow, "question")}run ${run.id} · step ${step.id}\n${spec.question ?? ""}\nOptions: ${labels}${other}${schema}\nAnswer with steer_workflow {runId: "${run.id}", action: {type: "answer", stepId: "${step.id}", ${how}}}.`;
+}
+
+/** An answer to a question: the option picked, a note, a typed value. */
+interface Answer {
+  choice?: string;
+  note?: string;
+  value?: unknown;
+}
+
+/**
+ * A reply in words, as the question takes it: a typed question's reply is its
+ * value as JSON; any other question's is the option picked or the words given.
+ */
+function answerOf(spec: AskArgs, reply: string): Answer {
+  if (!spec.answerSchema) {
+    return { choice: reply };
+  }
+  try {
+    return { value: JSON.parse(reply) as unknown };
+  } catch (error) {
+    throw new Error(
+      `This question takes a JSON value matching ${JSON.stringify(spec.answerSchema)}; the reply is not JSON.`,
+      { cause: error }
+    );
+  }
 }
 
 /** A launch's inputs: defaults filled, every required one present, selects in range. */
@@ -493,7 +530,11 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
 
   const parkAsk = (run: WorkflowRunRow, step: WorkflowStepRow, tell = true) => {
     const spec = (step.spec ?? {}) as AskArgs;
-    const question = spec.question ?? "";
+    // A typed question is answered in words: the reply is its JSON value, so
+    // the ledger entry always takes free text and says what shape it wants.
+    const question = spec.answerSchema
+      ? `${spec.question ?? ""}\nReply with JSON matching ${JSON.stringify(spec.answerSchema)}`
+      : (spec.question ?? "");
     const options = spec.options ?? [];
     deps.park({
       verb: "frames",
@@ -515,7 +556,8 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
               header: question.slice(0, 30),
               options,
               multiSelect: false,
-              allowOther: spec.allowOther ?? false,
+              allowOther:
+                Boolean(spec.answerSchema) || (spec.allowOther ?? false),
             },
           ],
         },
@@ -536,11 +578,8 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
           row.kind === "ask" && row.status === "waiting" && row.id !== except
       );
 
-  const settleAsk = (
-    run: WorkflowRunRow,
-    step: WorkflowStepRow,
-    answer: { choice?: string; note?: string; value?: unknown }
-  ) => {
+  /** Refuses an answer the question cannot take, with the reason. */
+  const checkAnswer = (step: WorkflowStepRow, answer: Answer) => {
     const spec = (step.spec ?? {}) as AskArgs;
     if (spec.answerSchema) {
       if (answer.value === undefined) {
@@ -550,7 +589,9 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
       }
       const validate = ajv.compile(spec.answerSchema);
       if (!validate(answer.value)) {
-        throw new Error(ajv.errorsText(validate.errors, { separator: "\n" }));
+        throw new Error(
+          `The value does not match the question's schema: ${ajv.errorsText(validate.errors, { separator: "; " })}`
+        );
       }
     } else if (answer.value !== undefined) {
       throw new Error(
@@ -559,6 +600,14 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
     } else if (!answer.choice) {
       throw new Error("A workflow question needs a choice.");
     }
+  };
+
+  const settleAsk = (
+    run: WorkflowRunRow,
+    step: WorkflowStepRow,
+    answer: Answer
+  ) => {
+    checkAnswer(step, answer);
     deps.settle(step.id);
     const result = {
       choice: answer.choice ?? "",
@@ -695,11 +744,16 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
 
   /** The session that supervises a new run: a live one named, or one spawned. */
   const supervisorFor = async (
-    chosen: LaunchOptions["supervisor"],
-    workflow: { name: string; description: string },
+    options: LaunchOptions,
+    workflow: WorkflowRow,
     workspace: { path: string; machineId: string },
     runId: string
   ): Promise<string | null> => {
+    // A top-level launch that names no supervisor takes the workflow's default.
+    const chosen =
+      options.supervisor === undefined && !options.parentRunId
+        ? workflow.graph?.settings?.defaultSupervisor
+        : options.supervisor;
     if (!chosen) {
       return null;
     }
@@ -753,9 +807,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
       throw new Error("workflow-depth");
     }
     const supervisorInstanceId = await supervisorFor(
-      options.supervisor === undefined && !options.parentRunId
-        ? workflow.graph?.settings?.defaultSupervisor
-        : options.supervisor,
+      options,
       workflow,
       workspace,
       id
@@ -772,7 +824,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
       status: "running",
       result: null,
       failure: null,
-      state: {},
+      state: options.rerunFrom ? { __rerun: options.rerunFrom } : {},
       startedAt: new Date(),
       endedAt: null,
       rerunOfRunId: options.rerunOfRunId ?? null,
@@ -967,6 +1019,80 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
     return { childRunId: childId };
   };
 
+  /** A child run's outcome once its row has ended; undefined while it runs. */
+  const childOutcomeOf = (childRunId: string): Outcome | undefined => {
+    const child = db.getWorkflowRun(childRunId);
+    if (!child || active(child)) {
+      return;
+    }
+    if (child.status === "done") {
+      return { result: child.result };
+    }
+    return {
+      failure: {
+        name: "ChildError",
+        kind: child.status === "cancelled" ? "cancelled" : "failed",
+        childRunId,
+        message: child.failure ?? child.status,
+      },
+    };
+  };
+
+  /**
+   * What a wait at `seq` of an ended run came back with, read off its step:
+   * a step's result or StepError, a question's answer or timeout, a child's
+   * outcome. Throws for one that never finished there.
+   */
+  const waitOutcome = (
+    runId: string,
+    seq: number,
+    kind: WorkflowEffectKind
+  ): Outcome => {
+    if (kind === "sleep") {
+      return { result: null };
+    }
+    const step =
+      kind === "workflow"
+        ? db.getWorkflowStep(`step-${stepIdFor(runId, seq)}`)
+        : db.getWorkflowStep(stepIdFor(runId, seq));
+    const outcome = step && waitStepOutcome(step);
+    if (!outcome) {
+      throw new Error(
+        `Effect ${seq} (${kind}) never finished in the run this one re-runs (${runId}); re-run it from an earlier step.`
+      );
+    }
+    return outcome;
+  };
+  const waitStepOutcome = (step: WorkflowStepRow): Outcome | undefined => {
+    if (step.kind === "workflow") {
+      return step.childRunId ? childOutcomeOf(step.childRunId) : undefined;
+    }
+    if (step.status === "passed") {
+      return { result: step.result };
+    }
+    if (step.status !== "failed") {
+      return;
+    }
+    if (step.kind === "ask") {
+      return {
+        failure: { name: "AskError", kind: "timeout", message: "ask-timeout" },
+      };
+    }
+    const failure = step.failure ?? "harness-error";
+    return {
+      failure: {
+        name: "StepError",
+        kind:
+          failure === "no-result" || failure === "attempt-timeout"
+            ? failure
+            : "harness-error",
+        stepId: step.id,
+        attempts: db.listWorkflowAttempts(step.id).length,
+        message: failure,
+      },
+    };
+  };
+
   const engine = createWorkflowEngine(deps.dbPath, {
     run: (runId) => db.getWorkflowRun(runId),
     async perform(runId, seq, kind, args) {
@@ -1038,22 +1164,27 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
       });
       write(run, step);
     },
-    childOutcome(childRunId) {
-      const child = db.getWorkflowRun(childRunId);
-      if (!child || active(child)) {
+    childOutcome: childOutcomeOf,
+    async seed(runId, seq, kind, args, hash) {
+      const run = runOf(runId);
+      const from = run.state.__rerun as RerunFrom | undefined;
+      if (!from || seq >= from.before) {
         return;
       }
-      if (child.status === "done") {
-        return { result: child.result };
+      const recorded = await engine.recorded(from.runId, seq);
+      if (!recorded) {
+        throw new Error(
+          `The run this one re-runs (${from.runId}) has no record of effect ${seq}; re-run it from an earlier step.`
+        );
       }
-      return {
-        failure: {
-          name: "ChildError",
-          kind: child.status === "cancelled" ? "cancelled" : "failed",
-          childRunId,
-          message: child.failure ?? child.status,
-        },
-      };
+      if (recorded.hash !== hash) {
+        // A different call here: the driver refuses it as the workflow changed.
+        return { hash: recorded.hash, outcome: { result: null } };
+      }
+      const outcome = recorded.outcome ?? waitOutcome(from.runId, seq, kind);
+      logCall(runId, seq, kind, args, outcome);
+      announce(run);
+      return { hash: recorded.hash, outcome };
     },
     finished(runId, outcome) {
       const run = db.getWorkflowRun(runId);
@@ -1194,9 +1325,21 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
       }
       return { runId: run.id };
     },
-    /** Starts the run again, from its start, with the inputs it had. */
-    rerun(runId: string) {
+    /**
+     * Starts the run again with the inputs it had, as its workflow is now:
+     * from the start, or from one of its steps — every call before that step
+     * is answered with what this run got there, and must be the same call.
+     */
+    rerun(runId: string, fromStepId?: string) {
       const old = runOf(runId);
+      let rerunFrom: RerunFrom | undefined;
+      if (fromStepId) {
+        const step = stepOf(fromStepId);
+        if (step.runId !== old.id) {
+          throw new Error("That step is not part of this workflow run.");
+        }
+        rerunFrom = { runId: old.id, before: step.seq };
+      }
       return runtime.launch(old.workflowId, {
         inputs: old.inputs,
         workspace: { path: old.workspace, machineId: old.machineId },
@@ -1204,6 +1347,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
           ? { instanceId: old.supervisorInstanceId }
           : undefined,
         rerunOfRunId: old.id,
+        ...(rerunFrom ? { rerunFrom } : {}),
       });
     },
     submitResult: (stepId: string, instanceId: string, result: unknown) =>
@@ -1235,31 +1379,44 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
         settleAsk(run, step, answer);
       });
     },
+    /**
+     * A question answered through the pending ledger — a dashboard card,
+     * Telegram, or a supervisor's `answer_delegate`. An answer the question
+     * cannot take throws here, before anything is settled, so whoever sent it
+     * is told why and the question stays open.
+     */
     settleQuestion(stepId: string, result: PermissionResult) {
       const step = db.getWorkflowStep(stepId);
       if (step?.kind !== "ask") {
         return false;
       }
+      if (result.behavior === "deny") {
+        serial(step.runId, () => {
+          const run = runOf(step.runId);
+          if (active(run)) {
+            finish(run, "cancelled");
+            interrupt(run.id);
+          }
+        }).catch(console.error);
+        return true;
+      }
+      const answers = (
+        result.updatedInput as
+          | { answers?: Record<string, string | string[]> }
+          | undefined
+      )?.answers;
+      const reply = answers && Object.values(answers)[0];
+      const answer = answerOf(
+        (step.spec ?? {}) as AskArgs,
+        Array.isArray(reply) ? reply.join(", ") : (reply ?? "")
+      );
+      checkAnswer(step, answer);
       serial(step.runId, () => {
         const run = runOf(step.runId);
-        if (!active(run)) {
-          return;
+        const current = stepOf(step.id);
+        if (active(run) && current.status === "waiting") {
+          settleAsk(run, current, answer);
         }
-        if (result.behavior === "deny") {
-          finish(run, "cancelled");
-          interrupt(run.id);
-          return;
-        }
-        const answers = (
-          result.updatedInput as
-            | { answers?: Record<string, string> }
-            | undefined
-        )?.answers;
-        const choice = answers && Object.values(answers)[0];
-        if (!choice) {
-          throw new Error("A workflow question needs a choice.");
-        }
-        settleAsk(run, stepOf(step.id), { choice });
       }).catch(console.error);
       return true;
     },

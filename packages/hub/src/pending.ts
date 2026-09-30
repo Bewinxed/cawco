@@ -27,6 +27,11 @@ export const onWorkflowAnswer = (
   pending: PendingShape,
   handler: (id: string, result: PermissionResult) => boolean
 ) => workflowAnswers.set(pending, handler);
+/**
+ * Whether `id` was a workflow's question, which this answer then settles.
+ * Throws, with the reason, when the question cannot take the answer — a typed
+ * question given a reply that is not its JSON — and the question stays open.
+ */
 export const answerWorkflow = (
   pending: PendingShape,
   id: string,

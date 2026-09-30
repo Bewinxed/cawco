@@ -271,13 +271,14 @@
       },
     });
   }
-  async function rerun() {
+  /** Runs the workflow again: from the start, or from one of this run's steps. */
+  async function rerun(fromStepId?: string) {
     if (!run) {
       return;
     }
     const { workflowId } = run;
-    await act("rerun", async () => {
-      const result = await rerunWorkflow(runId);
+    await act(fromStepId ? "rerun-step" : "rerun", async () => {
+      const result = await rerunWorkflow(runId, fromStepId);
       await goto(`/workflows/${workflowId}/runs/${result.runId}`);
     });
   }
@@ -388,6 +389,24 @@
           >{attempt.failure ?? JSON.stringify(attempt.result, null, 2)}</pre>
         </details>
       {/each}
+      <!-- Everything this run did before the step is kept: the new run is
+           handed those results and goes live from here. -->
+      <button
+        aria-busy={acting === 'rerun-step' || undefined}
+        aria-disabled={acting === 'rerun-step' || undefined}
+        class="wf-btn"
+        disabled={(busy && acting !== 'rerun-step') || !live}
+        onclick={whileIdle(() => acting === 'rerun-step', () => rerun(step?.id))}
+        title={live ? 'Run the workflow again from this step, keeping what came before it' : "Can't re-run while the hub is unreachable"}
+        type="button"
+      >
+        <PendingContent
+          failed={errorMessage !== ''}
+          label="Re-run from this step"
+          pending={acting === 'rerun-step'}
+          pendingLabel="Re-running…"
+        />
+      </button>
       <button
         class="wf-btn"
         onclick={() => { selected = undefined; }}
@@ -448,7 +467,7 @@
               aria-disabled={acting === 'rerun' || undefined}
               class="wf-btn"
               disabled={(busy && acting !== 'rerun') || !live}
-              onclick={whileIdle(() => acting === 'rerun', rerun)}
+              onclick={whileIdle(() => acting === 'rerun', () => rerun())}
               title={live ? 'Start this workflow again with the same inputs' : "Can't re-run while the hub is unreachable"}
               type="button"
             >

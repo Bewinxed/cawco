@@ -111,6 +111,20 @@ export interface EngineHost {
         status: string;
       }
     | undefined;
+  /**
+   * For a run re-run from a step: the call at `seq`, if it comes before that
+   * step, answered with what the run it re-runs got there — its outcome, and
+   * the hash that run recorded for the call, which must match this one's.
+   * Undefined for every other call. Throws when the call cannot be answered
+   * that way, and the run fails with the reason.
+   */
+  readonly seed: (
+    runId: string,
+    seq: number,
+    kind: WorkflowEffectKind,
+    args: Record<string, unknown>,
+    hash: string
+  ) => Promise<{ hash: string; outcome: Outcome } | undefined>;
 }
 
 export interface WorkflowEngineHandle {
@@ -120,6 +134,16 @@ export interface WorkflowEngineHandle {
   readonly interrupt: (runId: string) => Promise<void>;
   /** Settles when the engine is up; rejects with why it could not start. */
   readonly ready: Promise<void>;
+  /**
+   * What a run's call at `seq` recorded in the engine: the hash of the call,
+   * and its outcome when the call was answered at once (an immediate call, a
+   * wait that could not open, a call seeded from a re-run). A wait's own
+   * outcome lives with its step.
+   */
+  readonly recorded: (
+    runId: string,
+    seq: number
+  ) => Promise<{ hash: string; outcome?: Outcome } | undefined>;
   /** A step or question settled: completes the deferred the run waits on. */
   readonly settle: (
     runId: string,
@@ -202,6 +226,25 @@ const changed = (seq: number, kind: string | undefined) =>
   new Error(
     `The program changed at effect ${seq}${kind ? ` (${kind})` : ""}: a run replays the program it started with.`
   );
+const changedSinceRerun = (seq: number, kind: string) =>
+  new Error(
+    `The workflow changed at effect ${seq} (${kind}) since the run this one re-runs: re-run it from an earlier step, or from the start.`
+  );
+
+/**
+ * What a call's activity stores: its hash, and either what it opened (a wait
+ * that is now parked) or the outcome the program is handed, stamped. `seeded`
+ * marks an outcome taken from the run a re-run re-runs; `refused` a call that
+ * could not be seeded, which fails the run.
+ */
+interface StoredCall {
+  hash: string;
+  opened?: { childRunId?: string };
+  outcome?: Outcome;
+  refused?: string;
+  seeded?: boolean;
+  stamp?: number;
+}
 
 /** The engine primitives a driver uses, bound to one handler run. */
 interface DriverIO {
@@ -479,57 +522,97 @@ class RunDriver {
     return at;
   }
 
+  /**
+   * A call before the step a re-run starts from, answered with what the run
+   * it re-runs got there; undefined for any other call.
+   */
+  async #seeded(call: Call, hash: string): Promise<StoredCall | undefined> {
+    try {
+      const seeded = await this.#host.seed(
+        this.#runId,
+        call.seq,
+        call.kind,
+        call.args,
+        hash
+      );
+      return seeded
+        ? {
+            hash: seeded.hash,
+            seeded: true,
+            stamp: this.#stampFor(call),
+            outcome: seeded.outcome,
+          }
+        : undefined;
+    } catch (error) {
+      return { hash, refused: failureOf(error).message };
+    }
+  }
+
   /** An immediate call: performed once, its outcome stamped and stored. */
-  async #perform(call: Call, hash: string) {
-    const stored = JSON.parse(
-      await this.#io.activity(String(call.seq), async () => {
-        const outcome = await this.#host.perform(
+  #perform(call: Call, hash: string) {
+    return this.#settle(call, hash, async () => {
+      const seeded = await this.#seeded(call, hash);
+      if (seeded) {
+        return seeded;
+      }
+      const outcome = await this.#host.perform(
+        this.#runId,
+        call.seq,
+        call.kind,
+        call.args
+      );
+      return { hash, stamp: this.#stampFor(call), outcome };
+    });
+  }
+
+  /** A call the run waits on: opened once, then parked on its wait. */
+  #open(call: Call, hash: string) {
+    return this.#settle(call, hash, async () => {
+      const seeded = await this.#seeded(call, hash);
+      if (seeded) {
+        return seeded;
+      }
+      try {
+        const opened = await this.#host.open(
           this.#runId,
           call.seq,
           call.kind,
           call.args
         );
-        return JSON.stringify({ hash, stamp: this.#stampFor(call), outcome });
-      })
-    ) as { hash: string; outcome: Outcome; stamp: number };
-    this.#inTransit.delete(call.seq);
-    this.#check(call, stored.hash, hash);
-    call.outcome = stored.outcome;
-    call.stamp = stored.stamp;
-    call.state = "ready";
+        await this.#arm(call, opened);
+        return { hash, opened };
+      } catch (error) {
+        return {
+          hash,
+          stamp: this.#stampFor(call),
+          outcome: { failure: failureOf(error) },
+        };
+      }
+    });
   }
 
-  /** A call the run waits on: opened once, then parked on its wait. */
-  async #open(call: Call, hash: string) {
+  /**
+   * Runs a call's activity — `execute` once, its stored value on every replay
+   * — checks the recorded hash, and leaves the call ready with its outcome or
+   * parked on its wait.
+   */
+  async #settle(call: Call, hash: string, execute: () => Promise<StoredCall>) {
     const stored = JSON.parse(
-      await this.#io.activity(String(call.seq), async () => {
-        try {
-          const opened = await this.#host.open(
-            this.#runId,
-            call.seq,
-            call.kind,
-            call.args
-          );
-          await this.#arm(call, opened);
-          return JSON.stringify({ hash, opened });
-        } catch (error) {
-          return JSON.stringify({
-            hash,
-            stamp: this.#stampFor(call),
-            failure: failureOf(error),
-          });
-        }
-      })
-    ) as {
-      failure?: WorkflowFailure;
-      hash: string;
-      opened?: { childRunId?: string };
-      stamp?: number;
-    };
+      await this.#io.activity(String(call.seq), async () =>
+        JSON.stringify(await execute())
+      )
+    ) as StoredCall;
     this.#inTransit.delete(call.seq);
-    this.#check(call, stored.hash, hash);
-    if (stored.failure) {
-      call.outcome = { failure: stored.failure };
+    if (stored.refused) {
+      throw new Error(stored.refused);
+    }
+    if (stored.hash !== hash) {
+      throw stored.seeded
+        ? changedSinceRerun(call.seq, call.kind)
+        : changed(call.seq, call.kind);
+    }
+    if (stored.outcome) {
+      call.outcome = stored.outcome;
       call.stamp = stored.stamp ?? 0;
       call.state = "ready";
       return;
@@ -552,12 +635,6 @@ class RunDriver {
       );
     } else if (call.kind === "workflow" && opened.childRunId) {
       await this.#io.startChild(opened.childRunId);
-    }
-  }
-
-  #check(call: Call, stored: string, hash: string) {
-    if (stored !== hash) {
-      throw changed(call.seq, call.kind);
     }
   }
 
@@ -863,34 +940,85 @@ export function createWorkflowEngine(
     },
     async forget(runId) {
       await ready;
-      const entityId = EntityId.make(await executionIdOf(runId));
+      const executionId = await executionIdOf(runId);
       await runtime.runPromise(
         Effect.gen(function* () {
-          const sharding = yield* Sharding.Sharding;
           const storage = yield* MessageStorage.MessageStorage;
-          const shardId = sharding.getShardId(
-            entityId,
-            Context.get(
-              WhiffleRun.annotations,
-              ClusterSchema.ShardGroup
-            )(entityId)
-          );
-          // The execution's own mailbox and its clocks', under the entity
-          // types ClusterWorkflowEngine files them under.
-          for (const entityType of [
-            `Workflow/${WhiffleRun._tag}`,
-            "Workflow/-/DurableClock",
-          ]) {
+          // The execution's own mailbox and its clocks'.
+          for (const entityType of [RUN_ENTITY, CLOCK_ENTITY]) {
             yield* storage.clearAddress(
-              EntityAddress.make({
-                entityType: EntityType.make(entityType),
-                entityId,
-                shardId,
-              })
+              yield* addressOf(executionId, entityType)
             );
           }
         })
       );
     },
+    async recorded(runId, seq) {
+      await ready;
+      const executionId = await executionIdOf(runId);
+      const exit = await runtime.runPromise(
+        Effect.gen(function* () {
+          const storage = yield* MessageStorage.MessageStorage;
+          const requestId = yield* storage.requestIdForPrimaryKey({
+            address: yield* addressOf(executionId, RUN_ENTITY),
+            tag: "activity",
+            // Every call's activity runs once, as attempt 1.
+            id: `${seq}/1`,
+          });
+          const replies = Option.isSome(requestId)
+            ? yield* storage.repliesForUnfiltered([requestId.value])
+            : [];
+          const last = replies.at(-1);
+          return last?._tag === "WithExit" ? last.exit : null;
+        })
+      );
+      const value = storedValue(exit);
+      return value === undefined
+        ? undefined
+        : (JSON.parse(value) as StoredCall);
+    },
   };
+}
+
+/**
+ * The entity types ClusterWorkflowEngine files an execution's messages under:
+ * its own mailbox (`run`, `activity`, `deferred`, `resume`), and its clocks'.
+ */
+const RUN_ENTITY = `Workflow/${WhiffleRun._tag}`;
+const CLOCK_ENTITY = "Workflow/-/DurableClock";
+
+/** Where an execution's messages of one entity type live. */
+const addressOf = (executionId: string, entityType: string) =>
+  Effect.gen(function* () {
+    const sharding = yield* Sharding.Sharding;
+    const entityId = EntityId.make(executionId);
+    return EntityAddress.make({
+      entityType: EntityType.make(entityType),
+      entityId,
+      shardId: sharding.getShardId(
+        entityId,
+        Context.get(WhiffleRun.annotations, ClusterSchema.ShardGroup)(entityId)
+      ),
+    });
+  });
+
+/**
+ * The value an activity completed with, out of its stored reply: the RPC's
+ * exit, holding the workflow result, holding the activity's own exit.
+ */
+function storedValue(exit: unknown): string | undefined {
+  if (!exit || typeof exit !== "object") {
+    return;
+  }
+  const rpc = exit as {
+    _tag?: string;
+    value?: { _tag?: string; exit?: { _tag?: string; value?: unknown } };
+  };
+  const inner = rpc.value?.exit;
+  return rpc._tag === "Success" &&
+    rpc.value?._tag === "Complete" &&
+    inner?._tag === "Success" &&
+    typeof inner.value === "string"
+    ? inner.value
+    : undefined;
 }

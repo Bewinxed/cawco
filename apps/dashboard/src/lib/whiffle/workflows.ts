@@ -101,9 +101,14 @@ export const loadWorkflowRun = (key: string) =>
   request<WorkflowRunDetail>(`workflow-runs/${id(key)}`);
 export const cancelWorkflowRun = (key: string) =>
   request<unknown>(`workflow-runs/${id(key)}/cancel`, "POST");
-/** Starts the run again from its start, with the inputs it had. */
-export const rerunWorkflow = (key: string) =>
-  request<{ runId: string }>(`workflow-runs/${id(key)}/rerun`, "POST");
+/**
+ * Starts the run again with the inputs it had: from its start, or from one of
+ * its steps, the calls before it answered with what this run got there.
+ */
+export const rerunWorkflow = (key: string, fromStepId?: string) =>
+  request<{ runId: string }>(`workflow-runs/${id(key)}/rerun`, "POST", {
+    fromStepId,
+  });
 export const answerWorkflow = (
   key: string,
   stepId: string,

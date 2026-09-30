@@ -335,8 +335,11 @@ export function workflowRoutes(
           );
         })
     )
-    .post("/api/workflow-runs/:id/rerun", ({ params }) =>
-      attempt(() => runtime.rerun(params.id))
+    .post(
+      "/api/workflow-runs/:id/rerun",
+      { body: t.Object({ fromStepId: t.Optional(t.String()) }) },
+      ({ params, body }) =>
+        attempt(() => runtime.rerun(params.id, body.fromStepId))
     )
     .post(
       "/api/workflow-steps/:id/result",
