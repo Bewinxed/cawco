@@ -599,10 +599,10 @@
 
   /**
    * The width the field's text wraps at: its client width less its inline
-   * padding. The field keeps its scrollbar's gutter whether it scrolls or
-   * not (its stylesheet), so this is its width in every state; it changes
-   * only with the row around it, which is why the words leaving are read
-   * before a switch and the words arriving after it.
+   * padding. The field draws no scrollbar (its stylesheet), so this is its
+   * width in every state; it changes only with the row around it, which is
+   * why the words leaving are read before a switch and the words arriving
+   * after it.
    */
   function wrapOf(node: HTMLTextAreaElement): number {
     const style = getComputedStyle(node);
@@ -611,6 +611,37 @@
       Number.parseFloat(style.paddingInlineStart) -
       Number.parseFloat(style.paddingInlineEnd)
     );
+  }
+
+  /**
+   * The field's scroll cue, standing in for the scrollbar it does not draw:
+   * `cue-top` while text is scrolled out above, `cue-bottom` while there is
+   * more below, and neither when the text fits. The stylesheet fades that
+   * edge. Kept current as the field scrolls, resizes (a glide, a fold) and
+   * is handed another draft.
+   */
+  let cueTop = $state(false);
+  let cueBottom = $state(false);
+  function scrollCue(node: HTMLTextAreaElement) {
+    const cue = () => {
+      const hidden = node.scrollHeight - node.clientHeight;
+      cueTop = hidden > 1 && node.scrollTop > 1;
+      cueBottom = hidden > 1 && node.scrollTop < hidden - 1;
+    };
+    let frame = 0;
+    $effect(() => {
+      // biome-ignore lint/complexity/noVoid: read-only dependency — a new draft or text re-reads the scroll
+      void draft.text;
+      frame = requestAnimationFrame(cue);
+    });
+    const sizes = new ResizeObserver(cue);
+    sizes.observe(node);
+    node.addEventListener("scroll", cue, { passive: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      sizes.disconnect();
+      node.removeEventListener("scroll", cue);
+    };
   }
 
   function endFlight(): void {
@@ -1399,6 +1430,8 @@
           placeholder={hint}
           role="combobox"
           bind:this={field}
+          class:cue-bottom={cueBottom}
+          class:cue-top={cueTop}
           class:flying={flight !== null}
           class:folding
           bind:clientHeight={fieldHeight}
@@ -1411,6 +1444,7 @@
             },
           })}
           {@attach fitHint}
+          {@attach scrollCue}
         ></textarea>
         {#if flight}
           <!-- Each layer is its text and, drawn clear after it, the rest of
@@ -1654,11 +1688,16 @@
        single line sits on the buttons' midline. */
     height: var(--cin-ctl);
     min-height: var(--cin-ctl);
-    /* Where scrollbars take room, the field keeps the room whether it
-       scrolls, fits or is folded, so its text wraps at one width: a draft
-       crossing the ceiling never re-wraps, and the switch overlay and the
-       autosize twin (a copy of the field) wrap where it does. */
-    scrollbar-gutter: stable;
+    /* No scrollbar is drawn, so the text wraps at the field's full width
+       in every state: a draft crossing the ceiling never re-wraps, and the
+       switch overlay and the autosize twin (a copy of the field) wrap where
+       it does. Wheel, touch, keys and the caret still scroll it; the fades
+       at its edges (`scrollCue`) say there is more. */
+    scrollbar-width: none;
+
+    &::-webkit-scrollbar {
+      display: none;
+    }
     max-height: 200px;
     padding: calc((var(--cin-ctl) - 1lh) / 2) 0;
     min-width: 0;
@@ -1683,6 +1722,23 @@
     color: var(--ink-muted);
     letter-spacing: var(--hint-track);
     white-space: nowrap;
+  }
+  /* The scroll cue: the edge with text out of sight fades over about a
+     line. A folded draft keeps its own fade (below, later, so it wins). */
+  textarea.cue-top {
+    mask-image: linear-gradient(to bottom, transparent, #000 1lh);
+  }
+  textarea.cue-bottom {
+    mask-image: linear-gradient(to top, transparent, #000 1lh);
+  }
+  textarea.cue-top.cue-bottom {
+    mask-image: linear-gradient(
+      to bottom,
+      transparent,
+      #000 1lh,
+      #000 calc(100% - 1lh),
+      transparent
+    );
   }
   textarea.flying {
     color: transparent;
