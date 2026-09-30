@@ -2870,9 +2870,17 @@ export class OpencodeHarness implements Harness {
     { parent: OpencodeSession; callID: string }
   >();
   #disposed = false;
-  readonly #pumpDirs = new Set<string>();
+  /**
+   * The one subscription loop each directory has, by the controller that ends
+   * it. A loop runs only while it is the one on record here: stopping it
+   * (a config restart, dispose) aborts that controller, and the loop ends
+   * rather than reconnecting beside its replacement. opencode binds 4096
+   * again after a restart, so an old loop's client reaches the new server,
+   * and every event of that directory arrived twice — a turn's second
+   * `session.idle` then closed the turn the next prompt had just opened.
+   */
+  readonly #pumps = new Map<string, AbortController>();
   readonly #pumpReady = new Map<string, Promise<void>>();
-  readonly #pumpControllers = new Map<string, AbortController>();
   /** Directories whose subscription is up right now. */
   readonly #pumpConnected = new Set<string>();
   #recovering = 0;
@@ -3057,7 +3065,7 @@ export class OpencodeHarness implements Harness {
     if (this.#recovering > 0 || this.#recoveryWaiters.length > 0) {
       return true;
     }
-    const dirs = new Set<string>(this.#pumpDirs);
+    const dirs = new Set<string>(this.#pumps.keys());
     for (const session of this.#sessions.values()) {
       if (session.active) {
         return true;
@@ -3189,18 +3197,13 @@ export class OpencodeHarness implements Harness {
       }
 
       // 2. Collect active directories before killing the server.
-      const dirs = new Set<string>(this.#pumpDirs);
+      const dirs = new Set<string>(this.#pumps.keys());
       for (const session of this.#sessions.values()) {
         dirs.add(session.directory);
       }
 
-      // 3. Abort all SSE pumps (the server we're about to kill owns them).
-      for (const controller of this.#pumpControllers.values()) {
-        controller.abort();
-      }
-      this.#pumpControllers.clear();
-      this.#pumpReady.clear();
-      this.#pumpDirs.clear();
+      // 3. End all SSE pumps (the server we're about to kill owns them).
+      this.#stopPumps();
 
       // 4. SIGTERM the server via sessiond and wait for exit.
       const sessiond = await this.sessiond();
@@ -3710,31 +3713,45 @@ export class OpencodeHarness implements Harness {
     if (this.#disposed) {
       return Promise.reject(new Error("OpenCode adapter disposed"));
     }
-    if (!this.#pumpDirs.has(directory)) {
-      this.#pumpDirs.add(directory);
+    if (!this.#pumps.has(directory)) {
+      const owner = new AbortController();
+      this.#pumps.set(directory, owner);
       // biome-ignore lint/complexity/noVoid: the pump owns reconnection; callers await only readiness
-      void this.#pumpDirectory(client, directory).catch(console.warn);
+      void this.#pumpDirectory(client, directory, owner.signal).catch(
+        console.warn
+      );
     }
     // biome-ignore lint/style/noNonNullAssertion: pumpDirectory installs readiness before its first await
     return this.#pumpReady.get(directory)!;
   }
 
+  /** Ends every directory's subscription loop; none reconnects. */
+  #stopPumps(): void {
+    for (const owner of this.#pumps.values()) {
+      owner.abort();
+    }
+    this.#pumps.clear();
+    this.#pumpReady.clear();
+    this.#pumpConnected.clear();
+  }
+
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: routes every subscribed event to its owning session or child; not refactored in this pass
   async #pumpDirectory(
     client: OpencodeClient,
-    directory: string
+    directory: string,
+    stopped: AbortSignal
   ): Promise<void> {
     let delay = 1000;
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: #disposed is set true by dispose(), a different method biome's per-method inference doesn't see
-    while (!this.#disposed) {
+    while (!stopped.aborted) {
       const ready = Promise.withResolvers<void>();
       this.#pumpReady.set(directory, ready.promise);
       // biome-ignore lint/complexity/noVoid: a reconnect need not have a caller waiting for readiness
       void ready.promise.catch(() => undefined);
-      const controller = new AbortController();
-      this.#pumpControllers.set(directory, controller);
+      // One connection: its deadline drops it for a reconnect, the owner's
+      // stop ends the loop.
+      const connection = new AbortController();
       const deadline = setTimeout(
-        () => controller.abort(),
+        () => connection.abort(),
         RECOVERY_TIMEOUT_MS
       );
       let connected = false;
@@ -3742,10 +3759,14 @@ export class OpencodeHarness implements Harness {
         // biome-ignore lint/performance/noAwaitInLoops: reconnects the SSE stream after a drop; must retry sequentially with backoff
         const { stream } = await client.event.subscribe({
           query: { directory },
-          signal: controller.signal,
+          signal: AbortSignal.any([stopped, connection.signal]),
           sseMaxRetryAttempts: 1,
         });
         for await (const event of stream) {
+          // A stopped loop routes nothing more, even what was already read.
+          if (stopped.aborted) {
+            break;
+          }
           if (!connected) {
             connected = true;
             clearTimeout(deadline);
@@ -3778,19 +3799,20 @@ export class OpencodeHarness implements Harness {
           }
         }
       } catch {
-        // The stream ended or dropped; reconnect below unless disposed.
+        // The stream ended or dropped; reconnect below unless stopped.
       } finally {
-        if (connected) {
+        // A stopped loop's flag was cleared with it, and the directory may
+        // already be a newer loop's.
+        if (connected && !stopped.aborted) {
           this.#pumpConnected.delete(directory);
         }
         clearTimeout(deadline);
-        controller.abort();
+        connection.abort();
         ready.reject(
           new Error(`OpenCode subscription unavailable: ${directory}`)
         );
       }
-      // biome-ignore lint/suspicious/noUnnecessaryConditions: #disposed is set true by dispose(), a different method biome's per-method inference doesn't see
-      if (this.#disposed) {
+      if (stopped.aborted) {
         break;
       }
       await Bun.sleep(delay);
@@ -4482,12 +4504,7 @@ export class OpencodeHarness implements Harness {
   async dispose(): Promise<void> {
     this.#disposed = true;
     this.#stopConfigWatcher();
-    for (const controller of this.#pumpControllers.values()) {
-      controller.abort();
-    }
-    this.#pumpControllers.clear();
-    this.#pumpReady.clear();
-    this.#pumpDirs.clear();
+    this.#stopPumps();
     // The socket, not the child: a closed sessiond connection is re-dialled by
     // `sessiond()` and the held server never notices.
     // biome-ignore lint/complexity/noVoid: fire-and-forget close; dispose() must not block on the socket teardown

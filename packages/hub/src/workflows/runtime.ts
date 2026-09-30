@@ -427,33 +427,24 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
 
   // ---------------------------------------------------------------- steps
 
+  /**
+   * Starts the step's next attempt, inside `serial(run.id)`. The attempt is
+   * recorded first; then its session is spawned (or resumed) and sent the
+   * prompt. Whatever stops that start — a spawn the transport drops, a send
+   * with no session to take it — is the attempt's own failure and ends it
+   * through {@link ended}, so the step's `retries` cover every way an attempt
+   * fails, the first included.
+   */
   const attemptStep = async (
     run: WorkflowRunRow,
     step: WorkflowStepRow,
     spec: StepArgs,
     previousError = ""
-
-    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one dispatch builds the contract, decides spawn-or-resume, persists the attempt and arms the timeout
   ) => {
     const number = (latest(step)?.number ?? 0) + 1;
     const notes = (run.state.__notes as string[] | undefined) ?? [];
     run.state = { ...run.state, __notes: [] };
     const body = `${workflowStepMarker(nameOf(run), spec.title)}${spec.prompt}\n\nWhen the work is done, call submit_result exactly once with an object matching this schema, then end your turn. Do not describe the result in prose instead of calling it.\n${JSON.stringify(spec.outputSchema, null, 2)}${run.supervisorInstanceId ? "" : "\nThere is nobody to ask. Decide, and record any assumption in your result."}${notes.length ? `\nSupervisor note: ${notes.join("\n")}` : ""}${previousError ? `\nPrevious attempt: ${previousError}\n${previousError === "no-result" ? "You ended without calling submit_result. Call it now with an object matching the schema." : "Correct the error and call submit_result."}` : ""}`;
-    let resume: SpawnPayload["resume"];
-    const instance = step.instanceId
-      ? db.getInstancesByIds([step.instanceId])[0]
-      : undefined;
-    const needsSpawn = !(
-      instance && ["running", "starting"].includes(instance.status)
-    );
-    if (step.instanceId && needsSpawn) {
-      if (!instance?.sessionId) {
-        throw new Error(
-          `${previousError}\nThe step has no session key to resume; a retry cannot start a fresh session.`
-        );
-      }
-      resume = { sessionKey: instance.sessionId };
-    }
     step.instanceId ??= crypto.randomUUID();
     step.status = "running";
     step.startedAt ??= new Date();
@@ -469,9 +460,31 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
       endedAt: null,
     };
     write(run, step, attempt);
-    if (needsSpawn) {
+    try {
+      await startAttempt(run, step, step.instanceId, spec, body);
+    } catch (failure) {
+      await ended(run, step, reason(failure));
+    }
+  };
+
+  /**
+   * Puts an attempt's prompt in front of the step's session. A live session
+   * takes it as its next turn. One that is gone is resumed — a step that has
+   * a conversation keeps it across attempts, so a retry never starts over.
+   * A step whose session never came to be (its spawn failed before the
+   * harness named a conversation) is spawned, as its first attempt was.
+   */
+  const startAttempt = async (
+    run: WorkflowRunRow,
+    step: WorkflowStepRow,
+    instanceId: string,
+    spec: StepArgs,
+    body: string
+  ) => {
+    const [instance] = db.getInstancesByIds([instanceId]);
+    if (!(instance && ["running", "starting"].includes(instance.status))) {
       await deps.spawn(run.machineId, {
-        instanceId: step.instanceId,
+        instanceId,
         cwd: run.workspace,
         harness: spec.harness,
         model: spec.model,
@@ -484,7 +497,9 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
                 ...(run.supervisorInstanceId ? [] : ["AskUserQuestion"]),
               ]
             : undefined,
-        resume,
+        ...(instance?.sessionId
+          ? { resume: { sessionKey: instance.sessionId } }
+          : {}),
         permissionMode: "bypassPermissions",
         canDelegate: false,
         title: `${nameOf(run)} · ${spec.title}`,
@@ -499,7 +514,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
       stopStep(run, step);
       return;
     }
-    send(run, step.instanceId, body);
+    send(run, instanceId, body);
     arm(run, step, Date.now() + (spec.timeoutMinutes ?? 60) * 60_000);
   };
 
@@ -604,11 +619,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
     attempt.failure = error ?? "no-result";
     if (attempt.number <= (spec.retries ?? 2)) {
       write(run, step, attempt);
-      try {
-        await attemptStep(run, step, spec, attempt.failure);
-      } catch (failure) {
-        await ended(run, step, reason(failure));
-      }
+      await attemptStep(run, step, spec, attempt.failure);
       return;
     }
     step.status = "failed";
@@ -767,7 +778,9 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
             reject: (failure) => resolve({ failure }),
           });
         });
-        await attemptStep(run, step, spec);
+        // Under the run's lock like every later attempt: a start that fails
+        // ends through `ended`, which may settle the waiter above at once.
+        await serial(run.id, () => attemptStep(runOf(run.id), step, spec));
         return await settled;
       }
       case "ask": {
