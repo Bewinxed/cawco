@@ -602,6 +602,9 @@ export function compileWorkflow(graph: WorkflowGraph): CompiledWorkflow {
         ...(node.timeoutMinutes === undefined
           ? []
           : [`timeoutMinutes: ${node.timeoutMinutes}`]),
+        // A wired `fail` port is the graph's own answer to running out of
+        // attempts, so the step does not wait on a supervisor first.
+        ...(routesFailure(node) ? ['onExhausted: "fail"'] : []),
       ];
       return entries;
     };

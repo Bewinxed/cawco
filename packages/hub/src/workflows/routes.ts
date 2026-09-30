@@ -324,15 +324,17 @@ export function workflowRoutes(
         }),
       },
       ({ params, body }) =>
-        attempt(() => {
+        attempt(async () => {
           if (body.instanceId) {
             actor(body.instanceId);
           }
-          return runtime.steer(
-            params.id,
-            body.action as Parameters<typeof runtime.steer>[1],
-            body.instanceId
-          );
+          return {
+            message: await runtime.steer(
+              params.id,
+              body.action as Parameters<typeof runtime.steer>[1],
+              body.instanceId
+            ),
+          };
         })
     )
     .post(

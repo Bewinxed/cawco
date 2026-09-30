@@ -105,7 +105,7 @@ export function handoffTools(deps: HandoffDeps) {
   const all = [
     tool(
       "create_workflow",
-      'Create a workflow from a TypeScript program: `import { z } from "zod"`, `export const inputs = z.object({…})`, and a default-exported async function taking the Workflow runtime (w.run, w.spawn, w.ask, w.exec, w.exists, w.jev, w.workflow, w.state, w.checkpoint, w.sleep, w.now, w.notify, w.notes, w.log). `w.jev({ state, questions: { id: { type: "noul" | "choice" | "score", instructions, criteria } } })` asks TypeSafe\'s Jev and returns typed `answers.<id>` (noul; choice + probabilities + confidence; score + legend + probabilities + confidence) and `usage`; put every question over one state in ONE call — they are evaluated in parallel for one price. `w.ask({ question, options, answer: z.object({…}) })` takes a typed answer: the answer\'s `value` is validated against that schema, which is how a supervisor fills in a decision. A step prompt or Jev state may name an earlier call\'s result as `{{ref:N.path}}` (N is the call\'s effect number); the hub fills it in when the step starts. Every call is a durable workflow-engine step and a run replays its program after a restart or resume, so zod is the only import allowed and the program must be deterministic. Returns the saved workflow, or line-numbered typecheck problems verbatim.',
+      'Create a workflow from a TypeScript program: `import { z } from "zod"`, `export const inputs = z.object({…})`, and a default-exported async function taking the Workflow runtime (w.run, w.spawn, w.ask, w.exec, w.exists, w.jev, w.workflow, w.state, w.checkpoint, w.sleep, w.now, w.notify, w.notes, w.log). `w.jev({ state, questions: { id: { type: "noul" | "choice" | "score", instructions, criteria } } })` asks TypeSafe\'s Jev and returns typed `answers.<id>` (noul; choice + probabilities + confidence; score + legend + probabilities + confidence) and `usage`; put every question over one state in ONE call — they are evaluated in parallel for one price. `w.ask({ question, options, answer: z.object({…}) })` takes a typed answer: the answer\'s `value` is validated against that schema, which is how a supervisor fills in a decision. A `w.run`/`w.spawn` step that runs out of attempts in a supervised run is held for the supervisor to retry or fail; give it `onExhausted: "fail"` when the program handles its StepError itself. A step prompt or Jev state may name an earlier call\'s result as `{{ref:N.path}}` (N is the call\'s effect number); the hub fills it in when the step starts. Every call is a durable workflow-engine step and a run replays its program after a restart or resume, so zod is the only import allowed and the program must be deterministic. Returns the saved workflow, or line-numbered typecheck problems verbatim.',
       { name: z.string(), program: z.string() },
       async ({ name, program }) => ({
         content: [
@@ -167,7 +167,7 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "run_workflow",
-      "Run a saved workflow by name or slug. You become its supervisor and receive a receipt, as a queued peer message, for each step, checkpoint and the run's end: status, attempt, time, a `ref`, the result's size and the names of its top-level keys, or the whole result when it is 1,000 characters or less. Read more of a result with workflow_read only when you need it.",
+      "Run a saved workflow by name or slug. You become its supervisor and receive a receipt, as a queued peer message, for each step, checkpoint and the run's end: status, attempt, time, a `ref`, the result's size and the names of its top-level keys, or the whole result when it is 1,000 characters or less. Read more of a result with workflow_read only when you need it. A step that runs out of attempts is held for your decision (steer_workflow retry or fail); a receipt sent while your session is not live is kept and sent when it next is.",
       {
         name: z.string(),
         inputs: z.record(z.unknown()),
@@ -230,12 +230,19 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "steer_workflow",
-      "Steer a workflow you supervise: note for the next step, retry a failed step, answer a question routed to you, or cancel. An answer names the option label as `choice`; a question that declared a typed answer takes `value`, validated against the schema its question notice shows. The program controls routing.",
+      "Steer a workflow you supervise: note for the next step, decide on a held step, answer a question routed to you, or cancel. A step that runs out of attempts is held for you, up to an hour, and its receipt says so: `retry` runs another attempt on the same step and session, `fail` hands the program its StepError now; left undecided, it fails when the hold runs out. A step is held twice at most. An answer names the option label as `choice`; a question that declared a typed answer takes `value`, validated against the schema its question notice shows. The program controls routing. Answers one line saying what was done.",
       {
         runId: z.string(),
         action: z.discriminatedUnion("type", [
           z.object({ type: z.literal("note"), text: z.string() }),
-          z.object({ type: z.literal("retry"), stepId: z.string() }),
+          z.object({
+            type: z.literal("retry"),
+            stepId: z.string().describe("A held step."),
+          }),
+          z.object({
+            type: z.literal("fail"),
+            stepId: z.string().describe("A held step."),
+          }),
           z.object({
             type: z.literal("answer"),
             stepId: z.string(),
@@ -255,7 +262,7 @@ export function handoffTools(deps: HandoffDeps) {
         content: [
           {
             type: "text" as const,
-            text: JSON.stringify(await actions.steerWorkflow(runId, action)),
+            text: await actions.steerWorkflow(runId, action),
           },
         ],
       })

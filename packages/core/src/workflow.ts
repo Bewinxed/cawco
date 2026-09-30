@@ -10,6 +10,8 @@ export type WorkflowStepStatus =
   | "pending"
   | "running"
   | "waiting"
+  /** Out of attempts in a supervised run: open until the supervisor retries or fails it. */
+  | "held"
   | "passed"
   | "failed"
   | "skipped"
@@ -276,7 +278,10 @@ export interface Problem {
 }
 export type WorkflowAction =
   | { type: "note"; text: string }
+  /** A held step: another attempt, on the same step row and session. */
   | { type: "retry"; stepId: string }
+  /** A held step: the program is handed its StepError now. */
+  | { type: "fail"; stepId: string }
   | {
       type: "answer";
       stepId: string;

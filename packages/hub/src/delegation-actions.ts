@@ -428,10 +428,11 @@ export interface HandoffActions {
     sideQuest?: boolean,
     model?: string
   ): Promise<HandoffResult>;
+  /** A supervisor's action on its run; answers one line saying what it did. */
   readonly steerWorkflow: (
     runId: string,
     action: WorkflowAction
-  ) => Promise<unknown>;
+  ) => Promise<string>;
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   stopDelegate(target: string): Promise<string>;
   readonly submitResult: (result: unknown) => Promise<string>;
@@ -676,7 +677,7 @@ export const handoffActions = ({
     if (!response.ok) {
       throw new Error(await response.text());
     }
-    return response.json();
+    return ((await response.json()) as { message: string }).message;
   },
   async listWorkflows() {
     const response = await fetch(`${hubHttpUrl()}/api/workflows`);

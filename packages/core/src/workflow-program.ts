@@ -25,6 +25,13 @@ export interface StepSpec<Output extends ZodTypeAny = ZodTypeAny> {
    * program leaves it out and the run view lays out from the journal.
    */
   node?: string;
+  /**
+   * When the step's attempts run out in a supervised run: `"hold"` (the
+   * default) keeps it open for the supervisor to retry or fail, for an hour at
+   * most; `"fail"` hands the program its StepError at once, for a program that
+   * handles the failure itself. A run with no supervisor never holds.
+   */
+  onExhausted?: "fail" | "hold";
   output: Output;
   /**
    * The step's instructions. `{{ref:N.path}}` names the result of this run's

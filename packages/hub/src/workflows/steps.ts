@@ -4,8 +4,16 @@
  * is out of retries. An attempt is recorded, its session spawned (or resumed)
  * and sent the prompt; `submit_result` records the result; the end of the
  * session's turn decides: passed, another attempt on the same session, or
- * failed. Only the step's final outcome leaves this module — `settled`, which
- * hands it to the run's program through the workflow engine.
+ * out of attempts. Only the step's final outcome leaves this module —
+ * `settled`, which hands it to the run's program through the workflow engine.
+ *
+ * Out of attempts in a run whose supervisor is live, a step is held: open,
+ * its outcome not yet handed over, while the supervisor decides to retry it
+ * (another attempt, same row and session) or fail it. A hold lasts
+ * {@link HOLD_DEADLINE_MS} at most — a durable clock in the engine, so a
+ * restart does not lose it — and a step is held {@link MAX_HOLDS} times at
+ * most. A step whose program handles the failure (`onExhausted: "fail"`)
+ * never holds.
  *
  * A hub restart does not reopen a step. Its session keeps running on its
  * machine, its attempt row keeps counting, and `resume` re-arms the timeout
@@ -29,6 +37,8 @@ export interface StepSpec {
   harness: "claude" | "opencode" | "pi";
   model: string;
   node?: string;
+  /** Out of attempts in a supervised run: held for the supervisor (default), or failed. */
+  onExhausted?: "fail" | "hold";
   outputSchema: Record<string, unknown>;
   prompt: string;
   retries?: number;
@@ -43,9 +53,15 @@ export interface StepContext {
   /** Fills `{{ref:N.path}}` from this run's settled effects. */
   readonly expand: (run: WorkflowRunRow, text: string) => string;
   readonly halt: (machineId: string, instanceId: string) => Promise<void>;
+  /** A step went on hold: its deadline starts, in the engine. */
+  readonly hold: (
+    run: WorkflowRunRow,
+    step: WorkflowStepRow,
+    hold: number,
+    ms: number
+  ) => void;
   readonly nameOf: (run: WorkflowRunRow) => string;
   readonly notify: (run: WorkflowRunRow, body: string) => void;
-  readonly online: (machineId: string) => boolean;
   readonly send: (
     run: WorkflowRunRow,
     instanceId: string,
@@ -64,6 +80,8 @@ export interface StepContext {
   ) => void;
   readonly spawn: (machineId: string, payload: SpawnPayload) => Promise<void>;
   readonly stopSession: (run: WorkflowRunRow, instanceId: string) => void;
+  /** Whether the run has a supervisor, live now to take a decision. */
+  readonly supervisorLive: (run: WorkflowRunRow) => boolean;
   readonly write: (
     run: WorkflowRunRow,
     step?: WorkflowStepRow,
@@ -71,10 +89,41 @@ export interface StepContext {
   ) => void;
 }
 
+/** How long a held step waits on its supervisor before the program gets its failure. */
+export const HOLD_DEADLINE_MS = 60 * 60_000;
+/** How many times one step is held; out of attempts again after that, it fails. */
+const MAX_HOLDS = 2;
+
 const active = (run: WorkflowRunRow) =>
   run.status === "running" || run.status === "waiting";
 const reason = (error: unknown) =>
   error instanceof Error ? error.message : String(error);
+
+/** The StepError a failed step hands its program, after `attempts` attempts. */
+export function stepError(
+  step: WorkflowStepRow,
+  attempts: number
+): WorkflowFailure {
+  const failure = step.failure ?? "harness-error";
+  return {
+    name: "StepError",
+    kind:
+      failure === "no-result" || failure === "attempt-timeout"
+        ? failure
+        : "harness-error",
+    stepId: step.id,
+    attempts,
+    message: failure,
+  };
+}
+
+/**
+ * Which hold an attempt that ran out of attempts puts its step in: the
+ * attempts past the step's budget, counted from 1. The budget's last attempt
+ * is hold 1; each supervisor retry adds one.
+ */
+const holdAfter = (spec: StepSpec, attempt: WorkflowAttemptRow) =>
+  attempt.number - (spec.retries ?? 2);
 
 /** How long something took, in the words a receipt uses. */
 export function durationText(ms: number): string {
@@ -310,10 +359,88 @@ export function createSteps(ctx: StepContext) {
     step: WorkflowStepRow,
     attempt: WorkflowAttemptRow,
     spec: StepSpec
-  ) =>
-    `run ${run.id} · attempt ${attempt.number}/${(spec.retries ?? 2) + 1} · ${durationText(Date.now() - (step.startedAt?.getTime() ?? Date.now()))}`;
+  ) => {
+    const budget = (spec.retries ?? 2) + 1;
+    const count =
+      attempt.number <= budget
+        ? `${attempt.number}/${budget}`
+        : `${attempt.number} (supervisor retry)`;
+    return `run ${run.id} · attempt ${count} · ${durationText(Date.now() - (step.startedAt?.getTime() ?? Date.now()))}`;
+  };
 
-  /** A step's turn ended: record, retry on the same session, or fail. */
+  /** Ends a step as failed; answers the StepError its program is handed. */
+  const closeFailed = (
+    run: WorkflowRunRow,
+    step: WorkflowStepRow,
+    attempt: WorkflowAttemptRow
+  ) => {
+    step.status = "failed";
+    step.failure = attempt.failure;
+    step.endedAt = new Date();
+    ctx.write(run, step, attempt);
+    return stepError(step, attempt.number);
+  };
+
+  const failedReceipt = (
+    run: WorkflowRunRow,
+    step: WorkflowStepRow,
+    attempt: WorkflowAttemptRow,
+    spec: StepSpec,
+    why: string
+  ) =>
+    `${workflowNoticeMarker(ctx.nameOf(run), `step ${spec.title} failed`)}${receiptHead(run, step, attempt, spec)} · ${failureText(attempt.failure ?? "no-result")}${why ? ` · ${why}` : ""}`;
+
+  /**
+   * Why a step out of attempts is not held — for the receipt, `""` when there
+   * is nothing to say — or undefined when it is. A program that handles the
+   * failure or a run with no supervisor never holds; a step with no hold
+   * left, or a supervisor not live to decide, does not.
+   */
+  const holdRefusal = (
+    run: WorkflowRunRow,
+    spec: StepSpec,
+    hold: number
+  ): string | undefined => {
+    if (spec.onExhausted === "fail" || !run.supervisorInstanceId) {
+      return "";
+    }
+    if (hold > MAX_HOLDS) {
+      return `held ${MAX_HOLDS} times already`;
+    }
+    return ctx.supervisorLive(run)
+      ? undefined
+      : "not held: the supervisor is not live";
+  };
+
+  /**
+   * A step out of attempts: held for its supervisor, or failed with its
+   * StepError handed to the program.
+   */
+  const exhausted = (
+    run: WorkflowRunRow,
+    step: WorkflowStepRow,
+    attempt: WorkflowAttemptRow,
+    spec: StepSpec
+  ) => {
+    const hold = holdAfter(spec, attempt);
+    const why = holdRefusal(run, spec, hold);
+    if (why !== undefined) {
+      const failure = closeFailed(run, step, attempt);
+      ctx.notify(run, failedReceipt(run, step, attempt, spec, why));
+      ctx.settled(run, step, { failure });
+      return;
+    }
+    step.status = "held";
+    step.failure = attempt.failure;
+    ctx.write(run, step, attempt);
+    ctx.notify(
+      run,
+      `${workflowNoticeMarker(ctx.nameOf(run), `step ${spec.title} held`)}${receiptHead(run, step, attempt, spec)} · ${failureText(attempt.failure ?? "no-result")} · out of attempts, held for your decision (hold ${hold} of ${MAX_HOLDS}, ${HOLD_DEADLINE_MS / 60_000} min at most). steer_workflow {runId: "${run.id}", action: {type: "retry", stepId: "${step.id}"}} runs another attempt on the same session; {type: "fail", stepId: "${step.id}"} hands the program its StepError now. With no decision the step fails when the hold runs out.`
+    );
+    ctx.hold(run, step, hold, HOLD_DEADLINE_MS);
+  };
+
+  /** A step's turn ended: record, retry on the same session, or out of attempts. */
   const ended = async (
     run: WorkflowRunRow,
     step: WorkflowStepRow,
@@ -347,27 +474,18 @@ export function createSteps(ctx: StepContext) {
       await attemptStep(run, step, spec, attempt.failure);
       return;
     }
-    step.status = "failed";
-    step.failure = attempt.failure;
-    step.endedAt = new Date();
-    ctx.write(run, step, attempt);
-    ctx.notify(
-      run,
-      `${workflowNoticeMarker(ctx.nameOf(run), `step ${spec.title} failed`)}${receiptHead(run, step, attempt, spec)} · ${failureText(step.failure)}`
-    );
-    ctx.settled(run, step, {
-      failure: {
-        name: "StepError",
-        kind:
-          attempt.failure === "no-result" ||
-          attempt.failure === "attempt-timeout"
-            ? attempt.failure
-            : "harness-error",
-        stepId: step.id,
-        attempts: attempt.number,
-        message: attempt.failure,
-      },
-    });
+    exhausted(run, step, attempt, spec);
+  };
+
+  /** A step waiting on its supervisor's decision, or refused with why not. */
+  const heldStep = (step: WorkflowStepRow, action: string) => {
+    const attempt = latest(step);
+    if (step.kind !== "step" || step.status !== "held" || !attempt) {
+      throw new Error(
+        `Only a held step can be ${action}: one out of attempts, waiting on your decision. This step is ${step.status}.`
+      );
+    }
+    return attempt;
   };
 
   return {
@@ -456,13 +574,71 @@ export function createSteps(ctx: StepContext) {
         .catch(console.error);
       return true;
     },
-    /** The supervisor's retry of a failed step: another attempt, same session. */
+    /**
+     * The supervisor's retry of a held step: another attempt on the same row
+     * and session, told why the last one failed. Answers the step as it
+     * stands after the attempt started.
+     */
     async retry(run: WorkflowRunRow, step: WorkflowStepRow) {
-      step.status = "running";
+      const last = heldStep(step, "retried");
       step.failure = null;
-      step.endedAt = null;
-      ctx.write(run, step);
-      await attemptStep(run, step, specOf(step), "retry");
+      await attemptStep(run, step, specOf(step), last.failure ?? "");
+      return stepOf(step.id);
+    },
+    /** The supervisor's decision on a held step: the program gets its StepError now. */
+    fail(run: WorkflowRunRow, step: WorkflowStepRow) {
+      const attempt = heldStep(step, "failed");
+      ctx.settled(run, step, { failure: closeFailed(run, step, attempt) });
+    },
+    /**
+     * The hold a step is in, or ended in — its number, whose deadline clock
+     * the engine checks — for a step held or failed past its attempt budget.
+     * A number whose hold never happened has no clock, so nothing fires.
+     */
+    holdOf(stepId: string): number | undefined {
+      const step = db.getWorkflowStep(stepId);
+      const attempt = step && latest(step);
+      if (
+        !(step && attempt) ||
+        step.kind !== "step" ||
+        !(step.status === "held" || step.status === "failed")
+      ) {
+        return;
+      }
+      const hold = holdAfter(specOf(step), attempt);
+      return hold >= 1 && hold <= MAX_HOLDS ? hold : undefined;
+    },
+    /**
+     * Hold `hold`'s deadline passed. A step still in that hold fails, and its
+     * supervisor is told; one that already failed there answers the same
+     * StepError again. Undefined when the step has moved on — retried, or
+     * held again — and there is nothing to hand over.
+     */
+    holdExpired(stepId: string, hold: number): WorkflowFailure | undefined {
+      const step = db.getWorkflowStep(stepId);
+      const attempt = step && latest(step);
+      if (!(step && attempt) || holdAfter(specOf(step), attempt) !== hold) {
+        return;
+      }
+      if (step.status === "failed") {
+        return stepError(step, attempt.number);
+      }
+      const run = runOf(step.runId);
+      if (step.status !== "held" || !active(run)) {
+        return;
+      }
+      const failure = closeFailed(run, step, attempt);
+      ctx.notify(
+        run,
+        failedReceipt(
+          run,
+          step,
+          attempt,
+          specOf(step),
+          `held ${HOLD_DEADLINE_MS / 60_000} min; no supervisor decision`
+        )
+      );
+      return failure;
     },
     /**
      * A machine came back: an attempt whose session died while it was away

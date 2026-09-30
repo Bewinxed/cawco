@@ -82,6 +82,7 @@ import {
   usageLimitHistory,
   usageLimits,
   workflowAttempts,
+  workflowNotices,
   workflowRunLog,
   workflowRuns,
   workflowSteps,
@@ -114,6 +115,7 @@ export type WorkflowRunRow = typeof workflowRuns.$inferSelect;
 export type WorkflowStepRow = typeof workflowSteps.$inferSelect;
 export type WorkflowAttemptRow = typeof workflowAttempts.$inferSelect;
 export type WorkflowLogRow = typeof workflowRunLog.$inferSelect;
+export type WorkflowNoticeRow = typeof workflowNotices.$inferSelect;
 export type WorkItemRow = typeof workItems.$inferSelect;
 export type WorkspaceRow = typeof workspaces.$inferSelect;
 
@@ -292,6 +294,8 @@ export interface DbShape {
   readonly deleteRule: (id: string) => void;
   readonly deleteSkill: (name: string) => void;
   readonly deleteWorkflow: (id: string) => void;
+  /** A kept supervisor notice that has now been sent. */
+  readonly deleteWorkflowNotice: (id: number) => void;
   /** A side quest thrown away: stopped, and gone from every live listing. */
   readonly discardInstance: (id: string) => void;
   /** The agent reported the session dead: what killed it, kept for late readers. */
@@ -425,6 +429,8 @@ export interface DbShape {
   readonly listWorkflowAttempts: (stepId: string) => WorkflowAttemptRow[];
   /** A run's log, in effect order. */
   readonly listWorkflowLog: (runId: string) => WorkflowLogRow[];
+  /** Every supervisor notice still waiting to be sent, oldest first. */
+  readonly listWorkflowNotices: () => WorkflowNoticeRow[];
   readonly listWorkflowRuns: (workflowId?: string) => WorkflowRunRow[];
   readonly listWorkflowSteps: (runId: string) => WorkflowStepRow[];
   readonly listWorkflows: () => WorkflowRow[];
@@ -612,6 +618,10 @@ export interface DbShape {
   readonly putWorkflow: (row: typeof workflows.$inferInsert) => WorkflowRow;
   /** Records a call in its run's log, or completes the row it already has. */
   readonly putWorkflowLog: (row: typeof workflowRunLog.$inferInsert) => void;
+  /** A supervisor notice kept until its supervisor is live. */
+  readonly queueWorkflowNotice: (
+    row: typeof workflowNotices.$inferInsert
+  ) => void;
   /**
    * The daemon's own word, arriving every 15s: `liveIds` is exactly what its
    * supervisor is carrying right now (`HeartbeatPayload.instances`).
@@ -1349,6 +1359,9 @@ const make = (path: string): DbShape => {
           tx.delete(workflowRunLog)
             .where(eq(workflowRunLog.runId, run.id))
             .run();
+          tx.delete(workflowNotices)
+            .where(eq(workflowNotices.runId, run.id))
+            .run();
         }
         tx.delete(workflowRuns).where(eq(workflowRuns.workflowId, id)).run();
         tx.delete(workflows).where(eq(workflows.id, id)).run();
@@ -1400,6 +1413,14 @@ const make = (path: string): DbShape => {
           set: row,
         })
         .run();
+    },
+    listWorkflowNotices: () =>
+      db.select().from(workflowNotices).orderBy(workflowNotices.id).all(),
+    queueWorkflowNotice: (row) => {
+      db.insert(workflowNotices).values(row).run();
+    },
+    deleteWorkflowNotice: (id) => {
+      db.delete(workflowNotices).where(eq(workflowNotices.id, id)).run();
     },
     workflowTransition: (run, step, attempt, steps = []) =>
       db.transaction((tx) => {

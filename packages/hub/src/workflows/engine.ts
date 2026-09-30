@@ -13,8 +13,8 @@
  * - a call the run waits on is an `Activity` that opens it (a step's row and
  *   first attempt, a parked question, a scheduled `DurableClock`, a child
  *   run) and then a wait: a step or question on a `DurableDeferred` the hub
- *   completes when it settles, a sleep or ask timeout on its clock, a child on
- *   its own `whiffle-run` execution.
+ *   completes when it settles, a sleep or ask timeout on its clock, a held
+ *   step's deadline on its clock, a child on its own `whiffle-run` execution.
  *
  * A wait with no result yet parks. When the program has gone as far as it
  * can and every call it is still waiting on is parked, the handler suspends
@@ -84,6 +84,22 @@ export interface EngineHost {
   /** The program returned or threw: its run ends with that outcome. */
   readonly finished: (runId: string, outcome: Outcome) => void;
   /**
+   * The hold the step at `seq` is in, or ended in, when it ran out of
+   * attempts and was held for its supervisor: the hold whose deadline clock
+   * to look at. Undefined for a step never held.
+   */
+  readonly hold: (runId: string, seq: number) => number | undefined;
+  /**
+   * The step's hold `hold` ran out: the StepError it ends with, handed to the
+   * program. Undefined when the step has moved on since — retried, or held
+   * again — and there is nothing to hand over.
+   */
+  readonly holdExpired: (
+    runId: string,
+    seq: number,
+    hold: number
+  ) => Outcome | undefined;
+  /**
    * Opens a call the run waits on: a step's row and first attempt, a parked
    * question, a sleep, a child run's row. Throws when it cannot open, and the
    * program is handed that failure.
@@ -130,6 +146,16 @@ export interface EngineHost {
 export interface WorkflowEngineHandle {
   /** Clears an ended run's execution from the engine's storage: its row is going. */
   readonly forget: (runId: string) => Promise<void>;
+  /**
+   * A step went on hold: its deadline, a clock that wakes the run in `ms` to
+   * hand the program the step's failure if that hold is still on then.
+   */
+  readonly hold: (
+    runId: string,
+    seq: number,
+    hold: number,
+    ms: number
+  ) => Promise<void>;
   /** Ends a run's execution: its live driver stops, a suspended one ends. */
   readonly interrupt: (runId: string) => Promise<void>;
   /** Settles when the engine is up; rejects with why it could not start. */
@@ -185,7 +211,7 @@ const WAITS: ReadonlySet<WorkflowEffectKind> = new Set([
  */
 const SHARDS_PER_GROUP = 16;
 
-type Via = "step" | "answer" | "timeout" | "clock" | "child";
+type Via = "step" | "answer" | "timeout" | "clock" | "child" | "hold";
 /** What a turn delivered at its start: the parked waits whose result had come. */
 interface TurnRecord {
   deliver: { seq: number; via: Via; outcome?: Outcome }[];
@@ -221,6 +247,9 @@ const stamp = () => {
 /** A failure as the run's own words. */
 const messageOf = (failure: WorkflowFailure) =>
   failure.kind ? `${failure.kind}: ${failure.message}` : failure.message;
+
+/** The deadline clock of a step's hold: one per hold, since a clock fires once. */
+const holdClock = (seq: number, hold: number) => `${seq}:hold/${hold}`;
 
 const changed = (seq: number, kind: string | undefined) =>
   new Error(
@@ -386,9 +415,7 @@ class RunDriver {
     switch (call.kind) {
       case "run":
       case "spawn":
-        return (await this.#io.deferred(`${seq}:step`)) === undefined
-          ? undefined
-          : { seq, via: "step" };
+        return await this.#stepDue(seq);
       case "ask":
         if ((await this.#io.deferred(`${seq}:ask`)) !== undefined) {
           return { seq, via: "answer" };
@@ -414,6 +441,29 @@ class RunDriver {
         return outcome ? { seq, via: "child", outcome } : undefined;
       }
     }
+  }
+
+  /**
+   * A step's outcome has come when the hub settled it, or when a hold its
+   * supervisor left undecided ran out. Nothing completes the step's deferred
+   * then, so the failure is read off its row and kept in this record, as a
+   * child's outcome is.
+   */
+  async #stepDue(
+    seq: number
+  ): Promise<TurnRecord["deliver"][number] | undefined> {
+    if ((await this.#io.deferred(`${seq}:step`)) !== undefined) {
+      return { seq, via: "step" };
+    }
+    const hold = this.#host.hold(this.#runId, seq);
+    if (
+      hold === undefined ||
+      !(await this.#io.clockFired(holdClock(seq, hold)))
+    ) {
+      return;
+    }
+    const outcome = this.#host.holdExpired(this.#runId, seq, hold);
+    return outcome ? { seq, via: "hold", outcome } : undefined;
   }
 
   async #deliverParked(entry: TurnRecord["deliver"][number]) {
@@ -928,6 +978,22 @@ export function createWorkflowEngine(
               exit: Exit.succeed(JSON.stringify(outcome)),
             }
           );
+        })
+      );
+    },
+    async hold(runId, seq, hold, ms) {
+      await ready;
+      const executionId = await executionIdOf(runId);
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const engine = yield* WorkflowEngine.WorkflowEngine;
+          yield* engine.scheduleClock(WhiffleRun, {
+            executionId,
+            clock: DurableClock.make({
+              name: holdClock(seq, hold),
+              duration: Duration.millis(ms),
+            }),
+          });
         })
       );
     },

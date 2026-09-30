@@ -45,7 +45,7 @@ import {
   receiptOf,
   valueAt,
 } from "./refs";
-import { createSteps, durationText, type StepSpec } from "./steps";
+import { createSteps, durationText, type StepSpec, stepError } from "./steps";
 
 /** A workflow waits on Jev longer than a meaning rule does. */
 const WORKFLOW_JEV_TIMEOUT_MS = 60_000;
@@ -321,6 +321,14 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
     }
     return step;
   };
+  /** A step of run `runId`; any other step is refused. */
+  const runStep = (runId: string, stepId: string) => {
+    const step = stepOf(stepId);
+    if (step.runId !== runId) {
+      throw new Error("That step is not part of this workflow run.");
+    }
+    return step;
+  };
   const nameOf = (run: WorkflowRunRow) =>
     db.getWorkflow(run.workflowId)?.name ?? run.workflowId;
   /**
@@ -417,19 +425,58 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
       },
     });
   };
-  /** A receipt or question for the run's supervisor, queued for its next turn. */
+  /** Whether a session is live now: its process up, its machine connected. */
+  const isLive = (instanceId: string) => {
+    const [instance] = db.getInstancesByIds([instanceId]);
+    return Boolean(
+      instance &&
+        deps.online(instance.machineId) &&
+        ["running", "starting"].includes(instance.status)
+    );
+  };
+  const supervisorLive = (run: WorkflowRunRow) =>
+    Boolean(run.supervisorInstanceId && isLive(run.supervisorInstanceId));
+
+  /**
+   * Sends the notices kept for supervisors that were not live, oldest first,
+   * to each one that now is. A notice leaves the store once it is sent.
+   */
+  const flushNotices = () => {
+    for (const notice of db.listWorkflowNotices()) {
+      const run = db.getWorkflowRun(notice.runId);
+      if (!(run && isLive(notice.instanceId))) {
+        continue;
+      }
+      try {
+        send(run, notice.instanceId, notice.body, true);
+      } catch (error) {
+        console.error(
+          `[workflows] notice ${notice.id} for ${notice.instanceId} stays kept: ${reason(error)}`
+        );
+        continue;
+      }
+      db.deleteWorkflowNotice(notice.id);
+    }
+  };
+
+  /**
+   * A receipt or question for the run's supervisor, queued for its next turn.
+   * One that finds the supervisor not live is kept, and sent, after any kept
+   * before it, when the supervisor next is.
+   */
   const notify = (run: WorkflowRunRow, body: string) => {
-    if (!run.supervisorInstanceId) {
+    const supervisor = run.supervisorInstanceId;
+    if (!supervisor) {
       return;
     }
-    const [supervisor] = db.getInstancesByIds([run.supervisorInstanceId]);
-    if (
-      supervisor &&
-      deps.online(supervisor.machineId) &&
-      ["running", "starting"].includes(supervisor.status)
-    ) {
-      send(run, supervisor.id, body, true);
+    if (!db.getInstancesByIds([supervisor]).length) {
+      console.error(
+        `[workflows] run ${run.id}'s supervisor ${supervisor} no longer exists; this notice has nobody to reach:\n${body}`
+      );
+      return;
     }
+    db.queueWorkflowNotice({ instanceId: supervisor, runId: run.id, body });
+    flushNotices();
   };
 
   // -------------------------------------------------------------------- log
@@ -479,7 +526,10 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
       const step =
         db.getWorkflowStep(stepIdFor(runId, seq)) ??
         db.getWorkflowStep(`step-${stepIdFor(runId, seq)}`);
-      if (!step || ["pending", "running", "waiting"].includes(step.status)) {
+      if (
+        !step ||
+        ["pending", "running", "waiting", "held"].includes(step.status)
+      ) {
         throw new Error(
           `Effect ${seq} (${row.kind}) has not settled yet; it has no result to read.`
         );
@@ -496,9 +546,17 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
     db,
     expand,
     halt: deps.halt,
+    hold: (run, step, hold, ms) => {
+      engine.hold(run.id, step.seq, hold, ms).catch((error) => {
+        finish(
+          runOf(run.id),
+          "failed",
+          `The workflow engine could not start step ${step.id}'s hold: ${reason(error)}`
+        );
+      });
+    },
     nameOf,
     notify,
-    online: deps.online,
     send,
     serial,
     spawn: deps.spawn,
@@ -512,6 +570,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
         });
       }
     },
+    supervisorLive,
     write,
     settled: (run, step, outcome) => {
       settleLog(run.id, step.seq, outcome);
@@ -647,7 +706,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
     status: WorkflowRunRow["status"]
   ) => {
     for (const step of db.listWorkflowSteps(run.id)) {
-      if (!["pending", "running", "waiting"].includes(step.status)) {
+      if (!["pending", "running", "waiting", "held"].includes(step.status)) {
         continue;
       }
       steps.stop(run, step);
@@ -758,23 +817,16 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
       return null;
     }
     if ("instanceId" in chosen) {
-      const [instance] = db.getInstancesByIds([chosen.instanceId]);
-      if (
-        !(
-          instance &&
-          deps.online(instance.machineId) &&
-          ["running", "starting"].includes(instance.status)
-        )
-      ) {
+      if (!isLive(chosen.instanceId)) {
         throw new Error("The supervisor must be a live session.");
       }
-      return instance.id;
+      return chosen.instanceId;
     }
     return await deps.supervisor(
       chosen.delegateType,
       workspace.path,
       workspace.machineId,
-      `${workflowNoticeMarker(workflow.name, "supervisor brief")}Supervise workflow ${workflow.name}, run ${runId}.\n${workflow.description}\nYou receive a receipt for each step, checkpoint and the run's end: its status, attempt, time, a \`ref\`, and the result itself when it is 1,000 characters or less. Read more of a result only when you need it, with workflow_read {runId, ref, path}. Pass a result on to a later step as {{ref:N.path}} in what you hand the program; the hub fills it in when the step starts. Answer its questions and steer it with steer_workflow (note, retry, answer, cancel); the program controls routing.`
+      `${workflowNoticeMarker(workflow.name, "supervisor brief")}Supervise workflow ${workflow.name}, run ${runId}.\n${workflow.description}\nYou receive a receipt for each step, checkpoint and the run's end: its status, attempt, time, a \`ref\`, and the result itself when it is 1,000 characters or less. Read more of a result only when you need it, with workflow_read {runId, ref, path}. Pass a result on to a later step as {{ref:N.path}} in what you hand the program; the hub fills it in when the step starts. A step that runs out of attempts is held for your decision, up to an hour: steer_workflow retry runs another attempt on the same session, fail hands the program the failure. Answer its questions and steer it with steer_workflow (note, retry, fail, answer, cancel); the program controls routing.`
     );
   };
 
@@ -1078,18 +1130,8 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
         failure: { name: "AskError", kind: "timeout", message: "ask-timeout" },
       };
     }
-    const failure = step.failure ?? "harness-error";
     return {
-      failure: {
-        name: "StepError",
-        kind:
-          failure === "no-result" || failure === "attempt-timeout"
-            ? failure
-            : "harness-error",
-        stepId: step.id,
-        attempts: db.listWorkflowAttempts(step.id).length,
-        message: failure,
-      },
+      failure: stepError(step, db.listWorkflowAttempts(step.id).length),
     };
   };
 
@@ -1165,6 +1207,16 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
       write(run, step);
     },
     childOutcome: childOutcomeOf,
+    hold: (runId, seq) => steps.holdOf(stepIdFor(runId, seq)),
+    holdExpired(runId, seq, hold) {
+      const failure = steps.holdExpired(stepIdFor(runId, seq), hold);
+      if (!failure) {
+        return;
+      }
+      settleLog(runId, seq, { failure });
+      announce(runOf(runId));
+      return { failure };
+    },
     async seed(runId, seq, kind, args, hash) {
       const run = runOf(runId);
       const from = run.state.__rerun as RerunFrom | undefined;
@@ -1209,7 +1261,12 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
   const runtime = {
     /** A run's log, for the run view. */
     log: (runId: string) => db.listWorkflowLog(runId),
+    /**
+     * A session came up. A supervisor gets the notices kept while it was
+     * not live; a step session whose run has ended is stopped.
+     */
     instanceLive(instanceId: string) {
+      flushNotices();
       const [instance] = db.getInstancesByIds([instanceId]);
       if (instance?.workflowRunId && instance.workflowStepId) {
         const run = db.getWorkflowRun(instance.workflowRunId);
@@ -1334,11 +1391,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
       const old = runOf(runId);
       let rerunFrom: RerunFrom | undefined;
       if (fromStepId) {
-        const step = stepOf(fromStepId);
-        if (step.runId !== old.id) {
-          throw new Error("That step is not part of this workflow run.");
-        }
-        rerunFrom = { runId: old.id, before: step.seq };
+        rerunFrom = { runId: old.id, before: runStep(old.id, fromStepId).seq };
       }
       return runtime.launch(old.workflowId, {
         inputs: old.inputs,
@@ -1420,18 +1473,21 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
       }).catch(console.error);
       return true;
     },
+    /**
+     * A supervisor's action on its run. Answers one line saying what it did;
+     * the run itself is read with workflow_read or the dashboard.
+     */
     steer(id: string, action: WorkflowAction, caller?: string) {
-      // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: four bounded supervisor actions each enforce their own run and step state
       return serial(id, async () => {
         const run = runOf(id);
         if (caller && caller !== run.supervisorInstanceId) {
           throw new Error("Only this workflow run's supervisor may steer it.");
         }
+        if (!active(run)) {
+          throw new Error("This workflow run has already ended.");
+        }
         switch (action.type) {
-          case "note": {
-            if (!active(run)) {
-              throw new Error("This workflow run has ended.");
-            }
+          case "note":
             run.state = {
               ...run.state,
               __notes: [
@@ -1440,18 +1496,14 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
               ],
             };
             write(run);
-            break;
-          }
+            return "Noted: the next step to start gets it in its prompt, and the program reads it with w.notes().";
           case "cancel":
-            if (!active(run)) {
-              throw new Error("This workflow run has already ended.");
-            }
             finish(run, "cancelled");
             interrupt(id);
-            break;
+            return `Cancelled run ${id}.`;
           case "answer": {
-            const step = stepOf(action.stepId);
-            if (step.runId !== id || step.status !== "waiting") {
+            const step = runStep(id, action.stepId);
+            if (step.status !== "waiting") {
               throw new Error("That step is not waiting for an answer.");
             }
             settleAsk(run, step, {
@@ -1459,33 +1511,33 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
               note: action.note,
               value: action.value,
             });
-            break;
+            return `Answered step ${step.id}; the run goes on.`;
           }
           case "retry": {
-            const step = stepOf(action.stepId);
-            if (
-              step.runId !== id ||
-              step.kind !== "step" ||
-              step.status !== "failed" ||
-              !active(run)
-            ) {
-              throw new Error(
-                "Retry requires a failed step of a live workflow run."
-              );
-            }
-            await steps.retry(run, step);
-            break;
+            const step = await steps.retry(run, runStep(id, action.stepId));
+            const attempt = db.listWorkflowAttempts(step.id).at(-1);
+            return step.status === "running"
+              ? `Retrying step ${step.id}: attempt ${attempt?.number} started on the same session.`
+              : `Step ${step.id}'s new attempt did not start (${attempt?.failure}); the step is ${step.status}.`;
           }
+          case "fail":
+            steps.fail(run, runStep(id, action.stepId));
+            return `Step ${action.stepId} failed; the program has its StepError.`;
           default:
             throw new Error(
-              "Steering supports note, retry, answer, and cancel only."
+              "Steering takes note, retry, fail, answer, or cancel."
             );
         }
-        return publicRun(runOf(id), db.listWorkflowLog(id));
       });
     },
-    /** A machine came back: attempts whose session died while it was away end. */
-    recover: (machineId: string) => steps.recover(machineId),
+    /**
+     * A machine came back: attempts whose session died while it was away
+     * end, and its supervisors get the notices kept while it was gone.
+     */
+    recover(machineId: string) {
+      steps.recover(machineId);
+      flushNotices();
+    },
     /** A deleted workflow's ended runs: their executions leave the engine's storage too. */
     forget: (runIds: string[]) =>
       Promise.all(runIds.map((runId) => engine.forget(runId))),

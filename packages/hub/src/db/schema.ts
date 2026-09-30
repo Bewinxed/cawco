@@ -138,6 +138,26 @@ export const workflowRunLog = sqliteTable(
     index("workflow_run_log_run").on(table.runId),
   ]
 );
+/**
+ * Receipts and questions for a run's supervisor that found it not live: kept
+ * here, in order, and sent when it next is. None is dropped for want of a
+ * listener.
+ */
+export const workflowNotices = sqliteTable(
+  "workflow_notices",
+  {
+    id: integer("id").primaryKey({ autoIncrement: true }),
+    instanceId: text("instance_id").notNull(),
+    runId: text("run_id")
+      .notNull()
+      .references(() => workflowRuns.id),
+    body: text("body").notNull(),
+    at: timestamp("at")
+      .notNull()
+      .$defaultFn(() => new Date()),
+  },
+  (table) => [index("workflow_notices_instance").on(table.instanceId)]
+);
 export const workflowAttempts = sqliteTable("workflow_attempts", {
   id: text("id").primaryKey(),
   stepId: text("step_id")

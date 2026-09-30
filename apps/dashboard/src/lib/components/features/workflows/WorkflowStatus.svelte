@@ -16,6 +16,7 @@
   const tones = {
     running: "live",
     waiting: "attn",
+    held: "attn",
     passed: "done",
     done: "done",
     failed: "fail",
@@ -32,7 +33,9 @@
     fail: "failed",
     idle: "",
   };
-  const label = $derived(labels[tone] || status);
+  // A held step waits on its run's supervisor, not the operator: it says so
+  // in its own word under the same attention tone.
+  const label = $derived(status === "held" ? "held" : labels[tone] || status);
   const icons = {
     live: IconDot,
     attn: IconChevronUp,
