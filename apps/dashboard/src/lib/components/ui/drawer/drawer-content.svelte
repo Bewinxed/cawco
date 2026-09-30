@@ -33,12 +33,12 @@
          that starts in a field never reaches it. -->
     <div
       class="contents"
-      role="presentation"
       onpointerdown={(event) => {
         if ((event.target as HTMLElement).closest("input, textarea, select, [contenteditable]")) {
           event.stopPropagation();
         }
       }}
+      role="presentation"
     >
       {@render children?.()}
     </div>
