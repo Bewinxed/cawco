@@ -148,7 +148,7 @@
         type: "workflow",
         source: edge.from,
         target: edge.to,
-        data: { fired: true, label: "" },
+        data: { taken: "fired", label: "" },
       }));
       return;
     }
@@ -171,28 +171,36 @@
         },
       };
     });
-    edges = graph.edges.map((edge) => ({
-      id: edge.id,
-      type: "workflow",
-      source: edge.from.node,
-      sourceHandle: edge.from.port,
-      target: edge.to.node,
-      selected: selection === edge.id,
-      data: {
-        fired: run?.edges[executionScope]?.[edge.id] === "fired",
-        label: [
-          edge.when
-            ? `${edge.when.path} ${edge.when.op} ${edge.when.value === undefined ? "" : JSON.stringify(edge.when.value)}`
-            : "",
-          edge.maxIterations
-            ? `×${run ? `${run.loops[executionScope]?.[edge.id] ?? 0}/` : ""}${edge.maxIterations}`
-            : "",
-        ]
-          .filter(Boolean)
-          .join(" · "),
-        remove: readonly ? undefined : remove,
-      },
-    }));
+    // Edges paint in order, so the ones the run took go last: where a taken
+    // and an untaken edge share a route (two Branch ports into one node), the
+    // taken one is the line on top.
+    const taken = (id: string) =>
+      run?.edges[executionScope]?.[id] === "fired" ? 1 : 0;
+    edges = graph.edges
+      .toSorted((a, b) => taken(a.id) - taken(b.id))
+      .map((edge) => ({
+        id: edge.id,
+        type: "workflow",
+        source: edge.from.node,
+        sourceHandle: edge.from.port,
+        target: edge.to.node,
+        selected: selection === edge.id,
+        data: {
+          // The hub's word on this edge for this run: "fired" or "skipped".
+          taken: run?.edges[executionScope]?.[edge.id],
+          label: [
+            edge.when
+              ? `${edge.when.path} ${edge.when.op} ${edge.when.value === undefined ? "" : JSON.stringify(edge.when.value)}`
+              : "",
+            edge.maxIterations
+              ? `×${run ? `${run.loops[executionScope]?.[edge.id] ?? 0}/` : ""}${edge.maxIterations}`
+              : "",
+          ]
+            .filter(Boolean)
+            .join(" · "),
+          remove: readonly ? undefined : remove,
+        },
+      }));
   });
   function remove(id: string) {
     onchange?.({

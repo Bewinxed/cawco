@@ -143,6 +143,21 @@
       })),
     ].sort((a, b) => a.at - b.at);
   });
+  /**
+   * The header's account of the run. A run of only Jev, Branch and End nodes
+   * keeps no step rows, so the count shows only when there are steps to count.
+   */
+  const headline = $derived.by(() => {
+    if (!run) {
+      return "";
+    }
+    const took = duration(run.startedAt, run.endedAt, now);
+    if (!run.steps.length) {
+      return took;
+    }
+    const passed = run.steps.filter((entry) => entry.status === "passed");
+    return `${passed.length}/${run.steps.length} steps passed · ${took}`;
+  });
   const attempts = $derived(
     run?.attempts
       .filter((entry) => entry.stepId === step?.id)
@@ -450,10 +465,7 @@
               >View program</a
             >
           {/if}
-          <span class="wf-muted"
-            >{run.steps.filter((entry) => entry.status === 'passed').length}/{run.steps.length}
-            steps passed · {duration(run.startedAt, run.endedAt, now)}</span
-          >
+          <span class="wf-muted">{headline}</span>
         </div>
         {#if run.supervisorInstanceId}
           <a class="wf-btn" href="/session/{run.supervisorInstanceId}"

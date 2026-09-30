@@ -291,12 +291,17 @@ export function duration(
   if (!start) {
     return "—";
   }
-  const seconds = Math.max(
+  const ms = Math.max(
     0,
-    Math.floor(
-      ((end ? new Date(end).getTime() : now) - new Date(start).getTime()) / 1000
-    )
+    (end ? new Date(end).getTime() : now) - new Date(start).getTime()
   );
+  // A finished span under ten seconds keeps its tenths, so a 0.4s run does
+  // not read "0s". A running one counts whole seconds: its clock ticks once
+  // a second, and tenths off that tick would claim a precision it lacks.
+  if (end && ms < 9950) {
+    return `${(ms / 1000).toFixed(1)}s`;
+  }
+  const seconds = Math.floor(ms / 1000);
   return seconds < 60
     ? `${seconds}s`
     : `${Math.floor(seconds / 60)}m ${seconds % 60}s`;

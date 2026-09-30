@@ -87,13 +87,13 @@
   let launchFrom = $state<HTMLElement>();
   let program = $state("");
   /**
-   * What the hub said about the last save: the compiler's and the
-   * typechecker's diagnostics, which carry the node or the line they belong
-   * to. They outlive the request so they can be pinned where the mistake is.
+   * What the hub said about a payload: the compiler's and the typechecker's
+   * diagnostics, which carry the node or the line they belong to. Each one
+   * describes only the payload it answered — the saved one, or the one it
+   * refused — and is read only while the editor holds that payload again.
    */
-  let answered = $state<Problem[]>([]);
-  /** What the hub said about the saved workflow, for when the editor is back on it. */
   let savedProblems = $state<Problem[]>([]);
+  let refusedProblems = $state<Problem[]>([]);
   let tab = $state(
     page.url.searchParams.get("tab") === "program" ? "program" : "editor"
   );
@@ -146,13 +146,19 @@
     return `Saved · ${Math.max(0, Math.floor((now - savedAt) / 1000))}s ago`;
   });
   const live = $derived(whiffle.hub === "connected");
-  /** The hub refused exactly what is on screen, with diagnostics to show. */
   /**
-   * The hub's word on what is on screen: an edit taken back to the saved
-   * workflow reads that save's problems again, not those of the edit the
-   * hub refused on the way (which never saves again, being unchanged).
+   * The hub's word on exactly what is on screen, or nothing. An edit the hub
+   * has not answered yet has no hub problems: an earlier answer described an
+   * earlier graph, and showing it would pin a mistake already fixed. The
+   * graph rules still read at once, from the local validator below.
    */
-  const hubProblems = $derived(serial === saved ? savedProblems : answered);
+  const hubProblems = $derived.by(() => {
+    if (serial === saved) {
+      return savedProblems;
+    }
+    return serial === failedPayload ? refusedProblems : [];
+  });
+  /** The hub refused exactly what is on screen, with diagnostics to show. */
   const refused = $derived(serial === failedPayload && hubProblems.length > 0);
   const localProblems = $derived(
     origin === "code"
@@ -193,7 +199,6 @@
         workflow = value;
         ({ name, description, program } = value);
         root = value.graph ?? root;
-        answered = value.problems;
         savedProblems = value.problems;
         // A code-origin workflow has no canvas: the program is the editor.
         if (value.origin === "code") {
@@ -248,7 +253,6 @@
       saved = payload;
       savedAt = Date.now();
       errorMessage = "";
-      answered = value.problems;
       savedProblems = value.problems;
       workflowState.workflows = [
         ...workflowState.workflows.filter((entry) => entry.id !== id),
@@ -257,9 +261,10 @@
     } catch (caught) {
       failedPayload = payload;
       if (caught instanceof WorkflowProblems) {
-        answered = caught.problems;
+        refusedProblems = caught.problems;
         errorMessage = "";
       } else {
+        refusedProblems = [];
         errorMessage = message(caught);
       }
     } finally {
