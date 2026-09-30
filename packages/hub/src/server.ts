@@ -3343,12 +3343,34 @@ export const createServer = ({
   };
 
   /**
+   * Stops in flight to the machine now connected, by instance: sent once, and
+   * forgotten when the machine answers `stopped`, when the session is spawned
+   * again, or when the machine registers anew (a stop in flight to the agent
+   * that went away died with it).
+   */
+  const ending = new Map<string, string>();
+
+  /**
+   * Ends the process behind a row filed `stopped`. The row is the decision;
+   * this carries it to the machine, once per connection: a stop waits for the
+   * turn it cuts, and the beats that still list the session meanwhile must not
+   * send another (a second stop finds nothing, and says so as an error).
+   */
+  const endStopped = (machineId: string, instanceId: string): void => {
+    if (ending.has(instanceId) || !registry.agent(machineId)) {
+      return;
+    }
+    ending.set(instanceId, machineId);
+    stopFromHub(machineId, instanceId);
+  };
+
+  /**
    * A summariser the continuation is done with: stopped on its machine, and
    * recorded stopped here whether or not the machine still held it — one a
    * restarted agent had already lost would otherwise sit `sleeping` forever.
    */
   const retireSummariser = (machineId: string, instanceId: string): void => {
-    stopFromHub(machineId, instanceId);
+    endStopped(machineId, instanceId);
     db.stopInstance(instanceId);
     publishInstances(machineId);
   };
@@ -8239,6 +8261,13 @@ export const createServer = ({
                   heldSessions.delete(id);
                 }
               }
+              // A stop in flight to the agent that went away died with it; the
+              // beats of this one end whatever it still carries for them.
+              for (const [id, machineId] of ending) {
+                if (machineId === message.machineId) {
+                  ending.delete(id);
+                }
+              }
               registry.registerAgent(message.machineId, ws, ws.remoteAddress);
               // Checks a stopped hub left running on this machine run again
               // the moment it can run commands — waiting on nothing else the
@@ -8473,6 +8502,22 @@ export const createServer = ({
                 forgetPending(row.id, UNREAD.ended);
                 escalateRoutedAsks(row.id);
               }
+              // A process the operator stopped that the machine still carries:
+              // one the stop never reached (the agent was restarting), taken
+              // back into custody when its agent came up again. The row keeps
+              // the decision; this ends the process behind it. Not a respawn,
+              // and sent once per connection, so no beat repeats it.
+              const beatIds = peekInstances(message.payload);
+              if (beatIds.length > 0) {
+                for (const row of db.getInstancesByIds(beatIds)) {
+                  if (
+                    row.status === "stopped" &&
+                    row.machineId === message.machineId
+                  ) {
+                    endStopped(message.machineId, row.id);
+                  }
+                }
+              }
               // An outlived session whose sends could not be decided because
               // the machine did not answer the read is asked again.
               for (const [instanceId, held] of inCustody) {
@@ -8567,6 +8612,7 @@ export const createServer = ({
                     )
                   );
                 heldSessions.delete(message.instanceId);
+                ending.delete(message.instanceId);
                 closePreview(message.instanceId).catch(console.error);
                 // Stopped by anyone while its work was live: the work is over.
                 // Read before the row is filed away, which a discard hides.
@@ -9267,6 +9313,8 @@ export const createServer = ({
                 // A relaunch replaces the process — questions the old one had
                 // open are settled by its teardown and must not replay.
                 forgetPending(message.instanceId, UNREAD.restarted);
+                // Brought back by the operator: nothing of the stop is left to carry.
+                ending.delete(message.instanceId);
                 db.openInstance({
                   id: message.instanceId,
                   machineId: message.machineId,
@@ -9289,7 +9337,30 @@ export const createServer = ({
               break;
             }
             case "stop":
-              if (forward(message, ws) && message.requestId) {
+              // A Stop is the operator's decision, and it is filed here the
+              // moment it is made rather than when the machine confirms it.
+              // Waiting for the machine lost it: a Stop sent while the agent
+              // was restarting reached no agent (or one already detaching),
+              // the process lived on under sessiond, and the register after
+              // the restart restored it as a session the user had left
+              // running. Filed `stopped`, the row is no orphan to restore,
+              // no beat promotes it, and the first beat that still lists a
+              // process for it ends that process (`endStopped`, in the
+              // heartbeat case). Only a send brings it back (`ensureAlive`).
+              // A discard waits for the teardown's answer as before: its
+              // caller is told either way.
+              if (message.instanceId && !peekDiscard(message.payload)) {
+                const agent = registry.agent(message.machineId);
+                if (agent) {
+                  ending.set(message.instanceId, message.machineId);
+                  agent.send(message);
+                  if (message.requestId) {
+                    registry.rememberRequester(message.requestId, ws);
+                  }
+                }
+                db.stopInstance(message.instanceId);
+                publishInstances(message.machineId);
+              } else if (forward(message, ws) && message.requestId) {
                 registry.rememberRequester(message.requestId, ws);
               }
               // A stop cuts the turn it lands in, as an interrupt does.
