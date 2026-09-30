@@ -14,6 +14,7 @@
   let {
     open,
     onchange,
+    oncommit,
     mode,
     onmode,
     dir,
@@ -29,6 +30,8 @@
   }: {
     open: boolean;
     onchange: (open: boolean) => void;
+    /** The location is set (Enter, or "Use this folder"); the popover closes. */
+    oncommit: () => void;
     mode: "dir" | "repo";
     onmode: (mode: "dir" | "repo") => void;
     dir: string;
@@ -89,6 +92,7 @@
     {machineId}
     {machineName}
     {mode}
+    {oncommit}
     {ondir}
     {onmode}
     {onoverride}

@@ -33,6 +33,7 @@
     reading,
     informational = false,
     embedded = false,
+    oncommit,
   }: {
     mode: "dir" | "repo";
     onmode: (mode: "dir" | "repo") => void;
@@ -50,7 +51,19 @@
     /** Inside the composer's location popover: no header, no reading line —
         the dialog shows the reading under the composer, where it stays in view. */
     embedded?: boolean;
+    /**
+     * The location is set: Enter in the directory or repository field, or
+     * "Use this folder". A popover holding the form closes on it, and the
+     * next keys go back where the reader was typing.
+     */
+    oncommit?: () => void;
   } = $props();
+  function commitOnEnter(event: KeyboardEvent) {
+    if (event.key === "Enter" && !event.isComposing) {
+      event.preventDefault();
+      oncommit?.();
+    }
+  }
   let browsing = $state(false);
   let path = $state("~");
   let folders = $state<FsEntry[]>([]);
@@ -115,6 +128,7 @@
   function useFolder() {
     ondir(path);
     browsing = false;
+    oncommit?.();
   }
   $effect(() => {
     if (mode === "repo") {
@@ -167,6 +181,7 @@
         autocapitalize="off"
         id="session-dir"
         oninput={(event) => ondir(event.currentTarget.value)}
+        onkeydown={commitOnEnter}
         placeholder="~/code/project"
         readonly={locked}
         spellcheck="false"
@@ -288,6 +303,7 @@
               autocapitalize="off"
               id="session-repo"
               oninput={(event) => onrepo(event.currentTarget.value)}
+              onkeydown={commitOnEnter}
               placeholder="owner/repository"
               spellcheck="false"
               tabindex={mode === "repo" ? 0 : -1}

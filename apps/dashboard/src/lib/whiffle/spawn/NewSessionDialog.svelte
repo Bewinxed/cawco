@@ -97,6 +97,23 @@
   const REPO = /^[\w.-]+\/[\w.-]+$/;
   let card = $state<HTMLElement | null>(null);
   let editor = $state<HTMLDivElement>();
+  /**
+   * A location set with Enter or "Use this folder": its popover closes and
+   * the prompt takes the keys again, caret after what is already written.
+   */
+  function backToPrompt() {
+    popover = null;
+    if (!editor) {
+      return;
+    }
+    editor.focus();
+    const caret = document.createRange();
+    caret.selectNodeContents(editor);
+    caret.collapse(false);
+    const selection = window.getSelection();
+    selection?.removeAllRanges();
+    selection?.addRange(caret);
+  }
   const mobile = new MediaQuery("(max-width: 640px)");
   let opener: HTMLElement | null = null;
   let submission = 0;
@@ -1025,6 +1042,7 @@
               machineName={machine?.hostname ?? ""}
               mode={repo === undefined ? "dir" : "repo"}
               onchange={(value) => { popover = value ? "location" : null; }}
+              oncommit={backToPrompt}
               ondir={(value) => { cwd = value; editing = true; projectId = undefined; }}
               onmode={(value) => { repo = value === "repo" ? (repo ?? "") : undefined; if (value === "repo") { projectId = undefined; editing = true; cwd ||= "~"; } }}
               onoverride={() => { editing = true; }}

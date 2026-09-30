@@ -1204,14 +1204,16 @@
   /**
    * What the transcript makes room for: the prompt cards, the tray, the
    * chip row, and the panel with the field at its one-line height. The
-   * draft's further lines stand over the transcript and never move it. It
-   * stands still while a switch is landing ({@link holdUntil}): a tray or
-   * card handing over to the next conversation's must not move a
+   * draft's further lines stand over the transcript and never move it,
+   * except while a prompt card is parked: the card stands on the field, so
+   * its lines count then, and the card never covers the row that raised it.
+   * It stands still while a switch is landing ({@link holdUntil}): a tray
+   * or card handing over to the next conversation's must not move a
    * transcript that is still sliding in.
    */
   $effect(() => {
-    const next =
-      panel - Math.max(0, fieldHeight - floor) + lift + stack + chipRow;
+    const draftLines = stack > 0 ? 0 : Math.max(0, fieldHeight - floor);
+    const next = panel - draftLines + lift + stack + chipRow;
     if (!holding) {
       height = next;
     }
