@@ -392,6 +392,29 @@ export function workflowPorts(node: WorkflowNode): string[] {
       return [];
   }
 }
+/** The schema node a result path lands on, or undefined when it names none. */
+function schemaAt(
+  schema: unknown,
+  parts: string[]
+): WorkflowSchema | undefined {
+  if (!schema || typeof schema !== "object") {
+    return undefined;
+  }
+  const value = schema as WorkflowSchema;
+  if (!parts.length) {
+    return value;
+  }
+  const [key, ...rest] = parts;
+  if (value.type === "array") {
+    return key === "*" || ARRAY_INDEX.test(key)
+      ? schemaAt(value.items, rest)
+      : undefined;
+  }
+  const properties = value.properties as Record<string, unknown> | undefined;
+  return properties && Object.hasOwn(properties, key)
+    ? schemaAt(properties[key], rest)
+    : undefined;
+}
 function schemaPath(schema: unknown, parts: string[]): boolean {
   if (!parts.length) {
     return true;
@@ -413,6 +436,61 @@ function schemaPath(schema: unknown, parts: string[]): boolean {
     schemaPath(properties[key], rest)
   );
 }
+/**
+ * Whether `sourceId`'s outcome is set wherever `nodeId` runs: its result when
+ * every path from Start to `nodeId` leaves `sourceId` by a port other than
+ * `fail`, its failure when every such path leaves it by `fail`. A plain
+ * `steps.<source>.result…` / `.failure…` reference needs this; one written
+ * `steps.<source>?.…` accepts that the value may be absent.
+ */
+export function outcomeOnEveryPath(
+  graph: WorkflowGraph,
+  sourceId: string,
+  nodeId: string,
+  outcome: "result" | "failure"
+): boolean {
+  const start = graph.nodes.find((node) => node.kind === "start");
+  if (!start || sourceId === nodeId) {
+    return false;
+  }
+  const carries = (edge: WorkflowEdge) =>
+    outcome === "failure"
+      ? edge.from.port === "fail"
+      : edge.from.port !== "fail";
+  // Walk from Start without ever leaving the source with that outcome: any
+  // way that still arrives at the node is a path on which it is unset.
+  const seen = new Set<string>();
+  const pending = [start.id];
+  while (pending.length) {
+    const id = pending.pop() as string;
+    if (id === nodeId) {
+      return false;
+    }
+    if (seen.has(id)) {
+      continue;
+    }
+    seen.add(id);
+    for (const edge of graph.edges) {
+      if (edge.from.node === id && !(id === sourceId && carries(edge))) {
+        pending.push(edge.to.node);
+      }
+    }
+  }
+  return true;
+}
+
+/**
+ * A `steps.` reference taken apart: the node, whether it is written as an
+ * optional read (`steps.<id>?.…`), and the rest of the path.
+ */
+export function stepReference(parts: string[]): {
+  id: string;
+  optional: boolean;
+} {
+  const optional = parts[1]?.endsWith("?") ?? false;
+  return { id: optional ? parts[1].slice(0, -1) : (parts[1] ?? ""), optional };
+}
+
 const JEV_ID = /^[A-Za-z][\w-]*$/;
 const JEV_USAGE = ["inputTokens", "outputTokens", "costUsd"];
 
@@ -665,6 +743,51 @@ export function validateWorkflow(
     ) &&
     (rest.length === 0 ||
       (rest.length === 1 && ["message", "kind"].includes(rest[0])));
+  /**
+   * A map goes over an array. Launch inputs are text, so never one; a step's
+   * result is one where its schema says `array` at that path.
+   */
+  const mapOverProblem = (over: string): string | undefined => {
+    const parts = over.replace(ARRAY_PATH, ".$1").split(".");
+    if (parts[0] === "inputs") {
+      return `Map needs an array to go over; the input ${parts[1]} is text. Map over a step result's array.`;
+    }
+    const source =
+      parts[0] === "steps" ? nodes.get(stepReference(parts).id) : undefined;
+    if (source?.kind === "step" && parts[2] === "result") {
+      const at = schemaAt(source.outputSchema, parts.slice(3));
+      if (at?.type !== "array") {
+        return `Map needs an array to go over; ${over} is not an array in ${source.title}'s result schema.`;
+      }
+    }
+    return undefined;
+  };
+  /**
+   * What is wrong with a path at this node, if anything: a path that names
+   * nothing, or a plain step reference to a value that some path to the node
+   * leaves unset — that one must be written as an optional read.
+   */
+  const pathProblem = (
+    path: string,
+    node: WorkflowNode
+  ): string | undefined => {
+    if (!validPath(path, node)) {
+      return `Unresolved workflow path: ${path}`;
+    }
+    const parts = path.replace(ARRAY_PATH, ".$1").split(".");
+    if (parts[0] !== "steps") {
+      return undefined;
+    }
+    const { id, optional } = stepReference(parts);
+    const outcome = parts[2] === "failure" ? "failure" : "result";
+    if (optional || outcomeOnEveryPath(graph, id, node.id, outcome)) {
+      return undefined;
+    }
+    const rest = parts.slice(2).join(".");
+    return outcome === "failure"
+      ? `steps.${id} fails only on some paths to "${node.title}"; read it as steps.${id}?.${rest} to accept that it may be absent.`
+      : `steps.${id} runs only on some paths to "${node.title}"; read it as steps.${id}?.${rest} to accept that it may be absent.`;
+  };
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: each template namespace has its own structural contract and upstream check.
   const validPath = (path: string, node: WorkflowNode): boolean => {
     const parts = path.replace(ARRAY_PATH, ".$1").split(".");
@@ -689,13 +812,14 @@ export function validateWorkflow(
           !!options.inputNames?.includes(parts[1]))
       );
     }
+    const { id } = stepReference(parts);
     if (parts[0] === "steps" && parts[2] === "failure") {
-      return failurePath(parts[1], parts.slice(3), node);
+      return failurePath(id, parts.slice(3), node);
     }
     if (parts[0] !== "steps" || parts[2] !== "result") {
       return false;
     }
-    const source = nodes.get(parts[1]);
+    const source = nodes.get(id);
     if (!source || source.id === node.id || !reaches(source.id, node.id)) {
       return false;
     }
@@ -709,7 +833,8 @@ export function validateWorkflow(
       return parts.length === 4 && ["choice", "note"].includes(parts[3]);
     }
     if (source.kind === "map") {
-      return ["items", "failed"].includes(parts[3]);
+      // What the compiler returns for a map: `{ items }`, one per item.
+      return parts[3] === "items";
     }
     if (source.kind === "jev") {
       return jevPath(source, parts.slice(3));
@@ -718,6 +843,8 @@ export function validateWorkflow(
   };
   for (const node of graph.nodes) {
     const templates: string[] = [];
+    /** Every path this node reads, bare or from inside its templates. */
+    const paths: string[] = [];
     if (
       ["step", "check", "branch", "ask", "workflow", "jev"].includes(node.kind)
     ) {
@@ -754,8 +881,8 @@ export function validateWorkflow(
       for (const value of Object.values(node.inputs)) {
         if (value.includes("{{")) {
           templates.push(value);
-        } else if (!validPath(value, node)) {
-          add(`Unresolved workflow path: ${value}`, node.id);
+        } else {
+          paths.push(value);
         }
       }
     } else if (node.kind === "step") {
@@ -817,8 +944,10 @@ export function validateWorkflow(
       if (!Number.isInteger(node.concurrency) || node.concurrency < 1) {
         add("Map concurrency must be a positive integer.", node.id);
       }
-      if (!validPath(node.over, node)) {
-        add(`Unresolved workflow path: ${node.over}`, node.id);
+      paths.push(node.over);
+      const overProblem = mapOverProblem(node.over);
+      if (overProblem) {
+        add(overProblem, node.id);
       }
       problems.push(
         ...validateWorkflow(node.body, {
@@ -837,11 +966,7 @@ export function validateWorkflow(
         add("Branch needs ordered conditions and a final else case.", node.id);
       }
     } else if (node.kind === "end") {
-      for (const path of Object.values(node.outputs)) {
-        if (!validPath(path, node)) {
-          add(`Unresolved workflow path: ${path}`, node.id);
-        }
-      }
+      paths.push(...Object.values(node.outputs));
     } else if (node.kind === "check") {
       for (const rule of node.rules) {
         if (rule.kind === "command") {
@@ -865,9 +990,13 @@ export function validateWorkflow(
         add("Malformed workflow placeholder.", node.id);
       }
       for (const match of template.matchAll(TEMPLATE)) {
-        if (!validPath(match[1].trim(), node)) {
-          add(`Unresolved workflow path: ${match[1].trim()}`, node.id);
-        }
+        paths.push(match[1].trim());
+      }
+    }
+    for (const path of paths) {
+      const problem = pathProblem(path, node);
+      if (problem) {
+        add(problem, node.id);
       }
     }
   }

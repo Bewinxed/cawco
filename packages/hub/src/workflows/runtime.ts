@@ -1011,10 +1011,6 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
    * mismatch at a sequence fails the run; anything else runs live and is
    * journaled.
    */
-  /**
-   * The replay rule (§13.3): a journaled effect answers from the journal; a
-   * mismatch at a sequence fails the run; anything else runs live.
-   */
   const decide = (
     runId: string,
     message: Extract<WorkerOut, { type: "effect" }>,

@@ -18,7 +18,7 @@ import type {
   WorkflowSchema,
   WorkflowWhen,
 } from "./workflow";
-import { workflowPorts } from "./workflow";
+import { stepReference, workflowPorts } from "./workflow";
 
 export interface CompiledWorkflow {
   lines: Record<string, [number, number]>;
@@ -478,21 +478,21 @@ export function compileWorkflow(graph: WorkflowGraph): CompiledWorkflow {
           parts.slice(1)
         );
       }
+      // `steps.<id>?.…` is read with `?.`, as the author wrote it; a plain
+      // reference is one the validator proved set wherever this node runs.
+      const { id, optional } = stepReference(parts);
       if (parts[0] === "steps" && parts[2] === "failure") {
-        const source = nodes.get(parts[1]);
+        const source = nodes.get(id);
         if (source && routesFailure(source)) {
-          return walk(failureOf(source.id), parts.slice(3), true);
+          return optional
+            ? walk(failureOf(source.id), parts.slice(3), true)
+            : walk(`${failureOf(source.id)}!`, parts.slice(3));
         }
         add(`"${path}" names a node whose fail port is not wired.`, node.id);
         return "undefined";
       }
       if (parts[0] === "steps" && parts[2] === "result") {
-        const source = nodes.get(parts[1]);
-        return walk(
-          resultExpr(parts[1]),
-          parts.slice(3),
-          !!source && routesFailure(source)
-        );
+        return walk(resultExpr(id), parts.slice(3), optional);
       }
       add(
         `A program has no "${path}"; only inputs, step results, failures of routed nodes, map item/index and attempt.gateFindings survive the compile.`,
@@ -828,6 +828,42 @@ export function compileWorkflow(graph: WorkflowGraph): CompiledWorkflow {
       emitter.push("}");
     };
 
+    /**
+     * One `Promise.all` over the items, the body compiled into the callback.
+     * Its statements fill the body's declaration and schema tables, so they
+     * are emitted first; the declarations then go in ahead of them, at the
+     * top of the item's scope, and the body nodes' line spans move down by as
+     * many lines.
+     */
+    const emitMap = (node: Extract<WorkflowNode, { kind: "map" }>) => {
+      const body = compileGraph(node.body, `${nameOf(node.id)}Item`);
+      declarations.push(`let ${nameOf(node.id)}: { items: unknown[] };`);
+      emitter.push(`${nameOf(node.id)} = { items: await Promise.all(`);
+      emitter.indent += 1;
+      emitter.push(
+        `${pathExpr(node.over, node)}.map(async (item: unknown, index: number) => {`
+      );
+      emitter.indent += 1;
+      const top = emitter.lines.length;
+      const before = new Set(Object.keys(lines));
+      body.body();
+      const declared = body.declarations.map(
+        (declaration) => `${"  ".repeat(emitter.indent)}${declaration}`
+      );
+      emitter.lines.splice(top, 0, ...declared);
+      for (const [id, span] of Object.entries(lines)) {
+        if (!before.has(id)) {
+          span[0] += declared.length;
+          span[1] += declared.length;
+        }
+      }
+      schemas.push(...body.schemas);
+      emitter.indent -= 1;
+      emitter.push("})");
+      emitter.indent -= 1;
+      emitter.push(") };");
+    };
+
     const emitNode = (node: WorkflowNode) => {
       switch (node.kind) {
         case "start":
@@ -895,26 +931,9 @@ export function compileWorkflow(graph: WorkflowGraph): CompiledWorkflow {
           );
           break;
         }
-        case "map": {
-          const body = compileGraph(node.body, `${nameOf(node.id)}Item`);
-          schemas.push(...body.schemas);
-          declarations.push(`let ${nameOf(node.id)}: { items: unknown[] };`);
-          emitter.push(`${nameOf(node.id)} = { items: await Promise.all(`);
-          emitter.indent += 1;
-          emitter.push(
-            `${pathExpr(node.over, node)}.map(async (item: unknown, index: number) => {`
-          );
-          emitter.indent += 1;
-          body.body();
-          for (const declaration of body.declarations) {
-            emitter.push(declaration);
-          }
-          emitter.indent -= 1;
-          emitter.push("})");
-          emitter.indent -= 1;
-          emitter.push(") };");
+        case "map":
+          emitMap(node);
           break;
-        }
         case "end": {
           const entries = Object.entries(node.outputs).map(
             ([key, path]) =>

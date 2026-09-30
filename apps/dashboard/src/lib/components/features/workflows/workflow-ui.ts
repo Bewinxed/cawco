@@ -1,5 +1,5 @@
 import type { WorkflowGraph, WorkflowNode } from "@whiffle/core";
-import { JEV_ANSWER_FIELDS } from "@whiffle/core";
+import { JEV_ANSWER_FIELDS, outcomeOnEveryPath } from "@whiffle/core";
 import {
   IconBox,
   IconCpu,
@@ -223,23 +223,45 @@ export function templatePaths(graph: WorkflowGraph, nodeId: string): string[] {
     ...(start?.kind === "start"
       ? start.inputs.map((input) => `inputs.${input.name}`)
       : []),
-    ...above.flatMap((node) => {
-      if (node.kind === "step") {
-        return schemaPaths(node.outputSchema, `steps.${node.id}.result`);
-      }
-      if (node.kind === "jev") {
-        return jevPaths(node);
-      }
-      return [`steps.${node.id}.result`];
-    }),
+    ...above.flatMap((node) => readAs(node.id, "result", resultPaths(node))),
     ...above
       .filter((node) => failedOnTheWay(node.id))
-      .flatMap((node) => [
-        `steps.${node.id}.failure`,
-        `steps.${node.id}.failure.message`,
-        `steps.${node.id}.failure.kind`,
-      ]),
+      .flatMap((node) =>
+        readAs(node.id, "failure", [
+          `steps.${node.id}.failure`,
+          `steps.${node.id}.failure.message`,
+          `steps.${node.id}.failure.kind`,
+        ])
+      ),
   ];
+
+  /**
+   * The references as the validator takes them: plain where the value is set
+   * on every path here, `steps.<id>?.…` where it may be absent.
+   */
+  function readAs(
+    id: string,
+    outcome: "result" | "failure",
+    references: string[]
+  ): string[] {
+    return outcomeOnEveryPath(graph, id, nodeId, outcome)
+      ? references
+      : references.map((path) => path.replace(`steps.${id}.`, `steps.${id}?.`));
+  }
+}
+
+/** Every path a node's result offers, before it is marked optional or not. */
+function resultPaths(node: WorkflowNode): string[] {
+  if (node.kind === "step") {
+    return schemaPaths(node.outputSchema, `steps.${node.id}.result`);
+  }
+  if (node.kind === "jev") {
+    return jevPaths(node);
+  }
+  if (node.kind === "map") {
+    return [`steps.${node.id}.result`, `steps.${node.id}.result.items`];
+  }
+  return [`steps.${node.id}.result`];
 }
 
 /** A Jev question type as the editor names it. */
