@@ -347,21 +347,34 @@ export const covers = (row: ModelInfo, model: string): boolean =>
  */
 const NAMES_NO_MODEL = new Set(["default"]);
 
+/** The 1M-context variant's mark on a Claude model id: `claude-opus-5-5[1m]`. */
+const CONTEXT_SUFFIX = /\[1m\]$/i;
+
 /**
  * The offered row for a model id — the one that carries its name, its provider
  * and the effort scale it can be run at. A row that names the model wins over
  * one that only says "default".
+ *
+ * A session on the 1M-context variant reports `claude-opus-5-5[1m]`, which no
+ * row is keyed by: the catalog lists the model once. That id is the same model
+ * with a larger window, run at the same effort scale, so it is described by
+ * its model's row when no row names the variant itself.
  */
 export const describingRow = (
   model: string,
   harness?: string
 ): ModelInfo | null => {
   const list = models.forHarness(harness);
-  return (
-    list.find((row) => !NAMES_NO_MODEL.has(row.value) && covers(row, model)) ??
-    list.find((row) => covers(row, model)) ??
-    null
-  );
+  for (const id of new Set([model, model.replace(CONTEXT_SUFFIX, "")])) {
+    const row =
+      list.find(
+        (item) => !NAMES_NO_MODEL.has(item.value) && covers(item, id)
+      ) ?? list.find((item) => covers(item, id));
+    if (row) {
+      return row;
+    }
+  }
+  return null;
 };
 
 /** What to call a model in a trigger: the offered name, or the id as typed. */
