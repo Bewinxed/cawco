@@ -659,7 +659,9 @@
     gap: 2px;
     align-content: start;
     height: 300px;
-    overflow: auto;
+    /* Scrolls down only: the rows' 18px sideways slide on a harness change
+       would otherwise overflow it and flash a horizontal scrollbar. */
+    overflow: hidden auto;
     padding: 4px;
   }
   /* The outgoing rows, over the incoming ones so both staggers run at once. */
