@@ -78,36 +78,6 @@
   });
   // The list's props land on the hit, not the box; `class` is the box's.
 
-  let hitEl = $state<HTMLElement | undefined>();
-  /**
-   * The whole segment chooses, not only the label: the end padding and the
-   * sheet's flared foot belong to the tab but lie outside the hit. A click
-   * that lands on them (not on the hit, not on a trailing control) is
-   * handed to the hit.
-   */
-  function forward(event: MouseEvent): void {
-    const target = event.target as Element;
-    if (
-      event.defaultPrevented ||
-      !hitEl ||
-      hitEl.contains(target) ||
-      target.closest("button, a, input, [role=button]")
-    ) {
-      return;
-    }
-    hitEl.dispatchEvent(
-      new MouseEvent("click", {
-        bubbles: false,
-        cancelable: true,
-        button: event.button,
-        metaKey: event.metaKey,
-        ctrlKey: event.ctrlKey,
-        shiftKey: event.shiftKey,
-        altKey: event.altKey,
-      }),
-    );
-  }
-
   function choose(event: MouseEvent): void {
     onclick?.(event);
     if (event.defaultPrevented || event.button !== 0) {
@@ -132,10 +102,8 @@
   bind:this={node}
   style:--ride={ride ? `${ride.size * 100}%` : undefined}
   style:--ride-at={ride?.at}
-  onclick={forward}
 >
   <svelte:element
-    bind:this={hitEl}
     aria-selected={selected}
     class="hit touch-hit"
     draggable={href ? 'false' : undefined}
@@ -206,6 +174,47 @@
   .ff-tab > :global(*) {
     position: relative;
     z-index: 3;
+  }
+  .hit {
+    display: flex;
+    align-items: center;
+    align-self: stretch;
+    flex: 1 1 auto;
+    gap: calc(var(--gap) + 4px);
+    min-inline-size: 0;
+    padding-block: 0;
+    padding-inline-start: var(--px);
+    border: 0;
+    border-radius: inherit;
+    background: transparent;
+    color: inherit;
+    font: inherit;
+    font-size: var(--text);
+    line-height: 1;
+    white-space: nowrap;
+    text-decoration: none;
+    cursor: pointer;
+    outline: none;
+    /* Not positioned, so the box is the containing block of the area below;
+       as a flex item its z-index still lifts it over the sheet. */
+    position: static;
+
+    /* Last in the box: the hit's own end padding. When a trailing control
+       follows, the box's end padding keeps it off the segment's edge. */
+    &:last-child {
+      padding-inline-end: var(--px);
+    }
+
+    /* The whole segment chooses, not only the label: the hit's area spans
+       the box, end padding included. It sits under the hit's content, and
+       a trailing control, later in the box, stands over it and takes its
+       own presses. */
+    &::before {
+      content: "";
+      position: absolute;
+      inset: 0;
+      z-index: -1;
+    }
   }
   /* Folder tabs stand behind the sheet in their own tint: a rounded-top
      card the size of the tab, under the sheet's layer, so the chosen
@@ -311,32 +320,20 @@
       mask-position: var(--ride-at);
     }
   }
-  .hit {
-    display: flex;
-    align-items: center;
-    align-self: stretch;
-    flex: 1 1 auto;
-    gap: calc(var(--gap) + 4px);
-    min-inline-size: 0;
-    padding-block: 0;
-    padding-inline-start: var(--px);
-    border: 0;
-    border-radius: inherit;
-    background: transparent;
-    color: inherit;
-    font: inherit;
-    font-size: var(--text);
-    line-height: 1;
-    white-space: nowrap;
-    text-decoration: none;
-    cursor: pointer;
-    outline: none;
-
-    /* Last in the box: the hit's own end padding. When a trailing control
-       follows, the box's end padding keeps it off the segment's edge. */
-    &:last-child {
-      padding-inline-end: var(--px);
-    }
+  /* The chosen folder sheet's flared foot is the tab's too: the area takes
+     the sheet's outline, square-shouldered, so the foot reaches past the
+     box on each side. */
+  :global([data-variant="folder"]) .ff-tab.selected .hit::before {
+    inset-inline: calc(-1 * var(--flare));
+    clip-path: shape(
+      from 0 100%,
+      arc to var(--flare) calc(100% - var(--flare)) of var(--flare) ccw,
+      line to var(--flare) 0,
+      line to calc(100% - var(--flare)) 0,
+      line to calc(100% - var(--flare)) calc(100% - var(--flare)),
+      arc to 100% 100% of var(--flare) ccw,
+      close
+    );
   }
   .ff-tab :global(.ff-tab-icon) {
     inline-size: var(--icon);

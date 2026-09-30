@@ -488,7 +488,9 @@
           {@render feedback('effort')}
           {@render feedback('permission')}
           {#if !editable}
-            <p class="feedback">Controls unlock while the session is running.</p>
+            <p class="feedback">
+              Controls unlock while the session is running.
+            </p>
           {/if}
         </div>
       </div>

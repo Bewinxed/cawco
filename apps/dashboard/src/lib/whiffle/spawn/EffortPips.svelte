@@ -305,10 +305,6 @@
       var(--transition-control),
       box-shadow 120ms ease;
   }
-  .track:not(.ready),
-  .track:not(.ready) * {
-    transition: none;
-  }
   /* The range input is invisible over the track, so the track is the
      field: its border takes the ring. */
   .track.focus {
@@ -430,6 +426,11 @@
   }
   .bar-fill.lit {
     transform: scaleY(1);
+  }
+  /* Until the chip is measured nothing in the track moves. */
+  .track:not(.ready),
+  .track:not(.ready) * {
+    transition: none;
   }
   input[type="range"] {
     position: absolute;
