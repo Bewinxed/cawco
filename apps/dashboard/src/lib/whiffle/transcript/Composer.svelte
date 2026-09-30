@@ -190,7 +190,7 @@
   const presence = {};
   $effect(() => {
     if (paneVisible) {
-      return stand(presence, height);
+      return stand(presence, panel + lift + stack);
     }
   });
   let fileInput = $state<HTMLInputElement>();
@@ -511,17 +511,18 @@
     const border = node.offsetHeight - node.clientHeight;
     const whole =
       layer.offsetHeight + padTop + Number.parseFloat(style.paddingBottom);
-    const cap = Number.parseFloat(style.maxHeight) || Number.POSITIVE_INFINITY;
-    const box =
-      Math.min(
-        Math.max(whole + border, Number.parseFloat(style.minHeight) || 0),
-        cap
-      ) - border;
+    const least = Number.parseFloat(style.minHeight) || 0;
+    // A field not being written in folds a longer draft to its first line.
+    const folding = folds(whole + border);
+    const cap = folding
+      ? least
+      : Number.parseFloat(style.maxHeight) || Number.POSITIVE_INFINITY;
+    const box = Math.min(Math.max(whole + border, least), cap) - border;
     const fitted = box + border;
     if (whole <= box) {
       return { fitted, drop: 0, from: 0, to: text.length };
     }
-    const scrolled = Math.min(node.scrollTop, whole - box);
+    const scrolled = folding ? 0 : Math.min(node.scrollTop, whole - box);
     const [from, to] = inView(layer, text, scrolled - padTop, box);
     return { fitted, drop: scrollDrop(whole, box, scrolled), from, to };
   }
@@ -575,6 +576,21 @@
     const to = first(from, (at) => headOf(at) >= top + box - 0.5);
     probe.remove();
     return [from, to];
+  }
+
+  /**
+   * When the field's height glide ends, off the glide's own start (the
+   * frame the fit landed in); null until it has started.
+   */
+  function glideEndOf(node: HTMLElement, ms: number): number | null {
+    const run = node
+      .getAnimations()
+      .find(
+        (animation) =>
+          animation instanceof CSSTransition &&
+          animation.transitionProperty === "height"
+      );
+    return typeof run?.startTime === "number" ? run.startTime + ms : null;
   }
 
   function endFlight(): void {
@@ -660,11 +676,22 @@
       const glide = Math.abs(rest.fitted - node.offsetHeight) > 0.5 ? ms : 0;
       const expected = began + landing.ms() + glide;
       let glideEnd: number | null = null;
+      let letGoAt: number | null = null;
+      // The fit runs in the frame the hold lets go or the next; a frame on
+      // with no glide running, the height had nothing to glide to.
+      const endAt = (now: number): number | null => {
+        if (glideEnd !== null || holding) {
+          return glideEnd;
+        }
+        letGoAt ??= now;
+        if (!glide) {
+          return now;
+        }
+        return glideEndOf(node, ms) ?? (now > letGoAt ? now : null);
+      };
       let count = rest.from;
       const type = (now: number) => {
-        if (glideEnd === null && !holding) {
-          glideEnd = now + glide;
-        }
+        glideEnd = endAt(now);
         const end = glideEnd ?? Math.max(expected, now + glide + 1);
         const landed = glideEnd !== null && now >= glideEnd;
         const progress =
@@ -1054,16 +1081,82 @@
   }
 
   /**
+   * The field's one-line height and line height, off its stylesheet, and
+   * the height its whole text takes (autosize reports it at each fit).
+   */
+  let floor = $state(0);
+  let lineHeight = $state(0);
+  let natural = $state(0);
+  $effect(() => {
+    if (field) {
+      const style = getComputedStyle(field);
+      floor = Number.parseFloat(style.minHeight);
+      lineHeight = Number.parseFloat(style.lineHeight);
+    }
+  });
+  /** How many lines the draft runs to at the field's width. */
+  const lines = $derived(
+    lineHeight > 0
+      ? Math.max(1, Math.round((natural - floor + lineHeight) / lineHeight))
+      : 1
+  );
+  /**
+   * A draft of more than one line folds to its first line while the field
+   * is not being written in, and opens to its full height, growing upward
+   * over the transcript, when the field takes focus. Folding and opening
+   * run over --dur-morph (`folding`); a typed line grows over the field's
+   * own --dur-control.
+   */
+  let focused = $state(false);
+  let folding = $state(false);
+  const folds = (whole: number) => !focused && whole > floor + 0.5;
+  const folded = $derived(folds(natural));
+  function refocus(now: boolean): void {
+    focused = now;
+    folding = lines > 1;
+  }
+
+  /**
    * The panel's own height, the delegate tray's standing on it, and the
    * prompt stack's standing on that.
    */
   let panel = $state(0);
   let lift = $state(0);
   let stack = $state(0);
-  // The column the transcript makes room for is all of them, as it was
-  // when the prompts stood inside the panel.
+  /** The field's own height, which the panel includes. */
+  let fieldHeight = $state(0);
+  /**
+   * The suggestion row's share of the column: its one chip line, fixed by
+   * its stylesheet, and the step down to the tray. Reserved wherever the
+   * surface suggests at all, chips or none, so chips coming and going never
+   * move the transcript; read once, since the stylesheet fixes it.
+   */
+  let chipRow = $state(0);
+  let liftBox = $state<HTMLElement>();
   $effect(() => {
-    height = panel + lift + stack;
+    const row =
+      suggest && suggestions.enabled
+        ? liftBox?.querySelector<HTMLElement>(":scope > .suggest")
+        : null;
+    chipRow =
+      row && liftBox
+        ? liftBox.getBoundingClientRect().top - row.getBoundingClientRect().top
+        : 0;
+  });
+  /**
+   * What the transcript makes room for: the prompt cards, the tray, the
+   * chip row, and the panel with the field at its one-line height. The
+   * draft's further lines stand over the transcript and never move it. It
+   * stands still while a switch is landing ({@link holdUntil}): a tray or
+   * card handing over to the next conversation's must not move a
+   * transcript that is still sliding in.
+   */
+  $effect(() => {
+    const next =
+      panel - Math.max(0, fieldHeight - floor) + lift + stack + chipRow;
+    if (!holding) {
+      height = next;
+    }
   });
 
   /** One conversation's tray handing its place to the next: a crossfade. */
@@ -1107,9 +1200,9 @@
     </div>
   {/if}
   <!-- The row standing on the composer, outside its box: the delegate tray,
-       and the suggestion chips standing on the tray (out of flow, they never
-       change what this row measures). Prompts stand on top of both. -->
-  <div class="lift" bind:clientHeight={lift}>
+       and the suggestion chips standing on the tray (out of flow, their one
+       line reserved on its own: `chipRow`). Prompts stand on top of both. -->
+  <div class="lift" bind:this={liftBox} bind:clientHeight={lift}>
     {#if suggest && suggestions.enabled}
       <!-- Keyed by conversation: the ranking is of one chat's words, and the
            shared phone composer must not carry it into the next chat. -->
@@ -1248,7 +1341,7 @@
 
       <!-- A label, so the pill's padding above and below the 34px field
          focuses it: its touch area is the field's. -->
-      <label class="field touch-hit">
+      <label class="field touch-hit" class:folded>
         <textarea
           aria-activedescendant={activeDescendant}
           aria-autocomplete="list"
@@ -1256,23 +1349,40 @@
           aria-expanded={menuOpen}
           aria-label="Message the agent"
           onblur={() => {
-        dismissed = true;
-      }}
+            dismissed = true;
+            refocus(false);
+          }}
           onclick={noteCaret}
+          onfocus={() => refocus(true)}
           oninput={noteCaret}
           {onkeydown}
           onkeyup={noteCaret}
           {onpaste}
           onselect={noteCaret}
+          ontransitioncancel={(event) => {
+            if (event.propertyName === 'height') {
+              folding = false;
+            }
+          }}
+          ontransitionend={(event) => {
+            if (event.propertyName === 'height') {
+              folding = false;
+            }
+          }}
           placeholder={hint}
           role="combobox"
           bind:this={field}
           class:flying={flight !== null}
+          class:folding
+          bind:clientHeight={fieldHeight}
           bind:value={draft.text}
-          {@attach autosize(
-            () => draft.text,
-            () => holding
-          )}
+          {@attach autosize(() => draft.text, {
+            held: () => holding,
+            fold: folds,
+            measured: (whole) => {
+              natural = whole;
+            },
+          })}
           {@attach fitHint}
         ></textarea>
         {#if flight}
@@ -1312,6 +1422,12 @@
         >
           <IconPlus />
         </button>
+        {#if folded}
+          <!-- What the folded field keeps out of sight. -->
+          <span class="more"
+            >+{lines - 1} {lines === 2 ? 'line' : 'lines'}</span
+          >
+        {/if}
         <!-- Pending from the press until the hub takes the message: the glyph
            slot turns to the kit spinner and presses are swallowed. -->
         <button
@@ -1400,11 +1516,6 @@
     flex: none;
     width: min(720px, calc(100% - 50px));
     pointer-events: none;
-
-    /* The suggestion row takes the pointer; the tray's chips take it themselves. */
-    & > :global(.suggest) {
-      pointer-events: auto;
-    }
   }
   /* One conversation's tray over the next while they cross-fade, in a column
      the composer's width: an auto column grew to the chips' own width. */
@@ -1490,14 +1601,6 @@
       color: transparent;
     }
   }
-  textarea.flying {
-    color: transparent;
-    caret-color: transparent;
-
-    &::placeholder {
-      color: transparent;
-    }
-  }
   /* Above the label's .touch-hit area, which covers the field: a press on
      the text lands on the textarea itself, so iOS's hold-to-select and its
      Paste callout reach it; the area still takes the pill's padding. */
@@ -1523,6 +1626,11 @@
     min-width: 0;
     @media (prefers-reduced-motion: no-preference) {
       transition: height var(--dur-control) var(--ease-out);
+
+      /* Folding and opening a long draft. */
+      &.folding {
+        transition-duration: var(--dur-morph);
+      }
     }
   }
   /* One line, always: the field is sized from its value, so a hint that
@@ -1536,6 +1644,36 @@
   textarea::placeholder {
     color: var(--ink-muted);
     letter-spacing: var(--hint-track);
+    white-space: nowrap;
+  }
+  textarea.flying {
+    color: transparent;
+    caret-color: transparent;
+
+    &::placeholder {
+      color: transparent;
+    }
+  }
+  /* A folded draft shows its first line, fading out where the line ends,
+     and never a scrollbar. */
+  .folded textarea,
+  .folded .flight {
+    mask-image: linear-gradient(
+      to right,
+      #000 calc(100% - var(--space-8)),
+      transparent
+    );
+  }
+  .folded textarea {
+    overflow: hidden;
+  }
+  /* How much of a folded draft is out of sight. */
+  .more {
+    flex: none;
+    color: var(--ink-muted);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
+    font-variant-numeric: tabular-nums;
     white-space: nowrap;
   }
   .hidden-file {

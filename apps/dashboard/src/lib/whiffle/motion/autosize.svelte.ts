@@ -49,12 +49,26 @@ function nextFrame(node: HTMLElement, fit: () => void) {
  * A field handed a different text wholesale (a group's one composer, lent
  * to whichever conversation its swipe lands on) glides to the new text's
  * size as it does for a typed line. Only the first fit, on mount, lands
- * still. While `held` says so, a new value keeps the size the field has,
- * and it glides to the value's size once let go; typing fits at once.
+ * still.
+ *
+ * - `held`: while it says so, a new value keeps the size the field has, and
+ *   the field glides to the value's size once let go; typing fits at once.
+ * - `fold`: asked with the text's full height at each fit; when it says so
+ *   the field stands at its stylesheet height (one line) instead, scrolled
+ *   to its first line.
+ * - `measured`: told the text's full height at each fit.
  */
 export function autosize(
   value: () => unknown,
-  held: () => boolean = () => false
+  {
+    held = () => false,
+    fold = () => false,
+    measured,
+  }: {
+    held?: () => boolean;
+    fold?: (natural: number) => boolean;
+    measured?: (natural: number) => void;
+  } = {}
 ) {
   return (node: HTMLTextAreaElement) => {
     // Measured on a hidden twin, never on the field: collapsing the field to
@@ -76,20 +90,28 @@ export function autosize(
       "position:absolute;visibility:hidden;pointer-events:none;height:auto;min-height:0;max-height:none;overflow:hidden;inset-block-start:0;inset-inline-start:-9999px;transition:none";
     node.after(twin);
     let width = 0;
+    let natural = 0;
     const fit = () => {
       width = node.offsetWidth;
       twin.style.width = `${width}px`;
       twin.value = node.value;
       const border = node.offsetHeight - node.clientHeight;
-      const next = `${twin.scrollHeight + border}px`;
+      natural = twin.scrollHeight + border;
+      measured?.(natural);
+      const folded = fold(natural);
+      const next = folded ? "" : `${natural}px`;
       if (node.style.height !== next) {
         node.style.height = next;
+      }
+      if (folded) {
+        node.scrollTop = 0;
       }
     };
     const later = nextFrame(node, fit);
     let first = true;
     $effect(() => {
       value();
+      fold(natural);
       if (held()) {
         return;
       }

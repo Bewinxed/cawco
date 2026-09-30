@@ -830,9 +830,11 @@
   });
 
   /**
-   * How tall the floating composer column actually is, measured by the composer
-   * itself. The bare input is ~50px; a parked permission stacks above it and can
-   * stand several hundred. Published to the body as `--composer-clearance` — the
+   * The room the floating composer column takes, as the composer publishes
+   * it: its parked prompts, tray, suggestion row and attachments, and the
+   * input at its one-line height (a longer draft stands over the transcript
+   * instead). The bare input is ~50px; a parked permission stacks above it
+   * and can stand several hundred. Published to the body as `--composer-clearance` — the
    * measured height plus the column's bottom offset and one more step of
    * breathing room — which is what the transcript reserves at its foot, so the
    * row that raised a permission is never the row the permission covers.

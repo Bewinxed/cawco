@@ -254,18 +254,27 @@
 </div>
 
 <style>
-  /* Out of flow, standing on the composer's top edge: chips arriving, leaving
-     or wrapping never change the composer's measured height, so the transcript
-     it clears never moves. A second row grows upward over the transcript. */
+  /* Out of flow, standing on the composer's top edge, one line tall whatever
+     it holds: the composer reserves this row in the room the transcript
+     keeps clear, so chips coming, going or changing never move the
+     transcript. Past its width the line scrolls sideways. The row takes no
+     pointer of its own; what is in it does. */
   .suggest {
+    /* A chip's height: its Tab key cap (the kit's h-5), padding and border. */
+    --chip-block: calc(1.25rem + var(--space-1) * 2 + 2px);
     position: absolute;
     inset-inline: 0;
     bottom: calc(100% + var(--space-2));
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    block-size: calc(var(--space-4) + var(--space-1) * 2 + var(--chip-block));
+    padding-block-start: var(--space-4);
+    pointer-events: none;
 
     /* The hint and a failure line are bare text over the transcript, so a row
        with anything in it lifts off the page on the transcript's own field. */
     &:has(.chip, .shimmer, .fail) {
-      padding-block-start: var(--space-4);
       background: linear-gradient(
         to top,
         var(--surface-recess) 55%,
@@ -280,16 +289,20 @@
     margin: 0;
     border: 0;
     display: flex;
-    flex-wrap: wrap;
+    flex-wrap: nowrap;
     align-items: center;
     gap: var(--space-2);
     --hit-gap-x: var(--space-2);
     --hit-gap-y: var(--space-2);
-    padding-block: 0;
+    padding-block: var(--space-1);
     padding-inline: var(--space-1);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scrollbar-width: none;
 
-    &:has(.chip, .shimmer, .fail) {
-      padding-block: var(--space-1);
+    & > * {
+      flex: none;
+      pointer-events: auto;
     }
   }
 
@@ -301,6 +314,7 @@
     --tint: calc(8% + var(--conf) * 24%);
     display: inline-flex;
     align-items: center;
+    block-size: var(--chip-block);
     gap: var(--space-2);
     max-inline-size: 100%;
     padding-block: var(--space-1);
@@ -389,6 +403,6 @@
     color: var(--ink-muted);
     font-size: var(--text-meta);
     font-weight: var(--weight-body);
-    text-wrap: pretty;
+    white-space: nowrap;
   }
 </style>
