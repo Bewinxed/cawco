@@ -13,6 +13,11 @@ export interface PopoverMember {
   readonly id: string;
   readonly label?: string;
   readonly onchange: (open: boolean) => void;
+  /**
+   * Where focus goes as the surface closes, when not back to the trigger:
+   * true when it placed focus itself.
+   */
+  readonly onclosefocus?: () => boolean;
   readonly open: boolean;
   /** The rows the surface's hover ghost glides between (components/ui/highlight). */
   readonly rows?: string;

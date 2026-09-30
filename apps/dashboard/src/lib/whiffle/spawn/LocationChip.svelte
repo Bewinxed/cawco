@@ -15,6 +15,7 @@
     open,
     onchange,
     oncommit,
+    onclosefocus,
     mode,
     onmode,
     dir,
@@ -32,6 +33,8 @@
     onchange: (open: boolean) => void;
     /** The location is set (Enter, or "Use this folder"); the popover closes. */
     oncommit: () => void;
+    /** Where focus goes as the popover closes (NsPopover `onclosefocus`). */
+    onclosefocus: () => boolean;
     mode: "dir" | "repo";
     onmode: (mode: "dir" | "repo") => void;
     dir: string;
@@ -65,6 +68,7 @@
   id="session-location"
   label="Location"
   {onchange}
+  {onclosefocus}
   {open}
   triggerClass="ns-chip-btn"
   triggerStyle={empty ? "color:var(--ink-muted)" : ""}

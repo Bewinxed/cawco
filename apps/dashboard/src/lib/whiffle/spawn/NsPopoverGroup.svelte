@@ -83,6 +83,9 @@
         data-morph={morphing ? '' : undefined}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
+          if (shown?.onclosefocus?.()) {
+            return;
+          }
           const focused = document.activeElement;
           if (!focused || focused === document.body || focused.closest('.ns-pop')) {
             shown?.trigger?.focus();

@@ -15,6 +15,7 @@
     id,
     open,
     onchange,
+    onclosefocus,
     trigger,
     children,
     width = 320,
@@ -32,6 +33,11 @@
     id: string;
     open: boolean;
     onchange: (open: boolean) => void;
+    /**
+     * Where focus goes as the popover closes, when not back to the trigger:
+     * true when it placed focus itself.
+     */
+    onclosefocus?: () => boolean;
     trigger?: Snippet;
     children: Snippet;
     width?: number;
@@ -77,6 +83,9 @@
         get rows() {
           return rows;
         },
+        get onclosefocus() {
+          return onclosefocus;
+        },
         get open() {
           return open;
         },
@@ -92,20 +101,6 @@
       })
     );
   }
-
-  /**
-   * Focus already went on from the popover (its form handed the keys to
-   * another field as it closed): closing leaves it there rather than
-   * pulling it back to the trigger.
-   */
-  const focusMovedOn = () => {
-    const active = document.activeElement;
-    return (
-      active instanceof HTMLElement &&
-      active !== document.body &&
-      !active.closest(".ns-pop-shell")
-    );
-  };
 </script>
 
 {#if group}
@@ -151,7 +146,7 @@
         collisionPadding={8}
         customAnchor={anchor}
         id={`${id}-popover`}
-        onCloseAutoFocus={(event) => { if (focusMovedOn()) { event.preventDefault(); } }}
+        onCloseAutoFocus={(event) => { if (onclosefocus?.()) { event.preventDefault(); } }}
         onOpenAutoFocus={(event) => { if (!trapFocus) { event.preventDefault(); } }}
         side="bottom"
         sideOffset={6}

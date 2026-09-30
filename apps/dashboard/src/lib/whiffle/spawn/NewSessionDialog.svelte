@@ -100,12 +100,20 @@
   /**
    * A location set with Enter or "Use this folder": its popover closes and
    * the prompt takes the keys again, caret after what is already written.
+   * Focus moves as the popover closes (`promptAfterClose`): while it is open
+   * it keeps focus inside itself. A popover closed any other way (Escape)
+   * returns focus to its chip.
    */
+  let promptNext = false;
   function backToPrompt() {
+    promptNext = true;
     popover = null;
-    if (!editor) {
-      return;
+  }
+  function promptAfterClose(): boolean {
+    if (!(promptNext && editor)) {
+      return false;
     }
+    promptNext = false;
     editor.focus();
     const caret = document.createRange();
     caret.selectNodeContents(editor);
@@ -113,6 +121,7 @@
     const selection = window.getSelection();
     selection?.removeAllRanges();
     selection?.addRange(caret);
+    return true;
   }
   const mobile = new MediaQuery("(max-width: 640px)");
   let opener: HTMLElement | null = null;
@@ -1042,6 +1051,7 @@
               machineName={machine?.hostname ?? ""}
               mode={repo === undefined ? "dir" : "repo"}
               onchange={(value) => { popover = value ? "location" : null; }}
+              onclosefocus={promptAfterClose}
               oncommit={backToPrompt}
               ondir={(value) => { cwd = value; editing = true; projectId = undefined; }}
               onmode={(value) => { repo = value === "repo" ? (repo ?? "") : undefined; if (value === "repo") { projectId = undefined; editing = true; cwd ||= "~"; } }}
