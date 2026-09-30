@@ -455,16 +455,6 @@
       }
       if (continueFrom) {
         loadEstimate(continueFrom.instanceId, submission);
-      } else if (
-        !(prefill?.machineId || prefill?.cwd || prefill?.projectId) &&
-        spawnPrefs.machineId &&
-        spawnPrefs.cwd
-      ) {
-        restoreLocation(
-          { machineId: spawnPrefs.machineId, cwd: spawnPrefs.cwd },
-          submission,
-          first
-        );
       }
       loadFleetMenu(submission);
     });
@@ -548,37 +538,6 @@
       plugins = snapshot.config.plugins.map((row) => row.id);
     } catch {
       // A hub without a fleet catalog leaves the `/` menu with nothing to offer.
-    }
-  }
-  async function restoreLocation(
-    saved: { machineId: string; cwd: string },
-    request: number,
-    initialMachine: string
-  ) {
-    try {
-      await Promise.all([
-        inspectMachine(saved.machineId, saved.cwd),
-        machineFs(saved.machineId, "list", saved.cwd),
-      ]);
-      if (
-        !open ||
-        request !== submission ||
-        machineId !== initialMachine ||
-        machineIds.length > 1 ||
-        cwd ||
-        popover
-      ) {
-        return;
-      }
-      machineIds = [saved.machineId];
-      ({ cwd } = saved);
-      verifiedLocation = JSON.stringify([machineIds, cwd.trim()]);
-      projectId = whiffle.projects.find(
-        (row) => row.machineId === machineId && row.cwd === cwd
-      )?.id;
-      error = "";
-    } catch {
-      // A stale saved directory leaves the location free for a fresh choice.
     }
   }
   $effect(() => {
@@ -856,8 +815,6 @@
       }
       recordModelUse(draft.harness, draft.usedModel);
       rememberSpawn({
-        machineId: draft.machineIds[0],
-        cwd: draft.cwd,
         harness: draft.harness,
         model: draft.model,
         permissionMode: draft.permissionMode,
@@ -918,8 +875,6 @@
     recordModelUse(draft.summarizer.harness, draft.summarizer.model);
     recordModelUse(draft.harness, draft.usedModel);
     rememberSpawn({
-      machineId: target,
-      cwd: draft.cwd,
       harness: draft.harness,
       model: draft.model,
       permissionMode: draft.permissionMode,

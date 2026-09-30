@@ -6,14 +6,14 @@ import { MODEL_DEFAULT } from "./models.svelte";
  * What the new-session form was last set to. A user who picks Fable and a
  * permission mode is telling us how they work, not just how this one session
  * starts — a form that resets to the defaults every visit makes them say it
- * again for every session. The optional machine and directory remember the
- * last submitted location; consumers verify that location before restoring it.
- * Kept out of the model store because these are session preferences.
+ * again for every session. Where a session runs is not a preference: a plain
+ * New session opens with no location, and one opened from a project carries
+ * that project. Kept out of the model store because these are session
+ * preferences.
  */
 const KEY = "whiffle-spawn-prefs";
 
 interface SpawnPrefs {
-  cwd?: string;
   /**
    * `null` is a choice too, and the one to start from: only the model knows
    * which stops it has, so a form that opened on a level would be asserting one
@@ -21,7 +21,6 @@ interface SpawnPrefs {
    */
   effort: EffortLevel | null;
   harness: HarnessKind;
-  machineId?: string;
   model: string;
   permissionMode: PermissionMode;
 }
@@ -47,9 +46,6 @@ const load = (): SpawnPrefs => {
       ? parsed.harness
       : undefined;
     return {
-      machineId:
-        typeof parsed.machineId === "string" ? parsed.machineId : undefined,
-      cwd: typeof parsed.cwd === "string" ? parsed.cwd : undefined,
       harness: harness ?? FALLBACK.harness,
       model:
         harness && typeof parsed.model === "string"
@@ -72,12 +68,6 @@ const load = (): SpawnPrefs => {
 const store = $state<SpawnPrefs>(load());
 
 export const spawnPrefs = {
-  get machineId(): string | undefined {
-    return store.machineId;
-  },
-  get cwd(): string | undefined {
-    return store.cwd;
-  },
   get harness(): HarnessKind {
     return store.harness;
   },
@@ -94,12 +84,6 @@ export const spawnPrefs = {
 
 /** Called when a spawn actually goes out, so a form the user abandoned teaches nothing. */
 export function rememberSpawn(prefs: SpawnPrefs): void {
-  if (prefs.machineId !== undefined) {
-    store.machineId = prefs.machineId;
-  }
-  if (prefs.cwd !== undefined) {
-    store.cwd = prefs.cwd;
-  }
   store.harness = prefs.harness;
   store.model = prefs.model;
   store.permissionMode = prefs.permissionMode;
