@@ -516,7 +516,7 @@
       );
       const type = (now: number) => {
         const progress = ms > 0 ? Math.min(1, (now - began) / ms) : 1;
-        typed = to.slice(0, Math.round(to.length * easeOut(progress)));
+        typed = to.slice(0, Math.floor(to.length * easeOut(progress)));
         flightFrame = requestAnimationFrame(progress < 1 ? type : endFlight);
       };
       type(began);
@@ -1299,6 +1299,7 @@
     z-index: 2;
     display: grid;
     grid-template-columns: minmax(0, 1fr);
+    align-content: unsafe end;
     align-items: unsafe end;
     padding: calc((var(--cin-ctl) - 1lh) / 2) 0;
     font-family: var(--font-body);
