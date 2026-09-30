@@ -1,7 +1,13 @@
 <script lang="ts">
   /**
-   * Right-click on a running session or a side quest. Keep and Discard are what a
-   * side quest is waiting on, so they only appear on one (NEW.md §1).
+   * Right-click (long-press on touch, the menu key on a focused row) on a
+   * session, wherever one is listed: the rail, a project's page, the Fleet
+   * board. Keep and Discard are what a side quest is waiting on, so they only
+   * appear on one (NEW.md §1). Fork and Stop decide as the peek header's menu
+   * does: Fork needs a conversation and its machine, Stop a live process.
+   *
+   * The row is the trigger itself: `children` is handed the trigger's props
+   * and spreads them on its own root element, so a table row stays a `<tr>`.
    */
   import type { HarnessKind } from "@whiffle/core";
   import type { Snippet } from "svelte";
@@ -13,12 +19,14 @@
     IconCheck,
     IconExternal,
     IconFolder,
+    IconFork,
     IconStop,
     IconTrash,
   } from "$lib/icons";
   import {
     deleteTranscript,
     discardSession,
+    forkSession,
     type InstanceRow,
     keepSession,
     removeSession,
@@ -31,7 +39,8 @@
   import { sessionName } from "./session-name";
 
   interface Props {
-    children: Snippet;
+    /** The row, spreading the trigger's props on its root element. */
+    children: Snippet<[Record<string, unknown>]>;
     instance: InstanceRow;
     /**
      * Set only where the rail has flattened this session's directory out of
@@ -45,6 +54,33 @@
 
   const href = $derived(conversationHref(instance.id, whiffle.instanceIndex));
   const scratch = $derived(instance.kind === "scratch");
+  const running = $derived(
+    instance.status === "running" || instance.status === "starting"
+  );
+
+  const session = $derived(whiffle.session(instance.id) ?? null);
+  /** The SDK session a fork branches from. */
+  const forkable = $derived(session?.sessionId ?? instance.sessionId ?? null);
+  const machine = $derived(
+    whiffle.machines.find((entry) => entry.machineId === instance.machineId) ??
+      null
+  );
+
+  async function fork() {
+    if (!(forkable && machine)) {
+      return;
+    }
+    const forked = forkSession({
+      machineId: machine.machineId,
+      cwd: session?.cwd || instance.cwd,
+      sessionId: forkable,
+      harness: (session?.harness ??
+        instance.harness ??
+        "claude") as HarnessKind,
+      history: session?.messages ?? [],
+    });
+    await goto(conversationHref(forked, whiffle.instanceIndex));
+  }
 
   /**
    * A start that failed before the harness named a conversation: there is no
@@ -110,8 +146,10 @@
 </script>
 
 <ContextMenu.Root>
-  <ContextMenu.Trigger class="contents">
-    {@render children()}
+  <ContextMenu.Trigger>
+    {#snippet child({ props })}
+      {@render children(props)}
+    {/snippet}
   </ContextMenu.Trigger>
 
   <ContextMenu.Content>
@@ -119,18 +157,24 @@
       <IconExternal />
       Open
     </ContextMenu.Item>
+    <ContextMenu.Item disabled={!(forkable && machine)} onSelect={fork}>
+      <IconFork />
+      Fork
+    </ContextMenu.Item>
     <ContextMenu.Item
       onSelect={() => continueInNewSession({ instanceId: instance.id, machineId: instance.machineId, cwd: instance.cwd, harness: (instance.harness ?? 'claude') as HarnessKind, model: instance.model ?? undefined, title: sessionName(instance.id, {}, instance.cwd).label })}
     >
       <IconArrowRight />
       Continue in new session…
     </ContextMenu.Item>
-    <ContextMenu.Item
-      onSelect={() => stopSession(instance.id, instance.machineId)}
-    >
-      <IconStop />
-      Stop
-    </ContextMenu.Item>
+    {#if running}
+      <ContextMenu.Item
+        onSelect={() => stopSession(instance.id, instance.machineId)}
+      >
+        <IconStop />
+        Stop
+      </ContextMenu.Item>
+    {/if}
     {#if ongroup}
       <ContextMenu.Item onSelect={ongroup}>
         <IconFolder />

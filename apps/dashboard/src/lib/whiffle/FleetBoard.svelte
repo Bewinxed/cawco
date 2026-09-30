@@ -56,6 +56,7 @@
   import { formatDistanceToNow } from "$lib/utils/time";
   import AttentionQueue from "$lib/whiffle/AttentionQueue.svelte";
   import { addMachine } from "$lib/whiffle/join/join.svelte";
+  import LiveSessionMenu from "$lib/whiffle/LiveSessionMenu.svelte";
   import LiveSessionRow from "$lib/whiffle/LiveSessionRow.svelte";
   import MachineCard from "$lib/whiffle/MachineCard.svelte";
   import MachineMenu from "$lib/whiffle/MachineMenu.svelte";
@@ -1022,101 +1023,117 @@
                   </Table.Row>
                 </Table.Header>
                 <Table.Body>
+                  <!-- A session's row is its session menu's trigger (right-click,
+                       long-press, the menu key): the same menu the rail's rows open.
+                       A stored transcript has no session to act on, and no menu. -->
                   {#each visible as row (row.key)}
-                    <!-- A session that changes state re-sorts; it slides to its new place
+                    {#if row.instance}
+                      <LiveSessionMenu instance={row.instance}>
+                        {#snippet children(trigger)}
+                          {@render boardRow(trigger)}
+                        {/snippet}
+                      </LiveSessionMenu>
+                    {:else}
+                      {@render boardRow({})}
+                    {/if}
+                    {#snippet boardRow(trigger: Record<string, unknown>)}
+                      <!-- A session that changes state re-sorts; it slides to its new place
                        rather than swapping rows under the reader's eye. A row a
                        filter brings back opens as the rows below make room. -->
-                    <tr
-                      class="border-b transition-colors"
-                      data-flip-anchor
-                      data-key={row.key}
-                      data-share="pane:{sessionOf(row.href)}"
-                      data-slot="table-row"
-                    >
-                      <Table.Cell class="c-name">
-                        <div class="nm">
-                          <span aria-hidden="true" class="mark m{row.hue}">
-                            <HarnessGlyph harness={row.harness} />
-                          </span>
-                          <a class="touch-hit pointer-hit" href={row.href}
-                            ><span class="nm-title">{row.title}</span></a
-                          >
-                          {#if resumeFailed[row.key]}
-                            <span class="nm-failed" data-flip="pop">
-                              <ErrorText
-                                message={resumeFailed[row.key]}
-                                title="Couldn't resume {row.title}"
-                                ><IconWarningTriangle />
-                                <span class="truncate"
-                                  >Couldn't resume:
-                                  {resumeFailed[row.key]}</span
-                                ></ErrorText
-                              >
+                      <tr
+                        {...trigger}
+                        class={cn('border-b transition-colors', trigger.class as string | undefined)}
+                        data-flip-anchor
+                        data-key={row.key}
+                        data-share="pane:{sessionOf(row.href)}"
+                        data-slot="table-row"
+                      >
+                        <Table.Cell class="c-name">
+                          <div class="nm">
+                            <span aria-hidden="true" class="mark m{row.hue}">
+                              <HarnessGlyph harness={row.harness} />
                             </span>
-                          {/if}
-                        </div>
-                      </Table.Cell>
-                      <Table.Cell class="mut c-mach">{row.machine}</Table.Cell>
-                      <Table.Cell class="mut c-harn"
-                        >{row.harnessLabel}</Table.Cell
-                      >
-                      <Table.Cell class="num c-turns"
-                        >{row.turns ?? '—'}</Table.Cell
-                      >
-                      <Table.Cell
-                        class={cn('num c-ctx', contextClass(row.contextPct))}
-                      >
-                        {#if morphMs}
-                          <TextMorph
-                            as="span"
-                            duration={morphMs}
-                            ease={CURVE.out}
-                            text={row.contextPct === null ? '—' : `${Math.round(row.contextPct)}%`}
-                          />
-                        {:else}
-                          {row.contextPct === null ? '—' : `${Math.round(row.contextPct)}%`}
-                        {/if}
-                      </Table.Cell>
-                      <Table.Cell class="c-when">
-                        <span class="when">
-                          <IconHistory />
-                          {row.at ? formatDistanceToNow(new Date(row.at)) : '—'}
-                        </span>
-                      </Table.Cell>
-                      <!-- A session changing state keeps its chip: the tint turns and
-                           the words morph, the width following them. -->
-                      <Table.Cell class="c-state" data-flip>
-                        <Badge
-                          class={cn(pillBase, pillTint[row.status])}
-                          data-status={row.status}
+                            <a class="touch-hit pointer-hit" href={row.href}
+                              ><span class="nm-title">{row.title}</span></a
+                            >
+                            {#if resumeFailed[row.key]}
+                              <span class="nm-failed" data-flip="pop">
+                                <ErrorText
+                                  message={resumeFailed[row.key]}
+                                  title="Couldn't resume {row.title}"
+                                  ><IconWarningTriangle />
+                                  <span class="truncate"
+                                    >Couldn't resume:
+                                    {resumeFailed[row.key]}</span
+                                  ></ErrorText
+                                >
+                              </span>
+                            {/if}
+                          </div>
+                        </Table.Cell>
+                        <Table.Cell class="mut c-mach"
+                          >{row.machine}</Table.Cell
+                        >
+                        <Table.Cell class="mut c-harn"
+                          >{row.harnessLabel}</Table.Cell
+                        >
+                        <Table.Cell class="num c-turns"
+                          >{row.turns ?? '—'}</Table.Cell
+                        >
+                        <Table.Cell
+                          class={cn('num c-ctx', contextClass(row.contextPct))}
                         >
                           {#if morphMs}
                             <TextMorph
                               as="span"
                               duration={morphMs}
                               ease={CURVE.out}
-                              text={row.stateLabel}
+                              text={row.contextPct === null ? '—' : `${Math.round(row.contextPct)}%`}
                             />
                           {:else}
-                            {row.stateLabel}
+                            {row.contextPct === null ? '—' : `${Math.round(row.contextPct)}%`}
                           {/if}
-                        </Badge>
-                      </Table.Cell>
-                      <Table.Cell class="c-act">
-                        <div class="act">
-                          <Button
-                            aria-label="Open {row.title}"
-                            href={row.href}
-                            size="icon-sm"
-                            variant="outline"
+                        </Table.Cell>
+                        <Table.Cell class="c-when">
+                          <span class="when">
+                            <IconHistory />
+                            {row.at ? formatDistanceToNow(new Date(row.at)) : '—'}
+                          </span>
+                        </Table.Cell>
+                        <!-- A session changing state keeps its chip: the tint turns and
+                           the words morph, the width following them. -->
+                        <Table.Cell class="c-state" data-flip>
+                          <Badge
+                            class={cn(pillBase, pillTint[row.status])}
+                            data-status={row.status}
                           >
-                            <IconExternal />
-                          </Button>
-                          {#if row.instance}
-                            {@const instance = row.instance}
+                            {#if morphMs}
+                              <TextMorph
+                                as="span"
+                                duration={morphMs}
+                                ease={CURVE.out}
+                                text={row.stateLabel}
+                              />
+                            {:else}
+                              {row.stateLabel}
+                            {/if}
+                          </Badge>
+                        </Table.Cell>
+                        <Table.Cell class="c-act">
+                          <div class="act">
                             <Button
-                              aria-label="Peek {row.title}"
-                              onclick={() => {
+                              aria-label="Open {row.title}"
+                              href={row.href}
+                              size="icon-sm"
+                              variant="outline"
+                            >
+                              <IconExternal />
+                            </Button>
+                            {#if row.instance}
+                              {@const instance = row.instance}
+                              <Button
+                                aria-label="Peek {row.title}"
+                                onclick={() => {
                                 peeked = {
                                   viewId: instance.id,
                                   href: row.href,
@@ -1124,31 +1141,32 @@
                                 };
                                 peekOpen = true;
                               }}
-                              size="icon-sm"
-                              variant="outline"
-                            >
-                              <IconMaximize />
-                            </Button>
-                          {/if}
-                          {#if row.stored || (row.instance && isResumable(row.instance))}
-                            <Button
-                              aria-label="Resume {row.title}"
-                              class="[--btn-icon:16px]"
-                              onclick={() => resume(row)}
-                              pending={resuming === row.key}
-                              size="icon-sm"
-                              variant="outline"
-                            >
-                              <PendingContent
-                                failed={row.key in resumeFailed}
-                                icon={IconPlay}
+                                size="icon-sm"
+                                variant="outline"
+                              >
+                                <IconMaximize />
+                              </Button>
+                            {/if}
+                            {#if row.stored || (row.instance && isResumable(row.instance))}
+                              <Button
+                                aria-label="Resume {row.title}"
+                                class="[--btn-icon:16px]"
+                                onclick={() => resume(row)}
                                 pending={resuming === row.key}
-                              />
-                            </Button>
-                          {/if}
-                        </div>
-                      </Table.Cell>
-                    </tr>
+                                size="icon-sm"
+                                variant="outline"
+                              >
+                                <PendingContent
+                                  failed={row.key in resumeFailed}
+                                  icon={IconPlay}
+                                  pending={resuming === row.key}
+                                />
+                              </Button>
+                            {/if}
+                          </div>
+                        </Table.Cell>
+                      </tr>
+                    {/snippet}
                   {/each}
                 </Table.Body>
               </Table.Root>

@@ -168,63 +168,65 @@
 </script>
 
 <LiveSessionMenu {instance}>
-  <a
-    class="press-tint group flex min-h-9 flex-col justify-center gap-0.5 rounded-[var(--radius-sm)] px-4 py-1.5
+  {#snippet children(trigger)}
+    <a
+      {...trigger}
+      class="press-tint group flex min-h-9 flex-col justify-center gap-0.5 rounded-[var(--radius-sm)] px-4 py-1.5
       transition-colors duration-150 ease-out hover:text-accent-foreground
-      {failed || activity === 'blocked' ? 'bg-error/10' : ''}"
-    href={conversationHref(instance.id, whiffle.instanceIndex)}
-    title={rowHint}
-    use:dragSession={{ sessionId: instance.id, from: null }}
-  >
-    <!-- The row's band is the card's full width, so the whole strip is the
+      {failed || activity === 'blocked' ? 'bg-error/10' : ''} {trigger.class ?? ''}"
+      href={conversationHref(instance.id, whiffle.instanceIndex)}
+      title={rowHint}
+      use:dragSession={{ sessionId: instance.id, from: null }}
+    >
+      <!-- The row's band is the card's full width, so the whole strip is the
          hover target; what it *says* stops at a scannable measure, or an
          ultrawide track leaves the state word a screen away from the name. -->
-    <span class="flex max-w-3xl items-center gap-3">
-      <!-- The card's lead column: the header's 20px mark sits in the same one,
+      <span class="flex max-w-3xl items-center gap-3">
+        <!-- The card's lead column: the header's 20px mark sits in the same one,
            so a card has a single title column rather than a header set in from
            the rows it heads. -->
-      <span
-        class="flex shrink-0 items-center justify-center {sleeping || stale ? 'opacity-60' : ''}"
-        style="--c-mark:20px;--c-mark-glyph:12px"
-      >
-        <span class="mark m{markHue(instance.cwd || instance.machineId)}">
-          <Sprite aria-hidden="true" />
+        <span
+          class="flex shrink-0 items-center justify-center {sleeping || stale ? 'opacity-60' : ''}"
+          style="--c-mark:20px;--c-mark-glyph:12px"
+        >
+          <span class="mark m{markHue(instance.cwd || instance.machineId)}">
+            <Sprite aria-hidden="true" />
+          </span>
         </span>
-      </span>
-      <!-- `max-w-xl`: a title that runs on — a pasted URL, usually — stops at a
+        <!-- `max-w-xl`: a title that runs on — a pasted URL, usually — stops at a
            readable measure instead of crushing the path beside it. It is wider
            than it was because the state pill that used to sit at the end of
            this row is gone. -->
-      <span class="min-w-0 max-w-xl truncate text-label">{title}</span>
-      <!-- A quest is named beside its title rather than glyphed in front of it:
+        <span class="min-w-0 max-w-xl truncate text-label">{title}</span>
+        <!-- A quest is named beside its title rather than glyphed in front of it:
            the lead slot belongs to state, and the titles keep their column. -->
-      {#if quest}
-        <Badge class="shrink-0" variant="secondary">side quest</Badge>
-      {/if}
-      <!-- A leaf delegate cannot fan out: the operator reads at a glance that
+        {#if quest}
+          <Badge class="shrink-0" variant="secondary">side quest</Badge>
+        {/if}
+        <!-- A leaf delegate cannot fan out: the operator reads at a glance that
            nothing will ever nest beneath this row. -->
-      {#if instance.canDelegate === false}
-        <Badge
-          class="shrink-0"
-          title="Spawned with can_delegate=false — it cannot delegate or start sessions"
-          variant="outline"
-          >leaf</Badge
-        >
-      {/if}
-      <!-- Where it runs, second — and beside the title rather than in a column
+        {#if instance.canDelegate === false}
+          <Badge
+            class="shrink-0"
+            title="Spawned with can_delegate=false — it cannot delegate or start sessions"
+            variant="outline"
+            >leaf</Badge
+          >
+        {/if}
+        <!-- Where it runs, second — and beside the title rather than in a column
            of its own: on a wide track a path pinned right sits half a card away
            from the name it belongs to, and the two stop reading as one row.
            Under pressure it yields three times as readily as the title, and
            what it keeps it gives up from the left — the leaf is what tells two
            checkouts apart. -->
-      {#if showCwd}
-        <span
-          class="hidden min-w-24 shrink-[3] truncate font-mono text-label text-muted-foreground [direction:rtl] sm:block"
-          title={instance.cwd}
-          ><bdi>{instance.cwd}</bdi></span
-        >
-      {/if}
-      <!-- How far its plan has got, or, with no plan to measure while the
+        {#if showCwd}
+          <span
+            class="hidden min-w-24 shrink-[3] truncate font-mono text-label text-muted-foreground [direction:rtl] sm:block"
+            title={instance.cwd}
+            ><bdi>{instance.cwd}</bdi></span
+          >
+        {/if}
+        <!-- How far its plan has got, or, with no plan to measure while the
            session runs, a turning arc and how long it has been on this step,
            which is what is actually known. At a glance and nothing more: the
            row is already a link, and a control inside one is two targets
@@ -233,68 +235,69 @@
            One element for both, so the arc eases from turning to counted
            (TaskRing) and the figure morphs, and it fades in and out as a
            whole. -->
-      {#if progress || unmeasured}
-        <span
-          class="num ml-auto flex shrink-0 items-center gap-1.5 text-meta text-muted-foreground"
-          title={progress ? undefined : stepHint}
-          transition:crossIn
-        >
+        {#if progress || unmeasured}
           <span
-            class="identity-ink flex items-center"
-            style={identityVar(instance.cwd)}
+            class="num ml-auto flex shrink-0 items-center gap-1.5 text-meta text-muted-foreground"
+            title={progress ? undefined : stepHint}
+            transition:crossIn
           >
-            <TaskRing
-              done={progress?.done}
-              indeterminate={!progress}
-              size="sm"
-              total={progress?.total}
-            />
+            <span
+              class="identity-ink flex items-center"
+              style={identityVar(instance.cwd)}
+            >
+              <TaskRing
+                done={progress?.done}
+                indeterminate={!progress}
+                size="sm"
+                total={progress?.total}
+              />
+            </span>
+            {#if morphMs}
+              <TextMorph
+                as="span"
+                duration={morphMs}
+                ease={CURVE.out}
+                text={figure}
+              />
+            {:else}
+              {figure}
+            {/if}
           </span>
-          {#if morphMs}
-            <TextMorph
-              as="span"
-              duration={morphMs}
-              ease={CURVE.out}
-              text={figure}
-            />
-          {:else}
-            {figure}
-          {/if}
-        </span>
-      {/if}
-      <!-- The state, in one dot and no words (see the note in the script). It
+        {/if}
+        <!-- The state, in one dot and no words (see the note in the script). It
            is the last thing in the row and the smallest, which is the right
            weight for something you read peripherally and only act on when it
            is amber or red. -->
-      <span
-        class="flex shrink-0 items-center {progress || unmeasured ? 'ml-2' : 'ml-auto'}"
-      >
-        <ActivityDot {activity} {failed} size={2.5} {sleeping} {stale} />
-      </span>
-    </span>
-    <!-- The tool it is running: the name morphs from one tool to the next,
-         and the line fades in and out as the session starts and stops one. -->
-    {#if activity === 'working' && tool}
-      <span
-        class="flex max-w-3xl items-baseline gap-2 pl-8 text-label text-muted-foreground"
-        transition:crossIn
-      >
-        <span class="shrink-0">
-          {#if morphMs}
-            <TextMorph
-              as="span"
-              duration={morphMs}
-              ease={CURVE.out}
-              text={tool.name}
-            />
-          {:else}
-            {tool.name}
-          {/if}
+        <span
+          class="flex shrink-0 items-center {progress || unmeasured ? 'ml-2' : 'ml-auto'}"
+        >
+          <ActivityDot {activity} {failed} size={2.5} {sleeping} {stale} />
         </span>
-        <span class="truncate font-mono">{tool.glance}</span>
       </span>
-    {/if}
-  </a>
+      <!-- The tool it is running: the name morphs from one tool to the next,
+         and the line fades in and out as the session starts and stops one. -->
+      {#if activity === 'working' && tool}
+        <span
+          class="flex max-w-3xl items-baseline gap-2 pl-8 text-label text-muted-foreground"
+          transition:crossIn
+        >
+          <span class="shrink-0">
+            {#if morphMs}
+              <TextMorph
+                as="span"
+                duration={morphMs}
+                ease={CURVE.out}
+                text={tool.name}
+              />
+            {:else}
+              {tool.name}
+            {/if}
+          </span>
+          <span class="truncate font-mono">{tool.glance}</span>
+        </span>
+      {/if}
+    </a>
+  {/snippet}
 </LiveSessionMenu>
 
 <style>
