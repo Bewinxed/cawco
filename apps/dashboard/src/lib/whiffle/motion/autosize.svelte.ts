@@ -1,3 +1,5 @@
+import { motionOk } from "./curves.svelte";
+
 /**
  * A fit that measures in the next frame's callbacks, once however often it
  * is asked for before then. A change of state — a mount, a value swapped
@@ -39,6 +41,28 @@ function nextFrame(node: HTMLElement, fit: () => void) {
 }
 
 /**
+ * Another conversation's words settle into the field: they rise 3px out of a
+ * slight blur while they fade in, over --dur-fade on --ease-out. Run from the
+ * frame callback that fits the field, so the style it reads is that frame's.
+ */
+function fillIn(node: HTMLElement) {
+  if (!motionOk.current) {
+    return;
+  }
+  const style = getComputedStyle(node);
+  node.animate(
+    [
+      { opacity: 0, filter: "blur(2px)", transform: "translateY(3px)" },
+      { opacity: 1, filter: "blur(0)", transform: "translateY(0)" },
+    ],
+    {
+      duration: Number.parseFloat(style.getPropertyValue("--dur-fade")) || 200,
+      easing: style.getPropertyValue("--ease-out").trim() || "ease-out",
+    }
+  );
+}
+
+/**
  * A textarea that grows with what is in it, the same way on every engine:
  * its height is measured from the text (scrollHeight) and set in pixels, so
  * a CSS height transition carries each new line in instead of the field
@@ -48,8 +72,9 @@ function nextFrame(node: HTMLElement, fit: () => void) {
  *
  * `source` is where the value comes from, for a field that is handed a
  * different text wholesale (a group's one composer, lent to whichever
- * conversation its swipe lands on): a new source's text is not an edit, so
- * the field takes its size without the tween — as it does on mount.
+ * conversation its swipe lands on): the field glides to the new text's size
+ * as it does for a typed line, and the text fills in ({@link fillIn}). Only
+ * the first fit, on mount, lands still.
  */
 export function autosize(
   value: () => unknown,
@@ -85,13 +110,22 @@ export function autosize(
         node.style.height = next;
       }
     };
-    const later = nextFrame(node, fit);
+    /** Another source's text arrived: it fills in rather than appearing. */
+    let arrived = false;
+    const later = nextFrame(node, () => {
+      fit();
+      if (arrived) {
+        arrived = false;
+        fillIn(node);
+      }
+    });
     let first = true;
     let from: unknown;
     $effect(() => {
       value();
       const next = source();
-      later.request(first || next !== from);
+      arrived ||= !first && next !== from;
+      later.request(first);
       first = false;
       from = next;
     });
