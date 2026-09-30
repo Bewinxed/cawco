@@ -372,6 +372,20 @@ const dashboardBuild = (root: string): string =>
   join(root, "apps", "dashboard", "build", "index.js");
 
 /**
+ * The commit the dashboard on disk was built from: the build stamps it into
+ * `_app/version.json` (apps/dashboard/svelte.config.js, `kit.version.name`),
+ * the same short hash `git rev-parse --short HEAD` gives. No build, no commit.
+ */
+const builtCommit = async (root: string): Promise<string | undefined> => {
+  const stamp = (await Bun.file(
+    join(root, "apps", "dashboard", "build", "client", "_app", "version.json")
+  )
+    .json()
+    .catch(() => undefined)) as { version?: string } | undefined;
+  return stamp?.version;
+};
+
+/**
  * Whether a dashboard build is this machine's business. A worker running only
  * the daemon has no reason to spend minutes on a bundle nobody will serve, and
  * a machine that has one already is one that serves it.
@@ -504,44 +518,52 @@ const pullAndRestart = async ({
   };
   const skipped: string[] = [];
 
-  if (report.to !== report.from) {
-    // Frozen, so a commit whose bun.lock disagrees with its package.json files
-    // fails this one deploy instead of rewriting bun.lock and leaving the clone
-    // dirty, which would refuse every later pull.
-    const installed = await run(
-      [process.execPath, "install", "--frozen-lockfile"],
-      INSTALL_TIMEOUT_MS,
-      root
-    );
-    if (!installed.ok) {
-      throw failed("bun install", installed);
-    }
-    report.installed = true;
-
-    // A range that changed nothing the dashboard runs builds nothing; the
-    // restart skip in `restartStack` says so for both.
-    if (report.changed.includes("dashboard")) {
-      if (await buildsDashboard(root)) {
-        const built = await run(
-          [process.execPath, "run", "--filter", "@whiffle/dashboard", "build"],
-          BUILD_TIMEOUT_MS,
-          root
-        );
-        if (!built.ok) {
-          throw failed("the dashboard build", built);
-        }
-        report.built = true;
-      } else {
-        skipped.push("this machine serves no dashboard, so none was built");
-      }
-    }
+  // Every step below is decided by what is on disk, not by whether this pull
+  // moved HEAD: a deploy that failed partway is retried with nothing left to
+  // pull, and it has to finish the steps that did not happen then.
+  //
+  // Frozen, so a commit whose bun.lock disagrees with its package.json files
+  // fails this one deploy instead of rewriting bun.lock and leaving the clone
+  // dirty, which would refuse every later pull. With nothing new it is a no-op.
+  const installed = await run(
+    [process.execPath, "install", "--frozen-lockfile"],
+    INSTALL_TIMEOUT_MS,
+    root
+  );
+  if (!installed.ok) {
+    throw failed("bun install", installed);
   }
+  report.installed = true;
 
+  // The units go in before the build: the build overwrites the assets the
+  // running dashboard's pages point at, so anything that can fail between the
+  // build and the restart leaves the live dashboard serving pages whose
+  // scripts are gone. A units step that fails here leaves the old build whole.
   await installDashboardUnits(
     report.changed,
     join(root, "packages", "cli", "src", "cli.ts"),
     root
   );
+
+  // A range that changed nothing the dashboard runs builds nothing; the
+  // restart skip in `restartStack` says so for both.
+  if (report.changed.includes("dashboard")) {
+    if (!(await buildsDashboard(root))) {
+      skipped.push("this machine serves no dashboard, so none was built");
+    } else if ((await builtCommit(root)) === report.to) {
+      skipped.push(`the dashboard is already built from ${report.to}`);
+    } else {
+      const built = await run(
+        [process.execPath, "run", "--filter", "@whiffle/dashboard", "build"],
+        BUILD_TIMEOUT_MS,
+        root
+      );
+      if (!built.ok) {
+        throw failed("the dashboard build", built);
+      }
+      report.built = true;
+    }
+  }
 
   return restartStack(report, { restartAgent, force, busy }, skipped);
 };
