@@ -174,8 +174,11 @@ export interface Workflow<Inputs extends ZodTypeAny = ZodTypeAny> {
    * answered. With an `answer` schema the answer's `value` is typed by it.
    */
   ask: {
+    // `answer` is taken out of AskSpec first: `ZodTypeAny & ZodObject<…>` is
+    // a type no real schema is assignable to, which would leave this overload
+    // never chosen and every typed answer `unknown`.
     <Answer extends ZodTypeAny>(
-      spec: AskSpec & { answer: Answer }
+      spec: Omit<AskSpec, "answer"> & { answer: Answer }
     ): Promise<AskAnswer<z.infer<Answer>> & { value: z.infer<Answer> }>;
     (spec: AskSpec): Promise<AskAnswer>;
   };
