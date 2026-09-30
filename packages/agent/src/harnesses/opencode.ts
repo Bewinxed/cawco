@@ -36,13 +36,13 @@ import {
   type Message,
   type OpencodeClient,
   type Part,
-  type Permission,
+  type PermissionRequest,
   type Project,
   type Provider,
   type Session,
   type TextPart,
   type Todo,
-} from "@opencode-ai/sdk";
+} from "@opencode-ai/sdk/v2";
 import type {
   EffortLevel,
   FleetConfig,
@@ -899,6 +899,23 @@ const errorText = (error: unknown): string => {
   return `${name}${status ? ` ${status}` : ""}: ${message}`;
 };
 
+/**
+ * The SDK answers a request that never reached the server (connection
+ * refused, reset, timed out) with `{ error }` and no response, the same shape
+ * as the server's own refusal. Here that is an exception: an unreachable
+ * server is never "no sessions", "not held" or "no commands". A request the
+ * server answered comes back for its own `error` to be read.
+ */
+async function reached<T extends { response?: Response; error?: unknown }>(
+  pending: Promise<T>
+): Promise<T> {
+  const result = await pending;
+  if (!result.response) {
+    throw result.error;
+  }
+  return result;
+}
+
 /** `provider/model` or a bare model id, into opencode's two-part model reference. */
 const splitModel = (
   model: string
@@ -991,9 +1008,7 @@ async function connectedProviders(
   client: OpencodeClient,
   directory?: string
 ): Promise<Pick<Provider, "id" | "models">[]> {
-  const result = await client.provider.list({
-    ...(directory ? { query: { directory } } : {}),
-  });
+  const result = await client.provider.list(directory ? { directory } : {});
   if (result.error) {
     throw new Error(errorText(result.error));
   }
@@ -1105,7 +1120,6 @@ export class OpencodeSession implements HarnessSession {
   readonly #childInfo = new Map<string, { agent?: string; title?: string }>();
   readonly #childState = new Map<string, ChildState>();
   readonly #boundCalls = new Set<string>();
-  #serverUrl: string;
   readonly #registerChild: (childId: string, callID: string) => void;
   readonly #onRelease: () => void;
   readonly instanceId: string;
@@ -1125,7 +1139,6 @@ export class OpencodeSession implements HarnessSession {
     directory: string,
     model: string | undefined,
     permissionMode: string | undefined,
-    serverUrl: string,
     registerChild: (childId: string, callID: string) => void,
     onRelease: () => void,
     isConfigGateHeld: () => boolean,
@@ -1141,7 +1154,6 @@ export class OpencodeSession implements HarnessSession {
     this.#model = model;
     this.#effort = effort;
     this.#permissionMode = permissionMode;
-    this.#serverUrl = serverUrl;
     this.#registerChild = registerChild;
     this.#onRelease = onRelease;
     this.#isConfigGateHeld = isConfigGateHeld;
@@ -1158,14 +1170,12 @@ export class OpencodeSession implements HarnessSession {
   }
 
   /**
-   * Rebind this session to a new server after a process restart.
-   * Called by the harness when the opencode server is SIGTERM'd and
-   * respawned — the session retains its id/history but needs the new
-   * client and server URL.
+   * Rebind this session to a new server after the old one went away — a
+   * config restart, or a crash the harness respawned it from. The session
+   * keeps its id and history; only the client changes.
    */
-  rebindClient(client: OpencodeClient, serverUrl: string): void {
+  rebindClient(client: OpencodeClient): void {
     this.#client = client;
-    this.#serverUrl = serverUrl;
   }
 
   /** Routes one opencode event into neutral frames for this session. */
@@ -1320,46 +1330,13 @@ export class OpencodeSession implements HarnessSession {
         }
         break;
       }
-      case "permission.updated": {
-        if (sid !== this.sessionId) {
-          return;
-        }
-        const permission = event.properties as Permission;
-        const input = (permission.metadata ?? {}) as Record<string, unknown>;
-        const kind = permission.type === "question" ? "question" : "tool";
-        // opencode's permission system publishes events and never consults a
-        // plugin, so the daemon is where a session's mode is enforced.
-        if (
-          autoAllows(this.#permissionMode, kind) ||
-          (this.#permissionMode === "acceptEdits" && permission.type === "edit")
-        ) {
-          this.#replyPermission(permission.id, "once");
-          break;
-        }
-        this.#ctx.permission({
-          requestId: permission.id,
-          toolName:
-            permission.type === "question"
-              ? "AskUserQuestion"
-              : permission.type,
-          input:
-            kind === "question"
-              ? { questions: input.questions ?? [input] }
-              : input,
-          requestKind: kind,
-        });
-        break;
-      }
       case "permission.asked": {
         if (sid !== this.sessionId) {
           return;
         }
-        const asked = event.properties as unknown as {
-          id: string;
-          sessionID: string;
-          permission: string;
-          metadata?: Record<string, unknown>;
-        };
+        const asked = event.properties as unknown as PermissionRequest;
+        // opencode's permission system publishes events and never consults a
+        // plugin, so the daemon is where a session's mode is enforced.
         if (
           autoAllows(this.#permissionMode, "tool") ||
           (this.#permissionMode === "acceptEdits" &&
@@ -2089,13 +2066,17 @@ export class OpencodeSession implements HarnessSession {
       return;
     }
     try {
-      const result = await this.#client.session.status({
-        query: { directory: this.#directory },
-        signal: AbortSignal.any([
-          this.#lifetime.signal,
-          AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
-        ]),
-      });
+      const result = await reached(
+        this.#client.session.status(
+          { directory: this.#directory },
+          {
+            signal: AbortSignal.any([
+              this.#lifetime.signal,
+              AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
+            ]),
+          }
+        )
+      );
       if (this.#lifetime.signal.aborted) {
         return;
       }
@@ -2131,15 +2112,16 @@ export class OpencodeSession implements HarnessSession {
    * message already there is one it will not count as new.
    */
   async #resumeReads(): Promise<void> {
-    const listed = await this.#client.session.messages({
+    const listed = await this.#client.session.messages(
       // biome-ignore lint/style/noNonNullAssertion: invariant: watchResumedTurn returns before this when sessionId is null
-      path: { id: this.sessionId! },
-      query: { directory: this.#directory },
-      signal: AbortSignal.any([
-        this.#lifetime.signal,
-        AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
-      ]),
-    });
+      { sessionID: this.sessionId!, directory: this.#directory },
+      {
+        signal: AbortSignal.any([
+          this.#lifetime.signal,
+          AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
+        ]),
+      }
+    );
     if (listed.error || !listed.data) {
       throw new Error(
         `could not list the messages of resumed session ${this.sessionId}: ${errorText(listed.error)}`
@@ -2178,22 +2160,22 @@ export class OpencodeSession implements HarnessSession {
           for (let attempt = 0; attempt < 3; attempt += 1) {
             try {
               console.info(`[opencode] ${this.instanceId}: ${path} snapshot`);
-              // biome-ignore lint/performance/noAwaitInLoops: bounded retry of this endpoint, independently of the other gate endpoint
-              const response = await fetch(
-                `${this.#serverUrl}/${path}?directory=${encodeURIComponent(this.#directory)}`,
-                {
-                  signal: AbortSignal.any([
-                    this.#lifetime.signal,
-                    AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
-                  ]),
-                }
-              );
-              if (!response.ok) {
-                throw new Error(`HTTP ${response.status}`);
+              const options = {
+                signal: AbortSignal.any([
+                  this.#lifetime.signal,
+                  AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
+                ]),
+              };
+              const query = { directory: this.#directory };
+              const listed =
+                path === "permission"
+                  ? // biome-ignore lint/performance/noAwaitInLoops: bounded retry of this endpoint, independently of the other gate endpoint
+                    await this.#client.permission.list(query, options)
+                  : await this.#client.question.list(query, options);
+              if (listed.error || !listed.data) {
+                throw new Error(errorText(listed.error));
               }
-              const pending = (await response.json()) as {
-                sessionID: string;
-              }[];
+              const pending: { sessionID: string }[] = listed.data;
               if (this.#lifetime.signal.aborted) {
                 return;
               }
@@ -2337,8 +2319,8 @@ export class OpencodeSession implements HarnessSession {
       void this.#client.session
         .abort({
           // biome-ignore lint/style/noNonNullAssertion: invariant: sessionId is set once in the constructor and never nulled; the interface types it nullable for other harnesses
-          path: { id: this.sessionId! },
-          query: { directory: this.#directory },
+          sessionID: this.sessionId!,
+          directory: this.#directory,
         })
         // biome-ignore lint/suspicious/noEmptyBlockStatements: the abort's own failure is not actionable; the prompt below runs regardless
         .catch(() => {})
@@ -2379,43 +2361,42 @@ export class OpencodeSession implements HarnessSession {
     this.#turnOpen = true;
     this.#noteServerActivity();
     // biome-ignore lint/complexity/noVoid: fire-and-forget: #prompt itself is not awaited by its callers
-    void this.#client.session
-      .promptAsync({
+    void reached(
+      this.#client.session.promptAsync({
         // biome-ignore lint/style/noNonNullAssertion: invariant: sessionId is set once in the constructor and never nulled; the interface types it nullable for other harnesses
-        path: { id: this.sessionId! },
-        query: { directory: this.#directory },
-        body: {
-          messageID,
-          parts: parts as never,
-          tools: {
-            whiffle_submit_result: !!this.#workflowStepId,
-            whiffle_workflow_state_read: !!this.#workflowStepId,
-            whiffle_workflow_state_write: !!this.#workflowStepId,
-            ...Object.fromEntries(
-              [
-                "start_session",
-                "continue_session",
-                "delegate",
-                "stop_delegate",
-                "interrupt_delegate",
-                "answer_delegate",
-                "set_item_checks",
-                "run_workflow",
-                "steer_workflow",
-                "list_workflows",
-              ].map((name) => [`whiffle_${name}`, this.#canDelegate !== false])
-            ),
-          },
-          ...(this.#effort ? { variant: this.#effort } : {}),
-          // A bare model id (no provider) is left to opencode's default; never send `providerID: ''`.
-          ...(model?.providerID && model.modelID
-            ? {
-                model: { providerID: model.providerID, modelID: model.modelID },
-              }
-            : {}),
-          ...(this.#permissionMode === "plan" ? { agent: "plan" } : {}),
+        sessionID: this.sessionId!,
+        directory: this.#directory,
+        messageID,
+        parts: parts as never,
+        tools: {
+          whiffle_submit_result: !!this.#workflowStepId,
+          whiffle_workflow_state_read: !!this.#workflowStepId,
+          whiffle_workflow_state_write: !!this.#workflowStepId,
+          ...Object.fromEntries(
+            [
+              "start_session",
+              "continue_session",
+              "delegate",
+              "stop_delegate",
+              "interrupt_delegate",
+              "answer_delegate",
+              "set_item_checks",
+              "run_workflow",
+              "steer_workflow",
+              "list_workflows",
+            ].map((name) => [`whiffle_${name}`, this.#canDelegate !== false])
+          ),
         },
+        ...(this.#effort ? { variant: this.#effort } : {}),
+        // A bare model id (no provider) is left to opencode's default; never send `providerID: ''`.
+        ...(model?.providerID && model.modelID
+          ? {
+              model: { providerID: model.providerID, modelID: model.modelID },
+            }
+          : {}),
+        ...(this.#permissionMode === "plan" ? { agent: "plan" } : {}),
       })
+    )
       .then((res) => {
         if (res.error) {
           this.#ctx.rejected(uuid, new Error(errorText(res.error)));
@@ -2423,9 +2404,10 @@ export class OpencodeSession implements HarnessSession {
         }
       })
       .catch((error: unknown) => {
-        // A rejected prompt never opens a turn server-side, so no pump event
-        // will ever settle it: say so and leave busy clear here, or the
-        // session strands busy with every later message queuing behind nothing.
+        // A prompt that never reached the server never opens a turn there, so
+        // no pump event will ever settle it: say so and leave busy clear here,
+        // or the session strands busy with every later message queuing behind
+        // nothing.
         this.#turnOpen = false;
         this.#clearStallTimer();
         this.#busy = false;
@@ -2485,16 +2467,16 @@ export class OpencodeSession implements HarnessSession {
   /** The command names this session can answer, fetched once and cached. */
   #commandNamesOf(): Promise<Set<string>> {
     if (!this.#commandNames) {
-      this.#commandNames = this.#client.command
-        .list({ query: { directory: this.#directory } })
-        .then(
-          (res) =>
-            new Set(
-              (res.error ? [] : (res.data as Command[])).map(
-                (command) => command.name
-              )
+      this.#commandNames = reached(
+        this.#client.command.list({ directory: this.#directory })
+      ).then(
+        (res) =>
+          new Set(
+            (res.error ? [] : (res.data as Command[])).map(
+              (command) => command.name
             )
-        );
+          )
+      );
     }
     return this.#commandNames;
   }
@@ -2518,16 +2500,14 @@ export class OpencodeSession implements HarnessSession {
     void this.#client.session
       .command({
         // biome-ignore lint/style/noNonNullAssertion: invariant: sessionId is set once in the constructor and never nulled; the interface types it nullable for other harnesses
-        path: { id: this.sessionId! },
-        query: { directory: this.#directory },
-        body: {
-          messageID,
-          command: name,
-          arguments: args,
-          ...(this.#effort ? { variant: this.#effort } : {}),
-          ...(this.#model ? { model: this.#model } : {}),
-          ...(this.#permissionMode === "plan" ? { agent: "plan" } : {}),
-        },
+        sessionID: this.sessionId!,
+        directory: this.#directory,
+        messageID,
+        command: name,
+        arguments: args,
+        ...(this.#effort ? { variant: this.#effort } : {}),
+        ...(this.#model ? { model: this.#model } : {}),
+        ...(this.#permissionMode === "plan" ? { agent: "plan" } : {}),
       })
       .then((res) => {
         if (res.error) {
@@ -2563,9 +2543,9 @@ export class OpencodeSession implements HarnessSession {
 
   /** The server's command list as neutral commands, tagged with what opencode says each one is. */
   async #commands(): Promise<SlashCommand[]> {
-    const result = await this.#client.command.list({
-      query: { directory: this.#directory },
-    });
+    const result = await reached(
+      this.#client.command.list({ directory: this.#directory })
+    );
     if (result.error) {
       return [];
     }
@@ -2591,11 +2571,7 @@ export class OpencodeSession implements HarnessSession {
     }
     switch (method) {
       case CONTROL_INTERRUPT:
-        await this.#client.session.abort({
-          // biome-ignore lint/style/noNonNullAssertion: invariant: sessionId is set once in the constructor and never nulled; the interface types it nullable for other harnesses
-          path: { id: this.sessionId! },
-          query: { directory: this.#directory },
-        });
+        await this.interrupt();
         return undefined;
       case CONTROL_SET_MODEL:
         this.#model = args[0] as string;
@@ -2654,9 +2630,9 @@ export class OpencodeSession implements HarnessSession {
           ),
         };
       case CONTROL_MCP_STATUS: {
-        const result = await this.#client.mcp.status({
-          query: { directory: this.#directory },
-        });
+        const result = await reached(
+          this.#client.mcp.status({ directory: this.#directory })
+        );
         if (result.error) {
           return [];
         }
@@ -2669,25 +2645,22 @@ export class OpencodeSession implements HarnessSession {
         );
       }
       case CONTROL_MCP_RECONNECT:
-        await this.#client.mcp.connect({
-          path: { name: args[0] as string },
-          query: { directory: this.#directory },
-        });
+        await reached(
+          this.#client.mcp.connect({
+            name: args[0] as string,
+            directory: this.#directory,
+          })
+        );
         return undefined;
       case CONTROL_MCP_TOGGLE: {
         const name = args[0] as string;
         const enabled = args[1] as boolean;
-        if (enabled) {
-          await this.#client.mcp.connect({
-            path: { name },
-            query: { directory: this.#directory },
-          });
-        } else {
-          await this.#client.mcp.disconnect({
-            path: { name },
-            query: { directory: this.#directory },
-          });
-        }
+        const target = { name, directory: this.#directory };
+        await reached(
+          enabled
+            ? this.#client.mcp.connect(target)
+            : this.#client.mcp.disconnect(target)
+        );
         return undefined;
       }
       default:
@@ -2761,69 +2734,68 @@ export class OpencodeSession implements HarnessSession {
     this.#resolvedGates.add(requestId);
     this.#ctx.permissionResolved?.(requestId);
     // biome-ignore lint/complexity/noVoid: fire-and-forget: #replyPermission itself is not awaited by its callers
-    void this.#client
-      .postSessionIdPermissionsPermissionId({
-        // biome-ignore lint/style/noNonNullAssertion: invariant: sessionId is set once in the constructor and never nulled; the interface types it nullable for other harnesses
-        path: { id: this.sessionId!, permissionID: requestId },
-        query: { directory: this.#directory },
-        body: { response },
-        signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
-      })
-      .catch((error: unknown) =>
-        console.warn(`[opencode] permission reply failed: ${String(error)}`)
-      );
+    void reached(
+      this.#client.permission.reply(
+        { requestID: requestId, directory: this.#directory, reply: response },
+        { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+      )
+    ).catch((error: unknown) =>
+      console.warn(`[opencode] permission reply failed: ${String(error)}`)
+    );
   }
 
   #replyQuestion(id: string, answers: string[][]): Promise<void> {
     return (
-      fetch(
-        `${this.#serverUrl}/question/${id}/reply?directory=${encodeURIComponent(this.#directory)}`,
-        {
-          method: "POST",
-          signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({ answers }),
-        }
+      reached(
+        this.#client.question.reply(
+          { requestID: id, directory: this.#directory, answers },
+          { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+        )
       )
         .then((res) => {
-          if (!res.ok) {
+          if (res.error) {
             this.#ctx.failed(
-              new Error(`opencode question reply failed: ${res.status}`)
+              new Error(
+                `opencode question reply failed: ${errorText(res.error)}`
+              )
             );
           }
         })
-        // biome-ignore lint/suspicious/noEmptyBlockStatements: the fetch's own network failure already left #ctx.failed uncalled; nothing further to report here
+        // biome-ignore lint/suspicious/noEmptyBlockStatements: a request that never reached the server is not the session's failure; nothing further to report here
         .catch(() => {})
     );
   }
 
   #rejectQuestion(id: string): Promise<void> {
     return (
-      fetch(
-        `${this.#serverUrl}/question/${id}/reject?directory=${encodeURIComponent(this.#directory)}`,
-        {
-          method: "POST",
-          signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
-        }
+      reached(
+        this.#client.question.reject(
+          { requestID: id, directory: this.#directory },
+          { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+        )
       )
         .then((res) => {
-          if (!res.ok) {
+          if (res.error) {
             this.#ctx.failed(
-              new Error(`opencode question reject failed: ${res.status}`)
+              new Error(
+                `opencode question reject failed: ${errorText(res.error)}`
+              )
             );
           }
         })
-        // biome-ignore lint/suspicious/noEmptyBlockStatements: the fetch's own network failure already left #ctx.failed uncalled; nothing further to report here
+        // biome-ignore lint/suspicious/noEmptyBlockStatements: a request that never reached the server is not the session's failure; nothing further to report here
         .catch(() => {})
     );
   }
 
   async interrupt(): Promise<void> {
-    await this.#client.session.abort({
-      // biome-ignore lint/style/noNonNullAssertion: invariant: sessionId is set once in the constructor and never nulled; the interface types it nullable for other harnesses
-      path: { id: this.sessionId! },
-      query: { directory: this.#directory },
-    });
+    await reached(
+      this.#client.session.abort({
+        // biome-ignore lint/style/noNonNullAssertion: invariant: sessionId is set once in the constructor and never nulled; the interface types it nullable for other harnesses
+        sessionID: this.sessionId!,
+        directory: this.#directory,
+      })
+    );
   }
 
   async stop(): Promise<void> {
@@ -2834,8 +2806,8 @@ export class OpencodeSession implements HarnessSession {
     await this.#client.session
       .abort({
         // biome-ignore lint/style/noNonNullAssertion: invariant: sessionId is set once in the constructor and never nulled; the interface types it nullable for other harnesses
-        path: { id: this.sessionId! },
-        query: { directory: this.#directory },
+        sessionID: this.sessionId!,
+        directory: this.#directory,
       })
       // biome-ignore lint/suspicious/noEmptyBlockStatements: stop() is tearing down regardless; the abort's own failure is not actionable
       .catch(() => {});
@@ -2854,8 +2826,6 @@ export class OpencodeHarness implements Harness {
   auth: import("@whiffle/core").AuthState = "authenticated";
 
   #client: OpencodeClient | null = null;
-  /** The URL the sessiond-held server announced; the sessions' `fetch` base. */
-  #serverUrl: string | null = null;
   #sessiond: Promise<SessiondClient> | undefined;
   #ready: Promise<OpencodeClient> | null = null;
   // Keyed by instanceId, not opencode's own session id: a resume reuses the
@@ -2915,9 +2885,9 @@ export class OpencodeHarness implements Harness {
    * server's own words: `/path` reports the global config directory it loaded.
    */
   async #readsThisConfig(client: OpencodeClient): Promise<boolean> {
-    const paths = await client.path.get({
-      signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
-    });
+    const paths = await reached(
+      client.path.get({}, { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) })
+    );
     const reads = (paths.data as { config?: string } | undefined)?.config;
     if (reads === OPENCODE_DIR) {
       return true;
@@ -3079,8 +3049,7 @@ export class OpencodeHarness implements Harness {
     try {
       const answers = await Promise.all(
         [undefined, ...dirs].map((directory) =>
-          client.session.status({
-            ...(directory ? { query: { directory } } : {}),
+          client.session.status(directory ? { directory } : {}, {
             signal: AbortSignal.timeout(5000),
           })
         )
@@ -3238,7 +3207,6 @@ export class OpencodeHarness implements Harness {
       // 5. Clear old client state.
       this.#client = null;
       this.#ready = null;
-      this.#serverUrl = null;
 
       // 6. Respawn via the existing attach helper. This reads global config
       //    at startup — the whole point of a process restart.
@@ -3251,33 +3219,13 @@ export class OpencodeHarness implements Harness {
           env: { OPENCODE_CONFIG_CONTENT: JSON.stringify(config) },
         },
       });
-      this.#serverUrl = newUrl;
-      const newClient = createOpencodeClient({
-        baseUrl: newUrl,
-        fetch: async (request) => {
-          try {
-            return await fetch(request);
-          } catch (error) {
-            if (this.#client === newClient) {
-              this.#client = null;
-              this.#ready = null;
-              this.#serverUrl = null;
-            }
-            throw error;
-          }
-        },
-      });
-      this.#client = newClient;
-
-      // 7. Rebind retained sessions to the new client + server URL.
-      for (const session of this.#sessions.values()) {
-        session.rebindClient(newClient, newUrl);
-      }
+      // 7. The new client, with every retained session rebound to it.
+      const newClient = this.#adopt(newUrl);
 
       // 8. Reconnect SSE pumps for all active directories.
       for (const dir of dirs) {
         // biome-ignore lint/complexity/noVoid: fire-and-forget pump restart
-        void this.#ensurePump(newClient, dir).catch(console.warn);
+        void this.#ensurePump(dir).catch(console.warn);
       }
 
       // 9. Verify: runtime config matches desired.
@@ -3373,9 +3321,10 @@ export class OpencodeHarness implements Harness {
 
     // ---- 2. Runtime leaf comparison ----------------------------------------
     const desiredRaw = await readJson<Record<string, unknown>>(OPENCODE_CONFIG);
-    const liveResult = await client.config.get({
-      signal: AbortSignal.timeout(10_000),
-    });
+    const liveResult = await client.config.get(
+      {},
+      { signal: AbortSignal.timeout(10_000) }
+    );
     if (!liveResult.data) {
       throw new Error(
         "config verification failed: config.get() returned no data"
@@ -3435,9 +3384,9 @@ export class OpencodeHarness implements Harness {
         ? Object.keys(desiredRaw.mcp as Record<string, unknown>)
         : []
     );
-    const mcpStatus = await client.mcp.status({
-      signal: AbortSignal.timeout(10_000),
-    });
+    const mcpStatus = await reached(
+      client.mcp.status({}, { signal: AbortSignal.timeout(10_000) })
+    );
     if (mcpStatus.data) {
       const statuses = mcpStatus.data as Record<string, { status: string }>;
       const statusMap = Object.fromEntries(
@@ -3535,6 +3484,52 @@ export class OpencodeHarness implements Harness {
     return this.#sessiond;
   }
 
+  /**
+   * Makes the server at `url` the one this adapter talks to: one client for
+   * it, cached, with every retained session moved onto it — a server that
+   * replaced a restarted or dead one serves the same stored sessions. Every
+   * request the SDK makes goes through the client's fetch, the event
+   * subscriptions included.
+   *
+   * A connection failure there means the server this client was built for is
+   * gone — crashed, OOM-killed, or stopped out from under sessiond — and
+   * nothing else ever notices: `#ensure()` returns `#client` straight from
+   * cache, so every later call kept re-throwing the same dead connection
+   * forever (the live symptom: `listSessions on opencode failed: TypeError:
+   * Unable to connect`, repeating with no recovery). This fetch is the one
+   * place that sees the raw failure, so it is the one place that clears the
+   * cache — the NEXT call then goes through `attachOpencodeServer` again,
+   * which finds the proc dead via sessiond and respawns it. An abort this
+   * process asked for (a request's own timeout, a subscription it ended) is
+   * not the server going away, and leaves the client as it is.
+   */
+  #adopt(url: string): OpencodeClient {
+    const dropWhenGone = async (
+      input: RequestInfo | URL,
+      init?: RequestInit
+    ): Promise<Response> => {
+      try {
+        return await fetch(input, init);
+      } catch (error) {
+        const signal = input instanceof Request ? input.signal : init?.signal;
+        if (!signal?.aborted && this.#client === client) {
+          this.#client = null;
+          this.#ready = null;
+        }
+        throw error;
+      }
+    };
+    const client = createOpencodeClient({
+      baseUrl: url,
+      fetch: Object.assign(dropWhenGone, { preconnect: fetch.preconnect }),
+    });
+    this.#client = client;
+    for (const session of this.#sessions.values()) {
+      session.rebindClient(client);
+    }
+    return client;
+  }
+
   #ensure(): Promise<OpencodeClient> {
     if (this.#client) {
       return Promise.resolve(this.#client);
@@ -3572,33 +3567,7 @@ export class OpencodeHarness implements Harness {
             env: { OPENCODE_CONFIG_CONTENT: JSON.stringify(config) },
           },
         });
-        this.#serverUrl = url;
-        // A connection failure here means the server this client was built for
-        // is gone — crashed, OOM-killed, or stopped out from under sessiond —
-        // and nothing else ever notices: `#ensure()` above returns `#client`
-        // straight from cache, so every later call kept re-throwing the same
-        // dead connection forever (the live symptom: `listSessions on opencode
-        // failed: TypeError: Unable to connect`, repeating with no recovery).
-        // This is the one place that sees the raw fetch failure, so it is the
-        // one place that can clear the cache — the NEXT call then goes through
-        // `attachOpencodeServer` again, which finds the proc dead via sessiond
-        // and respawns it, instead of repeating this exact failure forever.
-        const client = createOpencodeClient({
-          baseUrl: url,
-          fetch: async (request) => {
-            try {
-              return await fetch(request);
-            } catch (error) {
-              if (this.#client === client) {
-                this.#client = null;
-                this.#ready = null;
-                this.#serverUrl = null;
-              }
-              throw error;
-            }
-          },
-        });
-        this.#client = client;
+        const client = this.#adopt(url);
 
         // Convergence keeps the server matching the machine's global config;
         // that is the machine agent's to do. Another agent's server runs on
@@ -3708,7 +3677,7 @@ export class OpencodeHarness implements Harness {
   #bridgePlugin: string | undefined;
 
   /** Starts the directory-scoped subscription for a directory, once per unique cwd. */
-  #ensurePump(client: OpencodeClient, directory: string): Promise<void> {
+  #ensurePump(directory: string): Promise<void> {
     // biome-ignore lint/suspicious/noUnnecessaryConditions: #disposed is set true by dispose(), a different method biome's per-method inference doesn't see
     if (this.#disposed) {
       return Promise.reject(new Error("OpenCode adapter disposed"));
@@ -3717,9 +3686,7 @@ export class OpencodeHarness implements Harness {
       const owner = new AbortController();
       this.#pumps.set(directory, owner);
       // biome-ignore lint/complexity/noVoid: the pump owns reconnection; callers await only readiness
-      void this.#pumpDirectory(client, directory, owner.signal).catch(
-        console.warn
-      );
+      void this.#pumpDirectory(directory, owner.signal).catch(console.warn);
     }
     // biome-ignore lint/style/noNonNullAssertion: pumpDirectory installs readiness before its first await
     return this.#pumpReady.get(directory)!;
@@ -3736,11 +3703,7 @@ export class OpencodeHarness implements Harness {
   }
 
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: routes every subscribed event to its owning session or child; not refactored in this pass
-  async #pumpDirectory(
-    client: OpencodeClient,
-    directory: string,
-    stopped: AbortSignal
-  ): Promise<void> {
+  async #pumpDirectory(directory: string, stopped: AbortSignal): Promise<void> {
     let delay = 1000;
     while (!stopped.aborted) {
       const ready = Promise.withResolvers<void>();
@@ -3756,12 +3719,19 @@ export class OpencodeHarness implements Harness {
       );
       let connected = false;
       try {
+        // Each connection is made on the adapter's current client. A server
+        // that died fails this subscription's fetch, the client's fetch drops
+        // it (see #connect), and the next attempt's #ensure attaches — and
+        // if need be respawns — the server that replaces it.
         // biome-ignore lint/performance/noAwaitInLoops: reconnects the SSE stream after a drop; must retry sequentially with backoff
-        const { stream } = await client.event.subscribe({
-          query: { directory },
-          signal: AbortSignal.any([stopped, connection.signal]),
-          sseMaxRetryAttempts: 1,
-        });
+        const client = await this.#ensure();
+        const { stream } = await client.event.subscribe(
+          { directory },
+          {
+            signal: AbortSignal.any([stopped, connection.signal]),
+            sseMaxRetryAttempts: 1,
+          }
+        );
         for await (const event of stream) {
           // A stopped loop routes nothing more, even what was already read.
           if (stopped.aborted) {
@@ -3922,10 +3892,10 @@ export class OpencodeHarness implements Harness {
     if (!client) {
       return false;
     }
-    const status = await client.session.status({
-      query: { directory: dir },
-      signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
-    });
+    const status = await client.session.status(
+      { directory: dir },
+      { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+    );
     if (status.error || !status.data) {
       throw new Error(`Could not read OpenCode session status in ${dir}`);
     }
@@ -3933,18 +3903,17 @@ export class OpencodeHarness implements Harness {
     if (state !== "busy" && state !== "retry") {
       return false;
     }
-    const aborted = await client.session.abort({
-      path: { id: sessionKey },
-      query: { directory: dir },
-      signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
-    });
+    const aborted = await client.session.abort(
+      { sessionID: sessionKey, directory: dir },
+      { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+    );
     if (aborted.error || aborted.data !== true) {
       throw new Error(`Could not abort OpenCode session ${sessionKey}`);
     }
-    const after = await client.session.status({
-      query: { directory: dir },
-      signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
-    });
+    const after = await client.session.status(
+      { directory: dir },
+      { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+    );
     if (after.error || !after.data) {
       throw new Error(
         `Could not verify OpenCode session ${sessionKey} stopped`
@@ -3988,11 +3957,10 @@ export class OpencodeHarness implements Harness {
         if (!(held && spec.resume && server)) {
           return;
         }
-        const session = await server.session.get({
-          path: { id: spec.resume.sessionKey },
-          query: { directory: ctx.cwd },
-          signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
-        });
+        const session = await server.session.get(
+          { sessionID: spec.resume.sessionKey, directory: ctx.cwd },
+          { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+        );
         if (session.response?.status === 404) {
           return;
         }
@@ -4002,10 +3970,10 @@ export class OpencodeHarness implements Harness {
           );
         }
         if (spec.reattachOnly === "busy" || spec.reattachOnly === "inspect") {
-          const status = await server.session.status({
-            query: { directory: ctx.cwd },
-            signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
-          });
+          const status = await server.session.status(
+            { directory: ctx.cwd },
+            { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+          );
           if (status.error) {
             throw new Error(
               `Could not read OpenCode session status in ${ctx.cwd}`
@@ -4061,10 +4029,10 @@ export class OpencodeHarness implements Harness {
     ctx: HarnessContext
   ): Promise<HarnessSession> {
     const client = await this.#ensure();
-    const mcp = await client.mcp.status({
-      query: { directory: ctx.cwd },
-      signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
-    });
+    const mcp = await client.mcp.status(
+      { directory: ctx.cwd },
+      { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+    );
     if (mcp.error) {
       throw new Error(
         `Could not read OpenCode MCP status: ${errorText(mcp.error)}`
@@ -4076,14 +4044,10 @@ export class OpencodeHarness implements Harness {
       mcp.data?.whiffle?.status !== "connected" ||
       !(await isMachineAgent())
     ) {
-      const connected = await client.mcp.add({
-        signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
-        query: { directory: ctx.cwd },
-        body: {
-          name: "whiffle",
-          config: whiffleMcp(),
-        },
-      });
+      const connected = await client.mcp.add(
+        { directory: ctx.cwd, name: "whiffle", config: whiffleMcp() },
+        { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+      );
       if (connected.error || connected.data?.whiffle?.status !== "connected") {
         throw new Error(
           `Could not connect Whiffle MCP: ${errorText(connected.error ?? connected.data?.whiffle)}`
@@ -4094,12 +4058,16 @@ export class OpencodeHarness implements Harness {
 
     if (spec.resume?.fork) {
       assertOpencodeKey(spec.resume.sessionKey, "fork");
-      const fork = await client.session.fork({
-        signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
-        path: { id: spec.resume.sessionKey },
-        query: { directory: ctx.cwd },
-        body: spec.resume.atMessage ? { messageID: spec.resume.atMessage } : {},
-      });
+      const fork = await client.session.fork(
+        {
+          sessionID: spec.resume.sessionKey,
+          directory: ctx.cwd,
+          ...(spec.resume.atMessage
+            ? { messageID: spec.resume.atMessage }
+            : {}),
+        },
+        { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+      );
       if (fork.error || !fork.data) {
         throw new Error("opencode could not fork the session");
       }
@@ -4112,11 +4080,10 @@ export class OpencodeHarness implements Harness {
       // fails, plus an init frame that cements the bogus key into the hub row
       // (noteInstanceSession trusts it), poisoning the session permanently.
       assertOpencodeKey(spec.resume.sessionKey, "resume");
-      const held = await client.session.get({
-        signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
-        path: { id: spec.resume.sessionKey },
-        query: { directory: ctx.cwd },
-      });
+      const held = await client.session.get(
+        { sessionID: spec.resume.sessionKey, directory: ctx.cwd },
+        { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+      );
       if (held.error || !held.data) {
         throw new Error(
           `opencode has no session ${spec.resume.sessionKey} to resume in ${ctx.cwd}`
@@ -4125,21 +4092,23 @@ export class OpencodeHarness implements Harness {
       sessionId = spec.resume.sessionKey;
       if (spec.resume.atMessage) {
         assertOpencodeKey(spec.resume.sessionKey, "revert");
-        const reverted = await client.session.revert({
-          signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
-          path: { id: spec.resume.sessionKey },
-          query: { directory: ctx.cwd },
-          body: { messageID: spec.resume.atMessage },
-        });
+        const reverted = await client.session.revert(
+          {
+            sessionID: spec.resume.sessionKey,
+            directory: ctx.cwd,
+            messageID: spec.resume.atMessage,
+          },
+          { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+        );
         if (reverted.error) {
           throw new Error("opencode could not rewind to that message");
         }
       }
     } else {
-      const created = await client.session.create({
-        signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
-        query: { directory: ctx.cwd },
-      });
+      const created = await client.session.create(
+        { directory: ctx.cwd },
+        { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+      );
       if (created.error || !created.data) {
         throw new Error("opencode could not create the session");
       }
@@ -4155,8 +4124,6 @@ export class OpencodeHarness implements Harness {
       ctx.cwd,
       spec.model,
       spec.permissionMode,
-      // biome-ignore lint/style/noNonNullAssertion: invariant: #ensure() above resolves only once attachOpencodeServer has set #serverUrl
-      this.#serverUrl!,
       (childId, callID) =>
         this.#children.set(childId, { parent: session, callID }),
       () => {
@@ -4212,7 +4179,7 @@ export class OpencodeHarness implements Harness {
       // subscription is already up reconciles here. Both checks run without
       // an await between them and the connection's, so exactly one fires.
       // biome-ignore lint/complexity/noVoid: attached handles remain operable while the subscription starts
-      void this.#ensurePump(client, ctx.cwd).catch((error: unknown) =>
+      void this.#ensurePump(ctx.cwd).catch((error: unknown) =>
         console.warn(String(error))
       );
       if (this.#pumpConnected.has(ctx.cwd)) {
@@ -4226,17 +4193,19 @@ export class OpencodeHarness implements Harness {
     if (spec.skills?.length) {
       for (const skill of spec.skills) {
         // biome-ignore lint/performance/noAwaitInLoops: skills must load in order, before the first prompt
-        await client.session.command({
-          signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
-          path: { id: sessionId },
-          query: { directory: ctx.cwd },
-          body: {
-            command: skill,
-            arguments: "",
-            ...(spec.model ? { model: spec.model } : {}),
-            ...(spec.effort ? { variant: spec.effort } : {}),
-          },
-        });
+        await reached(
+          client.session.command(
+            {
+              sessionID: sessionId,
+              directory: ctx.cwd,
+              command: skill,
+              arguments: "",
+              ...(spec.model ? { model: spec.model } : {}),
+              ...(spec.effort ? { variant: spec.effort } : {}),
+            },
+            { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+          )
+        );
       }
     }
 
@@ -4251,10 +4220,12 @@ export class OpencodeHarness implements Harness {
     const tags = await readTags();
 
     if (dir) {
-      const result = await client.session.list({
-        query: { directory: dir },
-        signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
-      });
+      const result = await reached(
+        client.session.list(
+          { directory: dir },
+          { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+        )
+      );
       if (result.error || !result.data) {
         return [];
       }
@@ -4271,23 +4242,26 @@ export class OpencodeHarness implements Harness {
     // verified live at 1.18.19, where `?directory=/` answers []. The unscoped
     // list covers those; the per-worktree queries stay so an opencode whose
     // unscoped list is project-scoped still reports the whole machine.
-    const projects = await client.project.list({
-      signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
-    });
+    const projects = await reached(
+      client.project.list(
+        {},
+        { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+      )
+    );
     if (projects.error || !projects.data) {
       return [];
     }
     const lists = await Promise.all([
       client.session
-        .list({ signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) })
+        .list({}, { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) })
         .then((res) => (res.error || !res.data ? [] : (res.data as Session[])))
         .catch(() => [] as Session[]),
       ...(projects.data as Project[]).map((project) =>
         client.session
-          .list({
-            query: { directory: project.worktree },
-            signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
-          })
+          .list(
+            { directory: project.worktree },
+            { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+          )
           .then((res) =>
             res.error || !res.data ? [] : (res.data as Session[])
           )
@@ -4321,10 +4295,9 @@ export class OpencodeHarness implements Harness {
       return undefined;
     }
     const client = await this.#ensure();
-    const result = await client.session.get({
-      path: { id: sessionKey },
-      query: { directory: dir },
-    });
+    const result = await reached(
+      client.session.get({ sessionID: sessionKey, directory: dir })
+    );
     if (result.error || !result.data) {
       return undefined;
     }
@@ -4342,10 +4315,9 @@ export class OpencodeHarness implements Harness {
     }
     assertOpencodeKey(sessionKey, "getSessionMessages");
     const client = await this.#ensure();
-    const result = await client.session.messages({
-      path: { id: sessionKey },
-      query: { directory: dir },
-    });
+    const result = await reached(
+      client.session.messages({ sessionID: sessionKey, directory: dir })
+    );
     if (result.error || !result.data) {
       return [];
     }
@@ -4353,10 +4325,9 @@ export class OpencodeHarness implements Harness {
 
     // opencode keeps the full history even after a rewind; reflect the session's
     // `revert` point by dropping it and everything after.
-    const sessionRes = await client.session.get({
-      path: { id: sessionKey },
-      query: { directory: dir },
-    });
+    const sessionRes = await reached(
+      client.session.get({ sessionID: sessionKey, directory: dir })
+    );
     const revertID = (sessionRes.data as Session).revert?.messageID;
     if (revertID) {
       const idx = rows.findIndex((row) => row.info.id === revertID);
@@ -4369,9 +4340,9 @@ export class OpencodeHarness implements Harness {
 
     // Subagents: children of this session, linked to their parent's task tool
     // call by the task ToolPart's `state.metadata.sessionId` (verified capture).
-    const childrenRes = await client.session.children({
-      path: { id: sessionKey },
-    });
+    const childrenRes = await reached(
+      client.session.children({ sessionID: sessionKey })
+    );
     if (childrenRes.error || !childrenRes.data) {
       return entries;
     }
@@ -4396,10 +4367,9 @@ export class OpencodeHarness implements Harness {
         continue;
       }
       // biome-ignore lint/performance/noAwaitInLoops: children are appended to the transcript in this order; parallel fetches would reorder subagents
-      const childRes = await client.session.messages({
-        path: { id: child.id },
-        query: { directory: dir },
-      });
+      const childRes = await reached(
+        client.session.messages({ sessionID: child.id, directory: dir })
+      );
       if (childRes.error || !childRes.data) {
         continue;
       }
@@ -4427,11 +4397,13 @@ export class OpencodeHarness implements Harness {
     assertOpencodeKey(sessionKey, "renameSession");
     return this.#ensure()
       .then((client) =>
-        client.session.update({
-          path: { id: sessionKey },
-          query: { directory: dir },
-          body: { title },
-        })
+        reached(
+          client.session.update({
+            sessionID: sessionKey,
+            directory: dir,
+            title,
+          })
+        )
       )
       .then(() => undefined);
   }
@@ -4452,10 +4424,9 @@ export class OpencodeHarness implements Harness {
     assertOpencodeKey(sessionKey, "deleteSession");
     return this.#ensure()
       .then((client) =>
-        client.session.delete({
-          path: { id: sessionKey },
-          query: { directory: dir },
-        })
+        reached(
+          client.session.delete({ sessionID: sessionKey, directory: dir })
+        )
       )
       .then(() => undefined);
   }
@@ -4467,17 +4438,23 @@ export class OpencodeHarness implements Harness {
       case CONTROL_GET_TODOS: {
         assertOpencodeKey(args[0] as string, CONTROL_GET_TODOS);
         const client = await this.#ensure();
-        const result = await client.session.todo({
-          path: { id: args[0] as string },
-          ...(args[1] ? { query: { directory: args[1] as string } } : {}),
-        });
+        const result = await reached(
+          client.session.todo({
+            sessionID: args[0] as string,
+            ...(args[1] ? { directory: args[1] as string } : {}),
+          })
+        );
         if (result.error || !result.data) {
           return [];
         }
+        // opencode's todos carry no id: the list is ordered and replaced
+        // whole on every write, so a todo's place in it is its identity,
+        // counted before the cancelled ones drop out.
         return (result.data as Todo[])
-          .filter((todo) => todo.status !== "cancelled")
-          .map((todo): import("@whiffle/core").NeutralTask => ({
-            id: todo.id,
+          .map((todo, index) => ({ todo, id: String(index + 1) }))
+          .filter(({ todo }) => todo.status !== "cancelled")
+          .map(({ todo, id }): import("@whiffle/core").NeutralTask => ({
+            id,
             subject: todo.content,
             status:
               todo.status === "in_progress" || todo.status === "completed"
@@ -4512,7 +4489,6 @@ export class OpencodeHarness implements Harness {
     void this.#sessiond?.then((client) => client.close()).catch(() => {});
     this.#sessiond = undefined;
     this.#client = null;
-    this.#serverUrl = null;
     this.#ready = null;
   }
 
