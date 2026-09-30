@@ -1774,11 +1774,11 @@
    *
    * The box is pinned in the resize itself. Its observer runs after the
    * frame's layout, before its paint, so the tail is put back in the frame
-   * the box changed: a switch hands the group's composer the arriving
-   * conversation's tray, the clearance under this transcript
-   * changes in the first frame of the glide, and that frame already shows
-   * the tail where it stays. Left to the next frame, the tail stood behind
-   * the new clearance for a frame and then jumped.
+   * the box changed. It is made when this transcript becomes the one being
+   * worked in, and an observer's first delivery comes in the next frame's
+   * layout: the frame a switch first draws this pane. So a tail that grew
+   * while the pane was off screen — skipped, never laid out — is pinned in
+   * the glide's first frame, not a frame behind it (`land`'s own frame).
    */
   $effect(() => {
     const node = scroller;
@@ -2063,12 +2063,6 @@
       });
     }
   });
-
-  // Composer height changes are handled entirely by CSS: `--composer-clearance`
-  // on the parent adjusts `.tr`'s `padding-bottom`, the browser updates
-  // `scrollHeight`, and the existing follow loop (which watches `rows.length`
-  // and `session.streaming`) catches any overshoot on the next frame. No JS
-  // needed — a padding change is layout, not a scroll event.
 
   /**
    * Which rows draw a rail, and which of them continue the one above.
@@ -2746,12 +2740,13 @@
        inline start --space-7 (25), inline end --space-6 (21). */
     padding-block-start: 0;
     padding-inline: var(--space-7) var(--space-6);
-    /* The foot clears the floating composer COLUMN, not the bare pill: the
-       tray and chip row stand on the input inside it. Parked prompt cards
-       and a grown draft stand over the transcript's foot instead and move
-       nothing. `--composer-clearance` is that column's measured height plus
-       its offsets, published by the pane; the old fixed reserve is the
-       floor, so a bare composer looks exactly as it did. */
+    /* The foot clears the composer's standing box: the pill at one line and
+       the suggestion row on it. The tray, parked prompt cards and a grown
+       draft stand over the transcript's foot and move nothing.
+       `--composer-clearance` is that box plus its offsets, set by the pane
+       in CSS from the composer's own tokens (app.css `--c-composer-*`), so
+       it is the same whether the pane is on screen or not; the old fixed
+       reserve is the floor. */
     padding-block-end: max(
       calc(var(--space-8) * 3),
       var(--composer-clearance, 0px)

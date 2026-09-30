@@ -14,14 +14,12 @@
     instanceId,
     open,
     content,
-    composerHeight,
     onselect,
     onescape,
   }: {
     instanceId: string;
     open: boolean;
     content?: HTMLDivElement;
-    composerHeight: number;
     onselect: (
       selection: CapturedSelection
     ) => "added" | "duplicate" | "full" | undefined;
@@ -124,19 +122,30 @@
   });
   $effect(() => {
     const node = content;
-    const height = composerHeight;
     const frame = host;
     if (!node) {
       return;
     }
+    // The sheet's floor is the top of the composer standing over this
+    // conversation — the tray row and the suggestion row on it — which is
+    // its group's composer, drawn outside the pane. A conversation that
+    // cannot be written to has none, and the floor is the pane's own foot,
+    // less the step the composer would have stood on.
+    const column = node
+      .closest(".leaf")
+      ?.querySelector<HTMLElement>(":scope > .dock .lift");
     const measure = () => {
       const box = node.getBoundingClientRect();
       const offset = Number.parseFloat(
         getComputedStyle(node).getPropertyValue("--space-4")
       );
-      const composerTop =
-        node.querySelector(".composer")?.getBoundingClientRect().top ??
-        box.bottom - height - offset;
+      const composerTop = column
+        ? Math.min(
+            column.getBoundingClientRect().top,
+            column.querySelector(".suggest")?.getBoundingClientRect().top ??
+              Number.POSITIVE_INFINITY
+          )
+        : box.bottom - offset;
       bottom = innerHeight - composerTop;
       viewportHeight = window.visualViewport?.height ?? innerHeight;
       const safeTop = frame
@@ -147,6 +156,11 @@
     measure();
     const observer = new ResizeObserver(measure);
     observer.observe(node);
+    // The column moves with the composer's parts beside it (a draft
+    // growing the box under it, a tray row arriving in it).
+    for (const part of column?.parentElement?.children ?? []) {
+      observer.observe(part);
+    }
     window.addEventListener("resize", measure);
     window.visualViewport?.addEventListener("resize", measure);
     window.visualViewport?.addEventListener("scroll", measure);

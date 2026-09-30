@@ -47,10 +47,3 @@ export interface ComposerBinding {
 
 /** The conversations drawn by their group's composer that can be written to, by id. */
 export const composerBindings = new SvelteMap<string, ComposerBinding>();
-
-/**
- * Each group's composer height, by group id. Every pane in the group
- * reserves it at the foot of its transcript, so the last row is never under
- * the box. A group drawing no composer has no entry.
- */
-export const groupComposerHeights = new SvelteMap<string, number>();

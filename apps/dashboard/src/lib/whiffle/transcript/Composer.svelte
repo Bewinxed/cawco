@@ -66,7 +66,6 @@
 
   let {
     draft,
-    height = $bindable(0),
     busy = false,
     sending = false,
     sendError = "",
@@ -92,12 +91,6 @@
      * another draft shows that conversation's words.
      */
     draft: ComposerDraft;
-    /**
-     * The floating column's measured height, published upward, less what
-     * stands over the transcript's foot (a grown draft, parked prompt
-     * cards). The transcript behind it reserves exactly this much foot-room.
-     */
-    height?: number;
     busy?: boolean;
     /**
      * Whether the last message this composer sent is still unacknowledged — out
@@ -651,9 +644,11 @@
 
   /**
    * The field keeps its height while the transcript's switch motion runs
-   * (`landing`), so fitting the new draft never moves a transcript still
-   * sliding in: from a switch until that motion lands, or until the text
-   * changes in place. A newer switch holds on to its own landing.
+   * (`landing`), and glides to the new draft's once it has landed, so the
+   * words being typed in finish with the field (`fly`): from a switch until
+   * that motion lands, or until the text changes in place. A newer switch
+   * holds on to its own landing. The field's further lines stand over the
+   * transcript's foot, so neither its height nor its hold moves a row.
    */
   let holding = $state(false);
   let holdFor: Promise<void> | null = null;
@@ -1181,44 +1176,6 @@
   let panel = $state(0);
   let lift = $state(0);
   let stack = $state(0);
-  /** The field's own height, which the panel includes. */
-  let fieldHeight = $state(0);
-  /**
-   * The suggestion row's share of the column: its one chip line, fixed by
-   * its stylesheet, and the step down to the tray. Reserved wherever the
-   * surface suggests at all, chips or none, so chips coming and going never
-   * move the transcript; read once, since the stylesheet fixes it.
-   */
-  let chipRow = $state(0);
-  let liftBox = $state<HTMLElement>();
-  $effect(() => {
-    const row =
-      suggest && suggestions.enabled
-        ? liftBox?.querySelector<HTMLElement>(":scope > .suggest")
-        : null;
-    chipRow =
-      row && liftBox
-        ? liftBox.getBoundingClientRect().top - row.getBoundingClientRect().top
-        : 0;
-  });
-  /**
-   * What the transcript makes room for: the tray, the chip row, and the
-   * panel with the field at its one-line height. The draft's further lines
-   * and the parked prompt cards stand over the transcript's foot and never
-   * move it.
-   *
-   * Published the frame a switch hands this composer the next
-   * conversation's tray, not when the transcript's glide lands: the
-   * arriving transcript is laid out and pinned at its own foot-room before
-   * the glide's first frame paints, so nothing under it moves while it
-   * slides or once it has. Held until the glide landed, the room was the
-   * last conversation's for the whole glide and changed in the frame it
-   * ended: the rows under a pinned tail jumped by a tray's height (35px) as
-   * the glide finished.
-   */
-  $effect(() => {
-    height = panel - Math.max(0, fieldHeight - floor) + lift + chipRow;
-  });
 
   /** One conversation's tray handing its place to the next: a crossfade. */
   function trayFade(node: HTMLElement): TransitionConfig {
@@ -1231,9 +1188,10 @@
   }
   /**
    * The tray going fades out of the flow, standing on the composer where it
-   * stood, so the row's height is the arriving tray's from the switch on:
-   * that height is the transcript's foot-room ({@link height}), and in the
-   * flow the leaving tray held the room open until its fade ended, mid-glide.
+   * stood, so the row is the arriving tray's from the switch on and the
+   * suggestion row and the parked cards standing on it take their places in
+   * the switch's first frame, not when the fade ends mid-glide. The tray
+   * stands over the transcript's foot: neither one moves a row of it.
    */
   function trayLeave(node: HTMLElement): TransitionConfig {
     node.style.position = "absolute";
@@ -1274,8 +1232,9 @@
   {/if}
   <!-- The row standing on the composer, outside its box: the delegate tray,
        and the suggestion chips standing on the tray (out of flow, their one
-       line reserved on its own: `chipRow`). Prompts stand on top of both. -->
-  <div class="lift" bind:this={liftBox} bind:clientHeight={lift}>
+       line kept clear at every transcript's foot: app.css
+       `--c-suggest-room`). Prompts stand on top of both. -->
+  <div class="lift" bind:clientHeight={lift}>
     {#if suggest && suggestions.enabled}
       <!-- Keyed by conversation: the ranking is of one chat's words, and the
            shared phone composer must not carry it into the next chat. -->
@@ -1449,7 +1408,6 @@
           class:cue-top={cueTop && !folded}
           class:flying={flight !== null}
           class:folding
-          bind:clientHeight={fieldHeight}
           bind:value={draft.text}
           {@attach autosize(() => draft.text, {
             held: () => holding,
@@ -1622,10 +1580,11 @@
      than two unrelated roundings stacked. The shell is the text field
      (app.css field-shell): keyboard focus in the textarea draws the ring over
      the shell's own border, an outline that moves nothing, and the textarea
-     itself draws none. */
+     itself draws none. Its one-line box is the app's composer tokens
+     (app.css `--c-composer-*`), which every transcript keeps clear. */
   .cin {
-    --cin-pad: var(--space-2);
-    --cin-ctl: 34px;
+    --cin-pad: var(--c-composer-inset);
+    --cin-ctl: var(--c-composer-field);
     position: relative;
     border: 1px solid var(--border-control);
     background: oklch(from var(--surface-raised) l c h / 0.82);

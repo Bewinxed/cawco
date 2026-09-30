@@ -599,6 +599,33 @@
     /* A nav row. Full-width rows in the rail take the 44px touch row on a
        touch screen, and on a narrow window too. */
     --c-nav-h: 40px;
+    /* The group composer's standing parts, which every transcript keeps
+       clear at its foot (SessionPane, `--composer-clearance`): the field at
+       its one line and the controls beside it, the pill's inset and 1px
+       border round them, and the suggestion row standing on the pill. The
+       composer draws those boxes from these same numbers, so the room a
+       transcript keeps is the composer's box by construction, in every pane,
+       shown or not. Everything else the composer holds — the draft's
+       further lines, attachments, a send's failure, the delegate tray, the
+       parked cards — stands over the transcript's foot and moves no row. */
+    --c-composer-field: 34px;
+    --c-composer-inset: var(--space-2);
+    --c-composer-panel: calc(
+      var(--c-composer-field) +
+      var(--c-composer-inset) *
+      2 +
+      2px
+    );
+    /* A suggestion chip: its Tab key cap (the kit's h-5), padding, border. */
+    --c-suggest-chip: calc(1.25rem + var(--space-1) * 2 + 2px);
+    --c-suggest-row: calc(
+      var(--space-4) +
+      var(--space-1) *
+      2 +
+      var(--c-suggest-chip)
+    );
+    /* The row and the step down to the pill it stands on. */
+    --c-suggest-room: calc(var(--c-suggest-row) + var(--space-2));
 
     @media (pointer: coarse), (width < 640px) {
       --c-nav-h: 44px;

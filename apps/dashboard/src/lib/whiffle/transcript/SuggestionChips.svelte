@@ -262,20 +262,20 @@
 
 <style>
   /* Out of flow, standing on the composer's top edge, one line tall whatever
-     it holds: the composer reserves this row in the room the transcript
-     keeps clear, so chips coming, going or changing never move the
-     transcript. Past its width the line scrolls sideways. The row takes no
-     pointer of its own; what is in it does. */
+     it holds: every transcript keeps this row clear at its foot (app.css
+     `--c-suggest-room`, the row and the step under it), so chips coming,
+     going or changing never move the transcript. Past its width the line
+     scrolls sideways. The row takes no pointer of its own; what is in it
+     does. */
   .suggest {
-    /* A chip's height: its Tab key cap (the kit's h-5), padding and border. */
-    --chip-block: calc(1.25rem + var(--space-1) * 2 + 2px);
+    --chip-block: var(--c-suggest-chip);
     position: absolute;
     inset-inline: 0;
     bottom: calc(100% + var(--space-2));
     display: flex;
     flex-direction: column;
     justify-content: flex-end;
-    block-size: calc(var(--space-4) + var(--space-1) * 2 + var(--chip-block));
+    block-size: var(--c-suggest-row);
     padding-block-start: var(--space-4);
     pointer-events: none;
 

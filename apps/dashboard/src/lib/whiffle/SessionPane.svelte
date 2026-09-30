@@ -62,7 +62,7 @@
   import { delegateHandle } from "./links";
   import PreviewPane from "./preview/PreviewPane.svelte";
   import PreviewSheet from "./preview/PreviewSheet.svelte";
-  import { clip, type SuggestCandidate } from "./suggest.svelte";
+  import { clip, type SuggestCandidate, suggestions } from "./suggest.svelte";
   import Composer, { type Mention } from "./transcript/Composer.svelte";
   import { ComposerDraft } from "./transcript/composer-draft.svelte";
   import {
@@ -78,10 +78,8 @@
   import {
     type ComposerBinding,
     composerBindings,
-    groupComposerHeights,
   } from "./workspace/composer-dock.svelte";
   import { rebuildScheduler } from "./workspace/scheduler.svelte";
-  import { workspace } from "./workspace/workspace.svelte";
 
   let {
     viewId,
@@ -144,23 +142,14 @@
    */
   const desktopPreview = $derived(previewOpen && previewVisible && !phone);
   /**
-   * The split was sized while this pane was off screen, where no style is
-   * computed: the first frame it is shown would run the `flex-grow`
-   * transition from the old size. It takes the size without one, and the
-   * transition is back once that frame has painted.
+   * The split is sliding: the reader is watching the preview open or close
+   * beside the transcript, and the split's size change is the information.
+   * Only then does `flex-grow` animate. A split sized any other way — off
+   * screen, where no style is computed and a transition would start from a
+   * stale size the frame the pane is shown, or out of its tool row, where
+   * the surface clips open instead — takes its size at once.
    */
-  let sizedAway = $state(false);
-  $effect(() => {
-    if (!(visible && sizedAway)) {
-      return;
-    }
-    let frame = requestAnimationFrame(() => {
-      frame = requestAnimationFrame(() => {
-        sizedAway = false;
-      });
-    });
-    return () => cancelAnimationFrame(frame);
-  });
+  let sliding = $state(false);
   let previewMounted = $state(false);
   /**
    * The side preview is opening out of its tool row
@@ -201,13 +190,15 @@
         untrack(() => !previewMounted) && departing(`preview:${viewId}`);
       previewMounted = true;
     }
+    const seen = untrack(() => visible && !fromRow) && motionOk.current;
+    sliding = seen;
     let settle = 0;
+    // The size is this conversation's own (`savedWidth`); the split's
+    // `minSize` holds the preview to its 320px floor, and re-applies it
+    // whenever the pane's width changes.
     const frame = requestAnimationFrame(() => {
-      if (!untrack(() => visible)) {
-        sizedAway = true;
-      }
       if (open) {
-        pane.resize(Math.max(savedWidth, (320 / paneWidth) * 100));
+        pane.resize(savedWidth);
       } else {
         pane.collapse();
       }
@@ -215,6 +206,11 @@
         fromRow = false;
       });
     });
+    const slid = seen
+      ? setTimeout(() => {
+          sliding = false;
+        }, 300)
+      : undefined;
     const timer = open
       ? undefined
       : setTimeout(
@@ -226,6 +222,7 @@
     return () => {
       cancelAnimationFrame(frame);
       cancelAnimationFrame(settle);
+      clearTimeout(slid);
       clearTimeout(timer);
     };
   });
@@ -892,25 +889,6 @@
     });
   });
 
-  /**
-   * The room the floating composer column takes, as the composer publishes
-   * it: its tray, suggestion row and attachments, and the input at its
-   * one-line height. A longer draft and the parked prompt cards stand over
-   * the transcript's foot instead, so neither ever moves it. Published to the
-   * body as `--composer-clearance` — the measured height plus the column's
-   * bottom offset and one more step of breathing room — which is what the
-   * transcript reserves at its foot.
-   */
-  let composerHeight = $state(0);
-  /** The composer column this pane's transcript makes room for: its group's, or on the server its own. */
-  const clearance = $derived.by(() => {
-    if (!browser) {
-      return composerHeight;
-    }
-    const group = workspace.leafOf(viewId);
-    return (group && groupComposerHeights.get(group.id)) ?? 0;
-  });
-
   /** Whether this session's last message is out of this tab but not yet taken. */
   const sending = $derived(
     latestCommandFor(viewId, "send")?.stage === "submitted"
@@ -980,6 +958,28 @@
   /** Whether this conversation takes messages from here at all. */
   const writable = $derived(
     !!session && !fault && !(unaddressable || readOnly)
+  );
+
+  /**
+   * The room this pane's transcript keeps clear at its foot for the
+   * composer standing over it: the composer's one-line box, and the
+   * suggestion row on it where the surface suggests (app.css
+   * `--c-composer-panel`, `--c-suggest-room`). Everything else the composer
+   * holds — a longer draft, attachments, a failed send's line, the delegate
+   * tray, the parked cards — stands over the transcript's foot and moves no
+   * row. A conversation that cannot be written to has no composer.
+   *
+   * CSS, from this conversation's own state, not a measurement: it holds
+   * while the pane is off screen and is the same when it comes on screen.
+   * Measured off the group's one composer and copied down, the room was the
+   * showing conversation's in every pane, and changed under the arriving
+   * one after it had started to draw (the rows under a pinned tail moved
+   * 35px as a switch's glide ended, when two tabs' trays differed).
+   */
+  const composerRoom = $derived(
+    writable
+      ? `var(--c-composer-panel)${suggestions.enabled ? " + var(--c-suggest-room)" : ""}`
+      : "0px"
   );
 
   /**
@@ -1084,13 +1084,14 @@
       class="session-content"
       bind:this={content}
       class:preview-shown={desktopPreview}
-      class:resizing={resizing || fromRow || sizedAway}
+      class:resizing={resizing}
+      class:sliding={sliding}
     >
       <Resizable.PaneGroup class="preview-group" direction="horizontal">
         <Resizable.Pane class="transcript-pane" defaultSize={100} minSize={30}>
           <div
             class="body"
-            style="--composer-clearance: calc({clearance + (phone && previewOpen ? 106 : 0)}px + var(--space-4) + var(--space-4))"
+            style="--composer-clearance: calc({composerRoom} + {phone && previewOpen ? 106 : 0}px + var(--space-4) + var(--space-4))"
           >
             <!-- The transcript area. Movement between conversations is owned by the
            pane above this one, so nothing here animates on a switch — this is
@@ -1181,7 +1182,6 @@
                 sendError={sendFailure}
                 {sending}
                 {suggest}
-                bind:height={composerHeight}
               />
             {/if}
           </div>
@@ -1218,7 +1218,6 @@
       </Resizable.PaneGroup>
       {#if sheetMounted && phone && visible}
         <PreviewSheet
-          composerHeight={clearance}
           {content}
           instanceId={viewId}
           onescape={() => draft.closeSelectionEditor()}
@@ -1246,21 +1245,21 @@
     display: flex;
     min-width: 0;
     min-height: 0;
-    /* Opening or closing the preview grows one side into the other: the
-       split's size change is the information. Opening decelerates into
-       place; closing is a morph on --ease-in-out. A drag follows the
-       pointer. */
-    @media (prefers-reduced-motion: no-preference) {
+  }
+  /* Opening or closing the preview in front of the reader grows one side
+     into the other: the split's size change is the information. Opening
+     decelerates into place; closing is a morph on --ease-in-out. Any other
+     size — a drag following the pointer, a pane sized off screen — is taken
+     at once (`sliding`). */
+  @media (prefers-reduced-motion: no-preference) {
+    .sliding :global(.transcript-pane),
+    .sliding :global(.artifact-pane) {
       transition: flex-grow 300ms var(--ease-in-out);
     }
-  }
-  .preview-shown :global(.transcript-pane),
-  .preview-shown :global(.artifact-pane) {
-    transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
-  }
-  .resizing :global(.transcript-pane),
-  .resizing :global(.artifact-pane) {
-    transition: none;
+    .sliding.preview-shown :global(.transcript-pane),
+    .sliding.preview-shown :global(.artifact-pane) {
+      transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+    }
   }
   .artifact-surface {
     width: 100%;

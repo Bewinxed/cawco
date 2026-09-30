@@ -30,10 +30,7 @@
   import type { HistorySource } from "../client.svelte";
   import SessionPane from "../SessionPane.svelte";
   import Composer from "../transcript/Composer.svelte";
-  import {
-    composerBindings,
-    groupComposerHeights,
-  } from "./composer-dock.svelte";
+  import { composerBindings } from "./composer-dock.svelte";
   import { dropHint, paneDropTarget } from "./dnd.svelte";
   import { slot } from "./dock.svelte";
   import { createSwipe } from "./gesture.svelte";
@@ -58,18 +55,6 @@
   const bound = $derived(
     leaf.active ? composerBindings.get(leaf.active) : undefined
   );
-  let composerHeight = $state(0);
-  // What this group's panes keep clear at their foot. No composer, no entry.
-  $effect(() => {
-    if (!bound) {
-      return;
-    }
-    const { id } = leaf;
-    groupComposerHeights.set(id, composerHeight);
-    return () => {
-      groupComposerHeights.delete(id);
-    };
-  });
 
   /**
    * What a drop hovering this group would do, as the box it would fill:
@@ -442,7 +427,6 @@
         sending={bound.sending}
         suggest={bound.suggest}
         {switchDir}
-        bind:height={composerHeight}
       />
     </div>
   {/if}
