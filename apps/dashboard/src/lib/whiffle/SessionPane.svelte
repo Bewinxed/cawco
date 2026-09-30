@@ -962,11 +962,12 @@
 
   /**
    * The room this pane's transcript keeps clear at its foot for the
-   * composer standing over it: the composer's one-line box, and the
-   * suggestion row on it where the surface suggests (app.css
-   * `--c-composer-panel`, `--c-suggest-room`). Everything else the composer
-   * holds — a longer draft, attachments, a failed send's line, the delegate
-   * tray, the parked cards — stands over the transcript's foot and moves no
+   * composer standing over it: the composer's one-line box, the delegate
+   * tray's row on it (kept whether or not a chip is in it), and the
+   * suggestion row on that where the surface suggests (app.css
+   * `--c-composer-panel`, `--c-tray-row`, `--c-suggest-room`). Everything
+   * else the composer holds — a longer draft, attachments, a failed send's
+   * line, the parked cards — stands over the transcript's foot and moves no
    * row. A conversation that cannot be written to has no composer.
    *
    * CSS, from this conversation's own state, not a measurement: it holds
@@ -978,7 +979,7 @@
    */
   const composerRoom = $derived(
     writable
-      ? `var(--c-composer-panel)${suggestions.enabled ? " + var(--c-suggest-room)" : ""}`
+      ? `var(--c-composer-panel) + var(--c-tray-row)${suggestions.enabled ? " + var(--c-suggest-room)" : ""}`
       : "0px"
   );
 

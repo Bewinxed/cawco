@@ -33,7 +33,6 @@
   import { conversationHref } from "../links";
   import { markHue, sessionSprite } from "../mark";
   import { CURVE, dur, easeOut, motionOk } from "../motion/curves.svelte";
-  import { unfold } from "../motion/fold.svelte";
   import { morph } from "../motion/morph.svelte";
   import { reflow } from "../motion/rows.svelte";
   import { land } from "../motion/share.svelte";
@@ -579,8 +578,22 @@
 
   /* ---- motion --------------------------------------------------------- */
 
-  /** The whole row, the first time a chip is in it: unfolds, unless every chip was simply there. */
+  /** The whole row, the first time a chip is in it: fades up, unless every chip was simply there. */
   const quiet = $derived(chips.every((chip) => chip.entry === "none"));
+
+  /**
+   * The row comes and goes in the room the composer keeps for it from its
+   * first render (app.css `--c-tray-row`): opacity only, so nothing standing
+   * on it or under it moves. Growing its height instead, a first chip
+   * arriving after the switch lifted the suggestion row 35px.
+   */
+  function rowFade(_node: Element): TransitionConfig {
+    return {
+      duration: quiet ? 0 : dur("--dur-control"),
+      easing: easeOut,
+      css: (t) => `opacity: ${t}`,
+    };
+  }
 
   function panelIn(_node: Element): TransitionConfig {
     if (!motionOk.current) {
@@ -719,7 +732,7 @@
       onpointerleave={onrootleave}
       role="presentation"
       bind:this={root}
-      transition:unfold={{ ms: quiet ? 0 : undefined }}
+      transition:rowFade
     >
       <!-- biome-ignore lint/a11y/useAriaPropsSupportedByRole: the role is toolbar or group (a binding the rule cannot read); both take a label. -->
       <div
@@ -921,15 +934,12 @@
   .host {
     pointer-events: none;
   }
-  /* The row of chips, standing --space-2 off the composer's top edge: no
-     surface of its own, one line, never wrapping or scrolling sideways. */
+  /* The row of chips, standing a step off the composer's top edge: no
+     surface of its own, one line, never wrapping or scrolling sideways. Its
+     chip and step are the app's tray tokens, the row the composer keeps. */
   .tray {
     position: relative;
-    padding-block-end: var(--space-2);
-
-    @media (pointer: coarse) {
-      padding-block-end: var(--space-3);
-    }
+    padding-block-end: var(--c-tray-gap);
   }
   .row {
     display: flex;
@@ -948,7 +958,7 @@
     flex: 0 1 auto;
     min-inline-size: 120px;
     max-inline-size: 224px;
-    block-size: 28px;
+    block-size: var(--c-tray-chip);
     display: inline-flex;
     align-items: center;
     gap: var(--c-pill-gap);
@@ -976,10 +986,6 @@
       background: var(--surface-raised);
       box-shadow: var(--shadow-tile);
       transition: background-color var(--dur-control) var(--ease-out);
-    }
-
-    @media (pointer: coarse) {
-      block-size: 34px;
     }
     @media (prefers-reduced-motion: no-preference) {
       transition:

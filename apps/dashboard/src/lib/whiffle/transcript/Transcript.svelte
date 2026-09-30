@@ -2740,9 +2740,9 @@
        inline start --space-7 (25), inline end --space-6 (21). */
     padding-block-start: 0;
     padding-inline: var(--space-7) var(--space-6);
-    /* The foot clears the composer's standing box: the pill at one line and
-       the suggestion row on it. The tray, parked prompt cards and a grown
-       draft stand over the transcript's foot and move nothing.
+    /* The foot clears the composer's standing box: the pill at one line, the
+       delegate tray's row and the suggestion row on it. Parked prompt cards
+       and a grown draft stand over the transcript's foot and move nothing.
        `--composer-clearance` is that box plus its offsets, set by the pane
        in CSS from the composer's own tokens (app.css `--c-composer-*`), so
        it is the same whether the pane is on screen or not; the old fixed

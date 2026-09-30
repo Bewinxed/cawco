@@ -1177,7 +1177,11 @@
   let lift = $state(0);
   let stack = $state(0);
 
-  /** One conversation's tray handing its place to the next: a crossfade. */
+  /**
+   * One conversation's tray handing its place to the next: a crossfade, the
+   * two in the one cell of the slot's fixed row, so neither the slot nor
+   * anything standing on it moves.
+   */
   function trayFade(node: HTMLElement): TransitionConfig {
     node.style.gridArea = "1 / 1";
     return {
@@ -1185,19 +1189,6 @@
       easing: easeOut,
       css: (t) => `opacity: ${t}`,
     };
-  }
-  /**
-   * The tray going fades out of the flow, standing on the composer where it
-   * stood, so the row is the arriving tray's from the switch on and the
-   * suggestion row and the parked cards standing on it take their places in
-   * the switch's first frame, not when the fade ends mid-glide. The tray
-   * stands over the transcript's foot: neither one moves a row of it.
-   */
-  function trayLeave(node: HTMLElement): TransitionConfig {
-    node.style.position = "absolute";
-    node.style.insetInline = "0";
-    node.style.insetBlockEnd = "0";
-    return trayFade(node);
   }
 
   const removeImage = (i: number) => {
@@ -1230,10 +1221,10 @@
       <div class="stack" bind:clientHeight={stack}>{@render prompts()}</div>
     </div>
   {/if}
-  <!-- The row standing on the composer, outside its box: the delegate tray,
-       and the suggestion chips standing on the tray (out of flow, their one
-       line kept clear at every transcript's foot: app.css
-       `--c-suggest-room`). Prompts stand on top of both. -->
+  <!-- The row standing on the composer, outside its box: the delegate
+       tray's fixed row, and the suggestion chips standing on it (out of
+       flow). Both rows are kept clear at every transcript's foot (app.css
+       `--c-tray-row`, `--c-suggest-room`). Prompts stand on top of both. -->
   <div class="lift" bind:clientHeight={lift}>
     {#if suggest && suggestions.enabled}
       <!-- Keyed by conversation: the ranking is of one chat's words, and the
@@ -1250,7 +1241,7 @@
     {#if delegatesOf}
       <div class="tray-slot">
         {#key delegatesOf}
-          <div in:trayFade out:trayLeave>
+          <div in:trayFade out:trayFade>
             <DelegateTray {held} parentId={delegatesOf} />
           </div>
         {/key}
@@ -1554,11 +1545,17 @@
     pointer-events: none;
   }
   /* One conversation's tray over the next while they cross-fade, in a column
-     the composer's width: an auto column grew to the chips' own width. */
+     the composer's width: an auto column grew to the chips' own width. The
+     slot is the tray's one row from the composer's first render, chips or
+     none (app.css `--c-tray-row`, which every transcript keeps clear), with
+     the tray standing on its foot: a chip arriving late fills room already
+     there, and the suggestion row standing on the slot never moves. */
   .tray-slot {
     position: relative;
     display: grid;
     grid-template-columns: minmax(0, 1fr);
+    align-items: end;
+    block-size: var(--c-tray-row);
   }
   /* What the column measures into the composer's height: the cards and
      the step under them, and nothing at all with no card parked. */

@@ -602,12 +602,13 @@
     /* The group composer's standing parts, which every transcript keeps
        clear at its foot (SessionPane, `--composer-clearance`): the field at
        its one line and the controls beside it, the pill's inset and 1px
-       border round them, and the suggestion row standing on the pill. The
-       composer draws those boxes from these same numbers, so the room a
+       border round them, the delegate tray's one row on the pill, and the
+       suggestion row on that. The composer draws those boxes from these
+       same numbers, from its first render, chips or none, so the room a
        transcript keeps is the composer's box by construction, in every pane,
-       shown or not. Everything else the composer holds — the draft's
-       further lines, attachments, a send's failure, the delegate tray, the
-       parked cards — stands over the transcript's foot and moves no row. */
+       shown or not, and a chip arriving late moves nothing. Everything else
+       the composer holds — the draft's further lines, attachments, a send's
+       failure, the parked cards — stands over the transcript's foot. */
     --c-composer-field: 34px;
     --c-composer-inset: var(--space-2);
     --c-composer-panel: calc(
@@ -624,8 +625,17 @@
       2 +
       var(--c-suggest-chip)
     );
-    /* The row and the step down to the pill it stands on. */
+    /* The row and the step down to the tray it stands on. */
     --c-suggest-room: calc(var(--c-suggest-row) + var(--space-2));
+    /* The delegate tray's row: a chip, and the step down to the pill. */
+    --c-tray-chip: 28px;
+    --c-tray-gap: var(--space-2);
+    --c-tray-row: calc(var(--c-tray-chip) + var(--c-tray-gap));
+
+    @media (pointer: coarse) {
+      --c-tray-chip: 34px;
+      --c-tray-gap: var(--space-3);
+    }
 
     @media (pointer: coarse), (width < 640px) {
       --c-nav-h: 44px;

@@ -207,56 +207,61 @@
 </script>
 
 <div class="suggest">
-  <fieldset class="track">
-    <legend class="sr-only">Suggested skills, tools and MCP servers</legend>
-    {#each shown as { candidate, noul }, i (candidate.id)}
-      <button
-        class="chip touch-hit"
-        onclick={() => choose(candidate)}
-        title={`Likely needed · ${Math.round(noul * 100)}%${candidate.description ? `\n${candidate.description}` : ''}`}
-        type="button"
-        style:--conf={confidence(noul)}
-        in:arrive={{ i }}
-        out:leave
-        animate:flip={{ duration: motionOk.current ? GLIDE_MS : 0, easing: glide }}
-      >
-        {#if candidate.kind === 'skill'}
-          <IconToolSkill aria-hidden="true" class="glyph" />
-        {:else if candidate.kind === 'tool'}
-          <IconToolGeneric aria-hidden="true" class="glyph" />
-        {:else}
-          <IconToolMcp aria-hidden="true" class="glyph" />
-        {/if}
-        <span class="name">{candidate.name}</span>
-        {#if i === 0}
-          <Kbd aria-hidden="true" class="key">Tab</Kbd>
-        {/if}
-        <span class="sr-only"
-          >— add “{suggestionLine(candidate)}” to the message</span
+  <!-- Drawn only with something in it: chips, the shimmer of an answer on
+       its way, or a failure. Its row is kept whether it is drawn or not
+       (app.css `--c-suggest-room`), so coming and going moves nothing. -->
+  {#if shown.length > 0 || slow || failure}
+    <fieldset class="track" out:fade={{ duration: LEAVE_MS, easing: easeOut }}>
+      <legend class="sr-only">Suggested skills, tools and MCP servers</legend>
+      {#each shown as { candidate, noul }, i (candidate.id)}
+        <button
+          class="chip touch-hit"
+          onclick={() => choose(candidate)}
+          title={`Likely needed · ${Math.round(noul * 100)}%${candidate.description ? `\n${candidate.description}` : ''}`}
+          type="button"
+          style:--conf={confidence(noul)}
+          in:arrive={{ i }}
+          out:leave
+          animate:flip={{ duration: motionOk.current ? GLIDE_MS : 0, easing: glide }}
         >
-      </button>
-    {/each}
-    {#if shown.length > 1}
-      <span aria-hidden="true" class="all"><Kbd>⇧ Tab</Kbd> all</span>
-    {/if}
-    {#if slow && shown.length === 0}
-      <span
-        aria-hidden="true"
-        class="shimmer"
-        in:fade={{ duration: 280, easing: easeOut }}
-        ><Skeleton class="size-full" /></span
-      >
-    {/if}
-    {#if failure}
-      <p
-        class="fail"
-        role="status"
-        in:fade={{ duration: 280, easing: easeOut }}
-      >
-        Suggestions failed: {failure}
-      </p>
-    {/if}
-  </fieldset>
+          {#if candidate.kind === 'skill'}
+            <IconToolSkill aria-hidden="true" class="glyph" />
+          {:else if candidate.kind === 'tool'}
+            <IconToolGeneric aria-hidden="true" class="glyph" />
+          {:else}
+            <IconToolMcp aria-hidden="true" class="glyph" />
+          {/if}
+          <span class="name">{candidate.name}</span>
+          {#if i === 0}
+            <Kbd aria-hidden="true" class="key">Tab</Kbd>
+          {/if}
+          <span class="sr-only"
+            >— add “{suggestionLine(candidate)}” to the message</span
+          >
+        </button>
+      {/each}
+      {#if shown.length > 1}
+        <span aria-hidden="true" class="all"><Kbd>⇧ Tab</Kbd> all</span>
+      {/if}
+      {#if slow && shown.length === 0}
+        <span
+          aria-hidden="true"
+          class="shimmer"
+          in:fade={{ duration: 280, easing: easeOut }}
+          ><Skeleton class="size-full" /></span
+        >
+      {/if}
+      {#if failure}
+        <p
+          class="fail"
+          role="status"
+          in:fade={{ duration: 280, easing: easeOut }}
+        >
+          Suggestions failed: {failure}
+        </p>
+      {/if}
+    </fieldset>
+  {/if}
   <p aria-live="polite" class="sr-only">{announced}</p>
 </div>
 
