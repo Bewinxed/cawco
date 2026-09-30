@@ -1,4 +1,4 @@
-import { motionOk } from "./curves.svelte";
+import { dur, ease, motionOk } from "./curves.svelte";
 
 /**
  * A fit that measures in the next frame's callbacks, once however often it
@@ -49,16 +49,12 @@ function fillIn(node: HTMLElement) {
   if (!motionOk.current) {
     return;
   }
-  const style = getComputedStyle(node);
   node.animate(
     [
       { opacity: 0, filter: "blur(2px)", transform: "translateY(3px)" },
       { opacity: 1, filter: "blur(0)", transform: "translateY(0)" },
     ],
-    {
-      duration: Number.parseFloat(style.getPropertyValue("--dur-fade")) || 200,
-      easing: style.getPropertyValue("--ease-out").trim() || "ease-out",
-    }
+    { duration: dur("--dur-fade"), easing: ease("--ease-out") }
   );
 }
 
