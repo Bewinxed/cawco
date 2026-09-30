@@ -445,12 +445,16 @@
     from: { transform: string; opacity: string };
     /** The words leaving, and the part of them that was never typed. */
     out: string;
+    /** How far the words leaving drop from the field's foot ({@link scrollDrop}). */
+    outDrop: number;
     outRest: string;
     text: string;
   }
   const FLIGHT_PX = 16;
   let flight = $state<Flight | null>(null);
   let typed = $state("");
+  /** How far the words arriving drop from the field's foot ({@link scrollDrop}). */
+  let inDrop = $state(0);
   let flightOut = $state<HTMLElement>();
   let flightIn = $state<HTMLElement>();
   let flightFrame = 0;
@@ -472,6 +476,97 @@
     return token.endsWith("ms") ? value : value * 1000;
   }
 
+  /**
+   * A layer stands whole on the field's foot, which puts its last line where
+   * a field scrolled to its end shows it. A field scrolled higher shows its
+   * lines lower by the scroll range it has left below, so the layer drops by
+   * that much. A text the field holds whole has none, and stands as it is.
+   */
+  const scrollDrop = (whole: number, box: number, scrolled: number) =>
+    Math.max(0, whole - box - scrolled);
+
+  /**
+   * Where the arriving text will rest once the field has fitted it: its
+   * drop, and the characters in view, as offsets into it. The field's own
+   * box and scroll at rest are worked out from the layer, laid out whole at
+   * the field's width, and the field's min and max height; the scroll is
+   * the field's own, as its bounds at rest will hold it.
+   */
+  function restOf(
+    node: HTMLTextAreaElement,
+    layer: HTMLElement,
+    text: string
+  ): { drop: number; from: number; to: number } {
+    const style = getComputedStyle(node);
+    const padTop = Number.parseFloat(style.paddingTop);
+    const border = node.offsetHeight - node.clientHeight;
+    const whole =
+      layer.offsetHeight + padTop + Number.parseFloat(style.paddingBottom);
+    const cap = Number.parseFloat(style.maxHeight) || Number.POSITIVE_INFINITY;
+    const box =
+      Math.min(
+        Math.max(whole + border, Number.parseFloat(style.minHeight) || 0),
+        cap
+      ) - border;
+    if (whole <= box) {
+      return { drop: 0, from: 0, to: text.length };
+    }
+    const scrolled = Math.min(node.scrollTop, whole - box);
+    const [from, to] = inView(layer, text, scrolled - padTop, box);
+    return { drop: scrollDrop(whole, box, scrolled), from, to };
+  }
+
+  /**
+   * The characters of `text` on the lines a box `box` tall shows from `top`
+   * down, measured on a hidden copy of `layer` holding the whole text.
+   */
+  function inView(
+    layer: HTMLElement,
+    text: string,
+    top: number,
+    box: number
+  ): [number, number] {
+    const probe = layer.cloneNode(false) as HTMLElement;
+    probe.removeAttribute("data-rest");
+    probe.removeAttribute("style");
+    probe.style.visibility = "hidden";
+    probe.textContent = text;
+    layer.after(probe);
+    const glyphs = probe.firstChild as Text;
+    const origin = probe.getBoundingClientRect().top;
+    const range = document.createRange();
+    /** The foot of the line character `at` is on. */
+    const footOf = (at: number) => {
+      range.setStart(glyphs, 0);
+      range.setEnd(glyphs, at + 1);
+      return range.getBoundingClientRect().bottom - origin;
+    };
+    /** The head of the line character `at` is on. */
+    const headOf = (at: number) => {
+      range.setStart(glyphs, at);
+      range.setEnd(glyphs, text.length);
+      return range.getBoundingClientRect().top - origin;
+    };
+    /** The first character from `start` on for which `past` holds; they are in order. */
+    const first = (start: number, past: (at: number) => boolean) => {
+      let lo = start;
+      let hi = text.length;
+      while (lo < hi) {
+        const mid = Math.floor((lo + hi) / 2);
+        if (past(mid)) {
+          hi = mid;
+        } else {
+          lo = mid + 1;
+        }
+      }
+      return lo;
+    };
+    const from = first(0, (at) => footOf(at) > top + 0.5);
+    const to = first(from, (at) => headOf(at) >= top + box - 0.5);
+    probe.remove();
+    return [from, to];
+  }
+
   function endFlight(): void {
     cancelAnimationFrame(flightFrame);
     flight = null;
@@ -483,11 +578,16 @@
     let start = { transform: "none", opacity: "1" };
     let out = from;
     let outRest = "";
+    // Read before the swap, off the field still showing the words leaving.
+    let outDrop = field
+      ? scrollDrop(field.scrollHeight, field.clientHeight, field.scrollTop)
+      : 0;
     if (was && flightIn) {
       const style = getComputedStyle(flightIn);
       start = { transform: style.transform, opacity: style.opacity };
       out = typed;
       outRest = was.text.slice(typed.length);
+      outDrop = inDrop;
     }
     for (const node of [flightOut, flightIn]) {
       for (const running of node?.getAnimations() ?? []) {
@@ -495,9 +595,15 @@
       }
     }
     typed = "";
-    flight = { dir, out, outRest, from: start, text: to };
+    inDrop = 0;
+    flight = { dir, out, outDrop, outRest, from: start, text: to };
     flightFrame = requestAnimationFrame((began) => {
       const ms = field ? heightMs(field) : 0;
+      const rest =
+        field && flightIn
+          ? restOf(field, flightIn, to)
+          : { drop: 0, from: 0, to: to.length };
+      inDrop = rest.drop;
       const timing = {
         duration: ms,
         easing: CURVE.out,
@@ -516,7 +622,16 @@
       );
       const type = (now: number) => {
         const progress = ms > 0 ? Math.min(1, (now - began) / ms) : 1;
-        typed = to.slice(0, Math.floor(to.length * easeOut(progress)));
+        // Typed across what the field will show; what stands above it is
+        // there from the start, so the typing is never spent out of view.
+        typed =
+          progress < 1
+            ? to.slice(
+                0,
+                rest.from +
+                  Math.floor((rest.to - rest.from) * easeOut(progress))
+              )
+            : to;
         flightFrame = requestAnimationFrame(progress < 1 ? type : endFlight);
       };
       type(began);
@@ -1123,6 +1238,7 @@
               bind:this={flightOut}
               style:opacity={flight.from.opacity}
               style:transform={flight.from.transform}
+              style:translate="0 {flight.outDrop}px"
               >{flight.out}</span
             >
             <span
@@ -1130,6 +1246,7 @@
               data-rest="{flight.text.slice(typed.length)}&#8203;"
               bind:this={flightIn}
               style:opacity="0"
+              style:translate="0 {inDrop}px"
               >{typed}</span
             >
           </span>
@@ -1290,9 +1407,10 @@
   }
   /* One draft handing the field to the next, laid exactly over the field's
      text box: its padding, face, size, leading and wrapping. Both texts
-     stand on the box's foot, where the field's fitted text ends, and clip
-     to its top as it glides; sideways they travel past it. The field under
-     it keeps its box with its text, hint and caret clear. */
+     stand on the box's foot, where the field's fitted text ends, each
+     dropped (`translate`) by the scroll its field has left below, so a long
+     one shows the lines the field shows. The field under it keeps its box
+     with its text, hint and caret clear. */
   .flight {
     position: absolute;
     inset: 0;
@@ -1308,8 +1426,11 @@
     color: var(--ink-strong);
     white-space: pre-wrap;
     overflow-wrap: break-word;
-    overflow-x: visible;
-    overflow-y: clip;
+    /* Clipped to the field's box as it glides, as the field clips its own
+       text, and sideways only as far as the pill's inset on the left and
+       the gap to the controls on the right, so nothing paints outside the
+       pill or over its buttons. */
+    clip-path: inset(0 calc(-1 * var(--space-2)) 0 calc(-1 * var(--space-3)));
     pointer-events: none;
   }
   .flight-text {
