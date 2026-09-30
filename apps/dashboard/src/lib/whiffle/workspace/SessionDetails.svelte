@@ -112,7 +112,7 @@
       return editable
         ? { label: "Effort…", reason: "Reading the session's effort" }
         : {
-            label: "Effort unknown",
+            label: "Not read",
             reason: "Effort is read while the session runs",
           };
     }
@@ -708,12 +708,17 @@
     display: flex;
     flex-wrap: nowrap;
     align-items: center;
-    gap: 6px;
+    gap: 4px;
     min-width: 0;
   }
   .settings :global(.model-chip) {
     flex: 0 1 auto;
     min-width: 0;
+  }
+  /* The card's width holds the longest names whole ("Opus 5.5 · 1M",
+     "medium", "Full access") with the chips' insides drawn in a little. */
+  .settings :global(.ns-chip-btn) {
+    gap: 4px;
   }
   .settings :global(.ns-chip-btn) {
     height: 28px;
@@ -859,6 +864,16 @@
     .ns-btn,
     .settings :global(.ns-chip-btn) {
       height: 44px;
+    }
+    /* A phone's row is ~350px: the three chips fit it whole, the model's
+       name included, with the chips' sides and gaps drawn in. */
+    .settings :global(.ns-chip-btn) {
+      padding-inline: 6px;
+    }
+    /* A bordered chip already reads as tappable; its chevron is the room
+       the model's name needs. */
+    .settings :global(.ns-chip-btn > svg.chevron) {
+      display: none;
     }
     .ns-btn {
       flex: 1;
