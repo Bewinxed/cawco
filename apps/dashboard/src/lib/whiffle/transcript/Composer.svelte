@@ -264,6 +264,22 @@
         still ? `opacity: ${t}` : `opacity: ${t}; translate: 0 ${u * 8}px`,
     };
   }
+  /**
+   * The send/stop glyph that is being replaced goes out as the new one comes
+   * in (`icon-swap`), the two sharing the button's one grid cell: it shrinks
+   * to 0.25 into a 4px blur as it fades. Reduced motion lets it go at once.
+   */
+  function glyphOut(_node: Element): TransitionConfig {
+    if (!motionOk.current) {
+      return { duration: 0 };
+    }
+    return {
+      duration: dur("--dur-control"),
+      easing: easeOut,
+      css: (t, u) =>
+        `opacity: ${t}; scale: ${1 - u * 0.75}; filter: blur(${u * 4}px)`,
+    };
+  }
   function fade(_node: Element): TransitionConfig {
     return {
       duration: dur("--dur-control"),
@@ -1000,7 +1016,7 @@
              the box it sits in is untouched, so send↔stop never moves or
              resizes under a thumb already travelling toward it. -->
           {#key sending ? 'wait' : busy}
-            <span class="swap">
+            <span class="swap" out:glyphOut>
               {#if sending}
                 <Spinner aria-hidden="true" role="presentation" />
               {:else if busy}
@@ -1320,6 +1336,9 @@
   /* The glyph carrier, not the button: it is content-sized and centred, so
      scaling it in cannot change the control's box. */
   .stop .swap {
+    /* The one cell of the button's grid: an outgoing glyph and its
+       replacement overlap there while they cross-fade. */
+    grid-area: 1 / 1;
     display: grid;
     place-items: center;
     @media (prefers-reduced-motion: no-preference) {
@@ -1329,11 +1348,13 @@
   @keyframes icon-swap {
     from {
       opacity: 0;
-      transform: scale(0.6);
+      transform: scale(0.25);
+      filter: blur(4px);
     }
     to {
       opacity: 1;
       transform: scale(1);
+      filter: blur(0);
     }
   }
   /* Optical centring: the send plane's mass sits low-left of its box, so the
