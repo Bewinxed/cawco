@@ -28,6 +28,19 @@
     <div
       class="mx-auto mt-4 hidden h-1.5 w-[100px] shrink-0 rounded-[var(--radius-pill)] bg-muted group-data-[vaul-drawer-direction=bottom]/drawer-content:block"
     ></div>
-    {@render children?.()}
+    <!-- vaul takes pointer capture on every press in the sheet, which leaves
+         a text field without iOS's hold-to-select and Paste callout: a press
+         that starts in a field never reaches it. -->
+    <div
+      class="contents"
+      role="presentation"
+      onpointerdown={(event) => {
+        if ((event.target as HTMLElement).closest("input, textarea, select, [contenteditable]")) {
+          event.stopPropagation();
+        }
+      }}
+    >
+      {@render children?.()}
+    </div>
   </DrawerPrimitive.Content>
 </DrawerPortal>

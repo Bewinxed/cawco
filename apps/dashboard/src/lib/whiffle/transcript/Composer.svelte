@@ -1124,7 +1124,12 @@
     flex: 1 1 auto;
     min-width: 0;
   }
+  /* Above the label's .touch-hit area, which covers the field: a press on
+     the text lands on the textarea itself, so iOS's hold-to-select and its
+     Paste callout reach it; the area still takes the pill's padding. */
   textarea {
+    position: relative;
+    z-index: 1;
     flex: 1 1 auto;
     border: 0;
     background: transparent;
