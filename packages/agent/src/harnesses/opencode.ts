@@ -84,6 +84,7 @@ import {
   IMAGE_GENERATION_TIMEOUT_MS,
   MESSAGES_READ,
   MESSAGES_STORED,
+  PROVIDER_RETRY,
 } from "@whiffle/core";
 // The protocol subpath, never the `@whiffle/core` barrel: `sessiond.ts` reaches
 // for `node:os` and the barrel is imported by the browser bundle (see f2e1c4c).
@@ -2127,9 +2128,13 @@ export class OpencodeSession implements HarnessSession {
         this.#lastRetryNote = note;
         this.#ctx.frame({
           type: "system",
-          subtype: "provider_retry",
+          subtype: PROVIDER_RETRY,
           session_id: this.sessionId ?? undefined,
           content: note,
+          retry: {
+            message: status.message,
+            ...(status.next ? { nextAttemptAt: status.next } : {}),
+          },
         });
       }
     }

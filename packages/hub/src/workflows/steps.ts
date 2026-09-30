@@ -142,6 +142,8 @@ export function createSteps(ctx: StepContext) {
   const { db } = ctx;
   const ajv = new Ajv({ allErrors: true, strict: false });
   const timers = new Map<string, ReturnType<typeof setTimeout>>();
+  /** Each armed attempt's deadline (ms epoch), by step, beside its timer. */
+  const deadlines = new Map<string, number>();
 
   const runOf = (id: string): WorkflowRunRow => {
     const run = db.getWorkflowRun(id);
@@ -168,6 +170,7 @@ export function createSteps(ctx: StepContext) {
   const clearTimer = (id: string) => {
     clearTimeout(timers.get(id));
     timers.delete(id);
+    deadlines.delete(id);
   };
   const denied = (run: WorkflowRunRow, spec: StepSpec) =>
     spec.harness === "claude"
@@ -293,6 +296,7 @@ export function createSteps(ctx: StepContext) {
     deadline: number
   ) => {
     clearTimer(step.id);
+    deadlines.set(step.id, deadline);
     timers.set(
       step.id,
       setTimeout(
@@ -572,6 +576,62 @@ export function createSteps(ctx: StepContext) {
           await ended(runOf(workflowRunId), current, error);
         })
         .catch(console.error);
+      return true;
+    },
+    /**
+     * A step session's provider refused its turn and will try again at
+     * `retry.nextAttemptAt`. A retry that lands past the attempt's deadline
+     * would only spend the rest of the attempt waiting for nothing, so the
+     * attempt ends now: its session's turn is halted as a timeout halts it
+     * (which stops the provider's retrying too), and it fails with the
+     * provider's own words and when it would have tried again. The step's
+     * retries, hold and StepError follow as for any failed attempt. A retry
+     * within the deadline, or one with no time, is left to run.
+     */
+    providerRetry(
+      instanceId: string,
+      retry: { message: string; nextAttemptAt?: number }
+    ) {
+      const [instance] = db.getInstancesByIds([instanceId]);
+      if (!(instance?.workflowStepId && instance.workflowRunId)) {
+        return false;
+      }
+      const { workflowRunId, workflowStepId } = instance;
+      const step = db.getWorkflowStep(workflowStepId);
+      if (step?.kind !== "step") {
+        return false;
+      }
+      const observedAttempt = latest(step)?.id;
+      ctx
+        .serial(workflowRunId, async () => {
+          const run = runOf(workflowRunId);
+          const current = stepOf(workflowStepId);
+          const attempt = latest(current);
+          const deadline = deadlines.get(workflowStepId);
+          if (
+            !(active(run) && current.status === "running" && attempt) ||
+            attempt.id !== observedAttempt ||
+            attempt.endedAt ||
+            deadline === undefined ||
+            retry.nextAttemptAt === undefined ||
+            retry.nextAttemptAt <= deadline
+          ) {
+            return;
+          }
+          if (current.instanceId) {
+            await ctx.halt(run.machineId, current.instanceId);
+          }
+          await ended(
+            run,
+            current,
+            `${retry.message} — the provider's next attempt is at ${new Date(retry.nextAttemptAt).toISOString()}, past this attempt's deadline (${new Date(deadline).toISOString()})`
+          );
+        })
+        .catch((error) => {
+          console.error(
+            `[workflows] step ${workflowStepId} provider retry: ${reason(error)}`
+          );
+        });
       return true;
     },
     /**

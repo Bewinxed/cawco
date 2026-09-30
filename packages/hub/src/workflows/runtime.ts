@@ -1407,6 +1407,10 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
       steps.submitResult(stepId, instanceId, result),
     observe: (instanceId: string, error?: string) =>
       steps.observe(instanceId, error),
+    providerRetry: (
+      instanceId: string,
+      retry: { message: string; nextAttemptAt?: number }
+    ) => steps.providerRetry(instanceId, retry),
     cancel(id: string) {
       return serial(id, () => {
         const run = runOf(id);

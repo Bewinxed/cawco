@@ -86,6 +86,7 @@ import {
   memoryDocProblem,
   PREVIEW_START,
   PREVIEW_STOP,
+  PROVIDER_RETRY,
   parseAgentFrontMatter,
   QUESTION_DISMISSED,
   READ_HOOK_SCRIPT,
@@ -8811,6 +8812,24 @@ export const createServer = ({
                   } else {
                     waiter.resolve();
                   }
+                }
+              }
+              // A provider refused a session's turn and waits to try again. For
+              // a workflow step's session its attempt decides whether that wait
+              // fits inside the attempt's deadline; any other session waits.
+              if (kind === "frame" && message.instanceId) {
+                const neutral = (
+                  message.payload as FramePayload & { kind: "frame" }
+                ).message;
+                if (
+                  neutral.type === "system" &&
+                  neutral.subtype === PROVIDER_RETRY &&
+                  neutral.retry
+                ) {
+                  workflowRuntime.providerRetry(
+                    message.instanceId,
+                    neutral.retry
+                  );
                 }
               }
               // A turn's end, in this order: the standing instructions answer

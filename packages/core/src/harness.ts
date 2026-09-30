@@ -587,6 +587,13 @@ export type HistoryLine = SessionMessage | { record: SendRecord };
 export const MESSAGES_READ = "read";
 
 /**
+ * The `system` subtype saying the provider refused the turn and the harness
+ * is waiting to try it again: its own words in `content`, and the same as
+ * data in `retry` — what the provider said and when the next attempt is.
+ */
+export const PROVIDER_RETRY = "provider_retry";
+
+/**
  * The `system` subtype saying which id the harness stores each send under
  * (`storedAs`, by the send's uuid), said as soon as the harness knows it.
  */
@@ -685,6 +692,11 @@ export interface NeutralSystemMessage {
    * frame carries none; its stored notification (`<result>`) does.
    */
   result?: string;
+  /**
+   * provider_retry ({@link PROVIDER_RETRY}): the provider's own message, and
+   * when the harness makes its next attempt (ms epoch) if it said.
+   */
+  retry?: { message: string; nextAttemptAt?: number };
   session_id?: string;
   skills?: string[];
   slash_commands?: string[];
