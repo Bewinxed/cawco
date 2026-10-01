@@ -34,7 +34,6 @@
     IconChevronRight,
     IconFolder,
     IconPlus,
-    IconSearch,
     IconSettings,
     IconSort,
     IconUsage,
@@ -67,14 +66,11 @@
   import { workflowState } from "./workflow-state.svelte";
   import { workspace } from "./workspace/workspace.svelte";
 
-  /** Opens the Jump palette, which Shell owns so ⌘K and this field open the same one. */
   let {
-    onjump,
     onassistant,
     assistantOpen,
     narrow,
   }: {
-    onjump: () => void;
     /** Toggles the assistant, which Shell owns so ⌘J and this row share it. */
     onassistant: () => void;
     assistantOpen: boolean;
@@ -495,119 +491,62 @@
   <!-- ────────────────────── header ──────────────────────── -->
 
   <Sidebar.Header>
-    <!-- Brand tile — matches the FF preset's workspace-switcher anatomy -->
-    <Sidebar.Menu aria-label="Workspace">
-      <Sidebar.MenuItem>
-        <Sidebar.MenuButton class={NAV_ROW} isActive={false}>
-          {#snippet child({ props })}
-            <a href="/session" {...props} class="{props.class} no-underline">
-              <span
-                aria-hidden="true"
-                class="{SLOT} rounded-[var(--radius-xs)]"
-                style="background: var(--brand-solid); color: var(--on-brand);"
-              >
-                <svg
+    <!-- The wordmark, and in the header's corner the two things started from
+         anywhere: a session (⇧⌘N) and the assistant (⌘J). Jump lives on the
+         tab row (Shell), beside the conversations it jumps between. -->
+    <div class="flex items-center gap-1">
+      <Sidebar.Menu aria-label="Workspace" class="min-w-0 flex-1">
+        <Sidebar.MenuItem>
+          <Sidebar.MenuButton class={NAV_ROW} isActive={false}>
+            {#snippet child({ props })}
+              <a href="/session" {...props} class="{props.class} no-underline">
+                <span
                   aria-hidden="true"
-                  class={MARK_GLYPH}
-                  fill="none"
-                  stroke="currentColor"
-                  stroke-width="1.7"
-                  viewBox="0 0 24 24"
+                  class="{SLOT} rounded-[var(--radius-xs)]"
+                  style="background: var(--brand-solid); color: var(--on-brand);"
                 >
-                  <path d="M4 4h16v16H4z" />
-                  <path d="M4 4h8v16H4z" fill="currentColor" />
-                </svg>
-              </span>
-              <span
-                class="min-w-0 truncate text-[length:var(--text-body)] font-medium text-foreground"
-                >Whiffle</span
-              >
-            </a>
-          {/snippet}
-        </Sidebar.MenuButton>
-      </Sidebar.MenuItem>
-    </Sidebar.Menu>
-
-    <!-- Search + New session row — one visual block -->
-    <div class="flex flex-col gap-0.5">
-      <div class="group/search relative pointer-coarse:mb-1.5">
-        <!-- A button dressed as the field: it opens the palette, which has
-             the real input. A bare input here took typing and did nothing. -->
-        <button
-          aria-label="Jump to session"
-          class="focus-inset touch-hit flex h-9 w-full [--hit-gap-y:8px] items-center rounded-md border border-[var(--border-control)] bg-[var(--surface-raised)] pr-14 pl-[38px] press-tint text-left text-body text-muted-foreground shadow-xs [transition:var(--transition-control)]"
-          data-share="jump"
-          onclick={onjump}
-          type="button"
-        >
-          Jump…
-        </button>
-        <!-- After the button: the button is positioned on a coarse pointer (its
-             touch area), and a glyph before it would paint beneath it. -->
-        <span
-          class="{SLOT} pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-muted-foreground"
-        >
-          <IconSearch class={SLOT_GLYPH} />
-        </span>
-        <kbd
-          class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 font-sans
-                  text-meta text-muted-foreground opacity-0 transition-opacity duration-(--dur-ghost)
-                  group-hover/search:opacity-100 group-focus-within/search:opacity-100"
-          >⌘K</kbd
-        >
-      </div>
-      <Sidebar.Menu>
-        <Sidebar.MenuItem>
-          <Sidebar.MenuButton class={NAV_ROW} onclick={() => newSession()}>
-            {#snippet child({ props })}
-              <button {...props} type="button">
-                <span class={SLOT}><IconPlus class={SLOT_GLYPH} /></span>
-                <span class="flex-1">Start session</span>
-                <span
-                  class="inline-flex opacity-0 transition-opacity duration-(--dur-ghost)
-                           group-hover/menu-item:opacity-100 group-focus-within/menu-item:opacity-100"
-                >
-                  <kbd class="font-sans text-meta text-muted-foreground"
-                    >⇧⌘N</kbd
+                  <svg
+                    aria-hidden="true"
+                    class={MARK_GLYPH}
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.7"
+                    viewBox="0 0 24 24"
                   >
+                    <path d="M4 4h16v16H4z" />
+                    <path d="M4 4h8v16H4z" fill="currentColor" />
+                  </svg>
                 </span>
-              </button>
-            {/snippet}
-          </Sidebar.MenuButton>
-        </Sidebar.MenuItem>
-        <!-- The assistant beside "New session": the two things you start
-             from anywhere. Its glyph keeps the accent the summon has always
-             carried; the row is otherwise a row like any other. -->
-        <Sidebar.MenuItem>
-          <Sidebar.MenuButton
-            class={NAV_ROW}
-            isActive={assistantOpen}
-            onclick={onassistant}
-          >
-            {#snippet child({ props })}
-              <button
-                {...props}
-                aria-expanded={assistantOpen}
-                data-assistant-row
-                type="button"
-              >
-                <span class="{SLOT} text-[var(--coral-11)]"
-                  ><IconAssistant class={SLOT_GLYPH} /></span
-                >
-                <span class="flex-1">Assistant</span>
                 <span
-                  class="inline-flex opacity-0 transition-opacity duration-(--dur-ghost)
-                           group-hover/menu-item:opacity-100 group-focus-within/menu-item:opacity-100"
+                  class="min-w-0 truncate text-[length:var(--text-body)] font-medium text-foreground"
+                  >Whiffle</span
                 >
-                  <kbd class="font-sans text-meta text-muted-foreground"
-                    >⌘J</kbd
-                  >
-                </span>
-              </button>
+              </a>
             {/snippet}
           </Sidebar.MenuButton>
         </Sidebar.MenuItem>
       </Sidebar.Menu>
+      <button
+        aria-expanded={assistantOpen}
+        aria-label="Assistant (⌘J)"
+        class="head-action focus-inset touch-hit"
+        data-assistant-row
+        data-on={assistantOpen || undefined}
+        onclick={onassistant}
+        title="Assistant ⌘J"
+        type="button"
+      >
+        <IconAssistant class="text-[var(--coral-11)]" />
+      </button>
+      <button
+        aria-label="Start session (⇧⌘N)"
+        class="head-action focus-inset touch-hit"
+        onclick={() => newSession()}
+        title="Start session ⇧⌘N"
+        type="button"
+      >
+        <IconPlus />
+      </button>
     </div>
   </Sidebar.Header>
 
@@ -622,13 +561,9 @@
          working, what finished, and the rest, while the transcripts take the
          screen. On the narrow line the home is the session surface's own
          page instead, and the rail is only navigation. -->
-    {#if !narrow}
-      <Home active variant="rail" />
-    {/if}
-    <!-- Fleet nav -->
+    <!-- The app's places, first: one compact block, no heading over it. -->
     <Sidebar.Group class={GROUP}>
-      <Sidebar.GroupLabel class={GROUP_LABEL}>Fleet</Sidebar.GroupLabel>
-      <Sidebar.Menu class={MENU} {@attach highlight(PILL)}>
+      <Sidebar.Menu aria-label="Places" class={MENU} {@attach highlight(PILL)}>
         <Sidebar.MenuItem>
           <Sidebar.MenuButton
             class={NAV_ROW}
@@ -699,6 +634,9 @@
         </Sidebar.MenuItem>
       </Sidebar.Menu>
     </Sidebar.Group>
+    {#if !narrow}
+      <Home active variant="rail" />
+    {/if}
 
     <!-- The groups built from the fleet come in top-down, each once its own
          read and every read above it are in (`stage`): runs, then machines,
@@ -957,6 +895,34 @@
 />
 
 <style>
+  /* The header's corner actions: icon buttons on the nav row's height. */
+  .head-action {
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+    inline-size: var(--c-nav-h);
+    block-size: var(--c-nav-h);
+    border: 0;
+    border-radius: var(--radius-sm);
+    background: none;
+    color: var(--ink-muted);
+    cursor: pointer;
+    transition: var(--transition-control);
+  }
+  .head-action :global(svg) {
+    inline-size: 18px;
+    block-size: 18px;
+  }
+  .head-action[data-on] {
+    background: var(--selected-bg);
+    color: var(--selected-ink);
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .head-action:hover {
+      background: var(--surface-hover);
+      color: var(--ink-strong);
+    }
+  }
   /* The project chevron turns over --dur-control. */
   .chevron {
     @media (prefers-reduced-motion: no-preference) {

@@ -294,7 +294,7 @@
     }
   }
   .dot.up {
-    background: var(--status-live-ink);
+    background: var(--status-done-glyph);
     opacity: 1;
   }
   .badges {

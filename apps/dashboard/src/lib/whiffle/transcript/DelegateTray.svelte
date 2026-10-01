@@ -1108,16 +1108,7 @@
     inline-size: 5px;
     block-size: 5px;
     border-radius: 50%;
-    background: var(--status-live-ink);
-
-    @media (prefers-reduced-motion: no-preference) {
-      animation: breathe var(--breath) var(--ease-in-out) infinite;
-    }
-  }
-  @keyframes breathe {
-    50% {
-      opacity: 0.3;
-    }
+    background: var(--status-live-glyph);
   }
 
   /* The mark flew in; the chip's surface and words come in after it. */

@@ -441,7 +441,7 @@
     stroke: none;
   }
   .check path {
-    stroke: var(--status-live-ink);
+    stroke: var(--status-live-glyph);
     stroke-width: 1.8;
     stroke-dasharray: 12;
     stroke-dashoffset: 0;
@@ -495,11 +495,11 @@
     translate: 0 -1px;
   }
   [data-tone="ok"] .dot {
-    background: var(--status-live-ink);
+    background: var(--status-live-glyph);
     opacity: 1;
   }
   [data-tone="bad"] .dot {
-    background: var(--status-attn-ink);
+    background: var(--status-attn-glyph);
     opacity: 1;
   }
 </style>

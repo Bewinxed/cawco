@@ -247,6 +247,12 @@
       var(--neutral-12)
     );
     --status-idle-ink: var(--neutral-11);
+    /* Status glyphs: the hue itself, not the near-black text ink, so a row's state reads in colour at a glance. Each holds 3:1 or more (non-text) on raised, page, fill, hover, the selected wash and the needs-you wash, in both themes; idle stays neutral. */
+    --status-live-glyph: light-dark(oklch(50% 0.15 252), oklch(74% 0.12 245));
+    --status-attn-glyph: light-dark(oklch(57% 0.125 78), oklch(87% 0.14 92));
+    --status-done-glyph: light-dark(oklch(52% 0.14 140), oklch(76% 0.15 135));
+    --status-fail-glyph: light-dark(oklch(53% 0.19 22), oklch(71% 0.16 20));
+    --status-idle-glyph: var(--neutral-11);
     --presence-online: light-dark(oklch(62.7% 0.17 149), oklch(74% 0.17 149));
     --presence-away: light-dark(oklch(70.5% 0.187 47.6), oklch(76% 0.187 47.6));
     --presence-off: var(--neutral-8);

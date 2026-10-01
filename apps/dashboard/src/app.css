@@ -189,6 +189,13 @@
      element. */
   :root {
     scrollbar-color: var(--scrollbar-thumb) transparent;
+    /* The seam's inset (.kit-seam, and the transcript's user-message
+       hairline): the text column's own padding. */
+    --seam-inset: var(--space-3);
+
+    @media (width <= 900px) {
+      --seam-inset: var(--space-2);
+    }
   }
 
   html {
@@ -397,6 +404,32 @@
         animation: kit-skeleton-sweep var(--dur-loop) linear infinite;
       }
     }
+  }
+
+  /* Nothing animates that nobody can see (motion/rest.ts): a hidden tab, an
+     element scrolled out of view, an inert surface parked behind the one in
+     front, and a swap slot that is not the one showing (a button's spinner
+     waits there between presses) all hold every loop they carry still. */
+  :where(:root[data-at-rest], [data-offscreen], [inert], [data-active="false"])
+  *,
+  :where(:root[data-at-rest], [data-offscreen], [inert], [data-active="false"])
+    *::before,
+  :where(:root[data-at-rest], [data-offscreen], [inert], [data-active="false"])
+    *::after,
+  :where([data-offscreen]) {
+    animation-play-state: paused !important;
+  }
+
+  /* The seam: the hairline the transcript draws between one user message
+     and the next (MessageRow `.well::after`), as a block of its own. The
+     home draws the same one between Working and Finished and between one
+     machine's rows and the next, so the two can never drift apart. */
+  .kit-seam {
+    flex: none;
+    block-size: 1px;
+    margin: 0 var(--seam-inset);
+    border: 0;
+    background: var(--well-edge);
   }
 
   /* The one empty state (ui/empty): mark, title, why, one action, set on

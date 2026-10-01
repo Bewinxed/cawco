@@ -411,18 +411,8 @@
   .child a {
     text-decoration: underline;
   }
+  /* Running holds its live outline; nothing breathes. */
   .running {
-    animation: workflow-breath var(--breath) var(--ease-in-out) infinite;
-  }
-  @keyframes workflow-breath {
-    50% {
-      outline-color: var(--status-live-ink);
-    }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .running {
-      animation: none;
-      outline-color: var(--status-live-ink);
-    }
+    outline-color: var(--status-live-glyph);
   }
 </style>

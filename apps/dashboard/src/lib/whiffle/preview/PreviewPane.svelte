@@ -561,6 +561,11 @@
   .cover.ready {
     opacity: 0;
   }
+  /* A cover faded away is not loading: its sweep holds still. */
+  .cover.ready :global(*),
+  .cover.ready :global(*::after) {
+    animation-play-state: paused;
+  }
   /* What went wrong, over the foot of the frame, and the one thing to do
      about it. */
   .error {

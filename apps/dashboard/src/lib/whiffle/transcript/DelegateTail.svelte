@@ -363,16 +363,6 @@
   .peer .ic {
     color: var(--ink-muted);
   }
-  @media (prefers-reduced-motion: no-preference) {
-    .ic.breathe :global(svg) {
-      animation: breathe var(--breath) var(--ease-in-out) infinite;
-    }
-  }
-  @keyframes breathe {
-    50% {
-      opacity: 0.4;
-    }
-  }
   .verb {
     flex: none;
     font-weight: var(--weight-strong);

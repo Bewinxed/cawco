@@ -319,16 +319,8 @@
     block-size: 5px;
     flex: 0 0 auto;
     border-radius: 50%;
-    background: var(--status-live-ink);
-
-    @media (prefers-reduced-motion: no-preference) {
-      animation: beat var(--breath) var(--ease-in-out) infinite;
-    }
-  }
-  @keyframes beat {
-    50% {
-      opacity: 0.3;
-    }
+    /* Still: running is said by its hue and the pill, not a loop. */
+    background: var(--status-live-glyph);
   }
 
   /* The subagent's own transcript, in a well of its own. Concentric: the

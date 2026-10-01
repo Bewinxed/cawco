@@ -1,9 +1,9 @@
 <script lang="ts" module>
   /**
-   * What opened the palette: ⌘K (`key`), the rail's Jump field (`field`),
-   * or the element tapped (the phone's header button).
+   * What opened the palette: ⌘K (`key`), or the element tapped (the Jump
+   * button at the end of the tab row).
    */
-  export type JumpOpener = "key" | "field" | HTMLElement;
+  export type JumpOpener = "key" | HTMLElement;
 </script>
 
 <script lang="ts">
@@ -33,7 +33,6 @@
     popScale,
   } from "$lib/whiffle/motion/curves.svelte";
   import { reflow } from "$lib/whiffle/motion/rows.svelte";
-  import { land } from "$lib/whiffle/motion/share.svelte";
   import { ACTIVITY_LABEL } from "./activity";
   import { whiffle } from "./client.svelte";
   import JumpMatch from "./JumpMatch.svelte";
@@ -163,16 +162,12 @@
   }
 
   /* ── How it arrives ──────────────────────────────────────────────────
-     From the rail's field, the palette IS that field opening: it starts on
-     the field, cut to its box around the search line, and travels home as
-     the cut opens (motion/share, `grow`), over --dur-pop on the drawer
-     curve. From the phone's header button it grows out of the button: from
-     the pop scale, the button as its origin, over the same length. From ⌘K,
+     From the Jump button it grows out of the button: from the pop scale,
+     the button as its origin, over --dur-pop on the drawer curve. From ⌘K,
      nothing travels — it is summoned often and from nowhere in particular —
      so it only fades in, over --dur-control. The kit dialog's own entrance
-     stands down for all three (the class below). */
-  const ENTRY = { key: "fade", field: "grow" } as const;
-  const entry = $derived(typeof opener === "string" ? ENTRY[opener] : "pop");
+     stands down for both (the class below). */
+  const entry = $derived(opener === "key" ? "fade" : "pop");
   let well = $state<HTMLElement | null>(null);
   const shell = $derived(
     well?.closest<HTMLElement>('[data-slot="dialog-content"]') ?? null
@@ -180,13 +175,6 @@
   $effect(() => {
     if (!shell) {
       return;
-    }
-    if (entry === "grow") {
-      return land(() => "jump", {
-        mode: "grow",
-        anchor: ".jump-search",
-        ms: dur("--dur-pop"),
-      })(shell);
     }
     if (entry === "pop" && motionOk.current && opener instanceof HTMLElement) {
       const from = opener.getBoundingClientRect();
@@ -610,10 +598,10 @@
   }
 
   /* The kit dialog's own entrance (app.css kit-dialog-in) stands down: the
-     field grows into it, the header button pops it, and ⌘K fades it in
+     Jump button pops it, and ⌘K fades it in
      over --dur-control, scrim and all. */
   @media (prefers-reduced-motion: no-preference) {
-    :global(.jump-dialog:is(.jump-grow, .jump-pop)[data-state="open"]) {
+    :global(.jump-dialog.jump-pop[data-state="open"]) {
       animation: none;
     }
     :global(.jump-dialog.jump-fade[data-state="open"]) {

@@ -8,6 +8,7 @@
   import { Markdown } from "$lib/components/ui/markdown";
   import { IconCheck, IconGlobe, IconSearch } from "$lib/icons";
   import { dur, easeOut } from "$lib/whiffle/motion/curves.svelte";
+  import { restOffscreen } from "$lib/whiffle/motion/rest";
   import { getSizeContext } from "../thinking-indicator/size-context";
 
   let {
@@ -81,6 +82,7 @@
     data-size={size?.() ?? "default"}
     data-slot="thinking-step"
     data-status={status}
+    {@attach restOffscreen}
   >
     <div aria-hidden="true" class="icon-column">
       <span class="icon"

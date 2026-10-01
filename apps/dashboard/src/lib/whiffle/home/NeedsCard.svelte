@@ -13,7 +13,7 @@
    * it — the request card above that pane's composer leaves with it.
    */
   import { Button } from "$lib/components/ui/button";
-  import { IconClose, IconTick } from "$lib/icons";
+  import { IconClose, IconMaximize, IconTick } from "$lib/icons";
   import { isTyping } from "$lib/utils/typing";
   import {
     type PermissionAnswer,
@@ -24,6 +24,7 @@
   import { conversationHref } from "../links";
   import { choices } from "./choices.svelte";
   import { clock, type NeedsItem, span } from "./home.svelte";
+  import { openPeek } from "./peek.svelte";
 
   let { item, stale }: { item: NeedsItem; stale: boolean } = $props();
 
@@ -90,6 +91,20 @@
   <div class="head">
     <span class="title">{item.title}</span>
     <span class="num wait">{waited}</span>
+    {#if item.kind === 'ask'}
+      {@const ask = item}
+      <!-- Glance → peek → dive: read what led here before answering. -->
+      <button
+        aria-label="Peek {item.title}"
+        class="peek touch-hit focus-inset"
+        onclick={() =>
+          openPeek({ viewId: ask.instanceId, href, title: ask.title })}
+        title="Peek"
+        type="button"
+      >
+        <IconMaximize aria-hidden="true" />
+      </button>
+    {/if}
   </div>
   <span class="place">{item.place}</span>
   <p class="ask">
@@ -198,6 +213,32 @@
     -webkit-box-orient: vertical;
     overflow: hidden;
     overflow-wrap: anywhere;
+  }
+  .peek {
+    display: inline-grid;
+    flex: none;
+    place-items: center;
+    align-self: center;
+    width: 28px;
+    height: 28px;
+    margin: -4px calc(-1 * var(--space-2)) -4px 0;
+    border: 0;
+    border-radius: var(--radius-xs);
+    background: none;
+    color: var(--ink-muted);
+    cursor: pointer;
+    pointer-events: auto;
+    transition: var(--transition-control);
+  }
+  .peek :global(svg) {
+    width: 16px;
+    height: 16px;
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .peek:hover {
+      background: var(--surface-fill);
+      color: var(--ink-strong);
+    }
   }
   .actions {
     position: relative;

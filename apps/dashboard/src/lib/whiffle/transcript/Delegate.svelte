@@ -854,16 +854,8 @@
     block-size: 5px;
     flex: 0 0 auto;
     border-radius: 50%;
-    background: var(--status-live-ink);
-
-    @media (prefers-reduced-motion: no-preference) {
-      animation: beat var(--breath) var(--ease-in-out) infinite;
-    }
-  }
-  @keyframes beat {
-    50% {
-      opacity: 0.3;
-    }
+    /* Still: the live hue says it, nothing loops. */
+    background: var(--status-live-glyph);
   }
 
   /* The asks register: each ask still waiting on an answer, on its own line

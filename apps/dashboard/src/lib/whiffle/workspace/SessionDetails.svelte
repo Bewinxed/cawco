@@ -793,7 +793,7 @@
     width: 16px;
     height: 16px;
     flex: none;
-    color: var(--status-live-ink);
+    color: var(--status-done-glyph);
   }
   .stats {
     flex: none;

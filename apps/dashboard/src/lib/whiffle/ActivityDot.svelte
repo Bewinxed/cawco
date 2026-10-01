@@ -57,8 +57,8 @@
      is the absence of a signal, not a colour of its own. */
   const tone = $derived(
     {
-      blocked: "bg-warning",
-      working: "bg-info animate-pulse motion-reduce:animate-none",
+      blocked: "bg-[var(--status-attn-glyph)]",
+      working: "bg-[var(--status-live-glyph)]",
       idle: "bg-muted-foreground/40",
     }[activity]
   );
@@ -105,10 +105,10 @@
   title={label}
 >
   {#if failed}
-    <!-- Red and static. Working breathes and blocked pings because both are
-         still going somewhere; this one has already stopped. -->
+    <!-- Red and still, as every state is: nothing here loops; a change
+         cross-fades once (swap) and holds. -->
     <span
-      class="absolute inset-0 rounded-full bg-destructive"
+      class="absolute inset-0 rounded-full bg-[var(--status-fail-glyph)]"
       transition:swap
     ></span>
   {:else if stale}
@@ -129,13 +129,6 @@
       />
     </span>
   {:else}
-    <!-- Blocked is the only state waiting on a human, so it is the loudest one. -->
-    {#if activity === 'blocked'}
-      <span
-        class="absolute inset-0 rounded-full bg-warning opacity-75 animate-ping motion-reduce:animate-none"
-        transition:swap
-      ></span>
-    {/if}
     <!-- One dot for every activity: its colour moves between them. -->
     <span
       class="tone absolute inset-0 rounded-full {tone}"

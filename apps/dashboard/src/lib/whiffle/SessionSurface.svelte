@@ -41,6 +41,7 @@
   import Caw from "$lib/whiffle/home/Caw.svelte";
   import Home from "$lib/whiffle/home/Home.svelte";
   import { home as fleetHome, markOpened } from "$lib/whiffle/home/home.svelte";
+  import PeekSheet from "$lib/whiffle/home/PeekSheet.svelte";
   import { instanceForSession } from "$lib/whiffle/links";
   import {
     crossIn,
@@ -464,6 +465,9 @@
     />
   </div>
 </div>
+
+<!-- One peek for every home: the page, the rail, and each iPad arrangement. -->
+<PeekSheet />
 
 <style>
   .surface {

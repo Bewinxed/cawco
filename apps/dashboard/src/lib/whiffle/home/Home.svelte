@@ -22,16 +22,18 @@
   import { machineLabel } from "../machine";
   import { crossIn, crossOut, morphMs } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
+  import OsMark from "../OsMark.svelte";
   import NewSessionDialog from "../spawn/NewSessionDialog.svelte";
   import { workspace } from "../workspace/workspace.svelte";
   import Caw from "./Caw.svelte";
   import HomeRow from "./HomeRow.svelte";
   import {
+    byMachine,
     clock,
     home,
     instanceTitle,
     lastAt,
-    placeOf,
+    type MachineGroup,
     span,
   } from "./home.svelte";
   import NeedsCard from "./NeedsCard.svelte";
@@ -52,11 +54,14 @@
   const current = $derived(
     page.url.pathname.startsWith("/session") ? workspace.activeSessionId : null
   );
-  const quiet = $derived(
-    home.live && home.needs.length === 0 && home.working.length === 0
-  );
-  const hasSessions = $derived(
-    home.working.length + home.finished.length + home.recent.length > 0
+  /** Nothing anywhere yet: the one empty state the home keeps. */
+  const firstRun = $derived(
+    home.live &&
+      home.needs.length +
+        home.working.length +
+        home.finished.length +
+        home.recent.length ===
+        0
   );
   /**
    * What Caw's line says. "No sessions" is a claim, so it waits on the data:
@@ -64,9 +69,6 @@
    * for (§8: a cross-fade cannot hide a wrong state).
    */
   const cawLine = $derived.by(() => {
-    if (hasSessions) {
-      return "All quiet.";
-    }
     const [first, ...rest] = home.waitingOn;
     if (first) {
       return rest.length > 0
@@ -137,14 +139,24 @@
     spawnOpen = true;
   }
 
-  /** What a working session is doing now, in one line. */
-  function doing(id: string, cwd: string, machineId: string): string {
+  /** What a working session is doing now, else how long it has been at it. */
+  function doing(id: string): string {
     const tool = whiffle.currentToolOf(id);
-    return tool
-      ? `${tool.name} ${tool.glance}`.trim()
-      : placeOf(machineId, cwd);
+    if (tool) {
+      return `${tool.name} ${tool.glance}`.trim();
+    }
+    const since = whiffle.turnSince(id);
+    return since ? span(clock.now - since) : "";
   }
 </script>
+
+{#snippet machine(group: MachineGroup<{ machineId: string }>)}
+  <!-- Where these run, said once for the rows under it. -->
+  <h3 class="machine" data-flip>
+    <OsMark class="size-3.5" os={group.os} />
+    <span>{group.name}</span>
+  </h3>
+{/snippet}
 
 <!-- Every state change here travels (motion/rows `reflow`): a request
      arriving opens its place while what follows slides down, one leaving
@@ -162,19 +174,15 @@
   <div class="top">
     <!-- The line every other line on this screen is believed by. -->
     <StatusLine />
-    {#if home.ready && home.live}
-      <h1 class="headline" data-flip>
-        {#if home.needs.length > 0}
-          <span aria-hidden="true" class="spark" data-flip="pop"
-            ><Attention /></span
-          >
-        {/if}
+    <!-- Only when something does: an empty claim is clutter. It enters and
+         leaves as one block of the reflow, never a snap. -->
+    {#if home.ready && home.live && home.needs.length > 0}
+      <h1 class="headline" data-flip in:crossIn out:crossOut>
+        <span aria-hidden="true" class="spark"><Attention /></span>
         <TextMorph
           as="span"
           duration={morphMs()}
-          text={home.needs.length > 0
-            ? `${home.needs.length} need${home.needs.length === 1 ? 's' : ''} you`
-            : 'Nothing needs you'}
+          text={`${home.needs.length} need${home.needs.length === 1 ? 's' : ''} you`}
         />
       </h1>
     {/if}
@@ -201,6 +209,8 @@
           aria-labelledby="needs-{variant}"
           class="group"
           data-flip="box"
+          in:crossIn
+          out:crossOut
         >
           <h2 class="label" id="needs-{variant}">
             <span aria-hidden="true" class="spark-ink"><Attention /></span>
@@ -220,54 +230,71 @@
           aria-labelledby="working-{variant}"
           class="group"
           data-flip="box"
+          in:crossIn
+          out:crossOut
         >
           <h2 class="label" id="working-{variant}">
             Working <span class="num count">{home.working.length}</span>
           </h2>
-          {#each home.working as row (row.id)}
-            {@const since = whiffle.turnSince(row.id)}
-            <HomeRow
-              active={current === row.id}
-              href={conversationHref(row.id, whiffle.instanceIndex)}
-              instance={row}
-              line={doing(row.id, row.cwd, row.machineId)}
-              machineId={row.machineId}
-              {stale}
-              title={instanceTitle(row)}
-              trail={since ? span(clock.now - since) : ''}
-            />
+          {#each byMachine(home.working) as group, index (group.machineId)}
+            {#if index > 0}
+              <hr class="kit-seam" data-flip>
+            {/if}
+            {@render machine(group)}
+            {#each group.rows as row (row.id)}
+              <HomeRow
+                active={current === row.id}
+                href={conversationHref(row.id, whiffle.instanceIndex)}
+                instance={row}
+                machineId={row.machineId}
+                {stale}
+                title={instanceTitle(row)}
+                trail={doing(row.id)}
+              />
+            {/each}
           {/each}
         </section>
       {/if}
 
+      {#if home.working.length > 0 && home.finished.length > 0}
+        <!-- Only between two lists that are both there. -->
+        <hr class="kit-seam list-seam" data-flip in:crossIn out:crossOut>
+      {/if}
       {#if home.finished.length > 0}
         <section
           aria-labelledby="finished-{variant}"
           class="group"
           data-flip="box"
+          in:crossIn
+          out:crossOut
         >
           <h2 class="label" id="finished-{variant}">
             Finished <span class="num count">{home.finished.length}</span>
           </h2>
-          {#each home.finished as row (row.id)}
-            <HomeRow
-              active={current === row.id}
-              href={conversationHref(row.id, whiffle.instanceIndex)}
-              instance={row}
-              line={placeOf(row.machineId, row.cwd)}
-              machineId={row.machineId}
-              quiet
-              {stale}
-              title={instanceTitle(row)}
-              trail={span(clock.now - lastAt(row))}
-            />
+          {#each byMachine(home.finished) as group, index (group.machineId)}
+            {#if index > 0}
+              <hr class="kit-seam" data-flip>
+            {/if}
+            {@render machine(group)}
+            {#each group.rows as row (row.id)}
+              <HomeRow
+                active={current === row.id}
+                href={conversationHref(row.id, whiffle.instanceIndex)}
+                instance={row}
+                machineId={row.machineId}
+                {stale}
+                title={instanceTitle(row)}
+                trail={span(clock.now - lastAt(row))}
+              />
+            {/each}
           {/each}
         </section>
       {/if}
 
-      {#if quiet}
-        <!-- Caw only when nothing asks and nothing works, with the hub live. -->
-        <figure class="caw" data-flip>
+      {#if firstRun}
+        <!-- Caw only on a fleet with nothing in it yet, or while a machine
+             has not answered: an empty group is otherwise just absent. -->
+        <figure class="caw" data-flip in:crossIn out:crossOut>
           <Caw pose="ready" size={variant === 'rail' ? 112 : 160} />
           <!-- The line's states share one cell and cross-fade (§8). -->
           <figcaption>
@@ -453,9 +480,23 @@
     width: 16px;
     height: 16px;
   }
+  /* One line per machine: its mark and name, quieter than the group label. */
+  .machine {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin: var(--space-2) 0 0;
+    padding: 0 var(--space-3);
+    min-height: 22px;
+    font: var(--type-meta);
+    color: var(--ink-muted);
+  }
+  .machine:first-of-type {
+    margin-top: 0;
+  }
   .spark-ink {
     display: inline-flex;
-    color: var(--status-attn-ink);
+    color: var(--status-attn-glyph);
   }
   .count {
     font: var(--type-meta);

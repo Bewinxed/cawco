@@ -10,6 +10,7 @@
   import { enableLongPressMenus } from "$lib/utils/longpress";
   import { ensureConnected } from "$lib/whiffle/client.svelte";
   import { GROUPS } from "$lib/whiffle/config/sections";
+  import { restWhenHidden } from "$lib/whiffle/motion/rest";
   import { leaving, plan, route } from "$lib/whiffle/motion/route.svelte";
   import { departAll } from "$lib/whiffle/motion/share.svelte";
   import Shell from "$lib/whiffle/Shell.svelte";
@@ -51,6 +52,8 @@
   // Effects flush only once the whole tree has hydrated, so every handler is
   // attached before the taps app.html held are replayed.
   onMount(() => window.releaseHeldTaps());
+  // A hidden tab runs no loop at all.
+  onMount(restWhenHidden);
 
   /** Configure's sections in the rail's order, top to bottom. */
   const SECTION_ORDER = GROUPS.flatMap(({ sections }) =>

@@ -121,23 +121,18 @@
     width: 16px;
     height: 16px;
   }
-  .working {
-    color: var(--status-live-ink);
+  /* The glyph wears its status hue; the word beside it stays text ink.
+     Nothing loops: a change cross-fades once (glyphIn) and then holds. */
+  .working .glyph {
+    color: var(--status-live-glyph);
   }
-  .attention {
-    color: var(--status-attn-ink);
+  .attention .glyph {
+    color: var(--status-attn-glyph);
   }
-  .failed {
-    color: var(--status-fail-ink);
+  .failed .glyph {
+    color: var(--status-fail-glyph);
   }
-  @media (prefers-reduced-motion: no-preference) {
-    .working :global(svg) {
-      animation: session-working var(--breath) var(--ease-in-out) infinite;
-    }
-  }
-  @keyframes session-working {
-    50% {
-      opacity: 0.45;
-    }
+  .quiet .glyph {
+    color: var(--status-idle-glyph);
   }
 </style>

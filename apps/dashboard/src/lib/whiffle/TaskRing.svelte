@@ -1,7 +1,4 @@
 <script lang="ts">
-  import { untrack } from "svelte";
-  import { dur, ease, motionOk } from "./motion/curves.svelte";
-
   /**
    * How far a session's plan has got, in the space a glyph takes.
    *
@@ -46,26 +43,9 @@
       : (circumference * Math.min(done, total)) / Math.max(total, 1)
   );
 
-  /* One arc in both modes, so a session that starts counting keeps the arc
-     it was turning: its length eases to the first count while its turn
-     runs on to the top, where a counted ring is read from (-90deg, one
-     turn on). */
-  let arcEl = $state<SVGCircleElement | null>(null);
-  let turning = untrack(() => indeterminate);
-  $effect.pre(() => {
-    const now = indeterminate;
-    if (turning && !now && arcEl && motionOk.current) {
-      const element = arcEl;
-      const angle = Number.parseFloat(getComputedStyle(element).rotate) || 0;
-      queueMicrotask(() =>
-        element.animate([{ rotate: `${angle}deg` }, { rotate: "270deg" }], {
-          duration: dur("--dur-pop"),
-          easing: ease("--ease-out"),
-        })
-      );
-    }
-    turning = now;
-  });
+  /* One arc in both modes, held still: a session that starts counting keeps
+     its arc, whose length eases to the first count. Nothing turns while it
+     waits; the arc's presence says a plan is running. */
 </script>
 
 <!-- Nothing planned and nothing running draws nothing: an empty ring is a
@@ -99,8 +79,6 @@
         stroke-dasharray="{arc} {circumference}"
         stroke-linecap="round"
         stroke-width={stroke}
-        bind:this={arcEl}
-        class:spin={indeterminate}
       />
     </g>
     <g class="text-success" data-shown={finished}>
@@ -136,19 +114,6 @@
   .task-ring g[data-shown="false"] {
     opacity: 0;
     scale: 0.6;
-  }
-
-  .task-ring .spin {
-    animation: task-ring-spin var(--dur-loop) linear infinite;
-  }
-
-  @keyframes task-ring-spin {
-    from {
-      rotate: -90deg;
-    }
-    to {
-      rotate: 270deg;
-    }
   }
 
   /* Clamped, never zeroed, and the travel goes — the swap still reads as one

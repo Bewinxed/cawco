@@ -2893,24 +2893,5 @@
       white-space: nowrap;
       min-inline-size: 0;
     }
-
-    /* The in-flight tool's glyph breathes — the one live channel — so the
-       running row reads as in-progress against the still, completed rows in
-       ToolGroup. This IS the progress indicator on tool usage; done rows hold
-       their glyph. */
-    @media (prefers-reduced-motion: no-preference) {
-      & .ic.breathe :global(svg) {
-        animation: breathe var(--breath) var(--ease-in-out) infinite;
-      }
-    }
-  }
-  @keyframes breathe {
-    0%,
-    100% {
-      opacity: 0.5;
-    }
-    50% {
-      opacity: 1;
-    }
   }
 </style>

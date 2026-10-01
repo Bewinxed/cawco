@@ -152,8 +152,14 @@ const machineName = (machineId: string): string => {
   return machine ? machineLabel(machine.hostname) : machineId;
 };
 
-/** "machine · project": the project that holds the folder, else its leaf. */
-export function placeOf(
+/**
+ * A workspace checkout is named `<project>-<8 hex>`: the hex is an id and
+ * nobody reads ids, so the project's own name is what shows.
+ */
+const WORKSPACE_ID = /-[0-9a-f]{8}$/;
+
+/** The project that holds the folder, else its leaf without a workspace id. */
+export function projectOf(
   machineId: string,
   cwd: string | null | undefined
 ): string {
@@ -163,10 +169,56 @@ export function placeOf(
       p.machineId === machineId &&
       (folder === p.cwd || folder.startsWith(`${p.cwd}/`))
   );
-  const where = project?.name ?? folder.split("/").filter(Boolean).pop();
+  return (
+    project?.name ??
+    (folder.split("/").filter(Boolean).pop() ?? "").replace(WORKSPACE_ID, "")
+  );
+}
+
+/** "machine · project". */
+export function placeOf(
+  machineId: string,
+  cwd: string | null | undefined
+): string {
+  const where = projectOf(machineId, cwd);
   return where
     ? `${machineName(machineId)} · ${where}`
     : machineName(machineId);
+}
+
+export interface MachineGroup<T> {
+  machineId: string;
+  name: string;
+  os: string;
+  rows: T[];
+}
+
+/**
+ * Rows under one header per machine, so a row never repeats where it runs.
+ * The groups keep the order of their first row, so the most urgent row's
+ * machine leads and each group keeps the list's own order inside it.
+ */
+export function byMachine<T extends { machineId: string }>(
+  rows: T[]
+): MachineGroup<T>[] {
+  const groups = new Map<string, MachineGroup<T>>();
+  for (const row of rows) {
+    let group = groups.get(row.machineId);
+    if (!group) {
+      const machine = whiffle.machines.find(
+        (m) => m.machineId === row.machineId
+      );
+      group = {
+        machineId: row.machineId,
+        name: machineName(row.machineId),
+        os: machine?.os ?? "",
+        rows: [],
+      };
+      groups.set(row.machineId, group);
+    }
+    group.rows.push(row);
+  }
+  return [...groups.values()];
 }
 
 /** When a session last moved: its pulse, else the hub's own update time. */
@@ -313,7 +365,7 @@ class Home {
         title:
           workflowState.workflows.find((w) => w.id === run.workflowId)?.name ??
           "Workflow",
-        place: `${machineName(run.machineId)} · run ${run.id.slice(0, 8)}`,
+        place: machineName(run.machineId),
         href: `/workflows/${run.workflowId}/runs/${run.id}`,
         raisedAt: whiffle.runAskRaisedAt(run.id),
       }));
@@ -346,20 +398,27 @@ class Home {
     if (choices.finished === "a") {
       return [];
     }
-    return whiffle.listedInstances
-      .filter((row) => {
-        if (!listed(row)) {
-          return false;
-        }
-        const activity = whiffle.activityOf(row.id);
-        if (activity !== "idle" && !isFailed(row)) {
-          return false;
-        }
-        const pulse = whiffle.pulseAt(row.id);
-        const ended = isFailed(row) ? lastAt(row) : pulse;
-        return ended !== undefined && ended > (opened[row.id] ?? 0);
-      })
-      .sort((a, b) => lastAt(b) - lastAt(a));
+    return (
+      whiffle.listedInstances
+        .filter((row) => {
+          if (!listed(row)) {
+            return false;
+          }
+          const activity = whiffle.activityOf(row.id);
+          if (activity !== "idle" && !isFailed(row)) {
+            return false;
+          }
+          const pulse = whiffle.pulseAt(row.id);
+          const ended = isFailed(row) ? lastAt(row) : pulse;
+          return ended !== undefined && ended > (opened[row.id] ?? 0);
+        })
+        // A failure is the more urgent news, then the latest first; a
+        // machine's group leads with its most urgent row (`byMachine`).
+        .sort(
+          (a, b) =>
+            Number(isFailed(b)) - Number(isFailed(a)) || lastAt(b) - lastAt(a)
+        )
+    );
   });
 
   readonly recent = $derived.by<RecentItem[]>(() => {

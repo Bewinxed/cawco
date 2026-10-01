@@ -398,11 +398,8 @@
      bleed into the gutter; the words sit inside at its padding: --space-3,
      or --space-2 at the narrow breakpoint. */
   .turn.you {
-    --pad: var(--space-3);
-
-    @media (width <= 900px) {
-      --pad: var(--space-2);
-    }
+    /* The seam's inset (app.css .kit-seam): one value for both. */
+    --pad: var(--seam-inset);
 
     /* The run's later messages: the row above ends on its own padding and
        the hairline, so there is no gap of the turn's own. */

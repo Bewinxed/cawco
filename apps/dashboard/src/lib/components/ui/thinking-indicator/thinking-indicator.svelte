@@ -1,6 +1,7 @@
 <script lang="ts" module>
   import type { HTMLAttributes } from "svelte/elements";
   import type { WithElementRef } from "$lib/utils.js";
+  import { restOffscreen } from "$lib/whiffle/motion/rest";
   import type { SizeVariant } from "./size-context";
 
   export type ThinkingIndicatorProps = WithElementRef<
@@ -52,6 +53,7 @@
   data-size={compact ? "compact" : "default"}
   data-slot="thinking-indicator"
   role="status"
+  {@attach restOffscreen}
 >
   <span class="sr-only">Thinking&#8230;</span>
   {#if showIcon}

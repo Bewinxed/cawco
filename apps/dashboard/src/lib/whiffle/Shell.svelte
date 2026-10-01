@@ -612,10 +612,6 @@
       onassistant={() => {
         assistantOpen = !assistantOpen;
       }}
-      onjump={() => {
-        jumpOpener = "field";
-        jumpOpen = true;
-      }}
     />
     <div
       aria-label="Resize sidebar"
@@ -645,11 +641,6 @@
         onassistant={() => {
           railOpen = false;
           assistantOpen = true;
-        }}
-        onjump={() => {
-          railOpen = false;
-          jumpOpener = "field";
-          jumpOpen = true;
         }}
       />
     </Sheet.Content>
@@ -714,10 +705,12 @@
             >
           </a>
         {/if}
-        <!-- Jump is a single entry: the one command surface the top bar opens.
-             The old phone thumb bar duplicated it; that bar is gone. -->
+        <!-- Jump, once, at every width: the far end of the tab row, beside
+             the conversations it jumps between. A phone shows its glyph. -->
         <Button
-          class="jump min-[900px]:hidden"
+          aria-label="Jump to session (⌘K)"
+          class="jump"
+          data-share="jump"
           onclick={(event: MouseEvent) => {
             jumpOpener = event.currentTarget as HTMLElement;
             jumpOpen = true;
@@ -728,6 +721,10 @@
         >
           <IconSearch />
           <span class="hidden sm:inline">Jump</span>
+          <kbd
+            class="hidden font-sans text-meta text-muted-foreground min-[900px]:inline"
+            >⌘K</kbd
+          >
         </Button>
         <!-- The phone's summon; on a desktop the rail carries it as a row. -->
         <span class="min-[900px]:hidden">
