@@ -257,6 +257,10 @@ const readSidecar = async (): Promise<Sidecar> => {
       await linkedMarketplaces()
     ),
     plugins: stored?.plugins ?? [],
+    // Read back like every other record: without it each sync starts from an
+    // empty one, so it reinstalls every vendored plugin and never uninstalls a
+    // plugin the fleet dropped.
+    vendoredPlugins: stored?.vendoredPlugins ?? {},
     // A sidecar written before skills existed names none, which is the truth.
     skills: stored?.skills ?? {},
     ...(stored?.memory ? { memory: stored.memory } : {}),
@@ -734,7 +738,11 @@ const syncPlugins = async (
     for (const { id } of wantedPlugins) {
       report.plugins[id] = { state: "failed", detail: "claude CLI not found" };
     }
-    return { marketplaces: managed.marketplaces, plugins: managed.plugins };
+    return {
+      marketplaces: managed.marketplaces,
+      plugins: managed.plugins,
+      vendoredPlugins: managed.vendoredPlugins,
+    };
   }
 
   /**
