@@ -4158,7 +4158,9 @@ export async function streamHistory({
 
   const epoch = claimTranscript(viewId);
   target.loading = true;
-  target.readFault = null;
+  // A fault the last read left stands until this one answers: a re-read
+  // after a reconnect happens behind the state the pane is showing, and only
+  // a read the hub answers replaces it (below).
 
   /** Entries buffered newest-first, waiting for a cut a chunk can start at. */
   let buffered: SessionMessage[] = [];
@@ -4273,6 +4275,7 @@ export async function streamHistory({
       }
       return fail({ reason: "failed", message: detail }, response.status);
     }
+    target.readFault = null;
 
     // Where the hub found it. A session addressed by id alone arrives here
     // knowing nothing about itself, and the composer, the header and the

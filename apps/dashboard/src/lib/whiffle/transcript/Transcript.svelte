@@ -84,7 +84,7 @@
     focused,
     agentName,
     onlanded,
-    shown = $bindable(false),
+    onshown,
   }: {
     session: SessionState;
     /**
@@ -105,12 +105,11 @@
     /** Optional callback when the transcript first renders content. */
     onlanded?: () => void;
     /**
-     * Whether the list is drawn. Until the first landing has put the rows
-     * where they will stay, it is laid out and measured but not painted: see
-     * the reveal below. Bound by the pane, whose placeholder stands over this
-     * transcript exactly while it is false.
+     * Told whether this transcript's list is drawn (`shown`, below), and told
+     * false when this transcript goes: the pane's placeholder stands over it
+     * exactly while it is not.
      */
-    shown?: boolean;
+    onshown?: (shown: boolean) => void;
   } = $props();
 
   setContext("whiffle:machine", () => session.machineId);
@@ -234,6 +233,20 @@
   // Declared up here because the build reads it, and the server evaluates the
   // rows before the scroller's own state is declared.
   let landed = $state(false);
+  /**
+   * Whether the list is drawn. Until the first landing has put the rows where
+   * they will stay, it is laid out and measured but not painted: see the
+   * reveal below. Declared up here with `landed`, which the build reads.
+   * This instance's own, from false: a transcript mounted again — a pane
+   * remounting, a module replaced in development — measures and lands
+   * before it is painted, like the first one.
+   */
+  let shown = $state(false);
+  $effect(() => {
+    const drawn = shown;
+    untrack(() => onshown?.(drawn));
+    return () => untrack(() => onshown?.(false));
+  });
   // ── The arrival ledger's state. Read by every build, so declared before
   // the first one (the server evaluates the rows during init).
   /** Every id this view has held: rows, the calls inside runs, the live tail's rows. */

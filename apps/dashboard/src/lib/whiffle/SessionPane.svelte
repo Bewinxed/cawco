@@ -306,29 +306,33 @@
             live: running,
           }
     );
+    // Each outcome replaces what the last read said, and only an outcome
+    // does: a read in flight leaves the pane showing what it showed.
     if (!outcome.ok) {
       // 404 is an answer, not a fault: nothing the hub or any machine holds
       // goes by this id. Retrying would ask the same question.
       if (outcome.status === 404) {
         missing = true;
+        failure = null;
       } else {
         const { ok: _ok, status: _status, ...fault } = outcome;
         failure = fault;
+        missing = false;
       }
       return;
     }
     // Skipped means another read already holds this view; its outcome is the
-    // one that counts, and this one has nothing to say about emptiness.
+    // one that counts, and this one has nothing to say.
     if (outcome.skipped) {
       return;
     }
+    failure = null;
+    missing = false;
     // A clean read of nothing. For a running session that is a conversation
     // that has not started, and the stream will say so when it does; for a
     // stored one it is the whole answer, and the skeleton would otherwise
     // wait for turns that are never coming.
-    if (!running && (whiffle.session(id)?.messages.length ?? 0) === 0) {
-      empty = true;
-    }
+    empty = !running && (whiffle.session(id)?.messages.length ?? 0) === 0;
   }
 
   // Bring the conversation into being: a stored session reads its transcript
@@ -362,9 +366,10 @@
     // biome-ignore lint/complexity/noVoid: read-only dependency — re-runs this effect once the hub or the session's machineId become known, per the comment above
     void whiffle.session(id)?.machineId;
     untrack(() => {
-      failure = null;
-      missing = false;
-      empty = false;
+      // What the last read said stands while this pass reads again: a
+      // reconnect re-reads behind a "no session" or an offline card, and
+      // only the read's own outcome replaces it (`readHistory`).
+      //
       // A running session is opened — hydrated from its row and subscribed to
       // — on every pass, and ahead of the guard below: the guard skips a pane
       // whose read landed before the hub's rows arrived, and that pane would
@@ -381,6 +386,12 @@
     // on its own.
     const held = whiffle.session(id);
     if (held?.initialized && held.messages.length > 0) {
+      // The transcript is in hand, which answers any earlier failed read.
+      untrack(() => {
+        failure = null;
+        missing = false;
+        empty = false;
+      });
       return;
     }
     // The server's answer for whichever conversation the URL names; a pane the
@@ -546,19 +557,14 @@
   const mounted = $derived(!(namedState || waiting) && buildable);
 
   /**
-   * Whether the mounted transcript has drawn its rows: its own `shown`,
-   * bound. Transcript keeps its list unpainted until every row in view is
-   * measured, so the placeholder stands over it until then; dropping the
+   * Whether the mounted transcript has drawn its rows, as it reports them
+   * (`onshown`). Transcript keeps its list unpainted until every row in view
+   * is measured, so the placeholder stands over it until then; dropping the
    * placeholder when the transcript mounted left the pane blank for those
-   * frames. A transcript that unmounts takes its reveal with it, so the
-   * next one starts unrevealed rather than inheriting this value.
+   * frames. A transcript that goes reports false as it goes, so the reveal
+   * is always the mounted instance's own, never one it inherited.
    */
   let shown = $state(false);
-  $effect.pre(() => {
-    if (!mounted) {
-      shown = false;
-    }
-  });
 
   /**
    * The placeholder, as a function of what stands in the area: over the
@@ -588,6 +594,13 @@
   /** Try again: forget what was said about the last read, then read. */
   function retry(): void {
     clearReadFault(viewId);
+    failure = null;
+    missing = false;
+    reread();
+  }
+
+  /** Read again behind what the pane shows; the outcome replaces it. */
+  function reread(): void {
     attempt += 1;
   }
 
@@ -619,7 +632,7 @@
         return;
       }
       if (online && wasOnline === false) {
-        retry();
+        reread();
       }
       wasOnline = online;
     });
@@ -1140,9 +1153,11 @@
                   <Transcript
                     {agentName}
                     {focused}
+                    onshown={(drawn) => {
+                      shown = drawn;
+                    }}
                     {session}
                     {visible}
-                    bind:shown
                   />
                 </div>
               {/if}
