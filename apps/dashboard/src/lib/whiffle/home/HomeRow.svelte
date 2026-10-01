@@ -109,6 +109,7 @@
       {...trigger}
       aria-current={active ? 'page' : undefined}
       class={cn('row press-tint focus-inset', trigger.class as string | undefined)}
+      data-hover-session={instance?.id}
       data-rail-row
       data-share="session:{sessionId}"
       {href}

@@ -22,18 +22,12 @@
     IconSuccess,
     IconWarningTriangle,
   } from "$lib/icons";
-  import {
-    dismissWorkItem,
-    preloadHistory,
-    unwatchDelegate,
-    watchDelegate,
-    whiffle,
-  } from "../client.svelte";
+  import { dismissWorkItem, whiffle } from "../client.svelte";
   import { askDetailOf, askShortOf, matchesSession } from "../frames";
+  import HoverPanel from "../HoverPanel.svelte";
   import { conversationHref } from "../links";
   import { markHue, sessionSprite } from "../mark";
   import { CURVE, dur, easeOut, motionOk } from "../motion/curves.svelte";
-  import { morph } from "../motion/morph.svelte";
   import { reflow } from "../motion/rows.svelte";
   import { land } from "../motion/share.svelte";
   import DelegateTail, { type TailNote } from "./DelegateTail.svelte";
@@ -614,45 +608,6 @@
     };
   }
 
-  function panelIn(_node: Element): TransitionConfig {
-    if (!motionOk.current) {
-      return { duration: dur("--dur-menu"), css: (t) => `opacity: ${t}` };
-    }
-    return {
-      duration: dur("--dur-menu"),
-      easing: easeOut,
-      css: (t, u) =>
-        `opacity: ${t}; transform: translateY(${(u * 4).toFixed(2)}px) scale(${(0.98 + 0.02 * t).toFixed(4)})`,
-    };
-  }
-  function panelOut(_node: Element): TransitionConfig {
-    return {
-      duration: dur("--dur-control"),
-      easing: easeOut,
-      css: (t) => `opacity: ${t}`,
-    };
-  }
-  /** The panel's content, when it glides to another chip: the new one fades in. */
-  function swapIn(_node: Element): TransitionConfig {
-    return {
-      duration: dur("--dur-control"),
-      easing: easeOut,
-      css: (t) => `opacity: ${t}`,
-    };
-  }
-  /**
-   * The old content fades out of the flow, so the panel's size tweens once,
-   * straight to the new content's (morph), under both.
-   */
-  function swapOut(node: HTMLElement): TransitionConfig {
-    node.style.position = "absolute";
-    node.style.inset = "var(--space-3) var(--space-3) auto";
-    return {
-      duration: dur("--dur-control"),
-      easing: easeOut,
-      css: (t) => `opacity: ${t}`,
-    };
-  }
   /**
    * The check or the triangle taking the dot's place: drawn in from its
    * leading edge over --dur-pop as it grows from 0.6.
@@ -686,41 +641,8 @@
     chips.find((chip) => chip.item.id === openKey) ?? null
   );
 
-  /**
-   * The open panel's delegate is watched live, so its tail moves; it stays
-   * watched for 2s after the panel closes, so a pointer that wanders off
-   * and back does not drop and re-open the stream.
-   */
+  /** The open panel's delegate, whose live tail the panel watches (HoverPanel). */
   const openInstance = $derived(openChip?.item.instanceId ?? null);
-  const releases = new Map<string, ReturnType<typeof setTimeout>>();
-  $effect(() => {
-    const id = openInstance;
-    if (!id) {
-      return;
-    }
-    untrack(() => {
-      const release = releases.get(id);
-      if (release) {
-        clearTimeout(release);
-        releases.delete(id);
-        return;
-      }
-      watchDelegate(id);
-      if (!whiffle.session(id)?.messages.length) {
-        // biome-ignore lint/complexity/noVoid: fire-and-forget; the tail draws whatever has arrived.
-        void preloadHistory(id);
-      }
-    });
-    return () => {
-      releases.set(
-        id,
-        setTimeout(() => {
-          releases.delete(id);
-          unwatchDelegate(id);
-        }, 2000)
-      );
-    };
-  });
 
   /** The row the tail ends on: the question waiting, or the failure. */
   const noteOf = ({ item, tone, question }: Chip): TailNote | null => {
@@ -868,102 +790,90 @@
         {/if}
       </div>
 
-      {#if openKey}
-        <!-- biome-ignore lint/a11y/noStaticElementInteractions: swallows the mousedown so a phone's keyboard stays up; the panel's controls are links and buttons. -->
-        <div
-          class="panel"
-          id={panelId}
-          onmousedown={(event) => event.preventDefault()}
-          role="presentation"
-          style:--origin="{place.origin}px"
-          style:--room="{place.room}px"
-          style:--span="{place.span}px"
-          style:--x="{place.x}px"
-          class:gliding={gliding}
-          in:panelIn
-          out:panelOut
-          {@attach morph({ width: true })}
-        >
-          <div class="cell">
-            {#key openKey}
-              <div class="pbody" in:swapIn out:swapOut>
-                {#if openKey === 'more'}
-                  <ul class="list">
-                    {#each hidden as chip (chip.item.id)}
-                      <li>
-                        <a class="prow" href={hrefOf(chip.item)}>
-                          {@render mark(chip.item, false)}
-                          <span class="ptitle">{chip.item.title}</span>
-                          <span class="pstate">{stateWords(chip)}</span>
-                        </a>
-                      </li>
-                    {/each}
-                  </ul>
-                {:else if openChip}
-                  {@const { item, tone } = openChip}
-                  <div class="phead">
-                    {@render mark(item, false)}
-                    <span class="ptitle">{item.title}</span>
-                    <span
-                      aria-label={stateWords(openChip)}
-                      class="pstate {tone}"
-                      role="img"
-                    >
-                      {#if tone === 'starting'}
-                        <Spinner aria-hidden="true" role="presentation" />
-                      {:else if tone === 'running'}
-                        <span
-                          class="dot"
-                          style:animation-delay="-{Date.now() % 2000}ms"
-                        ></span>
-                      {:else if tone === 'asked' || tone === 'needs'}
-                        <IconAsk />
-                      {:else if tone === 'done'}
-                        <IconSuccess />
-                      {:else if tone === 'failed'}
-                        <IconWarningTriangle />
-                      {:else}
-                        <IconStop />
-                      {/if}
-                    </span>
-                    <span class="elapsed"
-                      >{span(item.createdAt, item.endedAt ?? minute)}</span
-                    >
-                    <a
-                      aria-label="Open {item.title} in its own view"
-                      class="jump touch-hit"
-                      href={hrefOf(item)}
-                      title="Open {item.title} in its own view"
-                    >
-                      <IconExternal />
-                    </a>
-                  </div>
-                  <DelegateTail
-                    instanceId={item.instanceId}
-                    note={noteOf(openChip)}
-                  />
-                  {#if tone === 'needs'}
-                    <div class="acts">
-                      <Button href={hrefOf(item)} size="sm" variant="outline"
-                        >Open question</Button
-                      >
-                    </div>
-                  {:else if tone === 'failed'}
-                    <div class="acts">
-                      <Button
-                        onclick={() => dismiss(item)}
-                        size="sm"
-                        variant="ghost"
-                        >Dismiss</Button
-                      >
-                    </div>
-                  {/if}
+      <!-- The house hover panel; its mousedown is swallowed so a phone's
+           keyboard stays up (its controls are links and buttons). -->
+      <HoverPanel
+        {gliding}
+        id={panelId}
+        key={openKey}
+        onmousedown={(event) => event.preventDefault()}
+        role="presentation"
+        side="above"
+        style="--origin: {place.origin}px; --room: {place.room}px; --span: {place.span}px; --x: {place.x}px"
+        watch={openInstance}
+      >
+        {#snippet children(key)}
+          {#if key === 'more'}
+            <ul class="list">
+              {#each hidden as chip (chip.item.id)}
+                <li>
+                  <a class="prow" href={hrefOf(chip.item)}>
+                    {@render mark(chip.item, false)}
+                    <span class="ptitle">{chip.item.title}</span>
+                    <span class="pstate">{stateWords(chip)}</span>
+                  </a>
+                </li>
+              {/each}
+            </ul>
+          {:else if openChip}
+            {@const { item, tone } = openChip}
+            <div class="phead">
+              {@render mark(item, false)}
+              <span class="ptitle">{item.title}</span>
+              <span
+                aria-label={stateWords(openChip)}
+                class="pstate {tone}"
+                role="img"
+              >
+                {#if tone === 'starting'}
+                  <Spinner aria-hidden="true" role="presentation" />
+                {:else if tone === 'running'}
+                  <span
+                    class="dot"
+                    style:animation-delay="-{Date.now() % 2000}ms"
+                  ></span>
+                {:else if tone === 'asked' || tone === 'needs'}
+                  <IconAsk />
+                {:else if tone === 'done'}
+                  <IconSuccess />
+                {:else if tone === 'failed'}
+                  <IconWarningTriangle />
+                {:else}
+                  <IconStop />
                 {/if}
+              </span>
+              <span class="elapsed"
+                >{span(item.createdAt, item.endedAt ?? minute)}</span
+              >
+              <a
+                aria-label="Open {item.title} in its own view"
+                class="jump touch-hit"
+                href={hrefOf(item)}
+                title="Open {item.title} in its own view"
+              >
+                <IconExternal />
+              </a>
+            </div>
+            <DelegateTail
+              instanceId={item.instanceId}
+              note={noteOf(openChip)}
+            />
+            {#if tone === 'needs'}
+              <div class="acts">
+                <Button href={hrefOf(item)} size="sm" variant="outline"
+                  >Open question</Button
+                >
               </div>
-            {/key}
-          </div>
-        </div>
-      {/if}
+            {:else if tone === 'failed'}
+              <div class="acts">
+                <Button onclick={() => dismiss(item)} size="sm" variant="ghost"
+                  >Dismiss</Button
+                >
+              </div>
+            {/if}
+          {/if}
+        {/snippet}
+      </HoverPanel>
     </div>
   {/if}
 </div>
@@ -1189,57 +1099,8 @@
     background-color: var(--mark-8);
   }
 
-  /* The house popover, standing 4px off the chips, growing from the chip
-     it belongs to, as wide as its content up to 440px or the row. Between
-     chips one surface glides and takes the new content's size (morph) on
-     one clock, --dur-morph on --ease-drawer, while the content cross-fades. */
-  .panel {
-    position: absolute;
-    inset-block-end: calc(100% + 4px);
-    inset-inline-start: 0;
-    inline-size: max-content;
-    translate: max(0px, min(var(--x), calc(var(--span) - 100%))) 0;
-    transform-origin: var(--origin) 100%;
-    z-index: 2;
-    pointer-events: auto;
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-lg);
-    background: var(--surface-raised);
-    box-shadow: var(--shadow-overlay);
-
-    /* The 4px between the panel and the chips, so the pointer crossing it
-       is still over the panel. */
-    &::after {
-      content: "";
-      position: absolute;
-      inset-inline: 0;
-      inset-block-start: 100%;
-      block-size: 4px;
-    }
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .panel.gliding {
-      transition: translate var(--dur-morph) var(--ease-drawer);
-    }
-  }
-  /* The content's own width, capped at 440px or the row (less the panel's
-     border): never the panel's, so the panel's size tween (morph, which
-     watches this box) does not resize what it is watching. */
-  .cell {
-    position: relative;
-    display: grid;
-    inline-size: max-content;
-    max-inline-size: calc(min(440px, var(--span)) - 2px);
-    max-block-size: var(--room);
-    overflow-y: auto;
-    overscroll-behavior: contain;
-    padding: var(--space-3);
-
-    & > .pbody {
-      grid-area: 1 / 1;
-      min-inline-size: 0;
-    }
-  }
+  /* The panel's surface, motion and size are the house hover panel's
+     (HoverPanel); what is in it is drawn here. */
   .ptitle {
     flex: 1 1 auto;
     min-inline-size: 0;

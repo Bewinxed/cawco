@@ -64,6 +64,7 @@
   import { nestFrom, nestPlace } from "./nest";
   import ProjectMark from "./ProjectMark.svelte";
   import { type RailSort, rail } from "./rail.svelte";
+  import SessionHover from "./SessionHover.svelte";
   import NewSessionDialog from "./spawn/NewSessionDialog.svelte";
   import { tree } from "./tree";
   import UsageMeter from "./UsageMeter.svelte";
@@ -110,6 +111,9 @@
   const activeSession = $derived(
     path.startsWith("/session") ? workspace.activeSessionId : null
   );
+
+  /** The rail itself: its session rows open the session card (SessionHover). */
+  let railEl = $state<HTMLElement>();
 
   /**
    * The rail's steps, named once. Every size here comes from app.css's scale
@@ -515,6 +519,7 @@
     <span aria-hidden="true" class="kit-nest-tip"></span>
     <Sidebar.MenuSubButton
       class={SUB_ROW}
+      data-hover-session={row.id}
       data-share="session:{row.id}"
       href={conversationHref(row.id, whiffle.instanceIndex)}
       isActive={activeSession === row.id}
@@ -550,6 +555,7 @@
 
 <div
   class="flex h-full min-w-0 flex-1 flex-col overflow-hidden bg-sidebar text-sidebar-foreground"
+  bind:this={railEl}
   {@attach highlight({ rows: ROWS })}
 >
   <!-- ────────────────────── header ──────────────────────── -->
@@ -924,6 +930,7 @@
       <ThemeSwitcher />
     </div>
   </Sidebar.Footer>
+  <SessionHover within={railEl} />
 </div>
 <!-- end flex column wrapper -->
 
