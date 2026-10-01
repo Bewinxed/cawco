@@ -83,8 +83,17 @@
   } = $props();
 
   const ledger = useLedger();
+  /**
+   * The row's identity to the ledger, read once at mount. The entrance
+   * reports back to the ledger when its animation finishes, which can be
+   * after the row has unmounted; by then the prop is a value its parent no
+   * longer keeps, so it is not read again.
+   */
+  const ledgerId = untrack(() => id);
   /** Taken at mount. See the component note. */
-  const ticket = untrack(() => (id && ledger ? ledger.take(id) : null));
+  const ticket = untrack(() =>
+    ledgerId && ledger ? ledger.take(ledgerId) : null
+  );
   const emerges = untrack(() => motion) === "emerge";
   /**
    * Where the entrance starts: its place in the burst, less however long the
@@ -101,8 +110,8 @@
 
   /** The entrance has run: the ticket is spent. */
   function spent(): void {
-    if (id) {
-      ledger?.done(id);
+    if (ledgerId) {
+      ledger?.done(ledgerId);
     }
   }
   /** The entrance still owed: this mount plays it once. */

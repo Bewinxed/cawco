@@ -316,15 +316,29 @@
     copy.remove();
   }
 
+  /**
+   * The tray's beat: the interval only marks the time, and the tray reads
+   * its chips in an effect on that mark. A tray leaving (Composer's keyed
+   * fade, on every switch) is paused until its fade ends; a paused tray's
+   * effects do not run, so nothing reads its chips once it is on its way
+   * out, while the interval itself goes with the tray.
+   */
+  let beatAt = $state<number | null>(null);
   $effect(() => {
     const beat = setInterval(() => {
-      const now = Date.now();
-      untrack(() => {
-        admitWaiting(now);
-        holdFinished(now);
-      });
+      beatAt = Date.now();
     }, TICK);
     return () => clearInterval(beat);
+  });
+  $effect(() => {
+    const now = beatAt;
+    if (now === null) {
+      return;
+    }
+    untrack(() => {
+      admitWaiting(now);
+      holdFinished(now);
+    });
   });
 
   /* ---- overflow ------------------------------------------------------ */
