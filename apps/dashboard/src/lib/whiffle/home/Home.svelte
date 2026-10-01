@@ -22,6 +22,7 @@
   import { crossIn, crossOut, morphMs } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
   import NewSessionDialog from "../spawn/NewSessionDialog.svelte";
+  import UsageMeter from "../UsageMeter.svelte";
   import Caw from "./Caw.svelte";
   import HomeRecent from "./HomeRecent.svelte";
   import { home } from "./home.svelte";
@@ -117,6 +118,13 @@
   <div class="top">
     <!-- The line every other line on this screen is believed by. -->
     <StatusLine />
+    {#if variant === 'page'}
+      <!-- The phone has no rail: the rail's usage strip stands here, always
+           (owner pick i), on the home's own ground. -->
+      <div class="usage">
+        <UsageMeter />
+      </div>
+    {/if}
     <!-- Only when something does: an empty claim is clutter. It enters and
          leaves as one block of the reflow, never a snap. -->
     {#if home.ready && home.live && home.needs.length > 0}
@@ -235,6 +243,11 @@
   }
   .rail .top {
     padding: var(--space-2) var(--space-3) var(--space-1);
+  }
+  /* The strip's edges line up with the status line's text. */
+  .usage {
+    --strip-ground: var(--surface-recess);
+    margin-inline: -8px;
   }
   .headline {
     display: flex;

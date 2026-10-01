@@ -1,18 +1,24 @@
 <script lang="ts">
   /**
-   * The rail's usage strip (design/usage-tracker.md §2, owner picks a, i):
-   * one strip, two lines, the window that will stop you first. Its name and
+   * The usage strip (design/usage-tracker.md §2, owner picks a, i), in the
+   * rail's footer and, always, under the phone home's status line: one
+   * strip, two lines, the window that will stop you first. Its name and
    * percent, then what matters about it — when it resets, or when it runs
    * out at this pace — over a 4px bar with its pace tick. A "Usage" link at
    * the top right opens the page; the strip itself opens every window,
-   * grouped by provider. Near and over get a faint wash, nothing else.
+   * grouped by provider — a popover by the strip with a fine pointer, the
+   * house bottom sheet on touch. Near and over get a faint wash, nothing
+   * else.
    *
    * Live: the readings are the client's, which the hub's `usage` frame keeps
    * current. Until the socket has read them, the Claude reading the layout
    * was served with draws the strip, so it never grows on hydration.
    */
   import type { ClaudeLimits } from "@whiffle/core";
+  import { MediaQuery } from "svelte/reactivity";
   import { page } from "$app/state";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
+  import * as Drawer from "$lib/components/ui/drawer";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "$lib/components/ui/popover";
   import Failed from "~icons/solar/close-circle-bold-duotone";
@@ -94,99 +100,137 @@
     over: "Nearly at the limit",
     reached: "Limit reached",
   };
+
+  const triggerLabel = $derived(
+    lead
+      ? `${leadName(lead)} ${Math.round(lead.meter.used)} percent, ${detail(lead)}. Show every limit.`
+      : `${reason}. Show every limit.`
+  );
+
+  /** Touch, or a phone's width: the limits open in the house bottom sheet. */
+  const touch = new MediaQuery(
+    "(hover: none), (pointer: coarse), (max-width: 640px)"
+  );
 </script>
 
-<div class="strip" data-state={lead?.meter.state ?? 'unknown'}>
-  <Popover.Root>
-    <Popover.Trigger
-      aria-label={lead
-        ? `${leadName(lead)} ${Math.round(lead.meter.used)} percent, ${detail(lead)}. Show every limit.`
-        : `${reason}. Show every limit.`}
-      class="strip-hit press-tint"
-    >
-      {#if lead}
-        {@const m = lead.meter}
-        <span class="line">
-          {#if m.state === 'near'}
-            <Attention aria-hidden="true" class="glyph near" />
-          {:else if m.state === 'over' || m.state === 'reached'}
-            <Failed aria-hidden="true" class="glyph over" />
-          {/if}
-          {#if m.state === 'reached'}
-            <span class="name">{leadName(lead)} limit</span>
-          {:else}
-            <span class="name">{leadName(lead)}</span>
-            <span class="num pct">{Math.round(m.used)}%</span>
-          {/if}
-          {#if detail(lead)}
-            <span class="detail">· {detail(lead)}</span>
-          {/if}
-        </span>
-        <LimitBar
-          elapsed={m.elapsed}
-          label={leadName(lead)}
-          size={4}
-          state={m.state}
-          used={m.used}
-        />
+{#snippet face()}
+  {#if lead}
+    {@const m = lead.meter}
+    <span class="line">
+      {#if m.state === 'near'}
+        <Attention aria-hidden="true" class="glyph near" />
+      {:else if m.state === 'over' || m.state === 'reached'}
+        <Failed aria-hidden="true" class="glyph over" />
+      {/if}
+      {#if m.state === 'reached'}
+        <span class="name">{leadName(lead)} limit</span>
       {:else}
-        <span class="line"><span class="detail">{reason}</span></span>
+        <span class="name">{leadName(lead)}</span>
+        <span class="num pct">{Math.round(m.used)}%</span>
       {/if}
-    </Popover.Trigger>
-    <Popover.Content
-      align="start"
-      class="usage-pop w-[min(20rem,calc(100vw-16px))] gap-0 rounded-[var(--radius-lg)] p-0 shadow-lg"
-      collisionPadding={8}
-      side="top"
-      sideOffset={6}
-    >
-      {#if groups.length === 0}
-        <p class="pop-empty">{reason}</p>
+      {#if detail(lead)}
+        <span class="detail">· {detail(lead)}</span>
       {/if}
-      {#each groups as group (group.name)}
-        <section class="pop-group">
-          <h3 class="pop-provider">{group.name}</h3>
-          {#each group.rows as row (row.key)}
-            {@const m = row.meter}
-            <div class="pop-row" data-state={m.state}>
-              <span class="pop-name">
-                {#if m.state === 'near'}
-                  <Attention aria-label={glyphLabel.near} class="glyph near" />
-                {:else if m.state === 'over' || m.state === 'reached'}
-                  <Failed aria-label={glyphLabel[m.state]} class="glyph over" />
-                {/if}
-                {row.label}
-              </span>
-              <span class="num pct">{Math.round(m.used)}%</span>
-              <span class="pop-bar">
-                <LimitBar
-                  elapsed={m.elapsed}
-                  label={row.label}
-                  size={4}
-                  state={m.state}
-                  used={m.used}
-                />
-              </span>
-              {#if m.window.resetsAt}
-                <span class="pop-reset"
-                  >{m.used >= 100 ? 'Limit reached · ' : ''}resets
-                  {resetShort(m.window.resetsAt, now)}</span
-                >
-              {/if}
-            </div>
-          {/each}
-        </section>
+    </span>
+    <LimitBar
+      elapsed={m.elapsed}
+      label={leadName(lead)}
+      size={4}
+      state={m.state}
+      used={m.used}
+    />
+  {:else}
+    <span class="line"><span class="detail">{reason}</span></span>
+  {/if}
+{/snippet}
+
+{#snippet limits()}
+  {#if groups.length === 0}
+    <p class="pop-empty">{reason}</p>
+  {/if}
+  {#each groups as group (group.name)}
+    <section class="pop-group">
+      <h3 class="pop-provider">{group.name}</h3>
+      {#each group.rows as row (row.key)}
+        {@const m = row.meter}
+        <div class="pop-row" data-state={m.state}>
+          <span class="pop-name">
+            {#if m.state === 'near'}
+              <Attention aria-label={glyphLabel.near} class="glyph near" />
+            {:else if m.state === 'over' || m.state === 'reached'}
+              <Failed aria-label={glyphLabel[m.state]} class="glyph over" />
+            {/if}
+            {row.label}
+          </span>
+          <span class="num pct">{Math.round(m.used)}%</span>
+          <span class="pop-bar">
+            <LimitBar
+              elapsed={m.elapsed}
+              label={row.label}
+              size={4}
+              state={m.state}
+              used={m.used}
+            />
+          </span>
+          {#if m.window.resetsAt}
+            <span class="pop-reset"
+              >{m.used >= 100 ? 'Limit reached · ' : ''}resets
+              {resetShort(m.window.resetsAt, now)}</span
+            >
+          {/if}
+        </div>
       {/each}
-    </Popover.Content>
-  </Popover.Root>
+    </section>
+  {/each}
+{/snippet}
+
+<div class="strip" data-state={lead?.meter.state ?? 'unknown'}>
+  {#if touch.current}
+    <!-- On touch every window rises in the house sheet, as a tab's details
+         and a peek do; with a fine pointer it is a popover by the strip. -->
+    <Drawer.Root>
+      <Drawer.Trigger
+        aria-label={triggerLabel}
+        class="strip-hit press-tint touch-hit"
+      >
+        {@render face()}
+      </Drawer.Trigger>
+      <Drawer.Content
+        class="usage-sheet max-h-[85vh] pb-[calc(1rem+env(safe-area-inset-bottom))]"
+      >
+        <Drawer.Header class="p-0 pb-1 text-left">
+          <Drawer.Title class="text-left">Usage limits</Drawer.Title>
+        </Drawer.Header>
+        {@render limits()}
+      </Drawer.Content>
+    </Drawer.Root>
+  {:else}
+    <Popover.Root>
+      <Popover.Trigger aria-label={triggerLabel} class="strip-hit press-tint">
+        {@render face()}
+      </Popover.Trigger>
+      <Popover.Content
+        align="start"
+        class="usage-pop w-[min(20rem,calc(100vw-16px))] gap-0 rounded-[var(--radius-lg)] p-0 shadow-lg"
+        collisionPadding={8}
+        side="top"
+        sideOffset={6}
+      >
+        {@render limits()}
+      </Popover.Content>
+    </Popover.Root>
+  {/if}
   <a class="usage-link" href="/usage">Usage</a>
 </div>
 
 <style>
   /* One strip, two lines, the same height whatever it says, so the footer
      never moves when a reading lands or changes. */
+  /* Its ground is the surface it stands on: the rail's by default, the
+     phone home's where the home sets `--strip-ground`. The pace tick's gap
+     shows the same paint. */
   .strip {
-    --row-paint: var(--sidebar);
+    --row-paint: var(--strip-ground, var(--sidebar));
     position: relative;
     inline-size: 100%;
     min-inline-size: 0;
@@ -196,13 +240,13 @@
   .strip[data-state="near"] {
     --row-paint:
       linear-gradient(var(--meter-wash-near), var(--meter-wash-near)),
-      var(--sidebar);
+      var(--strip-ground, var(--sidebar));
   }
   .strip[data-state="over"],
   .strip[data-state="reached"] {
     --row-paint:
       linear-gradient(var(--meter-wash-over), var(--meter-wash-over)),
-      var(--sidebar);
+      var(--strip-ground, var(--sidebar));
   }
   :global(.strip-hit) {
     display: flex;
