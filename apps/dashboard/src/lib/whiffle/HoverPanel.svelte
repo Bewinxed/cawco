@@ -19,8 +19,8 @@
    * as it crosses the gap.
    */
   import type { Snippet } from "svelte";
-  import type { Attachment } from "svelte/attachments";
   import { untrack } from "svelte";
+  import type { Attachment } from "svelte/attachments";
   import type { HTMLAttributes } from "svelte/elements";
   import type { TransitionConfig } from "svelte/transition";
   import {
@@ -181,11 +181,11 @@
       {#key key}
         <div
           class="pbody"
-          {@attach measure}
           style:block-size={pending && held ? `${held.h}px` : null}
           style:inline-size={pending && held ? `${held.w}px` : null}
           in:swapIn
           out:swapOut
+          {@attach measure}
         >
           {@render children(key)}
         </div>
