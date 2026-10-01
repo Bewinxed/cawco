@@ -509,6 +509,7 @@
     aria-hidden="true"
     class={layer ? "leaving layer" : "leaving"}
     data-leaving
+    data-reflow
     inert
   >
     {#each lines.filter((line) => line.row) as line, i (line.key)}
@@ -844,16 +845,26 @@
       animation-delay: calc(var(--nest-i, 0) * 40ms + var(--dur-panel));
     }
   }
+  /* The old rows, out of the layout either way: the group's own height is
+     only what stays, so the height drive holds it while they leave and then
+     closes it. Its own reflow boundary (data-reflow): the list's reflow
+     neither enters these copies nor ghosts them when they go. */
   .leaving {
+    position: absolute;
+    inset: 0 0 auto;
     display: flex;
     flex-direction: column;
     gap: 2px;
     pointer-events: none;
   }
-  /* Over the rows' top: each old row in the place its successor takes. */
-  .leaving.layer {
-    position: absolute;
-    inset: 0 0 auto;
+  /* With no successor (a fold, a group that goes), where they stood: under
+     what stays. Layered, over the rows' top, each old row in the place its
+     successor takes. */
+  .leaving:not(.layer) {
+    top: 100%;
+  }
+  .rows:has(> [data-key]) > .leaving:not(.layer) {
+    top: calc(100% + 2px);
   }
   .machine {
     display: flex;
