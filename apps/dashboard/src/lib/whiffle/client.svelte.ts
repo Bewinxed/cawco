@@ -21,6 +21,7 @@ import type {
   ModelInfo,
   NeutralSessionInfo,
   NeutralStatus,
+  OpenCodeGoLimits,
   PermissionMode,
   PermissionResult,
   PermissionUpdate,
@@ -37,6 +38,7 @@ import type {
   SupervisorEvent,
   SupportedCommands,
   UsageLimitsReading,
+  UsageLimitsResponse,
   WorkItemSummary,
 } from "@whiffle/core";
 import {
@@ -578,6 +580,10 @@ const state = $state({
    * (USAGE-SPEC.md §7.1). Empty until a machine has reported.
    */
   usageLimits: {} as Record<string, ClaudeLimits>,
+  /** Each machine's OpenCode Go windows, from the same frame; absent on a machine with no Go key. */
+  openCodeGoLimits: {} as Record<string, OpenCodeGoLimits>,
+  /** The hub's limit readings have been read once, so an empty map means none, not not-yet. */
+  usageLimitsRead: false,
 });
 
 interface Waiter {
@@ -1184,27 +1190,34 @@ function patchInstances(upserts: InstanceRow[], removed: string[]): void {
   }
 }
 
-/** Replaces the whole limits map with the hub's word — a full snapshot, not a patch. */
+/** Replaces both limits maps with the hub's word — a full snapshot, not a patch. */
 function adoptUsageLimits(
-  readings: { machineId: string; limits: ClaudeLimits }[]
+  readings: {
+    machineId: string;
+    limits: ClaudeLimits;
+    openCodeGo: OpenCodeGoLimits | null;
+  }[]
 ): void {
-  const next: Record<string, ClaudeLimits> = {};
+  const claude: Record<string, ClaudeLimits> = {};
+  const openCodeGo: Record<string, OpenCodeGoLimits> = {};
   for (const reading of readings) {
-    next[reading.machineId] = reading.limits;
+    claude[reading.machineId] = reading.limits;
+    if (reading.openCodeGo) {
+      openCodeGo[reading.machineId] = reading.openCodeGo;
+    }
   }
-  state.usageLimits = next;
+  state.usageLimits = claude;
+  state.openCodeGoLimits = openCodeGo;
+  state.usageLimitsRead = true;
 }
 
-/** The `kind: 'usage'` frame's readings, mapped down to a machine → limits table. */
-function usageLimitReadings(
-  readings: UsageLimitsReading[]
-): Record<string, ClaudeLimits> {
-  const next: Record<string, ClaudeLimits> = {};
-  for (const reading of readings) {
-    next[reading.machineId] = reading.payload;
-  }
-  return next;
-}
+/** The `kind: 'usage'` frame's readings, in the shape `/api/usage/limits` serves. */
+const usageLimitReadings = (readings: UsageLimitsReading[]) =>
+  readings.map((reading) => ({
+    machineId: reading.machineId,
+    limits: reading.payload,
+    openCodeGo: reading.openCodeGo,
+  }));
 
 /** Who hears the continuation table each time it moves (see {@link followContinuations}). */
 let continuationFollower: ((table: ContinuationJob[]) => void) | null = null;
@@ -1242,9 +1255,7 @@ async function refresh(): Promise<boolean> {
       // a hand-off went out has missed every broadcast it will ever get.
       load<Record<string, { from: string; at: number }>>("/api/handoffs"),
       // Same reason: a dashboard opened between reports has missed the frames.
-      load<{ machines: { machineId: string; limits: ClaudeLimits }[] }>(
-        "/api/usage/limits"
-      ),
+      load<UsageLimitsResponse>("/api/usage/limits"),
       // Same reason: a continuation that moved while this tab was away.
       load<ContinuationJob[]>("/api/continuations"),
     ]);
@@ -1618,7 +1629,7 @@ function handleFrame(frame: FramePayload): void {
 
   if (frame.kind === "usage") {
     // The small limits frame the hub pushes on each report (USAGE-SPEC.md §6.4).
-    state.usageLimits = usageLimitReadings(frame.limits);
+    adoptUsageLimits(usageLimitReadings(frame.limits));
     return;
   }
 
@@ -5318,6 +5329,18 @@ export const whiffle = {
   usageLimitsAny: (): ClaudeLimits | null => {
     const readings = Object.values(state.usageLimits);
     return readings.find((r) => r.error === null) ?? readings[0] ?? null;
+  },
+  /** Every machine's Claude reading, by machineId (the usage page's Limits block). */
+  get claudeLimits(): Readonly<Record<string, ClaudeLimits>> {
+    return state.usageLimits;
+  },
+  /** Every machine's OpenCode Go windows, by machineId. */
+  get openCodeGoLimits(): Readonly<Record<string, OpenCodeGoLimits>> {
+    return state.openCodeGoLimits;
+  },
+  /** The hub's limit readings have landed at least once. */
+  get usageLimitsRead() {
+    return state.usageLimitsRead;
   },
   get instances() {
     return instances;

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { UsageSummary } from "@whiffle/core";
   import { onMount, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { goto } from "$app/navigation";
@@ -17,7 +18,6 @@
   import { crossIn, crossOut } from "$lib/whiffle/motion/curves.svelte";
   import { unfold } from "$lib/whiffle/motion/fold.svelte";
   import { reflow } from "$lib/whiffle/motion/rows.svelte";
-  import type { UsageSummary } from "$lib/whiffle/usage";
   import {
     refreshWorkflowLog,
     refreshWorkflowRun,

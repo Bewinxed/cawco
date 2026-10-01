@@ -1,0 +1,1 @@
+ALTER TABLE `usage_limits` ADD `open_code_go` text;

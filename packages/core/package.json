@@ -14,6 +14,10 @@
       "types": "./src/usage/limits.ts",
       "default": "./src/usage/limits.ts"
     },
+    "./usage/opencode-go": {
+      "types": "./src/usage/opencode-go.ts",
+      "default": "./src/usage/opencode-go.ts"
+    },
     "./usage/observed": {
       "types": "./src/usage/observed.ts",
       "default": "./src/usage/observed.ts"

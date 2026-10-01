@@ -10,6 +10,7 @@ import type {
   HookEvent,
   HookHandler,
   NeutralUserMessage,
+  OpenCodeGoLimits,
   RuleAction,
   RuleMatchKind,
   RuleScope,
@@ -812,6 +813,8 @@ export const usageBuckets = sqliteTable(
 export const usageLimits = sqliteTable("usage_limits", {
   machineId: text("machine_id").primaryKey(),
   payload: text("payload", { mode: "json" }).$type<ClaudeLimits>().notNull(),
+  /** The OpenCode Go plan's windows; null on a machine with no Go key. */
+  openCodeGo: text("open_code_go", { mode: "json" }).$type<OpenCodeGoLimits>(),
   fetchedAt: timestamp("fetched_at")
     .notNull()
     .$defaultFn(() => new Date()),

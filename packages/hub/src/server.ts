@@ -30,6 +30,7 @@ import type {
   NeutralResultMessage,
   NeutralSessionInfo,
   NeutralUserMessage,
+  OpenCodeGoLimits,
   PermissionMode,
   PreviewSource,
   RegisterAckPayload,
@@ -47,8 +48,8 @@ import type {
   SupervisorEvent,
   ToolState,
   ToolStatus,
-  UsageBlock,
   UsageBucket,
+  UsageLimitsResponse,
   Verb,
 } from "@whiffle/core";
 import {
@@ -78,7 +79,6 @@ import {
   hookProblem,
   IMAGE_GENERATION_TIMEOUT_MS,
   INSPECT_CONFIG,
-  identifyBlocks,
   isEffortLevel,
   MESSAGES_HELD,
   MESSAGES_READ,
@@ -131,7 +131,7 @@ import type {
   InstanceKind,
   SentMessageRow,
 } from "./db";
-import { hashHookMaterial, usageBucketFromRow } from "./db";
+import { hashHookMaterial } from "./db";
 import { delegateTypesRoutes, makeDelegateTypes } from "./delegate-types";
 import { hubHttpUrl } from "./delegation-actions";
 import { createDelegationMcp } from "./delegation-mcp";
@@ -8185,7 +8185,7 @@ export const createServer = ({
       // ── Usage (USAGE-SPEC.md §6) ─────────────────────────────────────────────
       // The heavy data lives behind these reads; the socket only carries the small
       // limits frame, so the dashboard pulls aggregates when it needs them.
-      .get("/api/usage/limits", () => {
+      .get("/api/usage/limits", (): UsageLimitsResponse => {
         const agents = db.listAgents();
         return {
           machines: db.listUsageLimits().map((row) => ({
@@ -8194,6 +8194,7 @@ export const createServer = ({
               agents.find((agent) => agent.machineId === row.machineId)
                 ?.hostname ?? REMOVED_MACHINE,
             limits: row.payload,
+            openCodeGo: row.openCodeGo,
           })),
         };
       })
@@ -8226,6 +8227,8 @@ export const createServer = ({
             groupBy: t.Optional(
               t.Union([
                 t.Literal("day"),
+                t.Literal("hour"),
+                t.Literal("machine"),
                 t.Literal("model"),
                 t.Literal("project"),
                 t.Literal("session"),
@@ -8242,92 +8245,6 @@ export const createServer = ({
             groupBy: query.groupBy ?? "day",
           })
       )
-      .get(
-        "/api/usage/blocks",
-        {
-          query: t.Object({
-            harness: t.Optional(t.String()),
-            machineId: t.Optional(t.String()),
-            recentDays: t.Optional(t.Numeric()),
-          }),
-        },
-        ({ query }) => {
-          const since =
-            Date.now() - (query.recentDays ?? 3) * 24 * 60 * 60 * 1000;
-          const buckets = db.listUsageBuckets({
-            since,
-            harness: query.harness,
-            machineId: query.machineId,
-          });
-
-          // A 5-hour block is ACCOUNT-wide, not per-session: the window the API
-          // reports as `five_hour` covers every session the account ran, and
-          // ccusage folds all entries into one series for the same reason.
-          // Grouping per session would fragment the window, make burn rate and
-          // projection meaningless, and mint colliding block ids. Harnesses stay
-          // apart because they bill separately.
-          const byHarness = new Map<string, UsageBucket[]>();
-          for (const row of buckets) {
-            const group = byHarness.get(row.harness) ?? [];
-            group.push(usageBucketFromRow(row));
-            byHarness.set(row.harness, group);
-          }
-
-          const now = Date.now();
-          const blocks: (UsageBlock & { harness: string })[] = [];
-          for (const [harness, group] of byHarness) {
-            for (const block of identifyBlocks(group, now)) {
-              blocks.push({ ...block, harness });
-            }
-          }
-          blocks.sort((a, b) => a.startTime - b.startTime);
-          return { blocks };
-        }
-      )
-      // Combined usage overview — one round-trip instead of five.
-      .get("/api/usage/overview", ({ query }) => {
-        const agents = db.listAgents();
-        const recentDays = Number(query.recentDays) || 3;
-        const since = Date.now() - recentDays * 24 * 60 * 60 * 1000;
-        const now = Date.now();
-
-        // Limits
-        const limits = {
-          machines: db.listUsageLimits().map((row) => ({
-            machineId: row.machineId,
-            hostname:
-              agents.find((a) => a.machineId === row.machineId)?.hostname ??
-              REMOVED_MACHINE,
-            limits: row.payload,
-          })),
-        };
-
-        // Summaries by harness
-        const summaryFor = (harness: string) =>
-          db.usageSummary({ harness, groupBy: "model" });
-
-        // Blocks by harness
-        const blocksFor = (harness: string) => {
-          const buckets = db.listUsageBuckets({ since, harness });
-          const blocks: (UsageBlock & { harness: string })[] = [];
-          for (const block of identifyBlocks(
-            buckets.map(usageBucketFromRow),
-            now
-          )) {
-            blocks.push({ ...block, harness });
-          }
-          blocks.sort((a, b) => a.startTime - b.startTime);
-          return blocks;
-        };
-
-        return {
-          limits,
-          claude: summaryFor("claude"),
-          opencode: summaryFor("opencode"),
-          blocksClaude: blocksFor("claude"),
-          blocksOpenCode: blocksFor("opencode"),
-        };
-      })
       .ws("/ws", {
         // A machine answers a full transcript read in one frame, and a long
         // session's is tens of MB (a 45MB claude transcript). Past Bun's 16MB
@@ -8656,15 +8573,20 @@ export const createServer = ({
             // the buckets and the limit reading, then push only the small limits
             // frame — the dashboard pulls the heavy aggregates over REST.
             case "usage": {
-              const { buckets, limits } = message.payload as {
+              const { buckets, limits, openCodeGo } = message.payload as {
                 buckets?: UsageBucket[];
                 limits?: ClaudeLimits;
+                openCodeGo?: OpenCodeGoLimits | null;
               };
               if (buckets && buckets.length > 0) {
                 db.putUsageBuckets(message.machineId, buckets);
               }
               if (limits) {
-                db.putUsageLimits(message.machineId, limits);
+                db.putUsageLimits(
+                  message.machineId,
+                  limits,
+                  openCodeGo ?? null
+                );
               }
               registry.broadcast({
                 verb: "frames",

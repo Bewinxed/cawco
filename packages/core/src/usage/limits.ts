@@ -67,15 +67,24 @@ interface UsageResponse {
   five_hour?: { utilization?: number; resets_at?: string } | null;
   limits?: LimitWindowRaw[];
   seven_day?: { utilization?: number; resets_at?: string } | null;
+  /** Extra usage: pay-as-you-go money past the plan, against a monthly cap. */
   spend?: {
-    used?: {
-      amount_minor?: number;
-      exponent?: number;
-      currency?: string;
-    } | null;
-    limit?: number | null;
+    used?: MoneyRaw | null;
+    limit?: MoneyRaw | null;
   } | null;
 }
+
+interface MoneyRaw {
+  amount_minor?: number;
+  currency?: string;
+  exponent?: number;
+}
+
+/** Minor units to dollars: `amount_minor / 10^exponent`; null when unreported. */
+const dollars = (money: MoneyRaw | null | undefined): number | null =>
+  money?.amount_minor !== undefined && money.exponent !== undefined
+    ? money.amount_minor / 10 ** money.exponent
+    : null;
 
 let cached: { at: number; value: ClaudeLimits } | null = null;
 /** The last successful reading, kept to serve (stale) through a later failure. */
@@ -181,19 +190,13 @@ export async function fetchClaudeLimits(opts?: {
     }
   }
 
-  const used = body.spend?.used;
-  const spendUsed =
-    used && used.amount_minor !== undefined && used.exponent !== undefined
-      ? used.amount_minor / 10 ** used.exponent
-      : null;
-
   const result: ClaudeLimits = {
     fetchedAt: Date.now(),
     planTier: oauth?.rateLimitTier ?? null,
     subscription: oauth?.subscriptionType ?? null,
     windows,
-    spendUsed,
-    spendLimit: body.spend?.limit ?? null,
+    spendUsed: dollars(body.spend?.used),
+    spendLimit: dollars(body.spend?.limit),
     error: null,
   };
 

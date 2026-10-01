@@ -13,3 +13,9 @@ export const cacheCreationCount = (u: RawClaudeUsage): number =>
 
 export const totalTokens = (t: UsageTokens): number =>
   t.input + t.output + t.cacheCreation + t.cacheRead + t.reasoning;
+
+const HOUR_MS = 60 * 60 * 1000;
+
+/** The UTC hour a timestamp falls in: a usage bucket's `hourStart`. */
+export const floorToHour = (ts: number): number =>
+  Math.floor(ts / HOUR_MS) * HOUR_MS;

@@ -51,7 +51,6 @@
     "@tailwindcss/vite": "^4.3.3",
     "@types/bun": "latest",
     "jsrepo": "^3.0.10",
-    "layerchart": "^2.0.0",
     "paneforge": "^1.0.2",
     "shadcn-svelte": "^1.5.0",
     "svelte": "^5.57.0",

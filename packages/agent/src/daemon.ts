@@ -20,6 +20,7 @@ import {
 import { sessiondEndpoint } from "@whiffle/core/sessiond";
 import { fetchClaudeLimits } from "@whiffle/core/usage/limits";
 import { mergeObserved } from "@whiffle/core/usage/observed";
+import { fetchOpenCodeGoLimits } from "@whiffle/core/usage/opencode-go";
 import { Data, Duration, Effect, Fiber, Schedule } from "effect";
 import { buildInfo } from "./build";
 import { convertWorktrees } from "./clone";
@@ -786,10 +787,14 @@ const attach = (
           const limits = mergeObserved(
             yield* Effect.promise(() => fetchClaudeLimits())
           );
+          // The OpenCode Go plan's windows, when this machine holds a Go key.
+          const openCodeGo = yield* Effect.promise(() =>
+            fetchOpenCodeGoLimits()
+          );
           send(socket, {
             verb: "usage",
             machineId: identity.machineId,
-            payload: { buckets, limits },
+            payload: { buckets, limits, openCodeGo },
           });
         }).pipe(
           Effect.catchDefect((error) =>

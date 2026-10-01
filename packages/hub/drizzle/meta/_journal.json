@@ -414,6 +414,13 @@
       "when": 1790845135054,
       "tag": "0058_workspace_base",
       "breakpoints": true
+    },
+    {
+      "idx": 59,
+      "version": "6",
+      "when": 1790886291375,
+      "tag": "0059_usage_open_code_go",
+      "breakpoints": true
     }
   ]
 }

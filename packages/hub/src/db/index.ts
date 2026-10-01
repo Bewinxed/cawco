@@ -14,6 +14,7 @@ import type {
   HarnessReport,
   HookEvent,
   HookHandler,
+  OpenCodeGoLimits,
   Rule,
   RuleState,
   RuleStats,
@@ -24,8 +25,12 @@ import type {
   ToolPolicy,
   ToolStatus,
   UsageBucket,
+  UsageGroupBy,
+  UsageSummary,
+  UsageSummaryRow,
+  UsageTotals,
 } from "@whiffle/core";
-import { RESTART_LOST, resolveRates } from "@whiffle/core";
+import { REMOVED_MACHINE, RESTART_LOST, resolveRates } from "@whiffle/core";
 import {
   and,
   asc,
@@ -187,47 +192,11 @@ export interface HookVersionMaterial {
   script?: string;
 }
 
-/** A stored usage bucket, one (machine, session, model, hour) cell (USAGE-SPEC.md §6). */
-export type UsageBucketRow = typeof usageBuckets.$inferSelect;
-
 /** A stored limit reading, one per machine (USAGE-SPEC.md §6). */
 export type UsageLimitRow = typeof usageLimits.$inferSelect;
 
 /** One point in a machine's limit-history series (burn rate, not just burn level). */
 export type UsageLimitHistoryRow = typeof usageLimitHistory.$inferSelect;
-
-/** How `/api/usage/summary` folds the buckets it returns (USAGE-SPEC.md §6.3). */
-export type UsageGroupBy = "day" | "model" | "project" | "session";
-
-/** One aggregated group in a usage summary. */
-export interface UsageSummaryRow {
-  cacheCreation: number;
-  cacheRead: number;
-  costUsd: number;
-  input: number;
-  key: string | number;
-  messages: number;
-  output: number;
-  reasoning: number;
-}
-
-/** The whole-window sums a summary's groups roll up to. */
-export interface UsageTotals {
-  cacheCreation: number;
-  cacheRead: number;
-  costUsd: number;
-  input: number;
-  messages: number;
-  output: number;
-  reasoning: number;
-}
-
-/** What `/api/usage/summary` returns: the groups, their totals, and unpriced models. */
-export interface UsageSummary {
-  missingPricing: string[];
-  rows: UsageSummaryRow[];
-  totals: UsageTotals;
-}
 
 export interface DbShape {
   /** A machine's workspaces that still have their checkout. */
@@ -417,13 +386,6 @@ export interface DbShape {
   }) => SupervisorEvent[];
   /** The fleet's tool policy (NEW.md §10) — only the tools somebody has ruled on. */
   readonly listToolPolicies: () => ToolPolicy[];
-  /** The buckets in the window, oldest first — the rows the blocks route folds. */
-  readonly listUsageBuckets: (q: {
-    since?: number;
-    until?: number;
-    harness?: string;
-    machineId?: string;
-  }) => UsageBucketRow[];
   /** Every machine's latest limit reading. */
   readonly listUsageLimits: () => UsageLimitRow[];
   readonly listWorkflowAttempts: (stepId: string) => WorkflowAttemptRow[];
@@ -614,7 +576,11 @@ export interface DbShape {
    */
   readonly putUsageBuckets: (machineId: string, buckets: UsageBucket[]) => void;
   /** Stores the machine's latest limit reading; one row per machine. */
-  readonly putUsageLimits: (machineId: string, limits: ClaudeLimits) => void;
+  readonly putUsageLimits: (
+    machineId: string,
+    limits: ClaudeLimits,
+    openCodeGo: OpenCodeGoLimits | null
+  ) => void;
   readonly putWorkflow: (row: typeof workflows.$inferInsert) => WorkflowRow;
   /** Records a call in its run's log, or completes the row it already has. */
   readonly putWorkflowLog: (row: typeof workflowRunLog.$inferInsert) => void;
@@ -1026,31 +992,9 @@ const hookOf = (row: {
   ...(row.projectId ? { projectId: row.projectId } : {}),
 });
 
-/**
- * A stored bucket row back into the shared `UsageBucket` shape the blocks
- * algorithm consumes (USAGE-SPEC.md §4.4): the flattened token columns are
- * re-nested under `tokens`.
- */
-export const usageBucketFromRow = (row: UsageBucketRow): UsageBucket => ({
-  harness: row.harness,
-  hourStart: row.hourStart,
-  firstTs: row.firstTs,
-  lastTs: row.lastTs,
-  sessionId: row.sessionId,
-  project: row.project,
-  projectPath: row.projectPath,
-  model: row.model,
-  provider: row.provider,
-  tokens: {
-    input: row.inputTokens,
-    output: row.outputTokens,
-    cacheCreation: row.cacheCreationTokens,
-    cacheRead: row.cacheReadTokens,
-    reasoning: row.reasoningTokens,
-  },
-  costUsd: row.costUsd,
-  messages: row.messages,
-});
+/** A path's last folder, or undefined for none. */
+const folderOf = (path: string | null | undefined): string | undefined =>
+  (path ?? "").split("/").filter(Boolean).pop();
 
 /** The one row the fleet's memory ever takes: there is one document, not a list. */
 const MEMORY_ID = "memory";
@@ -1240,6 +1184,81 @@ const make = (path: string): DbShape => {
         )
       )
       .run();
+  };
+
+  /** The column a usage summary groups on. */
+  const usageKey = (groupBy: UsageGroupBy) => {
+    if (groupBy === "day") {
+      return sql<number>`(${usageBuckets.hourStart} / 86400000) * 86400000`;
+    }
+    if (groupBy === "hour") {
+      return usageBuckets.hourStart;
+    }
+    if (groupBy === "machine") {
+      return usageBuckets.machineId;
+    }
+    if (groupBy === "model") {
+      return usageBuckets.model;
+    }
+    if (groupBy === "project") {
+      return usageBuckets.project;
+    }
+    return usageBuckets.sessionId;
+  };
+
+  /** Each machine by id, for naming summary rows; a removed one keeps its place. */
+  const usageMachines = (wanted: boolean) => {
+    const machines = new Map(
+      wanted
+        ? db
+            .select({
+              id: agents.machineId,
+              hostname: agents.hostname,
+              os: agents.os,
+            })
+            .from(agents)
+            .all()
+            .map((agent) => [agent.id, agent])
+        : []
+    );
+    return (id: string) =>
+      machines.get(id) ?? { id, hostname: REMOVED_MACHINE, os: "" };
+  };
+
+  /** Each harness session's newest instance: its address and its name. */
+  const usageSessions = (wanted: boolean) => {
+    const sessions = new Map<
+      string,
+      { id: string; name: string | null; cwd: string; at: number }
+    >();
+    if (!wanted) {
+      return sessions;
+    }
+    for (const row of db
+      .select({
+        id: instances.id,
+        sessionId: instances.sessionId,
+        title: instances.title,
+        derivedTitle: instances.derivedTitle,
+        cwd: instances.cwd,
+        updatedAt: instances.updatedAt,
+      })
+      .from(instances)
+      .where(isNotNull(instances.sessionId))
+      .all()) {
+      const at = row.updatedAt.getTime();
+      const sessionId = row.sessionId ?? "";
+      const held = sessions.get(sessionId);
+      if (!held || at > held.at) {
+        sessions.set(sessionId, {
+          id: row.id,
+          name: row.title ?? row.derivedTitle,
+          cwd: row.cwd,
+          at,
+        });
+      }
+    }
+    return sessions;
   };
 
   /** The window a usage query names, or nothing — the filters fold into one AND. */
@@ -2881,7 +2900,7 @@ const make = (path: string): DbShape => {
         }
       });
     },
-    putUsageLimits: (machineId, limits) => {
+    putUsageLimits: (machineId, limits, openCodeGo) => {
       const at = new Date();
       const previous =
         db
@@ -2890,10 +2909,10 @@ const make = (path: string): DbShape => {
           .where(eq(usageLimits.machineId, machineId))
           .get()?.payload ?? null;
       db.insert(usageLimits)
-        .values({ machineId, payload: limits, fetchedAt: at })
+        .values({ machineId, payload: limits, openCodeGo, fetchedAt: at })
         .onConflictDoUpdate({
           target: usageLimits.machineId,
-          set: { payload: limits, fetchedAt: at },
+          set: { payload: limits, openCodeGo, fetchedAt: at },
         })
         .run();
       appendLimitHistory(machineId, limits, previous, at);
@@ -2916,31 +2935,17 @@ const make = (path: string): DbShape => {
         )
         .orderBy(usageLimitHistory.fetchedAt)
         .all(),
-    listUsageBuckets: (q) =>
-      db
-        .select()
-        .from(usageBuckets)
-        .where(usageWhere(q))
-        .orderBy(usageBuckets.hourStart)
-        .all(),
     listUsageLimits: () => db.select().from(usageLimits).all(),
     usageSummary: ({ since, until, harness, machineId, groupBy }) => {
-      const key = (() => {
-        if (groupBy === "day") {
-          return sql<number>`(${usageBuckets.hourStart} / 86400000) * 86400000`;
-        }
-        if (groupBy === "model") {
-          return usageBuckets.model;
-        }
-        if (groupBy === "project") {
-          return usageBuckets.project;
-        }
-        return usageBuckets.sessionId;
-      })();
-
-      const rows = db
+      const key = usageKey(groupBy);
+      const groups = db
         .select({
           key,
+          // A session's buckets all come from the one machine and checkout
+          // that ran it, so max() is that machine and that folder.
+          machineId: sql<string>`max(${usageBuckets.machineId})`,
+          project: sql<string>`max(${usageBuckets.project})`,
+          projectPath: sql<string | null>`max(${usageBuckets.projectPath})`,
           input: sql<number>`sum(${usageBuckets.inputTokens})`,
           output: sql<number>`sum(${usageBuckets.outputTokens})`,
           cacheCreation: sql<number>`sum(${usageBuckets.cacheCreationTokens})`,
@@ -2953,9 +2958,33 @@ const make = (path: string): DbShape => {
         .where(usageWhere({ since, until, harness, machineId }))
         .groupBy(key)
         .orderBy(key)
-        .all()
-        .map((group) => ({
+        .all();
+
+      // Rows are shown by name, never by id: a machine by its hostname, a
+      // session by the title its instance carries (else what it was first
+      // asked, else its folder), and a session run outside Whiffle by its
+      // folder.
+      const named = groupBy === "machine" || groupBy === "session";
+      const machineOf = usageMachines(named);
+      const sessions = usageSessions(groupBy === "session");
+
+      const rows: UsageSummaryRow[] = groups.map((group) => {
+        const instance = sessions.get(String(group.key));
+        let label = String(group.key);
+        if (groupBy === "machine") {
+          label = machineOf(String(group.key)).hostname;
+        } else if (groupBy === "session") {
+          label =
+            instance?.name ??
+            folderOf(instance?.cwd) ??
+            folderOf(group.projectPath) ??
+            group.project;
+        }
+        return {
           key: group.key,
+          label,
+          machine: named ? machineOf(group.machineId) : null,
+          instanceId: instance?.id ?? null,
           input: group.input ?? 0,
           output: group.output ?? 0,
           cacheCreation: group.cacheCreation ?? 0,
@@ -2963,7 +2992,8 @@ const make = (path: string): DbShape => {
           reasoning: group.reasoning ?? 0,
           costUsd: group.costUsd ?? 0,
           messages: group.messages ?? 0,
-        }));
+        };
+      });
 
       const totals: UsageTotals = {
         input: 0,
