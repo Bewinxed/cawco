@@ -409,12 +409,14 @@
   /* Nothing animates that nobody can see (motion/rest.ts): a hidden tab, an
      element scrolled out of view, an inert surface parked behind the one in
      front, and a swap slot that is not the one showing (a button's spinner
-     waits there between presses) all hold every loop they carry still. */
-  :where(:root[data-at-rest], [data-offscreen], [inert], [data-active="false"])
+     waits there between presses) all hold every loop they carry still. A
+     list swap's leaving layer (`data-leaving`) is inert so nobody clicks a
+     row on its way out, but its rows still play their exit. */
+  :where(:root[data-at-rest], [data-offscreen], [inert]:not([data-leaving]), [data-active="false"])
   *,
-  :where(:root[data-at-rest], [data-offscreen], [inert], [data-active="false"])
+  :where(:root[data-at-rest], [data-offscreen], [inert]:not([data-leaving]), [data-active="false"])
     *::before,
-  :where(:root[data-at-rest], [data-offscreen], [inert], [data-active="false"])
+  :where(:root[data-at-rest], [data-offscreen], [inert]:not([data-leaving]), [data-active="false"])
     *::after,
   :where([data-offscreen]) {
     animation-play-state: paused !important;
@@ -429,7 +431,111 @@
     block-size: 1px;
     margin: 0 var(--seam-inset);
     border: 0;
-    background: var(--well-edge);
+    background: var(--seam);
+  }
+
+  /* Nesting: children hang off their parent on a hairline rail that drops
+     from the parent's glyph centre; each child joins it with a rounded
+     elbow into its own glyph, and the last child's elbow ends the rail.
+     One primitive for every nested list (project → sessions, run → steps).
+     The lines are drawn by the children themselves, so as rows unfold,
+     reflow or leave, the rail grows and shrinks with them and never jumps.
+     Set on the child list:
+       --nest-x      the rail's x from the list's left edge (parent glyph centre)
+       --nest-in     elbow width, rail to the child's glyph (12px)
+       --nest-row-pad the child row's own left padding before its glyph
+       --nest-glyph-y the child glyph's centre from the row's top
+       --nest-gap    the gap between child rows
+       --nest-lead   how far above the list the parent's glyph ends
+     A child that only carries more children (a scroller) is
+     `data-nest="through"`: it draws no elbow and its inner list is
+     `.kit-nest-inner`, joined to the same rail. */
+  .kit-nest {
+    --nest-in: 12px;
+    --nest-row-pad: 10px;
+    --nest-glyph-y: 14px;
+    --nest-gap: 4px;
+    --nest-lead: 6px;
+    --nest-ink: var(--border-hairline);
+    --nest-pad: calc(var(--nest-x) + var(--nest-in) - var(--nest-row-pad));
+    position: relative;
+  }
+  :is(.kit-nest, .kit-nest-inner) > li:not([data-nest="through"]) {
+    position: relative;
+  }
+  :is(.kit-nest, .kit-nest-inner) > li:not([data-nest="through"])::before,
+  :is(.kit-nest, .kit-nest-inner) > li:not([data-nest="through"])::after {
+    content: "";
+    position: absolute;
+    left: calc(var(--nest-x) - var(--nest-pad));
+    pointer-events: none;
+    border-color: var(--nest-ink);
+    border-style: solid;
+    border-width: 0;
+  }
+  /* The elbow: down the rail from the row above, then round into the glyph,
+     ending at the arrow tip (`.kit-nest-tip`) — |_> */
+  :is(.kit-nest, .kit-nest-inner) > li:not([data-nest="through"])::before {
+    top: calc(-1 * var(--nest-gap));
+    width: calc(var(--nest-in) - 3px);
+    height: calc(var(--nest-glyph-y) + var(--nest-gap));
+    border-left-width: 1px;
+    border-bottom-width: 1px;
+    border-bottom-left-radius: 6px;
+  }
+  .kit-nest > li:first-child:not([data-nest="through"])::before {
+    top: calc(-1 * var(--nest-lead));
+    height: calc(var(--nest-glyph-y) + var(--nest-lead));
+  }
+  /* The rail on past this child to the next one; the last child has none. */
+  :is(.kit-nest, .kit-nest-inner) > li:not([data-nest="through"])::after {
+    top: var(--nest-glyph-y);
+    bottom: 0;
+    border-left-width: 1px;
+  }
+  .kit-nest > li:last-child::after,
+  .kit-nest-inner > li:last-child::after {
+    content: none;
+  }
+  /* The arm's arrow tip, a hairline chevron pointing into the child's
+     glyph. Each child row carries one: <span class="kit-nest-tip">. */
+  .kit-nest-tip {
+    position: absolute;
+    left: calc(var(--nest-x) - var(--nest-pad) + var(--nest-in) - 7px);
+    top: calc(var(--nest-glyph-y) - 2.5px);
+    inline-size: 5px;
+    block-size: 5px;
+    border-top: 1px solid var(--nest-ink);
+    border-right: 1px solid var(--nest-ink);
+    rotate: 45deg;
+    pointer-events: none;
+  }
+  /* A scroller (`data-nest="through"`) carries the rail across the gap
+     above it and its own top inset (`--nest-inner-lead`) to its first row. */
+  .kit-nest > li[data-nest="through"] {
+    position: relative;
+  }
+  .kit-nest > li[data-nest="through"]::before {
+    content: "";
+    position: absolute;
+    left: calc(var(--nest-x) - var(--nest-pad));
+    top: calc(-1 * var(--nest-gap));
+    block-size: calc(var(--nest-gap) + var(--nest-inner-lead, 0px) + 1px);
+    border-left: 1px solid var(--nest-ink);
+    pointer-events: none;
+    z-index: 1;
+  }
+  .kit-nest-inner > li:first-child:not([data-nest="through"])::before {
+    top: 0;
+    height: var(--nest-glyph-y);
+  }
+  /* A scroller's last row is not the rail's end when more follow it. */
+  .kit-nest
+    > li[data-nest="through"]:not(:last-child)
+    .kit-nest-inner
+    > li:last-child::after {
+    content: "";
+    bottom: calc(-1 * var(--nest-gap));
   }
 
   /* A list section's header (the home's Needs you, Recent): its label at
@@ -441,7 +547,7 @@
     gap: var(--space-1);
     margin: 0 0 var(--space-1);
     padding: 0 var(--space-3) var(--space-1);
-    border-bottom: 1px solid var(--border-hairline);
+    border-bottom: 1px solid var(--seam);
     font: var(--type-label);
     color: var(--ink-muted);
     text-align: start;
@@ -1148,6 +1254,42 @@
 @keyframes kit-tip-fade {
   from {
     opacity: 0;
+  }
+}
+/* The list swap (motion/list-swap): the model list's harness change and the
+   home's Working/Finished switch. Global, because the rows name them from
+   an inline style: Svelte rewrites `animation:` inside a component's own
+   <style> to a scoped name but cannot rewrite a string built in script. */
+@keyframes ns-in-r {
+  from {
+    opacity: 0;
+    transform: translateX(18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes ns-in-l {
+  from {
+    opacity: 0;
+    transform: translateX(-18px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@keyframes ns-out-l {
+  to {
+    opacity: 0;
+    transform: translateX(-18px);
+  }
+}
+@keyframes ns-out-r {
+  to {
+    opacity: 0;
+    transform: translateX(18px);
   }
 }
 /* The rail's travelling label (motion/Rail) settling in as it re-labels. */

@@ -883,6 +883,13 @@ class Reflow {
   }
 }
 
+/**
+ * Dispatched on a `reflow` container by an owner that moves its contents
+ * itself (WorkTabs' tab swap): every place is re-read as it now stands, so
+ * what that owner removed and added is not taken for a change to animate.
+ */
+export const REFLOW_REREAD = "reflow:reread";
+
 export function reflow() {
   return (node: HTMLElement) => {
     node.setAttribute("data-reflow", "");
@@ -902,7 +909,10 @@ export function reflow() {
     // and none of it is a change to animate.
     const sizes = new ResizeObserver(() => state.reread());
     sizes.observe(node);
+    const reread = () => state.reread();
+    node.addEventListener(REFLOW_REREAD, reread);
     return () => {
+      node.removeEventListener(REFLOW_REREAD, reread);
       watcher.disconnect();
       sizes.disconnect();
     };

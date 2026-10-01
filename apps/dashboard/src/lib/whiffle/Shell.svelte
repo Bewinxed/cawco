@@ -905,7 +905,7 @@
        it holds the crumb or the tabs, and nothing in it moves as they swap. */
     padding: 0 var(--space-6) 0 0;
     background: var(--surface-raised);
-    border-bottom: 1px solid var(--border-hairline);
+    border-bottom: 1px solid var(--seam);
   }
   /* Hosting the tabs, the bar is the shelf they stand on: two steps below
      the transcript and one below an unchosen tab, so the chosen tab — a
@@ -1026,7 +1026,7 @@
       padding-inline-start: 0;
     }
     .top.hosting {
-      border-bottom: 1px solid var(--border-hairline);
+      border-bottom: 1px solid var(--seam);
       background: var(--surface-raised);
     }
     .top.hosting .right {

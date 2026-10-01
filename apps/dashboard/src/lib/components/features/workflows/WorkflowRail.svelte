@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { WorkflowRun } from "@whiffle/core";
   import { IconWorkflow } from "$lib/icons";
+  import { formatAgeShort } from "$lib/utils/time";
   import { whiffle } from "$lib/whiffle/client.svelte";
   import { workflowState } from "$lib/whiffle/workflow-state.svelte";
   import WorkflowRail from "./WorkflowRail.svelte";
@@ -18,7 +19,9 @@
     ><IconWorkflow class="size-4 shrink-0" />
     <span
       >{workflowState.workflows.find((entry) => entry.id === run.workflowId)?.name ?? 'Workflow'}
-      · run {run.id.slice(0, 8)}</span
+      <span class="age"
+        >{formatAgeShort(new Date(run.startedAt).getTime(), Date.now())}</span
+      ></span
     ><WorkflowStatus status={run.status} /></a
   >
   <ul>
@@ -28,7 +31,7 @@
           aria-current={instance.id === activeSession ? 'page' : undefined}
           class="session focus-inset press-tint"
           href="/session/{instance.id}"
-          >{instance.title ?? instance.id.slice(0, 8)}</a
+          >{instance.title ?? 'Untitled session'}</a
         >
       </li>
     {/each}
@@ -51,6 +54,10 @@
     flex: 1;
     min-width: 80px;
     overflow-wrap: anywhere;
+  }
+  .age {
+    font: var(--type-meta);
+    color: var(--ink-muted);
   }
   ul {
     margin-left: var(--space-4);

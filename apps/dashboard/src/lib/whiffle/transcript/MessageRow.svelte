@@ -447,7 +447,7 @@
       inset-inline: var(--pad);
       inset-block-start: -1px;
       block-size: 1px;
-      background: var(--well-edge);
+      background: var(--seam);
       opacity: 0;
 
       @media (prefers-reduced-motion: no-preference) {

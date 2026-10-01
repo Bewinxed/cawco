@@ -171,7 +171,7 @@
   }
   .add {
     margin-top: var(--space-1);
-    border-top: 1px solid var(--border-hairline);
+    border-top: 1px solid var(--seam);
     border-radius: 0 0 var(--radius-sm) var(--radius-sm);
     font: var(--type-label);
     color: var(--ink-muted);

@@ -693,6 +693,16 @@
         }
       }
     },
+    "seam": {
+      "$type": "color",
+      "$value": "oklch(from {color.coral-9} l c h / 0.32)",
+      "$description": "Every divider: the transcript's user-message seam, section rules, the seams between machines and lists. The coral ramp at a subtle strength.",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(from {color.coral-9} l c h / 0.38)"
+        }
+      }
+    },
     "code-bg": {
       "$type": "color",
       "$value": "{color.neutral-3}",

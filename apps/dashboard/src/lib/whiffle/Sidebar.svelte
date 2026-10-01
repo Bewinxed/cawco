@@ -29,7 +29,6 @@
   import * as Sidebar from "$lib/components/ui/sidebar";
   import { Skeleton } from "$lib/components/ui/skeleton";
   import ThemeSwitcher from "$lib/components/ui/ThemeSwitcher.svelte";
-  import { Toggle } from "$lib/components/ui/toggle";
   import Tip from "$lib/components/ui/tooltip/tip.svelte";
   import {
     IconAssistant,
@@ -125,10 +124,8 @@
   const NAV_ROW = "h-[var(--c-nav-h)] gap-2.5 px-2.5 text-body";
   const LIST_ROW = "h-[30px] gap-2.5 px-2.5 py-0";
   const SUB_ROW = "h-[28px] gap-2.5 px-2.5";
-  /** The heights the loading rows stand at: a list row, and a workflow run
-   *  row as WorkflowRail draws it (its 44px floor plus the status chip, 48px). */
+  /** The height the loading rows stand at: a list row's. */
   const LIST_ROW_H = "h-[30px]";
-  const RUN_ROW = "h-12";
   /** `Sidebar.Group`'s own `p-2` plus `Sidebar.Content`'s `gap-2` stacked to
    *  24px of nothing between every section; the label already separates them. */
   const GROUP = "px-2 py-1";
@@ -335,14 +332,6 @@
     )
   );
 
-  /** The running delegate sessions the Delegates switch is hiding, for its count. */
-  const delegatesHidden = $derived(
-    rail.delegates
-      ? 0
-      : running.filter((row) => !row.workflowRunId && row.parentInstanceId)
-          .length
-  );
-
   /* ---- order -----------------------------------------------------------
    *
    * The rail could not answer "which one was I just in": every list was
@@ -537,26 +526,6 @@
 <!-- When a session last moved, in the ~28px a rail can spare. Every session
      row in the rail renders this, so "which one was I just in" is answered by
      looking down one column instead of opening six of them. -->
-<!-- The delegates toggle, on the label of every section it filters. One
-     switch behind both: "do I want the work I handed off in this rail" is a
-     single question, and a reader who asks it of the running list means it of
-     the sleeping one too. The number is what the section is not showing. -->
-{#snippet delegates(hidden: number)}
-  <Toggle
-    class="border border-transparent aria-pressed:border-[var(--border-control)] data-[state=off]:text-muted-foreground"
-    onPressedChange={(value) => rail.setDelegates(value)}
-    pressed={rail.delegates}
-    size="xs"
-    title={rail.delegates
-      ? 'Listing delegate sessions, nested under the session that spawned them'
-      : 'Delegate sessions are hidden — this lists only sessions nobody delegated'}
-  >
-    Delegates
-    {#if hidden > 0}
-      <span class="num opacity-70">{hidden}</span>
-    {/if}
-  </Toggle>
-{/snippet}
 
 {#snippet subRow(row: InstanceRow, depth: number)}
   {@const Sprite = sessionSprite(row.id)}
@@ -568,6 +537,7 @@
     data-sidebar="menu-sub-item"
     data-slot="sidebar-menu-sub-item"
   >
+    <span aria-hidden="true" class="kit-nest-tip"></span>
     <Sidebar.MenuSubButton
       class={SUB_ROW}
       data-share="session:{row.id}"
@@ -739,28 +709,11 @@
       <Home active variant="rail" />
     {/if}
 
-    <!-- The groups built from the fleet come in top-down, each once its own
-         read and every read above it are in (`stage`): runs, then machines,
-         then projects and sessions once every machine's stored sessions are
-         read. So a group only ever arrives below everything already drawn;
-         arriving each on its own, they pushed the ones before them down.
-         Until the last, rows standing where the rest will be. -->
-    {#if stage >= 1}
-      {#if Object.keys(workflowState.runs).length}
-        <Sidebar.Group class={GROUP} data-flip>
-          <Sidebar.GroupLabel class={GROUP_LABEL}
-            >Workflow runs</Sidebar.GroupLabel
-          >
-          <Sidebar.Menu class={MENU}>
-            {#each Object.values(workflowState.runs).filter((run) => !run.parentRunId).sort((a, b) => +new Date(b.startedAt) - +new Date(a.startedAt)) as run (run.id)}
-              <WorkflowRail {activeSession} {run} />
-            {/each}
-          </Sidebar.Menu>
-        </Sidebar.Group>
-      {/if}
-    {:else}
-      {@render pending(2, RUN_ROW)}
-    {/if}
+    <!-- The groups built from the fleet come in together, once every read
+         they need is in (`stage` 3): Projects straight under the home, then
+         the workflow runs. Arriving each on its own, a later group pushed
+         the ones before it down; arriving together, nothing drawn moves.
+         Until then, rows standing where they will be. -->
     {#if stage >= 3}
       <!-- Projects -->
       <Sidebar.Group class={GROUP} data-flip>
@@ -770,7 +723,6 @@
            of them at once: a rail whose projects were ordered by recency and
            whose "Not running" was ordered by name would be two rails. -->
           <div class="-mr-1 ml-auto flex items-center gap-0.5">
-            {@render delegates(delegatesHidden)}
             <DropdownMenu.Root>
               <DropdownMenu.Trigger>
                 {#snippet child({ props })}
@@ -878,7 +830,13 @@
                    moved: it is uncovered top to bottom while the rows under it
                    slide down to make its room, and closes the same way. -->
                   <div data-flip>
-                    <Sidebar.MenuSub>
+                    <!-- The sessions hang off the project's mark on one
+                         rail (app.css .kit-nest): each joins it with its
+                         own elbow, and the last one ends it. -->
+                    <Sidebar.MenuSub
+                      class="kit-nest mx-0 translate-x-0 border-l-0 pr-0 pl-(--nest-pad)"
+                      style="--nest-x: 39px"
+                    >
                       {@const lists = splitOf(project)}
                       {#each nested(lists.recent, `rail:${project.id}:recent`) as { row, depth } (row.id)}
                         {@render subRow(row, depth)}
@@ -886,6 +844,7 @@
                       {#if lists.older.length > 0}
                         {@const olderVisible = olderShown(project, lists.older)}
                         <Sidebar.MenuSubItem data-flip>
+                          <span aria-hidden="true" class="kit-nest-tip"></span>
                           <Sidebar.MenuSubButton
                             aria-expanded={olderVisible}
                             class="{SUB_ROW} text-muted-foreground"
@@ -905,8 +864,11 @@
                           <!-- Older sessions scroll in a box of their own,
                                six rows at most, so opening them never pushes
                                the projects below or the footer. -->
-                          <li class="older-wrap" data-flip>
-                            <ul class="older" {@attach scrollEdges}>
+                          <li class="older-wrap" data-flip data-nest="through">
+                            <ul
+                              class="older kit-nest-inner"
+                              {@attach scrollEdges}
+                            >
                               {#each nested(lists.older, `rail:${project.id}:older`) as { row, depth } (row.id)}
                                 {@render subRow(row, depth)}
                               {/each}
@@ -915,6 +877,7 @@
                         {/if}
                       {:else if lists.recent.length === 0}
                         <Sidebar.MenuSubItem data-flip>
+                          <span aria-hidden="true" class="kit-nest-tip"></span>
                           <Sidebar.MenuSubButton
                             class="{SUB_ROW} text-muted-foreground"
                             onclick={() =>
@@ -936,7 +899,19 @@
           </Sidebar.Menu>
         {/if}
       </Sidebar.Group>
-    {:else if stage >= 1}
+      {#if Object.keys(workflowState.runs).length}
+        <Sidebar.Group class={GROUP} data-flip>
+          <Sidebar.GroupLabel class={GROUP_LABEL}
+            >Workflow runs</Sidebar.GroupLabel
+          >
+          <Sidebar.Menu class={MENU}>
+            {#each Object.values(workflowState.runs).filter((run) => !run.parentRunId).sort((a, b) => +new Date(b.startedAt) - +new Date(a.startedAt)) as run (run.id)}
+              <WorkflowRail {activeSession} {run} />
+            {/each}
+          </Sidebar.Menu>
+        </Sidebar.Group>
+      {/if}
+    {:else}
       {@render pending(6, LIST_ROW_H)}
     {/if}
     {#if !narrow}
@@ -1037,14 +1012,17 @@
   .older-wrap {
     list-style: none;
   }
+  /* It reaches back under the rail (and pads its rows forward again), so the
+     elbows drawn left of its rows sit inside its scroll box, not clipped. */
   .older {
     --fade: var(--space-4);
+    --nest-gap: 2px;
     display: flex;
     flex-direction: column;
     gap: 2px;
     max-block-size: calc(6 * 28px + 5 * 2px);
-    margin: 0;
-    padding: 0;
+    margin: 0 0 0 calc(-1 * var(--nest-pad));
+    padding: 0 0 0 var(--nest-pad);
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-width: thin;

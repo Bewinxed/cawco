@@ -140,46 +140,6 @@
     transform: none;
   }
 }
-/*
- * The model list's harness slide-swap. These live here, not in
- * ModelSection.svelte, because the rows name them from an inline `style`
- * attribute: Svelte rewrites `animation:` inside a component's own <style>
- * to the scoped name (`svelte-xxxxxx-ns-in-r`) but cannot rewrite a string
- * built in script, so a component-scoped copy left every row naming an
- * animation that did not exist, and the swap never moved.
- */
-@keyframes ns-in-r {
-  from {
-    opacity: 0;
-    transform: translateX(18px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-@keyframes ns-in-l {
-  from {
-    opacity: 0;
-    transform: translateX(-18px);
-  }
-  to {
-    opacity: 1;
-    transform: none;
-  }
-}
-@keyframes ns-out-l {
-  to {
-    opacity: 0;
-    transform: translateX(-18px);
-  }
-}
-@keyframes ns-out-r {
-  to {
-    opacity: 0;
-    transform: translateX(18px);
-  }
-}
 .ns-theme .ns-in {
   @media (prefers-reduced-motion: no-preference) {
     animation: ns-in var(--ns-row-ms) var(--ease-out) both;

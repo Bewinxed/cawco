@@ -286,7 +286,7 @@
     align-items: center;
     gap: 8px;
     padding: 10px 12px;
-    border-bottom: 1px solid var(--border-hairline);
+    border-bottom: 1px solid var(--seam);
   }
   .pop-title {
     font-size: var(--text-label);
@@ -301,7 +301,7 @@
     color: var(--ink-muted);
   }
   .pop-stale {
-    border-bottom: 1px solid var(--border-hairline);
+    border-bottom: 1px solid var(--seam);
   }
   .pop-list {
     display: flex;
@@ -347,7 +347,7 @@
     align-items: center;
     gap: 8px;
     padding: 10px 12px;
-    border-top: 1px solid var(--border-hairline);
+    border-top: 1px solid var(--seam);
     font-size: var(--text-meta);
     font-weight: var(--weight-body);
     color: var(--ink-strong);

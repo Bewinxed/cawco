@@ -132,6 +132,11 @@
       var(--neutral-5),
       oklch(from var(--neutral-12) l c h / 0.08)
     );
+    /* Every divider: the transcript's user-message seam, section rules, the seams between machines and lists. The coral ramp at a subtle strength. */
+    --seam: light-dark(
+      oklch(from var(--coral-9) l c h / 0.32),
+      oklch(from var(--coral-9) l c h / 0.38)
+    );
     --code-bg: light-dark(var(--neutral-3), oklch(15.6% 0.004 70));
     /* Surface ladder: eight levels that nest; each container lifts one step off what it sits on. Light flattens to warm white after step 2 (shadow carries depth); dark lightens ~3.2% L per step. */
     --surface-1: light-dark(var(--neutral-2), oklch(18.4% 0.004 70));

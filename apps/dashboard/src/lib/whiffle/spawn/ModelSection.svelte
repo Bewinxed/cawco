@@ -22,7 +22,8 @@
     providerOf,
     rememberModel,
   } from "../models.svelte";
-  import { crossIn, crossOut, motionOk } from "../motion/curves.svelte";
+  import { crossIn, crossOut } from "../motion/curves.svelte";
+  import { ListSwap } from "../motion/list-swap.svelte";
   import Rail from "../motion/Rail.svelte";
   import {
     deriveModelEntries,
@@ -86,29 +87,11 @@
   };
   const harnessName = (kind: HarnessKind) =>
     TABS.find((tab) => tab.id === kind)?.name ?? kind;
-  /**
-   * Exit and entrance run over each other. The entrance takes a short lead so
-   * the exit is visibly under way first — overlapping them without one made
-   * the whole swap land ~240ms sooner than before and read as hurried.
-   */
-  const OUT_MS = 200;
-  const OUT_STAGGER = 18;
-  const IN_LEAD = 80;
-  const IN_MS = 300;
-  const IN_STAGGER = 40;
-  /** Rows past this all leave together; a stagger that keeps growing down a
-      forty-model list is a wait, not a rhythm. */
-  const STAGGER_CAP = 9;
-  /** How many leaving rows keep animating. The list shows about five. */
-  const LEAVING = 8;
   let listHarness = $state<HarnessKind>(untrack(() => harness));
-  let phase = $state<"in" | "idle">(untrack(() => (runtime ? "idle" : "in")));
-  let slideDir = $state(1);
-  let gen = $state(0);
+  /** The harness change's list swap (motion/list-swap). */
+  const swap = new ListSwap<ModelEntry>(untrack(() => !runtime));
   let query = $state("");
   let list = $state<HTMLDivElement>();
-  /** The rows the last harness had, still on screen while the new ones arrive. */
-  let leaving = $state<ModelEntry[]>([]);
   /**
    * The rail (motion/Rail) shows marks only; the name rides one label that
    * slides and re-labels between them. Codex is listed but not pickable yet.
@@ -129,41 +112,21 @@
     if (next === untrack(() => listHarness)) {
       return;
     }
-    slideDir =
-      HARNESSES.indexOf(next) > HARNESSES.indexOf(untrack(() => listHarness))
-        ? 1
-        : -1;
     // The new list mounts immediately and the old rows keep animating in a
     // layer above it, so the two staggers overlap. Swapping only after the
     // exit finished left a dead beat between them, and it also froze `pick`
     // for the whole of that wait.
-    leaving = untrack(() => rows.slice(0, LEAVING));
+    swap.swap(
+      untrack(() => rows),
+      HARNESSES.indexOf(next) > HARNESSES.indexOf(untrack(() => listHarness))
+        ? 1
+        : -1
+    );
     listHarness = next;
-    gen += 1;
     query = "";
-    phase = "in";
     // A different catalogue entirely; keeping the old scroll offset would
     // land mid-list and misalign the layer that is animating out.
     untrack(() => list)?.scrollTo({ top: 0 });
-    const clear = setTimeout(
-      () => {
-        leaving = [];
-      },
-      motionOk.current ? OUT_MS + OUT_STAGGER * LEAVING : 0
-    );
-    return () => clearTimeout(clear);
-  });
-  $effect(() => {
-    if (phase !== "in") {
-      return;
-    }
-    const idle = setTimeout(
-      () => {
-        phase = "idle";
-      },
-      motionOk.current ? IN_LEAD + STAGGER_CAP * IN_STAGGER + IN_MS : 0
-    );
-    return () => clearTimeout(idle);
   });
 
   const catalog = $derived(models.forHarness(listHarness, machineIds));
@@ -225,15 +188,6 @@
     onmodel(id);
     query = "";
   }
-  function rowAnim(i: number) {
-    if (phase !== "in") {
-      return "none";
-    }
-    const step = Math.min(i, STAGGER_CAP);
-    return `${slideDir > 0 ? "ns-in-r" : "ns-in-l"} ${IN_MS}ms var(--ease-out) both ${IN_LEAD + step * IN_STAGGER}ms`;
-  }
-  const leaveAnim = (i: number) =>
-    `${slideDir > 0 ? "ns-out-l" : "ns-out-r"} ${OUT_MS}ms var(--ease-out) both ${i * OUT_STAGGER}ms`;
 </script>
 
 <section class="model">
@@ -328,10 +282,10 @@
             <ToolChips {tools} />
           </div>
         {/if}
-        {#if leaving.length}
-          <div aria-hidden="true" class="leaving" inert>
-            {#each leaving as entry, i (entry.id)}
-              <div class="row" style={`animation:${leaveAnim(i)}`}>
+        {#if swap.leaving.length}
+          <div aria-hidden="true" class="leaving" data-leaving inert>
+            {#each swap.leaving as entry, i (entry.id)}
+              <div class="row" style={`animation:${swap.leaveAnim(i)}`}>
                 {@render rowBody(entry)}
               </div>
             {/each}
@@ -364,7 +318,7 @@
             {/if}
           </div>
         {/if}
-        {#each rows as entry, i (`${gen}:${entry.id}`)}
+        {#each rows as entry, i (`${swap.gen}:${entry.id}`)}
           {@const reason = unavailable?.(entry)}
           <button
             aria-disabled={reason ? true : undefined}
@@ -375,7 +329,7 @@
             disabled={Boolean(reason)}
             onclick={() => pick(entry)}
             role="option"
-            style={`animation:${rowAnim(i)}`}
+            style={`animation:${swap.rowAnim(i)}`}
             type="button"
             class:picked={entry.id === selectedId}
           >

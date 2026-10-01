@@ -222,7 +222,7 @@
      height: the rail scrolls, the home does not shrink into it. */
   .home.rail {
     flex: none;
-    border-bottom: 1px solid var(--border-hairline);
+    border-bottom: 1px solid var(--seam);
     margin-bottom: var(--space-1);
   }
   .top {

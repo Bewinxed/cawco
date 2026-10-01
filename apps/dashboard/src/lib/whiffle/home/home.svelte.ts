@@ -219,7 +219,15 @@ export function byMachine<T extends { machineId: string }>(
     }
     group.rows.push(row);
   }
-  return [...groups.values()];
+  // One machine order for every list (the fleet's, as the machines popover
+  // lists them), so a machine keeps its place whichever list is shown.
+  const place = (id: string) => {
+    const at = whiffle.machines.findIndex((m) => m.machineId === id);
+    return at === -1 ? Number.MAX_SAFE_INTEGER : at;
+  };
+  return [...groups.values()].sort(
+    (a, b) => place(a.machineId) - place(b.machineId)
+  );
 }
 
 /** When a session last moved: its pulse, else the hub's own update time. */
