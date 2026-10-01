@@ -1,14 +1,28 @@
-import { unwatchFile, watchFile } from "node:fs";
+import {
+  createHmac,
+  randomBytes,
+  randomUUID,
+  timingSafeEqual,
+} from "node:crypto";
+import {
+  mkdirSync,
+  readFileSync,
+  unwatchFile,
+  watchFile,
+  writeFileSync,
+} from "node:fs";
+import { dirname, join } from "node:path";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import {
   CallToolRequestSchema,
   type CallToolResult,
+  LATEST_PROTOCOL_VERSION,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import type { Envelope, InstanceRow } from "@whiffle/core";
 import { adminTools } from "./admin-tools";
-import { HUB_PORT, SPAWN_START_TIMEOUT_MS } from "./config";
+import { DB_PATH, HUB_PORT, SPAWN_START_TIMEOUT_MS } from "./config";
 import { handoffInstructions, handoffTools } from "./delegation-tools";
 
 type ToolFactory = typeof handoffTools;
@@ -28,6 +42,23 @@ const LONG_CALLS: Record<string, string> = {
  */
 declare const __WHIFFLE_RELEASE__: boolean | undefined;
 
+/**
+ * The key MCP session ids are signed with, beside the hub's database so a
+ * restart keeps it: made once, readable by the hub's user alone.
+ */
+function sessionKey(path: string): Buffer {
+  try {
+    return readFileSync(path);
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+      throw error;
+    }
+  }
+  mkdirSync(dirname(path), { recursive: true });
+  writeFileSync(path, randomBytes(32), { mode: 0o600, flag: "wx" });
+  return readFileSync(path);
+}
+
 export function createDelegationMcp(options: {
   instances: () => InstanceRow[];
   /** Whether the session runs a work item with acceptance checks: it gets finish_item. */
@@ -37,6 +68,7 @@ export function createDelegationMcp(options: {
 }) {
   let tools = options.tools ?? handoffTools;
   const baseUrl = options.baseUrl ?? `http://127.0.0.1:${HUB_PORT}`;
+  const secret = sessionKey(join(dirname(DB_PATH), "mcp-session.key"));
   const sessions = new Map<
     string,
     {
@@ -266,32 +298,33 @@ export function createDelegationMcp(options: {
     }
   };
 
-  const handle = async (
-    request: Request,
-    parsedBody?: unknown
-  ): Promise<Response> => {
-    const id = request.headers.get("mcp-session-id");
-    if (id) {
-      const connection = sessions.get(id);
-      if (!connection) {
-        return Response.json(
-          { error: "Unknown MCP session; reconnect" },
-          { status: 404 }
-        );
-      }
-      return connection.transport.handleRequest(request, { parsedBody });
+  /**
+   * A session id names the instance its connection is bound to: a nonce and
+   * an HMAC of nonce and binding under the hub's key, which outlives the
+   * process. A restart forgets every connection, and the id a client still
+   * sends is enough to put its connection back — for the binding it was
+   * minted for and no other.
+   */
+  const signed = (nonce: string, binding: string | null) =>
+    createHmac("sha256", secret)
+      .update(`${nonce}:${binding ?? ""}`)
+      .digest("base64url");
+  const mint = (binding: string | null) => {
+    const nonce = randomUUID();
+    return `${nonce}.${signed(nonce, binding)}`;
+  };
+  const mintedFor = (id: string, binding: string | null): boolean => {
+    const [nonce, signature, extra] = id.split(".");
+    if (!(nonce && signature) || extra !== undefined) {
+      return false;
     }
-    if (request.method !== "POST") {
-      return new Response("Initialize MCP first", { status: 400 });
-    }
-    const body = parsedBody ?? (await request.json());
-    if ((body as { method?: string } | null)?.method !== "initialize") {
-      return new Response("Initialize MCP first", { status: 400 });
-    }
-    const binding = new URL(request.url).searchParams.get("instanceId");
-    if (binding && !options.instances().some((row) => row.id === binding)) {
-      return new Response("Unknown Whiffle instance", { status: 404 });
-    }
+    const expected = Buffer.from(signed(nonce, binding));
+    const given = Buffer.from(signature);
+    return expected.length === given.length && timingSafeEqual(expected, given);
+  };
+
+  /** One connection — its server and transport — bound to `binding`, under `id`. */
+  const open = async (binding: string | null, id: string) => {
     const bound = binding
       ? options.instances().find((row) => row.id === binding)
       : undefined;
@@ -310,7 +343,7 @@ export function createDelegationMcp(options: {
       }
     );
     const transport = new WebStandardStreamableHTTPServerTransport({
-      sessionIdGenerator: () => crypto.randomUUID(),
+      sessionIdGenerator: () => id,
       // Send headers immediately; image generation must not sit behind HTTP first-byte deadlines.
       enableJsonResponse: false,
       onsessioninitialized: (sessionId) => {
@@ -376,6 +409,109 @@ export function createDelegationMcp(options: {
       }
     });
     await server.connect(transport);
+    return transport;
+  };
+
+  /**
+   * Puts back a connection this process never opened: the client holds an id
+   * a previous hub minted, and a restart is not its business. Only for the
+   * binding the id was signed for; the transport is brought to where the
+   * client believes it is through its own handshake, with the protocol
+   * version the client is speaking, before its request is served.
+   */
+  const restoring = new Map<
+    string,
+    Promise<WebStandardStreamableHTTPServerTransport>
+  >();
+  const restore = (
+    request: Request,
+    binding: string | null,
+    id: string
+  ): Promise<WebStandardStreamableHTTPServerTransport> => {
+    const pending = restoring.get(id);
+    if (pending) {
+      return pending;
+    }
+    const restored = (async () => {
+      const transport = await open(binding, id);
+      const version =
+        request.headers.get("mcp-protocol-version") ?? LATEST_PROTOCOL_VERSION;
+      const handshake = (message: object, session?: string) =>
+        transport
+          .handleRequest(
+            new Request(request.url, {
+              method: "POST",
+              headers: {
+                accept: "application/json, text/event-stream",
+                "content-type": "application/json",
+                "mcp-protocol-version": version,
+                ...(session ? { "mcp-session-id": session } : {}),
+              },
+              body: JSON.stringify({ jsonrpc: "2.0", ...message }),
+            })
+          )
+          .then((response) => response.text());
+      await handshake({
+        id: 0,
+        method: "initialize",
+        params: {
+          protocolVersion: version,
+          capabilities: {},
+          clientInfo: { name: "whiffle-restored-session", version: "1" },
+        },
+      });
+      await handshake({ method: "notifications/initialized" }, id);
+      return transport;
+    })().finally(() => restoring.delete(id));
+    restoring.set(id, restored);
+    return restored;
+  };
+
+  /** The spec's answer to an id it does not know: the client starts a new session. */
+  const sessionNotFound = () =>
+    Response.json(
+      {
+        jsonrpc: "2.0",
+        error: { code: -32_001, message: "Session not found" },
+        id: null,
+      },
+      { status: 404 }
+    );
+
+  const handle = async (
+    request: Request,
+    parsedBody?: unknown
+  ): Promise<Response> => {
+    const id = request.headers.get("mcp-session-id");
+    const binding = new URL(request.url).searchParams.get("instanceId");
+    const live = id ? sessions.get(id) : undefined;
+    if (live) {
+      // A connection answers only on the URL it was opened on: its id names
+      // one instance, and another instance's URL does not borrow it.
+      return live.binding === binding
+        ? live.transport.handleRequest(request, { parsedBody })
+        : sessionNotFound();
+    }
+    // Opening a connection, or putting one back, binds it to the instance its
+    // URL names: one the hub has a row for.
+    if (binding && !options.instances().some((row) => row.id === binding)) {
+      return new Response("Unknown Whiffle instance", { status: 404 });
+    }
+    if (id) {
+      if (!mintedFor(id, binding)) {
+        return sessionNotFound();
+      }
+      const transport = await restore(request, binding, id);
+      return transport.handleRequest(request, { parsedBody });
+    }
+    if (request.method !== "POST") {
+      return new Response("Initialize MCP first", { status: 400 });
+    }
+    const body = parsedBody ?? (await request.json());
+    if ((body as { method?: string } | null)?.method !== "initialize") {
+      return new Response("Initialize MCP first", { status: 400 });
+    }
+    const transport = await open(binding, mint(binding));
     return transport.handleRequest(request, { parsedBody: body });
   };
   const close = async () => {
