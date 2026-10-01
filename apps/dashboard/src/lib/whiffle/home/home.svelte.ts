@@ -219,11 +219,32 @@ class Home {
   /** The hub is live: only then can an empty group be believed. */
   readonly live = $derived(whiffle.hub === "connected");
 
-  /** The first full read is in (or the hub is known to be unreachable). */
-  readonly ready = $derived(
-    whiffle.hub === "unreachable" ||
-      (whiffle.fleetRead && workflowState.loaded && whiffle.catalogsRead)
-  );
+  /**
+   * The first full read is in: machines, sessions, runs, every online
+   * machine's stored sessions, and the socket's own snapshot of what is
+   * mid-turn (or the hub is known to be unreachable). It only rises: a
+   * reconnect later does not take the home back to its skeleton.
+   */
+  #ready = $state(false);
+  get ready(): boolean {
+    return this.#ready;
+  }
+
+  constructor() {
+    $effect.root(() => {
+      $effect(() => {
+        if (
+          whiffle.hub === "unreachable" ||
+          (whiffle.fleetRead &&
+            whiffle.liveRead &&
+            workflowState.loaded &&
+            whiffle.catalogsRead)
+        ) {
+          this.#ready = true;
+        }
+      });
+    });
+  }
 
   readonly exceptions = $derived<MachineException[]>(
     whiffle.machines.flatMap((machine) => {
@@ -237,6 +258,23 @@ class Home {
           ]
         : [];
     })
+  );
+
+  /**
+   * The machines that have not answered yet: offline, their stored sessions
+   * not read, or their sessions still the hub's stale copy waiting for the
+   * daemon to register. Until this is empty an empty list proves nothing,
+   * so "no sessions" is never said over it.
+   */
+  readonly waitingOn = $derived(
+    whiffle.machines.filter(
+      (machine) =>
+        machine.status !== "online" ||
+        !whiffle.catalogRead(machine.machineId) ||
+        whiffle.listedInstances.some(
+          (row) => row.machineId === machine.machineId && isStale(row)
+        )
+    )
   );
 
   /** Today's spend across the running sessions this browser has stats for. */

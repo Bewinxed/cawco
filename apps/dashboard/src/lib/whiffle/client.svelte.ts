@@ -558,6 +558,12 @@ const state = $state({
    */
   runAskRaisedAt: {} as Record<string, number>,
   /**
+   * The socket's first full `instances` frame has landed: the hub's own
+   * now-state (pulses) for every session is in, so "nothing is working" can
+   * be believed. The REST read alone cannot say what is mid-turn.
+   */
+  liveRead: false,
+  /**
    * The hub's record of every delegate's asks, answers and reports, keyed by
    * the delegate they are about and oldest first. Kept apart from the session
    * it belongs to because the reader of this traffic is the *parent* — a
@@ -1616,6 +1622,7 @@ function handleFrame(frame: FramePayload): void {
     );
     if (frame.kind === "instances") {
       adoptInstances(frame.instances);
+      state.liveRead = true;
     } else {
       patchInstances(frame.upserts, frame.removed);
     }
@@ -5262,6 +5269,10 @@ export const whiffle = {
   /** The first REST read of machines, sessions and projects is in. */
   get fleetRead() {
     return state.fleetRead;
+  },
+  /** The socket's first full snapshot, pulses included, is in. */
+  get liveRead() {
+    return state.liveRead;
   },
   /** Every online machine's stored sessions have been read, or failed to be. */
   get catalogsRead() {

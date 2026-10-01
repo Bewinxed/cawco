@@ -33,6 +33,14 @@
     whiffle.retryAt ? Math.max(0, Math.ceil((whiffle.retryAt - now) / 1000)) : 0
   );
 
+  /** Which line is up; each change cross-fades. */
+  const phase = $derived.by(() => {
+    if (whiffle.hub !== "connected") {
+      return whiffle.hub;
+    }
+    return home.ready ? "connected" : "reading";
+  });
+
   const machines = $derived(whiffle.machines.length);
   const spend = $derived(`$${home.spend.toFixed(2)} today`);
 </script>
@@ -40,9 +48,9 @@
 <!-- The hub's three states cross-fade in place: the line that leaves is
      pinned where it stood (crossOut) while the one that arrives fades in. -->
 <div class="status" role="status">
-  {#key whiffle.hub}
+  {#key phase}
     <div class="line" in:crossIn out:crossOut>
-      {#if whiffle.hub === 'unreachable'}
+      {#if phase === 'unreachable'}
         <span class="down">
           <IconWarningTriangle aria-hidden="true" />
           <span
@@ -58,8 +66,12 @@
           size="xs"
           variant="outline"
         />
-      {:else if whiffle.hub === 'connecting'}
+      {:else if phase === 'connecting'}
         <span>Connecting…</span>
+      {:else if phase === 'reading'}
+        <!-- Connected, but machines and spend are not counted until the
+             fleet is read: "0 machines" would be a claim. -->
+        <span>Connected · reading the fleet…</span>
       {:else}
         <span>Connected</span>
         <span aria-hidden="true">·</span>

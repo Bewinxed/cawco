@@ -19,6 +19,7 @@
   import Attention from "~icons/solar/hand-shake-bold-duotone";
   import { whiffle } from "../client.svelte";
   import { conversationHref } from "../links";
+  import { machineLabel } from "../machine";
   import { crossIn, crossOut, morphMs } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
   import NewSessionDialog from "../spawn/NewSessionDialog.svelte";
@@ -57,6 +58,23 @@
   const hasSessions = $derived(
     home.working.length + home.finished.length + home.recent.length > 0
   );
+  /**
+   * What Caw's line says. "No sessions" is a claim, so it waits on the data:
+   * while any machine has not answered, the line names who it is waiting
+   * for (§8: a cross-fade cannot hide a wrong state).
+   */
+  const cawLine = $derived.by(() => {
+    if (hasSessions) {
+      return "All quiet.";
+    }
+    const [first, ...rest] = home.waitingOn;
+    if (first) {
+      return rest.length > 0
+        ? `Waiting for ${rest.length + 1} machines to answer.`
+        : `Waiting for ${machineLabel(first.hostname)} to answer.`;
+    }
+    return "Your sessions will land here.";
+  });
 
   /* ── Recent ─────────────────────────────────────────────────────────── */
 
@@ -251,8 +269,11 @@
         <!-- Caw only when nothing asks and nothing works, with the hub live. -->
         <figure class="caw" data-flip>
           <Caw pose="ready" size={variant === 'rail' ? 112 : 160} />
+          <!-- The line's states share one cell and cross-fade (§8). -->
           <figcaption>
-            {hasSessions ? 'All quiet.' : 'Your sessions will land here.'}
+            {#key cawLine}
+              <span in:crossIn out:crossOut>{cawLine}</span>
+            {/key}
           </figcaption>
         </figure>
       {/if}
@@ -529,8 +550,10 @@
     margin: var(--space-4) 0;
   }
   .caw figcaption {
+    position: relative;
     font: var(--type-body);
     color: var(--ink-muted);
+    text-align: center;
   }
   .dock {
     position: sticky;
