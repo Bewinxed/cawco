@@ -9,7 +9,8 @@
    *
    * `watch` is the session whose live tail the content draws: watched while
    * the panel shows it, and for 2s after, so a pointer that wanders off and
-   * back does not drop the stream and fetch it again.
+   * back does not drop the stream and fetch it again. Moving to a session
+   * whose tail is still being read keeps the panel's size until it lands.
    *
    * Where it stands is the caller's: `above` a row of chips (`--x` along
    * the row, clamped to `--span`, growing from `--origin`), or to the
@@ -18,6 +19,7 @@
    * as it crosses the gap.
    */
   import type { Snippet } from "svelte";
+  import type { Attachment } from "svelte/attachments";
   import { untrack } from "svelte";
   import type { HTMLAttributes } from "svelte/elements";
   import type { TransitionConfig } from "svelte/transition";
@@ -47,6 +49,52 @@
     side: "above" | "right";
     children: Snippet<[string]>;
   } = $props();
+
+  /**
+   * The watched session's tail is still being read. The read publishes in
+   * chunks, so the first rows to arrive are not yet the tail's size: it is
+   * pending until the read is done.
+   */
+  const pending = $derived.by(() => {
+    if (!watch) {
+      return false;
+    }
+    const branch = whiffle.session(watch);
+    return !branch || branch.loading || branch.hydrating;
+  });
+  // Landed: the hold is spent, and a later re-read never brings it back.
+  $effect(() => {
+    if (!pending) {
+      held = null;
+    }
+  });
+  /**
+   * The size the content had before the panel moved to the next trigger.
+   * While the next one's tail is still on its way the new content holds it
+   * (its head at once, skeleton lines under), so the panel resizes once,
+   * when the tail lands, and not at all when it lands the same size.
+   */
+  let held = $state<{ w: number; h: number } | null>(null);
+  /** The shown content's size, kept as it changes; a leaving one never counts. */
+  let size: { w: number; h: number } | null = null;
+  const measure: Attachment<HTMLElement> = (node) => {
+    const watcher = new ResizeObserver(() => {
+      if (node.style.position !== "absolute") {
+        size = { w: node.offsetWidth, h: node.offsetHeight };
+      }
+    });
+    watcher.observe(node);
+    return () => watcher.disconnect();
+  };
+  $effect.pre(() => {
+    const next = key;
+    untrack(() => {
+      held = next && size ? { ...size } : null;
+      if (!next) {
+        size = null;
+      }
+    });
+  });
 
   const releases = new Map<string, ReturnType<typeof setTimeout>>();
   $effect(() => {
@@ -131,7 +179,16 @@
   >
     <div class="cell">
       {#key key}
-        <div class="pbody" in:swapIn out:swapOut>{@render children(key)}</div>
+        <div
+          class="pbody"
+          {@attach measure}
+          style:block-size={pending && held ? `${held.h}px` : null}
+          style:inline-size={pending && held ? `${held.w}px` : null}
+          in:swapIn
+          out:swapOut
+        >
+          {@render children(key)}
+        </div>
       {/key}
     </div>
   </div>

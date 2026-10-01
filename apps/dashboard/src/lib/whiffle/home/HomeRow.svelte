@@ -54,6 +54,7 @@
     active = false,
     stale = false,
     done = false,
+    context = false,
   }: {
     instance?: InstanceRow | null;
     info?: NeutralSessionInfo | null;
@@ -70,6 +71,11 @@
     stale?: boolean;
     /** It is listed as finished: an idle session here is done, not idle. */
     done?: boolean;
+    /**
+     * Not one of the list's own: the parent of delegates that are, drawn so
+     * they hang off it. Its title reads in muted ink.
+     */
+    context?: boolean;
   } = $props();
 
   const sessionId = $derived(instance?.id ?? info?.sessionId ?? "");
@@ -102,6 +108,7 @@
   <div
     class="item"
     data-active={active || undefined}
+    data-context={context || undefined}
     data-flip
     data-stale={stale || undefined}
   >
@@ -270,6 +277,9 @@
   .item[data-active] .trail,
   .item[data-active] .peek {
     color: var(--selected-ink);
+  }
+  .item[data-context]:not([data-active]) .title {
+    color: var(--ink-muted);
   }
   .item[data-stale] {
     opacity: 0.55;

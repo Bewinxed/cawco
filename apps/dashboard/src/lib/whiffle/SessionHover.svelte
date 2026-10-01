@@ -12,7 +12,7 @@
    * the card (bridged) keeps it. A fine pointer only; touch has no hover.
    */
   import { IconAsk, IconSuccess, IconWarningTriangle } from "$lib/icons";
-  import { isFailed, whiffle } from "./client.svelte";
+  import { isFailed, preloadHistory, whiffle } from "./client.svelte";
   import { askDetailOf } from "./frames";
   import HoverPanel from "./HoverPanel.svelte";
   import { instanceTitle } from "./home/home.svelte";
@@ -34,6 +34,22 @@
   let closing: ReturnType<typeof setTimeout> | undefined;
 
   const fine = () => matchMedia("(hover: hover) and (pointer: fine)").matches;
+
+  /**
+   * The row the pointer is on starts reading its tail now, while the open
+   * delay runs, so the card mostly opens (or glides) onto a tail already in.
+   */
+  let fetched: string | null = null;
+  function prefetch(id: string): void {
+    if (id === fetched) {
+      return;
+    }
+    fetched = id;
+    if (!whiffle.session(id)?.messages.length) {
+      // biome-ignore lint/complexity/noVoid: fire-and-forget; the card draws whatever has arrived.
+      void preloadHistory(id);
+    }
+  }
 
   function open(row: HTMLElement, id: string): void {
     const box = row.getBoundingClientRect();
@@ -86,6 +102,7 @@
         hold();
         return;
       }
+      prefetch(id);
       clearTimeout(dwell);
       hold();
       if (openId) {

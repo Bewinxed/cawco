@@ -160,10 +160,17 @@
 
   /* ---- the tail's motion ---------------------------------------------- */
 
-  /** The keys on screen, oldest first: SLOTS of them, one more while it leaves. */
-  let shown = $state<string[]>([]);
+  /**
+   * The keys on screen, oldest first: SLOTS of them, one more while it
+   * leaves. A tail already in the store is there from the first frame.
+   */
+  let shown = $state<string[]>(
+    untrack(() => rows.map((row) => row.key).slice(-SLOTS))
+  );
   /** The last data each key had, for a row drawn on its way out. */
-  const last = new Map<string, Row>();
+  const last = new Map<string, Row>(
+    untrack(() => rows.map((row) => [row.key, row]))
+  );
   const byKey = $derived(new Map(rows.map((row) => [row.key, row])));
   const dataOf = (key: string) => byKey.get(key) ?? last.get(key);
 

@@ -29,7 +29,9 @@
    * row arriving, a held re-sort.
    *
    * A tab with nothing in it shows nothing; with nothing in either, there is
-   * no switch at all. The delegates button lists work other sessions started.
+   * no switch at all. The delegates button lists work other sessions started,
+   * each under the session that started it; a parent the tab does not list
+   * stands in as a quiet context line, not counted and taking no room.
    */
   import { flushSync, untrack } from "svelte";
   import type { Attachment } from "svelte/attachments";
@@ -124,8 +126,40 @@
   /** The boxes whose heights a change drives: each group, and the "N more" row's. */
   const BOXES = ":scope > .group, :scope > .more-slot";
 
-  const rowsOf = (tab: WorkTab): InstanceRow[] =>
-    tab === "working" ? home.working : home.finished;
+  /**
+   * A tab's own rows. Delegates only when the Delegates button is on: work
+   * another session started is listed on request, here as everywhere.
+   */
+  const rowsOf = (tab: WorkTab): InstanceRow[] => {
+    const rows = tab === "working" ? home.working : home.finished;
+    return rail.delegates ? rows : rows.filter((row) => !row.parentInstanceId);
+  };
+  /** A session the tab does not list, to stand in for a delegate's parent. */
+  const known = (id: string): InstanceRow | undefined =>
+    whiffle.instanceIndex.byId.get(id);
+  /**
+   * Each tab as its tree (tree.ts): every session followed by its
+   * delegates, and with Delegates on, a parent the tab does not list drawn
+   * as a context line in its delegates' place, so none stands alone.
+   */
+  const trees = $derived({
+    working: tree(
+      rowsOf("working"),
+      undefined,
+      rail.delegates ? known : undefined
+    ),
+    finished: tree(
+      rowsOf("finished"),
+      undefined,
+      rail.delegates ? known : undefined
+    ),
+  });
+  /** Every row's place in its tab's tree: depth, last sibling, rails through it. */
+  const shapes = $derived({
+    working: new Map(trees.working.map((line) => [line.row.id, line])),
+    finished: new Map(trees.finished.map((line) => [line.row.id, line])),
+  });
+  const shapeOf = (tab: WorkTab, id: string) => shapes[tab].get(id);
 
   type Group = MachineGroup<InstanceRow>;
   /** A line that is leaving: a machine's header, or one of its rows. */
@@ -154,14 +188,13 @@
     return at === -1 ? Number.MAX_SAFE_INTEGER : at;
   };
 
-  /** A tab's groups as listed: all of them, or the first MORE_AT rows. */
   /**
    * A tab's rows by machine, each session followed by its delegates (tree.ts)
    * under the machine its top-level session runs on, so a delegate on
    * another machine still hangs under the session that started it.
    */
   function grouped(tab: WorkTab): Group[] {
-    const lines = tree(rowsOf(tab));
+    const lines = trees[tab];
     const tops = byMachine(
       lines.filter((line) => line.depth === 0).map((line) => line.row)
     );
@@ -181,23 +214,13 @@
     return [...at.values()];
   }
 
-  /** Every row's place in its tab's tree: depth, last sibling, rails through it. */
-  const shapes = $derived(
-    new Map(
-      [...tree(home.working), ...tree(home.finished)].map((line) => [
-        line.row.id,
-        line,
-      ])
-    )
-  );
-
   /**
    * A nested row's lines (the .kit-nest elbow, drawn from its own wrapper
    * since the list is flat): its depth, its place in the stagger, and a
    * straight rail for each ancestor whose line runs on past it.
    */
-  function nestStyle(id: string, i: number): string {
-    const line = shapes.get(id);
+  function nestStyle(tab: WorkTab, id: string, i: number): string {
+    const line = shapeOf(tab, id);
     if (!line || line.depth === 0) {
       return "";
     }
@@ -214,6 +237,11 @@
       .join("; ");
   }
 
+  /**
+   * A tab's groups as listed: all of them, or its first MORE_AT rows. A
+   * context line takes no room; it is listed with the first of its
+   * delegates that is.
+   */
   function listed(tab: WorkTab, all: boolean): Group[] {
     const groups = grouped(tab);
     if (all) {
@@ -222,11 +250,23 @@
     let room = MORE_AT;
     const out: Group[] = [];
     for (const group of groups) {
-      if (room === 0) {
-        break;
+      const rows: InstanceRow[] = [];
+      let waiting: InstanceRow[] = [];
+      for (const row of group.rows) {
+        if (room === 0) {
+          break;
+        }
+        if (shapeOf(tab, row.id)?.context) {
+          waiting.push(row);
+          continue;
+        }
+        rows.push(...waiting, row);
+        waiting = [];
+        room -= 1;
       }
-      out.push({ ...group, rows: group.rows.slice(0, room) });
-      room -= Math.min(room, group.rows.length);
+      if (rows.length > 0) {
+        out.push({ ...group, rows });
+      }
     }
     return out;
   }
@@ -418,6 +458,13 @@
       : "";
     return [projectOf(row.machineId, row.cwd), why].filter(Boolean).join(" · ");
   }
+  /** The row's meta line, naming its machine when it is not its group's. */
+  function metaLine(row: InstanceRow, tab: WorkTab, group: string): string {
+    const said = tab === "working" ? workingLine(row) : finishedLine(row);
+    return row.machineId === group
+      ? said
+      : `${machineName(row.machineId)} · ${said}`;
+  }
   function age(row: InstanceRow, tab: WorkTab): string {
     if (tab === "working") {
       const since = whiffle.turnSince(row.id);
@@ -436,17 +483,20 @@
 {/snippet}
 
 {#snippet sessionRow(row: InstanceRow, tab: WorkTab, group: string)}
-  {@const said = tab === 'working' ? workingLine(row) : finishedLine(row)}
+  {@const context = shapeOf(tab, row.id)?.context ?? false}
+  <!-- A context line is the parent of delegates listed here, not one of
+       the tab's own: its state and name, quietly, and nothing else. -->
   <HomeRow
     active={current === row.id}
+    {context}
     done={tab === 'finished'}
     href={conversationHref(row.id, whiffle.instanceIndex)}
     instance={row}
-    line={row.machineId === group ? said : `${machineName(row.machineId)} · ${said}`}
+    line={context ? '' : metaLine(row, tab, group)}
     machineId={row.machineId}
     {stale}
     title={instanceTitle(row)}
-    trail={age(row, tab)}
+    trail={context ? '' : age(row, tab)}
   />
 {/snippet}
 
@@ -458,11 +508,11 @@
     inert
   >
     {#each lines.filter((line) => line.row) as line, i (line.key)}
-      {@const shape = shapes.get(line.key)}
+      {@const shape = shapeOf(line.tab, line.key)}
       <div
         data-first={shape?.first || undefined}
         data-last={shape?.last || undefined}
-        style={[leaveAnim(line.key), nestStyle(line.key, i)].join('; ')}
+        style={[leaveAnim(line.key), nestStyle(line.tab, line.key, i)].join('; ')}
         class:nested={(shape?.depth ?? 0) > 0}
       >
         {#if (shape?.depth ?? 0) > 0}
@@ -545,13 +595,13 @@
               {@render leaving(entry.gone, true)}
             {/if}
             {#each entry.rows as row, i (`${swap.gen}:${row.id}`)}
-              {@const shape = shapes.get(row.id)}
+              {@const shape = shapeOf(shown, row.id)}
               <div
                 data-first={shape?.first || undefined}
                 data-flip={plan ? undefined : ''}
                 data-key={row.id}
                 data-last={shape?.last || undefined}
-                style={[enterAnim(row.id), nestStyle(row.id, i)].join('; ')}
+                style={[enterAnim(row.id), nestStyle(shown, row.id, i)].join('; ')}
                 class:nested={(shape?.depth ?? 0) > 0}
               >
                 {#if (shape?.depth ?? 0) > 0}
