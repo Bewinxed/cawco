@@ -18,12 +18,9 @@ Claude Code, OpenCode, pi. A Telegram bridge lets the operator approve permissio
 
 ## Design Context
 
-- **Journey spec**: JOURNEY.md
-- The dashboard's visual design is being re-derived from scratch (see
-  `.design-foundations/plans/2026-08-18-whiffle-flowai-overhaul.md`). `DESIGN.md` (visual tokens)
-  does not exist yet — once it is locked, it is law: apply its tokens, do not re-derive the
-  palette or introduce one-off colors, fonts, or spacing outside it.
-- The existing 7 route surfaces (`session`, `session/[id]`, `tools`, `rules`, `rules/[id]`,
-  `project/[id]`, `usage`) are evidence of what information the product needs to show, never of
-  how that information should be arranged. Structural and IA decisions come from JOURNEY.md, not
-  from the incumbent layout.
+- **Journey spec**: JOURNEY.md. Structural and IA decisions come from it.
+- **Design spec**: DESIGN.md is the locked design language and it is law. Apply its tokens
+  (`apps/dashboard/src/app.css`), its named rules and its component recipes. Do not introduce
+  one-off colours, fonts, spacing, radii, shadows, curves or durations outside it; add a token
+  first. `.impeccable/design.json` carries its hex values, shadows, motion tokens and breakpoints.
+- **Product truth**: PRODUCT.md (users, principles, accessibility). **Copy**: WORDS.md.

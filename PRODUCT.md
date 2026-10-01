@@ -64,6 +64,13 @@ Away from a desk, the operator uses a Telegram bridge to receive permission prom
 - **rule**: a standing permission rule
 - **spend / budget**: daily cost number / the limit
 
+**How state is shown (derived liveness in the UI):**
+- An empty surface claims "nothing" only while the hub connection is live. While connecting, disconnected or in error, the board keeps its last good rows, marks them stale, and suppresses the needs-you count instead of showing zero.
+- An empty state renders only once the data is known to be empty, never while it is still being read. While data loads, a skeleton stands in at the real layout's size.
+- First-use empty ("no machine has joined") and user-cleared empty ("all clear, nothing running") are different answers and are always shown differently.
+- A machine the hub cannot reach is marked on its own rows (hollow status, "Unreachable"); the rest of the board stays live.
+- No answer to a permission prompt and no spawn is ever posted optimistically. A control that cannot be carried by the socket is disabled with the reason stated.
+
 ## Brand Commitments
 
 - **Name:** Whiffle (codebase migration from "Whiffle" pending; "Whiffle" is the sole public-facing name)
@@ -72,6 +79,8 @@ Away from a desk, the operator uses a Telegram bridge to receive permission prom
 - **Button labels:** always [Verb]+[Object], from an allowlisted imperative-verb set.
 - **Terminology discipline:** one concept → one canonical term everywhere, enforced by lint.
 - **No humor** in error, warning, destructive-confirm, or permission-approval copy.
+- **Copy authority:** WORDS.md governs every user-facing string: the voice chart, tone map, terminology table, error formula, empty-state formulas and button-label rule.
+- **Identity constraints (owner-stated):** every product icon is Solar's bold-duotone cut, and it stays; indigo is never a brand hue; the action is graphite, not a hue. DESIGN.md records how these are drawn.
 
 ## Evidence on Hand
 
@@ -84,3 +93,13 @@ Working product with 9 route surfaces (fleet board, session detail, project deta
 3. **One board, every agent.** Harness-neutral by design — Claude Code, OpenCode, and pi are peers, not first-class-and-also-rans.
 4. **Ship the daemon, not the sessions.** sessiond exists so agent-daemon deploys don't kill running work. The process keeper is protocol-blind and ships approximately never.
 5. **Derived, not stored.** Status is computed at read time from live sources. The hub records what happened (durable history); the daemon reports what is happening (live truth). The UI renders the derivation and invents nothing.
+
+## Accessibility & Inclusion
+
+- **Standard:** WCAG 2.2 AA. Text and status inks hold 4.5:1 on the surfaces they sit on.
+- **Target size:** every control reaches a 44×44 touch area on a coarse pointer and a 24×24 area on a fine pointer (SC 2.5.8), without changing its drawn size. The approve/deny pair targets 44×44.
+- **Status is never colour alone:** every state carries a word or a distinct shape as well as its hue.
+- **Keyboard:** every action is reachable by keyboard and shows one visible focus ring on keyboard focus.
+- **Reduced motion and transparency:** `prefers-reduced-motion` removes all travelling motion and loops (fades remain); `prefers-reduced-transparency` makes translucent chrome opaque.
+- **Phone fields:** text inputs never render below 16px on a phone or a coarse pointer, so iOS never zooms on focus; iOS hold-to-select and Paste must reach every text field, including inside sheets.
+- **Screen readers:** live regions announce state changes and refusals; morphing text keeps a plain-text copy for assistive technology.
