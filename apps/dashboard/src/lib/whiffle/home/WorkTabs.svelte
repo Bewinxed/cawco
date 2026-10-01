@@ -40,9 +40,15 @@
   import Structure from "~icons/solar/structure-bold-duotone";
   import { type InstanceRow, isFailed, whiffle } from "../client.svelte";
   import { conversationHref } from "../links";
-  import { CURVE, dur, easeDrawer, motionOk } from "../motion/curves.svelte";
+  import { dur, motionOk } from "../motion/curves.svelte";
   import { holdWhileInside } from "../motion/held-order.svelte";
   import { IN_MS, ListSwap } from "../motion/list-swap.svelte";
+  import {
+    boxHeights,
+    driveHeights,
+    onScreen,
+    waitForBoxes,
+  } from "../motion/relay-boxes";
   import { REFLOW_REREAD, reflow } from "../motion/rows.svelte";
   import OsMark from "../OsMark.svelte";
   import { rail } from "../rail.svelte";
@@ -140,58 +146,6 @@
     old: Group[];
     /** The tab the leaving rows came from. */
     tab: WorkTab;
-  }
-
-  /**
-   * How long a group's height travels `delta` px on the morph curve
-   * (--ease-drawer): --dur-panel, longer for a long way (2.5ms a pixel),
-   * never past 480ms, so a big change still reads as one quick glide.
-   */
-  const tweenMs = (delta: number): number =>
-    Math.min(
-      480,
-      Math.max(dur("--dur-panel"), Math.ceil(Math.abs(delta) * 2.5))
-    );
-
-  /**
-   * How far into an opening box's tween (0–1) its edge reaches `foot` px
-   * from its top: the morph curve, inverted by halving.
-   */
-  function reached(open: { from: number; to: number }, foot: number): number {
-    const share = (foot - open.from) / (open.to - open.from);
-    if (share <= 0) {
-      return 0;
-    }
-    let lo = 0;
-    let hi = 1;
-    for (let step = 0; step < 20; step += 1) {
-      const mid = (lo + hi) / 2;
-      if (easeDrawer(mid) < share) {
-        lo = mid;
-      } else {
-        hi = mid;
-      }
-    }
-    return hi;
-  }
-
-  /** The lines shown this frame: arrived, and inside their box's edge. */
-  function onScreen(list: HTMLElement): Set<string> {
-    const shownKeys = new Set<string>();
-    for (const line of list.querySelectorAll<HTMLElement>("[data-key]")) {
-      const box = line.closest(".group, .more-slot");
-      if (!box || line.closest("[data-leaving]")) {
-        continue;
-      }
-      const edge = box.getBoundingClientRect().bottom;
-      if (
-        Number.parseFloat(getComputedStyle(line).opacity) > 0.05 &&
-        line.getBoundingClientRect().bottom <= edge + 0.5
-      ) {
-        shownKeys.add(line.dataset.key ?? "");
-      }
-    }
-    return shownKeys;
   }
 
   /** The machines' order, the one every list keeps (`byMachine`). */
@@ -329,81 +283,6 @@
     });
   });
 
-  interface Opening {
-    from: number;
-    ms: number;
-    to: number;
-  }
-
-  /**
-   * Moves every box from the height it was drawn at to its new one: one
-   * that grows opens at once, one that shrinks waits for its last leaving
-   * line, one that goes closes to nothing. Returns the boxes that open and
-   * when the last height lands.
-   */
-  function driveHeights(
-    list: HTMLElement,
-    before: Map<string, number>,
-    lastOut: Map<string, number>
-  ) {
-    const opened = new Map<Element, Opening>();
-    let done = 0;
-    for (const el of list.querySelectorAll<HTMLElement>(BOXES)) {
-      const id = el.dataset.machine ?? "";
-      const gone = el.dataset.kind === "gone";
-      const from = before.get(id) ?? 0;
-      const to = gone ? 0 : el.offsetHeight;
-      if (Math.abs(to - from) < 0.5) {
-        continue;
-      }
-      const ms = tweenMs(to - from);
-      const wait = to > from ? 0 : (lastOut.get(id) ?? 0);
-      if (to > from) {
-        opened.set(el, { from, ms, to });
-      }
-      done = Math.max(done, wait + ms);
-      heights.push(
-        el.animate(
-          [
-            { height: `${from}px`, overflowY: "clip" },
-            { height: `${to}px`, overflowY: "clip" },
-          ],
-          {
-            duration: ms,
-            delay: wait,
-            easing: CURVE.drawer,
-            fill: gone ? "both" : "backwards",
-          }
-        )
-      );
-    }
-    return { done, opened };
-  }
-
-  /**
-   * An arriving line in an opening box waits for the box's edge to reach
-   * its foot, so nothing shows past a box's edge.
-   */
-  function waitForBoxes(
-    opened: Map<Element, Opening>,
-    enter: Map<string, Arrival>
-  ): Map<string, Arrival> {
-    const reach = new Map(enter);
-    for (const [box, open] of opened) {
-      const { top } = box.getBoundingClientRect();
-      for (const line of box.querySelectorAll<HTMLElement>("[data-key]")) {
-        const key = line.dataset.key ?? "";
-        const at = reach.get(key);
-        const foot = line.getBoundingClientRect().bottom - top;
-        const wait = Math.ceil(open.ms * reached(open, foot));
-        if (at && wait > at.notBefore) {
-          reach.set(key, { ...at, notBefore: wait });
-        }
-      }
-    }
-    return reach;
-  }
-
   /**
    * Changes what the list shows, as one relay: `apply` changes the state
    * (the tab, how many rows), and every line, header and height moves from
@@ -411,13 +290,10 @@
    */
   function relay(dir: number, next: WorkTab, all: boolean, apply: () => void) {
     const list = listEl;
-    const before = new Map<string, number>();
-    for (const el of list?.querySelectorAll<HTMLElement>(BOXES) ?? []) {
-      before.set(el.dataset.machine ?? "", el.getBoundingClientRect().height);
-    }
+    const before = list ? boxHeights(list, BOXES) : new Map<string, number>();
     // Mid-change, only what is on screen this frame is drawn: a line not
     // yet arrived, or still below its opening box, has nothing to leave.
-    const seen = plan && list ? onScreen(list) : null;
+    const seen = plan && list ? onScreen(list, ".group, .more-slot") : null;
     const drawnNow = (key: string) => !seen || seen.has(key);
     // What is drawn now: the groups as they stand, mid-change or not. A
     // group already closing has said its goodbye; it is not said twice.
@@ -458,7 +334,8 @@
 
     let done = dur("--dur-panel");
     if (list && moving) {
-      const driven = driveHeights(list, before, relayed.lastOut);
+      const driven = driveHeights(list, BOXES, before, relayed.lastOut);
+      heights = driven.runs;
       const enter = waitForBoxes(driven.opened, relayed.enter);
       done = Math.max(
         driven.done,

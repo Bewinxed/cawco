@@ -66,9 +66,11 @@ export interface ClaudeLimits {
    * Extra usage: the pay-as-you-go real money spent past the plan this month,
    * and its monthly cap, in dollars (the API's `spend.used` / `spend.limit`
    * money objects). Null when not reported; the cap is null with extra usage
-   * off.
+   * off. `spendResetsAt` is when the cap resets (ISO), only when the API
+   * says; null otherwise, never guessed.
    */
   spendLimit: number | null;
+  spendResetsAt: string | null;
   spendUsed: number | null;
   /** Set when a fetch failed and the caller is served the last good reading. */
   stale?: boolean;

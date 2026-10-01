@@ -13,6 +13,8 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { IconRefresh } from "$lib/icons";
+  import { ListSwap } from "../motion/list-swap.svelte";
+  import { morph } from "../motion/morph.svelte";
   import { money } from "../usage";
 
   type Harness = "claude" | "opencode";
@@ -186,7 +188,19 @@
     })
   );
 
+  type Chart = (typeof charts)[number];
+
   const ready = $derived(shown !== null);
+
+  /**
+   * Chart ⇄ Table swaps each chart's body in its slot (motion/list-swap,
+   * the switches' one relay): the old body leaves over the slot's top and
+   * the new one arrives once it has gone; the caption stays.
+   */
+  const bodySwap = new ListSwap<{
+    harness: Harness;
+    view: "chart" | "table";
+  }>();
 </script>
 
 <section aria-labelledby="history-title" class="card">
@@ -194,7 +208,19 @@
     <h2 class="title" id="history-title">History</h2>
     <Tabs
       onValueChange={(next) => {
-        view = next as "chart" | "table";
+        const to = next as "chart" | "table";
+        if (to === view) {
+          return;
+        }
+        if (ready) {
+          bodySwap.swap(
+            charts
+              .filter((c) => !c.missing)
+              .map((c) => ({ harness: c.harness, view })),
+            to === 'table' ? 1 : -1
+          );
+        }
+        view = to;
       }}
       value={view}
     >
@@ -232,65 +258,109 @@
             <p class="note">No 5-hour window is running.</p>
           {:else if !ready}
             <Skeleton class="h-24 w-full" />
-          {:else if view === 'chart'}
-            <div class="plot">
-              <div class="bars">
-                {#each chart.points as point (point.at)}
-                  <Tooltip.Root>
-                    <Tooltip.Trigger>
-                      {#snippet child({ props })}
-                        <span
-                          {...props}
-                          aria-label="{periodLabel(point.at)}: {chart.approx}{money(point.cost)}"
-                          class="slot"
-                          role="img"
-                        >
-                          <span
-                            class="bar"
-                            style:--h={chart.peak > 0 ? point.cost / chart.peak : 0}
-                          ></span>
-                        </span>
-                      {/snippet}
-                    </Tooltip.Trigger>
-                    <Tooltip.Content
-                      >{periodLabel(point.at)}
-                      · {chart.approx}{money(point.cost)}</Tooltip.Content
-                    >
-                  </Tooltip.Root>
-                {/each}
-              </div>
-              {#if chart.points.length > 0}
-                <div class="axis">
-                  <span>{periodLabel(chart.points[0].at)}</span>
-                  <span>{periodLabel(chart.points.at(-1)?.at ?? 0)}</span>
-                </div>
-              {/if}
-            </div>
           {:else}
-            <table class="figures">
-              <thead>
-                <tr>
-                  <th scope="col">{byHour ? 'Hour' : 'Day'}</th>
-                  <th class="num" scope="col">
-                    {chart.harness === 'claude' ? 'API price' : 'Spend'}
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {#each chart.points as point (point.at)}
-                  <tr>
-                    <td>{periodLabel(point.at)}</td>
-                    <td class="num">{chart.approx}{money(point.cost)}</td>
-                  </tr>
-                {/each}
-              </tbody>
-            </table>
+            {@const i = chart.harness === 'claude' ? 0 : 1}
+            <!-- One slot: the old view leaves over its top while the new one
+                 waits for it, and the slot's height morphs to the new. -->
+            <div class="body" {@attach morph()}>
+              {#each bodySwap.leaving.filter((l) => l.harness === chart.harness) as gone (gone.harness)}
+                <div
+                  aria-hidden="true"
+                  class="leaving"
+                  inert
+                  style="animation:{bodySwap.leaveAnim(i)}"
+                >
+                  {#if gone.view === 'chart'}
+                    {@render plot(chart, false)}
+                  {:else}
+                    {@render figures(chart)}
+                  {/if}
+                </div>
+              {/each}
+              {#key bodySwap.gen}
+                <div
+                  style="animation:{bodySwap.rowAnim(i, ListSwap.leaveEnd(i))}"
+                >
+                  {#if view === 'chart'}
+                    {@render plot(chart, true)}
+                  {:else}
+                    {@render figures(chart)}
+                  {/if}
+                </div>
+              {/key}
+            </div>
           {/if}
         </figure>
       {/each}
     </div>
   {/if}
 </section>
+
+{#snippet plot(chart: Chart, live: boolean)}
+  <div class="plot">
+    <div class="bars">
+      {#each chart.points as point (point.at)}
+        {#if !live}
+          <span class="slot"
+            ><span
+              class="bar"
+              style:--h={chart.peak > 0 ? point.cost / chart.peak : 0}
+            ></span></span
+          >
+        {:else}
+          <Tooltip.Root>
+            <Tooltip.Trigger>
+              {#snippet child({ props })}
+                <span
+                  {...props}
+                  aria-label="{periodLabel(point.at)}: {chart.approx}{money(point.cost)}"
+                  class="slot"
+                  role="img"
+                >
+                  <span
+                    class="bar"
+                    style:--h={chart.peak > 0 ? point.cost / chart.peak : 0}
+                  ></span>
+                </span>
+              {/snippet}
+            </Tooltip.Trigger>
+            <Tooltip.Content
+              >{periodLabel(point.at)}
+              · {chart.approx}{money(point.cost)}</Tooltip.Content
+            >
+          </Tooltip.Root>
+        {/if}
+      {/each}
+    </div>
+    {#if chart.points.length > 0}
+      <div class="axis">
+        <span>{periodLabel(chart.points[0].at)}</span>
+        <span>{periodLabel(chart.points.at(-1)?.at ?? 0)}</span>
+      </div>
+    {/if}
+  </div>
+{/snippet}
+
+{#snippet figures(chart: Chart)}
+  <table class="figures">
+    <thead>
+      <tr>
+        <th scope="col">{byHour ? 'Hour' : 'Day'}</th>
+        <th class="num" scope="col">
+          {chart.harness === 'claude' ? 'API price' : 'Spend'}
+        </th>
+      </tr>
+    </thead>
+    <tbody>
+      {#each chart.points as point (point.at)}
+        <tr>
+          <td>{periodLabel(point.at)}</td>
+          <td class="num">{chart.approx}{money(point.cost)}</td>
+        </tr>
+      {/each}
+    </tbody>
+  </table>
+{/snippet}
 
 <style>
   .card {
@@ -347,6 +417,15 @@
   .total {
     font: var(--type-label);
     color: var(--ink-strong);
+  }
+  .body {
+    position: relative;
+  }
+  /* The old view, over the slot's top while it leaves. */
+  .leaving {
+    position: absolute;
+    inset: 0 0 auto;
+    pointer-events: none;
   }
   .plot {
     display: flex;

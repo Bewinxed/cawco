@@ -5327,20 +5327,7 @@ export const whiffle = {
   get onlineMachines() {
     return state.machines.filter((machine) => machine.status === "online");
   },
-  /** One machine's latest Claude limit reading, or null until it has reported. */
-  usageLimitsFor: (machineId: string): ClaudeLimits | null =>
-    state.usageLimits[machineId] ?? null,
-  /**
-   * Any machine's reading. Limits belong to the account, not the host: every
-   * machine signed in to the same account reports the same percentages, so the
-   * app chrome shows the first real reading it has and prefers one without an
-   * error over a machine that is merely signed out.
-   */
-  usageLimitsAny: (): ClaudeLimits | null => {
-    const readings = Object.values(state.usageLimits);
-    return readings.find((r) => r.error === null) ?? readings[0] ?? null;
-  },
-  /** Every machine's Claude reading, by machineId (the usage page's Limits block). */
+  /** Every machine's Claude reading, by machineId (every usage surface). */
   get claudeLimits(): Readonly<Record<string, ClaudeLimits>> {
     return state.usageLimits;
   },

@@ -71,6 +71,8 @@ interface UsageResponse {
   spend?: {
     used?: MoneyRaw | null;
     limit?: MoneyRaw | null;
+    /** When the cap resets, when the API reports it. */
+    resets_at?: string | null;
   } | null;
 }
 
@@ -197,6 +199,7 @@ export async function fetchClaudeLimits(opts?: {
     windows,
     spendUsed: dollars(body.spend?.used),
     spendLimit: dollars(body.spend?.limit),
+    spendResetsAt: body.spend?.resets_at ?? null,
     error: null,
   };
 
@@ -214,6 +217,7 @@ function errorResult(error: string): ClaudeLimits {
     windows: [],
     spendUsed: null,
     spendLimit: null,
+    spendResetsAt: null,
     error,
   };
 }

@@ -42,6 +42,8 @@
     NO_EFFORT_MODEL,
   } from "../spawn/ToolChips.svelte";
   import "../spawn/ns-theme.css";
+  import { fillState, firstToStop, limitRows, speakingReading } from "../usage";
+  import LimitBar from "../usage/LimitBar.svelte";
   import SessionStatus from "./SessionStatus.svelte";
   import { contextOf } from "./workspace.svelte";
 
@@ -93,6 +95,30 @@
   const cwd = $derived(session?.cwd || row?.cwd || context?.cwd || "");
   const stats = $derived(whiffle.statsOf(sessionId));
   const model = $derived(session?.model ?? null);
+
+  /**
+   * This session's provider limit (owner pick h): the window that stops its
+   * provider first — Claude's for a Claude session, OpenCode Go's for an
+   * opencode session on a Go model. Read against a minute clock.
+   */
+  let limitNow = $state(Date.now());
+  $effect(() => {
+    const timer = setInterval(() => {
+      limitNow = Date.now();
+    }, 60_000);
+    return () => clearInterval(timer);
+  });
+  const providerLimit = $derived.by(() => {
+    if (harness === "claude") {
+      const claude = speakingReading(whiffle.claudeLimits)?.reading;
+      return firstToStop(limitRows("Claude", claude, limitNow));
+    }
+    if (harness === "opencode" && model?.startsWith("opencode-go/")) {
+      const go = speakingReading(whiffle.openCodeGoLimits)?.reading;
+      return firstToStop(limitRows("opencode", go, limitNow));
+    }
+    return null;
+  });
   const modelInfo = $derived(model ? describingRow(model) : null);
   const efforts = $derived(
     report?.capabilities.effort ? (modelInfo?.supportedEffortLevels ?? []) : []
@@ -540,20 +566,15 @@
   <div class="stats" bind:this={statsEl}>
     <div class="context">
       {#if percent !== null && stats.totalTokens !== null && stats.maxTokens !== null}
-        <!-- biome-ignore lint/a11y/useSemanticElements: a native meter's fill cannot be animated -->
-        <span
-          aria-label="Context used"
-          aria-valuemax={100}
-          aria-valuemin={0}
-          aria-valuenow={percent}
-          class="context-meter"
-          role="meter"
-          title={readAt ? `Read at ${readAt}` : undefined}
-        >
-          <span
-            class="context-fill"
-            style:transform={`scaleX(${percent / 100})`}
-          ></span>
+        <span class="stat-label">Context</span>
+        <span class="stat-bar" title={readAt ? `Read at ${readAt}` : undefined}>
+          <LimitBar
+            elapsed={null}
+            label="Context"
+            size={4}
+            state={fillState(percent)}
+            used={percent}
+          />
         </span>
         <TextMorph
           as="span"
@@ -568,6 +589,22 @@
         <span>Context not reported</span>
       {/if}
     </div>
+    {#if providerLimit}
+      {@const m = providerLimit.meter}
+      <div class="limit">
+        <span class="stat-label">{providerLimit.label}</span>
+        <span class="stat-bar">
+          <LimitBar
+            elapsed={m.elapsed}
+            label={providerLimit.label}
+            size={4}
+            state={m.state}
+            used={m.used}
+          />
+        </span>
+        <span>{Math.round(m.used)}%</span>
+      </div>
+    {/if}
     {#if session?.mcp}
       <a class="tools" href="/config/mcp"
         ><TextMorph
@@ -827,21 +864,28 @@
     margin-left: auto;
     color: var(--ink-strong);
   }
-  .context-meter {
+  /* Context and the provider's limit, each a word, a 4px bar and a figure
+     (usage/LimitBar); the bar's pace gap shows the strip's own surface. */
+  .limit {
+    --row-paint: var(--surface-recess);
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .context {
+    --row-paint: var(--surface-recess);
+  }
+  .stat-label {
+    color: var(--ink-muted);
+  }
+  .stat-bar {
     flex: 1;
     min-width: 48px;
     max-width: 96px;
-    height: 4px;
-    border-radius: var(--radius-pill);
-    overflow: hidden;
-    background: var(--border-control);
   }
-  .context-fill {
-    display: block;
-    height: 100%;
-    background: var(--ink-muted);
-    transform-origin: left;
-    transition: transform var(--dur-panel) var(--ease-out);
+  .limit .stat-bar {
+    flex: none;
+    width: 64px;
   }
   /* The modal's action row (SessionFooter): right-aligned, 8px apart. */
   .footer {

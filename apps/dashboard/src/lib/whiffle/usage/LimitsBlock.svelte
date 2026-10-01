@@ -10,7 +10,6 @@
    * stale. Live: the readings are the client's, which the hub's `usage`
    * frame keeps current.
    */
-  import type { LimitWindow } from "@whiffle/core";
   import { Button } from "$lib/components/ui/button";
   import { Skeleton } from "$lib/components/ui/skeleton";
   import { IconKey } from "$lib/icons";
@@ -20,17 +19,19 @@
   import HarnessGlyph from "../HarnessGlyph.svelte";
   import MachineLogin from "../MachineLogin.svelte";
   import {
+    capMoney,
+    fillState,
     firstToStop,
+    type LimitRow,
+    limitRows,
     type Meter,
     money,
     planName,
     projectionNote,
     projectionSentence,
     readAgo,
-    readMeter,
     resetLabel,
     speakingReading,
-    windowLabel,
   } from "../usage";
   import LimitBar from "./LimitBar.svelte";
 
@@ -44,12 +45,7 @@
     spend: { today: number; week: number; all: number } | null;
   } = $props();
 
-  interface Row {
-    key: string;
-    label: string;
-    meter: Meter;
-    provider: string;
-  }
+  type Row = LimitRow;
 
   interface Unknown {
     machine: Machine | null;
@@ -63,34 +59,32 @@
   const claude = $derived(speakingReading(whiffle.claudeLimits));
   const go = $derived(speakingReading(whiffle.openCodeGoLimits));
 
-  /** Session first, then the weeks fullest first: worst news nearest the top. */
-  const ORDER: Record<string, number> = { session: 0, weekly: 1, monthly: 2 };
-  function rowsOf(
-    provider: string,
-    windows: LimitWindow[],
-    stale: boolean
-  ): Row[] {
-    return [...windows]
-      .sort(
-        (a, b) =>
-          (ORDER[a.group] ?? 3) - (ORDER[b.group] ?? 3) || b.percent - a.percent
-      )
-      .map((w) => ({
-        key: `${provider}:${w.kind}:${w.scopeLabel ?? ""}`,
-        label: windowLabel(w),
-        meter: readMeter(w, now, stale),
-        provider,
-      }));
-  }
+  const claudeRows = $derived(limitRows("Claude", claude?.reading, now));
+  const goRows = $derived(limitRows("opencode", go?.reading, now));
 
-  const claudeRows = $derived(
-    claude
-      ? rowsOf("Claude", claude.reading.windows, Boolean(claude.reading.stale))
-      : []
-  );
-  const goRows = $derived(
-    go ? rowsOf("opencode", go.reading.windows, Boolean(go.reading.stale)) : []
-  );
+  /**
+   * Claude's extra usage: real money past the plan against a monthly cap.
+   * Only when a cap is set; it has no clock to pace against, so no tick, and
+   * it never stops a session, so it never leads the block.
+   */
+  const extra = $derived.by(() => {
+    const r = claude?.reading;
+    if (
+      !r ||
+      r.spendLimit === null ||
+      r.spendLimit <= 0 ||
+      r.spendUsed === null
+    ) {
+      return null;
+    }
+    const used = (r.spendUsed / r.spendLimit) * 100;
+    return {
+      used,
+      state: r.stale ? ("stale" as const) : fillState(used),
+      amount: `${money(r.spendUsed)} of ${capMoney(r.spendLimit)}`,
+      resetsAt: r.spendResetsAt,
+    };
+  });
 
   /** Why there is no Claude bar, and what to do about it. */
   const claudeUnknown = $derived.by((): Unknown | null => {
@@ -226,6 +220,35 @@
           </div>
         {:else}
           {@render windows(claudeRows)}
+          {#if extra}
+            <div class="row extra" data-state={extra.state}>
+              <span class="label">Extra usage</span>
+              <span class="bar">
+                <LimitBar
+                  elapsed={null}
+                  label="Extra usage"
+                  state={extra.state}
+                  used={extra.used}
+                />
+              </span>
+              <span class="amount num">
+                {#if extra.state === 'near'}
+                  <Attention aria-label="Near the cap" class="status" />
+                {:else if extra.state === 'over' || extra.state === 'reached'}
+                  <Failed
+                    aria-label={extra.state === 'reached' ? 'Cap reached' : 'Nearly at the cap'}
+                    class="status"
+                  />
+                {/if}
+                {extra.amount}
+                {#if extra.resetsAt}
+                  <span class="resets"
+                    >· resets {resetLabel(extra.resetsAt, now)}</span
+                  >
+                {/if}
+              </span>
+            </div>
+          {/if}
         {/if}
       </div>
 
@@ -415,15 +438,26 @@
     font: var(--type-label);
     color: var(--ink-strong);
   }
-  .used :global(.status) {
+  /* Extra usage's money stands at the bar's tip, across the percent and
+     reset columns: "$12.40 of $330". */
+  .amount {
+    grid-column: 3 / -1;
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    font: var(--type-label);
+    color: var(--ink-strong);
+  }
+  .used :global(.status),
+  .amount :global(.status) {
     inline-size: 16px;
     block-size: 16px;
   }
-  .row[data-state="near"] .used :global(.status) {
+  .row[data-state="near"] :global(.status) {
     color: var(--meter-near);
   }
-  .row[data-state="over"] .used :global(.status),
-  .row[data-state="reached"] .used :global(.status) {
+  .row[data-state="over"] :global(.status),
+  .row[data-state="reached"] :global(.status) {
     color: var(--meter-over);
   }
   .resets {
@@ -486,6 +520,9 @@
       grid-area: bar;
     }
     .row > .resets {
+      grid-area: resets;
+    }
+    .row > .amount {
       grid-area: resets;
     }
     .spend .label {

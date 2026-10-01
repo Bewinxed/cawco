@@ -1,220 +1,138 @@
 <script lang="ts">
-  import type { ClaudeLimits, LimitWindow } from "@whiffle/core";
   /**
-   * How full the machine's Claude limits are, on the dock. The 5-hour, the
-   * weekly, and each scoped weekly window (the model scopes) ride their own
-   * strip, each strip filling green → amber → red down its own length. That structure is what
-   * separates it from a sidebar row: segmented, severity-hued, and never one
-   * collapsed number.
+   * The rail's usage strip (design/usage-tracker.md §2, owner picks a, i):
+   * one strip, two lines, the window that will stop you first. Its name and
+   * percent, then what matters about it — when it resets, or when it runs
+   * out at this pace — over a 4px bar with its pace tick. A "Usage" link at
+   * the top right opens the page; the strip itself opens every window,
+   * grouped by provider. Near and over get a faint wash, nothing else.
    *
-   * The limits arrive live over the socket (the hub's `kind: 'usage'` frame),
-   * folded into `whiffle.usageLimitsFor` — no polling. The opencode spend is
-   * fetched on open, once, because it is a heavy REST aggregate rather than a
-   * pushed number.
+   * Live: the readings are the client's, which the hub's `usage` frame keeps
+   * current. Until the socket has read them, the Claude reading the layout
+   * was served with draws the strip, so it never grows on hydration.
    */
-  import { onMount } from "svelte";
+  import type { ClaudeLimits } from "@whiffle/core";
   import { page } from "$app/state";
-  import { Badge } from "$lib/components/ui/badge";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Popover from "$lib/components/ui/popover";
-  import IconDollar from "~icons/solar/dollar-bold-duotone";
+  import Failed from "~icons/solar/close-circle-bold-duotone";
+  import Attention from "~icons/solar/hand-shake-bold-duotone";
   import { whiffle } from "./client.svelte";
-  import UsageRail from "./UsageRail.svelte";
-  import { band, resetsIn, usd } from "./usage";
+  import {
+    about,
+    firstToStop,
+    type LimitRow,
+    limitRows,
+    readAgo,
+    resetShort,
+    speakingReading,
+  } from "./usage";
+  import LimitBar from "./usage/LimitBar.svelte";
 
-  const DEFAULT_CLAUDE_TIER_PREFIX = /^default_claude_/;
-  const UNDERSCORE = /_/g;
-  const WORD_START = /\b\w/g;
-
-  interface Props {
-    /**
-     * Optional, and usually absent. Limits are account-scoped, not
-     * machine-scoped — every host signed in to the same account reads the same
-     * numbers — so the chrome asks for whichever reading exists rather than
-     * naming a machine.
-     */
-    machineId?: string;
-  }
-
-  let { machineId }: Props = $props();
-
-  // Until the live reading arrives, the one the page was served with
-  // (routes/+layout.server.ts): the meter is drawn at its size from the
-  // first paint instead of growing the footer when the socket catches up.
-  const limits: ClaudeLimits | null = $derived(
-    machineId
-      ? whiffle.usageLimitsFor(machineId)
-      : (whiffle.usageLimitsAny() ??
-          (page.data.usage as ClaudeLimits | null | undefined) ??
-          null)
-  );
-
-  const windows = $derived(limits?.windows ?? []);
-
-  /**
-   * What the compact surface shows: the windows that will stop you first,
-   * fullest down. Everything else is one tap away in the popover.
-   */
-  const visible = $derived.by(() => {
-    const scored = windows.filter((w) => typeof w.percent === "number");
-    return scored
-      .sort((a, b) => (b.percent ?? 0) - (a.percent ?? 0))
-      .slice(0, 3);
-  });
-  const hiddenCount = $derived(windows.length - visible.length);
-
-  /** The full list reads in the glance's order: fullest first. */
-  const ranked = $derived(
-    [...windows].sort((a, b) => (b.percent ?? -1) - (a.percent ?? -1))
-  );
-
-  /** The window that will stop you first — named with its reset once it is tight. */
-  const tightest = $derived(
-    visible[0] && band(visible[0].percent) !== "calm" ? visible[0] : null
-  );
-
-  /** Short strip labels: 5h / Wk / the scope name. */
-  const compactLabel = (w: LimitWindow): string => {
-    if (w.group === "session") {
-      return "5h";
-    }
-    if (w.group === "weekly") {
-      return w.scopeLabel ?? "Wk";
-    }
-    return w.kind;
-  };
-
-  /** Why there is nothing to meter — a normal state, never a fake 0%. */
-  const emptyReason = $derived.by(() => {
-    if (limits === null) {
-      return "No limit reading yet.";
-    }
-    if (limits.error === "not signed in") {
-      return "No limit reading — this machine is not signed in to Claude.";
-    }
-    if (limits.error === "token expired") {
-      return "The Claude login on this machine has expired.";
-    }
-    if (limits.error) {
-      // A stale reading still has its windows; show them and flag the age.
-      if (limits.stale && windows.length > 0) {
-        return null;
-      }
-      return limits.error;
-    }
-    return null;
-  });
-
-  /** Surfaced only when the windows shown are a stale last-good reading. */
-  const staleNote = $derived(
-    limits?.stale && limits.error ? `last good reading · ${limits.error}` : null
-  );
-
-  /** There are real windows to show; anything else is an empty state. */
-  const hasReading = $derived(emptyReason === null);
-
-  /** A live clock for the countdowns; minute granularity is all they show. */
+  /** A minute clock: the strip's countdowns show minutes and nothing finer. */
   let now = $state(Date.now());
-  onMount(() => {
+  $effect(() => {
     const timer = setInterval(() => {
       now = Date.now();
-    }, 30_000);
+    }, 60_000);
     return () => clearInterval(timer);
   });
 
-  const planLabel = (tier: string | null): string | null => {
-    if (!tier) {
-      return null;
+  const claude = $derived(
+    speakingReading(whiffle.claudeLimits)?.reading ??
+      (whiffle.usageLimitsRead
+        ? null
+        : ((page.data.usage as ClaudeLimits | null | undefined) ?? null))
+  );
+  const go = $derived(speakingReading(whiffle.openCodeGoLimits)?.reading);
+
+  const groups = $derived(
+    [
+      { name: "Claude", rows: limitRows("Claude", claude, now) },
+      { name: "opencode", rows: limitRows("opencode", go, now) },
+    ].filter((g) => g.rows.length > 0)
+  );
+  const lead = $derived(firstToStop(groups.flatMap((g) => g.rows)));
+
+  /**
+   * The lead's name: the provider is said only when it is not Claude, and
+   * then by its plan, the one word the rail has room for ("Go Month").
+   */
+  const leadName = (row: LimitRow): string =>
+    row.provider === "Claude" ? row.label : `Go ${row.label}`;
+
+  /** What follows the name and percent: the one fact that matters now. */
+  const detail = (row: LimitRow): string => {
+    const m = row.meter;
+    const reset = m.window.resetsAt;
+    if (m.state === "stale" && claude) {
+      return readAgo(claude.fetchedAt, now);
     }
-    return tier
-      .replace(DEFAULT_CLAUDE_TIER_PREFIX, "")
-      .replace(UNDERSCORE, " ")
-      .replace(WORD_START, (c) => c.toUpperCase());
+    // A window that will not last says when it runs out; one that lasts,
+    // when it resets.
+    if (m.used < 100 && m.runsOutIn !== null) {
+      return `out in ${about(m.runsOutIn)}`;
+    }
+    return reset ? `resets ${resetShort(reset, now)}` : "";
   };
 
-  /** The opencode spend, fetched on open — real dollars, never a guess. */
-  let spend = $state<{ today: number; total: number } | null>(null);
-
-  async function refreshSpend(): Promise<void> {
-    const day = new Date();
-    day.setUTCHours(0, 0, 0, 0);
-    const since = day.getTime();
-    const query = machineId
-      ? `harness=opencode&machineId=${encodeURIComponent(machineId)}`
-      : "harness=opencode";
-    try {
-      const [totalRes, todayRes] = await Promise.all([
-        fetch(`/api/usage/summary?${query}`).then((r) =>
-          r.ok ? r.json() : null
-        ),
-        fetch(`/api/usage/summary?${query}&since=${since}`).then((r) =>
-          r.ok ? r.json() : null
-        ),
-      ]);
-      spend = {
-        total: totalRes?.totals?.costUsd ?? 0,
-        today: todayRes?.totals?.costUsd ?? 0,
-      };
-    } catch {
-      // Keep the last reading; the meter is a glance, not a report.
+  /** Why there is no bar: a normal state, never a fake 0%. */
+  const reason = $derived.by(() => {
+    const [first] = Object.values(whiffle.claudeLimits);
+    const error = first?.error ?? claude?.error;
+    if (error === "not signed in") {
+      return "No Claude reading · not signed in";
     }
-  }
+    if (error === "token expired") {
+      return "No Claude reading · login expired";
+    }
+    return error ? `No Claude reading · ${error}` : "No Claude reading yet";
+  });
+
+  const glyphLabel: Record<string, string> = {
+    near: "Near the limit",
+    over: "Nearly at the limit",
+    reached: "Limit reached",
+  };
 </script>
 
-<!-- The meter opens its popover; only the "Usage" word in its corner goes to
-     the usage page, so a stray click on the bars never navigates. -->
-<div class="meter-wrap">
-  <Popover.Root
-    onOpenChange={(open) => {
-    if (open) {
-      // biome-ignore lint/complexity/noVoid: fire-and-forget — refreshSpend() manages its own loading/error state
-      void refreshSpend();
-    }
-  }}
-  >
+<div class="strip" data-state={lead?.meter.state ?? 'unknown'}>
+  <Popover.Root>
     <Popover.Trigger
-      aria-label={hasReading
-      ? `Claude limits. ${visible
-          .map((w) => `${compactLabel(w)} ${Math.round(w.percent)} percent`)
-          .join(", ")}${hiddenCount > 0 ? `, ${hiddenCount} more` : ""}. Show them all.${
-          staleNote ? ` ${staleNote}.` : ""
-        }`
-      : `Claude usage limits. ${emptyReason}`}
-      class="meter press-tint"
+      aria-label={lead
+        ? `${leadName(lead)} ${Math.round(lead.meter.used)} percent, ${detail(lead)}. Show every limit.`
+        : `${reason}. Show every limit.`}
+      class="strip-hit press-tint"
     >
-      {#if hasReading}
-        <span class="rows">
-          {#each visible as window, i (window.kind)}
-            {@const tone = band(window.percent)}
-            <span aria-hidden="true" class="label num" data-flip
-              >{compactLabel(window)}</span
-            >
-            {#key Math.round(window.percent)}
-              <span aria-hidden="true" class="pct {tone}" data-flip="pop"
-                >{Math.round(window.percent)}%</span
-              >
-            {/key}
-            <span class="bar" class:first={i === 0}>
-              <UsageRail
-                compact
-                label={compactLabel(window)}
-                value={window.percent}
-              />
-            </span>
-          {/each}
+      {#if lead}
+        {@const m = lead.meter}
+        <span class="line">
+          {#if m.state === 'near'}
+            <Attention aria-hidden="true" class="glyph near" />
+          {:else if m.state === 'over' || m.state === 'reached'}
+            <Failed aria-hidden="true" class="glyph over" />
+          {/if}
+          {#if m.state === 'reached'}
+            <span class="name">{leadName(lead)} limit</span>
+          {:else}
+            <span class="name">{leadName(lead)}</span>
+            <span class="num pct">{Math.round(m.used)}%</span>
+          {/if}
+          {#if detail(lead)}
+            <span class="detail">· {detail(lead)}</span>
+          {/if}
         </span>
-        {#if tightest?.resetsAt}
-          <span class="note {band(tightest.percent)}" data-flip>
-            {compactLabel(tightest)} {resetsIn(tightest.resetsAt, now)}
-          </span>
-        {:else if staleNote}
-          <span class="note" data-flip>{staleNote}</span>
-        {/if}
+        <LimitBar
+          elapsed={m.elapsed}
+          label={leadName(lead)}
+          size={4}
+          state={m.state}
+          used={m.used}
+        />
       {:else}
-        <span class="note" data-flip>{emptyReason}</span>
+        <span class="line"><span class="detail">{reason}</span></span>
       {/if}
     </Popover.Trigger>
-
     <Popover.Content
       align="start"
       class="usage-pop w-[min(20rem,calc(100vw-16px))] gap-0 rounded-[var(--radius-lg)] p-0 shadow-lg"
@@ -222,247 +140,181 @@
       side="top"
       sideOffset={6}
     >
-      <div class="pop-head">
-        <span class="pop-title">Usage limits</span>
-        {#if hasReading && limits && planLabel(limits.planTier)}
-          <Badge class="ml-auto text-label" variant="outline"
-            >{planLabel(limits.planTier)}</Badge
-          >
-        {/if}
-      </div>
-
-      {#if staleNote}
-        <p class="pop-stale">{staleNote}</p>
+      {#if groups.length === 0}
+        <p class="pop-empty">{reason}</p>
       {/if}
-
-      {#if emptyReason}
-        <p class="pop-empty">{emptyReason}</p>
-      {:else}
-        <ul class="pop-list">
-          {#each ranked as window (window.kind)}
-            {@const tone = band(window.percent)}
-            <li class="pop-row">
+      {#each groups as group (group.name)}
+        <section class="pop-group">
+          <h3 class="pop-provider">{group.name}</h3>
+          {#each group.rows as row (row.key)}
+            {@const m = row.meter}
+            <div class="pop-row" data-state={m.state}>
               <span class="pop-name">
-                {compactLabel(window)}
-                {#if window.isActive}
-                  <span class="pop-active">active</span>
+                {#if m.state === 'near'}
+                  <Attention aria-label={glyphLabel.near} class="glyph near" />
+                {:else if m.state === 'over' || m.state === 'reached'}
+                  <Failed aria-label={glyphLabel[m.state]} class="glyph over" />
                 {/if}
+                {row.label}
               </span>
-              <span class="pct {tone}">{Math.round(window.percent)}%</span>
+              <span class="num pct">{Math.round(m.used)}%</span>
               <span class="pop-bar">
-                <UsageRail
-                  label={compactLabel(window)}
-                  value={window.percent}
+                <LimitBar
+                  elapsed={m.elapsed}
+                  label={row.label}
+                  size={4}
+                  state={m.state}
+                  used={m.used}
                 />
               </span>
-              {#if window.resetsAt}
-                <span class="pop-reset">{resetsIn(window.resetsAt, now)}</span>
+              {#if m.window.resetsAt}
+                <span class="pop-reset"
+                  >{m.used >= 100 ? 'Limit reached · ' : ''}resets
+                  {resetShort(m.window.resetsAt, now)}</span
+                >
               {/if}
-            </li>
+            </div>
           {/each}
-        </ul>
-      {/if}
-
-      <div class="pop-spend">
-        <IconDollar class="size-3 text-muted-foreground" />
-        <span>opencode</span>
-        <span class="pop-spend-value">
-          {#if spend}
-            {usd(spend.today)}
-            today · {usd(spend.total)} total
-          {:else}
-            —
-          {/if}
-        </span>
-      </div>
+        </section>
+      {/each}
     </Popover.Content>
   </Popover.Root>
-  <a class="usage-link touch-hit" href="/usage">Usage</a>
+  <a class="usage-link" href="/usage">Usage</a>
 </div>
 
 <style>
-  .pop-head {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 12px;
-    border-bottom: 1px solid var(--seam);
+  /* One strip, two lines, the same height whatever it says, so the footer
+     never moves when a reading lands or changes. */
+  .strip {
+    --row-paint: var(--sidebar);
+    position: relative;
+    inline-size: 100%;
+    min-inline-size: 0;
+    border-radius: var(--radius-sm);
+    background: var(--row-paint);
   }
-  .pop-title {
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
-    color: var(--ink-strong);
+  .strip[data-state="near"] {
+    --row-paint:
+      linear-gradient(var(--meter-wash-near), var(--meter-wash-near)),
+      var(--sidebar);
   }
-  .pop-stale,
-  .pop-empty {
-    padding: 8px 12px;
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
+  .strip[data-state="over"],
+  .strip[data-state="reached"] {
+    --row-paint:
+      linear-gradient(var(--meter-wash-over), var(--meter-wash-over)),
+      var(--sidebar);
   }
-  .pop-stale {
-    border-bottom: 1px solid var(--seam);
-  }
-  .pop-list {
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-    padding: 12px;
-  }
-  .pop-row {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: baseline;
-    row-gap: 6px;
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    font-variant-numeric: tabular-nums;
-  }
-  .pop-name {
-    display: flex;
-    align-items: center;
-    gap: 6px;
-    min-width: 0;
-    font: var(--type-label);
-    color: var(--ink-strong);
-  }
-  .pop-active {
-    padding: 0 6px;
-    border-radius: var(--radius-pill);
-    background: var(--surface-hover);
-    font-size: var(--text-meta);
-    font-weight: normal;
-    color: var(--ink-muted);
-  }
-  .pop-bar {
-    grid-column: 1 / -1;
-    display: flex;
-  }
-  .pop-reset {
-    grid-column: 1 / -1;
-    color: var(--ink-muted);
-  }
-  .pop-spend {
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    padding: 10px 12px;
-    border-top: 1px solid var(--seam);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--ink-strong);
-  }
-  .pop-spend-value {
-    margin-left: auto;
-    font-variant-numeric: tabular-nums;
-    color: var(--ink-muted);
-  }
-  /* The glance: one grid, so every bar starts and ends on the same x
-     whatever the label. Neutral until a window is tight — then only that
-     row's number takes the status colour, and the reset line says when it
-     eases. */
-  /* The box is the same height whatever it shows — no reading yet, an empty
-     reason, one to three windows, a stale or reset note — so nothing in the
-     footer moves when the reading lands or changes: three window rows (1lh
-     each, 8px apart) and one note line (6px below), clipped. */
-  :global(.meter) {
-    --meter-pad: 8px;
+  :global(.strip-hit) {
     display: flex;
     flex-direction: column;
+    justify-content: center;
     gap: 6px;
-    width: 100%;
-    min-width: 0;
-    block-size: calc(4lh + 2 * 8px + 6px + 2 * var(--meter-pad));
-    overflow: hidden;
-    padding: var(--meter-pad) 10px;
+    inline-size: 100%;
+    block-size: 44px;
+    padding: 0 8px;
     border: 0;
     border-radius: var(--radius-sm);
     background: transparent;
     text-align: start;
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
+    font: var(--type-meta);
     font-variant-numeric: tabular-nums;
-    color: var(--ink-muted);
+    color: var(--ink-strong);
     cursor: pointer;
     transition: background-color var(--dur-control) var(--ease-out);
 
     @media (hover: hover) and (pointer: fine) {
       &:hover {
-        background: var(--surface-hover);
+        background: color-mix(in oklch, var(--surface-hover) 60%, transparent);
       }
     }
-    /* A thumb gets a full-height target. */
-    @media (pointer: coarse) {
-      --meter-pad: 10px;
-    }
   }
-  .meter-wrap {
-    --usage-link-w: 5ch;
-    position: relative;
-  }
-  /* Label, its number beside it, then the bar to the end; the top row's
-     bar stops short of the corner link. */
-  .rows {
-    display: grid;
-    grid-template-columns: max-content 4ch minmax(0, 1fr);
-    align-items: center;
-    column-gap: 10px;
-    row-gap: 8px;
-  }
-  .bar {
+  /* The first line leaves the link its corner. */
+  .line {
     display: flex;
-    min-width: 0;
+    align-items: center;
+    gap: var(--space-1);
+    min-inline-size: 0;
+    padding-inline-end: 2.5rem;
+    white-space: nowrap;
   }
-  .bar.first {
-    margin-inline-end: calc(var(--usage-link-w) + 10px);
-  }
-  .label {
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  /* A window crossing into warn or critical changes colour over
-     --dur-panel, as its bar does. */
-  .pct,
-  .note {
-    transition: color var(--dur-panel) var(--ease-out);
+  .name {
+    color: var(--ink-strong);
   }
   .pct {
-    text-align: end;
+    color: var(--ink-strong);
+  }
+  .detail {
+    overflow: hidden;
+    text-overflow: ellipsis;
     color: var(--ink-muted);
   }
-  .pct.warn {
-    color: var(--warning);
-  }
-  .pct.critical {
-    color: var(--destructive);
-  }
-  .note {
-    color: var(--ink-muted);
-  }
-  .note.warn {
-    color: var(--warning);
-  }
-  .note.critical {
-    color: var(--destructive);
-  }
-  /* The way to the usage page, in the meter's top corner: plain words,
-     muted, the action ink on hover and focus. */
+  /* The page link: plain meta text in the corner, coral on hover. */
   .usage-link {
     position: absolute;
-    inset-block-start: 8px;
-    inset-inline-end: 10px;
-    inline-size: var(--usage-link-w);
+    inset-block-start: 6px;
+    inset-inline-end: 8px;
     font: var(--type-meta);
-    text-align: end;
     color: var(--ink-muted);
     text-decoration: none;
     transition: color var(--dur-control) var(--ease-out);
-
-    @media (pointer: coarse) {
-      inset-block-start: 10px;
-    }
   }
-  .usage-link:is(:hover, :focus-visible) {
-    color: var(--coral-11);
+  .usage-link:hover {
+    color: var(--meter-calm);
+  }
+  .strip :global(.glyph),
+  .pop-row :global(.glyph) {
+    inline-size: 14px;
+    block-size: 14px;
+    flex: none;
+  }
+  .strip :global(.glyph.near),
+  .pop-row :global(.glyph.near) {
+    color: var(--meter-near);
+  }
+  .strip :global(.glyph.over),
+  .pop-row :global(.glyph.over) {
+    color: var(--meter-over);
+  }
+
+  .pop-empty {
+    padding: 10px 12px;
+    font: var(--type-meta);
+    color: var(--ink-muted);
+  }
+  .pop-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    padding: 12px;
+  }
+  .pop-group + .pop-group {
+    border-top: 1px solid var(--border-hairline);
+  }
+  .pop-provider {
+    font: var(--type-label);
+    color: var(--ink-strong);
+  }
+  .pop-row {
+    --row-paint: var(--surface-raised);
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: baseline;
+    row-gap: 6px;
+    font: var(--type-meta);
+    font-variant-numeric: tabular-nums;
+  }
+  .pop-name {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-inline-size: 0;
+    color: var(--ink-strong);
+  }
+  .pop-bar,
+  .pop-reset {
+    grid-column: 1 / -1;
+  }
+  .pop-reset {
+    color: var(--ink-muted);
   }
 </style>

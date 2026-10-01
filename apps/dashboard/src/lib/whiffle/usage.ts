@@ -18,6 +18,10 @@ const WHOLE_DOLLARS = new Intl.NumberFormat("en-US", {
 export const money = (n: number): string =>
   n >= 1000 ? WHOLE_DOLLARS.format(n) : usd(n);
 
+/** A cap as it is set: "$330" when it is whole dollars, else to the cent. */
+export const capMoney = (n: number): string =>
+  Number.isInteger(n) ? WHOLE_DOLLARS.format(n) : money(n);
+
 /** 13.1M, 581M, 1.5k — the token counts the spec quotes read this way. */
 export const compactNumber = (n: number): string => {
   if (n >= 1_000_000) {
@@ -38,42 +42,6 @@ export const totalTokensOf = (r: {
   cacheRead: number;
   reasoning: number;
 }): number => r.input + r.output + r.cacheCreation + r.cacheRead + r.reasoning;
-
-/** The three limit bands the sidebar's UsageMeter colours by. */
-export type Band = "calm" | "warn" | "critical";
-
-export const band = (pct: number): Band => {
-  if (pct >= 90) {
-    return "critical";
-  }
-  return pct >= 70 ? "warn" : "calm";
-};
-
-/** A countdown to a reset, as the sidebar's UsageMeter words it. */
-export const resetsIn = (resetsAt: string | null, now: number): string => {
-  if (!resetsAt) {
-    return "";
-  }
-  const diff = new Date(resetsAt).getTime() - now;
-  if (diff <= 0) {
-    return "resetting now";
-  }
-  const totalMin = Math.floor(diff / 60_000);
-  const h = Math.floor(totalMin / 60);
-  const m = totalMin % 60;
-  if (h >= 24) {
-    const d = Math.floor(h / 24);
-    const rest = h % 24;
-    return rest > 0 ? `resets in ${d}d ${rest}h` : `resets in ${d}d`;
-  }
-  if (h > 0) {
-    return `resets in ${h}h ${m}m`;
-  }
-  if (m > 0) {
-    return `resets in ${m}m`;
-  }
-  return "resets in <1m";
-};
 
 /* ---- Limit windows (design/usage-tracker.md §1) ------------------------- */
 
@@ -151,7 +119,7 @@ export function duration(ms: number): string {
 }
 
 /** About this long: "about 2h", "about 45m" — a projection is never to the minute. */
-function about(ms: number): string {
+export function about(ms: number): string {
   const min = ms / MINUTE_MS;
   const fives = Math.max(5, Math.round(min / 5) * 5);
   if (fives < 60) {
@@ -221,6 +189,22 @@ export interface Meter {
   window: LimitWindow;
 }
 
+/**
+ * A share's colour step by how full it is alone: spark from 70%, crimson from
+ * 90%, reached at 100% (owner picks b and c). A window also turns spark on a
+ * projected run-out (readMeter); a share with no clock — context, a spend cap
+ * — goes by this.
+ */
+export function fillState(used: number): MeterState {
+  if (used >= 100) {
+    return "reached";
+  }
+  if (used >= 90) {
+    return "over";
+  }
+  return used >= 70 ? "near" : "calm";
+}
+
 /** Below this share of the window gone, the design reads "too early to project". */
 const EARLY = 0.03;
 
@@ -260,14 +244,10 @@ export function readMeter(w: LimitWindow, now: number, stale: boolean): Meter {
     }
   }
 
-  let state: MeterState = "calm";
+  let state = fillState(used);
   if (stale) {
     state = "stale";
-  } else if (used >= 100) {
-    state = "reached";
-  } else if (used >= 90) {
-    state = "over";
-  } else if (used >= 70 || (runsOutIn !== null && runsOutIn < HOUR_MS)) {
+  } else if (state === "calm" && runsOutIn !== null && runsOutIn < HOUR_MS) {
     state = "near";
   }
   return {
@@ -331,6 +311,64 @@ export function projectionNote(m: Meter): string {
     return `runs out in about ${about(m.runsOutIn)}`;
   }
   return m.lasts ? "lasts to the reset" : "";
+}
+
+const DAY_ONLY = new Intl.DateTimeFormat(undefined, {
+  day: "numeric",
+  month: "short",
+});
+
+/**
+ * A reset as the rail says it, after its "resets": "4h 38m", "Thu 09:00",
+ * and past a week only the day, "Oct 17" — the rail has no room for a time
+ * nobody acts on a week out.
+ */
+export const resetShort = (resetsAt: string, now: number): string => {
+  const at = new Date(resetsAt).getTime();
+  if (at - now >= 7 * DAY_MS) {
+    return DAY_ONLY.format(at);
+  }
+  const label = resetLabel(resetsAt, now);
+  return label.startsWith("in ") ? label.slice(3) : label;
+};
+
+/** One provider's window, read against the clock: what every limit surface draws. */
+export interface LimitRow {
+  key: string;
+  label: string;
+  meter: Meter;
+  provider: "Claude" | "opencode";
+}
+
+/** Session first, then the weeks fullest first, then the month: worst news nearest the top. */
+const GROUP_ORDER: Record<string, number> = {
+  session: 0,
+  weekly: 1,
+  monthly: 2,
+};
+
+/** A provider's windows as rows, in the order every surface lists them. */
+export function limitRows(
+  provider: LimitRow["provider"],
+  reading: { stale?: boolean; windows: LimitWindow[] } | null | undefined,
+  now: number
+): LimitRow[] {
+  if (!reading) {
+    return [];
+  }
+  const stale = Boolean(reading.stale);
+  return [...reading.windows]
+    .sort(
+      (a, b) =>
+        (GROUP_ORDER[a.group] ?? 3) - (GROUP_ORDER[b.group] ?? 3) ||
+        b.percent - a.percent
+    )
+    .map((w) => ({
+      key: `${provider}:${w.kind}:${w.scopeLabel ?? ""}`,
+      label: windowLabel(w),
+      meter: readMeter(w, now, stale),
+      provider,
+    }));
 }
 
 /** "read 2h ago": how old a stale reading is. */

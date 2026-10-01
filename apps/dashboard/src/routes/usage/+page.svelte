@@ -89,8 +89,7 @@
       return;
     }
     exporting = true;
-    await new Promise((done) => requestAnimationFrame(done));
-    const file = where.csv();
+    const file = await where.csv();
     const url = URL.createObjectURL(
       new Blob([file.body], { type: "text/csv;charset=utf-8" })
     );
