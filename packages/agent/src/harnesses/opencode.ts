@@ -1128,6 +1128,11 @@ export class OpencodeSession implements HarnessSession {
   #openThinking: string | null = null;
   readonly #toolsEmitted = new Map<string, "called" | "resolved">();
   #busy = false;
+  /**
+   * Busy since {@link reattachedMidTurn}, on the server's word alone, until
+   * {@link watchResumedTurn} has read the turn again.
+   */
+  #reattachedBusy = false;
   /** The last provider-retry note surfaced, so a repeating retry says it once. */
   #lastRetryNote = "";
   /** The message id of the prompt this process sent that the open turn answers. */
@@ -2170,11 +2175,21 @@ export class OpencodeSession implements HarnessSession {
         return;
       }
       const status = result.data?.[this.sessionId];
+      const reattachedBusy = this.#reattachedBusy;
+      this.#reattachedBusy = false;
       if (!status || (status.type !== "busy" && status.type !== "retry")) {
         // Idle on the server, yet the hub is still owed this turn's end: it
         // ended while nothing here was subscribed.
         if (this.#turnOpen) {
           await this.#endMissedTurn();
+        }
+        // The turn the reattach found running ended before this session was
+        // subscribed: no idle event is coming for it. A prompt this process
+        // has sent since is a turn of its own, and keeps the session busy.
+        // biome-ignore lint/suspicious/noUnnecessaryConditions: #reattachedBusy is set true by reattachedMidTurn() elsewhere in the class; the checker sees only its initializer
+        if (reattachedBusy && this.#busy && this.#turnPrompt === undefined) {
+          this.#busy = false;
+          this.#ctx.busy(false);
         }
         return;
       }
@@ -2266,6 +2281,19 @@ export class OpencodeSession implements HarnessSession {
       });
       this.#drainQueue();
     }
+  }
+
+  /**
+   * Reattached while the server still runs this session's turn: busy from
+   * the moment it is handed back, as a turn started here would be. The
+   * reconcile after its subscription comes up ({@link watchResumedTurn})
+   * reads the turn again and takes it from there — on to its end, or to the
+   * end it reached before anything here was subscribed.
+   */
+  reattachedMidTurn(): void {
+    this.#reattachedBusy = true;
+    this.#busy = true;
+    this.#ctx.busy(true);
   }
 
   /**
@@ -4144,18 +4172,24 @@ export class OpencodeHarness implements Harness {
             `Could not reattach OpenCode session ${spec.resume.sessionKey}`
           );
         }
-        if (spec.reattachOnly === "busy" || spec.reattachOnly === "inspect") {
-          const status = await server.session.status(
-            { directory: ctx.cwd },
-            { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+        // Whether this session's turn is still running is the server's word,
+        // asked before the session is handed back: a reattached session is
+        // busy from that moment, not from the reconcile that follows its
+        // subscription (`watchResumedTurn`), which a busy question after an
+        // agent restart did not wait for.
+        const status = await server.session.status(
+          { directory: ctx.cwd },
+          { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+        );
+        if (status.error) {
+          throw new Error(
+            `Could not read OpenCode session status in ${ctx.cwd}`
           );
-          if (status.error) {
-            throw new Error(
-              `Could not read OpenCode session status in ${ctx.cwd}`
-            );
-          }
-          const state = status.data?.[spec.resume.sessionKey]?.type;
-          if (state !== "busy" && state !== "retry") {
+        }
+        const state = status.data?.[spec.resume.sessionKey]?.type;
+        const running = state === "busy" || state === "retry";
+        if (spec.reattachOnly === "busy" || spec.reattachOnly === "inspect") {
+          if (!running) {
             return;
           }
           if (spec.reattachOnly === "inspect") {
@@ -4178,7 +4212,11 @@ export class OpencodeHarness implements Harness {
         // started while this recovery held its slot waits for the slot —
         // queueing here would hold both. The apply stops nothing while a
         // recovery is running, so the server this opens against stays up.
-        return await this.#open(spec, ctx);
+        const opened = await this.#open(spec, ctx);
+        if (running) {
+          opened.reattachedMidTurn();
+        }
+        return opened;
       } catch (error) {
         console.warn(
           `[opencode] recovery ${ctx.instanceId} left sleeping: ${String(error)}`
@@ -4202,7 +4240,7 @@ export class OpencodeHarness implements Harness {
   async #open(
     spec: SpawnPayload,
     ctx: HarnessContext
-  ): Promise<HarnessSession> {
+  ): Promise<OpencodeSession> {
     const client = await this.#ensure();
     const mcp = await client.mcp.status(
       { directory: ctx.cwd },

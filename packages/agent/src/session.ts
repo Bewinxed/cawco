@@ -80,6 +80,8 @@ interface ClaudeAdoption {
       /** The ring's last seq off the same welcome. */
       head: number;
       sessionId: string | null;
+      /** {@link turnRunning}'s answer for this child. */
+      turnRunning: boolean;
     }
   ): Promise<HarnessSession>;
   // biome-ignore lint/style/useConsistentMethodSignatures: a property signature changes parameter variance here and would break the claude adapter's implementation
@@ -95,6 +97,19 @@ interface ClaudeAdoption {
       pid: number;
     }[];
   }>;
+  /** Whether the child is mid-turn as its ring stands up to `head`. */
+  // biome-ignore lint/style/useConsistentMethodSignatures: a property signature changes parameter variance here and would break the claude adapter's implementation
+  turnRunning(instanceId: string, head: number): Promise<boolean>;
+}
+
+/** A surviving child one reattach has claimed, and what it decided about it. */
+interface Claimed {
+  proc: { head: number; pid: number };
+  row: { instanceId: string; cwd: string; sessionId?: string | null };
+  /** Whether its turn was running when its ring was read. */
+  running: boolean;
+  /** Lets go of the claim, for a reattach waiting on this row. */
+  settle: () => void;
 }
 
 /**
@@ -371,6 +386,11 @@ export class SessionSupervisor {
   readonly #queues = new Map<string, Promise<void>>();
   /** The sessions with a turn in flight — from the `send` that starts one until the turn ends. */
   readonly #busy = new Set<string>();
+  /**
+   * What every busy answer waits for: custody being taken of sessions whose
+   * turns are not known yet ({@link holdBusy}).
+   */
+  readonly #holds = new Set<Promise<void>>();
   readonly #imageRequests = new Map<string, string>();
 
   /**
@@ -417,15 +437,12 @@ export class SessionSupervisor {
     [PREVIEW_START]: (options) =>
       startPreview(options as Parameters<typeof startPreview>[0]),
     [PREVIEW_STOP]: (options) => stopPreview(options as { instanceId: string }),
-    [AGENT_BUSY]: () => ({
-      busy: this.busyCount,
-      instances: this.busyInstanceIds,
-    }),
-    [UPDATE_WHIFFLE]: (options) =>
+    [AGENT_BUSY]: () => this.busyNow(),
+    [UPDATE_WHIFFLE]: async (options) =>
       updateCheckout({
         ...(options as Pick<UpdateOptions, "force" | "restartAgent">),
         branch: DEPLOY_BRANCH,
-        busy: this.busyCount,
+        busy: (await this.busyNow()).busy,
       }),
   };
 
@@ -468,7 +485,8 @@ export class SessionSupervisor {
     }
   }
 
-  dispatch(envelope: Envelope): void {
+  /** Settles once the envelope has been handled, success or failure alike. */
+  dispatch(envelope: Envelope): Promise<void> {
     const control =
       envelope.verb === "control"
         ? (envelope.payload as ControlPayload)
@@ -492,11 +510,10 @@ export class SessionSupervisor {
     // the spawn that makes the session, a send before it — but nothing waits
     // for its answer: a send behind one sat here until it came back.
     if (control && CONTROL_QUERIES.has(control.method)) {
-      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — #control sinks its own answer, success or failure
-      void (this.#queues.get(key) ?? Promise.resolve()).then(() =>
+      // #control sinks its own answer, success or failure.
+      return (this.#queues.get(key) ?? Promise.resolve()).then(() =>
         this.#route(envelope)
       );
-      return;
     }
     const queue = (this.#queues.get(key) ?? Promise.resolve())
       .then(() => this.#route(envelope))
@@ -532,6 +549,7 @@ export class SessionSupervisor {
         this.#queues.delete(key);
       }
     });
+    return queue;
   }
 
   /** The sessions running right now — what `register` reconciles the hub against. */
@@ -540,17 +558,43 @@ export class SessionSupervisor {
   }
 
   /**
-   * How many sessions are mid-turn right now. Same number {@link AGENT_BUSY}
-   * answers over the wire, but read in-process: the deploy poller runs in this
-   * same daemon and asking its own supervisor through the hub it is itself
-   * connected to would be a round trip to learn a fact already held in memory.
+   * Holds every busy answer until `until` settles.
+   *
+   * An agent that has just restarted carries no session yet, while sessiond
+   * still holds every child the last one left — some of them mid-turn. Until
+   * custody has said which, `#busy` is empty because nothing has been read,
+   * not because nothing is running: a cutover that asked then read `0` and
+   * went ahead while two sessions were working (2026-10-01, obelisk, for the
+   * 23 s the agent took to attach 138 sessions). So the question waits for
+   * the answer to exist. Whoever takes custody holds it for as long as that
+   * takes, and lets go whether custody succeeded or not.
    */
-  get busyCount(): number {
-    return this.busyInstanceIds.length;
+  holdBusy(until: Promise<unknown>): void {
+    const hold = until.then(
+      () => undefined,
+      () => undefined
+    );
+    this.#holds.add(hold);
+    // biome-ignore lint/complexity/noVoid: the hold removes itself; nothing waits on the removal
+    void hold.then(() => this.#holds.delete(hold));
   }
 
-  get busyInstanceIds(): string[] {
-    return [...new Set([...this.#busy, ...this.#imageRequests.values()])];
+  /**
+   * The sessions mid-turn right now, once every hold has let go. The answer
+   * {@link AGENT_BUSY} gives over the wire, and the one the deploy poller
+   * reads in-process: it runs in this same daemon, and asking its own
+   * supervisor through the hub it is itself connected to would be a round
+   * trip to learn a fact already held in memory.
+   */
+  async busyNow(): Promise<{ busy: number; instances: string[] }> {
+    while (this.#holds.size > 0) {
+      // biome-ignore lint/performance/noAwaitInLoops: a hold taken while the others settled is waited for too
+      await Promise.all(this.#holds);
+    }
+    const instances = [
+      ...new Set([...this.#busy, ...this.#imageRequests.values()]),
+    ];
+    return { busy: instances.length, instances };
   }
 
   /** The pulse as it stands, computed from the parts rather than stored. */
@@ -575,12 +619,21 @@ export class SessionSupervisor {
   }
 
   /**
+   * Whether this daemon speaks for an instance: it carries the session, or a
+   * reattach has claimed the child and is deciding or attaching it — a turn
+   * that child is running is this daemon's to report from the decision on.
+   */
+  #speaksFor(instanceId: string): boolean {
+    return this.#sessions.has(instanceId) || this.#adopting.has(instanceId);
+  }
+
+  /**
    * Pushes the current pulse, throttled to {@link PULSE_THROTTLE_MS} per
    * instance. A busy/blocked transition always goes immediately; everything
    * else waits for the trailing edge of the window.
    */
   #emitPulse(instanceId: string, important: boolean): void {
-    if (!this.#sessions.has(instanceId)) {
+    if (!this.#speaksFor(instanceId)) {
       return;
     }
     const now = Date.now();
@@ -606,7 +659,7 @@ export class SessionSupervisor {
         setTimeout(
           () => {
             this.#pulseTimers.delete(instanceId);
-            if (!this.#sessions.has(instanceId)) {
+            if (!this.#speaksFor(instanceId)) {
               return;
             }
             this.#pulseAt.set(instanceId, Date.now());
@@ -870,6 +923,11 @@ export class SessionSupervisor {
       holder.session = session;
       this.#sessions.set(instanceId, session);
       session.attached?.();
+      // A reattach that met a running turn said so before there was a session
+      // to carry the pulse ({@link #emitPulse} drops it): said now.
+      if (this.#busy.has(instanceId)) {
+        this.#emitPulse(instanceId, true);
+      }
       // The session is in place. Worth saying out loud for a relaunch, whose
       // caller has nothing else to wait on.
       if (ack) {
@@ -1049,6 +1107,16 @@ export class SessionSupervisor {
    * No mark, or one from another process, follows from head: the honest-loss
    * rule, which replays nothing rather than double what history shows.
    *
+   * Three steps, and only the middle one decides what busy questions hear:
+   *  1. CLAIM every row sessiond is holding, without yielding.
+   *  2. DECIDE whether each claimed child is mid-turn, all at once, off the
+   *     end of its own ring ({@link ClaudeAdoption.turnRunning}). Busy answers
+   *     are held from this call until every row is decided ({@link holdBusy}),
+   *     and a running turn is in `#busy` from then on — attached or not yet.
+   *  3. ATTACH them one at a time. On obelisk this took 23 s for 138 rows
+   *     (2026-10-01), and a busy answer that waited for it, or read `#busy`
+   *     before it reached a working row, read 0 while two sessions worked.
+   *
    * Returns the instance ids attached. A row sessiond is not holding is not
    * one of them: no process, nothing to attach to, and the hub's own
    * `sleeping`/`restore` path owns it from there.
@@ -1064,80 +1132,152 @@ export class SessionSupervisor {
     const adapter = this.#adapter("claude");
     // `adopt` is claude's alone: opencode reattaches through its own server
     // (design §4.2) and pi has no subprocess to keep (§4.3).
-    const claude = adapter as Harness & Partial<ClaudeAdoption>;
+    const candidate = adapter as Harness & Partial<ClaudeAdoption>;
     if (
-      typeof claude.adopt !== "function" ||
-      typeof claude.custodyCandidates !== "function"
+      typeof candidate.adopt !== "function" ||
+      typeof candidate.custodyCandidates !== "function" ||
+      typeof candidate.turnRunning !== "function"
     ) {
       return [];
     }
-    const welcome = await claude.custodyCandidates();
-    const held = new Map(
-      welcome.procs
-        .filter((proc) => proc.alive)
-        .map((proc) => [proc.procId, proc])
-    );
-
+    const claude = candidate as Harness & ClaudeAdoption;
+    // Taken before the first `await`, so a caller that has started this
+    // reattach can let go of its own hold at once (see daemon.ts).
+    const decided = Promise.withResolvers<void>();
+    this.holdBusy(decided.promise);
+    const claimed: Claimed[] = [];
+    /** Rows another reattach is attaching right now: theirs to decide. */
+    const elsewhere: (typeof rows)[number][] = [];
     const adopted: string[] = [];
-    for (const row of rows) {
-      const proc = held.get(row.instanceId);
-      if (!proc) {
-        continue;
-      }
-      // ONE QUERY PER CHILD. A hub reconnect while a reattach is still walking
-      // its rows starts a second one, and the new ack names the same children
-      // the first is adopting. A second adopt put a second `Query` on the
-      // child: its subscribe took over the first's listener, so the first
-      // `Query` stranded with no stream while both had initialised the CLI. A
-      // child already carried, or being attached right now, is this daemon's
+    try {
+      const welcome = await claude.custodyCandidates();
+      const held = new Map(
+        welcome.procs
+          .filter((proc) => proc.alive)
+          .map((proc) => [proc.procId, proc])
+      );
+
+      // 1. CLAIM. ONE QUERY PER CHILD. A hub reconnect while a reattach is
+      // still walking its rows starts a second one, and the new ack names the
+      // same children the first is adopting. A second adopt put a second
+      // `Query` on the child: its subscribe took over the first's listener,
+      // so the first `Query` stranded with no stream while both had
+      // initialised the CLI. A child already carried is this daemon's
       // already; it counts as adopted, so its spawn is not dispatched either.
-      // Only an adoption in flight is awaited: an `await` with nothing to wait
-      // on still yields, and in that gap the other reattach passed the same
-      // check and adopted the row too — whose subscribe then took over this
-      // pre-read's listener, so this reattach never finished. From the last
-      // check to the `#adopting.set` below nothing yields.
-      let inFlight = this.#adopting.get(row.instanceId);
-      while (inFlight) {
-        // biome-ignore lint/performance/noAwaitInLoops: rows are adopted one at a time: each mutates the shared #ingested map, and another reattach's adoption of this row must land before this one decides
-        await inFlight;
-        inFlight = this.#adopting.get(row.instanceId);
+      // One being attached by another reattach is that one's to decide and
+      // attach, and is waited for after this one's own rows. Nothing in this
+      // loop yields, so no other reattach can claim a row between its check
+      // and its `#adopting.set`.
+      for (const row of rows) {
+        const proc = held.get(row.instanceId);
+        if (!proc) {
+          continue;
+        }
+        if (this.#adopting.has(row.instanceId)) {
+          elsewhere.push(row);
+          continue;
+        }
+        if (this.#sessions.has(row.instanceId)) {
+          adopted.push(row.instanceId);
+          continue;
+        }
+        const claim = Promise.withResolvers<void>();
+        this.#adopting.set(row.instanceId, claim.promise);
+        claimed.push({ row, proc, running: false, settle: claim.resolve });
       }
+
+      // 2. DECIDE, every claimed row at once.
+      await Promise.all(
+        claimed.map(async (entry) => {
+          entry.running = await claude.turnRunning(
+            entry.row.instanceId,
+            entry.proc.head
+          );
+          if (entry.running) {
+            this.#busy.add(entry.row.instanceId);
+            // The hub forgot this session's pulse at the register: the rail's
+            // Working list hears it from here, not when step 3 reaches it.
+            this.#emitPulse(entry.row.instanceId, true);
+          }
+        })
+      );
+      decided.resolve();
+
+      // 3. ATTACH, one at a time.
+      for (const entry of claimed) {
+        // biome-ignore lint/performance/noAwaitInLoops: rows are attached one at a time: each mutates the shared #ingested map
+        await this.#adoptClaimed(claude, welcome.epoch, entry, ingested);
+        adopted.push(entry.row.instanceId);
+      }
+    } finally {
+      decided.resolve();
+      this.#releaseClaims(claimed);
+    }
+    // Another reattach's rows, once it is done with them. One it failed to
+    // attach is tried again here, as a reattach of its own.
+    for (const row of elsewhere) {
+      // biome-ignore lint/performance/noAwaitInLoops: each row waits on whichever reattach holds it
+      await this.#adopting.get(row.instanceId);
       if (this.#sessions.has(row.instanceId)) {
         adopted.push(row.instanceId);
-        continue;
-      }
-      // THE HONEST-LOSS RULE (design §7). A mark in THIS child's sequence space
-      // — sessiond's current boot and this process — is a cursor: replay
-      // exactly the gap the hub named. Anything else is replayed as NOTHING and
-      // followed from head: a mark from a sessiond that has since restarted
-      // names lines that no longer exist, and one from an earlier process
-      // under the same id names another ring. Disk transcripts cover the
-      // middle.
-      const mark = ingested?.[row.instanceId];
-      const cursor = resumeCursor(procEpoch(welcome.epoch, proc.pid), mark);
-      if (cursor !== undefined && mark) {
-        this.#ingested.set(row.instanceId, mark);
       } else {
-        this.#ingested.delete(row.instanceId);
+        adopted.push(...(await this.reattach([row], ingested)));
       }
-      const holder: { session: HarnessSession | null } = { session: null };
-      const ctx = this.#context(row.instanceId, row.cwd, adapter, holder);
-      const adoption = claude
-        .adopt(row.instanceId, ctx, {
-          ...(cursor === undefined ? {} : { afterSeq: cursor }),
-          head: proc.head,
-          sessionId: row.sessionId ?? null,
-        })
-        .then((session) => {
-          holder.session = session;
-          this.#sessions.set(row.instanceId, session);
-        })
-        .finally(() => this.#adopting.delete(row.instanceId));
-      this.#adopting.set(row.instanceId, adoption);
-      await adoption;
-      adopted.push(row.instanceId);
     }
     return adopted;
+  }
+
+  /**
+   * Lets go of every claim a reattach took. A row decided but never attached
+   * — the reattach failed on the way — is carried by nobody, and is not this
+   * daemon's turn to report: the busy pulse it was given goes back while the
+   * claim still speaks for it.
+   */
+  #releaseClaims(claimed: Claimed[]): void {
+    for (const { row, settle } of claimed) {
+      if (!this.#sessions.has(row.instanceId)) {
+        if (this.#busy.delete(row.instanceId)) {
+          this.#emitPulse(row.instanceId, true);
+        }
+        this.#adopting.delete(row.instanceId);
+      }
+      settle();
+    }
+  }
+
+  /** {@link reattach}'s step 3 for one claimed, decided row. */
+  async #adoptClaimed(
+    claude: Harness & ClaudeAdoption,
+    epoch: string,
+    { row, proc, running, settle }: Claimed,
+    ingested: Record<string, IngestMark> | undefined
+  ): Promise<void> {
+    // THE HONEST-LOSS RULE (design §7). A mark in THIS child's sequence space
+    // — sessiond's current boot and this process — is a cursor: replay
+    // exactly the gap the hub named. Anything else is replayed as NOTHING and
+    // followed from head: a mark from a sessiond that has since restarted
+    // names lines that no longer exist, and one from an earlier process
+    // under the same id names another ring. Disk transcripts cover the
+    // middle.
+    const mark = ingested?.[row.instanceId];
+    const cursor = resumeCursor(procEpoch(epoch, proc.pid), mark);
+    if (cursor !== undefined && mark) {
+      this.#ingested.set(row.instanceId, mark);
+    } else {
+      this.#ingested.delete(row.instanceId);
+    }
+    const holder: { session: HarnessSession | null } = { session: null };
+    const ctx = this.#context(row.instanceId, row.cwd, claude, holder);
+    const session = await claude.adopt(row.instanceId, ctx, {
+      ...(cursor === undefined ? {} : { afterSeq: cursor }),
+      head: proc.head,
+      sessionId: row.sessionId ?? null,
+      turnRunning: running,
+    });
+    holder.session = session;
+    this.#sessions.set(row.instanceId, session);
+    this.#adopting.delete(row.instanceId);
+    settle();
   }
 
   /**

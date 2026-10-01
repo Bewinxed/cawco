@@ -1284,15 +1284,84 @@ class ChildActivity {
     }
   }
 
+  /** Whether any line read so far said something about a turn. */
+  get decided(): boolean {
+    return this.#waiting !== undefined;
+  }
+
   /**
    * A child that has said nothing about a turn is not running one: it has
-   * taken no turn in anything sessiond still remembers (see the head decision
-   * in {@link ClaudeHarness.adopt}).
+   * taken no turn in anything sessiond still remembers (see
+   * {@link ClaudeHarness.turnRunning}).
    */
   get turnRunning(): boolean {
     return this.#waiting === false;
   }
 }
+
+/**
+ * Reads a child's ring from `afterSeq` through `head`, one line at a time, and
+ * resolves with the first seq sessiond still held for that read.
+ *
+ * A cursor below what sessiond still holds is answered by its `reset`, which
+ * names the oldest line it has, and the read reopens there: that is how a read
+ * asks "how far back do you go". `head` is a listing's, taken before the read,
+ * and the child has gone on writing since. When its ring has since dropped its
+ * window (the 8 MB cap) or wrapped past `head`, the lines the read waits for
+ * are gone: reopening there replays only lines above `head`, the child may be
+ * idle, and the read would wait without a word. The ring's first line — or,
+ * holding none, the next it will write — says whether any line up to `head`
+ * is still there to read, and a read with nothing left to read ends.
+ */
+const readRing = (
+  client: SessiondClient,
+  procId: string,
+  afterSeq: number,
+  head: number,
+  line: NonNullable<ProcLineListener["line"]>
+): Promise<number> => {
+  let oldest = afterSeq + 1;
+  return new Promise<number>((done) => {
+    if (head <= afterSeq) {
+      done(oldest);
+      return;
+    }
+    let reopened = false;
+    const listener: ProcLineListener = {
+      line: (event) => {
+        if (event.seq > head) {
+          return;
+        }
+        line(event);
+        if (event.seq === head) {
+          done(oldest);
+        }
+      },
+      exit: () => done(oldest),
+      reset: (nextSeq, from) => {
+        oldest = from ?? nextSeq;
+        if (reopened || oldest > head) {
+          done(oldest);
+          return;
+        }
+        reopened = true;
+        client.subscribe(procId, listener, oldest - 1);
+      },
+    };
+    client.subscribe(procId, listener, afterSeq);
+  });
+};
+
+/** What {@link readRing} hands a child's ring listener. */
+type ProcLineListener = Parameters<SessiondClient["subscribe"]>[1];
+
+/**
+ * How many lines back from `head` the first look at a ring's end reads. A turn
+ * that is running wrote the last of them, and an idle child's notices after
+ * its `result` are a handful; each look that finds nothing about a turn reads
+ * four times further back, to the ring's start.
+ */
+const TURN_LOOK_LINES = 256;
 
 /**
  * The permission asks still open, by request id, as a ring is read in order.
@@ -1323,15 +1392,11 @@ const readAsk = (
 };
 
 /**
- * Where an adoption's read starts: the oldest line sessiond still holds.
- *
- * A fixed window back from `head` can fill with the notices an idle child
- * keeps writing after its `result` and say nothing about the turn. Reading
- * from the ring's start cannot run out of window that way: one pass over at
- * most a few thousand retained lines, once per adopted session, and nothing
- * read here is emitted. Sessiond refusing this cursor is not a failure but
- * the answer to "how far back do you go": {@link SessiondClient.subscribe}'s
- * `reset` names the oldest seq it will serve, and the read reopens there.
+ * Where an adoption's read starts: the oldest line sessiond still holds. Every
+ * send the CLI was handed is somewhere in it, so the read is the whole ring:
+ * one pass over at most a few thousand retained lines, once per adopted
+ * session, and nothing read here is emitted. Sessiond refusing this cursor is
+ * the answer to "how far back do you go" ({@link readRing}).
  */
 const RING_START = 0;
 
@@ -1570,15 +1635,45 @@ export class ClaudeHarness implements Harness {
   }
 
   /**
+   * WHETHER A CHILD THAT OUTLIVED THE AGENT IS MID-TURN, as its own ring says
+   * up to `head` ({@link ChildActivity}). Asked of every surviving child at
+   * once, before any of them is attached, so a restarted agent never answers
+   * a busy question as if the turns it has not attached yet had ended.
+   *
+   * The answer is the last line that says anything about a turn, so the read
+   * starts near the end: {@link TURN_LOOK_LINES} back from `head`, and four
+   * times further each time a look finds nothing about a turn, until it has
+   * read back to the oldest line sessiond holds. A full read of every ring is
+   * what an adoption does ({@link adopt}), and doing that here for 138 rings
+   * at once is the very wait this answer must not sit behind.
+   */
+  async turnRunning(instanceId: string, head: number): Promise<boolean> {
+    const client = await this.sessiond();
+    for (let span = TURN_LOOK_LINES; ; span *= 4) {
+      const from = Math.max(head - span, 0);
+      const activity = new ChildActivity();
+      // biome-ignore lint/performance/noAwaitInLoops: each look reaches further back only when the one before it found nothing about a turn
+      const oldest = await readRing(client, instanceId, from, head, (event) =>
+        activity.read(parseLine(event.data))
+      );
+      if (activity.decided || from === 0 || oldest > from + 1) {
+        return activity.turnRunning;
+      }
+    }
+  }
+
+  /**
    * ATTACH (design §4.1): take over a child that outlived the agent, by
    * putting a full SDK `Query` on the same process — idle, mid-turn, or with
    * background work running. Nothing is relaunched, so nothing it runs is cut
    * off, and nothing waits: the `Query` takes sends and controls at once.
    *
+   * `turnRunning` is {@link turnRunning}'s answer for this child, taken before
+   * any child was attached: a running turn is this session's from the start,
+   * busy as it was before the agent went away.
+   *
    * The ring is read first, from {@link RING_START} through `head`, for the
-   * four things only the backlog can say:
-   *  - whether a turn is running ({@link ChildActivity}), so the session is
-   *    busy from the start, as it was before the agent went away;
+   * three things only the whole backlog can say:
    *  - the permission asks the previous host left unanswered — the turn is
    *    blocked on them, and the attached `Query` must park and answer them
    *    under the CLI's own request ids (the bridge's `prelude`);
@@ -1587,10 +1682,6 @@ export class ClaudeHarness implements Harness {
    *  - every send the CLI was handed, which is told to the hub
    *    ({@link MESSAGES_HELD}, `whole`): the rest of what the agent before
    *    this one was sent never reached the CLI.
-   * Reading from the start cannot miss a turn line the way a fixed window
-   * did: an idle child keeps writing notices after its `result`. A start
-   * sessiond no longer holds is answered by its `reset`, which names the
-   * oldest line it still has, and the read reopens there.
    *
    * The `Query` then reads from `afterSeq` — the hub's own mark, so the lines
    * the CLI wrote while no agent was reading reach the hub now, exactly once
@@ -1605,68 +1696,39 @@ export class ClaudeHarness implements Harness {
       /** The ring's last seq as sessiond listed it. */
       head: number;
       sessionId: string | null;
+      /** {@link turnRunning}'s answer for this child. */
+      turnRunning: boolean;
     }
   ): Promise<HarnessSession> {
     const client = await this.sessiond();
-    const { head } = options;
-    const activity = new ChildActivity();
+    const { head, turnRunning } = options;
     const asks = new Map<string, string>();
     // Every send the CLI has been handed: each command it names in a
     // lifecycle line, queued or begun.
     const handed = new Set<string>();
     let { sessionId } = options;
-    let oldest = 1;
-    await new Promise<void>((done) => {
-      if (head < 1) {
-        done();
-        return;
+    // `head` is the listing's, taken before every earlier row was adopted; a
+    // ring that has since dropped past it ends the read rather than stalling
+    // every later row behind this one ({@link readRing}).
+    const oldest = await readRing(
+      client,
+      instanceId,
+      RING_START,
+      head,
+      (event) => {
+        const parsed = parseLine(event.data);
+        readAsk(asks, parsed, event.data);
+        if (
+          parsed?.type === "command_lifecycle" &&
+          typeof parsed.command_uuid === "string"
+        ) {
+          handed.add(parsed.command_uuid);
+        }
+        if (typeof parsed?.session_id === "string") {
+          sessionId = parsed.session_id;
+        }
       }
-      let reopened = false;
-      const listener: Parameters<SessiondClient["subscribe"]>[1] = {
-        line: (event) => {
-          if (event.seq > head) {
-            return;
-          }
-          if (!reopened) {
-            oldest = Math.min(oldest, event.seq);
-          }
-          const parsed = parseLine(event.data);
-          activity.read(parsed);
-          readAsk(asks, parsed, event.data);
-          if (
-            parsed?.type === "command_lifecycle" &&
-            typeof parsed.command_uuid === "string"
-          ) {
-            handed.add(parsed.command_uuid);
-          }
-          if (typeof parsed?.session_id === "string") {
-            sessionId = parsed.session_id;
-          }
-          if (event.seq === head) {
-            done();
-          }
-        },
-        exit: () => done(),
-        // `head` is the listing's, taken before every earlier row was adopted,
-        // and the child has gone on writing since. When its ring has since
-        // dropped its window (the 8 MB cap) or wrapped past `head`, the lines
-        // this read waits for are gone: reopening there replays only lines
-        // above `head`, the child may be idle, and the reattach of every
-        // later row stalled behind this one without a word. The ring's first
-        // line — or, holding none, the next it will write — says whether any
-        // line up to `head` is still there to read.
-        reset: (nextSeq, from) => {
-          oldest = from ?? nextSeq;
-          if (reopened || oldest > head) {
-            done();
-            return;
-          }
-          reopened = true;
-          client.subscribe(instanceId, listener, oldest - 1);
-        },
-      };
-      client.subscribe(instanceId, listener, RING_START);
-    });
+    );
     const replayable =
       options.afterSeq !== undefined && options.afterSeq + 1 >= oldest;
     // What the CLI was handed is all it holds: a send the agent before this
@@ -1681,7 +1743,7 @@ export class ClaudeHarness implements Harness {
       type: "system",
       subtype: MESSAGES_HELD,
       held: [...handed],
-      whole: replayable || oldest <= 1 || !activity.turnRunning,
+      whole: replayable || oldest <= 1 || !turnRunning,
       ...(sessionId ? { session_id: sessionId } : {}),
     });
     // Where the `Query` reads from when it cannot replay the hub's mark: the
@@ -1719,7 +1781,7 @@ export class ClaudeHarness implements Harness {
       }
     );
     session.sessionId = sessionId;
-    if (activity.turnRunning) {
+    if (turnRunning) {
       session.adoptTurn();
     }
     return session;

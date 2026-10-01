@@ -203,12 +203,13 @@ export const HEALTHY_CONNECTION = Duration.seconds(60);
 let activeSupervisor: SessionSupervisor | undefined;
 
 /**
- * How many sessions this daemon is carrying mid-turn, right now — `0` before
- * the supervisor exists (nothing has been asked yet, so nothing can be busy).
- * This is what lets the deploy poller (deploy.ts) hold a restart until idle
- * without asking the hub a question the daemon can answer about itself.
+ * How many sessions this daemon is carrying mid-turn, once it knows — `0`
+ * before the supervisor exists (nothing has been asked yet, so nothing can be
+ * busy). This is what lets the deploy poller (deploy.ts) hold a restart until
+ * idle without asking the hub a question the daemon can answer about itself.
  */
-export const currentBusy = (): number => activeSupervisor?.busyCount ?? 0;
+export const currentBusy = async (): Promise<number> =>
+  activeSupervisor ? (await activeSupervisor.busyNow()).busy : 0;
 
 /**
  * How many consecutive failures against the pinned URL, and how much wall
@@ -546,6 +547,17 @@ const attach = (
       ...(latestDeploy() ? { deploy: latestDeploy() } : {}),
       ...(restarted ? { restarted: true } : {}),
     };
+    // NO BUSY ANSWER BEFORE CUSTODY HAS SAID. From the register until the
+    // sessions this connection takes custody of have each said whether their
+    // turn is running (`takeCustody` below), a busy question waits: before
+    // then an empty busy set means nothing has been read yet, and a restarted
+    // agent read `0` for 23 s while two sessions worked (2026-10-01). Let go
+    // when custody is handed over, or when the connection ends without it.
+    const custodyDecided = Promise.withResolvers<void>();
+    supervisor.holdBusy(custodyDecided.promise);
+    socket.addEventListener("close", () => custodyDecided.resolve(), {
+      once: true,
+    });
     send(socket, { verb: "register", machineId: identity.machineId, payload });
     yield* Effect.logInfo(`registered with ${url}`);
     markLive();
@@ -662,10 +674,24 @@ const attach = (
      */
     const custodyIds = new Set<string>();
     const custodyWaiting: Envelope[] = [];
+    /**
+     * The restores the hub sent ahead of its ack that go straight to the
+     * supervisor rather than wait here: a held opencode session's reattach,
+     * which asks its server whether its turn is running before it is handed
+     * back. Busy answers wait for them as they wait for claude's.
+     */
+    const reattaching: Promise<void>[] = [];
 
     const takeCustody = (ackPayload: unknown, spawns: Envelope[]): void => {
       const named = spawns.map((envelope) =>
         custodyRow(envelope.payload as SpawnPayload)
+      );
+      // Claude's part is handed over the moment `reattachFrom` is called: it
+      // holds busy answers itself until each of its rows is decided.
+      const handedOver = Promise.withResolvers<void>();
+      // biome-ignore lint/complexity/noVoid: the hold settles itself; nothing waits on it here
+      void Promise.all([handedOver.promise, ...reattaching.splice(0)]).then(
+        () => custodyDecided.resolve()
       );
       // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — takeCustody doesn't await its own reattach
       void supervisor
@@ -683,12 +709,15 @@ const attach = (
             ...named,
             ...surviving.filter((row) => !claimed.has(row.instanceId)),
           ];
-          if (rows.length === 0) {
-            return [] as string[];
-          }
-          return supervisor.reattachFrom(ackPayload, rows);
+          const reattached =
+            rows.length === 0
+              ? Promise.resolve([] as string[])
+              : supervisor.reattachFrom(ackPayload, rows);
+          handedOver.resolve();
+          return reattached;
         })
         .catch((error: unknown) => {
+          handedOver.resolve();
           // Fresh restores may still spawn; custody-only requests must not turn
           // an unavailable sessiond into an unbounded spawn queue.
           Effect.runFork(
@@ -717,23 +746,35 @@ const attach = (
         });
     };
 
+    /** What arrives ahead of the register ack: custody, taken on the ack. Whether it was taken. */
+    const beforeAck = (envelope: Envelope): boolean => {
+      if (envelope.verb === "register") {
+        awaitingRegisterAck = false;
+        const spawns = heldSpawns.splice(0);
+        takeCustody(envelope.payload, spawns);
+        return true;
+      }
+      if (envelope.verb !== "spawn") {
+        return false;
+      }
+      const spawn = envelope.payload as SpawnPayload | undefined;
+      const reattachOnly = spawn?.reattachOnly;
+      if (adoptable(spawn)) {
+        heldSpawns.push(envelope);
+        custodyIds.add(spawn.instanceId);
+        return true;
+      }
+      if (reattachOnly) {
+        reattaching.push(supervisor.dispatch(envelope));
+        return true;
+      }
+      return false;
+    };
+
     socket.addEventListener("message", (event) => {
       const envelope = JSON.parse(String(event.data)) as Envelope;
-      if (awaitingRegisterAck) {
-        if (envelope.verb === "register") {
-          awaitingRegisterAck = false;
-          const spawns = heldSpawns.splice(0);
-          takeCustody(envelope.payload, spawns);
-          return;
-        }
-        if (
-          envelope.verb === "spawn" &&
-          adoptable(envelope.payload as SpawnPayload | undefined)
-        ) {
-          heldSpawns.push(envelope);
-          custodyIds.add((envelope.payload as SpawnPayload).instanceId);
-          return;
-        }
+      if (awaitingRegisterAck && beforeAck(envelope)) {
+        return;
       }
       if (
         envelope.verb !== "spawn" &&

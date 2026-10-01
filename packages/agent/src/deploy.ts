@@ -359,13 +359,13 @@ export const forgetLatestDeploy = (): void => {
 
 export interface DeployWatcherOptions {
   /**
-   * How many sessions this daemon is carrying mid-turn, right now. Read once
-   * per tick, never awaited across one — a pending agent restart is held for
-   * as long as this says `> 0` and fired the very first tick it does not.
-   * Absent (as it is in every test) means "always idle": nothing here ever
-   * calls the real `update.ts`, so there is never a restart to gate.
+   * How many sessions this daemon is carrying mid-turn, once it knows (a
+   * restarted daemon knows only when custody of its sessions has said). Read
+   * once per tick — a pending agent restart is held for as long as this says
+   * `> 0` and fired the very first tick it does not. Absent means "always
+   * idle": nothing is wired to restart, so there is never a restart to gate.
    */
-  readonly busy?: () => number;
+  readonly busy?: () => Promise<number>;
   readonly git?: GitRunner;
   /**
    * Where a tick goes. The default logs; the hub-facing surface (leaf C2)
@@ -520,7 +520,7 @@ export class DeployWatcher {
     if (!commit) {
       return;
     }
-    if ((this.#options.busy?.() ?? 0) > 0) {
+    if (((await this.#options.busy?.()) ?? 0) > 0) {
       return;
     }
     const restart = this.#options.restartAgent;
