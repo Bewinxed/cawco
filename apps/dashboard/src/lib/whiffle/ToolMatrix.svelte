@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { ToolPolicy, ToolSpec } from "@whiffle/core";
+  import { machineLabel } from "@whiffle/core";
   import { toast } from "svelte-sonner";
   import { Badge } from "$lib/components/ui/badge";
   import { Button } from "$lib/components/ui/button";
@@ -21,7 +22,7 @@
   } from "$lib/icons";
   import type { Machine } from "./client.svelte";
   import { addMachine } from "./join/join.svelte";
-  import { machineLabel, machineOs } from "./machine";
+  import { machineOs } from "./machine";
   import OsMark from "./OsMark.svelte";
   import { installTool, policyFor, setPolicy } from "./tools";
 

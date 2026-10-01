@@ -1,5 +1,6 @@
 <script lang="ts">
   import type { NeutralSessionInfo } from "@whiffle/core";
+  import { machineLabel } from "@whiffle/core";
   /**
    * The fleet board — every session across every machine as one ledger table,
    * with the four counts that say whether the fleet needs you above it.
@@ -84,7 +85,6 @@
   import ErrorText from "./ErrorText.svelte";
   import HarnessGlyph from "./HarnessGlyph.svelte";
   import { conversationHref, sessionTitle } from "./links";
-  import { machineLabel } from "./machine";
   import { type MarkHue, markHue } from "./mark";
   import PeekPane, { type PeekTarget } from "./PeekPane.svelte";
 

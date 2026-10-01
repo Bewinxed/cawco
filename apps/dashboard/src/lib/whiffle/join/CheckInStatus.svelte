@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { machineLabel } from "@whiffle/core";
   /**
    * The line under an install command: waiting while no new machine has
    * checked in, and which machine joined once one has. Reads one CheckIn —
@@ -6,7 +7,6 @@
    * flip on the same frame for the same machine.
    */
   import type { Snippet } from "svelte";
-  import { machineLabel } from "../machine";
   import type { CheckIn } from "./join.svelte";
 
   let { checkIn, trail }: { checkIn: CheckIn; trail?: Snippet } = $props();

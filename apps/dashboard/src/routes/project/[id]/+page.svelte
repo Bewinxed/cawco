@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { machineLabel } from "@whiffle/core";
   /**
    * The project home (NEW.md §1, north star 4): what this is and what is
    * happening — read from the repo's own files, never from a store of
@@ -38,7 +39,6 @@
   import LiveSessionRow from "$lib/whiffle/LiveSessionRow.svelte";
   import { conversationHref } from "$lib/whiffle/links";
   import MachineInventory from "$lib/whiffle/MachineInventory.svelte";
-  import { machineLabel } from "$lib/whiffle/machine";
   import {
     crossIn,
     crossOut,

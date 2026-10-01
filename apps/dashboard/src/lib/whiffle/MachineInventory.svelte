@@ -6,6 +6,7 @@
     FleetMcpServer,
     FleetSkillMeta,
   } from "@whiffle/core";
+  import { machineLabel } from "@whiffle/core";
   import { toast } from "svelte-sonner";
   import { Alert, AlertDescription } from "$lib/components/ui/alert";
   import { Badge } from "$lib/components/ui/badge";
@@ -15,7 +16,6 @@
   import { IconChevronDown, IconChevronRight, IconLaptop } from "$lib/icons";
   import type { Machine } from "./client.svelte";
   import { adoptSkill, inspectMachine, saveMcpServer } from "./fleet";
-  import { machineLabel } from "./machine";
   import OsMark from "./OsMark.svelte";
 
   let {

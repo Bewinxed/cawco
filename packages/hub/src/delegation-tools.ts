@@ -347,7 +347,8 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "list_sessions",
-      "List the other sessions running on the fleet, with the directory each is working in. " +
+      "List the other sessions running on the fleet, with the directory and machine each is working in, " +
+        "then the machines online now by the names start_session's `machine` takes. " +
         "The listing shows where each session works, not what it is currently doing, how busy it " +
         "is, or how likely it is to pick up a handoff — and recency is not an ownership signal. " +
         "Use it to find a session that already owns the work, or to name a delegate. For configured delegate types and model mappings, use list_delegate_types. " +
@@ -402,16 +403,27 @@ export function handoffTools(deps: HandoffDeps) {
       "Start a NEW session on the fleet using the caller's harness and give it work. Unlike a subagent, this " +
         "is a full session of its own: it gets its own row in the sidebar, its own transcript " +
         "the user can open and read, its own model and permission mode, and it survives after " +
-        "this turn ends. Use it when the user asks you to spin something off, or when work " +
-        "belongs in a different directory and no session is running there yet. Prefer " +
-        "`handoff` when a session is ALREADY running in that directory.",
+        "this turn ends. It runs on this session's machine unless `machine` names another one of the fleet. " +
+        "Use it when the user asks you to spin something off, or when work " +
+        "belongs in a different directory or on a different machine and no session is running there yet. Prefer " +
+        "`handoff` when a session is ALREADY running in that directory. " +
+        "Returns once the machine has the session in place; a spawn that fails there (a missing directory, a harness error, the machine gone) is returned as this tool's error, in the machine's words.",
       {
         cwd: z
           .string()
           .describe(
-            "Absolute directory the new session works in. Often a DIFFERENT project from this " +
+            "Absolute directory the new session works in, as a path on the machine it runs on " +
+              "(e.g. /Users/<name>/... on a Mac, /home/<name>/... on Linux). Often a DIFFERENT project from this " +
               "one — if the user named another repository or folder, use that. Defaults to " +
               "this session's directory only when they did not."
+          ),
+        machine: z
+          .string()
+          .optional()
+          .describe(
+            'The machine the session runs on: its hostname as the fleet shows it (e.g. "Omars-MacBook-Pro", ' +
+              '"obelisk-of-light"; list_sessions ends with the machines online now) or its machineId. ' +
+              "Omit to run it on this session's machine. An unknown or offline machine is refused."
           ),
         prompt: z
           .string()
@@ -431,13 +443,14 @@ export function handoffTools(deps: HandoffDeps) {
           .optional()
           .describe("Model id. Omit to let the SDK choose."),
       },
-      async ({ cwd, prompt, title, sideQuest, model }) => {
+      async ({ cwd, prompt, title, sideQuest, model, machine }) => {
         const result = await actions.startSession(
           cwd,
           prompt,
           title,
           sideQuest,
-          model
+          model,
+          machine
         );
         const sc = { instanceId: result.id, title: result.title };
         return {

@@ -29,7 +29,11 @@
 
 <script lang="ts">
   /** Right-click on a machine's heading — what you can do to the box, not to a session. */
-  import { UPDATE_WHIFFLE, type UpdateReport } from "@whiffle/core";
+  import {
+    machineLabel,
+    UPDATE_WHIFFLE,
+    type UpdateReport,
+  } from "@whiffle/core";
   import type { Snippet } from "svelte";
   import { goto } from "$app/navigation";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
@@ -53,7 +57,6 @@
   import { confirm } from "./confirm.svelte";
   import ErrorDialog from "./ErrorDialog.svelte";
   import MachineLogin from "./MachineLogin.svelte";
-  import { machineLabel } from "./machine";
   import UnlockKeychain from "./UnlockKeychain.svelte";
 
   let { machine, children }: { machine: Machine; children: Snippet } = $props();

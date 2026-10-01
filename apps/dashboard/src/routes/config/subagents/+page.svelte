@@ -1,5 +1,9 @@
 <script lang="ts">
-  import { type FleetAgent, parseAgentFrontMatter } from "@whiffle/core";
+  import {
+    type FleetAgent,
+    machineLabel,
+    parseAgentFrontMatter,
+  } from "@whiffle/core";
   import { toast } from "svelte-sonner";
   import { Button } from "$lib/components/ui/button";
   import { EmptyState } from "$lib/components/ui/empty";
@@ -26,7 +30,6 @@
     removeAgent,
     saveAgent,
   } from "$lib/whiffle/fleet";
-  import { machineLabel } from "$lib/whiffle/machine";
   import OsMark from "$lib/whiffle/OsMark.svelte";
   import { orderMachines } from "$lib/whiffle/rail.svelte";
 

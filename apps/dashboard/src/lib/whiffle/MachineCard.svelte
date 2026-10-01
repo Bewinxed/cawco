@@ -9,6 +9,7 @@
    * adopt/overwrite affordance for a failed sync stays a click on Configure.
    */
   import type { BuildInfo } from "@whiffle/core";
+  import { machineLabel } from "@whiffle/core";
   import { TextMorph } from "torph/svelte";
   import { Badge } from "$lib/components/ui/badge";
   import { Spinner } from "$lib/components/ui/spinner";
@@ -27,7 +28,6 @@
   } from "./convergence";
   import { CAUSE, faultHref, machineFaults } from "./fleet-faults";
   import { isUpdating, machineUpdates } from "./MachineMenu.svelte";
-  import { machineLabel } from "./machine";
   import { CURVE, dur } from "./motion/curves.svelte";
   import OsMark from "./OsMark.svelte";
 

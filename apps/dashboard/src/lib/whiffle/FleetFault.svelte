@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { machineLabel } from "@whiffle/core";
   /**
    * One fault, rendered the same way everywhere it appears.
    *
@@ -31,7 +32,6 @@
     readToolchain,
     SCOPE_NOUN,
   } from "./fleet-faults";
-  import { machineLabel } from "./machine";
   import { appear, CURVE, dur } from "./motion/curves.svelte";
   import { fold } from "./motion/fold.svelte";
   import OsMark from "./OsMark.svelte";

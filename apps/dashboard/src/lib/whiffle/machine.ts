@@ -1,14 +1,5 @@
 /** How a machine names itself vs. how the rail should say it out loud. */
-import type { AgentRow } from "@whiffle/core";
-
-/** mDNS and router suffixes: they say "same network", which the rail already implies. */
-const LOCAL_SUFFIXES = [".local", ".lan", ".home"];
-
-export function machineLabel(hostname: string): string {
-  const name = hostname.trim();
-  const suffix = LOCAL_SUFFIXES.find((s) => name.toLowerCase().endsWith(s));
-  return suffix ? name.slice(0, -suffix.length) : name;
-}
+import { type AgentRow, machineLabel } from "@whiffle/core";
 
 /**
  * Splits the daemon's `platform-arch` fingerprint into something readable.

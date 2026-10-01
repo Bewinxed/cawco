@@ -109,7 +109,7 @@ import {
 } from "@whiffle/core";
 import { Elysia, t, ValidationError } from "elysia";
 import { websocket } from "elysia/websocket";
-import { DB_PATH, HUB_VERSION } from "./config";
+import { DB_PATH, HUB_VERSION, SPAWN_START_TIMEOUT_MS } from "./config";
 import {
   type ContinuationSource,
   type ContinueRequest,
@@ -250,12 +250,6 @@ const READ_TIMEOUT_MS = 10_000;
  * call's own deadline.
  */
 const WORKSPACE_TIMEOUT_MS = 60_000;
-/**
- * How long a continuation waits for a session it spawned to be in place. A
- * cold harness (opencode starting its server, claude its CLI) takes seconds;
- * past this the machine is not going to answer.
- */
-const CONTINUE_SPAWN_TIMEOUT_MS = 120_000;
 /**
  * How long a settled continuation stays in the table dashboards follow. Ours:
  * five minutes lets a dashboard that was reconnecting when it settled still
@@ -3302,6 +3296,41 @@ export const createServer = ({
   };
 
   /**
+   * A relayed spawn, issued. One that carries a `requestId` (start_session's)
+   * is held until its machine says the session is in place, and answers with
+   * the machine's own words when it is not; one without is fire-and-forget,
+   * its failure reaching the row and its parent later.
+   */
+  const relaySpawn = async (
+    machineId: string,
+    payload: SpawnPayload
+  ): Promise<{ code: number; message: string } | undefined> => {
+    const { requestId } = payload;
+    if (!requestId) {
+      issueSpawn(machineId, payload);
+      return;
+    }
+    const reply = await awaitReply(
+      machineId,
+      requestId,
+      SPAWN_START_TIMEOUT_MS,
+      () => issueSpawn(machineId, payload)
+    );
+    if (reply === "timeout") {
+      return {
+        code: 504,
+        message: `the session on ${machineId} did not start within ${SPAWN_START_TIMEOUT_MS / 1000}s`,
+      };
+    }
+    if (!reply.ok) {
+      return {
+        code: 422,
+        message: reply.error ?? "the session failed to start",
+      };
+    }
+  };
+
+  /**
    * Spawns a session from the hub itself — a continuation's summarisers and
    * its target — recorded exactly like a dashboard's spawn, and resolved once
    * the machine says the session is in place. A refusal is the machine's own
@@ -3332,7 +3361,7 @@ export const createServer = ({
     const reply = await awaitReply(
       machineId,
       requestId,
-      CONTINUE_SPAWN_TIMEOUT_MS,
+      SPAWN_START_TIMEOUT_MS,
       () =>
         agent.send({
           verb: "spawn",
@@ -3343,7 +3372,7 @@ export const createServer = ({
     );
     if (reply === "timeout") {
       throw new Error(
-        `the ${payload.harness} session on ${machineId} did not start within ${CONTINUE_SPAWN_TIMEOUT_MS / 1000}s`
+        `the ${payload.harness} session on ${machineId} did not start within ${SPAWN_START_TIMEOUT_MS / 1000}s`
       );
     }
     if (!reply.ok) {
@@ -7920,8 +7949,9 @@ export const createServer = ({
       // A session's own tools reach the fleet over plain HTTP — the hub's MCP
       // server forwards `start_session`'s spawn here, and the workflow runtime
       // spawns its steps the same way — and the hub relays them like the
-      // dashboard's own. Fire-and-forget: the tool has nothing to wait on.
-      .post("/api/relay/spawn", { body: t.Any() }, ({ body, status }) => {
+      // dashboard's own. start_session's is answered once its machine has the
+      // session in place, or with why not ({@link relaySpawn}).
+      .post("/api/relay/spawn", { body: t.Any() }, async ({ body, status }) => {
         const payload = body as SpawnPayload & { machineId?: string };
         const { machineId } = payload;
         if (!(machineId && payload.instanceId)) {
@@ -7960,7 +7990,10 @@ export const createServer = ({
         if (!registry.agent(machineId)) {
           return status(404, `machine ${machineId} is not connected`);
         }
-        issueSpawn(machineId, payload);
+        const refused = await relaySpawn(machineId, payload);
+        if (refused) {
+          return status(refused.code, refused.message);
+        }
         return { ok: true, instanceId: payload.instanceId, machineId };
       })
       .post("/api/relay/send", { body: t.Any() }, ({ body, status }) => {

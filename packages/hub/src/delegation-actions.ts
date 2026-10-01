@@ -25,6 +25,7 @@ import {
   delegateTypeProblem,
   handoffMarker,
   IMAGE_GENERATION_TIMEOUT_MS,
+  machineLabel,
   QUESTION_DISMISSED,
   WHIFFLE_ENV,
   WHIFFLE_HUB_PORT,
@@ -115,32 +116,84 @@ const ageOf = (at: InstanceRow["updatedAt"]): string => {
     : `active ${Math.round(hours / 24)}d ago`;
 };
 
+/** A machine of the fleet as the hub's registry has it (`GET /api/agents`). */
+interface Machine {
+  hostname: string;
+  machineId: string;
+  /** `online` while its daemon holds a socket to the hub. */
+  status: string;
+}
+
+/** Every machine the hub knows, online or not. */
+async function fetchMachines(): Promise<Machine[]> {
+  const response = await fetch(`${hubHttpUrl()}/api/agents`, {
+    signal: AbortSignal.timeout(5000),
+  });
+  if (!response.ok) {
+    throw new Error(`the hub answered ${response.status} for its machines`);
+  }
+  return (await response.json()) as Machine[];
+}
+
+/** The machines a session can start on now, by the names start_session takes. */
+const onlineNames = (machines: Machine[]): string =>
+  machines
+    .filter((machine) => machine.status === "online")
+    .map((machine) => machineLabel(machine.hostname))
+    .join(", ") || "none";
+
+/**
+ * The one machine `target` names: its machineId, its hostname, or that
+ * hostname as the fleet shows it (without `.local`), case aside. An unknown,
+ * ambiguous or offline name is refused with the machines online now.
+ */
+function resolveMachine(machines: Machine[], target: string): Machine {
+  const needle = target.trim().toLowerCase();
+  const matches = machines.filter(
+    (machine) =>
+      machine.machineId.toLowerCase() === needle ||
+      machine.hostname.toLowerCase() === needle ||
+      machineLabel(machine.hostname).toLowerCase() === needle
+  );
+  if (matches.length === 0) {
+    throw new Error(
+      `No machine in the fleet is named "${target}". Online now: ${onlineNames(machines)}.`
+    );
+  }
+  if (matches.length > 1) {
+    throw new Error(
+      `"${target}" names ${matches.length} machines: ${matches.map((machine) => `${machineLabel(machine.hostname)} (${machine.machineId})`).join(", ")}. Name one by its machineId.`
+    );
+  }
+  const [found] = matches;
+  if (found.status !== "online") {
+    throw new Error(
+      `${machineLabel(found.hostname)} is offline. Online now: ${onlineNames(machines)}.`
+    );
+  }
+  return found;
+}
+
 /** The raw rows behind the roster, before the running/starting narrowing. */
 async function fetchInstances(): Promise<{
   rows: InstanceRow[];
   hosts: Map<string, string>;
 }> {
   const base = hubHttpUrl();
-  const [instancesRes, agentsRes] = await Promise.all([
+  const [instancesRes, machines] = await Promise.all([
     fetch(`${base}/api/instances`, { signal: AbortSignal.timeout(5000) }),
-    fetch(`${base}/api/agents`, { signal: AbortSignal.timeout(5000) }).catch(
-      () => undefined
-    ),
+    fetchMachines().catch(() => [] as Machine[]),
   ]);
   if (!instancesRes.ok) {
     throw new Error(`the hub answered ${instancesRes.status}`);
   }
   const rows = (await instancesRes.json()) as InstanceRow[];
-  const hosts = new Map<string, string>();
-  if (agentsRes?.ok) {
-    const agents = (await agentsRes.json()) as {
-      machineId: string;
-      hostname: string;
-    }[];
-    for (const agent of agents) {
-      hosts.set(agent.machineId, agent.hostname);
-    }
-  }
+  const hosts = new Map(
+    machines.map((machine) => [
+      machine.machineId,
+      machineLabel(machine.hostname),
+    ])
+  );
   return { rows, hosts };
 }
 
@@ -489,7 +542,9 @@ export interface HandoffActions {
     prompt: string,
     title: string,
     sideQuest?: boolean,
-    model?: string
+    model?: string,
+    /** The machine it runs on, by hostname or machineId; the caller's by default. */
+    machine?: string
   ): Promise<HandoffResult>;
   /** A supervisor's action on its run; answers one line saying what it did. */
   readonly steerWorkflow: (
@@ -785,11 +840,15 @@ export const handoffActions = ({
     return { types };
   },
   async listSessions(): Promise<string> {
-    const { peers, own } = await roster(instanceId);
+    const [{ peers, own }, machines] = await Promise.all([
+      roster(instanceId),
+      fetchMachines(),
+    ]);
+    const where = `Machines online (start_session's \`machine\`): ${onlineNames(machines)}.`;
     if (peers.length === 0) {
-      return "No other sessions are running.";
+      return `No other sessions are running.\n\n${where}`;
     }
-    return peers
+    const listed = peers
       .map((peer) => {
         const facts = [
           peer.host,
@@ -806,6 +865,7 @@ export const handoffActions = ({
         return `- ${peer.label} — ${peer.row.cwd} · ${facts.join(" · ")}`;
       })
       .join("\n");
+    return `${listed}\n\n${where}`;
   },
 
   async handoff(
@@ -866,14 +926,20 @@ export const handoffActions = ({
     );
   },
 
-  // biome-ignore lint/suspicious/useAwait: HandoffActions.startSession returns Promise<HandoffResult>; dropping async would need every return wrapped instead
   async startSession(
     workdir: string,
     prompt: string,
     title: string,
     sideQuest = false,
-    model?: string
+    model?: string,
+    machine?: string
   ): Promise<HandoffResult> {
+    // Named: that machine, which must be online. Unnamed: "" is the caller's
+    // own, which the hub's forwarder fills in.
+    const target = machine
+      ? resolveMachine(await fetchMachines(), machine)
+      : undefined;
+    const machineId = target?.machineId ?? "";
     const id = crypto.randomUUID();
     const from = leafOf(cwd);
     const payload: SpawnPayload = {
@@ -886,8 +952,12 @@ export const handoffActions = ({
       // Provenance only — a started session is not a delegate. The hub reads
       // it to hold a leaf to `canDelegate` on this door as well.
       spawnedBy: { instanceId },
+      // The machine answers it once the session is in place, or with why it
+      // is not; the hub holds the relay until then, so a failed spawn is this
+      // tool's error rather than a "Started" for a session that never was.
+      requestId: crypto.randomUUID(),
     };
-    emit({ verb: "spawn", machineId: "", instanceId: id, payload });
+    emit({ verb: "spawn", machineId, instanceId: id, payload });
     // The marker prefix survives SDK storage (which strips `origin`) so that
     // `mapTranscript` → `handoffFrom()` can still detect the opening prompt as
     // a peer message and render it as `user.peer` instead of the reader's own
@@ -908,12 +978,13 @@ export const handoffActions = ({
         },
       },
     };
-    emit({ verb: "send", machineId: "", instanceId: id, payload: opening });
+    emit({ verb: "send", machineId, instanceId: id, payload: opening });
+    const on = target ? ` on ${machineLabel(target.hostname)}` : "";
     return {
       id,
       title,
       text:
-        `Started "${title}" (${leafOf(workdir)})${sideQuest ? " as a side quest" : ""} in ${workdir}. ` +
+        `Started "${title}" (${leafOf(workdir)})${sideQuest ? " as a side quest" : ""}${on} in ${workdir}. ` +
         "It is in the sidebar now and the user can open its transcript. " +
         `Hand it more work later with handoff("${id}", ...).`,
     };

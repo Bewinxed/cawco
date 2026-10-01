@@ -8,7 +8,7 @@ import {
 } from "@modelcontextprotocol/sdk/types.js";
 import type { Envelope, InstanceRow } from "@whiffle/core";
 import { adminTools } from "./admin-tools";
-import { HUB_PORT } from "./config";
+import { HUB_PORT, SPAWN_START_TIMEOUT_MS } from "./config";
 import { handoffInstructions, handoffTools } from "./delegation-tools";
 
 type ToolFactory = typeof handoffTools;
@@ -18,6 +18,7 @@ const LONG_CALLS: Record<string, string> = {
   generate_image: "Generating image through ChatGPT",
   continue_session: "Summarising the session",
   finish_item: "Running the work item's acceptance checks",
+  start_session: "Waiting for the machine to start the session",
 };
 
 /**
@@ -170,7 +171,7 @@ export function createDelegationMcp(options: {
       body = { ...body, machineId: actor.machineId };
     } else if (envelope.verb === "spawn" || envelope.verb === "send") {
       // A send names its target's machine; a session it starts runs on the
-      // caller's.
+      // machine its caller named, or on the caller's own.
       body = { ...body, machineId: envelope.machineId || actor.machineId };
     } else if (envelope.verb === "control") {
       if (body.method === "interrupt") {
@@ -188,7 +189,11 @@ export function createDelegationMcp(options: {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
-      signal: AbortSignal.timeout(15_000),
+      // A spawn is answered once its machine has the session in place, which
+      // the hub waits on for up to SPAWN_START_TIMEOUT_MS.
+      signal: AbortSignal.timeout(
+        envelope.verb === "spawn" ? SPAWN_START_TIMEOUT_MS + 15_000 : 15_000
+      ),
     });
     if (!response.ok) {
       const text = await response.text();

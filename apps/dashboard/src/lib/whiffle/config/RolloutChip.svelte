@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { machineLabel } from "@whiffle/core";
   /**
    * Where one row has landed: "2/2 machines" on the row, and machine by
    * machine in the popover. A machine that refused it opens the full fault —
@@ -30,7 +31,7 @@
   import FleetFault from "../FleetFault.svelte";
   import { syncFleet } from "../fleet";
   import { causeOf, type FaultScope } from "../fleet-faults";
-  import { machineLabel, machineOs } from "../machine";
+  import { machineOs } from "../machine";
   import { appear, morphMs } from "../motion/curves.svelte";
 
   let {

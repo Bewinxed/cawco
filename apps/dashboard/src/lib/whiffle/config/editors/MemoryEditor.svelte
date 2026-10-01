@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { machineLabel } from "@whiffle/core";
   import { untrack } from "svelte";
   import { toast } from "svelte-sonner";
   import { goto } from "$app/navigation";
@@ -35,7 +36,7 @@
     saveMemory,
     saveMemoryDoc,
   } from "../../fleet";
-  import { machineLabel, machineOs } from "../../machine";
+  import { machineOs } from "../../machine";
   import { orderMachines } from "../../rail.svelte";
   import { drafts, keepDraft } from "../drafts.svelte";
   import EditorFrame from "../EditorFrame.svelte";

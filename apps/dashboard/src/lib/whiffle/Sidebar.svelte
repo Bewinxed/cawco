@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { machineLabel } from "@whiffle/core";
   /**
    * Fleet sidebar — reimplemented on top of the shadcn-svelte sidebar primitives
    * (ui/sidebar/*), following the Fluid Functionalism inset preset pattern:
@@ -64,7 +65,6 @@
   import { folderPrefs } from "./folder-prefs.svelte";
   import { conversationHref } from "./links";
   import MachineMenu from "./MachineMenu.svelte";
-  import { machineLabel } from "./machine";
   import { markHue, sessionSprite } from "./mark";
   import { CURVE, dur, ease, motionOk } from "./motion/curves.svelte";
   import { reflow } from "./motion/rows.svelte";

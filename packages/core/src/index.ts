@@ -411,6 +411,20 @@ export interface AgentRow {
   tools?: Record<string, ToolStatus>;
 }
 
+/** mDNS and router suffixes: they say "same network", which the fleet already implies. */
+const LOCAL_SUFFIXES = [".local", ".lan", ".home"];
+
+/**
+ * How the fleet names a machine out loud: its hostname without a local-network
+ * suffix ("Omars-MacBook-Pro.local" is "Omars-MacBook-Pro"). The dashboard
+ * shows this name, and `start_session` takes it.
+ */
+export function machineLabel(hostname: string): string {
+  const name = hostname.trim();
+  const suffix = LOCAL_SUFFIXES.find((s) => name.toLowerCase().endsWith(s));
+  return suffix ? name.slice(0, -suffix.length) : name;
+}
+
 /**
  * Where a deployment clone stands, flattened for the wire. The kinds are
  * `DeployState['kind']` in packages/agent/src/deploy.ts; the rest of that

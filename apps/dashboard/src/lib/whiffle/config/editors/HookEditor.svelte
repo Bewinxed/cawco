@@ -6,6 +6,7 @@
     hookProblem,
     hookSentence,
     hookTakesMatcher,
+    machineLabel,
   } from "@whiffle/core";
   import { untrack } from "svelte";
   import { toast } from "svelte-sonner";
@@ -56,7 +57,7 @@
     saveHook,
   } from "../../hooks";
   import { newId } from "../../id";
-  import { machineLabel, machineOs } from "../../machine";
+  import { machineOs } from "../../machine";
   import { orderMachines } from "../../rail.svelte";
   import Choice from "../Choice.svelte";
   import { keepDraft, sameFields } from "../drafts.svelte";

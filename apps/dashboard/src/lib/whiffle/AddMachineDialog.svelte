@@ -10,7 +10,7 @@
    * and ends in `whiffle join`, and the fleet is what says it worked.
    */
   import type { SshJoinJob } from "@whiffle/core";
-  import { INSTALL_STEP_PREFIX } from "@whiffle/core";
+  import { INSTALL_STEP_PREFIX, machineLabel } from "@whiffle/core";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Alert from "$lib/components/ui/alert";
   import { Button } from "$lib/components/ui/button";
@@ -39,7 +39,6 @@
     joinInfo,
     sshJoin,
   } from "./join/join.svelte";
-  import { machineLabel } from "./machine";
 
   let tab = $state<"ssh" | "command">("ssh");
   let target = $state("");
