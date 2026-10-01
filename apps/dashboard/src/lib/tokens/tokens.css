@@ -5,29 +5,29 @@
     /* Warm neutrals (hue ~85 paper by day, ~70 roost at night). Chroma stays low so chrome reads neutral; colour is reserved for action, status and identity. */
     --neutral-1: light-dark(oklch(99.3% 0.004 85), oklch(18.4% 0.004 70));
     --neutral-2: light-dark(oklch(96.6% 0.008 85), oklch(21% 0.005 70));
-    --neutral-3: light-dark(oklch(94.4% 0.010 84), oklch(24.8% 0.006 70));
+    --neutral-3: light-dark(oklch(94.4% 0.01 84), oklch(24.8% 0.006 70));
     --neutral-4: light-dark(oklch(92% 0.011 83), oklch(28.2% 0.007 70));
     --neutral-5: light-dark(oklch(89% 0.013 82), oklch(31.4% 0.008 70));
     --neutral-6: light-dark(oklch(85.4% 0.014 82), oklch(35.2% 0.009 70));
-    --neutral-7: light-dark(oklch(81% 0.016 80), oklch(40.2% 0.010 72));
+    --neutral-7: light-dark(oklch(81% 0.016 80), oklch(40.2% 0.01 72));
     --neutral-8: light-dark(oklch(73.5% 0.017 78), oklch(48.8% 0.012 74));
     --neutral-9: oklch(52% 0.016 76);
     --neutral-11: light-dark(oklch(49.5% 0.014 74), oklch(77.8% 0.012 78));
-    --neutral-12: light-dark(oklch(29.5% 0.010 70), oklch(93.4% 0.010 82));
+    --neutral-12: light-dark(oklch(29.5% 0.01 70), oklch(93.4% 0.01 82));
     /* Caw coral: brand and the action. #E65D46 at rest. */
-    --coral-3: light-dark(oklch(94.6% 0.030 38), oklch(28% 0.060 32));
-    --coral-5: light-dark(oklch(88% 0.065 36), oklch(36% 0.090 32));
-    --coral-9: light-dark(oklch(64.5% 0.175 33), oklch(66.5% 0.170 33));
-    --coral-10: light-dark(oklch(60% 0.175 33), oklch(70.5% 0.160 34));
-    --coral-11: light-dark(oklch(50% 0.150 32), oklch(80% 0.100 34));
+    --coral-3: light-dark(oklch(94.6% 0.03 38), oklch(28% 0.06 32));
+    --coral-5: light-dark(oklch(88% 0.065 36), oklch(36% 0.09 32));
+    --coral-9: light-dark(oklch(64.5% 0.175 33), oklch(66.5% 0.17 33));
+    --coral-10: light-dark(oklch(60% 0.175 33), oklch(70.5% 0.16 34));
+    --coral-11: light-dark(oklch(50% 0.15 32), oklch(80% 0.1 34));
     /* Spark yellow, paper and roost ink: brand moments only (wordmark, mascot, art). */
-    --spark: #F2D36B;
-    --paper: #F4F0E6;
+    --spark: #f2d36b;
+    --paper: #f4f0e6;
     --crow-ink: #171715;
     /* Functional hues (Flexoki-derived). Error sits on crimson (hue 15) so failed never reads as the coral action. */
-    --error-3: light-dark(oklch(90% 0.050 12), oklch(30% 0.080 12));
-    --error-9: light-dark(oklch(50% 0.170 15), oklch(58% 0.170 15));
-    --error-11: light-dark(oklch(36% 0.110 15), oklch(86% 0.070 12));
+    --error-3: light-dark(oklch(90% 0.05 12), oklch(30% 0.08 12));
+    --error-9: light-dark(oklch(50% 0.17 15), oklch(58% 0.17 15));
+    --error-11: light-dark(oklch(36% 0.11 15), oklch(86% 0.07 12));
     --warning-3: light-dark(oklch(91.4% 0.087 93.2), oklch(37% 0.074 88.4));
     --warning-9: light-dark(oklch(63.3% 0.129 85.8), oklch(68.3% 0.138 86.8));
     --warning-11: light-dark(oklch(37% 0.074 88.4), oklch(85% 0.131 92.3));
@@ -48,16 +48,43 @@
     --mark-8: light-dark(oklch(51% 0.165 349.8), oklch(70% 0.17 349.8));
     --mark-glyph: light-dark(oklch(99% 0 0), var(--neutral-1));
     /* Identity-mark sheen. */
-    --mark-overlay: linear-gradient(oklch(from var(--neutral-1) l c h / 0.22), oklch(from var(--neutral-12) l c h / 0.06));
+    --mark-overlay: linear-gradient(
+      oklch(from var(--neutral-1) l c h / 0.22),
+      oklch(from var(--neutral-12) l c h / 0.06)
+    );
     /* Identity hues for duotone icon tiles (new-session modal, Configure). Dark keeps each hue's chroma and raises its lightness. */
-    --hue-cyan-400: light-dark(oklch(75.35% 0.139 232.66), oklch(80% 0.139 232.66));
-    --hue-cyan-500: light-dark(oklch(70.66% 0.1331 226.72), oklch(78% 0.1331 226.72));
-    --hue-amber-500: light-dark(oklch(79.08% 0.1577 79.28), oklch(82% 0.1577 79.28));
-    --hue-orange-500: light-dark(oklch(70.49% 0.1867 47.6), oklch(76% 0.1867 47.6));
-    --hue-green-500: light-dark(oklch(72.27% 0.192 149.58), oklch(76% 0.192 149.58));
-    --hue-green-600: light-dark(oklch(62.71% 0.1699 149.21), oklch(74% 0.1699 149.21));
-    --hue-blue-500: light-dark(oklch(61.52% 0.2076 262.53), oklch(74% 0.2076 262.53));
-    --hue-blue-600: light-dark(oklch(53.18% 0.2148 265.52), oklch(72% 0.2148 265.52));
+    --hue-cyan-400: light-dark(
+      oklch(75.35% 0.139 232.66),
+      oklch(80% 0.139 232.66)
+    );
+    --hue-cyan-500: light-dark(
+      oklch(70.66% 0.1331 226.72),
+      oklch(78% 0.1331 226.72)
+    );
+    --hue-amber-500: light-dark(
+      oklch(79.08% 0.1577 79.28),
+      oklch(82% 0.1577 79.28)
+    );
+    --hue-orange-500: light-dark(
+      oklch(70.49% 0.1867 47.6),
+      oklch(76% 0.1867 47.6)
+    );
+    --hue-green-500: light-dark(
+      oklch(72.27% 0.192 149.58),
+      oklch(76% 0.192 149.58)
+    );
+    --hue-green-600: light-dark(
+      oklch(62.71% 0.1699 149.21),
+      oklch(74% 0.1699 149.21)
+    );
+    --hue-blue-500: light-dark(
+      oklch(61.52% 0.2076 262.53),
+      oklch(74% 0.2076 262.53)
+    );
+    --hue-blue-600: light-dark(
+      oklch(53.18% 0.2148 265.52),
+      oklch(72% 0.2148 265.52)
+    );
     /* Tool ink: one hue per tool family, one lightness per scheme. */
     --tool-run: light-dark(oklch(50% 0.12 52), oklch(74% 0.11 52));
     --tool-mcp: light-dark(oklch(50% 0.12 176), oklch(74% 0.11 176));
@@ -101,7 +128,10 @@
     --surface-fill: light-dark(var(--neutral-4), var(--neutral-5));
     --surface-hover: light-dark(var(--neutral-2), var(--neutral-4));
     /* The reader's well edge: darker than the well by day, the ink at 8% at night. */
-    --well-edge: light-dark(var(--neutral-5), oklch(from var(--neutral-12) l c h / 0.08));
+    --well-edge: light-dark(
+      var(--neutral-5),
+      oklch(from var(--neutral-12) l c h / 0.08)
+    );
     --code-bg: light-dark(var(--neutral-3), oklch(15.6% 0.004 70));
     /* Surface ladder: eight levels that nest; each container lifts one step off what it sits on. Light flattens to warm white after step 2 (shadow carries depth); dark lightens ~3.2% L per step. */
     --surface-1: light-dark(var(--neutral-2), oklch(18.4% 0.004 70));
@@ -110,28 +140,49 @@
     --surface-4: light-dark(oklch(99.6% 0.003 85), oklch(28% 0.007 70));
     --surface-5: light-dark(oklch(99.6% 0.003 85), oklch(31.2% 0.008 70));
     --surface-6: light-dark(oklch(99.6% 0.003 85), oklch(34.4% 0.009 72));
-    --surface-7: light-dark(oklch(99.6% 0.003 85), oklch(37.6% 0.010 72));
+    --surface-7: light-dark(oklch(99.6% 0.003 85), oklch(37.6% 0.01 72));
     --surface-8: light-dark(oklch(99.6% 0.003 85), oklch(40.8% 0.011 74));
     /* Borders: graded, never flattened to one value. */
-    --border: light-dark(var(--neutral-6), oklch(from var(--neutral-12) l c h / 0.08));
-    --border-hairline: light-dark(color-mix(in oklab, var(--neutral-4) 34%, var(--neutral-3)), color-mix(in oklab, var(--neutral-5) 40%, var(--neutral-4)));
+    --border: light-dark(
+      var(--neutral-6),
+      oklch(from var(--neutral-12) l c h / 0.08)
+    );
+    --border-hairline: light-dark(
+      color-mix(in oklab, var(--neutral-4) 34%, var(--neutral-3)),
+      color-mix(in oklab, var(--neutral-5) 40%, var(--neutral-4))
+    );
     --border-control: light-dark(var(--neutral-5), var(--neutral-6));
-    --input: light-dark(var(--neutral-7), oklch(from var(--neutral-12) l c h / 0.14));
+    --input: light-dark(
+      var(--neutral-7),
+      oklch(from var(--neutral-12) l c h / 0.14)
+    );
     /* Inks. Subtle is the weakest mix that holds 4.5:1 on fill, hover and raised. */
     --ink-strong: var(--neutral-12);
     /* A ledger row's name, just under the strongest ink. */
-    --ink-row: light-dark(color-mix(in oklab, var(--neutral-12) 68%, var(--neutral-11)), color-mix(in oklab, var(--neutral-12) 88%, var(--neutral-11)));
+    --ink-row: light-dark(
+      color-mix(in oklab, var(--neutral-12) 68%, var(--neutral-11)),
+      color-mix(in oklab, var(--neutral-12) 88%, var(--neutral-11))
+    );
     /* A stat tile's figure, a step lighter than the strongest ink. */
-    --ink-stat: light-dark(color-mix(in oklab, var(--neutral-12) 60%, var(--neutral-11)), color-mix(in oklab, var(--neutral-12) 72%, var(--neutral-11)));
+    --ink-stat: light-dark(
+      color-mix(in oklab, var(--neutral-12) 60%, var(--neutral-11)),
+      color-mix(in oklab, var(--neutral-12) 72%, var(--neutral-11))
+    );
     --ink-muted: var(--neutral-11);
     /* Placeholders and tertiary text: the weakest mix of neutral-8 into neutral-11 that holds 4.5:1 on fill, hover and raised (by day 4.55 / 5.21 / 5.66:1 at 6%; the cool ramp's 8.3% measured 4.47 on the warm fill). */
-    --ink-subtle: light-dark(color-mix(in oklab, var(--neutral-8) 6%, var(--neutral-11)), color-mix(in oklab, var(--neutral-8) 33.3%, var(--neutral-11)));
+    --ink-subtle: light-dark(
+      color-mix(in oklab, var(--neutral-8) 6%, var(--neutral-11)),
+      color-mix(in oklab, var(--neutral-8) 33.3%, var(--neutral-11))
+    );
     --text-strong: var(--ink-strong);
     --text-muted: var(--ink-muted);
     /* Brand: coral for marks, badges and brand moments. */
     --brand-solid: var(--coral-9);
     --brand-hover: var(--coral-10);
-    --brand-wash: light-dark(var(--coral-3), oklch(from var(--coral-9) l c h / 0.16));
+    --brand-wash: light-dark(
+      var(--coral-3),
+      oklch(from var(--coral-9) l c h / 0.16)
+    );
     --brand-ink: var(--coral-11);
     --link-ink: var(--coral-11);
     --link-hover: var(--coral-10);
@@ -141,8 +192,14 @@
     --on-action: oklch(100% 0 0);
     --on-brand: var(--on-action);
     /* The action is never flat: a top-highlight gradient, lifted ±0.03 L so the top stop keeps 4.5:1 under white. */
-    --action-surface: linear-gradient(oklch(from var(--action-solid) calc(l + 0.03) c h), oklch(from var(--action-solid) calc(l - 0.03) c h));
-    --action-surface-hover: linear-gradient(oklch(from var(--action-hover) calc(l + 0.03) c h), oklch(from var(--action-hover) calc(l - 0.03) c h));
+    --action-surface: linear-gradient(
+      oklch(from var(--action-solid) calc(l + 0.03) c h),
+      oklch(from var(--action-solid) calc(l - 0.03) c h)
+    );
+    --action-surface-hover: linear-gradient(
+      oklch(from var(--action-hover) calc(l + 0.03) c h),
+      oklch(from var(--action-hover) calc(l - 0.03) c h)
+    );
     /* Selected nav / chosen row: warm apricot wash, coral ink, no shadow. */
     --selected-bg: light-dark(oklch(90.5% 0.062 48), oklch(34% 0.075 40));
     --selected-ink: light-dark(var(--coral-11), oklch(83% 0.085 34));
@@ -156,27 +213,62 @@
     /* Focus: one 2px coral ring, keyboard focus only. */
     --focus-ring: light-dark(oklch(55% 0.165 33), oklch(76% 0.12 34));
     /* Selection: coral tint. */
-    --selection: light-dark(oklch(64.5% 0.175 33 / 0.2), oklch(64.5% 0.175 33 / 0.3));
+    --selection: light-dark(
+      oklch(64.5% 0.175 33 / 0.2),
+      oklch(64.5% 0.175 33 / 0.3)
+    );
     /* Status: four hues and a hueless idle (idle carries no fill). Needs-you is spark yellow, the one status that asks for a person. */
     --status-live-bg: color-mix(in oklab, var(--info-3) 76%, var(--info-9));
     --status-attn-bg: light-dark(oklch(91% 0.115 95), oklch(37% 0.07 92));
-    --status-done-bg: color-mix(in oklab, var(--success-3) 76%, var(--success-9));
-    --status-fail-bg: light-dark(color-mix(in oklab, var(--error-3) 76%, var(--error-9)), color-mix(in oklab, var(--error-3) 68%, var(--error-9)));
+    --status-done-bg: color-mix(
+      in oklab,
+      var(--success-3) 76%,
+      var(--success-9)
+    );
+    --status-fail-bg: light-dark(
+      color-mix(in oklab, var(--error-3) 76%, var(--error-9)),
+      color-mix(in oklab, var(--error-3) 68%, var(--error-9))
+    );
     --status-idle-bg: transparent;
-    --status-live-ink: color-mix(in oklab, var(--info-11) 76%, var(--neutral-12));
+    --status-live-ink: color-mix(
+      in oklab,
+      var(--info-11) 76%,
+      var(--neutral-12)
+    );
     --status-attn-ink: light-dark(oklch(35% 0.075 88), oklch(90% 0.115 95));
-    --status-done-ink: color-mix(in oklab, var(--success-11) 76%, var(--neutral-12));
-    --status-fail-ink: color-mix(in oklab, var(--error-11) 76%, var(--neutral-12));
+    --status-done-ink: color-mix(
+      in oklab,
+      var(--success-11) 76%,
+      var(--neutral-12)
+    );
+    --status-fail-ink: color-mix(
+      in oklab,
+      var(--error-11) 76%,
+      var(--neutral-12)
+    );
     --status-idle-ink: var(--neutral-11);
     --presence-online: light-dark(oklch(62.7% 0.17 149), oklch(74% 0.17 149));
     --presence-away: light-dark(oklch(70.5% 0.187 47.6), oklch(76% 0.187 47.6));
     --presence-off: var(--neutral-8);
     /* A machine that is not online: between the mid and muted neutrals. */
-    --machine-offline: color-mix(in oklab, var(--neutral-8) 62%, var(--neutral-11));
+    --machine-offline: color-mix(
+      in oklab,
+      var(--neutral-8) 62%,
+      var(--neutral-11)
+    );
     /* Data colour: chroma survives in numerals. */
-    --data-ok: light-dark(oklch(from var(--success-9) 46% 0.125 h), oklch(from var(--success-9) 78% 0.135 h));
-    --data-warn: light-dark(oklch(from var(--warning-9) 46% 0.125 h), oklch(from var(--warning-9) 80% 0.13 h));
-    --data-bad: light-dark(oklch(from var(--error-9) 46% 0.135 h), oklch(from var(--error-9) 81% 0.13 h));
+    --data-ok: light-dark(
+      oklch(from var(--success-9) 46% 0.125 h),
+      oklch(from var(--success-9) 78% 0.135 h)
+    );
+    --data-warn: light-dark(
+      oklch(from var(--warning-9) 46% 0.125 h),
+      oklch(from var(--warning-9) 80% 0.13 h)
+    );
+    --data-bad: light-dark(
+      oklch(from var(--error-9) 46% 0.135 h),
+      oklch(from var(--error-9) 81% 0.13 h)
+    );
     --diff-add-bg: oklch(from var(--success-9) l c h / 0.15);
     --diff-del-bg: oklch(from var(--error-9) l c h / 0.15);
     --chart-1: light-dark(var(--neutral-12), var(--neutral-11));
@@ -188,57 +280,108 @@
     /* Syntax (code blocks and diffs). */
     --code-ink: var(--ink-strong);
     --code-keyword: light-dark(oklch(50% 0.15 33), oklch(76% 0.12 34));
-    --code-fn: light-dark(oklch(45% 0.10 245), oklch(80% 0.07 240));
-    --code-string: light-dark(oklch(50% 0.12 122), oklch(84% 0.10 118));
-    --code-number: light-dark(oklch(52% 0.13 55), oklch(84% 0.10 70));
+    --code-fn: light-dark(oklch(45% 0.1 245), oklch(80% 0.07 240));
+    --code-string: light-dark(oklch(50% 0.12 122), oklch(84% 0.1 118));
+    --code-number: light-dark(oklch(52% 0.13 55), oklch(84% 0.1 70));
     --code-comment: var(--ink-subtle);
     /* The transcript rail: one flat 2px line down a run of tool rows. An image, not a colour: rows paint it as a sized background layer (2px wide), and a colour would fill the whole row. Head and continuing rows paint the same, so no seam shows between them. */
-    --rail: linear-gradient(oklch(from var(--neutral-11) l c h / 0.4), oklch(from var(--neutral-11) l c h / 0.4));
+    --rail: linear-gradient(
+      oklch(from var(--neutral-11) l c h / 0.4),
+      oklch(from var(--neutral-11) l c h / 0.4)
+    );
     --rail-body: var(--rail);
     /* Chrome materials: structural translucency, never decoration. */
     --material-panel: oklch(from var(--surface-raised) l c h / 0.72);
     /* What a dialog's backdrop paints: the page itself, translucent. */
     --scrim: oklch(from var(--background) l c h / 0.72);
     /* Elevation tints: warm ink by day, the deepest surface at night, never rgba black. */
-    --shadow-tint: light-dark(oklch(from var(--neutral-12) l c h / 0.09), oklch(from var(--neutral-1) l c h / 0.55));
-    --shadow-tint-2: light-dark(oklch(from var(--neutral-12) l c h / 0.14), oklch(from var(--neutral-1) l c h / 0.66));
-    --shadow-tint-3: light-dark(oklch(from var(--neutral-12) l c h / 0.2), oklch(from var(--neutral-1) l c h / 0.76));
+    --shadow-tint: light-dark(
+      oklch(from var(--neutral-12) l c h / 0.09),
+      oklch(from var(--neutral-1) l c h / 0.55)
+    );
+    --shadow-tint-2: light-dark(
+      oklch(from var(--neutral-12) l c h / 0.14),
+      oklch(from var(--neutral-1) l c h / 0.66)
+    );
+    --shadow-tint-3: light-dark(
+      oklch(from var(--neutral-12) l c h / 0.2),
+      oklch(from var(--neutral-1) l c h / 0.76)
+    );
     /* At night every raised shadow adds a 1px inner ring of ink. */
-    --night-ring: light-dark(transparent, oklch(from var(--neutral-12) l c h / 0.07));
+    --night-ring: light-dark(
+      transparent,
+      oklch(from var(--neutral-12) l c h / 0.07)
+    );
     --shadow-xs: 0 1px 2px var(--shadow-tint);
-    --shadow-tile: 0 1px 2px light-dark(oklch(from var(--neutral-12) l c h / 0.07), oklch(0% 0 0 / 0.3)), 0 0 0 1px light-dark(oklch(from var(--neutral-12) l c h / 0.035), oklch(from var(--neutral-12) l c h / 0.06));
-    --shadow-raised: 0 1px 3px var(--shadow-tint), 0 1px 1px var(--shadow-tint), inset 0 0 0 1px var(--night-ring);
+    --shadow-tile:
+      0 1px 2px
+      light-dark(
+        oklch(from var(--neutral-12) l c h / 0.07),
+        oklch(0% 0 0 / 0.3)
+      ),
+      0 0 0 1px
+      light-dark(
+        oklch(from var(--neutral-12) l c h / 0.035),
+        oklch(from var(--neutral-12) l c h / 0.06)
+      );
+    --shadow-raised:
+      0 1px 3px var(--shadow-tint), 0 1px 1px var(--shadow-tint),
+      inset 0 0 0 1px var(--night-ring);
     --shadow-hairline: 0 3px 7px -2px var(--shadow-tint-2);
     /* A stat tile's lift: drawn below the card, not around it; ringed at night. */
-    --shadow-stat: 0 3px 7px -2px var(--shadow-tint-2), inset 0 0 0 1px var(--night-ring);
-    --shadow-md: 0 3px 10px var(--shadow-tint-2), 0 1px 2px var(--shadow-tint), inset 0 0 0 1px var(--night-ring);
-    --shadow-lg: 0 10px 30px var(--shadow-tint-2), 0 3px 8px var(--shadow-tint), inset 0 0 0 1px var(--night-ring);
-    --shadow-xl: 0 24px 64px var(--shadow-tint-3), 0 6px 16px var(--shadow-tint), inset 0 0 0 1px var(--night-ring);
-    --shadow-overlay: 0 18px 48px var(--shadow-tint-3), 0 2px 6px var(--shadow-tint), inset 0 0 0 1px var(--night-ring);
+    --shadow-stat:
+      0 3px 7px -2px var(--shadow-tint-2), inset 0 0 0 1px var(--night-ring);
+    --shadow-md:
+      0 3px 10px var(--shadow-tint-2), 0 1px 2px var(--shadow-tint),
+      inset 0 0 0 1px var(--night-ring);
+    --shadow-lg:
+      0 10px 30px var(--shadow-tint-2), 0 3px 8px var(--shadow-tint),
+      inset 0 0 0 1px var(--night-ring);
+    --shadow-xl:
+      0 24px 64px var(--shadow-tint-3), 0 6px 16px var(--shadow-tint),
+      inset 0 0 0 1px var(--night-ring);
+    --shadow-overlay:
+      0 18px 48px var(--shadow-tint-3), 0 2px 6px var(--shadow-tint),
+      inset 0 0 0 1px var(--night-ring);
     --shadow-modal: var(--shadow-overlay);
     --shadow-drawer: 0 12px 40px var(--shadow-tint-3);
     --shadow-inset-sel: inset 0 1px 1px var(--shadow-tint);
     /* Shadow per surface level, paired with --surface-1…8. */
     --surface-shadow-1: none;
     --surface-shadow-2: var(--shadow-tile);
-    --surface-shadow-3: 0 1px 3px var(--shadow-tint), 0 1px 1px var(--shadow-tint), inset 0 0 0 1px var(--night-ring);
+    --surface-shadow-3:
+      0 1px 3px var(--shadow-tint), 0 1px 1px var(--shadow-tint),
+      inset 0 0 0 1px var(--night-ring);
     --surface-shadow-4: var(--shadow-md);
-    --surface-shadow-5: 0 6px 18px var(--shadow-tint-2), 0 2px 4px var(--shadow-tint), inset 0 0 0 1px var(--night-ring);
+    --surface-shadow-5:
+      0 6px 18px var(--shadow-tint-2), 0 2px 4px var(--shadow-tint),
+      inset 0 0 0 1px var(--night-ring);
     --surface-shadow-6: var(--shadow-lg);
-    --surface-shadow-7: 0 14px 40px var(--shadow-tint-3), 0 2px 6px var(--shadow-tint), inset 0 0 0 1px var(--night-ring);
+    --surface-shadow-7:
+      0 14px 40px var(--shadow-tint-3), 0 2px 6px var(--shadow-tint),
+      inset 0 0 0 1px var(--night-ring);
     --surface-shadow-8: var(--shadow-overlay);
     /* The action's edge: a white top hairline and a coral-tinted drop. */
-    --action-ring: inset 0 1px 0 oklch(100% 0 0 / 0.18), 0 1px 2px light-dark(oklch(45% 0.12 33 / 0.25), oklch(0% 0 0 / 0.4));
+    --action-ring:
+      inset 0 1px 0 oklch(100% 0 0 / 0.18),
+      0 1px 2px light-dark(oklch(45% 0.12 33 / 0.25), oklch(0% 0 0 / 0.4));
     /* Inner vermillion ring and soft inner glow on code blocks. */
-    --code-ring: inset 0 0 0 1px light-dark(oklch(58.5% 0.17 33 / 0.28), oklch(66% 0.16 34 / 0.32)), inset 0 1px 6px light-dark(oklch(58.5% 0.17 33 / 0.06), oklch(66% 0.16 34 / 0.10));
+    --code-ring:
+      inset 0 0 0 1px
+      light-dark(oklch(58.5% 0.17 33 / 0.28), oklch(66% 0.16 34 / 0.32)),
+      inset 0 1px 6px
+      light-dark(oklch(58.5% 0.17 33 / 0.06), oklch(66% 0.16 34 / 0.1));
     --selected-shadow: none;
     /* Figtree for UI and transcript prose, 400 and 500 only. */
-    --font-sans: "Figtree Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-sans:
+      "Figtree Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+      sans-serif;
     --font-body: var(--font-sans);
     /* JetBrains Mono for code, paths, IDs and measurements; ligatures off. */
     --font-mono: "JetBrains Mono Variable", ui-monospace, "SF Mono", monospace;
     /* Fredoka 600: brand display only. */
-    --font-display: "Fredoka", "Figtree Variable", ui-rounded, system-ui, sans-serif;
+    --font-display:
+      "Fredoka", "Figtree Variable", ui-rounded, system-ui, sans-serif;
     /* The six sizes text takes. Dense roles hold one size at every width; title and kpi scale with the viewport between 390 and 1024px. */
     --text-meta: 0.75rem;
     --text-label: 0.8125rem;
@@ -332,10 +475,20 @@
     /* The group composer's field at one line; every transcript keeps the composer's standing parts clear at its foot. */
     --c-composer-field: 34px;
     --c-composer-inset: var(--space-2);
-    --c-composer-panel: calc(var(--c-composer-field) + var(--c-composer-inset) * 2 + 2px);
+    --c-composer-panel: calc(
+      var(--c-composer-field) +
+      var(--c-composer-inset) *
+      2 +
+      2px
+    );
     /* A suggestion chip: its Tab key cap, padding and border. */
     --c-suggest-chip: calc(1.25rem + var(--space-1) * 2 + 2px);
-    --c-suggest-row: calc(var(--space-4) + var(--space-1) * 2 + var(--c-suggest-chip));
+    --c-suggest-row: calc(
+      var(--space-4) +
+      var(--space-1) *
+      2 +
+      var(--c-suggest-chip)
+    );
     --c-suggest-room: calc(var(--c-suggest-row) + var(--space-2));
     /* The delegate tray's row: a chip, and the step down to the pill. */
     --c-tray-chip: 28px;
@@ -388,7 +541,10 @@
     --press-scale: 0.97;
     --pop-scale: 0.92;
     --pop-rise: 8px;
-    --transition-control: background-color var(--dur-control) var(--ease-out), border-color var(--dur-control) var(--ease-out), color var(--dur-control) var(--ease-out);
+    --transition-control:
+      background-color var(--dur-control) var(--ease-out),
+      border-color var(--dur-control) var(--ease-out),
+      color var(--dur-control) var(--ease-out);
   }
 
   @media (pointer: coarse) {

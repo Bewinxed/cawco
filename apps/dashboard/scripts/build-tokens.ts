@@ -26,7 +26,11 @@ const MEDIA = {
   compact: "(pointer: coarse), (width < 640px)",
 } as const;
 
-type Variants = { dark?: string; coarse?: string; compact?: string };
+interface Variants {
+  coarse?: string;
+  compact?: string;
+  dark?: string;
+}
 
 function cssValue(raw: string, names: Set<string>, where: string): string {
   return raw.replace(/\{([^}]+)\}/g, (_, ref: string) => {
@@ -69,7 +73,10 @@ function format({ dictionary }: { dictionary: Dictionary }): string {
     lines.push(declaration(token, names));
   }
   lines.push("  }");
-  for (const [key, query] of Object.entries(MEDIA) as [keyof typeof MEDIA, string][]) {
+  for (const [key, query] of Object.entries(MEDIA) as [
+    keyof typeof MEDIA,
+    string,
+  ][]) {
     const scoped = tokens.filter((t) => variantsOf(t)[key] !== undefined);
     if (scoped.length === 0) {
       continue;
