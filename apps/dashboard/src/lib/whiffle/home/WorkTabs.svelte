@@ -99,13 +99,15 @@
   }
 
   /**
-   * How long a group's height travels `delta` px: --dur-panel, or longer
-   * for a long way, so that on the morph curve (--ease-drawer, whose
-   * steepest point runs 4.22× its mean speed) no frame moves what is below
-   * more than 16px: 16px a frame at 4.22× is 4.4ms a pixel.
+   * How long a group's height travels `delta` px on the morph curve
+   * (--ease-drawer): --dur-panel, longer for a long way (2.5ms a pixel),
+   * never past 480ms, so a big change still reads as one quick glide.
    */
   const tweenMs = (delta: number): number =>
-    Math.max(dur("--dur-panel"), Math.ceil(Math.abs(delta) * 4.4));
+    Math.min(
+      480,
+      Math.max(dur("--dur-panel"), Math.ceil(Math.abs(delta) * 2.5))
+    );
 
   /**
    * How far into an opening box's tween (0–1) its edge reaches `foot` px
@@ -181,7 +183,7 @@
     if (total <= MORE_AT) {
       return null;
     }
-    return all ? "Show fewer" : `${total - MORE_AT} more`;
+    return all ? "Show fewer" : `Show ${total - MORE_AT} more`;
   }
   const more = $derived(moreOf(shown, workTab.showsAll(shown)));
 
