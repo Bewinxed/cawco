@@ -126,24 +126,19 @@
   /** The boxes whose heights a change drives: each group, and the "N more" row's. */
   const BOXES = ":scope > .group, :scope > .more-slot";
 
-  /**
-   * A delegate that needs the operator: blocked on a question or a
-   * permission, or failed. It is listed whatever the Delegates button says,
-   * so a needs-you is never missed.
-   */
-  const needsYou = (row: InstanceRow): boolean =>
-    isFailed(row) || whiffle.activityOf(row.id) === "blocked";
   /** Every session a tab could list, delegates included. */
   const allOf = (tab: WorkTab): InstanceRow[] =>
     tab === "working" ? home.working : home.finished;
   /**
    * A tab's own rows. Other delegates only when the Delegates button is
-   * on: work another session started is listed on request.
+   * on: work another session started is listed on request. A failed one is
+   * listed whatever the button says, so a failure is never missed; a
+   * blocked one is never in a tab, it is a Needs-you card above them.
    */
   const rowsOf = (tab: WorkTab): InstanceRow[] =>
     rail.delegates
       ? allOf(tab)
-      : allOf(tab).filter((row) => !row.parentInstanceId || needsYou(row));
+      : allOf(tab).filter((row) => !row.parentInstanceId || isFailed(row));
   /** A session the tab does not list, to stand in for a delegate's parent. */
   const known = (id: string): InstanceRow | undefined =>
     whiffle.instanceIndex.byId.get(id);
