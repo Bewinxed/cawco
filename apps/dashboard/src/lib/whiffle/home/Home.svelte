@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { machineLabel } from "@whiffle/core";
   /**
    * The home: a status line, a headline, and the sessions grouped by what
    * they want from the operator — Needs you, then Working and Finished as
@@ -18,7 +19,6 @@
   import { Skeleton } from "$lib/components/ui/skeleton";
   import { IconPlus } from "$lib/icons";
   import Attention from "~icons/solar/hand-shake-bold-duotone";
-  import { machineLabel } from "../machine";
   import { crossIn, crossOut, morphMs } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
   import NewSessionDialog from "../spawn/NewSessionDialog.svelte";

@@ -13,6 +13,7 @@
  *   sessions, and the transcripts stored on the machines.
  */
 import type { NeutralSessionInfo, WorkflowRun } from "@whiffle/core";
+import { machineLabel } from "@whiffle/core";
 import {
   type BlockedRequest,
   type InstanceRow,
@@ -28,7 +29,6 @@ import {
 } from "../convergence";
 import { machineFaults } from "../fleet-faults";
 import { conversationHref, resolveSessionTitle, sessionTitle } from "../links";
-import { machineLabel } from "../machine";
 import { heldOrder } from "../motion/held-order.svelte";
 import { permissionSummary } from "../permission-summary";
 import { questionsOf } from "../question";

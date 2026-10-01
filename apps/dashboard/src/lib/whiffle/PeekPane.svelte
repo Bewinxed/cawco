@@ -11,6 +11,7 @@
 </script>
 
 <script lang="ts">
+  import { machineLabel } from "@whiffle/core";
   /**
    * The middle step of the board's loop: glance at the fleet, peek at one
    * session, dive into it. A peek answers "what is this one actually doing"
@@ -63,7 +64,6 @@
   } from "./client.svelte";
   import { identityVar } from "./folder-prefs.svelte";
   import { conversationHref } from "./links";
-  import { machineLabel } from "./machine";
   import OsMark from "./OsMark.svelte";
   import { permissionSummary } from "./permission-summary";
   import { questionsOf } from "./question";

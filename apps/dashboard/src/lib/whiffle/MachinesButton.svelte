@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { machineLabel } from "@whiffle/core";
   /**
    * The machines, one click away beside Jump rather than always on screen.
    * The button says how many are online; its glyph takes the fail ink when
@@ -22,7 +23,6 @@
   import { home } from "./home/home.svelte";
   import { addMachine } from "./join/join.svelte";
   import MachineMenu from "./MachineMenu.svelte";
-  import { machineLabel } from "./machine";
 
   let shown = $state(false);
 
