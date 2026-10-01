@@ -169,7 +169,7 @@
       () => {
         sheetMounted = false;
       },
-      motionOk.current ? 300 : 1
+      motionOk.current ? dur("--dur-panel") : 1
     );
     return () => clearTimeout(timer);
   });
@@ -217,7 +217,7 @@
           () => {
             previewMounted = false;
           },
-          motionOk.current ? 300 : 1
+          motionOk.current ? dur("--dur-panel") : 1
         );
     return () => {
       cancelAnimationFrame(frame);
@@ -1052,7 +1052,7 @@
     }
     const still = !motionOk.current;
     return {
-      duration: 280,
+      duration: dur("--dur-panel"),
       easing: easeOut,
       css: (t, u) =>
         still
@@ -1249,17 +1249,18 @@
   }
   /* Opening or closing the preview in front of the reader grows one side
      into the other: the split's size change is the information. Opening
-     decelerates into place; closing is a morph on --ease-in-out. Any other
+     decelerates into place on the drawer curve; closing is a morph on
+     --ease-in-out. Any other
      size — a drag following the pointer, a pane sized off screen — is taken
      at once (`sliding`). */
   @media (prefers-reduced-motion: no-preference) {
     .sliding :global(.transcript-pane),
     .sliding :global(.artifact-pane) {
-      transition: flex-grow 300ms var(--ease-in-out);
+      transition: flex-grow var(--dur-panel) var(--ease-in-out);
     }
     .sliding.preview-shown :global(.transcript-pane),
     .sliding.preview-shown :global(.artifact-pane) {
-      transition-timing-function: cubic-bezier(0.16, 1, 0.3, 1);
+      transition-timing-function: var(--ease-drawer);
     }
   }
   .artifact-surface {

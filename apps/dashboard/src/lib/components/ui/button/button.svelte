@@ -16,7 +16,7 @@
          tints instead. */
       press: {
         scale:
-          "[transition:var(--transition-control),transform_160ms_var(--ease-out)] motion-safe:active:not-disabled:not-aria-busy:[transform:scale(var(--press-scale))]",
+          "[transition:var(--transition-control),transform_var(--dur-toggle)_var(--ease-out)] motion-safe:active:not-disabled:not-aria-busy:[transform:scale(var(--press-scale))]",
         tint: "press-tint [transition:var(--transition-control)]",
       },
       variant: {

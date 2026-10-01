@@ -265,7 +265,7 @@
     padding: var(--space-3) var(--space-4);
   }
   strong {
-    font-weight: 500;
+    font-weight: var(--weight-strong);
     flex: 1;
     overflow-wrap: anywhere;
     color: var(--ink-strong);
@@ -412,7 +412,7 @@
     text-decoration: underline;
   }
   .running {
-    animation: workflow-breath var(--breath) ease-in-out infinite;
+    animation: workflow-breath var(--breath) var(--ease-in-out) infinite;
   }
   @keyframes workflow-breath {
     50% {

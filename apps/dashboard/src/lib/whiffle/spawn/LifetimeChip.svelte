@@ -92,7 +92,7 @@
     align-items: center;
     gap: 6px;
     @media (prefers-reduced-motion: no-preference) {
-      animation: ns-in 200ms var(--ease-out) both;
+      animation: ns-in var(--ns-row-ms) var(--ease-out) both;
     }
   }
   .swap :global(svg) {

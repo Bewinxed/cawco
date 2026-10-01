@@ -8,7 +8,7 @@
   import { TextMorph } from "torph/svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Card from "$lib/components/ui/card";
-  import { CURVE } from "$lib/whiffle/motion/curves.svelte";
+  import { CURVE, morphMs } from "$lib/whiffle/motion/curves.svelte";
 
   interface Props {
     label: string;
@@ -27,7 +27,7 @@
       <TextMorph
         as="span"
         class="st-value num"
-        duration={150}
+        duration={morphMs()}
         ease={CURVE.out}
         text={String(value)}
       />

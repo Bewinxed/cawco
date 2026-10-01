@@ -86,7 +86,7 @@
     @media (prefers-reduced-motion: no-preference) {
       transition:
         var(--transition-control),
-        transform 160ms var(--ease-out);
+        transform var(--dur-toggle) var(--ease-out);
     }
   }
   @media (prefers-reduced-motion: no-preference) {

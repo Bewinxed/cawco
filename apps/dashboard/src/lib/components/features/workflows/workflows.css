@@ -71,7 +71,7 @@
   font-weight: var(--weight-strong);
   cursor: pointer;
   text-decoration: none;
-  transition: transform 160ms var(--ease-out);
+  transition: transform var(--dur-toggle) var(--ease-out);
 }
 /* The press, as .pressable gives every other compact control. */
 @media (prefers-reduced-motion: no-preference) {

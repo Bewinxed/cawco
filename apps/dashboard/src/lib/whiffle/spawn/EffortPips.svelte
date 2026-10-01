@@ -7,6 +7,7 @@
   import type { EffortLevel } from "@whiffle/core";
   import { untrack } from "svelte";
   import { TextMorph } from "torph/svelte";
+  import { morphMs } from "$lib/whiffle/motion/curves.svelte";
 
   let {
     efforts,
@@ -229,7 +230,7 @@
               <TextMorph
                 as="span"
                 class="lvl"
-                duration={220}
+                duration={morphMs()}
                 text={capital(label)}
               />
               <span class="sr-only">{label}</span>
@@ -288,7 +289,7 @@
     grid-area: 1 / 1;
     display: grid;
     align-content: start;
-    transition: opacity 240ms ease;
+    transition: opacity var(--dur-pop) var(--ease-out);
   }
   .track {
     position: relative;
@@ -303,7 +304,7 @@
     box-shadow: none;
     transition:
       var(--transition-control),
-      box-shadow 120ms ease;
+      box-shadow var(--dur-control) var(--ease-out);
   }
   /* The range input is invisible over the track, so the track is the
      field: its border takes the ring. */
@@ -335,12 +336,12 @@
     margin-top: -2.5px;
     border-radius: var(--radius-pill);
     background: var(--ink-strong);
-    transition: opacity 120ms ease;
+    transition: opacity var(--dur-control) var(--ease-out);
     pointer-events: none;
     @media (prefers-reduced-motion: no-preference) {
       transition:
         left var(--ns-fill-ms) var(--ease-in-out),
-        opacity 120ms ease;
+        opacity var(--dur-control) var(--ease-out);
     }
   }
   .knob {
@@ -355,12 +356,12 @@
       inset 0 0 0 1px var(--neutral-8),
       var(--shadow-raised);
     color: var(--ink-muted);
-    font: 500 var(--text-label) / 1 var(--font-body);
+    font: var(--weight-strong) var(--text-label) / 1 var(--font-body);
     text-transform: capitalize;
     font-variant-numeric: tabular-nums;
     transition:
-      color 120ms ease,
-      opacity 120ms ease;
+      color var(--dur-control) var(--ease-out),
+      opacity var(--dur-control) var(--ease-out);
     pointer-events: none;
     white-space: nowrap;
   }
@@ -421,7 +422,7 @@
     transform-origin: 50% 100%;
     transform: scaleY(0);
     @media (prefers-reduced-motion: no-preference) {
-      transition: transform 180ms var(--ease-out) var(--delay, 0ms);
+      transition: transform var(--dur-morph) var(--ease-out) var(--delay, 0ms);
     }
   }
   .bar-fill.lit {

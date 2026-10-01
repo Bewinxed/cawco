@@ -134,7 +134,7 @@
         <!-- The row is the control; a chevron beside it would be a second way
              to do the one thing the row already does. -->
         <Collapsible.Trigger
-          class="{row} rounded-[var(--radius-control)] transition-colors hover:bg-accent/40"
+          class="{row} rounded-md transition-colors hover:bg-accent/40"
         >
           {@render line(task, blocker)}
         </Collapsible.Trigger>

@@ -139,7 +139,7 @@
   }
 
   .task-ring .spin {
-    animation: task-ring-spin 1.1s linear infinite;
+    animation: task-ring-spin var(--dur-loop) linear infinite;
   }
 
   @keyframes task-ring-spin {

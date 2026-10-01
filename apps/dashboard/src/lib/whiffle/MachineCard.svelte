@@ -282,7 +282,7 @@
     width: 6px;
     height: 6px;
     flex: 0 0 auto;
-    border-radius: 999px;
+    border-radius: var(--radius-pill);
     background: var(--ink-muted);
     opacity: 0.5;
 

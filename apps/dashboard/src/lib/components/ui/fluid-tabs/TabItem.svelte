@@ -168,7 +168,7 @@
     }
 
     @media (prefers-reduced-motion: no-preference) {
-      transition: color 80ms linear;
+      transition: color var(--dur-ghost) var(--ease-out);
     }
   }
   .ff-tab > :global(*) {
@@ -232,7 +232,7 @@
 
       @media (prefers-reduced-motion: no-preference) {
         transition:
-          background-color 80ms linear,
+          background-color var(--dur-ghost) var(--ease-out),
           opacity 0s;
       }
     }

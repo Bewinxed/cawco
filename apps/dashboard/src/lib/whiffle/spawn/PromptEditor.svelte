@@ -356,8 +356,9 @@
     overflow: auto;
     outline: none;
     background: transparent;
-    border-radius: 12px 12px 0 0;
-    font: 400 var(--prompt-fs) / var(--prompt-lh) var(--font-body);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
+    font:
+      var(--weight-body) var(--prompt-fs) / var(--prompt-lh) var(--font-body);
     color: var(--ink-strong);
     white-space: pre-wrap;
     word-break: break-word;
@@ -370,7 +371,8 @@
     left: 16px;
     top: 12px;
     right: 16px;
-    font: 400 var(--prompt-fs) / var(--prompt-lh) var(--font-body);
+    font:
+      var(--weight-body) var(--prompt-fs) / var(--prompt-lh) var(--font-body);
     color: var(--ink-subtle);
     pointer-events: none;
     white-space: nowrap;
@@ -400,7 +402,7 @@
     border-radius: var(--radius-sm);
     background: var(--surface-fill);
     border: 1px solid var(--border-control);
-    font: 500 var(--text-label) / 1 var(--font-body);
+    font: var(--weight-strong) var(--text-label) / 1 var(--font-body);
     color: var(--ink-strong);
     white-space: nowrap;
     user-select: all;

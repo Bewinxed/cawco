@@ -6,7 +6,7 @@
  * height, so content that arrives later is never clipped to a measurement.
  */
 import type { TransitionConfig } from "svelte/transition";
-import { easeOut, motionOk } from "./curves.svelte";
+import { dur, easeOut, motionOk } from "./curves.svelte";
 
 export interface FoldOptions {
   easing: string;
@@ -144,7 +144,7 @@ export function folds(open: () => boolean, options: FoldOptions) {
 /**
  * The same fold for content an `{#if}` mounts and unmounts, as a Svelte
  * transition: `in:unfold` grows it from nothing to its measured height
- * (240ms), `out:unfold` folds it back (160ms), fading with the height, so
+ * (--dur-pop), `out:unfold` folds it back (--dur-exit), fading with the height, so
  * what sits below slides instead of jumping. In a column with a gap, the
  * gap it brings folds with it. `ms` overrides the length (0: no motion).
  * With reduced motion, a fade in place.
@@ -155,7 +155,7 @@ export function unfold(
   { direction }: { direction?: "in" | "out" | "both" } = {}
 ): TransitionConfig {
   if (!motionOk.current) {
-    return { duration: 120, css: (t) => `opacity: ${t}` };
+    return { duration: dur("--dur-control"), css: (t) => `opacity: ${t}` };
   }
   const { height } = node.getBoundingClientRect();
   const styles = getComputedStyle(node);
@@ -175,7 +175,7 @@ export function unfold(
       ? Number.parseFloat(getComputedStyle(parent).rowGap) || 0
       : 0;
   return {
-    duration: ms ?? (direction === "out" ? 160 : 240),
+    duration: ms ?? dur(direction === "out" ? "--dur-exit" : "--dur-pop"),
     easing: easeOut,
     css: (t) =>
       [

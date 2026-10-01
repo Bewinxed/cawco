@@ -287,7 +287,7 @@
       var(--accent-solid) 92%,
       transparent 100%
     );
-    animation: ap-halo-orbit 1400ms linear infinite;
+    animation: ap-halo-orbit var(--dur-loop) linear infinite;
   }
   @keyframes ap-halo-orbit {
     to {
@@ -296,7 +296,7 @@
   }
   .ap-halo-pulse {
     background: var(--verdict-ink, var(--ink-muted));
-    animation: ap-halo-fade 2400ms var(--ease-out) both;
+    animation: ap-halo-fade calc(var(--dur-hold) * 2) var(--ease-out) both;
   }
   @keyframes ap-halo-fade {
     0% {
@@ -328,7 +328,7 @@
   }
   @media (prefers-reduced-motion: no-preference) {
     .ap-trigger:active {
-      transform: scale(0.96);
+      transform: scale(var(--press-scale));
     }
   }
   /* Active state: accent-colored glyph, no solid fill. */
@@ -345,7 +345,7 @@
   }
   .ap-title {
     font-size: var(--text-label);
-    font-weight: 500;
+    font-weight: var(--weight-strong);
     color: var(--ink-strong);
     margin: 0;
   }
@@ -363,7 +363,7 @@
   .ap-label {
     font-size: var(--text-label);
     color: var(--ink-strong);
-    font-weight: 500;
+    font-weight: var(--weight-strong);
   }
   .ap-prompt {
     border: 1px solid var(--border-control);
@@ -382,7 +382,7 @@
     color: var(--ink-muted);
   }
   .ap-error {
-    font-size: var(--text-meta, 12px);
+    font-size: var(--text-meta);
     color: var(--error);
     margin: 0;
     line-height: var(--leading-ui);

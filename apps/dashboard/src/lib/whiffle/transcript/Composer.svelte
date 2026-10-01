@@ -1578,15 +1578,25 @@
      (app.css field-shell): keyboard focus in the textarea draws the ring over
      the shell's own border, an outline that moves nothing, and the textarea
      itself draws none. Its one-line box is the app's composer tokens
-     (app.css `--c-composer-*`), which every transcript keeps clear. */
+     (app.css `--c-composer-*`), which every transcript keeps clear. It is
+     the panel material (app.css `--material-*`), so the transcript shows
+     faintly through it, and opaque where translucency is turned down. */
   .cin {
     --cin-pad: var(--c-composer-inset);
     --cin-ctl: var(--c-composer-field);
     position: relative;
     border: 1px solid var(--border-control);
-    background: oklch(from var(--surface-raised) l c h / 0.82);
-    -webkit-backdrop-filter: blur(16px) saturate(1.6);
-    backdrop-filter: blur(16px) saturate(1.6);
+    background: var(--material-panel);
+    -webkit-backdrop-filter: blur(var(--material-blur))
+      saturate(var(--material-saturate));
+    backdrop-filter: blur(var(--material-blur))
+      saturate(var(--material-saturate));
+
+    @media (prefers-reduced-transparency: reduce) {
+      background: var(--surface-raised);
+      -webkit-backdrop-filter: none;
+      backdrop-filter: none;
+    }
     border-radius: var(--radius-lg);
     padding: var(--cin-pad) var(--cin-pad) var(--cin-pad) var(--space-3);
     display: flex;
@@ -1798,7 +1808,7 @@
     padding: var(--space-1) var(--space-2) var(--space-2);
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
-    letter-spacing: 0.04em;
+    letter-spacing: var(--track-caps);
     text-transform: uppercase;
     color: var(--ink-muted);
   }
@@ -1941,7 +1951,7 @@
   @media (prefers-reduced-motion: no-preference) {
     .att-btn:active,
     .stop:active:not(:disabled) {
-      transform: scale(0.96);
+      transform: scale(var(--press-scale));
     }
   }
   .stop:disabled {

@@ -8,7 +8,6 @@
 
 <script lang="ts">
   import { Command as CommandPrimitive } from "bits-ui";
-  import { expoOut } from "svelte/easing";
   import { scale } from "svelte/transition";
   import { goto } from "$app/navigation";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
@@ -29,6 +28,7 @@
     crossOut,
     dur,
     ease,
+    easeOut,
     motionOk,
     popScale,
   } from "$lib/whiffle/motion/curves.svelte";
@@ -101,9 +101,9 @@
   const still = $derived(!motionOk.current);
   /** The chip lands rather than pops: it grows the last twentieth into place. */
   const chipMotion = $derived({
-    duration: still ? 0 : 190,
+    duration: still ? 0 : dur("--dur-morph"),
     start: 0.95,
-    easing: expoOut,
+    easing: easeOut,
   });
 
   const SKELETONS = [0, 1, 2];
@@ -578,7 +578,7 @@
   :global(.jump-snippet mark) {
     background: transparent;
     color: var(--ink-strong);
-    font-weight: 500;
+    font-weight: var(--weight-strong);
   }
   /* The hit rows' own box (kit-item, jump-hit), so a skeleton row is as
      tall as the row that replaces it; the bars sit on the lines' centres. */

@@ -82,7 +82,7 @@
     {#each words as word, index}
       <span
         class="word"
-        style:--delay={`${index * 4 - 0.24}s`}
+        style:--delay={`calc(var(--breath) * ${index * 2} - 0.24s)`}
         class:first={index === 0}
       >
         <!-- The light passing over the word: the word again in the strong
@@ -151,13 +151,16 @@
     }
   }
 
+  /* Every beat here is the breath (--breath): each word stands for two of
+     them in an eight-breath cycle, the marks trade places on a three-breath
+     loop, and the light crosses a word once a breath. */
   @media (prefers-reduced-motion: no-preference) {
     .word {
-      animation: cycle 16s cubic-bezier(0.4, 0, 0.2, 1) infinite both;
+      animation: cycle calc(var(--breath) * 8) var(--ease-out) infinite both;
       animation-delay: var(--delay);
     }
 
-    /* The circle and the infinity trade places every 1.5s, each easing in
+    /* The circle and the infinity trade places twice a loop, each easing in
        and out: the circle widens and flattens as it fades, the infinity
        settles out of a narrower, taller shape as it comes up. */
     .circle,
@@ -165,16 +168,16 @@
       transform-origin: 50% 50%;
     }
     .circle {
-      animation: circle 6s cubic-bezier(0.42, 0, 0.58, 1) infinite both;
+      animation: circle calc(var(--breath) * 3) var(--ease-in-out) infinite both;
     }
     .lemniscate {
-      animation: lemniscate 6s cubic-bezier(0.42, 0, 0.58, 1) infinite both;
+      animation: lemniscate calc(var(--breath) * 3) var(--ease-in-out) infinite
+        both;
     }
 
     /* The band is the old gradient's geometry: three words wide, ink-strong
        at its middle, fading to nothing 15% of its width either side. It
-       enters from the right and leaves on the left over 1.5s, as the
-       background it replaces did. */
+       enters from the right and leaves on the left once a breath. */
     .shimmer {
       position: relative;
       display: inline-block;
@@ -192,11 +195,11 @@
         transparent 65%
       );
       pointer-events: none;
-      animation: sheen 1.5s ease-in-out infinite;
+      animation: sheen var(--breath) var(--ease-in-out) infinite;
     }
     .sheen-word {
       display: inline-block;
-      animation: sheen-hold 1.5s ease-in-out infinite;
+      animation: sheen-hold var(--breath) var(--ease-in-out) infinite;
     }
   }
 

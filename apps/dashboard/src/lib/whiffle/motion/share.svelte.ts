@@ -19,7 +19,7 @@
  * starts moved onto the source, cut to the source's box around its `anchor`
  * (the part of it that is the source), and travels home as the cut opens.
  */
-import { CURVE, motionOk } from "./curves.svelte";
+import { CURVE, dur, motionOk } from "./curves.svelte";
 
 interface Departure {
   at: number;
@@ -197,7 +197,12 @@ function fly(node: HTMLElement, from: Departure, options: LandOptions) {
   if (to.width === 0 || to.height === 0) {
     return;
   }
-  const { mode = "scale", uniform = false, ms = 280, anchor } = options;
+  const {
+    mode = "scale",
+    uniform = false,
+    ms = dur("--dur-panel"),
+    anchor,
+  } = options;
   if (!from.stays) {
     from.source.style.visibility = "hidden";
   }
@@ -311,7 +316,7 @@ export function land(key: () => string | undefined, options: LandOptions = {}) {
 export function closeInto(
   surface: HTMLElement,
   target: HTMLElement,
-  ms = 280
+  ms = dur("--dur-panel")
 ): Animation | undefined {
   if (!motionOk.current) {
     return;

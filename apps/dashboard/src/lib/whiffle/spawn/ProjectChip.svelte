@@ -198,8 +198,8 @@
     border-radius: var(--radius-xs);
     color: var(--ink-subtle);
     transition:
-      background-color 120ms ease,
-      color 120ms ease;
+      background-color var(--dur-control) var(--ease-out),
+      color var(--dur-control) var(--ease-out);
   }
   .clear :global(svg) {
     width: 12px;
@@ -220,7 +220,7 @@
   }
   .swap {
     @media (prefers-reduced-motion: no-preference) {
-      animation: ns-in 200ms var(--ease-out) both;
+      animation: ns-in var(--ns-row-ms) var(--ease-out) both;
     }
   }
   .row {
@@ -237,11 +237,11 @@
     cursor: pointer;
     text-align: left;
     color: var(--ink-strong);
-    transition: background-color 160ms ease;
+    transition: background-color var(--dur-toggle) var(--ease-out);
     @media (prefers-reduced-motion: no-preference) {
       transition:
-        background-color 160ms ease,
-        transform 160ms var(--ease-out);
+        background-color var(--dur-toggle) var(--ease-out),
+        transform var(--dur-toggle) var(--ease-out);
     }
   }
   .row.on {
@@ -319,7 +319,7 @@
     border: 0;
     outline: none;
     background: transparent;
-    font: 400 var(--text-body) / 1.4 var(--font-body);
+    font: var(--weight-body) var(--text-body) / 1.4 var(--font-body);
     color: var(--ink-strong);
     padding: 0;
   }

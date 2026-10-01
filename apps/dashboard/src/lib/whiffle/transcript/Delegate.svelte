@@ -904,7 +904,7 @@
     font-weight: var(--weight-body);
     color: var(--status-attn-ink);
     text-transform: uppercase;
-    letter-spacing: 0.02em;
+    letter-spacing: var(--track-caps);
   }
   .ashort {
     min-inline-size: 0;
@@ -942,7 +942,7 @@
   .report h4 {
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
-    letter-spacing: 0.02em;
+    letter-spacing: var(--track-caps);
     text-transform: uppercase;
     color: var(--ink-muted);
     margin-block-end: var(--space-2);

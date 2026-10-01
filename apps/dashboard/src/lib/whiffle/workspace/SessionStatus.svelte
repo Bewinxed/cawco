@@ -8,12 +8,18 @@
   import Unknown from "~icons/solar/question-circle-bold-duotone";
   import Working from "~icons/solar/refresh-circle-bold-duotone";
   import { isFailed, isStale, whiffle } from "../client.svelte";
-  import { dur, easeOut, motionOk, popScale } from "../motion/curves.svelte";
+  import {
+    dur,
+    easeOut,
+    morphMs,
+    motionOk,
+    popScale,
+  } from "../motion/curves.svelte";
 
   let {
     sessionId,
     compact = false,
-    duration = 150,
+    duration = morphMs(),
   }: {
     sessionId: string;
     compact?: boolean;
@@ -126,7 +132,7 @@
   }
   @media (prefers-reduced-motion: no-preference) {
     .working :global(svg) {
-      animation: session-working var(--breath) ease-in-out infinite;
+      animation: session-working var(--breath) var(--ease-in-out) infinite;
     }
   }
   @keyframes session-working {

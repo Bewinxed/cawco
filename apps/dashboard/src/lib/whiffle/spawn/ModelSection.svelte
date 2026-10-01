@@ -531,7 +531,7 @@
     box-shadow: var(--shadow-raised);
     pointer-events: none;
     @media (prefers-reduced-motion: no-preference) {
-      transition: transform 180ms var(--ease-in-out);
+      transition: transform var(--dur-morph) var(--ease-in-out);
     }
   }
   .tab {
@@ -546,7 +546,7 @@
     border-radius: var(--radius-sm);
     cursor: pointer;
     color: var(--ink-muted);
-    transition: background-color 120ms ease;
+    transition: background-color var(--dur-control) var(--ease-out);
   }
   @media (hover: hover) {
     .tab:not(.on):not(:disabled):hover {
@@ -580,12 +580,12 @@
     border-radius: var(--radius-sm);
     box-shadow: var(--shadow-raised);
     pointer-events: none;
-    transition: opacity 120ms ease;
+    transition: opacity var(--dur-control) var(--ease-out);
     @media (prefers-reduced-motion: no-preference) {
       transition:
-        transform 180ms var(--ease-in-out),
-        width 180ms var(--ease-in-out),
-        opacity 120ms ease;
+        transform var(--dur-morph) var(--ease-in-out),
+        width var(--dur-morph) var(--ease-in-out),
+        opacity var(--dur-control) var(--ease-out);
     }
   }
   .tip-text {
@@ -593,15 +593,15 @@
     align-items: center;
     gap: 6px;
     padding: 0 10px;
-    font: 400 var(--text-meta) / 1 var(--font-body);
+    font: var(--weight-body) var(--text-meta) / 1 var(--font-body);
     white-space: nowrap;
     @media (prefers-reduced-motion: no-preference) {
-      animation: ns-in 160ms var(--ease-out) both;
+      animation: ns-in var(--ns-swap-out-ms) var(--ease-out) both;
     }
   }
   .soon {
-    font: 500 var(--text-label) / 1 var(--font-body);
-    letter-spacing: 0.04em;
+    font: var(--weight-strong) var(--text-label) / 1 var(--font-body);
+    letter-spacing: var(--track-caps);
     text-transform: uppercase;
     opacity: 0.6;
   }
@@ -625,7 +625,7 @@
     min-width: 0;
     border: 0;
     background: transparent;
-    font: 400 var(--text-body) / 1.4 var(--font-body);
+    font: var(--weight-body) var(--text-body) / 1.4 var(--font-body);
     color: var(--ink-strong);
     padding: 0;
   }
@@ -683,12 +683,12 @@
     height: 44px;
     background: var(--surface-fill);
     border-radius: var(--radius-sm);
-    transition: opacity 120ms ease;
+    transition: opacity var(--dur-control) var(--ease-out);
     pointer-events: none;
     @media (prefers-reduced-motion: no-preference) {
       transition:
-        transform 160ms var(--ease-in-out),
-        opacity 120ms ease;
+        transform var(--dur-toggle) var(--ease-in-out),
+        opacity var(--dur-control) var(--ease-out);
     }
   }
   /* The chosen row's run settings: effort and permission chips, riding the
@@ -702,11 +702,11 @@
     align-items: center;
     gap: 4px;
     height: 44px;
-    transition: opacity 120ms ease;
+    transition: opacity var(--dur-control) var(--ease-out);
     @media (prefers-reduced-motion: no-preference) {
       transition:
-        transform 160ms var(--ease-in-out),
-        opacity 120ms ease;
+        transform var(--dur-toggle) var(--ease-in-out),
+        opacity var(--dur-control) var(--ease-out);
     }
   }
   .tools :global(.ns-chip-btn.tool) {
@@ -790,7 +790,7 @@
   }
   .hint,
   .ctx {
-    font: 400 var(--text-meta) / 1 var(--font-mono);
+    font: var(--weight-body) var(--text-meta) / 1 var(--font-mono);
     color: var(--ink-subtle);
     white-space: nowrap;
   }

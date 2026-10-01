@@ -32,7 +32,7 @@
     SCOPE_NOUN,
   } from "./fleet-faults";
   import { machineLabel } from "./machine";
-  import { appear, CURVE } from "./motion/curves.svelte";
+  import { appear, CURVE, dur } from "./motion/curves.svelte";
   import { fold } from "./motion/fold.svelte";
   import OsMark from "./OsMark.svelte";
 
@@ -102,7 +102,7 @@
           return;
         }
         fold(node, next, {
-          ms: next ? 240 : 160,
+          ms: dur(next ? "--dur-pop" : "--dur-exit"),
           easing: CURVE.out,
           fade: true,
           gap,

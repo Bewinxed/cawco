@@ -3,7 +3,7 @@
  * jumping: when the content inside it reflows (a popover's list arrives, an
  * error line appears, a card switches what it shows), the container is held
  * at the size it is drawn at and animated to its new natural size on the
- * Web Animations API, 220ms on --ease-drawer. Attach to the container:
+ * Web Animations API, over --dur-morph on --ease-drawer. Attach to the container:
  * `{@attach morph()}`.
  *
  * What is observed is the content (the container's children), never the
@@ -12,9 +12,15 @@
  * tween's length the children hold their natural size (no flex shrink), so
  * the container clips them instead of squashing a scrolling list inside it.
  */
-import { CURVE, motionOk } from "./curves.svelte";
+import { CURVE, dur, motionOk } from "./curves.svelte";
 
-export function morph({ width = false, ms = 220 } = {}) {
+export function morph({
+  width = false,
+  ms,
+}: {
+  width?: boolean;
+  ms?: number;
+} = {}) {
   return (node: HTMLElement) => {
     /**
      * The size the container last settled at: unknown until the observer's
@@ -56,7 +62,7 @@ export function morph({ width = false, ms = 220 } = {}) {
         child.style.flexShrink = "0";
       }
       const animation = node.animate(frames, {
-        duration: ms,
+        duration: ms ?? dur("--dur-morph"),
         easing: CURVE.drawer,
       });
       running = animation;

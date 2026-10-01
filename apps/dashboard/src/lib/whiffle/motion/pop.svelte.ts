@@ -6,17 +6,17 @@
  * `data-state="open"`.
  */
 import type { TransitionConfig } from "svelte/transition";
-import { easeDrawer, motionOk } from "./curves.svelte";
+import { dur, easeDrawer, motionOk } from "./curves.svelte";
 
 export function popOut(node: HTMLElement): TransitionConfig {
   if (!motionOk.current) {
-    return { duration: 120, css: (t) => `opacity: ${t}` };
+    return { duration: dur("--dur-control"), css: (t) => `opacity: ${t}` };
   }
   const styles = getComputedStyle(node);
   const scale = Number.parseFloat(styles.getPropertyValue("--pop-scale"));
   const rise = Number.parseFloat(styles.getPropertyValue("--pop-rise"));
   return {
-    duration: 160,
+    duration: dur("--dur-exit"),
     easing: easeDrawer,
     css: (t) =>
       `opacity: ${t}; scale: ${scale + (1 - scale) * t}; translate: 0 ${(-(1 - t) * rise).toFixed(2)}px`,

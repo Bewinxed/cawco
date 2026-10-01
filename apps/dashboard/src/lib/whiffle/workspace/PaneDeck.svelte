@@ -171,7 +171,7 @@
 
   /* The pick-up: 180ms, derived from the base beat the way `--breath` is. */
   .deck.lifted .lift {
-    transform: scale(0.96);
+    transform: scale(var(--press-scale));
     border-radius: var(--radius-lg);
     transition:
       transform calc(var(--dur-panel) * 0.6) var(--ease-out),
@@ -214,12 +214,12 @@
   .dot {
     width: 6px;
     height: 6px;
-    border-radius: 3px;
+    border-radius: var(--radius-pill);
     background: var(--ink-muted);
     opacity: 0.5;
     transition:
-      height 160ms var(--ease-out),
-      opacity 160ms var(--ease-out);
+      height var(--dur-toggle) var(--ease-out),
+      opacity var(--dur-toggle) var(--ease-out);
   }
   .dot-on {
     height: 18px;
@@ -236,7 +236,7 @@
       transition: none;
     }
     .dot {
-      transition: opacity 160ms var(--ease-out);
+      transition: opacity var(--dur-toggle) var(--ease-out);
     }
     .deck.lifted .lift {
       transform: scale(1);

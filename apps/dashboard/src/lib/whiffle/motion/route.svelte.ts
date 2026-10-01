@@ -9,7 +9,9 @@
  * Distances are percentages of the page's own box, so a phone and a desk
  * travel the same share of the screen.
  */
-import { easeDrawer, motionOk } from "./curves.svelte";
+import { dur, easeDrawer, motionOk } from "./curves.svelte";
+
+type DurToken = `--dur-${string}`;
 
 interface End {
   opacity: number;
@@ -24,13 +26,14 @@ export interface Travel {
   leave: End;
   /** A pop keeps the page being taken off on top of the one it uncovers. */
   leavingOnTop: boolean;
-  ms: number;
+  /** The duration token it travels over, read when it plays. */
+  over: DurToken;
 }
 
-const nudge = (x: number, y: number, ms = 120): Travel => ({
+const nudge = (x: number, y: number): Travel => ({
   leave: { x: -x, y: -y, opacity: 0 },
   enter: { x, y, opacity: 0 },
-  ms,
+  over: "--dur-control",
   leavingOnTop: false,
 });
 
@@ -60,10 +63,12 @@ export interface Plan {
  * - Between two sidebar spokes: vertical, ±8%, the way the sidebar runs.
  * - Configure on a phone is a stack: a deeper page pushes in from the inline
  *   end over the one it leaves, which falls back 30% and dims to 0.6
- *   (280ms); back pops it off the same way, on a shorter 240ms.
+ *   (--dur-panel); back pops it off the same way, on the shorter --dur-pop.
  * - Between two Configure sections on a wide screen: the section rises or
- *   drops in 4% the way the rail runs (150ms) while the rail holds still.
- * - Anything else deeper or shallower: a horizontal ±8% nudge (120ms).
+ *   drops in 4% the way the rail runs (--dur-menu) while the rail holds
+ *   still.
+ * - Anything else deeper or shallower: a horizontal ±8% nudge
+ *   (--dur-control).
  * Browser back and forward go by the history step, not the path.
  */
 export function plan({
@@ -101,7 +106,7 @@ function configTravel(
     return {
       leave: { x: -30 * side, y: 0, opacity: 0.6 },
       enter: { x: 100 * side, y: 0, opacity: 1 },
-      ms: 280,
+      over: "--dur-panel",
       leavingOnTop: false,
     };
   }
@@ -109,7 +114,7 @@ function configTravel(
     return {
       leave: { x: 100 * side, y: 0, opacity: 1 },
       enter: { x: -30 * side, y: 0, opacity: 0.6 },
-      ms: 240,
+      over: "--dur-pop",
       leavingOnTop: true,
     };
   }
@@ -120,7 +125,7 @@ function configTravel(
   return {
     leave: { x: 0, y: 0, opacity: 0 },
     enter: { x: 0, y: section(to) > section(from) ? 4 : -4, opacity: 0 },
-    ms: 150,
+    over: "--dur-menu",
     leavingOnTop: false,
   };
 }
@@ -144,12 +149,12 @@ export function leaving(from: URL): void {
   }
 }
 
-/** Reduced motion: a 120ms cross-fade in place, nothing travels. */
+/** Reduced motion: a --dur-control cross-fade in place, nothing travels. */
 const STILL: End = { x: 0, y: 0, opacity: 0 };
-const STILL_MS = 120;
+const STILL_OVER: DurToken = "--dur-control";
 
 export function pageOut(node: HTMLElement) {
-  const { leave, ms, leavingOnTop } = route.travel;
+  const { leave, over, leavingOnTop } = route.travel;
   const to = motionOk.current ? leave : STILL;
   // The page going away takes no input and, on a pop, stays on top.
   node.inert = true;
@@ -157,7 +162,7 @@ export function pageOut(node: HTMLElement) {
     node.style.zIndex = "1";
   }
   return {
-    duration: motionOk.current ? ms : STILL_MS,
+    duration: dur(motionOk.current ? over : STILL_OVER),
     easing: easeDrawer,
     css: (_t: number, u: number) =>
       `transform: translate(${to.x * u}%, ${to.y * u}%); opacity: ${1 - (1 - to.opacity) * u}`,
@@ -165,10 +170,10 @@ export function pageOut(node: HTMLElement) {
 }
 
 export function pageIn(_node: HTMLElement) {
-  const { enter, ms } = route.travel;
+  const { enter, over } = route.travel;
   const from = motionOk.current ? enter : STILL;
   return {
-    duration: motionOk.current ? ms : STILL_MS,
+    duration: dur(motionOk.current ? over : STILL_OVER),
     easing: easeDrawer,
     css: (t: number, u: number) =>
       `transform: translate(${from.x * u}%, ${from.y * u}%); opacity: ${from.opacity + (1 - from.opacity) * t}`,

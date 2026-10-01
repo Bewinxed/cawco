@@ -16,7 +16,7 @@
     font: var(--type-body);
     color: var(--ink-strong);
     transition:
-      background-color 240ms cubic-bezier(0.16, 1, 0.3, 1),
-      color 240ms cubic-bezier(0.16, 1, 0.3, 1);
+      background-color var(--dur-pop) var(--ease-out),
+      color var(--dur-pop) var(--ease-out);
   }
 </style>

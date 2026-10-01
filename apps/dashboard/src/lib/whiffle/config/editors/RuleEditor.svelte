@@ -350,10 +350,15 @@
     });
   }
 
-  /** Text-matching options fold away for a meaning rule: 300ms, settling in. */
+  /** Text-matching options fold away for a meaning rule: a panel's length,
+      on the drawer curve, read when the fold plays. */
   const FOLD = {
-    ms: 300,
-    easing: "cubic-bezier(0.16, 1, 0.3, 1)",
+    get ms() {
+      return dur("--dur-panel");
+    },
+    get easing() {
+      return ease("--ease-drawer");
+    },
     fade: true,
     gap: 8,
   };

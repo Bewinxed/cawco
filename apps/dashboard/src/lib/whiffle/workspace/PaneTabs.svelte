@@ -920,10 +920,10 @@
         > .session-details-popover[data-morph]
       )
     ) {
-      transition: transform 260ms var(--ease-drawer);
+      transition: transform var(--dur-pop) var(--ease-drawer);
     }
     :global(.session-details-popover[data-morph]) .details-morph {
-      transition: height 260ms var(--ease-drawer);
+      transition: height var(--dur-pop) var(--ease-drawer);
     }
   }
   /* ── The row ──────────────────────────────────────────────────────
@@ -1002,7 +1002,7 @@
       position: absolute;
       inset-block: 2px;
       inline-size: 2px;
-      border-radius: 1px;
+      border-radius: var(--radius-pill);
       background: var(--ink-strong);
       z-index: 3;
     }
@@ -1056,7 +1056,7 @@
         transform var(--dur-control) var(--ease-out);
 
       &:active {
-        transform: scale(0.9);
+        transform: scale(var(--press-scale));
       }
     }
   }

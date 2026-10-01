@@ -72,7 +72,7 @@
     border-radius: var(--radius-sm);
     pointer-events: none;
     @media (prefers-reduced-motion: no-preference) {
-      transition: transform 120ms var(--ease-in-out);
+      transition: transform var(--dur-control) var(--ease-in-out);
     }
   }
   .row {
@@ -102,7 +102,7 @@
   .label {
     flex: 1;
     min-width: 0;
-    font: 500 var(--text-label) / 1.2 var(--font-body);
+    font: var(--weight-strong) var(--text-label) / 1.2 var(--font-body);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;

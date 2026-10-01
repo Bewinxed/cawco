@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-01T08:55:17.039Z",
+  "generatedAt": "2026-10-01T09:20:45.408Z",
   "title": "Design System: Whiffle",
   "extensions": {
     "colorMeta": {
@@ -1112,8 +1112,8 @@
       "ink-subtle": {
         "role": "neutral",
         "displayName": "Subtle Ink",
-        "canonical": "light-dark(oklch(53.61% 0.0121 266.40), oklch(68.32% 0.0116 264.29))",
-        "hex": "#6a6d75",
+        "canonical": "light-dark(oklch(51.95% 0.0119 266.79), oklch(68.32% 0.0116 264.29))",
+        "hex": "#666970",
         "hexDark": "#9699a1",
         "tonalRamp": [
           "#090b10",
@@ -1801,7 +1801,7 @@
       {
         "name": "material-panel",
         "value": "card at 72% (dark 68%) + backdrop-filter: blur(28px) saturate(1.6); opaque under prefers-reduced-transparency",
-        "purpose": "Floating chrome over content."
+        "purpose": "Floating chrome over content. The composer shell uses the same material at the base blur: blur(var(--material-blur)) = 20px, saturate 1.6."
       }
     ],
     "motion": [
@@ -1876,6 +1876,16 @@
         "purpose": "How long a done state (a copied or saved check) stays up."
       },
       {
+        "name": "dur-loop",
+        "value": "1.2s",
+        "purpose": "One turn of an ambient loop while something is pending: spinners, the task ring, the supervisor's orbit, the skeleton sweep, and Tailwind's animate-spin (linear), animate-pulse (ease-in-out) and animate-ping (ease-out)."
+      },
+      {
+        "name": "default-transition",
+        "value": "duration var(--dur-control), timing var(--ease-out)",
+        "purpose": "Tailwind's default transition timing (transition-colors and siblings) on the product's tokens."
+      },
+      {
         "name": "c-500",
         "value": "500ms",
         "purpose": "Base unit for --breath."
@@ -1887,13 +1897,13 @@
       },
       {
         "name": "transition-control",
-        "value": "background-color 120ms ease, border-color 120ms ease, color 120ms ease",
+        "value": "background-color, border-color, color: var(--dur-control) var(--ease-out)",
         "purpose": "The default control transition."
       },
       {
         "name": "press-scale",
         "value": "0.97",
-        "purpose": "A compact control's press, over 160ms on ease-out."
+        "purpose": "Every press scale, over --dur-toggle on ease-out; also the new-session dialog's exit scale and the phone deck's pick-up."
       },
       {
         "name": "pop-scale",
@@ -1904,11 +1914,6 @@
         "name": "pop-rise",
         "value": "8px",
         "purpose": "How far a floating surface or toast travels from its edge."
-      },
-      {
-        "name": "animate-shake",
-        "value": "shake 280ms linear (±6px, ±4px keyframes)",
-        "purpose": "A one-shot 'that is wrong' nudge. Defined, currently unused."
       },
       {
         "name": "spring-settle",
@@ -1932,28 +1937,33 @@
       },
       {
         "name": "morph",
-        "value": "220ms, ease-drawer",
-        "purpose": "A container tweening to its content's new size (motion/morph.svelte.ts)."
+        "value": "--dur-morph (180ms), ease-drawer",
+        "purpose": "A container tweening to its content's new size (motion/morph.svelte.ts); TextMorph words and figures run on the same token (morphMs)."
       },
       {
         "name": "unfold",
-        "value": "in 240ms / out 160ms, ease-out; reduced motion 120ms fade",
+        "value": "in --dur-pop / out --dur-exit, ease-out; reduced motion --dur-control fade",
         "purpose": "Content an {#if} mounts growing from nothing (motion/fold.svelte.ts)."
       },
       {
         "name": "route-nudge",
-        "value": "±8% over 120ms, ease-drawer; reduced motion 120ms cross-fade",
-        "purpose": "Page transitions; Configure on a phone pushes 280ms / pops 240ms, sections 4% over 150ms."
+        "value": "±8% over --dur-control, ease-drawer; reduced motion --dur-control cross-fade",
+        "purpose": "Page transitions; Configure on a phone pushes over --dur-panel / pops over --dur-pop, sections 4% over --dur-menu."
       },
       {
         "name": "segmented-thumb",
-        "value": "240ms, ease-in-out, transform + width + height",
+        "value": "--dur-pop (260ms), ease-in-out, transform + width + height",
         "purpose": "The kit segmented thumb (tabs/thumb.ts)."
       },
       {
         "name": "fluid-tabs",
-        "value": "segment 160ms ease-out; focus ring 80ms ease-out; folder wipe 260ms ease-drawer",
+        "value": "segment --dur-toggle ease-out; focus ring --dur-ghost ease-out; folder wipe --dur-pop ease-drawer",
         "purpose": "The fluid tab strip."
+      },
+      {
+        "name": "thinking-indicator",
+        "value": "marks: --breath × 3, ease-in-out; words: --breath × 8 cycle, two breaths each, ease-out; sheen: --breath, ease-in-out",
+        "purpose": "The thinking indicator's rhythms, all multiples of the breath."
       }
     ],
     "breakpoints": [
@@ -1986,7 +1996,7 @@
       "refersTo": "button-primary",
       "description": "The graphite action with its top-highlight gradient: Start session, Save, Send.",
       "html": "<button class=\"ds-btn-primary\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" aria-hidden=\"true\"><path d=\"M12 5v14M5 12h14\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\"/></svg><span>Start session</span></button>",
-      "css": ".ds-btn-primary { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border: 1px solid transparent; border-radius: var(--radius-md); background-color: var(--brand-solid); background-image: var(--action-surface); color: var(--on-brand); font: 500 var(--text-body) / 1 var(--font-body); letter-spacing: -0.01em; cursor: pointer; transition: var(--transition-control), transform 160ms var(--ease-out); } .ds-btn-primary:hover { background-color: var(--ink-hover); background-image: var(--action-surface-hover); } .ds-btn-primary:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; } @media (prefers-reduced-motion: no-preference) { .ds-btn-primary:active { transform: scale(var(--press-scale)); } }"
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border: 1px solid transparent; border-radius: var(--radius-md); background-color: var(--brand-solid); background-image: var(--action-surface); color: var(--on-brand); font: 500 var(--text-body) / 1 var(--font-body); letter-spacing: -0.01em; cursor: pointer; transition: var(--transition-control), transform var(--dur-toggle) var(--ease-out); } .ds-btn-primary:hover { background-color: var(--ink-hover); background-image: var(--action-surface-hover); } .ds-btn-primary:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; } @media (prefers-reduced-motion: no-preference) { .ds-btn-primary:active { transform: scale(var(--press-scale)); } }"
     },
     {
       "name": "Outline Button",
@@ -1994,7 +2004,7 @@
       "refersTo": "button-outline",
       "description": "The kit's default control: a raised block with a control edge.",
       "html": "<button class=\"ds-btn\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" aria-hidden=\"true\" viewBox=\"0 0 24 24\"><g fill=\"currentColor\"><g opacity=\".5\"><path d=\"M6 13H18C19.8856 13 20.8284 13 21.4142 13.5858C22 14.1716 22 15.1144 22 17C22 18.8856 22 19.8284 21.4142 20.4142C20.8284 21 19.8856 21 18 21H6C4.11438 21 3.17157 21 2.58579 20.4142C2 19.8284 2 18.8856 2 17C2 15.1144 2 14.1716 2.58579 13.5858C3.17157 13 4.11438 13 6 13Z\"/><path d=\"M6 3H18C19.8856 3 20.8284 3 21.4142 3.58579C22 4.17157 22 5.11438 22 7C22 8.88562 22 9.82843 21.4142 10.4142C20.8284 11 19.8856 11 18 11H6C4.11438 11 3.17157 11 2.58579 10.4142C2 9.82843 2 8.88562 2 7C2 5.11438 2 4.17157 2.58579 3.58579C3.17157 3 4.11438 3 6 3Z\"/></g><path d=\"M12.75 7C12.75 6.58579 13.0858 6.25 13.5 6.25H18C18.4142 6.25 18.75 6.58579 18.75 7C18.75 7.41421 18.4142 7.75 18 7.75H13.5C13.0858 7.75 12.75 7.41421 12.75 7Z\"/><path d=\"M6 8.75C5.58579 8.75 5.25 8.41421 5.25 8V6C5.25 5.58579 5.58579 5.25 6 5.25C6.41421 5.25 6.75 5.58579 6.75 6V8C6.75 8.41421 6.41421 8.75 6 8.75Z\"/><path d=\"M9 8.75C8.58579 8.75 8.25 8.41421 8.25 8V6C8.25 5.58579 8.58579 5.25 9 5.25C9.41421 5.25 9.75 5.58579 9.75 6V8C9.75 8.41421 9.41421 8.75 9 8.75Z\"/><path d=\"M12.75 17C12.75 16.5858 13.0858 16.25 13.5 16.25H18C18.4142 16.25 18.75 16.5858 18.75 17C18.75 17.4142 18.4142 17.75 18 17.75H13.5C13.0858 17.75 12.75 17.4142 12.75 17Z\"/><path d=\"M6 18.75C5.58579 18.75 5.25 18.4142 5.25 18V16C5.25 15.5858 5.58579 15.25 6 15.25C6.41421 15.25 6.75 15.5858 6.75 16V18C6.75 18.4142 6.41421 18.75 6 18.75Z\"/><path d=\"M9 18.75C8.58579 18.75 8.25 18.4142 8.25 18V16C8.25 15.5858 8.58579 15.25 9 15.25C9.41421 15.25 9.75 15.5858 9.75 16V18C9.75 18.4142 9.41421 18.75 9 18.75Z\"/></g></svg><span>Add machine</span></button>",
-      "css": ".ds-btn { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border: 1px solid var(--border-control); border-radius: var(--radius-md); background: var(--surface-raised); color: var(--ink-strong); font: 500 var(--text-body) / 1 var(--font-body); letter-spacing: -0.01em; cursor: pointer; transition: var(--transition-control), transform 160ms var(--ease-out); } .ds-btn:hover { background: var(--surface-hover); } .ds-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; } @media (prefers-reduced-motion: no-preference) { .ds-btn:active { transform: scale(var(--press-scale)); } }"
+      "css": ".ds-btn { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border: 1px solid var(--border-control); border-radius: var(--radius-md); background: var(--surface-raised); color: var(--ink-strong); font: 500 var(--text-body) / 1 var(--font-body); letter-spacing: -0.01em; cursor: pointer; transition: var(--transition-control), transform var(--dur-toggle) var(--ease-out); } .ds-btn:hover { background: var(--surface-hover); } .ds-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; } @media (prefers-reduced-motion: no-preference) { .ds-btn:active { transform: scale(var(--press-scale)); } }"
     },
     {
       "name": "Text Input",
@@ -2034,7 +2044,7 @@
       "refersTo": "segmented",
       "description": "A recessed groove with a lifted thumb under the chosen segment; segments tint on press, never scale.",
       "html": "<div class=\"ds-seg\" role=\"tablist\"><span class=\"ds-seg-thumb\" aria-hidden=\"true\"></span><button class=\"ds-seg-item ds-seg-on\" role=\"tab\" aria-selected=\"true\">Sessions</button><button class=\"ds-seg-item\" role=\"tab\" aria-selected=\"false\">Machines</button><button class=\"ds-seg-item\" role=\"tab\" aria-selected=\"false\">Runs</button></div>",
-      "css": ".ds-seg { position: relative; display: inline-flex; align-items: center; gap: 2px; padding: 3px; border-radius: var(--radius-md); background: var(--surface-recess-deep); } .ds-seg-thumb { position: absolute; top: 3px; left: 3px; width: 84px; height: 30px; border-radius: var(--radius-sm); background: var(--surface-lift); box-shadow: var(--shadow-raised); transition: transform 240ms var(--ease-in-out); } .ds-seg-item { position: relative; width: 84px; height: 30px; padding: 0 10px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--ink-muted); font: 500 var(--text-label) / 1 var(--font-body); cursor: pointer; transition: var(--transition-control); } .ds-seg-on { color: var(--ink-strong); } .ds-seg-item:not(.ds-seg-on):active { background-color: var(--surface-fill); } .ds-seg-item:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }"
+      "css": ".ds-seg { position: relative; display: inline-flex; align-items: center; gap: 2px; padding: 3px; border-radius: var(--radius-md); background: var(--surface-recess-deep); } .ds-seg-thumb { position: absolute; top: 3px; left: 3px; width: 84px; height: 30px; border-radius: var(--radius-sm); background: var(--surface-lift); box-shadow: var(--shadow-raised); transition: transform var(--dur-pop) var(--ease-in-out); } .ds-seg-item { position: relative; width: 84px; height: 30px; padding: 0 10px; border: 0; border-radius: var(--radius-sm); background: transparent; color: var(--ink-muted); font: 500 var(--text-label) / 1 var(--font-body); cursor: pointer; transition: var(--transition-control); } .ds-seg-on { color: var(--ink-strong); } .ds-seg-item:not(.ds-seg-on):active { background-color: var(--surface-fill); } .ds-seg-item:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: -2px; }"
     },
     {
       "name": "Permission Gate",
@@ -2042,7 +2052,7 @@
       "refersTo": "permission-card",
       "description": "Approve and Deny as recessed peers at opposite ends of the row; the standing grant set apart in the warning tint.",
       "html": "<section class=\"ds-gate\" aria-label=\"Permission request\"><p class=\"ds-gate-lede\">Run <code class=\"ds-gate-cmd\">rm -rf apps/dashboard/.svelte-kit</code></p><div class=\"ds-gate-row\"><button class=\"ds-gate-btn ds-grant\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" aria-hidden=\"true\"><path d=\"M5 12.5l4.5 4.5L19 7.5\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg><span>Approve</span></button><button class=\"ds-gate-btn ds-refuse\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" aria-hidden=\"true\"><path d=\"M6 6l12 12M18 6L6 18\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg><span>Deny</span></button></div><div class=\"ds-gate-widen\"><p>This would allow <code class=\"ds-gate-cmd\">rm -rf</code> for this project, a wider grant than the request above.</p><button class=\"ds-gate-btn ds-widen\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" aria-hidden=\"true\" viewBox=\"0 0 24 24\"><g fill=\"currentColor\"><path d=\"M12 22C10.9807 22 10.6199 21.8425 9.89844 21.5273C7.23883 20.3655 3 17.6292 3 11.9912V11L12 8V22Z\"/><path d=\"M12 2C12.8114 2 13.595 2.26825 15.1621 2.80469L15.7354 3.00098C18.7409 4.02979 20.244 4.54434 20.6221 5.08203C20.9996 5.6199 21 7.21941 21 10.417V11L12 8V2Z\"/><g opacity=\".5\"><path d=\"M21 11V11.9912C21 17.6292 16.7612 20.3655 14.1016 21.5273C13.3801 21.8425 13.0193 22 12 22V8L21 11Z\"/><path d=\"M12 8L3 11V10.417C3 7.21941 3.00041 5.6199 3.37793 5.08203C3.75595 4.54434 5.25909 4.02979 8.26465 3.00098L8.83789 2.80469C10.405 2.26825 11.1886 2 12 2V8Z\"/></g></g></svg><span>Always allow rm</span></button></div></section>",
-      "css": ".ds-gate { width: 420px; padding: var(--space-3); border: 1px solid var(--border-control); border-radius: var(--radius-lg); background: var(--surface-raised); box-shadow: var(--shadow-hairline); color: var(--ink-strong); } .ds-gate-lede { margin: 0 0 var(--space-2); font: var(--type-body); } .ds-gate-cmd { font-family: var(--font-mono); font-size: var(--text-label); } .ds-gate-row { display: flex; justify-content: space-between; gap: var(--space-8); } .ds-gate-btn { display: inline-flex; align-items: center; gap: var(--space-2); height: var(--space-8); padding: 0 var(--space-3); border: 1px solid var(--border-hairline); border-radius: var(--radius-sm); background: var(--surface-recess); font: var(--type-label); cursor: pointer; transition: var(--transition-control), transform 160ms var(--ease-out); } .ds-gate-btn svg { width: 12px; height: 12px; } .ds-gate-btn:hover { background: var(--surface-hover); } .ds-gate-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; } .ds-grant { color: var(--ink-strong); } .ds-refuse { color: var(--ink-muted); } .ds-gate-widen { margin-top: var(--space-8); padding-top: var(--space-5); border-top: 1px solid var(--border-hairline); } .ds-gate-widen p { margin: 0 0 var(--space-2); font: var(--type-body); color: var(--ink-muted); } .ds-widen { border-color: var(--status-attn-ink); background: var(--status-attn-bg); color: var(--status-attn-ink); } @media (prefers-reduced-motion: no-preference) { .ds-gate-btn:active { transform: scale(var(--press-scale)); } } @media (pointer: coarse) { .ds-gate-btn { height: 44px; } }"
+      "css": ".ds-gate { width: 420px; padding: var(--space-3); border: 1px solid var(--border-control); border-radius: var(--radius-lg); background: var(--surface-raised); box-shadow: var(--shadow-hairline); color: var(--ink-strong); } .ds-gate-lede { margin: 0 0 var(--space-2); font: var(--type-body); } .ds-gate-cmd { font-family: var(--font-mono); font-size: var(--text-label); } .ds-gate-row { display: flex; justify-content: space-between; gap: var(--space-8); } .ds-gate-btn { display: inline-flex; align-items: center; gap: var(--space-2); height: var(--space-8); padding: 0 var(--space-3); border: 1px solid var(--border-hairline); border-radius: var(--radius-sm); background: var(--surface-recess); font: var(--type-label); cursor: pointer; transition: var(--transition-control), transform var(--dur-toggle) var(--ease-out); } .ds-gate-btn svg { width: 12px; height: 12px; } .ds-gate-btn:hover { background: var(--surface-hover); } .ds-gate-btn:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; } .ds-grant { color: var(--ink-strong); } .ds-refuse { color: var(--ink-muted); } .ds-gate-widen { margin-top: var(--space-8); padding-top: var(--space-5); border-top: 1px solid var(--border-hairline); } .ds-gate-widen p { margin: 0 0 var(--space-2); font: var(--type-body); color: var(--ink-muted); } .ds-widen { border-color: var(--status-attn-ink); background: var(--status-attn-bg); color: var(--status-attn-ink); } @media (prefers-reduced-motion: no-preference) { .ds-gate-btn:active { transform: scale(var(--press-scale)); } } @media (pointer: coarse) { .ds-gate-btn { height: 44px; } }"
     },
     {
       "name": "Empty State",
@@ -2088,6 +2098,11 @@
       {
         "name": "The Interruptible Rule",
         "body": "Every transition turns back from where it is drawn. Popovers transition on `data-state` rather than playing keyframes, folds animate from the drawn height, and a segmented thumb caught mid-glide restarts from where it stands.",
+        "section": "motion"
+      },
+      {
+        "name": "The One Loop Rule",
+        "body": "Anything that turns or blinks while something is pending runs one ambient loop, `--dur-loop` (1.2s): a spinner, the task ring's arc, the supervisor's orbit, the skeleton's sweep, and Tailwind's `animate-spin`, `animate-pulse` and `animate-ping`, which the theme points at the token. A rotation turns linearly; a pulse runs ease-in-out and a ping ease-out. Longer rhythms are multiples of the breath, never new numbers: the thinking indicator's words change every two breaths. Tailwind's default transition timing (`transition-colors` and its siblings) is `--dur-control` on ease-out.",
         "section": "motion"
       },
       {
@@ -2172,7 +2187,7 @@
       },
       {
         "name": "The Concentric Rule",
-        "body": "A surface nested inside another takes the outer radius less the inset. The dialog tray (18px, 6px padding) holds a 12px body. The composer shell (12px, 7px inset) holds 5px controls, and the Stop ring 3px outside them is drawn at 8px. A subagent's well (8px, 4px padding) holds a 5px report.",
+        "body": "A surface nested inside another takes the outer radius less the inset. The dialog tray (18px, 6px padding) holds a 12px body. The composer shell (12px, 7px inset) holds 5px controls, and the autopilot's halo 3px outside its control is drawn at 8px. A subagent's well (8px, 4px padding) holds a 5px report.",
         "section": "shapes"
       },
       {

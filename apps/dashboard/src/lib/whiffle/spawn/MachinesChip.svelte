@@ -164,13 +164,13 @@
     text-align: left;
     color: var(--ink-strong);
     transition:
-      background-color 160ms ease,
-      border-radius 160ms ease;
+      background-color var(--dur-toggle) var(--ease-out),
+      border-radius var(--dur-toggle) var(--ease-out);
     @media (prefers-reduced-motion: no-preference) {
       transition:
-        background-color 160ms ease,
-        border-radius 160ms ease,
-        transform 160ms var(--ease-out);
+        background-color var(--dur-toggle) var(--ease-out),
+        border-radius var(--dur-toggle) var(--ease-out),
+        transform var(--dur-toggle) var(--ease-out);
     }
   }
   .row.on {
@@ -185,11 +185,11 @@
     height: 16px;
     flex: none;
     color: var(--ink-strong);
-    transition: opacity 160ms var(--ease-out);
+    transition: opacity var(--dur-toggle) var(--ease-out);
     @media (prefers-reduced-motion: no-preference) {
       transition:
-        opacity 160ms var(--ease-out),
-        transform 160ms var(--ease-out);
+        opacity var(--dur-toggle) var(--ease-out),
+        transform var(--dur-toggle) var(--ease-out);
     }
   }
   .divider {

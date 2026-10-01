@@ -498,7 +498,7 @@
     border-radius: var(--radius-pill);
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
-    letter-spacing: 0.03em;
+    letter-spacing: var(--track-caps);
     text-transform: uppercase;
     background: var(--surface-recess);
     color: var(--ink-muted);
@@ -550,7 +550,7 @@
     font-weight: var(--weight-strong);
     color: var(--ink-strong);
     text-transform: uppercase;
-    letter-spacing: 0.06em;
+    letter-spacing: var(--track-caps);
   }
   .sect-note {
     font-size: var(--text-body);

@@ -25,7 +25,7 @@
   import { Skeleton } from "$lib/components/ui/skeleton";
   import { IconCpu, IconHandoff, IconReport, IconRules } from "$lib/icons";
   import { whiffle } from "../client.svelte";
-  import { CURVE, motionOk } from "../motion/curves.svelte";
+  import { CURVE, dur, easeOut, motionOk } from "../motion/curves.svelte";
   import type { Message } from "../types";
   import MessageBody from "./MessageBody.svelte";
 
@@ -215,14 +215,14 @@
     untrack(() => take(target));
   });
 
-  /** Plays the queue one row at a time: the first lift over 220ms, the rest back to back at 120ms. */
+  /** Plays the queue one row at a time: the first lift over --dur-morph, the rest back to back at --dur-control. */
   function pump(): void {
     if (playing) {
       return;
     }
     playing = true;
     // biome-ignore lint/complexity/noVoid: the queue plays on its own; nothing waits on it.
-    void lift(220);
+    void lift(dur("--dur-morph"));
   }
 
   /** One row into the bottom slot, then the next one queued, if any. */
@@ -239,11 +239,11 @@
       await column?.lastElementChild?.animate(
         [{ opacity: 0 }, { opacity: 1 }],
         {
-          duration: 120,
+          duration: dur("--dur-control"),
           easing: CURVE.out,
         }
       ).finished;
-      return lift(120);
+      return lift(dur("--dur-control"));
     }
     shown = [...shown, key];
     await tick();
@@ -260,13 +260,17 @@
       timing
     ).finished;
     shown = shown.slice(-SLOTS);
-    return lift(120);
+    return lift(dur("--dur-control"));
   }
 </script>
 
 <div class="tail" style:--row="{ROW}px">
   {#if shown.length}
-    <div class="column" bind:this={column} in:fade={{ duration: 120 }}>
+    <div
+      class="column"
+      bind:this={column}
+      in:fade={{ duration: dur('--dur-control'), easing: easeOut }}
+    >
       {#each shown as key (key)}
         {@const row = dataOf(key)}
         <div class="row {row?.kind ?? ''}">

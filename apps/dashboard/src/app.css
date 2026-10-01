@@ -218,7 +218,6 @@
     --sidebar-accent: var(--neutral-3);
     --sidebar-accent-foreground: var(--neutral-12);
     --sidebar-border: var(--border);
-    --sidebar-ring: var(--focus-ring);
 
     /* Chart palette: accent, identity hues and neutral, distinct from
        status. */
@@ -286,8 +285,10 @@
     );
     --border-control: light-dark(var(--neutral-4), var(--neutral-6));
 
-    /* Inks. Subtle is the weakest mix that holds 4.5:1 on the fill and hover
-       surfaces (15.2% light / 33.3% dark; 15.3% / 33.4% fail). */
+    /* Inks. Subtle is the weakest mix, at 0.1% steps, that holds 4.5:1 on the
+       fill, hover and raised surfaces: 8.3% by day (4.50 / 5.24 / 5.42:1;
+       8.4% falls under 4.5:1 on fill) and 33.3% at night (4.51 / 5.04 /
+       5.59:1). */
     --ink-strong: var(--neutral-12);
     --ink-muted: var(--neutral-11);
     /* A ledger row's name: the plan's "row name #393939", just under the
@@ -303,7 +304,7 @@
       color-mix(in oklab, var(--neutral-12) 72%, var(--neutral-11))
     );
     --ink-subtle: light-dark(
-      color-mix(in oklab, var(--neutral-8) 15.2%, var(--neutral-11)),
+      color-mix(in oklab, var(--neutral-8) 8.3%, var(--neutral-11)),
       color-mix(in oklab, var(--neutral-8) 33.3%, var(--neutral-11))
     );
     --ink-hover: light-dark(
@@ -485,13 +486,10 @@
 
     /* The Tailwind-facing shadow ladder (exposed through @theme inline). */
     --shadow-xs: 0 1px 2px var(--shadow-tint);
-    --shadow-sm: 0 1px 2px var(--shadow-tint);
     --shadow-md: 0 2px 8px var(--shadow-tint), 0 1px 2px var(--shadow-tint);
     --shadow-lg: 0 8px 28px var(--shadow-tint-2), 0 2px 8px var(--shadow-tint);
     --shadow-xl:
       0 24px 64px var(--shadow-tint-3), 0 6px 16px var(--shadow-tint);
-    --shadow-2xl:
-      0 24px 64px var(--shadow-tint-3), 0 6px 16px var(--shadow-tint-2);
 
     /* At night the elevation changes shape, not only colour, so it is keyed
        on the theme class rather than light-dark(): the ladder aliases the
@@ -499,11 +497,9 @@
        shadow. */
     &.dark {
       --shadow-xs: var(--shadow-hairline);
-      --shadow-sm: var(--shadow-tile);
       --shadow-md: var(--shadow-tile);
       --shadow-lg: var(--shadow-overlay);
       --shadow-xl: var(--shadow-drawer);
-      --shadow-2xl: var(--shadow-drawer);
       --shadow-raised: inset 0 0 0 1px oklch(from var(--neutral-7) l c h / 0.7);
       --shadow-stat: var(--shadow-tile);
     }
@@ -525,7 +521,6 @@
     --leading-tight: 1.2;
     --leading-body: 1.4;
     --leading-ui: 1.25;
-    --leading-numeric: 1;
     --weight-body: 400;
     --weight-strong: 500;
     --track-display: -0.008em;
@@ -568,10 +563,17 @@
     --dur-hold: 1.2s;
     /* The hover ghost following the pointer from row to row. */
     --dur-ghost: 80ms;
+    /* One turn of an ambient loop that runs while something is pending: a
+       spinner, the task ring and Stop's ring turning, a pulse, a ping, the
+       supervisor's orbit. Tailwind's animate-spin/pulse/ping run on it too
+       (@theme below). */
+    --dur-loop: 1.2s;
     --c-500: 500ms;
     --breath: calc(var(--c-500) * 4);
     --transition-control:
-      background-color 120ms ease, border-color 120ms ease, color 120ms ease;
+      background-color var(--dur-control) var(--ease-out),
+      border-color var(--dur-control) var(--ease-out),
+      color var(--dur-control) var(--ease-out);
     --press-scale: 0.97;
     --pop-scale: 0.92;
     --pop-rise: 8px;
@@ -669,7 +671,6 @@
   --color-sidebar-accent: var(--sidebar-accent);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
 
   /* Geist across the product (DESIGN.md locked face); platform stack falls
      back where Geist is unavailable. TX-02 stays the mono for code/paths/IDs. */
@@ -678,12 +679,13 @@
     sans-serif;
   --font-mono: "TX-02", ui-monospace, "SF Mono", monospace;
 
+  /* Only the ladder steps the product uses; Tailwind's own (black-based)
+     shadow scale is cleared so nothing falls back to it. */
+  --shadow-*: initial;
   --shadow-xs: var(--shadow-xs);
-  --shadow-sm: var(--shadow-sm);
   --shadow-md: var(--shadow-md);
   --shadow-lg: var(--shadow-lg);
   --shadow-xl: var(--shadow-xl);
-  --shadow-2xl: var(--shadow-2xl);
 
   --color-tool-run: var(--tool-run);
   --color-tool-mcp: var(--tool-mcp);
@@ -739,30 +741,14 @@
   --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
 
-  /* One-shot "that is wrong" nudge. */
-  --animate-shake: shake 280ms linear;
-
-  @keyframes shake {
-    0% {
-      transform: translateX(0);
-      animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
-    }
-    28.57% {
-      transform: translateX(6px);
-      animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
-    }
-    57.14% {
-      transform: translateX(-6px);
-      animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
-    }
-    78.57% {
-      transform: translateX(4px);
-      animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
-    }
-    100% {
-      transform: translateX(0);
-    }
-  }
+  /* Tailwind's own timing, on the product's: `transition-colors` and its
+     siblings run --dur-control on --ease-out, and the stock loops turn on
+     --dur-loop (a rotation is linear; a pulse breathes in-out). */
+  --default-transition-duration: var(--dur-control);
+  --default-transition-timing-function: var(--ease-out);
+  --animate-spin: spin var(--dur-loop) linear infinite;
+  --animate-pulse: pulse var(--dur-loop) var(--ease-in-out) infinite;
+  --animate-ping: ping var(--dur-loop) var(--ease-out) infinite;
 }
 
 @layer base {
@@ -1000,7 +986,7 @@
           oklch(from var(--surface-raised) l c h / 0.6) 50%,
           transparent 70% 100%
         );
-        animation: kit-skeleton-sweep 1.2s linear infinite;
+        animation: kit-skeleton-sweep var(--dur-loop) linear infinite;
       }
     }
   }
@@ -1102,13 +1088,13 @@
 
   /* Switch: a 32×18 track (24×14 small). Its hit area is .pointer-hit's
      24px on a pointer device and .touch-hit's 44px on a touch screen; the
-     drawn track and the layout do not change. The knob travels 160ms on
-     --ease-in-out, the track's colour turning with it, and the track takes
-     the press every control takes. */
+     drawn track and the layout do not change. The knob travels --dur-toggle
+     on --ease-in-out, the track's colour turning with it, and the track
+     takes the press every control takes. */
   .kit-switch {
     transition:
       background-color var(--dur-toggle) var(--ease-out),
-      transform 160ms var(--ease-out);
+      transform var(--dur-toggle) var(--ease-out);
 
     @media (prefers-reduced-motion: no-preference) {
       &:active:not([data-disabled]) {
@@ -1258,7 +1244,7 @@
     padding-inline: 10px;
     border-radius: var(--radius-sm);
     white-space: nowrap;
-    font: 500 var(--text-label) / 1 var(--font-body);
+    font: var(--weight-strong) var(--text-label) / 1 var(--font-body);
     color: var(--ink-muted);
     transition: var(--transition-control);
 
@@ -1338,14 +1324,14 @@
       display: inline-flex;
       grid-area: 1 / 1;
       transition:
-        opacity var(--icon-swap-dur, 240ms) var(--ease-out),
-        filter var(--icon-swap-dur, 240ms) var(--ease-out);
+        opacity var(--icon-swap-dur, var(--dur-pop)) var(--ease-out),
+        filter var(--icon-swap-dur, var(--dur-pop)) var(--ease-out);
 
       @media (prefers-reduced-motion: no-preference) {
         transition:
-          opacity var(--icon-swap-dur, 240ms) var(--ease-out),
-          scale var(--icon-swap-dur, 240ms) var(--ease-out),
-          filter var(--icon-swap-dur, 240ms) var(--ease-out);
+          opacity var(--icon-swap-dur, var(--dur-pop)) var(--ease-out),
+          scale var(--icon-swap-dur, var(--dur-pop)) var(--ease-out),
+          filter var(--icon-swap-dur, var(--dur-pop)) var(--ease-out);
       }
     }
     > [data-active="true"] {
@@ -1387,7 +1373,7 @@
   :where(.kit-highlight) .kit-ghost {
     display: none;
     background: var(--surface-hover);
-    transition: opacity var(--dur-control) ease;
+    transition: opacity var(--dur-control) var(--ease-out);
 
     &[data-follow] {
       display: block;
@@ -1401,7 +1387,7 @@
           transform var(--dur-ghost) var(--ease-in-out),
           width var(--dur-ghost) var(--ease-in-out),
           height var(--dur-ghost) var(--ease-in-out),
-          opacity var(--dur-control) ease;
+          opacity var(--dur-control) var(--ease-out);
       }
     }
   }
@@ -1561,8 +1547,8 @@
 }
 
 /* ---- Project identity colour (see lib/whiffle/identity.ts). Elements set
-   --identity-h inline; these utilities fix lightness and chroma per theme.
-   Identity is ink, tint, and underline — never a status dot. */
+   --identity-h inline; this utility fixes lightness and chroma per theme.
+   Identity is ink — never a status dot. */
 @utility identity-ink {
   /* 48%, not 50%: a row's hover background is the tightest surface identity
      ink lands on, and at 50% the cyan end of the wheel (hue 175-205) fell to
@@ -1571,21 +1557,6 @@
     oklch(48% 0.12 var(--identity-h, 120)),
     oklch(74% 0.11 var(--identity-h, 122))
   );
-}
-
-@utility identity-tint {
-  background-color: light-dark(
-    oklch(52% 0.11 var(--identity-h, 120) / 0.09),
-    oklch(70% 0.1 var(--identity-h, 122) / 0.14)
-  );
-}
-
-@utility identity-underline {
-  box-shadow: inset 0 -2px 0
-    light-dark(
-      oklch(52% 0.11 var(--identity-h, 120) / 0.85),
-      oklch(72% 0.1 var(--identity-h, 122) / 0.85)
-    );
 }
 
 /* ---- Chrome materials. Structural translucency, never decoration. */
@@ -1616,7 +1587,7 @@
    [transition:…] class and lose to it. */
 @utility pressable {
   transition:
-    transform 160ms var(--ease-out),
+    transform var(--dur-toggle) var(--ease-out),
     box-shadow var(--dur-control) var(--ease-out);
 }
 

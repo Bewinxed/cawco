@@ -30,6 +30,7 @@
     dur,
     ease,
     easeOut,
+    morphMs,
     motionOk,
     popScale,
   } from "$lib/whiffle/motion/curves.svelte";
@@ -316,8 +317,8 @@
     if (!motionOk.current) {
       return { end: { x: 0, y: 0, opacity: 0 }, ms: dur("--dur-control") };
     }
-    const { enter, leave, ms } = route.travel;
-    return { end: showing ? enter : leave, ms };
+    const { enter, leave, over } = route.travel;
+    return { end: showing ? enter : leave, ms: dur(over) };
   }
 
   function park(shown: () => boolean) {
@@ -685,7 +686,7 @@
           >
         {:else}
           <span class="crumb" in:riseIn out:crossOut>
-            <TextMorph as="span" duration={150} text={crumb} />
+            <TextMorph as="span" duration={morphMs()} text={crumb} />
           </span>
         {/if}
       </div>
@@ -707,7 +708,7 @@
             <span class="badge"
               ><TextMorph
                 as="span"
-                duration={150}
+                duration={morphMs()}
                 text={String(whiffle.blockedCount)}
               /></span
             >
@@ -758,7 +759,11 @@
           {#if everConnected}
             <span
               >Hub connection lost — retrying in
-              <TextMorph as="span" duration={150} text="{retryIn}s" /></span
+              <TextMorph
+                as="span"
+                duration={morphMs()}
+                text="{retryIn}s"
+              /></span
             >
           {:else}
             <span>Can't reach the hub at <code>{hubSocketUrl()}</code></span>
@@ -1077,7 +1082,7 @@
   @media (prefers-reduced-motion: no-preference) {
     .icobtn:active,
     .burger:active {
-      transform: scale(0.96);
+      transform: scale(var(--press-scale));
     }
   }
   .badge {

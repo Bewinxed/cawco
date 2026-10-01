@@ -5,14 +5,13 @@
  *
  * The hue is hashed from the folder's cwd (registered projects hash their
  * cwd too, so renaming a project keeps its color). Ten hues, tuned to stay
- * clear of the reserved state hues' *roles*: identity renders as glyph ink,
- * tints, and underlines — never as a status dot.
+ * clear of the reserved state hues' *roles*: identity renders as glyph ink
+ * — never as a status dot.
  *
  * Usage: set `style={identityVar(cwd)}` on the element — from
  * `folder-prefs.svelte.ts`, which lets a hand-picked hue win over the hash —
- * then color through the `identity-ink` / `identity-tint` /
- * `identity-underline` utilities in app.css, which read `--identity-h` and
- * tune lightness per appearance.
+ * then color through the `identity-ink` utility in app.css, which reads
+ * `--identity-h` and tunes lightness per appearance.
  */
 
 /** Ten identity hues (oklch). No hue below 40: a red folder reads as alarm. */

@@ -6,7 +6,7 @@
    */
   import type { FsEntry } from "@whiffle/core";
   import { SectionHeader } from "$lib/components/ui/section-header";
-  import { CURVE } from "$lib/whiffle/motion/curves.svelte";
+  import { CURVE, dur } from "$lib/whiffle/motion/curves.svelte";
   import { folds } from "$lib/whiffle/motion/fold.svelte";
   import GitHub from "~icons/logos/github-icon";
   import Up from "~icons/solar/alt-arrow-up-linear";
@@ -137,7 +137,13 @@
   });
 
   /** The browser and the clone field open under their controls. */
-  const PANEL = { ms: 280, easing: CURVE.inOut };
+  /** Read when a fold plays, in the browser: the duration is a root token. */
+  const PANEL = {
+    get ms() {
+      return dur("--dur-panel");
+    },
+    easing: CURVE.inOut,
+  };
 </script>
 
 <section class="loc" class:embedded={embedded}>
@@ -377,7 +383,7 @@
     border: 0;
     outline: none;
     background: transparent;
-    font: 400 var(--text-label) / 1.4 var(--font-mono);
+    font: var(--weight-body) var(--text-label) / 1.4 var(--font-mono);
     color: var(--ink-strong);
     padding: 0;
   }
@@ -390,7 +396,7 @@
     border-radius: var(--radius-sm);
     background: var(--status-live-bg);
     color: var(--status-live-ink);
-    font: 500 var(--text-label) / 1 var(--font-body);
+    font: var(--weight-strong) var(--text-label) / 1 var(--font-body);
     white-space: nowrap;
   }
   .override {
@@ -400,7 +406,7 @@
     border: 0;
     background: transparent;
     border-radius: var(--radius-sm);
-    font: 500 var(--text-label) / 1 var(--font-body);
+    font: var(--weight-strong) var(--text-label) / 1 var(--font-body);
     color: var(--ink-muted);
     cursor: pointer;
     white-space: nowrap;
@@ -419,7 +425,7 @@
       inset 0 0 0 1px var(--neutral-8),
       var(--shadow-raised);
     border-radius: var(--radius-sm);
-    font: 500 var(--text-label) / 1 var(--font-body);
+    font: var(--weight-strong) var(--text-label) / 1 var(--font-body);
     color: var(--ink-strong);
     cursor: pointer;
     white-space: nowrap;
@@ -448,7 +454,7 @@
     }
   }
   /* A panel opens by growing to its content's height and folds shut the
-     same way (280ms, --ease-in-out; motion/fold.svelte.ts). */
+     same way (--dur-panel, --ease-in-out; motion/fold.svelte.ts). */
   .clip {
     min-height: 0;
   }
@@ -472,7 +478,7 @@
     padding: 0 8px;
     border-radius: var(--radius-sm);
     background: var(--surface-lift);
-    font: 500 var(--text-label) / 1 var(--font-body);
+    font: var(--weight-strong) var(--text-label) / 1 var(--font-body);
     color: var(--ink-strong);
     white-space: nowrap;
     flex: none;
@@ -489,7 +495,7 @@
     display: flex;
     align-items: center;
     gap: 2px;
-    font: 400 var(--text-label) / 1.4 var(--font-mono);
+    font: var(--weight-body) var(--text-label) / 1.4 var(--font-mono);
     color: var(--ink-muted);
   }
   .ancestors {
@@ -517,7 +523,7 @@
     padding: 8px;
     background: var(--surface-lift);
     color: var(--ink-strong);
-    font-weight: 500;
+    font-weight: var(--weight-strong);
     text-align: left;
     overflow-wrap: anywhere;
   }
@@ -544,7 +550,7 @@
     border: 0;
     background: transparent;
     border-radius: var(--radius-sm);
-    font: 400 var(--text-label) / 1 var(--font-mono);
+    font: var(--weight-body) var(--text-label) / 1 var(--font-mono);
     color: var(--ink-strong);
     cursor: pointer;
     text-align: left;
@@ -593,7 +599,7 @@
     white-space: nowrap;
   }
   .path {
-    font: 400 var(--text-meta) / 1.3 var(--font-mono);
+    font: var(--weight-body) var(--text-meta) / 1.3 var(--font-mono);
     color: var(--ink-muted);
     min-width: 0;
     white-space: nowrap;
@@ -603,11 +609,11 @@
   .repo {
     display: grid;
     gap: 8px;
-    transition: opacity 280ms ease;
+    transition: opacity var(--dur-panel) var(--ease-out);
     @media (prefers-reduced-motion: no-preference) {
       transition:
-        transform 280ms var(--ease-in-out),
-        opacity 280ms ease;
+        transform var(--dur-panel) var(--ease-in-out),
+        opacity var(--dur-panel) var(--ease-out);
     }
   }
   .note {

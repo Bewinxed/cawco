@@ -504,7 +504,7 @@
   @media (prefers-reduced-motion: no-preference) {
     button:active,
     a:active {
-      transform: scale(0.96);
+      transform: scale(var(--press-scale));
     }
   }
   button[aria-pressed="true"] {

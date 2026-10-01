@@ -31,7 +31,7 @@
   import { syncFleet } from "../fleet";
   import { causeOf, type FaultScope } from "../fleet-faults";
   import { machineLabel, machineOs } from "../machine";
-  import { appear } from "../motion/curves.svelte";
+  import { appear, morphMs } from "../motion/curves.svelte";
 
   let {
     machines,
@@ -119,7 +119,7 @@
     <TextMorph
       as="span"
       class="count"
-      duration={150}
+      duration={morphMs()}
       text="{applied}/{machines.length}"
     />
     <span class="unit">machines</span>
@@ -219,7 +219,7 @@
       transition:
         background-color var(--dur-panel) var(--ease-out),
         color var(--dur-panel) var(--ease-out),
-        transform 160ms var(--ease-out);
+        transform var(--dur-toggle) var(--ease-out);
     }
   }
   @media (prefers-reduced-motion: no-preference) {
@@ -318,7 +318,7 @@
     @media (prefers-reduced-motion: no-preference) {
       transition:
         var(--transition-control),
-        transform 160ms var(--ease-out);
+        transform var(--dur-toggle) var(--ease-out);
     }
   }
   @media (prefers-reduced-motion: no-preference) {

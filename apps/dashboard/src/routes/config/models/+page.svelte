@@ -12,6 +12,7 @@
   import SectionFrame from "$lib/whiffle/config/SectionFrame.svelte";
   import SwitchField from "$lib/whiffle/config/SwitchField.svelte";
   import { sectionOf } from "$lib/whiffle/config/sections";
+  import { dur, easeOut } from "$lib/whiffle/motion/curves.svelte";
   import { unfold } from "$lib/whiffle/motion/fold.svelte";
   import {
     type OpenRouterState,
@@ -274,8 +275,8 @@
             aria-live="polite"
             class="status num"
             data-tone={phase === 'connected' ? 'ok' : 'off'}
-            in:blur={{ duration: 300, amount: 2 }}
-            out:blur={{ duration: 100, amount: 2 }}
+            in:blur={{ duration: dur('--dur-panel'), easing: easeOut, amount: 2 }}
+            out:blur={{ duration: dur('--dur-exit'), easing: easeOut, amount: 2 }}
           >
             {#if phase === 'exchanging'}
               <span aria-hidden="true" class="dot pulse"></span>
@@ -375,8 +376,8 @@
             aria-live="polite"
             class="status num"
             data-tone={reach.tone}
-            in:blur={{ duration: 300, amount: 2 }}
-            out:blur={{ duration: 100, amount: 2 }}
+            in:blur={{ duration: dur('--dur-panel'), easing: easeOut, amount: 2 }}
+            out:blur={{ duration: dur('--dur-exit'), easing: easeOut, amount: 2 }}
           >
             <span aria-hidden="true" class="dot"></span>
             {reach.text}
@@ -416,7 +417,7 @@
   .morph {
     overflow: hidden;
     @media (prefers-reduced-motion: no-preference) {
-      transition: block-size 300ms cubic-bezier(0.16, 1, 0.3, 1);
+      transition: block-size var(--dur-morph) var(--ease-drawer);
     }
   }
   .stack {
@@ -445,7 +446,7 @@
     stroke-dasharray: 12;
     stroke-dashoffset: 0;
     @media (prefers-reduced-motion: no-preference) {
-      animation: draw 500ms cubic-bezier(0.16, 1, 0.3, 1) 100ms both;
+      animation: draw var(--dur-toggle) var(--ease-out) var(--dur-ghost) both;
     }
   }
   @keyframes draw {
@@ -456,7 +457,9 @@
   /* Finishing the connection: the dot breathes while the hub works. */
   .pulse {
     opacity: 0.6;
-    animation: breathe 2000ms cubic-bezier(0.65, 0, 0.35, 1) infinite;
+    @media (prefers-reduced-motion: no-preference) {
+      animation: breathe var(--breath) var(--ease-in-out) infinite;
+    }
   }
   @keyframes breathe {
     50% {

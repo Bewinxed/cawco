@@ -1,23 +1,24 @@
 /*
- * The new-session dialog's own motion tunables. Every colour, radius, type
- * role, curve and shared duration comes from the root tokens in app.css.
- * Scoped to `.ns-theme`, which sits on the dialog card, the scrim and every
- * portaled popover.
+ * The new-session dialog's own motion names. Each duration is a root token
+ * from app.css under the name the dialog uses for it; the staggers and the
+ * swap distance are its own choreography. Every colour, radius, type role
+ * and curve comes from the root tokens. Scoped to `.ns-theme`, which sits on
+ * the dialog card, the scrim and every portaled popover.
  */
 .ns-theme {
-  --ns-swap-out-ms: 160ms;
+  --ns-swap-out-ms: var(--dur-exit);
   --ns-swap-out-stagger: 14ms;
-  --ns-swap-in-ms: 260ms;
+  --ns-swap-in-ms: var(--dur-pop);
   --ns-swap-in-delay: 40ms;
   --ns-swap-in-stagger: 32ms;
   --ns-swap-distance: 18px;
-  --ns-check-ms: 200ms;
-  --ns-prompt-ms: 240ms;
-  --ns-chip-ms: 120ms;
-  --ns-thumb-ms: 240ms;
-  --ns-harness-thumb-ms: 160ms;
-  --ns-fill-ms: 160ms;
-  --ns-row-ms: 200ms;
+  --ns-check-ms: var(--dur-fade);
+  --ns-prompt-ms: var(--dur-pop);
+  --ns-chip-ms: var(--dur-control);
+  --ns-thumb-ms: var(--dur-pop);
+  --ns-harness-thumb-ms: var(--dur-toggle);
+  --ns-fill-ms: var(--dur-toggle);
+  --ns-row-ms: var(--dur-fade);
 
   font: var(--type-body);
   color: var(--ink-strong);
@@ -35,7 +36,7 @@
   @media (prefers-reduced-motion: no-preference) {
     transition:
       var(--transition-control),
-      transform 160ms var(--ease-out);
+      transform var(--dur-toggle) var(--ease-out);
   }
 }
 /* A button scales on press; a list row, a folder and a segment take
@@ -72,7 +73,7 @@
 }
 .ns-theme .fai-scroll::-webkit-scrollbar-thumb {
   background: var(--neutral-5);
-  border-radius: 999px;
+  border-radius: var(--radius-pill);
   border: 2px solid transparent;
   background-clip: content-box;
 }
@@ -90,8 +91,8 @@
   background: var(--surface-raised);
   box-shadow: var(--shadow-tile);
   transition:
-    background-color 240ms var(--ease-out),
-    color 240ms var(--ease-out);
+    background-color var(--dur-pop) var(--ease-out),
+    color var(--dur-pop) var(--ease-out);
 }
 .ns-theme .ns-tile svg {
   flex: none;
@@ -192,7 +193,7 @@
 }
 .ns-theme .ns-panel {
   @media (prefers-reduced-motion: no-preference) {
-    animation: ns-panel 200ms var(--ease-out) both;
+    animation: ns-panel var(--dur-fade) var(--ease-out) both;
   }
 }
 
@@ -206,7 +207,7 @@
   --btn-icon: 16px;
   height: 36px;
   padding: 0 14px;
-  font: 500 var(--text-body) / 1 var(--font-body);
+  font: var(--weight-strong) var(--text-body) / 1 var(--font-body);
   letter-spacing: -0.01em;
   border: 1px solid var(--border-control);
   border-radius: var(--radius-md);
@@ -252,21 +253,21 @@
   background: var(--surface-raised);
   border: 1px solid var(--border-control);
   border-radius: var(--radius-sm);
-  font: 500 var(--text-label) / 1 var(--font-body);
+  font: var(--weight-strong) var(--text-label) / 1 var(--font-body);
   color: var(--ink-strong);
   cursor: pointer;
   white-space: nowrap;
   max-width: 100%;
   transition:
-    background-color var(--ns-chip-ms) ease,
-    border-color var(--ns-chip-ms) ease,
-    color var(--ns-chip-ms) ease;
+    background-color var(--ns-chip-ms) var(--ease-out),
+    border-color var(--ns-chip-ms) var(--ease-out),
+    color var(--ns-chip-ms) var(--ease-out);
   @media (prefers-reduced-motion: no-preference) {
     transition:
-      background-color var(--ns-chip-ms) ease,
-      border-color var(--ns-chip-ms) ease,
-      color var(--ns-chip-ms) ease,
-      transform 160ms var(--ease-out);
+      background-color var(--ns-chip-ms) var(--ease-out),
+      border-color var(--ns-chip-ms) var(--ease-out),
+      color var(--ns-chip-ms) var(--ease-out),
+      transform var(--dur-toggle) var(--ease-out);
   }
 }
 .ns-theme .ns-chip-btn > svg {
@@ -300,7 +301,7 @@
   gap: 6px;
   height: 28px;
   padding: 0 8px;
-  font: 500 var(--text-label) / 1 var(--font-body);
+  font: var(--weight-strong) var(--text-label) / 1 var(--font-body);
   border-radius: var(--radius-sm);
 }
 

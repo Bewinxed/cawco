@@ -5,7 +5,12 @@
   import { Kbd } from "$lib/components/ui/kbd";
   import { Skeleton } from "$lib/components/ui/skeleton";
   import { IconToolGeneric, IconToolMcp, IconToolSkill } from "$lib/icons";
-  import { bezier, easeOut, motionOk } from "$lib/whiffle/motion/curves.svelte";
+  import {
+    dur,
+    easeDrawer,
+    easeOut,
+    motionOk,
+  } from "$lib/whiffle/motion/curves.svelte";
   import {
     askSuggestions,
     SUGGEST_PAUSE_MS,
@@ -35,13 +40,6 @@
   const MIN_CHARS = 12;
   /** The shimmer waits this long, so a fast answer never flashes it. */
   const SHIMMER_AFTER_MS = 150;
-  /** `--dur-panel` and `--dur-control`, for Svelte's JS-driven flip and exit. */
-  const GLIDE_MS = 300;
-  const LEAVE_MS = 100;
-
-  /** A cubic-bezier easing, so the JS motion runs on the house curves. */
-  /** The glide in place: the settle-in curve the flip has always used. */
-  const glide = bezier(0.16, 1, 0.3, 1);
 
   /**
    * A chip arrives rising 4px out of 0.96, one after another 30ms apart;
@@ -50,7 +48,7 @@
   function arrive(_node: HTMLElement, { i }: { i: number }) {
     return {
       delay: i * 30,
-      duration: 280,
+      duration: dur("--dur-panel"),
       easing: easeOut,
       css: (t: number, u: number) =>
         motionOk.current
@@ -196,7 +194,7 @@
     node.style.insetBlockStart = `${box.top - (frame?.top ?? 0)}px`;
     node.style.inlineSize = `${box.width}px`;
     return {
-      duration: LEAVE_MS,
+      duration: dur("--dur-control"),
       easing: easeOut,
       css: (t: number) =>
         motionOk.current
@@ -211,7 +209,10 @@
        its way, or a failure. Its row is kept whether it is drawn or not
        (app.css `--c-suggest-room`), so coming and going moves nothing. -->
   {#if shown.length > 0 || slow || failure}
-    <fieldset class="track" out:fade={{ duration: LEAVE_MS, easing: easeOut }}>
+    <fieldset
+      class="track"
+      out:fade={{ duration: dur('--dur-control'), easing: easeOut }}
+    >
       <legend class="sr-only">Suggested skills, tools and MCP servers</legend>
       {#each shown as { candidate, noul }, i (candidate.id)}
         <button
@@ -222,7 +223,7 @@
           style:--conf={confidence(noul)}
           in:arrive={{ i }}
           out:leave
-          animate:flip={{ duration: motionOk.current ? GLIDE_MS : 0, easing: glide }}
+          animate:flip={{ duration: motionOk.current ? dur('--dur-panel') : 0, easing: easeDrawer }}
         >
           {#if candidate.kind === 'skill'}
             <IconToolSkill aria-hidden="true" class="glyph" />
@@ -247,7 +248,7 @@
         <span
           aria-hidden="true"
           class="shimmer"
-          in:fade={{ duration: 280, easing: easeOut }}
+          in:fade={{ duration: dur('--dur-panel'), easing: easeOut }}
           ><Skeleton class="size-full" /></span
         >
       {/if}
@@ -255,7 +256,7 @@
         <p
           class="fail"
           role="status"
-          in:fade={{ duration: 280, easing: easeOut }}
+          in:fade={{ duration: dur('--dur-panel'), easing: easeOut }}
         >
           Suggestions failed: {failure}
         </p>
@@ -352,7 +353,7 @@
     /* A confidence that moves in place re-tints over --dur-panel. */
     @media (prefers-reduced-motion: no-preference) {
       transition:
-        transform 160ms var(--ease-out),
+        transform var(--dur-toggle) var(--ease-out),
         background-color var(--dur-panel) var(--ease-out),
         border-color var(--dur-panel) var(--ease-out),
         color var(--dur-control) var(--ease-out);

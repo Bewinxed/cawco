@@ -107,7 +107,7 @@
     border-radius: var(--radius-sm);
     pointer-events: none;
     @media (prefers-reduced-motion: no-preference) {
-      transition: transform 160ms var(--ease-in-out);
+      transition: transform var(--dur-toggle) var(--ease-in-out);
     }
   }
   .embedded .fill {

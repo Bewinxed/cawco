@@ -7,10 +7,10 @@
    */
   import { Popover } from "bits-ui";
   import type { Snippet } from "svelte";
-  import { cubicOut } from "svelte/easing";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
   import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
+  import { dur, easeOut } from "$lib/whiffle/motion/curves.svelte";
   import {
     type PopoverMember,
     providePopoverGroup,
@@ -49,9 +49,9 @@
       return { duration: 0 };
     }
     return {
-      duration: 180,
+      duration: dur("--dur-morph"),
       delay: 60,
-      easing: cubicOut,
+      easing: easeOut,
       css: (t) => `opacity: ${t}`,
     };
   }

@@ -9,6 +9,7 @@
   import {
     dur,
     easeOut,
+    morphMs,
     motionOk,
     popScale,
   } from "$lib/whiffle/motion/curves.svelte";
@@ -87,7 +88,11 @@
                   class="fault num"
                   title="{faults} failing on a machine or at the hub"
                   transition:badge
-                  ><TextMorph as="span" duration={150} text={String(faults)} />
+                  ><TextMorph
+                    as="span"
+                    duration={morphMs()}
+                    text={String(faults)}
+                  />
                   <span class="sr-only"> failing</span></span
                 >
               {/if}
@@ -189,7 +194,7 @@
     min-width: 0;
     overflow: hidden;
     font: var(--type-label);
-    font-weight: 500;
+    font-weight: var(--weight-strong);
     text-overflow: ellipsis;
     white-space: nowrap;
   }

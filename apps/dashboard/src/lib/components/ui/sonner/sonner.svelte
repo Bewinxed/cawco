@@ -179,7 +179,7 @@
   ) {
     border-radius: var(--radius-sm);
     font: var(--type-label);
-    transition: transform 160ms var(--ease-out);
+    transition: transform var(--dur-toggle) var(--ease-out);
 
     @media (prefers-reduced-motion: no-preference) {
       &:active {

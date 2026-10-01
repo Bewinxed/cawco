@@ -8,7 +8,7 @@
     SLEEPING_LABEL,
     UNKNOWN_LABEL,
   } from "./activity";
-  import { dur, easeOut, motionOk } from "./motion/curves.svelte";
+  import { dur, easeOut, motionOk, popScale } from "./motion/curves.svelte";
 
   interface Props {
     activity: Activity;
@@ -65,16 +65,20 @@
 
   /**
    * One glyph handing its place to the next (failed, unknown, asleep, a dot):
-   * the new one fades in over --dur-control as it settles from .92, the old
-   * one fades out in the same cell. With reduced motion, only the fade.
+   * the new one fades in over --dur-control as it settles from --pop-scale,
+   * the old one fades out in the same cell. With reduced motion, only the
+   * fade.
    */
   function swap(_node: Element) {
     const grow = motionOk.current;
+    const from = grow ? popScale() : 1;
     return {
       duration: dur("--dur-control"),
       easing: easeOut,
       css: (t: number) =>
-        grow ? `opacity: ${t}; scale: ${0.92 + 0.08 * t}` : `opacity: ${t}`,
+        grow
+          ? `opacity: ${t}; scale: ${from + (1 - from) * t}`
+          : `opacity: ${t}`,
     };
   }
 

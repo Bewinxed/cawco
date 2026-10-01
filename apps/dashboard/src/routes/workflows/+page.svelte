@@ -278,13 +278,13 @@
     min-height: 64px;
   }
   th {
-    font-weight: 500;
+    font-weight: var(--weight-strong);
   }
   .name {
     min-height: 24px;
     display: grid;
     color: var(--ink-strong);
-    font-weight: 500;
+    font-weight: var(--weight-strong);
     overflow-wrap: anywhere;
   }
   .count {

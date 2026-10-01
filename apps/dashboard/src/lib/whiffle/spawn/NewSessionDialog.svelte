@@ -1169,7 +1169,7 @@
     flex-direction: column;
     background: var(--surface-recess);
     border-radius: var(--radius-lg);
-    padding: 7px;
+    padding: var(--space-2);
     box-shadow: var(--shadow-modal);
     outline: none;
     transform-origin: center;
@@ -1216,7 +1216,7 @@
     height: 12px;
   }
   .title {
-    font: 500 var(--text-label) / 1 var(--font-body);
+    font: var(--weight-strong) var(--text-label) / 1 var(--font-body);
     color: var(--ink-muted);
     white-space: nowrap;
     overflow: hidden;
@@ -1261,7 +1261,7 @@
   .sec {
     display: grid;
     gap: 8px;
-    animation: ns-in 260ms var(--ease-out) both;
+    animation: ns-in var(--dur-pop) var(--ease-out) both;
     animation-delay: var(--delay, 0ms);
   }
   .prompt-sec {
@@ -1366,7 +1366,7 @@
   }
   @keyframes ns-panel-out {
     to {
-      transform: translateY(6px) scale(0.98);
+      transform: translateY(6px) scale(var(--press-scale));
       opacity: 0;
     }
   }

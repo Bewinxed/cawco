@@ -8,7 +8,7 @@
     IconError,
     IconStop,
   } from "$lib/icons";
-  import { crossIn } from "$lib/whiffle/motion/curves.svelte";
+  import { crossIn, morphMs } from "$lib/whiffle/motion/curves.svelte";
 
   let {
     status,
@@ -57,7 +57,7 @@
     >{#key tone}
       <span transition:crossIn><Glyph class="size-3" /></span>
     {/key}</span
-  ><TextMorph as="span" duration={150} text={label} /></span
+  ><TextMorph as="span" duration={morphMs()} text={label} /></span
 >
 <style>
   .wf-status {

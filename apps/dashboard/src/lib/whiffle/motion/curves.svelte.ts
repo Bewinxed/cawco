@@ -131,6 +131,13 @@ export const dur = (name: `--dur-${string}`): number => {
   return token.endsWith("ms") ? value : value * 1000;
 };
 export const ease = (name: `--ease-${string}`): string => rootToken(name);
+/**
+ * `--dur-morph` for a TextMorph's `duration` prop: words and figures morph
+ * at the pace a button's width follows its label. 0 on the server, where
+ * nothing animates and there is no stylesheet to read.
+ */
+export const morphMs = (): number =>
+  typeof document === "undefined" ? 0 : dur("--dur-morph");
 export const popScale = (): number =>
   Number.parseFloat(rootToken("--pop-scale"));
 
@@ -148,7 +155,7 @@ export const CURVE = {
  */
 export function appear(_node: Element) {
   return {
-    duration: 200,
+    duration: dur("--dur-fade"),
     easing: easeOut,
     css: (t: number) => `opacity: ${t}`,
   };

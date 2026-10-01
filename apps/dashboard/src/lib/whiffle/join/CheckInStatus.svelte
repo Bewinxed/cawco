@@ -48,7 +48,7 @@
     height: 6px;
     border-radius: var(--radius-pill);
     background: var(--hue-orange-500);
-    transition: background-color var(--dur-control) ease;
+    transition: background-color var(--dur-control) var(--ease-out);
   }
   .dot.online {
     background: var(--hue-green-500);

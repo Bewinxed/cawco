@@ -6,7 +6,6 @@
   import type { EffortLevel, HarnessKind, PermissionMode } from "@whiffle/core";
   import { EFFORT_NONE, isEffortLevel } from "@whiffle/core";
   import { onDestroy, untrack } from "svelte";
-  import { cubicOut } from "svelte/easing";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
   import { TextMorph } from "torph/svelte";
@@ -25,7 +24,14 @@
   import { copyToClipboard } from "../copy";
   import HarnessLogo from "../HarnessLogo.svelte";
   import { describingRow, ensureModels } from "../models.svelte";
-  import { crossIn, crossOut, dur } from "../motion/curves.svelte";
+  import {
+    CURVE,
+    crossIn,
+    crossOut,
+    dur,
+    easeOut,
+    morphMs as morphDuration,
+  } from "../motion/curves.svelte";
   import { PERMISSION_MODES } from "../permission-modes";
   import ModelSection from "../spawn/ModelSection.svelte";
   import { modelName } from "../spawn/model-entries";
@@ -54,14 +60,14 @@
     dir: 1 | -1;
   } = $props();
   const reduceMotion = new MediaQuery("(prefers-reduced-motion: reduce)");
-  const morphMs = $derived(reduceMotion.current ? 0 : 150);
+  const morphMs = $derived(reduceMotion.current ? 0 : morphDuration());
   let metaEl = $state<HTMLElement>();
   let statsEl = $state<HTMLElement>();
   /** The harness mark arrives from the side the card moved toward. */
   function harnessIn(_node: Element): TransitionConfig {
     return {
-      duration: reduceMotion.current ? 0 : 180,
-      easing: cubicOut,
+      duration: reduceMotion.current ? 0 : dur("--dur-morph"),
+      easing: easeOut,
       css: (t) =>
         `transform: translateX(calc(${(1 - t) * 8}px * var(--dir))); opacity: ${t}`,
     };
@@ -236,7 +242,7 @@
             { transform: `translateX(${8 * dir}px)`, opacity: 0.6 },
             { transform: "none", opacity: 1 },
           ],
-          { duration: 180, easing: "cubic-bezier(0.215, 0.61, 0.355, 1)" }
+          { duration: dur("--dur-morph"), easing: CURVE.out }
         );
       }
     });

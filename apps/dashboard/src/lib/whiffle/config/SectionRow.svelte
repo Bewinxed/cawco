@@ -195,7 +195,7 @@
     border-radius: var(--radius-sm);
   }
   .item.flash {
-    animation: row-flash 600ms var(--ease-out) both;
+    animation: row-flash calc(var(--dur-fade) * 3) var(--ease-out) both;
   }
   @keyframes row-flash {
     from {

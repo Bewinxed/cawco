@@ -263,7 +263,7 @@
     if (!(chip && motionOk.current)) {
       left.add(item.id);
       target.animate([{ opacity: 0 }, { opacity: 1 }], {
-        duration: 160,
+        duration: dur("--dur-menu"),
         easing: CURVE.out,
       });
       return;
@@ -299,9 +299,14 @@
           transform: `translate(${to.left - from.left}px, ${dy}px) scale(${scale})`,
         },
       ],
-      { duration: 420, easing: CURVE.inOut, fill: "forwards" }
+      // A flight and a half: the chip travels further than a row moves.
+      {
+        duration: dur("--dur-panel") * 1.5,
+        easing: CURVE.inOut,
+        fill: "forwards",
+      }
     ).finished;
-    const landing = { duration: 160, easing: CURVE.out };
+    const landing = { duration: dur("--dur-menu"), easing: CURVE.out };
     target.style.removeProperty("opacity");
     target.animate([{ opacity: 0 }, { opacity: 1 }], landing);
     await copy.animate([{ opacity: 1 }, { opacity: 0 }], {
@@ -597,7 +602,7 @@
 
   function panelIn(_node: Element): TransitionConfig {
     if (!motionOk.current) {
-      return { duration: 160, css: (t) => `opacity: ${t}` };
+      return { duration: dur("--dur-menu"), css: (t) => `opacity: ${t}` };
     }
     return {
       duration: dur("--dur-menu"),
@@ -607,11 +612,19 @@
     };
   }
   function panelOut(_node: Element): TransitionConfig {
-    return { duration: 120, easing: easeOut, css: (t) => `opacity: ${t}` };
+    return {
+      duration: dur("--dur-control"),
+      easing: easeOut,
+      css: (t) => `opacity: ${t}`,
+    };
   }
   /** The panel's content, when it glides to another chip: the new one fades in. */
   function swapIn(_node: Element): TransitionConfig {
-    return { duration: 100, easing: easeOut, css: (t) => `opacity: ${t}` };
+    return {
+      duration: dur("--dur-control"),
+      easing: easeOut,
+      css: (t) => `opacity: ${t}`,
+    };
   }
   /**
    * The old content fades out of the flow, so the panel's size tweens once,
@@ -620,25 +633,37 @@
   function swapOut(node: HTMLElement): TransitionConfig {
     node.style.position = "absolute";
     node.style.inset = "var(--space-3) var(--space-3) auto";
-    return { duration: 100, easing: easeOut, css: (t) => `opacity: ${t}` };
+    return {
+      duration: dur("--dur-control"),
+      easing: easeOut,
+      css: (t) => `opacity: ${t}`,
+    };
   }
   /**
    * The check or the triangle taking the dot's place: drawn in from its
-   * leading edge over 240ms as it grows from 0.6.
+   * leading edge over --dur-pop as it grows from 0.6.
    */
   function slotIn(_node: Element, ends: boolean): TransitionConfig {
     if (!(ends && motionOk.current)) {
-      return { duration: 120, easing: easeOut, css: (t) => `opacity: ${t}` };
+      return {
+        duration: dur("--dur-control"),
+        easing: easeOut,
+        css: (t) => `opacity: ${t}`,
+      };
     }
     return {
-      duration: 240,
+      duration: dur("--dur-pop"),
       easing: easeOut,
       css: (t, u) =>
         `transform: scale(${(0.6 + 0.4 * t).toFixed(3)}); clip-path: inset(0 ${(u * 100).toFixed(1)}% 0 0)`,
     };
   }
   function slotOut(_node: Element): TransitionConfig {
-    return { duration: 120, easing: easeOut, css: (t) => `opacity: ${t}` };
+    return {
+      duration: dur("--dur-control"),
+      easing: easeOut,
+      css: (t) => `opacity: ${t}`,
+    };
   }
 
   const slotOf = (tone: Tone) =>
@@ -1086,12 +1111,12 @@
     .chip.fly::before,
     .chip.fly .words,
     .chip.fly .slot {
-      animation: arrive 160ms var(--ease-out) 120ms both;
+      animation: arrive var(--dur-menu) var(--ease-out) var(--dur-control) both;
     }
   }
   @media (prefers-reduced-motion: reduce) {
     .chip.fly {
-      animation: arrive 160ms var(--ease-out) both;
+      animation: arrive var(--dur-menu) var(--ease-out) both;
     }
   }
   @keyframes arrive {
@@ -1103,7 +1128,7 @@
   /* Finished while watched: one soft pulse of the success tint (after the
      arrival rules, which it replaces on a chip that flew in). */
   .chip.finished::before {
-    animation: finish 400ms var(--ease-out);
+    animation: finish calc(var(--dur-fade) * 2) var(--ease-out);
   }
   @keyframes finish {
     35% {
@@ -1162,7 +1187,7 @@
   /* The house popover, standing 4px off the chips, growing from the chip
      it belongs to, as wide as its content up to 440px or the row. Between
      chips one surface glides and takes the new content's size (morph) on
-     one clock, 220ms --ease-drawer, while the content cross-fades. */
+     one clock, --dur-morph on --ease-drawer, while the content cross-fades. */
   .panel {
     position: absolute;
     inset-block-end: calc(100% + 4px);
@@ -1189,7 +1214,7 @@
   }
   @media (prefers-reduced-motion: no-preference) {
     .panel.gliding {
-      transition: translate 220ms var(--ease-drawer);
+      transition: translate var(--dur-morph) var(--ease-drawer);
     }
   }
   /* The content's own width, capped at 440px or the row (less the panel's

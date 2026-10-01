@@ -62,6 +62,6 @@
   mark {
     background: transparent;
     color: var(--ink-strong);
-    font-weight: 500;
+    font-weight: var(--weight-strong);
   }
 </style>

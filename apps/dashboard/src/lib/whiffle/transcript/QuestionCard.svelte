@@ -417,7 +417,7 @@
       font-size: var(--text-label);
       font-weight: var(--weight-strong);
       text-transform: uppercase;
-      letter-spacing: 0.02em;
+      letter-spacing: var(--track-caps);
       color: var(--ink-muted);
       flex: 0 0 auto;
     }

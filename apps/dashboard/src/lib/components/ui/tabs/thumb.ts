@@ -1,10 +1,12 @@
+import { dur, ease } from "$lib/whiffle/motion/curves.svelte";
+
 /**
  * Slides the thumb of a segmented group (tabs, single toggle group) under
- * its selected item, gliding its position and its size together over 240ms
- * on --ease-in-out, the way the new-session ghost follows the hover. A
- * change caught mid-glide starts from where the thumb is on screen, not
- * from where it was headed, and width and height tween rather than scale,
- * so the thumb's corners never stretch.
+ * its selected item, gliding its position and its size together over
+ * --dur-pop on --ease-in-out, the way the new-session ghost follows the
+ * hover. A change caught mid-glide starts from where the thumb is on
+ * screen, not from where it was headed, and width and height tween rather
+ * than scale, so the thumb's corners never stretch.
  */
 export function slideThumb(
   group: HTMLElement,
@@ -63,8 +65,8 @@ export function slideThumb(
           },
         ],
         {
-          duration: 240,
-          easing: getComputedStyle(group).getPropertyValue("--ease-in-out"),
+          duration: dur("--dur-pop"),
+          easing: ease("--ease-in-out"),
         }
       );
     }

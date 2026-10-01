@@ -107,7 +107,7 @@
     border: 0;
     border-radius: var(--radius-sm);
     background: transparent;
-    font: 500 var(--text-label) / 1 var(--font-body);
+    font: var(--weight-strong) var(--text-label) / 1 var(--font-body);
     color: var(--ink-muted);
     cursor: pointer;
     white-space: nowrap;

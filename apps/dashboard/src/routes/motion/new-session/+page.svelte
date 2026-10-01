@@ -25,7 +25,7 @@
   }
   h1 {
     font-size: var(--text-title);
-    font-weight: 500;
+    font-weight: var(--weight-strong);
     color: var(--ink-strong);
   }
 </style>

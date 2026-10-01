@@ -67,7 +67,7 @@ colors:
   ink-muted: "light-dark(oklch(49.95% 0.0117 267.27), oklch(77.92% 0.0104 267.34))"
   ink-row: "light-dark(oklch(36.40% 0.0079 262.58), oklch(91.24% 0.0064 265.08))"
   ink-stat: "light-dark(oklch(38.00% 0.0083 263.36), oklch(88.82% 0.0071 265.68))"
-  ink-subtle: "light-dark(oklch(53.61% 0.0121 266.40), oklch(68.32% 0.0116 264.29))"
+  ink-subtle: "light-dark(oklch(51.95% 0.0119 266.79), oklch(68.32% 0.0116 264.29))"
   mark-1: "light-dark(oklch(51.00% 0.1680 27.90), oklch(70.00% 0.1700 27.90))"
   mark-2: "light-dark(oklch(53.00% 0.1500 47.40), oklch(70.00% 0.1500 47.40))"
   mark-3: "light-dark(oklch(50.00% 0.1150 86.80), oklch(70.00% 0.1200 86.80))"
@@ -430,9 +430,11 @@ All motion stands on three curves and a short duration scale (values in the side
 
 **Live work breathes.** Anything still running pulses its opacity on `--breath` (2s, ease-in-out): the catch-up dot, a subagent's beat, the in-flight tool glyph, the Working status glyph. Nothing that has finished moves.
 
+**The One Loop Rule.** Anything that turns or blinks while something is pending runs one ambient loop, `--dur-loop` (1.2s): a spinner, the task ring's arc, the supervisor's orbit, the skeleton's sweep, and Tailwind's `animate-spin`, `animate-pulse` and `animate-ping`, which the theme points at the token. A rotation turns linearly; a pulse runs ease-in-out and a ping ease-out. Longer rhythms are multiples of the breath, never new numbers: the thinking indicator's words change every two breaths. Tailwind's default transition timing (`transition-colors` and its siblings) is `--dur-control` on ease-out.
+
 **The Reduced Motion Rule.** Motion is opt-in. Every travelling transition and keyframe sits under `prefers-reduced-motion: no-preference`, and JavaScript motion asks the same question through `motionOk` (`motion/curves.svelte.ts`). With reduced motion, opacity and colour fades still run, pages cross-fade in place over 120ms, heights land at once, folds fade instead of opening, list changes only fade, flights do not fly, and loops stop (an indeterminate spinner keeps turning). Reduced motion means stillness. It does not mean an instant swap.
 
-**Pages.** The shell keys its page on the route (`motion/route.svelte.ts`). Between two sidebar spokes the page moves 8% vertically, in the order the sidebar runs, over 120ms. Deeper or shallower moves nudge 8% horizontally. Browser back and forward follow the history step and flip in right-to-left layouts. On a phone, Configure behaves as a stack: a deeper page pushes in from the inline end over 280ms while the page it leaves falls back 30% and dims to 0.6, and back reverses it over 240ms. On a wide screen, Configure sections rise or drop 4% over 150ms while the rail holds still. Everything runs on the drawer curve, and the leaving page is inert.
+**Pages.** The shell keys its page on the route (`motion/route.svelte.ts`). Between two sidebar spokes the page moves 8% vertically, in the order the sidebar runs, over 120ms. Deeper or shallower moves nudge 8% horizontally. Browser back and forward follow the history step and flip in right-to-left layouts. On a phone, Configure behaves as a stack: a deeper page pushes in from the inline end over 280ms while the page it leaves falls back 30% and dims to 0.6, and back reverses it over 260ms. On a wide screen, Configure sections rise or drop 4% over 140ms while the rail holds still. Everything runs on the drawer curve, and the leaving page is inert.
 
 **Theme switch.** The new theme is drawn at once under a wash of the old background, which fades off over 200ms on ease-out (`theme.svelte.ts`, `.theme-wash`). Element transitions are switched off for the flip. With reduced motion the theme flips with no wash.
 
@@ -463,7 +465,7 @@ A chip background is the hue's 3-step mixed 24% toward its 9-step (32% for attn 
 - **Paper ramp** (`neutral-1` … `neutral-12`, no step 10): a locked ramp at seed hue 263 whose chroma rounds to nothing. The dark ramp is its own set of lightnesses, not an inversion. `neutral-9` is the one step shared by both themes.
 - **Surfaces**: `surface-raised` (cards, menus, popovers, dialog body), `surface-recess` (the app field, top bar sheet, dialog tray, badges, stat well; 0.026 L under raised in both themes), `surface-band` (a table's header band, 0.036 L under raised), `surface-recess-deep` (the groove of a segmented control or progress track), `surface-shelf` (the bar folder tabs stand on), `surface-lift` (a thumb in a groove), `surface-fill` (pressed or selected), `surface-hover` (hover on any control or row).
 - **Edges**: `border-hairline` (the quiet rule between rows, cards and regions), `border-control` (a control's own edge), `well-edge` (the reader's message well: darker than the well by day, ink at 8% at night).
-- **Inks**: `ink-strong` (primary text), `ink-muted` (secondary text and labels), `ink-row` (a ledger row's name, the comp's #393939), `ink-stat` (a stat figure, the comp's #404040), `ink-subtle` (placeholders and tertiary text).
+- **Inks**: `ink-strong` (primary text), `ink-muted` (secondary text and labels), `ink-row` (a ledger row's name, the comp's #393939), `ink-stat` (a stat figure, the comp's #404040), `ink-subtle` (placeholders and tertiary text: the weakest mix of neutral-8 into neutral-11 that holds 4.5:1 on the fill, hover and raised surfaces, at 4.50, 5.24 and 5.42:1 by day and 4.51, 5.04 and 5.59:1 at night).
 
 **The Dark Flips Polarity Rule.** At night a groove sits below the card (recess-deep is neutral-1) and a lifted thumb sits above it (neutral-6). Dark mode is a second set of lightness decisions, never an inverted light mode.
 
@@ -545,12 +547,12 @@ Depth is tonal first and shadowed second. The frame (app field, top bar sheet, d
 - **Overlay** (`0 18px 48px` shadow-tint-3, plus `0 2px 6px` shadow-tint): popovers, menus, the dialog tray, toasts, floating tags. The modal shadow is the same value.
 - **Drawer** (`0 12px 40px` shadow-tint-3): sheets.
 
-The Tailwind ladder (`shadow-xs` … `shadow-2xl`) is light-only drops by day. At night it aliases the doctrine set: xs becomes hairline, sm and md become tile, lg becomes overlay, xl and 2xl become drawer.
+The Tailwind ladder has four steps, `shadow-xs`, `shadow-md`, `shadow-lg` and `shadow-xl` (Tailwind's own scale is cleared, so no other step exists). By day they are graphite drops. At night they alias the doctrine set: xs becomes hairline, md becomes tile, lg becomes overlay and xl becomes drawer.
 
 ### Materials
 - **Scrim**: the page's own background at 72% with a 2px blur, behind dialogs and sheets.
 - **Panel material**: the card colour at 72% by day and 68% at night, with a 28px blur and 1.6 saturation, for chrome that floats over content. It turns opaque under `prefers-reduced-transparency: reduce`.
-- **Composer glass**: the raised surface at 82% with a 16px blur and 1.6 saturation, so the transcript shows faintly under the field.
+- **Composer glass**: the panel material at the base blur (`--material-blur`, 20px, and 1.6 saturation), so the transcript shows faintly under the field; opaque raised surface under `prefers-reduced-transparency: reduce`.
 
 ### Named Rules
 **The Frame Recesses Rule.** The frame recesses and content never does. The one sanctioned card-in-card is the stat tile's recessed well, which the reference plan calls "a signature move of the design".
@@ -563,7 +565,7 @@ The Tailwind ladder (`shadow-xs` … `shadow-2xl`) is light-only drops by day. A
 
 Corners are soft and graded by role: 5px for marks and tiles, 8px for items inside a surface, 10px for controls and buttons, 12px for cards and menus, and 18px for the dialog tray. The stat well uses 7px. A fully round shape is kept for state pills on the board, the compacting note, switches and status dots; buttons are never pills.
 
-**The Concentric Rule.** A surface nested inside another takes the outer radius less the inset. The dialog tray (18px, 6px padding) holds a 12px body. The composer shell (12px, 7px inset) holds 5px controls, and the Stop ring 3px outside them is drawn at 8px. A subagent's well (8px, 4px padding) holds a 5px report.
+**The Concentric Rule.** A surface nested inside another takes the outer radius less the inset. The dialog tray (18px, 6px padding) holds a 12px body. The composer shell (12px, 7px inset) holds 5px controls, and the autopilot's halo 3px outside its control is drawn at 8px. A subagent's well (8px, 4px padding) holds a 5px report.
 
 **The Measured Exception Rule.** The stat tile keeps the comp's measured radii (a 10px card around a 7px well, 7px in), even though a concentric well would be 3px.
 
@@ -601,22 +603,22 @@ Tactile and quiet: a hairline-edged raised block that dips under the hand.
 
 ### Cards and the stat tile
 - **Card:** 12px radius, raised surface, the tile shadow, 18px vertical rhythm (12px for `sm`), no border.
-- **Stat tile:** a 10px card, 90px tall, holding a recessed well 7px in: recess surface, 1px hairline, 7px radius, 10px padding. The label (label role, muted) sits over the value (KPI role, `ink-stat`, tabular), with its unit in meta on the same baseline. A new value morphs digit by digit over 150ms on ease-out, and a unit pops in from 0.92.
+- **Stat tile:** a 10px card, 90px tall, holding a recessed well 7px in: recess surface, 1px hairline, 7px radius, 10px padding. The label (label role, muted) sits over the value (KPI role, `ink-stat`, tabular), with its unit in meta on the same baseline. A new value morphs digit by digit over 180ms on ease-out, and a unit pops in from 0.92.
 - **Needs-you tile:** a real button wrapping the tile. Its hover, chosen (`status-attn-bg` well with attn ink) and pressed fills paint the well, not the card. Pressing it filters the board to the sessions it counts.
 
 ### Badges and state chips
 - **Badge:** 20px, 5px radius, label role, recess surface, no border, 12px icons. The `live`, `attn`, `done` and `fail` variants take their status pairs.
-- **Board state pill:** fully round, 24px tall, 10px padding, label weight, status tint with no glyph. Idle drops the tint and the padding. When state changes the tint turns and the word morphs over 280ms on ease-out, with the width following.
+- **Board state pill:** fully round, 24px tall, 10px padding, label weight, status tint with no glyph. Idle drops the tint and the padding. When state changes the tint turns over 280ms on ease-out and the word morphs over 180ms, with the width following.
 
 ### Navigation, menus and floating surfaces
-- **Popover, dropdown, select, context menu, toast** (`kit-pop`): 12px radius, 1px control edge, overlay shadow, 6px padding, raised surface. A popover whose content changes size tweens to the new height over 220ms on the drawer curve.
+- **Popover, dropdown, select, context menu, toast** (`kit-pop`): 12px radius, 1px control edge, overlay shadow, 6px padding, raised surface. A popover whose content changes size tweens to the new height over 180ms on the drawer curve.
 - **Motion (origin-aware):** opens from its trigger's side over 260ms on the drawer curve, rising 8px and growing from 0.92 as it fades in. It leaves the same way over 160ms. These are transitions on `data-state`, so a close caught mid-open turns back from where it is. With reduced motion only the fade runs.
 - **Menu item:** 8px radius, 32px tall (44px on a coarse pointer), label role, 10px padding, 16px icons.
 - **Hover ghost and selection pill:** each list has one hover ghost and one selection pill drawn under its rows (`highlight.svelte.ts`). The ghost glides to the row nearest the pointer over 80ms on ease-in-out and fades in place when the pointer leaves. A menu's ghost follows the highlighted item under arrow keys too. The pill glides to a new selection over 120ms on the drawer curve. A row picked under the ghost becomes the pill at once while the old selection fades where it was, so no frame shows both or neither. On a touch screen a pointer-driven ghost never shows.
 - **Ticks and dots:** a checkbox tick draws itself along its stroke over 160ms (120ms in a menu). A radio dot grows from 0.6 as it fades in. With reduced motion both only fade.
 
 ### Segmented controls and tabs
-- **Segmented** (`kit-segmented`, used by Tabs and single toggle groups): a recess-deep groove with a 10px radius and 3px padding holding a lifted thumb (8px radius, raised shadow). Segments are 30px tall with 10px padding, label weight at line-height 1, muted until chosen. The thumb glides with position and size together over 240ms on ease-in-out, from wherever it is drawn. A segment presses with the tint, never a scale.
+- **Segmented** (`kit-segmented`, used by Tabs and single toggle groups): a recess-deep groove with a 10px radius and 3px padding holding a lifted thumb (8px radius, raised shadow). Segments are 30px tall with 10px padding, label weight at line-height 1, muted until chosen. The thumb glides with position and size together over 260ms on ease-in-out, from wherever it is drawn. A segment presses with the tint, never a scale.
 - **Fluid tabs** (`fluid-tabs`): a track of 4px padding and 28px items (36px control; 32px items on a coarse pointer). The active segment is a raised sheet with the tile shadow that slides over 160ms on ease-out. The focus ring glides between tabs over 80ms. The hover ghost sits one register down at 40% hover. A scrolling track fades whichever edge has more to scroll, and a mouse wheel moves it sideways on the 0.3s glide spring. Arrow keys move and choose.
 - **Folder tabs:** the same track standing on `surface-shelf`. A switch wipes the chosen sheet in from the side facing the old tab while the old sheet wipes out toward the new one (mask size, 260ms, drawer curve). A jump past a neighbour slides the chosen sheet across from the tab it left. A swipe gesture drives both sheets frame by frame.
 
@@ -624,7 +626,7 @@ Tactile and quiet: a hairline-edged raised block that dips under the hand.
 Brand ink: `brand-solid` fill, `on-brand` text, meta role, 8px radius, 6×10px padding, with a 10px rotated square arrow. It fades in and settles from 0.96 over 140ms on ease-out, and leaves the same way.
 
 ### Dialog, sheet and drawer
-- **Dialog:** a recess tray (18px radius, 6px padding, overlay shadow) holding a raised body (12px radius, 18px padding) for concentric corners, over the blurred scrim. It enters over 280ms on ease-out rising 6px, exits over 160ms, and tweens to a new height over 220ms when its body changes. The close button is a 30px ghost icon button 12px from the corner.
+- **Dialog:** a recess tray (18px radius, 6px padding, overlay shadow) holding a raised body (12px radius, 18px padding) for concentric corners, over the blurred scrim. It enters over 280ms on ease-out rising 6px, exits over 160ms, and tweens to a new height over 180ms when its body changes. The close button is a 30px ghost icon button 12px from the corner.
 - **Sheet:** a raised side or edge panel with the drawer shadow. It slides its whole size in over 280ms on the drawer curve and leaves over 160ms; with reduced motion it fades over 120ms.
 - **Drag to dismiss:** a sheet follows the finger 1:1 along its axis and rubber-bands past rest (35% of travel, at most 25% of its size). Released past 30% of its size, or flicked faster than 0.3px/ms toward its edge, it leaves on the settle spring at the finger's speed while its scrim fades with the share still on screen. Otherwise the spring puts it back. A mouse never drags; it has the close button and Escape.
 - **Drawer (vaul):** rises from the bottom with a 100×6 grabber and a raised inner card (12px radius, inset 8px). The phone version of the new-session dialog uses it and leaves over 160ms on ease-out.
@@ -639,15 +641,15 @@ A compact tinted row, never a slab: 10px radius, 10×12px padding, body type, an
 ### Empty, loading and skeleton states
 - **Empty** (`ui/empty`): a 20px Solar duotone mark in muted ink, a title in the title role, one body line in muted ink up to 60ch saying why, and at most one action. It sits on the column the content would have started on, with 21px of block padding.
 - **Skeleton** (`ui/skeleton`): a `surface-fill` block at exactly the size of what it stands for, with an 8px radius. One band of the raised surface at 60% crosses it every 1.2s, by transform only; without motion it sits still. Board skeleton rows are 44px (83px on a phone) with a header band in `surface-band`.
-- **Spinner:** a 16px ring at 25% with a 25% arc, turning. It is used inside a pending button's slot, as a toast's loading icon, and where a wait is under the skeleton threshold.
+- **Spinner:** a 16px ring at 25% with a 25% arc, turning once per 1.2s loop. It is used inside a pending button's slot, as a toast's loading icon, and where a wait is under the skeleton threshold.
 
 **The Claim Of Nothing Rule.** An empty state claims there is nothing to show, so it renders only once the data is known to be empty, never while it is still being read. While data loads, the skeleton stands in at the real layout's size, and the first real read replaces it in one cross-fade (120ms) rather than as rows arriving.
 
 ### Status displays
-- **Session status:** a 16px Solar duotone glyph (refresh-circle for Working, hand-shake for Needs you, close-circle for Failed, pause-circle for Idle and Stopped, moon-sleep for Sleeping, question-circle for Unreachable), then the word in the label role, tinted live, attn or fail where it applies. A new glyph cross-fades in from 0.92 over 120ms, and the word morphs over 150ms. The Working glyph breathes to 45% on `--breath`.
-- **Activity dot:** an 8px dot. Working is info blue and pulses, Needs you is warning amber with a ping ring, Idle is muted at 40%, Failed is solid red and still, Unreachable is a hollow ring, Sleeping is a moon glyph. The colour moves between states over 280ms; a shape change cross-fades from 0.92 over 120ms.
-- **Task ring:** 16px (12px in a board row), wound from the top as a clock is read, drawn in `currentColor`. With no plan it turns a 30% arc continuously (1.1s, linear). With a plan, the arc length eases to the share done over 260ms. Finished, it swaps for a success check from 0.6 over 160ms. Nothing planned and nothing running draws nothing.
-- **Thinking indicator:** a 20px glyph that morphs between a circle and an infinity loop over a 6s cycle, beside words ("Thinking", "Moonwalking", "Planning", "Refining") that cycle every 4s, rising 80% in and out with a shimmer sweeping each word. With reduced motion it shows the infinity glyph and the first word, still.
+- **Session status:** a 16px Solar duotone glyph (refresh-circle for Working, hand-shake for Needs you, close-circle for Failed, pause-circle for Idle and Stopped, moon-sleep for Sleeping, question-circle for Unreachable), then the word in the label role, tinted live, attn or fail where it applies. A new glyph cross-fades in from 0.92 over 120ms, and the word morphs over 180ms. The Working glyph breathes to 45% on `--breath`.
+- **Activity dot:** an 8px dot. Working is info blue and pulses on the 1.2s loop, Needs you is warning amber with a ping ring on the same loop, Idle is muted at 40%, Failed is solid red and still, Unreachable is a hollow ring, Sleeping is a moon glyph. The colour moves between states over 280ms; a shape change cross-fades from 0.92 over 120ms.
+- **Task ring:** 16px (12px in a board row), wound from the top as a clock is read, drawn in `currentColor`. With no plan it turns a 30% arc continuously (one turn per 1.2s loop, linear). With a plan, the arc length eases to the share done over 260ms. Finished, it swaps for a success check from 0.6 over 160ms. Nothing planned and nothing running draws nothing.
+- **Thinking indicator:** two 20px marks, a circle and an infinity loop, stacked in one cell and trading places on a three-breath loop (6s), the circle widening and flattening as it fades and the infinity settling out of a narrower, taller shape. Beside them four words ("Thinking", "Moonwalking", "Planning", "Refining") each hold for two breaths of an eight-breath cycle, rising 80% in and out on ease-out, while a band of strong ink crosses each word once a breath. Everything moves by transform and opacity on the compositor. With reduced motion it shows the infinity mark and the first word, still.
 - **Thinking steps:** a column of steps joined by a 1px hairline connector that draws down as each step starts (160ms). A step's glyph cross-fades in its cell (120ms), new steps fade in over 140ms, and the active label shimmers on `--breath`.
 
 ### Transcript
@@ -660,8 +662,8 @@ A compact tinted row, never a slab: 10px radius, 10×12px padding, body type, an
 - **Floating tags** ("Jump to latest", "Catching up…"): a raised 10px tag with a hairline and the overlay shadow. They rise 8px and grow from 0.96 as they fade in over 280ms, and sink out over 160ms. A live dot beats beside them.
 
 ### Composer
-- **Shell:** a 12px glass pill (raised at 82%, 16px blur) with a 1px control edge and the tile shadow, inset 7px (11px on the leading side). The textarea is 16px Geist at 1.25 leading with no visible scrollbar. It grows from one line (34px) to a 200px ceiling over 120ms, and its scrolled edges fade over one line.
-- **Controls:** 34px Attach (raised, control edge) and Send/Stop (graphite action), each at the concentric 5px radius. They scale to 0.96 on press. The send glyph is optically nudged 0.5px up and right. Send and Stop cross-fade, the incoming glyph growing from 0.25 out of a 4px blur over 120ms. While the agent works, a 2px brand arc a third of a turn long orbits Stop 3px outside it (1.2s per turn). With reduced motion there is no ring.
+- **Shell:** a 12px pill in the panel material (composer glass, see Elevation & Depth) with a 1px control edge and the tile shadow, inset 7px (11px on the leading side). The textarea is 16px Geist at 1.25 leading with no visible scrollbar. It grows from one line (34px) to a 200px ceiling over 120ms, and its scrolled edges fade over one line.
+- **Controls:** 34px Attach (raised, control edge) and Send/Stop (graphite action), each at the concentric 5px radius. They scale to 0.97 on press. The send glyph is optically nudged 0.5px up and right. Send and Stop cross-fade, the incoming glyph growing from 0.25 out of a 4px blur over 120ms. Stop's glyph is the whole signal that the agent works; nothing orbits it, so an idle-looking composer paints nothing per frame.
 - **Drafts:** a long draft folds to one line with a "+N lines" count when the field loses focus. Another chat's draft slides and types in when the composer switches conversations.
 - **Slash and @ menu:** a floating surface above the field and matched to its width, growing from its bottom edge. Groups are ruled with a hairline and headed in uppercase label.
 - **The Composer Touch Rule.** The textarea sits above its label's touch area, so a press on the text lands on the field itself and iOS hold-to-select and Paste reach it.
@@ -676,13 +678,13 @@ A raised card (12px, control edge, hairline shadow, 11px padding) floating over 
 A question card answers with option chips (30px, 8px radius, keycap digits). A picked option takes the brand edge, a recessed fill and an inverted keycap, never the attn hue, because selection is not a warning.
 
 ### Effort chip
-A slider whose chip lives inside its fill. The track is a 30px raised field (38px on a phone) with a 10px radius. The fill is recess-deep. The chip is a lifted 8px block with a neutral-8 inner edge, holding level bars (2×10px, 4px pitch, 22% when unlit) and the level word. The chip snaps to the nearest level and is as wide as its longest word, so the rail never moves. A level change slides the fill over 160ms on ease-in-out, morphs the word letter by letter over 220ms, and fills the bars in order from the foot, 40ms apart (or drains them from the top down) over 180ms each. Stop pips show only where they are clear of the chip.
+A slider whose chip lives inside its fill. The track is a 30px raised field (38px on a phone) with a 10px radius. The fill is recess-deep. The chip is a lifted 8px block with a neutral-8 inner edge, holding level bars (2×10px, 4px pitch, 22% when unlit) and the level word. The chip snaps to the nearest level and is as wide as its longest word, so the rail never moves. A level change slides the fill over 160ms on ease-in-out, morphs the word letter by letter over 180ms, and fills the bars in order from the foot, 40ms apart (or drains them from the top down) over 180ms each. Stop pips show only where they are clear of the chip.
 
 ### New-session dialog
-The dialog that set the language. A recess tray (12px, 7px padding, modal shadow, up to 980px wide) holds a raised body (12px). It enters with `ns-panel` over 280ms on ease-out and exits over 160ms, sinking 6px and shrinking to 0.98. Sections fade up 8px in a stagger. Its popovers glide between sibling triggers, morphing width and height over 260ms on the drawer curve. Setting chips are 30px with an 8px radius, a 16px glyph and a 12px chevron. Icon tiles are raised 8px squares with the tile shadow, dashed for empty or inverted for chosen. Under 640px the dialog becomes a vaul bottom sheet.
+The dialog that set the language. A recess tray (12px, 7px padding, modal shadow, up to 980px wide) holds a raised body (12px). It enters with `ns-panel` over 280ms on ease-out and exits over 160ms, sinking 6px and shrinking to 0.97. Sections fade up 8px in a stagger. Its popovers glide between sibling triggers, morphing width and height over 260ms on the drawer curve. Setting chips are 30px with an 8px radius, a 16px glyph and a 12px chevron. Icon tiles are raised 8px squares with the tile shadow, dashed for empty or inverted for chosen. Under 640px the dialog becomes a vaul bottom sheet.
 
 ### Autopilot toggle
-A 34px raised control. Armed, its glyph and edge take `accent-text`. While the supervisor deliberates, a hairline halo 3px outside orbits as a conic arc (1.4s per turn). When it settles, the halo pulses once in the verdict's ink and fades over 2.4s. With reduced motion the halo is a still 45% accent ring.
+A 34px raised control. Armed, its glyph and edge take `accent-text`. While the supervisor deliberates, a hairline halo 3px outside orbits as a conic arc (one turn per 1.2s loop). When it settles, the halo pulses once in the verdict's ink and fades over 2.4s (twice the done-state hold). The control scales to 0.97 on press. With reduced motion the halo is a still 45% accent ring.
 
 ### Identity marks and tiles
 - **Identity mark:** a 26px square on the board (18px on a transcript speaker line, 16px in a subagent head, 17px for the reader's own mark at 4.6px radius) at 5px radius in a `mark-N` colour under the sheen, with the vendor glyph in `mark-glyph`.

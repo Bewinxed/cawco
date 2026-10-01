@@ -16,7 +16,7 @@
   import type { HTMLAttributes } from "svelte/elements";
   import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   import { cn } from "$lib/utils";
-  import { motionOk } from "$lib/whiffle/motion/curves.svelte";
+  import { dur, ease, motionOk } from "$lib/whiffle/motion/curves.svelte";
   import { provideList, TabsListState, useTabs } from "./context.svelte";
   import { TabRects } from "./rects.svelte";
 
@@ -87,8 +87,8 @@
       slide = to.animate(
         [{ transform: `translateX(${dx}px)` }, { transform: "none" }],
         {
-          duration: 260,
-          easing: getComputedStyle(to).getPropertyValue("--ease-drawer"),
+          duration: dur("--dur-pop"),
+          easing: ease("--ease-drawer"),
           pseudoElement: "::after",
         }
       );
@@ -450,7 +450,7 @@
     background: none;
     /* The app's own curve and the tab details' morph length, so the sheet
        and the popover that follows it move as one. */
-    --wipe: 260ms;
+    --wipe: var(--dur-pop);
     --wipe-ease: var(--ease-drawer);
     --wipe-in: left;
     --wipe-out: right;
@@ -494,10 +494,10 @@
 
     @media (prefers-reduced-motion: no-preference) {
       transition:
-        transform 160ms var(--ease-out),
-        width 160ms var(--ease-out),
-        height 160ms var(--ease-out),
-        opacity 80ms linear;
+        transform var(--dur-toggle) var(--ease-out),
+        width var(--dur-toggle) var(--ease-out),
+        height var(--dur-toggle) var(--ease-out),
+        opacity var(--dur-ghost) var(--ease-out);
     }
   }
   /* Folder tabs draw their own sheet (TabItem): it has to sit exactly on
@@ -528,9 +528,9 @@
 
     @media (prefers-reduced-motion: no-preference) {
       transition:
-        transform 80ms var(--ease-out),
-        width 80ms var(--ease-out),
-        height 80ms var(--ease-out);
+        transform var(--dur-ghost) var(--ease-out),
+        width var(--dur-ghost) var(--ease-out),
+        height var(--dur-ghost) var(--ease-out);
     }
   }
   :global([data-variant="folder"]) .ring {

@@ -27,7 +27,7 @@
   import { whiffle } from "$lib/whiffle/client.svelte";
   import { loadDelegateTypes, message } from "$lib/whiffle/delegate-types";
   import { newId } from "$lib/whiffle/id";
-  import { crossIn, dur } from "$lib/whiffle/motion/curves.svelte";
+  import { crossIn, dur, morphMs } from "$lib/whiffle/motion/curves.svelte";
   import { reflow } from "$lib/whiffle/motion/rows.svelte";
   import {
     refreshWorkflows,
@@ -452,7 +452,7 @@
       <h2>
         <TextMorph
           as="span"
-          duration={150}
+          duration={morphMs()}
           text={paletteCollapsed ? 'Add' : 'Nodes'}
         />
       </h2>
@@ -619,7 +619,7 @@
         {/if}
       </div>
       <span class="wf-muted num save-state" role="status"
-        ><TextMorph as="span" duration={150} text={saveState} /></span
+        ><TextMorph as="span" duration={morphMs()} text={saveState} /></span
       >
     </div>
   </header>
@@ -827,7 +827,7 @@
     max-width: 300px;
     border-color: transparent;
     font-size: var(--text-body);
-    font-weight: 500;
+    font-weight: var(--weight-strong);
   }
   .palette {
     padding: var(--space-4) var(--space-3);

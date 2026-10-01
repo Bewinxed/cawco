@@ -16,7 +16,7 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Alert from "$lib/components/ui/alert";
   import { IconWarningTriangle } from "$lib/icons";
-  import { appear, easeOut } from "$lib/whiffle/motion/curves.svelte";
+  import { appear, dur, easeOut } from "$lib/whiffle/motion/curves.svelte";
   import { morph } from "$lib/whiffle/motion/morph.svelte";
   import { whiffle } from "../client.svelte";
   import { type Cards, rememberCard } from "./cards";
@@ -126,7 +126,10 @@
             {@render children()}
           </div>
         {:else}
-          <div class="slot" out:fade={{ duration: 120, easing: easeOut }}>
+          <div
+            class="slot"
+            out:fade={{ duration: dur('--dur-control'), easing: easeOut }}
+          >
             <SkeletonRows fill={card !== null} />
           </div>
         {/if}
