@@ -32,6 +32,9 @@ import { untrack } from "svelte";
 
 type Axis = "x" | "y" | "xy";
 
+/** How far past a row's edge, along the list's axis, the pointer still counts as on it. */
+const REACH = 8;
+
 /** A row's box in the container's own coordinates. */
 export interface LaidOut {
   height: number;
@@ -254,7 +257,28 @@ export function highlight(options: HighlightOptions) {
       pillRow = row;
     };
 
-    /** The row nearest a point on screen, of those the pointer can reach. */
+    /** Whether `at` lies on the row at `box`, the gaps along the axis bridged. */
+    const reaches = (
+      box: { x: number; y: number; w: number; h: number },
+      at: { x: number; y: number }
+    ): boolean => {
+      const growX = axis === "y" ? 0 : REACH;
+      const growY = axis === "x" ? 0 : REACH;
+      return (
+        at.x >= box.x - growX &&
+        at.x <= box.x + box.w + growX &&
+        at.y >= box.y - growY &&
+        at.y <= box.y + box.h + growY
+      );
+    };
+
+    /**
+     * The row under a point on screen, of those the pointer can reach: a row
+     * counts only when its box, grown by REACH along the list's axis (enough
+     * to bridge the gaps between rows), holds the point; of those, the
+     * nearest. Over a header, a seam or the list's own chrome there is none,
+     * and the ghost fades rather than jumping to whatever row is closest.
+     */
     const nearest = (clientX: number, clientY: number) => {
       const at = toLocal(clientX, clientY);
       let best: HTMLElement | null = null;
@@ -266,7 +290,7 @@ export function highlight(options: HighlightOptions) {
           getComputedStyle(row).pointerEvents === "none"
             ? undefined
             : placeOf(row);
-        if (!box) {
+        if (!(box && reaches(box, at))) {
           continue;
         }
         const dx = at.x - (box.x + box.w / 2);

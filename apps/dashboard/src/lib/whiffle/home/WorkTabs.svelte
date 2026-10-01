@@ -35,6 +35,7 @@
   import type { Attachment } from "svelte/attachments";
   import { page } from "$app/state";
   import { TabItem, Tabs, TabsList } from "$lib/components/ui/fluid-tabs";
+  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   import Tip from "$lib/components/ui/tooltip/tip.svelte";
   import Structure from "~icons/solar/structure-bold-duotone";
   import { type InstanceRow, isFailed, whiffle } from "../client.svelte";
@@ -47,7 +48,7 @@
   import { rail } from "../rail.svelte";
   import { tree } from "../tree";
   import { workspace } from "../workspace/workspace.svelte";
-  import HomeRow from "./HomeRow.svelte";
+  import HomeRow, { ROW_PILL } from "./HomeRow.svelte";
   import {
     byMachine,
     clock,
@@ -643,6 +644,7 @@
       bind:this={listEl}
       {@attach reflow()}
       {@attach glyphs}
+      {@attach highlight(ROW_PILL)}
       {@attach holdWhileInside('home:')}
     >
       {#each drawn as entry (entry.group.machineId)}

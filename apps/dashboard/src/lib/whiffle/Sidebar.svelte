@@ -164,7 +164,8 @@
    * across the groups; the nav and each session list carry their own
    * selection pill under it (components/ui/highlight).
    */
-  const ROWS = '[data-sidebar="menu-button"], [data-sidebar="menu-sub-button"]';
+  /** Every clickable row in the rail: menu rows, session rows, "Show N more". */
+  const ROWS = "[data-rail-row]";
   const PILL = { rows: ROWS, selected: '[data-active="true"]', ghost: false };
   /**
    * The lead column, 18px, on EVERY row in the rail — nav, machines, projects,

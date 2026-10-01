@@ -24,6 +24,8 @@
     ),
     "data-slot": "sidebar-menu-sub-button",
     "data-sidebar": "menu-sub-button",
+    /* One selector for every row the rail's hover ghost lands on. */
+    "data-rail-row": "",
     "data-size": size,
     "data-active": isActive,
     ...restProps,

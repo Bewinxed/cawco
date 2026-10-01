@@ -71,6 +71,8 @@
     class: cn(sidebarMenuButtonVariants({ variant, size }), className),
     "data-slot": "sidebar-menu-button",
     "data-sidebar": "menu-button",
+    /* One selector for every row the rail's hover ghost lands on. */
+    "data-rail-row": "",
     "data-size": size,
     "data-active": isActive,
     ...restProps,

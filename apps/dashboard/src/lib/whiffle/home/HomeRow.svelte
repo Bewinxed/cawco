@@ -1,3 +1,15 @@
+<script lang="ts" module>
+  /**
+   * The selection pill for a list of these rows (highlight): it sits under
+   * the open session's row. Hover is the rail's one ghost, not the list's.
+   */
+  export const ROW_PILL = {
+    rows: "[data-rail-row]",
+    selected: '[aria-current="page"]',
+    ghost: false,
+  };
+</script>
+
 <script lang="ts">
   /**
    * One session in a home group. It leads with its project's mark, the
@@ -97,6 +109,7 @@
       {...trigger}
       aria-current={active ? 'page' : undefined}
       class={cn('row press-tint focus-inset', trigger.class as string | undefined)}
+      data-rail-row
       data-share="session:{sessionId}"
       {href}
       use:dragSession={{
@@ -178,11 +191,8 @@
       min-height: 44px;
     }
   }
-  @media (hover: hover) and (pointer: fine) {
-    .item:hover {
-      background: var(--surface-hover);
-    }
-  }
+  /* Hover and selection are the list's (highlight: the rail's one ghost,
+     the list's own pill), so a row never paints a second one under them. */
   /* The peek sits at the row's end. A fine pointer finds it on hover or
      focus; a touch screen always shows it, since there is no hover. */
   .peek {
@@ -253,7 +263,6 @@
     color: var(--ink-muted);
   }
   .item[data-active] {
-    background: var(--selected-bg);
     color: var(--selected-ink);
   }
   .item[data-active] .line,

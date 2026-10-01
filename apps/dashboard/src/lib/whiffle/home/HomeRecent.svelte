@@ -7,10 +7,11 @@
    */
   import { page } from "$app/state";
   import { Button } from "$lib/components/ui/button";
+  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   import { IconChevronRight, IconSearch } from "$lib/icons";
   import { holdWhileInside } from "../motion/held-order.svelte";
   import { workspace } from "../workspace/workspace.svelte";
-  import HomeRow from "./HomeRow.svelte";
+  import HomeRow, { ROW_PILL } from "./HomeRow.svelte";
   import { clock, home, span } from "./home.svelte";
 
   let { inset = false }: { inset?: boolean } = $props();
@@ -64,7 +65,7 @@
       {/key}
     </button>
     {#if recentOpen}
-      <div class="recent-body" data-flip>
+      <div class="recent-body" data-flip {@attach highlight(ROW_PILL)}>
         <label class="search touch-hit">
           <IconSearch aria-hidden="true" />
           <input
