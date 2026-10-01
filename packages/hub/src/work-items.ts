@@ -515,6 +515,7 @@ export const createWorkItems = ({
       repoRoot: checkout.repoRoot,
       path: checkout.path,
       branch: checkout.branch,
+      base: checkout.base,
       boundaryPid: checkout.boundaryPid,
       state: "active",
       createdByInstanceId: parent.id,
@@ -737,7 +738,8 @@ export const createWorkItems = ({
           parent,
           withWorkspaceLine(
             `${handoffMarker(leaf(parent.cwd))}${fork}${request.prompt}`,
-            workspace.repoRoot
+            workspace.repoRoot,
+            workspace.base
           )
         )
       );
@@ -904,7 +906,7 @@ export const createWorkItems = ({
    * The report's commits and diffstat: only what the item's own session
    * made. A range from a starting commit cannot say that — a rebase onto a
    * newer main pulls other people's commits into it, and after the push that
-   * lands the work, `merge-base origin/main HEAD` is HEAD itself. The
+   * lands the work, `merge-base origin/<base> HEAD` is HEAD itself. The
    * worktree's HEAD reflog can: every commit its session made, or rewrote by
    * rebasing, is an entry there. The ones since the item began that HEAD still
    * holds are the item's ({@link keptCommits}); the diffstat runs from the

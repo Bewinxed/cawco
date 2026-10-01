@@ -492,7 +492,8 @@ export function handoffTools(deps: HandoffDeps) {
           .string()
           .optional()
           .describe(
-            "The repository a new workspace is cut from, on branch ws/<id> from origin/main. " +
+            "The repository a new workspace is cut from, on branch ws/<id> from the repository's " +
+              "default branch, fetched from its remote as the workspace is cut. " +
               "Defaults to this session's directory; unused with `workspace`."
           ),
         skills: z

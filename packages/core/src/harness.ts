@@ -929,7 +929,8 @@ export type GitChanges =
 /**
  * Makes a delegation workspace: a shared clone (`git clone --shared`) of the
  * repository at `cwd`, at `~/.worktrees/<repo>-<id8>` on a new branch
- * `ws/<id8>` cut from the repository's `origin/main`, its `origin` the
+ * `ws/<id8>` cut from the repository's default branch (what `origin` names as
+ * its HEAD, fetched as the clone is cut), its `origin` the
  * repository's own remote — and the workspace's boundary, which every shell
  * command of its work items runs inside. Args `[cwd, workspaceId]`; answers
  * {@link WorkspaceCheckout}. Machine-scoped; a directory that is not in a git
@@ -940,6 +941,8 @@ export const CONTROL_WORKSPACE_CREATE = "workspaceCreate";
 
 /** Where {@link CONTROL_WORKSPACE_CREATE} put a workspace. */
 export interface WorkspaceCheckout {
+  /** The repository's default branch, which the clone was cut from and lands on. */
+  base: string;
   /** The boundary's anchor: the process its commands join. */
   boundaryPid: number;
   branch: string;

@@ -376,6 +376,12 @@ export const workspaces = sqliteTable("workspaces", {
   path: text("path").notNull(),
   branch: text("branch").notNull(),
   /**
+   * The repository's default branch the clone was cut from, which its work
+   * lands on. Every workspace cut before this was recorded was cut from
+   * `origin/main`, which is what the default says of those rows.
+   */
+  base: text("base").notNull().default("main"),
+  /**
    * The boundary's anchor (Linux) or runner (macOS), as the machine last
    * named it to the hub: when the workspace was made, and as each follow-up
    * started. Null once archived.

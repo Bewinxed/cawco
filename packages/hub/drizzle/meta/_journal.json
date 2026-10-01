@@ -407,6 +407,13 @@
       "when": 1790752917672,
       "tag": "0057_workflow_notices",
       "breakpoints": true
+    },
+    {
+      "idx": 58,
+      "version": "6",
+      "when": 1790845135054,
+      "tag": "0058_workspace_base",
+      "breakpoints": true
     }
   ]
 }

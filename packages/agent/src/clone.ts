@@ -2,8 +2,8 @@
  * A workspace's checkout as git sees it: a shared clone (`git clone
  * --shared`) of the repository it was cut from — its own `.git`, so its
  * branches, stash and index are its own, its objects read through the
- * source's — with `origin` at the source's own remote and `origin/main` where
- * the source has it.
+ * source's — with `origin` at the source's own remote and `origin/HEAD` at
+ * the remote's default branch, fetched when the clone was cut.
  *
  * Workspaces were git worktrees before they were clones. A worktree's `.git`
  * is a file pointing into the source repository, so everything a delegate
@@ -34,23 +34,69 @@ const gitMaybe = async (
   return run.exitCode === 0 ? run.text().trim() : undefined;
 };
 
+const SYMREF_HEAD = /^ref: refs\/heads\/(\S+)\tHEAD$/m;
+
+/**
+ * The branch `origin` itself names as its HEAD — the repository's default
+ * branch as its host has it (`master` for some, `main` for others), asked of
+ * the remote rather than read off a local ref that may never have been set or
+ * may have gone stale.
+ */
+const remoteDefault = async (dir: string): Promise<string> => {
+  const run = await Bun.$`git -C ${dir} ls-remote --symref origin HEAD`
+    .env({ ...process.env, GIT_TERMINAL_PROMPT: "0" })
+    .quiet()
+    .nothrow();
+  if (run.exitCode !== 0) {
+    throw new Error(
+      `git ls-remote origin failed: ${run.stderr.toString().trim()}`
+    );
+  }
+  const branch = SYMREF_HEAD.exec(run.text())?.[1];
+  if (!branch) {
+    throw new Error("origin does not name a default branch for its HEAD");
+  }
+  return branch;
+};
+
+/**
+ * The remote's default branch, fetched into `dir` as it stands right now, with
+ * `origin/HEAD` naming it. Answers the branch's name: what a checkout is cut
+ * from and where its work lands.
+ */
+export const fetchDefaultBranch = async (dir: string): Promise<string> => {
+  const base = await remoteDefault(dir);
+  await git(
+    dir,
+    "fetch",
+    "--quiet",
+    "--no-tags",
+    "origin",
+    `+refs/heads/${base}:refs/remotes/origin/${base}`
+  );
+  await git(
+    dir,
+    "symbolic-ref",
+    "refs/remotes/origin/HEAD",
+    `refs/remotes/origin/${base}`
+  );
+  return base;
+};
+
 /**
  * A shared clone of `source` (a repository or its git directory) at `dir`,
- * with no checkout and no ref of the source's but `origin/main`, so its
- * branch list is its own, and `origin` at the source's own remote. A clone
- * that cannot be set up is deleted again.
+ * with no checkout and no ref of the source's, so its branch list is its own,
+ * and `origin` at the source's own remote. Its one remote branch is the
+ * remote's default, fetched from the remote now — so a workspace starts where
+ * that branch is at the moment it is cut, whatever the source last fetched —
+ * with `origin/HEAD` naming it. Answers that branch's name. A clone that
+ * cannot be set up is deleted again.
  */
 export const prepareClone = async (
   source: string,
   dir: string
-): Promise<void> => {
+): Promise<string> => {
   const remote = await git(source, "remote", "get-url", "origin");
-  const base = await git(
-    source,
-    "rev-parse",
-    "--verify",
-    "origin/main^{commit}"
-  );
   await git(
     source,
     "clone",
@@ -73,7 +119,7 @@ export const prepareClone = async (
       await git(dir, "update-ref", "-d", ref);
     }
     await git(dir, "remote", "set-url", "origin", remote);
-    await git(dir, "update-ref", "refs/remotes/origin/main", base);
+    return await fetchDefaultBranch(dir);
   } catch (error) {
     await rm(dir, { recursive: true, force: true });
     throw error;
@@ -92,8 +138,8 @@ const WORKTREE_LINKS: ReadonlySet<string> = new Set([
 
 /**
  * The objects the checkout has only through the source's worktree: its own
- * commits since `origin/main`, and the blobs its index stages. Packed into the
- * clone, so a gc in the source can never take them from under it.
+ * commits since `origin/HEAD`, and the blobs its index stages. Packed into
+ * the clone, so a gc in the source can never take them from under it.
  */
 const packOwnObjects = async (dir: string): Promise<void> => {
   const commits = await git(
@@ -102,7 +148,7 @@ const packOwnObjects = async (dir: string): Promise<void> => {
     "--objects",
     "HEAD",
     "--not",
-    "refs/remotes/origin/main"
+    "refs/remotes/origin/HEAD"
   );
   const staged = (await git(dir, "ls-files", "--stage"))
     .split("\n")

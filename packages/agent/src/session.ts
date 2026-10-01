@@ -51,6 +51,7 @@ import {
 } from "@whiffle/core";
 import { Effect } from "effect";
 import { type Boundary, boundaryFor } from "./boundary";
+import { fetchDefaultBranch } from "./clone";
 import { DEPLOY_BRANCH } from "./deploy";
 import { expandHome, runFs } from "./fs";
 import type { Harness, HarnessContext, HarnessSession } from "./harness";
@@ -139,8 +140,12 @@ const isDirectory = async (path: string): Promise<boolean> => {
 
 /** The checkout a side quest ran in, kept until the quest is discarded. */
 interface Worktree {
-  /** The requested cwd, until the opening message says whose worktree this is. */
-  announce?: string;
+  /**
+   * The requested cwd and the default branch it was cut from (none for a
+   * repository with no remote), until the opening message says whose
+   * worktree this is.
+   */
+  announce?: { cwd: string; base: string | undefined };
   /** Where the session runs: `path`, or the same subdirectory of it. */
   dir: string;
   path: string;
@@ -1231,7 +1236,11 @@ export class SessionSupervisor {
         ...message,
         message: {
           ...message.message,
-          content: withWorktreeLine(content, worktree.announce),
+          content: withWorktreeLine(
+            content,
+            worktree.announce.cwd,
+            worktree.announce.base
+          ),
         },
       };
       worktree.announce = undefined;
@@ -1362,15 +1371,17 @@ export class SessionSupervisor {
       .quiet()
       .text();
     const reused = listed.split("\n").includes(`worktree ${path}`);
+    let base: string | undefined;
     if (!reused) {
-      // The remote's default branch, not the local checkout: a shared clone's
-      // HEAD is whatever nobody updated. No fetch; every leaf's own fetch keeps
-      // the remote-tracking refs current.
-      const origin =
-        await Bun.$`git -C ${root} rev-parse --verify --quiet origin/HEAD`
-          .quiet()
-          .nothrow();
-      const commit = origin.exitCode === 0 ? "origin/HEAD" : "HEAD";
+      // The remote's default branch as the remote has it now, not the local
+      // checkout (a shared clone's HEAD is whatever nobody updated) and not a
+      // remote-tracking ref nobody fetched. A repository with no remote has
+      // nothing to land on, and starts from its own HEAD.
+      const hasOrigin =
+        (await Bun.$`git -C ${root} remote get-url origin`.quiet().nothrow())
+          .exitCode === 0;
+      base = hasOrigin ? await fetchDefaultBranch(root) : undefined;
+      const commit = base ? `origin/${base}` : "HEAD";
       const added =
         await Bun.$`git -C ${root} worktree add --detach ${path} ${commit}`
           .quiet()
@@ -1387,7 +1398,7 @@ export class SessionSupervisor {
       path,
       root,
       dir,
-      ...(reused ? {} : { announce: baseCwd }),
+      ...(reused ? {} : { announce: { cwd: baseCwd, base } }),
     });
     return dir;
   }

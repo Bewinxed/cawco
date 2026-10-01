@@ -13,8 +13,8 @@ import { expandHome } from "./fs";
 
 /**
  * {@link CONTROL_WORKSPACE_CREATE}: a shared clone on `ws/<id8>` from the
- * source's `origin/main`, and its boundary. A boundary that cannot start
- * takes the clone with it.
+ * remote's default branch as it stands now, and its boundary. A boundary that
+ * cannot start takes the clone with it.
  */
 export const createWorkspace = async (
   cwd: unknown,
@@ -34,11 +34,11 @@ export const createWorkspace = async (
   const id8 = id.slice(0, 8);
   const path = expandHome(`~/.worktrees/${basename(repoRoot)}-${id8}`);
   const branch = `ws/${id8}`;
-  await prepareClone(repoRoot, path);
+  const base = await prepareClone(repoRoot, path);
   try {
-    await git(path, "checkout", "--quiet", "-b", branch, "origin/main");
+    await git(path, "checkout", "--quiet", "-b", branch, `origin/${base}`);
     const boundary = await ensureBoundary({ id, path });
-    return { repoRoot, path, branch, boundaryPid: boundary.pid };
+    return { repoRoot, path, branch, base, boundaryPid: boundary.pid };
   } catch (error) {
     await rm(path, { recursive: true, force: true });
     throw error;
