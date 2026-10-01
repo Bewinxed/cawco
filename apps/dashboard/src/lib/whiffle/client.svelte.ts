@@ -233,6 +233,11 @@ const listedInHistory = (info: NeutralSessionInfo): boolean =>
 export interface PendingPermission {
   input: Record<string, unknown>;
   instanceId: string;
+  /**
+   * When the hub first parked the ask, ms epoch: one clock for every device,
+   * so the wait each shows and the order it lists asks in agree.
+   */
+  raisedAt?: number;
   requestId: string;
   /** Set when the hub routed the ask to its parent rather than to the user. */
   routedTo?: "parent";
@@ -546,6 +551,12 @@ const state = $state({
    * it, so a session keeps its place for as long as it works.
    */
   turnSince: {} as Record<string, number>,
+  /**
+   * When the hub parked each waiting workflow run's question, keyed by run
+   * id: the `raisedAt` its ask carried. The run itself is the ask's only
+   * representation, so the moment it was raised is kept beside it here.
+   */
+  runAskRaisedAt: {} as Record<string, number>,
   /**
    * The hub's record of every delegate's asks, answers and reports, keyed by
    * the delegate they are about and oldest first. Kept apart from the session
@@ -1544,6 +1555,11 @@ function handleFrame(frame: FramePayload): void {
   if (frame.kind === "permission_request" && "workflowRunId" in frame) {
     // A workflow question is represented once, by its waiting run, and is
     // answered through the run view — not as a session permission prompt.
+    // Only the moment the hub parked it is kept, beside the run.
+    const runId = (frame as { workflowRunId?: unknown }).workflowRunId;
+    if (typeof runId === "string" && frame.raisedAt !== undefined) {
+      state.runAskRaisedAt[runId] = frame.raisedAt;
+    }
     return;
   }
   if (frame.kind === "workflow") {
@@ -2078,6 +2094,7 @@ function handleFrame(frame: FramePayload): void {
         // to the user's queue; a fresh arrival keeps it out. Either way the
         // stored entry follows the latest word from the hub.
         existing.routedTo = routedTo;
+        existing.raisedAt = frame.raisedAt;
         break;
       }
       target.pending.push({
@@ -2088,6 +2105,7 @@ function handleFrame(frame: FramePayload): void {
         suggestions: frame.suggestions,
         routedTo,
         toolUseId: frame.toolUseId,
+        raisedAt: frame.raisedAt,
       });
       break;
     }
@@ -2261,7 +2279,7 @@ function rememberAnswerSurface(
  * Checked against both dialects, because they answer it differently and both
  * answers are right:
  *
- * - LEGACY. `resolvePermission` puts the control on the wire and clears
+ * - LEGACY. The control dialect puts the answer on the wire and clears
  *   `pending` only afterwards, so a socket that throws leaves the card exactly
  *   where it was. The card renders "Couldn't send that answer." off the very
  *   record that failed — so this returns true and the toast stands down. That
@@ -5126,25 +5144,6 @@ export function permissionAnswer(
   };
 }
 
-export function resolvePermission(
-  instanceId: string,
-  machineId: string,
-  requestId: string,
-  result: PermissionResult
-): void {
-  const payload: ControlPayload = {
-    instanceId,
-    requestId,
-    method: RESOLVE_PERMISSION,
-    args: [requestId, result],
-  };
-  send({ verb: "control", machineId, instanceId, requestId, payload });
-
-  const target = session(instanceId);
-  target.pending = target.pending.filter((p) => p.requestId !== requestId);
-  trackWorking(target);
-}
-
 /**
  * Every permission waiting on the user, across every machine. This is the
  * question the fleet view exists to answer, so it is derived from the sessions
@@ -5507,6 +5506,9 @@ export const whiffle = {
   /** When the session's current turn began, ms epoch; `undefined` while it is idle. */
   turnSince: (instanceId: string): number | undefined =>
     state.turnSince[instanceId],
+  /** When the hub parked a waiting workflow run's question, ms epoch. */
+  runAskRaisedAt: (runId: string): number | undefined =>
+    state.runAskRaisedAt[runId],
   /**
    * The ledger stats the fleet table shows per session — turns, context %, cost.
    * Only populated for a session this browser has state for (subscribed / a turn

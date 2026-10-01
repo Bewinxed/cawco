@@ -22,6 +22,7 @@ import { pushState, replaceState } from "$app/navigation";
 import { whiffle } from "../client.svelte";
 import { conversationHref } from "../links";
 import { workingSet } from "../working-set.svelte";
+import { layoutPolicy } from "./layout-policy.svelte";
 
 /** A split: two or more children laid out along one axis. */
 export interface BranchNode {
@@ -694,27 +695,74 @@ export const workspace = {
   },
 
   /**
-   * The next conversation along a group's strip, or `null` when there is
-   * nowhere to go. Wraps, because on a phone there is no edge to see and
-   * continuing round is the shortest way back to the other end.
-   *
-   * The reachable set is exactly this group's open tabs — a swipe can never land on a conversation that is not
-   * in the strip in front of you.
+   * Show a conversation the reader did not pick: what a wide screen opens
+   * when nothing is open. Same as `open`, but the URL is replaced rather than
+   * pushed, so Back never walks into a conversation the app chose.
    */
-  step(from: string | null, by: number, leafId?: string): string | null {
-    const leaf = leafId ? leafById(leafId) : focused();
-    if (!leaf || leaf.tabs.length < 2) {
-      return null;
+  land(sessionId: string): void {
+    workingSet.visit(sessionId);
+    const leaf = leafHolding(sessionId) ?? focused();
+    if (!leaf.tabs.includes(sessionId)) {
+      leaf.tabs.push(sessionId);
     }
-    const at = from ? leaf.tabs.indexOf(from) : -1;
-    if (at === -1) {
-      return leaf.tabs[0] ?? null;
-    }
-    return leaf.tabs[(at + by + leaf.tabs.length) % leaf.tabs.length] ?? null;
+    leaf.active = sessionId;
+    held.focusedLeaf = leaf.id;
+    save();
+    project(sessionId, "replace");
   },
 
   /**
-   * Split a group, putting a conversation in the new half.
+   * Give every group that holds tabs a conversation in front. A phone's
+   * home is the focused group showing nothing (`reveal(null)`); on a wide
+   * screen there is no home in the detail area, so a group left that way
+   * would draw blank beside the others. Its first tab comes forward, and
+   * the URL is replaced (not pushed) to name what is now in front.
+   */
+  fillGroups(): void {
+    let changed = false;
+    for (const leaf of leavesOf(held.root)) {
+      if (leaf.active === null && leaf.tabs.length > 0) {
+        leaf.active = leaf.tabs[0];
+        changed = true;
+      }
+    }
+    if (changed) {
+      save();
+      project(focused().active, "replace");
+    }
+  },
+
+  /**
+   * Fold the tree down to at most `max` groups, the extra groups' tabs moving
+   * into the last group kept. What a layout that allows fewer groups (a
+   * tablet's two, a single wide transcript) does to a tree made at a desk.
+   */
+  capLeaves(max: number): void {
+    const leaves = leavesOf(held.root);
+    if (leaves.length <= max) {
+      return;
+    }
+    const kept = leaves.slice(0, max);
+    const into = kept.at(-1) as LeafNode;
+    for (const extra of leaves.slice(max)) {
+      for (const id of extra.tabs) {
+        if (!into.tabs.includes(id)) {
+          into.tabs.push(id);
+        }
+      }
+      if (extra.id === held.focusedLeaf) {
+        into.active = extra.active ?? into.active;
+        held.focusedLeaf = into.id;
+      }
+      extra.tabs = [];
+      extra.active = null;
+    }
+    settle();
+  },
+
+  /**
+   * Split a group, putting a conversation in the new half. Refused when the
+   * layout already holds as many groups as `maxLeaves` allows.
    *
    * "Always move": a conversation lives in exactly one group, so it leaves
    * wherever it was. That is the invariant that keeps session state keyed by
@@ -727,7 +775,7 @@ export const workspace = {
     sessionId: string
   ): void {
     const target = leafById(leafId);
-    if (!target) {
+    if (!target || leavesOf(held.root).length >= layoutPolicy.maxLeaves) {
       return;
     }
     const from = leafHolding(sessionId);
@@ -835,21 +883,6 @@ export const workspace = {
     }
     branch.sizes = sizes;
     save();
-  },
-
-  /** Close a whole group, and everything open in it. */
-  closeLeaf(leafId: string): void {
-    const leaf = leafById(leafId);
-    if (!leaf) {
-      return;
-    }
-    for (const id of [...leaf.tabs]) {
-      workingSet.forget(id);
-    }
-    leaf.tabs = [];
-    leaf.active = null;
-    settle();
-    project(this.activeSessionId, "replace");
   },
 
   /** Server only: this request's tree, from its cookie. Reset every render, because the module is shared across requests. */

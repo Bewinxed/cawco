@@ -17,7 +17,6 @@
    * space-efficient and less noisy.
    */
   import { TextMorph } from "torph/svelte";
-  import { Virtualizer } from "virtua/svelte";
   import { page } from "$app/state";
   import WorkflowRail from "$lib/components/features/workflows/WorkflowRail.svelte";
   import { Button } from "$lib/components/ui/button";
@@ -39,18 +38,11 @@
     IconSettings,
     IconSort,
     IconUsage,
-    IconWarningTriangle,
     IconWorkflow,
   } from "$lib/icons";
   import { formatAgeShort, formatDistanceToNow } from "$lib/utils/time";
   import ActivityDot from "./ActivityDot.svelte";
-  import {
-    type Activity,
-    FAILED_HINT,
-    MACHINE_UNREACHABLE_HINT,
-    SLEEPING_HINT,
-    UNKNOWN_HINT,
-  } from "./activity";
+  import type { Activity } from "./activity";
   import {
     type InstanceRow,
     isFailed,
@@ -63,13 +55,12 @@
   import { continuing } from "./continue.svelte";
   import FolderMenu from "./FolderMenu.svelte";
   import { folderPrefs } from "./folder-prefs.svelte";
+  import Home from "./home/Home.svelte";
   import { conversationHref } from "./links";
-  import MachineMenu from "./MachineMenu.svelte";
   import { markHue, sessionSprite } from "./mark";
-  import { CURVE, dur, ease, motionOk } from "./motion/curves.svelte";
+  import { CURVE, dur } from "./motion/curves.svelte";
   import { reflow } from "./motion/rows.svelte";
   import NewProjectPopover from "./NewProjectPopover.svelte";
-  import OsMark from "./OsMark.svelte";
   import { type RailSort, rail } from "./rail.svelte";
   import NewSessionDialog from "./spawn/NewSessionDialog.svelte";
   import UsageMeter from "./UsageMeter.svelte";
@@ -260,39 +251,22 @@
   const recentCountOf = (project: ProjectRow): number =>
     notRunning.filter((row) => inProject(row, project)).length;
 
-  /**
-   * Each section keeps its unfiltered list beside its filtered one. Two reasons,
-   * both about the checkbox that sits on the section's own label: the group has
-   * to draw while its every row is hidden, or the control that hid them goes
-   * with them and there is no way back — and the count beside the checkbox is
-   * the difference between the two lists.
-   */
-  const ungroupedAll = $derived(
-    running.filter(
-      (row) => !whiffle.projects.some((project) => inProject(row, project))
+  /** What a project says when nothing in it runs: how much of it is resumable. */
+  const notRunning = $derived(
+    shown(
+      whiffle.listedInstances.filter(
+        (row) => isResumable(row) || isStale(row) || isFailed(row)
+      )
     )
   );
 
-  const ungrouped = $derived(ordered(shown(ungroupedAll)));
-
-  const notRunningAll = $derived(
-    whiffle.listedInstances.filter(
-      (row) => isResumable(row) || isStale(row) || isFailed(row)
-    )
+  /** The running delegate sessions the Delegates switch is hiding, for its count. */
+  const delegatesHidden = $derived(
+    rail.delegates
+      ? 0
+      : running.filter((row) => !row.workflowRunId && row.parentInstanceId)
+          .length
   );
-
-  const notRunning = $derived(ordered(shown(notRunningAll)));
-
-  const notRunningHint = (row: InstanceRow): string => {
-    if (isFailed(row)) {
-      return FAILED_HINT;
-    }
-    return isResumable(row) ? SLEEPING_HINT : UNKNOWN_HINT;
-  };
-
-  /** Flattened once per change rather than per scroll frame — the virtualizer
-   *  re-reads `data` on every visible-range update. */
-  const nestedNotRunning = $derived(nested(notRunning));
 
   /* ---- order -----------------------------------------------------------
    *
@@ -453,29 +427,6 @@
     whiffle.blockedCount || whiffle.runningInstances.length
   );
 
-  const online = $derived(
-    new Set(whiffle.onlineMachines.map((machine) => machine.machineId))
-  );
-
-  /**
-   * A machine's mark pulses once when it goes online or offline, and never on
-   * its first draw: a rail that loads with the fleet already up has nothing
-   * to announce. The two glyphs cross-fade in CSS; this is only the pulse.
-   */
-  const pulses = (up: () => boolean) => (node: HTMLElement) => {
-    let was: boolean | undefined;
-    $effect(() => {
-      const next = up();
-      if (was !== undefined && was !== next && motionOk.current) {
-        node.animate([{ scale: 1 }, { scale: 1.25 }, { scale: 1 }], {
-          duration: dur("--dur-panel"),
-          easing: ease("--ease-out"),
-        });
-      }
-      was = next;
-    });
-  };
-
   /** TextMorph's length, read from the token once the stylesheet is there. */
   let morphMs = $state(0);
   $effect(() => {
@@ -511,7 +462,7 @@
      the sleeping one too. The number is what the section is not showing. -->
 {#snippet delegates(hidden: number)}
   <Toggle
-    class="-mr-1 ml-auto border border-transparent aria-pressed:border-[var(--border-control)] data-[state=off]:text-muted-foreground"
+    class="border border-transparent aria-pressed:border-[var(--border-control)] data-[state=off]:text-muted-foreground"
     onPressedChange={(value) => rail.setDelegates(value)}
     pressed={rail.delegates}
     size="xs"
@@ -611,7 +562,7 @@
             {#snippet child({ props })}
               <button {...props} type="button">
                 <span class={SLOT}><IconPlus class={SLOT_GLYPH} /></span>
-                <span class="flex-1">New session</span>
+                <span class="flex-1">Start session</span>
                 <span
                   class="inline-flex opacity-0 transition-opacity duration-(--dur-ghost)
                            group-hover/menu-item:opacity-100 group-focus-within/menu-item:opacity-100"
@@ -667,6 +618,13 @@
        mark is `data-flip`, so it arrives and leaves in place and what it moves
        slides instead of jumping (motion/rows `reflow`). -->
   <Sidebar.Content class="gap-0 py-1" {@attach reflow()}>
+    <!-- On a wide screen the home is the sidebar: what needs you, what is
+         working, what finished, and the rest, while the transcripts take the
+         screen. On the narrow line the home is the session surface's own
+         page instead, and the rail is only navigation. -->
+    {#if !narrow}
+      <Home active variant="rail" />
+    {/if}
     <!-- Fleet nav -->
     <Sidebar.Group class={GROUP}>
       <Sidebar.GroupLabel class={GROUP_LABEL}>Fleet</Sidebar.GroupLabel>
@@ -764,62 +722,6 @@
     {:else}
       {@render pending(2, RUN_ROW)}
     {/if}
-    {#if stage >= 2}
-      <!-- Machines -->
-      {#if whiffle.machines.length > 0}
-        <Sidebar.Group class={GROUP} data-flip>
-          <Sidebar.GroupLabel class={GROUP_LABEL}>Machines</Sidebar.GroupLabel>
-          <Sidebar.Menu class={MENU}>
-            <!-- Keyed by machine: one coming back keeps its row, and only its
-                 mark changes. -->
-            {#each whiffle.machines as machine (machine.machineId)}
-              <Sidebar.MenuItem data-flip>
-                <MachineMenu {machine}>
-                  <Sidebar.MenuButton class="{LIST_ROW} cursor-default">
-                    {#snippet child({ props })}
-                      {@const up = online.has(machine.machineId)}
-                      <div {...props}>
-                        <span class={SLOT}>
-                          <OsMark
-                            class="{SLOT_GLYPH} text-muted-foreground"
-                            os={machine.os}
-                          />
-                        </span>
-                        <span class="min-w-0 flex-1 truncate"
-                          >{machineLabel(machine.hostname)}</span
-                        >
-                        <!-- Both marks stand in one cell and cross-fade, so the
-                             row never changes a node when the machine does. -->
-                        <span
-                          class="presence size-4 shrink-0"
-                          data-online={up}
-                          title={up ? 'Online' : MACHINE_UNREACHABLE_HINT}
-                          {@attach pulses(() => online.has(machine.machineId))}
-                        >
-                          <span
-                            aria-hidden="true"
-                            class="dot size-2 rounded-full bg-[var(--hue-green-500)]"
-                          ></span>
-                          <IconWarningTriangle
-                            aria-hidden="true"
-                            class="warn size-4 text-warning"
-                          />
-                          <span class="sr-only"
-                            >{up ? 'Online' : 'Unreachable'}</span
-                          >
-                        </span>
-                      </div>
-                    {/snippet}
-                  </Sidebar.MenuButton>
-                </MachineMenu>
-              </Sidebar.MenuItem>
-            {/each}
-          </Sidebar.Menu>
-        </Sidebar.Group>
-      {/if}
-    {:else if stage === 1}
-      {@render pending(2, LIST_ROW_H)}
-    {/if}
     {#if stage >= 3}
       <!-- Projects -->
       <Sidebar.Group class={GROUP} data-flip>
@@ -829,6 +731,7 @@
            of them at once: a rail whose projects were ordered by recency and
            whose "Not running" was ordered by name would be two rails. -->
           <div class="-mr-1 ml-auto flex items-center gap-0.5">
+            {@render delegates(delegatesHidden)}
             <DropdownMenu.Root>
               <DropdownMenu.Trigger>
                 {#snippet child({ props })}
@@ -1000,144 +903,7 @@
           </Sidebar.Menu>
         {/if}
       </Sidebar.Group>
-
-      <!-- Running now (ungrouped sessions) -->
-      {#if ungroupedAll.length > 0}
-        <Sidebar.Group class={GROUP} data-flip>
-          <Sidebar.GroupLabel class="{GROUP_LABEL} {CONTROL_LABEL}">
-            <span>Running now</span>
-            {@render delegates(
-            ungroupedAll.length - ungrouped.length
-          )}
-          </Sidebar.GroupLabel>
-          <Sidebar.Menu class={MENU} {@attach highlight(PILL)}>
-            {#each nested(ungrouped) as { row, depth } (row.id)}
-              {@const activity = whiffle.activityOf(row.id)}
-              {@const Sprite = sessionSprite(row.id)}
-              <li
-                class="group/menu-item relative"
-                data-flip
-                data-sidebar="menu-item"
-                data-slot="sidebar-menu-item"
-              >
-                <Sidebar.MenuButton
-                  class={LIST_ROW}
-                  isActive={activeSession === row.id}
-                >
-                  {#snippet child({ props })}
-                    <a
-                      data-share="session:{row.id}"
-                      href={conversationHref(row.id, whiffle.instanceIndex)}
-                      style={indent(depth)}
-                      {...props}
-                    >
-                      <span
-                        class={MARK}
-                        style="background-image: var(--mark-overlay); background-color: var(--mark-{markHue(row.cwd || row.machineId)});"
-                      >
-                        <Sprite
-                          aria-hidden="true"
-                          class={MARK_GLYPH}
-                          style="color: var(--mark-glyph);"
-                        />
-                      </span>
-                      <span class="min-w-0 flex-1 truncate"
-                        >{sessionName(row)}</span
-                      >
-                      {@render age(row)}
-                      <span class={TRAIL}><ActivityDot {activity} /></span>
-                    </a>
-                  {/snippet}
-                </Sidebar.MenuButton>
-              </li>
-            {/each}
-          </Sidebar.Menu>
-        </Sidebar.Group>
-      {/if}
-
-      <!-- Not running -->
-      {#if notRunningAll.length > 0}
-        <Sidebar.Group class="{GROUP} min-h-0 flex-1" data-flip>
-          <Sidebar.GroupLabel class="{GROUP_LABEL} {CONTROL_LABEL}">
-            <span>Not running</span>
-            {#key notRunning.length}
-              <span class="num ml-1.5 opacity-70" data-flip="pop"
-                >{notRunning.length}</span
-              >
-            {/key}
-            {@render delegates(
-            notRunningAll.length - notRunning.length
-          )}
-          </Sidebar.GroupLabel>
-          <!-- Virtualized rather than capped. This list is the whole history of the
-           fleet — two hundred rows on this machine today — and "15 more…" is
-           not a shorter list, it is the same list with the interesting part
-           hidden behind a click. `LIST_ROW` is a fixed 30px, so `itemSize` is
-           exact and the scrollbar never jumps as rows measure.
-           
-           It scrolls in its own pane rather than in the rail's. Virtua measures
-           a list from the top of its scroller, so pointed at the rail's
-           scroller it would need `startMargin` — the exact height of the four
-           groups above it, which changes every time a folder is toggled or a
-           machine arrives. A pane of its own has no such number to keep
-           correct, and it earns its keep anyway: the fleet's whole history
-           scrolls without pushing the nav, the machines and the projects off
-           the top of the rail. -->
-          <div class="no-scrollbar min-h-40 flex-1 overflow-y-auto">
-            <Virtualizer
-              as="ul"
-              bufferSize={12}
-              data={nestedNotRunning}
-              getKey={({ row }: Nested) => row.id}
-              item="li"
-              itemProps={() => ({ class: 'group/menu-item relative' })}
-              itemSize={30}
-            >
-              {#snippet children({ row, depth }: Nested)}
-                {@const Sprite = sessionSprite(row.id)}
-                {@const rowStale = isStale(row)}
-                <Sidebar.MenuButton
-                  class={LIST_ROW}
-                  isActive={activeSession === row.id}
-                >
-                  {#snippet child({ props })}
-                    <a
-                      data-share="session:{row.id}"
-                      href={conversationHref(row.id, whiffle.instanceIndex)}
-                      style={indent(depth)}
-                      title={notRunningHint(row)}
-                      {...props}
-                    >
-                      <span
-                        class="{MARK} opacity-60"
-                        style="background-image: var(--mark-overlay); background-color: var(--mark-{markHue(row.cwd || row.machineId)});"
-                      >
-                        <Sprite
-                          aria-hidden="true"
-                          class={MARK_GLYPH}
-                          style="color: var(--mark-glyph);"
-                        />
-                      </span>
-                      <span class="min-w-0 flex-1 truncate"
-                        >{sessionName(row)}</span
-                      >
-                      {@render age(row)}
-                      <span class={TRAIL}
-                        ><ActivityDot
-                          activity="idle"
-                          sleeping={!rowStale}
-                          stale={rowStale}
-                        /></span
-                      >
-                    </a>
-                  {/snippet}
-                </Sidebar.MenuButton>
-              {/snippet}
-            </Virtualizer>
-          </div>
-        </Sidebar.Group>
-      {/if}
-    {:else if stage === 2}
+    {:else if stage >= 1}
       {@render pending(6, LIST_ROW_H)}
     {/if}
   </Sidebar.Content>
@@ -1195,20 +961,6 @@
   .chevron {
     @media (prefers-reduced-motion: no-preference) {
       transition: rotate var(--dur-control) var(--ease-out);
-    }
-  }
-  /* Online and unreachable marks share one cell and cross-fade. */
-  .presence {
-    display: grid;
-    place-items: center;
-
-    & > :global(:not(.sr-only)) {
-      grid-area: 1 / 1;
-      transition: opacity var(--dur-panel) var(--ease-out);
-    }
-    &[data-online="true"] > :global(.warn),
-    &[data-online="false"] > .dot {
-      opacity: 0;
     }
   }
 </style>

@@ -783,6 +783,13 @@ export type FramePayload =
       /** `tool` for a permission, `question` for an AskUserQuestion-shaped prompt. */
       requestKind?: "tool" | "question";
       /**
+       * When the hub first parked this ask, ms epoch. Stamped by the hub
+       * (`Pending.remember`) and kept across the daemon's replays, so every
+       * dashboard orders and ages an ask by the same moment. Absent only on
+       * the daemon → hub leg, before the hub has seen it.
+       */
+      raisedAt?: number;
+      /**
        * The tool call the ask gates, as its transcript message names it
        * (`toolCallId`): while the ask is parked, that call's row is the card.
        */

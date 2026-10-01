@@ -27,19 +27,29 @@
    * left, because nothing was rebuilt.
    */
   import { onMount, untrack } from "svelte";
+  import { MediaQuery } from "svelte/reactivity";
   import { browser } from "$app/environment";
   import { afterNavigate } from "$app/navigation";
   import { page } from "$app/state";
-  import { IsMobile, IsTouchPortrait } from "$lib/hooks/is-mobile.svelte";
+  import { NARROW_QUERY } from "$lib/hooks/is-mobile.svelte";
   import {
     type HistorySource,
     preloadHistory,
     syncSubscriptions,
     whiffle,
   } from "$lib/whiffle/client.svelte";
-  import FleetBoard from "$lib/whiffle/FleetBoard.svelte";
+  import Caw from "$lib/whiffle/home/Caw.svelte";
+  import Home from "$lib/whiffle/home/Home.svelte";
+  import { home as fleetHome, markOpened } from "$lib/whiffle/home/home.svelte";
   import { instanceForSession } from "$lib/whiffle/links";
-  import { dur, ease, motionOk } from "$lib/whiffle/motion/curves.svelte";
+  import {
+    crossIn,
+    crossOut,
+    dur,
+    ease,
+    motionOk,
+  } from "$lib/whiffle/motion/curves.svelte";
+  import { layoutPolicy } from "$lib/whiffle/workspace/layout-policy.svelte";
   import PaneDeck from "$lib/whiffle/workspace/PaneDeck.svelte";
   import PaneGrid from "$lib/whiffle/workspace/PaneGrid.svelte";
   import PaneHost from "$lib/whiffle/workspace/PaneHost.svelte";
@@ -48,32 +58,87 @@
   /** Whether a `/session` page is showing, rather than another spoke over this one parked. */
   let { shown }: { shown: boolean } = $props();
 
-  /** 900px is this app's desktop line, not the 768 the hook defaults to. */
-  const mobile = new IsMobile(900);
   /**
-   * A tablet held upright is the deck too, however wide it is.
+   * Where the home lives. On the app's narrow line (a phone, or a tablet
+   * held upright) it is this surface's own page, under the conversations;
+   * anywhere wider it is the sidebar, and the conversations own this whole
+   * surface. The same query the Shell asks, so the two never disagree about
+   * which of them is drawing the home.
    *
-   * The width line alone was drawn for phones, and a tablet clears it: every
-   * iPad is 1024 CSS px or more in landscape, and the 12.9" is 1024 in
-   * portrait as well. So an iPad got the grid, and with the grid it got
-   * neither gesture — the two-finger paging lives on the deck, and the
-   * one-finger tab swipe was armed only for the deck's focused group. Held
-   * upright there is one conversation's worth of room anyway, which is what
-   * the deck is for, so the same orientation that makes the grid cramped is
-   * the one that turns the gestures on. Turned landscape it is a desk again:
-   * the grid comes back, and the tab swipe is armed there instead (PaneGrid).
-   */
-  const touchPortrait = new IsTouchPortrait();
-  /**
    * The media query cannot run on the server, so its answer there is the
    * `whiffle-narrow` cookie this browser wrote last time (or, on a first
    * visit, what its headers suggest). On the client the query is right
-   * synchronously, so hydration on a phone finds the deck already painted.
+   * synchronously, so hydration on a phone finds the page already painted.
    */
-  const deck = $derived(mobile.current || touchPortrait.current);
-  const narrow = $derived(browser ? deck : (page.data.narrow as boolean));
+  const narrowQuery = new MediaQuery(NARROW_QUERY);
+  const homePage = $derived(
+    browser ? narrowQuery.current : (page.data.narrow as boolean)
+  );
+  /**
+   * Whether the conversations are a deck (one group, paged) or a grid: the
+   * phone always, a tablet held upright as the `ipad` choice says.
+   */
+  const narrow = $derived(
+    browser ? layoutPolicy.deck : (page.data.narrow as boolean)
+  );
 
-  const onBoard = $derived(workspace.activeSessionId === null);
+  /** What a wide screen's detail area says while nothing is open. */
+  const detailState = $derived.by(() => {
+    if (whiffle.hub === "unreachable") {
+      return "reconnecting";
+    }
+    return fleetHome.ready ? "ready" : "loading";
+  });
+
+  /** The home page is in front: a narrow screen with no conversation open. */
+  const onBoard = $derived(homePage && workspace.activeSessionId === null);
+
+  /* ── Wide screens never show an empty detail if anything can be opened ──
+     With nothing open, the longest-waiting ask's session opens, else the
+     most recently active one. Replaced in the history rather than pushed,
+     so Back never walks into a conversation the app picked. */
+  $effect(() => {
+    if (!(browser && shown) || homePage) {
+      return;
+    }
+    if (workspace.leaves.some((leaf) => !leaf.active && leaf.tabs.length > 0)) {
+      untrack(() => workspace.fillGroups());
+    }
+    if (workspace.activeSessionId !== null) {
+      return;
+    }
+    const { landing } = fleetHome;
+    if (landing) {
+      untrack(() => workspace.land(landing));
+    }
+  });
+
+  /* ── A layout that allows fewer groups folds the tree to fit ── */
+  $effect(() => {
+    const max = layoutPolicy.maxLeaves;
+    if (browser && Number.isFinite(max)) {
+      untrack(() => workspace.capLeaves(max));
+    }
+  });
+
+  /* ── What is on screen counts as opened (Finished reads it) ──
+     Every group's front conversation on a grid, the focused one on a deck;
+     re-marked as its pulses move, so a turn that ends while it is watched
+     is not news afterwards. */
+  $effect(() => {
+    if (!shown || onBoard) {
+      return;
+    }
+    const front = narrow
+      ? [workspace.activeSessionId]
+      : workspace.leaves.map((leaf) => leaf.active);
+    for (const id of front) {
+      if (id) {
+        whiffle.pulseAt(id);
+        untrack(() => markOpened(id));
+      }
+    }
+  });
 
   /* ── The server's answer, claimed once ───────────────────────────────
      `page.data` only changes on a REAL navigation — a cold load, a deep
@@ -346,7 +411,9 @@
     bind:this={boardEl}
     class:hidden-surface={boardHidden}
   >
-    <FleetBoard active={onBoard && shown} />
+    {#if homePage}
+      <Home active={onBoard && shown} variant="page" />
+    {/if}
   </div>
 
   <div
@@ -360,7 +427,30 @@
          deck makes them reachable: the groups are a vertical stack that two
          fingers page through, so widening the window restores the grid and
          narrowing it loses nothing. -->
-    {#if narrow}
+    {#if !homePage && workspace.activeSessionId === null}
+      <!-- A wide screen with nothing open: while the fleet is first read,
+           or the hub is being reached again, Caw says so; once it is read
+           and nothing could be opened, the detail area says where to start.
+           The sidebar's home carries the facts either way. -->
+      <!-- It fades out as the conversation the app lands on fades in under
+           it, and each of its own states cross-fades into the next. -->
+      <div class="empty-detail" out:crossOut>
+        {#key detailState}
+          <div class="detail-state" in:crossIn out:crossOut>
+            {#if detailState === 'reconnecting'}
+              <Caw pose="reconnecting" size={150} />
+              <p>Reaching the hub again…</p>
+            {:else if detailState === 'loading'}
+              <Caw pose="loading" size={150} />
+              <p>Reading the fleet…</p>
+            {:else}
+              <Caw pose="ready" size={150} />
+              <p>Open a session from the list, or start one.</p>
+            {/if}
+          </div>
+        {/key}
+      </div>
+    {:else if narrow}
       <PaneDeck />
     {:else}
       <PaneGrid node={workspace.root} />
@@ -417,5 +507,21 @@
      paint a surface that is supposed to be put away. */
   .groups.hidden-surface {
     visibility: hidden;
+  }
+  .empty-detail {
+    position: relative;
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+    justify-content: center;
+    background: var(--surface-recess);
+    color: var(--ink-muted);
+    font: var(--type-body);
+  }
+  .detail-state {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: var(--space-3);
   }
 </style>

@@ -1,0 +1,394 @@
+/**
+ * What the home says, as one model both of its places read: the phone's
+ * home page and the wide screen's sidebar draw the same groups from here.
+ *
+ * - Status: the hub, the machines and today's spend, in one line.
+ * - Needs you: every ask parked on the operator (a session's permission or
+ *   question, a workflow run's question), longest wait first by the moment
+ *   the hub parked it (`raisedAt`), so every device lists them alike.
+ * - Working: sessions mid-turn, with what each is doing now.
+ * - Finished: sessions whose turn ended, or that failed, since this device
+ *   last opened them (the `finished` choice).
+ * - Recent: everything else that can be opened — idle and sleeping
+ *   sessions, and the transcripts stored on the machines.
+ */
+import type { NeutralSessionInfo, WorkflowRun } from "@whiffle/core";
+import {
+  type BlockedRequest,
+  type InstanceRow,
+  isFailed,
+  isResumable,
+  isStale,
+  whiffle,
+} from "../client.svelte";
+import {
+  buildConvergence,
+  deployInfoOf,
+  isDeployDiverged,
+} from "../convergence";
+import { machineFaults } from "../fleet-faults";
+import { conversationHref, resolveSessionTitle, sessionTitle } from "../links";
+import { machineLabel } from "../machine";
+import { permissionSummary } from "../permission-summary";
+import { questionsOf } from "../question";
+import { rail } from "../rail.svelte";
+import { workflowState } from "../workflow-state.svelte";
+import { choices } from "./choices.svelte";
+
+/* ── Last opened, per device ──────────────────────────────────────────
+   Kept in this browser for now: what "finished since you last looked"
+   means is this device's looking. */
+
+const OPENED_KEY = "cawco-last-opened";
+
+function loadOpened(): Record<string, number> {
+  if (typeof localStorage === "undefined") {
+    return {};
+  }
+  try {
+    return JSON.parse(localStorage.getItem(OPENED_KEY) ?? "{}") as Record<
+      string,
+      number
+    >;
+  } catch {
+    return {};
+  }
+}
+
+const opened = $state<Record<string, number>>(loadOpened());
+
+/** Records that the reader has a conversation on screen now. */
+export function markOpened(id: string): void {
+  opened[id] = Date.now();
+  try {
+    localStorage.setItem(OPENED_KEY, JSON.stringify(opened));
+  } catch {
+    // A browser that will not store forgets what it has seen; Finished
+    // then only lasts the page.
+  }
+}
+
+/* ── One clock for every age on the home ──────────────────────────── */
+
+let tick = $state(Date.now());
+let ticker: ReturnType<typeof setInterval> | undefined;
+
+/** The minute-grained now every wait and elapsed time reads. */
+export const clock = {
+  get now(): number {
+    if (ticker === undefined && typeof window !== "undefined") {
+      ticker = setInterval(() => {
+        tick = Date.now();
+      }, 15_000);
+    }
+    return tick;
+  },
+};
+
+/** "4m", "1h 12m", "2d": how long, at the grain a glance needs. */
+export function span(ms: number): string {
+  const minutes = Math.max(0, Math.floor(ms / 60_000));
+  if (minutes < 1) {
+    return "now";
+  }
+  if (minutes < 60) {
+    return `${minutes}m`;
+  }
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) {
+    return minutes % 60 ? `${hours}h ${minutes % 60}m` : `${hours}h`;
+  }
+  return `${Math.floor(hours / 24)}d`;
+}
+
+/* ── Shapes ────────────────────────────────────────────────────────── */
+
+export interface AskItem {
+  /** What it asks, in plain words. */
+  ask: string;
+  instanceId: string;
+  isQuestion: boolean;
+  key: string;
+  kind: "ask";
+  machineId: string;
+  /** machine · project */
+  place: string;
+  /** When the hub parked it, ms epoch. */
+  raisedAt: number | undefined;
+  request: BlockedRequest["request"];
+  title: string;
+}
+
+export interface RunItem {
+  href: string;
+  key: string;
+  kind: "run";
+  place: string;
+  raisedAt: number | undefined;
+  run: WorkflowRun;
+  title: string;
+}
+
+export type NeedsItem = AskItem | RunItem;
+
+export interface RecentItem {
+  at: number;
+  href: string;
+  info: NeutralSessionInfo | null;
+  instance: InstanceRow | null;
+  key: string;
+  machineId: string;
+  place: string;
+  title: string;
+}
+
+/* ── Naming ────────────────────────────────────────────────────────── */
+
+export const instanceTitle = (row: InstanceRow): string =>
+  resolveSessionTitle({ title: row.title, cwd: row.cwd, id: row.id });
+
+const machineName = (machineId: string): string => {
+  const machine = whiffle.machines.find((m) => m.machineId === machineId);
+  return machine ? machineLabel(machine.hostname) : machineId;
+};
+
+/** "machine · project": the project that holds the folder, else its leaf. */
+export function placeOf(
+  machineId: string,
+  cwd: string | null | undefined
+): string {
+  const folder = cwd ?? "";
+  const project = whiffle.projects.find(
+    (p) =>
+      p.machineId === machineId &&
+      (folder === p.cwd || folder.startsWith(`${p.cwd}/`))
+  );
+  const where = project?.name ?? folder.split("/").filter(Boolean).pop();
+  return where
+    ? `${machineName(machineId)} · ${where}`
+    : machineName(machineId);
+}
+
+/** When a session last moved: its pulse, else the hub's own update time. */
+export function lastAt(row: InstanceRow): number {
+  const pulse = whiffle.pulseAt(row.id);
+  if (pulse !== undefined) {
+    return pulse;
+  }
+  const at = row.updatedAt ? new Date(row.updatedAt).getTime() : 0;
+  return Number.isNaN(at) ? 0 : at;
+}
+
+/** The rail's delegates switch, kept: work handed off is listed only on request. */
+const listed = (row: InstanceRow): boolean =>
+  !row.workflowRunId && (rail.delegates || !row.parentInstanceId);
+
+/* ── The machines ──────────────────────────────────────────────────── */
+
+export interface MachineException {
+  machineId: string;
+  /** "MacBook unreachable" */
+  text: string;
+}
+
+/** What is wrong with a machine, in a word or two; `null` when nothing is. */
+function exceptionOf(
+  machine: (typeof whiffle.machines)[number]
+): string | null {
+  if (machine.status !== "online") {
+    return "unreachable";
+  }
+  if (buildConvergence(machine.build, whiffle.hubBuild) === "behind") {
+    return "behind hub";
+  }
+  if (machineFaults(machine.machineId, machine.fleet).length > 0) {
+    return "sync failed";
+  }
+  const deploy = deployInfoOf(
+    (machine as unknown as { deploy?: unknown }).deploy
+  );
+  if (isDeployDiverged(deploy)) {
+    return "deploy diverged";
+  }
+  return null;
+}
+
+/* ── The model ─────────────────────────────────────────────────────── */
+
+class Home {
+  /** The hub is live: only then can an empty group be believed. */
+  readonly live = $derived(whiffle.hub === "connected");
+
+  /** The first full read is in (or the hub is known to be unreachable). */
+  readonly ready = $derived(
+    whiffle.hub === "unreachable" ||
+      (whiffle.fleetRead && workflowState.loaded && whiffle.catalogsRead)
+  );
+
+  readonly exceptions = $derived<MachineException[]>(
+    whiffle.machines.flatMap((machine) => {
+      const word = exceptionOf(machine);
+      return word
+        ? [
+            {
+              machineId: machine.machineId,
+              text: `${machineLabel(machine.hostname)} ${word}`,
+            },
+          ]
+        : [];
+    })
+  );
+
+  /** Today's spend across the running sessions this browser has stats for. */
+  readonly spend = $derived(
+    whiffle.runningInstances.reduce(
+      (sum, row) => sum + (whiffle.statsOf(row.id).cost ?? 0),
+      0
+    )
+  );
+
+  readonly needs = $derived.by<NeedsItem[]>(() => {
+    const asks: NeedsItem[] = whiffle.blocked.map((item) => {
+      const row = whiffle.instanceIndex.byId.get(item.instanceId);
+      const questions = questionsOf(item.request.toolName, item.request.input);
+      return {
+        kind: "ask",
+        key: `${item.instanceId}:${item.request.requestId}`,
+        instanceId: item.instanceId,
+        machineId: item.machineId,
+        title: row ? instanceTitle(row) : item.hostname,
+        place: placeOf(item.machineId, item.cwd),
+        isQuestion: Boolean(questions),
+        ask: questions
+          ? questions.map((question) => question.question).join(" · ")
+          : permissionSummary(item.request.toolName, item.request.input),
+        raisedAt: item.request.raisedAt,
+        request: item.request,
+      };
+    });
+    const runs: NeedsItem[] = Object.values(workflowState.runs)
+      .filter((run) => run.status === "waiting")
+      .map((run) => ({
+        kind: "run",
+        key: `run:${run.id}`,
+        run,
+        title:
+          workflowState.workflows.find((w) => w.id === run.workflowId)?.name ??
+          "Workflow",
+        place: `${machineName(run.machineId)} · run ${run.id.slice(0, 8)}`,
+        href: `/workflows/${run.workflowId}/runs/${run.id}`,
+        raisedAt: whiffle.runAskRaisedAt(run.id),
+      }));
+    // Longest wait first; an ask the hub has not stamped sorts last.
+    return [...asks, ...runs].sort(
+      (a, b) =>
+        (a.raisedAt ?? Number.POSITIVE_INFINITY) -
+        (b.raisedAt ?? Number.POSITIVE_INFINITY)
+    );
+  });
+
+  /**
+   * Every session mid-turn, delegates included whatever the Delegates
+   * switch says: work handed off is still work, and Caw only says "all
+   * quiet" when nothing at all is working.
+   */
+  readonly working = $derived(
+    whiffle.runningInstances
+      .filter(
+        (row) => !row.workflowRunId && whiffle.activityOf(row.id) === "working"
+      )
+      .sort(
+        (a, b) =>
+          (whiffle.turnSince(a.id) ?? lastAt(a)) -
+          (whiffle.turnSince(b.id) ?? lastAt(b))
+      )
+  );
+
+  readonly finished = $derived.by<InstanceRow[]>(() => {
+    if (choices.finished === "a") {
+      return [];
+    }
+    return whiffle.listedInstances
+      .filter((row) => {
+        if (!listed(row)) {
+          return false;
+        }
+        const activity = whiffle.activityOf(row.id);
+        if (activity !== "idle" && !isFailed(row)) {
+          return false;
+        }
+        const pulse = whiffle.pulseAt(row.id);
+        const ended = isFailed(row) ? lastAt(row) : pulse;
+        return ended !== undefined && ended > (opened[row.id] ?? 0);
+      })
+      .sort((a, b) => lastAt(b) - lastAt(a));
+  });
+
+  readonly recent = $derived.by<RecentItem[]>(() => {
+    const shown = new Set([
+      ...this.working.map((row) => row.id),
+      ...this.finished.map((row) => row.id),
+      ...whiffle.blocked.map((item) => item.instanceId),
+    ]);
+    const live = whiffle.listedInstances
+      .filter(
+        (row) =>
+          listed(row) &&
+          !shown.has(row.id) &&
+          (whiffle.activityOf(row.id) === "idle" ||
+            isResumable(row) ||
+            isStale(row) ||
+            isFailed(row))
+      )
+      .map(
+        (row): RecentItem => ({
+          key: row.id,
+          instance: row,
+          info: null,
+          machineId: row.machineId,
+          title: instanceTitle(row),
+          place: placeOf(row.machineId, row.cwd),
+          href: conversationHref(row.id, whiffle.instanceIndex),
+          at: lastAt(row),
+        })
+      );
+    const running = new Set(
+      whiffle.listedInstances.map((row) => row.sessionId).filter(Boolean)
+    );
+    const stored = whiffle.machines.flatMap((machine) =>
+      whiffle
+        .catalogOf(machine.machineId)
+        .filter((info) => !running.has(info.sessionId))
+        .map(
+          (info): RecentItem => ({
+            key: `${machine.machineId}:${info.sessionId}`,
+            instance: null,
+            info,
+            machineId: machine.machineId,
+            title: sessionTitle(info),
+            place: placeOf(machine.machineId, info.cwd),
+            href: conversationHref(info.sessionId, whiffle.instanceIndex, {
+              machineId: machine.machineId,
+              cwd: info.cwd,
+            }),
+            at: info.lastModified,
+          })
+        )
+    );
+    return [...live, ...stored].sort((a, b) => b.at - a.at);
+  });
+
+  /** What a wide screen opens with nothing open: the longest wait, else the latest work. */
+  readonly landing = $derived.by<string | null>(() => {
+    const ask = this.needs.find((item) => item.kind === "ask");
+    if (ask?.kind === "ask") {
+      return ask.instanceId;
+    }
+    const [latest] = [...whiffle.runningInstances]
+      .filter(listed)
+      .sort((a, b) => lastAt(b) - lastAt(a));
+    return latest?.id ?? null;
+  });
+}
+
+export const home = new Home();

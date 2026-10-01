@@ -38,11 +38,26 @@ export const answerWorkflow = (
   result: PermissionResult
 ): boolean => workflowAnswers.get(pending)?.(id, result) ?? false;
 
+/** The payload field the hub stamps; see `raisedAt` on `permission_request`. */
+const raisedAtOf = (envelope: Envelope | undefined): number | undefined => {
+  const at = (envelope?.payload as { raisedAt?: unknown } | undefined)
+    ?.raisedAt;
+  return typeof at === "number" ? at : undefined;
+};
+
 const make = (): PendingShape => {
   const requests = new Map<string, Envelope>();
 
   return {
+    /**
+     * Parks an ask and stamps the moment the hub first saw it onto its
+     * payload, before the payload is relayed or replayed from `/api/pending`.
+     * A daemon replay of the same request keeps the first stamp, so the wait
+     * every device shows is the same wait.
+     */
     remember: (requestId, envelope) => {
+      const payload = envelope.payload as Record<string, unknown>;
+      payload.raisedAt = raisedAtOf(requests.get(requestId)) ?? Date.now();
       requests.set(requestId, envelope);
     },
     get: (requestId) => requests.get(requestId),
