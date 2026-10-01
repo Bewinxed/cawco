@@ -12,7 +12,8 @@
  * So faults are modelled rather than printed. Two things follow:
  *
  *  - A fault has an ORIGIN. A row the hub could not fetch (`FleetSkillMeta.error`,
- *    `FleetPlugin.error`) never reached any machine and is fixed at the hub; a
+ *    `FleetPlugin.error` while no machine has installed that plugin from its own
+ *    marketplace) never reached any machine and is fixed at the hub; a
  *    row a machine would not apply (`FleetItemState.state === 'failed'`) reached
  *    it and was refused there. They look alike in a log and have nothing in
  *    common as problems, so they never share a badge here.
@@ -325,11 +326,19 @@ export function machineFaults(
 /**
  * Every row the HUB could not resolve. These belong to no machine: the bytes
  * were never fetched, so nothing was ever offered to one.
+ *
+ * A plugin is the exception. One the hub could not carry is installed by each
+ * machine from its own marketplace instead, so its fetch error is a fault only
+ * while no machine reports it applied — a plugin bigger than the hub carries
+ * works everywhere and is not broken.
  */
 export function hubFaults(
   skills: readonly FleetSkillMeta[],
-  plugins: readonly FleetPlugin[]
+  plugins: readonly FleetPlugin[],
+  reports: readonly (FleetSyncReport | undefined)[]
 ): Fault[] {
+  const appliedSomewhere = (id: string): boolean =>
+    reports.some((report) => report?.plugins[id]?.state === "applied");
   return [
     ...skills
       .filter((row) => row.error)
@@ -341,7 +350,7 @@ export function hubFaults(
         cause: causeOf(row.error, "hub"),
       })),
     ...plugins
-      .filter((row) => row.error)
+      .filter((row) => row.error && !appliedSomewhere(row.id))
       .map((row) => ({
         origin: "hub" as const,
         scope: "plugins" as const,

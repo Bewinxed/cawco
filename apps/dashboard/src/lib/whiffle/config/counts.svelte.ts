@@ -38,7 +38,13 @@ export function countOf(store: ConfigStore, slug: SectionSlug): number | null {
 export function allFaults(store: ConfigStore) {
   const fleet = store.fleet.value;
   return [
-    ...(fleet ? hubFaults(fleet.skills, fleet.config.plugins) : []),
+    ...(fleet
+      ? hubFaults(
+          fleet.skills,
+          fleet.config.plugins,
+          whiffle.machines.map((machine) => machine.fleet)
+        )
+      : []),
     ...whiffle.machines.flatMap((machine) =>
       machineFaults(machine.machineId, machine.fleet)
     ),

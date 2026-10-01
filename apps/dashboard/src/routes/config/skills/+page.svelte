@@ -59,7 +59,13 @@
   const marketplaces = $derived(fleet?.config.marketplaces ?? []);
   const plugins = $derived(fleet?.config.plugins ?? []);
   const machines = $derived(orderMachines(whiffle.machines));
-  const hubBroken = $derived(hubFaults(skills, plugins));
+  const hubBroken = $derived(
+    hubFaults(
+      skills,
+      plugins,
+      whiffle.machines.map((machine) => machine.fleet)
+    )
+  );
 
   let busy = $state<Record<string, boolean>>({});
   let browsing = $state<string | null>(null);
