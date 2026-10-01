@@ -2,50 +2,47 @@ import { browser } from "$app/environment";
 import { motionOk } from "$lib/whiffle/motion/curves.svelte";
 
 type Theme = "light" | "dark" | "system";
+type Scheme = "light" | "dark";
 
+/** No stored choice follows the OS: neither scheme is the default. */
 function getInitialTheme(): Theme {
   if (!browser) {
-    return "light";
+    return "system";
   }
   const stored = localStorage.getItem("whiffle-theme") as Theme | null;
-  return stored || "light";
+  return stored || "system";
 }
 
-function applyTheme(themeValue: Theme) {
-  if (!browser) {
-    return;
+function resolve(themeValue: Theme): Scheme {
+  if (themeValue !== "system") {
+    return themeValue;
   }
+  return window.matchMedia("(prefers-color-scheme: dark)").matches
+    ? "dark"
+    : "light";
+}
 
-  const root = document.documentElement;
-
-  if (themeValue === "system") {
-    const systemPrefersDark = window.matchMedia(
-      "(prefers-color-scheme: dark)"
-    ).matches;
-    if (systemPrefersDark) {
-      root.classList.add("dark");
-    } else {
-      root.classList.remove("dark");
-    }
-  } else if (themeValue === "dark") {
-    root.classList.add("dark");
-  } else {
-    root.classList.remove("dark");
-  }
+/** Sets the class app.html also sets before first paint; returns the scheme drawn. */
+function applyTheme(themeValue: Theme): Scheme {
+  const scheme = resolve(themeValue);
+  document.documentElement.classList.toggle("dark", scheme === "dark");
+  return scheme;
 }
 
 class ThemeState {
   current = $state<Theme>(getInitialTheme());
+  /** The scheme on screen, whichever choice produced it. */
+  resolved = $state<Scheme>("light");
 
   constructor() {
     if (browser) {
-      applyTheme(this.current);
+      this.resolved = applyTheme(this.current);
 
-      // Listen for system theme changes
+      // A reader on "system" follows the OS as it changes.
       const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
       mediaQuery.addEventListener("change", () => {
         if (this.current === "system") {
-          applyTheme("system");
+          this.resolved = applyTheme("system");
         }
       });
     }
@@ -61,7 +58,7 @@ class ThemeState {
     const flip = () => {
       this.current = value;
       localStorage.setItem("whiffle-theme", value);
-      applyTheme(value);
+      this.resolved = applyTheme(value);
     };
     // The page's own colour transitions (a button's hover ink, a row's pill)
     // would start from the old theme: a second fade under the wash's, a fade
@@ -96,8 +93,9 @@ class ThemeState {
     flip();
   }
 
+  /** Flips the scheme on screen, so the first press always changes it. */
   toggle() {
-    this.set(this.current === "light" ? "dark" : "light");
+    this.set(this.resolved === "light" ? "dark" : "light");
   }
 }
 

@@ -9,7 +9,7 @@
     system: "System",
   };
 
-  const isDark = $derived(theme.current === "dark");
+  const isDark = $derived(theme.resolved === "dark");
   const label = $derived(themeLabels[theme.current] || "Light mode");
 </script>
 

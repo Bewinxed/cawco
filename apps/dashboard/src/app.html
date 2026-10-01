@@ -18,6 +18,24 @@
       is in and before the body is parsed, so both are ready by the first
       layout.
     -->
+    <!--
+      The scheme, before anything paints. A stored choice wins; with none the
+      page follows the OS (neither scheme is the default). theme.svelte.ts
+      owns the class from hydration onward.
+    -->
+    <script>
+      "use strict";
+      try {
+        const stored = localStorage.getItem("whiffle-theme");
+        const dark =
+          stored === "dark" ||
+          (stored !== "light" &&
+            matchMedia("(prefers-color-scheme: dark)").matches);
+        document.documentElement.classList.toggle("dark", dark);
+      } catch {
+        /* No storage: the OS decides through theme.svelte.ts on hydration. */
+      }
+    </script>
     <script>
       "use strict";
       document.fonts.load('1em "Figtree Variable"');

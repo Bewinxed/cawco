@@ -20,7 +20,9 @@ Claude Code, OpenCode, pi. A Telegram bridge lets the operator approve permissio
 
 - **Journey spec**: JOURNEY.md. Structural and IA decisions come from it.
 - **Design spec**: DESIGN.md is the locked design language and it is law. Apply its tokens
-  (`apps/dashboard/src/app.css`), its named rules and its component recipes. Do not introduce
-  one-off colours, fonts, spacing, radii, shadows, curves or durations outside it; add a token
-  first. `.impeccable/design.json` carries its hex values, shadows, motion tokens and breakpoints.
+  (the one source is `design/tokens/cawco.tokens.json`, built by `bun run tokens` in
+  apps/dashboard into `src/lib/tokens/tokens.css`), its named rules and its component recipes.
+  Do not introduce one-off colours, fonts, spacing, radii, shadows, curves or durations outside
+  it; add a token to the JSON first. `.impeccable/design.json` carries its hex values, shadows,
+  motion tokens and breakpoints.
 - **Product truth**: PRODUCT.md (users, principles, accessibility). **Copy**: WORDS.md.

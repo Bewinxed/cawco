@@ -1074,6 +1074,31 @@
       "$type": "color",
       "$value": "{color.neutral-8}"
     },
+    "scrollbar-thumb": {
+      "$type": "color",
+      "$value": "oklch(from {color.muted-foreground} l c h / 0.35)",
+      "$description": "Every scrollbar's thumb, inherited from the root."
+    },
+    "skeleton-sheen": {
+      "$type": "color",
+      "$value": "oklch(from {color.surface-raised} l c h / 0.6)",
+      "$description": "The band of raised surface that crosses a skeleton once per loop."
+    },
+    "prose-bullet": {
+      "$type": "color",
+      "$value": "oklch(from {color.muted-foreground} l c h / 0.55)",
+      "$description": "List bullets in rendered markdown."
+    },
+    "identity-ink": {
+      "$type": "color",
+      "$value": "oklch(48% 0.12 0)",
+      "$description": "Project identity ink at hue 0; the identity-ink utility turns it to the project's --identity-h. 48%, not 50%: on a row's hover surface the cyan end of the wheel fell to 4.39:1 at 50%, and 48% holds every one of the ten hues above 4.5:1.",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(74% 0.11 0)"
+        }
+      }
+    },
     "machine-offline": {
       "$type": "color",
       "$value": "color-mix(in oklab, {color.neutral-8} 62%, {color.neutral-11})",

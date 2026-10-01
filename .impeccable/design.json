@@ -1,1129 +1,1383 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-01T09:28:50.709Z",
-  "title": "Design System: Whiffle",
+  "generatedAt": "2026-10-01T18:47:13.510Z",
+  "title": "Design System: CawCo",
+  "source": "design/tokens/cawco.tokens.json",
   "extensions": {
     "colorMeta": {
-      "brand-solid": {
+      "action-solid": {
         "role": "primary",
-        "displayName": "Graphite Action",
-        "canonical": "light-dark(oklch(30.03% 0.0061 258.35), oklch(93.06% 0.0058 264.53))",
-        "hex": "#2c2e31",
-        "hexDark": "#e6e8ec",
+        "displayName": "Coral Action",
+        "canonical": "light-dark(oklch(0.555 0.17 33), oklch(0.54 0.165 33))",
+        "hex": "#c24128",
+        "hexDark": "#bb3e26",
         "tonalRamp": [
-          "#0a0b0e",
-          "#222427",
-          "#3e4043",
-          "#5b5e61",
-          "#7b7d81",
-          "#9c9ea2",
-          "#bec1c5",
-          "#eceff3"
+          "#380000",
+          "#5f0000",
+          "#850000",
+          "#ac2b11",
+          "#d45239",
+          "#fd775c",
+          "#ff9c7f",
+          "#ffc1a3"
         ]
       },
-      "on-brand": {
+      "action-hover": {
         "role": "primary",
-        "displayName": "Paper On Graphite",
-        "canonical": "light-dark(oklch(99.33% 0.0011 197.14), oklch(18.56% 0.0016 197.02))",
-        "hex": "#fcfdfd",
-        "hexDark": "#121313",
+        "displayName": "Coral Action Pressed",
+        "canonical": "light-dark(oklch(0.51 0.165 33), oklch(0.495 0.16 34))",
+        "hex": "#b1341c",
+        "hexDark": "#a93217",
+        "tonalRamp": [
+          "#380000",
+          "#5e0000",
+          "#840000",
+          "#ab2e15",
+          "#d3543b",
+          "#fb785e",
+          "#ff9d81",
+          "#ffc3a5"
+        ]
+      },
+      "on-action": {
+        "role": "primary",
+        "displayName": "White On Coral",
+        "canonical": "oklch(1 0 0)",
+        "hex": "#ffffff",
+        "hexDark": "#ffffff",
         "tonalRamp": [
           "#0b0b0b",
-          "#232424",
-          "#3f4040",
-          "#5d5e5e",
-          "#7c7d7d",
-          "#9e9e9e",
-          "#c0c1c1",
-          "#eeefef"
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#a5a5a5",
+          "#c9c9c9",
+          "#eeeeee"
         ]
       },
-      "action-top": {
+      "coral-3": {
         "role": "primary",
-        "displayName": "Action Highlight",
-        "canonical": "light-dark(oklch(38.43% 0.0061 258.35), oklch(100.00% 0.0058 264.53))",
-        "hex": "#414447",
+        "displayName": "Coral 3",
+        "canonical": "light-dark(oklch(0.946 0.03 38), oklch(0.28 0.06 32))",
+        "hex": "#ffe7df",
+        "hexDark": "#421c15",
+        "tonalRamp": [
+          "#150704",
+          "#31201b",
+          "#503d37",
+          "#705c55",
+          "#927d76",
+          "#b69f98",
+          "#dbc3bc",
+          "#ffe9e1"
+        ]
+      },
+      "coral-5": {
+        "role": "primary",
+        "displayName": "Coral 5",
+        "canonical": "light-dark(oklch(0.88 0.065 36), oklch(0.36 0.09 32))",
+        "hex": "#ffc9ba",
+        "hexDark": "#64281d",
+        "tonalRamp": [
+          "#200000",
+          "#3f170d",
+          "#603529",
+          "#825447",
+          "#a57567",
+          "#ca9789",
+          "#f0bbac",
+          "#ffe0d1"
+        ]
+      },
+      "coral-9": {
+        "role": "primary",
+        "displayName": "Caw Coral",
+        "canonical": "light-dark(oklch(0.645 0.175 33), oklch(0.665 0.17 33))",
+        "hex": "#e45c41",
+        "hexDark": "#e9644a",
+        "tonalRamp": [
+          "#3a0000",
+          "#600000",
+          "#870000",
+          "#ae280a",
+          "#d64f35",
+          "#ff7558",
+          "#ff9a7c",
+          "#ffbfa0"
+        ]
+      },
+      "coral-10": {
+        "role": "primary",
+        "displayName": "Coral 10",
+        "canonical": "light-dark(oklch(0.6 0.175 33), oklch(0.705 0.16 34))",
+        "hex": "#d44d33",
+        "hexDark": "#f27559",
+        "tonalRamp": [
+          "#3a0000",
+          "#600000",
+          "#870000",
+          "#ae270a",
+          "#d64f35",
+          "#ff7459",
+          "#ff9a7c",
+          "#ffbfa0"
+        ]
+      },
+      "coral-11": {
+        "role": "primary",
+        "displayName": "Coral 11",
+        "canonical": "light-dark(oklch(0.5 0.15 32), oklch(0.8 0.1 34))",
+        "hex": "#a83825",
+        "hexDark": "#f7a693",
+        "tonalRamp": [
+          "#340000",
+          "#5a0000",
+          "#7f0900",
+          "#a53623",
+          "#cd5a45",
+          "#f47d67",
+          "#ffa28a",
+          "#ffc7ae"
+        ]
+      },
+      "brand-solid": {
+        "role": "primary",
+        "displayName": "Caw Coral Mark",
+        "canonical": "light-dark(oklch(0.645 0.175 33), oklch(0.665 0.17 33))",
+        "hex": "#e45c41",
+        "hexDark": "#e9644a",
+        "tonalRamp": [
+          "#3a0000",
+          "#600000",
+          "#870000",
+          "#ae280a",
+          "#d64f35",
+          "#ff7558",
+          "#ff9a7c",
+          "#ffbfa0"
+        ]
+      },
+      "brand-wash": {
+        "role": "primary",
+        "displayName": "Coral Wash",
+        "canonical": "light-dark(oklch(0.946 0.03 38), oklch(0.665 0.17 33 / 0.16))"
+      },
+      "brand-ink": {
+        "role": "primary",
+        "displayName": "Coral Ink",
+        "canonical": "light-dark(oklch(0.5 0.15 32), oklch(0.8 0.1 34))",
+        "hex": "#a83825",
+        "hexDark": "#f7a693",
+        "tonalRamp": [
+          "#340000",
+          "#5a0000",
+          "#7f0900",
+          "#a53623",
+          "#cd5a45",
+          "#f47d67",
+          "#ffa28a",
+          "#ffc7ae"
+        ]
+      },
+      "link-ink": {
+        "role": "primary",
+        "displayName": "Link Coral",
+        "canonical": "light-dark(oklch(0.5 0.15 32), oklch(0.8 0.1 34))",
+        "hex": "#a83825",
+        "hexDark": "#f7a693",
+        "tonalRamp": [
+          "#340000",
+          "#5a0000",
+          "#7f0900",
+          "#a53623",
+          "#cd5a45",
+          "#f47d67",
+          "#ffa28a",
+          "#ffc7ae"
+        ]
+      },
+      "selected-bg": {
+        "role": "primary",
+        "displayName": "Apricot Selection",
+        "canonical": "light-dark(oklch(0.905 0.062 48), oklch(0.34 0.075 40))",
+        "hex": "#ffd4bd",
+        "hexDark": "#582818",
+        "tonalRamp": [
+          "#1d0200",
+          "#3b1b08",
+          "#5b3925",
+          "#7c5844",
+          "#9f7964",
+          "#c49b85",
+          "#e9bfa8",
+          "#ffe4cd"
+        ]
+      },
+      "selected-ink": {
+        "role": "primary",
+        "displayName": "Selected Coral Ink",
+        "canonical": "light-dark(oklch(0.5 0.15 32), oklch(0.83 0.085 34))",
+        "hex": "#a83825",
+        "hexDark": "#f9b4a3",
+        "tonalRamp": [
+          "#340000",
+          "#5a0000",
+          "#7f0900",
+          "#a53623",
+          "#cd5a45",
+          "#f47d67",
+          "#ffa28a",
+          "#ffc7ae"
+        ]
+      },
+      "selected-icon": {
+        "role": "primary",
+        "displayName": "Selected Coral Icon",
+        "canonical": "light-dark(oklch(0.6 0.175 33), oklch(0.74 0.13 34))",
+        "hex": "#d44d33",
+        "hexDark": "#f18b73",
+        "tonalRamp": [
+          "#3a0000",
+          "#600000",
+          "#870000",
+          "#ae270a",
+          "#d64f35",
+          "#ff7459",
+          "#ff9a7c",
+          "#ffbfa0"
+        ]
+      },
+      "chip-chosen-bg": {
+        "role": "primary",
+        "displayName": "Chosen Vermillion",
+        "canonical": "light-dark(oklch(0.55 0.17 33), oklch(0.54 0.165 33))",
+        "hex": "#c03f26",
+        "hexDark": "#bb3e26",
+        "tonalRamp": [
+          "#380000",
+          "#5f0000",
+          "#850000",
+          "#ac2b11",
+          "#d45238",
+          "#fd775c",
+          "#ff9c7f",
+          "#ffc1a3"
+        ]
+      },
+      "chip-chosen-ink": {
+        "role": "primary",
+        "displayName": "White On Vermillion",
+        "canonical": "oklch(1 0 0)",
+        "hex": "#ffffff",
         "hexDark": "#ffffff",
         "tonalRamp": [
-          "#0a0b0e",
-          "#222427",
-          "#3e4043",
-          "#5b5e61",
-          "#7b7d81",
-          "#9c9ea2",
-          "#bec1c5",
-          "#eceff3"
+          "#0b0b0b",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#a5a5a5",
+          "#c9c9c9",
+          "#eeeeee"
         ]
       },
-      "action-bottom": {
-        "role": "primary",
-        "displayName": "Action Base",
-        "canonical": "light-dark(oklch(29.63% 0.0061 258.35), oklch(92.66% 0.0058 264.53))",
-        "hex": "#2b2d30",
-        "hexDark": "#e5e7eb",
-        "tonalRamp": [
-          "#0a0b0e",
-          "#222427",
-          "#3e4043",
-          "#5b5e61",
-          "#7b7d81",
-          "#9c9ea2",
-          "#bec1c5",
-          "#eceff3"
-        ]
-      },
-      "action-hover-top": {
-        "role": "primary",
-        "displayName": "Action Hover Top",
-        "canonical": "light-dark(oklch(33.43% 0.0061 258.35), oklch(100.00% 0.0058 264.53))",
-        "hex": "#35373a",
-        "hexDark": "#ffffff",
-        "tonalRamp": [
-          "#0a0b0e",
-          "#222427",
-          "#3e4043",
-          "#5b5e61",
-          "#7b7d81",
-          "#9c9ea2",
-          "#bec1c5",
-          "#eceff3"
-        ]
-      },
-      "action-hover-bottom": {
-        "role": "primary",
-        "displayName": "Action Hover Bottom",
-        "canonical": "light-dark(oklch(24.63% 0.0061 258.35), oklch(97.66% 0.0058 264.53))",
-        "hex": "#1f2124",
-        "hexDark": "#f5f7fb",
-        "tonalRamp": [
-          "#0a0b0e",
-          "#222427",
-          "#3e4043",
-          "#5b5e61",
-          "#7b7d81",
-          "#9c9ea2",
-          "#bec1c5",
-          "#eceff3"
-        ]
-      },
-      "ink-hover": {
-        "role": "primary",
-        "displayName": "Ink Hover",
-        "canonical": "light-dark(oklch(25.03% 0.0061 258.35), oklch(98.06% 0.0058 264.53))",
-        "hex": "#202225",
-        "hexDark": "#f7f9fd",
-        "tonalRamp": [
-          "#0a0b0e",
-          "#222427",
-          "#3e4043",
-          "#5b5e61",
-          "#7b7d81",
-          "#9c9ea2",
-          "#bec1c5",
-          "#eceff3"
-        ]
-      },
-      "row-mark-top": {
-        "role": "primary",
-        "displayName": "Row Mark Top",
-        "canonical": "light-dark(oklch(35.63% 0.0061 258.35), oklch(98.66% 0.0058 264.53))",
-        "hex": "#3a3c3f",
-        "hexDark": "#f9fbff",
-        "tonalRamp": [
-          "#0a0b0e",
-          "#222427",
-          "#3e4043",
-          "#5b5e61",
-          "#7b7d81",
-          "#9c9ea2",
-          "#bec1c5",
-          "#eceff3"
-        ]
-      },
-      "row-mark-bottom": {
-        "role": "primary",
-        "displayName": "Row Mark Bottom",
-        "canonical": "light-dark(oklch(26.83% 0.0061 258.35), oklch(89.86% 0.0058 264.53))",
-        "hex": "#242629",
-        "hexDark": "#dbdde1",
-        "tonalRamp": [
-          "#0a0b0e",
-          "#222427",
-          "#3e4043",
-          "#5b5e61",
-          "#7b7d81",
-          "#9c9ea2",
-          "#bec1c5",
-          "#eceff3"
-        ]
-      },
-      "accent-9": {
+      "ink-solid": {
         "role": "secondary",
-        "displayName": "Focus Blue",
-        "canonical": "oklch(51.88% 0.1179 263.31)",
-        "hex": "#4466ac",
-        "hexDark": "#4466ac",
+        "displayName": "Solid Ink",
+        "canonical": "light-dark(oklch(0.295 0.01 70), oklch(0.934 0.01 82))",
+        "hex": "#302c27",
+        "hexDark": "#ece9e2",
         "tonalRamp": [
-          "#00003b",
-          "#031c5c",
-          "#1d3b7d",
-          "#395ba0",
-          "#587bc3",
-          "#789de8",
-          "#99c0ff",
-          "#dfefff"
+          "#0e0b07",
+          "#28241f",
+          "#45413c",
+          "#65605b",
+          "#86817c",
+          "#a9a49e",
+          "#cdc8c2",
+          "#f3eee7"
         ]
       },
-      "accent-11": {
+      "on-ink": {
         "role": "secondary",
-        "displayName": "Accent 11",
-        "canonical": "light-dark(oklch(50.02% 0.0707 263.21), oklch(78.07% 0.0711 263.25))",
-        "hex": "#4e638c",
-        "hexDark": "#a0b8e6",
+        "displayName": "Paper On Ink",
+        "canonical": "light-dark(oklch(0.993 0.004 85), oklch(0.184 0.004 70))",
+        "hex": "#fefdfa",
+        "hexDark": "#141211",
         "tonalRamp": [
-          "#000728",
-          "#112246",
-          "#2c3f65",
-          "#485d86",
-          "#677da8",
-          "#879fcb",
-          "#a9c1f0",
-          "#dfefff"
-        ]
-      },
-      "accent-3": {
-        "role": "secondary",
-        "displayName": "Accent 3",
-        "canonical": "light-dark(oklch(95.62% 0.0207 261.77), oklch(25.13% 0.0268 262.57))",
-        "hex": "#e9f1ff",
-        "hexDark": "#1b222f",
-        "tonalRamp": [
-          "#070b14",
-          "#1e242e",
-          "#3a404b",
-          "#575e6a",
-          "#777e8a",
-          "#979fac",
-          "#bac1cf",
-          "#e7effd"
+          "#0c0b09",
+          "#262523",
+          "#434240",
+          "#62615f",
+          "#838280",
+          "#a6a5a2",
+          "#cac9c6",
+          "#efeeeb"
         ]
       },
       "focus-ring": {
-        "role": "secondary",
-        "displayName": "Focus Ring",
-        "canonical": "light-dark(oklch(51.88% 0.1179 263.31), oklch(78.07% 0.0711 263.25))",
-        "hex": "#4466ac",
-        "hexDark": "#a0b8e6",
+        "role": "primary",
+        "displayName": "Coral Focus Ring",
+        "canonical": "light-dark(oklch(0.55 0.165 33), oklch(0.76 0.12 34))",
+        "hex": "#be4229",
+        "hexDark": "#f3947e",
         "tonalRamp": [
-          "#00003b",
-          "#031c5c",
-          "#1d3b7d",
-          "#395ba0",
-          "#587bc3",
-          "#789de8",
-          "#99c0ff",
-          "#dfefff"
+          "#370000",
+          "#5d0000",
+          "#840000",
+          "#aa2f15",
+          "#d2543b",
+          "#fa795e",
+          "#ff9e81",
+          "#ffc3a5"
         ]
       },
       "selection": {
+        "role": "primary",
+        "displayName": "Coral Selection Tint",
+        "canonical": "light-dark(oklch(0.645 0.175 33 / 0.2), oklch(0.645 0.175 33 / 0.3))"
+      },
+      "spark": {
         "role": "secondary",
-        "displayName": "Selection",
-        "canonical": "light-dark(oklch(51.88% 0.1179 263.31 / 0.22), oklch(51.88% 0.1179 263.31 / 0.32))",
-        "hex": "#4466ac38",
-        "hexDark": "#4466ac52",
+        "displayName": "Spark Yellow",
+        "canonical": "#F2D36B",
+        "hex": "#f2d36b",
+        "hexDark": "#f2d36b",
         "tonalRamp": [
-          "#00003b",
-          "#031c5c",
-          "#1d3b7d",
-          "#395ba0",
-          "#587bc3",
-          "#789de8",
-          "#99c0ff",
-          "#dfefff"
+          "#1d0300",
+          "#3a1e00",
+          "#5a3d00",
+          "#7a5d00",
+          "#9d7f00",
+          "#c1a236",
+          "#e6c75f",
+          "#ffed85"
+        ]
+      },
+      "paper": {
+        "role": "secondary",
+        "displayName": "Caw Paper",
+        "canonical": "#F4F0E6",
+        "hex": "#f4f0e6",
+        "hexDark": "#f4f0e6",
+        "tonalRamp": [
+          "#0e0b05",
+          "#28251d",
+          "#45423a",
+          "#646158",
+          "#868279",
+          "#a8a59b",
+          "#cdc9bf",
+          "#f2eee4"
+        ]
+      },
+      "crow-ink": {
+        "role": "secondary",
+        "displayName": "Crow Ink",
+        "canonical": "#171715",
+        "hex": "#171715",
+        "hexDark": "#171715",
+        "tonalRamp": [
+          "#0b0b09",
+          "#252523",
+          "#424240",
+          "#61615f",
+          "#828280",
+          "#a5a5a2",
+          "#c9c9c6",
+          "#efefec"
         ]
       },
       "status-live-bg": {
         "role": "tertiary",
-        "displayName": "Live Tint",
-        "canonical": "light-dark(oklch(78.75% 0.0521 243.84), oklch(36.19% 0.0815 252.75))",
+        "displayName": "Status Live Bg",
+        "canonical": "light-dark(oklab(0.78752 -0.0229622 -0.0467447), oklab(0.36192 -0.0241563 -0.0778037))",
         "hex": "#9ebed9",
         "hexDark": "#1a3f67",
         "tonalRamp": [
           "#000c1f",
-          "#09263b",
-          "#264359",
-          "#446179",
-          "#63819a",
-          "#83a3bd",
-          "#a5c5e1",
-          "#d4f3ff"
+          "#0b273c",
+          "#29455c",
+          "#48657d",
+          "#6886a0",
+          "#8aa9c4",
+          "#adcee9",
+          "#d2f3ff"
         ]
       },
       "status-live-ink": {
         "role": "tertiary",
         "displayName": "Status Live Ink",
-        "canonical": "light-dark(oklch(30.46% 0.0539 253.63), oklch(81.77% 0.0483 236.69))",
-        "hex": "#1b3049",
-        "hexDark": "#a7c9df",
+        "canonical": "light-dark(oklab(0.30336 -0.0140729 -0.0480252), oklab(0.81848 -0.0260833 -0.0366415))",
+        "hex": "#1c3047",
+        "hexDark": "#a8c9dd",
         "tonalRamp": [
-          "#000a21",
-          "#10253d",
-          "#2b415c",
-          "#485f7c",
-          "#677f9d",
-          "#87a1c0",
-          "#a9c4e4",
-          "#daf1ff"
+          "#000b1f",
+          "#12263c",
+          "#2f445c",
+          "#4d637d",
+          "#6e85a0",
+          "#90a7c4",
+          "#b3cce9",
+          "#d8f1ff"
         ]
       },
       "status-attn-bg": {
         "role": "tertiary",
-        "displayName": "Needs-You Tint",
-        "canonical": "light-dark(oklch(84.66% 0.0969 90.84), oklch(47.02% 0.0945 87.65))",
-        "hex": "#e4cb81",
-        "hexDark": "#715704",
+        "displayName": "Spark Needs-You",
+        "canonical": "light-dark(oklch(0.91 0.115 95), oklch(0.37 0.07 92))",
+        "hex": "#f9e185",
+        "hexDark": "#4d3e09",
         "tonalRamp": [
-          "#130900",
-          "#312100",
-          "#523c00",
-          "#725b03",
-          "#937b31",
-          "#b59c54",
-          "#d8bf76",
-          "#ffeda2"
+          "#1a0500",
+          "#372100",
+          "#553f00",
+          "#765f00",
+          "#98811d",
+          "#bba447",
+          "#e0c96d",
+          "#ffee92"
         ]
       },
       "status-attn-ink": {
         "role": "tertiary",
-        "displayName": "Status Attn Ink",
-        "canonical": "light-dark(oklch(35.33% 0.0548 88.67), oklch(86.93% 0.0982 92.41))",
-        "hex": "#473a16",
-        "hexDark": "#ebd388",
+        "displayName": "Spark Needs-You Ink",
+        "canonical": "light-dark(oklch(0.35 0.075 88), oklch(0.9 0.115 95))",
+        "hex": "#4b3700",
+        "hexDark": "#f6de82",
         "tonalRamp": [
-          "#130900",
-          "#2f2200",
-          "#4c3e1b",
-          "#6a5c39",
-          "#8b7c57",
-          "#ac9d78",
-          "#cfc099",
-          "#fdedc5"
+          "#180600",
+          "#342100",
+          "#533f0a",
+          "#735e2e",
+          "#967f4f",
+          "#b9a271",
+          "#dec694",
+          "#ffecb8"
         ]
       },
       "status-done-bg": {
         "role": "tertiary",
-        "displayName": "Done Tint",
-        "canonical": "light-dark(oklch(74.98% 0.1065 117.73), oklch(40.21% 0.0894 121.65))",
+        "displayName": "Status Done Bg",
+        "canonical": "light-dark(oklab(0.74976 -0.049533 0.0942267), oklab(0.40208 -0.0469337 0.0761345))",
         "hex": "#a8b767",
         "hexDark": "#414f0c",
         "tonalRamp": [
-          "#0a0d00",
-          "#212800",
-          "#3c4600",
-          "#59650c",
-          "#788535",
-          "#99a757",
-          "#bbca79",
+          "#0a0e00",
+          "#222a00",
+          "#3e4800",
+          "#5d6913",
+          "#7d8b3b",
+          "#9fae5e",
+          "#c3d382",
           "#e8f9a6"
         ]
       },
       "status-done-ink": {
         "role": "tertiary",
         "displayName": "Status Done Ink",
-        "canonical": "light-dark(oklch(32.90% 0.0567 122.92), oklch(83.89% 0.0733 116.06))",
-        "hex": "#303a17",
-        "hexDark": "#c7d19a",
+        "canonical": "light-dark(oklab(0.32768 -0.0297018 0.0512919), oklab(0.83976 -0.0317305 0.0696012))",
+        "hex": "#313913",
+        "hexDark": "#c9d197",
         "tonalRamp": [
-          "#070e00",
-          "#1f2805",
-          "#3a4522",
-          "#57633f",
-          "#77835d",
-          "#98a57e",
-          "#bac79f",
-          "#e7f5cc"
+          "#090e00",
+          "#222902",
+          "#3e4721",
+          "#5d663f",
+          "#7e8860",
+          "#a0ab81",
+          "#c4cfa4",
+          "#e9f5c9"
         ]
       },
       "status-fail-bg": {
         "role": "tertiary",
-        "displayName": "Failed Tint",
-        "canonical": "light-dark(oklch(79.13% 0.0880 32.54), oklch(38.88% 0.1129 27.06))",
-        "hex": "#eea697",
-        "hexDark": "#752621",
+        "displayName": "Crimson Failed",
+        "canonical": "light-dark(oklab(0.804 0.0765794 0.0184605), oklab(0.3896 0.105758 0.0253902))",
+        "hex": "#edabb0",
+        "hexDark": "#732633",
         "tonalRamp": [
-          "#240000",
-          "#450c04",
-          "#662b20",
-          "#884a3d",
-          "#ab695b",
-          "#cf8a7b",
-          "#f4ac9d",
-          "#ffe4db"
+          "#230003",
+          "#431019",
+          "#652f35",
+          "#884e54",
+          "#ac6f74",
+          "#d19196",
+          "#f8b5ba",
+          "#ffdadf"
         ]
       },
       "status-fail-ink": {
         "role": "tertiary",
-        "displayName": "Status Fail Ink",
-        "canonical": "light-dark(oklch(31.00% 0.0652 25.29), oklch(89.37% 0.0477 35.16))",
-        "hex": "#4c221f",
-        "hexDark": "#fad2c7",
+        "displayName": "Crimson Failed Ink",
+        "canonical": "light-dark(oklab(0.3444 0.0815722 0.0238925), oklab(0.87776 0.0523715 0.0134375))",
+        "hex": "#5d2329",
+        "hexDark": "#f8c9cc",
         "tonalRamp": [
-          "#200001",
-          "#3e1513",
-          "#5e312e",
-          "#7f4f4b",
-          "#a16e69",
-          "#c48f8a",
-          "#e8b1ac",
-          "#ffe3df"
+          "#250001",
+          "#460d16",
+          "#682c32",
+          "#8b4c50",
+          "#af6d70",
+          "#d58f92",
+          "#fcb3b6",
+          "#ffd8db"
         ]
       },
       "status-idle-ink": {
         "role": "tertiary",
         "displayName": "Status Idle Ink",
-        "canonical": "light-dark(oklch(49.95% 0.0117 267.27), oklch(77.92% 0.0104 267.34))",
-        "hex": "#60636a",
-        "hexDark": "#b4b7be",
+        "canonical": "light-dark(oklch(0.495 0.014 74), oklch(0.778 0.012 78))",
+        "hex": "#676159",
+        "hexDark": "#bbb6ae",
         "tonalRamp": [
-          "#090b10",
-          "#21242a",
-          "#3d4046",
-          "#5b5e64",
-          "#7a7d84",
-          "#9b9ea6",
-          "#bdc1c9",
-          "#ebeef7"
+          "#0f0a05",
+          "#29241d",
+          "#47413a",
+          "#666058",
+          "#888179",
+          "#aba49b",
+          "#cfc8bf",
+          "#f4ede4"
         ]
       },
       "data-ok": {
         "role": "tertiary",
         "displayName": "Data Ok",
-        "canonical": "light-dark(oklch(46.00% 0.1250 122.90), oklch(78.00% 0.1350 121.20))",
+        "canonical": "light-dark(oklch(0.46 0.125 122.9), oklch(0.78 0.135 121.2))",
         "hex": "#4b6200",
         "hexDark": "#aac45c",
         "tonalRamp": [
-          "#070e00",
-          "#1d2a00",
-          "#354800",
-          "#516800",
-          "#708928",
-          "#90ab4d",
-          "#b2ce70",
-          "#dffd9d"
+          "#041000",
+          "#1a2c00",
+          "#364b00",
+          "#546b12",
+          "#748e3a",
+          "#96b15e",
+          "#bad681",
+          "#defca6"
         ]
       },
       "data-warn": {
         "role": "tertiary",
         "displayName": "Data Warn",
-        "canonical": "light-dark(oklch(46.00% 0.1250 85.80), oklch(80.00% 0.1300 86.80))",
-        "hex": "#745200",
+        "canonical": "light-dark(oklch(0.46 0.125 85.8), oklch(0.8 0.13 86.8))",
+        "hex": "#775000",
         "hexDark": "#e2b850",
         "tonalRamp": [
-          "#140900",
-          "#332000",
-          "#563a00",
-          "#7b5700",
-          "#9e7600",
-          "#c19832",
-          "#e5bb59",
-          "#ffea9f"
+          "#200000",
+          "#3e1b00",
+          "#5e3900",
+          "#805910",
+          "#a37a39",
+          "#c89d5c",
+          "#edc180",
+          "#ffe6a4"
         ]
       },
       "data-bad": {
         "role": "tertiary",
         "displayName": "Data Bad",
-        "canonical": "light-dark(oklch(46.00% 0.1350 27.80), oklch(81.00% 0.1300 27.90))",
-        "hex": "#95312a",
-        "hexDark": "#ff9f92",
+        "canonical": "light-dark(oklch(0.46 0.135 15), oklch(0.81 0.13 15))",
+        "hex": "#942f3f",
+        "hexDark": "#ff9da6",
         "tonalRamp": [
-          "#240000",
-          "#510000",
-          "#771310",
-          "#9b3830",
-          "#c0594e",
-          "#e67b6f",
-          "#ff9f91",
-          "#ffe3dd"
+          "#300000",
+          "#54000e",
+          "#79132a",
+          "#9f3948",
+          "#c65c68",
+          "#ed7f8a",
+          "#ffa3ad",
+          "#ffc8d1"
         ]
       },
       "error-3": {
         "role": "tertiary",
         "displayName": "Error 3",
-        "canonical": "light-dark(oklch(88.20% 0.0640 36.40), oklch(31.30% 0.0870 26.30))",
-        "hex": "#ffcabb",
-        "hexDark": "#551b18",
+        "canonical": "light-dark(oklch(0.9 0.05 12), oklch(0.3 0.08 12))",
+        "hex": "#fdd1d5",
+        "hexDark": "#4e1923",
         "tonalRamp": [
-          "#1f0000",
-          "#3d170c",
-          "#5d3327",
-          "#7d5144",
-          "#9f7063",
-          "#c29183",
-          "#e7b3a4",
-          "#ffe4d8"
+          "#1b0206",
+          "#391a1f",
+          "#59373b",
+          "#7b565a",
+          "#9e767a",
+          "#c2999d",
+          "#e8bcc0",
+          "#ffe2e6"
         ]
       },
       "error-9": {
         "role": "tertiary",
         "displayName": "Error 9",
-        "canonical": "light-dark(oklch(50.40% 0.1650 27.80), oklch(55.00% 0.1680 27.90))",
-        "hex": "#af3029",
-        "hexDark": "#c03e35",
+        "canonical": "light-dark(oklch(0.5 0.17 15), oklch(0.58 0.17 15))",
+        "hex": "#ae2843",
+        "hexDark": "#ca4459",
         "tonalRamp": [
-          "#240000",
-          "#510000",
-          "#810000",
-          "#a72722",
-          "#cd4c42",
-          "#f47063",
-          "#ff9f91",
-          "#ffe3dd"
+          "#370000",
+          "#5e0006",
+          "#850023",
+          "#ac2541",
+          "#d44d61",
+          "#fc7283",
+          "#ff97a6",
+          "#ffbcca"
         ]
       },
       "error-11": {
         "role": "tertiary",
         "displayName": "Error 11",
-        "canonical": "light-dark(oklch(31.30% 0.0870 26.30), oklch(88.20% 0.0640 36.40))",
-        "hex": "#551b18",
-        "hexDark": "#ffcabb",
+        "canonical": "light-dark(oklch(0.36 0.11 15), oklch(0.86 0.07 12))",
+        "hex": "#6b1d2a",
+        "hexDark": "#fbbfc5",
         "tonalRamp": [
-          "#240000",
-          "#450c0b",
-          "#662a26",
-          "#884943",
-          "#ab6862",
-          "#cf8982",
-          "#f4aca3",
-          "#ffe3de"
+          "#2a0000",
+          "#4d0013",
+          "#71222f",
+          "#95434d",
+          "#bb656d",
+          "#e1888f",
+          "#ffabb2",
+          "#ffd0d7"
         ]
       },
       "warning-3": {
         "role": "tertiary",
         "displayName": "Warning 3",
-        "canonical": "light-dark(oklch(91.40% 0.0870 93.20), oklch(37.00% 0.0740 88.40))",
+        "canonical": "light-dark(oklch(0.914 0.087 93.2), oklch(0.37 0.074 88.4))",
         "hex": "#f6e2a0",
         "hexDark": "#503d03",
         "tonalRamp": [
-          "#120a00",
-          "#302200",
-          "#4f3e00",
-          "#6e5c18",
-          "#8f7c3c",
-          "#b19d5d",
-          "#d4c07f",
-          "#ffeeab"
+          "#170700",
+          "#332200",
+          "#524000",
+          "#72601e",
+          "#948142",
+          "#b7a464",
+          "#dcc887",
+          "#ffeeac"
         ]
       },
       "warning-9": {
         "role": "tertiary",
         "displayName": "Warning 9",
-        "canonical": "light-dark(oklch(63.30% 0.1290 85.80), oklch(68.30% 0.1380 86.80))",
+        "canonical": "light-dark(oklch(0.633 0.129 85.8), oklch(0.683 0.138 86.8))",
         "hex": "#ad8303",
         "hexDark": "#be9209",
         "tonalRamp": [
-          "#140900",
-          "#332000",
-          "#563a00",
-          "#7b5700",
-          "#9f7600",
-          "#c2982c",
-          "#e6ba55",
-          "#ffea9f"
+          "#210000",
+          "#401a00",
+          "#603900",
+          "#825900",
+          "#a57b00",
+          "#c99e35",
+          "#efc35d",
+          "#ffe884"
         ]
       },
       "warning-11": {
         "role": "tertiary",
         "displayName": "Warning 11",
-        "canonical": "light-dark(oklch(37.00% 0.0740 88.40), oklch(85.00% 0.1310 92.30))",
+        "canonical": "light-dark(oklch(0.37 0.074 88.4), oklch(0.85 0.131 92.3))",
         "hex": "#503d03",
         "hexDark": "#eccb60",
         "tonalRamp": [
-          "#140900",
-          "#322100",
-          "#503d03",
-          "#6f5b28",
-          "#8f7b48",
-          "#b19c68",
-          "#d5bf8a",
+          "#180700",
+          "#342200",
+          "#523f06",
+          "#735f2c",
+          "#95804d",
+          "#b8a36f",
+          "#ddc792",
           "#ffedb6"
         ]
       },
       "success-3": {
         "role": "tertiary",
         "displayName": "Success 3",
-        "canonical": "light-dark(oklch(81.00% 0.0980 115.50), oklch(33.80% 0.0760 121.90))",
+        "canonical": "light-dark(oklch(0.81 0.098 115.5), oklch(0.338 0.076 121.9))",
         "hex": "#bec97e",
         "hexDark": "#313d07",
         "tonalRamp": [
-          "#0b0d00",
-          "#232800",
-          "#3e4500",
-          "#5c6417",
-          "#7b843b",
-          "#9ca65d",
-          "#bec97e",
-          "#ebf7ab"
+          "#0c0d00",
+          "#242900",
+          "#414700",
+          "#5f681b",
+          "#808940",
+          "#a2ad63",
+          "#c6d186",
+          "#ebf7aa"
         ]
       },
       "success-9": {
         "role": "tertiary",
         "displayName": "Success 9",
-        "canonical": "light-dark(oklch(55.90% 0.1340 122.90), oklch(60.50% 0.1320 121.20))",
+        "canonical": "light-dark(oklch(0.559 0.134 122.9), oklch(0.605 0.132 121.2))",
         "hex": "#668009",
         "hexDark": "#768d21",
         "tonalRamp": [
-          "#070e00",
-          "#1d2a00",
-          "#354800",
-          "#506800",
-          "#6f891b",
-          "#8fac44",
-          "#b1cf68",
+          "#041000",
+          "#1a2c00",
+          "#364b00",
+          "#546c00",
+          "#748f23",
+          "#96b24b",
+          "#b9d771",
           "#defe96"
         ]
       },
       "success-11": {
         "role": "tertiary",
         "displayName": "Success 11",
-        "canonical": "light-dark(oklch(33.80% 0.0760 121.90), oklch(81.00% 0.0980 115.50))",
+        "canonical": "light-dark(oklch(0.338 0.076 121.9), oklch(0.81 0.098 115.5))",
         "hex": "#313d07",
         "hexDark": "#bec97e",
         "tonalRamp": [
-          "#080e00",
-          "#1e2900",
-          "#394612",
-          "#566431",
-          "#768551",
-          "#96a671",
-          "#b8c992",
+          "#070f00",
+          "#1f2a00",
+          "#3b4815",
+          "#5a6835",
+          "#7b8a56",
+          "#9dad77",
+          "#c1d29b",
           "#e6f7bf"
         ]
       },
       "info-3": {
         "role": "tertiary",
         "displayName": "Info 3",
-        "canonical": "light-dark(oklch(88.40% 0.0290 228.10), oklch(30.60% 0.0690 253.50))",
+        "canonical": "light-dark(oklch(0.884 0.029 228.1), oklch(0.306 0.069 253.5))",
         "hex": "#c6dde8",
         "hexDark": "#133051",
         "tonalRamp": [
           "#000d15",
-          "#14272f",
-          "#30434c",
-          "#4d616b",
-          "#6c818b",
-          "#8ca2ad",
-          "#aec5d0",
+          "#152830",
+          "#32454e",
+          "#50656e",
+          "#718690",
+          "#93a9b4",
+          "#b7cdd8",
           "#dbf3fe"
         ]
       },
       "info-9": {
         "role": "tertiary",
         "displayName": "Info 9",
-        "canonical": "light-dark(oklch(48.20% 0.1310 254.80), oklch(53.90% 0.1210 251.40))",
+        "canonical": "light-dark(oklch(0.482 0.131 254.8), oklch(0.539 0.121 251.4))",
         "hex": "#205ea6",
         "hexDark": "#3171b2",
         "tonalRamp": [
-          "#000138",
-          "#001d60",
-          "#003d82",
-          "#205da5",
-          "#427fc9",
-          "#63a1ee",
-          "#8bc4ff",
-          "#dbf1ff"
+          "#000040",
+          "#001f62",
+          "#004085",
+          "#2461aa",
+          "#4784cf",
+          "#69a8f6",
+          "#8dcdff",
+          "#b1f3ff"
         ]
       },
       "info-11": {
         "role": "tertiary",
         "displayName": "Info 11",
-        "canonical": "light-dark(oklch(30.60% 0.0690 253.50), oklch(78.20% 0.0620 235.90))",
+        "canonical": "light-dark(oklch(0.306 0.069 253.5), oklch(0.782 0.062 235.9))",
         "hex": "#133051",
         "hexDark": "#92bfdb",
         "tonalRamp": [
           "#000927",
-          "#072444",
-          "#244163",
-          "#416084",
-          "#6080a6",
-          "#80a1c9",
-          "#a2c4ed",
-          "#daf1ff"
+          "#082545",
+          "#264366",
+          "#456388",
+          "#6585ab",
+          "#87a8d0",
+          "#aaccf6",
+          "#cff2ff"
         ]
       },
       "neutral-1": {
         "role": "neutral",
         "displayName": "Neutral 1",
-        "canonical": "light-dark(oklch(99.33% 0.0011 197.14), oklch(18.56% 0.0016 197.02))",
-        "hex": "#fcfdfd",
-        "hexDark": "#121313",
+        "canonical": "light-dark(oklch(0.993 0.004 85), oklch(0.184 0.004 70))",
+        "hex": "#fefdfa",
+        "hexDark": "#141211",
         "tonalRamp": [
-          "#0b0b0b",
-          "#232424",
-          "#3f4040",
-          "#5d5e5e",
-          "#7c7d7d",
-          "#9e9e9e",
-          "#c0c1c1",
-          "#eeefef"
+          "#0c0b09",
+          "#262523",
+          "#434240",
+          "#62615f",
+          "#838280",
+          "#a6a5a2",
+          "#cac9c6",
+          "#efeeeb"
         ]
       },
       "neutral-2": {
         "role": "neutral",
         "displayName": "Neutral 2",
-        "canonical": "light-dark(oklch(98.16% 0.0017 247.84), oklch(21.38% 0.0019 286.23))",
-        "hex": "#f8f9fa",
-        "hexDark": "#19191a",
+        "canonical": "light-dark(oklch(0.966 0.008 85), oklch(0.21 0.005 70))",
+        "hex": "#f6f3ee",
+        "hexDark": "#1a1816",
         "tonalRamp": [
-          "#0b0b0c",
-          "#232425",
-          "#3f4041",
-          "#5d5e5e",
-          "#7c7d7e",
-          "#9d9e9f",
-          "#c0c1c2",
-          "#edeeef"
+          "#0d0b08",
+          "#272521",
+          "#44423e",
+          "#63615d",
+          "#85827d",
+          "#a7a5a0",
+          "#ccc9c4",
+          "#f1eee9"
         ]
       },
       "neutral-3": {
         "role": "neutral",
         "displayName": "Neutral 3",
-        "canonical": "light-dark(oklch(95.52% 0.0041 271.37), oklch(25.17% 0.0040 264.49))",
-        "hex": "#eff0f3",
-        "hexDark": "#212224",
+        "canonical": "light-dark(oklch(0.944 0.01 84), oklch(0.248 0.006 70))",
+        "hex": "#f0ece5",
+        "hexDark": "#23211e",
         "tonalRamp": [
-          "#0a0b0d",
-          "#232426",
-          "#3f4042",
-          "#5d5d60",
-          "#7c7d80",
-          "#9d9ea1",
-          "#c0c1c4",
-          "#edeef1"
+          "#0d0b07",
+          "#28251f",
+          "#45423c",
+          "#64615b",
+          "#85827c",
+          "#a8a49e",
+          "#ccc9c2",
+          "#f2eee7"
         ]
       },
       "neutral-4": {
         "role": "neutral",
         "displayName": "Neutral 4",
-        "canonical": "light-dark(oklch(93.06% 0.0058 264.53), oklch(28.52% 0.0056 271.22))",
-        "hex": "#e6e8ec",
-        "hexDark": "#292a2d",
+        "canonical": "light-dark(oklch(0.92 0.011 83), oklch(0.282 0.007 70))",
+        "hex": "#e8e4dd",
+        "hexDark": "#2c2926",
         "tonalRamp": [
-          "#0a0b0e",
-          "#232427",
-          "#3e4043",
-          "#5c5e61",
-          "#7b7d81",
-          "#9c9ea2",
-          "#bfc1c5",
-          "#eceef2"
+          "#0d0b07",
+          "#28251f",
+          "#45423c",
+          "#64615b",
+          "#85827b",
+          "#a8a49e",
+          "#ccc9c2",
+          "#f2eee7"
         ]
       },
       "neutral-5": {
         "role": "neutral",
         "displayName": "Neutral 5",
-        "canonical": "light-dark(oklch(89.97% 0.0076 260.73), oklch(31.67% 0.0076 264.46))",
-        "hex": "#dbdee3",
-        "hexDark": "#303236",
+        "canonical": "light-dark(oklch(0.89 0.013 82), oklch(0.314 0.008 70))",
+        "hex": "#dfdad1",
+        "hexDark": "#34312d",
         "tonalRamp": [
-          "#090b0e",
-          "#222428",
-          "#3d4044",
-          "#5b5e62",
-          "#7b7d82",
-          "#9c9ea3",
-          "#bec1c6",
-          "#eceff4"
+          "#0e0b05",
+          "#28251e",
+          "#45413a",
+          "#656159",
+          "#86827a",
+          "#a9a49c",
+          "#cdc8c0",
+          "#f3eee5"
         ]
       },
       "neutral-6": {
         "role": "neutral",
         "displayName": "Neutral 6",
-        "canonical": "light-dark(oklch(86.35% 0.0102 267.35), oklch(35.52% 0.0096 260.72))",
-        "hex": "#cfd2d9",
-        "hexDark": "#393c41",
+        "canonical": "light-dark(oklch(0.854 0.014 82), oklch(0.352 0.009 70))",
+        "hex": "#d4cec5",
+        "hexDark": "#3e3a36",
         "tonalRamp": [
-          "#090b10",
-          "#222429",
-          "#3d4045",
-          "#5b5e64",
-          "#7a7d84",
-          "#9b9ea5",
-          "#bec1c8",
-          "#ebeef6"
+          "#0e0a05",
+          "#29241e",
+          "#46413a",
+          "#666059",
+          "#878179",
+          "#aaa49b",
+          "#cec8bf",
+          "#f4eee4"
         ]
       },
       "neutral-7": {
         "role": "neutral",
         "displayName": "Neutral 7",
-        "canonical": "light-dark(oklch(81.88% 0.0125 259.82), oklch(40.52% 0.0124 267.22))",
-        "hex": "#bfc4cc",
-        "hexDark": "#464950",
+        "canonical": "light-dark(oklch(0.81 0.016 80), oklch(0.402 0.01 72))",
+        "hex": "#c6c0b6",
+        "hexDark": "#4c4742",
         "tonalRamp": [
-          "#080b10",
-          "#20242a",
-          "#3c4047",
-          "#595e65",
-          "#797e85",
-          "#9a9fa6",
-          "#bcc1c9",
-          "#eaeff7"
+          "#0f0a05",
+          "#29241d",
+          "#464139",
+          "#666058",
+          "#878278",
+          "#aaa49a",
+          "#cec8be",
+          "#f4eee3"
         ]
       },
       "neutral-8": {
         "role": "neutral",
         "displayName": "Neutral 8",
-        "canonical": "light-dark(oklch(74.00% 0.0141 262.37), oklch(49.10% 0.0142 259.82))",
-        "hex": "#a6abb4",
-        "hexDark": "#5c6169",
+        "canonical": "light-dark(oklch(0.735 0.017 78), oklch(0.488 0.012 74))",
+        "hex": "#afa89e",
+        "hexDark": "#645f59",
         "tonalRamp": [
-          "#080b11",
-          "#20242b",
-          "#3c4047",
-          "#595e66",
-          "#797d86",
-          "#9a9fa7",
-          "#bcc1ca",
-          "#e9eff8"
+          "#0f0a04",
+          "#2a241c",
+          "#474138",
+          "#676057",
+          "#888178",
+          "#aba49a",
+          "#cfc8be",
+          "#f5ede3"
         ]
       },
       "neutral-9": {
         "role": "neutral",
         "displayName": "Neutral 9",
-        "canonical": "oklch(51.95% 0.0188 262.69)",
-        "hex": "#636974",
-        "hexDark": "#636974",
+        "canonical": "oklch(0.52 0.016 76)",
+        "hex": "#6e685f",
+        "hexDark": "#6e685f",
         "tonalRamp": [
-          "#070b13",
-          "#1f242d",
-          "#3a404a",
-          "#585e69",
-          "#777d89",
-          "#989fab",
-          "#bac1cd",
-          "#e8effc"
+          "#0f0a05",
+          "#29241d",
+          "#474139",
+          "#666057",
+          "#888178",
+          "#aba49a",
+          "#cfc8be",
+          "#f4ede3"
         ]
       },
       "neutral-11": {
         "role": "neutral",
         "displayName": "Neutral 11",
-        "canonical": "light-dark(oklch(49.95% 0.0117 267.27), oklch(77.92% 0.0104 267.34))",
-        "hex": "#60636a",
-        "hexDark": "#b4b7be",
+        "canonical": "light-dark(oklch(0.495 0.014 74), oklch(0.778 0.012 78))",
+        "hex": "#676159",
+        "hexDark": "#bbb6ae",
         "tonalRamp": [
-          "#090b10",
-          "#21242a",
-          "#3d4046",
-          "#5b5e64",
-          "#7a7d84",
-          "#9b9ea6",
-          "#bdc1c9",
-          "#ebeef7"
+          "#0f0a05",
+          "#29241d",
+          "#47413a",
+          "#666058",
+          "#888179",
+          "#aba49b",
+          "#cfc8bf",
+          "#f4ede4"
         ]
       },
       "neutral-12": {
         "role": "neutral",
         "displayName": "Neutral 12",
-        "canonical": "light-dark(oklch(30.03% 0.0061 258.35), oklch(93.06% 0.0058 264.53))",
-        "hex": "#2c2e31",
-        "hexDark": "#e6e8ec",
+        "canonical": "light-dark(oklch(0.295 0.01 70), oklch(0.934 0.01 82))",
+        "hex": "#302c27",
+        "hexDark": "#ece9e2",
         "tonalRamp": [
-          "#0a0b0e",
-          "#222427",
-          "#3e4043",
-          "#5b5e61",
-          "#7b7d81",
-          "#9c9ea2",
-          "#bec1c5",
-          "#eceff3"
+          "#0e0b07",
+          "#28241f",
+          "#45413c",
+          "#65605b",
+          "#86817c",
+          "#a9a49e",
+          "#cdc8c2",
+          "#f3eee7"
         ]
       },
       "background": {
         "role": "neutral",
-        "displayName": "Background",
-        "canonical": "light-dark(oklch(98.16% 0.0017 247.84), oklch(18.56% 0.0016 197.02))",
-        "hex": "#f8f9fa",
-        "hexDark": "#121313",
+        "displayName": "Paper Frame / Roost",
+        "canonical": "light-dark(oklch(0.966 0.008 85), oklch(0.184 0.004 70))",
+        "hex": "#f6f3ee",
+        "hexDark": "#141211",
         "tonalRamp": [
-          "#0b0b0c",
-          "#232425",
-          "#3f4041",
-          "#5d5e5e",
-          "#7c7d7e",
-          "#9d9e9f",
-          "#c0c1c2",
-          "#edeeef"
+          "#0d0b08",
+          "#272521",
+          "#44423e",
+          "#63615d",
+          "#85827d",
+          "#a7a5a0",
+          "#ccc9c4",
+          "#f1eee9"
         ]
       },
       "surface-raised": {
         "role": "neutral",
         "displayName": "Raised Paper",
-        "canonical": "light-dark(oklch(99.33% 0.0011 197.14), oklch(25.17% 0.0040 264.49))",
-        "hex": "#fcfdfd",
-        "hexDark": "#212224",
+        "canonical": "light-dark(oklch(0.993 0.004 85), oklch(0.248 0.006 70))",
+        "hex": "#fefdfa",
+        "hexDark": "#23211e",
         "tonalRamp": [
-          "#0b0b0b",
-          "#232424",
-          "#3f4040",
-          "#5d5e5e",
-          "#7c7d7d",
-          "#9e9e9e",
-          "#c0c1c1",
-          "#eeefef"
+          "#0c0b09",
+          "#262523",
+          "#434240",
+          "#62615f",
+          "#838280",
+          "#a6a5a2",
+          "#cac9c6",
+          "#efeeeb"
         ]
       },
       "surface-recess": {
         "role": "neutral",
-        "displayName": "Recessed Field",
-        "canonical": "light-dark(oklch(96.73% 0.0011 197.14), oklch(22.57% 0.0040 264.49))",
-        "hex": "#f3f4f4",
-        "hexDark": "#1b1c1e",
+        "displayName": "Surface Recess",
+        "canonical": "light-dark(oklch(0.967 0.008 84), oklch(0.222 0.006 70))",
+        "hex": "#f7f4ee",
+        "hexDark": "#1d1b18",
         "tonalRamp": [
-          "#0b0b0b",
-          "#232424",
-          "#3f4040",
-          "#5d5e5e",
-          "#7c7d7d",
-          "#9e9e9e",
-          "#c0c1c1",
-          "#eeefef"
+          "#0d0b07",
+          "#272520",
+          "#44423d",
+          "#63615c",
+          "#85827d",
+          "#a7a59f",
+          "#ccc9c3",
+          "#f1eee8"
         ]
       },
       "surface-band": {
         "role": "neutral",
-        "displayName": "Header Band",
-        "canonical": "light-dark(oklch(95.73% 0.0011 197.14), oklch(21.57% 0.0040 264.49))",
-        "hex": "#f0f1f1",
-        "hexDark": "#191a1b",
+        "displayName": "Surface Band",
+        "canonical": "light-dark(oklch(0.957 0.009 84), oklch(0.214 0.006 70))",
+        "hex": "#f4f0ea",
+        "hexDark": "#1b1916",
         "tonalRamp": [
-          "#0b0b0b",
-          "#232424",
-          "#3f4040",
-          "#5d5e5e",
-          "#7c7d7d",
-          "#9e9e9e",
-          "#c0c1c1",
-          "#eeefef"
+          "#0d0b07",
+          "#272520",
+          "#45413d",
+          "#64615c",
+          "#85827c",
+          "#a8a49f",
+          "#ccc8c3",
+          "#f2eee8"
         ]
       },
       "surface-recess-deep": {
         "role": "neutral",
-        "displayName": "Groove",
-        "canonical": "light-dark(oklch(93.06% 0.0058 264.53), oklch(18.56% 0.0016 197.02))",
-        "hex": "#e6e8ec",
-        "hexDark": "#121313",
+        "displayName": "Surface Recess Deep",
+        "canonical": "light-dark(oklch(0.92 0.011 83), oklch(0.184 0.004 70))",
+        "hex": "#e8e4dd",
+        "hexDark": "#141211",
         "tonalRamp": [
-          "#0a0b0e",
-          "#232427",
-          "#3e4043",
-          "#5c5e61",
-          "#7b7d81",
-          "#9c9ea2",
-          "#bfc1c5",
-          "#eceef2"
+          "#0d0b07",
+          "#28251f",
+          "#45423c",
+          "#64615b",
+          "#85827b",
+          "#a8a49e",
+          "#ccc9c2",
+          "#f2eee7"
         ]
       },
       "surface-shelf": {
         "role": "neutral",
-        "displayName": "Tab Shelf",
-        "canonical": "light-dark(oklch(89.97% 0.0076 260.73), oklch(15.56% 0.0016 197.02))",
-        "hex": "#dbdee3",
-        "hexDark": "#0c0d0d",
+        "displayName": "Surface Shelf",
+        "canonical": "light-dark(oklch(0.89 0.013 82), oklch(0.156 0.004 70))",
+        "hex": "#dfdad1",
+        "hexDark": "#0e0c0b",
         "tonalRamp": [
-          "#090b0e",
-          "#222428",
-          "#3d4044",
-          "#5b5e62",
-          "#7b7d82",
-          "#9c9ea3",
-          "#bec1c6",
-          "#eceff4"
+          "#0e0b05",
+          "#28251e",
+          "#45413a",
+          "#656159",
+          "#86827a",
+          "#a9a49c",
+          "#cdc8c0",
+          "#f3eee5"
         ]
       },
       "surface-lift": {
         "role": "neutral",
-        "displayName": "Lifted Thumb",
-        "canonical": "light-dark(oklch(99.33% 0.0011 197.14), oklch(35.52% 0.0096 260.72))",
-        "hex": "#fcfdfd",
-        "hexDark": "#393c41",
+        "displayName": "Surface Lift",
+        "canonical": "light-dark(oklch(0.993 0.004 85), oklch(0.352 0.009 70))",
+        "hex": "#fefdfa",
+        "hexDark": "#3e3a36",
         "tonalRamp": [
-          "#0b0b0b",
-          "#232424",
-          "#3f4040",
-          "#5d5e5e",
-          "#7c7d7d",
-          "#9e9e9e",
-          "#c0c1c1",
-          "#eeefef"
+          "#0c0b09",
+          "#262523",
+          "#434240",
+          "#62615f",
+          "#838280",
+          "#a6a5a2",
+          "#cac9c6",
+          "#efeeeb"
         ]
       },
       "surface-fill": {
         "role": "neutral",
-        "displayName": "Pressed Fill",
-        "canonical": "light-dark(oklch(93.06% 0.0058 264.53), oklch(31.67% 0.0076 264.46))",
-        "hex": "#e6e8ec",
-        "hexDark": "#303236",
+        "displayName": "Surface Fill",
+        "canonical": "light-dark(oklch(0.92 0.011 83), oklch(0.314 0.008 70))",
+        "hex": "#e8e4dd",
+        "hexDark": "#34312d",
         "tonalRamp": [
-          "#0a0b0e",
-          "#232427",
-          "#3e4043",
-          "#5c5e61",
-          "#7b7d81",
-          "#9c9ea2",
-          "#bfc1c5",
-          "#eceef2"
+          "#0d0b07",
+          "#28251f",
+          "#45423c",
+          "#64615b",
+          "#85827b",
+          "#a8a49e",
+          "#ccc9c2",
+          "#f2eee7"
         ]
       },
       "surface-hover": {
         "role": "neutral",
-        "displayName": "Hover Fill",
-        "canonical": "light-dark(oklch(98.16% 0.0017 247.84), oklch(28.52% 0.0056 271.22))",
-        "hex": "#f8f9fa",
-        "hexDark": "#292a2d",
+        "displayName": "Surface Hover",
+        "canonical": "light-dark(oklch(0.966 0.008 85), oklch(0.282 0.007 70))",
+        "hex": "#f6f3ee",
+        "hexDark": "#2c2926",
         "tonalRamp": [
-          "#0b0b0c",
-          "#232425",
-          "#3f4041",
-          "#5d5e5e",
-          "#7c7d7e",
-          "#9d9e9f",
-          "#c0c1c2",
-          "#edeeef"
+          "#0d0b08",
+          "#272521",
+          "#44423e",
+          "#63615d",
+          "#85827d",
+          "#a7a5a0",
+          "#ccc9c4",
+          "#f1eee9"
+        ]
+      },
+      "code-bg": {
+        "role": "neutral",
+        "displayName": "Code Bg",
+        "canonical": "light-dark(oklch(0.944 0.01 84), oklch(0.156 0.004 70))",
+        "hex": "#f0ece5",
+        "hexDark": "#0e0c0b",
+        "tonalRamp": [
+          "#0d0b07",
+          "#28251f",
+          "#45423c",
+          "#64615b",
+          "#85827c",
+          "#a8a49e",
+          "#ccc9c2",
+          "#f2eee7"
         ]
       },
       "border-hairline": {
         "role": "neutral",
         "displayName": "Border Hairline",
-        "canonical": "light-dark(oklch(94.68% 0.0047 268.49), oklch(29.78% 0.0064 268.01))",
-        "hex": "#ecedf1",
-        "hexDark": "#2c2d31",
+        "canonical": "light-dark(oklab(0.93584 0.00114568 0.010276), oklab(0.2948 0.00253095 0.00695373))",
+        "hex": "#ede9e2",
+        "hexDark": "#2f2c29",
         "tonalRamp": [
-          "#0a0b0d",
-          "#232426",
-          "#3f4042",
-          "#5c5d60",
-          "#7c7d80",
-          "#9d9ea1",
-          "#bfc1c4",
-          "#edeef2"
+          "#0d0b07",
+          "#28251f",
+          "#45423c",
+          "#64615b",
+          "#85827b",
+          "#a8a49e",
+          "#ccc9c2",
+          "#f2eee7"
         ]
       },
       "border-control": {
         "role": "neutral",
         "displayName": "Border Control",
-        "canonical": "light-dark(oklch(93.06% 0.0058 264.53), oklch(35.52% 0.0096 260.72))",
-        "hex": "#e6e8ec",
-        "hexDark": "#393c41",
+        "canonical": "light-dark(oklch(0.89 0.013 82), oklch(0.352 0.009 70))",
+        "hex": "#dfdad1",
+        "hexDark": "#3e3a36",
         "tonalRamp": [
-          "#0a0b0e",
-          "#232427",
-          "#3e4043",
-          "#5c5e61",
-          "#7b7d81",
-          "#9c9ea2",
-          "#bfc1c5",
-          "#eceef2"
+          "#0e0b05",
+          "#28251e",
+          "#45413a",
+          "#656159",
+          "#86827a",
+          "#a9a49c",
+          "#cdc8c0",
+          "#f3eee5"
         ]
       },
       "well-edge": {
         "role": "neutral",
         "displayName": "Well Edge",
-        "canonical": "light-dark(oklch(89.97% 0.0076 260.73), oklch(93.06% 0.0058 264.53 / 0.08))",
-        "hex": "#dbdee3",
-        "hexDark": "#e6e8ec14",
-        "tonalRamp": [
-          "#090b0e",
-          "#222428",
-          "#3d4044",
-          "#5b5e62",
-          "#7b7d82",
-          "#9c9ea3",
-          "#bec1c6",
-          "#eceff4"
-        ]
+        "canonical": "light-dark(oklch(0.89 0.013 82), oklch(0.934 0.01 82 / 0.08))"
       },
       "ink-strong": {
         "role": "neutral",
-        "displayName": "Strong Ink",
-        "canonical": "light-dark(oklch(30.03% 0.0061 258.35), oklch(93.06% 0.0058 264.53))",
-        "hex": "#2c2e31",
-        "hexDark": "#e6e8ec",
+        "displayName": "Ink Strong",
+        "canonical": "light-dark(oklch(0.295 0.01 70), oklch(0.934 0.01 82))",
+        "hex": "#302c27",
+        "hexDark": "#ece9e2",
         "tonalRamp": [
-          "#0a0b0e",
-          "#222427",
-          "#3e4043",
-          "#5b5e61",
-          "#7b7d81",
-          "#9c9ea2",
-          "#bec1c5",
-          "#eceff3"
+          "#0e0b07",
+          "#28241f",
+          "#45413c",
+          "#65605b",
+          "#86817c",
+          "#a9a49e",
+          "#cdc8c2",
+          "#f3eee7"
         ]
       },
       "ink-muted": {
         "role": "neutral",
-        "displayName": "Muted Ink",
-        "canonical": "light-dark(oklch(49.95% 0.0117 267.27), oklch(77.92% 0.0104 267.34))",
-        "hex": "#60636a",
-        "hexDark": "#b4b7be",
+        "displayName": "Ink Muted",
+        "canonical": "light-dark(oklch(0.495 0.014 74), oklch(0.778 0.012 78))",
+        "hex": "#676159",
+        "hexDark": "#bbb6ae",
         "tonalRamp": [
-          "#090b10",
-          "#21242a",
-          "#3d4046",
-          "#5b5e64",
-          "#7a7d84",
-          "#9b9ea6",
-          "#bdc1c9",
-          "#ebeef7"
+          "#0f0a05",
+          "#29241d",
+          "#47413a",
+          "#666058",
+          "#888179",
+          "#aba49b",
+          "#cfc8bf",
+          "#f4ede4"
         ]
       },
       "ink-row": {
         "role": "neutral",
-        "displayName": "Row Ink",
-        "canonical": "light-dark(oklch(36.40% 0.0079 262.58), oklch(91.24% 0.0064 265.08))",
-        "hex": "#3c3e42",
-        "hexDark": "#e0e2e6",
+        "displayName": "Ink Row",
+        "canonical": "light-dark(oklab(0.359 0.00356059 0.0106964), oklab(0.91528 0.00152412 0.0101229))",
+        "hex": "#413c37",
+        "hexDark": "#e6e2dc",
         "tonalRamp": [
-          "#090b0f",
-          "#222428",
-          "#3d4044",
-          "#5b5e62",
-          "#7b7d82",
-          "#9c9ea3",
-          "#bec1c6",
-          "#eceff4"
+          "#0e0a07",
+          "#29241f",
+          "#46413c",
+          "#66605b",
+          "#87817c",
+          "#aaa49e",
+          "#cec8c2",
+          "#f4ede7"
         ]
       },
       "ink-stat": {
         "role": "neutral",
-        "displayName": "Stat Ink",
-        "canonical": "light-dark(oklch(38.00% 0.0083 263.36), oklch(88.82% 0.0071 265.68))",
-        "hex": "#404247",
-        "hexDark": "#d8dadf",
+        "displayName": "Ink Stat",
+        "canonical": "light-dark(oklab(0.375 0.00359569 0.0110212), oklab(0.89032 0.00170063 0.0104165))",
+        "hex": "#45403a",
+        "hexDark": "#dedad3",
         "tonalRamp": [
-          "#090b0f",
-          "#222428",
-          "#3d4044",
-          "#5b5e62",
-          "#7b7d82",
-          "#9c9ea4",
-          "#bec1c6",
-          "#ebeff4"
+          "#0e0a06",
+          "#29241f",
+          "#46413b",
+          "#66605a",
+          "#87817b",
+          "#aaa49d",
+          "#cec8c1",
+          "#f4ede6"
         ]
       },
       "ink-subtle": {
         "role": "neutral",
-        "displayName": "Subtle Ink",
-        "canonical": "light-dark(oklch(51.95% 0.0119 266.79), oklch(68.32% 0.0116 264.29))",
-        "hex": "#666970",
-        "hexDark": "#9699a1",
+        "displayName": "Ink Subtle",
+        "canonical": "light-dark(color-mix(in oklab, oklch(0.735 0.017 78) 6%, oklch(0.495 0.014 74)), oklab(0.68143 0.00276557 0.0116703))",
+        "hex": "#6b655d",
+        "hexDark": "#9d9891",
         "tonalRamp": [
-          "#090b10",
-          "#21242a",
-          "#3d4046",
-          "#5a5e65",
-          "#7a7d85",
-          "#9b9ea6",
-          "#bdc1c9",
-          "#ebeef7"
+          "#0f0a05",
+          "#29241d",
+          "#47413a",
+          "#666058",
+          "#888179",
+          "#aaa49b",
+          "#cfc8bf",
+          "#f4ede4"
+        ]
+      },
+      "code-keyword": {
+        "role": "tertiary",
+        "displayName": "Code Keyword",
+        "canonical": "light-dark(oklch(0.5 0.15 33), oklch(0.76 0.12 34))",
+        "hex": "#a73923",
+        "hexDark": "#f3947e",
+        "tonalRamp": [
+          "#340000",
+          "#590000",
+          "#7e0c00",
+          "#a53721",
+          "#cc5b43",
+          "#f37e65",
+          "#ffa388",
+          "#ffc8ac"
+        ]
+      },
+      "code-fn": {
+        "role": "tertiary",
+        "displayName": "Code Fn",
+        "canonical": "light-dark(oklch(0.45 0.1 245), oklch(0.8 0.07 240))",
+        "hex": "#185a89",
+        "hexDark": "#95c4e7",
+        "tonalRamp": [
+          "#000731",
+          "#002651",
+          "#004573",
+          "#266696",
+          "#4a88ba",
+          "#6dace0",
+          "#91d0ff",
+          "#b5f6ff"
+        ]
+      },
+      "code-string": {
+        "role": "tertiary",
+        "displayName": "Code String",
+        "canonical": "light-dark(oklch(0.5 0.12 122), oklch(0.84 0.1 118))",
+        "hex": "#586d03",
+        "hexDark": "#c4d488",
+        "tonalRamp": [
+          "#060f00",
+          "#1c2c00",
+          "#384a00",
+          "#566b00",
+          "#768d32",
+          "#98b157",
+          "#bcd67b",
+          "#e1fca0"
+        ]
+      },
+      "code-number": {
+        "role": "tertiary",
+        "displayName": "Code Number",
+        "canonical": "light-dark(oklch(0.52 0.13 55), oklch(0.84 0.1 70))",
+        "hex": "#a05000",
+        "hexDark": "#f5bf81",
+        "tonalRamp": [
+          "#2d0000",
+          "#4f0000",
+          "#732600",
+          "#974800",
+          "#bd6a2a",
+          "#e38d50",
+          "#ffb174",
+          "#ffd799"
+        ]
+      },
+      "presence-online": {
+        "role": "tertiary",
+        "displayName": "Presence Online",
+        "canonical": "light-dark(oklch(0.627 0.17 149), oklch(0.74 0.17 149))",
+        "hex": "#18a349",
+        "hexDark": "#4cc76c",
+        "tonalRamp": [
+          "#001800",
+          "#003700",
+          "#005700",
+          "#00791e",
+          "#059d43",
+          "#44c166",
+          "#6ee789",
+          "#95ffae"
+        ]
+      },
+      "presence-away": {
+        "role": "tertiary",
+        "displayName": "Presence Away",
+        "canonical": "light-dark(oklch(0.705 0.187 47.6), oklch(0.76 0.187 47.6))",
+        "hex": "#f97315",
+        "hexDark": "#ff8532",
+        "tonalRamp": [
+          "#3a0000",
+          "#610000",
+          "#870000",
+          "#af2c00",
+          "#d65300",
+          "#ff781f",
+          "#ff9e4f",
+          "#ffc477"
         ]
       },
       "mark-1": {
@@ -1133,14 +1387,14 @@
         "hex": "#b23029",
         "hexDark": "#f66e60",
         "tonalRamp": [
-          "#240000",
-          "#510000",
-          "#820000",
-          "#a82520",
-          "#ce4b41",
-          "#f56e61",
-          "#ff9f91",
-          "#ffe3dd"
+          "#380000",
+          "#5f0000",
+          "#850000",
+          "#ac2a24",
+          "#d45146",
+          "#fd7568",
+          "#ff9a8b",
+          "#ffc0af"
         ]
       },
       "mark-2": {
@@ -1150,14 +1404,14 @@
         "hex": "#ae4900",
         "hexDark": "#e87d43",
         "tonalRamp": [
-          "#1f0000",
-          "#460d00",
-          "#712100",
-          "#9d3900",
-          "#c25b1b",
-          "#e87d43",
-          "#ffa26c",
-          "#ffe5d1"
+          "#320000",
+          "#570000",
+          "#7c1700",
+          "#a13d00",
+          "#c86027",
+          "#ef844d",
+          "#ffa872",
+          "#ffce96"
         ]
       },
       "mark-3": {
@@ -1167,14 +1421,14 @@
         "hex": "#7f5d00",
         "hexDark": "#bf9939",
         "tonalRamp": [
-          "#140900",
-          "#332000",
-          "#553b00",
-          "#795700",
-          "#9b7814",
-          "#bd9940",
-          "#e1bc64",
-          "#ffeb9b"
+          "#1e0200",
+          "#3c1d00",
+          "#5b3b00",
+          "#7d5b00",
+          "#a07c30",
+          "#c49f55",
+          "#e9c479",
+          "#ffe99d"
         ]
       },
       "mark-4": {
@@ -1184,14 +1438,14 @@
         "hex": "#5b7000",
         "hexDark": "#92ab41",
         "tonalRamp": [
-          "#080e00",
-          "#1e2900",
-          "#374700",
-          "#536800",
-          "#72881a",
-          "#92ab44",
-          "#b4ce68",
-          "#e1fd95"
+          "#060f00",
+          "#1d2c00",
+          "#384a00",
+          "#566b00",
+          "#778d2e",
+          "#99b154",
+          "#bcd678",
+          "#e1fc9d"
         ]
       },
       "mark-5": {
@@ -1201,14 +1455,14 @@
         "hex": "#00776f",
         "hexDark": "#4cb2a8",
         "tonalRamp": [
-          "#00110e",
-          "#002d29",
-          "#004d47",
-          "#006e66",
-          "#268f86",
-          "#4fb1a8",
-          "#74d5cb",
-          "#a3fff9"
+          "#001411",
+          "#00312c",
+          "#00504a",
+          "#007169",
+          "#33948b",
+          "#5bb7ae",
+          "#80dcd2",
+          "#a6fff8"
         ]
       },
       "mark-6": {
@@ -1218,14 +1472,14 @@
         "hex": "#1468b3",
         "hexDark": "#53a2f5",
         "tonalRamp": [
-          "#00072e",
-          "#002159",
-          "#003e86",
-          "#025fa9",
-          "#3380cd",
-          "#56a2f2",
-          "#85c6ff",
-          "#d9f1ff"
+          "#000043",
+          "#001f65",
+          "#004188",
+          "#0a63ad",
+          "#3885d3",
+          "#5da9fa",
+          "#81ceff",
+          "#a6f5ff"
         ]
       },
       "mark-7": {
@@ -1235,14 +1489,14 @@
         "hex": "#6b51b3",
         "hexDark": "#a28af5",
         "tonalRamp": [
-          "#110032",
-          "#2c0064",
-          "#462686",
-          "#6248a9",
-          "#8169cd",
-          "#a28bf3",
-          "#c3b1ff",
-          "#efe9ff"
+          "#160042",
+          "#2c0065",
+          "#482988",
+          "#664cad",
+          "#866ed3",
+          "#a991fa",
+          "#ccb6ff",
+          "#f2dbff"
         ]
       },
       "mark-8": {
@@ -1252,30 +1506,30 @@
         "hex": "#a63273",
         "hexDark": "#e96cae",
         "tonalRamp": [
-          "#210010",
-          "#4b002d",
-          "#77004c",
-          "#9c286b",
-          "#c14c8b",
-          "#e76ead",
-          "#ff94cf",
-          "#ffe0f4"
+          "#300014",
+          "#550030",
+          "#7a004e",
+          "#a02c6e",
+          "#c75190",
+          "#ef75b3",
+          "#ff99d8",
+          "#ffbffe"
         ]
       },
       "mark-glyph": {
         "role": "identity",
         "displayName": "Mark Glyph",
-        "canonical": "light-dark(oklch(99.00% 0.0000 0.00), oklch(18.56% 0.0016 197.02))",
+        "canonical": "light-dark(oklch(0.99 0 0), oklch(0.184 0.004 70))",
         "hex": "#fcfcfc",
-        "hexDark": "#121313",
+        "hexDark": "#141211",
         "tonalRamp": [
           "#0b0b0b",
-          "#242424",
-          "#404040",
-          "#5d5d5d",
-          "#7d7d7d",
-          "#9e9e9e",
-          "#c1c1c1",
+          "#252525",
+          "#424242",
+          "#616161",
+          "#828282",
+          "#a5a5a5",
+          "#c9c9c9",
           "#eeeeee"
         ]
       },
@@ -1286,14 +1540,14 @@
         "hex": "#38bdf8",
         "hexDark": "#4cccff",
         "tonalRamp": [
-          "#000e1e",
-          "#002943",
-          "#00476b",
-          "#006797",
-          "#0089c1",
-          "#1aace6",
-          "#50cfff",
-          "#cbf6ff"
+          "#00063a",
+          "#00295c",
+          "#004a7e",
+          "#006ba2",
+          "#008ec7",
+          "#28b3ed",
+          "#5ad8ff",
+          "#83feff"
         ]
       },
       "hue-cyan-500": {
@@ -1303,14 +1557,14 @@
         "hex": "#14b0e0",
         "hexDark": "#3fc8f9",
         "tonalRamp": [
-          "#000e1c",
-          "#002a3f",
-          "#004865",
-          "#00698f",
-          "#008bba",
-          "#0caede",
-          "#4bd2ff",
-          "#c6f7ff"
+          "#000a35",
+          "#002b55",
+          "#004c77",
+          "#006e9b",
+          "#0091bf",
+          "#20b5e5",
+          "#56daff",
+          "#80ffff"
         ]
       },
       "hue-amber-500": {
@@ -1320,14 +1574,14 @@
         "hex": "#f0ad1f",
         "hexDark": "#fab630",
         "tonalRamp": [
-          "#160700",
-          "#361e00",
-          "#5a3800",
-          "#805300",
-          "#a97100",
-          "#d29000",
-          "#f6b32a",
-          "#ffe9ae"
+          "#290000",
+          "#4a0c00",
+          "#6c3000",
+          "#8f5100",
+          "#b37300",
+          "#d99700",
+          "#ffbc37",
+          "#ffe165"
         ]
       },
       "hue-orange-500": {
@@ -1335,16 +1589,16 @@
         "displayName": "Hue Orange 500",
         "canonical": "light-dark(oklch(70.49% 0.1867 47.60), oklch(76.00% 0.1867 47.60))",
         "hex": "#f97316",
-        "hexDark": "#ff8739",
+        "hexDark": "#ff8532",
         "tonalRamp": [
-          "#1f0000",
-          "#460d00",
-          "#712100",
-          "#a03700",
-          "#d04e00",
-          "#f77113",
-          "#ffa26c",
-          "#ffe5d1"
+          "#3a0000",
+          "#610000",
+          "#870000",
+          "#af2c00",
+          "#d65300",
+          "#ff7820",
+          "#ff9e4f",
+          "#ffc477"
         ]
       },
       "hue-green-500": {
@@ -1354,14 +1608,14 @@
         "hex": "#22c55e",
         "hexDark": "#37d16a",
         "tonalRamp": [
-          "#001200",
-          "#003001",
-          "#00510e",
-          "#007520",
-          "#009a34",
-          "#0ebe57",
-          "#4de279",
-          "#b1ffc1"
+          "#001900",
+          "#003800",
+          "#005900",
+          "#007c0f",
+          "#00a03a",
+          "#21c55e",
+          "#57eb81",
+          "#82ffa6"
         ]
       },
       "hue-green-600": {
@@ -1371,14 +1625,14 @@
         "hex": "#16a34a",
         "hexDark": "#4bc76c",
         "tonalRamp": [
-          "#001200",
-          "#003000",
-          "#00510c",
-          "#00751e",
-          "#00973f",
-          "#3bba60",
-          "#64df82",
-          "#b1ffc1"
+          "#001800",
+          "#003700",
+          "#005700",
+          "#007920",
+          "#029d44",
+          "#44c167",
+          "#6de78a",
+          "#95ffaf"
         ]
       },
       "hue-blue-500": {
@@ -1386,16 +1640,16 @@
         "displayName": "Hue Blue 500",
         "canonical": "light-dark(oklch(61.52% 0.2076 262.53), oklch(74.00% 0.2076 262.53))",
         "hex": "#3b7bff",
-        "hexDark": "#74a8ff",
+        "hexDark": "#60a4ff",
         "tonalRamp": [
-          "#00003f",
-          "#000083",
-          "#0029aa",
-          "#124fd0",
-          "#3473f6",
-          "#5f9aff",
-          "#98c1ff",
-          "#dfefff"
+          "#100062",
+          "#000087",
+          "#002cad",
+          "#1653d4",
+          "#3978fc",
+          "#5b9eff",
+          "#7dc4ff",
+          "#a1eaff"
         ]
       },
       "hue-blue-600": {
@@ -1403,33 +1657,33 @@
         "displayName": "Hue Blue 600",
         "canonical": "light-dark(oklch(53.18% 0.2148 265.52), oklch(72.00% 0.2148 265.52))",
         "hex": "#2f5ce6",
-        "hexDark": "#729fff",
+        "hexDark": "#639aff",
         "tonalRamp": [
-          "#02003e",
-          "#070082",
-          "#0b22ae",
-          "#224bd4",
-          "#3e6ffa",
-          "#6897ff",
-          "#9dbfff",
-          "#e0efff"
+          "#140065",
+          "#0a008b",
+          "#0d26b1",
+          "#254fd8",
+          "#4375ff",
+          "#639aff",
+          "#85c0ff",
+          "#a9e7ff"
         ]
       },
       "machine-offline": {
         "role": "identity",
         "displayName": "Machine Offline",
-        "canonical": "light-dark(oklch(64.86% 0.0132 264.02), oklch(60.05% 0.0127 262.15))",
-        "hex": "#8b8f97",
-        "hexDark": "#7c8188",
+        "canonical": "light-dark(oklab(0.6438 0.00365778 0.0154236), oklab(0.5982 0.00299882 0.0116121))",
+        "hex": "#938c83",
+        "hexDark": "#847f78",
         "tonalRamp": [
-          "#080b11",
-          "#21242b",
-          "#3c4047",
-          "#5a5e65",
-          "#797d85",
-          "#9a9ea7",
-          "#bdc1ca",
-          "#eaeff8"
+          "#0f0a05",
+          "#2a241d",
+          "#474139",
+          "#676058",
+          "#888178",
+          "#aba49b",
+          "#cfc8be",
+          "#f5ede3"
         ]
       },
       "tool-run": {
@@ -1439,65 +1693,65 @@
         "hex": "#974c12",
         "hexDark": "#e29668",
         "tonalRamp": [
-          "#1d0200",
-          "#431100",
-          "#6d2600",
-          "#904607",
-          "#b46632",
-          "#d98854",
-          "#feaa76",
-          "#ffe5ce"
+          "#2b0000",
+          "#4d0300",
+          "#702900",
+          "#944a0e",
+          "#ba6b38",
+          "#e08e5b",
+          "#ffb37e",
+          "#ffd8a3"
         ]
       },
       "tool-mcp": {
         "role": "identity",
         "displayName": "Tool Mcp",
         "canonical": "light-dark(oklch(50.00% 0.1200 176.00), oklch(74.00% 0.1100 176.00))",
-        "hex": "#007761",
+        "hex": "#007861",
         "hexDark": "#50c1a8",
         "tonalRamp": [
-          "#00110a",
-          "#002e23",
-          "#004e3e",
-          "#00715b",
-          "#00947a",
-          "#2eb69c",
-          "#5bdabe",
-          "#9cffec"
+          "#001507",
+          "#003321",
+          "#00523d",
+          "#00735c",
+          "#34957d",
+          "#5bb99f",
+          "#81dec3",
+          "#a7ffe8"
         ]
       },
       "tool-search": {
         "role": "identity",
         "displayName": "Tool Search",
         "canonical": "light-dark(oklch(50.00% 0.1200 195.00), oklch(74.00% 0.1100 195.00))",
-        "hex": "#007576",
+        "hex": "#007778",
         "hexDark": "#3fc0c0",
         "tonalRamp": [
-          "#001011",
-          "#002d2d",
-          "#004c4d",
-          "#006e6f",
-          "#009293",
-          "#00b5b5",
-          "#49d9d9",
-          "#88ffff"
+          "#001317",
+          "#003033",
+          "#004f51",
+          "#007071",
+          "#329393",
+          "#5ab6b7",
+          "#80dbdc",
+          "#a5ffff"
         ]
       },
       "tool-ask": {
         "role": "identity",
         "displayName": "Tool Ask",
         "canonical": "light-dark(oklch(50.00% 0.1200 214.00), oklch(74.00% 0.1100 214.00))",
-        "hex": "#007288",
+        "hex": "#00738d",
         "hexDark": "#44bcd5",
         "tonalRamp": [
-          "#000f17",
-          "#002b37",
-          "#004a5b",
-          "#006b81",
-          "#008ea8",
-          "#16b1cc",
-          "#4fd5f0",
-          "#b4fcff"
+          "#000f26",
+          "#002d44",
+          "#004c65",
+          "#006d86",
+          "#328faa",
+          "#59b3ce",
+          "#7fd8f4",
+          "#a4feff"
         ]
       },
       "tool-web": {
@@ -1507,14 +1761,14 @@
         "hex": "#006c9c",
         "hexDark": "#5cb6e6",
         "tonalRamp": [
-          "#000d1f",
-          "#002844",
-          "#00466d",
-          "#006696",
-          "#1088b9",
-          "#43aadd",
-          "#69ceff",
-          "#cdf5ff"
+          "#000833",
+          "#002853",
+          "#004875",
+          "#006998",
+          "#348bbd",
+          "#5aafe3",
+          "#7fd4ff",
+          "#a5faff"
         ]
       },
       "tool-read": {
@@ -1524,31 +1778,31 @@
         "hex": "#2965a5",
         "hexDark": "#78afef",
         "tonalRamp": [
-          "#000531",
-          "#00205b",
-          "#003f7c",
-          "#235f9f",
-          "#4580c2",
-          "#66a2e7",
-          "#88c5ff",
-          "#d9f1ff"
+          "#00003b",
+          "#00215c",
+          "#00427f",
+          "#2763a3",
+          "#4985c8",
+          "#6ca9ee",
+          "#8fceff",
+          "#b4f4ff"
         ]
       },
       "tool-agent": {
         "role": "identity",
         "displayName": "Tool Agent",
         "canonical": "light-dark(oklch(50.00% 0.1200 272.00), oklch(74.00% 0.1100 272.00))",
-        "hex": "#4c5ca7",
+        "hex": "#4c5da7",
         "hexDark": "#92a6f1",
         "tonalRamp": [
           "#06003c",
-          "#14185c",
-          "#2b377e",
-          "#4757a1",
-          "#6577c4",
-          "#8499e9",
-          "#a6bcff",
-          "#e4edff"
+          "#14195d",
+          "#2d3a80",
+          "#4a5ba4",
+          "#697dca",
+          "#8ba0f0",
+          "#adc4ff",
+          "#d2eaff"
         ]
       },
       "tool-edit": {
@@ -1558,14 +1812,14 @@
         "hex": "#6654a1",
         "hexDark": "#ac9eeb",
         "tonalRamp": [
-          "#110033",
-          "#280f57",
-          "#432f79",
-          "#604e9b",
-          "#7f6fbe",
-          "#a090e3",
-          "#c2b3ff",
-          "#eee9ff"
+          "#120037",
+          "#2a1059",
+          "#45317b",
+          "#64529f",
+          "#8574c4",
+          "#a796ea",
+          "#cbbbff",
+          "#f0e0ff"
         ]
       },
       "tool-write": {
@@ -1575,14 +1829,14 @@
         "hex": "#794d95",
         "hexDark": "#c197de",
         "tonalRamp": [
-          "#180028",
-          "#36064d",
-          "#54286d",
-          "#73478f",
-          "#9467b1",
-          "#b688d5",
-          "#daabfa",
-          "#fce4ff"
+          "#1a002e",
+          "#37084e",
+          "#562b70",
+          "#774b93",
+          "#996cb7",
+          "#bd8fdc",
+          "#e2b3ff",
+          "#ffd8ff"
         ]
       },
       "tool-skill": {
@@ -1592,14 +1846,14 @@
         "hex": "#884783",
         "hexDark": "#d291cc",
         "tonalRamp": [
-          "#1d001c",
-          "#41003e",
-          "#61225d",
-          "#82417d",
-          "#a5619f",
-          "#c882c2",
-          "#eda4e6",
-          "#ffdeff"
+          "#220021",
+          "#42013f",
+          "#63255f",
+          "#864581",
+          "#aa66a4",
+          "#cf89c8",
+          "#f5adee",
+          "#ffd1ff"
         ]
       },
       "tool-plan": {
@@ -1609,83 +1863,35 @@
         "hex": "#94436d",
         "hexDark": "#df8db5",
         "tonalRamp": [
-          "#210010",
-          "#49002c",
-          "#6b1d48",
-          "#8d3d67",
-          "#b15d87",
-          "#d67ea9",
-          "#fba0cc",
-          "#ffe0f4"
+          "#280012",
+          "#4a002d",
+          "#6d1f4b",
+          "#91416b",
+          "#b7628c",
+          "#dd85b0",
+          "#ffa8d4",
+          "#ffcdfa"
         ]
       },
       "scrim": {
         "role": "neutral",
         "displayName": "Scrim",
-        "canonical": "light-dark(oklch(98.16% 0.0017 247.84 / 0.72), oklch(18.56% 0.0016 197.02 / 0.72))",
-        "hex": "#f8f9fab8",
-        "hexDark": "#121313b8",
-        "tonalRamp": [
-          "#0b0b0c",
-          "#232425",
-          "#3f4041",
-          "#5d5e5e",
-          "#7c7d7e",
-          "#9d9e9f",
-          "#c0c1c2",
-          "#edeeef"
-        ]
+        "canonical": "light-dark(oklch(0.966 0.008 85 / 0.72), oklch(0.184 0.004 70 / 0.72))"
       },
       "material-panel": {
         "role": "neutral",
         "displayName": "Material Panel",
-        "canonical": "light-dark(oklch(99.33% 0.0011 197.14 / 0.72), oklch(21.38% 0.0019 286.23 / 0.68))",
-        "hex": "#fcfdfdb8",
-        "hexDark": "#19191aad",
-        "tonalRamp": [
-          "#0b0b0b",
-          "#232424",
-          "#3f4040",
-          "#5d5e5e",
-          "#7c7d7d",
-          "#9e9e9e",
-          "#c0c1c1",
-          "#eeefef"
-        ]
+        "canonical": "light-dark(oklch(0.993 0.004 85 / 0.72), oklch(0.248 0.006 70 / 0.72))"
       },
       "diff-add-bg": {
         "role": "tertiary",
         "displayName": "Diff Add Bg",
-        "canonical": "light-dark(oklch(55.90% 0.1340 122.90 / 0.15), oklch(60.50% 0.1320 121.20 / 0.15))",
-        "hex": "#66800926",
-        "hexDark": "#768d2126",
-        "tonalRamp": [
-          "#070e00",
-          "#1d2a00",
-          "#354800",
-          "#506800",
-          "#6f891b",
-          "#8fac44",
-          "#b1cf68",
-          "#defe96"
-        ]
+        "canonical": "light-dark(oklch(0.559 0.134 122.9 / 0.15), oklch(0.605 0.132 121.2 / 0.15))"
       },
       "diff-del-bg": {
         "role": "tertiary",
         "displayName": "Diff Del Bg",
-        "canonical": "light-dark(oklch(50.40% 0.1650 27.80 / 0.15), oklch(55.00% 0.1680 27.90 / 0.15))",
-        "hex": "#af302926",
-        "hexDark": "#c03e3526",
-        "tonalRamp": [
-          "#240000",
-          "#510000",
-          "#810000",
-          "#a72722",
-          "#cd4c42",
-          "#f47063",
-          "#ff9f91",
-          "#ffe3dd"
-        ]
+        "canonical": "light-dark(oklch(0.5 0.17 15 / 0.15), oklch(0.58 0.17 15 / 0.15))"
       }
     },
     "typographyMeta": {
@@ -1717,16 +1923,34 @@
         "displayName": "Column head",
         "purpose": "A ledger's header band, uppercase."
       },
-      "mono": {
-        "displayName": "Mono",
-        "purpose": "TX-02 for code, commands, paths, IDs and keycaps."
+      "prose": {
+        "displayName": "Prose",
+        "purpose": "Transcript prose and rendered markdown, Figtree at 1.55."
+      },
+      "code": {
+        "displayName": "Code",
+        "purpose": "JetBrains Mono for code, commands, paths, IDs and keycaps; ligatures off."
+      },
+      "display": {
+        "displayName": "Display",
+        "purpose": "Fredoka 600, brand display only: the wordmark, marketing, a brand moment."
       }
     },
     "shadows": [
       {
+        "name": "shadow-xs",
+        "value": "0 1px 2px var(--shadow-tint)",
+        "purpose": "Inputs, select triggers, the new-session prompt."
+      },
+      {
         "name": "shadow-tile",
-        "value": "0 1px 2px oklch(from var(--neutral-12) l c h / 0.07), 0 0 0 1px oklch(from var(--neutral-12) l c h / 0.035)",
+        "value": "0 1px 2px light-dark(oklch(from var(--neutral-12) l c h / 0.07), oklch(0% 0 0 / 0.3)), 0 0 0 1px light-dark(oklch(from var(--neutral-12) l c h / 0.035), oklch(from var(--neutral-12) l c h / 0.06))",
         "purpose": "Cards, tiles, icon tiles, report cards, the fluid-tabs segment."
+      },
+      {
+        "name": "shadow-raised",
+        "value": "0 1px 3px var(--shadow-tint), 0 1px 1px var(--shadow-tint), inset 0 0 0 1px var(--night-ring)",
+        "purpose": "A thumb in a groove; the night ring edges it at night."
       },
       {
         "name": "shadow-hairline",
@@ -1735,18 +1959,33 @@
       },
       {
         "name": "shadow-stat",
-        "value": "var(--shadow-hairline); dark: var(--shadow-tile)",
-        "purpose": "The stat tile's lift."
+        "value": "0 3px 7px -2px var(--shadow-tint-2), inset 0 0 0 1px var(--night-ring)",
+        "purpose": "The stat tile's lift: a drop below the card, ringed at night."
       },
       {
-        "name": "shadow-raised",
-        "value": "0 1px 3px var(--shadow-tint), 0 1px 1px var(--shadow-tint); dark: inset 0 0 0 1px oklch(from var(--neutral-7) l c h / 0.7)",
-        "purpose": "A thumb in a groove."
+        "name": "shadow-md",
+        "value": "0 3px 10px var(--shadow-tint-2), 0 1px 2px var(--shadow-tint), inset 0 0 0 1px var(--night-ring)",
+        "purpose": "Tailwind ladder step."
+      },
+      {
+        "name": "shadow-lg",
+        "value": "0 10px 30px var(--shadow-tint-2), 0 3px 8px var(--shadow-tint), inset 0 0 0 1px var(--night-ring)",
+        "purpose": "Tailwind ladder step (meters' hover cards)."
+      },
+      {
+        "name": "shadow-xl",
+        "value": "0 24px 64px var(--shadow-tint-3), 0 6px 16px var(--shadow-tint), inset 0 0 0 1px var(--night-ring)",
+        "purpose": "Tailwind ladder step (project popover, tool matrix)."
       },
       {
         "name": "shadow-overlay",
-        "value": "0 18px 48px var(--shadow-tint-3), 0 2px 6px var(--shadow-tint)",
+        "value": "0 18px 48px var(--shadow-tint-3), 0 2px 6px var(--shadow-tint), inset 0 0 0 1px var(--night-ring)",
         "purpose": "Popovers, menus, the dialog tray, toasts, floating tags (also --shadow-modal)."
+      },
+      {
+        "name": "shadow-modal",
+        "value": "var(--shadow-overlay)",
+        "purpose": ""
       },
       {
         "name": "shadow-drawer",
@@ -1759,49 +1998,89 @@
         "purpose": "A selected control sunk into its field (markdown editor)."
       },
       {
-        "name": "shadow-xs",
-        "value": "0 1px 2px var(--shadow-tint); dark: var(--shadow-hairline)",
-        "purpose": "Inputs, select triggers, the new-session prompt."
+        "name": "surface-shadow-1",
+        "value": "none",
+        "purpose": "Shadow per surface level, paired with --surface-1…8."
       },
       {
-        "name": "shadow-md",
-        "value": "0 2px 8px var(--shadow-tint), 0 1px 2px var(--shadow-tint); dark: var(--shadow-tile)",
-        "purpose": "Tailwind ladder step."
+        "name": "surface-shadow-2",
+        "value": "var(--shadow-tile)",
+        "purpose": ""
       },
       {
-        "name": "shadow-lg",
-        "value": "0 8px 28px var(--shadow-tint-2), 0 2px 8px var(--shadow-tint); dark: var(--shadow-overlay)",
-        "purpose": "Tailwind ladder step (meters' hover cards)."
+        "name": "surface-shadow-3",
+        "value": "0 1px 3px var(--shadow-tint), 0 1px 1px var(--shadow-tint), inset 0 0 0 1px var(--night-ring)",
+        "purpose": ""
       },
       {
-        "name": "shadow-xl",
-        "value": "0 24px 64px var(--shadow-tint-3), 0 6px 16px var(--shadow-tint); dark: var(--shadow-drawer)",
-        "purpose": "Tailwind ladder step (project popover, tool matrix)."
+        "name": "surface-shadow-4",
+        "value": "var(--shadow-md)",
+        "purpose": ""
+      },
+      {
+        "name": "surface-shadow-5",
+        "value": "0 6px 18px var(--shadow-tint-2), 0 2px 4px var(--shadow-tint), inset 0 0 0 1px var(--night-ring)",
+        "purpose": ""
+      },
+      {
+        "name": "surface-shadow-6",
+        "value": "var(--shadow-lg)",
+        "purpose": ""
+      },
+      {
+        "name": "surface-shadow-7",
+        "value": "0 14px 40px var(--shadow-tint-3), 0 2px 6px var(--shadow-tint), inset 0 0 0 1px var(--night-ring)",
+        "purpose": ""
+      },
+      {
+        "name": "surface-shadow-8",
+        "value": "var(--shadow-overlay)",
+        "purpose": ""
+      },
+      {
+        "name": "action-ring",
+        "value": "inset 0 1px 0 oklch(100% 0 0 / 0.18), 0 1px 2px light-dark(oklch(45% 0.12 33 / 0.25), oklch(0% 0 0 / 0.4))",
+        "purpose": "The action's edge: a white top hairline and a coral-tinted drop."
+      },
+      {
+        "name": "code-ring",
+        "value": "inset 0 0 0 1px light-dark(oklch(58.5% 0.17 33 / 0.28), oklch(66% 0.16 34 / 0.32)), inset 0 1px 6px light-dark(oklch(58.5% 0.17 33 / 0.06), oklch(66% 0.16 34 / 0.10))",
+        "purpose": "Inner vermillion ring and soft inner glow on code blocks."
+      },
+      {
+        "name": "selected-shadow",
+        "value": "none",
+        "purpose": ""
       },
       {
         "name": "shadow-tint",
-        "value": "light oklch(30.03% 0.0061 258.35 / 0.09) (#2c2e3117); dark oklch(18.56% 0.0016 197.02 / 0.55) (#1213138c)",
-        "purpose": "Base shadow colour: the ink by day, the deepest surface at night."
+        "value": "light-dark(oklch(from var(--neutral-12) l c h / 0.09), oklch(from var(--neutral-1) l c h / 0.55))",
+        "purpose": "Elevation tints: warm ink by day, the deepest surface at night, never rgba black."
       },
       {
         "name": "shadow-tint-2",
-        "value": "light oklch(30.03% 0.0061 258.35 / 0.14) (#2c2e3124); dark oklch(18.56% 0.0016 197.02 / 0.66) (#121313a8)",
+        "value": "light-dark(oklch(from var(--neutral-12) l c h / 0.14), oklch(from var(--neutral-1) l c h / 0.66))",
         "purpose": "Second shadow tint."
       },
       {
         "name": "shadow-tint-3",
-        "value": "light oklch(30.03% 0.0061 258.35 / 0.2) (#2c2e3133); dark oklch(18.56% 0.0016 197.02 / 0.76) (#121313c2)",
+        "value": "light-dark(oklch(from var(--neutral-12) l c h / 0.2), oklch(from var(--neutral-1) l c h / 0.76))",
         "purpose": "Third shadow tint, for overlays and drawers."
       },
       {
+        "name": "night-ring",
+        "value": "light-dark(transparent, oklch(from var(--neutral-12) l c h / 0.07))",
+        "purpose": "At night every raised shadow adds a 1px inner ring of ink."
+      },
+      {
         "name": "scrim",
-        "value": "oklch(from var(--background) l c h / 0.72) + backdrop-filter: blur(2px)",
-        "purpose": "Behind dialogs and sheets."
+        "value": "oklch(from var(--background) l c h / 0.72)",
+        "purpose": "What a dialog's backdrop paints: the page itself, translucent."
       },
       {
         "name": "material-panel",
-        "value": "card at 72% (dark 68%) + backdrop-filter: blur(28px) saturate(1.6); opaque under prefers-reduced-transparency",
-        "purpose": "Floating chrome over content. The composer shell uses the same material at the base blur: blur(var(--material-blur)) = 20px, saturate 1.6."
+        "value": "oklch(from var(--surface-raised) l c h / 0.72)",
+        "purpose": "Chrome materials: structural translucency, never decoration."
       }
     ],
     "motion": [
@@ -1994,9 +2273,9 @@
       "name": "Primary Button",
       "kind": "button",
       "refersTo": "button-primary",
-      "description": "The graphite action with its top-highlight gradient: Start session, Save, Send.",
+      "description": "The coral action with its top-highlight gradient: Start session, Save, Send.",
       "html": "<button class=\"ds-btn-primary\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" aria-hidden=\"true\"><path d=\"M12 5v14M5 12h14\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\"/></svg><span>Start session</span></button>",
-      "css": ".ds-btn-primary { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border: 1px solid transparent; border-radius: var(--radius-md); background-color: var(--brand-solid); background-image: var(--action-surface); color: var(--on-brand); font: 500 var(--text-body) / 1 var(--font-body); letter-spacing: -0.01em; cursor: pointer; transition: var(--transition-control), transform var(--dur-toggle) var(--ease-out); } .ds-btn-primary:hover { background-color: var(--ink-hover); background-image: var(--action-surface-hover); } .ds-btn-primary:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; } @media (prefers-reduced-motion: no-preference) { .ds-btn-primary:active { transform: scale(var(--press-scale)); } }"
+      "css": ".ds-btn-primary { display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border: 1px solid transparent; border-radius: var(--radius-md); background-color: var(--action-solid); background-image: var(--action-surface); color: var(--on-action); font: 500 var(--text-body) / 1 var(--font-body); letter-spacing: -0.01em; cursor: pointer; transition: var(--transition-control), transform var(--dur-toggle) var(--ease-out); } .ds-btn-primary:hover { background-color: var(--action-hover); background-image: var(--action-surface-hover); } .ds-btn-primary:focus-visible { outline: 2px solid var(--focus-ring); outline-offset: 2px; } @media (prefers-reduced-motion: no-preference) { .ds-btn-primary:active { transform: scale(var(--press-scale)); } }"
     },
     {
       "name": "Outline Button",
@@ -2060,16 +2339,16 @@
       "refersTo": "card",
       "description": "The one empty state: a duotone mark, a title, one line saying why, at most one action. Shown only once the data is known to be empty.",
       "html": "<div class=\"ds-empty\"><span class=\"ds-empty-mark\"><svg xmlns=\"http://www.w3.org/2000/svg\" width=\"16\" height=\"16\" aria-hidden=\"true\" viewBox=\"0 0 24 24\"><g fill=\"currentColor\"><g opacity=\".5\"><path d=\"M6 13H18C19.8856 13 20.8284 13 21.4142 13.5858C22 14.1716 22 15.1144 22 17C22 18.8856 22 19.8284 21.4142 20.4142C20.8284 21 19.8856 21 18 21H6C4.11438 21 3.17157 21 2.58579 20.4142C2 19.8284 2 18.8856 2 17C2 15.1144 2 14.1716 2.58579 13.5858C3.17157 13 4.11438 13 6 13Z\"/><path d=\"M6 3H18C19.8856 3 20.8284 3 21.4142 3.58579C22 4.17157 22 5.11438 22 7C22 8.88562 22 9.82843 21.4142 10.4142C20.8284 11 19.8856 11 18 11H6C4.11438 11 3.17157 11 2.58579 10.4142C2 9.82843 2 8.88562 2 7C2 5.11438 2 4.17157 2.58579 3.58579C3.17157 3 4.11438 3 6 3Z\"/></g><path d=\"M12.75 7C12.75 6.58579 13.0858 6.25 13.5 6.25H18C18.4142 6.25 18.75 6.58579 18.75 7C18.75 7.41421 18.4142 7.75 18 7.75H13.5C13.0858 7.75 12.75 7.41421 12.75 7Z\"/><path d=\"M6 8.75C5.58579 8.75 5.25 8.41421 5.25 8V6C5.25 5.58579 5.58579 5.25 6 5.25C6.41421 5.25 6.75 5.58579 6.75 6V8C6.75 8.41421 6.41421 8.75 6 8.75Z\"/><path d=\"M9 8.75C8.58579 8.75 8.25 8.41421 8.25 8V6C8.25 5.58579 8.58579 5.25 9 5.25C9.41421 5.25 9.75 5.58579 9.75 6V8C9.75 8.41421 9.41421 8.75 9 8.75Z\"/><path d=\"M12.75 17C12.75 16.5858 13.0858 16.25 13.5 16.25H18C18.4142 16.25 18.75 16.5858 18.75 17C18.75 17.4142 18.4142 17.75 18 17.75H13.5C13.0858 17.75 12.75 17.4142 12.75 17Z\"/><path d=\"M6 18.75C5.58579 18.75 5.25 18.4142 5.25 18V16C5.25 15.5858 5.58579 15.25 6 15.25C6.41421 15.25 6.75 15.5858 6.75 16V18C6.75 18.4142 6.41421 18.75 6 18.75Z\"/><path d=\"M9 18.75C8.58579 18.75 8.25 18.4142 8.25 18V16C8.25 15.5858 8.58579 15.25 9 15.25C9.41421 15.25 9.75 15.5858 9.75 16V18C9.75 18.4142 9.41421 18.75 9 18.75Z\"/></g></svg></span><p class=\"ds-empty-title\">Nothing is connected yet</p><p class=\"ds-empty-line\">Join a machine to see every session in one board.</p><button class=\"ds-btn-primary ds-empty-action\"><svg width=\"16\" height=\"16\" viewBox=\"0 0 24 24\" fill=\"none\" aria-hidden=\"true\"><path d=\"M12 5v14M5 12h14\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\"/></svg><span>Show join command</span></button></div>",
-      "css": ".ds-empty { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); padding-block: var(--space-6); } .ds-empty-mark { display: inline-flex; color: var(--ink-muted); margin-bottom: var(--space-1); } .ds-empty-mark svg { width: 20px; height: 20px; } .ds-empty-title { margin: 0; font: var(--type-title); letter-spacing: -0.01em; color: var(--ink-strong); } .ds-empty-line { margin: 0; max-width: 60ch; font: var(--type-body); color: var(--ink-muted); } .ds-empty-action { margin-top: var(--space-2); display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border: 1px solid transparent; border-radius: var(--radius-md); background-color: var(--brand-solid); background-image: var(--action-surface); color: var(--on-brand); font: 500 var(--text-body) / 1 var(--font-body); cursor: pointer; }"
+      "css": ".ds-empty { display: flex; flex-direction: column; align-items: flex-start; gap: var(--space-2); padding-block: var(--space-6); } .ds-empty-mark { display: inline-flex; color: var(--ink-muted); margin-bottom: var(--space-1); } .ds-empty-mark svg { width: 20px; height: 20px; } .ds-empty-title { margin: 0; font: var(--type-title); letter-spacing: -0.01em; color: var(--ink-strong); } .ds-empty-line { margin: 0; max-width: 60ch; font: var(--type-body); color: var(--ink-muted); } .ds-empty-action { margin-top: var(--space-2); display: inline-flex; align-items: center; gap: 8px; height: 36px; padding: 0 14px; border: 1px solid transparent; border-radius: var(--radius-md); background-color: var(--action-solid); background-image: var(--action-surface); color: var(--on-action); font: 500 var(--text-body) / 1 var(--font-body); cursor: pointer; }"
     }
   ],
   "narrative": {
-    "northStar": "The Quiet Ledger",
-    "overview": "Whiffle is a board an operator glances at between other work. It answers one question: does anything need me right now? The design treats that glance like reading a departure board. Rows hold still, numbers line up, and a quiet row has to mean a healthy row. The name comes from the code. The status dots are \"the Quiet Ledger status hues\" (`ActivityDot.svelte`), the slash menu \"wears Quiet Ledger tokens\" (`Composer.svelte`), and the copy guide calls the voice \"a calm ledger, not a personality brand\" (`WORDS.md`).\n\nThe surface is graphite ink on cool, near-neutral paper. Chroma is close to zero in all chrome; the neutral ramp carries a faint blue cast (hue around 260) that reads as cool rather than grey. Colour is spent on four things only: status, identity marks, the blue focus ring, and data that crosses a threshold. The primary action is graphite with a soft top highlight, never a hue. Depth comes from a recessed frame holding raised content, not from heavy shadows. The density is set by the operator's job: 44px rows, a 32px header band, 90px stat tiles and the 14px body size. Pages are efficient without being cramped.\n\nMotion is continuity, never decoration. Something that exists on both sides of a change travels to its new place rather than vanishing and reappearing, and a list that changes reflows rather than jumps. Nothing moves after it has landed unless it is live work, and live work breathes slowly. The visual rejection is explicit in the code: no ease-in curve, no `rgba(0,0,0,…)` shadow, no weight above 500, no indigo, no hue used for decoration.",
+    "northStar": "The Quiet Ledger, re-skinned for Caw&Co",
+    "overview": "CawCo is a board an operator glances at between other work. It answers one question: does anything need me right now? The design treats that glance like reading a departure board. Rows hold still, numbers line up, and a quiet row has to mean a healthy row. The copy is a calm operator's log, not a personality brand (`WORDS.md`).\n\nThe direction (Caw&Co \"3b · Coral action\") keeps the shipped ledger's density, metrics, spacing, radii, motion and Solar icons, and re-skins its colour and type. The surface is warm paper by day (neutral hue ~85) and roost-dark at night (hue ~70). Chroma stays low in all chrome. Colour is spent on five things only: the coral action (where you act), status, identity marks, the coral focus ring, and data that crosses a threshold. Depth comes from a recessed frame holding raised content, not from heavy shadows. The density is set by the operator's job: 44px rows, a 32px header band, 90px stat tiles and the 14px body size.\n\nNeither scheme is the original. The theme class on `<html>` (resolved from the reader's choice or the OS by `theme.svelte.ts`) sets `color-scheme`, and every colour token picks its side through `light-dark()`. A design is drawn and checked in both, never light-first or dark-first.\n\nMotion is continuity, never decoration. Something that exists on both sides of a change travels to its new place rather than vanishing and reappearing, and a list that changes reflows rather than jumps. Nothing moves after it has landed unless it is live work, and live work breathes slowly. The code rejects: ease-in curves, `rgba(0,0,0,…)` shadows, weights above 500, indigo, and hue used for decoration.",
     "keyCharacteristics": [
-      "Graphite action, cool paper surfaces, colour only where it carries meaning.",
+      "A coral action on warm paper; colour elsewhere only where it carries meaning.",
       "The frame recesses; content sits raised on it.",
-      "Two type families: Geist for everything, TX-02 for code, paths and IDs. Weights 400 and 500 only.",
+      "Figtree for the product, JetBrains Mono for code, paths and IDs, Fredoka 600 for brand display only. Product weights 400 and 500 only.",
       "A spacing ladder measured off the reference comps (4, 7, 11, 14, 18, 21, 25, 32), not a 4px grid.",
       "Solar bold-duotone icons throughout, linear only for chevrons and arrows.",
       "Motion that keeps one object on screen through every change, honours reduced motion everywhere, and exits faster than it enters."
@@ -2112,22 +2391,27 @@
       },
       {
         "name": "The Dark Flips Polarity Rule",
-        "body": "At night a groove sits below the card (recess-deep is neutral-1) and a lifted thumb sits above it (neutral-6). Dark mode is a second set of lightness decisions, never an inverted light mode.",
+        "body": "At night a groove sits below the card (recess-deep is neutral-1) and a lifted thumb sits above it (neutral-6). Dark mode is a second set of lightness decisions, never an inverted light mode, and neither scheme is designed first.",
         "section": "colors"
       },
       {
         "name": "The Reserved Hue Rule",
-        "body": "Red, amber, green and blue mean status, and status only. Progress rings, identity and decoration take `currentColor` or an identity hue. A finished task ring is the one moment a decoration earns a state colour, because by then it is a result (`TaskRing.svelte`).",
+        "body": "Crimson, spark yellow, olive and blue mean status, and status only. Progress rings, identity and decoration take `currentColor` or an identity hue. A finished task ring is the one moment a decoration earns a state colour, because by then it is a result (`TaskRing.svelte`).",
         "section": "colors"
       },
       {
-        "name": "The Graphite Action Rule",
-        "body": "The action is graphite, never a hue. A hue-filled primary button does not exist in this system.",
+        "name": "The Coral Is Where You Act Rule",
+        "body": "Coral marks the action, the selected nav row, the focus ring, checked controls, the chosen option and the selection tint. It is never a status: failed is crimson and needs-you is spark, so coral never reads as an alarm and an alarm never reads as a button.",
         "section": "colors"
       },
       {
-        "name": "The Blue Is Focus Rule",
-        "body": "The blue accent marks where the keyboard is and what is selected. It never fills a button, a chip or a background.",
+        "name": "The White On Coral Rule",
+        "body": "Text on coral sits on `action-solid` or `chip-chosen-bg`, the measured fills, never on `brand-solid`. A new coral fill under text is measured to 4.5:1, top gradient stop included, before it ships.",
+        "section": "colors"
+      },
+      {
+        "name": "The Ink Stays Ink Rule",
+        "body": "Tooltips and inverted tiles are `ink-solid` with `on-ink`. They are never coral.",
         "section": "colors"
       },
       {
@@ -2137,7 +2421,7 @@
       },
       {
         "name": "The No Indigo Rule",
-        "body": "Indigo is never a brand, action or accent hue. The accent is a blue at hue 263 and is reserved for focus. Identity hues span the wheel for telling things apart and are never promoted to a brand role.",
+        "body": "Indigo is never a brand, action or accent hue. Identity hues span the wheel for telling things apart and are never promoted to a brand role.",
         "section": "colors"
       },
       {
@@ -2147,7 +2431,7 @@
       },
       {
         "name": "The 500 Ceiling Rule",
-        "body": "No weight above 500 exists. Emphasis is a weight step from 400 to 500 or an ink step, never bold. The prose plugin's 600 to 800 weights are overridden back to 500.",
+        "body": "No product text goes above 500; Fredoka's 600 is brand display only. Emphasis is a weight step from 400 to 500 or an ink step, never bold. The prose plugin's 600 to 800 weights are overridden back to 500.",
         "section": "typography"
       },
       {
@@ -2176,13 +2460,13 @@
         "section": "elevation"
       },
       {
-        "name": "The Graphite Shadow Rule",
-        "body": "Shadows are cool graphite taken from the neutral ramp, never `rgba(0,0,0,·)`.",
+        "name": "The Warm Shadow Rule",
+        "body": "Shadows are warm ink taken from the neutral ramp, never `rgba(0,0,0,·)`. The tile's night drop is the one black, at 30%, under a ring of ink.",
         "section": "elevation"
       },
       {
-        "name": "The Dark Changes Shape Rule",
-        "body": "At night elevation changes shape as well as colour. A raised thumb is an inset hairline and the ladder aliases the doctrine set, keyed on the theme class rather than `light-dark()`.",
+        "name": "The Night Ring Rule",
+        "body": "At night a raised surface is told apart from its frame by a 1px inner ring of ink as well as its drop. The ring is part of the shadow token, so a component that takes the token gets it in both schemes without a class.",
         "section": "elevation"
       },
       {
@@ -2247,8 +2531,10 @@
       }
     ],
     "dos": [
-      "**Do** take every colour, radius, type role, spacing step, curve and duration from the tokens in `app.css`. Add a token before adding a one-off value.",
-      "**Do** keep the action graphite with its top-highlight gradient, and spend hue only on status, identity, focus and threshold data.",
+      "**Do** take every colour, radius, type role, spacing step, curve and duration from the tokens in `design/tokens/cawco.tokens.json`. Add a token there and run `bun run tokens` before adding a one-off value.",
+      "**Do** keep the action coral with its top-highlight gradient, and spend other hue only on status, identity and threshold data.",
+      "**Do** check every change in both schemes; neither is the default.",
+      "**Do** measure white on any new coral fill to 4.5:1, top gradient stop included.",
       "**Do** recess the frame and raise the content; the stat well is the only card-in-card.",
       "**Do** say status with a glyph or a word before hue, and draw idle as no chip at all.",
       "**Do** set every changing figure in tabular numerals (`.num`), and keep weights at 400 and 500.",
@@ -2262,10 +2548,13 @@
       "**Do** keep Approve and Deny as equal peers at opposite ends of their row, with the standing grant set apart below."
     ],
     "donts": [
-      "**Don't** fill an action, chip or background with the blue accent, or introduce indigo anywhere as a brand or accent hue.",
-      "**Don't** use a hue for decoration, or use red, amber, green or blue for anything but status.",
+      "**Don't** use coral for a status, crimson or spark for an action, or introduce indigo anywhere as a brand or accent hue.",
+      "**Don't** use a hue for decoration, or use crimson, spark yellow, olive or blue for anything but status.",
+      "**Don't** set text on `brand-solid`, turn a tooltip or ink tile coral, or put spark, paper or crow ink in product chrome.",
+      "**Don't** set product text in Fredoka, or code in anything but JetBrains Mono with ligatures off.",
+      "**Don't** write a token value in `app.css` or a component, or edit the generated `tokens.css`.",
       "**Don't** set any text above weight 500, or pick a size without a role.",
-      "**Don't** use `rgba(0,0,0,·)` shadows; shadows come from the graphite tints.",
+      "**Don't** use `rgba(0,0,0,·)` shadows; shadows come from the warm ink tints.",
       "**Don't** use an ease-in curve, or let an exit run longer than its entrance.",
       "**Don't** keep an arrived surface moving: no pulse or attention loop on anything that is not live work.",
       "**Don't** draw a focus indicator as a box-shadow, a border-colour change or a background, and don't stack a ring on a border.",

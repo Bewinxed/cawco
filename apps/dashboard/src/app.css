@@ -89,6 +89,7 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-selected-bg: var(--selected-bg);
   --color-selected-ink: var(--selected-ink);
+  --color-selected-icon: var(--selected-icon);
 
   /* Figtree across the product, JetBrains Mono for code/paths/IDs, Fredoka
      for brand display (the token file holds the stacks). */
@@ -187,8 +188,7 @@
   /* Inherited, so it is set once here rather than worked out on every
      element. */
   :root {
-    scrollbar-color: oklch(from var(--muted-foreground) l c h / 0.35)
-      transparent;
+    scrollbar-color: var(--scrollbar-thumb) transparent;
   }
 
   html {
@@ -391,7 +391,7 @@
         background: linear-gradient(
           90deg,
           transparent 0 30%,
-          oklch(from var(--surface-raised) l c h / 0.6) 50%,
+          var(--skeleton-sheen) 50%,
           transparent 70% 100%
         );
         animation: kit-skeleton-sweep var(--dur-loop) linear infinite;
@@ -800,8 +800,10 @@
     }
   }
 
+  /* The selection is where the reader acts: the apricot selected wash, its
+     row in selected ink (the row sets that; the pill sits under it). */
   :where(.kit-highlight) :is(.kit-pill, .kit-pill-trail) {
-    background: var(--surface-fill);
+    background: var(--selected-bg);
   }
 
   :where(.kit-highlight) .kit-pill.kit-glide {
@@ -882,7 +884,7 @@
     --tw-prose-links: var(--link-ink);
     --tw-prose-bold: var(--foreground);
     --tw-prose-counters: var(--muted-foreground);
-    --tw-prose-bullets: oklch(from var(--muted-foreground) l c h / 0.55);
+    --tw-prose-bullets: var(--prose-bullet);
     --tw-prose-hr: var(--border);
     --tw-prose-quotes: var(--muted-foreground);
     --tw-prose-quote-borders: var(--border);
@@ -958,13 +960,8 @@
    --identity-h inline; this utility fixes lightness and chroma per theme.
    Identity is ink — never a status dot. */
 @utility identity-ink {
-  /* 48%, not 50%: a row's hover background is the tightest surface identity
-     ink lands on, and at 50% the cyan end of the wheel (hue 175-205) fell to
-     4.39:1 there. 48% holds every one of the ten hues above 4.5:1. */
-  color: light-dark(
-    oklch(48% 0.12 var(--identity-h, 120)),
-    oklch(74% 0.11 var(--identity-h, 122))
-  );
+  /* The token's lightness and chroma per scheme, at the project's hue. */
+  color: oklch(from var(--identity-ink) l c var(--identity-h, 120));
 }
 
 /* ---- Chrome materials. Structural translucency, never decoration. */
