@@ -1207,8 +1207,8 @@
     width: 22px;
     height: 22px;
     border-radius: var(--radius-xs);
-    background: var(--ink-strong);
-    color: var(--on-brand);
+    background: var(--ink-solid);
+    color: var(--on-ink);
     flex: none;
   }
   .bolt :global(svg) {

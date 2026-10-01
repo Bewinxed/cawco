@@ -21,7 +21,7 @@
       },
       variant: {
         default:
-          "border-transparent bg-[image:var(--action-surface)] bg-[var(--brand-solid)] text-[var(--on-brand)] hover:bg-[image:var(--action-surface-hover)] hover:bg-[var(--ink-hover)]",
+          "border-transparent bg-[image:var(--action-surface)] bg-[var(--action-solid)] text-[var(--on-action)] hover:bg-[image:var(--action-surface-hover)] hover:bg-[var(--action-hover)]",
         outline: "aria-expanded:bg-[var(--surface-hover)]",
         secondary:
           "border-[var(--border-hairline)] bg-[var(--surface-recess)] hover:bg-[var(--surface-hover)]",
@@ -29,7 +29,7 @@
           "border-transparent bg-transparent aria-expanded:bg-[var(--surface-hover)]",
         destructive:
           "border-[var(--error-9)] bg-transparent text-[var(--error-11)] hover:bg-[var(--error-3)]",
-        link: "border-transparent bg-transparent text-primary underline-offset-4 hover:bg-transparent hover:underline",
+        link: "border-transparent bg-transparent text-link underline-offset-4 hover:bg-transparent hover:underline",
       },
       size: {
         default:

@@ -1,0 +1,1888 @@
+{
+  "color": {
+    "neutral-1": {
+      "$type": "color",
+      "$value": "oklch(99.3% 0.004 85)",
+      "$description": "Warm neutrals (hue ~85 paper by day, ~70 roost at night). Chroma stays low so chrome reads neutral; colour is reserved for action, status and identity.",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(18.4% 0.004 70)"
+        }
+      }
+    },
+    "neutral-2": {
+      "$type": "color",
+      "$value": "oklch(96.6% 0.008 85)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(21% 0.005 70)"
+        }
+      }
+    },
+    "neutral-3": {
+      "$type": "color",
+      "$value": "oklch(94.4% 0.010 84)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(24.8% 0.006 70)"
+        }
+      }
+    },
+    "neutral-4": {
+      "$type": "color",
+      "$value": "oklch(92% 0.011 83)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(28.2% 0.007 70)"
+        }
+      }
+    },
+    "neutral-5": {
+      "$type": "color",
+      "$value": "oklch(89% 0.013 82)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(31.4% 0.008 70)"
+        }
+      }
+    },
+    "neutral-6": {
+      "$type": "color",
+      "$value": "oklch(85.4% 0.014 82)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(35.2% 0.009 70)"
+        }
+      }
+    },
+    "neutral-7": {
+      "$type": "color",
+      "$value": "oklch(81% 0.016 80)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(40.2% 0.010 72)"
+        }
+      }
+    },
+    "neutral-8": {
+      "$type": "color",
+      "$value": "oklch(73.5% 0.017 78)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(48.8% 0.012 74)"
+        }
+      }
+    },
+    "neutral-9": {
+      "$type": "color",
+      "$value": "oklch(52% 0.016 76)"
+    },
+    "neutral-11": {
+      "$type": "color",
+      "$value": "oklch(49.5% 0.014 74)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(77.8% 0.012 78)"
+        }
+      }
+    },
+    "neutral-12": {
+      "$type": "color",
+      "$value": "oklch(29.5% 0.010 70)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(93.4% 0.010 82)"
+        }
+      }
+    },
+    "coral-3": {
+      "$type": "color",
+      "$value": "oklch(94.6% 0.030 38)",
+      "$description": "Caw coral: brand and the action. #E65D46 at rest.",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(28% 0.060 32)"
+        }
+      }
+    },
+    "coral-5": {
+      "$type": "color",
+      "$value": "oklch(88% 0.065 36)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(36% 0.090 32)"
+        }
+      }
+    },
+    "coral-9": {
+      "$type": "color",
+      "$value": "oklch(64.5% 0.175 33)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(66.5% 0.170 33)"
+        }
+      }
+    },
+    "coral-10": {
+      "$type": "color",
+      "$value": "oklch(60% 0.175 33)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(70.5% 0.160 34)"
+        }
+      }
+    },
+    "coral-11": {
+      "$type": "color",
+      "$value": "oklch(50% 0.150 32)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(80% 0.100 34)"
+        }
+      }
+    },
+    "spark": {
+      "$type": "color",
+      "$value": "#F2D36B",
+      "$description": "Spark yellow, paper and roost ink: brand moments only (wordmark, mascot, art)."
+    },
+    "paper": {
+      "$type": "color",
+      "$value": "#F4F0E6"
+    },
+    "crow-ink": {
+      "$type": "color",
+      "$value": "#171715"
+    },
+    "error-3": {
+      "$type": "color",
+      "$value": "oklch(90% 0.050 12)",
+      "$description": "Functional hues (Flexoki-derived). Error sits on crimson (hue 15) so failed never reads as the coral action.",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(30% 0.080 12)"
+        }
+      }
+    },
+    "error-9": {
+      "$type": "color",
+      "$value": "oklch(50% 0.170 15)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(58% 0.170 15)"
+        }
+      }
+    },
+    "error-11": {
+      "$type": "color",
+      "$value": "oklch(36% 0.110 15)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(86% 0.070 12)"
+        }
+      }
+    },
+    "warning-3": {
+      "$type": "color",
+      "$value": "oklch(91.4% 0.087 93.2)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(37% 0.074 88.4)"
+        }
+      }
+    },
+    "warning-9": {
+      "$type": "color",
+      "$value": "oklch(63.3% 0.129 85.8)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(68.3% 0.138 86.8)"
+        }
+      }
+    },
+    "warning-11": {
+      "$type": "color",
+      "$value": "oklch(37% 0.074 88.4)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(85% 0.131 92.3)"
+        }
+      }
+    },
+    "success-3": {
+      "$type": "color",
+      "$value": "oklch(81% 0.098 115.5)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(33.8% 0.076 121.9)"
+        }
+      }
+    },
+    "success-9": {
+      "$type": "color",
+      "$value": "oklch(55.9% 0.134 122.9)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(60.5% 0.132 121.2)"
+        }
+      }
+    },
+    "success-11": {
+      "$type": "color",
+      "$value": "oklch(33.8% 0.076 121.9)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(81% 0.098 115.5)"
+        }
+      }
+    },
+    "info-3": {
+      "$type": "color",
+      "$value": "oklch(88.4% 0.029 228.1)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(30.6% 0.069 253.5)"
+        }
+      }
+    },
+    "info-9": {
+      "$type": "color",
+      "$value": "oklch(48.2% 0.131 254.8)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(53.9% 0.121 251.4)"
+        }
+      }
+    },
+    "info-11": {
+      "$type": "color",
+      "$value": "oklch(30.6% 0.069 253.5)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(78.2% 0.062 235.9)"
+        }
+      }
+    },
+    "mark-1": {
+      "$type": "color",
+      "$value": "oklch(51% 0.168 27.9)",
+      "$description": "Identity marks: eight hues at one lightness (projects, sessions).",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(70% 0.17 27.9)"
+        }
+      }
+    },
+    "mark-2": {
+      "$type": "color",
+      "$value": "oklch(53% 0.15 47.4)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(70% 0.15 47.4)"
+        }
+      }
+    },
+    "mark-3": {
+      "$type": "color",
+      "$value": "oklch(50% 0.115 86.8)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(70% 0.12 86.8)"
+        }
+      }
+    },
+    "mark-4": {
+      "$type": "color",
+      "$value": "oklch(51% 0.132 121.2)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(70% 0.135 121.2)"
+        }
+      }
+    },
+    "mark-5": {
+      "$type": "color",
+      "$value": "oklch(51% 0.093 186.7)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(70% 0.095 186.7)"
+        }
+      }
+    },
+    "mark-6": {
+      "$type": "color",
+      "$value": "oklch(51% 0.14 251.4)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(70% 0.145 251.4)"
+        }
+      }
+    },
+    "mark-7": {
+      "$type": "color",
+      "$value": "oklch(51% 0.15 292.5)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(70% 0.155 292.5)"
+        }
+      }
+    },
+    "mark-8": {
+      "$type": "color",
+      "$value": "oklch(51% 0.165 349.8)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(70% 0.17 349.8)"
+        }
+      }
+    },
+    "mark-glyph": {
+      "$type": "color",
+      "$value": "oklch(99% 0 0)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "{color.neutral-1}"
+        }
+      }
+    },
+    "mark-overlay": {
+      "$type": "gradient",
+      "$value": "linear-gradient(oklch(from {color.neutral-1} l c h / 0.22), oklch(from {color.neutral-12} l c h / 0.06))",
+      "$description": "Identity-mark sheen."
+    },
+    "hue-cyan-400": {
+      "$type": "color",
+      "$value": "oklch(75.35% 0.139 232.66)",
+      "$description": "Identity hues for duotone icon tiles (new-session modal, Configure). Dark keeps each hue's chroma and raises its lightness.",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(80% 0.139 232.66)"
+        }
+      }
+    },
+    "hue-cyan-500": {
+      "$type": "color",
+      "$value": "oklch(70.66% 0.1331 226.72)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(78% 0.1331 226.72)"
+        }
+      }
+    },
+    "hue-amber-500": {
+      "$type": "color",
+      "$value": "oklch(79.08% 0.1577 79.28)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(82% 0.1577 79.28)"
+        }
+      }
+    },
+    "hue-orange-500": {
+      "$type": "color",
+      "$value": "oklch(70.49% 0.1867 47.6)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(76% 0.1867 47.6)"
+        }
+      }
+    },
+    "hue-green-500": {
+      "$type": "color",
+      "$value": "oklch(72.27% 0.192 149.58)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(76% 0.192 149.58)"
+        }
+      }
+    },
+    "hue-green-600": {
+      "$type": "color",
+      "$value": "oklch(62.71% 0.1699 149.21)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(74% 0.1699 149.21)"
+        }
+      }
+    },
+    "hue-blue-500": {
+      "$type": "color",
+      "$value": "oklch(61.52% 0.2076 262.53)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(74% 0.2076 262.53)"
+        }
+      }
+    },
+    "hue-blue-600": {
+      "$type": "color",
+      "$value": "oklch(53.18% 0.2148 265.52)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(72% 0.2148 265.52)"
+        }
+      }
+    },
+    "tool-run": {
+      "$type": "color",
+      "$value": "oklch(50% 0.12 52)",
+      "$description": "Tool ink: one hue per tool family, one lightness per scheme.",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(74% 0.11 52)"
+        }
+      }
+    },
+    "tool-mcp": {
+      "$type": "color",
+      "$value": "oklch(50% 0.12 176)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(74% 0.11 176)"
+        }
+      }
+    },
+    "tool-search": {
+      "$type": "color",
+      "$value": "oklch(50% 0.12 195)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(74% 0.11 195)"
+        }
+      }
+    },
+    "tool-ask": {
+      "$type": "color",
+      "$value": "oklch(50% 0.12 214)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(74% 0.11 214)"
+        }
+      }
+    },
+    "tool-web": {
+      "$type": "color",
+      "$value": "oklch(50% 0.12 234)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(74% 0.11 234)"
+        }
+      }
+    },
+    "tool-read": {
+      "$type": "color",
+      "$value": "oklch(50% 0.12 253)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(74% 0.11 253)"
+        }
+      }
+    },
+    "tool-agent": {
+      "$type": "color",
+      "$value": "oklch(50% 0.12 272)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(74% 0.11 272)"
+        }
+      }
+    },
+    "tool-edit": {
+      "$type": "color",
+      "$value": "oklch(50% 0.12 292)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(74% 0.11 292)"
+        }
+      }
+    },
+    "tool-write": {
+      "$type": "color",
+      "$value": "oklch(50% 0.12 311)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(74% 0.11 311)"
+        }
+      }
+    },
+    "tool-skill": {
+      "$type": "color",
+      "$value": "oklch(50% 0.12 330)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(74% 0.11 330)"
+        }
+      }
+    },
+    "tool-plan": {
+      "$type": "color",
+      "$value": "oklch(50% 0.12 350)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(74% 0.11 350)"
+        }
+      }
+    },
+    "background": {
+      "$type": "color",
+      "$value": "{color.neutral-2}",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "{color.neutral-1}"
+        }
+      }
+    },
+    "foreground": {
+      "$type": "color",
+      "$value": "{color.neutral-12}"
+    },
+    "card": {
+      "$type": "color",
+      "$value": "{color.neutral-1}",
+      "$description": "shadcn bridge: the kit's own names, resolved to the ramps.",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "{color.neutral-2}"
+        }
+      }
+    },
+    "card-foreground": {
+      "$type": "color",
+      "$value": "{color.neutral-12}"
+    },
+    "muted": {
+      "$type": "color",
+      "$value": "{color.neutral-2}"
+    },
+    "muted-foreground": {
+      "$type": "color",
+      "$value": "{color.neutral-11}"
+    },
+    "accent": {
+      "$type": "color",
+      "$value": "{color.neutral-3}",
+      "$description": "The subtle hover surface, never brand.",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "{color.neutral-4}"
+        }
+      }
+    },
+    "destructive": {
+      "$type": "color",
+      "$value": "{color.error-9}"
+    },
+    "success": {
+      "$type": "color",
+      "$value": "{color.success-9}"
+    },
+    "warning": {
+      "$type": "color",
+      "$value": "{color.warning-9}"
+    },
+    "info": {
+      "$type": "color",
+      "$value": "{color.info-9}"
+    },
+    "error": {
+      "$type": "color",
+      "$value": "{color.error-9}"
+    },
+    "sidebar": {
+      "$type": "color",
+      "$value": "{color.background}"
+    },
+    "sidebar-foreground": {
+      "$type": "color",
+      "$value": "{color.neutral-12}"
+    },
+    "sidebar-border": {
+      "$type": "color",
+      "$value": "{color.border}"
+    },
+    "surface-page": {
+      "$type": "color",
+      "$value": "{color.background}",
+      "$description": "Surfaces: the frame recesses, content sits raised on it."
+    },
+    "surface-raised": {
+      "$type": "color",
+      "$value": "{color.neutral-1}",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "{color.neutral-3}"
+        }
+      }
+    },
+    "surface-card": {
+      "$type": "color",
+      "$value": "{color.surface-raised}"
+    },
+    "surface-recess": {
+      "$type": "color",
+      "$value": "oklch(96.7% 0.008 84)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(22.2% 0.006 70)"
+        }
+      }
+    },
+    "surface-band": {
+      "$type": "color",
+      "$value": "oklch(95.7% 0.009 84)",
+      "$description": "A table's header band, one step under the field.",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(21.4% 0.006 70)"
+        }
+      }
+    },
+    "surface-recess-deep": {
+      "$type": "color",
+      "$value": "{color.neutral-4}",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "{color.neutral-1}"
+        }
+      }
+    },
+    "surface-shelf": {
+      "$type": "color",
+      "$value": "{color.neutral-5}",
+      "$description": "The bar folder tabs stand on, a step below recess-deep.",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(15.6% 0.004 70)"
+        }
+      }
+    },
+    "surface-lift": {
+      "$type": "color",
+      "$value": "{color.neutral-1}",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "{color.neutral-6}"
+        }
+      }
+    },
+    "surface-fill": {
+      "$type": "color",
+      "$value": "{color.neutral-4}",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "{color.neutral-5}"
+        }
+      }
+    },
+    "surface-hover": {
+      "$type": "color",
+      "$value": "{color.neutral-2}",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "{color.neutral-4}"
+        }
+      }
+    },
+    "well-edge": {
+      "$type": "color",
+      "$value": "{color.neutral-5}",
+      "$description": "The reader's well edge: darker than the well by day, the ink at 8% at night.",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(from {color.neutral-12} l c h / 0.08)"
+        }
+      }
+    },
+    "code-bg": {
+      "$type": "color",
+      "$value": "{color.neutral-3}",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(15.6% 0.004 70)"
+        }
+      }
+    },
+    "surface-1": {
+      "$type": "color",
+      "$value": "{color.neutral-2}",
+      "$description": "Surface ladder: eight levels that nest; each container lifts one step off what it sits on. Light flattens to warm white after step 2 (shadow carries depth); dark lightens ~3.2% L per step.",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(18.4% 0.004 70)"
+        }
+      }
+    },
+    "surface-2": {
+      "$type": "color",
+      "$value": "oklch(99.3% 0.004 85)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(21.6% 0.005 70)"
+        }
+      }
+    },
+    "surface-3": {
+      "$type": "color",
+      "$value": "oklch(99.6% 0.003 85)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(24.8% 0.006 70)"
+        }
+      }
+    },
+    "surface-4": {
+      "$type": "color",
+      "$value": "oklch(99.6% 0.003 85)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(28% 0.007 70)"
+        }
+      }
+    },
+    "surface-5": {
+      "$type": "color",
+      "$value": "oklch(99.6% 0.003 85)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(31.2% 0.008 70)"
+        }
+      }
+    },
+    "surface-6": {
+      "$type": "color",
+      "$value": "oklch(99.6% 0.003 85)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(34.4% 0.009 72)"
+        }
+      }
+    },
+    "surface-7": {
+      "$type": "color",
+      "$value": "oklch(99.6% 0.003 85)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(37.6% 0.010 72)"
+        }
+      }
+    },
+    "surface-8": {
+      "$type": "color",
+      "$value": "oklch(99.6% 0.003 85)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(40.8% 0.011 74)"
+        }
+      }
+    },
+    "border": {
+      "$type": "color",
+      "$value": "{color.neutral-6}",
+      "$description": "Borders: graded, never flattened to one value.",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(from {color.neutral-12} l c h / 0.08)"
+        }
+      }
+    },
+    "border-hairline": {
+      "$type": "color",
+      "$value": "color-mix(in oklab, {color.neutral-4} 34%, {color.neutral-3})",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "color-mix(in oklab, {color.neutral-5} 40%, {color.neutral-4})"
+        }
+      }
+    },
+    "border-control": {
+      "$type": "color",
+      "$value": "{color.neutral-5}",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "{color.neutral-6}"
+        }
+      }
+    },
+    "input": {
+      "$type": "color",
+      "$value": "{color.neutral-7}",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(from {color.neutral-12} l c h / 0.14)"
+        }
+      }
+    },
+    "ink-strong": {
+      "$type": "color",
+      "$value": "{color.neutral-12}",
+      "$description": "Inks. Subtle is the weakest mix that holds 4.5:1 on fill, hover and raised."
+    },
+    "ink-row": {
+      "$type": "color",
+      "$value": "color-mix(in oklab, {color.neutral-12} 68%, {color.neutral-11})",
+      "$description": "A ledger row's name, just under the strongest ink.",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "color-mix(in oklab, {color.neutral-12} 88%, {color.neutral-11})"
+        }
+      }
+    },
+    "ink-stat": {
+      "$type": "color",
+      "$value": "color-mix(in oklab, {color.neutral-12} 60%, {color.neutral-11})",
+      "$description": "A stat tile's figure, a step lighter than the strongest ink.",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "color-mix(in oklab, {color.neutral-12} 72%, {color.neutral-11})"
+        }
+      }
+    },
+    "ink-muted": {
+      "$type": "color",
+      "$value": "{color.neutral-11}"
+    },
+    "ink-subtle": {
+      "$type": "color",
+      "$value": "color-mix(in oklab, {color.neutral-8} 6%, {color.neutral-11})",
+      "$description": "Placeholders and tertiary text: the weakest mix of neutral-8 into neutral-11 that holds 4.5:1 on fill, hover and raised (by day 4.55 / 5.21 / 5.66:1 at 6%; the cool ramp's 8.3% measured 4.47 on the warm fill).",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "color-mix(in oklab, {color.neutral-8} 33.3%, {color.neutral-11})"
+        }
+      }
+    },
+    "text-strong": {
+      "$type": "color",
+      "$value": "{color.ink-strong}"
+    },
+    "text-muted": {
+      "$type": "color",
+      "$value": "{color.ink-muted}"
+    },
+    "brand-solid": {
+      "$type": "color",
+      "$value": "{color.coral-9}",
+      "$description": "Brand: coral for marks, badges and brand moments."
+    },
+    "brand-hover": {
+      "$type": "color",
+      "$value": "{color.coral-10}"
+    },
+    "brand-wash": {
+      "$type": "color",
+      "$value": "{color.coral-3}",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(from {color.coral-9} l c h / 0.16)"
+        }
+      }
+    },
+    "brand-ink": {
+      "$type": "color",
+      "$value": "{color.coral-11}"
+    },
+    "link-ink": {
+      "$type": "color",
+      "$value": "{color.coral-11}"
+    },
+    "link-hover": {
+      "$type": "color",
+      "$value": "{color.coral-10}"
+    },
+    "action-solid": {
+      "$type": "color",
+      "$value": "oklch(55.5% 0.17 33)",
+      "$description": "The action: coral under a white label. Darkened from the direction's 58.5/63% so white holds 4.5:1 on every stop of the gradient.",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(54% 0.165 33)"
+        }
+      }
+    },
+    "action-hover": {
+      "$type": "color",
+      "$value": "oklch(51% 0.165 33)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(49.5% 0.16 34)"
+        }
+      }
+    },
+    "on-action": {
+      "$type": "color",
+      "$value": "oklch(100% 0 0)"
+    },
+    "on-brand": {
+      "$type": "color",
+      "$value": "{color.on-action}"
+    },
+    "action-surface": {
+      "$type": "gradient",
+      "$value": "linear-gradient(oklch(from {color.action-solid} calc(l + 0.03) c h), oklch(from {color.action-solid} calc(l - 0.03) c h))",
+      "$description": "The action is never flat: a top-highlight gradient, lifted ±0.03 L so the top stop keeps 4.5:1 under white."
+    },
+    "action-surface-hover": {
+      "$type": "gradient",
+      "$value": "linear-gradient(oklch(from {color.action-hover} calc(l + 0.03) c h), oklch(from {color.action-hover} calc(l - 0.03) c h))"
+    },
+    "selected-bg": {
+      "$type": "color",
+      "$value": "oklch(90.5% 0.062 48)",
+      "$description": "Selected nav / chosen row: warm apricot wash, coral ink, no shadow.",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(34% 0.075 40)"
+        }
+      }
+    },
+    "selected-ink": {
+      "$type": "color",
+      "$value": "{color.coral-11}",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(83% 0.085 34)"
+        }
+      }
+    },
+    "selected-icon": {
+      "$type": "color",
+      "$value": "{color.coral-10}",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(74% 0.13 34)"
+        }
+      }
+    },
+    "chip-chosen-bg": {
+      "$type": "color",
+      "$value": "oklch(55% 0.17 33)",
+      "$description": "Chosen option chip (1/2/3 keys in agent questions): solid vermillion, no ring. Dark sits at the dark action's lightness so the white digit holds 4.5:1 (the direction's 66% measured 3.33:1).",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(54% 0.165 33)"
+        }
+      }
+    },
+    "chip-chosen-ink": {
+      "$type": "color",
+      "$value": "oklch(100% 0 0)"
+    },
+    "ink-solid": {
+      "$type": "color",
+      "$value": "{color.neutral-12}",
+      "$description": "Ink-solid: tooltips and inverted tiles stay ink, never coral."
+    },
+    "on-ink": {
+      "$type": "color",
+      "$value": "{color.neutral-1}"
+    },
+    "focus-ring": {
+      "$type": "color",
+      "$value": "oklch(55% 0.165 33)",
+      "$description": "Focus: one 2px coral ring, keyboard focus only.",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(76% 0.12 34)"
+        }
+      }
+    },
+    "selection": {
+      "$type": "color",
+      "$value": "oklch(64.5% 0.175 33 / 0.2)",
+      "$description": "Selection: coral tint.",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(64.5% 0.175 33 / 0.3)"
+        }
+      }
+    },
+    "status-live-bg": {
+      "$type": "color",
+      "$value": "color-mix(in oklab, {color.info-3} 76%, {color.info-9})",
+      "$description": "Status: four hues and a hueless idle (idle carries no fill). Needs-you is spark yellow, the one status that asks for a person."
+    },
+    "status-attn-bg": {
+      "$type": "color",
+      "$value": "oklch(91% 0.115 95)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(37% 0.07 92)"
+        }
+      }
+    },
+    "status-done-bg": {
+      "$type": "color",
+      "$value": "color-mix(in oklab, {color.success-3} 76%, {color.success-9})"
+    },
+    "status-fail-bg": {
+      "$type": "color",
+      "$value": "color-mix(in oklab, {color.error-3} 76%, {color.error-9})",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "color-mix(in oklab, {color.error-3} 68%, {color.error-9})"
+        }
+      }
+    },
+    "status-idle-bg": {
+      "$type": "color",
+      "$value": "transparent"
+    },
+    "status-live-ink": {
+      "$type": "color",
+      "$value": "color-mix(in oklab, {color.info-11} 76%, {color.neutral-12})"
+    },
+    "status-attn-ink": {
+      "$type": "color",
+      "$value": "oklch(35% 0.075 88)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(90% 0.115 95)"
+        }
+      }
+    },
+    "status-done-ink": {
+      "$type": "color",
+      "$value": "color-mix(in oklab, {color.success-11} 76%, {color.neutral-12})"
+    },
+    "status-fail-ink": {
+      "$type": "color",
+      "$value": "color-mix(in oklab, {color.error-11} 76%, {color.neutral-12})"
+    },
+    "status-idle-ink": {
+      "$type": "color",
+      "$value": "{color.neutral-11}"
+    },
+    "presence-online": {
+      "$type": "color",
+      "$value": "oklch(62.7% 0.17 149)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(74% 0.17 149)"
+        }
+      }
+    },
+    "presence-away": {
+      "$type": "color",
+      "$value": "oklch(70.5% 0.187 47.6)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(76% 0.187 47.6)"
+        }
+      }
+    },
+    "presence-off": {
+      "$type": "color",
+      "$value": "{color.neutral-8}"
+    },
+    "machine-offline": {
+      "$type": "color",
+      "$value": "color-mix(in oklab, {color.neutral-8} 62%, {color.neutral-11})",
+      "$description": "A machine that is not online: between the mid and muted neutrals."
+    },
+    "data-ok": {
+      "$type": "color",
+      "$value": "oklch(from {color.success-9} 46% 0.125 h)",
+      "$description": "Data colour: chroma survives in numerals.",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(from {color.success-9} 78% 0.135 h)"
+        }
+      }
+    },
+    "data-warn": {
+      "$type": "color",
+      "$value": "oklch(from {color.warning-9} 46% 0.125 h)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(from {color.warning-9} 80% 0.13 h)"
+        }
+      }
+    },
+    "data-bad": {
+      "$type": "color",
+      "$value": "oklch(from {color.error-9} 46% 0.135 h)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(from {color.error-9} 81% 0.13 h)"
+        }
+      }
+    },
+    "diff-add-bg": {
+      "$type": "color",
+      "$value": "oklch(from {color.success-9} l c h / 0.15)"
+    },
+    "diff-del-bg": {
+      "$type": "color",
+      "$value": "oklch(from {color.error-9} l c h / 0.15)"
+    },
+    "chart-1": {
+      "$type": "color",
+      "$value": "{color.neutral-12}",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "{color.neutral-11}"
+        }
+      }
+    },
+    "chart-brand": {
+      "$type": "color",
+      "$value": "{color.coral-9}"
+    },
+    "chart-2": {
+      "$type": "color",
+      "$value": "{color.info-9}"
+    },
+    "chart-3": {
+      "$type": "color",
+      "$value": "{color.mark-7}"
+    },
+    "chart-4": {
+      "$type": "color",
+      "$value": "{color.warning-9}"
+    },
+    "chart-5": {
+      "$type": "color",
+      "$value": "{color.neutral-9}"
+    },
+    "code-ink": {
+      "$type": "color",
+      "$value": "{color.ink-strong}",
+      "$description": "Syntax (code blocks and diffs)."
+    },
+    "code-keyword": {
+      "$type": "color",
+      "$value": "oklch(50% 0.15 33)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(76% 0.12 34)"
+        }
+      }
+    },
+    "code-fn": {
+      "$type": "color",
+      "$value": "oklch(45% 0.10 245)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(80% 0.07 240)"
+        }
+      }
+    },
+    "code-string": {
+      "$type": "color",
+      "$value": "oklch(50% 0.12 122)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(84% 0.10 118)"
+        }
+      }
+    },
+    "code-number": {
+      "$type": "color",
+      "$value": "oklch(52% 0.13 55)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(84% 0.10 70)"
+        }
+      }
+    },
+    "code-comment": {
+      "$type": "color",
+      "$value": "{color.ink-subtle}"
+    },
+    "rail": {
+      "$type": "gradient",
+      "$value": "linear-gradient(oklch(from {color.neutral-11} l c h / 0.4), oklch(from {color.neutral-11} l c h / 0.4))",
+      "$description": "The transcript rail: one flat 2px line down a run of tool rows. An image, not a colour: rows paint it as a sized background layer (2px wide), and a colour would fill the whole row. Head and continuing rows paint the same, so no seam shows between them."
+    },
+    "rail-body": {
+      "$type": "color",
+      "$value": "{color.rail}"
+    },
+    "material-panel": {
+      "$type": "color",
+      "$value": "oklch(from {color.surface-raised} l c h / 0.72)",
+      "$description": "Chrome materials: structural translucency, never decoration."
+    },
+    "scrim": {
+      "$type": "color",
+      "$value": "oklch(from {color.background} l c h / 0.72)",
+      "$description": "What a dialog's backdrop paints: the page itself, translucent."
+    },
+    "shadow-tint": {
+      "$type": "color",
+      "$value": "oklch(from {color.neutral-12} l c h / 0.09)",
+      "$description": "Elevation tints: warm ink by day, the deepest surface at night, never rgba black.",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(from {color.neutral-1} l c h / 0.55)"
+        }
+      }
+    },
+    "shadow-tint-2": {
+      "$type": "color",
+      "$value": "oklch(from {color.neutral-12} l c h / 0.14)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(from {color.neutral-1} l c h / 0.66)"
+        }
+      }
+    },
+    "shadow-tint-3": {
+      "$type": "color",
+      "$value": "oklch(from {color.neutral-12} l c h / 0.2)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(from {color.neutral-1} l c h / 0.76)"
+        }
+      }
+    },
+    "night-ring": {
+      "$type": "color",
+      "$value": "transparent",
+      "$description": "At night every raised shadow adds a 1px inner ring of ink.",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(from {color.neutral-12} l c h / 0.07)"
+        }
+      }
+    }
+  },
+  "shadow": {
+    "shadow-xs": {
+      "$type": "shadow",
+      "$value": "0 1px 2px {color.shadow-tint}"
+    },
+    "shadow-tile": {
+      "$type": "shadow",
+      "$value": "0 1px 2px light-dark(oklch(from {color.neutral-12} l c h / 0.07), oklch(0% 0 0 / 0.3)), 0 0 0 1px light-dark(oklch(from {color.neutral-12} l c h / 0.035), oklch(from {color.neutral-12} l c h / 0.06))"
+    },
+    "shadow-raised": {
+      "$type": "shadow",
+      "$value": "0 1px 3px {color.shadow-tint}, 0 1px 1px {color.shadow-tint}, inset 0 0 0 1px {color.night-ring}"
+    },
+    "shadow-hairline": {
+      "$type": "shadow",
+      "$value": "0 3px 7px -2px {color.shadow-tint-2}"
+    },
+    "shadow-stat": {
+      "$type": "shadow",
+      "$value": "0 3px 7px -2px {color.shadow-tint-2}, inset 0 0 0 1px {color.night-ring}",
+      "$description": "A stat tile's lift: drawn below the card, not around it; ringed at night."
+    },
+    "shadow-md": {
+      "$type": "shadow",
+      "$value": "0 3px 10px {color.shadow-tint-2}, 0 1px 2px {color.shadow-tint}, inset 0 0 0 1px {color.night-ring}"
+    },
+    "shadow-lg": {
+      "$type": "shadow",
+      "$value": "0 10px 30px {color.shadow-tint-2}, 0 3px 8px {color.shadow-tint}, inset 0 0 0 1px {color.night-ring}"
+    },
+    "shadow-xl": {
+      "$type": "shadow",
+      "$value": "0 24px 64px {color.shadow-tint-3}, 0 6px 16px {color.shadow-tint}, inset 0 0 0 1px {color.night-ring}"
+    },
+    "shadow-overlay": {
+      "$type": "shadow",
+      "$value": "0 18px 48px {color.shadow-tint-3}, 0 2px 6px {color.shadow-tint}, inset 0 0 0 1px {color.night-ring}"
+    },
+    "shadow-modal": {
+      "$type": "shadow",
+      "$value": "{shadow.shadow-overlay}"
+    },
+    "shadow-drawer": {
+      "$type": "shadow",
+      "$value": "0 12px 40px {color.shadow-tint-3}"
+    },
+    "shadow-inset-sel": {
+      "$type": "shadow",
+      "$value": "inset 0 1px 1px {color.shadow-tint}"
+    },
+    "surface-shadow-1": {
+      "$type": "shadow",
+      "$value": "none",
+      "$description": "Shadow per surface level, paired with --surface-1…8."
+    },
+    "surface-shadow-2": {
+      "$type": "shadow",
+      "$value": "{shadow.shadow-tile}"
+    },
+    "surface-shadow-3": {
+      "$type": "shadow",
+      "$value": "0 1px 3px {color.shadow-tint}, 0 1px 1px {color.shadow-tint}, inset 0 0 0 1px {color.night-ring}"
+    },
+    "surface-shadow-4": {
+      "$type": "shadow",
+      "$value": "{shadow.shadow-md}"
+    },
+    "surface-shadow-5": {
+      "$type": "shadow",
+      "$value": "0 6px 18px {color.shadow-tint-2}, 0 2px 4px {color.shadow-tint}, inset 0 0 0 1px {color.night-ring}"
+    },
+    "surface-shadow-6": {
+      "$type": "shadow",
+      "$value": "{shadow.shadow-lg}"
+    },
+    "surface-shadow-7": {
+      "$type": "shadow",
+      "$value": "0 14px 40px {color.shadow-tint-3}, 0 2px 6px {color.shadow-tint}, inset 0 0 0 1px {color.night-ring}"
+    },
+    "surface-shadow-8": {
+      "$type": "shadow",
+      "$value": "{shadow.shadow-overlay}"
+    },
+    "action-ring": {
+      "$type": "shadow",
+      "$value": "inset 0 1px 0 oklch(100% 0 0 / 0.18), 0 1px 2px light-dark(oklch(45% 0.12 33 / 0.25), oklch(0% 0 0 / 0.4))",
+      "$description": "The action's edge: a white top hairline and a coral-tinted drop."
+    },
+    "code-ring": {
+      "$type": "shadow",
+      "$value": "inset 0 0 0 1px light-dark(oklch(58.5% 0.17 33 / 0.28), oklch(66% 0.16 34 / 0.32)), inset 0 1px 6px light-dark(oklch(58.5% 0.17 33 / 0.06), oklch(66% 0.16 34 / 0.10))",
+      "$description": "Inner vermillion ring and soft inner glow on code blocks."
+    },
+    "selected-shadow": {
+      "$type": "shadow",
+      "$value": "none"
+    }
+  },
+  "font": {
+    "font-sans": {
+      "$type": "fontFamily",
+      "$value": "\"Figtree Variable\", ui-sans-serif, system-ui, -apple-system, \"Segoe UI\", sans-serif",
+      "$description": "Figtree for UI and transcript prose, 400 and 500 only."
+    },
+    "font-body": {
+      "$type": "fontFamily",
+      "$value": "{font.font-sans}"
+    },
+    "font-mono": {
+      "$type": "fontFamily",
+      "$value": "\"JetBrains Mono Variable\", ui-monospace, \"SF Mono\", monospace",
+      "$description": "JetBrains Mono for code, paths, IDs and measurements; ligatures off."
+    },
+    "font-display": {
+      "$type": "fontFamily",
+      "$value": "\"Fredoka\", \"Figtree Variable\", ui-rounded, system-ui, sans-serif",
+      "$description": "Fredoka 600: brand display only."
+    }
+  },
+  "type": {
+    "text-meta": {
+      "$type": "dimension",
+      "$value": "0.75rem",
+      "$description": "The six sizes text takes. Dense roles hold one size at every width; title and kpi scale with the viewport between 390 and 1024px."
+    },
+    "text-label": {
+      "$type": "dimension",
+      "$value": "0.8125rem"
+    },
+    "text-body": {
+      "$type": "dimension",
+      "$value": "0.875rem"
+    },
+    "text-code": {
+      "$type": "dimension",
+      "$value": "0.75rem",
+      "$description": "Code runs a step under body: JetBrains Mono sets large."
+    },
+    "text-title": {
+      "$type": "dimension",
+      "$value": "clamp(1.125rem, 1.048rem + 0.3155vi, 1.25rem)"
+    },
+    "text-kpi": {
+      "$type": "dimension",
+      "$value": "clamp(1.25rem, 1.0962rem + 0.6309vi, 1.5rem)"
+    },
+    "text-display": {
+      "$type": "dimension",
+      "$value": "2.5rem",
+      "$description": "Brand and marketing only."
+    },
+    "leading-meta": {
+      "$type": "number",
+      "$value": "1.35"
+    },
+    "leading-label": {
+      "$type": "number",
+      "$value": "1.3"
+    },
+    "leading-tight": {
+      "$type": "number",
+      "$value": "1.2"
+    },
+    "leading-ui": {
+      "$type": "number",
+      "$value": "1.25"
+    },
+    "leading-body": {
+      "$type": "number",
+      "$value": "1.45"
+    },
+    "leading-prose": {
+      "$type": "number",
+      "$value": "1.55"
+    },
+    "leading-code": {
+      "$type": "number",
+      "$value": "1.6"
+    },
+    "leading-kpi": {
+      "$type": "number",
+      "$value": "1"
+    },
+    "weight-body": {
+      "$type": "fontWeight",
+      "$value": "400"
+    },
+    "weight-strong": {
+      "$type": "fontWeight",
+      "$value": "500",
+      "$description": "Nothing in product UI goes above 500."
+    },
+    "track-display": {
+      "$type": "dimension",
+      "$value": "-0.008em"
+    },
+    "track-title": {
+      "$type": "dimension",
+      "$value": "-0.01em"
+    },
+    "track-caps": {
+      "$type": "dimension",
+      "$value": "0.06em"
+    },
+    "type-meta": {
+      "$type": "typography",
+      "$value": "400 {type.text-meta} / 1.35 {font.font-body}",
+      "$description": "Role shorthands (font: var(--type-label)). A kpi figure is always .num: the shorthand resets font-variant-numeric."
+    },
+    "type-label": {
+      "$type": "typography",
+      "$value": "500 {type.text-label} / 1.3 {font.font-body}"
+    },
+    "type-body": {
+      "$type": "typography",
+      "$value": "400 {type.text-body} / 1.45 {font.font-body}"
+    },
+    "type-prose": {
+      "$type": "typography",
+      "$value": "400 {type.text-body} / 1.55 {font.font-body}"
+    },
+    "type-button": {
+      "$type": "typography",
+      "$value": "500 {type.text-body} / 1 {font.font-body}"
+    },
+    "type-title": {
+      "$type": "typography",
+      "$value": "500 {type.text-title} / 1.25 {font.font-body}"
+    },
+    "type-kpi": {
+      "$type": "typography",
+      "$value": "500 {type.text-kpi} / 1 {font.font-body}"
+    },
+    "type-code": {
+      "$type": "typography",
+      "$value": "400 {type.text-code} / 1.6 {font.font-mono}"
+    },
+    "type-caps": {
+      "$type": "typography",
+      "$value": "500 11px / 1 {font.font-body}"
+    }
+  },
+  "space": {
+    "space-1": {
+      "$type": "dimension",
+      "$value": "4px",
+      "$description": "Measured off the comps, deliberately not a 4px ladder. Keep the odd values."
+    },
+    "space-2": {
+      "$type": "dimension",
+      "$value": "7px"
+    },
+    "space-3": {
+      "$type": "dimension",
+      "$value": "11px"
+    },
+    "space-4": {
+      "$type": "dimension",
+      "$value": "14px"
+    },
+    "space-5": {
+      "$type": "dimension",
+      "$value": "18px"
+    },
+    "space-6": {
+      "$type": "dimension",
+      "$value": "21px"
+    },
+    "space-7": {
+      "$type": "dimension",
+      "$value": "25px"
+    },
+    "space-8": {
+      "$type": "dimension",
+      "$value": "32px"
+    },
+    "space-group": {
+      "$type": "dimension",
+      "$value": "{space.space-5}",
+      "$description": "Between the groups of a page (stat row, queue, a card)."
+    }
+  },
+  "radius": {
+    "radius-hair": {
+      "$type": "dimension",
+      "$value": "2px",
+      "$description": "Hair: chart swatches, a tooltip's arrow."
+    },
+    "radius-xs": {
+      "$type": "dimension",
+      "$value": "5px",
+      "$description": "Marks, tiles, badges, kbd."
+    },
+    "radius-sm": {
+      "$type": "dimension",
+      "$value": "8px",
+      "$description": "Controls inside a surface, nav rows, menu items."
+    },
+    "radius-md": {
+      "$type": "dimension",
+      "$value": "10px",
+      "$description": "Buttons, inputs, the segmented groove."
+    },
+    "radius-lg": {
+      "$type": "dimension",
+      "$value": "12px",
+      "$description": "Cards, menus, popovers."
+    },
+    "radius-well": {
+      "$type": "dimension",
+      "$value": "7px",
+      "$description": "The stat tile's recessed well."
+    },
+    "radius-panel": {
+      "$type": "dimension",
+      "$value": "16px",
+      "$description": "The assistant panel's shell."
+    },
+    "radius-modal": {
+      "$type": "dimension",
+      "$value": "18px",
+      "$description": "Dialog tray: 6px pad + 12px body, concentric."
+    },
+    "radius-pill": {
+      "$type": "dimension",
+      "$value": "999px"
+    },
+    "well-r": {
+      "$type": "dimension",
+      "$value": "7px",
+      "$description": "The reader's well."
+    },
+    "row-mark-r": {
+      "$type": "dimension",
+      "$value": "4.6px",
+      "$description": "The reader's row mark."
+    }
+  },
+  "size": {
+    "c-btn-h": {
+      "$type": "dimension",
+      "$value": "36px"
+    },
+    "c-btn-h-sm": {
+      "$type": "dimension",
+      "$value": "30px"
+    },
+    "c-btn-h-xs": {
+      "$type": "dimension",
+      "$value": "24px"
+    },
+    "c-btn-h-lg": {
+      "$type": "dimension",
+      "$value": "44px"
+    },
+    "c-input-h": {
+      "$type": "dimension",
+      "$value": "36px"
+    },
+    "c-nav-h": {
+      "$type": "dimension",
+      "$value": "40px",
+      "$description": "A nav row; touch screens and narrow windows take the 44px row.",
+      "$extensions": {
+        "dev.cawco": {
+          "compact": "44px"
+        }
+      }
+    },
+    "c-mark": {
+      "$type": "dimension",
+      "$value": "26px"
+    },
+    "c-mark-glyph": {
+      "$type": "dimension",
+      "$value": "16px"
+    },
+    "c-row-mark": {
+      "$type": "dimension",
+      "$value": "18px"
+    },
+    "c-pill-h": {
+      "$type": "dimension",
+      "$value": "24px"
+    },
+    "c-pill-gap": {
+      "$type": "dimension",
+      "$value": "6px"
+    },
+    "c-pill-fs": {
+      "$type": "dimension",
+      "$value": "{type.text-label}"
+    },
+    "c-badge-h": {
+      "$type": "dimension",
+      "$value": "20px"
+    },
+    "c-stat-h": {
+      "$type": "dimension",
+      "$value": "90px",
+      "$description": "A stat tile's height."
+    },
+    "c-toolbar-zone": {
+      "$type": "dimension",
+      "$value": "55px",
+      "$description": "A ledger's toolbar zone, holding 32px controls 11px in."
+    },
+    "c-toolbar-ctl": {
+      "$type": "dimension",
+      "$value": "32px"
+    },
+    "c-top-bar-h": {
+      "$type": "dimension",
+      "$value": "60px",
+      "$description": "The shell's top bar: 59px and its 1px hairline."
+    },
+    "c-page-head-h": {
+      "$type": "dimension",
+      "$value": "96px",
+      "$description": "A page head under the top bar."
+    },
+    "c-sidebar-w": {
+      "$type": "dimension",
+      "$value": "248px"
+    },
+    "c-composer-field": {
+      "$type": "dimension",
+      "$value": "34px",
+      "$description": "The group composer's field at one line; every transcript keeps the composer's standing parts clear at its foot."
+    },
+    "c-composer-inset": {
+      "$type": "dimension",
+      "$value": "{space.space-2}"
+    },
+    "c-composer-panel": {
+      "$type": "dimension",
+      "$value": "calc({size.c-composer-field} + {size.c-composer-inset} * 2 + 2px)"
+    },
+    "c-suggest-chip": {
+      "$type": "dimension",
+      "$value": "calc(1.25rem + {space.space-1} * 2 + 2px)",
+      "$description": "A suggestion chip: its Tab key cap, padding and border."
+    },
+    "c-suggest-row": {
+      "$type": "dimension",
+      "$value": "calc({space.space-4} + {space.space-1} * 2 + {size.c-suggest-chip})"
+    },
+    "c-suggest-room": {
+      "$type": "dimension",
+      "$value": "calc({size.c-suggest-row} + {space.space-2})"
+    },
+    "c-tray-chip": {
+      "$type": "dimension",
+      "$value": "28px",
+      "$description": "The delegate tray's row: a chip, and the step down to the pill.",
+      "$extensions": {
+        "dev.cawco": {
+          "coarse": "34px"
+        }
+      }
+    },
+    "c-tray-gap": {
+      "$type": "dimension",
+      "$value": "{space.space-2}",
+      "$extensions": {
+        "dev.cawco": {
+          "coarse": "{space.space-3}"
+        }
+      }
+    },
+    "c-tray-row": {
+      "$type": "dimension",
+      "$value": "calc({size.c-tray-chip} + {size.c-tray-gap})"
+    },
+    "icon-sm": {
+      "$type": "dimension",
+      "$value": "12px"
+    },
+    "icon-md": {
+      "$type": "dimension",
+      "$value": "16px"
+    },
+    "icon-lg": {
+      "$type": "dimension",
+      "$value": "20px"
+    },
+    "row-mark": {
+      "$type": "dimension",
+      "$value": "17px",
+      "$description": "The reader's row mark: 17×17 with an 11px glyph, centred in the 18px speaker cell."
+    },
+    "row-mark-glyph": {
+      "$type": "dimension",
+      "$value": "11px"
+    },
+    "row-mark-box": {
+      "$type": "dimension",
+      "$value": "18px"
+    },
+    "well-x": {
+      "$type": "dimension",
+      "$value": "calc(({size.row-mark-box} - {size.row-mark}) / 2)"
+    },
+    "focus-ring-width": {
+      "$type": "dimension",
+      "$value": "2px"
+    },
+    "focus-ring-offset": {
+      "$type": "dimension",
+      "$value": "2px"
+    },
+    "focus-ring-inset": {
+      "$type": "dimension",
+      "$value": "-2px"
+    },
+    "material-blur": {
+      "$type": "dimension",
+      "$value": "20px"
+    },
+    "scrim-blur": {
+      "$type": "dimension",
+      "$value": "2px"
+    }
+  },
+  "effect": {
+    "ghost-presence": {
+      "$type": "number",
+      "$value": "0.7",
+      "$description": "A message not yet said in the conversation (sending, queued)."
+    },
+    "material-saturate": {
+      "$type": "number",
+      "$value": "1.6"
+    },
+    "surface-hover-mix": {
+      "$type": "number",
+      "$value": "6%",
+      "$description": "Relative tints for rows inside any surface: hover +6%, selected +10% ink."
+    },
+    "surface-selected-mix": {
+      "$type": "number",
+      "$value": "10%"
+    }
+  },
+  "motion": {
+    "ease-out": {
+      "$type": "cubicBezier",
+      "$value": "cubic-bezier(0.23, 1, 0.32, 1)",
+      "$description": "Entrances and exits ease out; on-screen movement eases in-out; drawers, popovers and page swaps use the drawer curve. No ease-in."
+    },
+    "ease-in-out": {
+      "$type": "cubicBezier",
+      "$value": "cubic-bezier(0.77, 0, 0.175, 1)"
+    },
+    "ease-drawer": {
+      "$type": "cubicBezier",
+      "$value": "cubic-bezier(0.32, 0.72, 0, 1)"
+    },
+    "dur-ghost": {
+      "$type": "duration",
+      "$value": "80ms",
+      "$description": "The hover ghost following the pointer from row to row."
+    },
+    "dur-control": {
+      "$type": "duration",
+      "$value": "120ms"
+    },
+    "dur-menu": {
+      "$type": "duration",
+      "$value": "140ms"
+    },
+    "dur-toggle": {
+      "$type": "duration",
+      "$value": "160ms",
+      "$description": "A switch's knob and a checkbox's tick."
+    },
+    "dur-exit": {
+      "$type": "duration",
+      "$value": "160ms"
+    },
+    "dur-morph": {
+      "$type": "duration",
+      "$value": "180ms",
+      "$description": "A button's width following its label while it works."
+    },
+    "dur-rail": {
+      "$type": "duration",
+      "$value": "180ms",
+      "$description": "A transcript row's place opening, its rail drawing down with it."
+    },
+    "dur-fade": {
+      "$type": "duration",
+      "$value": "200ms",
+      "$description": "Fades that carry a state change in place."
+    },
+    "dur-pop": {
+      "$type": "duration",
+      "$value": "260ms"
+    },
+    "dur-panel": {
+      "$type": "duration",
+      "$value": "280ms"
+    },
+    "dur-hold": {
+      "$type": "duration",
+      "$value": "1.2s",
+      "$description": "How long a done state stays up."
+    },
+    "dur-loop": {
+      "$type": "duration",
+      "$value": "1.2s",
+      "$description": "One turn of an ambient loop: spinner, pulse, ping."
+    },
+    "c-500": {
+      "$type": "duration",
+      "$value": "500ms"
+    },
+    "breath": {
+      "$type": "duration",
+      "$value": "calc({motion.c-500} * 4)"
+    },
+    "press-scale": {
+      "$type": "number",
+      "$value": "0.97"
+    },
+    "pop-scale": {
+      "$type": "number",
+      "$value": "0.92"
+    },
+    "pop-rise": {
+      "$type": "dimension",
+      "$value": "8px"
+    },
+    "transition-control": {
+      "$type": "transition",
+      "$value": "background-color {motion.dur-control} {motion.ease-out}, border-color {motion.dur-control} {motion.ease-out}, color {motion.dur-control} {motion.ease-out}"
+    }
+  }
+}

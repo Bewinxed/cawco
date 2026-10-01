@@ -15,7 +15,7 @@
         attn: "bg-[var(--status-attn-bg)] text-[var(--status-attn-ink)]",
         done: "bg-[var(--status-done-bg)] text-[var(--status-done-ink)]",
         fail: "bg-[var(--status-fail-bg)] text-[var(--status-fail-ink)]",
-        link: "bg-transparent text-primary underline-offset-4 hover:underline",
+        link: "bg-transparent text-link underline-offset-4 hover:underline",
       },
     },
     defaultVariants: {

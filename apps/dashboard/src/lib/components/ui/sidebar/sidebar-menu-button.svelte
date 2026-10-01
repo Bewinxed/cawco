@@ -3,12 +3,12 @@
   import { tv } from "$lib/utils.js";
 
   export const sidebarMenuButtonVariants = tv({
-    base: "peer/menu-button group/menu-button focus-inset press-tint flex w-full items-center gap-2 overflow-hidden rounded-[var(--radius-sm)] px-3 py-2 text-left text-label transition-[width,height,padding,color,background-color] duration-(--dur-toggle) ease-out hover:text-sidebar-accent-foreground active:text-sidebar-accent-foreground disabled:pointer-events-none disabled:opacity-50 group-has-data-[sidebar=menu-action]/menu-item:pr-8 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-active:font-medium data-active:text-sidebar-accent-foreground data-open:hover:text-sidebar-accent-foreground group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:p-2! [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0",
+    base: "peer/menu-button group/menu-button focus-inset press-tint flex w-full items-center gap-2 overflow-hidden rounded-[var(--radius-sm)] px-3 py-2 text-left text-label transition-[width,height,padding,color,background-color] duration-(--dur-toggle) ease-out hover:text-foreground active:text-foreground disabled:pointer-events-none disabled:opacity-50 group-has-data-[sidebar=menu-action]/menu-item:pr-8 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-active:font-medium data-active:text-selected-ink data-open:hover:text-foreground group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:p-2! [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0",
     variants: {
       variant: {
-        default: "hover:text-sidebar-accent-foreground",
+        default: "hover:text-foreground",
         outline:
-          "bg-background shadow-[0_0_0_1px_var(--sidebar-border)] hover:text-sidebar-accent-foreground hover:shadow-[0_0_0_1px_var(--sidebar-accent)]",
+          "bg-background shadow-[0_0_0_1px_var(--sidebar-border)] hover:text-foreground hover:shadow-[0_0_0_1px_var(--border-control)]",
       },
       size: {
         default: "h-[var(--c-nav-h)] text-label",

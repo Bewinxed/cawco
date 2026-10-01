@@ -103,8 +103,8 @@
   border: 1px dashed var(--neutral-8);
 }
 .ns-theme .ns-tile.ink {
-  background: var(--ink-strong);
-  color: var(--on-brand);
+  background: var(--ink-solid);
+  color: var(--on-ink);
   box-shadow: none;
 }
 

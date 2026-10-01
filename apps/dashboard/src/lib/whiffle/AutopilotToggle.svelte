@@ -66,7 +66,7 @@
   );
   const verdictInk = $derived.by(() => {
     if (settled === "reply") {
-      return "var(--accent-solid)";
+      return "var(--action-solid)";
     }
     if (settled === "escalate" || settled === "ask") {
       return "var(--status-attn-ink)";
@@ -283,8 +283,8 @@
     background: conic-gradient(
       from 0deg,
       transparent 0 62%,
-      oklch(from var(--accent-solid) l c h / 0.6) 78%,
-      var(--accent-solid) 92%,
+      oklch(from var(--action-solid) l c h / 0.6) 78%,
+      var(--action-solid) 92%,
       transparent 100%
     );
     animation: ap-halo-orbit var(--dur-loop) linear infinite;
@@ -309,7 +309,7 @@
   @media (prefers-reduced-motion: reduce) {
     .ap-halo-spin {
       animation: none;
-      background: oklch(from var(--accent-solid) l c h / 0.45);
+      background: oklch(from var(--action-solid) l c h / 0.45);
     }
     .ap-halo-pulse {
       animation: none;
@@ -331,10 +331,10 @@
       transform: scale(var(--press-scale));
     }
   }
-  /* Active state: accent-colored glyph, no solid fill. */
+  /* Active state: brand-ink glyph, no solid fill. */
   .ap-active {
-    color: var(--accent-text);
-    border-color: var(--accent-text);
+    color: var(--brand-ink);
+    border-color: var(--brand-ink);
   }
 
   .ap-popover-inner {

@@ -38,7 +38,7 @@
     border: 1px solid var(--border-hairline);
     border-radius: var(--radius-sm);
     background: var(--surface-raised);
-    color: var(--accent-11);
+    color: var(--coral-11);
     cursor: pointer;
     transition: background var(--dur-control) var(--ease-in-out);
   }

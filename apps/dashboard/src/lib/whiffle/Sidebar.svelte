@@ -640,7 +640,7 @@
                 data-assistant-row
                 type="button"
               >
-                <span class="{SLOT} text-[var(--accent-11)]"
+                <span class="{SLOT} text-[var(--coral-11)]"
                   ><IconAssistant class={SLOT_GLYPH} /></span
                 >
                 <span class="flex-1">Assistant</span>
@@ -1152,7 +1152,7 @@
           <Sidebar.MenuButton class={NAV_ROW}>
             <span
               aria-hidden="true"
-              class="{SLOT} rounded-full bg-sidebar-accent text-meta text-sidebar-accent-foreground"
+              class="{SLOT} rounded-full bg-selected-bg text-meta text-selected-ink"
               >bw</span
             >
             <span class="min-w-0 flex-1 truncate text-foreground"

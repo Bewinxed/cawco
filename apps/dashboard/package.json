@@ -7,7 +7,8 @@
     "build": "vite build && bun scripts/publish-build.ts",
     "dev": "vite dev",
     "preview": "vite preview",
-    "typecheck": "svelte-kit sync && bun --bun svelte-fast-check --incremental"
+    "typecheck": "svelte-kit sync && bun --bun svelte-fast-check --incremental",
+    "tokens": "bun scripts/build-tokens.ts"
   },
   "overrides": {
     "vite": "^8.3.1"
@@ -22,7 +23,9 @@
     "@codemirror/state": "^6",
     "@codemirror/view": "^6",
     "@dagrejs/dagre": "^1.1.8",
-    "@fontsource-variable/geist": "^5.3.0",
+    "@fontsource-variable/figtree": "^5.3.0",
+    "@fontsource-variable/jetbrains-mono": "^5.3.0",
+    "@fontsource/fredoka": "^5.3.0",
     "@lezer/highlight": "^1",
     "@milkdown/crepe": "^7.22.1",
     "@pierre/diffs": "1.5.1",
@@ -53,6 +56,7 @@
     "jsrepo": "^3.0.10",
     "paneforge": "^1.0.2",
     "shadcn-svelte": "^1.5.0",
+    "style-dictionary": "^5",
     "svelte": "^5.57.0",
     "svelte-check": "^4.2.0",
     "svelte-fast-check": "^0.4.5",

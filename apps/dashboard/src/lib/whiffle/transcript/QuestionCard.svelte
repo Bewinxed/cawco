@@ -398,8 +398,8 @@
       color: var(--ink-strong);
 
       & .kc {
-        background: var(--brand-solid);
-        color: var(--on-brand);
+        background: var(--chip-chosen-bg);
+        color: var(--chip-chosen-ink);
       }
     }
   }

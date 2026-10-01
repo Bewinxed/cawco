@@ -857,7 +857,7 @@
                       {#if clipped || expanded}
                         <button
                           class="press-tint flex min-h-9 w-full items-center justify-center rounded-b-[var(--radius-lg)] text-label
-                              transition-colors hover:bg-accent hover:text-accent-foreground"
+                              transition-colors hover:bg-accent hover:text-foreground"
                           onclick={toggleExpanded}
                           type="button"
                         >

@@ -11,8 +11,8 @@
     %sveltekit.head%
     <!--
       The faces the first paint sets its text in, decoded before it. The build
-      inlines Geist's latin face and TX-02's regular into the stylesheet above
-      (vite.config.ts), but a browser decodes a face only once text asks for
+      inlines Figtree's and JetBrains Mono's latin faces into the stylesheet
+      above (vite.config.ts), but a browser decodes a face only once text asks for
       it, and off to one side: the first frame could still be laid out in the
       fallback and re-set a moment later. This script runs once the stylesheet
       is in and before the body is parsed, so both are ready by the first
@@ -20,8 +20,8 @@
     -->
     <script>
       "use strict";
-      document.fonts.load('1em "Geist Variable"');
-      document.fonts.load('1em "TX-02"');
+      document.fonts.load('1em "Figtree Variable"');
+      document.fonts.load('1em "JetBrains Mono Variable"');
     </script>
     <!--
       Taps before hydration. The shell is server-rendered, so its buttons (the

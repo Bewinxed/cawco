@@ -453,8 +453,8 @@
     cursor: pointer;
   }
   .jump-chip-off:hover {
-    background: oklch(from var(--accent-solid) l c h / 0.18);
-    color: var(--accent-text);
+    background: oklch(from var(--action-solid) l c h / 0.18);
+    color: var(--brand-ink);
   }
 
   /* Icon, chip and field share one row. The field takes what is left, so the
@@ -490,7 +490,7 @@
      hairline separated them; tinting alone did not fix it either, since a pale
      tint on a pale well measured 1.03:1 against its background. Salience comes
      the way this design already makes a control salient — a tint, its own ink
-     and a real edge — rather than from `--accent-solid` as a fill, which
+     and a real edge — rather than from `--action-solid` as a fill, which
      belongs to the assistant orb. */
   .jump-chip {
     display: inline-flex;
@@ -500,10 +500,10 @@
     height: 21px;
     padding: 0 3px 0 7px;
     transform-origin: left center;
-    border: 1px solid var(--accent-solid);
+    border: 1px solid var(--action-solid);
     border-radius: var(--radius-pill);
-    background: var(--accent-bg-subtle);
-    color: var(--accent-text);
+    background: var(--brand-wash);
+    color: var(--brand-ink);
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
     line-height: 1;

@@ -1902,7 +1902,7 @@
     }
     /* Every primary action's hover (DESIGN.md, Primary button). */
     .stop:not(:disabled):hover {
-      background-color: var(--ink-hover);
+      background-color: var(--action-hover);
       background-image: var(--action-surface-hover);
     }
   }
@@ -1910,9 +1910,9 @@
   .stop {
     position: relative;
     border: 0;
-    background-color: var(--brand-solid);
+    background-color: var(--action-solid);
     background-image: var(--action-surface);
-    color: var(--on-brand);
+    color: var(--on-action);
   }
   .stop :global(svg) {
     width: 16px;

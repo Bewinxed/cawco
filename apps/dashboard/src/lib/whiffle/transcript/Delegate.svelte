@@ -647,7 +647,7 @@
   }
   @media (hover: hover) and (pointer: fine) {
     :global(.delegate .bhead:hover) .tk {
-      color: var(--accent-text);
+      color: var(--brand-ink);
     }
   }
   .chev {
@@ -740,7 +740,7 @@
     flex: 0 0 auto;
     font-size: var(--text-meta);
     font-weight: var(--weight-body);
-    color: var(--accent-text);
+    color: var(--brand-ink);
     white-space: nowrap;
   }
   .pill {
@@ -806,7 +806,7 @@
   }
   @media (hover: hover) and (pointer: fine) {
     .jump:hover {
-      color: var(--accent-text);
+      color: var(--brand-ink);
       background: var(--surface-hover);
     }
   }

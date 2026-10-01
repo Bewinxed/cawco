@@ -306,7 +306,7 @@
           <div class="min-w-0 flex-1">
             <div class="flex flex-wrap items-baseline gap-x-2">
               <a
-                class="text-body truncate font-medium text-foreground transition-colors hover:text-primary"
+                class="text-body truncate font-medium text-foreground transition-colors hover:text-link"
                 href={conversationHref(item.instanceId, whiffle.instanceIndex)}
                 onkeydown={(event) => onKeydown(event, item, entry.isQuestion)}
               >
@@ -314,7 +314,7 @@
               </a>
               {#if item.cwd}
                 <!-- The path is what tells two blocked sessions on the same
-                     machine apart — TX-02, like every other path in the app. -->
+                     machine apart — mono, like every other path in the app. -->
                 <span class="text-meta text-muted-foreground truncate font-mono"
                   >{item.cwd}</span
                 >

@@ -232,7 +232,7 @@
     transform: rotate(90deg);
   }
   .glyph {
-    color: var(--accent-text);
+    color: var(--brand-ink);
   }
   .glyph :global(svg) {
     width: 16px;
@@ -263,7 +263,7 @@
   }
   @media (hover: hover) and (pointer: fine) {
     a.name:hover {
-      color: var(--accent-text);
+      color: var(--brand-ink);
     }
   }
   @media (hover: hover) and (pointer: fine) and (

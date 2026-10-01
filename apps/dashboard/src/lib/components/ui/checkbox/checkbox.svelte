@@ -13,7 +13,7 @@
 </script>
 
 <CheckboxPrimitive.Root
-  class={cn("peer relative flex size-4 shrink-0 items-center", "justify-center rounded-[var(--radius-xs)] border", "touch-hit border-input", "disabled:cursor-not-allowed disabled:opacity-50", "group-has-disabled/field:opacity-50", "aria-invalid:border-destructive", "aria-invalid:aria-checked:border-primary", "data-checked:border-primary data-checked:bg-primary", "data-checked:text-primary-foreground dark:bg-input/30", "dark:data-checked:bg-primary", "dark:aria-invalid:border-destructive/50", className)}
+  class={cn("peer relative flex size-4 shrink-0 items-center", "justify-center rounded-[var(--radius-xs)] border", "touch-hit border-input", "disabled:cursor-not-allowed disabled:opacity-50", "group-has-disabled/field:opacity-50", "aria-invalid:border-destructive", "aria-invalid:aria-checked:border-action-solid", "data-checked:border-action-solid data-checked:bg-action-solid", "data-checked:text-on-action dark:bg-input/30", "dark:data-checked:bg-action-solid", "dark:aria-invalid:border-destructive/50", className)}
   data-slot="checkbox"
   bind:checked
   bind:indeterminate

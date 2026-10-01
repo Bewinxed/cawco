@@ -1,7 +1,12 @@
 @import "tailwindcss" source(".");
 @import "tw-animate-css";
 @import "shadcn-svelte/tailwind.css";
-@import "@fontsource-variable/geist";
+@import "@fontsource-variable/figtree";
+@import "@fontsource-variable/jetbrains-mono";
+@import "@fontsource/fredoka/600.css";
+/* Every token the app reads, generated from design/tokens/cawco.tokens.json
+   (`bun run tokens`). This sheet defines none of its own. */
+@import "./lib/tokens/tokens.css";
 @plugin "@tailwindcss/typography";
 
 /* One cascade order for the whole app, and it is Tailwind's own: tokens in
@@ -12,26 +17,6 @@
 @layer theme, base, components, utilities;
 
 @custom-variant dark (&:where(.dark, .dark *));
-
-/* TX-02 is the mono: code, paths, IDs and measurements. The regular face
-   is inlined into this stylesheet by the build (vite.config.ts), like
-   Geist's latin face, so the first paint sets code in it; the medium face
-   loads by URL. */
-@font-face {
-  font-family: "TX-02";
-  src: url("./lib/fonts/TX-02-Regular.woff2") format("woff2");
-  font-weight: 400;
-  font-style: normal;
-  font-display: swap;
-}
-
-@font-face {
-  font-family: "TX-02";
-  src: url("./lib/fonts/TX-02-Medium.woff2") format("woff2");
-  font-weight: 500;
-  font-style: normal;
-  font-display: swap;
-}
 
 /* The edge fades of a scrolling tab track (TabsList), registered so the
    scroll-driven animation can interpolate them as lengths. */
@@ -48,357 +33,6 @@
 
 @layer theme {
   :root {
-    /* ---- Base palette. Every base colour is defined once, as
-       light-dark(light, dark); `color-scheme` (base layer) follows the `.dark`
-       class, so these follow the app's theme toggle. Everything below the
-       palette is derived from it. */
-
-    /* DESIGN.md locked ramps (palette.mjs · seed hue 263 · analogous). Cool
-       neutrals: chroma rounds to nothing in chrome; colour is reserved for
-       the accent (blue), status, and identity marks. */
-    --neutral-1: light-dark(
-      oklch(99.33% 0.0011 197.14),
-      oklch(18.56% 0.0016 197.02)
-    );
-    --neutral-2: light-dark(
-      oklch(98.16% 0.0017 247.84),
-      oklch(21.38% 0.0019 286.23)
-    );
-    --neutral-3: light-dark(
-      oklch(95.52% 0.0041 271.37),
-      oklch(25.17% 0.004 264.49)
-    );
-    --neutral-4: light-dark(
-      oklch(93.06% 0.0058 264.53),
-      oklch(28.52% 0.0056 271.22)
-    );
-    --neutral-5: light-dark(
-      oklch(89.97% 0.0076 260.73),
-      oklch(31.67% 0.0076 264.46)
-    );
-    --neutral-6: light-dark(
-      oklch(86.35% 0.0102 267.35),
-      oklch(35.52% 0.0096 260.72)
-    );
-    --neutral-7: light-dark(
-      oklch(81.88% 0.0125 259.82),
-      oklch(40.52% 0.0124 267.22)
-    );
-    --neutral-8: light-dark(
-      oklch(74% 0.0141 262.37),
-      oklch(49.1% 0.0142 259.82)
-    );
-    --neutral-9: oklch(51.95% 0.0188 262.69);
-    --neutral-11: light-dark(
-      oklch(49.95% 0.0117 267.27),
-      oklch(77.92% 0.0104 267.34)
-    );
-    --neutral-12: light-dark(
-      oklch(30.03% 0.0061 258.35),
-      oklch(93.06% 0.0058 264.53)
-    );
-    --accent-3: light-dark(
-      oklch(95.62% 0.0207 261.77),
-      oklch(25.13% 0.0268 262.57)
-    );
-    --accent-9: oklch(51.88% 0.1179 263.31);
-    --accent-11: light-dark(
-      oklch(50.02% 0.0707 263.21),
-      oklch(78.07% 0.0711 263.25)
-    );
-
-    /* Flexoki v2 functional hues: error->red, warning->yellow,
-       success->green, info->blue. Status chips and data resolve through
-       these. */
-    --error-3: light-dark(oklch(88.2% 0.064 36.4), oklch(31.3% 0.087 26.3));
-    --error-9: light-dark(oklch(50.4% 0.165 27.8), oklch(55% 0.168 27.9));
-    --error-11: light-dark(oklch(31.3% 0.087 26.3), oklch(88.2% 0.064 36.4));
-    --warning-3: light-dark(oklch(91.4% 0.087 93.2), oklch(37% 0.074 88.4));
-    --warning-9: light-dark(oklch(63.3% 0.129 85.8), oklch(68.3% 0.138 86.8));
-    --warning-11: light-dark(oklch(37% 0.074 88.4), oklch(85% 0.131 92.3));
-    --success-3: light-dark(oklch(81% 0.098 115.5), oklch(33.8% 0.076 121.9));
-    --success-9: light-dark(oklch(55.9% 0.134 122.9), oklch(60.5% 0.132 121.2));
-    --success-11: light-dark(oklch(33.8% 0.076 121.9), oklch(81% 0.098 115.5));
-    --info-3: light-dark(oklch(88.4% 0.029 228.1), oklch(30.6% 0.069 253.5));
-    --info-9: light-dark(oklch(48.2% 0.131 254.8), oklch(53.9% 0.121 251.4));
-    --info-11: light-dark(oklch(30.6% 0.069 253.5), oklch(78.2% 0.062 235.9));
-
-    /* Identity marks: eight Flexoki accent hues at one lightness. */
-    --mark-1: light-dark(oklch(51% 0.168 27.9), oklch(70% 0.17 27.9));
-    --mark-2: light-dark(oklch(53% 0.15 47.4), oklch(70% 0.15 47.4));
-    --mark-3: light-dark(oklch(50% 0.115 86.8), oklch(70% 0.12 86.8));
-    --mark-4: light-dark(oklch(51% 0.132 121.2), oklch(70% 0.135 121.2));
-    --mark-5: light-dark(oklch(51% 0.093 186.7), oklch(70% 0.095 186.7));
-    --mark-6: light-dark(oklch(51% 0.14 251.4), oklch(70% 0.145 251.4));
-    --mark-7: light-dark(oklch(51% 0.15 292.5), oklch(70% 0.155 292.5));
-    --mark-8: light-dark(oklch(51% 0.165 349.8), oklch(70% 0.17 349.8));
-
-    /* Identity hues for duotone icon tiles (new-session modal, Configure).
-       Dark keeps each hue's chroma and raises its lightness so the tile
-       reads on the dark surface. */
-    --hue-cyan-400: light-dark(
-      oklch(75.35% 0.139 232.66),
-      oklch(80% 0.139 232.66)
-    );
-    --hue-cyan-500: light-dark(
-      oklch(70.66% 0.1331 226.72),
-      oklch(78% 0.1331 226.72)
-    );
-    --hue-amber-500: light-dark(
-      oklch(79.08% 0.1577 79.28),
-      oklch(82% 0.1577 79.28)
-    );
-    --hue-orange-500: light-dark(
-      oklch(70.49% 0.1867 47.6),
-      oklch(76% 0.1867 47.6)
-    );
-    --hue-green-500: light-dark(
-      oklch(72.27% 0.192 149.58),
-      oklch(76% 0.192 149.58)
-    );
-    --hue-green-600: light-dark(
-      oklch(62.71% 0.1699 149.21),
-      oklch(74% 0.1699 149.21)
-    );
-    --hue-blue-500: light-dark(
-      oklch(61.52% 0.2076 262.53),
-      oklch(74% 0.2076 262.53)
-    );
-    --hue-blue-600: light-dark(
-      oklch(53.18% 0.2148 265.52),
-      oklch(72% 0.2148 265.52)
-    );
-
-    /* Tool ink: one identity hue per tool family, all at one lightness and
-       chroma per theme (distinct from status). */
-    --tool-ink: light-dark(oklch(50% 0.12 0), oklch(74% 0.11 0));
-    --tool-run: oklch(from var(--tool-ink) l c 52);
-    --tool-mcp: oklch(from var(--tool-ink) l c 176);
-    --tool-search: oklch(from var(--tool-ink) l c 195);
-    --tool-ask: oklch(from var(--tool-ink) l c 214);
-    --tool-web: oklch(from var(--tool-ink) l c 234);
-    --tool-read: oklch(from var(--tool-ink) l c 253);
-    --tool-agent: oklch(from var(--tool-ink) l c 272);
-    --tool-edit: oklch(from var(--tool-ink) l c 292);
-    --tool-write: oklch(from var(--tool-ink) l c 311);
-    --tool-skill: oklch(from var(--tool-ink) l c 330);
-    --tool-plan: oklch(from var(--tool-ink) l c 350);
-
-    /* ---- shadcn bridge -> the ramps. Graphite is the action, never a hue
-       (DESIGN.md Never #2); the blue accent is reserved for focus. */
-    --background: light-dark(var(--neutral-2), var(--neutral-1));
-    --foreground: var(--neutral-12);
-    --card: light-dark(var(--neutral-1), var(--neutral-2));
-    --card-foreground: var(--neutral-12);
-    --primary: var(--neutral-12);
-    --primary-foreground: var(--neutral-1);
-    --muted: var(--neutral-2);
-    --muted-foreground: var(--neutral-11);
-    /* The SUBTLE hover surface, never brand. */
-    --accent: light-dark(var(--neutral-3), var(--neutral-4));
-    --accent-foreground: var(--neutral-12);
-    --destructive: var(--error-9);
-    /* At night the hairline recedes to a seam; controls take their edge
-       from input. */
-    --border: light-dark(
-      var(--neutral-6),
-      oklch(from var(--neutral-12) l c h / 0.08)
-    );
-    --input: light-dark(
-      var(--neutral-7),
-      oklch(from var(--neutral-12) l c h / 0.14)
-    );
-    --ring: var(--focus-ring);
-    --success: var(--success-9);
-    --warning: var(--warning-9);
-    --info: var(--accent-9);
-    --error: var(--error-9);
-    --sidebar: var(--background);
-    --sidebar-foreground: var(--neutral-12);
-    --sidebar-accent: var(--neutral-3);
-    --sidebar-accent-foreground: var(--neutral-12);
-    --sidebar-border: var(--border);
-
-    /* Chart palette: accent, identity hues and neutral, distinct from
-       status. */
-    --chart-1: var(--accent-9);
-    --chart-2: var(--info-9);
-    --chart-3: var(--mark-7);
-    --chart-4: var(--warning-9);
-    --chart-5: var(--neutral-9);
-
-    /* ---- Surfaces. The frame recesses; content sits raised on it. A groove
-       (recess-deep) holds a lifted thumb (lift). Dark flips the polarity. */
-    --surface-raised: light-dark(var(--neutral-1), var(--neutral-3));
-    /* One step under what is raised, the same step in both themes. The plan's
-       measured field is #F4F4F4 (L 0.967) under a #FDFDFD card; raised n-1
-       less 0.026 L lands on it. Dark takes the same step under raised n-3, so
-       a well is never level with the surface it is cut into (it used to be
-       n-2, equal to --card) and stays above recess-deep n-1. */
-    --surface-recess: oklch(from var(--surface-raised) calc(l - 0.026) c h);
-    /* A table's header band, one step further down than the field: the plan
-       measures it apart ("header band 32, #F1F1F1" against field #F4F4F4),
-       #F1F1F1 sitting 0.036 L under the #FDFDFD card. Same step in dark. */
-    --surface-band: oklch(from var(--surface-raised) calc(l - 0.036) c h);
-    --surface-recess-deep: light-dark(var(--neutral-4), var(--neutral-1));
-    /* The reader's well: one run of their own messages, recess-deep cut into
-       the recess pane. The plan's stat-well radius, r7 (no radius step
-       carries 7). Its 1px edge is darker than the well by day; at night it
-       is the ink at 8%, lighter than the well. */
-    --well-r: 7px;
-    --well-edge: light-dark(
-      var(--neutral-5),
-      oklch(from var(--neutral-12) l c h / 0.08)
-    );
-    /* A message not yet said in the conversation (sending, queued). */
-    --ghost-presence: 0.7;
-    /* The reader's row mark in the action material: 17×17 at r4.6, an 11px
-       glyph (17 − 11 = 6 splits 3/3), with the plan's top-highlight
-       gradient restated as offsets from --brand-solid so dark follows it. */
-    --row-mark: 17px;
-    --row-mark-r: 4.6px;
-    --row-mark-glyph: 11px;
-    /* The speaker line's mark cell: the agent's 18px mark fills it, the
-       reader's 17px mark is centred in it. The reader's well starts on the
-       edge of the reader's mark. */
-    --row-mark-box: 18px;
-    --well-x: calc((var(--row-mark-box) - var(--row-mark)) / 2);
-    --action-grad: linear-gradient(
-      oklch(from var(--brand-solid) calc(l + 0.056) c h),
-      oklch(from var(--brand-solid) calc(l - 0.032) c h)
-    );
-    /* The bar folder tabs stand on: a step below recess-deep, so bar,
-       unselected tab (recess-deep) and chosen sheet (recess) are three
-       steps. */
-    --surface-shelf: light-dark(
-      var(--neutral-5),
-      oklch(from var(--neutral-1) calc(l - 0.03) c h)
-    );
-    --surface-lift: light-dark(var(--neutral-1), var(--neutral-6));
-    --surface-fill: light-dark(var(--neutral-4), var(--neutral-5));
-    --surface-hover: light-dark(var(--neutral-2), var(--neutral-4));
-
-    /* Borders: graded, never flattened to one value. */
-    --border-hairline: light-dark(
-      color-mix(in oklab, var(--neutral-4) 34%, var(--neutral-3)),
-      color-mix(in oklab, var(--neutral-5) 40%, var(--neutral-4))
-    );
-    --border-control: light-dark(var(--neutral-4), var(--neutral-6));
-
-    /* Inks. Subtle is the weakest mix, at 0.1% steps, that holds 4.5:1 on the
-       fill, hover and raised surfaces: 8.3% by day (4.50 / 5.24 / 5.42:1;
-       8.4% falls under 4.5:1 on fill) and 33.3% at night (4.51 / 5.04 /
-       5.59:1). */
-    --ink-strong: var(--neutral-12);
-    --ink-muted: var(--neutral-11);
-    /* A ledger row's name: the plan's "row name #393939", just under the
-       strongest ink (mocks/tokens.css `--ink-row`). */
-    --ink-row: light-dark(
-      color-mix(in oklab, var(--neutral-12) 68%, var(--neutral-11)),
-      color-mix(in oklab, var(--neutral-12) 88%, var(--neutral-11))
-    );
-    /* A stat tile's figure: the plan's "stat value #404040", a step lighter
-       than the strongest ink (mocks/tokens.css `--ink-stat`). */
-    --ink-stat: light-dark(
-      color-mix(in oklab, var(--neutral-12) 60%, var(--neutral-11)),
-      color-mix(in oklab, var(--neutral-12) 72%, var(--neutral-11))
-    );
-    --ink-subtle: light-dark(
-      color-mix(in oklab, var(--neutral-8) 8.3%, var(--neutral-11)),
-      color-mix(in oklab, var(--neutral-8) 33.3%, var(--neutral-11))
-    );
-    --ink-hover: light-dark(
-      oklch(from var(--ink-strong) calc(l - 0.05) c h),
-      oklch(from var(--ink-strong) calc(l + 0.05) c h)
-    );
-
-    /* Accent aliases (graphite is the action; blue is reserved for focus). */
-    --accent-solid: var(--accent-9);
-    --accent-text: var(--accent-11);
-    --accent-bg-subtle: var(--accent-3);
-    --focus-ring: light-dark(var(--accent-solid), var(--accent-11));
-    /* Focus is one ring, on keyboard focus only. A control carries it
-       outside its edge at --focus-ring-offset. A text field (or the frame
-       around a borderless editor), a row in a list and a control flush
-       against its container carry it at --focus-ring-inset: drawn over the
-       element's own border, so the border itself turns the ring's colour
-       and weight and nothing is stacked on it or on the container's
-       edge. */
-    --focus-ring-width: 2px;
-    --focus-ring-offset: 2px;
-    --focus-ring-inset: calc(-1 * var(--focus-ring-width));
-    --brand-solid: var(--neutral-12);
-    --on-brand: var(--neutral-1);
-    /* The action is never flat (plan 2026-08-18, measured reference: "action
-       #272727 with a top-highlight gradient #3C3C3C→#262626, not flat"). The
-       stops keep the reference's offsets from its base, +0.084 L on top and
-       -0.004 L below, taken from --brand-solid so dark (a light ink) gets the
-       same top highlight; there the top stop clamps at L 1. Hover is the same
-       gradient off --ink-hover. */
-    --action-surface: linear-gradient(
-      oklch(from var(--brand-solid) calc(l + 0.084) c h),
-      oklch(from var(--brand-solid) calc(l - 0.004) c h)
-    );
-    --action-surface-hover: linear-gradient(
-      oklch(from var(--ink-hover) calc(l + 0.084) c h),
-      oklch(from var(--ink-hover) calc(l - 0.004) c h)
-    );
-
-    /* Status: four functional hues and a hueless idle (idle carries NO
-       fill). A chip is its hue's 3-step tinted toward the 9-step; its ink
-       is the 11-step pulled toward ink-strong. */
-    --status-live-bg: color-mix(in oklab, var(--info-3) 76%, var(--info-9));
-    --status-attn-bg: light-dark(
-      color-mix(in oklab, var(--warning-3) 76%, var(--warning-9)),
-      color-mix(in oklab, var(--warning-3) 68%, var(--warning-9))
-    );
-    --status-done-bg: color-mix(
-      in oklab,
-      var(--success-3) 76%,
-      var(--success-9)
-    );
-    --status-fail-bg: light-dark(
-      color-mix(in oklab, var(--error-3) 76%, var(--error-9)),
-      color-mix(in oklab, var(--error-3) 68%, var(--error-9))
-    );
-    --status-idle-bg: transparent;
-    --status-live-ink: color-mix(
-      in oklab,
-      var(--info-11) 76%,
-      var(--neutral-12)
-    );
-    --status-attn-ink: color-mix(
-      in oklab,
-      var(--warning-11) 76%,
-      var(--neutral-12)
-    );
-    --status-done-ink: color-mix(
-      in oklab,
-      var(--success-11) 76%,
-      var(--neutral-12)
-    );
-    --status-fail-ink: color-mix(
-      in oklab,
-      var(--error-11) 76%,
-      var(--neutral-12)
-    );
-    --status-idle-ink: var(--neutral-11);
-
-    /* Data colour: the solid hue at a fixed lightness and chroma, so chroma
-       survives in numerals. */
-    --data-ok: light-dark(
-      oklch(from var(--success-9) 46% 0.125 h),
-      oklch(from var(--success-9) 78% 0.135 h)
-    );
-    --data-warn: light-dark(
-      oklch(from var(--warning-9) 46% 0.125 h),
-      oklch(from var(--warning-9) 80% 0.13 h)
-    );
-    --data-bad: light-dark(
-      oklch(from var(--error-9) 46% 0.135 h),
-      oklch(from var(--error-9) 81% 0.13 h)
-    );
-
     /* Usage meters (design/usage-tracker.md §1, §8). The hues are the CawCo
        kit's (cawco-design-kit/claude-design/tokens/colors.css): coral is a
        window with room, spark yellow one near its limit (70% used, or a
@@ -426,250 +60,6 @@
       color-mix(in oklch, var(--status-fail-ink) 6%, transparent),
       color-mix(in oklch, var(--status-fail-ink) 10%, transparent)
     );
-
-    /* Identity-mark glyph and sheen. */
-    --mark-glyph: light-dark(oklch(99% 0 0), var(--neutral-1));
-    --mark-overlay: linear-gradient(
-      oklch(from var(--neutral-1) l c h / 0.22),
-      oklch(from var(--neutral-12) l c h / 0.06)
-    );
-
-    /* What a dialog's backdrop paints: the page itself, translucent. */
-    --scrim: oklch(from var(--background) l c h / 0.72);
-    --scrim-blur: 2px;
-
-    /* The rail's head fades to the body's own weight, not to nothing: a run
-       of rail rows is several elements each painting this, so a gradient
-       that ran to nothing left every block invisible at its foot and the
-       next one starting dark again. */
-    --rail: linear-gradient(
-      light-dark(
-        oklch(from var(--neutral-11) l c h / 0.58),
-        oklch(from var(--neutral-11) l c h / 0.55)
-      ),
-      light-dark(
-        oklch(from var(--neutral-11) l c h / 0.28),
-        oklch(from var(--neutral-11) l c h / 0.3)
-      )
-    );
-    /* What a row paints when it CONTINUES the line above it: flat, at the
-       weight the head settles to, so the seam between two rail rows is not
-       a seam. */
-    --rail-body: linear-gradient(
-      light-dark(
-        oklch(from var(--neutral-11) l c h / 0.28),
-        oklch(from var(--neutral-11) l c h / 0.3)
-      ),
-      light-dark(
-        oklch(from var(--neutral-11) l c h / 0.28),
-        oklch(from var(--neutral-11) l c h / 0.3)
-      )
-    );
-
-    /* A machine that is not online: between the mid and muted neutrals. */
-    --machine-offline: color-mix(
-      in oklab,
-      var(--neutral-8) 62%,
-      var(--neutral-11)
-    );
-    /* Diff line backgrounds: the add and delete hues, washed. */
-    --diff-add-bg: oklch(from var(--success-9) l c h / 0.15);
-    --diff-del-bg: oklch(from var(--error-9) l c h / 0.15);
-
-    /* Chrome materials. Structural translucency, never decoration. */
-    --material-panel: light-dark(
-      oklch(from var(--card) l c h / 0.72),
-      oklch(from var(--card) l c h / 0.68)
-    );
-    --material-blur: 20px;
-    --material-saturate: 1.6;
-
-    /* ---- Elevation: hue-shifted cool graphite, never rgba(0,0,0,·). By
-       day the shadow is the ink; at night it is the deepest surface. */
-    --shadow-tint: light-dark(
-      oklch(from var(--neutral-12) l c h / 0.09),
-      oklch(from var(--neutral-1) l c h / 0.55)
-    );
-    --shadow-tint-2: light-dark(
-      oklch(from var(--neutral-12) l c h / 0.14),
-      oklch(from var(--neutral-1) l c h / 0.66)
-    );
-    --shadow-tint-3: light-dark(
-      oklch(from var(--neutral-12) l c h / 0.2),
-      oklch(from var(--neutral-1) l c h / 0.76)
-    );
-    --shadow-hairline: 0 3px 7px -2px var(--shadow-tint-2);
-    /* A stat tile's lift: the comp draws it below the card and not around it
-       (the field runs unbroken to its top edge). Dark rings it (below). */
-    --shadow-stat: var(--shadow-hairline);
-    --shadow-tile:
-      0 1px 2px oklch(from var(--neutral-12) l c h / 0.07),
-      0 0 0 1px oklch(from var(--neutral-12) l c h / 0.035);
-    --shadow-raised: 0 1px 3px var(--shadow-tint), 0 1px 1px var(--shadow-tint);
-    --shadow-overlay:
-      0 18px 48px var(--shadow-tint-3), 0 2px 6px var(--shadow-tint);
-    --shadow-modal: var(--shadow-overlay);
-    --shadow-drawer: 0 12px 40px var(--shadow-tint-3);
-    --shadow-inset-sel: inset 0 1px 1px var(--shadow-tint);
-
-    /* The Tailwind-facing shadow ladder (exposed through @theme inline). */
-    --shadow-xs: 0 1px 2px var(--shadow-tint);
-    --shadow-md: 0 2px 8px var(--shadow-tint), 0 1px 2px var(--shadow-tint);
-    --shadow-lg: 0 8px 28px var(--shadow-tint-2), 0 2px 8px var(--shadow-tint);
-    --shadow-xl:
-      0 24px 64px var(--shadow-tint-3), 0 6px 16px var(--shadow-tint);
-
-    /* At night the elevation changes shape, not only colour, so it is keyed
-       on the theme class rather than light-dark(): the ladder aliases the
-       doctrine set, and a raised thumb is an inset hairline, not a drop
-       shadow. */
-    &.dark {
-      --shadow-xs: var(--shadow-hairline);
-      --shadow-md: var(--shadow-tile);
-      --shadow-lg: var(--shadow-overlay);
-      --shadow-xl: var(--shadow-drawer);
-      --shadow-raised: inset 0 0 0 1px oklch(from var(--neutral-7) l c h / 0.7);
-      --shadow-stat: var(--shadow-tile);
-    }
-
-    /* ---- Type roles as font shorthands; their sizes are the @theme
-       `--text-*` roles below, which also generate the `text-meta` ...
-       `text-kpi` utilities. These six are the only styles text takes:
-       meta 12/400, label 13/500, body 14/400, title 20/500, kpi 24/500 and
-       the button's 14/500. A kpi figure is always `.num`: the font shorthand
-       cannot carry font-variant-numeric, and resets it. */
-    --font-body:
-      "Geist Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI",
-      sans-serif;
-    --type-meta: 400 var(--text-meta) / 1.35 var(--font-body);
-    --type-label: 500 var(--text-label) / 1.3 var(--font-body);
-    --type-body: 400 var(--text-body) / 1.45 var(--font-body);
-    --type-title: 500 var(--text-title) / 1.25 var(--font-body);
-    --type-kpi: 500 var(--text-kpi) / 1 var(--font-body);
-    --leading-tight: 1.2;
-    --leading-body: 1.4;
-    --leading-ui: 1.25;
-    --weight-body: 400;
-    --weight-strong: 500;
-    --track-display: -0.008em;
-    --track-caps: 0.01em;
-
-    /* Space: measured off the comps, deliberately not a 4px ladder. */
-    --space-1: 4px;
-    --space-2: 7px;
-    --space-3: 11px;
-    --space-4: 14px;
-    --space-5: 18px;
-    --space-6: 21px;
-    --space-7: 25px;
-    --space-8: 32px;
-    /* Between the groups of a page (stat row, queue, a card): the comp's
-       stat row ends at y 246 and the table card starts at 262-264. */
-    --space-group: var(--space-5);
-
-    /* Shape: the radius roles (xs..modal) live in @theme. */
-    --radius-pill: 999px;
-
-    /* Motion. Entrances and exits ease out; on-screen movement eases in-out;
-       drawers, popovers and page swaps use the drawer curve. No ease-in. */
-    --dur-control: 120ms;
-    --dur-menu: 140ms;
-    --dur-pop: 260ms;
-    --dur-panel: 280ms;
-    --dur-exit: 160ms;
-    /* A switch's knob and a checkbox's tick. */
-    --dur-toggle: 160ms;
-    /* A button's width following its label while it works. */
-    --dur-morph: 180ms;
-    /* A transcript row's place opening, its rail drawing down with it,
-       before anything on the rail shows. */
-    --dur-rail: 180ms;
-    /* Fades that carry a state change in place: a field's error, the theme
-       switch, a toast stack closing up. */
-    --dur-fade: 200ms;
-    /* How long a done state (a copied check, a saved check) stays up. */
-    --dur-hold: 1.2s;
-    /* The hover ghost following the pointer from row to row. */
-    --dur-ghost: 80ms;
-    /* One turn of an ambient loop that runs while something is pending: a
-       spinner, the task ring and Stop's ring turning, a pulse, a ping, the
-       supervisor's orbit. Tailwind's animate-spin/pulse/ping run on it too
-       (@theme below). */
-    --dur-loop: 1.2s;
-    --c-500: 500ms;
-    --breath: calc(var(--c-500) * 4);
-    --transition-control:
-      background-color var(--dur-control) var(--ease-out),
-      border-color var(--dur-control) var(--ease-out),
-      color var(--dur-control) var(--ease-out);
-    --press-scale: 0.97;
-    --pop-scale: 0.92;
-    --pop-rise: 8px;
-
-    /* Component dimension ramp. */
-    --c-mark: 26px;
-    --c-mark-glyph: 16px;
-    --c-pill-h: 24px;
-    --c-pill-gap: 6px;
-    --c-pill-fs: var(--text-label);
-    /* A stat tile's height (plan: "stat card 280×90"). */
-    --c-stat-h: 90px;
-    /* A ledger's toolbar: the plan's "toolbar zone 55" from the card's top to
-       its header band, holding the comp's 32px controls 11px in (so 12px
-       stand under them). On touch, .touch-hit still grows each to 44×44. */
-    --c-toolbar-zone: 55px;
-    --c-toolbar-ctl: 32px;
-    /* A page head under the top bar: title, its line and the actions (the
-       comp's bar ends at y 60 and its stat row starts at 156). */
-    --c-page-head-h: 96px;
-    /* The shell's top bar, measured off the reference comp: 59px of bar and
-       its 1px hairline, the field starting at y 60. Whatever floats under
-       the bar (the phone's toasts) reads this rather than repeating it. */
-    --c-top-bar-h: 60px;
-    /* A nav row. Full-width rows in the rail take the 44px touch row on a
-       touch screen, and on a narrow window too. */
-    --c-nav-h: 40px;
-    /* The group composer's standing parts, which every transcript keeps
-       clear at its foot (SessionPane, `--composer-clearance`): the field at
-       its one line and the controls beside it, the pill's inset and 1px
-       border round them, the delegate tray's one row on the pill, and the
-       suggestion row on that. The composer draws those boxes from these
-       same numbers, from its first render, chips or none, so the room a
-       transcript keeps is the composer's box by construction, in every pane,
-       shown or not, and a chip arriving late moves nothing. Everything else
-       the composer holds — the draft's further lines, attachments, a send's
-       failure, the parked cards — stands over the transcript's foot. */
-    --c-composer-field: 34px;
-    --c-composer-inset: var(--space-2);
-    --c-composer-panel: calc(
-      var(--c-composer-field) +
-      var(--c-composer-inset) *
-      2 +
-      2px
-    );
-    /* A suggestion chip: its Tab key cap (the kit's h-5), padding, border. */
-    --c-suggest-chip: calc(1.25rem + var(--space-1) * 2 + 2px);
-    --c-suggest-row: calc(
-      var(--space-4) +
-      var(--space-1) *
-      2 +
-      var(--c-suggest-chip)
-    );
-    /* The row and the step down to the tray it stands on. */
-    --c-suggest-room: calc(var(--c-suggest-row) + var(--space-2));
-    /* The delegate tray's row: a chip, and the step down to the pill. */
-    --c-tray-chip: 28px;
-    --c-tray-gap: var(--space-2);
-    --c-tray-row: calc(var(--c-tray-chip) + var(--c-tray-gap));
-
-    @media (pointer: coarse) {
-      --c-tray-chip: 34px;
-      --c-tray-gap: var(--space-3);
-    }
-
-    @media (pointer: coarse), (width < 640px) {
-      --c-nav-h: 44px;
-    }
   }
 }
 
@@ -678,16 +68,16 @@
   --color-foreground: var(--foreground);
   --color-card: var(--card);
   --color-card-foreground: var(--card-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
+  --color-action-solid: var(--action-solid);
+  --color-on-action: var(--on-action);
+  --color-link: var(--link-ink);
   --color-muted: var(--muted);
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
   --color-border: var(--border);
   --color-input: var(--input);
-  --color-ring: var(--ring);
+  --color-focus-ring: var(--focus-ring);
 
   --color-success: var(--success);
   --color-warning: var(--warning);
@@ -696,16 +86,15 @@
 
   --color-sidebar: var(--sidebar);
   --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
+  --color-selected-bg: var(--selected-bg);
+  --color-selected-ink: var(--selected-ink);
 
-  /* Geist across the product (DESIGN.md locked face); platform stack falls
-     back where Geist is unavailable. TX-02 stays the mono for code/paths/IDs. */
-  --font-sans:
-    "Geist Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui,
-    sans-serif;
-  --font-mono: "TX-02", ui-monospace, "SF Mono", monospace;
+  /* Figtree across the product, JetBrains Mono for code/paths/IDs, Fredoka
+     for brand display (the token file holds the stacks). */
+  --font-sans: var(--font-sans);
+  --font-mono: var(--font-mono);
+  --font-display: var(--font-display);
 
   /* Only the ladder steps the product uses; Tailwind's own (black-based)
      shadow scale is cleared so nothing falls back to it. */
@@ -728,52 +117,40 @@
   --color-tool-plan: var(--tool-plan);
 }
 
-@theme {
+@theme inline {
   /* Radius roles: xs marks and tiles, sm controls inside a surface, md
      controls and buttons, lg cards and menus, modal the dialog tray. */
-  --radius-xs: 5px;
-  --radius-sm: 8px;
-  --radius-md: 10px;
-  --radius-lg: 12px;
-  --radius-modal: 18px;
-  /* The stat tile's recessed well (plan: "stat well 7px inset, #F4F4F4 + 1px
-     #EEEEEE, r7" in an r10 card). */
-  --radius-well: 7px;
-  /* A hair of rounding on marks too small for --radius-xs to stay square:
-     chart swatches, a chart tooltip's key, the tooltip's arrow. */
-  --radius-hair: 2px;
-  /* The assistant panel's measured shell (JOURNEY.md §Assistant, DW-9b:
-     "radius 16"). */
-  --radius-panel: 16px;
+  --radius-xs: var(--radius-xs);
+  --radius-sm: var(--radius-sm);
+  --radius-md: var(--radius-md);
+  --radius-lg: var(--radius-lg);
+  --radius-modal: var(--radius-modal);
+  --radius-well: var(--radius-well);
+  --radius-hair: var(--radius-hair);
+  --radius-panel: var(--radius-panel);
 
-  /* Type roles. Each generates a `text-<role>` utility with its leading.
-     The dense roles (meta, label, body) hold one size at every width: they
-     are already the smallest that reads, so a phone keeps them. The display
-     roles scale with the viewport, not with the nearest container (the
-     kit's card headers, field groups and panes are containers for layout),
-     so each role has one size per viewport: title 18→20px and kpi 20→24px
-     between a 390px and a 1024px viewport. */
-  --text-meta: 0.75rem;
-  --text-meta--line-height: 1.35;
-  --text-meta--font-weight: 400;
-  --text-label: 0.8125rem;
-  --text-label--line-height: 1.3;
-  --text-label--font-weight: 500;
-  --text-body: 0.875rem;
-  --text-body--line-height: 1.45;
-  --text-body--font-weight: 400;
-  --text-title: clamp(1.125rem, 1.048rem + 0.3155vi, 1.25rem);
-  --text-title--line-height: 1.25;
-  --text-title--letter-spacing: -0.01em;
-  --text-title--font-weight: 500;
-  --text-kpi: clamp(1.25rem, 1.0962rem + 0.6309vi, 1.5rem);
-  --text-kpi--line-height: 1;
-  --text-kpi--font-weight: 500;
+  /* Type roles. Each generates a `text-<role>` utility with its leading. */
+  --text-meta: var(--text-meta);
+  --text-meta--line-height: var(--leading-meta);
+  --text-meta--font-weight: var(--weight-body);
+  --text-label: var(--text-label);
+  --text-label--line-height: var(--leading-label);
+  --text-label--font-weight: var(--weight-strong);
+  --text-body: var(--text-body);
+  --text-body--line-height: var(--leading-body);
+  --text-body--font-weight: var(--weight-body);
+  --text-title: var(--text-title);
+  --text-title--line-height: var(--leading-ui);
+  --text-title--letter-spacing: var(--track-title);
+  --text-title--font-weight: var(--weight-strong);
+  --text-kpi: var(--text-kpi);
+  --text-kpi--line-height: var(--leading-kpi);
+  --text-kpi--font-weight: var(--weight-strong);
 
   /* Curves. Generates `ease-out`, `ease-in-out`, `ease-drawer`. */
-  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
-  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
-  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-out: var(--ease-out);
+  --ease-in-out: var(--ease-in-out);
+  --ease-drawer: var(--ease-drawer);
 
   /* Tailwind's own timing, on the product's: `transition-colors` and its
      siblings run --dur-control on --ease-out, and the stock loops turn on
@@ -847,15 +224,12 @@
 
   /* Browser surfaces carry the design too. */
   ::selection {
-    background: light-dark(
-      oklch(from var(--accent-9) l c h / 0.22),
-      oklch(from var(--accent-9) l c h / 0.32)
-    );
+    background: var(--selection);
   }
 
   input,
   textarea {
-    caret-color: var(--primary);
+    caret-color: var(--brand-solid);
   }
 
   /* The one focus indicator (tokens: --focus-ring*). An outline, so it
@@ -1289,11 +663,11 @@
     }
   }
 
-  /* Tooltip: brand ink, fades and settles from .96. */
+  /* Tooltip: solid ink, never coral; fades and settles from .96. */
   .kit-tip {
     border-radius: var(--radius-sm);
-    background: var(--brand-solid);
-    color: var(--on-brand);
+    background: var(--ink-solid);
+    color: var(--on-ink);
     font: var(--type-meta);
 
     @media (prefers-reduced-motion: no-preference) {
@@ -1505,7 +879,7 @@
     --tw-prose-body: var(--foreground);
     --tw-prose-headings: var(--foreground);
     --tw-prose-lead: var(--muted-foreground);
-    --tw-prose-links: var(--primary);
+    --tw-prose-links: var(--link-ink);
     --tw-prose-bold: var(--foreground);
     --tw-prose-counters: var(--muted-foreground);
     --tw-prose-bullets: oklch(from var(--muted-foreground) l c h / 0.55);

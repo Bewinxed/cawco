@@ -1309,7 +1309,7 @@
   }
   @media (hover: hover) and (pointer: fine) {
     .jump:hover {
-      color: var(--accent-text);
+      color: var(--brand-ink);
       background: var(--surface-hover);
     }
   }

@@ -56,8 +56,8 @@
     box-shadow: var(--shadow-tile);
   }
   .tile.ink {
-    background: var(--ink-strong);
-    color: var(--on-brand);
+    background: var(--ink-solid);
+    color: var(--on-ink);
     box-shadow: none;
   }
   .tile :global(svg) {

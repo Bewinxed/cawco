@@ -33,7 +33,7 @@
 <StoredSessionMenu {info} {machineId}>
   <a
     class="press-tint flex min-h-9 items-center rounded-[var(--radius-sm)] px-4 py-1.5
-      transition-colors duration-(--dur-control) ease-out hover:text-accent-foreground"
+      transition-colors duration-(--dur-control) ease-out hover:text-foreground"
     {href}
     use:dragSession={{
       sessionId: href.slice('/session/'.length),

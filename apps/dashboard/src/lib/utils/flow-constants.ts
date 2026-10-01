@@ -119,7 +119,7 @@ export const ELAPSED_TIME_UPDATE_INTERVAL = 1000;
 export const BRANCH_COLOR_VARS = [
   "--color-info",
   "--color-success",
-  "--color-primary",
+  "--color-action-solid",
   "--color-warning",
 ] as const;
 
@@ -127,7 +127,7 @@ export const BRANCH_COLOR_VARS = [
 export const BRANCH_COLORS_FALLBACK = [
   "var(--color-info)",
   "var(--color-success)",
-  "var(--color-primary)",
+  "var(--color-action-solid)",
   "var(--color-warning)",
 ] as const;
 

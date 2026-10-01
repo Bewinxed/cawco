@@ -441,7 +441,7 @@
         {:else if message.type === 'user' || message.type === 'user.peer'}
           <!-- The one voice worth tinting: what the session was asked. -->
           <p
-            class="line-clamp-4 rounded-lg bg-primary/10 px-3 py-2 text-body break-words whitespace-pre-wrap"
+            class="line-clamp-4 rounded-lg bg-action-solid/10 px-3 py-2 text-body break-words whitespace-pre-wrap"
           >
             {message.content}
           </p>
@@ -459,7 +459,7 @@
         <p class="text-body break-words whitespace-pre-wrap">
           {stream.text}
           <span
-            class="inline-block h-4 w-[3px] animate-pulse rounded-xs bg-primary/60 align-text-bottom"
+            class="inline-block h-4 w-[3px] animate-pulse rounded-xs bg-action-solid/60 align-text-bottom"
           ></span>
         </p>
       {/if}

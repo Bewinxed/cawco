@@ -335,13 +335,13 @@
     border: 1px solid
       color-mix(
         in srgb,
-        var(--accent-solid) calc(var(--tint) * 1.5),
+        var(--action-solid) calc(var(--tint) * 1.5),
         var(--surface-raised)
       );
     border-radius: var(--radius-sm);
     background: color-mix(
       in srgb,
-      var(--accent-solid) var(--tint),
+      var(--action-solid) var(--tint),
       var(--surface-raised)
     );
     box-shadow: var(--shadow-tile);
@@ -366,7 +366,7 @@
     &:hover {
       background: color-mix(
         in srgb,
-        var(--accent-solid) calc(var(--tint) + 6%),
+        var(--action-solid) calc(var(--tint) + 6%),
         var(--surface-raised)
       );
       color: var(--ink-strong);

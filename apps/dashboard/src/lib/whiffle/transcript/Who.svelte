@@ -125,8 +125,8 @@
       block-size: var(--row-mark);
       margin-inline: var(--well-x);
       border-radius: var(--row-mark-r);
-      background: var(--action-grad);
-      color: var(--mark-glyph);
+      background: var(--action-surface);
+      color: var(--on-action);
 
       & :global(svg) {
         inline-size: var(--row-mark-glyph);

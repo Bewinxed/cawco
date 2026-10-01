@@ -256,7 +256,7 @@
   }
 
   /* shadcn <Button>, dressed in DESIGN.md tokens so nothing reads as stock
-     shadcn (no 4/8/12 padding ladder, no pill radius, no --primary fill).
+     shadcn (no 4/8/12 padding ladder, no pill radius, no shadcn primary fill).
      Control height sits on the scale — --space-8 (32) fine, 44 coarse. */
   const btnBase =
     "h-[var(--space-8)] pointer-coarse:h-11 gap-(--btn-gap) " +
@@ -640,8 +640,8 @@
     color: var(--ink-strong);
   }
   .qopts button.sel .kc {
-    background: var(--brand-solid);
-    color: var(--on-brand);
+    background: var(--chip-chosen-bg);
+    color: var(--chip-chosen-ink);
   }
   /* A digit that answers nothing must not look like a digit that does: keycaps
      go quiet on every question the keys are not currently pointed at. A picked
