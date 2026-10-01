@@ -33,7 +33,6 @@
   import {
     IconAssistant,
     IconBox,
-    IconChevronRight,
     IconPlus,
     IconSettings,
     IconSort,
@@ -61,6 +60,7 @@
   import { CURVE, dur } from "./motion/curves.svelte";
   import { heldOrder, holdWhileInside } from "./motion/held-order.svelte";
   import { reflow } from "./motion/rows.svelte";
+  import { nestFrom, nestPlace } from "./nest";
   import NewProjectPopover from "./NewProjectPopover.svelte";
   import ProjectMark from "./ProjectMark.svelte";
   import { type RailSort, rail } from "./rail.svelte";
@@ -527,11 +527,12 @@
      row in the rail renders this, so "which one was I just in" is answered by
      looking down one column instead of opening six of them. -->
 
-{#snippet subRow(row: InstanceRow, depth: number)}
+{#snippet subRow(row: InstanceRow, depth: number, place: string)}
   {@const Sprite = sessionSprite(row.id)}
   {@const activity = whiffle.activityOf(row.id)}
   <li
     class="group/menu-sub-item relative"
+    style={place}
     data-flip
     data-session-row={row.id}
     data-sidebar="menu-sub-item"
@@ -802,13 +803,6 @@
                     class={LIST_ROW}
                     onclick={() => toggle(project)}
                   >
-                    <span
-                      aria-hidden="true"
-                      class="chevron -ml-1 inline-flex size-[14px] shrink-0 items-center justify-center"
-                      class:rotate-90={expanded}
-                    >
-                      <IconChevronRight class="size-3 text-muted-foreground" />
-                    </span>
                     <ProjectMark hue={markHue(project.cwd)} />
                     <span class="min-w-0 truncate">{project.name}</span>
                     {#if sessions.length > 0}
@@ -835,28 +829,26 @@
                          own elbow, and the last one ends it. -->
                     <Sidebar.MenuSub
                       class="kit-nest mx-0 translate-x-0 border-l-0 pr-0 pl-(--nest-pad)"
-                      style="--nest-x: 39px"
+                      {@attach nestFrom('.project-mark')}
                     >
                       {@const lists = splitOf(project)}
-                      {#each nested(lists.recent, `rail:${project.id}:recent`) as { row, depth } (row.id)}
-                        {@render subRow(row, depth)}
+                      {@const count =
+                        lists.recent.length + (lists.older.length > 0 || lists.recent.length === 0 ? 1 : 0)}
+                      {#each nested(lists.recent, `rail:${project.id}:recent`) as { row, depth }, i (row.id)}
+                        {@render subRow(row, depth, nestPlace(i, count))}
                       {/each}
                       {#if lists.older.length > 0}
                         {@const olderVisible = olderShown(project, lists.older)}
-                        <Sidebar.MenuSubItem data-flip>
+                        <Sidebar.MenuSubItem
+                          data-flip
+                          style={nestPlace(lists.recent.length, count)}
+                        >
                           <span aria-hidden="true" class="kit-nest-tip"></span>
                           <Sidebar.MenuSubButton
                             aria-expanded={olderVisible}
                             class="{SUB_ROW} text-muted-foreground"
                             onclick={() => toggleOlder(project.id)}
                           >
-                            <span
-                              aria-hidden="true"
-                              class="chevron inline-flex size-[14px] shrink-0 items-center justify-center"
-                              class:rotate-90={olderVisible}
-                            >
-                              <IconChevronRight class="size-3" />
-                            </span>
                             <span class="num">{lists.older.length} older</span>
                           </Sidebar.MenuSubButton>
                         </Sidebar.MenuSubItem>
@@ -869,14 +861,14 @@
                               class="older kit-nest-inner"
                               {@attach scrollEdges}
                             >
-                              {#each nested(lists.older, `rail:${project.id}:older`) as { row, depth } (row.id)}
-                                {@render subRow(row, depth)}
+                              {#each nested(lists.older, `rail:${project.id}:older`) as { row, depth }, i (row.id)}
+                                {@render subRow(row, depth, nestPlace(i, lists.older.length))}
                               {/each}
                             </ul>
                           </li>
                         {/if}
                       {:else if lists.recent.length === 0}
-                        <Sidebar.MenuSubItem data-flip>
+                        <Sidebar.MenuSubItem data-flip style={nestPlace(0, 1)}>
                           <span aria-hidden="true" class="kit-nest-tip"></span>
                           <Sidebar.MenuSubButton
                             class="{SUB_ROW} text-muted-foreground"
@@ -1052,11 +1044,5 @@
     transition:
       background-color var(--dur-control) var(--ease-out),
       color var(--dur-control) var(--ease-out);
-  }
-  /* The project chevron turns over --dur-control. */
-  .chevron {
-    @media (prefers-reduced-motion: no-preference) {
-      transition: rotate var(--dur-control) var(--ease-out);
-    }
   }
 </style>

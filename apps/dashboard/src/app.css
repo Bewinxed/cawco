@@ -33,6 +33,13 @@
 
 @layer theme {
   :root {
+    /* The nesting lines' ink (.kit-nest, WorkflowRail): one neutral, at
+       least 3:1 against the sidebar in both themes (between steps 8 and 9
+       in light, step 9 in dark). */
+    --nest-ink: light-dark(
+      color-mix(in oklch, var(--neutral-8) 45%, var(--neutral-9)),
+      var(--neutral-9)
+    );
     /* Usage meters (design/usage-tracker.md §1, §8). The hues are the CawCo
        kit's (cawco-design-kit/claude-design/tokens/colors.css): coral is a
        window with room, spark yellow one near its limit (70% used, or a
@@ -441,23 +448,28 @@
      The lines are drawn by the children themselves, so as rows unfold,
      reflow or leave, the rail grows and shrinks with them and never jumps.
      Set on the child list:
-       --nest-x      the rail's x from the list's left edge (parent glyph centre)
-       --nest-in     elbow width, rail to the child's glyph (12px)
-       --nest-row-pad the child row's own left padding before its glyph
+       --nest-x      the rail's x from the list's left edge (the parent's
+                     glyph centre, measured: nest.ts `nestFrom`)
+       --nest-in     the arm, rail to the arrow tip (12px)
        --nest-glyph-y the child glyph's centre from the row's top
        --nest-gap    the gap between child rows
        --nest-lead   how far above the list the parent's glyph ends
+     The child rows start just right of the tip, so a row's hover or
+     selected pill never lies under the rail or the arm.
      A child that only carries more children (a scroller) is
      `data-nest="through"`: it draws no elbow and its inner list is
-     `.kit-nest-inner`, joined to the same rail. */
+     `.kit-nest-inner`, joined to the same rail.
+     Drawn in: each elbow runs down the rail from the parent, round the
+     corner and out along the arm, then its tip fades in, a stagger step
+     after the row above (`--nest-i` on each child, its place). A closing
+     copy (reflow's ghost) retracts them the other way, last child first
+     (`--nest-r`, its place from the end). */
   .kit-nest {
     --nest-in: 12px;
-    --nest-row-pad: 10px;
     --nest-glyph-y: 14px;
     --nest-gap: 4px;
     --nest-lead: 6px;
-    --nest-ink: var(--border-hairline);
-    --nest-pad: calc(var(--nest-x) + var(--nest-in) - var(--nest-row-pad));
+    --nest-pad: calc(var(--nest-x) + var(--nest-in) + 3px);
     position: relative;
   }
   :is(.kit-nest, .kit-nest-inner) > li:not([data-nest="through"]) {
@@ -501,7 +513,7 @@
      glyph. Each child row carries one: <span class="kit-nest-tip">. */
   .kit-nest-tip {
     position: absolute;
-    left: calc(var(--nest-x) - var(--nest-pad) + var(--nest-in) - 7px);
+    left: calc(var(--nest-x) - var(--nest-pad) + var(--nest-in) - 6px);
     top: calc(var(--nest-glyph-y) - 2.5px);
     inline-size: 5px;
     block-size: 5px;
@@ -536,6 +548,32 @@
     > li:last-child::after {
     content: "";
     bottom: calc(-1 * var(--nest-gap));
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    :is(.kit-nest, .kit-nest-inner) > li:not([data-nest="through"])::before {
+      animation: nest-elbow var(--dur-panel) var(--ease-out) both;
+      animation-delay: calc(var(--nest-i, 0) * 40ms);
+    }
+    :is(.kit-nest, .kit-nest-inner) > li:not([data-nest="through"])::after {
+      animation: nest-rail var(--dur-panel) var(--ease-out) both;
+      animation-delay: calc(var(--nest-i, 0) * 40ms + var(--dur-panel) / 2);
+    }
+    .kit-nest-tip {
+      animation: nest-tip var(--dur-fade) var(--ease-out) both;
+      animation-delay: calc(var(--nest-i, 0) * 40ms + var(--dur-panel));
+    }
+    /* A closing copy: the same lines, retracting, last child first. */
+    [data-reflow-ghost]
+      :is(.kit-nest, .kit-nest-inner)
+      > li:not([data-nest="through"])::before,
+    [data-reflow-ghost]
+      :is(.kit-nest, .kit-nest-inner)
+      > li:not([data-nest="through"])::after,
+    [data-reflow-ghost] .kit-nest-tip {
+      animation-direction: reverse;
+      animation-duration: var(--dur-exit);
+      animation-delay: calc(var(--nest-r, 0) * 24ms);
+    }
   }
 
   /* A list section's header (the home's Needs you, Recent): its label at
@@ -1260,6 +1298,37 @@
    home's Working/Finished switch. Global, because the rows name them from
    an inline style: Svelte rewrites `animation:` inside a component's own
    <style> to a scoped name but cannot rewrite a string built in script. */
+/* The nesting lines drawing in (.kit-nest): the rail's one-pixel column
+   first, top down, then out along the arm; the rail on to the next child;
+   the tip last. */
+@keyframes nest-elbow {
+  0% {
+    clip-path: inset(0 calc(100% - 1px) 100% 0);
+  }
+  55% {
+    clip-path: inset(0 calc(100% - 7px) 0 0);
+  }
+  100% {
+    clip-path: inset(0 0 0 0);
+  }
+}
+@keyframes nest-rail {
+  from {
+    clip-path: inset(0 0 100% 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+@keyframes nest-tip {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
 @keyframes ns-in-r {
   from {
     opacity: 0;

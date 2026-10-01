@@ -61,7 +61,7 @@
   }
   ul {
     margin-left: var(--space-4);
-    border-left: 1px solid var(--border-hairline);
+    border-left: 1px solid var(--nest-ink);
   }
   .session {
     display: block;
