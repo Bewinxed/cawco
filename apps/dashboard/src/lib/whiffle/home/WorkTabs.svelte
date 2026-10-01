@@ -127,32 +127,34 @@
   const BOXES = ":scope > .group, :scope > .more-slot";
 
   /**
-   * A tab's own rows. Delegates only when the Delegates button is on: work
-   * another session started is listed on request, here as everywhere.
+   * A delegate that needs the operator: blocked on a question or a
+   * permission, or failed. It is listed whatever the Delegates button says,
+   * so a needs-you is never missed.
    */
-  const rowsOf = (tab: WorkTab): InstanceRow[] => {
-    const rows = tab === "working" ? home.working : home.finished;
-    return rail.delegates ? rows : rows.filter((row) => !row.parentInstanceId);
-  };
+  const needsYou = (row: InstanceRow): boolean =>
+    isFailed(row) || whiffle.activityOf(row.id) === "blocked";
+  /** Every session a tab could list, delegates included. */
+  const allOf = (tab: WorkTab): InstanceRow[] =>
+    tab === "working" ? home.working : home.finished;
+  /**
+   * A tab's own rows. Other delegates only when the Delegates button is
+   * on: work another session started is listed on request.
+   */
+  const rowsOf = (tab: WorkTab): InstanceRow[] =>
+    rail.delegates
+      ? allOf(tab)
+      : allOf(tab).filter((row) => !row.parentInstanceId || needsYou(row));
   /** A session the tab does not list, to stand in for a delegate's parent. */
   const known = (id: string): InstanceRow | undefined =>
     whiffle.instanceIndex.byId.get(id);
   /**
    * Each tab as its tree (tree.ts): every session followed by its
-   * delegates, and with Delegates on, a parent the tab does not list drawn
-   * as a context line in its delegates' place, so none stands alone.
+   * delegates, and a parent the tab does not list drawn as a context line
+   * in its delegates' place, so none stands alone.
    */
   const trees = $derived({
-    working: tree(
-      rowsOf("working"),
-      undefined,
-      rail.delegates ? known : undefined
-    ),
-    finished: tree(
-      rowsOf("finished"),
-      undefined,
-      rail.delegates ? known : undefined
-    ),
+    working: tree(rowsOf("working"), undefined, known),
+    finished: tree(rowsOf("finished"), undefined, known),
   });
   /** Every row's place in its tab's tree: depth, last sibling, rails through it. */
   const shapes = $derived({
@@ -283,6 +285,8 @@
     return all ? "Show fewer" : `Show ${total - MORE_AT} more`;
   }
   const more = $derived(moreOf(shown, workTab.showsAll(shown)));
+  /** The delegates the button is keeping out of the tab shown. */
+  const hiddenCount = $derived(allOf(shown).length - rowsOf(shown).length);
 
   let plan = $state.raw<Plan | null>(null);
   const swap = new ListSwap<Line>();
@@ -554,7 +558,9 @@
         {#snippet children(tip)}
           <button
             {...tip}
-            aria-label="Show delegates"
+            aria-label={hiddenCount > 0
+              ? `Show delegates, ${hiddenCount} hidden`
+              : 'Show delegates'}
             aria-pressed={rail.delegates}
             class="delegates focus-inset touch-hit"
             data-on={rail.delegates || undefined}
@@ -562,6 +568,18 @@
             type="button"
           >
             <Structure aria-hidden="true" />
+            {#if hiddenCount > 0}
+              <!-- How many the button is keeping out, in the tab's ink. -->
+              {#key hiddenCount}
+                <span
+                  aria-hidden="true"
+                  class="num count"
+                  data-flip="pop"
+                  data-tab={shown}
+                  >{hiddenCount}</span
+                >
+              {/key}
+            {/if}
           </button>
         {/snippet}
       </Tip>
@@ -697,11 +715,14 @@
   /* The corner actions' icon button (Sidebar .head-action), its pressed
      state their selected tint. */
   .delegates {
-    display: inline-grid;
+    display: inline-flex;
     flex: none;
-    place-items: center;
-    inline-size: 28px;
+    align-items: center;
+    justify-content: center;
+    gap: var(--space-1);
+    min-inline-size: 28px;
     block-size: 28px;
+    padding-inline: 6px;
     margin-block-end: 2px;
     border: 0;
     border-radius: var(--radius-sm);
@@ -713,8 +734,13 @@
       color var(--dur-control) var(--ease-out);
   }
   .delegates :global(svg) {
+    flex: none;
     inline-size: 16px;
     block-size: 16px;
+  }
+  /* The hidden delegates' count, the tab counts' badge at its own end. */
+  .delegates .count {
+    margin-inline-end: 0;
   }
   .delegates[data-on] {
     background: var(--selected-bg);

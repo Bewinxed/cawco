@@ -415,6 +415,12 @@ class Home {
     );
   });
 
+  /**
+   * Every session that has ended since it was last opened, delegates
+   * included whatever the Delegates switch says: the list that shows them
+   * (WorkTabs) decides which delegates it lists, so a failed one is never
+   * missed.
+   */
   readonly finished = $derived.by<InstanceRow[]>(() => {
     if (choices.finished === "a") {
       return [];
@@ -423,7 +429,7 @@ class Home {
       "home:finished",
       whiffle.listedInstances
         .filter((row) => {
-          if (!listed(row)) {
+          if (row.workflowRunId) {
             return false;
           }
           const activity = whiffle.activityOf(row.id);
