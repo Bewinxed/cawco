@@ -1,9 +1,10 @@
 <script lang="ts">
   /**
    * The home: a status line, a headline, and the sessions grouped by what
-   * they want from the operator — Needs you, Working, Finished, Recent.
-   * The same list is the phone's home page (`page`) and the wide screen's
-   * sidebar (`rail`), where the transcripts take the rest of the screen.
+   * they want from the operator — Needs you, then Working and Finished as
+   * two tabs, then (on the phone) Recent. The same list is the phone's home
+   * page (`page`) and the wide screen's sidebar (`rail`), where the
+   * transcripts take the rest of the screen and Recent sits under Projects.
    *
    * What it never does: claim nothing needs you while the hub is not live.
    * Then the rows stay as last known and greyed, there is no headline and
@@ -15,29 +16,18 @@
   import { page } from "$app/state";
   import { Button } from "$lib/components/ui/button";
   import { Skeleton } from "$lib/components/ui/skeleton";
-  import { IconChevronRight, IconPlus, IconSearch } from "$lib/icons";
+  import { IconPlus } from "$lib/icons";
   import Attention from "~icons/solar/hand-shake-bold-duotone";
-  import { whiffle } from "../client.svelte";
-  import { conversationHref } from "../links";
   import { machineLabel } from "../machine";
   import { crossIn, crossOut, morphMs } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
-  import OsMark from "../OsMark.svelte";
   import NewSessionDialog from "../spawn/NewSessionDialog.svelte";
-  import { workspace } from "../workspace/workspace.svelte";
   import Caw from "./Caw.svelte";
-  import HomeRow from "./HomeRow.svelte";
-  import {
-    byMachine,
-    clock,
-    home,
-    instanceTitle,
-    lastAt,
-    type MachineGroup,
-    span,
-  } from "./home.svelte";
+  import HomeRecent from "./HomeRecent.svelte";
+  import { home } from "./home.svelte";
   import NeedsCard from "./NeedsCard.svelte";
   import StatusLine from "./StatusLine.svelte";
+  import WorkTabs from "./WorkTabs.svelte";
 
   let {
     variant,
@@ -50,10 +40,6 @@
   } = $props();
 
   const stale = $derived(!home.live);
-  /** The conversation in front, for the rail to mark. */
-  const current = $derived(
-    page.url.pathname.startsWith("/session") ? workspace.activeSessionId : null
-  );
   /** Nothing anywhere yet: the one empty state the home keeps. */
   const firstRun = $derived(
     home.live &&
@@ -77,31 +63,6 @@
     }
     return "Your sessions will land here.";
   });
-
-  /* ── Recent ─────────────────────────────────────────────────────────── */
-
-  const RECENT_PAGE = 30;
-  const RECENT_KEY = "cawco-home-recent-open";
-  let recentOpen = $state(
-    typeof localStorage !== "undefined" &&
-      localStorage.getItem(RECENT_KEY) === "true"
-  );
-  let search = $state("");
-  let recentShown = $state(RECENT_PAGE);
-  const recentMatches = $derived.by(() => {
-    const needle = search.trim().toLowerCase();
-    return needle
-      ? home.recent.filter(
-          (item) =>
-            item.title.toLowerCase().includes(needle) ||
-            item.place.toLowerCase().includes(needle)
-        )
-      : home.recent;
-  });
-  function toggleRecent() {
-    recentOpen = !recentOpen;
-    localStorage.setItem(RECENT_KEY, String(recentOpen));
-  }
 
   /* ── Start session ──────────────────────────────────────────────────── */
 
@@ -138,33 +99,15 @@
     spawnPrefill = undefined;
     spawnOpen = true;
   }
-
-  /** What a working session is doing now, else how long it has been at it. */
-  function doing(id: string): string {
-    const tool = whiffle.currentToolOf(id);
-    if (tool) {
-      return `${tool.name} ${tool.glance}`.trim();
-    }
-    const since = whiffle.turnSince(id);
-    return since ? span(clock.now - since) : "";
-  }
 </script>
-
-{#snippet machine(group: MachineGroup<{ machineId: string }>)}
-  <!-- Where these run, said once for the rows under it. -->
-  <h3 class="machine" data-flip>
-    <OsMark class="size-3.5" os={group.os} />
-    <span>{group.name}</span>
-  </h3>
-{/snippet}
 
 <!-- Every state change here travels (motion/rows `reflow`): a request
      arriving opens its place while what follows slides down, one leaving
-     closes, a session moving from Working to Finished closes in one group
-     and opens in the other, a re-sort slides, a group's box follows its
-     height, and Caw fades where the groups were. With less motion, only the
-     fades run. In the rail the home is one box of the rail's own reflow, so
-     the nav under it slides as it grows. -->
+     closes, a session moving from Working to Finished closes in one list
+     and its count pops on the other tab, a re-sort slides, a group's box
+     follows its height, and Caw fades where the groups were. With less
+     motion, only the fades run. In the rail the home is one box of the
+     rail's own reflow, so what is under it slides as it grows. -->
 <section
   aria-label="Home"
   class="home {variant}"
@@ -205,18 +148,15 @@
   {:else}
     <div class="groups" in:crossIn>
       {#if home.needs.length > 0}
+        <!-- The headline above names this group and counts it; a header
+             here would say the same twice. -->
         <section
-          aria-labelledby="needs-{variant}"
+          aria-label="Needs you"
           class="group"
           data-flip="box"
           in:crossIn
           out:crossOut
         >
-          <h2 class="label" id="needs-{variant}">
-            <span aria-hidden="true" class="spark-ink"><Attention /></span>
-            Needs you
-            <span class="num count">{home.needs.length}</span>
-          </h2>
           <div class="cards">
             {#each home.needs as item (item.key)}
               <NeedsCard {item} {stale} />
@@ -225,71 +165,7 @@
         </section>
       {/if}
 
-      {#if home.working.length > 0}
-        <section
-          aria-labelledby="working-{variant}"
-          class="group"
-          data-flip="box"
-          in:crossIn
-          out:crossOut
-        >
-          <h2 class="label" id="working-{variant}">
-            Working <span class="num count">{home.working.length}</span>
-          </h2>
-          {#each byMachine(home.working) as group, index (group.machineId)}
-            {#if index > 0}
-              <hr class="kit-seam" data-flip>
-            {/if}
-            {@render machine(group)}
-            {#each group.rows as row (row.id)}
-              <HomeRow
-                active={current === row.id}
-                href={conversationHref(row.id, whiffle.instanceIndex)}
-                instance={row}
-                machineId={row.machineId}
-                {stale}
-                title={instanceTitle(row)}
-                trail={doing(row.id)}
-              />
-            {/each}
-          {/each}
-        </section>
-      {/if}
-
-      {#if home.working.length > 0 && home.finished.length > 0}
-        <!-- Only between two lists that are both there. -->
-        <hr class="kit-seam list-seam" data-flip in:crossIn out:crossOut>
-      {/if}
-      {#if home.finished.length > 0}
-        <section
-          aria-labelledby="finished-{variant}"
-          class="group"
-          data-flip="box"
-          in:crossIn
-          out:crossOut
-        >
-          <h2 class="label" id="finished-{variant}">
-            Finished <span class="num count">{home.finished.length}</span>
-          </h2>
-          {#each byMachine(home.finished) as group, index (group.machineId)}
-            {#if index > 0}
-              <hr class="kit-seam" data-flip>
-            {/if}
-            {@render machine(group)}
-            {#each group.rows as row (row.id)}
-              <HomeRow
-                active={current === row.id}
-                href={conversationHref(row.id, whiffle.instanceIndex)}
-                instance={row}
-                machineId={row.machineId}
-                {stale}
-                title={instanceTitle(row)}
-                trail={span(clock.now - lastAt(row))}
-              />
-            {/each}
-          {/each}
-        </section>
-      {/if}
+      <WorkTabs {stale} />
 
       {#if firstRun}
         <!-- Caw only on a fleet with nothing in it yet, or while a machine
@@ -305,63 +181,8 @@
         </figure>
       {/if}
 
-      {#if home.recent.length > 0}
-        <section class="group recent" data-flip="box">
-          <button
-            aria-expanded={recentOpen}
-            class="disclosure press-tint focus-inset"
-            onclick={toggleRecent}
-            type="button"
-          >
-            <span class="chev" class:open={recentOpen}
-              ><IconChevronRight /></span
-            >
-            Recent
-            <span class="num count">{home.recent.length}</span>
-          </button>
-          {#if recentOpen}
-            <div class="recent-body" data-flip>
-              <label class="search touch-hit">
-                <IconSearch aria-hidden="true" />
-                <input
-                  aria-label="Search recent sessions"
-                  oninput={() => {
-                    recentShown = RECENT_PAGE;
-                  }}
-                  placeholder="Search sessions…"
-                  type="search"
-                  bind:value={search}
-                >
-              </label>
-              {#each recentMatches.slice(0, recentShown) as item (item.key)}
-                <HomeRow
-                  active={current !== null && (current === item.instance?.id || current === item.info?.sessionId)}
-                  href={item.href}
-                  info={item.info}
-                  instance={item.instance}
-                  line={item.place}
-                  machineId={item.machineId}
-                  {stale}
-                  title={item.title}
-                  trail={item.at ? span(clock.now - item.at) : ''}
-                />
-              {:else}
-                <p class="none">No session matches “{search}”.</p>
-              {/each}
-              {#if recentMatches.length > recentShown}
-                <Button
-                  class="self-start"
-                  label="Show {Math.min(RECENT_PAGE, recentMatches.length - recentShown)} more"
-                  onclick={() => {
-                    recentShown += RECENT_PAGE;
-                  }}
-                  size="sm"
-                  variant="outline"
-                />
-              {/if}
-            </div>
-          {/if}
-        </section>
+      {#if variant === 'page'}
+        <HomeRecent />
       {/if}
     </div>
   {/if}
@@ -467,121 +288,10 @@
     flex-direction: column;
     gap: 2px;
   }
-  .label {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    margin: 0 0 var(--space-1);
-    padding-inline: var(--space-3);
-    font: var(--type-label);
-    color: var(--ink-muted);
-  }
-  .label :global(svg) {
-    width: 16px;
-    height: 16px;
-  }
-  /* One line per machine: its mark and name, quieter than the group label. */
-  .machine {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    margin: var(--space-2) 0 0;
-    padding: 0 var(--space-3);
-    min-height: 22px;
-    font: var(--type-meta);
-    color: var(--ink-muted);
-  }
-  .machine:first-of-type {
-    margin-top: 0;
-  }
-  .spark-ink {
-    display: inline-flex;
-    color: var(--status-attn-glyph);
-  }
-  .count {
-    font: var(--type-meta);
-    color: var(--ink-subtle);
-  }
   .cards {
     display: flex;
     flex-direction: column;
     gap: var(--space-2);
-  }
-  .disclosure {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    min-height: 36px;
-    padding-inline: var(--space-2);
-    border: 0;
-    border-radius: var(--radius-sm);
-    background: none;
-    font: var(--type-label);
-    color: var(--ink-muted);
-    cursor: pointer;
-    transition: var(--transition-control);
-  }
-  @media (hover: hover) and (pointer: fine) {
-    .disclosure:hover {
-      background: var(--surface-hover);
-      color: var(--ink-strong);
-    }
-  }
-  .chev {
-    display: inline-flex;
-  }
-  .chev :global(svg) {
-    width: 12px;
-    height: 12px;
-  }
-  @media (prefers-reduced-motion: no-preference) {
-    .chev {
-      transition: rotate var(--dur-control) var(--ease-out);
-    }
-  }
-  .chev.open {
-    rotate: 90deg;
-  }
-  .recent-body {
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
-  }
-  .search {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    height: var(--c-input-h);
-    margin: var(--space-1) 0 var(--space-2);
-    padding-inline: var(--space-3);
-    border: 1px solid var(--border-control);
-    border-radius: var(--radius-md);
-    background: var(--surface-raised);
-    color: var(--ink-muted);
-  }
-  .search :global(svg) {
-    width: 16px;
-    height: 16px;
-    flex: none;
-  }
-  .search:has(input:focus-visible) {
-    outline: var(--focus-ring-width) solid var(--focus-ring);
-    outline-offset: var(--focus-ring-inset);
-  }
-  .search input {
-    flex: 1 1 auto;
-    min-width: 0;
-    border: 0;
-    background: none;
-    font: var(--type-body);
-    color: var(--ink-strong);
-    outline: none;
-  }
-  .none {
-    margin: 0;
-    padding: var(--space-2) var(--space-3);
-    font: var(--type-meta);
-    color: var(--ink-muted);
   }
   .caw {
     display: flex;

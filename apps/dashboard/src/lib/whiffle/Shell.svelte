@@ -17,6 +17,9 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Sheet from "$lib/components/ui/sheet";
   import { setSidebar } from "$lib/components/ui/sidebar/context.svelte";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
+  import * as Tooltip from "$lib/components/ui/tooltip";
+  import Tip from "$lib/components/ui/tooltip/tip.svelte";
   import { NARROW_QUERY } from "$lib/hooks/is-mobile.svelte";
   import {
     IconChevronLeft,
@@ -42,6 +45,7 @@
   import ConfirmDialog from "./ConfirmDialog.svelte";
   import { hubSocketUrl, reconnectNow, whiffle } from "./client.svelte";
   import JumpPalette, { type JumpOpener } from "./JumpPalette.svelte";
+  import MachinesButton from "./MachinesButton.svelte";
   import SessionSurface from "./SessionSurface.svelte";
   import Sidebar from "./Sidebar.svelte";
   import PaneTabs from "./workspace/PaneTabs.svelte";
@@ -604,214 +608,227 @@
      component writes; the server's cookie width is the fallback under it. SSR
      therefore emits no committed width of its own, and there is nothing to
      snap away from on hydration. -->
-<div class="shell" style="--sidebar-width: var(--rail-w, {railWidth}px)">
-  <aside class="rail hidden min-[900px]:flex">
-    <Sidebar
-      {assistantOpen}
-      {narrow}
-      onassistant={() => {
-        assistantOpen = !assistantOpen;
-      }}
-    />
-    <div
-      aria-label="Resize sidebar"
-      aria-orientation="vertical"
-      aria-valuemax={RAIL_MAX}
-      aria-valuemin={RAIL_MIN}
-      aria-valuenow={railWidth}
-      class="grip"
-      onkeydown={resizeKey}
-      onpointerdown={startDrag}
-      role="slider"
-      tabindex="0"
-    ></div>
-  </aside>
-
-  <Sheet.Root bind:open={railOpen}>
-    <Sheet.Content
-      class="rail-sheet w-[284px] p-0 min-[900px]:hidden"
-      side="left"
-    >
-      <Sheet.Header class="sr-only">
-        <Sheet.Title>Navigation</Sheet.Title>
-      </Sheet.Header>
+<!-- One provider: every tooltip in the app shares its delay and its skip. -->
+<Tooltip.Provider>
+  <div class="shell" style="--sidebar-width: var(--rail-w, {railWidth}px)">
+    <aside class="rail hidden min-[900px]:flex">
       <Sidebar
         {assistantOpen}
         {narrow}
         onassistant={() => {
+        assistantOpen = !assistantOpen;
+      }}
+      />
+      <div
+        aria-label="Resize sidebar"
+        aria-orientation="vertical"
+        aria-valuemax={RAIL_MAX}
+        aria-valuemin={RAIL_MIN}
+        aria-valuenow={railWidth}
+        class="grip"
+        onkeydown={resizeKey}
+        onpointerdown={startDrag}
+        role="slider"
+        tabindex="0"
+      ></div>
+    </aside>
+
+    <Sheet.Root bind:open={railOpen}>
+      <Sheet.Content
+        class="rail-sheet w-[284px] p-0 min-[900px]:hidden"
+        side="left"
+      >
+        <Sheet.Header class="sr-only">
+          <Sheet.Title>Navigation</Sheet.Title>
+        </Sheet.Header>
+        <Sidebar
+          {assistantOpen}
+          {narrow}
+          onassistant={() => {
           railOpen = false;
           assistantOpen = true;
         }}
-      />
-    </Sheet.Content>
-  </Sheet.Root>
+        />
+      </Sheet.Content>
+    </Sheet.Root>
 
-  <div class="main">
-    <header class="top" class:hosting={hostedLeaf !== null}>
-      <button
-        aria-label="Open navigation"
-        class="burger min-[900px]:hidden"
-        onclick={() => {
+    <div class="main">
+      <header class="top" class:hosting={hostedLeaf !== null}>
+        <button
+          aria-label="Open navigation"
+          class="burger min-[900px]:hidden"
+          onclick={() => {
           railOpen = true;
         }}
-        type="button"
-      >
-        <IconSidebar />
-      </button>
-      <!-- The one "where am I" label, now visible at every width — the brand
+          type="button"
+        >
+          <IconSidebar />
+        </button>
+        <!-- The one "where am I" label, now visible at every width — the brand
            lives in the rail, and the crumb is what the top bar owes a reader
            who arrived by URL. -->
-      <div class="slot">
-        {#if barLeaf}
-          <div class="slot-tabs" {@attach barTabs(() => hostedLeaf !== null)}>
-            <PaneTabs hosted leaf={barLeaf} />
-          </div>
-        {/if}
-        {#if hostedLeaf}
-        <!-- The strip above has the slot. -->
-        {:else if narrow && page.url.pathname.startsWith('/config/')}
-          <!-- Inside a section on a phone the rail is its own page, so the bar
+        <div class="slot">
+          {#if barLeaf}
+            <div class="slot-tabs" {@attach barTabs(() => hostedLeaf !== null)}>
+              <PaneTabs hosted leaf={barLeaf} />
+            </div>
+          {/if}
+          {#if hostedLeaf}
+          <!-- The strip above has the slot. -->
+          {:else if narrow && page.url.pathname.startsWith('/config/')}
+            <!-- Inside a section on a phone the rail is its own page, so the bar
                leads back to it. -->
-          <a class="crumb back pressable" href="/config" in:riseIn out:crossOut
-            ><IconChevronLeft />Configure</a
-          >
-        {:else}
-          <span class="crumb" in:riseIn out:crossOut>
-            <TextMorph as="span" duration={morphMs()} text={crumb} />
-          </span>
-        {/if}
-      </div>
+            <a
+              class="crumb back pressable"
+              href="/config"
+              in:riseIn
+              out:crossOut
+              ><IconChevronLeft />Configure</a
+            >
+          {:else}
+            <span class="crumb" in:riseIn out:crossOut>
+              <TextMorph as="span" duration={morphMs()} text={crumb} />
+            </span>
+          {/if}
+        </div>
 
-      <div class="right">
-        <!-- First, so the order read is the order drawn: below 900px it stands
+        <div class="right">
+          <!-- First, so the order read is the order drawn: below 900px it stands
              left of the cluster rather than in it (the style below). It
              grows out of the bar's edge and back into it; its count morphs
              digit by digit. -->
-        {#if whiffle.blockedCount > 0}
-          <a
-            class="icobtn touch-hit"
-            href="/session"
-            title="{whiffle.blockedCount} waiting on you"
-            in:badgeIn
-            out:badgeOut
-          >
-            <IconShield />
-            <span class="badge"
-              ><TextMorph
-                as="span"
-                duration={morphMs()}
-                text={String(whiffle.blockedCount)}
-              /></span
+          {#if whiffle.blockedCount > 0}
+            <a
+              class="icobtn touch-hit"
+              href="/session"
+              title="{whiffle.blockedCount} waiting on you"
+              in:badgeIn
+              out:badgeOut
             >
-          </a>
-        {/if}
-        <!-- Jump, once, at every width: the far end of the tab row, beside
+              <IconShield />
+              <span class="badge"
+                ><TextMorph
+                  as="span"
+                  duration={morphMs()}
+                  text={String(whiffle.blockedCount)}
+                /></span
+              >
+            </a>
+          {/if}
+          <!-- Jump, once, at every width: the far end of the tab row, beside
              the conversations it jumps between. A phone shows its glyph. -->
-        <Button
-          aria-label="Jump to session (⌘K)"
-          class="jump"
-          data-share="jump"
-          onclick={(event: MouseEvent) => {
-            jumpOpener = event.currentTarget as HTMLElement;
-            jumpOpen = true;
-          }}
-          size="sm"
-          title="Jump to session (⌘K)"
-          variant="outline"
-        >
-          <IconSearch />
-          <span class="hidden sm:inline">Jump</span>
-          <kbd
-            class="hidden font-sans text-meta text-muted-foreground min-[900px]:inline"
-            >⌘K</kbd
-          >
-        </Button>
-        <!-- The phone's summon; on a desktop the rail carries it as a row. -->
-        <span class="min-[900px]:hidden">
-          <AssistantOrb
-            onclick={() => {
+          <!-- The machines, one click away beside Jump. -->
+          <MachinesButton />
+          <Tip keys="⌘K" label="Jump to session">
+            {#snippet children(tip)}
+              <Button
+                {...tip}
+                aria-label="Jump to session"
+                class="jump"
+                data-share="jump"
+                onclick={(event: MouseEvent) => {
+                jumpOpener = event.currentTarget as HTMLElement;
+                jumpOpen = true;
+              }}
+                size="sm"
+                variant="outline"
+              >
+                <IconSearch />
+                <span class="hidden sm:inline">Jump</span>
+                <kbd
+                  class="hidden font-sans text-meta text-muted-foreground min-[900px]:inline"
+                  >⌘K</kbd
+                >
+              </Button>
+            {/snippet}
+          </Tip>
+          <!-- The phone's summon; on a desktop the rail carries it as a row. -->
+          <span class="min-[900px]:hidden">
+            <AssistantOrb
+              onclick={() => {
               assistantOpen = !assistantOpen;
             }}
-            open={assistantOpen}
-          />
-        </span>
-        <!-- No always-on hub dot: a green light that is green 99% of the time
+              open={assistantOpen}
+            />
+          </span>
+          <!-- No always-on hub dot: a green light that is green 99% of the time
              says nothing. Connection health folds into the banner below, which
              is shown only when the hub is NOT connected. The theme toggle
              lives in the rail's footer with the account row. -->
-      </div>
-    </header>
-
-    <!-- Server-side there is no socket to have lost, so the banner would render
-         into every first paint and flash away on hydration. -->
-    <!-- The banner is uncovered from under the bar and closes back into it
-         (motion/rows); its slot floats over the page, so it moves nothing. -->
-    <div class="banner-slot" {@attach reflow()}>
-      {#if browser && showBanner}
-        <div
-          class="banner {everConnected ? 'warn' : 'bad'}"
-          data-flip
-          role="status"
-        >
-          {#if everConnected}
-            <span
-              >Hub connection lost — retrying in
-              <TextMorph
-                as="span"
-                duration={morphMs()}
-                text="{retryIn}s"
-              /></span
-            >
-          {:else}
-            <span>Can't reach the hub at <code>{hubSocketUrl()}</code></span>
-          {/if}
-          <!-- Pending in place while an attempt is out, whoever started it. -->
-          <Button
-            failed={whiffle.status !== 'connecting'}
-            label={everConnected ? 'Reconnect' : 'Retry'}
-            onclick={reconnectNow}
-            pending={whiffle.status === 'connecting'}
-            pendingLabel="Connecting…"
-            size="sm"
-            variant="outline"
-          />
         </div>
-      {/if}
-    </div>
+      </header>
 
-    <!-- The old thumb bar is gone, so this region reclaims its height. On a
+      <!-- Server-side there is no socket to have lost, so the banner would render
+         into every first paint and flash away on hydration. -->
+      <!-- The banner is uncovered from under the bar and closes back into it
+         (motion/rows); its slot floats over the page, so it moves nothing. -->
+      <div class="banner-slot" {@attach reflow()}>
+        {#if browser && showBanner}
+          <div
+            class="banner {everConnected ? 'warn' : 'bad'}"
+            data-flip
+            role="status"
+          >
+            {#if everConnected}
+              <span
+                >Hub connection lost — retrying in
+                <TextMorph
+                  as="span"
+                  duration={morphMs()}
+                  text="{retryIn}s"
+                /></span
+              >
+            {:else}
+              <span>Can't reach the hub at <code>{hubSocketUrl()}</code></span>
+            {/if}
+            <!-- Pending in place while an attempt is out, whoever started it. -->
+            <Button
+              failed={whiffle.status !== 'connecting'}
+              label={everConnected ? 'Reconnect' : 'Retry'}
+              onclick={reconnectNow}
+              pending={whiffle.status === 'connecting'}
+              pendingLabel="Connecting…"
+              size="sm"
+              variant="outline"
+            />
+          </div>
+        {/if}
+      </div>
+
+      <!-- The old thumb bar is gone, so this region reclaims its height. On a
          session route the composer owns its own bottom inset; everywhere else
          the scroll region pads the home-indicator safe area itself so the last
          row is never tucked under it. -->
-    <main class="content" id="main-content" class:safe={!onSession}>
-      <!-- The page is keyed on its route, so a navigation swaps one page for
+      <main class="content" id="main-content" class:safe={!onSession}>
+        <!-- The page is keyed on its route, so a navigation swaps one page for
            the next through their own transitions (motion/route.svelte.ts):
            both stand in this one grid cell while they overlap. Every
            conversation is one key, and so is Configure, which keys its own
            pane so its rail holds still. -->
-      <div class="swap">
-        {#key pageKey}
-          <div class="page" in:pageIn out:pageOut>{@render children()}</div>
-        {/key}
-        <!-- After the keyed page, so it is drawn over the empty one a
+        <div class="swap">
+          {#key pageKey}
+            <div class="page" in:pageIn out:pageOut>{@render children()}</div>
+          {/key}
+          <!-- After the keyed page, so it is drawn over the empty one a
              `/session` route renders. -->
-        {#if surfaceMounted}
-          <div class="page" in:pageIn {@attach park(() => onSession)}>
-            <SessionSurface shown={onSession} />
-          </div>
-        {/if}
-      </div>
-    </main>
+          {#if surfaceMounted}
+            <div class="page" in:pageIn {@attach park(() => onSession)}>
+              <SessionSurface shown={onSession} />
+            </div>
+          {/if}
+        </div>
+      </main>
+    </div>
   </div>
-</div>
 
-<JumpPalette opener={jumpOpener} bind:open={jumpOpen} />
-<!-- One dialog for every destructive confirm in the app (see confirm.svelte.ts). -->
-<ConfirmDialog />
-<!-- One Connect a machine dialog for every entry that adds one (join/join.svelte.ts). -->
-<AddMachineDialog />
+  <JumpPalette opener={jumpOpener} bind:open={jumpOpen} />
+  <!-- One dialog for every destructive confirm in the app (see confirm.svelte.ts). -->
+  <ConfirmDialog />
+  <!-- One Connect a machine dialog for every entry that adds one (join/join.svelte.ts). -->
+  <AddMachineDialog />
 
-<AssistantPanel bind:open={assistantOpen} />
+  <AssistantPanel bind:open={assistantOpen} />
+</Tooltip.Provider>
 
 <style>
   .skip {

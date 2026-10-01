@@ -1,5 +1,6 @@
 <script lang="ts">
   import { useSvelteFlow } from "@xyflow/svelte";
+  import Tip from "$lib/components/ui/tooltip/tip.svelte";
   import { IconMaximize, IconPlus, IconReset } from "$lib/icons";
   import { dur, easeInOut, motionOk } from "$lib/whiffle/motion/curves.svelte";
 
@@ -37,43 +38,73 @@
   <button aria-pressed={pan} class="wf-btn" onclick={onpan} type="button">
     {pan ? 'Pan' : 'Select'}
   </button>
-  <button
-    aria-label="Zoom out"
-    class="wf-btn"
-    onclick={() => zoomOut(glide())}
-    type="button"
-  >
-    −
-  </button><span>{Math.round(zoom * 100)}%</span
-  ><button
-    aria-label="Zoom in"
-    class="wf-btn"
-    onclick={() => zoomIn(glide())}
-    type="button"
-  >
-    <IconPlus class="size-4" />
-  </button>
-  <button aria-label="Fit graph" class="wf-btn" onclick={fit} type="button">
-    <IconMaximize class="size-4" />
-  </button>
+  <Tip label="Zoom out">
+    {#snippet children(tip)}
+      <button
+        {...tip}
+        aria-label="Zoom out"
+        class="wf-btn"
+        onclick={() => zoomOut(glide())}
+        type="button"
+      >
+        −
+      </button>
+    {/snippet}
+  </Tip><span>{Math.round(zoom * 100)}%</span
+  ><Tip label="Zoom in">
+    {#snippet children(tip)}
+      <button
+        {...tip}
+        aria-label="Zoom in"
+        class="wf-btn"
+        onclick={() => zoomIn(glide())}
+        type="button"
+      >
+        <IconPlus class="size-4" />
+      </button>
+    {/snippet}
+  </Tip>
+  <Tip keys="F" label="Fit graph">
+    {#snippet children(tip)}
+      <button
+        {...tip}
+        aria-label="Fit graph"
+        class="wf-btn"
+        onclick={fit}
+        type="button"
+      >
+        <IconMaximize class="size-4" />
+      </button>
+    {/snippet}
+  </Tip>
   {#if !readonly}
-    <button
-      aria-label="Undo"
-      class="wf-btn"
-      disabled={!canUndo}
-      onclick={undo}
-      type="button"
-    >
-      <IconReset class="size-4" />
-    </button><button
-      aria-label="Redo"
-      class="wf-btn"
-      disabled={!canRedo}
-      onclick={redo}
-      type="button"
-    >
-      <IconReset class="size-4 rotate-180" />
-    </button>
+    <Tip label="Undo">
+      {#snippet children(tip)}
+        <button
+          {...tip}
+          aria-label="Undo"
+          class="wf-btn"
+          disabled={!canUndo}
+          onclick={undo}
+          type="button"
+        >
+          <IconReset class="size-4" />
+        </button>
+      {/snippet}
+    </Tip><Tip label="Redo">
+      {#snippet children(tip)}
+        <button
+          {...tip}
+          aria-label="Redo"
+          class="wf-btn"
+          disabled={!canRedo}
+          onclick={redo}
+          type="button"
+        >
+          <IconReset class="size-4 rotate-180" />
+        </button>
+      {/snippet}
+    </Tip>
   {/if}
 </div>
 <style>

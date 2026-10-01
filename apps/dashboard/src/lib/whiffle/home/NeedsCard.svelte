@@ -13,6 +13,7 @@
    * it — the request card above that pane's composer leaves with it.
    */
   import { Button } from "$lib/components/ui/button";
+  import Tip from "$lib/components/ui/tooltip/tip.svelte";
   import { IconClose, IconMaximize, IconTick } from "$lib/icons";
   import { isTyping } from "$lib/utils/typing";
   import {
@@ -94,16 +95,20 @@
     {#if item.kind === 'ask'}
       {@const ask = item}
       <!-- Glance → peek → dive: read what led here before answering. -->
-      <button
-        aria-label="Peek {item.title}"
-        class="peek touch-hit focus-inset"
-        onclick={() =>
-          openPeek({ viewId: ask.instanceId, href, title: ask.title })}
-        title="Peek"
-        type="button"
-      >
-        <IconMaximize aria-hidden="true" />
-      </button>
+      <Tip label="Peek">
+        {#snippet children(tip)}
+          <button
+            {...tip}
+            aria-label="Peek {item.title}"
+            class="peek touch-hit focus-inset"
+            onclick={() =>
+              openPeek({ viewId: ask.instanceId, href, title: ask.title })}
+            type="button"
+          >
+            <IconMaximize aria-hidden="true" />
+          </button>
+        {/snippet}
+      </Tip>
     {/if}
   </div>
   <span class="place">{item.place}</span>

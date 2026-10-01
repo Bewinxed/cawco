@@ -1,4 +1,10 @@
 <script lang="ts">
+  import { Dialog as DialogPrimitive } from "bits-ui";
+  import type PhotoSwipe from "photoswipe";
+  import { type Component, mount, onDestroy, unmount } from "svelte";
+  import OutputBlock from "$lib/components/features/tool-cards/OutputBlock.svelte";
+  import { Button } from "$lib/components/ui/button";
+  import { CopyButton } from "$lib/components/ui/copy-button";
   /**
    * What a thumbnail opens into, one entry point (lightbox-state) for both
    * kinds of attachment.
@@ -16,12 +22,7 @@
    * turn does, JSON pretty-printed, anything else in the transcript's code
    * well.
    */
-  import { Dialog as DialogPrimitive } from "bits-ui";
-  import type PhotoSwipe from "photoswipe";
-  import { type Component, mount, onDestroy, unmount } from "svelte";
-  import OutputBlock from "$lib/components/features/tool-cards/OutputBlock.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import { CopyButton } from "$lib/components/ui/copy-button";
+  import Tip from "$lib/components/ui/tooltip/tip.svelte";
   import {
     IconChevronLeft,
     IconChevronRight,
@@ -238,15 +239,20 @@
               size="icon"
               text={doc.content}
             />
-            <Button
-              aria-label="Close document"
-              class="touch-hit"
-              onclick={dismiss}
-              size="icon"
-              variant="ghost"
-            >
-              <IconClose />
-            </Button>
+            <Tip keys="Esc" label="Close document">
+              {#snippet children(tip)}
+                <Button
+                  {...tip}
+                  aria-label="Close document"
+                  class="touch-hit"
+                  onclick={dismiss}
+                  size="icon"
+                  variant="ghost"
+                >
+                  <IconClose />
+                </Button>
+              {/snippet}
+            </Tip>
           </header>
           <div class="doc-body">
             {#if extension === 'md' || extension === 'markdown'}

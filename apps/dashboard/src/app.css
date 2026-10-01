@@ -422,14 +422,36 @@
 
   /* The seam: the hairline the transcript draws between one user message
      and the next (MessageRow `.well::after`), as a block of its own. The
-     home draws the same one between Working and Finished and between one
-     machine's rows and the next, so the two can never drift apart. */
+     home draws the same one between one machine's rows and the next, so
+     the two can never drift apart. */
   .kit-seam {
     flex: none;
     block-size: 1px;
     margin: 0 var(--seam-inset);
     border: 0;
     background: var(--well-edge);
+  }
+
+  /* A list section's header (the home's Needs you, Recent): its label at
+     the start, its count pushed to the end in tabular figures, and a
+     neutral hairline under it marking where the section begins. */
+  .kit-section-head {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    margin: 0 0 var(--space-1);
+    padding: 0 var(--space-3) var(--space-1);
+    border-bottom: 1px solid var(--border-hairline);
+    font: var(--type-label);
+    color: var(--ink-muted);
+    text-align: start;
+
+    & > .count {
+      margin-inline-start: auto;
+      font: var(--type-meta);
+      font-variant-numeric: tabular-nums;
+      color: var(--ink-subtle);
+    }
   }
 
   /* The one empty state (ui/empty): mark, title, why, one action, set on
@@ -696,19 +718,31 @@
     }
   }
 
-  /* Tooltip: solid ink, never coral; fades and settles from .96. */
+  /* Tooltip: solid ink, never coral. It fades in over --dur-fade, settling
+     2px toward its trigger; it leaves at once, so moving on is never held
+     up by the last one. With reduced motion only the fade runs. */
   .kit-tip {
+    --kit-tip-from: 0 2px;
     border-radius: var(--radius-sm);
     background: var(--ink-solid);
     color: var(--on-ink);
     font: var(--type-meta);
 
+    &[data-side="bottom"] {
+      --kit-tip-from: 0 -2px;
+    }
+    &[data-side="left"] {
+      --kit-tip-from: 2px 0;
+    }
+    &[data-side="right"] {
+      --kit-tip-from: -2px 0;
+    }
+    &:is([data-state="delayed-open"], [data-state="instant-open"]) {
+      animation: kit-tip-fade var(--dur-fade) var(--ease-out) both;
+    }
     @media (prefers-reduced-motion: no-preference) {
       &:is([data-state="delayed-open"], [data-state="instant-open"]) {
-        animation: kit-tip-in var(--dur-menu) var(--ease-out) both;
-      }
-      &[data-state="closed"] {
-        animation: kit-tip-out var(--dur-menu) var(--ease-out) both;
+        animation: kit-tip-in var(--dur-fade) var(--ease-out) both;
       }
     }
   }
@@ -1108,13 +1142,19 @@
 @keyframes kit-tip-in {
   from {
     opacity: 0;
-    transform: scale(0.96);
+    translate: var(--kit-tip-from);
   }
 }
-@keyframes kit-tip-out {
-  to {
+@keyframes kit-tip-fade {
+  from {
     opacity: 0;
-    transform: scale(0.96);
+  }
+}
+/* The rail's travelling label (motion/Rail) settling in as it re-labels. */
+@keyframes rail-label-in {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
   }
 }
 @keyframes kit-dialog-in {

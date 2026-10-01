@@ -1,4 +1,5 @@
 <script lang="ts">
+  import Tip from "$lib/components/ui/tooltip/tip.svelte";
   import { IconClose, IconWindow } from "$lib/icons";
   import { dur } from "../motion/curves.svelte";
   import { land } from "../motion/share.svelte";
@@ -47,14 +48,19 @@
       >
     </span>
   </button>
-  <button
-    aria-label="Remove selection"
-    class="remove touch-hit"
-    onclick={onremove}
-    type="button"
-  >
-    <IconClose />
-  </button>
+  <Tip label="Remove selection">
+    {#snippet children(tip)}
+      <button
+        {...tip}
+        aria-label="Remove selection"
+        class="remove touch-hit"
+        onclick={onremove}
+        type="button"
+      >
+        <IconClose />
+      </button>
+    {/snippet}
+  </Tip>
 </span>
 
 <style>

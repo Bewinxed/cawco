@@ -16,6 +16,8 @@
    * Sessions use ActivityDot (status dots) rather than text pills — far more
    * space-efficient and less noisy.
    */
+  import type { Attachment } from "svelte/attachments";
+  import { SvelteSet } from "svelte/reactivity";
   import { TextMorph } from "torph/svelte";
   import { page } from "$app/state";
   import WorkflowRail from "$lib/components/features/workflows/WorkflowRail.svelte";
@@ -28,15 +30,14 @@
   import { Skeleton } from "$lib/components/ui/skeleton";
   import ThemeSwitcher from "$lib/components/ui/ThemeSwitcher.svelte";
   import { Toggle } from "$lib/components/ui/toggle";
+  import Tip from "$lib/components/ui/tooltip/tip.svelte";
   import {
     IconAssistant,
     IconBox,
     IconChevronRight,
-    IconFolder,
     IconPlus,
     IconSettings,
     IconSort,
-    IconUsage,
     IconWorkflow,
   } from "$lib/icons";
   import { formatAgeShort, formatDistanceToNow } from "$lib/utils/time";
@@ -55,11 +56,14 @@
   import FolderMenu from "./FolderMenu.svelte";
   import { folderPrefs } from "./folder-prefs.svelte";
   import Home from "./home/Home.svelte";
+  import HomeRecent from "./home/HomeRecent.svelte";
   import { conversationHref } from "./links";
   import { markHue, sessionSprite } from "./mark";
   import { CURVE, dur } from "./motion/curves.svelte";
+  import { heldOrder, holdWhileInside } from "./motion/held-order.svelte";
   import { reflow } from "./motion/rows.svelte";
   import NewProjectPopover from "./NewProjectPopover.svelte";
+  import ProjectMark from "./ProjectMark.svelte";
   import { type RailSort, rail } from "./rail.svelte";
   import NewSessionDialog from "./spawn/NewSessionDialog.svelte";
   import UsageMeter from "./UsageMeter.svelte";
@@ -96,6 +100,7 @@
     }
     return `/config/${SECTIONS.some((section) => section.slug === last) ? last : "rules"}`;
   });
+  const configuring = $derived(path.startsWith("/config"));
   /**
    * Which conversation is in front, for the rows to mark. The workspace
    * store, not the URL: a tab switch writes the address with `pushState`,
@@ -242,10 +247,84 @@
     );
 
   const sessionsOf = (project: ProjectRow): InstanceRow[] =>
-    ordered(shown(running.filter((row) => inProject(row, project))));
+    shown(running.filter((row) => inProject(row, project)));
 
-  const recentCountOf = (project: ProjectRow): number =>
-    notRunning.filter((row) => inProject(row, project)).length;
+  /* ---- recent and older ------------------------------------------------
+   * A project lists what is recent — running, waiting on you, or moved in
+   * the last day — and folds the rest under one "N older" row. Opened, the
+   * older ones scroll in a box six rows tall, so they never push the
+   * projects under them down the rail.
+   */
+  const DAY_MS = 24 * 60 * 60 * 1000;
+  function splitOf(project: ProjectRow): {
+    recent: InstanceRow[];
+    older: InstanceRow[];
+  } {
+    const live = sessionsOf(project);
+    const liveIds = new Set(live.map((row) => row.id));
+    const resting = notRunning.filter(
+      (row) => inProject(row, project) && !liveIds.has(row.id)
+    );
+    const recent = [...live];
+    const older: InstanceRow[] = [];
+    for (const row of resting) {
+      if (
+        whiffle.activityOf(row.id) === "blocked" ||
+        now - lastAt(row) < DAY_MS
+      ) {
+        recent.push(row);
+      } else {
+        older.push(row);
+      }
+    }
+    return { recent, older };
+  }
+
+  /** Projects whose older list is open; in memory, so a reload shuts them. */
+  const olderOpen = new SvelteSet<string>();
+  function toggleOlder(id: string) {
+    if (olderOpen.has(id)) {
+      olderOpen.delete(id);
+    } else {
+      olderOpen.add(id);
+    }
+  }
+  /** Open by hand, or because the conversation in front is one of them. */
+  const olderShown = (project: ProjectRow, older: InstanceRow[]): boolean =>
+    olderOpen.has(project.id) ||
+    (activeSession !== null && older.some((row) => row.id === activeSession));
+
+  // The conversation in front stays in view inside its older box.
+  $effect(() => {
+    const id = activeSession;
+    if (!id) {
+      return;
+    }
+    requestAnimationFrame(() => {
+      document
+        .querySelector(`.older [data-session-row="${CSS.escape(id)}"]`)
+        ?.scrollIntoView({ block: "nearest" });
+    });
+  });
+
+  /** Marks which edges of a scroll box have more past them, for the fade. */
+  const scrollEdges: Attachment<HTMLElement> = (node) => {
+    const mark = () => {
+      node.toggleAttribute("data-more-above", node.scrollTop > 0);
+      node.toggleAttribute(
+        "data-more-below",
+        node.scrollTop + node.clientHeight < node.scrollHeight - 1
+      );
+    };
+    mark();
+    const sizes = new ResizeObserver(mark);
+    sizes.observe(node);
+    node.addEventListener("scroll", mark, { passive: true });
+    return () => {
+      sizes.disconnect();
+      node.removeEventListener("scroll", mark);
+    };
+  };
 
   /** What a project says when nothing in it runs: how much of it is resumable. */
   const notRunning = $derived(
@@ -310,7 +389,13 @@
    * Recency is the tiebreak under `name` and `state` alike: two idle sessions
    * in one project are still told apart by which one you touched last.
    */
-  function ordered(rows: InstanceRow[]): InstanceRow[] {
+  function ordered(rows: InstanceRow[], key: string): InstanceRow[] {
+    // Held (motion/held-order): activity never moves a row, and a settled
+    // re-sort lands only while the pointer is away from the rail's lists.
+    return heldOrder(key, sorted(rows), (row) => row.id);
+  }
+
+  function sorted(rows: InstanceRow[]): InstanceRow[] {
     const by = rail.sort;
     return [...rows].sort((a, b) => {
       if (by === "name") {
@@ -352,7 +437,7 @@
    * root rather than dropped: a session the rail can reach is never hidden
    * because its parent is not on screen.
    */
-  function nested(rows: InstanceRow[]): Nested[] {
+  function nested(rows: InstanceRow[], key: string): Nested[] {
     const present = new Set(rows.map((row) => row.id));
     const children = new Map<string, InstanceRow[]>();
     const roots: InstanceRow[] = [];
@@ -370,16 +455,16 @@
       }
     }
     const out: Nested[] = [];
-    const walk = (list: InstanceRow[], depth: number): void => {
-      for (const row of ordered(list)) {
+    const walk = (list: InstanceRow[], depth: number, under: string): void => {
+      for (const row of ordered(list, `${key}:${under}`)) {
         out.push({ row, depth: Math.min(depth, MAX_INDENT) });
         const kids = children.get(row.id);
         if (kids) {
-          walk(kids, depth + 1);
+          walk(kids, depth + 1, row.id);
         }
       }
     };
-    walk(roots, 0);
+    walk(roots, 0, "root");
     return out;
   }
 
@@ -473,6 +558,40 @@
   </Toggle>
 {/snippet}
 
+{#snippet subRow(row: InstanceRow, depth: number)}
+  {@const Sprite = sessionSprite(row.id)}
+  {@const activity = whiffle.activityOf(row.id)}
+  <li
+    class="group/menu-sub-item relative"
+    data-flip
+    data-session-row={row.id}
+    data-sidebar="menu-sub-item"
+    data-slot="sidebar-menu-sub-item"
+  >
+    <Sidebar.MenuSubButton
+      class={SUB_ROW}
+      data-share="session:{row.id}"
+      href={conversationHref(row.id, whiffle.instanceIndex)}
+      isActive={activeSession === row.id}
+      style={indent(depth)}
+    >
+      <span
+        class={MARK}
+        style="background-image: var(--mark-overlay); background-color: var(--mark-{markHue(row.cwd || row.machineId)});"
+      >
+        <Sprite
+          aria-hidden="true"
+          class={MARK_GLYPH}
+          style="color: var(--mark-glyph);"
+        />
+      </span>
+      <span class="min-w-0 flex-1 truncate">{sessionName(row)}</span>
+      {@render age(row)}
+      <span class={TRAIL}><ActivityDot {activity} /></span>
+    </Sidebar.MenuSubButton>
+  </li>
+{/snippet}
+
 {#snippet age(row: InstanceRow)}
   {@const label = ageOf(row)}
   {#if label}
@@ -526,27 +645,35 @@
           </Sidebar.MenuButton>
         </Sidebar.MenuItem>
       </Sidebar.Menu>
-      <button
-        aria-expanded={assistantOpen}
-        aria-label="Assistant (⌘J)"
-        class="head-action focus-inset touch-hit"
-        data-assistant-row
-        data-on={assistantOpen || undefined}
-        onclick={onassistant}
-        title="Assistant ⌘J"
-        type="button"
-      >
-        <IconAssistant class="text-[var(--coral-11)]" />
-      </button>
-      <button
-        aria-label="Start session (⇧⌘N)"
-        class="head-action focus-inset touch-hit"
-        onclick={() => newSession()}
-        title="Start session ⇧⌘N"
-        type="button"
-      >
-        <IconPlus />
-      </button>
+      <Tip keys="⌘J" label="Assistant">
+        {#snippet children(tip)}
+          <button
+            {...tip}
+            aria-expanded={assistantOpen}
+            aria-label="Assistant"
+            class="head-action focus-inset touch-hit"
+            data-assistant-row
+            data-on={assistantOpen || undefined}
+            onclick={onassistant}
+            type="button"
+          >
+            <IconAssistant class="text-[var(--coral-11)]" />
+          </button>
+        {/snippet}
+      </Tip>
+      <Tip keys="⇧⌘N" label="Start session">
+        {#snippet children(tip)}
+          <button
+            {...tip}
+            aria-label="Start session"
+            class="head-action focus-inset touch-hit"
+            onclick={() => newSession()}
+            type="button"
+          >
+            <IconPlus />
+          </button>
+        {/snippet}
+      </Tip>
     </div>
   </Sidebar.Header>
 
@@ -603,32 +730,6 @@
                 ><span class={SLOT}><IconWorkflow class={SLOT_GLYPH} /></span
                 ><span>Workflows</span></a
               >
-            {/snippet}
-          </Sidebar.MenuButton>
-        </Sidebar.MenuItem>
-        <Sidebar.MenuItem>
-          <Sidebar.MenuButton
-            class={NAV_ROW}
-            isActive={path.startsWith('/usage')}
-          >
-            {#snippet child({ props })}
-              <a href="/usage" {...props}>
-                <span class={SLOT}><IconUsage class={SLOT_GLYPH} /></span>
-                <span>Usage</span>
-              </a>
-            {/snippet}
-          </Sidebar.MenuButton>
-        </Sidebar.MenuItem>
-        <Sidebar.MenuItem>
-          <Sidebar.MenuButton
-            class={NAV_ROW}
-            isActive={path.startsWith('/config')}
-          >
-            {#snippet child({ props })}
-              <a href={configureHref} {...props}>
-                <span class={SLOT}><IconSettings class={SLOT_GLYPH} /></span>
-                <span>Configure</span>
-              </a>
             {/snippet}
           </Sidebar.MenuButton>
         </Sidebar.MenuItem>
@@ -723,7 +824,11 @@
             {/if}
           </p>
         {:else}
-          <Sidebar.Menu class={MENU} {@attach highlight(PILL)}>
+          <Sidebar.Menu
+            class={MENU}
+            {@attach highlight(PILL)}
+            {@attach holdWhileInside('rail:')}
+          >
             {#each orderedProjects as project (project.id)}
               {@const sessions = sessionsOf(project)}
               {@const expanded = !folderPrefs.collapsed(project.cwd)}
@@ -752,15 +857,7 @@
                     >
                       <IconChevronRight class="size-3 text-muted-foreground" />
                     </span>
-                    <span
-                      class={MARK}
-                      style="background-image: var(--mark-overlay); background-color: var(--mark-{markHue(project.cwd)});"
-                    >
-                      <IconFolder
-                        class={MARK_GLYPH}
-                        style="color: var(--mark-glyph);"
-                      />
-                    </span>
+                    <ProjectMark hue={markHue(project.cwd)} />
                     <span class="min-w-0 truncate">{project.name}</span>
                     {#if sessions.length > 0}
                       {#key sessions.length}
@@ -782,43 +879,41 @@
                    slide down to make its room, and closes the same way. -->
                   <div data-flip>
                     <Sidebar.MenuSub>
-                      {#each nested(sessions) as { row, depth } (row.id)}
-                        {@const Sprite = sessionSprite(row.id)}
-                        {@const activity = whiffle.activityOf(row.id)}
-                        <li
-                          class="group/menu-sub-item relative"
-                          data-flip
-                          data-sidebar="menu-sub-item"
-                          data-slot="sidebar-menu-sub-item"
-                        >
+                      {@const lists = splitOf(project)}
+                      {#each nested(lists.recent, `rail:${project.id}:recent`) as { row, depth } (row.id)}
+                        {@render subRow(row, depth)}
+                      {/each}
+                      {#if lists.older.length > 0}
+                        {@const olderVisible = olderShown(project, lists.older)}
+                        <Sidebar.MenuSubItem data-flip>
                           <Sidebar.MenuSubButton
-                            class={SUB_ROW}
-                            data-share="session:{row.id}"
-                            href={conversationHref(row.id, whiffle.instanceIndex)}
-                            isActive={activeSession === row.id}
-                            style={indent(depth)}
+                            aria-expanded={olderVisible}
+                            class="{SUB_ROW} text-muted-foreground"
+                            onclick={() => toggleOlder(project.id)}
                           >
                             <span
-                              class={MARK}
-                              style="background-image: var(--mark-overlay); background-color: var(--mark-{markHue(row.cwd || row.machineId)});"
+                              aria-hidden="true"
+                              class="chevron inline-flex size-[14px] shrink-0 items-center justify-center"
+                              class:rotate-90={olderVisible}
                             >
-                              <Sprite
-                                aria-hidden="true"
-                                class={MARK_GLYPH}
-                                style="color: var(--mark-glyph);"
-                              />
+                              <IconChevronRight class="size-3" />
                             </span>
-                            <span class="min-w-0 flex-1 truncate"
-                              >{sessionName(row)}</span
-                            >
-                            {@render age(row)}
-                            <span class={TRAIL}
-                              ><ActivityDot {activity} /></span
-                            >
+                            <span class="num">{lists.older.length} older</span>
                           </Sidebar.MenuSubButton>
-                        </li>
-                      {:else}
-                        {@const recent = recentCountOf(project)}
+                        </Sidebar.MenuSubItem>
+                        {#if olderVisible}
+                          <!-- Older sessions scroll in a box of their own,
+                               six rows at most, so opening them never pushes
+                               the projects below or the footer. -->
+                          <li class="older-wrap" data-flip>
+                            <ul class="older" {@attach scrollEdges}>
+                              {#each nested(lists.older, `rail:${project.id}:older`) as { row, depth } (row.id)}
+                                {@render subRow(row, depth)}
+                              {/each}
+                            </ul>
+                          </li>
+                        {/if}
+                      {:else if lists.recent.length === 0}
                         <Sidebar.MenuSubItem data-flip>
                           <Sidebar.MenuSubButton
                             class="{SUB_ROW} text-muted-foreground"
@@ -829,10 +924,10 @@
                           cwd: project.cwd,
                         })}
                           >
-                            {recent > 0 ? `${recent} recent — none running` : 'No sessions — start one'}
+                            No sessions — start one
                           </Sidebar.MenuSubButton>
                         </Sidebar.MenuSubItem>
-                      {/each}
+                      {/if}
                     </Sidebar.MenuSub>
                   </div>
                 {/if}
@@ -843,6 +938,10 @@
       </Sidebar.Group>
     {:else if stage >= 1}
       {@render pending(6, LIST_ROW_H)}
+    {/if}
+    {#if !narrow}
+      <!-- Everything else that can be opened, after the projects. -->
+      <HomeRecent inset />
     {/if}
   </Sidebar.Content>
 
@@ -862,15 +961,25 @@
             <span class="min-w-0 flex-1 truncate text-foreground"
               >bewinxed</span
             >
-            <span class="num shrink-0 text-meta text-muted-foreground">
-              {#key whiffle.machines.length}
-                <span data-flip="pop">{whiffle.machines.length}</span>
-              {/key}
-              machine{whiffle.machines.length === 1 ? '' : 's'}
-            </span>
           </Sidebar.MenuButton>
         </Sidebar.MenuItem>
       </Sidebar.Menu>
+      <!-- Configure and the theme: the pair of settings in the corner. -->
+      <Tip label="Configure">
+        {#snippet children(tip)}
+          <Button
+            {...tip}
+            aria-current={configuring ? 'page' : undefined}
+            aria-label="Configure"
+            class="configure"
+            href={configureHref}
+            size="icon-sm"
+            variant="ghost"
+          >
+            <IconSettings class="size-4" />
+          </Button>
+        {/snippet}
+      </Tip>
       <ThemeSwitcher />
     </div>
   </Sidebar.Footer>
@@ -922,6 +1031,49 @@
       background: var(--surface-hover);
       color: var(--ink-strong);
     }
+  }
+  /* A project's older sessions: six sub-rows (28px, 2px apart) at most,
+     scrolling in place. The edges fade only while there is more past them. */
+  .older-wrap {
+    list-style: none;
+  }
+  .older {
+    --fade: var(--space-4);
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    max-block-size: calc(6 * 28px + 5 * 2px);
+    margin: 0;
+    padding: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-width: thin;
+    list-style: none;
+  }
+  .older[data-more-above] {
+    mask-image: linear-gradient(transparent, #000 var(--fade));
+  }
+  .older[data-more-below] {
+    mask-image: linear-gradient(#000 calc(100% - var(--fade)), transparent);
+  }
+  .older[data-more-above][data-more-below] {
+    mask-image: linear-gradient(
+      transparent,
+      #000 var(--fade),
+      #000 calc(100% - var(--fade)),
+      transparent
+    );
+  }
+  /* Configure, while a /config page is open: the selected tint, crossing
+     over --dur-control like every control's colour. */
+  :global(.configure[aria-current="page"]) {
+    background: var(--selected-bg);
+    color: var(--selected-ink);
+  }
+  :global(.configure) {
+    transition:
+      background-color var(--dur-control) var(--ease-out),
+      color var(--dur-control) var(--ease-out);
   }
   /* The project chevron turns over --dur-control. */
   .chevron {

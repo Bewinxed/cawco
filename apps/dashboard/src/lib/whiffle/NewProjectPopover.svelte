@@ -1,9 +1,5 @@
 <script lang="ts">
-  /**
-   * Names a directory so the rail has a folder for it before anything has run
-   * there. Every other folder in the rail is grown from live work, which leaves
-   * no way at all to add the checkout you have not started yet — this is it.
-   */
+  import { mergeProps } from "bits-ui";
   import { tick } from "svelte";
   import DirectoryPicker from "$lib/components/features/DirectoryPicker.svelte";
   import { Button } from "$lib/components/ui/button";
@@ -12,6 +8,12 @@
   import * as Popover from "$lib/components/ui/popover";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Select from "$lib/components/ui/select";
+  /**
+   * Names a directory so the rail has a folder for it before anything has run
+   * there. Every other folder in the rail is grown from live work, which leaves
+   * no way at all to add the checkout you have not started yet — this is it.
+   */
+  import Tip from "$lib/components/ui/tooltip/tip.svelte";
   import { IconPlus } from "$lib/icons";
   import { createProject, whiffle } from "./client.svelte";
   import { appear } from "./motion/curves.svelte";
@@ -105,20 +107,23 @@
 {/snippet}
 
 <Popover.Root onOpenChange={opened} {open}>
-  <Popover.Trigger>
-    {#snippet child({ props })}
-      <Button
-        {...props}
-        aria-label="New project"
-        class="-mr-1"
-        size="icon-sm"
-        title="New project"
-        variant="ghost"
-      >
-        <IconPlus />
-      </Button>
+  <Tip label="New project">
+    {#snippet children(tip)}
+      <Popover.Trigger>
+        {#snippet child({ props })}
+          <Button
+            {...mergeProps(props, tip)}
+            aria-label="New project"
+            class="-mr-1"
+            size="icon-sm"
+            variant="ghost"
+          >
+            <IconPlus />
+          </Button>
+        {/snippet}
+      </Popover.Trigger>
     {/snippet}
-  </Popover.Trigger>
+  </Tip>
 
   <Popover.Content
     align="start"

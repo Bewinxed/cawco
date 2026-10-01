@@ -29,6 +29,7 @@ import {
 import { machineFaults } from "../fleet-faults";
 import { conversationHref, resolveSessionTitle, sessionTitle } from "../links";
 import { machineLabel } from "../machine";
+import { heldOrder } from "../motion/held-order.svelte";
 import { permissionSummary } from "../permission-summary";
 import { questionsOf } from "../question";
 import { rail } from "../rail.svelte";
@@ -231,6 +232,9 @@ export function lastAt(row: InstanceRow): number {
   return Number.isNaN(at) ? 0 : at;
 }
 
+/** When each working session joined Working this stint (see `working`). */
+const enteredWorking = new Map<string, number>();
+
 /** The rail's delegates switch, kept: work handed off is listed only on request. */
 const listed = (row: InstanceRow): boolean =>
   !row.workflowRunId && (rail.delegates || !row.parentInstanceId);
@@ -239,7 +243,8 @@ const listed = (row: InstanceRow): boolean =>
 
 export interface MachineException {
   machineId: string;
-  /** "MacBook unreachable" */
+  /** What is wrong, in a word or two ("behind hub"); said on the machine's
+      own row, so it never names the machine again. */
   text: string;
 }
 
@@ -301,14 +306,7 @@ class Home {
   readonly exceptions = $derived<MachineException[]>(
     whiffle.machines.flatMap((machine) => {
       const word = exceptionOf(machine);
-      return word
-        ? [
-            {
-              machineId: machine.machineId,
-              text: `${machineLabel(machine.hostname)} ${word}`,
-            },
-          ]
-        : [];
+      return word ? [{ machineId: machine.machineId, text: word }] : [];
     })
   );
 
@@ -382,23 +380,39 @@ class Home {
    * switch says: work handed off is still work, and Caw only says "all
    * quiet" when nothing at all is working.
    */
-  readonly working = $derived(
-    whiffle.runningInstances
-      .filter(
-        (row) => !row.workflowRunId && whiffle.activityOf(row.id) === "working"
-      )
-      .sort(
-        (a, b) =>
-          (whiffle.turnSince(a.id) ?? lastAt(a)) -
-          (whiffle.turnSince(b.id) ?? lastAt(b))
-      )
-  );
+  readonly working = $derived.by(() => {
+    const rows = whiffle.runningInstances.filter(
+      (row) => !row.workflowRunId && whiffle.activityOf(row.id) === "working"
+    );
+    // Ordered by when each joined Working this stint, oldest first: a key
+    // that never moves while it works, so two agents trading turns never
+    // swap places. Stamped on arrival, forgotten on leaving.
+    const present = new Set(rows.map((row) => row.id));
+    for (const id of enteredWorking.keys()) {
+      if (!present.has(id)) {
+        enteredWorking.delete(id);
+      }
+    }
+    const at = Date.now();
+    for (const row of rows) {
+      if (!enteredWorking.has(row.id)) {
+        // Its turn's start when known (a page opened mid-turn), read once.
+        enteredWorking.set(row.id, whiffle.turnSince(row.id) ?? at);
+      }
+    }
+    return rows.sort(
+      (a, b) =>
+        (enteredWorking.get(a.id) ?? at) - (enteredWorking.get(b.id) ?? at) ||
+        a.id.localeCompare(b.id)
+    );
+  });
 
   readonly finished = $derived.by<InstanceRow[]>(() => {
     if (choices.finished === "a") {
       return [];
     }
-    return (
+    return heldOrder(
+      "home:finished",
       whiffle.listedInstances
         .filter((row) => {
           if (!listed(row)) {
@@ -417,7 +431,8 @@ class Home {
         .sort(
           (a, b) =>
             Number(isFailed(b)) - Number(isFailed(a)) || lastAt(b) - lastAt(a)
-        )
+        ),
+      (row) => row.id
     );
   });
 
@@ -472,7 +487,11 @@ class Home {
           })
         )
     );
-    return [...live, ...stored].sort((a, b) => b.at - a.at);
+    return heldOrder(
+      "home:recent",
+      [...live, ...stored].sort((a, b) => b.at - a.at),
+      (item) => item.key
+    );
   });
 
   /** What a wide screen opens with nothing open: the longest wait, else the latest work. */

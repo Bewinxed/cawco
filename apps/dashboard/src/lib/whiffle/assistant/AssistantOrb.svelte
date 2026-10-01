@@ -6,6 +6,7 @@
    * neighbour Jump — hairline, raised surface — and only its glyph takes the
    * accent, so the bar reads as one row of controls, not a lone blue slab.
    */
+  import Tip from "$lib/components/ui/tooltip/tip.svelte";
   import { IconAssistant } from "$lib/icons";
 
   let {
@@ -17,17 +18,21 @@
   } = $props();
 </script>
 
-<button
-  aria-expanded={open}
-  aria-label={open ? 'Close assistant' : 'Open assistant'}
-  class="orb touch-hit"
-  data-assistant-orb
-  {onclick}
-  title="Assistant"
-  type="button"
->
-  <IconAssistant />
-</button>
+<Tip keys="⌘J" label={open ? 'Close assistant' : 'Open assistant'}>
+  {#snippet children(tip)}
+    <button
+      {...tip}
+      aria-expanded={open}
+      aria-label={open ? 'Close assistant' : 'Open assistant'}
+      class="orb touch-hit"
+      data-assistant-orb
+      {onclick}
+      type="button"
+    >
+      <IconAssistant />
+    </button>
+  {/snippet}
+</Tip>
 
 <style>
   .orb {

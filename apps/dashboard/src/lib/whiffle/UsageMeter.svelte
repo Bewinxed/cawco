@@ -161,119 +161,124 @@
   }
 </script>
 
-<Popover.Root
-  onOpenChange={(open) => {
+<!-- The meter opens its popover; only the "Usage" word in its corner goes to
+     the usage page, so a stray click on the bars never navigates. -->
+<div class="meter-wrap">
+  <Popover.Root
+    onOpenChange={(open) => {
     if (open) {
       // biome-ignore lint/complexity/noVoid: fire-and-forget — refreshSpend() manages its own loading/error state
       void refreshSpend();
     }
   }}
->
-  <Popover.Trigger
-    aria-label={hasReading
+  >
+    <Popover.Trigger
+      aria-label={hasReading
       ? `Claude limits. ${visible
           .map((w) => `${compactLabel(w)} ${Math.round(w.percent)} percent`)
           .join(", ")}${hiddenCount > 0 ? `, ${hiddenCount} more` : ""}. Show them all.${
           staleNote ? ` ${staleNote}.` : ""
         }`
       : `Claude usage limits. ${emptyReason}`}
-    class="meter press-tint"
-  >
-    {#if hasReading}
-      <span class="rows">
-        {#each visible as window (window.kind)}
-          {@const tone = band(window.percent)}
-          <span aria-hidden="true" class="label num" data-flip
-            >{compactLabel(window)}</span
-          >
-          <UsageRail
-            compact
-            label={compactLabel(window)}
-            value={window.percent}
-          />
-          {#key Math.round(window.percent)}
-            <span aria-hidden="true" class="pct {tone}" data-flip="pop"
-              >{Math.round(window.percent)}%</span
+      class="meter press-tint"
+    >
+      {#if hasReading}
+        <span class="rows">
+          {#each visible as window, i (window.kind)}
+            {@const tone = band(window.percent)}
+            <span aria-hidden="true" class="label num" data-flip
+              >{compactLabel(window)}</span
             >
-          {/key}
-        {/each}
-      </span>
-      {#if tightest?.resetsAt}
-        <span class="note {band(tightest.percent)}" data-flip>
-          {compactLabel(tightest)} {resetsIn(tightest.resetsAt, now)}
+            {#key Math.round(window.percent)}
+              <span aria-hidden="true" class="pct {tone}" data-flip="pop"
+                >{Math.round(window.percent)}%</span
+              >
+            {/key}
+            <span class="bar" class:first={i === 0}>
+              <UsageRail
+                compact
+                label={compactLabel(window)}
+                value={window.percent}
+              />
+            </span>
+          {/each}
         </span>
-      {:else if staleNote}
-        <span class="note" data-flip>{staleNote}</span>
-      {/if}
-    {:else}
-      <span class="note" data-flip>{emptyReason}</span>
-    {/if}
-  </Popover.Trigger>
-
-  <Popover.Content
-    align="start"
-    class="usage-pop w-[min(20rem,calc(100vw-16px))] gap-0 rounded-[var(--radius-lg)] p-0 shadow-lg"
-    collisionPadding={8}
-    side="top"
-    sideOffset={6}
-  >
-    <div class="pop-head">
-      <span class="pop-title">Usage limits</span>
-      {#if hasReading && limits && planLabel(limits.planTier)}
-        <Badge class="ml-auto text-label" variant="outline"
-          >{planLabel(limits.planTier)}</Badge
-        >
-      {/if}
-    </div>
-
-    {#if staleNote}
-      <p class="pop-stale">{staleNote}</p>
-    {/if}
-
-    {#if emptyReason}
-      <p class="pop-empty">{emptyReason}</p>
-    {:else}
-      <ul class="pop-list">
-        {#each ranked as window (window.kind)}
-          {@const tone = band(window.percent)}
-          <li class="pop-row">
-            <span class="pop-name">
-              {compactLabel(window)}
-              {#if window.isActive}
-                <span class="pop-active">active</span>
-              {/if}
-            </span>
-            <span class="pct {tone}">{Math.round(window.percent)}%</span>
-            <span class="pop-bar">
-              <UsageRail label={compactLabel(window)} value={window.percent} />
-            </span>
-            {#if window.resetsAt}
-              <span class="pop-reset">{resetsIn(window.resetsAt, now)}</span>
-            {/if}
-          </li>
-        {/each}
-      </ul>
-    {/if}
-
-    <div class="pop-spend">
-      <IconDollar class="size-3 text-muted-foreground" />
-      <span>opencode</span>
-      <span class="pop-spend-value">
-        {#if spend}
-          {usd(spend.today)}
-          today · {usd(spend.total)} total
-        {:else}
-          —
+        {#if tightest?.resetsAt}
+          <span class="note {band(tightest.percent)}" data-flip>
+            {compactLabel(tightest)} {resetsIn(tightest.resetsAt, now)}
+          </span>
+        {:else if staleNote}
+          <span class="note" data-flip>{staleNote}</span>
         {/if}
-      </span>
-    </div>
+      {:else}
+        <span class="note" data-flip>{emptyReason}</span>
+      {/if}
+    </Popover.Trigger>
 
-    <a class="pop-link" href="/usage">
-      Open full usage
-      <span aria-hidden="true">→</span>
-    </a>
-  </Popover.Content>
-</Popover.Root>
+    <Popover.Content
+      align="start"
+      class="usage-pop w-[min(20rem,calc(100vw-16px))] gap-0 rounded-[var(--radius-lg)] p-0 shadow-lg"
+      collisionPadding={8}
+      side="top"
+      sideOffset={6}
+    >
+      <div class="pop-head">
+        <span class="pop-title">Usage limits</span>
+        {#if hasReading && limits && planLabel(limits.planTier)}
+          <Badge class="ml-auto text-label" variant="outline"
+            >{planLabel(limits.planTier)}</Badge
+          >
+        {/if}
+      </div>
+
+      {#if staleNote}
+        <p class="pop-stale">{staleNote}</p>
+      {/if}
+
+      {#if emptyReason}
+        <p class="pop-empty">{emptyReason}</p>
+      {:else}
+        <ul class="pop-list">
+          {#each ranked as window (window.kind)}
+            {@const tone = band(window.percent)}
+            <li class="pop-row">
+              <span class="pop-name">
+                {compactLabel(window)}
+                {#if window.isActive}
+                  <span class="pop-active">active</span>
+                {/if}
+              </span>
+              <span class="pct {tone}">{Math.round(window.percent)}%</span>
+              <span class="pop-bar">
+                <UsageRail
+                  label={compactLabel(window)}
+                  value={window.percent}
+                />
+              </span>
+              {#if window.resetsAt}
+                <span class="pop-reset">{resetsIn(window.resetsAt, now)}</span>
+              {/if}
+            </li>
+          {/each}
+        </ul>
+      {/if}
+
+      <div class="pop-spend">
+        <IconDollar class="size-3 text-muted-foreground" />
+        <span>opencode</span>
+        <span class="pop-spend-value">
+          {#if spend}
+            {usd(spend.today)}
+            today · {usd(spend.total)} total
+          {:else}
+            —
+          {/if}
+        </span>
+      </div>
+    </Popover.Content>
+  </Popover.Root>
+  <a class="usage-link touch-hit" href="/usage">Usage</a>
+</div>
 
 <style>
   .pop-head {
@@ -352,26 +357,6 @@
     font-variant-numeric: tabular-nums;
     color: var(--ink-muted);
   }
-  .pop-link {
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 10px 12px;
-    border-top: 1px solid var(--border-hairline);
-    font: var(--type-label);
-    color: var(--ink-strong);
-    text-decoration: none;
-    transition: background-color var(--dur-control) var(--ease-out);
-
-    @media (hover: hover) and (pointer: fine) {
-      &:hover {
-        background: var(--surface-hover);
-      }
-    }
-    @media (pointer: coarse) {
-      min-height: 44px;
-    }
-  }
   /* The glance: one grid, so every bar starts and ends on the same x
      whatever the label. Neutral until a window is tight — then only that
      row's number takes the status colour, and the reset line says when it
@@ -411,12 +396,25 @@
       --meter-pad: 10px;
     }
   }
+  .meter-wrap {
+    --usage-link-w: 5ch;
+    position: relative;
+  }
+  /* Label, its number beside it, then the bar to the end; the top row's
+     bar stops short of the corner link. */
   .rows {
     display: grid;
-    grid-template-columns: max-content minmax(0, 1fr) 4ch;
+    grid-template-columns: max-content 4ch minmax(0, 1fr);
     align-items: center;
     column-gap: 10px;
     row-gap: 8px;
+  }
+  .bar {
+    display: flex;
+    min-width: 0;
+  }
+  .bar.first {
+    margin-inline-end: calc(var(--usage-link-w) + 10px);
   }
   .label {
     font: var(--type-meta);
@@ -446,5 +444,25 @@
   }
   .note.critical {
     color: var(--destructive);
+  }
+  /* The way to the usage page, in the meter's top corner: plain words,
+     muted, the action ink on hover and focus. */
+  .usage-link {
+    position: absolute;
+    inset-block-start: 8px;
+    inset-inline-end: 10px;
+    inline-size: var(--usage-link-w);
+    font: var(--type-meta);
+    text-align: end;
+    color: var(--ink-muted);
+    text-decoration: none;
+    transition: color var(--dur-control) var(--ease-out);
+
+    @media (pointer: coarse) {
+      inset-block-start: 10px;
+    }
+  }
+  .usage-link:is(:hover, :focus-visible) {
+    color: var(--coral-11);
   }
 </style>

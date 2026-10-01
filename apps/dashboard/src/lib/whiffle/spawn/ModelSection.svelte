@@ -23,6 +23,7 @@
     rememberModel,
   } from "../models.svelte";
   import { crossIn, crossOut, motionOk } from "../motion/curves.svelte";
+  import Rail from "../motion/Rail.svelte";
   import {
     deriveModelEntries,
     groupModelEntries,
@@ -108,32 +109,18 @@
   let list = $state<HTMLDivElement>();
   /** The rows the last harness had, still on screen while the new ones arrive. */
   let leaving = $state<ModelEntry[]>([]);
-  const harnessIdx = $derived(TABS.findIndex((tab) => tab.id === harness));
   /**
-   * The rail shows marks only; the name rides one tooltip that slides and
-   * re-labels between them rather than a tooltip per mark popping in and out.
-   * `tip` is the mark under the pointer or keyboard focus; `shownTip` holds
-   * the last one so the tooltip fades out where it was instead of jumping.
+   * The rail (motion/Rail) shows marks only; the name rides one label that
+   * slides and re-labels between them. Codex is listed but not pickable yet.
    */
-  let tip = $state(-1);
-  let shownTip = $state(0);
-  let tipWidth = $state(0);
-  $effect(() => {
-    if (tip >= 0) {
-      shownTip = tip;
-    }
-  });
-  const RAIL_PAD = 6;
-  function railMove(event: MouseEvent) {
-    const rail = event.currentTarget as HTMLElement;
-    const box = rail.getBoundingClientRect();
-    // One radio plus its gap; the rail's CSS owns it (--rail-step).
-    const step = Number.parseFloat(
-      getComputedStyle(rail).getPropertyValue("--rail-step")
-    );
-    const at = Math.floor((event.clientY - box.top - RAIL_PAD) / step);
-    tip = at >= 0 && at < TABS.length ? at : -1;
-  }
+  const railItems = $derived(
+    TABS.map((tab) => ({
+      id: tab.id,
+      label: tab.name,
+      soon: tab.soon,
+      disabled: tab.soon || !installed.includes(tab.id as HarnessKind),
+    }))
+  );
   let toolsWidth = $state(0);
 
   $effect(() => {
@@ -238,26 +225,6 @@
     onmodel(id);
     query = "";
   }
-  function tabKey(event: KeyboardEvent) {
-    const step = { ArrowRight: 1, ArrowDown: 1, ArrowLeft: -1, ArrowUp: -1 }[
-      event.key
-    ];
-    if (!step) {
-      return;
-    }
-    event.preventDefault();
-    const enabled = TABS.filter(
-      (tab) => !tab.soon && installed.includes(tab.id as HarnessKind)
-    );
-    const at = enabled.findIndex((tab) => tab.id === harness);
-    const next = enabled[(at + step + enabled.length) % enabled.length];
-    if (next) {
-      onharness(next.id as HarnessKind);
-      (event.currentTarget as HTMLElement)
-        .querySelector<HTMLButtonElement>(`[data-harness="${next.id}"]`)
-        ?.focus();
-    }
-  }
   function rowAnim(i: number) {
     if (phase !== "in") {
       return "none";
@@ -275,68 +242,36 @@
   {/if}
   <div class="picker" class:railed={!runtime}>
     {#if !runtime}
-      <div
-        aria-label="Harness"
-        class="rail"
-        onfocusout={() => { tip = -1; }}
-        onkeydown={tabKey}
-        onmouseleave={() => { tip = -1; }}
-        onmousemove={railMove}
-        role="radiogroup"
-        tabindex="-1"
+      <Rail
+        axis="y"
+        class="harness-rail"
+        itemClass="harness-tab ns-in touch-hit press-tint"
+        itemStyle={(i: number) => `--delay:${i * 30}ms`}
+        items={railItems}
+        label="Harness"
+        onpick={(id: string) => onharness(id as HarnessKind)}
+        value={harness}
       >
-        <span
-          aria-hidden="true"
-          class="thumb"
-          style={`transform:translateY(calc(${harnessIdx} * var(--rail-step)))`}
-        ></span>
-        {#each TABS as tab, i (tab.id)}
-          {@const available = !tab.soon && installed.includes(tab.id as HarnessKind)}
-          <!-- biome-ignore lint/a11y/useSemanticElements: the harness rail is a designed radio group; a native radio cannot carry the mark, thumb and disabled reason -->
-          <button
-            aria-checked={tab.id === harness}
-            aria-describedby={available ? undefined : `harness-${tab.id}-why`}
-            aria-label={tab.name}
-            class="tab ns-in touch-hit press-tint"
-            data-harness={tab.id}
-            disabled={!available}
-            onclick={() => onharness(tab.id as HarnessKind)}
-            onfocus={(event) => { if (event.currentTarget.matches(':focus-visible')) { tip = i; } }}
-            role="radio"
-            style={`--delay:${i * 30}ms`}
-            tabindex={tab.id === harness ? 0 : -1}
-            type="button"
-            class:on={tab.id === harness}
-          >
-            {#if tab.id === "codex"}
-              <OpenAiMark aria-hidden="true" class="codex-mark" />
-            {:else}
-              <HarnessLogo harness={tab.id as HarnessKind} />
-            {/if}
-            {#if !available}
-              <span class="sr-only" id={`harness-${tab.id}-why`}
-                >{tab.soon ? "Coming soon" : `Not installed on ${machineName}`}</span
-              >
-            {/if}
-          </button>
-        {/each}
-        <span
-          aria-hidden="true"
-          class="tip"
-          style={`transform:translateY(calc(${shownTip} * var(--rail-step)));width:${tipWidth}px;opacity:${tip >= 0 ? 1 : 0}`}
-        >
-          {#key shownTip}
-            <span class="tip-text" bind:offsetWidth={tipWidth}
-              >{TABS[shownTip]?.name}
-              {#if TABS[shownTip]?.soon}
-                <span class="soon">soon</span>
-              {:else if !installed.includes(TABS[shownTip]?.id as HarnessKind)}
-                <span class="soon">not installed</span>
-              {/if}</span
+        {#snippet item(tab: (typeof railItems)[number])}
+          {#if tab.id === "codex"}
+            <OpenAiMark aria-hidden="true" class="codex-mark" />
+          {:else}
+            <HarnessLogo harness={tab.id as HarnessKind} />
+          {/if}
+          {#if tab.disabled}
+            <span class="sr-only"
+              >{tab.soon ? "Coming soon" : `Not installed on ${machineName}`}</span
             >
-          {/key}
-        </span>
-      </div>
+          {/if}
+        {/snippet}
+        {#snippet tipExtra(tab: (typeof railItems)[number])}
+          {#if tab.soon}
+            <span class="soon">soon</span>
+          {:else if tab.disabled}
+            <span class="soon">not installed</span>
+          {/if}
+        {/snippet}
+      </Rail>
     {/if}
     <div class="pick">
       <label class="search field-underline">
@@ -503,11 +438,13 @@
   /* One 36px radio plus its gap, which the thumb and the tip travel by. On
      a coarse pointer the gap opens to 8px, so each radio's touch area
      reaches 44px before meeting its neighbour's. */
-  .rail {
+  /* The harness rail (motion/Rail) down the panel's left edge: one 36px
+     radio plus its gap per step. On a coarse pointer the gap opens to 8px,
+     so each radio's touch area reaches 44px before meeting its neighbour's. */
+  :global(.harness-rail) {
     --rail-step: 40px;
     --hit-gap-x: calc(var(--rail-step) - 36px);
     --hit-gap-y: calc(var(--rail-step) - 36px);
-    position: relative;
     display: grid;
     align-content: start;
     gap: calc(var(--rail-step) - 36px);
@@ -520,84 +457,17 @@
     background: var(--surface-recess);
     border-radius: var(--radius-md) 0 0 var(--radius-md);
   }
-  .thumb {
-    position: absolute;
-    top: 6px;
-    left: 6px;
-    width: 36px;
-    height: 36px;
-    background: var(--surface-lift);
-    border-radius: var(--radius-sm);
-    box-shadow: var(--shadow-raised);
-    pointer-events: none;
-    @media (prefers-reduced-motion: no-preference) {
-      transition: transform var(--dur-morph) var(--ease-in-out);
-    }
-  }
-  .tab {
-    position: relative;
+  :global(.harness-tab) {
     display: grid;
     place-items: center;
     width: 36px;
     height: 36px;
-    padding: 0;
-    background: transparent;
-    border: 0;
-    border-radius: var(--radius-sm);
-    cursor: pointer;
-    color: var(--ink-muted);
-    transition: background-color var(--dur-control) var(--ease-out);
   }
-  @media (hover: hover) {
-    .tab:not(.on):not(:disabled):hover {
-      background: var(--surface-hover);
-    }
-  }
-  .tab:disabled {
-    cursor: not-allowed;
-    opacity: 0.45;
-  }
-  .tab :global(.harness-logo),
-  .tab :global(.codex-mark) {
+  :global(.harness-tab .harness-logo),
+  :global(.harness-tab .codex-mark) {
     width: 16px;
     height: 16px;
     flex: none;
-  }
-  /* One tooltip for the whole rail: it slides to the mark under the pointer
-     and re-sizes to its name, so moving down the rail reads as one label
-     travelling, not four appearing and vanishing. */
-  .tip {
-    position: absolute;
-    top: 6px;
-    left: calc(100% + 6px);
-    z-index: 5;
-    display: flex;
-    align-items: center;
-    height: 36px;
-    overflow: hidden;
-    background: var(--ink-strong);
-    color: var(--neutral-2, #fff);
-    border-radius: var(--radius-sm);
-    box-shadow: var(--shadow-raised);
-    pointer-events: none;
-    transition: opacity var(--dur-control) var(--ease-out);
-    @media (prefers-reduced-motion: no-preference) {
-      transition:
-        transform var(--dur-morph) var(--ease-in-out),
-        width var(--dur-morph) var(--ease-in-out),
-        opacity var(--dur-control) var(--ease-out);
-    }
-  }
-  .tip-text {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    padding: 0 10px;
-    font: var(--weight-body) var(--text-meta) / 1 var(--font-body);
-    white-space: nowrap;
-    @media (prefers-reduced-motion: no-preference) {
-      animation: ns-in var(--ns-swap-out-ms) var(--ease-out) both;
-    }
   }
   .soon {
     font: var(--weight-strong) var(--text-label) / 1 var(--font-body);

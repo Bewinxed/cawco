@@ -15,6 +15,7 @@
   import * as Drawer from "$lib/components/ui/drawer";
   import { EmptyState } from "$lib/components/ui/empty";
   import { Skeleton } from "$lib/components/ui/skeleton";
+  import Tip from "$lib/components/ui/tooltip/tip.svelte";
   import { IconAssistant } from "$lib/icons";
   import { whiffle } from "../client.svelte";
   import { conversationHref } from "../links";
@@ -269,23 +270,28 @@
       </span>
       <span class="a-t"><b>Whiffle</b> Assistant</span>
       <span class="a-role">Assistant</span>
-      <button
-        aria-label="Close assistant"
-        class="a-x"
-        onclick={close}
-        type="button"
-      >
-        <svg
-          aria-hidden="true"
-          fill="none"
-          stroke="currentColor"
-          stroke-linecap="round"
-          stroke-width="1.9"
-          viewBox="0 0 24 24"
-        >
-          <path d="M6 6l12 12M18 6L6 18" />
-        </svg>
-      </button>
+      <Tip keys="⌘J" label="Close assistant">
+        {#snippet children(tip)}
+          <button
+            {...tip}
+            aria-label="Close assistant"
+            class="a-x"
+            onclick={close}
+            type="button"
+          >
+            <svg
+              aria-hidden="true"
+              fill="none"
+              stroke="currentColor"
+              stroke-linecap="round"
+              stroke-width="1.9"
+              viewBox="0 0 24 24"
+            >
+              <path d="M6 6l12 12M18 6L6 18" />
+            </svg>
+          </button>
+        {/snippet}
+      </Tip>
     </header>
     {@render panelContents()}
   </div>

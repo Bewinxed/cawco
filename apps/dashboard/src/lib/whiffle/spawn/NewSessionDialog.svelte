@@ -1,9 +1,4 @@
 <script lang="ts">
-  /**
-   * The New Session modal. This file owns the logic — open-reset boundary,
-   * submission generation guard, draft snapshot, dual location verification,
-   * the exact `spawnSession` payload — and composes the designed sections.
-   */
   import {
     contextFitRefusal,
     type EffortLevel,
@@ -26,6 +21,12 @@
   } from "$lib/components/ui/drawer";
   import { machineHue, machineIcon } from "$lib/components/ui/machine-row";
   import { SectionHeader } from "$lib/components/ui/section-header";
+  /**
+   * The New Session modal. This file owns the logic — open-reset boundary,
+   * submission generation guard, draft snapshot, dual location verification,
+   * the exact `spawnSession` payload — and composes the designed sections.
+   */
+  import Tip from "$lib/components/ui/tooltip/tip.svelte";
   import { IconClose as X } from "$lib/icons";
   import Bolt from "~icons/solar/bolt-bold-duotone";
   import Book from "~icons/solar/book-2-bold-duotone";
@@ -991,16 +992,20 @@
         >{continueFrom ? "Sessions · Continue" : "Sessions · New"}</span
       >
     </div>
-    <button
-      aria-label="Close"
-      class="close touch-hit"
-      data-vaul-no-drag
-      onclick={close}
-      title="Close"
-      type="button"
-    >
-      <X />
-    </button>
+    <Tip keys="Esc" label="Close">
+      {#snippet children(tip)}
+        <button
+          {...tip}
+          aria-label="Close"
+          class="close touch-hit"
+          data-vaul-no-drag
+          onclick={close}
+          type="button"
+        >
+          <X />
+        </button>
+      {/snippet}
+    </Tip>
   </div>
   <div
     class="body fai-scroll"

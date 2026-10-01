@@ -1,9 +1,11 @@
 <script lang="ts">
   /**
-   * One session in a home group. Status is the glyph alone, its word the
-   * glyph's accessible name (ruling R3); the title, and at the end the age or
-   * what it is doing now. Where it runs is said once by the machine header
-   * above it, never per row; only a flat list (Recent) adds a line under.
+   * One session in a home group. It leads with its project's mark, the
+   * folder tile the rail's projects list draws, coloured by the session's
+   * status; the status word is read out with the title, so colour is never
+   * the only signal. Under the title, the project and what it is doing now;
+   * at the end, the age. Where it runs is said once by the machine header
+   * above it, never per row; only a flat list (Recent) names the machine.
    *
    * The row is the session menu's trigger (right-click, long-press, the menu
    * key), as every session row in the app is; a pointer can drag it onto a
@@ -11,13 +13,22 @@
    * opens it in the focused pane.
    */
   import type { NeutralSessionInfo } from "@whiffle/core";
+  import Tip from "$lib/components/ui/tooltip/tip.svelte";
   import { IconMaximize } from "$lib/icons";
   import { cn } from "$lib/utils";
-  import type { InstanceRow } from "../client.svelte";
+  import {
+    type InstanceRow,
+    isFailed,
+    isStale,
+    whiffle,
+  } from "../client.svelte";
   import LiveSessionMenu from "../LiveSessionMenu.svelte";
+  import ProjectMark, {
+    type MarkStatus,
+    STATUS_WORD,
+  } from "../ProjectMark.svelte";
   import StoredSessionMenu from "../StoredSessionMenu.svelte";
   import { dragSession } from "../workspace/dnd.svelte";
-  import SessionStatus from "../workspace/SessionStatus.svelte";
   import { openPeek } from "./peek.svelte";
 
   let {
@@ -30,12 +41,13 @@
     href,
     active = false,
     stale = false,
+    done = false,
   }: {
     instance?: InstanceRow | null;
     info?: NeutralSessionInfo | null;
     machineId: string;
     title: string;
-    /** A line under the title, where a flat list needs to say where (Recent). */
+    /** The meta line under the title: the project, then what adds to it. */
     line?: string;
     /** The time at the row's end. */
     trail?: string;
@@ -44,9 +56,34 @@
     active?: boolean;
     /** The hub is not live: the row is what was last known. */
     stale?: boolean;
+    /** It is listed as finished: an idle session here is done, not idle. */
+    done?: boolean;
   } = $props();
 
   const sessionId = $derived(instance?.id ?? info?.sessionId ?? "");
+  const status = $derived.by<MarkStatus>(() => {
+    if (!instance) {
+      return "idle";
+    }
+    if (isFailed(instance)) {
+      return "fail";
+    }
+    if (
+      isStale(instance) ||
+      instance.status === "sleeping" ||
+      instance.status === "stopped"
+    ) {
+      return "idle";
+    }
+    const activity = whiffle.activityOf(instance.id);
+    if (activity === "blocked") {
+      return "attn";
+    }
+    if (activity === "working") {
+      return "live";
+    }
+    return done ? "done" : "idle";
+  });
 </script>
 
 {#snippet body(trigger: Record<string, unknown>)}
@@ -71,9 +108,11 @@
           : null,
     }}
     >
-      <span class="glyph"><SessionStatus compact {sessionId} /></span>
+      <ProjectMark {status} />
       <span class="text">
-        <span class="title">{title}</span>
+        <span class="title"
+          ><span class="sr-only">{STATUS_WORD[status]}: </span>{title}</span
+        >
         {#if line}
           <span class="line">{line}</span>
         {/if}
@@ -85,15 +124,19 @@
     {#if instance}
       {@const live = instance}
       <!-- Glance → peek → dive: the tail of this one, without leaving home. -->
-      <button
-        aria-label="Peek {title}"
-        class="peek touch-hit focus-inset"
-        onclick={() => openPeek({ viewId: live.id, href, title })}
-        title="Peek"
-        type="button"
-      >
-        <IconMaximize aria-hidden="true" />
-      </button>
+      <Tip label="Peek">
+        {#snippet children(tip)}
+          <button
+            {...tip}
+            aria-label="Peek {title}"
+            class="peek touch-hit focus-inset"
+            onclick={() => openPeek({ viewId: live.id, href, title })}
+            type="button"
+          >
+            <IconMaximize aria-hidden="true" />
+          </button>
+        {/snippet}
+      </Tip>
     {/if}
   </div>
 {/snippet}
@@ -180,10 +223,6 @@
       background: var(--surface-fill);
       color: var(--ink-strong);
     }
-  }
-  .glyph {
-    display: inline-flex;
-    flex: none;
   }
   .text {
     display: flex;
