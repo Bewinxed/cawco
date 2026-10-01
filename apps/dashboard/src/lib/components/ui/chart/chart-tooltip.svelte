@@ -169,7 +169,7 @@
               <itemConfig.icon />
             {:else if !hideIndicator}
               <div
-                class={cn("shrink-0 rounded-[2px] border-(--color-border) bg-(--color-bg)", {
+                class={cn("shrink-0 rounded-hair border-(--color-border) bg-(--color-bg)", {
 									"size-2.5": indicator === "dot",
 									"h-full w-1": indicator === "line",
 									"w-0 border-[1.5px] border-dashed bg-transparent": indicator === "dashed",

@@ -600,7 +600,7 @@
         </span>
         <kbd
           class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 font-sans
-                  text-meta text-muted-foreground opacity-0 transition-opacity duration-75
+                  text-meta text-muted-foreground opacity-0 transition-opacity duration-(--dur-ghost)
                   group-hover/search:opacity-100 group-focus-within/search:opacity-100"
           >⌘K</kbd
         >
@@ -613,7 +613,7 @@
                 <span class={SLOT}><IconPlus class={SLOT_GLYPH} /></span>
                 <span class="flex-1">New session</span>
                 <span
-                  class="inline-flex opacity-0 transition-opacity duration-75
+                  class="inline-flex opacity-0 transition-opacity duration-(--dur-ghost)
                            group-hover/menu-item:opacity-100 group-focus-within/menu-item:opacity-100"
                 >
                   <kbd class="font-sans text-meta text-muted-foreground"
@@ -645,7 +645,7 @@
                 >
                 <span class="flex-1">Assistant</span>
                 <span
-                  class="inline-flex opacity-0 transition-opacity duration-75
+                  class="inline-flex opacity-0 transition-opacity duration-(--dur-ghost)
                            group-hover/menu-item:opacity-100 group-focus-within/menu-item:opacity-100"
                 >
                   <kbd class="font-sans text-meta text-muted-foreground"

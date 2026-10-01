@@ -450,7 +450,7 @@
     height: min(899px, calc(100dvh - 64px));
     z-index: 60;
     background: var(--surface-raised);
-    border-radius: 16px;
+    border-radius: var(--radius-panel);
     box-shadow: var(--shadow-overlay);
     display: flex;
     flex-direction: column;

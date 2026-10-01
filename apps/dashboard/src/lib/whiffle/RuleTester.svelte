@@ -68,7 +68,7 @@
     <span class="text-label text-foreground">Try it</span>
     <span
       aria-live="polite"
-      class="text-meta transition-colors duration-240 ease-[var(--ease-out)] {firing
+      class="text-meta transition-colors duration-(--dur-pop) ease-out {firing
         ? 'text-success'
         : 'text-muted-foreground'}"
       role="status"

@@ -109,7 +109,7 @@
     class="flex h-7 shrink-0 items-center gap-1.5 rounded-[var(--radius-sm)] px-1.5
            text-label tabular-nums
            hover:bg-muted
-           transition-[background-color,color] duration-150 ease-out
+           transition-[background-color,color] duration-(--dur-control) ease-out
            {compacting ? 'text-foreground' : TEXT[band]}"
     title={meterTitle}
   >
@@ -181,7 +181,7 @@
         {#each usage.categories as category, index (category.name)}
           <li class="flex items-center gap-2 py-1 text-label">
             <span
-              class="size-2 shrink-0 rounded-[2px]"
+              class="size-2 shrink-0 rounded-hair"
               style="background-color: {swatch(index)}"
             ></span>
             <span class="min-w-0 flex-1 truncate">{category.name}</span>

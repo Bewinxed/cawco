@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-01T09:20:45.408Z",
+  "generatedAt": "2026-10-01T09:28:50.709Z",
   "title": "Design System: Whiffle",
   "extensions": {
     "colorMeta": {
@@ -2192,7 +2192,7 @@
       },
       {
         "name": "The Measured Exception Rule",
-        "body": "The stat tile keeps the comp's measured radii (a 10px card around a 7px well, 7px in), even though a concentric well would be 3px.",
+        "body": "The stat tile keeps the comp's measured radii (a 10px card around a 7px well, 7px in), even though a concentric well would be 3px. The assistant panel keeps its measured 16px shell (`--radius-panel`, JOURNEY.md §Assistant), and the smallest marks keep a 2px hair (`--radius-hair`) rather than the 5px that would turn them into dots. Each is a token, never a literal.",
         "section": "shapes"
       },
       {

@@ -83,23 +83,23 @@
      that has nothing to open — say the same thing rather than nearly. -->
 {#snippet line(task: SessionTask, blocker: string | null)}
   {@render glyph(task)}
-  <span class="min-w-0 truncate text-[13px] {subjectClass(task)}"
+  <span class="min-w-0 truncate text-label {subjectClass(task)}"
     >{task.subject}</span
   >
   {#if task.owner}
     <span
-      class="shrink-0 rounded-full bg-muted px-1.5 text-micro text-muted-foreground"
+      class="shrink-0 rounded-full bg-muted px-1.5 text-label text-muted-foreground"
     >
       {task.owner}
     </span>
   {/if}
   {#if blocker}
-    <span class="ml-auto shrink-0 text-micro text-muted-foreground"
+    <span class="ml-auto shrink-0 text-meta text-muted-foreground"
       >after #{blocker}</span
     >
   {/if}
   <span
-    class="shrink-0 font-mono text-micro text-muted-foreground tabular-nums {blocker
+    class="shrink-0 font-mono text-meta text-muted-foreground tabular-nums {blocker
       ? ''
       : 'ml-auto'}"
     data-tabular
@@ -110,9 +110,9 @@
 <div class="flex flex-col">
   {#if !dense}
     <div class="flex items-baseline gap-2 px-3 pt-2 pb-1">
-      <span class="text-caption">Tasks</span>
+      <span class="text-label">Tasks</span>
       <span
-        class="ml-auto text-micro text-muted-foreground tabular-nums"
+        class="ml-auto text-meta text-muted-foreground tabular-nums"
         data-tabular
       >
         {progress.done}
@@ -140,7 +140,7 @@
         </Collapsible.Trigger>
         <Collapsible.Content>
           <p
-            class="max-w-[60ch] pb-2 text-caption whitespace-pre-line {dense
+            class="max-w-[60ch] pb-2 text-body whitespace-pre-line {dense
               ? 'pr-2 pl-7'
               : 'pr-3 pl-8'}"
           >

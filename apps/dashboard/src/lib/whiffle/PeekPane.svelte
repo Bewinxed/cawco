@@ -263,7 +263,7 @@
             {/if}
             <span class="truncate">{target.title}</span>
           </h2>
-          <p class="flex items-baseline gap-2 text-micro text-muted-foreground">
+          <p class="flex items-baseline gap-2 text-meta text-muted-foreground">
             <span class="flex shrink-0 items-center gap-1.5">
               {#if machine}
                 <OsMark class="size-3.5" os={machine.os} />
@@ -316,7 +316,7 @@
     </ContextMenu.Content>
   </ContextMenu.Root>
 
-  <div class="flex items-center gap-2 px-4 pb-3 text-micro">
+  <div class="flex items-center gap-2 px-4 pb-3 text-meta">
     {#if failed}
       <span class="size-2 shrink-0 rounded-full bg-error"></span>
     {:else}
@@ -385,13 +385,13 @@
 
   {#if failed}
     <p
-      class="border-t border-border/50 bg-error/10 px-4 py-3 text-caption text-error"
+      class="border-t border-border/50 bg-error/10 px-4 py-3 text-meta text-error"
     >
       {row?.lastError || 'Failed without saying why.'}
     </p>
   {:else if stale}
     <p
-      class="border-t border-border/50 px-4 py-3 text-caption text-muted-foreground"
+      class="border-t border-border/50 px-4 py-3 text-meta text-muted-foreground"
     >
       {UNKNOWN_HINT}
     </p>
@@ -402,7 +402,7 @@
        its own section rather than pushing the tail off. -->
   {#if progress}
     <div class="flex flex-col border-t border-border/50 pb-2">
-      <p class="px-4 pt-3 pb-1 text-caption">
+      <p class="px-4 pt-3 pb-1 text-label">
         Tasks · {progress.done} of {progress.total}
       </p>
       <div class="max-h-48 overflow-y-auto px-2">
@@ -416,19 +416,19 @@
     bind:this={tailEl}
   >
     {#if session?.loading && tail.length === 0}
-      <p class="text-caption">Reading…</p>
+      <p class="text-meta">Reading…</p>
     {:else if session?.readFault && tail.length === 0}
       <!-- A read that failed is not a session with nothing to say. -->
-      <p class="text-caption text-error">
+      <p class="text-meta text-error">
         Couldn't read this session: {session.readFault.message}
       </p>
     {:else if tail.length === 0 && !session?.streaming}
-      <p class="text-caption">Nothing said yet.</p>
+      <p class="text-meta">Nothing said yet.</p>
     {:else}
       {#each tail as message, index (message.id ?? index)}
         {#if message.type === 'tool.use' || message.type === 'tool.handoff'}
           <p
-            class="flex items-baseline gap-1.5 text-micro text-muted-foreground"
+            class="flex items-baseline gap-1.5 text-meta text-muted-foreground"
           >
             <span class="shrink-0"
               >{message.metadata?.toolName ?? message.content}</span

@@ -148,12 +148,14 @@ typography:
     lineHeight: 1.3
     fontFeature: "liga 0"
 rounded:
+  hair: "2px"
   xs: "5px"
   row-mark: "4.6px"
   well: "7px"
   sm: "8px"
   md: "10px"
   lg: "12px"
+  panel: "16px"
   modal: "18px"
   pill: "999px"
 spacing:
@@ -563,11 +565,11 @@ The Tailwind ladder has four steps, `shadow-xs`, `shadow-md`, `shadow-lg` and `s
 
 ## Shapes
 
-Corners are soft and graded by role: 5px for marks and tiles, 8px for items inside a surface, 10px for controls and buttons, 12px for cards and menus, and 18px for the dialog tray. The stat well uses 7px. A fully round shape is kept for state pills on the board, the compacting note, switches and status dots; buttons are never pills.
+Corners are soft and graded by role: 2px (`--radius-hair`) for marks too small to round further (chart swatches, a chart tooltip's key, the tooltip's arrow), 5px for marks and tiles, 8px for items inside a surface, 10px for controls and buttons, 12px for cards and menus, and 18px for the dialog tray. The stat well uses 7px. A fully round shape is kept for state pills on the board, the compacting note, switches and status dots; buttons are never pills.
 
 **The Concentric Rule.** A surface nested inside another takes the outer radius less the inset. The dialog tray (18px, 6px padding) holds a 12px body. The composer shell (12px, 7px inset) holds 5px controls, and the autopilot's halo 3px outside its control is drawn at 8px. A subagent's well (8px, 4px padding) holds a 5px report.
 
-**The Measured Exception Rule.** The stat tile keeps the comp's measured radii (a 10px card around a 7px well, 7px in), even though a concentric well would be 3px.
+**The Measured Exception Rule.** The stat tile keeps the comp's measured radii (a 10px card around a 7px well, 7px in), even though a concentric well would be 3px. The assistant panel keeps its measured 16px shell (`--radius-panel`, JOURNEY.md §Assistant), and the smallest marks keep a 2px hair (`--radius-hair`) rather than the 5px that would turn them into dots. Each is a token, never a literal.
 
 **Borders are graded.** `border-hairline` separates rows and regions. `border-control` draws a control's edge. At night the generic border becomes ink at 8% (a seam) and the input edge becomes ink at 14%.
 

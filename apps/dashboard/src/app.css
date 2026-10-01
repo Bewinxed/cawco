@@ -711,6 +711,12 @@
   /* The stat tile's recessed well (plan: "stat well 7px inset, #F4F4F4 + 1px
      #EEEEEE, r7" in an r10 card). */
   --radius-well: 7px;
+  /* A hair of rounding on marks too small for --radius-xs to stay square:
+     chart swatches, a chart tooltip's key, the tooltip's arrow. */
+  --radius-hair: 2px;
+  /* The assistant panel's measured shell (JOURNEY.md §Assistant, DW-9b:
+     "radius 16"). */
+  --radius-panel: 16px;
 
   /* Type roles. Each generates a `text-<role>` utility with its leading.
      The dense roles (meta, label, body) hold one size at every width: they
