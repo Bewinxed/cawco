@@ -4,8 +4,8 @@ import type {
   Rule,
   RuleTiming,
   SendPayload,
-} from "@whiffle/core";
-import { RULE_FIRE_CEILING, ruleMarker, ruleMatches } from "@whiffle/core";
+} from "@cawco/core";
+import { RULE_FIRE_CEILING, ruleMarker, ruleMatches } from "@cawco/core";
 import type { DbShape } from "./db";
 import type { MeaningJudge } from "./meaning";
 
@@ -412,7 +412,7 @@ export class RuleEngine {
   }
 
   /**
-   * The session quoting whiffle's own words back is not the session tripping
+   * The session quoting cawco's own words back is not the session tripping
    * the rule.
    *
    * This closes a real loop: a rule's reply necessarily contains the phrase
@@ -424,7 +424,7 @@ export class RuleEngine {
    */
   #withoutOwnWords(rule: Rule, text: string): string {
     let cleaned = text;
-    const header = `[whiffle rule — ${rule.name}]`;
+    const header = `[cawco rule — ${rule.name}]`;
     if (cleaned.includes(header)) {
       cleaned = cleaned.split(header).join(" ");
     }
@@ -564,7 +564,7 @@ export class RuleEngine {
             content: `${ruleMarker(rule.name)}${rule.reply}`,
           },
           parent_tool_use_id: null,
-          // `system` marks it as whiffle's own word rather than the user's, so a
+          // `system` marks it as cawco's own word rather than the user's, so a
           // transcript can render it as the standing instruction it is.
           origin: { kind: "system", name: `rule:${rule.name}` },
         },

@@ -3,18 +3,18 @@
  *
  * Eliminates redundant parsing of append-only JSONL transcripts by caching
  * parsed records keyed by file path with LRU eviction. The cache uses
- * `@whiffle/jsonl-parser`'s checkpoint machinery for incremental tail reads:
+ * `@cawco/jsonl-parser`'s checkpoint machinery for incremental tail reads:
  * on a hit where the file grew, only the appended bytes are parsed.
  *
  * Total heap is bounded by a budget (default 256 MB, configurable via
- * `transcriptCacheMb` in whiffle's machine config), estimated as source-file
+ * `transcriptCacheMb` in cawco's machine config), estimated as source-file
  * bytes x HEAP_FACTOR. A single session larger than the whole budget is
  * cached alone; everything else is evicted.
  */
 
 import { stat } from "node:fs/promises";
-import type { Checkpoint, LocatedRecord } from "@whiffle/jsonl-parser";
-import { readTranscript, readTranscriptTail } from "@whiffle/jsonl-parser";
+import type { Checkpoint, LocatedRecord } from "@cawco/jsonl-parser";
+import { readTranscript, readTranscriptTail } from "@cawco/jsonl-parser";
 import { CHAIN_TYPES } from "./claude-transcript.ts";
 
 export interface CachedSession {

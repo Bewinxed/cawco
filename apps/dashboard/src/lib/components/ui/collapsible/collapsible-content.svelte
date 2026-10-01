@@ -1,8 +1,8 @@
 <script lang="ts">
   import { Collapsible as CollapsiblePrimitive } from "bits-ui";
   import { untrack } from "svelte";
-  import { CURVE } from "$lib/whiffle/motion/curves.svelte";
-  import { fold } from "$lib/whiffle/motion/fold.svelte";
+  import { CURVE } from "$lib/cawco/motion/curves.svelte";
+  import { fold } from "$lib/cawco/motion/fold.svelte";
 
   let {
     ref = $bindable(null),

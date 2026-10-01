@@ -82,7 +82,7 @@ const md = `# Design: Quiet Ledger
 **Archetype:** Data-Dense Professional · **Register:** calm structure · expressive at: the needs-you arrival, the assistant summon, the never-yet-connected fleet
 **Grounding:** FlowAI's recessed-well surface discipline + a departure board's status-in-one-word restraint
 **DNA:** Data-Dense Professional + motion vocabulary borrowed from instrument panels · **Dominant axis:** composition
-**Composition:** <dealt> (data-dense-professional × ledger-grid, variance 2 — seed \`whiffle-whiffle|2026-08-18|0\`, \`scripts/dealer.mjs\`)
+**Composition:** <dealt> (data-dense-professional × ledger-grid, variance 2 — seed \`cawco-cawco|2026-08-18|0\`, \`scripts/dealer.mjs\`)
 **Pins:** \`family=data-dense-professional\` · \`discipline=ledger-grid\` · \`hue=263\` (chosen in this phase and justified under ## Color tokens — the comps carry no accent hue to pin) · \`chroma=muted\` · \`signature=accent-scarcity\`, **swapped at converge** to the user's own move (the inset well + the never-flat action). The deal is **degenerate by pin** — five pins leave \`"available": 1\` cell and five byte-identical hands, which is the documented consequence of pinning, not a failure of the deal. Divergence therefore ran on the one unpinned axis, motion vocabulary. Pinned values are user law: dealt around, never re-chosen.
 
 ---
@@ -142,7 +142,7 @@ kind: a check glyph and \`--ink-strong\` for the grant, a cross glyph and
 rather than 12×.
 
 **A standing grant must read as consequential.** "Always allow \`rm -rf\` in
-~/whiffle" painted **1.00:1** against its panel, treatment-identical to a benign
+~/cawco" painted **1.00:1** against its panel, treatment-identical to a benign
 quick-reply chip, while its scope is strictly wider than the command being
 approved: the one control on the surface with unbounded blast radius had the least
 visual weight on it. It now carries the warning tint, a warning ink, a warning
@@ -555,7 +555,7 @@ other state change is instantaneous.
    error explanation. Those must be fully visible at every supported width.
    Measured before the fix: the \`rm -rf\` gate rendered its scope 90.5px
    off-screen at 320, so \`Path\` read
-   \`/home/bewinxed/whiffle/apps/dashboard/.svel\` — not the path being granted —
+   \`/home/bewinxed/cawco/apps/dashboard/.svel\` — not the path being granted —
    while \`Approve\` sat fully legible beneath it, and the document measured clean
    because a \`.tr{overflow-x:auto}\` ancestor absorbed the overflow. A dialog that
    looks complete while stating a truncated path is worse than one that looks
@@ -607,7 +607,7 @@ other state change is instantaneous.
   identity today.** Wiring \`app.css\` to the token system is Phase 4's bridge, which
   the plan assigns there; until it lands, this identity exists in the mocks only.
 - **RTL is measured but not enforced.** The suite runs a right-to-left pass and
-  currently reports zero findings, but it does not fail the build: Whiffle ships
+  currently reports zero findings, but it does not fail the build: CawCo ships
   English only and JOURNEY.md scopes no localisation, so the logical-property
   work has no consumer today. If i18n is ever scoped, that axis flips to enforcing
   and the physical \`left\`/\`right\` properties in the mocks become the work item.

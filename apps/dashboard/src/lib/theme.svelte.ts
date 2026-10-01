@@ -1,5 +1,5 @@
 import { browser } from "$app/environment";
-import { motionOk } from "$lib/whiffle/motion/curves.svelte";
+import { motionOk } from "$lib/cawco/motion/curves.svelte";
 
 type Theme = "light" | "dark" | "system";
 type Scheme = "light" | "dark";
@@ -9,7 +9,7 @@ function getInitialTheme(): Theme {
   if (!browser) {
     return "system";
   }
-  const stored = localStorage.getItem("whiffle-theme") as Theme | null;
+  const stored = localStorage.getItem("cawco-theme") as Theme | null;
   return stored || "system";
 }
 
@@ -57,7 +57,7 @@ class ThemeState {
   set(value: Theme) {
     const flip = () => {
       this.current = value;
-      localStorage.setItem("whiffle-theme", value);
+      localStorage.setItem("cawco-theme", value);
       this.resolved = applyTheme(value);
     };
     // The page's own colour transitions (a button's hover ink, a row's pill)

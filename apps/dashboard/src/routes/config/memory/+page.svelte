@@ -1,34 +1,34 @@
 <script lang="ts">
-  import { Input } from "$lib/components/ui/input";
-  import { SectionHeader } from "$lib/components/ui/section-header";
-  import { IconBook, IconTrash, IconWarningTriangle } from "$lib/icons";
-  import { formatDistanceToNow } from "$lib/utils/time";
-  import { whiffle } from "$lib/whiffle/client.svelte";
-  import { drafts } from "$lib/whiffle/config/drafts.svelte";
+  import { cawco } from "$lib/cawco/client.svelte";
+  import { drafts } from "$lib/cawco/config/drafts.svelte";
   import {
     byteLength,
     fileHref,
     fileLabel,
     MAIN,
-  } from "$lib/whiffle/config/memory";
-  import NewMemoryPopover from "$lib/whiffle/config/NewMemoryPopover.svelte";
-  import RolloutChip from "$lib/whiffle/config/RolloutChip.svelte";
-  import RowFaults from "$lib/whiffle/config/RowFaults.svelte";
-  import RowList from "$lib/whiffle/config/RowList.svelte";
-  import SectionFrame from "$lib/whiffle/config/SectionFrame.svelte";
-  import SectionRow from "$lib/whiffle/config/SectionRow.svelte";
-  import { sectionOf } from "$lib/whiffle/config/sections";
-  import { configStore, upsert } from "$lib/whiffle/config/store.svelte";
-  import { confirm } from "$lib/whiffle/confirm.svelte";
-  import FleetFault from "$lib/whiffle/FleetFault.svelte";
+  } from "$lib/cawco/config/memory";
+  import NewMemoryPopover from "$lib/cawco/config/NewMemoryPopover.svelte";
+  import RolloutChip from "$lib/cawco/config/RolloutChip.svelte";
+  import RowFaults from "$lib/cawco/config/RowFaults.svelte";
+  import RowList from "$lib/cawco/config/RowList.svelte";
+  import SectionFrame from "$lib/cawco/config/SectionFrame.svelte";
+  import SectionRow from "$lib/cawco/config/SectionRow.svelte";
+  import { sectionOf } from "$lib/cawco/config/sections";
+  import { configStore, upsert } from "$lib/cawco/config/store.svelte";
+  import { confirm } from "$lib/cawco/confirm.svelte";
+  import FleetFault from "$lib/cawco/FleetFault.svelte";
   import {
     type FleetMemoryDocRow,
     formatBytes,
     removeMemory,
     removeMemoryDoc,
-  } from "$lib/whiffle/fleet";
-  import { causeOf } from "$lib/whiffle/fleet-faults";
-  import { orderMachines } from "$lib/whiffle/rail.svelte";
+  } from "$lib/cawco/fleet";
+  import { causeOf } from "$lib/cawco/fleet-faults";
+  import { orderMachines } from "$lib/cawco/rail.svelte";
+  import { Input } from "$lib/components/ui/input";
+  import { SectionHeader } from "$lib/components/ui/section-header";
+  import { IconBook, IconTrash, IconWarningTriangle } from "$lib/icons";
+  import { formatDistanceToNow } from "$lib/utils/time";
 
   /**
    * The fleet's memory: the user CLAUDE.md every session loads flat, and the
@@ -42,7 +42,7 @@
   const fleet = $derived(store.fleet.value);
   const memory = $derived(fleet?.memory ?? null);
   const docs = $derived(fleet?.memoryDocs ?? []);
-  const machines = $derived(orderMachines(whiffle.machines));
+  const machines = $derived(orderMachines(cawco.machines));
   let filter = $state("");
   let busy = $state<Record<string, boolean>>({});
 
@@ -78,7 +78,7 @@
     }
     await confirm({
       title: `Delete ${fileLabel(path)}?`,
-      body: "It is taken off every machine that still has Whiffle's copy. A machine's own edited copy is left where it is.",
+      body: "It is taken off every machine that still has CawCo's copy. A machine's own edited copy is left where it is.",
       confirmLabel: "Delete everywhere",
       destructive: true,
       pendingLabel: "Deleting…",
@@ -211,9 +211,9 @@
         label="Model documents are not being loaded everywhere"
       />
       <p class="note">
-        The documents are put in front of a session by a SessionStart hook
-        Whiffle registers. Where it did not register, the files are on the
-        machine and nothing reads them.
+        The documents are put in front of a session by a SessionStart hook CawCo
+        registers. Where it did not register, the files are on the machine and
+        nothing reads them.
       </p>
       {#each hookFailed as { machine, hook } (machine.machineId)}
         <FleetFault

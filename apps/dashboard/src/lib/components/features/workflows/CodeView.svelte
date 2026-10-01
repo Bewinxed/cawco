@@ -1,4 +1,5 @@
 <script lang="ts">
+  import type { Problem } from "@cawco/core";
   import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
   import { javascript } from "@codemirror/lang-javascript";
   import {
@@ -21,7 +22,6 @@
     lineNumbers,
   } from "@codemirror/view";
   import { tags } from "@lezer/highlight";
-  import type { Problem } from "@whiffle/core";
   import { untrack } from "svelte";
   import { withoutLine } from "./workflow-ui";
 

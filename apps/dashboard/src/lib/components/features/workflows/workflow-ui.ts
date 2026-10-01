@@ -1,5 +1,6 @@
-import type { WorkflowGraph, WorkflowNode } from "@whiffle/core";
-import { JEV_ANSWER_FIELDS, outcomeOnEveryPath } from "@whiffle/core";
+import type { WorkflowGraph, WorkflowNode } from "@cawco/core";
+import { JEV_ANSWER_FIELDS, outcomeOnEveryPath } from "@cawco/core";
+import { newId } from "$lib/cawco/id";
 import {
   IconBox,
   IconCpu,
@@ -11,7 +12,6 @@ import {
   IconToolTodo,
   IconWorkflow,
 } from "$lib/icons";
-import { newId } from "$lib/whiffle/id";
 
 export const kinds = [
   {

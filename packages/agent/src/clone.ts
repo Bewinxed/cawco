@@ -14,7 +14,7 @@
  */
 import { cp, readdir, rename, rm, stat } from "node:fs/promises";
 import { join } from "node:path";
-import type { WorkspaceRef } from "@whiffle/core";
+import type { WorkspaceRef } from "@cawco/core";
 
 /** Runs git, answering its stdout; its stderr is the error. */
 export const git = async (dir: string, ...args: string[]): Promise<string> => {
@@ -195,8 +195,8 @@ const convert = async (path: string): Promise<void> => {
     "--git-common-dir"
   );
   const head = await gitMaybe(path, "symbolic-ref", "-q", "HEAD");
-  const next = `${path}.whiffle-clone`;
-  const kept = `${path}.whiffle-worktree-link`;
+  const next = `${path}.cawco-clone`;
+  const kept = `${path}.cawco-worktree-link`;
   await rm(next, { recursive: true, force: true });
   await prepareClone(common, next);
   try {

@@ -6,16 +6,16 @@
    */
   import { onMount } from "svelte";
   import { page } from "$app/state";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
-  import * as Tooltip from "$lib/components/ui/tooltip";
-  import ConfigRail from "$lib/whiffle/config/ConfigRail.svelte";
+  import ConfigRail from "$lib/cawco/config/ConfigRail.svelte";
   import {
     LAST_KEY,
     SECTIONS,
     type SectionSlug,
-  } from "$lib/whiffle/config/sections";
-  import { ConfigStore, provideConfig } from "$lib/whiffle/config/store.svelte";
-  import { pageIn, pageOut } from "$lib/whiffle/motion/route.svelte";
+  } from "$lib/cawco/config/sections";
+  import { ConfigStore, provideConfig } from "$lib/cawco/config/store.svelte";
+  import { pageIn, pageOut } from "$lib/cawco/motion/route.svelte";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
+  import * as Tooltip from "$lib/components/ui/tooltip";
 
   let { children } = $props();
 

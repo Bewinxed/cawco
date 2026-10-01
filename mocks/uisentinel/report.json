@@ -5,7 +5,7 @@
   "screenshots": [
     {
       "viewport": "mobile",
-      "path": "/home/bewinxed/whiffle/mocks/uisentinel/screenshots/v2_final_mobile_1787045669059.png",
+      "path": "/home/bewinxed/cawco/mocks/uisentinel/screenshots/v2_final_mobile_1787045669059.png",
       "width": 375,
       "height": 667,
       "timestamp": "2026-08-18T09:34:29.160Z",
@@ -13,7 +13,7 @@
     },
     {
       "viewport": "desktop",
-      "path": "/home/bewinxed/whiffle/mocks/uisentinel/screenshots/v2_final_desktop_1787045669504.png",
+      "path": "/home/bewinxed/cawco/mocks/uisentinel/screenshots/v2_final_desktop_1787045669504.png",
       "width": 1920,
       "height": 1080,
       "timestamp": "2026-08-18T09:34:29.598Z",

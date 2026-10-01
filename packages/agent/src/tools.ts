@@ -12,8 +12,8 @@ import type {
   ToolPlatform,
   ToolSpec,
   ToolStatus,
-} from "@whiffle/core";
-import { TOOL_CATALOG, toolSpec } from "@whiffle/core";
+} from "@cawco/core";
+import { TOOL_CATALOG, toolSpec } from "@cawco/core";
 import { expandHome } from "./fs";
 
 /** Where {@link NATIVE_ROUTINES} put what they install. */

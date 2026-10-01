@@ -13,7 +13,7 @@
  *   cd apps/dashboard
  *   bun scripts/measure-append-jerk.mjs <session-id>
  *
- * Env overrides: WHIFFLE_URL (full URL), WAIT_MS (default 6000),
+ * Env overrides: CAWCO_URL (full URL), WAIT_MS (default 6000),
  * RECORD_MS (default 30000), CHROMIUM_PATH (default: playwright-core's own).
  *
  * Output is a single JSON object on stdout:
@@ -32,7 +32,7 @@ if (!id) {
   process.exit(1);
 }
 
-const url = process.env.WHIFFLE_URL || `http://localhost:3000/session/${id}`;
+const url = process.env.CAWCO_URL || `http://localhost:3000/session/${id}`;
 const WAIT_MS = Number(process.env.WAIT_MS || 6000);
 const RECORD_MS = Number(process.env.RECORD_MS || 30_000);
 

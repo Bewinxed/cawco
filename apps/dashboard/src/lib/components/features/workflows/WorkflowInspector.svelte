@@ -9,12 +9,12 @@
     WorkflowGraph,
     WorkflowInput,
     WorkflowNode,
-  } from "@whiffle/core";
-  import { EFFORT_LEVELS, workflowPorts } from "@whiffle/core";
-  import { whiffle } from "$lib/whiffle/client.svelte";
-  import { newId } from "$lib/whiffle/id";
-  import { crossIn, crossOut, dur } from "$lib/whiffle/motion/curves.svelte";
-  import { morph } from "$lib/whiffle/motion/morph.svelte";
+  } from "@cawco/core";
+  import { EFFORT_LEVELS, workflowPorts } from "@cawco/core";
+  import { cawco } from "$lib/cawco/client.svelte";
+  import { newId } from "$lib/cawco/id";
+  import { crossIn, crossOut, dur } from "$lib/cawco/motion/curves.svelte";
+  import { morph } from "$lib/cawco/motion/morph.svelte";
   import JsonField from "./JsonField.svelte";
   import SchemaBuilder from "./SchemaBuilder.svelte";
   import TemplateInput from "./TemplateInput.svelte";
@@ -857,7 +857,7 @@
               value={graph.settings?.defaultProject ?? ''}
             >
               <option value="">Choose at launch</option>
-              {#each whiffle.projects as project (project.id)}
+              {#each cawco.projects as project (project.id)}
                 <option value={project.id}>{project.name}</option>
               {/each}
             </select></label
@@ -867,7 +867,7 @@
               value={graph.settings?.defaultMachine ?? ''}
             >
               <option value="">Choose at launch</option>
-              {#each whiffle.machines as machine (machine.machineId)}
+              {#each cawco.machines as machine (machine.machineId)}
                 <option value={machine.machineId}>{machine.hostname}</option>
               {/each}
             </select></label

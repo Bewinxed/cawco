@@ -1,12 +1,12 @@
 import { realpath, stat } from "node:fs/promises";
 import { isAbsolute, relative, resolve, sep } from "node:path";
-import type { PreviewSource } from "@whiffle/core";
+import type { PreviewSource } from "@cawco/core";
 import {
   type PreviewSocket,
   previewWebSocket,
   proxyHeaders,
   upgradePreview,
-} from "@whiffle/core/preview-proxy";
+} from "@cawco/core/preview-proxy";
 import type { Server } from "bun";
 
 /**
@@ -114,7 +114,7 @@ export async function startPreview(options: {
   }
   const source: PreviewSource =
     port === undefined ? { dir: root as string } : { port };
-  const script = `<script src="/__whiffle/overlay.js"></script>`;
+  const script = `<script src="/__cawco/overlay.js"></script>`;
   stopPreview({ instanceId });
   const listener = Bun.serve<PreviewSocket>({
     hostname: "0.0.0.0",
@@ -123,7 +123,7 @@ export async function startPreview(options: {
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the two source modes converge here so header rewriting and HTML injection have one path.
     async fetch(request, server) {
       const url = new URL(request.url);
-      if (url.pathname === "/__whiffle/overlay.js") {
+      if (url.pathname === "/__cawco/overlay.js") {
         return new Response(await loadOverlay(), {
           headers: {
             "content-type": "text/javascript",

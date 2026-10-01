@@ -3,7 +3,7 @@
  * Claude Code PreToolUse hook for Bash.
  *
  * Counts consecutive read-only exploration commands and nudges the model
- * toward mcp__whiffle__delegate after sustained inline searching. Never
+ * toward mcp__cawco__delegate after sustained inline searching. Never
  * blocks a command — exits 0 in every path, including parse failures.
  *
  * Hook contract (command type, PreToolUse event, matcher "Bash"):
@@ -111,7 +111,7 @@ function main(): void {
 
   const isReadOnly = classifyReadOnly(command);
 
-  const stateDir = join("/tmp", "whiffle-delegate-nudge");
+  const stateDir = join("/tmp", "cawco-delegate-nudge");
   // Safe file name: strip anything that isn't alphanumeric, dash, or underscore.
   const safeId = sessionId.replace(/[^a-zA-Z0-9_-]/g, "_");
   const stateFile = join(stateDir, `${safeId}.count`);
@@ -141,7 +141,7 @@ function main(): void {
     const nudge =
       "You have run 5 consecutive read-only exploration commands inline. " +
       "This is the pattern delegate exists to absorb — hand the remaining " +
-      "exploration to mcp__whiffle__delegate with a bounded brief describing " +
+      "exploration to mcp__cawco__delegate with a bounded brief describing " +
       "what you are looking for and what conclusions to bring back. Keep the " +
       "decisions and edits here; send the searching there.";
     console.log(JSON.stringify({ additionalContext: nudge }));
@@ -150,7 +150,7 @@ function main(): void {
       "You have now run 10 consecutive read-only exploration commands inline " +
       "without delegating. Every one of these re-reads your full conversation " +
       "context. Stop exploring inline and delegate the remainder to " +
-      "mcp__whiffle__delegate immediately — describe the question, the files " +
+      "mcp__cawco__delegate immediately — describe the question, the files " +
       "or patterns left to check, and the format you need the answer in.";
     console.log(JSON.stringify({ additionalContext: nudge }));
   }

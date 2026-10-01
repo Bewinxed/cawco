@@ -3,7 +3,7 @@
 Scope: client.svelte.ts — capability-negotiated stream ingestion (lastSeq per session, gap detection -> resubscribe, reset -> existing re-read path), single ingestFrame chokepoint for BOTH stream and legacy paths, command tracker map keyed by commandId with stages, command submission path that wraps the existing relay calls. client-stream.test.ts proves it against a scripted socket.
 
 - [x] G1: Ordered delivery applies frames exactly once; a 500-event scripted stream yields no dupes and no holes (assert message count and seq continuity)
-  CHECK: cd /home/bewinxed/whiffle/apps/dashboard && bun test src/lib/whiffle/client-stream.test.ts 2>&1 | grep -E "^ [0-9]+ pass" | tail -1
+  CHECK: cd /home/bewinxed/cawco/apps/dashboard && bun test src/lib/cawco/client-stream.test.ts 2>&1 | grep -E "^ [0-9]+ pass" | tail -1
   EXPECT: /^\s*[6-9] pass|^\s*[1-9][0-9] pass/
   EVIDENCE: 29 pass
 
@@ -16,7 +16,7 @@ Scope: client.svelte.ts — capability-negotiated stream ingestion (lastSeq per 
   test both named "gap …" counts 1, not 2.
 
 - [x] G2: Gap handling — delta with seq gap triggers a resubscribe carrying afterSeq=lastSeq; backlog heals; reset falls back to re-read then follows (all asserted)
-  CHECK: cd /home/bewinxed/whiffle/apps/dashboard && bun test src/lib/whiffle/client-stream.test.ts --reporter=junit --reporter-outfile=/tmp/leafc.xml >/dev/null 2>&1; grep -icE '<testcase [^>]*name="[^"]*(gap|resubscribe|reset)[^"]*"[^>]*/>$' /tmp/leafc.xml
+  CHECK: cd /home/bewinxed/cawco/apps/dashboard && bun test src/lib/cawco/client-stream.test.ts --reporter=junit --reporter-outfile=/tmp/leafc.xml >/dev/null 2>&1; grep -icE '<testcase [^>]*name="[^"]*(gap|resubscribe|reset)[^"]*"[^>]*/>$' /tmp/leafc.xml
   EXPECT: /^([2-9]|[1-9][0-9]+)/
   EVIDENCE: 9
   DETAIL: gap applies nothing and resubscribes at afterSeq=lastSeq; a 36-delta burst past
@@ -27,7 +27,7 @@ Scope: client.svelte.ts — capability-negotiated stream ingestion (lastSeq per 
   follows from nextSeq with deltas racing it; a second reset re-reads again.
 
 - [x] G3: Command tracker — submitted command reaches accepted/applied/failed stages from acks; stages readable from the store (asserted)
-  CHECK: cd /home/bewinxed/whiffle/apps/dashboard && bun test src/lib/whiffle/client-stream.test.ts --reporter=junit --reporter-outfile=/tmp/leafc.xml >/dev/null 2>&1; grep -icE '<testcase [^>]*name="[^"]*(command|ack)[^"]*"[^>]*/>$' /tmp/leafc.xml
+  CHECK: cd /home/bewinxed/cawco/apps/dashboard && bun test src/lib/cawco/client-stream.test.ts --reporter=junit --reporter-outfile=/tmp/leafc.xml >/dev/null 2>&1; grep -icE '<testcase [^>]*name="[^"]*(command|ack)[^"]*"[^>]*/>$' /tmp/leafc.xml
   EXPECT: /^([2-9]|[1-9][0-9]+)/
   EVIDENCE: 14
   DETAIL: envelope on the wire and stage 'submitted'; acks walk submitted -> accepted ->
@@ -38,12 +38,12 @@ Scope: client.svelte.ts — capability-negotiated stream ingestion (lastSeq per 
   unanswered commands off; an unacknowledged command times out; the tracker is capped.
 
 - [x] G4: Legacy path byte-compatible — with no STREAM_V1 capability, ingestion, absorbLive and echoes behave exactly as today (existing suite is the proof)
-  CHECK: cd /home/bewinxed/whiffle/apps/dashboard && bun test src/lib 2>&1 | grep -E "^ [0-9]+ fail" | tail -1
+  CHECK: cd /home/bewinxed/cawco/apps/dashboard && bun test src/lib 2>&1 | grep -E "^ [0-9]+ fail" | tail -1
   EXPECT: 0 fail
   EVIDENCE: 0 fail
 
 - [x] G5: Workspace typecheck clean
-  CHECK: cd /home/bewinxed/whiffle && bun run typecheck 2>&1 | grep -c "Exited with code 0"
+  CHECK: cd /home/bewinxed/cawco && bun run typecheck 2>&1 | grep -c "Exited with code 0"
   EXPECT: 6
   EVIDENCE: 6
 

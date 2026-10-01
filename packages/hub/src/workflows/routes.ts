@@ -1,10 +1,10 @@
-import type { Problem, WorkflowGraph } from "@whiffle/core";
-import { compileWorkflow, validateWorkflow } from "@whiffle/core";
+import type { Problem, WorkflowGraph } from "@cawco/core";
+import { compileWorkflow, validateWorkflow } from "@cawco/core";
 import {
   programInputs,
   typecheckProgram,
   workflowProgramCheck,
-} from "@whiffle/core/workflow-sandbox";
+} from "@cawco/core/workflow-sandbox";
 import { Elysia, t } from "elysia";
 import type { DbShape } from "../db";
 import { type createWorkflowRuntime, publicRun } from "./runtime";

@@ -1,13 +1,38 @@
 <script lang="ts">
-  import { machineLabel } from "@whiffle/core";
+  import { machineLabel } from "@cawco/core";
   /**
    * The project home (NEW.md §1, north star 4): what this is and what is
    * happening — read from the repo's own files, never from a store of
-   * Whiffle's own.
+   * CawCo's own.
    */
   import { flushSync, tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { goto } from "$app/navigation";
+  import type { InstanceRow, ProjectRow } from "$lib/cawco/client.svelte";
+  import {
+    cawco,
+    deleteProject,
+    machineFs,
+    spawnSession,
+  } from "$lib/cawco/client.svelte";
+  import { type Doc, readDocs } from "$lib/cawco/docs";
+  import ErrorText from "$lib/cawco/ErrorText.svelte";
+  import LiveSessionRow from "$lib/cawco/LiveSessionRow.svelte";
+  import { conversationHref } from "$lib/cawco/links";
+  import MachineInventory from "$lib/cawco/MachineInventory.svelte";
+  import {
+    crossIn,
+    crossOut,
+    dur,
+    ease,
+  } from "$lib/cawco/motion/curves.svelte";
+  import { fold } from "$lib/cawco/motion/fold.svelte";
+  import { route } from "$lib/cawco/motion/route.svelte";
+  import { reflow } from "$lib/cawco/motion/rows.svelte";
+  import { handOver, land } from "$lib/cawco/motion/share.svelte";
+  import OsMark from "$lib/cawco/OsMark.svelte";
+  import StoredSessionRow from "$lib/cawco/StoredSessionRow.svelte";
+  import { rememberSpawn, spawnPrefs } from "$lib/cawco/spawnPrefs.svelte";
   import MemoryCard from "$lib/components/features/MemoryCard.svelte";
   import { Alert, AlertDescription } from "$lib/components/ui/alert";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
@@ -27,40 +52,15 @@
   import * as Tabs from "$lib/components/ui/tabs";
   import { Textarea } from "$lib/components/ui/textarea";
   import { IconChat, IconDocument } from "$lib/icons";
-  import type { InstanceRow, ProjectRow } from "$lib/whiffle/client.svelte";
-  import {
-    deleteProject,
-    machineFs,
-    spawnSession,
-    whiffle,
-  } from "$lib/whiffle/client.svelte";
-  import { type Doc, readDocs } from "$lib/whiffle/docs";
-  import ErrorText from "$lib/whiffle/ErrorText.svelte";
-  import LiveSessionRow from "$lib/whiffle/LiveSessionRow.svelte";
-  import { conversationHref } from "$lib/whiffle/links";
-  import MachineInventory from "$lib/whiffle/MachineInventory.svelte";
-  import {
-    crossIn,
-    crossOut,
-    dur,
-    ease,
-  } from "$lib/whiffle/motion/curves.svelte";
-  import { fold } from "$lib/whiffle/motion/fold.svelte";
-  import { route } from "$lib/whiffle/motion/route.svelte";
-  import { reflow } from "$lib/whiffle/motion/rows.svelte";
-  import { handOver, land } from "$lib/whiffle/motion/share.svelte";
-  import OsMark from "$lib/whiffle/OsMark.svelte";
-  import StoredSessionRow from "$lib/whiffle/StoredSessionRow.svelte";
-  import { rememberSpawn, spawnPrefs } from "$lib/whiffle/spawnPrefs.svelte";
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();
 
   const project = $derived<ProjectRow | null>(
-    (data.project && whiffle.project(data.project.id)) ?? data.project
+    (data.project && cawco.project(data.project.id)) ?? data.project
   );
   const machine = $derived(
-    whiffle.machines.find((row) => row.machineId === project?.machineId) ??
+    cawco.machines.find((row) => row.machineId === project?.machineId) ??
       data.machine
   );
 
@@ -162,7 +162,7 @@
 
   $effect(() => {
     const current = project;
-    const ready = whiffle.status === "connected";
+    const ready = cawco.status === "connected";
     if (!(current && ready) || loadedFor === current.id) {
       return;
     }
@@ -347,14 +347,14 @@
     }
   }
 
-  const live = $derived(project ? whiffle.liveIn(project) : []);
-  const stored = $derived(project ? whiffle.storedIn(project) : []);
+  const live = $derived(project ? cawco.liveIn(project) : []);
+  const stored = $derived(project ? cawco.storedIn(project) : []);
   /**
    * The rail's two lists answer separately, and each shows when its own
    * source has: the live sessions with the fleet's first read, the stored
    * ones once the machine has listed them (or is not online to ask).
    */
-  const liveRead = $derived(whiffle.fleetRead);
+  const liveRead = $derived(cawco.fleetRead);
 
   /**
    * The live list mounts a screenful at once and the rest a chunk a frame. A
@@ -410,8 +410,8 @@
   );
   const storedRead = $derived(
     project !== null &&
-      whiffle.fleetRead &&
-      (machine?.status !== "online" || whiffle.catalogRead(project.machineId))
+      cawco.fleetRead &&
+      (machine?.status !== "online" || cawco.catalogRead(project.machineId))
   );
   /** Indices for skeleton rows: `{#each}` wants something to walk. */
   const count = (n: number) => Array.from({ length: n }, (_, i) => i);
@@ -457,7 +457,7 @@
     spawnPrompt = "";
     spawnOpen = false;
     // biome-ignore lint/complexity/noVoid: fire-and-forget navigation after the spawn already succeeded
-    void goto(conversationHref(instanceId, whiffle.instanceIndex));
+    void goto(conversationHref(instanceId, cawco.instanceIndex));
   }
 
   async function forget() {
@@ -481,7 +481,7 @@
 </script>
 
 <svelte:head>
-  <title>{project?.name ?? 'Project'} &middot; Whiffle</title>
+  <title>{project?.name ?? 'Project'} &middot; CawCo</title>
 </svelte:head>
 
 {#snippet skeletonRows(rows: number)}
@@ -519,7 +519,7 @@
                 title={machine.status}
               ></span>
             </span>
-          {:else if !whiffle.fleetRead}
+          {:else if !cawco.fleetRead}
             <Skeleton class="h-4 w-32" />
           {/if}
         </div>
@@ -921,7 +921,7 @@
                 class="border-t border-border px-4 py-2 text-label text-muted-foreground"
               >
                 This file is the repo's own — commit it to share it. Git is its
-                sync; Whiffle does not replicate it.
+                sync; CawCo does not replicate it.
               </p>
             {/if}
           {/snippet}

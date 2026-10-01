@@ -61,8 +61,8 @@ jobs:
           npm pack
           mkdir -p /tmp/smoke && cd /tmp/smoke
           bun add "$(ls "$GITHUB_WORKSPACE"/release/*.tgz)"
-          ./node_modules/.bin/whiffle --version
-          ./node_modules/.bin/whiffle --help > /dev/null
+          ./node_modules/.bin/cawco --version
+          ./node_modules/.bin/cawco --help > /dev/null
 
       - name: Publish
         run: npm publish --provenance --access public

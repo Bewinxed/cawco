@@ -30,7 +30,7 @@ import type {
   WorkflowOrigin,
   WorkflowRunStatus,
   WorkflowStepStatus,
-} from "@whiffle/core";
+} from "@cawco/core";
 import {
   index,
   integer,
@@ -203,7 +203,7 @@ export const agents = sqliteTable("agents", {
    */
   fleet: text("fleet", { mode: "json" }).$type<FleetSyncReport>(),
   /**
-   * The whiffle the daemon is running (NEW.md §12), as it reported at register.
+   * The cawco the daemon is running (NEW.md §12), as it reported at register.
    * Null until a daemon that says so has registered once.
    */
   build: text("build", { mode: "json" }).$type<BuildInfo>(),
@@ -310,7 +310,7 @@ export const instances = sqliteTable("instances", {
    * last happened, and the last thing that happened does not stop having
    * happened because the machine went quiet.
    *
-   * The union is core's {@link import('@whiffle/core').InstanceStatus} (see its
+   * The union is core's {@link import('@cawco/core').InstanceStatus} (see its
    * doc comment for what each value means). Plain text, no SQL migration:
    * `sleeping` arrived by a one-time boot sweep over rows the old taxonomy had
    * to file under `error`.
@@ -538,7 +538,7 @@ export const delegateEvents = sqliteTable("delegate_events", {
 });
 
 /**
- * One record per message sent to a session (`SendRecord`, @whiffle/core): what
+ * One record per message sent to a session (`SendRecord`, @cawco/core): what
  * was sent, when the hub took it, and where it stands. The hub is the only
  * writer of `state`; every change is stored here before any screen hears of
  * it, so a reload and a hub restart read the same record the live stream
@@ -830,7 +830,7 @@ export const usageLimits = sqliteTable("usage_limits", {
  * One row per window per CHANGE, not per reading: the daemon pushes on a
  * 60-second schedule and `percent` is an integer, so appending unconditionally
  * would write ~1,440 identical rows per window per day to record maybe 100
- * transitions. {@link WhiffleDb.putUsageLimits} diffs against the previous
+ * transitions. {@link CawcoDb.putUsageLimits} diffs against the previous
  * reading and writes only what moved (see there for what counts as a change).
  *
  * Readings carrying an `error` are dropped rather than recorded: a daemon whose
@@ -871,7 +871,7 @@ export const usageLimitHistory = sqliteTable(
  * up. The hub is the only component that sees every frame from every machine,
  * so it is the only one that can do this without a per-harness hook.
  *
- * The matching fields mirror `Rule` in `@whiffle/core` one-for-one; the matcher
+ * The matching fields mirror `Rule` in `@cawco/core` one-for-one; the matcher
  * itself is shared with the dashboard so the editor's test box and the fleet
  * agree on what fires.
  */

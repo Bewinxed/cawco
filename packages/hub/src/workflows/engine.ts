@@ -3,7 +3,7 @@
  * on a single-process cluster runner (`SingleRunner` + `ClusterWorkflowEngine`)
  * whose message storage lives in the hub's own SQLite file.
  *
- * Every run is one execution of the `whiffle-run` workflow. Its handler is the
+ * Every run is one execution of the `cawco-run` workflow. Its handler is the
  * driver: it starts the run's program in its sandbox Worker and performs each
  * `w.*` call the program makes as an engine primitive —
  *
@@ -14,7 +14,7 @@
  *   first attempt, a parked question, a scheduled `DurableClock`, a child
  *   run) and then a wait: a step or question on a `DurableDeferred` the hub
  *   completes when it settles, a sleep or ask timeout on its clock, a held
- *   step's deadline on its clock, a child on its own `whiffle-run` execution.
+ *   step's deadline on its clock, a child on its own `cawco-run` execution.
  *
  * A wait with no result yet parks. When the program has gone as far as it
  * can and every call it is still waiting on is parked, the handler suspends
@@ -32,11 +32,12 @@
  * the program has gone idle on the last and nothing it asked for is still
  * being looked up. Both orders are the same order.
  */
+
+import type { WorkflowEffectKind, WorkflowFailure } from "@cawco/core";
+import { failureOf } from "@cawco/core/workflow-program";
+import { WORKER_URL, writeProgram } from "@cawco/core/workflow-sandbox";
+import type { WorkerOut, WorkerStart } from "@cawco/core/workflow-worker";
 import { SqliteClient } from "@effect/sql-sqlite-bun";
-import type { WorkflowEffectKind, WorkflowFailure } from "@whiffle/core";
-import { failureOf } from "@whiffle/core/workflow-program";
-import { WORKER_URL, writeProgram } from "@whiffle/core/workflow-sandbox";
-import type { WorkerOut, WorkerStart } from "@whiffle/core/workflow-worker";
 import {
   Context,
   Crypto,
@@ -189,7 +190,7 @@ const RunFailed = Schema.Struct({
 type RunFailed = typeof RunFailed.Type;
 
 /** Every run is one execution of this workflow, keyed by its run id. */
-const WhiffleRun = Workflow.make("whiffle-run", {
+const CawcoRun = Workflow.make("cawco-run", {
   payload: { runId: Schema.String },
   success: Schema.String,
   error: RunFailed,
@@ -311,7 +312,7 @@ interface Call {
 
 /**
  * Plays one run's program from its start to the point it next waits, or to
- * its end, in a fresh Worker — one handler run of `whiffle-run`.
+ * its end, in a fresh Worker — one handler run of `cawco-run`.
  */
 class RunDriver {
   readonly #calls = new Map<number, Call>();
@@ -769,7 +770,7 @@ class RunDriver {
   }
 }
 
-/** What a `whiffle-run` handler runs with: the engine and its own execution. */
+/** What a `cawco-run` handler runs with: the engine and its own execution. */
 type HandlerServices =
   | WorkflowEngine.WorkflowEngine
   | WorkflowEngine.WorkflowInstance
@@ -820,7 +821,7 @@ function driverIO(
         })
       ),
     startChild: async (childRunId) => {
-      await run(WhiffleRun.execute({ runId: childRunId }, { discard: true }));
+      await run(CawcoRun.execute({ runId: childRunId }, { discard: true }));
     },
   };
 }
@@ -923,7 +924,7 @@ export function createWorkflowEngine(
       return JSON.stringify(played.result ?? null);
     });
 
-  const layer = WhiffleRun.toLayer(handler).pipe(
+  const layer = CawcoRun.toLayer(handler).pipe(
     Layer.provideMerge(ClusterWorkflowEngine.layer),
     Layer.provideMerge(
       SingleRunner.layer({
@@ -952,15 +953,13 @@ export function createWorkflowEngine(
   });
 
   const executionIdOf = (runId: string) =>
-    runtime.runPromise(WhiffleRun.executionId({ runId }));
+    runtime.runPromise(CawcoRun.executionId({ runId }));
 
   return {
     ready,
     async start(runId) {
       await ready;
-      await runtime.runPromise(
-        WhiffleRun.execute({ runId }, { discard: true })
-      );
+      await runtime.runPromise(CawcoRun.execute({ runId }, { discard: true }));
     },
     async settle(runId, seq, kind, outcome) {
       await ready;
@@ -972,7 +971,7 @@ export function createWorkflowEngine(
           yield* engine.deferredDone(
             DurableDeferred.make(name, { success: Schema.String }),
             {
-              workflowName: WhiffleRun._tag,
+              workflowName: CawcoRun._tag,
               executionId,
               deferredName: name,
               exit: Exit.succeed(JSON.stringify(outcome)),
@@ -987,7 +986,7 @@ export function createWorkflowEngine(
       await runtime.runPromise(
         Effect.gen(function* () {
           const engine = yield* WorkflowEngine.WorkflowEngine;
-          yield* engine.scheduleClock(WhiffleRun, {
+          yield* engine.scheduleClock(CawcoRun, {
             executionId,
             clock: DurableClock.make({
               name: holdClock(seq, hold),
@@ -1000,9 +999,7 @@ export function createWorkflowEngine(
     async interrupt(runId) {
       drivers.get(runId)?.stop();
       await ready;
-      await runtime.runPromise(
-        WhiffleRun.interrupt(await executionIdOf(runId))
-      );
+      await runtime.runPromise(CawcoRun.interrupt(await executionIdOf(runId)));
     },
     async forget(runId) {
       await ready;
@@ -1050,7 +1047,7 @@ export function createWorkflowEngine(
  * The entity types ClusterWorkflowEngine files an execution's messages under:
  * its own mailbox (`run`, `activity`, `deferred`, `resume`), and its clocks'.
  */
-const RUN_ENTITY = `Workflow/${WhiffleRun._tag}`;
+const RUN_ENTITY = `Workflow/${CawcoRun._tag}`;
 const CLOCK_ENTITY = "Workflow/-/DurableClock";
 
 /** Where an execution's messages of one entity type live. */
@@ -1063,7 +1060,7 @@ const addressOf = (executionId: string, entityType: string) =>
       entityId,
       shardId: sharding.getShardId(
         entityId,
-        Context.get(WhiffleRun.annotations, ClusterSchema.ShardGroup)(entityId)
+        Context.get(CawcoRun.annotations, ClusterSchema.ShardGroup)(entityId)
       ),
     });
   });

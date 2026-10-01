@@ -642,7 +642,7 @@ export function validateWorkflow(
     /**
      * Compiles the graph and typechecks the program, pinning each diagnostic
      * back onto the node that produced its line. Injected by the hub —
-     * `workflowProgramCheck` in `@whiffle/core/workflow-sandbox` — so the
+     * `workflowProgramCheck` in `@cawco/core/workflow-sandbox` — so the
      * editor can run the graph rules without loading a TypeScript compiler.
      */
     checkProgram?: (graph: WorkflowGraph) => Problem[];

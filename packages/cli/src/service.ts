@@ -2,10 +2,10 @@ import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
 import { chmod } from "node:fs/promises";
 import { homedir, platform, userInfo } from "node:os";
 import { dirname, join } from "node:path";
-import type { AgentRow } from "@whiffle/core";
-import { readEnv, WHIFFLE_ENV, WHIFFLE_HUB_PORT } from "@whiffle/core";
-import { sessiondEndpoint } from "@whiffle/core/sessiond";
-import { migrateLegacyDb } from "@whiffle/hub/src/migrate-db";
+import type { AgentRow } from "@cawco/core";
+import { CAWCO_ENV, CAWCO_HUB_PORT, readEnv } from "@cawco/core";
+import { sessiondEndpoint } from "@cawco/core/sessiond";
+import { migrateLegacyDb } from "@cawco/hub/src/migrate-db";
 
 /**
  * The whole stack, as four services this machine can run for you, in the order
@@ -57,14 +57,14 @@ export type ServiceMode = "prod" | "dev";
  * record of how a service was installed. Never set in prod, so a unit without it
  * is a prod install.
  */
-const MODE_ENV = WHIFFLE_ENV.serviceMode;
+const MODE_ENV = CAWCO_ENV.serviceMode;
 
 /** Thrown for anything the caller can fix — a wrong platform, a failed launchctl. */
 export class ServiceError extends Error {}
 
 /** systemd wants a name, launchd wants a reverse-DNS label; they are one service. */
-const unitName = (id: ServiceId): string => `whiffle-${id}.service`;
-const label = (id: ServiceId): string => `dev.whiffle.${id}`;
+const unitName = (id: ServiceId): string => `cawco-${id}.service`;
+const label = (id: ServiceId): string => `dev.cawco.${id}`;
 
 const SYSTEMD_DIR = join(
   process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"),
@@ -75,12 +75,12 @@ const SYSTEMD_DIR = join(
 const systemdPath = (id: ServiceId): string => join(SYSTEMD_DIR, unitName(id));
 
 /** The listening socket systemd holds for a socket-activated service. */
-const socketName = (id: ServiceId): string => `whiffle-${id}.socket`;
+const socketName = (id: ServiceId): string => `cawco-${id}.socket`;
 const socketPath = (id: ServiceId): string => join(SYSTEMD_DIR, socketName(id));
 const launchAgentPath = (id: ServiceId): string =>
   join(homedir(), "Library", "LaunchAgents", `${label(id)}.plist`);
 const launchAgentLog = (id: ServiceId): string =>
-  join(homedir(), "Library", "Logs", `whiffle-${id}.log`);
+  join(homedir(), "Library", "Logs", `cawco-${id}.log`);
 
 /**
  * The node the dashboard's server runs under, found on the installing shell's
@@ -214,7 +214,7 @@ const layoutAt = (root: string): Layout => {
     return releaseLayout(root);
   }
   throw new ServiceError(
-    `${root} is neither a whiffle checkout (a package.json with workspaces) nor a whiffle release (dashboard/serve.js)`
+    `${root} is neither a cawco checkout (a package.json with workspaces) nor a cawco release (dashboard/serve.js)`
   );
 };
 
@@ -239,7 +239,7 @@ const here = (): Layout => {
     dir = dirname(dir);
   }
   throw new ServiceError(
-    `${main} is in neither a whiffle checkout (no package.json with workspaces above it) nor a whiffle release (no dashboard/serve.js beside it)`
+    `${main} is in neither a cawco checkout (no package.json with workspaces above it) nor a cawco release (no dashboard/serve.js beside it)`
   );
 };
 
@@ -328,19 +328,19 @@ const servicePath = (): string => {
  */
 const dataDir = (): string =>
   platform() === "darwin"
-    ? join(homedir(), "Library", "Application Support", "whiffle")
+    ? join(homedir(), "Library", "Application Support", "cawco")
     : join(
         process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share"),
-        "whiffle"
+        "cawco"
       );
 
-const DEFAULT_DB_PATH = join(dataDir(), "whiffle.db");
+const DEFAULT_DB_PATH = join(dataDir(), "cawco.db");
 
 /** How long a liveness probe is worth waiting for before it has said enough. */
 const PROBE_TIMEOUT_MS = 2000;
 
 const hubOrigin = (): string =>
-  `http://127.0.0.1:${readEnv(WHIFFLE_ENV.hubPort) ?? WHIFFLE_HUB_PORT}`;
+  `http://127.0.0.1:${readEnv(CAWCO_ENV.hubPort) ?? CAWCO_HUB_PORT}`;
 
 /** A probe answers or it does not; nothing it finds is worth throwing over. */
 const probeJson = async <T>(url: string): Promise<T | undefined> => {
@@ -379,7 +379,7 @@ const probeDashboard = async (): Promise<string> => {
 const joinedHub = async (): Promise<string | undefined> => {
   // Imported here rather than at the top so the verbs that never ask about
   // the agent never pay for the agent package.
-  const { readConfig } = await import("@whiffle/agent");
+  const { readConfig } = await import("@cawco/agent");
   return (await readConfig())?.hubUrl || undefined;
 };
 
@@ -389,7 +389,7 @@ const runningAgentBuild = async (): Promise<AgentRow["build"]> => {
   if (!hub) {
     return undefined;
   }
-  const { machineId } = await import("@whiffle/agent");
+  const { machineId } = await import("@cawco/agent");
   const id = await machineId();
   const agents = await probeJson<AgentRow[]>(`${hub}/api/agents`);
   return agents?.find(
@@ -405,7 +405,7 @@ const probeAgent = async (): Promise<string | undefined> => {
   if (!(hub && agents)) {
     return undefined;
   }
-  const { machineId } = await import("@whiffle/agent");
+  const { machineId } = await import("@cawco/agent");
   const id = await machineId();
   const self = agents.find((agent) => agent.machineId === id);
   return self
@@ -414,11 +414,11 @@ const probeAgent = async (): Promise<string | undefined> => {
 };
 
 /**
- * Where sessiond listens, as this machine derives it (`@whiffle/core/sessiond`,
+ * Where sessiond listens, as this machine derives it (`@cawco/core/sessiond`,
  * design §12), with the same override the daemon's entry point honours.
  */
 const sessiondSocket = (): string =>
-  process.env.WHIFFLE_SESSIOND_ENDPOINT ?? sessiondEndpoint();
+  process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint();
 
 /**
  * A unix socket that is merely *there* proves nothing — a sessiond killed with
@@ -504,7 +504,7 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
   const needs = (launch: Launch, what: string) => (): void => {
     if (!existsSync(launch.needs)) {
       throw new ServiceError(
-        `no ${what} at ${launch.needs} — is ${LAYOUT_ROOT} a whiffle checkout or release?`
+        `no ${what} at ${launch.needs} — is ${LAYOUT_ROOT} a cawco checkout or release?`
       );
     }
   };
@@ -512,24 +512,24 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
     hub: {
       id: "hub",
       mode: "prod",
-      description: "Whiffle hub",
-      // `bun run --filter '@whiffle/hub' start` needs a shell for the quoting and
+      description: "CawCo hub",
+      // `bun run --filter '@cawco/hub' start` needs a shell for the quoting and
       // a cwd for the workspace lookup; the entry point needs neither and boots
       // the same process.
       command: layout.hub.command,
       environment: {
-        // The hub's DB_PATH defaults to `./whiffle.db` — relative to wherever it
+        // The hub's DB_PATH defaults to `./cawco.db` — relative to wherever it
         // was started. A unit that leaves this unset opens a second, empty
         // database in whatever directory the init system chose, and the fleet
         // comes up blank with nothing to say why. Point it at the platform data
-        // dir (C9: ~/.local/share/whiffle on linux, ~/Library/Application
-        // Support/whiffle on darwin) rather than the checkout: the hub's own
+        // dir (C9: ~/.local/share/cawco on linux, ~/Library/Application
+        // Support/cawco on darwin) rather than the checkout: the hub's own
         // boot migration (see packages/hub/src/index.ts) carries an existing
         // in-tree database there the first time it finds one.
-        [WHIFFLE_ENV.dbPath]: DEFAULT_DB_PATH, // ~/.local/share/whiffle or ~/Library/Application Support/whiffle
-        [WHIFFLE_ENV.previewPort]:
-          readEnv(WHIFFLE_ENV.previewPort) ??
-          String(Number(readEnv(WHIFFLE_ENV.hubPort) ?? WHIFFLE_HUB_PORT) + 1),
+        [CAWCO_ENV.dbPath]: DEFAULT_DB_PATH, // ~/.local/share/cawco or ~/Library/Application Support/cawco
+        [CAWCO_ENV.previewPort]:
+          readEnv(CAWCO_ENV.previewPort) ??
+          String(Number(readEnv(CAWCO_ENV.hubPort) ?? CAWCO_HUB_PORT) + 1),
       },
       workingDirectory: LAYOUT_ROOT,
       after: ["network-online.target"],
@@ -543,12 +543,12 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
     dashboard: {
       id: "dashboard",
       mode: "prod",
-      description: "Whiffle dashboard",
+      description: "CawCo dashboard",
       command: layout.dashboard.command,
       environment: {
-        [WHIFFLE_ENV.previewPort]:
-          readEnv(WHIFFLE_ENV.previewPort) ??
-          String(Number(readEnv(WHIFFLE_ENV.hubPort) ?? WHIFFLE_HUB_PORT) + 1),
+        [CAWCO_ENV.previewPort]:
+          readEnv(CAWCO_ENV.previewPort) ??
+          String(Number(readEnv(CAWCO_ENV.hubPort) ?? CAWCO_HUB_PORT) + 1),
       },
       // serve.js collects this socket by name and never binds the port itself,
       // so a deploy's restart leaves the port open the whole time.
@@ -572,7 +572,7 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
         needs(layout.dashboard, "dashboard server")();
         if (!existsSync(DASHBOARD_BUILD)) {
           throw new ServiceError(
-            `no dashboard build at ${DASHBOARD_BUILD}, so its service could only restart until there is one. Build it with \`bun run --filter '@whiffle/dashboard' build\`, then install again.`
+            `no dashboard build at ${DASHBOARD_BUILD}, so its service could only restart until there is one. Build it with \`bun run --filter '@cawco/dashboard' build\`, then install again.`
           );
         }
       },
@@ -592,7 +592,7 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
      * stdout pipe, which is strictly worse than dead children. The cgroup kill is
      * also what makes recovery simple: systemd tears down the remainder, the
      * fresh sessiond starts on a new epoch with an empty register, and `restore()`
-     * runs. `whiffle-agent.service` needs no KillMode tuning at all once the
+     * runs. `cawco-agent.service` needs no KillMode tuning at all once the
      * children live over here — its restart is free by construction. So
      * {@link unit} emits no `KillMode=` for anybody, and that absence is the
      * decision, not an oversight.
@@ -600,7 +600,7 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
     sessiond: {
       id: "sessiond",
       mode: "prod",
-      description: "Whiffle sessiond",
+      description: "CawCo sessiond",
       command: layout.sessiond.command,
       environment: {},
       // Not the checkout: sessiond spawns children with a cwd the agent hands it
@@ -621,7 +621,7 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
     agent: {
       id: "agent",
       mode: "prod",
-      description: "Whiffle agent",
+      description: "CawCo agent",
       /**
        * This same CLI, `up`, under the same Bun that is running right now.
        * Installing from a checkout therefore installs that checkout, which is
@@ -767,13 +767,13 @@ const xml = (value: string): string =>
  * before sessiond finds the answer written down where they are already looking.
  * It is documentation in the artefact, never enforcement.
  */
-const WHIFFLE_SIBLING_SERVICE = /^whiffle-(.+)\.service$/;
+const CAWCO_SIBLING_SERVICE = /^cawco-(.+)\.service$/;
 
 const orderingComment = (spec: ServiceSpec): string => {
-  // Only sibling whiffle services mean anything under launchd; systemd targets
+  // Only sibling cawco services mean anything under launchd; systemd targets
   // like `network-online.target` have no launchd counterpart to name.
   const siblings = spec.after
-    .map((target) => WHIFFLE_SIBLING_SERVICE.exec(target)?.[1])
+    .map((target) => CAWCO_SIBLING_SERVICE.exec(target)?.[1])
     .filter((id): id is string => id !== undefined && isServiceId(id))
     .map((id) => label(id as ServiceId));
   if (siblings.length === 0) {
@@ -1079,7 +1079,7 @@ const enableLinger = async (note: (line: string) => void): Promise<void> => {
   note("checking for systemd…");
   if (!existsSync("/run/systemd/system")) {
     throw new ServiceError(
-      "this machine is not running systemd (no /run/systemd/system), and whiffle's services are systemd user units, so there is nothing here to install them into. Add a machine whose init is systemd."
+      "this machine is not running systemd (no /run/systemd/system), and cawco's services are systemd user units, so there is nothing here to install them into. Add a machine whose init is systemd."
     );
   }
   note("loginctl enable-linger…");
@@ -1247,7 +1247,7 @@ const agentBusy = async (): Promise<number | "unknown"> => {
     return "unknown";
   }
   // Imported here rather than at the top so no other verb pays for the agent SDK.
-  const { machineId } = await import("@whiffle/agent");
+  const { machineId } = await import("@cawco/agent");
   const report = await probeJson<BusyReport>(
     `${hub}/api/agents/${await machineId()}/busy`
   );
@@ -1420,7 +1420,7 @@ const restartLaunchAgent = async (
 ): Promise<void> => {
   if (!existsSync(launchAgentPath(spec.id))) {
     throw new ServiceError(
-      `${spec.id} is not installed — \`whiffle service install ${spec.id}\` first.`
+      `${spec.id} is not installed — \`cawco service install ${spec.id}\` first.`
     );
   }
   if (await launchctlHas("kickstart")) {
@@ -1445,7 +1445,7 @@ const restartSystemdUnit = async (
 ): Promise<void> => {
   if (!existsSync(systemdPath(spec.id))) {
     throw new ServiceError(
-      `${spec.id} is not installed — \`whiffle service install ${spec.id}\` first.`
+      `${spec.id} is not installed — \`cawco service install ${spec.id}\` first.`
     );
   }
   const restarted = await run([
@@ -1613,7 +1613,7 @@ export const service = async (
   const host = platform();
   if (host !== "darwin" && host !== "linux") {
     throw new ServiceError(
-      `whiffle service does not know how to manage a service on ${host}`
+      `cawco service does not know how to manage a service on ${host}`
     );
   }
   const mac = host === "darwin";
@@ -1661,7 +1661,7 @@ export const service = async (
       const [spec] = specs;
       if (!spec || specs.length > 1) {
         throw new ServiceError(
-          `whiffle service logs reads one service: ${SERVICE_IDS.join(", ")}`
+          `cawco service logs reads one service: ${SERVICE_IDS.join(", ")}`
         );
       }
       return mac ? launchAgentLogs(spec, follow) : systemdLogs(spec, follow);
@@ -1711,7 +1711,7 @@ export interface LedgerEntry {
 
 /**
  * The ad-hoc ledger, next to the socket it belongs to (design §11). Only
- * `whiffle up` in a terminal ever writes it: under service management the
+ * `cawco up` in a terminal ever writes it: under service management the
  * cgroup gives the same guarantee for free, and this file is not consulted.
  */
 export const sessiondLedgerPath = (): string =>
@@ -1907,7 +1907,7 @@ const requireGuiDomain = async (
   const printed = await run(["launchctl", "print", guiDomain()]);
   if (printed.exitCode !== 0) {
     throw new ServiceError(
-      `launchctl print ${guiDomain()} failed: ${printed.stderr.toString().trim() || `exit ${printed.exitCode}`}\nNobody is logged in to this Mac's desktop, so launchd has no ${guiDomain()} domain for the agent to run in. Log in to the Mac once, and run \`whiffle login\` on it so the agent has a token, then run this again.`
+      `launchctl print ${guiDomain()} failed: ${printed.stderr.toString().trim() || `exit ${printed.exitCode}`}\nNobody is logged in to this Mac's desktop, so launchd has no ${guiDomain()} domain for the agent to run in. Log in to the Mac once, and run \`cawco login\` on it so the agent has a token, then run this again.`
     );
   }
 };
@@ -2035,23 +2035,23 @@ const settleServices = async (
 /**
  * Where the deployment clone lives. Our choice: per-user so it needs no sudo,
  * under a dotdir so it is nobody's working copy, and deliberately outside every
- * dev checkout. `WHIFFLE_DEPLOY_ROOT` overrides it — how the tests point at a
+ * dev checkout. `CAWCO_DEPLOY_ROOT` overrides it — how the tests point at a
  * scratch directory.
  *
- * Named here rather than imported from `@whiffle/agent`, exactly as
+ * Named here rather than imported from `@cawco/agent`, exactly as
  * `update.ts` names the unit paths this file writes: the two ends of the deploy
  * channel agree on a constant, and neither package may depend on the other.
  */
 export const deployRoot = (): string =>
-  readEnv(WHIFFLE_ENV.deployRoot) ?? join(homedir(), ".whiffle", "app");
+  readEnv(CAWCO_ENV.deployRoot) ?? join(homedir(), ".cawco", "app");
 
 /** The marker that licenses an automatic pull. Its absence is the safety property. */
-export const DEPLOY_MARKER = ".whiffle-deploy";
+export const DEPLOY_MARKER = ".cawco-deploy";
 
 /** The branch a deployment clone tracks. */
 export const DEPLOY_BRANCH = "main";
 
-/** Written to `<root>/.whiffle-deploy`, read by the daemon's poller. */
+/** Written to `<root>/.cawco-deploy`, read by the daemon's poller. */
 export interface DeployMarker {
   readonly branch: string;
   readonly createdAt: string;
@@ -2099,7 +2099,7 @@ export interface DeployInitResult {
 export interface DeployInitOptions {
   readonly branch?: string;
   /** Which verb is setting the clone up, recorded in the marker. */
-  readonly command?: "whiffle deploy init" | "whiffle join";
+  readonly command?: "cawco deploy init" | "cawco join";
   /**
    * Where the fleet's database should end up, and where this checkout's legacy
    * one still sits. Both default to the real paths; named so a test can prove
@@ -2185,7 +2185,7 @@ const occupied = (root: string): boolean => {
 };
 
 /**
- * `whiffle deploy init` and `whiffle join` — the whole of C8's setup, in the
+ * `cawco deploy init` and `cawco join` — the whole of C8's setup, in the
  * order it has to happen: clone `origin/main` into {@link deployRoot}, write
  * the marker, install, build the dashboard when this machine serves it, and
  * install units that point at the clone with the C9 data-dir database path.
@@ -2201,7 +2201,7 @@ const occupied = (root: string): boolean => {
  * units), so a run that fails part-way leaves a marked clone, and running it
  * again catches that clone up rather than refusing it.
  *
- * The agent unit it installs carries `WHIFFLE_DEPLOY_POLL=1`: a deployment
+ * The agent unit it installs carries `CAWCO_DEPLOY_POLL=1`: a deployment
  * clone exists to follow its branch, and `up` only runs the poller when told
  * to. It never restarts a service itself; the first actual deploy is the next
  * push to main.
@@ -2263,7 +2263,7 @@ export const deployInit = async ({
   root = deployRoot(),
   origin,
   branch = DEPLOY_BRANCH,
-  command = "whiffle deploy init",
+  command = "cawco deploy init",
   force = false,
   ids = SERVICE_IDS,
   requireLinger = false,
@@ -2271,12 +2271,12 @@ export const deployInit = async ({
   note,
   run: runner = runStep,
   dbPath = DEFAULT_DB_PATH,
-  legacyDb = join(ROOT, "packages", "hub", "whiffle.db"),
+  legacyDb = join(ROOT, "packages", "hub", "cawco.db"),
 }: DeployInitOptions): Promise<DeployInitResult> => {
   const host = platform();
   if (host !== "darwin" && host !== "linux") {
     throw new ServiceError(
-      `whiffle deploy does not know how to install services on ${host}`
+      `cawco deploy does not know how to install services on ${host}`
     );
   }
 
@@ -2285,7 +2285,7 @@ export const deployInit = async ({
   if (occupied(root) && !(marked || running)) {
     throw new ServiceError(
       `${root} already exists and is not a deployment clone (no ${DEPLOY_MARKER}). ` +
-        "Refusing to touch it — move it aside, or point elsewhere with WHIFFLE_DEPLOY_ROOT."
+        "Refusing to touch it — move it aside, or point elsewhere with CAWCO_DEPLOY_ROOT."
     );
   }
 
@@ -2355,7 +2355,7 @@ export const deployInit = async ({
     await step(
       runner,
       "building the dashboard",
-      [process.execPath, "run", "--filter", "@whiffle/dashboard", "build"],
+      [process.execPath, "run", "--filter", "@cawco/dashboard", "build"],
       root,
       note
     );
@@ -2375,7 +2375,7 @@ export const deployInit = async ({
     return id === "agent"
       ? {
           ...spec,
-          environment: { ...spec.environment, [WHIFFLE_ENV.deployPoll]: "1" },
+          environment: { ...spec.environment, [CAWCO_ENV.deployPoll]: "1" },
         }
       : spec;
   });

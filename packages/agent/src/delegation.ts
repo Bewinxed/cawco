@@ -1,15 +1,15 @@
 import {
+  CAWCO_ENV,
+  CAWCO_HUB_PORT,
   IMAGE_GENERATION_TIMEOUT_MS,
   readEnv,
-  WHIFFLE_ENV,
-  WHIFFLE_HUB_PORT,
-} from "@whiffle/core";
+} from "@cawco/core";
 
-export const MCP_SERVER_NAME = "whiffle";
+export const MCP_SERVER_NAME = "cawco";
 const WS_SCHEME = /^ws/;
 const WS_PATH = /\/ws$/;
 export const delegationHubUrl = () =>
-  (readEnv(WHIFFLE_ENV.hubUrl) ?? `ws://localhost:${WHIFFLE_HUB_PORT}/ws`)
+  (readEnv(CAWCO_ENV.hubUrl) ?? `ws://localhost:${CAWCO_HUB_PORT}/ws`)
     .replace(WS_SCHEME, "http")
     .replace(WS_PATH, "");
 /** How long any call to the hub's tools may run: finish_item's checks set it. */
@@ -17,9 +17,9 @@ const DELEGATION_CALL_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 
 export const delegationMcp = (instanceId: string) => ({
   type: "http" as const,
-  url: `${delegationHubUrl()}/mcp/whiffle?instanceId=${encodeURIComponent(instanceId)}`,
+  url: `${delegationHubUrl()}/mcp/cawco?instanceId=${encodeURIComponent(instanceId)}`,
   // Exempt from tool-search deferral (Claude Code >= 2.1.121). Measured: across
-  // 54 whiffle-spawned sessions the delegate tool was one deferred NAME among
+  // 54 cawco-spawned sessions the delegate tool was one deferred NAME among
   // 133, uncallable until a ToolSearch round trip, while Bash sat loaded — a
   // 79:1 inline-to-delegate ratio and one unprompted adoption in 54 sessions.
   // The whole server is ~10 tools, so loading them upfront costs little; the
@@ -40,9 +40,7 @@ export async function delegationTools(instanceId?: string) {
     }
   );
   if (!response.ok) {
-    throw new Error(
-      `Could not discover Whiffle tools: HTTP ${response.status}`
-    );
+    throw new Error(`Could not discover CawCo tools: HTTP ${response.status}`);
   }
   return (
     (await response.json()) as {
@@ -81,7 +79,7 @@ export async function callDelegationTool(
     }
   );
   if (!response.ok) {
-    throw new Error(`Whiffle tool ${name}: HTTP ${response.status}`);
+    throw new Error(`CawCo tool ${name}: HTTP ${response.status}`);
   }
   const result = (await response.json()) as {
     content: { type: "text"; text: string }[];

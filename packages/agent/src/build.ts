@@ -5,7 +5,7 @@
  */
 
 import { resolve } from "node:path";
-import type { BuildInfo } from "@whiffle/core";
+import type { BuildInfo } from "@cawco/core";
 
 /** The checkout this daemon runs out of — up from `packages/agent/src`. */
 export const REPO_ROOT = resolve(
@@ -25,13 +25,13 @@ const git = async (args: string[]): Promise<string | undefined> => {
  * Defined only in the published package's bundle (scripts/build-release.mjs),
  * where this module is `cli.js` and the package's own manifest sits beside it.
  */
-declare const __WHIFFLE_RELEASE__: boolean | undefined;
+declare const __CAWCO_RELEASE__: boolean | undefined;
 
 const read = async (): Promise<BuildInfo> => {
   const manifest = (await Bun.file(
     Bun.fileURLToPath(
       new URL(
-        typeof __WHIFFLE_RELEASE__ === "boolean"
+        typeof __CAWCO_RELEASE__ === "boolean"
           ? "./package.json"
           : "../package.json",
         import.meta.url

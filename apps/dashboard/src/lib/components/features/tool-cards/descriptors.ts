@@ -5,6 +5,7 @@
  * everything else lands on the params table, which is the dignity floor.
  */
 import type { Component } from "svelte";
+import { rootDomain } from "$lib/cawco/mcp";
 import {
   IconBook,
   IconToolCode,
@@ -26,7 +27,6 @@ import {
   IconToolWeb,
   IconToolWrite,
 } from "$lib/icons";
-import { rootDomain } from "$lib/whiffle/mcp";
 
 export type ToolStatus = "pending" | "success" | "error";
 
@@ -309,14 +309,14 @@ export function familyId(toolName: string | undefined): FamilyId {
   if (
     name === "computer" ||
     name === "show_image" ||
-    name === "whiffle_show_image"
+    name === "cawco_show_image"
   ) {
     return "screen";
   }
   if (name === "navigate") {
     return "navigate";
   }
-  if (name === "manage_memory" || name === "whiffle_manage_memory") {
+  if (name === "manage_memory" || name === "cawco_manage_memory") {
     return "memory";
   }
   if (name === "javascript_tool" || name === "repl") {
@@ -790,7 +790,7 @@ function sentence(
 
     case "screen": {
       const normalized = MCP_NAME.exec(name)?.[2] ?? name;
-      if (normalized === "show_image" || normalized === "whiffle_show_image") {
+      if (normalized === "show_image" || normalized === "cawco_show_image") {
         // Live rows describe the call before its arguments have streamed in.
         const path = str(input?.path);
         return {

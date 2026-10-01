@@ -1,11 +1,11 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import NewSessionDialog from "$lib/whiffle/spawn/NewSessionDialog.svelte";
+  import NewSessionDialog from "$lib/cawco/spawn/NewSessionDialog.svelte";
 
   let dialogOpen = $state(true);
 </script>
 
-<svelte:head><title>New session | Whiffle</title></svelte:head>
+<svelte:head><title>New session | CawCo</title></svelte:head>
 <main>
   <h1>New session</h1>
   <button onclick={() => { dialogOpen = true; }} type="button">

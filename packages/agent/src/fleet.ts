@@ -3,7 +3,7 @@
  * hub owns the desired state; nothing in here decides what belongs on a
  * machine, only what the machine came to when it was asked to converge.
  *
- * Everything whiffle writes is named in a sidecar, and only what the sidecar
+ * Everything cawco writes is named in a sidecar, and only what the sidecar
  * names is ever taken away again: `~/.claude.json` is the user's own file, and
  * an MCP server they added by hand — or a plugin they installed themselves —
  * outlives every sync this daemon runs.
@@ -44,8 +44,8 @@ import type {
   MachineMemorySet,
   MarketplacePluginInfo,
   SkillFile,
-} from "@whiffle/core";
-import { hookProblem, memoryDocProblem } from "@whiffle/core";
+} from "@cawco/core";
+import { hookProblem, memoryDocProblem } from "@cawco/core";
 import { expandHome } from "./fs";
 import { resolveBin, toolEnv, toolPath } from "./tools";
 import {
@@ -60,39 +60,39 @@ import {
  */
 const CLAUDE_JSON = expandHome("~/.claude.json");
 
-/** What whiffle manages here. Anything this does not name is never touched. */
-const SIDECAR = expandHome("~/.claude/whiffle-fleet.json");
+/** What cawco manages here. Anything this does not name is never touched. */
+const SIDECAR = expandHome("~/.claude/cawco-fleet.json");
 
-/** Where a plain skill's files land — one directory per skill, all of it whiffle's. */
+/** Where a plain skill's files land — one directory per skill, all of it cawco's. */
 const SKILLS_DIR = expandHome("~/.claude/skills");
 
 /**
  * The fleet's OWN marketplace, written from the bytes the hub resolved. All of
- * it whiffle's, like a skill's directory — rewritten whole whenever the set
+ * it cawco's, like a skill's directory — rewritten whole whenever the set
  * changes, and never edited by anything else.
  */
-export const VENDOR_DIR = expandHome("~/.claude/whiffle-marketplace");
+export const VENDOR_DIR = expandHome("~/.claude/cawco-marketplace");
 
 /** What that marketplace is called once linked, and the half after every `@`. */
-const VENDOR_NAME = "whiffle";
+const VENDOR_NAME = "cawco";
 
 /** The user-scope memory every session on this machine reads (NEW.md §11). */
 const MEMORY_PATH = expandHome("~/.claude/CLAUDE.md");
 
 /**
  * The documents the main memory links, one file per path the set names. All of
- * it whiffle's, like a skill's directory — nothing under here was ever written
+ * it cawco's, like a skill's directory — nothing under here was ever written
  * by anything else, so a file the set stops carrying is a file that goes.
  */
 const MEMORIES_DIR = expandHome("~/.claude/memories");
 
 /**
  * The hook that puts a model's own document in front of the session running
- * that model. Whiffle's own machinery rather than a document of the user's, so
+ * that model. CawCo's own machinery rather than a document of the user's, so
  * it lives beside the sidecar and is written whenever it is not what this
- * version of whiffle generates.
+ * version of cawco generates.
  */
-const MEMORY_HOOK_PATH = expandHome("~/.claude/whiffle-model-memory.sh");
+const MEMORY_HOOK_PATH = expandHome("~/.claude/cawco-model-memory.sh");
 
 /** Where Claude Code reads a user's hooks; the same file the user's own are in. */
 const SETTINGS_PATH = expandHome("~/.claude/settings.json");
@@ -103,7 +103,7 @@ const SETTINGS_PATH = expandHome("~/.claude/settings.json");
  * registration but never orphans a script under an old name, and a hand edit
  * survives a hash bump to the same file it was made in.
  */
-const HOOKS_DIR = expandHome("~/.claude/whiffle-hooks");
+const HOOKS_DIR = expandHome("~/.claude/cawco-hooks");
 
 const PLUGINS_DIR = expandHome("~/.claude/plugins");
 /** The CLI's own account of what is linked and what is installed. */
@@ -128,9 +128,9 @@ const said = (error: unknown): string =>
   error instanceof Error ? error.message : String(error);
 
 /**
- * One marketplace whiffle linked, under both of the names it answers to.
+ * One marketplace cawco linked, under both of the names it answers to.
  * `name` is the hub config's; `linkedAs` is the one the CLI chose, out of the
- * marketplace's own manifest. They are routinely different — whiffle adds
+ * marketplace's own manifest. They are routinely different — cawco adds
  * `ryanthedev/rtd-claude-inn` and the CLI links it as `rtd` — so a sidecar that
  * kept one bare string left every later sync guessing which of the two it had.
  * Written only once something really is linked, which is what lets `linkedAs`
@@ -149,24 +149,24 @@ interface Sidecar {
    */
   deniedTools?: string[];
   /**
-   * Hook id → what whiffle last registered for it. `command` is the identity
+   * Hook id → what cawco last registered for it. `command` is the identity
    * {@link withoutHooks} removes by — a command handler's `command` verbatim,
-   * or the exact entry whiffle wrote otherwise — so a hook renamed or moved to
+   * or the exact entry cawco wrote otherwise — so a hook renamed or moved to
    * a different event or settings file is still collectable by what it used to
-   * be, not by whatever this version of whiffle would write today.
+   * be, not by whatever this version of cawco would write today.
    */
   hooks: Record<string, ManagedHook>;
   marketplaces: ManagedMarketplace[];
   mcp: string[];
-  /** The hash whiffle last wrote to `~/.claude/CLAUDE.md`; absent = unmanaged. */
+  /** The hash cawco last wrote to `~/.claude/CLAUDE.md`; absent = unmanaged. */
   memory?: string;
   /**
-   * Set path → the hash whiffle last wrote there, under `~/.claude/memories/`.
+   * Set path → the hash cawco last wrote there, under `~/.claude/memories/`.
    * Per file, because drift is per file: one document edited on this machine
    * holds up itself and leaves the rest of the set converging.
    */
   memoryDocs: Record<string, string>;
-  /** The SessionStart command whiffle registered; only this one is ever removed. */
+  /** The SessionStart command cawco registered; only this one is ever removed. */
   memoryHook?: string;
   plugins: string[];
   /** Skill name → the hash of the files written, which is what makes a sync a no-op. */
@@ -179,12 +179,12 @@ interface Sidecar {
   vendoredPlugins?: Record<string, string>;
 }
 
-/** What whiffle registered for one hook, enough to find and remove it later. */
+/** What cawco registered for one hook, enough to find and remove it later. */
 interface ManagedHook {
   command: string;
   cwd?: string;
   event: HookEvent;
-  /** sha256 of the script whiffle wrote, or of the hub's row when there is no script. */
+  /** sha256 of the script cawco wrote, or of the hub's row when there is no script. */
   hash: string;
   scope: FleetScope;
 }
@@ -212,7 +212,7 @@ const writeAtomic = async (
   path: string,
   content: string | Buffer
 ): Promise<void> => {
-  const temp = `${path}.whiffle-${process.pid}`;
+  const temp = `${path}.cawco-${process.pid}`;
   await Bun.write(temp, content);
   await rename(temp, path);
 };
@@ -226,7 +226,7 @@ const writeJson = (path: string, value: unknown): Promise<void> =>
  * A sidecar written before a marketplace carried both its names has one bare
  * string and no way to tell whose name it is. Kept only when the CLI still
  * lists something under it, because that is the only reading under which it
- * names something on this machine — a leftover whiffle name owns nothing, and
+ * names something on this machine — a leftover cawco name owns nothing, and
  * treating it as a link is what would have a later sync remove a name that was
  * never linked. Config puts the entry back, in full, on the same sync.
  */
@@ -241,7 +241,7 @@ export const upgradeMarketplaces = (
     return linked[one] ? [{ name: one, linkedAs: one }] : [];
   });
 
-/** What whiffle put here last time; unreadable is the same as never written. */
+/** What cawco put here last time; unreadable is the same as never written. */
 const readSidecar = async (): Promise<Sidecar> => {
   // Typed to admit the older shape too, so the upgrade is a fact of the type
   // rather than a cast: what is on disk may predate a marketplace's two names.
@@ -265,7 +265,7 @@ const readSidecar = async (): Promise<Sidecar> => {
     skills: stored?.skills ?? {},
     ...(stored?.memory ? { memory: stored.memory } : {}),
     // Likewise one written before the memory was a set: no linked document on
-    // this machine is whiffle's, so none of them is whiffle's to take away.
+    // this machine is cawco's, so none of them is cawco's to take away.
     memoryDocs: stored?.memoryDocs ?? {},
     ...(stored?.memoryHook ? { memoryHook: stored.memoryHook } : {}),
     // A sidecar written before denied-tools syncing names none, which is what
@@ -348,7 +348,7 @@ const forThisMachine = (
 
 /**
  * Merges the fleet's servers into `~/.claude.json` and answers with the names
- * whiffle now manages. Every other key in the file, and every server the
+ * cawco now manages. Every other key in the file, and every server the
  * sidecar does not name, comes back out exactly as it went in.
  */
 const syncMcp = async (
@@ -624,7 +624,7 @@ const linkedMarketplaces = async (): Promise<
 /**
  * `owner/repo`, an ssh remote, an https clone URL and a `marketplace.json` URL
  * can all name the same link. Compared on the part that identifies it, so the
- * spelling whiffle stores still matches whatever the CLI wrote down.
+ * spelling cawco stores still matches whatever the CLI wrote down.
  */
 const GIT_PLUS_PREFIX = /^git\+/;
 const GIT_SSH_HOST = /^git@github\.com:/;
@@ -649,10 +649,10 @@ const sourceKeysOf = (entry: KnownMarketplace): string[] =>
 
 /**
  * The name the CLI linked a marketplace under, which comes from the
- * marketplace's own `marketplace.json` and is not necessarily the name whiffle
+ * marketplace's own `marketplace.json` and is not necessarily the name cawco
  * calls it: `ryanthedev/rtd-claude-inn` is added and comes back as `rtd`.
  * Everything downstream — the clone's directory, a `plugin@marketplace` id,
- * `marketplace remove` — speaks the CLI's name, so a sync that kept whiffle's
+ * `marketplace remove` — speaks the CLI's name, so a sync that kept cawco's
  * would report a successful add as a failure and never install a plugin from
  * it. Matched on the source when the name does not hit, because the source is
  * the one thing both sides agree on.
@@ -695,9 +695,9 @@ const marketplaceOf = (id: string): string => id.split("@").pop() ?? "";
 const pluginNameOf = (id: string): string => id.split("@")[0] ?? id;
 
 /**
- * Which of the marketplaces whiffle linked last time are whiffle's to unlink
+ * Which of the marketplaces cawco linked last time are cawco's to unlink
  * now. What goes is a link, so what is compared is the link: renaming a
- * marketplace in the hub's config changes whiffle's name for it and nothing on
+ * marketplace in the hub's config changes cawco's name for it and nothing on
  * the machine, and comparing the names instead would unlink the marketplace
  * this same sync just linked. A name config still asks for is not a removal
  * either — nothing linked under it means the add failed, which is its own
@@ -746,7 +746,7 @@ const syncPlugins = async (
   }
 
   /**
-   * The report stays keyed by whiffle's name, because that is the row the
+   * The report stays keyed by cawco's name, because that is the row the
    * dashboard has; everything that acts on the machine uses the CLI's.
    */
   const marketplaces: ManagedMarketplace[] = [];
@@ -879,7 +879,7 @@ const dirExists = async (path: string): Promise<boolean> => {
 
 /**
  * The skill's directory, as the hub resolved it. Written whole, because the
- * directory is whiffle's own: a file the last version carried is not one this
+ * directory is cawco's own: a file the last version carried is not one this
  * version carries, and leaving it there is how a skill drifts.
  */
 const writeSkill = async (skill: FleetSkillPayload): Promise<void> => {
@@ -951,11 +951,11 @@ export const writeVendoredMarketplace = async (
     `${JSON.stringify(
       {
         name: VENDOR_NAME,
-        owner: { name: "whiffle" },
+        owner: { name: "cawco" },
         plugins: plugins.map((plugin) => ({
           name: plugin.name,
           source: `./plugins/${plugin.name}`,
-          description: `Carried by the whiffle fleet (${plugin.marketplace}).`,
+          description: `Carried by the cawco fleet (${plugin.marketplace}).`,
         })),
       },
       null,
@@ -968,7 +968,7 @@ export const writeVendoredMarketplace = async (
  * Installs the vendored plugins, and answers with what each one came to.
  *
  * Keyed by the FLEET's id — `name@marketplace`, the id the hub's config used —
- * while the CLI installs `name@whiffle`, because the marketplace it comes from
+ * while the CLI installs `name@cawco`, because the marketplace it comes from
  * on this machine is the one written above. The dashboard's rows are the
  * fleet's, not this machine's private arrangement for satisfying them.
  */
@@ -1136,7 +1136,7 @@ const syncSkillFiles = async (
       written[skill.name] = skill.hash;
       report[skill.name] = { state: "applied" };
     } catch (error) {
-      // A write that got part of the way through still left whiffle's files
+      // A write that got part of the way through still left cawco's files
       // behind, so the name stays managed — under a hash nothing matches, which
       // is what has the next sync write it again.
       written[skill.name] = "";
@@ -1185,7 +1185,7 @@ export type MemoryPlan =
 
 /**
  * What to do about the user CLAUDE.md, from hashes alone. Drift is a machine
- * edit whiffle did not make: managed hash exists, the file no longer matches
+ * edit cawco did not make: managed hash exists, the file no longer matches
  * it — never overwritten without `force`, reported instead.
  */
 export function memoryPlan(
@@ -1199,7 +1199,7 @@ export function memoryPlan(
     }
     return fileHash === managedHash ? "remove" : "unmanage";
   }
-  // A file whiffle has never written is somebody's own: it is taken over only
+  // A file cawco has never written is somebody's own: it is taken over only
   // when it already says the same thing, or when the reader said to.
   if (managedHash === undefined) {
     return fileHash === null || fileHash === desired.hash || desired.force
@@ -1218,9 +1218,9 @@ export function memoryPlan(
 const DRIFTED = "edited on this machine — adopt it or overwrite";
 
 /**
- * Applies the plan and answers with the hash whiffle now manages, or nothing
+ * Applies the plan and answers with the hash cawco now manages, or nothing
  * when it manages none. The file is only ever deleted when it is still exactly
- * what whiffle wrote — an edited one outlives the fleet's row, unmanaged.
+ * what cawco wrote — an edited one outlives the fleet's row, unmanaged.
  */
 const syncMemory = async (
   desired: FleetMemory | null | undefined,
@@ -1334,7 +1334,7 @@ const pruneEmptyDirs = async (): Promise<void> => {
  * sidecar still names — which is a document the fleet has stopped carrying.
  *
  * Pure, and separate from the writing for the same reason `memoryPlan` is: this
- * is where "whiffle overwrote what I wrote" is caught, and a decision that only
+ * is where "cawco overwrote what I wrote" is caught, and a decision that only
  * exists inside a filesystem walk is a decision nothing can ask about.
  *
  * A hub that predates the set sends no documents at all, which arrives here as
@@ -1367,7 +1367,7 @@ export function memorySetPlan(
  * The linked documents, {@link memorySetPlan} applied. Every rule the single
  * document has, held per file: one edited on this machine is reported and left
  * alone, the rest of the set converges around it, and a document the fleet
- * stops carrying is only deleted while it is still exactly what whiffle wrote.
+ * stops carrying is only deleted while it is still exactly what cawco wrote.
  */
 const syncMemoryDocs = async (
   desired: FleetMemoryDoc[],
@@ -1463,7 +1463,7 @@ const syncMemoryDocs = async (
  * model (measured on 2.1.280 and 2.1.284: only session_id, transcript_path,
  * cwd, hook_event_name and source), and CLAUDE.md itself is loaded flat. The
  * Claude harness therefore passes the session's model to the hook as the
- * `WHIFFLE_MODEL` environment variable, and the script prints the document
+ * `CAWCO_MODEL` environment variable, and the script prints the document
  * whose name is the longest prefix of that id — the whole of how a document
  * reaches only the sessions it is for.
  *
@@ -1471,7 +1471,7 @@ const syncMemoryDocs = async (
  * the ones where the daemon's own Bun is the only Bun there is.
  */
 export const MEMORY_HOOK = `#!/bin/sh
-# Written by whiffle. Edits are overwritten — the fleet's documents are in
+# Written by cawco. Edits are overwritten — the fleet's documents are in
 # ~/.claude/memories/, and this only decides which one a session is shown.
 set -u
 
@@ -1479,10 +1479,10 @@ dir="\${HOME}/.claude/memories/models"
 [ -d "$dir" ] || exit 0
 
 # Claude Code's SessionStart input carries no model, so the harness that
-# started this session names it in WHIFFLE_MODEL. A session started
+# started this session names it in CAWCO_MODEL. A session started
 # without one is shown nothing.
 cat >/dev/null
-model="\${WHIFFLE_MODEL:-}"
+model="\${CAWCO_MODEL:-}"
 [ -n "$model" ] || exit 0
 
 # Longest prefix wins, so \`claude-opus-5-20260315\` takes claude-opus-5.md over
@@ -1521,9 +1521,9 @@ interface HookMatcher {
 }
 
 /**
- * The same list without whiffle's own entries. A matcher entry that held
+ * The same list without cawco's own entries. A matcher entry that held
  * anything else comes back holding it, and one that is left with nothing goes —
- * but only when it was ours that emptied it. `commands` names what whiffle
+ * but only when it was ours that emptied it. `commands` names what cawco
  * registered last time, not what it would register today, so a hook that was
  * renamed, moved to a different script path, or changed handler type entirely
  * is still found and taken out — a set keyed off today's constants would leave
@@ -1628,7 +1628,7 @@ const syncMemoryHook = async (
   return wanted ? command : undefined;
 };
 
-/** Where a hook's own script lands: `~/.claude/whiffle-hooks/<id>.sh`. */
+/** Where a hook's own script lands: `~/.claude/cawco-hooks/<id>.sh`. */
 const hookScriptPath = (id: string): string => join(HOOKS_DIR, `${id}.sh`);
 
 /** How long one `bash -n` gets. Our choice: a parse of a hook script is
@@ -1704,7 +1704,7 @@ const settingsPathFor = (hook: Pick<FleetHook, "scope" | "cwd">): string =>
 
 /**
  * The handler as it goes into `settings.json`. A command handler carrying a
- * script is pointed at the path whiffle wrote it to on *this* machine — the
+ * script is pointed at the path cawco wrote it to on *this* machine — the
  * fleet row itself never names a path, because a path is machine-local and the
  * row has to mean the same thing on every box it reaches. Every other handler,
  * and a command handler with no script, is written exactly as the hub sent it.
@@ -1865,7 +1865,7 @@ const syncHooks = async (
       ...((root.hooks as Record<string, unknown> | undefined) ?? {}),
     };
 
-    // Everything whiffle registered out of this file last time, whatever event
+    // Everything cawco registered out of this file last time, whatever event
     // it ran on — a hook that moved to a different event still needs its old
     // row gone, not just left orphaned under the event it used to fire on.
     const registeredHere = Object.values(managed)
@@ -1934,7 +1934,7 @@ const syncHooks = async (
 
   // A hook that is disabled, deleted, or failed validation this round and had
   // nothing kept alive for it above is one whose registration and script (if
-  // whiffle wrote one) are whiffle's to take away.
+  // cawco wrote one) are cawco's to take away.
   const stillHere = new Set(settled.map((hook) => hook.id));
   for (const [id, record] of Object.entries(managed)) {
     if (stillHere.has(id) || written[id]) {
@@ -1983,12 +1983,12 @@ const converge = async (config: FleetConfig): Promise<FleetSyncReport> => {
   );
   const memory = await syncMemory(config.memory, managed.memory, report);
   // A hub that predates the set sends no `docs`, which reads as a fleet that
-  // links none — and the machine gives back the ones whiffle wrote it.
+  // links none — and the machine gives back the ones cawco wrote it.
   const docs = config.memory?.docs ?? [];
   const memoryDocs = await syncMemoryDocs(docs, managed.memoryDocs, docStates);
   const memoryHook = await syncMemoryHook(docs, managed.memoryHook, report);
   // A hub that predates hooks sends no `hooks`, which reads the same way: a
-  // fleet that keeps none, and the machine gives back whatever whiffle
+  // fleet that keeps none, and the machine gives back whatever cawco
   // registered before this daemon knew what that field meant.
   const hooks = await syncHooks(config.hooks ?? [], managed.hooks, hookStates);
   await writeJson(SIDECAR, {
@@ -2044,7 +2044,7 @@ export const syncFleetConfig = (
 };
 
 /**
- * What the machine has of what whiffle last put on it, without changing any of
+ * What the machine has of what cawco last put on it, without changing any of
  * it. The sidecar is the question — a server or a plugin nobody here manages is
  * not this report's business.
  */
@@ -2144,7 +2144,7 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
         continue;
       }
     }
-    // The last question for every hook: whether the entry whiffle registered
+    // The last question for every hook: whether the entry cawco registered
     // is still in the settings.json it registered it in — a script that was
     // refused registration is kept on disk, so a matching file is not enough.
     const settingsPath = settingsPathFor(record);
@@ -2217,7 +2217,7 @@ export const readHookScript = async (
 };
 
 /**
- * Discovery (NEW.md §11). Everything above answers "what did whiffle do here";
+ * Discovery (NEW.md §11). Everything above answers "what did cawco do here";
  * everything below answers the question that was missing — what this machine
  * really has, whoever put it there. Read-only, all of it: an unmanaged server or
  * a skill somebody wrote by hand is exactly what a reader wants to see, and
@@ -2249,7 +2249,7 @@ export function mergeMcp(
         name,
         scope,
         config: config as FleetMcpConfig,
-        // Whiffle only ever writes the user scope, so only that one can be ours.
+        // CawCo only ever writes the user scope, so only that one can be ours.
         managed: scope === "user" && managed.includes(name),
         ...(nearer ? { shadowedBy: nearer.scope } : {}),
       });

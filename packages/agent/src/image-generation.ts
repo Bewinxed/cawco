@@ -10,10 +10,7 @@ import {
 } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, extname, join, resolve } from "node:path";
-import {
-  type GeneratedImage,
-  IMAGE_GENERATION_TIMEOUT_MS,
-} from "@whiffle/core";
+import { type GeneratedImage, IMAGE_GENERATION_TIMEOUT_MS } from "@cawco/core";
 import { z } from "zod";
 
 const requestSchema = z
@@ -51,7 +48,7 @@ async function requireNewOutput(output: string): Promise<void> {
 }
 
 async function publishImage(output: string, bytes: Buffer): Promise<void> {
-  const temporary = join(dirname(output), `.whiffle-image-${randomUUID()}.tmp`);
+  const temporary = join(dirname(output), `.cawco-image-${randomUUID()}.tmp`);
   const file = await open(temporary, "wx", 0o600);
   try {
     try {

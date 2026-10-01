@@ -19,13 +19,13 @@ import type {
   WorkflowGraph,
   WorkflowInput,
   WorkflowRun,
-} from "@whiffle/core";
-import { workflowNoticeMarker } from "@whiffle/core";
+} from "@cawco/core";
+import { workflowNoticeMarker } from "@cawco/core";
 import {
   failureOf,
   type JevSpec,
   stepIdFor,
-} from "@whiffle/core/workflow-program";
+} from "@cawco/core/workflow-program";
 import Ajv from "ajv";
 import type {
   DbShape,

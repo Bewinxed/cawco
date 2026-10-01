@@ -31,7 +31,7 @@ try {
   // Monitor's websocket form runs no command, so there is nothing to bound.
   if (typeof call.command === "string") {
     const ended = quote(join(scratch, `.cwd-${randomUUID()}`));
-    const command = `${quote(exec)} --cwd-out ${ended} ${quote(call.command)}; __whiffle_status=$?; if [ -s ${ended} ]; then cd -- "$(cat ${ended})"; fi; rm -f ${ended}; (exit $__whiffle_status)`;
+    const command = `${quote(exec)} --cwd-out ${ended} ${quote(call.command)}; __cawco_status=$?; if [ -s ${ended} ]; then cd -- "$(cat ${ended})"; fi; rm -f ${ended}; (exit $__cawco_status)`;
     process.stdout.write(
       JSON.stringify({
         hookSpecificOutput: {
@@ -44,7 +44,7 @@ try {
   }
 } catch (error) {
   console.error(
-    `whiffle: this command did not run, because the workspace boundary could not wrap it: ${error instanceof Error ? error.message : String(error)}`
+    `cawco: this command did not run, because the workspace boundary could not wrap it: ${error instanceof Error ? error.message : String(error)}`
   );
   process.exit(2);
 }

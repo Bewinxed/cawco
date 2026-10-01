@@ -12,7 +12,7 @@ A single operator — the person who owns every machine in a self-hosted deploym
 
 ## Product Purpose
 
-Whiffle is a self-hosted fleet control plane for AI coding agents. When several agents are running unattended across different machines and one stalls on a permission gate, breaks, or goes silent, Whiffle shows which session needs attention without opening every terminal or SSHing into every box. The operator can approve, redirect, or kill it before it wastes context, cost, or blocks downstream work.
+CawCo is a self-hosted fleet control plane for AI coding agents. When several agents are running unattended across different machines and one stalls on a permission gate, breaks, or goes silent, CawCo shows which session needs attention without opening every terminal or SSHing into every box. The operator can approve, redirect, or kill it before it wastes context, cost, or blocks downstream work.
 
 Success means the operator trusts the board: an empty board with a live connection genuinely means nothing needs them, and a "needs you" signal is never a false negative.
 
@@ -26,7 +26,7 @@ Three things a neighboring tool could not truthfully copy simultaneously:
 
 ## Operating Context
 
-The operator runs a fleet of machines (desktops, laptops, servers) on a Tailscale network or LAN. Each machine runs a whiffle daemon that discovers the hub via mDNS (link-local) or Tailscale peer discovery. Agent sessions are spawned against Git repositories and run inside harness runtimes (Claude Code, OpenCode, pi).
+The operator runs a fleet of machines (desktops, laptops, servers) on a Tailscale network or LAN. Each machine runs a cawco daemon that discovers the hub via mDNS (link-local) or Tailscale peer discovery. Agent sessions are spawned against Git repositories and run inside harness runtimes (Claude Code, OpenCode, pi).
 
 The operator's day includes: glancing at the fleet board to see what's running and what's blocked; triaging a blocked session by reading its transcript and approving or denying the permission request; spawning new sessions against projects; checking daily spend against a budget; authoring standing rules that auto-approve or auto-deny future permission patterns; and configuring fleet-wide tools (MCP servers, skills, plugins, hooks).
 
@@ -59,7 +59,7 @@ Away from a desk, the operator uses a Telegram bridge to receive permission prom
 - **agent**: the harness identity (Claude Code / OpenCode / pi)
 - **subagent**: a child task inside a session, folded into the parent transcript
 - **delegate**: a separate fleet session spawned by a parent, reported back
-- **machine**: a host running the whiffle daemon
+- **machine**: a host running the cawco daemon
 - **fleet**: the connected collective of machines
 - **rule**: a standing permission rule
 - **spend / budget**: daily cost number / the limit
@@ -73,7 +73,7 @@ Away from a desk, the operator uses a Telegram bridge to receive permission prom
 
 ## Brand Commitments
 
-- **Name:** Whiffle (codebase migration from "Whiffle" pending; "Whiffle" is the sole public-facing name)
+- **Name:** Caw&Co, shown as CawCo in the product. Identifiers spell it `cawco`.
 - **Voice:** Calm structure — precise, calm, commanding, honest. Not friendly-helpful-clear. A calm ledger, not a personality brand.
 - **Error formula:** what happened → why → how to fix → what happens next. Never "We" as subject; never blame framing; never a raw error code alone.
 - **Button labels:** always [Verb]+[Object], from an allowlisted imperative-verb set.

@@ -12,6 +12,6 @@ export default defineConfig({
   dbCredentials: {
     // A plain read rather than core's `readEnv`: drizzle-kit bundles this
     // config on its own and never sees the workspace's TypeScript sources.
-    url: process.env.WHIFFLE_DB_PATH ?? "./whiffle.db",
+    url: process.env.CAWCO_DB_PATH ?? "./cawco.db",
   },
 });

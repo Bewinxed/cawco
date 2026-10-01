@@ -8,7 +8,7 @@
 
 import { homedir, platform } from "node:os";
 import { dirname, join } from "node:path";
-import type { UpdateReport } from "@whiffle/core";
+import type { UpdateReport } from "@cawco/core";
 import { REPO_ROOT } from "./build";
 import {
   checkDeploy,
@@ -27,7 +27,7 @@ export interface UpdateOptions {
   /**
    * Pull from `origin/<branch>` by name rather than from whatever upstream the
    * checkout has configured. The deployment poller and the manual
-   * `updateWhiffle` control both pass {@link DEPLOY_BRANCH} (C8/G3): a
+   * `updateCawco` control both pass {@link DEPLOY_BRANCH} (C8/G3): a
    * fast-forward onto a branch nobody named is how a clone quietly starts
    * following something else.
    */
@@ -43,7 +43,7 @@ export interface UpdateOptions {
   restartAgent?: boolean;
   /**
    * Which checkout to update. Defaults to the one this daemon is running out of
-   * — which is the whole of what the manual `updateWhiffle` control ever meant.
+   * — which is the whole of what the manual `updateCawco` control ever meant.
    * The deployment poller passes the marked clone explicitly (C8), because
    * "wherever this file happens to sit" is not a thing to pull into.
    */
@@ -113,7 +113,7 @@ const git = (args: string[], cwd?: string): Promise<Ran> =>
 export const failed = (step: string, ran: Ran): Error =>
   new Error(`${step} failed:\n${ran.output || `exited ${ran.code}`}`);
 
-/** The three services `whiffle service install` puts on a machine, in start order. */
+/** The three services `cawco service install` puts on a machine, in start order. */
 export type Service = "hub" | "dashboard" | "agent";
 
 /**
@@ -258,12 +258,12 @@ export const changedServices = async (
  */
 const unitPath = (id: Service): string =>
   platform() === "darwin"
-    ? join(homedir(), "Library", "LaunchAgents", `dev.whiffle.${id}.plist`)
+    ? join(homedir(), "Library", "LaunchAgents", `dev.cawco.${id}.plist`)
     : join(
         process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"),
         "systemd",
         "user",
-        `whiffle-${id}.service`
+        `cawco-${id}.service`
       );
 
 /** A service nobody installed here is not this machine's to restart. */
@@ -276,9 +276,9 @@ const restartCommand = (id: Service): string[] =>
         "launchctl",
         "kickstart",
         "-k",
-        `gui/${process.getuid?.() ?? 0}/dev.whiffle.${id}`,
+        `gui/${process.getuid?.() ?? 0}/dev.cawco.${id}`,
       ]
-    : ["systemctl", "--user", "restart", `whiffle-${id}.service`];
+    : ["systemctl", "--user", "restart", `cawco-${id}.service`];
 
 /** How long the reply gets to reach the hub before this daemon goes down with it. */
 const RESTART_DELAY_S = 1;
@@ -298,7 +298,7 @@ const scheduleRestart = (id: "agent" | "hub"): void => {
 
 /** Where "an agent restart is owed for commit X" lives, next to the deploy marker it complements. */
 const restartMarkerPath = (root: string): string =>
-  join(root, ".whiffle-restart-pending.json");
+  join(root, ".cawco-restart-pending.json");
 
 /**
  * Written by the process about to restart itself, right before it does —
@@ -446,14 +446,14 @@ export const pullArgs = (branch: string): string[] => [
 /**
  * The tail of the update queue. Git refuses two pulls in one checkout at once
  * ("fatal: Cannot fast-forward…"), and the deployment poller and the manual
- * `updateWhiffle` control both pull, on their own clocks. Every update in this
+ * `updateCawco` control both pull, on their own clocks. Every update in this
  * process runs after the one before it has finished; one that queued behind a
  * pull finds nothing left to fetch and reports the commit it is already on.
  */
 let updateQueue: Promise<unknown> = Promise.resolve();
 
 /**
- * Everything the `updateWhiffle` control does, in the order it has to happen.
+ * Everything the `updateCawco` control does, in the order it has to happen.
  * Every field of the report is what actually took place: a step that was
  * asked for and did not run says why in `skipped` rather than reading as done.
  */
@@ -554,7 +554,7 @@ const pullAndRestart = async ({
       skipped.push(`the dashboard is already built from ${report.to}`);
     } else {
       const built = await run(
-        [process.execPath, "run", "--filter", "@whiffle/dashboard", "build"],
+        [process.execPath, "run", "--filter", "@cawco/dashboard", "build"],
         BUILD_TIMEOUT_MS,
         root
       );
@@ -699,7 +699,7 @@ export const watchDeployment = (
 
 /**
  * Where this machine stands against the deployment branch, asked once. What
- * `whiffle deploy status` prints, and what the daemon can answer with.
+ * `cawco deploy status` prints, and what the daemon can answer with.
  */
 export const deploymentState = (
   root: string = deployRoot()

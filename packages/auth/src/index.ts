@@ -5,7 +5,7 @@
  *
  * Usage:
  * ```ts
- * import { login, logout, isAuthenticated, getValidAccessToken } from '@whiffle/auth';
+ * import { login, logout, isAuthenticated, getValidAccessToken } from '@cawco/auth';
  *
  * // Check if authenticated
  * if (await isAuthenticated()) {
@@ -18,7 +18,7 @@
  * ```
  */
 
-// biome-ignore lint/performance/noBarrelFile: this is the package's public entrypoint; consumers import "@whiffle/auth" and expect one surface
+// biome-ignore lint/performance/noBarrelFile: this is the package's public entrypoint; consumers import "@cawco/auth" and expect one surface
 export {
   deleteCredentials,
   getCredentialsPath,

@@ -7,7 +7,7 @@
 import { readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { extname, join, resolve } from "node:path";
-import type { FsEntry, FsImage, FsPayload } from "@whiffle/core";
+import type { FsEntry, FsImage, FsPayload } from "@cawco/core";
 
 /**
  * `~` is the shell's, not a path: anything handed a literal `~` — a spawn's
@@ -25,7 +25,7 @@ export const expandHome = (path: string): string => {
 const MAX_READ_BYTES = 512 * 1024;
 
 /**
- * Whiffle is a single-user tool on a trusted network (NEW.md §6), so this is a
+ * CawCo is a single-user tool on a trusted network (NEW.md §6), so this is a
  * guard against a mistyped path reaching kernel and system state, not an
  * attacker: the whole rest of the machine is deliberately reachable.
  */

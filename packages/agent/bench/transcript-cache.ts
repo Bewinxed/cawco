@@ -10,7 +10,7 @@
 import { readFileSync, unlinkSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import { readTranscript } from "@whiffle/jsonl-parser";
+import { readTranscript } from "@cawco/jsonl-parser";
 import {
   CHAIN_TYPES,
   readSessionEnd,

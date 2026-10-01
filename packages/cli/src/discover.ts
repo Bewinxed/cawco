@@ -9,13 +9,13 @@ import {
   toHttpBase,
   toWsUrl,
   writeConfig,
-} from "@whiffle/agent";
+} from "@cawco/agent";
 import {
+  CAWCO_ENV,
+  CAWCO_HUB_PORT,
+  CAWCO_MDNS_TYPE,
   readEnv,
-  WHIFFLE_ENV,
-  WHIFFLE_HUB_PORT,
-  WHIFFLE_MDNS_TYPE,
-} from "@whiffle/core";
+} from "@cawco/core";
 
 /** Which rung of the ladder answered. */
 export type HubSource =
@@ -47,10 +47,10 @@ export interface DiscoverOptions {
  * did it pick that one" has to be readable without a debugger.
  *
  * The mDNS browse, the tailscale walk, and the probe itself live in
- * `@whiffle/agent`'s `discovery` module — they are shared with the daemon's
+ * `@cawco/agent`'s `discovery` module — they are shared with the daemon's
  * own re-discovery on a sustained reconnect failure (for a hub found by a
  * discovery rung, never one named by `--hub` or env). This file keeps only the
- * rungs that are specific to a `whiffle up`: being told outright, the CLI's
+ * rungs that are specific to a `cawco up`: being told outright, the CLI's
  * cached config, and localhost.
  */
 export const discoverHub = async ({
@@ -63,7 +63,7 @@ export const discoverHub = async ({
     ((): void => {
       // --verbose narration is opt-in; silently drop it when no logger was given.
     });
-  const port = Number(readEnv(WHIFFLE_ENV.hubPort) ?? WHIFFLE_HUB_PORT);
+  const port = Number(readEnv(CAWCO_ENV.hubPort) ?? CAWCO_HUB_PORT);
 
   const settle = async (httpUrl: string, source: HubSource): Promise<Hub> => {
     await writeConfig({ hubUrl: httpUrl });
@@ -72,21 +72,19 @@ export const discoverHub = async ({
 
   // 1. Being told outranks being clever, and an explicit hub is not probed: the
   //    daemon is allowed to start before the hub it was pointed at exists.
-  const explicit = hub ?? readEnv(WHIFFLE_ENV.hubUrl);
+  const explicit = hub ?? readEnv(CAWCO_ENV.hubUrl);
   if (explicit) {
     const source = hub ? "flag" : "env";
     const base = toHttpBase(explicit);
     if (base) {
-      note(
-        `[1/5] ${source === "flag" ? "--hub" : WHIFFLE_ENV.hubUrl}: ${base}`
-      );
+      note(`[1/5] ${source === "flag" ? "--hub" : CAWCO_ENV.hubUrl}: ${base}`);
       return settle(base, source);
     }
     note(
-      `[1/5] ${source === "flag" ? "--hub" : WHIFFLE_ENV.hubUrl}: ${explicit} is not a URL`
+      `[1/5] ${source === "flag" ? "--hub" : CAWCO_ENV.hubUrl}: ${explicit} is not a URL`
     );
   } else {
-    note(`[1/5] --hub / ${WHIFFLE_ENV.hubUrl}: not set`);
+    note(`[1/5] --hub / ${CAWCO_ENV.hubUrl}: not set`);
   }
 
   // 2. The hub found last time is the hub most runs want, so it costs one probe.
@@ -105,7 +103,7 @@ export const discoverHub = async ({
 
   // 3. Same network, nothing configured.
   note(
-    `[3/5] mDNS _${WHIFFLE_MDNS_TYPE}._tcp.local: browsing ${MDNS_BROWSE_MS}ms`
+    `[3/5] mDNS _${CAWCO_MDNS_TYPE}._tcp.local: browsing ${MDNS_BROWSE_MS}ms`
   );
   const advertised = await browseMdns();
   if (advertised.length > 0) {

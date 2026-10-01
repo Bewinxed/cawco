@@ -1,8 +1,8 @@
 <script lang="ts">
-  import type { WorkflowSchema } from "@whiffle/core";
-  import { crossIn } from "$lib/whiffle/motion/curves.svelte";
-  import { unfold } from "$lib/whiffle/motion/fold.svelte";
-  import { morph } from "$lib/whiffle/motion/morph.svelte";
+  import type { WorkflowSchema } from "@cawco/core";
+  import { crossIn } from "$lib/cawco/motion/curves.svelte";
+  import { unfold } from "$lib/cawco/motion/fold.svelte";
+  import { morph } from "$lib/cawco/motion/morph.svelte";
   import JsonField from "./JsonField.svelte";
 
   let {

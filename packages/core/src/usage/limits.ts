@@ -19,7 +19,7 @@ const TIMEOUT_MS = 10_000;
  * against one live token, seven back-to-back requests per agent:
  *
  *     claude-code/2.1.263  3x 200     <- privileged bucket
- *     whiffle/0.1.0        1x 200     |
+ *     cawco/0.1.0        1x 200     |
  *     curl/8.5.0           1x 200     |- one shared, trickling generic bucket
  *     (header suppressed)  0x 200     <- worst bucket of all
  *

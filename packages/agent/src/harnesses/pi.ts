@@ -16,6 +16,32 @@
 import { homedir } from "node:os";
 import { join } from "node:path";
 import type {
+  AuthState,
+  FleetConfig,
+  FleetSyncReport,
+  HarnessCapabilities,
+  HarnessReport,
+  ModelInfo,
+  NeutralAssistantBlock,
+  NeutralContentBlock,
+  NeutralSessionInfo,
+  PermissionResult,
+  SendPayload,
+  SentMessage,
+  SessionMessage,
+  SpawnPayload,
+  SupportedCommands,
+} from "@cawco/core";
+import {
+  CONTROL_CONTEXT_USAGE,
+  CONTROL_INTERRUPT,
+  CONTROL_MODEL_CATALOG,
+  CONTROL_SET_MODEL,
+  CONTROL_SUPPORTED_COMMANDS,
+  CONTROL_SUPPORTED_MODELS,
+  MESSAGES_READ,
+} from "@cawco/core";
+import type {
   ImageContent,
   Model,
   TextContent,
@@ -32,32 +58,6 @@ import {
   SessionManager,
   type ToolDefinition,
 } from "@earendil-works/pi-coding-agent";
-import type {
-  AuthState,
-  FleetConfig,
-  FleetSyncReport,
-  HarnessCapabilities,
-  HarnessReport,
-  ModelInfo,
-  NeutralAssistantBlock,
-  NeutralContentBlock,
-  NeutralSessionInfo,
-  PermissionResult,
-  SendPayload,
-  SentMessage,
-  SessionMessage,
-  SpawnPayload,
-  SupportedCommands,
-} from "@whiffle/core";
-import {
-  CONTROL_CONTEXT_USAGE,
-  CONTROL_INTERRUPT,
-  CONTROL_MODEL_CATALOG,
-  CONTROL_SET_MODEL,
-  CONTROL_SUPPORTED_COMMANDS,
-  CONTROL_SUPPORTED_MODELS,
-  MESSAGES_READ,
-} from "@whiffle/core";
 import { type Boundary, boundaryCommand } from "../boundary";
 import { callDelegationTool, delegationTools } from "../delegation";
 import type { Harness, HarnessContext, HarnessSession } from "../harness";
@@ -74,7 +74,7 @@ import {
 const PI_DIR = join(homedir(), ".pi", "agent");
 const PI_SKILLS = join(PI_DIR, "skills");
 const PI_MEMORY = join(PI_DIR, "AGENTS.md");
-const PI_SIDECAR = join(PI_DIR, "whiffle-fleet.json");
+const PI_SIDECAR = join(PI_DIR, "cawco-fleet.json");
 
 export const PI_CAPABILITIES: HarnessCapabilities = {
   interrupt: true,

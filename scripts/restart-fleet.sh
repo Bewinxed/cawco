@@ -1,30 +1,30 @@
 #!/usr/bin/env bash
 #
-# Restart whiffle's services after a delay, then prove the fleet came back.
+# Restart cawco's services after a delay, then prove the fleet came back.
 #
 # Why the delay: the agent hosts the Claude Code sessions, so the session that
-# asks for this restart is itself mid-turn, and `whiffle service restart
+# asks for this restart is itself mid-turn, and `cawco service restart
 # --when-idle` would wait on a turn that cannot finish until the command it is
 # running returns. Sleeping first lets the asking turn end before the agent is
 # touched.
 #
 # Why this must be launched with `systemd-run --user` and not `nohup … &`:
-# whiffle-agent.service is KillMode=control-group, and anything spawned from a
+# cawco-agent.service is KillMode=control-group, and anything spawned from a
 # session lives in that cgroup. Restarting the agent would kill this script
 # halfway through. Run it in its own transient unit and it outlives the restart:
 #
-#   systemd-run --user --unit=whiffle-restart --collect \
+#   systemd-run --user --unit=cawco-restart --collect \
 #     scripts/restart-fleet.sh [delay-seconds]
 #
-# Reads back to journalctl --user -u whiffle-restart, and to the log file below.
+# Reads back to journalctl --user -u cawco-restart, and to the log file below.
 
 set -uo pipefail
 
 DELAY="${1:-45}"
-HUB="http://127.0.0.1:${WHIFFLE_HUB_PORT:-3456}"
-MACHINE_ID="${WHIFFLE_MACHINE_ID:-d04ca118428001f1}"
-LOG="${HOME}/.claude/whiffle-restart.log"
-SIDECAR="${HOME}/.claude/whiffle-fleet.json"
+HUB="http://127.0.0.1:${CAWCO_HUB_PORT:-3456}"
+MACHINE_ID="${CAWCO_MACHINE_ID:-d04ca118428001f1}"
+LOG="${HOME}/.claude/cawco-restart.log"
+SIDECAR="${HOME}/.claude/cawco-fleet.json"
 
 # hub first, then dashboard, then agent: the units declare After/Wants on the
 # hub, and the agent is restarted last so it re-registers against a hub that is
@@ -42,7 +42,7 @@ say() { printf '%s %s\n' "$(date -Is)" "$*" | tee -a "$LOG"; }
 
 fail() {
   say "FAILED: $*"
-  say "state: $(systemctl --user is-active whiffle-{hub,dashboard,agent}.service 2>&1 | tr '\n' ' ')"
+  say "state: $(systemctl --user is-active cawco-{hub,dashboard,agent}.service 2>&1 | tr '\n' ' ')"
   exit 1
 }
 
@@ -62,7 +62,7 @@ until_ok() {
 
 hub_healthy() { curl -fsS -m 3 "${HUB}/health"; }
 
-say "=== whiffle restart requested; sleeping ${DELAY}s so the asking turn can finish ==="
+say "=== cawco restart requested; sleeping ${DELAY}s so the asking turn can finish ==="
 sleep "$DELAY"
 
 # The agent is only safe to bounce once no session is mid-turn. Ask the hub
@@ -72,7 +72,7 @@ busy="$(curl -fsS -m 5 "${HUB}/api/agents/${MACHINE_ID}/busy" 2>/dev/null || ech
 say "hub reports busy=${busy:-unreachable}"
 
 for id in "${SERVICES[@]}"; do
-  unit="whiffle-${id}.service"
+  unit="cawco-${id}.service"
   say "restarting ${unit}"
   systemctl --user restart "$unit" || fail "systemctl --user restart ${unit}"
   until_ok "$UNIT_TIMEOUT" "${unit} active" \

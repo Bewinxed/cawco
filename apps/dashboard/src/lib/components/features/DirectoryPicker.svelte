@@ -1,13 +1,13 @@
 <script lang="ts">
-  import type { FsEntry, NeutralSessionInfo } from "@whiffle/core";
+  import type { FsEntry, NeutralSessionInfo } from "@cawco/core";
+  import { cawco, machineFs } from "$lib/cawco/client.svelte";
+  import { dur, easeDrawer, motionOk } from "$lib/cawco/motion/curves.svelte";
   import { Button } from "$lib/components/ui/button";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for importing a component group
   import * as Collapsible from "$lib/components/ui/collapsible";
   import { Skeleton } from "$lib/components/ui/skeleton";
   /** Walks a machine's filesystem over the `fs` verb so a cwd can be picked, not typed. */
   import { IconArrowUp, IconCheck, IconFolder } from "$lib/icons";
-  import { machineFs, whiffle } from "$lib/whiffle/client.svelte";
-  import { dur, easeDrawer, motionOk } from "$lib/whiffle/motion/curves.svelte";
 
   let {
     machineId,
@@ -72,7 +72,7 @@
     if (value.startsWith("/")) {
       return trim(value);
     }
-    const recent = whiffle
+    const recent = cawco
       .catalogOf(machineId)
       .reduce<NeutralSessionInfo | null>(
         (best, info) =>

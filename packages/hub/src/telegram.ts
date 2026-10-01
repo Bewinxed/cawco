@@ -7,13 +7,13 @@ import type {
   SendPayload,
   UserAnswers,
   UserQuestion,
-} from "@whiffle/core";
+} from "@cawco/core";
 import {
   ASK_USER_QUESTION,
+  CAWCO_ENV,
   RESOLVE_PERMISSION,
   readEnv,
-  WHIFFLE_ENV,
-} from "@whiffle/core";
+} from "@cawco/core";
 import type { DbShape } from "./db";
 import type { PendingShape } from "./pending";
 import { answerWorkflow } from "./pending";
@@ -93,7 +93,7 @@ export interface TelegramServices {
 const CREDENTIAL_ID = "telegram";
 
 /** Overridable so a test can point the bridge at a local stand-in. */
-const API_BASE = Bun.env.WHIFFLE_TELEGRAM_API ?? "https://api.telegram.org";
+const API_BASE = Bun.env.CAWCO_TELEGRAM_API ?? "https://api.telegram.org";
 
 /** Telegram's own ceiling on a message, and how long a `getUpdates` may hang. */
 const MESSAGE_LIMIT = 4096;
@@ -111,9 +111,9 @@ const SWEEP_INTERVAL_MS = 60 * 60_000;
  * The explicit answer, for a hub whose public URL it cannot see: behind a
  * reverse proxy or a tunnel, the origin a browser used is the proxy's, not the
  * one the operator wants in a message. Read directly rather than through core's
- * `readEnv`: `WHIFFLE_ENV` has no key for it.
+ * `readEnv`: `CAWCO_ENV` has no key for it.
  */
-const DASHBOARD_URL_OVERRIDE = Bun.env.WHIFFLE_DASHBOARD_URL;
+const DASHBOARD_URL_OVERRIDE = Bun.env.CAWCO_DASHBOARD_URL;
 
 /**
  * The port the dashboard is served on, for the composed fallback below. The
@@ -121,7 +121,7 @@ const DASHBOARD_URL_OVERRIDE = Bun.env.WHIFFLE_DASHBOARD_URL;
  * (`packages/cli/src/service.ts`, `PORT ?? '3000'`); a hub that cannot import
  * the CLI has to be told separately when that is changed.
  */
-const DASHBOARD_PORT = Bun.env.WHIFFLE_DASHBOARD_PORT ?? "3000";
+const DASHBOARD_PORT = Bun.env.CAWCO_DASHBOARD_PORT ?? "3000";
 
 /**
  * Where a message that is too big to answer here sends the reader instead.
@@ -263,9 +263,9 @@ export const createTelegramBridge = ({
   db,
   pending,
 }: TelegramServices): TelegramBridge | null => {
-  const token = readEnv(WHIFFLE_ENV.telegramToken);
+  const token = readEnv(CAWCO_ENV.telegramToken);
   if (!token) {
-    console.log(`[telegram] no ${WHIFFLE_ENV.telegramToken} — bridge off`);
+    console.log(`[telegram] no ${CAWCO_ENV.telegramToken} — bridge off`);
     return null;
   }
 

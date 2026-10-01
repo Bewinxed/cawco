@@ -14,7 +14,7 @@
 <svelte:head
   ><title>
     {missing ? 'Page not found' : 'Something went wrong'}
-    · Whiffle
+    · CawCo
   </title></svelte:head
 >
 

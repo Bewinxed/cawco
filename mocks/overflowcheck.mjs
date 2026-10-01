@@ -26,7 +26,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
  *      acceptable answer, and this assertion exists because treating it as one
  *      let the worst defect of the phase through: the `rm -rf` permission gate
  *      rendered its scope values 90.5px off-screen at 320 with no ellipsis and
- *      no cue, so `Path` read `/home/bewinxed/whiffle/apps/dashboard/.svel` —
+ *      no cue, so `Path` read `/home/bewinxed/cawco/apps/dashboard/.svel` —
  *      not the path being granted — while Approve sat fully legible beneath it.
  *      The document measured clean, because a `.tr{overflow-x:auto}` ancestor
  *      absorbed the overflow.

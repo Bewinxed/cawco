@@ -1,6 +1,6 @@
 <script lang="ts">
   /**
-   * A menu item that copies. The copy goes through whiffle/copy.ts, whose
+   * A menu item that copies. The copy goes through cawco/copy.ts, whose
    * toast says what was copied; on success the item's icon cross-fades to a
    * check over --dur-control and holds it for --dur-hold, and only then does
    * the menu close, so the check shows on the item that did it. The first
@@ -9,9 +9,9 @@
    * and returns focus. A failed copy closes it at once, the toast saying why.
    */
   import type { Snippet } from "svelte";
+  import { copyToClipboard } from "$lib/cawco/copy";
+  import { dur } from "$lib/cawco/motion/curves.svelte";
   import { IconCheck, IconCopy } from "$lib/icons";
-  import { copyToClipboard } from "$lib/whiffle/copy";
-  import { dur } from "$lib/whiffle/motion/curves.svelte";
   import ContextMenuItem from "./context-menu-item.svelte";
 
   let {

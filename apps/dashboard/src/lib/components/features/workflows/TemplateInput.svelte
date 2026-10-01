@@ -1,6 +1,6 @@
 <script lang="ts">
+  import { popOut } from "$lib/cawco/motion/pop.svelte";
   import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
-  import { popOut } from "$lib/whiffle/motion/pop.svelte";
 
   let {
     label,

@@ -2,8 +2,8 @@ import type { Dirent } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { RawClaudeUsage, UsageTokens } from "@whiffle/core";
-import { cacheCreationCount, costForUsage } from "@whiffle/core";
+import type { RawClaudeUsage, UsageTokens } from "@cawco/core";
+import { cacheCreationCount, costForUsage } from "@cawco/core";
 import type { ScannedRecord } from "./types";
 
 /**

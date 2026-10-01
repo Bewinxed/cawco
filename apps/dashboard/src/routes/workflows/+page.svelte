@@ -1,7 +1,15 @@
 <script lang="ts">
-  import type { Workflow } from "@whiffle/core";
+  import type { Workflow } from "@cawco/core";
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
+  import { cawco } from "$lib/cawco/client.svelte";
+  import { message } from "$lib/cawco/delegate-types";
+  import { crossIn, crossOut } from "$lib/cawco/motion/curves.svelte";
+  import {
+    refreshWorkflows,
+    workflowState,
+  } from "$lib/cawco/workflow-state.svelte";
+  import { createWorkflow } from "$lib/cawco/workflows";
   import WorkflowLaunch from "$lib/components/features/workflows/WorkflowLaunch.svelte";
   import WorkflowStatus from "$lib/components/features/workflows/WorkflowStatus.svelte";
   import {
@@ -14,14 +22,6 @@
   import { Skeleton } from "$lib/components/ui/skeleton";
   import { IconWorkflow } from "$lib/icons";
   import { formatDistanceToNow } from "$lib/utils/time";
-  import { whiffle } from "$lib/whiffle/client.svelte";
-  import { message } from "$lib/whiffle/delegate-types";
-  import { crossIn, crossOut } from "$lib/whiffle/motion/curves.svelte";
-  import {
-    refreshWorkflows,
-    workflowState,
-  } from "$lib/whiffle/workflow-state.svelte";
-  import { createWorkflow } from "$lib/whiffle/workflows";
   import "$lib/components/features/workflows/workflows.css";
 
   let busy = $state(false);
@@ -30,7 +30,7 @@
   let launch = $state<{ workflow: Workflow; from: HTMLElement }>();
   /** Until the first read is in, rows standing where the list will be. */
   const loading = $derived(!workflowState.loaded);
-  const live = $derived(whiffle.hub === "connected");
+  const live = $derived(cawco.hub === "connected");
   const rows = $derived(
     workflowState.workflows.map((workflow) => {
       const runs = Object.values(workflowState.runs)
@@ -65,7 +65,7 @@
     }
   }
 </script>
-<svelte:head><title>Workflows · Whiffle</title></svelte:head>
+<svelte:head><title>Workflows · CawCo</title></svelte:head>
 {#snippet newMenu(inEmptyState: boolean)}
   <DropdownMenu.Root>
     <DropdownMenu.Trigger disabled={!live || busy}>

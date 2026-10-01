@@ -3,31 +3,20 @@
     FleetPlugin,
     FleetSkillMeta,
     MarketplacePluginInfo,
-  } from "@whiffle/core";
+  } from "@cawco/core";
   import { toast } from "svelte-sonner";
-  import { Button } from "$lib/components/ui/button";
-  import { SectionHeader } from "$lib/components/ui/section-header";
-  import { Skeleton } from "$lib/components/ui/skeleton";
-  import {
-    IconBolt,
-    IconLayers,
-    IconRefresh,
-    IconSearch,
-    IconShop,
-    IconTrash,
-  } from "$lib/icons";
-  import { whiffle } from "$lib/whiffle/client.svelte";
-  import FetchSkillPopover from "$lib/whiffle/config/FetchSkillPopover.svelte";
-  import { hubDown } from "$lib/whiffle/config/hub.svelte";
-  import LinkMarketplacePopover from "$lib/whiffle/config/LinkMarketplacePopover.svelte";
-  import RolloutChip from "$lib/whiffle/config/RolloutChip.svelte";
-  import RowFaults from "$lib/whiffle/config/RowFaults.svelte";
-  import RowList from "$lib/whiffle/config/RowList.svelte";
-  import SectionFrame from "$lib/whiffle/config/SectionFrame.svelte";
-  import SectionRow from "$lib/whiffle/config/SectionRow.svelte";
-  import { sectionOf } from "$lib/whiffle/config/sections";
-  import { configStore, upsert } from "$lib/whiffle/config/store.svelte";
-  import { confirm } from "$lib/whiffle/confirm.svelte";
+  import { cawco } from "$lib/cawco/client.svelte";
+  import FetchSkillPopover from "$lib/cawco/config/FetchSkillPopover.svelte";
+  import { hubDown } from "$lib/cawco/config/hub.svelte";
+  import LinkMarketplacePopover from "$lib/cawco/config/LinkMarketplacePopover.svelte";
+  import RolloutChip from "$lib/cawco/config/RolloutChip.svelte";
+  import RowFaults from "$lib/cawco/config/RowFaults.svelte";
+  import RowList from "$lib/cawco/config/RowList.svelte";
+  import SectionFrame from "$lib/cawco/config/SectionFrame.svelte";
+  import SectionRow from "$lib/cawco/config/SectionRow.svelte";
+  import { sectionOf } from "$lib/cawco/config/sections";
+  import { configStore, upsert } from "$lib/cawco/config/store.svelte";
+  import { confirm } from "$lib/cawco/confirm.svelte";
   import {
     catalogHost,
     formatBytes,
@@ -39,10 +28,21 @@
     removeSkill,
     savePlugin,
     saveSkill,
-  } from "$lib/whiffle/fleet";
-  import { hubFaults } from "$lib/whiffle/fleet-faults";
-  import MachineInventory from "$lib/whiffle/MachineInventory.svelte";
-  import { orderMachines } from "$lib/whiffle/rail.svelte";
+  } from "$lib/cawco/fleet";
+  import { hubFaults } from "$lib/cawco/fleet-faults";
+  import MachineInventory from "$lib/cawco/MachineInventory.svelte";
+  import { orderMachines } from "$lib/cawco/rail.svelte";
+  import { Button } from "$lib/components/ui/button";
+  import { SectionHeader } from "$lib/components/ui/section-header";
+  import { Skeleton } from "$lib/components/ui/skeleton";
+  import {
+    IconBolt,
+    IconLayers,
+    IconRefresh,
+    IconSearch,
+    IconShop,
+    IconTrash,
+  } from "$lib/icons";
 
   /**
    * Two ways to the same thing: fetch a skill and the hub downloads its files
@@ -58,12 +58,12 @@
   const skills = $derived(fleet?.skills ?? []);
   const marketplaces = $derived(fleet?.config.marketplaces ?? []);
   const plugins = $derived(fleet?.config.plugins ?? []);
-  const machines = $derived(orderMachines(whiffle.machines));
+  const machines = $derived(orderMachines(cawco.machines));
   const hubBroken = $derived(
     hubFaults(
       skills,
       plugins,
-      whiffle.machines.map((machine) => machine.fleet)
+      cawco.machines.map((machine) => machine.fleet)
     )
   );
 
@@ -389,8 +389,8 @@
       </RowList>
     {/if}
     <p class="note">
-      Whiffle installs a skill's files. A skill that also ships hooks or
-      subagents runs in its degraded mode until those are set up by hand.
+      CawCo installs a skill's files. A skill that also ships hooks or subagents
+      runs in its degraded mode until those are set up by hand.
     </p>
   </div>
 

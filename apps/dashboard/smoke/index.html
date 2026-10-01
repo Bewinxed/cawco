@@ -169,7 +169,7 @@
   <tbody data-slot="table-body" class="[&_tr:last-child]:border-0">
     ${[
       [
-        "whiffle-dashboard",
+        "cawco-dashboard",
         "bg-success-bg text-success-ink",
         "idle",
         "1.2M",
@@ -217,14 +217,14 @@
 
       const stats = `
 <div class="grid grid-cols-4 gap-3.5">
-${[
-  ["Active runs", "12"],
-  ["Queued", "3"],
-  ["Tokens today", "4.8M"],
-  ["Failures", "1"],
-]
-  .map(
-    ([l, v]) => `
+      ${[
+        ["Active runs", "12"],
+        ["Queued", "3"],
+        ["Tokens today", "4.8M"],
+        ["Failures", "1"],
+      ]
+        .map(
+          ([l, v]) => `
   <div class="bg-card rounded-[10px] p-[7px] h-[90px] shadow-sm">
     <div class="well h-full px-4 py-3 flex flex-col justify-between">
       <div class="flex items-center gap-2.5 text-[13.5px] text-ink-2">
@@ -233,8 +233,8 @@ ${[
       <div class="ml-[33px] text-[26px] font-medium tracking-[-0.006em] text-stat-num tabular-nums">${v}</div>
     </div>
   </div>`
-  )
-  .join("")}
+        )
+        .join("")}
 </div>`;
 
       const board = (mode) => `
@@ -244,7 +244,7 @@ ${[
     <aside class="w-[228px] shrink-0 bg-sidebar border-r border-sidebar-border text-sidebar-foreground flex flex-col">
       <div class="h-[57px] flex items-center gap-2.5 px-3.5">
         <span class="size-[26px] rounded-[7px] action-surface grid place-items-center text-[13px] font-bold">C</span>
-        <b class="text-[15px] font-semibold text-foreground">Whiffle</b>
+        <b class="text-[15px] font-semibold text-foreground">CawCo</b>
       </div>
       <div data-slot="sidebar-content" class="px-2.5 ${SB_CONTENT}">
         <div data-slot="sidebar-group-label" class="${SB_GROUP_LABEL}">Workspace</div>

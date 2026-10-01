@@ -10,6 +10,6 @@ import { join } from "node:path";
 export const transcriptIndexPath = (): string =>
   join(
     process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share"),
-    "whiffle",
+    "cawco",
     "transcript-index.db"
   );

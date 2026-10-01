@@ -1,12 +1,12 @@
 ---
 name: generating-images
-description: Generates raster images and reference-guided variations through Whiffle using the owner's ChatGPT subscription. Use when asked to generate an image, draw an illustration, create a photo, make an image asset, or revise a generated image using a reference.
+description: Generates raster images and reference-guided variations through CawCo using the owner's ChatGPT subscription. Use when asked to generate an image, draw an illustration, create a photo, make an image asset, or revise a generated image using a reference.
 ---
 
 # Generating images
 
-Use Whiffle's `generate_image` tool directly. Claude Code exposes it as
-`mcp__whiffle__generate_image`; OpenCode exposes it as `whiffle_generate_image`.
+Use CawCo's `generate_image` tool directly. Claude Code exposes it as
+`mcp__cawco__generate_image`; OpenCode exposes it as `cawco_generate_image`.
 The calling model does not need native image-generation support.
 
 ## Write the brief
@@ -42,7 +42,7 @@ promise that prompting will preserve every pixel.
    Identify each reference's role in the prompt.
 4. Call the tool once per requested image. Size and quality are requests to the
    backend; use the returned dimensions as the actual result.
-5. Show the returned `path` with Whiffle's `show_image` tool. Use `send_to_user`
+5. Show the returned `path` with CawCo's `show_image` tool. Use `send_to_user`
    with an attachment when the user needs delivery to Telegram.
 
 The tool uses the owner's configured ChatGPT OAuth account. Never supply an API

@@ -8,7 +8,7 @@
  *     sessiond: the child would land in the *agent's* cgroup and die with the
  *     next agent restart, which is precisely the `KillMode` trap this whole
  *     build exists to escape. Under a service, a missing sessiond is a loud
- *     install-time error; only a hand-run `whiffle up` spawns one.
+ *     install-time error; only a hand-run `cawco up` spawns one.
  *  2. {@link SessiondClient} — NDJSON over the unix socket: `spawn`/`write`/
  *     `signal`/`stdin_end`/`subscribe`/`list`, `commandId` minted once per
  *     mutation so a re-delivery after a socket drop is re-acked rather than
@@ -42,7 +42,7 @@ import {
   type SessiondProcInfo,
   type SessiondServerMessage,
   sessiondEndpoint,
-} from "@whiffle/core/sessiond";
+} from "@cawco/core/sessiond";
 
 /**
  * How long a dial or a `welcome` may take before the agent calls the endpoint
@@ -70,7 +70,7 @@ export const ADHOC_START_TIMEOUT_MS = 10_000;
  *   for a launchd-started process. A login shell inherits the literal `0`
  *   placeholder instead, which is why the value — not merely its presence —
  *   is what decides.
- * - `WHIFFLE_SERVICE_MODE` is whiffle's own unit-set marker
+ * - `CAWCO_SERVICE_MODE` is cawco's own unit-set marker
  *   (`cli/src/service.ts:45`, `MODE_ENV`); honoured here so a dev-mode unit is
  *   still recognised as service-managed.
  */
@@ -80,7 +80,7 @@ export const serviceManaged = (
   if (env.INVOCATION_ID) {
     return true;
   }
-  if (env.WHIFFLE_SERVICE_MODE) {
+  if (env.CAWCO_SERVICE_MODE) {
     return true;
   }
   const xpc = env.XPC_SERVICE_NAME;
@@ -99,8 +99,8 @@ export class SessiondUnavailableError extends Error {
     super(
       `[sessiond] nothing is listening on ${endpoint}, and this agent is service-managed — ` +
         "refusing to ad-hoc spawn one (its children would land in the agent cgroup and die " +
-        "with the next agent restart). Install and start the unit: `whiffle service install` " +
-        "then `systemctl --user start whiffle-sessiond`."
+        "with the next agent restart). Install and start the unit: `cawco service install` " +
+        "then `systemctl --user start cawco-sessiond`."
     );
     this.name = "SessiondUnavailableError";
     this.endpoint = endpoint;
@@ -132,13 +132,13 @@ export const probeEndpoint = (
  * Defined only in the published package's bundle (scripts/build-release.mjs),
  * where this module is `cli.js` itself and sessiond is its `sessiond` verb.
  */
-declare const __WHIFFLE_RELEASE__: boolean | undefined;
+declare const __CAWCO_RELEASE__: boolean | undefined;
 
 /** The ad-hoc sessiond command: this repo's own entry point, run under bun. */
 const adhocCommand = (): { command: string; args: string[] } => ({
   command: process.execPath,
   args:
-    typeof __WHIFFLE_RELEASE__ === "boolean"
+    typeof __CAWCO_RELEASE__ === "boolean"
       ? [fileURLToPath(import.meta.url), "sessiond"]
       : [
           join(
@@ -157,7 +157,7 @@ const adhocCommand = (): { command: string; args: string[] } => ({
  *
  * The guard, restated because it is the reason this function is not a plain
  * "spawn if absent": under systemd/launchd a child spawned from here inherits
- * the agent's cgroup, so the next `systemctl restart whiffle-agent` kills every
+ * the agent's cgroup, so the next `systemctl restart cawco-agent` kills every
  * session — the exact failure sessiond was built to remove. Service mode gets a
  * loud error; ad-hoc mode gets a detached daemon.
  */
@@ -176,7 +176,7 @@ export const ensureSessiond = async (
   const child = spawnProcess(command, args, {
     detached: true,
     stdio: "ignore",
-    env: { ...env, WHIFFLE_SESSIOND_ENDPOINT: endpoint },
+    env: { ...env, CAWCO_SESSIOND_ENDPOINT: endpoint },
   });
   child.unref();
 

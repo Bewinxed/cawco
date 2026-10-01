@@ -1,6 +1,6 @@
-import type { NeutralMessage, Rule, RuleFacts } from "@whiffle/core";
-import { ruleInScope } from "@whiffle/core";
-import type { JevResult } from "@whiffle/core/workflow-program";
+import type { NeutralMessage, Rule, RuleFacts } from "@cawco/core";
+import { ruleInScope } from "@cawco/core";
+import type { JevResult } from "@cawco/core/workflow-program";
 import type { DbShape } from "./db";
 import { askJev } from "./jev";
 

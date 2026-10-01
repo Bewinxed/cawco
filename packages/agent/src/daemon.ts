@@ -6,21 +6,21 @@ import type {
   Envelope,
   HeartbeatPayload,
   SpawnPayload,
-} from "@whiffle/core";
+} from "@cawco/core";
 import {
+  CAWCO_ENV,
+  CAWCO_HUB_PORT,
   CONTROL_RUN_COMMAND,
   CONTROL_SEARCH_TRANSCRIPTS,
   CONTROL_WORKSPACE_ARCHIVE,
   CONTROL_WORKSPACE_BOUNDARY,
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_MIGRATE,
-  WHIFFLE_ENV,
-  WHIFFLE_HUB_PORT,
-} from "@whiffle/core";
-import { sessiondEndpoint } from "@whiffle/core/sessiond";
-import { fetchClaudeLimits } from "@whiffle/core/usage/limits";
-import { mergeObserved } from "@whiffle/core/usage/observed";
-import { fetchOpenCodeGoLimits } from "@whiffle/core/usage/opencode-go";
+} from "@cawco/core";
+import { sessiondEndpoint } from "@cawco/core/sessiond";
+import { fetchClaudeLimits } from "@cawco/core/usage/limits";
+import { mergeObserved } from "@cawco/core/usage/observed";
+import { fetchOpenCodeGoLimits } from "@cawco/core/usage/opencode-go";
 import { Data, Duration, Effect, Fiber, Schedule } from "effect";
 import { buildInfo } from "./build";
 import { convertWorktrees } from "./clone";
@@ -46,7 +46,7 @@ import {
   workspaceBoundary,
 } from "./workspace";
 
-const DEFAULT_HUB_URL = `ws://localhost:${WHIFFLE_HUB_PORT}/ws`;
+const DEFAULT_HUB_URL = `ws://localhost:${CAWCO_HUB_PORT}/ws`;
 const HEARTBEAT_INTERVAL = Duration.seconds(15);
 const USAGE_INTERVAL = Duration.seconds(60);
 const USAGE_FULL_REBUILD_MS = 30 * 60 * 1000;
@@ -79,7 +79,7 @@ interface MachineIdentity {
  */
 export interface RegisterPayload extends MachineIdentity {
   /**
-   * The whiffle this daemon is running (NEW.md §12), as it reported at register.
+   * The cawco this daemon is running (NEW.md §12), as it reported at register.
    */
   build?: BuildInfo;
   /** Custody is not attachment: these still need a handle before being listed live. */
@@ -215,8 +215,8 @@ export const currentBusy = async (): Promise<number> =>
  * How many consecutive failures against the pinned URL, and how much wall
  * time they must span, before the daemon stops trusting that URL and re-runs
  * discovery instead of just retrying it — only for a daemon started with
- * `rediscover` (a hub `whiffle up` discovered). A hub the operator named
- * (`--hub`, `WHIFFLE_HUB_URL`) is retried forever and never swapped.
+ * `rediscover` (a hub `cawco up` discovered). A hub the operator named
+ * (`--hub`, `CAWCO_HUB_URL`) is retried forever and never swapped.
  *
  * Both ours, chosen together: 5 failures is inside one retry series (past the
  * point where a flap is still plausibly transient) but comfortably short of
@@ -446,7 +446,7 @@ const readSessions = async () => {
   const custody = await (async () => {
     try {
       const client = await SessiondClient.connect(
-        process.env.WHIFFLE_SESSIOND_ENDPOINT ?? sessiondEndpoint()
+        process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint()
       );
       try {
         const held = client.procs.filter((proc) => proc.alive);
@@ -871,7 +871,7 @@ const attach = (
 /**
  * Runs until interrupted: connect, register, heartbeat, reconnect on loss.
  *
- * `auth` is what the caller already found out — `whiffle up` probes before it
+ * `auth` is what the caller already found out — `cawco up` probes before it
  * gets here, because it may still be able to fix it. A daemon started any other
  * way asks for itself.
  *
@@ -881,7 +881,7 @@ const attach = (
  */
 export const startDaemon = (auth?: AuthState, rediscover = false) =>
   Effect.gen(function* () {
-    const url = process.env[WHIFFLE_ENV.hubUrl] ?? DEFAULT_HUB_URL;
+    const url = process.env[CAWCO_ENV.hubUrl] ?? DEFAULT_HUB_URL;
     // Re-pinned by the rediscovery trigger below (discovered hubs only), read fresh by every attempt
     // `reconnecting` makes — see its own doc for why a plain closure variable
     // is enough: each attempt calls `session` anew, in the same tick that
@@ -893,8 +893,8 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     const machineIdValue = yield* Effect.promise(() => machineId());
     // Child processes — the opencode server and its plugins most of all — read
     // the machine's identity and the hub off the environment they inherit.
-    process.env[WHIFFLE_ENV.machineId] = machineIdValue;
-    process.env[WHIFFLE_ENV.hubUrl] = url;
+    process.env[CAWCO_ENV.machineId] = machineIdValue;
+    process.env[CAWCO_ENV.hubUrl] = url;
     // The sessions this daemon spawns carry the deny list in their own options;
     // the settings file is how the `claude` the user starts by hand gets it too.
     const denied = yield* Effect.promise(() => convergeDeniedTools());
@@ -999,7 +999,7 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     );
 
     yield* Effect.logInfo(
-      `whiffle agent ${identity.machineId} connecting to ${url}`
+      `cawco agent ${identity.machineId} connecting to ${url}`
     );
     const sessions = sessionsReader();
     // The connection — and only the connection — is what the loop re-enters.

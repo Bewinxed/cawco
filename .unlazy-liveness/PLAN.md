@@ -1,6 +1,6 @@
 # PLAN — session truth, sessiond, deploy-from-main
 
-Repo /home/bewinxed/whiffle. Base commit 4cd9dbb (main == fleet). Chair: Fable 5.
+Repo /home/bewinxed/cawco. Base commit 4cd9dbb (main == fleet). Chair: Fable 5.
 
 ## The operator's question, answered (this is the plan's spine)
 
@@ -18,7 +18,7 @@ being violated:
 - **UI** = renders derived truth, never invents state, every action rides the ledger.
 - The one split still owed is **sessiond**: process custody out of the churny agent, so agent
   deploys stop costing sessions. Built in wave D per
-  `/tmp/claude-1000/-home-bewinxed-whiffle/1f058869-e130-41f4-98cc-8db5aa6003d5/scratchpad/sessiond-design.md`
+  `/tmp/claude-1000/-home-bewinxed-cawco/1f058869-e130-41f4-98cc-8db5aa6003d5/scratchpad/sessiond-design.md`
   (the design doc IS the spec; leaves cite its sections).
 
 ## Contracts (frozen before fan-out; leaves build against these exactly)
@@ -57,20 +57,20 @@ being violated:
   §9 unix socket 0600 in 0700 dir, win32 pipe name reserved; §11 one per machine,
   KillMode=control-group on sessiond, ad-hoc auto-spawn FORBIDDEN under service management;
   §12 endpoint derivation in core). Deviation from the doc's migration section, by operator
-  order: NO `WHIFFLE_SESSIOND` flag — the bridge is the spawn path unconditionally. The
+  order: NO `CAWCO_SESSIOND` flag — the bridge is the spawn path unconditionally. The
   adoption spike (second `initialize` against a live child) is timeboxed to 90 min (our
   choice); custody + boundary hand-off ship either way. pi keeps agent-lifetime sessions
   (scope, stated; the runner is the upgrade path).
 - **C8 deployment channel.** Every machine's services run from a dedicated clean clone at
-  `~/.whiffle/app` tracking `origin/main` (path our choice, per-user, no sudo). `whiffle
+  `~/.cawco/app` tracking `origin/main` (path our choice, per-user, no sudo). `cawco
   deploy init` creates it: clone, bun install, build dashboard, install units pointing at
-  the clone, write a `.whiffle-deploy` marker (our choice — the guard that auto-pull NEVER
+  the clone, write a `.cawco-deploy` marker (our choice — the guard that auto-pull NEVER
   runs in a dev tree). The agent polls every 60 s (our choice): `git fetch origin main` in a
   marked checkout; if behind → the existing update flow (`pull --ff-only`, install, build,
   restart services; agent restart is free post-cutover). Push to main IS the fleet deploy.
   The hub's role is surfacing skew, not executing pulls.
-- **C9 DB placement.** Default WHIFFLE_DB_PATH moves to the platform data dir
-  (`~/.local/share/whiffle/whiffle.db`; darwin `~/Library/Application Support/whiffle/`).
+- **C9 DB placement.** Default CAWCO_DB_PATH moves to the platform data dir
+  (`~/.local/share/cawco/cawco.db`; darwin `~/Library/Application Support/cawco/`).
   Hub boot migrates: target absent + legacy tree file present → move db+wal+shm. The DB
   never lives in a git checkout again (dev tree or clone).
 
@@ -105,7 +105,7 @@ being violated:
 | D3 | ingest ledger: srcEpoch/srcSeq, hub ledger, register-ack ingested, seam frame, property test | Opus 5 | A2, D2 |
 | D4 | service units: sessiond in SERVICES, agent Wants/After, auto-spawn guard, pid ledger | Opus 5 | B2, D1 |
 | D5 | opencode process-keeping under sessiond | Opus 5 | D2, D4 |
-| C1 | deploy clone: `whiffle deploy init`, marker guard, agent poller, update-flow trigger | Opus 5 | D4, B2 |
+| C1 | deploy clone: `cawco deploy init`, marker guard, agent poller, update-flow trigger | Opus 5 | D4, B2 |
 | C2 | convergence surfaced: behind-main badge, fleet-sync failures, update-pending | Sonnet 5 | A3, D3 |
 | F1 | THE CUTOVER (one destructive event, operator-timed): push main, deploy init on obelisk, flip units, verify survival; then mac | Opus 5 | all above |
 | E  | close: full suites, all typechecks, security pass on the deploy/update surface, gate re-run | Opus 5 | F1 |
@@ -120,12 +120,12 @@ harnesses/* (D2→D5), daemon.ts (A1→B1).
 
 - This is the single destructive step of the plan: stopping the old agent kills every live
   claude child once (pipes die with the parent). Run at an operator-confirmed moment.
-- If the executor itself runs as a whiffle-agent child it will die mid-leaf. That is
+- If the executor itself runs as a cawco-agent child it will die mid-leaf. That is
   expected and survivable: gates live on disk; the resumed/replacement session re-runs
   gate-check and continues. Do not treat your own death as failure; write evidence early.
 - With RESTORE_HORIZON/RESTORE_MAX bounds, up to ~20 sessions respawn immediately; the rest
   settle as `sleeping` with the UI wake affordance. That is designed, not a bug.
-- Old units (`whiffle-*`, `whiffle-*` pointing at the dev tree) are disabled, not deleted;
+- Old units (`cawco-*`, `cawco-*` pointing at the dev tree) are disabled, not deleted;
   `.bak` copies stay.
 
 ## Status log

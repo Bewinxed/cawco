@@ -4,8 +4,8 @@
  * operator.
  *
  * The hub never connects out on its own. A machine joins by running
- * `/install.sh`, which installs Bun if needed, clones Whiffle and ends in
- * `whiffle join`; an SSH add is the same script started over `ssh` from here.
+ * `/install.sh`, which installs Bun if needed, clones CawCo and ends in
+ * `cawco join`; an SSH add is the same script started over `ssh` from here.
  * The hub API has no auth in front of it (anyone who reaches it can already
  * spawn a session), so this adds no trust boundary — but nothing the operator
  * types reaches a shell: the target is one argv entry for `ssh`, and the hub
@@ -16,14 +16,14 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { homedir, hostname, networkInterfaces } from "node:os";
 import { join } from "node:path";
 import {
+  CAWCO_ENV,
   INSTALL_JOINED,
   INSTALL_STEP_PREFIX,
   type JoinAddress,
   type JoinInfo,
   type SshJoinJob,
   type SshJoinProblem,
-  WHIFFLE_ENV,
-} from "@whiffle/core";
+} from "@cawco/core";
 import { Elysia, t } from "elysia";
 import { HUB_PORT } from "./config";
 
@@ -121,16 +121,16 @@ const shellQuote = (value: string): string =>
 const HOST_HEADER = /^[A-Za-z0-9.\-[\]:]+$/;
 
 /**
- * The deploy clone's marker and branch, as `whiffle deploy init` names them
+ * The deploy clone's marker and branch, as `cawco deploy init` names them
  * (packages/cli/src/service.ts `DEPLOY_MARKER`, `DEPLOY_BRANCH`). Named here
  * rather than imported because the CLI already imports the hub.
  */
-const DEPLOY_MARKER = ".whiffle-deploy";
+const DEPLOY_MARKER = ".cawco-deploy";
 const DEPLOY_BRANCH = "main";
 
 /**
  * The install script. POSIX `sh`, every step announced with the step prefix
- * and every failure said with the `whiffle:` prefix the CLI's own errors use,
+ * and every failure said with the `cawco:` prefix the CLI's own errors use,
  * so the last step line before a failure names the step that failed.
  *
  * The body is one function, started only by the block at the very end: a
@@ -145,15 +145,15 @@ const DEPLOY_BRANCH = "main";
  * did not make itself.
  */
 export const installScript = (hub: string, origin: string): string => `#!/bin/sh
-# Adds this machine to the Whiffle fleet whose hub is ${hub}.
-# Installs Bun if it is missing, clones Whiffle and runs \`whiffle join\`.
+# Adds this machine to the CawCo fleet whose hub is ${hub}.
+# Installs Bun if it is missing, clones CawCo and runs \`cawco join\`.
 set -eu
 
 HUB=${shellQuote(hub)}
 ORIGIN=${shellQuote(origin)}
 
 say() { printf '${INSTALL_STEP_PREFIX}%s\\n' "$*"; }
-fail() { printf 'whiffle: %s\\n' "$*" >&2; exit 1; }
+fail() { printf 'cawco: %s\\n' "$*" >&2; exit 1; }
 
 main() {
   say "checking for git, curl and unzip"
@@ -180,14 +180,14 @@ main() {
     command -v bun >/dev/null 2>&1 || fail "Bun did not install. Its installer's output is above."
   fi
 
-  ROOT="\${${WHIFFLE_ENV.deployRoot}:-$HOME/.whiffle/app}"
+  ROOT="\${${CAWCO_ENV.deployRoot}:-$HOME/.cawco/app}"
   if [ -z "$(ls -A "$ROOT" 2>/dev/null)" ]; then
     say "cloning $ORIGIN into $ROOT"
     git clone --quiet --branch ${DEPLOY_BRANCH} --single-branch "$ORIGIN" "$ROOT"
   elif [ -f "$ROOT/${DEPLOY_MARKER}" ]; then
     say "$ROOT is already this machine's deployment clone"
   else
-    fail "$ROOT already exists and is not a deployment clone (no ${DEPLOY_MARKER}). Refusing to touch it — move it aside, or point elsewhere with ${WHIFFLE_ENV.deployRoot}."
+    fail "$ROOT already exists and is not a deployment clone (no ${DEPLOY_MARKER}). Refusing to touch it — move it aside, or point elsewhere with ${CAWCO_ENV.deployRoot}."
   fi
 
   cd "$ROOT"
@@ -197,7 +197,7 @@ main() {
   say "installing dependencies"
   bun install --frozen-lockfile
 
-  say "running whiffle join"
+  say "running cawco join"
   bun packages/cli/src/cli.ts join --hub "$HUB"
 }
 

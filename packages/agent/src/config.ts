@@ -19,7 +19,7 @@ export interface CliConfig {
 
 export const CONFIG_PATH = join(
   process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"),
-  "whiffle",
+  "cawco",
   "config.json"
 );
 

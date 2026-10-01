@@ -12,12 +12,12 @@ Scope: composer send state, settings rows, permission/question cards read the co
   EVIDENCE: Composer.svelte:40/:62 `sending` prop ("the gap in front of busy"); :292 submit guard `if (!hasContent || sending) return` (draft preserved); :493 aria-disabled. SessionPane.svelte:459 send -> submitCommand('send'). Queued-row machinery untouched (rows.ts/Queued.svelte not in D's diff).
 
 - [x] G4: Dashboard suite 0 fail
-  CHECK: cd /home/bewinxed/whiffle/apps/dashboard && bun test src/lib 2>&1 | grep -E "^ [0-9]+ fail" | tail -1
+  CHECK: cd /home/bewinxed/cawco/apps/dashboard && bun test src/lib 2>&1 | grep -E "^ [0-9]+ fail" | tail -1
   EXPECT: 0 fail
   EVIDENCE: 0 fail
 
 - [x] G5: Workspace typecheck clean
-  CHECK: cd /home/bewinxed/whiffle && bun run typecheck 2>&1 | grep -c "Exited with code 0"
+  CHECK: cd /home/bewinxed/cawco && bun run typecheck 2>&1 | grep -c "Exited with code 0"
   EXPECT: 6
   EVIDENCE: 6
 

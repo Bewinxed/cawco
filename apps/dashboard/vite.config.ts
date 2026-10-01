@@ -44,7 +44,7 @@ function previewMatch(req: http.IncomingMessage): {
   return null;
 }
 
-const HUB_URL = new URL(process.env.WHIFFLE_HUB_URL || "http://localhost:3456");
+const HUB_URL = new URL(process.env.CAWCO_HUB_URL || "http://localhost:3456");
 
 /**
  * The faces the first paint sets its text in: Figtree's and JetBrains
@@ -65,7 +65,7 @@ const INLINE_FACES =
  * goes through `server.proxy` below.
  *
  * Preview requests (`/preview/<id>/…` and Referer-routed root-absolute fetches)
- * are forwarded to the hub's preview listener on `WHIFFLE_PREVIEW_PORT`.
+ * are forwarded to the hub's preview listener on `CAWCO_PREVIEW_PORT`.
  *
  * Also the whole fix for a stray upgrade killing the dev server: `http.Server`
  * drops a socket's error handling the moment it emits `upgrade`, so an upgrade
@@ -74,10 +74,10 @@ const INLINE_FACES =
  * that reset from taking the server (and every dashboard socket) down with it.
  */
 const hubProxy = (): Plugin => ({
-  name: "whiffle:hub-proxy",
+  name: "cawco:hub-proxy",
   configureServer(server) {
     const hubPort = Number(HUB_URL.port || 80);
-    const pvPort = Number(process.env.WHIFFLE_PREVIEW_PORT || hubPort + 1);
+    const pvPort = Number(process.env.CAWCO_PREVIEW_PORT || hubPort + 1);
 
     // HTTP middleware: intercept preview requests before Vite/SvelteKit.
     server.middlewares.use((req, res, next) => {
@@ -104,7 +104,7 @@ const hubProxy = (): Plugin => ({
         headers: {
           ...req.headers,
           host: `${HUB_URL.hostname}:${pvPort}`,
-          "x-whiffle-preview": info.id,
+          "x-cawco-preview": info.id,
         },
       };
       const pvPrefix = `/preview/${encodeURIComponent(info.id)}`;
@@ -124,7 +124,7 @@ const hubProxy = (): Plugin => ({
       });
       proxyReq.on("error", (error: NodeJS.ErrnoException) => {
         server.config.logger.warn(
-          `[whiffle] preview proxy error for ${info.id}: ${error.code ?? error.message}`,
+          `[cawco] preview proxy error for ${info.id}: ${error.code ?? error.message}`,
           { timestamp: true }
         );
         if (!res.headersSent) {
@@ -138,7 +138,7 @@ const hubProxy = (): Plugin => ({
     server.httpServer?.on("upgrade", (req, socket, head) => {
       socket.on("error", (error: NodeJS.ErrnoException) => {
         server.config.logger.warn(
-          `[whiffle] websocket socket error on ${req.url}: ${error.code ?? error.message}`,
+          `[cawco] websocket socket error on ${req.url}: ${error.code ?? error.message}`,
           { timestamp: true }
         );
       });
@@ -154,7 +154,7 @@ const hubProxy = (): Plugin => ({
           headers: {
             ...req.headers,
             host: `${HUB_URL.hostname}:${pvPort}`,
-            "x-whiffle-preview": info.id,
+            "x-cawco-preview": info.id,
           },
         });
         proxyReq.on("upgrade", (proxyRes, proxySocket, proxyHead) => {
@@ -177,7 +177,7 @@ const hubProxy = (): Plugin => ({
         });
         proxyReq.on("error", (error: NodeJS.ErrnoException) => {
           server.config.logger.warn(
-            `[whiffle] preview ws proxy error for ${info.id}: ${error.code ?? error.message}`,
+            `[cawco] preview ws proxy error for ${info.id}: ${error.code ?? error.message}`,
             { timestamp: true }
           );
           socket.destroy();

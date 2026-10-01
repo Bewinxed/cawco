@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Contrast + colour-distance verifier for the Whiffle design tokens.
+"""Contrast + colour-distance verifier for the CawCo design tokens.
 
 palette.mjs solves and reports only 8 pairs per scheme. This measures the pairs
 it never covers (DW-3.3), the banned-hex distances (DW-3.7) and the status/accent

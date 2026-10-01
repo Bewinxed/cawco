@@ -72,7 +72,7 @@ PRODUCT.md binds **session**, **run**, **delegate**. This feature adds:
 | **result** | the validated object a step returned through `submit_result`. |
 | **supervisor** | the session, if any, that receives a run's reports and answers its steps' questions. |
 | **child run** | a workflow run launched by a `workflow` node of another run (its **parent run**). |
-| **workspace** | the project directory a run executes in — every step's `cwd`. Whiffle never creates worktrees for steps; a step that wants isolation decides so itself, or its supervisor tells it. |
+| **workspace** | the project directory a run executes in — every step's `cwd`. CawCo never creates worktrees for steps; a step that wants isolation decides so itself, or its supervisor tells it. |
 
 ## 3. Execution model (hub, `packages/hub/src/workflows/`)
 
@@ -155,7 +155,7 @@ in your result.`
 ### 3.4 Workspace
 
 Launch names a project (or any directory on the chosen machine); every step's `cwd` is that
-directory. Whiffle does not create, suggest, or clean up worktrees for steps — isolation is
+directory. CawCo does not create, suggest, or clean up worktrees for steps — isolation is
 a step's own decision (it has a shell) or a supervisor's instruction. `map` bodies that
 write files share the workspace like everything else; a graph author who needs them apart
 says so in the step prompt.
@@ -265,12 +265,12 @@ name>: <template or path> }` covering every required input of the child's `start
   parent: supervisor ? { instanceId: supervisor } : undefined,   // asks route through it
   workflowRunId, workflowStepId }
 ```
-Skills load through each harness's `skills` path; whiffle tools are injected as today
-(claude: in-process MCP `whiffle`; opencode: plugin `whiffle_*`; pi: `customTools`).
+Skills load through each harness's `skills` path; cawco tools are injected as today
+(claude: in-process MCP `cawco`; opencode: plugin `cawco_*`; pi: `customTools`).
 
 ### 5.2 `submit_result` — one tool, three registrations
 `HandoffActions.submitResult(result)` beside the hand-off tools in `delegation-actions.ts`;
-surfaced as `mcp__whiffle__submit_result` / `whiffle_submit_result` / `submit_result`.
+surfaced as `mcp__cawco__submit_result` / `cawco_submit_result` / `submit_result`.
 Body: `POST /api/workflow-steps/:id/result`; the hub validates and returns either
 "Recorded…" or the validator's message verbatim. Registered **only** when the spawn carries
 `workflowStepId`. Steps keep `send_to_user`, `show_preview`, `generate_image`; they never
@@ -519,7 +519,7 @@ directly (push to main is the fleet deploy); each phase verified in the running 
 the next. No tests. Nothing shimmed: `submit_result` is the only result channel; dependency
 bumps land with the code that exercises them.
 
-1. **Core + schema + engine + tools (hub).** `@whiffle/core` `workflow.ts` (types,
+1. **Core + schema + engine + tools (hub).** `@cawco/core` `workflow.ts` (types,
    `validateWorkflow`, `renderPrompt`, `evaluateWhen`); schema tables; `workflows/engine.ts`;
    REST §7.1 (all but `/markdown`); `workflow` frame; frame-observer hook; `submitResult`
    + three registrations; `run_workflow` / `steer_workflow` / `list_workflows` tools;
@@ -551,7 +551,7 @@ harness/model · stored in the hub DB, synced to machines only as slash-command 
 one `submit_result` tool · retries re-prompt the same session, resume if its process died,
 never a fresh spawn · context policy per step, `continue` = fork · steps ask only when
 supervised; `ask` nodes default to the operator · launch surfaces: dashboard, `run_workflow`,
-slash stubs · workspace: the project directory named at launch; whiffle never creates or
+slash stubs · workspace: the project directory named at launch; cawco never creates or
 suggests worktrees for steps — a step decides, or its supervisor does · "workflow run"
 two words · dependencies updated or added as needed · no spend cap · `map` and `check
 command` in v1 · workflows invoke other workflows through a `workflow` node (child run,
@@ -648,6 +648,6 @@ decompiler; the mapping is one-way, as the owner asked.
 - Slash stubs (§8.2) unchanged in behaviour; inputs come from the program's `inputs`.
 
 ### 13.6 Phases
-7. **core**: `Workflow` API types, `StepError`/`AskError`/`ChildError`, `compileWorkflow(graph)` with node→line map, `programInputs(program)` (zod → inputs list for stubs/launch dialog), `jsonSchemaToZod`. Zod moves to `@whiffle/core` deps.
+7. **core**: `Workflow` API types, `StepError`/`AskError`/`ChildError`, `compileWorkflow(graph)` with node→line map, `programInputs(program)` (zod → inputs list for stubs/launch dialog), `jsonSchemaToZod`. Zod moves to `@cawco/core` deps.
 8. **hub**: program worker + `w` bridge, `workflow_effects` table + replay, cutover of routes/tools/stubs from graph to program, deletion of engine scheduler and markdown code, `state` tools on the three harnesses. Verification: the whole phase-1 matrix (§11 phase 1) re-run against programs compiled from the same graphs, plus: a hand-written code-origin program runs; a hub restart mid-run replays to the same seq and continues; a program that calls `w.run` in a different order on replay fails `nondeterministic`; `w.state` written by a step is read by the program; `w.sleep(30_000)` survives a restart.
 9. **dashboard**: **View as program** (read-only code view, editor-origin) / code editor (code-origin) replaces markdown buttons; run view for code-origin runs laid out from the journal; checkpoints and state in the step drawer.

@@ -1,4 +1,4 @@
-# @whiffle/jsonl-parser
+# @cawco/jsonl-parser
 
 Fast, incremental parser and BM25 search index for agent-session transcripts.
 
@@ -26,7 +26,7 @@ The warm numbers are the point: transcripts are append-only, so per-file
 ## Usage
 
 ```ts
-import { readTranscript, readTranscriptEnd, parseMany, typeFilter, extractDoc } from "@whiffle/jsonl-parser";
+import { readTranscript, readTranscriptEnd, parseMany, typeFilter, extractDoc } from "@cawco/jsonl-parser";
 
 // Parse one transcript (invalid lines are counted, never thrown)
 const { records, stats } = await readTranscript(path);
@@ -42,7 +42,7 @@ const { records } = await readTranscriptEnd(path, { records: 200 });
 ```
 
 ```ts
-import { TranscriptIndex } from "@whiffle/jsonl-parser/fts5"; // Bun only
+import { TranscriptIndex } from "@cawco/jsonl-parser/fts5"; // Bun only
 
 const index = new TranscriptIndex("./transcripts.db");
 await index.sync(files); // incremental: full-parses new files, tails grown ones
@@ -51,7 +51,7 @@ const hits = index.search("websocket reconnect", { limit: 10 });
 ```
 
 ```ts
-import { readOpenCodeDocs, defaultOpenCodePath } from "@whiffle/jsonl-parser/opencode"; // Bun only
+import { readOpenCodeDocs, defaultOpenCodePath } from "@cawco/jsonl-parser/opencode"; // Bun only
 
 const { docs, watermark } = readOpenCodeDocs(defaultOpenCodePath());
 index.indexDocs(docs);
@@ -62,9 +62,9 @@ index.indexDocs(docs);
 
 | Export | Runtime | Contents |
 |---|---|---|
-| `@whiffle/jsonl-parser` | neutral | typed records, byte scanner, lazy parse, text extraction, checkpoints, worker fan-out |
-| `@whiffle/jsonl-parser/fts5` | Bun | SQLite FTS5 BM25 index (`porter unicode61`, external-content table, trigger-synced) |
-| `@whiffle/jsonl-parser/opencode` | Bun | OpenCode sqlite adapter with `time_updated` watermark |
+| `@cawco/jsonl-parser` | neutral | typed records, byte scanner, lazy parse, text extraction, checkpoints, worker fan-out |
+| `@cawco/jsonl-parser/fts5` | Bun | SQLite FTS5 BM25 index (`porter unicode61`, external-content table, trigger-synced) |
+| `@cawco/jsonl-parser/opencode` | Bun | OpenCode sqlite adapter with `time_updated` watermark |
 
 ## Design notes
 

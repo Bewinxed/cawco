@@ -16,7 +16,7 @@
  * and the hub's own 101 passes straight back.
  *
  * It runs under node and serves only on the listening socket its service
- * manager hands it — `whiffle-dashboard.socket` under systemd, the `Sockets`
+ * manager hands it — `cawco-dashboard.socket` under systemd, the `Sockets`
  * entry of the LaunchAgent under launchd (packages/cli/src/service.ts). The
  * manager holds that socket across a restart of this process, so a page load
  * that lands while a deploy restarts the dashboard waits in the listen backlog
@@ -38,9 +38,9 @@ import { fileURLToPath } from "node:url";
 import sockets from "socket-activation";
 import { handler } from "./build/handler.js";
 
-const target = new URL(process.env.WHIFFLE_HUB_URL || "http://localhost:3456");
+const target = new URL(process.env.CAWCO_HUB_URL || "http://localhost:3456");
 const targetPort = Number(target.port || 80);
-const previewPort = Number(process.env.WHIFFLE_PREVIEW_PORT || targetPort + 1);
+const previewPort = Number(process.env.CAWCO_PREVIEW_PORT || targetPort + 1);
 
 const PREVIEW_PREFIX = /^\/preview\/([^/]+)\//;
 /**
@@ -92,7 +92,7 @@ function proxyPreviewHttp(req, res, info) {
     headers: {
       ...req.headers,
       host: `${target.hostname}:${previewPort}`,
-      "x-whiffle-preview": info.id,
+      "x-cawco-preview": info.id,
     },
   };
   const prefix = `/preview/${encodeURIComponent(info.id)}`;
@@ -108,7 +108,7 @@ function proxyPreviewHttp(req, res, info) {
   });
   proxyReq.on("error", (error) => {
     console.warn(
-      `[whiffle] preview proxy error for ${info.id}: ${error.code ?? error.message}`
+      `[cawco] preview proxy error for ${info.id}: ${error.code ?? error.message}`
     );
     if (!res.headersSent) {
       res.writeHead(502);
@@ -252,7 +252,7 @@ function serveApp(req, res) {
       if (error.code !== "ENOENT") {
         throw error;
       }
-      console.warn(`[whiffle] static file gone mid-request: ${error.path}`);
+      console.warn(`[cawco] static file gone mid-request: ${error.path}`);
       res.destroy();
     });
   });
@@ -280,7 +280,7 @@ server.on("upgrade", (req, socket, head) => {
   // every other dashboard socket, down with it.
   socket.on("error", (error) => {
     console.warn(
-      `[whiffle] websocket socket error on ${req.url}: ${error.code ?? error.message}`
+      `[cawco] websocket socket error on ${req.url}: ${error.code ?? error.message}`
     );
   });
   // Preview WebSocket: /preview/<id>/…
@@ -296,7 +296,7 @@ server.on("upgrade", (req, socket, head) => {
         lines.push(`${req.rawHeaders[i]}: ${req.rawHeaders[i + 1]}`);
       }
       lines.push(`Host: ${target.hostname}:${previewPort}`);
-      lines.push(`X-Whiffle-Preview: ${info.id}`);
+      lines.push(`X-Cawco-Preview: ${info.id}`);
       upstream.write(`${lines.join("\r\n")}\r\n\r\n`);
       if (head?.length) {
         upstream.write(head);
@@ -306,7 +306,7 @@ server.on("upgrade", (req, socket, head) => {
     });
     upstream.on("error", (error) => {
       console.warn(
-        `[whiffle] preview ws proxy error for ${info.id}: ${error.code ?? error.message}`
+        `[cawco] preview ws proxy error for ${info.id}: ${error.code ?? error.message}`
       );
       socket.destroy();
     });
@@ -341,7 +341,7 @@ server.on("upgrade", (req, socket, head) => {
 
   upstream.on("error", (error) => {
     console.warn(
-      `[whiffle] hub ws proxy could not reach ${target.host}: ${error.code ?? error.message}`
+      `[cawco] hub ws proxy could not reach ${target.host}: ${error.code ?? error.message}`
     );
     socket.destroy();
   });

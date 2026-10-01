@@ -1,5 +1,5 @@
 /**
- * Delegate types (`@whiffle/core`'s `DelegateType`): the fleet-wide presets a
+ * Delegate types (`@cawco/core`'s `DelegateType`): the fleet-wide presets a
  * `delegate` call's `type` param resolves against.
  *
  * Kept out of `db/schema.ts` and `db/index.ts` deliberately — both files are
@@ -11,8 +11,8 @@
  * plain `CREATE TABLE IF NOT EXISTS`.
  */
 import { Database } from "bun:sqlite";
-import type { DelegateType } from "@whiffle/core";
-import { DEFAULT_DELEGATE_TYPES, delegateTypeProblem } from "@whiffle/core";
+import type { DelegateType } from "@cawco/core";
+import { DEFAULT_DELEGATE_TYPES, delegateTypeProblem } from "@cawco/core";
 import { Elysia, t } from "elysia";
 import { DB_PATH } from "./config";
 

@@ -6,14 +6,14 @@
  * Nothing here infers a status — the step rows carry those.
  */
 
-import dagre from "@dagrejs/dagre";
 import type {
   EffortLevel,
   WorkflowEffectKind,
   WorkflowLogEntry,
   WorkflowNode,
-} from "@whiffle/core";
-import type { JevAnswer, JevResult } from "@whiffle/core/workflow-program";
+} from "@cawco/core";
+import type { JevAnswer, JevResult } from "@cawco/core/workflow-program";
+import dagre from "@dagrejs/dagre";
 
 /** The 260px node of §9.2, and the rank/row gaps that keep edges readable. */
 const NODE_WIDTH = 260;

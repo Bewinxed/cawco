@@ -1,5 +1,5 @@
 /**
- * OpenCode adapter. Subpath export: `@whiffle/jsonl-parser/opencode`.
+ * OpenCode adapter. Subpath export: `@cawco/jsonl-parser/opencode`.
  *
  * Modern OpenCode stores sessions in SQLite (~/.local/share/opencode/
  * opencode.db): `message` and `part` tables with JSON `data` columns

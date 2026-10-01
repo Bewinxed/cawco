@@ -3,6 +3,7 @@
     Toaster as Sonner,
     type ToasterProps as SonnerProps,
   } from "svelte-sonner";
+  import { dur } from "$lib/cawco/motion/curves.svelte";
   import { Spinner } from "$lib/components/ui/spinner";
   import {
     IconError,
@@ -11,7 +12,6 @@
     IconWarningTriangle,
   } from "$lib/icons";
   import { theme } from "$lib/theme.svelte";
-  import { dur } from "$lib/whiffle/motion/curves.svelte";
 
   let { ...restProps }: SonnerProps = $props();
 

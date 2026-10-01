@@ -1,6 +1,6 @@
 /**
  * Resolving a plain skill to its files (NEW.md §11). An installer CLI is a
- * wrapper around copying a directory into `~/.claude/skills/`, so whiffle runs
+ * wrapper around copying a directory into `~/.claude/skills/`, so cawco runs
  * none of them: the hub downloads the source once, reads the skill out of it,
  * and sync carries the files to every machine.
  */
@@ -8,7 +8,7 @@
 import { lstat, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
-import type { SkillFile } from "@whiffle/core";
+import type { SkillFile } from "@cawco/core";
 import { $ } from "bun";
 
 /** What a `source` string names, once its scheme has been read off it. */
@@ -66,7 +66,7 @@ const MAX_BYTES = 8 * 1024 * 1024;
  * Where a repo keeps its skills, in the order the skills CLI looks — except
  * that `.claude/skills` comes before `.agents/skills`: a repo that ships one
  * variant per agent has tuned the Claude one for Claude Code, and that is the
- * one a whiffle fleet wants.
+ * one a cawco fleet wants.
  */
 const CONTAINERS = [
   "skills",
@@ -94,7 +94,7 @@ const ARCHIVE_PATH_RE = /\.(zip|tgz|tar\.gz)$/i;
 const MEDIA_PATH_RE = /\.(gif|jpe?g|png|webp|svg|mp4|mov|webm|avif)$/i;
 const README_NAME_RE = /^readme\.md$/i;
 
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: parses the four source shapes (url, npm:, github:, bare owner/repo) whiffle accepts; each branch is a distinct grammar, not incidental complexity.
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: parses the four source shapes (url, npm:, github:, bare owner/repo) cawco accepts; each branch is a distinct grammar, not incidental complexity.
 export const parseSkillSource = (source: string): SkillSource | undefined => {
   const trimmed = source.trim();
   if (URL_SOURCE_RE.test(trimmed)) {
@@ -254,13 +254,13 @@ export const readTree = async (
   const found = await keep(await walk(dir));
   if (found.length > MAX_FILES) {
     throw new Error(
-      `${what} has ${found.length} files; whiffle carries at most ${MAX_FILES}`
+      `${what} has ${found.length} files; cawco carries at most ${MAX_FILES}`
     );
   }
   const bytes = found.reduce((total, file) => total + file.size, 0);
   if (bytes > MAX_BYTES) {
     throw new Error(
-      `${what} is ${bytes} bytes; whiffle carries at most ${MAX_BYTES}`
+      `${what} is ${bytes} bytes; cawco carries at most ${MAX_BYTES}`
     );
   }
   const files: SkillFile[] = await Promise.all(
@@ -531,10 +531,10 @@ export const resolveSkill = async (
 ): Promise<ResolvedSkill | UnresolvedSkill> => {
   const parsed = parseSkillSource(source);
   if (!parsed) {
-    return { error: `${source} is not a source whiffle knows how to fetch` };
+    return { error: `${source} is not a source cawco knows how to fetch` };
   }
 
-  const work = await mkdtemp(join(tmpdir(), "whiffle-skill-"));
+  const work = await mkdtemp(join(tmpdir(), "cawco-skill-"));
   try {
     return await fetchSkill(parsed, work);
   } catch (error) {

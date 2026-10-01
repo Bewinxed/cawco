@@ -1,9 +1,9 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import EditorRoute from "$lib/whiffle/config/EditorRoute.svelte";
-  import RuleEditor from "$lib/whiffle/config/editors/RuleEditor.svelte";
-  import { sectionOf } from "$lib/whiffle/config/sections";
-  import { configStore } from "$lib/whiffle/config/store.svelte";
+  import EditorRoute from "$lib/cawco/config/EditorRoute.svelte";
+  import RuleEditor from "$lib/cawco/config/editors/RuleEditor.svelte";
+  import { sectionOf } from "$lib/cawco/config/sections";
+  import { configStore } from "$lib/cawco/config/store.svelte";
 
   const store = configStore();
   const section = sectionOf("rules");

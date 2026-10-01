@@ -1,5 +1,5 @@
 /**
- * The marker lines whiffle opens every message it puts into a session with,
+ * The marker lines cawco opens every message it puts into a session with,
  * on someone else's behalf — another session's hand-off, a workflow's brief or
  * notice, a delegate's report or ask. (A rule's marker lives beside the rest
  * of rules, in `rules.ts`.)

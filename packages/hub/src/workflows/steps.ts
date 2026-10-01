@@ -19,8 +19,8 @@
  * machine, its attempt row keeps counting, and `resume` re-arms the timeout
  * the restart dropped.
  */
-import type { EffortLevel, SpawnPayload, WorkflowFailure } from "@whiffle/core";
-import { workflowNoticeMarker, workflowStepMarker } from "@whiffle/core";
+import type { EffortLevel, SpawnPayload, WorkflowFailure } from "@cawco/core";
+import { workflowNoticeMarker, workflowStepMarker } from "@cawco/core";
 import Ajv from "ajv";
 import type {
   DbShape,

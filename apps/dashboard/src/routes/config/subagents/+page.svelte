@@ -3,8 +3,24 @@
     type FleetAgent,
     machineLabel,
     parseAgentFrontMatter,
-  } from "@whiffle/core";
+  } from "@cawco/core";
   import { toast } from "svelte-sonner";
+  import { cawco } from "$lib/cawco/client.svelte";
+  import RowList from "$lib/cawco/config/RowList.svelte";
+  import SectionFrame from "$lib/cawco/config/SectionFrame.svelte";
+  import SectionRow from "$lib/cawco/config/SectionRow.svelte";
+  import { sectionOf } from "$lib/cawco/config/sections";
+  import { configStore, upsert } from "$lib/cawco/config/store.svelte";
+  import { confirm } from "$lib/cawco/confirm.svelte";
+  import {
+    type DiscoveredAgent,
+    discoverAgents,
+    pushAgents,
+    removeAgent,
+    saveAgent,
+  } from "$lib/cawco/fleet";
+  import OsMark from "$lib/cawco/OsMark.svelte";
+  import { orderMachines } from "$lib/cawco/rail.svelte";
   import { Button } from "$lib/components/ui/button";
   import { EmptyState } from "$lib/components/ui/empty";
   import { SectionHeader } from "$lib/components/ui/section-header";
@@ -16,22 +32,6 @@
     IconSubagent,
     IconTrash,
   } from "$lib/icons";
-  import { whiffle } from "$lib/whiffle/client.svelte";
-  import RowList from "$lib/whiffle/config/RowList.svelte";
-  import SectionFrame from "$lib/whiffle/config/SectionFrame.svelte";
-  import SectionRow from "$lib/whiffle/config/SectionRow.svelte";
-  import { sectionOf } from "$lib/whiffle/config/sections";
-  import { configStore, upsert } from "$lib/whiffle/config/store.svelte";
-  import { confirm } from "$lib/whiffle/confirm.svelte";
-  import {
-    type DiscoveredAgent,
-    discoverAgents,
-    pushAgents,
-    removeAgent,
-    saveAgent,
-  } from "$lib/whiffle/fleet";
-  import OsMark from "$lib/whiffle/OsMark.svelte";
-  import { orderMachines } from "$lib/whiffle/rail.svelte";
 
   /**
    * Subagents, fleet-wide: define one and it lands in every machine's
@@ -43,7 +43,7 @@
   const HUE = section.hue;
 
   const agents = $derived(store.fleet.value?.agents ?? []);
-  const machines = $derived(orderMachines(whiffle.machines));
+  const machines = $derived(orderMachines(cawco.machines));
   const online = $derived(
     machines.filter((machine) => machine.status === "online")
   );

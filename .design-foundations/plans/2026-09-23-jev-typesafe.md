@@ -1,4 +1,4 @@
-# Jev (TypeSafe) in Whiffle — decisions and spec
+# Jev (TypeSafe) in CawCo — decisions and spec
 
 Owner session 2026-09-23. This file is the record; every change to the plan below is appended to the
 decision log at the bottom with the owner's words.
@@ -30,7 +30,7 @@ decision log at the bottom with the owner's words.
 
 - Settings page `/settings`, OpenRouter section: Connect (PKCE S256, verifier held in the hub), key stored in
   `openrouter_connection` in the hub DB, never sent to the browser. Disconnect deletes it.
-- Supervisor LLM config moved to Settings; its `WHIFFLE_SUPERVISOR_*` env fallback deleted.
+- Supervisor LLM config moved to Settings; its `CAWCO_SUPERVISOR_*` env fallback deleted.
 
 ## 2. Meaning rules (shipped in 8738148)
 
@@ -93,7 +93,7 @@ always-included new installs), 14 tools, 2 MCP servers; 17 used skills fall outs
 
 ## Decision log
 
-- 2026-09-23 — "by adding openrouter oauth to whiffle in settings then using jev latest via openrouter, no .envs"
+- 2026-09-23 — "by adding openrouter oauth to cawco in settings then using jev latest via openrouter, no .envs"
 - 2026-09-23 — "no fallbacks, it should be configurable in the settings page too" → supervisor env fallback removed, config in Settings.
 - 2026-09-23 — Harness-level tool filtering considered and dropped in favour of composer chips ("instead of adjusting the tools in the harness itself").
 - 2026-09-23 — "make sure you're doing a really nice implementation, no cheap impls here" / "and animated!" / "with FLIP on changing suggestions"
@@ -116,11 +116,11 @@ always-included new installs), 14 tools, 2 MCP servers; 17 used skills fall outs
   $0.000023–0.000028 per message → ~$2/month at ~2,700 messages/day, ~$0.27 on the busiest day (10,480 messages).
 - 2026-09-23 — "there has been 0 instances where the models actually acknoweldged … it doesn't even tell the model that it
   needs to acknowledge them". Verified: 3 acks out of 100 requireAck fires; 97 pending across 81 sessions. Cause:
-  `rules.ts#body` sends the reply verbatim by design ("no mention of whiffle or of a tool") and the note tool is described
+  `rules.ts#body` sends the reply verbatim by design ("no mention of cawco or of a tool") and the note tool is described
   as being for user concerns only. Orchestrator cleared the 97 stale pending fires through the hub's ack endpoint with a
   note saying who cleared them and why. Fix briefed (branch `rule-ack`): requireAck replies end with a line naming the
   harness's note tool; the tool's description covers rule messages.
-- 2026-09-29 — reversed: "agents keep using a 'note for user' tool in whiffle instead of simply replying to me, they are
+- 2026-09-29 — reversed: "agents keep using a 'note for user' tool in cawco instead of simply replying to me, they are
   talking to the wall … they need to just acknoweldge it, i don't read these notes nor do i need them". The note tool, the
   ack endpoints, the appended line and the stored note are deleted. The reply goes out exactly as written; a pending rule
   re-arms when a later turn of that session ends without matching it again. `requireAck` is renamed `repeat` (fire again
@@ -160,7 +160,7 @@ always-included new installs), 14 tools, 2 MCP servers; 17 used skills fall outs
   chip and Shift+Tab adding all (`79584e1`); owner: "color tinted based on confidence … sorted by confidence, with some kind of
   shortcut to insert them via keyboard, and a shortcut to insert all".
 - 2026-09-23 — Auto-rows marker contract (`d33fc579`): every injected message (rule, supervisor reply, hand-off, workflow step
-  brief and notice, delegate report and ask) opens with a marker line that `@whiffle/core` builds and parses. The dashboard
+  brief and notice, delegate report and ask) opens with a marker line that `@cawco/core` builds and parses. The dashboard
   classifies live, mid-turn and stored copies through one function, so a reload renders the same system row; stored workflow
   briefs and notices no longer render as the owner's turn. Owner: "after i refresh, it shows as if it's my own message".
 - 2026-09-23 — One chip per capability, by name: after thresholding, `suggest()` keeps only the likelier entry when the same

@@ -119,7 +119,7 @@ export { default as IconDot } from "~icons/solar/record-circle-bold-duotone";
 export { default as IconRefresh } from "~icons/solar/refresh-bold-duotone";
 /*
  * The marks a folder can be given by hand (see `FOLDER_MARKS` in
- * lib/whiffle/folder-prefs.svelte.ts), picked to span the kinds of work a
+ * lib/cawco/folder-prefs.svelte.ts), picked to span the kinds of work a
  * directory holds rather than to be a complete icon set.
  */
 export { default as IconRocket } from "~icons/solar/rocket-2-bold-duotone";

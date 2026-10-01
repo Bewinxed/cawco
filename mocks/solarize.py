@@ -78,7 +78,7 @@ KEEP = [
     'M12 4l7 4v8l-7 4-7-4V8z',  # Claude Code harness glyph
     'M9 8l-4 4 4 4M15 8l4 4',   # OpenCode harness glyph
     'M5 7.5h14M9 7.5v9M15 7.5', # pi harness glyph
-    'M4 4h16v16H4z',            # Whiffle brand logo
+    'M4 4h16v16H4z',            # CawCo brand logo
     'M12 4.5v15',               # theme toggle (screenshot affordance, not design)
 ]
 

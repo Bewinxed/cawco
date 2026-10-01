@@ -1,7 +1,7 @@
 # Implementation Plan — Session shell architecture
 
 **Date:** 2026-08-18
-**Companion to:** `.design-foundations/plans/2026-08-18-whiffle-flowai-overhaul.md` Phase 8
+**Companion to:** `.design-foundations/plans/2026-08-18-cawco-flowai-overhaul.md` Phase 8
 **Status:** skeleton — not yet decomposed into phases
 
 ---
@@ -59,7 +59,7 @@ owns **how it is built**.
   its edge and reported none — so the page stole the swipe. Fixed by sampling the scroller and its
   offset at *touchstart* and comparing at the end. Same failure shape as the `.finally()` race: state
   read after the thing being reasoned about had already changed.
-- **A gesture's destination set is the open tabs.** Swipe was bounded by `whiffle.listedInstances`
+- **A gesture's destination set is the open tabs.** Swipe was bounded by `cawco.listedInstances`
   (every session that exists) and walked into sessions never opened. Fixed to `workingSet.order`
   intersected with what the hub still lists.
 - **`$effect(() => syncSubscriptions())`** tracks whatever `subscriptionIds()` reads, so it re-runs

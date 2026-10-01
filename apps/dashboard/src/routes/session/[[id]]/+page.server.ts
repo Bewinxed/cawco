@@ -3,15 +3,15 @@ import type {
   InstanceRow,
   SendRecord,
   SessionMessage,
-} from "@whiffle/core";
+} from "@cawco/core";
+import { turnStart } from "$lib/cawco/frames";
 import { TRANSCRIPT_FIRST_CHUNK, TRANSCRIPT_TAIL_CEILING } from "$lib/config";
-import { turnStart } from "$lib/whiffle/frames";
 import type { PageServerLoad } from "./$types";
 
 /**
  * Where this conversation's stored transcript can be read from, resolved on the
  * server so the browser can start reading it without waiting for its socket.
- * Mirrors `HistorySource` in the whiffle store.
+ * Mirrors `HistorySource` in the cawco store.
  */
 interface HistorySource {
   cwd: string;
@@ -69,19 +69,19 @@ async function readTail(
   // Where the hub found it — the one thing a bare id does not say, and the
   // pane names the machine in its header from the first paint.
   const found: Partial<HistorySource> = {};
-  const machineId = response.headers.get("x-whiffle-machine");
+  const machineId = response.headers.get("x-cawco-machine");
   if (machineId) {
     found.machineId = machineId;
   }
-  const cwd = response.headers.get("x-whiffle-cwd");
+  const cwd = response.headers.get("x-cawco-cwd");
   if (cwd) {
     found.cwd = decodeURIComponent(cwd);
   }
-  const harness = response.headers.get("x-whiffle-harness");
+  const harness = response.headers.get("x-cawco-harness");
   if (harness) {
     found.harness = harness;
   }
-  const sessionId = response.headers.get("x-whiffle-session");
+  const sessionId = response.headers.get("x-cawco-session");
   if (sessionId) {
     found.sessionId = decodeURIComponent(sessionId);
   }

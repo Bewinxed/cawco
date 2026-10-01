@@ -51,7 +51,7 @@ or an explicit supported contract. No selector or endpoint migration was added.
 ## Reliability corrections
 
 - Claude's HTTP MCP transport defaults to a 60-second first-response deadline.
-  Set the Whiffle server timeout to the image execution budget plus transport margin.
+  Set the CawCo server timeout to the image execution budget plus transport margin.
 - Stream MCP responses immediately and emit elapsed-time progress when the client
   supplies a progress token; do not pretend elapsed seconds are completion percent.
 - Disable shorter HTTP idle cutoffs on long tool routes; retain explicit operation

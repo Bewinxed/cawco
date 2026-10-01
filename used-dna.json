@@ -161,10 +161,10 @@
       }
     },
     {
-      "seed": "whiffle-whiffle|2026-08-18|0|pin:chroma=muted,discipline=ledger-grid,family=data-dense-professional,hue=263,signature=accent-scarcity",
+      "seed": "cawco-cawco|2026-08-18|0|pin:chroma=muted,discipline=ledger-grid,family=data-dense-professional,hue=263,signature=accent-scarcity",
       "output": {
-        "seed": "whiffle-whiffle|2026-08-18|0|pin:chroma=muted,discipline=ledger-grid,family=data-dense-professional,hue=263,signature=accent-scarcity",
-        "project": "whiffle-whiffle",
+        "seed": "cawco-cawco|2026-08-18|0|pin:chroma=muted,discipline=ledger-grid,family=data-dense-professional,hue=263,signature=accent-scarcity",
+        "project": "cawco-cawco",
         "date": "2026-08-18",
         "reroll": 0,
         "candidates": 5,

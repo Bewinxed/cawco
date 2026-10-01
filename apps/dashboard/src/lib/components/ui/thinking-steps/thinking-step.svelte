@@ -5,10 +5,10 @@
 <script lang="ts">
   import type { Component, Snippet } from "svelte";
   import { untrack } from "svelte";
+  import { dur, easeOut } from "$lib/cawco/motion/curves.svelte";
+  import { restOffscreen } from "$lib/cawco/motion/rest";
   import { Markdown } from "$lib/components/ui/markdown";
   import { IconCheck, IconGlobe, IconSearch } from "$lib/icons";
-  import { dur, easeOut } from "$lib/whiffle/motion/curves.svelte";
-  import { restOffscreen } from "$lib/whiffle/motion/rest";
   import { getSizeContext } from "../thinking-indicator/size-context";
 
   let {

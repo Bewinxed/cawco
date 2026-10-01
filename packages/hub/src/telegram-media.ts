@@ -1,5 +1,5 @@
-import type { SendPayload } from "@whiffle/core";
-import { readEnv, WHIFFLE_ENV } from "@whiffle/core";
+import type { SendPayload } from "@cawco/core";
+import { CAWCO_ENV, readEnv } from "@cawco/core";
 
 /** Telegram's own ceiling on what a bot may fetch, and how long fetching may take. */
 const FILE_LIMIT = 20 * 1024 * 1024;
@@ -287,14 +287,14 @@ export const createMediaIntake = ({
     bytes: Uint8Array,
     filename: string
   ): Promise<Intake> => {
-    const url = readEnv(WHIFFLE_ENV.telegramAsrUrl)?.replace(
+    const url = readEnv(CAWCO_ENV.telegramAsrUrl)?.replace(
       TRAILING_SLASH_RE,
       ""
     );
     if (!url) {
       return { kind: "refused", reason: "Transcription isn't configured yet." };
     }
-    const handle = readEnv(WHIFFLE_ENV.telegramAsrModel) ?? DEFAULT_MODEL;
+    const handle = readEnv(CAWCO_ENV.telegramAsrModel) ?? DEFAULT_MODEL;
 
     const name = await named(url, handle);
     if (typeof name !== "string") {
@@ -305,7 +305,7 @@ export const createMediaIntake = ({
       return { kind: "refused", reason: cold };
     }
 
-    const chat = readEnv(WHIFFLE_ENV.telegramAsrMode) === "chat";
+    const chat = readEnv(CAWCO_ENV.telegramAsrMode) === "chat";
     const response = await (chat
       ? // An audio-capable LLM has no transcription API — it is asked to
         // transcribe the way it is asked anything, with the audio attached.

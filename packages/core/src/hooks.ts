@@ -458,7 +458,7 @@ export type HookHandler =
 export interface FleetHook extends FleetPlacement {
   /**
    * A disabled hook is simply not written to any machine. Claude Code itself
-   * has no way to disable one hook while keeping it, so this is whiffle's
+   * has no way to disable one hook while keeping it, so this is cawco's
    * to provide: the row stays, the registration goes.
    */
   enabled: boolean;
@@ -474,7 +474,7 @@ export interface FleetHook extends FleetPlacement {
   /** What the reader calls it. Unique across the fleet. */
   name: string;
   /**
-   * A command hook's script body. Whiffle writes it to a file on every machine
+   * A command hook's script body. CawCo writes it to a file on every machine
    * and points the registration at that path, so the hook travels — a machine
    * that has never seen this hook still runs it correctly. Absent means the
    * handler carries its own `command` and the reader is on their own for
@@ -566,7 +566,7 @@ export function hookProblem(draft: Partial<HookDraft>): Record<string, string> {
       }
       if (script !== "" && command !== "") {
         wrong.script =
-          "This has both a script and a command. Keep one — whiffle points the hook at whichever it writes.";
+          "This has both a script and a command. Keep one — cawco points the hook at whichever it writes.";
       }
       // args means exec form: `command` is spawned directly with no shell.
       // A written script is spawned as the executable, so args are its

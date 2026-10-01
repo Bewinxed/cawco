@@ -22,7 +22,7 @@
  * Run with `bun peer-echo-proof.ts`. Prints a DIAG line per peer-mappable frame.
  */
 
-import type { NeutralMessage } from "@whiffle/core";
+import type { NeutralMessage } from "@cawco/core";
 import type { HarnessContext, HarnessSession } from "./src/harness";
 import { claudeHarness } from "./src/harnesses/claude";
 

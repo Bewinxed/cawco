@@ -3,8 +3,8 @@
  * machine-wide harness config (`~/.config/opencode/opencode.json` and its
  * plugins, and everything a fleet sync converges for claude, opencode and pi).
  *
- * The signal is the machine's own whiffle config: `config.json` names the hub
- * this machine joined (`whiffle up` writes it). An agent talking to that hub
+ * The signal is the machine's own cawco config: `config.json` names the hub
+ * this machine joined (`cawco up` writes it). An agent talking to that hub
  * is the machine's agent; one started from a worktree against a test hub is
  * not, and must not repoint the machine's harnesses at its hub. It keeps its
  * sessions on its own hub by passing the hub per session instead.

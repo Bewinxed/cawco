@@ -1,4 +1,4 @@
-import type { JevResult } from "@whiffle/core/workflow-program";
+import type { JevResult } from "@cawco/core/workflow-program";
 import type { DbShape } from "./db";
 import { askJev } from "./jev";
 import { usageScores } from "./usage-count";

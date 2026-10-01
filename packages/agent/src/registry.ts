@@ -15,12 +15,12 @@
  *
  * What this module does NOT do is decide when. It reports what is installed
  * and what is available; acting on the difference is the operator's, through
- * `whiffle update` or the fleet control that calls it.
+ * `cawco update` or the fleet control that calls it.
  */
 import { realpath } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import type { UpdateReport } from "@whiffle/core";
-import { readEnv, WHIFFLE_ENV } from "@whiffle/core";
+import type { UpdateReport } from "@cawco/core";
+import { CAWCO_ENV, readEnv } from "@cawco/core";
 import {
   failed,
   installDashboardUnits,
@@ -37,13 +37,13 @@ import {
  * only holds as a safety property while the name stays ours on npm: never
  * point this at a generic word we do not own, and never let the publish lapse.
  */
-export const PACKAGE_NAME = "whiffle";
+export const PACKAGE_NAME = "cawco";
 
 const TRAILING_SLASH_RE = /\/$/;
 
 /** The registry, overridable for a private mirror or an air-gapped fleet. */
 export const registryUrl = (): string =>
-  readEnv(WHIFFLE_ENV.registry)?.replace(TRAILING_SLASH_RE, "") ||
+  readEnv(CAWCO_ENV.registry)?.replace(TRAILING_SLASH_RE, "") ||
   "https://registry.npmjs.org";
 
 /** Long enough for a slow mirror, short enough not to wedge a poll. */

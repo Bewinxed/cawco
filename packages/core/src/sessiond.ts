@@ -5,7 +5,7 @@
  * runtime, no binary, no spawning — leaf P1 builds the daemon against this.
  *
  * Deviation from the design doc, by operator order (PLAN.md contract C7):
- * there is no `WHIFFLE_SESSIOND` feature flag. Do not add one here.
+ * there is no `CAWCO_SESSIOND` feature flag. Do not add one here.
  *
  * See the design document §3.4 (the verbs sessiond owns), §5 (capability
  * strings and version tolerance), §6 (ring bounds), §9 (socket mode) and §12
@@ -208,14 +208,14 @@ export type SessiondServerMessage =
  * `node:net` accepts all three shapes in `listen()`/`connect()`; only the
  * derivation branches.
  *
- * - linux : `$XDG_RUNTIME_DIR/whiffle/sessiond.sock`, else `~/.whiffle/sessiond.sock`.
+ * - linux : `$XDG_RUNTIME_DIR/cawco/sessiond.sock`, else `~/.cawco/sessiond.sock`.
  *   `XDG_RUNTIME_DIR` is safe here because the install path already requires
- *   lingering, which keeps the runtime dir alive across logout; `~/.whiffle`
+ *   lingering, which keeps the runtime dir alive across logout; `~/.cawco`
  *   covers ad-hoc runs.
- * - darwin: `~/.whiffle/sessiond.sock` always — `sun_path` is 104 bytes on
+ * - darwin: `~/.cawco/sessiond.sock` always — `sun_path` is 104 bytes on
  *   darwin, so a long `XDG_RUNTIME_DIR`-style path is a real risk; a fixed,
  *   short home-relative path avoids it.
- * - win32 : `\\.\pipe\whiffle-sessiond-<user>` — a name reservation. Windows
+ * - win32 : `\\.\pipe\cawco-sessiond-<user>` — a name reservation. Windows
  *   implementation is out of scope for this leaf; only the string is fixed
  *   so nothing downstream has to change when it lands.
  */
@@ -223,18 +223,18 @@ export const sessiondEndpoint = (): string => {
   switch (process.platform) {
     case "win32": {
       const user = process.env.USERNAME ?? process.env.USER ?? "default";
-      return `\\\\.\\pipe\\whiffle-sessiond-${user}`;
+      return `\\\\.\\pipe\\cawco-sessiond-${user}`;
     }
     case "darwin":
-      return join(homedir(), ".whiffle", "sessiond.sock");
+      return join(homedir(), ".cawco", "sessiond.sock");
     default: {
       // linux, and every other platform Node reports: same derivation as
       // linux's documented case, since XDG_RUNTIME_DIR is the same signal
       // wherever it is set.
       const runtimeDir = process.env.XDG_RUNTIME_DIR;
       return runtimeDir
-        ? join(runtimeDir, "whiffle", "sessiond.sock")
-        : join(homedir(), ".whiffle", "sessiond.sock");
+        ? join(runtimeDir, "cawco", "sessiond.sock")
+        : join(homedir(), ".cawco", "sessiond.sock");
     }
   }
 };

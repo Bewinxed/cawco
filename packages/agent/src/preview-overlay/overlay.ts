@@ -1,7 +1,7 @@
 /// <reference lib="dom" />
 /// <reference lib="dom.iterable" />
 
-import type { PreviewElement } from "@whiffle/core";
+import type { PreviewElement } from "@cawco/core";
 import { domToPng } from "modern-screenshot";
 
 const INSPECTOR_PATH = /^(.*):(\d+):(\d+)$/;
@@ -74,7 +74,7 @@ if (prefix) {
   window.WebSocket = PatchedWebSocket;
 }
 
-const host = document.createElement("whiffle-overlay");
+const host = document.createElement("cawco-overlay");
 host.style.cssText =
   "all:initial!important;position:fixed!important;inset:0!important;z-index:2147483647!important;pointer-events:none!important";
 const shadow = host.attachShadow({ mode: "open" });
@@ -119,14 +119,14 @@ function post(type: string, payload: object = {}) {
 }
 
 function ready() {
-  post("whiffle:ready", {
+  post("cawco:ready", {
     url: stripPrefix(location.href),
     title: document.title,
   });
 }
 
 function navigated() {
-  post("whiffle:navigated", {
+  post("cawco:navigated", {
     url: stripPrefix(location.href),
     title: document.title,
   });
@@ -300,7 +300,7 @@ function describe(el: Element): PreviewElement {
   if (el.contains(host)) {
     const clone = el.cloneNode(true) as Element;
     for (const node of clone.querySelectorAll(
-      "whiffle-overlay, script[src='/__whiffle/overlay.js']"
+      "cawco-overlay, script[src='/__cawco/overlay.js']"
     )) {
       node.remove();
     }
@@ -332,7 +332,7 @@ async function capture(
     return { png: png.replace(PNG_PREFIX, "") };
   } catch (reason) {
     const error = reason instanceof Error ? reason.message : String(reason);
-    post("whiffle:error", { message: error });
+    post("cawco:error", { message: error });
     return { png: null, error };
   }
 }
@@ -370,7 +370,7 @@ async function selectAt(clientX: number, clientY: number) {
   const el = elementAt(clientX, clientY);
   if (el) {
     const element = describe(el);
-    post("whiffle:selected", { element, ...(await capture(el)) });
+    post("cawco:selected", { element, ...(await capture(el)) });
   }
 }
 
@@ -431,7 +431,7 @@ window.addEventListener(
       event.preventDefault();
       event.stopImmediatePropagation();
       mode(false);
-      post("whiffle:escape");
+      post("cawco:escape");
     }
   },
   true
@@ -442,12 +442,12 @@ window.addEventListener("message", async (event) => {
     return;
   }
   const message = event.data;
-  if (message?.type === "whiffle:hello") {
+  if (message?.type === "cawco:hello") {
     ready();
-  } else if (message?.type === "whiffle:mode") {
+  } else if (message?.type === "cawco:mode") {
     mode(message.mode === "select");
-  } else if (message?.type === "whiffle:capture") {
-    post("whiffle:capture", await capture(document.documentElement));
+  } else if (message?.type === "cawco:capture") {
+    post("cawco:capture", await capture(document.documentElement));
   }
 });
 

@@ -1,22 +1,22 @@
 import { existsSync } from "node:fs";
 import {
+  CAWCO_ENV,
+  CAWCO_HUB_PORT,
+  CAWCO_MDNS_TYPE,
   readEnv,
-  WHIFFLE_ENV,
-  WHIFFLE_HUB_PORT,
-  WHIFFLE_MDNS_TYPE,
-} from "@whiffle/core";
+} from "@cawco/core";
 import { Bonjour, type Service } from "bonjour-service";
 import { readConfig, writeConfig } from "./config";
 
 /**
- * The network rungs of hub discovery, shared between `whiffle up`
- * (`@whiffle/cli`'s `discoverHub`) and the daemon's own re-discovery on a
+ * The network rungs of hub discovery, shared between `cawco up`
+ * (`@cawco/cli`'s `discoverHub`) and the daemon's own re-discovery on a
  * sustained reconnect failure (`rediscoverHub`, below) — the latter only for a
  * hub that was discovered, never one the operator named.
  *
  * This lives on the agent side of the package graph, not core and not cli:
- * `@whiffle/cli` already depends on `@whiffle/agent` (it dynamically imports
- * `runDaemon` and `machineId` from here for `whiffle up`), so the reverse
+ * `@cawco/cli` already depends on `@cawco/agent` (it dynamically imports
+ * `runDaemon` and `machineId` from here for `cawco up`), so the reverse
  * dependency — agent importing from cli — would be a cycle. `discover.ts`
  * imports these instead of keeping its own copies of the mDNS/tailscale/probe
  * logic; its own rungs (`--hub`/env, the CLI's cached config, localhost) and
@@ -52,7 +52,7 @@ export const toWsUrl = (httpBase: string): string =>
   `${httpBase.replace(HTTP_PREFIX, "ws")}/ws`;
 
 /**
- * What tells a whiffle hub apart from whatever else is listening on the port:
+ * What tells a cawco hub apart from whatever else is listening on the port:
  * `/api/agents` is the fleet, so a 200 carrying an array is the whole test.
  */
 export const probeHub = async (httpUrl: string): Promise<boolean> => {
@@ -85,7 +85,7 @@ export const firstToAnswer = (
 };
 
 /**
- * Browses `_whiffle._tcp.local` for as long as it takes the first hub to answer.
+ * Browses `_cawco._tcp.local` for as long as it takes the first hub to answer.
  *
  * This is link-local multicast. It does not cross a router and it does not cross
  * a tailnet — a hub reachable only over Tailscale is invisible here no matter
@@ -102,7 +102,7 @@ export const browseMdns = (): Promise<string[]> =>
       resolve(candidates);
     };
     const browser = bonjour.find(
-      { type: WHIFFLE_MDNS_TYPE, protocol: "tcp" },
+      { type: CAWCO_MDNS_TYPE, protocol: "tcp" },
       (service: Service) => {
         const addresses = (service.addresses ?? []).filter((address) =>
           IPV4.test(address)
@@ -192,7 +192,7 @@ export interface RediscoverProbes {
  * way `discoverHub` does, and returns it.
  *
  * Skips two of `discoverHub`'s five rungs on purpose: `--hub`/env have nothing
- * new to read this long after `whiffle up` started, and localhost is not a
+ * new to read this long after `cawco up` started, and localhost is not a
  * rung a *relocated* hub can land on — a hub that was reachable on this
  * machine would have answered the pinned URL already if the pinned URL was
  * localhost, so retrying it here only finds the same failure again.
@@ -212,7 +212,7 @@ export const rediscoverHub = async (
   const findMdns = probes.browseMdns ?? browseMdns;
   const findTailscale = probes.tailscaleCandidates ?? tailscaleCandidates;
   const port =
-    probes.port ?? Number(readEnv(WHIFFLE_ENV.hubPort) ?? WHIFFLE_HUB_PORT);
+    probes.port ?? Number(readEnv(CAWCO_ENV.hubPort) ?? CAWCO_HUB_PORT);
 
   const settle = async (httpUrl: string, rung: string): Promise<string> => {
     note(`[rediscover/${rung}] ${httpUrl} answered — repinning`);

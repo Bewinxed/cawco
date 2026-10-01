@@ -13,7 +13,7 @@ import type {
   JevQuestion,
   JevResult,
   JevText,
-} from "@whiffle/core/workflow-program";
+} from "@cawco/core/workflow-program";
 
 const SYSTEMONE_URL = "https://openrouter.ai/api/v1/systemone";
 /** The first wait before a 429/529 is asked again; it doubles each time. */
@@ -53,8 +53,8 @@ export async function askJev<
       headers: {
         Authorization: `Bearer ${key}`,
         "Content-Type": "application/json",
-        "HTTP-Referer": "https://github.com/bewinxed/whiffle",
-        "X-OpenRouter-Title": "Whiffle",
+        "HTTP-Referer": "https://github.com/bewinxed/cawco",
+        "X-OpenRouter-Title": "CawCo",
       },
       body,
       signal: deadline,

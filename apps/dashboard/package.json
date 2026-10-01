@@ -1,5 +1,5 @@
 {
-  "name": "@whiffle/dashboard",
+  "name": "@cawco/dashboard",
   "version": "0.0.1",
   "private": true,
   "type": "module",
@@ -16,6 +16,7 @@
   "dependencies": {
     "@atlaskit/pragmatic-drag-and-drop": "^3.1.0",
     "@atlaskit/pragmatic-drag-and-drop-hitbox": "^2.2.0",
+    "@cawco/core": "workspace:*",
     "@codemirror/commands": "^6",
     "@codemirror/lang-javascript": "^6",
     "@codemirror/language": "^6",
@@ -29,7 +30,6 @@
     "@lezer/highlight": "^1",
     "@milkdown/crepe": "^7.22.1",
     "@pierre/diffs": "1.5.1",
-    "@whiffle/core": "workspace:*",
     "@xyflow/svelte": "^1.6.6",
     "bits-ui": "^2.19.3",
     "clsx": "^2.1.1",

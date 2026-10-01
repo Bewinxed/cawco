@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Stage the v5 modal over a representative Whiffle settings backdrop, on a REAL
+"""Stage the v5 modal over a representative CawCo settings backdrop, on a REAL
 dimmed scrim — mirroring how the reference comp shows a dialog in-context (dimmed
 app behind it), rather than the component gallery's isolated bare-scrim view.
 
@@ -61,7 +61,7 @@ nav = lambda label, on=False: f'<a class="{ "on" if on else "" }"><svg viewBox="
 html = f"""<!doctype html>
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Whiffle — modal in context</title>
+<title>CawCo — modal in context</title>
 <link rel="stylesheet" href="./fonts/geist.css">
 <link rel="stylesheet" href="./tokens.css">
 <style>{style}
@@ -69,7 +69,7 @@ html = f"""<!doctype html>
 <body>
 <div class="app" aria-hidden="true">
   <aside class="side">
-    <div class="brand"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 4h8v16H4z" fill="currentColor"/></svg></i>Whiffle</div>
+    <div class="brand"><i><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h16v16H4z"/><path d="M4 4h8v16H4z" fill="currentColor"/></svg></i>CawCo</div>
     <div class="lbl">Fleet</div>
     {nav("Board")}
     {nav("Sessions")}

@@ -1,5 +1,5 @@
 {
-  "name": "@whiffle/jsonl-parser",
+  "name": "@cawco/jsonl-parser",
   "version": "0.1.0",
   "description": "Fast, incremental parser and BM25 indexer for agent-session transcripts (Claude Code JSONL, OpenCode sqlite).",
   "type": "module",

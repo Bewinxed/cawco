@@ -172,7 +172,7 @@ console.log(
     () => document.querySelector(".asst .a-t")?.textContent?.trim() || ""
   );
   ok(
-    /Whiffle\s*Assistant/i.test(name),
+    /CawCo\s*Assistant/i.test(name),
     `assistant carries its NAME cue "${name}"`
   );
   const role = await p.evaluate(

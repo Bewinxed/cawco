@@ -110,7 +110,7 @@ export interface UsageRowMachine {
  * One aggregated group in a usage summary. `key` is the group's identity (a
  * session id, a machine id, an hour's epoch ms); `label` is what a reader is
  * shown. Session rows carry their machine and the instance that ran them (null
- * for a session run outside Whiffle); machine rows carry the machine.
+ * for a session run outside CawCo); machine rows carry the machine.
  */
 export interface UsageSummaryRow {
   cacheCreation: number;

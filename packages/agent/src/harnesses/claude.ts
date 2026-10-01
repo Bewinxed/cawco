@@ -1,7 +1,7 @@
 /**
  * The Claude Code adapter.
  *
- * The original harness — everything whiffle did before harnesses existed ran on
+ * The original harness — everything cawco did before harnesses existed ran on
  * it, so this file is the quarry the other adapters are measured against. It
  * spawns `@anthropic-ai/claude-agent-sdk`'s `query()`, feeds it an
  * `AsyncIterable` prompt, parks `canUseTool` under the SDK's `requestId`, and
@@ -42,7 +42,7 @@ import type {
   UserQuestion,
   UserQuestionAnswered,
   UserQuestionResult,
-} from "@whiffle/core";
+} from "@cawco/core";
 import {
   ASK_USER_QUESTION,
   CONTROL_SET_EFFORT,
@@ -56,9 +56,9 @@ import {
   READ_MEMORY_FILE,
   READ_SKILL_FILES,
   settledQuestionResult,
-} from "@whiffle/core";
-import { sessiondEndpoint } from "@whiffle/core/sessiond";
-import { observeRateLimit } from "@whiffle/core/usage/observed";
+} from "@cawco/core";
+import { sessiondEndpoint } from "@cawco/core/sessiond";
+import { observeRateLimit } from "@cawco/core/usage/observed";
 import { probeAuth, unlockKeychain } from "../auth";
 import { claudeBoundaryOptions } from "../boundary";
 import { delegationMcp, MCP_SERVER_NAME } from "../delegation";
@@ -618,12 +618,12 @@ class ClaudeSession implements HarnessSession {
     const turn = new Turn();
     this.#turn = turn;
 
-    // Claude in Chrome is on by default for every whiffle session.
+    // Claude in Chrome is on by default for every cawco session.
     //
     // The CLI resolves it in `shouldEnableClaudeInChrome`, in this order:
     // OAuth scope -> `--chrome`/`--no-chrome` -> `CLAUDE_CODE_ENABLE_CFC` ->
     // `if (!isInteractive()) return false` -> `~/.claude.json`'s
-    // `claudeInChromeDefaultEnabled`. Every whiffle session is non-interactive
+    // `claudeInChromeDefaultEnabled`. Every cawco session is non-interactive
     // stream-json, so it always trips the interactive gate and never reads the
     // config key — setting `claudeInChromeDefaultEnabled: true` cannot work
     // here at any value. `--chrome` short-circuits above that gate.
@@ -687,11 +687,11 @@ class ClaudeSession implements HarnessSession {
                 | { env?: Record<string, string | undefined> }
                 | undefined
             )?.env,
-            WHIFFLE_MODEL: model,
+            CAWCO_MODEL: model,
           },
         }),
         // Left out entirely when nobody chose: the SDK's own default is the
-        // model's, and writing a level here would put whiffle's guess in its
+        // model's, and writing a level here would put cawco's guess in its
         // place on every model whose scale we cannot see.
         ...(effort && { effort }),
         ...(permissionMode === "bypassPermissions" && {
@@ -713,7 +713,7 @@ class ClaudeSession implements HarnessSession {
         // THE SEAM (design §4.1). The SDK builds the CLI's command line and
         // hands it here instead of spawning it; we forward it to sessiond and
         // hand back a `SpawnedProcess` over the socket. Nothing downstream —
-        // `canUseTool` parking, `InputStream`, the queue frames, the whiffle
+        // `canUseTool` parking, `InputStream`, the queue frames, the cawco
         // MCP server on the control channel — can tell the difference, which
         // is exactly the contract this option exists to provide. What changes
         // is custody: the child is sessiond's, and it outlives this agent.
@@ -1588,11 +1588,10 @@ export class ClaudeHarness implements Harness {
   #sessiond: Promise<SessiondClient> | undefined;
 
   async sessiond(
-    // `WHIFFLE_SESSIOND_ENDPOINT` is sessiond's own override
+    // `CAWCO_SESSIOND_ENDPOINT` is sessiond's own override
     // (`sessiond/src/main.ts`), honoured on this side too so a dev run — or a
     // test — can point both halves at a scratch socket instead of the real one.
-    endpoint: string = process.env.WHIFFLE_SESSIOND_ENDPOINT ??
-      sessiondEndpoint()
+    endpoint: string = process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint()
   ): Promise<SessiondClient> {
     const existing = await this.#sessiond?.catch(() => undefined);
     if (existing && !existing.closed) {
@@ -1754,7 +1753,7 @@ export class ClaudeHarness implements Harness {
       ctx.frame({
         type: "system",
         subtype: "sessiond_stream_gap",
-        text: `whiffle: sessiond's replay window overflowed; this transcript resumes at line ${start + 1}`,
+        text: `cawco: sessiond's replay window overflowed; this transcript resumes at line ${start + 1}`,
       } as unknown as NeutralMessage);
     }
     const session = new ClaudeSession(
@@ -1906,7 +1905,7 @@ export class ClaudeHarness implements Harness {
     }
   }
 
-  syncFleet(config: import("@whiffle/core").FleetConfig) {
+  syncFleet(config: import("@cawco/core").FleetConfig) {
     return syncFleetConfig(config);
   }
 

@@ -1,17 +1,17 @@
 <script lang="ts">
-  import type { DelegateType, Workflow } from "@whiffle/core";
+  import type { DelegateType, Workflow } from "@cawco/core";
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
+  import { cawco } from "$lib/cawco/client.svelte";
+  import { loadDelegateTypes, message } from "$lib/cawco/delegate-types";
+  import { dur, ease, motionOk } from "$lib/cawco/motion/curves.svelte";
+  import { launchWorkflow } from "$lib/cawco/workflows";
   import DirectoryPicker from "$lib/components/features/DirectoryPicker.svelte";
   import PendingContent, {
     whileIdle,
   } from "$lib/components/ui/button/pending-content.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
   import * as Dialog from "$lib/components/ui/dialog";
-  import { whiffle } from "$lib/whiffle/client.svelte";
-  import { loadDelegateTypes, message } from "$lib/whiffle/delegate-types";
-  import { dur, ease, motionOk } from "$lib/whiffle/motion/curves.svelte";
-  import { launchWorkflow } from "$lib/whiffle/workflows";
 
   let {
     workflow,
@@ -81,12 +81,12 @@
     start?.kind === "start" ? start.inputs : workflow.inputs
   );
   const online = $derived(
-    whiffle.onlineMachines.some((machine) => machine.machineId === machineId)
+    cawco.onlineMachines.some((machine) => machine.machineId === machineId)
   );
   onMount(() => {
     const defaults = workflow.graph?.settings;
     const project = defaults?.defaultProject
-      ? whiffle.project(defaults.defaultProject)
+      ? cawco.project(defaults.defaultProject)
       : null;
     machineId = defaults?.defaultMachine ?? project?.machineId ?? "";
     workspace = project?.cwd ?? "";
@@ -179,11 +179,11 @@
           <h3>Workspace</h3>
           <label
             >Project<select
-              onchange={(event) => { const project = whiffle.project(event.currentTarget.value); if (project) { ({ machineId, cwd: workspace } = project); } }}
+              onchange={(event) => { const project = cawco.project(event.currentTarget.value); if (project) { ({ machineId, cwd: workspace } = project); } }}
               value=""
             >
               <option value="">Choose a project or enter a directory</option>
-              {#each whiffle.projects as project (project.id)}
+              {#each cawco.projects as project (project.id)}
                 <option value={project.id}>{project.name}</option>
               {/each}
             </select></label
@@ -191,7 +191,7 @@
           <label
             >Machine<select required bind:value={machineId}>
               <option disabled value="">Choose a machine</option>
-              {#each whiffle.machines as machine (machine.machineId)}
+              {#each cawco.machines as machine (machine.machineId)}
                 <option
                   disabled={machine.status !== 'online'}
                   value={machine.machineId}
@@ -240,9 +240,9 @@
             aria-busy={busy || undefined}
             aria-disabled={busy || undefined}
             class="wf-btn wf-primary"
-            disabled={!(online && workspace && whiffle.hub === 'connected')}
+            disabled={!(online && workspace && cawco.hub === 'connected')}
             onclick={whileIdle(() => busy, undefined)}
-            title={whiffle.hub === 'connected'
+            title={cawco.hub === 'connected'
               ? undefined
               : "Can't start a run while the hub is unreachable"}
             type="submit"

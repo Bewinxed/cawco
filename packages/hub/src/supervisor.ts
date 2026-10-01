@@ -6,14 +6,14 @@ import type {
   RuleFacts,
   SendPayload,
   SupervisorEvent,
-} from "@whiffle/core";
+} from "@cawco/core";
 import {
   RULE_FIRE_CEILING,
   RULE_SCAN_LIMIT,
   ruleInScope,
   ruleMarker,
   ruleMatches,
-} from "@whiffle/core";
+} from "@cawco/core";
 import type { DbShape } from "./db";
 import { type RuleVerdict, verdictFor, verdictStream } from "./llm";
 import type { MeaningJudge } from "./meaning";

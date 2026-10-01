@@ -10,13 +10,13 @@
     FileDiff,
     parseDiffFromFile,
   } from "@pierre/diffs";
+  import { crossIn, crossOut } from "$lib/cawco/motion/curves.svelte";
   import { CopyButton } from "$lib/components/ui/copy-button";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as Dialog from "$lib/components/ui/dialog";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as ToggleGroup from "$lib/components/ui/toggle-group";
   import { IconAlignLeft, IconColumns } from "$lib/icons";
-  import { crossIn, crossOut } from "$lib/whiffle/motion/curves.svelte";
   import { fileName, languageOf } from "./diff-language";
 
   interface Props {

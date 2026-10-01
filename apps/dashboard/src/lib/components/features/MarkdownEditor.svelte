@@ -12,9 +12,9 @@
    * inside `onMount`: this editor never runs on the server.
    */
   import { onMount } from "svelte";
+  import { crossIn } from "$lib/cawco/motion/curves.svelte";
+  import { morph } from "$lib/cawco/motion/morph.svelte";
   import { Button } from "$lib/components/ui/button";
-  import { crossIn } from "$lib/whiffle/motion/curves.svelte";
-  import { morph } from "$lib/whiffle/motion/morph.svelte";
   // Structure only, and only for the features Crepe runs by default (top-bar,
   // ai and the ai diff stay off, so their sheets are not shipped). Crepe's own
   // theme files are nothing but a palette, and the palette this app already

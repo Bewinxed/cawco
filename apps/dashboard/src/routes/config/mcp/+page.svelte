@@ -1,6 +1,24 @@
 <script lang="ts">
-  import type { FleetMcpServer } from "@whiffle/core";
+  import type { FleetMcpServer } from "@cawco/core";
   import { toast } from "svelte-sonner";
+  import { cawco } from "$lib/cawco/client.svelte";
+  import RolloutChip from "$lib/cawco/config/RolloutChip.svelte";
+  import RowFaults from "$lib/cawco/config/RowFaults.svelte";
+  import RowList from "$lib/cawco/config/RowList.svelte";
+  import SectionFrame from "$lib/cawco/config/SectionFrame.svelte";
+  import SectionRow from "$lib/cawco/config/SectionRow.svelte";
+  import { sectionOf } from "$lib/cawco/config/sections";
+  import { configStore, upsert } from "$lib/cawco/config/store.svelte";
+  import { confirm } from "$lib/cawco/confirm.svelte";
+  import {
+    describeMcp,
+    isRemoteMcp,
+    removeMcpServer,
+    saveMcpServer,
+    syncFleet,
+  } from "$lib/cawco/fleet";
+  import MachineInventory from "$lib/cawco/MachineInventory.svelte";
+  import { orderMachines } from "$lib/cawco/rail.svelte";
   import { Button } from "$lib/components/ui/button";
   import { EmptyState } from "$lib/components/ui/empty";
   import {
@@ -10,24 +28,6 @@
     IconToolMcp,
     IconTrash,
   } from "$lib/icons";
-  import { whiffle } from "$lib/whiffle/client.svelte";
-  import RolloutChip from "$lib/whiffle/config/RolloutChip.svelte";
-  import RowFaults from "$lib/whiffle/config/RowFaults.svelte";
-  import RowList from "$lib/whiffle/config/RowList.svelte";
-  import SectionFrame from "$lib/whiffle/config/SectionFrame.svelte";
-  import SectionRow from "$lib/whiffle/config/SectionRow.svelte";
-  import { sectionOf } from "$lib/whiffle/config/sections";
-  import { configStore, upsert } from "$lib/whiffle/config/store.svelte";
-  import { confirm } from "$lib/whiffle/confirm.svelte";
-  import {
-    describeMcp,
-    isRemoteMcp,
-    removeMcpServer,
-    saveMcpServer,
-    syncFleet,
-  } from "$lib/whiffle/fleet";
-  import MachineInventory from "$lib/whiffle/MachineInventory.svelte";
-  import { orderMachines } from "$lib/whiffle/rail.svelte";
 
   /**
    * The MCP servers every machine's Claude Code can reach. New sessions pick
@@ -38,7 +38,7 @@
   const HUE = section.hue;
 
   const servers = $derived(store.fleet.value?.config.mcp ?? []);
-  const machines = $derived(orderMachines(whiffle.machines));
+  const machines = $derived(orderMachines(cawco.machines));
   let busy = $state<Record<string, boolean>>({});
   let syncing = $state(false);
   let syncFailed = $state(false);

@@ -14,9 +14,9 @@
    */
   import type { Snippet } from "svelte";
   import type { HTMLAttributes } from "svelte/elements";
+  import { dur, ease, motionOk } from "$lib/cawco/motion/curves.svelte";
   import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   import { cn } from "$lib/utils";
-  import { dur, ease, motionOk } from "$lib/whiffle/motion/curves.svelte";
   import { provideList, TabsListState, useTabs } from "./context.svelte";
   import { TabRects } from "./rects.svelte";
 

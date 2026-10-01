@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { whiffle } from "$lib/whiffle/client.svelte";
-  import SectionFrame from "$lib/whiffle/config/SectionFrame.svelte";
-  import { sectionOf } from "$lib/whiffle/config/sections";
-  import { configStore } from "$lib/whiffle/config/store.svelte";
-  import { orderMachines } from "$lib/whiffle/rail.svelte";
-  import ToolMatrix from "$lib/whiffle/ToolMatrix.svelte";
+  import { cawco } from "$lib/cawco/client.svelte";
+  import SectionFrame from "$lib/cawco/config/SectionFrame.svelte";
+  import { sectionOf } from "$lib/cawco/config/sections";
+  import { configStore } from "$lib/cawco/config/store.svelte";
+  import { orderMachines } from "$lib/cawco/rail.svelte";
+  import ToolMatrix from "$lib/cawco/ToolMatrix.svelte";
 
   /**
    * The CLIs each machine carries, machine by machine. Require one on every
@@ -13,7 +13,7 @@
    */
   const store = configStore();
   const section = sectionOf("cli-tools");
-  const machines = $derived(orderMachines(whiffle.machines));
+  const machines = $derived(orderMachines(cawco.machines));
 </script>
 
 <SectionFrame

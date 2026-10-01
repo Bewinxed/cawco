@@ -4,7 +4,7 @@
     WorkflowGraph,
     WorkflowRun,
     WorkflowStep,
-  } from "@whiffle/core";
+  } from "@cawco/core";
   import {
     Background,
     BackgroundVariant,
@@ -16,6 +16,8 @@
   } from "@xyflow/svelte";
   import "@xyflow/svelte/dist/style.css";
   import { onMount } from "svelte";
+  import { newId } from "$lib/cawco/id";
+  import { workflowState } from "$lib/cawco/workflow-state.svelte";
   import FlowAutoFit from "$lib/components/features/flow/FlowAutoFit.svelte";
   import FlowZoomTracker from "$lib/components/features/flow/FlowZoomTracker.svelte";
   import { FIT } from "$lib/components/features/flow/fit";
@@ -23,8 +25,6 @@
   import * as ContextMenu from "$lib/components/ui/context-menu";
   import { IconChat } from "$lib/icons";
   import { theme } from "$lib/theme.svelte";
-  import { newId } from "$lib/whiffle/id";
-  import { workflowState } from "$lib/whiffle/workflow-state.svelte";
   import type {
     JournalCheckpoint,
     JournalGraph,

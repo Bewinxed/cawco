@@ -31,7 +31,7 @@
  * wire rather than guessed.
  */
 
-import type { NeutralMessage } from "@whiffle/core";
+import type { NeutralMessage } from "@cawco/core";
 import type { HarnessContext, HarnessSession } from "./src/harness";
 import { claudeHarness } from "./src/harnesses/claude";
 

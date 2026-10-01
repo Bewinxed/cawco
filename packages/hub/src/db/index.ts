@@ -29,8 +29,8 @@ import type {
   UsageSummary,
   UsageSummaryRow,
   UsageTotals,
-} from "@whiffle/core";
-import { REMOVED_MACHINE, RESTART_LOST, resolveRates } from "@whiffle/core";
+} from "@cawco/core";
+import { REMOVED_MACHINE, RESTART_LOST, resolveRates } from "@cawco/core";
 import {
   and,
   asc,
@@ -103,12 +103,12 @@ const SENDS_FOR_BATCH = 500;
  * Defined only in the published package's bundle (scripts/build-release.mjs),
  * where this module is `cli.js` and the migrations sit beside it.
  */
-declare const __WHIFFLE_RELEASE__: boolean | undefined;
+declare const __CAWCO_RELEASE__: boolean | undefined;
 
 /** Shipped with the package so a fresh boot never needs a drizzle-kit step. */
 const MIGRATIONS_DIR = Bun.fileURLToPath(
   new URL(
-    typeof __WHIFFLE_RELEASE__ === "boolean" ? "./drizzle" : "../../drizzle",
+    typeof __CAWCO_RELEASE__ === "boolean" ? "./drizzle" : "../../drizzle",
     import.meta.url
   )
 );
@@ -2062,7 +2062,7 @@ const make = (path: string): DbShape => {
             ];
           }),
         // Null rather than absent: a fleet that keeps no memory is what has a
-        // machine give back the copy whiffle wrote it — the linked documents
+        // machine give back the copy cawco wrote it — the linked documents
         // included, since a set with no main file is not a set.
         memory: (() => {
           const stored = getFleetMemory();
@@ -2962,7 +2962,7 @@ const make = (path: string): DbShape => {
 
       // Rows are shown by name, never by id: a machine by its hostname, a
       // session by the title its instance carries (else what it was first
-      // asked, else its folder), and a session run outside Whiffle by its
+      // asked, else its folder), and a session run outside CawCo by its
       // folder.
       const named = groupBy === "machine" || groupBy === "session";
       const machineOf = usageMachines(named);

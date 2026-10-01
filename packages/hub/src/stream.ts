@@ -41,7 +41,7 @@ import {
   type StreamDelta,
   type StreamReset,
   type StreamSubscribe,
-} from "@whiffle/core";
+} from "@cawco/core";
 import { type HubSocket, toDashboard } from "./registry";
 
 export { RING_SIZE };

@@ -1182,7 +1182,7 @@
   }
 }
 
-/* ---- Project identity colour (see lib/whiffle/identity.ts). Elements set
+/* ---- Project identity colour (see lib/cawco/identity.ts). Elements set
    --identity-h inline; this utility fixes lightness and chroma per theme.
    Identity is ink — never a status dot. */
 @utility identity-ink {

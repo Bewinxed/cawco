@@ -1,14 +1,14 @@
 #!/usr/bin/env bun
 import { platform } from "node:os";
-import { CONFIG_PATH, readConfig, toHttpBase } from "@whiffle/agent";
-import type { AgentRow, AuthState } from "@whiffle/core";
+import { CONFIG_PATH, readConfig, toHttpBase } from "@cawco/agent";
+import type { AgentRow, AuthState } from "@cawco/core";
 import {
+  CAWCO_ENV,
+  CAWCO_HUB_PORT,
+  CAWCO_MDNS_TYPE,
   INSTALL_STEP_PREFIX,
   readEnv,
-  WHIFFLE_ENV,
-  WHIFFLE_HUB_PORT,
-  WHIFFLE_MDNS_TYPE,
-} from "@whiffle/core";
+} from "@cawco/core";
 import { discoverHub, type Hub } from "./discover";
 import { clearToken, LoginError, login, saveToken } from "./login";
 import {
@@ -31,24 +31,24 @@ import {
  * binary cannot claim a version the manifest does not. `0.0.0-dev` is what a
  * checkout reports, which is true: a checkout is not a release.
  */
-declare const __WHIFFLE_VERSION__: string | undefined;
+declare const __CAWCO_VERSION__: string | undefined;
 const CLI_VERSION =
-  typeof __WHIFFLE_VERSION__ === "string" ? __WHIFFLE_VERSION__ : "0.0.0-dev";
+  typeof __CAWCO_VERSION__ === "string" ? __CAWCO_VERSION__ : "0.0.0-dev";
 
-const HELP = `whiffle ${CLI_VERSION} — join this machine to a whiffle fleet
+const HELP = `cawco ${CLI_VERSION} — join this machine to a cawco fleet
 
 Usage
-  whiffle up [--hub <url>] [--verbose]      run the agent daemon on this machine
-  whiffle hub [--verbose]                   run the hub here
-  whiffle sessiond                          run this machine's session keeper
-  whiffle status [--hub <url>] [--verbose]  print the hub it found, and the fleet
-  whiffle service <${SERVICE_ACTIONS.join("|")}> [service...]
-                                            run whiffle as per-user services
-  whiffle update [--check] [--to <version>] install the newest release and restart
-  whiffle deploy init [--origin <url>]      developer mode: run from a git clone
-  whiffle join --hub <url>                  add this machine to that hub's fleet
-  whiffle login [--token <token>]           give this machine a Claude Code token
-  whiffle logout                            forget it
+  cawco up [--hub <url>] [--verbose]      run the agent daemon on this machine
+  cawco hub [--verbose]                   run the hub here
+  cawco sessiond                          run this machine's session keeper
+  cawco status [--hub <url>] [--verbose]  print the hub it found, and the fleet
+  cawco service <${SERVICE_ACTIONS.join("|")}> [service...]
+                                            run cawco as per-user services
+  cawco update [--check] [--to <version>] install the newest release and restart
+  cawco deploy init [--origin <url>]      developer mode: run from a git clone
+  cawco join --hub <url>                  add this machine to that hub's fleet
+  cawco login [--token <token>]           give this machine a Claude Code token
+  cawco logout                            forget it
 
 Services
   ${SERVICE_IDS.join(", ")} — each its own per-user service, started by systemd or
@@ -70,7 +70,7 @@ Services
   reached to answer the question at all.
 
 Deploying
-  \`whiffle deploy init\` clones ${DEPLOY_BRANCH} into ${deployRoot()} — a checkout
+  \`cawco deploy init\` clones ${DEPLOY_BRANCH} into ${deployRoot()} — a checkout
   that is nobody's working copy — installs it, builds the dashboard, writes a
   ${DEPLOY_MARKER} marker and installs the services pointing at that clone
   instead of at your editor's checkout. From then on the daemon fetches
@@ -84,7 +84,7 @@ Deploying
   exactly as it is — resetting it would destroy work nobody else has a copy of.
 
 Joining
-  \`whiffle join --hub <url>\` is what the hub's install script runs, from the
+  \`cawco join --hub <url>\` is what the hub's install script runs, from the
   clone it made at ${deployRoot()}: it saves the hub, makes that clone this
   machine's deployment clone, installs sessiond and the agent (no hub, no
   dashboard), turns on lingering on Linux so they outlive the SSH session, and
@@ -113,36 +113,36 @@ Options
 
 Signing in
   The daemon runs Claude Code as you, so it needs the credentials you logged in
-  with. Run it as a service — \`whiffle service install\` — and on macOS it
+  with. Run it as a service — \`cawco service install\` — and on macOS it
   inherits your desktop session and reads them from the login keychain, which is
   the whole fix. A daemon started over SSH cannot: the keychain refuses a process
   with no GUI session, and every turn comes back "Not logged in".
 
-  Where that is not possible — a headless box — \`whiffle login\` mints a token
+  Where that is not possible — a headless box — \`cawco login\` mints a token
   instead, kept in ${CONFIG_PATH} at mode 0600 and exported to the daemon as
   CLAUDE_CODE_OAUTH_TOKEN, which skips the keychain entirely.
 
 Finding the hub, in order — the first that answers wins
-  1. --hub, then ${WHIFFLE_ENV.hubUrl}
+  1. --hub, then ${CAWCO_ENV.hubUrl}
   2. the last hub that answered, remembered in ${CONFIG_PATH}
-  3. mDNS on the local link (_${WHIFFLE_MDNS_TYPE}._tcp)
-  4. online Tailscale peers, on ${WHIFFLE_ENV.hubPort} (default ${WHIFFLE_HUB_PORT})
-  5. http://localhost:${WHIFFLE_HUB_PORT}
+  3. mDNS on the local link (_${CAWCO_MDNS_TYPE}._tcp)
+  4. online Tailscale peers, on ${CAWCO_ENV.hubPort} (default ${CAWCO_HUB_PORT})
+  5. http://localhost:${CAWCO_HUB_PORT}
 
   Step 3 only ever sees the local link. mDNS is multicast, and multicast does
   not travel over Tailscale — a hub on the far side of a tailnet is found by
   step 4, never by step 3.
 
 Environment
-  ${WHIFFLE_ENV.hubUrl}    hub to use, same as --hub
-  ${WHIFFLE_ENV.hubPort}   port the probes try (default ${WHIFFLE_HUB_PORT})
-  ${WHIFFLE_ENV.noMdns}=1  stop \`whiffle hub\` advertising itself
+  ${CAWCO_ENV.hubUrl}    hub to use, same as --hub
+  ${CAWCO_ENV.hubPort}   port the probes try (default ${CAWCO_HUB_PORT})
+  ${CAWCO_ENV.noMdns}=1  stop \`cawco hub\` advertising itself
 `;
 
-const NO_HUB = `whiffle: no hub found.
+const NO_HUB = `cawco: no hub found.
 
-Start one with \`whiffle hub\`, or point this machine at an existing one with
-\`whiffle up --hub http://host:${WHIFFLE_HUB_PORT}\`. Run again with --verbose to
+Start one with \`cawco hub\`, or point this machine at an existing one with
+\`cawco up --hub http://host:${CAWCO_HUB_PORT}\`. Run again with --verbose to
 see what each step tried.`;
 
 interface Args {
@@ -332,7 +332,7 @@ const status = async (args: Args): Promise<number> => {
     )
     .catch(() => undefined);
   if (!agents) {
-    console.error(`\nwhiffle: ${hub.httpUrl} did not answer /api/agents`);
+    console.error(`\ncawco: ${hub.httpUrl} did not answer /api/agents`);
     return 1;
   }
   printFleet(agents);
@@ -363,11 +363,11 @@ const applyToken = async (): Promise<boolean> => {
  */
 const authNote = (state: Exclude<AuthState, "authenticated">): string =>
   state === "unreadable-credentials"
-    ? `whiffle: this machine has Claude Code credentials, but this process cannot read them.
+    ? `cawco: this machine has Claude Code credentials, but this process cannot read them.
 They live in your login keychain, and the keychain only opens for a process
 inside your desktop session — a daemon started over SSH is not one, so sessions
 will start and then answer "Not logged in". Logging in again will not change it.`
-    : `whiffle: nobody is signed in to Claude Code on this machine, so sessions will
+    : `cawco: nobody is signed in to Claude Code on this machine, so sessions will
 start and then answer "Not logged in".`;
 
 /**
@@ -378,7 +378,7 @@ start and then answer "Not logged in".`;
  */
 const preflight = async (): Promise<AuthState> => {
   // Loaded here rather than at the top so `status` never pays for the agent SDK.
-  const { probeAuth } = await import("@whiffle/agent");
+  const { probeAuth } = await import("@cawco/agent");
   const state = await probeAuth();
   if (state === "authenticated") {
     return state;
@@ -388,8 +388,8 @@ const preflight = async (): Promise<AuthState> => {
 
   if (!process.stdin.isTTY) {
     console.error(`
-Fix it from this machine with \`whiffle login\`, or run the daemon as a service
-— \`whiffle service install\` — which on macOS is enough on its own. Starting
+Fix it from this machine with \`cawco login\`, or run the daemon as a service
+— \`cawco service install\` — which on macOS is enough on its own. Starting
 anyway; the fleet will show this machine as needing sign-in.`);
     return state;
   }
@@ -414,20 +414,20 @@ const up = async (args: Args): Promise<number> => {
     console.error(NO_HUB);
     return 1;
   }
-  console.log(`whiffle: hub ${hub.httpUrl} (found by ${hub.source})`);
+  console.log(`cawco: hub ${hub.httpUrl} (found by ${hub.source})`);
 
   await applyToken();
   const auth = await preflight();
   if (process.stdin.isTTY) {
     console.log(
-      "whiffle: `whiffle service install` runs this in the background instead."
+      "cawco: `cawco service install` runs this in the background instead."
     );
   }
 
   // The daemon reads its hub from the environment, so this is the handoff.
-  process.env[WHIFFLE_ENV.hubUrl] = hub.wsUrl;
+  process.env[CAWCO_ENV.hubUrl] = hub.wsUrl;
   const { currentBusy, runDaemon, watchDeployment } = await import(
-    "@whiffle/agent"
+    "@cawco/agent"
   );
   // A hub the operator named is never swapped; only a discovered one may be
   // rediscovered on sustained reconnect failure.
@@ -439,13 +439,13 @@ const up = async (args: Args): Promise<number> => {
   // to run their own fleet and the wrong thing to ship — it makes every commit
   // a release, with no version to name, nothing to roll back to, and no gate
   // between a push and somebody else's machine. Users update from the registry
-  // (`whiffle update`), where a release is a published version that was built
+  // (`cawco update`), where a release is a published version that was built
   // once and can be pinned.
   //
   // Kept, rather than deleted, because running the fleet straight from a
   // checkout is genuinely how this gets developed. It simply has to be chosen:
-  // WHIFFLE_DEPLOY_POLL=1, or a clone that says so in its own marker.
-  if (readEnv(WHIFFLE_ENV.deployPoll) === "1") {
+  // CAWCO_DEPLOY_POLL=1, or a clone that says so in its own marker.
+  if (readEnv(CAWCO_ENV.deployPoll) === "1") {
     // `busy` is this same process's own supervisor, read in-process — see
     // `currentBusy`. Without it, a pull that lands mid-turn would restart
     // the agent onto it blind; with it, the restart waits for `currentBusy()`
@@ -458,13 +458,13 @@ const up = async (args: Args): Promise<number> => {
 const runService = async (args: Args): Promise<number> => {
   if (!isServiceAction(args.action)) {
     throw new UsageError(
-      `whiffle service needs one of: ${SERVICE_ACTIONS.join(", ")}`
+      `cawco service needs one of: ${SERVICE_ACTIONS.join(", ")}`
     );
   }
   const named = args.rest.map((id) => {
     if (!isServiceId(id)) {
       throw new UsageError(
-        `whiffle service does not know ${id} — one of: ${SERVICE_IDS.join(", ")}`
+        `cawco service does not know ${id} — one of: ${SERVICE_IDS.join(", ")}`
       );
     }
     return id;
@@ -484,7 +484,7 @@ const runService = async (args: Args): Promise<number> => {
 };
 
 /**
- * `whiffle deploy init` (PLAN.md C8). One verb, and deliberately only one: the
+ * `cawco deploy init` (PLAN.md C8). One verb, and deliberately only one: the
  * clone is created here, and every deploy after it is a push to the deploy
  * branch that the daemon's poller picks up.
  */
@@ -496,31 +496,31 @@ const runService = async (args: Args): Promise<number> => {
  * installed and the services come back on it.
  */
 const runUpdate = async (args: Args): Promise<number> => {
-  const { checkVersion, registryUpdate } = await import("@whiffle/agent");
+  const { checkVersion, registryUpdate } = await import("@cawco/agent");
   const state = await checkVersion(CLI_VERSION);
 
   if (state.latest === null) {
     console.error(
-      `whiffle: could not reach the registry — ${state.reason ?? "no reason given"}`
+      `cawco: could not reach the registry — ${state.reason ?? "no reason given"}`
     );
-    console.error(`whiffle: this machine stays on ${state.installed}.`);
+    console.error(`cawco: this machine stays on ${state.installed}.`);
     return 1;
   }
 
   const wanted = args.to;
   if (!(wanted || state.behind)) {
-    console.log(`whiffle ${state.installed} is the newest release.`);
+    console.log(`cawco ${state.installed} is the newest release.`);
     return 0;
   }
   if (args.check) {
     console.log(
-      `whiffle ${state.installed} installed; ${state.latest} available.`
+      `cawco ${state.installed} installed; ${state.latest} available.`
     );
-    console.log("Run `whiffle update` to install it.");
+    console.log("Run `cawco update` to install it.");
     return 0;
   }
 
-  console.log(`whiffle: ${state.installed} → ${wanted ?? state.latest}`);
+  console.log(`cawco: ${state.installed} → ${wanted ?? state.latest}`);
   const report = await registryUpdate({
     installed: state.installed,
     ...(wanted ? { to: wanted } : {}),
@@ -538,7 +538,7 @@ const runUpdate = async (args: Args): Promise<number> => {
 
 const runDeploy = async (args: Args): Promise<number> => {
   if (args.action !== "init") {
-    throw new UsageError("whiffle deploy takes one verb: init");
+    throw new UsageError("cawco deploy takes one verb: init");
   }
   const result = await deployInit({
     ...(args.origin === undefined ? {} : { origin: args.origin }),
@@ -594,22 +594,22 @@ const awaitRegistration = async (
   }
   const logs =
     platform() === "darwin"
-      ? "tail -n 50 ~/Library/Logs/whiffle-agent.log"
-      : "journalctl --user -u whiffle-agent -n 50";
+      ? "tail -n 50 ~/Library/Logs/cawco-agent.log"
+      : "journalctl --user -u cawco-agent -n 50";
   throw new ServiceError(
     `the agent is installed, but ${httpUrl} has not listed ${machineId} online after ${JOIN_REGISTER_MS / 1000}s. Read why with: ${logs}`
   );
 };
 
 /**
- * `whiffle join --hub <url>`: this machine, into that hub's fleet, in one
+ * `cawco join --hub <url>`: this machine, into that hub's fleet, in one
  * unattended run. It is `deploy init` for a worker — the same code path, with
  * sessiond and the agent only and lingering required — preceded by saving the
  * hub and followed by waiting for the hub to see the machine.
  */
 const runJoin = async (args: Args): Promise<number> => {
   if (!args.hub) {
-    throw new UsageError("whiffle join needs --hub <url>, the hub to join");
+    throw new UsageError("cawco join needs --hub <url>, the hub to join");
   }
   if (!toHttpBase(args.hub)) {
     throw new UsageError(`--hub ${args.hub} is not a URL`);
@@ -624,11 +624,11 @@ const runJoin = async (args: Args): Promise<number> => {
 
   say(`setting up ${deployRoot()} as this machine's deployment clone`);
   await deployInit({
-    command: "whiffle join",
+    command: "cawco join",
     force: args.force,
     // The clone moved under this process: the join it pulled finishes the run.
     onPulled: async () => {
-      say("running the whiffle join it just pulled");
+      say("running the cawco join it just pulled");
       const next = Bun.spawn(
         [process.execPath, Bun.main, ...Bun.argv.slice(2)],
         {
@@ -645,7 +645,7 @@ const runJoin = async (args: Args): Promise<number> => {
       console.log(line.endsWith("…") ? `${INSTALL_STEP_PREFIX}${line}` : line),
   });
 
-  const { machineId } = await import("@whiffle/agent");
+  const { machineId } = await import("@cawco/agent");
   const id = await machineId();
   say(`waiting for ${hub.httpUrl} to list ${id} online`);
   await awaitRegistration(hub.httpUrl, id);
@@ -655,7 +655,7 @@ const runJoin = async (args: Args): Promise<number> => {
 
 /** Importing the hub boots it: its entry point listens, and then stays up. */
 const hub = async (): Promise<number> => {
-  const { startHub } = await import("@whiffle/hub");
+  const { startHub } = await import("@cawco/hub");
   await startHub();
   return 0;
 };
@@ -665,7 +665,7 @@ const hub = async (): Promise<number> => {
  * source tree — can run it from a unit the way it runs the hub.
  */
 const sessiond = async (): Promise<number> => {
-  await import("@whiffle/sessiond/main");
+  await import("@cawco/sessiond/main");
   return 0;
 };
 
@@ -704,14 +704,14 @@ const run = async (argv: string[]): Promise<number> => {
         await login();
       }
       console.log(
-        `whiffle: token saved to ${CONFIG_PATH}. Restart the daemon to use it.`
+        `cawco: token saved to ${CONFIG_PATH}. Restart the daemon to use it.`
       );
       return 0;
     case "logout":
       console.log(
         (await clearToken())
-          ? `whiffle: token cleared from ${CONFIG_PATH}.`
-          : "whiffle: no token was stored."
+          ? `cawco: token cleared from ${CONFIG_PATH}.`
+          : "cawco: no token was stored."
       );
       return 0;
     default:
@@ -721,11 +721,11 @@ const run = async (argv: string[]): Promise<number> => {
 
 const code = await run(Bun.argv.slice(2)).catch((error: unknown) => {
   if (error instanceof UsageError) {
-    console.error(`whiffle: ${error.message}\n\nRun \`whiffle --help\`.`);
+    console.error(`cawco: ${error.message}\n\nRun \`cawco --help\`.`);
     return 2;
   }
   if (error instanceof LoginError || error instanceof ServiceError) {
-    console.error(`whiffle: ${error.message}`);
+    console.error(`cawco: ${error.message}`);
     return 1;
   }
   throw error;

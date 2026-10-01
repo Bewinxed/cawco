@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import type { CommandResult } from "@whiffle/core";
+import type { CommandResult } from "@cawco/core";
 
 /** The most a command may write, stdout and stderr together, in bytes. */
 const OUTPUT_LIMIT = 8 * 1024 * 1024;

@@ -1,4 +1,4 @@
-import type { Envelope } from "@whiffle/core";
+import type { Envelope } from "@cawco/core";
 import { Context, Effect, Layer } from "effect";
 
 /**

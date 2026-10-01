@@ -2,9 +2,9 @@
 
 The FlowAI comps are a source to DISTILL REUSABLE COMPONENTS from — NOT features to
 reimplement. Ignore FlowAI's product surfaces (API-keys manager, team roster, seat billing,
-transfer-ownership flow). Take only the component primitives below, re-skinned to Whiffle's
+transfer-ownership flow). Take only the component primitives below, re-skinned to CawCo's
 locked DESIGN.md tokens (Flexoki v2 accents, Geist, graphite neutral base, Solar duotone).
-Where and whether each component gets used in Whiffle is decided by JOURNEY.md, never by FlowAI.
+Where and whether each component gets used in CawCo is decided by JOURNEY.md, never by FlowAI.
 
 ## Primitives to add to the design system
 

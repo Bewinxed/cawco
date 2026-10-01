@@ -1,5 +1,5 @@
 {
-  "name": "whiffle",
+  "name": "cawco",
   "private": true,
   "type": "module",
   "workspaces": [
@@ -7,22 +7,22 @@
     "packages/*"
   ],
   "scripts": {
-    "agent": "bun run --filter '@whiffle/agent' start",
+    "agent": "bun run --filter '@cawco/agent' start",
     "build": "bun run --filter '*' build",
-    "db:push": "bun run --filter '@whiffle/hub' db:push",
+    "cawco": "bun packages/cli/src/cli.ts",
+    "db:push": "bun run --filter '@cawco/hub' db:push",
     "dev": "bun run dev:dashboard",
-    "dev:agent": "bun run --filter '@whiffle/agent' dev",
+    "dev:agent": "bun run --filter '@cawco/agent' dev",
     "dev:all": "bun run --filter '*' dev",
-    "dev:dashboard": "bun run --filter '@whiffle/dashboard' dev",
-    "dev:hub": "bun run --filter '@whiffle/hub' dev",
-    "hub": "bun run --filter '@whiffle/hub' dev",
+    "dev:dashboard": "bun run --filter '@cawco/dashboard' dev",
+    "dev:hub": "bun run --filter '@cawco/hub' dev",
+    "hub": "bun run --filter '@cawco/hub' dev",
     "lint": "ultracite check",
     "lint:changed": "git diff --name-only --diff-filter=ACMR HEAD | xargs -r bunx biome check",
     "lint:fix": "ultracite fix",
     "release:build": "bun scripts/build-release.mjs",
     "release:pack": "bun scripts/build-release.mjs && cd release && npm pack",
-    "typecheck": "bun run --filter '*' typecheck",
-    "whiffle": "bun packages/cli/src/cli.ts"
+    "typecheck": "bun run --filter '*' typecheck"
   },
   "overrides": {
     "@types/bun": "latest",

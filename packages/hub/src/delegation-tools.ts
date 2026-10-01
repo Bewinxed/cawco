@@ -1,5 +1,5 @@
+import { IMAGE_GENERATION_DESCRIPTION } from "@cawco/core";
 import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
-import { IMAGE_GENERATION_DESCRIPTION } from "@whiffle/core";
 import { z } from "zod";
 import { zodToJsonSchema } from "zod-to-json-schema";
 import {
@@ -76,9 +76,9 @@ export type { HandoffDeps } from "./delegation-actions";
 
 /**
  * The name the SDK injects this server under, and so the prefix of every tool
- * it exposes: `mcp__whiffle__handoff`, `…__start_session`, `…__delegate`.
+ * it exposes: `mcp__cawco__handoff`, `…__start_session`, `…__delegate`.
  */
-export const MCP_SERVER_NAME = "whiffle";
+export const MCP_SERVER_NAME = "cawco";
 
 /**
  * Called when a tool handler returns structured data the Claude SDK would
@@ -845,22 +845,22 @@ export function handoffTools(deps: HandoffDeps) {
 
 export function handoffInstructions(deps: HandoffDeps): string {
   const images =
-    "Whiffle can generate images regardless of your model: use generate_image (Claude: mcp__whiffle__generate_image; OpenCode: whiffle_generate_image). It uses the machine's ChatGPT subscription login only. Pass reference_images for edits or visual guidance, then show the returned path with show_image. Discover deferred tools before claiming image generation is unavailable. Do not delegate image generation to a different model.";
+    "CawCo can generate images regardless of your model: use generate_image (Claude: mcp__cawco__generate_image; OpenCode: cawco_generate_image). It uses the machine's ChatGPT subscription login only. Pass reference_images for edits or visual guidance, then show the returned path with show_image. Discover deferred tools before claiming image generation is unavailable. Do not delegate image generation to a different model.";
   if (deps.canDelegate === false) {
-    return `This session is a leaf delegate. Do the assigned work yourself and call finish_item when it is done; delegate and start_session are unavailable. Use mcp__whiffle__handoff to reach your parent or a session that already owns related work.\n\n${images}`;
+    return `This session is a leaf delegate. Do the assigned work yourself and call finish_item when it is done; delegate and start_session are unavailable. Use mcp__cawco__handoff to reach your parent or a session that already owns related work.\n\n${images}`;
   }
   let catalog = deps.delegateTypes?.length
     ? delegateTypeLine(deps.delegateTypes).trim()
-    : "Call mcp__whiffle__list_delegate_types to discover the current routes rather than guessing a model.";
+    : "Call mcp__cawco__list_delegate_types to discover the current routes rather than guessing a model.";
   if (deps.delegateTypesError) {
     catalog = `${deps.delegateTypesError}. The catalog is unavailable, not empty. A delegate call naming a known type retries the fetch; if no type is known, report the catalog blocker rather than guessing a model.`;
   }
   return [
     images,
-    "Use Whiffle's delegate tool for bounded fleet work that must report back to its parent. Native harness subagents are a separate mechanism and do not resolve Whiffle presets.",
-    'Call list_delegate_types for current model/effort mappings. Claude names these tools mcp__whiffle__list_delegate_types and mcp__whiffle__delegate; if deferred, use ToolSearch(query="select:mcp__whiffle__delegate"). OpenCode names them whiffle_list_delegate_types and whiffle_delegate. These are tools, not MCP resources. list_sessions lists running sessions, not configured types.',
+    "Use CawCo's delegate tool for bounded fleet work that must report back to its parent. Native harness subagents are a separate mechanism and do not resolve CawCo presets.",
+    'Call list_delegate_types for current model/effort mappings. Claude names these tools mcp__cawco__list_delegate_types and mcp__cawco__delegate; if deferred, use ToolSearch(query="select:mcp__cawco__delegate"). OpenCode names them cawco_list_delegate_types and cawco_delegate. These are tools, not MCP resources. list_sessions lists running sessions, not configured types.',
     "Delegate substantial bounded work — multi-file implementation, wide sweeps, builds with verification, browser audits — with a brief that keeps intent, decisions, and acceptance with the parent and returns evidence and conclusions rather than file dumps. Menial reads and checks (git status, a grep, a file, a port) are the parent's own work, run inline.",
-    "Prefer the configured type and omit model/harness overrides unless the user requested them. Give each delegate a concrete deliverable and bounded file ownership. Keep independent parent work moving; reports arrive automatically. Each delegate runs one work item in a workspace; use mcp__whiffle__handoff to guide it while that item runs, and handoff again to follow up after it reports — that continues its own session on its cached transcript. Use start_session only for a separate persistent session.",
+    "Prefer the configured type and omit model/harness overrides unless the user requested them. Give each delegate a concrete deliverable and bounded file ownership. Keep independent parent work moving; reports arrive automatically. Each delegate runs one work item in a workspace; use mcp__cawco__handoff to guide it while that item runs, and handoff again to follow up after it reports — that continues its own session on its cached transcript. Use start_session only for a separate persistent session.",
     "The catalog below is a session-start snapshot of configured routes, not confirmation of the model that will serve a request. If delegation fails or no suitable route is available, report the blocker; do not silently move bulk exploration onto the parent model.",
     catalog,
   ].join("\n\n");

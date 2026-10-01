@@ -1,12 +1,12 @@
 /**
- * @whiffle/jsonl-parser — fast, incremental parser for agent-session
+ * @cawco/jsonl-parser — fast, incremental parser for agent-session
  * transcripts, with BM25 search layers as subpath exports:
  *
- * - `@whiffle/jsonl-parser`           core (runtime-neutral): types, byte
+ * - `@cawco/jsonl-parser`           core (runtime-neutral): types, byte
  *                                     scanner, lazy parse, text extraction,
  *                                     checkpoints, worker fan-out
- * - `@whiffle/jsonl-parser/fts5`      BM25 index over parsed docs (bun:sqlite)
- * - `@whiffle/jsonl-parser/opencode`  OpenCode sqlite adapter (bun:sqlite)
+ * - `@cawco/jsonl-parser/fts5`      BM25 index over parsed docs (bun:sqlite)
+ * - `@cawco/jsonl-parser/opencode`  OpenCode sqlite adapter (bun:sqlite)
  */
 
 export {

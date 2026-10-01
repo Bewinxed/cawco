@@ -2,13 +2,13 @@
  * Adding a machine to the fleet: what the hub's join routes answer with, and
  * what the dashboard renders from them. The hub never connects out except for
  * an SSH add the operator started; every machine joins by running the hub's
- * install script, which ends in `whiffle join`.
+ * install script, which ends in `cawco join`.
  */
 
-/** Every line of progress the install script and `whiffle join` print starts with this. */
-export const INSTALL_STEP_PREFIX = "whiffle-install: ";
+/** Every line of progress the install script and `cawco join` print starts with this. */
+export const INSTALL_STEP_PREFIX = "cawco-install: ";
 
-/** The line `whiffle join` ends a successful run on, followed by the machine id. */
+/** The line `cawco join` ends a successful run on, followed by the machine id. */
 export const INSTALL_JOINED = `${INSTALL_STEP_PREFIX}joined as `;
 
 /**
@@ -56,7 +56,7 @@ export type SshJoinProblem =
   | { kind: "unreachable"; detail: string }
   /** SSH got in, but the machine could not download the script from the hub address. */
   | { kind: "download" }
-  /** A step of the install script or `whiffle join` failed. */
+  /** A step of the install script or `cawco join` failed. */
   | { kind: "step"; step: string }
   /** Everything ran, but the hub never saw the machine come online. */
   | { kind: "unregistered" };

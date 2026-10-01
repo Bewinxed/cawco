@@ -127,7 +127,7 @@ await page.addInitScript(
           { value: "claude-fable-5-1" },
         ];
     localStorage.setItem(
-      "whiffle-models:by-harness",
+      "cawco-models:by-harness",
       JSON.stringify(
         ["claude", "opencode", "pi"].flatMap((harness) =>
           rows.map((row) => ({
@@ -140,20 +140,18 @@ await page.addInitScript(
         )
       )
     );
-    localStorage.setItem("whiffle-models:recent", "[]");
-    localStorage.removeItem("whiffle-models:use");
+    localStorage.setItem("cawco-models:recent", "[]");
+    localStorage.removeItem("cawco-models:use");
     if (new URL(location.href).searchParams.has("dates")) {
-      const dated = JSON.parse(
-        localStorage.getItem("whiffle-models:by-harness")
-      );
+      const dated = JSON.parse(localStorage.getItem("cawco-models:by-harness"));
       for (const row of dated) {
         if (row.value === "claude-opus-5[1m]") {
           row.released = "2026-09-05T12:00:00Z";
         }
       }
-      localStorage.setItem("whiffle-models:by-harness", JSON.stringify(dated));
+      localStorage.setItem("cawco-models:by-harness", JSON.stringify(dated));
       localStorage.setItem(
-        "whiffle-models:use",
+        "cawco-models:use",
         JSON.stringify({
           claude: {
             lastSpawnAt: "2026-09-07T12:00:00Z",
@@ -163,7 +161,7 @@ await page.addInitScript(
       );
     }
     localStorage.setItem(
-      "whiffle-spawn-prefs",
+      "cawco-spawn-prefs",
       JSON.stringify({
         harness: "claude",
         permissionMode: "default",

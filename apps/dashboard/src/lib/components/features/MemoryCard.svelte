@@ -11,12 +11,12 @@
    */
   import { onMount, type Snippet } from "svelte";
   import { toast } from "svelte-sonner";
+  import { crossIn, crossOut, dur } from "$lib/cawco/motion/curves.svelte";
+  import { morph } from "$lib/cawco/motion/morph.svelte";
   import { Button } from "$lib/components/ui/button";
   import { Card } from "$lib/components/ui/card";
   import { Markdown } from "$lib/components/ui/markdown";
   import { Skeleton } from "$lib/components/ui/skeleton";
-  import { crossIn, crossOut, dur } from "$lib/whiffle/motion/curves.svelte";
-  import { morph } from "$lib/whiffle/motion/morph.svelte";
   import MarkdownEditor from "./MarkdownEditor.svelte";
 
   interface Props {
@@ -134,7 +134,7 @@
    * returns the editor exactly as it was left. Cleared on save and on cancel,
    * because those are the two ways a draft is genuinely finished with.
    */
-  const stash = $derived(`whiffle:draft:${path}`);
+  const stash = $derived(`cawco:draft:${path}`);
   function forget() {
     if (typeof sessionStorage === "undefined") {
       return;

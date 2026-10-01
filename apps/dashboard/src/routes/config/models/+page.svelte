@@ -3,27 +3,27 @@
   import { blur } from "svelte/transition";
   import { replaceState } from "$app/navigation";
   import { page } from "$app/state";
+  import Field from "$lib/cawco/config/Field.svelte";
+  import SectionFrame from "$lib/cawco/config/SectionFrame.svelte";
+  import SwitchField from "$lib/cawco/config/SwitchField.svelte";
+  import { sectionOf } from "$lib/cawco/config/sections";
+  import { dur, easeOut } from "$lib/cawco/motion/curves.svelte";
+  import { unfold } from "$lib/cawco/motion/fold.svelte";
+  import {
+    type OpenRouterState,
+    saveSuggestSetting,
+    suggestions,
+  } from "$lib/cawco/suggest.svelte";
+  import {
+    loadSupervisor,
+    type SupervisorStatus,
+    saveSupervisorConfig,
+  } from "$lib/cawco/supervisor";
   import { Button } from "$lib/components/ui/button";
   import { Input } from "$lib/components/ui/input";
   import { SectionHeader } from "$lib/components/ui/section-header";
   import { IconGlobe, IconRules } from "$lib/icons";
   import { formatDistanceToNow } from "$lib/utils/time";
-  import Field from "$lib/whiffle/config/Field.svelte";
-  import SectionFrame from "$lib/whiffle/config/SectionFrame.svelte";
-  import SwitchField from "$lib/whiffle/config/SwitchField.svelte";
-  import { sectionOf } from "$lib/whiffle/config/sections";
-  import { dur, easeOut } from "$lib/whiffle/motion/curves.svelte";
-  import { unfold } from "$lib/whiffle/motion/fold.svelte";
-  import {
-    type OpenRouterState,
-    saveSuggestSetting,
-    suggestions,
-  } from "$lib/whiffle/suggest.svelte";
-  import {
-    loadSupervisor,
-    type SupervisorStatus,
-    saveSupervisorConfig,
-  } from "$lib/whiffle/supervisor";
 
   /**
    * The models the hub itself talks to. OpenRouter is connected by OAuth

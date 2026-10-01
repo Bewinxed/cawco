@@ -7,12 +7,12 @@
 import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
-import { transcriptIndexPath } from "@whiffle/core/paths";
-import { type SearchHit, TranscriptIndex } from "@whiffle/jsonl-parser/fts5";
+import { transcriptIndexPath } from "@cawco/core/paths";
+import { type SearchHit, TranscriptIndex } from "@cawco/jsonl-parser/fts5";
 import {
   defaultOpenCodePath,
   readOpenCodeDocs,
-} from "@whiffle/jsonl-parser/opencode";
+} from "@cawco/jsonl-parser/opencode";
 import { listClaudeFiles } from "../usage/scan-claude";
 
 const SYNC_INTERVAL_MS = 30_000;

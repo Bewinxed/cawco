@@ -6,7 +6,7 @@
  * result on to a later step as `{{ref:N.path}}`, which the hub fills in only
  * when that step is dispatched.
  */
-import { workflowPath } from "@whiffle/core";
+import { workflowPath } from "@cawco/core";
 
 /** A value at or under this many characters is shown whole in a receipt. */
 export const RECEIPT_WHOLE_LIMIT = 1000;

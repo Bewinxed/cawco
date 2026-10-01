@@ -1,6 +1,6 @@
 import { lstat } from "node:fs/promises";
 import { join } from "node:path";
-import type { FleetSkillPayload } from "@whiffle/core";
+import type { FleetSkillPayload } from "@cawco/core";
 
 /** Check before claiming ownership: a failed collision must never enter the sidecar. */
 export async function workflowSkillCollision(
@@ -20,7 +20,7 @@ export async function workflowSkillCollision(
     throw error;
   }
   const file = Bun.file(join(path, "SKILL.md"));
-  const owner = Bun.file(join(path, ".whiffle-workflow"));
+  const owner = Bun.file(join(path, ".cawco-workflow"));
   if (
     !(await file.exists()) &&
     (await owner.exists()) &&
@@ -30,9 +30,7 @@ export async function workflowSkillCollision(
   }
   if (
     (await file.exists()) &&
-    (await file.text()).includes(
-      `<!-- whiffle-workflow:${skill.workflowId} -->`
-    )
+    (await file.text()).includes(`<!-- cawco-workflow:${skill.workflowId} -->`)
   ) {
     return undefined;
   }
@@ -43,7 +41,7 @@ export async function guardWorkflowSkillRemoval(
   dir: string,
   name: string
 ): Promise<void> {
-  const owner = Bun.file(join(dir, name, ".whiffle-workflow"));
+  const owner = Bun.file(join(dir, name, ".cawco-workflow"));
   if (!(await owner.exists())) {
     return;
   }

@@ -15,16 +15,16 @@
     parseDiffFromFile,
   } from "@pierre/diffs";
   import { fade } from "svelte/transition";
-  import { Button } from "$lib/components/ui/button";
-  import { Skeleton } from "$lib/components/ui/skeleton";
-  import { IconAlert, IconMaximize } from "$lib/icons";
   import {
     crossIn,
     crossOut,
     dur,
     easeOut,
-  } from "$lib/whiffle/motion/curves.svelte";
-  import { morph } from "$lib/whiffle/motion/morph.svelte";
+  } from "$lib/cawco/motion/curves.svelte";
+  import { morph } from "$lib/cawco/motion/morph.svelte";
+  import { Button } from "$lib/components/ui/button";
+  import { Skeleton } from "$lib/components/ui/skeleton";
+  import { IconAlert, IconMaximize } from "$lib/icons";
   import DiffModal from "./DiffModal.svelte";
   import { fileName, languageOf } from "./diff-language";
 

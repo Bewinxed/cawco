@@ -11,7 +11,7 @@
  * Mac's daemon ran for 21 days without ever learning that main had moved,
  * because nothing looked.
  *
- * The guard is the marker. A checkout with no `.whiffle-deploy` in it is not a
+ * The guard is the marker. A checkout with no `.cawco-deploy` in it is not a
  * deployment clone, and this module will not so much as *fetch* in one, let
  * alone pull. That is deliberately the first thing every path here checks: a dev
  * tree must be structurally unable to auto-pull, and "we remembered to check"
@@ -20,25 +20,25 @@
 
 import { homedir } from "node:os";
 import { join } from "node:path";
-import type { DeployInfo, UpdateReport } from "@whiffle/core";
-import { readEnv, WHIFFLE_ENV } from "@whiffle/core";
+import type { DeployInfo, UpdateReport } from "@cawco/core";
+import { CAWCO_ENV, readEnv } from "@cawco/core";
 
 /**
  * The marker file, relative to the clone's root. Its presence — and nothing
  * else — is what licenses an automatic pull.
  */
-export const DEPLOY_MARKER = ".whiffle-deploy";
+export const DEPLOY_MARKER = ".cawco-deploy";
 
 /**
  * Where a machine's deployment clone lives. Our choice: per-user so it needs no
  * sudo, under a dotdir so it is nobody's working copy, and deliberately outside
  * every dev checkout so `git clean -fdx` in one cannot reach it.
  *
- * `WHIFFLE_DEPLOY_ROOT` overrides it — that is how the tests point at a scratch
+ * `CAWCO_DEPLOY_ROOT` overrides it — that is how the tests point at a scratch
  * directory, and how a machine with a different home layout is accommodated.
  */
 export const deployRoot = (): string =>
-  readEnv(WHIFFLE_ENV.deployRoot) ?? join(homedir(), ".whiffle", "app");
+  readEnv(CAWCO_ENV.deployRoot) ?? join(homedir(), ".cawco", "app");
 
 /** The branch a deployment clone follows. Push to it and the fleet deploys. */
 export const DEPLOY_BRANCH = "main";
@@ -51,7 +51,7 @@ export const DEPLOY_BRANCH = "main";
  */
 export const DEPLOY_POLL_MS = 60_000;
 
-/** What `whiffle deploy init` wrote, read back. */
+/** What `cawco deploy init` wrote, read back. */
 export interface DeployMarker {
   /** The branch it tracks — {@link DEPLOY_BRANCH}. */
   readonly branch: string;
@@ -327,7 +327,7 @@ export interface DeployTick {
 
 /**
  * A tick, flattened onto the shape the wire and the board share
- * ({@link DeployInfo} in `@whiffle/core`). Everything the fuller
+ * ({@link DeployInfo} in `@cawco/core`). Everything the fuller
  * {@link DeployState} carries — heads, targets, the two counts — is already in
  * the sentence {@link describeDeploy} writes, so the wire carries one kind and
  * one sentence rather than six shapes the reader would have to re-narrate.
@@ -393,7 +393,7 @@ export interface DeployWatcherOptions {
   ) => Promise<Pick<UpdateReport, "changed">>;
 }
 
-const say = (line: string): void => console.error(`whiffle deploy: ${line}`);
+const say = (line: string): void => console.error(`cawco deploy: ${line}`);
 
 /**
  * The default report: every skew and every deploy is spoken once, and a state

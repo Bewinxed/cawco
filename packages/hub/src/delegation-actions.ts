@@ -20,16 +20,16 @@ import type {
   SendPayload,
   SpawnPayload,
   WorkflowAction,
-} from "@whiffle/core";
+} from "@cawco/core";
 import {
+  CAWCO_ENV,
+  CAWCO_HUB_PORT,
   delegateTypeProblem,
   handoffMarker,
   IMAGE_GENERATION_TIMEOUT_MS,
   machineLabel,
   QUESTION_DISMISSED,
-  WHIFFLE_ENV,
-  WHIFFLE_HUB_PORT,
-} from "@whiffle/core";
+} from "@cawco/core";
 import type { WorkItemCheck, WorkItemSubmission } from "./db/schema";
 
 const WS_SCHEME = /^ws/;
@@ -38,13 +38,13 @@ const WS_PATH_SUFFIX = /\/ws$/;
 /** Where the hub answers REST, derived from the websocket url the daemon uses. */
 export const hubHttpUrl = (): string => {
   const ws =
-    process.env[WHIFFLE_ENV.hubUrl] ??
-    `ws://localhost:${process.env[WHIFFLE_ENV.hubPort] ?? WHIFFLE_HUB_PORT}/ws`;
+    process.env[CAWCO_ENV.hubUrl] ??
+    `ws://localhost:${process.env[CAWCO_ENV.hubPort] ?? CAWCO_HUB_PORT}/ws`;
   return ws.replace(WS_SCHEME, "http").replace(WS_PATH_SUFFIX, "");
 };
 
 /**
- * The fleet's delegate types (`@whiffle/core`'s `DelegateType`), read once
+ * The fleet's delegate types (`@cawco/core`'s `DelegateType`), read once
  * per session. There is no fleet sync path for them yet (unlike MCP servers
  * and skills) — a daemon fetches this directly from the hub it already knows
  * the address of, right before it builds the `delegate` tool's description,
@@ -74,7 +74,7 @@ export async function fetchDelegateTypes(
     return body.types;
   } catch (error) {
     const message = `Could not load delegate types: ${error instanceof Error ? error.message : String(error)}`;
-    console.warn(`[whiffle] ${message}`);
+    console.warn(`[cawco] ${message}`);
     onError?.(message);
     return [];
   }
@@ -1110,7 +1110,7 @@ export const handoffActions = ({
     // `updatedInput` has to carry the whole call back or the harness refuses it
     // for the `questions` it is missing, so the harness that parked the ask
     // folds these into the input it kept (settledQuestionResult in
-    // @whiffle/core, mirroring the dashboard's questionAnswer). A denial says so
+    // @cawco/core, mirroring the dashboard's questionAnswer). A denial says so
     // in words for the same reason: the model is told why, not merely that.
     let result: PermissionResult;
     if (deny) {

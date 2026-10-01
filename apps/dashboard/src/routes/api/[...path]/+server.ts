@@ -1,14 +1,14 @@
-import { readEnv, WHIFFLE_ENV } from "@whiffle/core";
+import { CAWCO_ENV, readEnv } from "@cawco/core";
 import type { RequestHandler } from "./$types";
 
 const WS_SCHEME = /^ws(s?):\/\//;
 const TRAILING_WS_PATH = /\/ws\/?$/;
 const TRAILING_SLASHES = /\/+$/;
-/** The hub's own response headers (`X-Whiffle-Machine`, …), as fetch lowercases them. */
-const WHIFFLE_HEADER = "x-whiffle-";
+/** The hub's own response headers (`X-Cawco-Machine`, …), as fetch lowercases them. */
+const CAWCO_HEADER = "x-cawco-";
 
 /**
- * The hub's HTTP origin, derived from WHIFFLE_HUB_URL. That variable is a
+ * The hub's HTTP origin, derived from CAWCO_HUB_URL. That variable is a
  * WebSocket URL (e.g. `ws://localhost:3456/ws`) — the same one the agent and
  * the browser socket use — so the REST base is it with the scheme mapped to
  * http(s) and the trailing `/ws` path dropped. Without this the api route did
@@ -16,7 +16,7 @@ const WHIFFLE_HEADER = "x-whiffle-";
  * every load returned "Failed to connect to hub server".
  */
 const HUB_URL = (() => {
-  const raw = readEnv(WHIFFLE_ENV.hubUrl) || "http://localhost:3456";
+  const raw = readEnv(CAWCO_ENV.hubUrl) || "http://localhost:3456";
   const http = raw
     .replace(WS_SCHEME, "http$1://")
     .replace(TRAILING_WS_PATH, "");
@@ -62,7 +62,7 @@ async function proxyToHub(request: Request, path: string): Promise<Response> {
         // its own headers, and a reader addressed by id alone has no other.
         ...Object.fromEntries(
           [...response.headers].filter(([name]) =>
-            name.startsWith(WHIFFLE_HEADER)
+            name.startsWith(CAWCO_HEADER)
           )
         ),
       },

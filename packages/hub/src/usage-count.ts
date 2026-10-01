@@ -1,7 +1,7 @@
 import { Database } from "bun:sqlite";
 import { existsSync, statSync } from "node:fs";
-import type { NeutralMessage } from "@whiffle/core";
-import { transcriptIndexPath } from "@whiffle/core/paths";
+import type { NeutralMessage } from "@cawco/core";
+import { transcriptIndexPath } from "@cawco/core/paths";
 import type { DbShape } from "./db";
 
 /**

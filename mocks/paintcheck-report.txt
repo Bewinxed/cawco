@@ -1,6 +1,6 @@
 
   v2-fleet.html @390 light  (27 candidates, 91 skipped)
-      SKIP  B "Whiffle"                        rect -235,18 58x20  — occluded by unknown
+      SKIP  B "CawCo"                        rect -235,18 58x20  — occluded by unknown
       SKIP  sec "Fleet"                        rect -284,71 283x16  — occluded by unknown
       SKIP  nav-i on "Fleet6"                  rect -274,93 263x36  — occluded by unknown
       SKIP  nav-i "Tools"                      rect -274,130 263x36  — occluded by unknown
@@ -120,7 +120,7 @@
       (1 regions span multiple fills — no single background to judge)
 
   v2-fleet.html @390 dark   (27 candidates, 91 skipped)
-      SKIP  B "Whiffle"                        rect -235,18 58x20  — occluded by unknown
+      SKIP  B "CawCo"                        rect -235,18 58x20  — occluded by unknown
       SKIP  sec "Fleet"                        rect -284,71 283x16  — occluded by unknown
       SKIP  nav-i on "Fleet6"                  rect -274,93 263x36  — occluded by unknown
       SKIP  nav-i "Tools"                      rect -274,130 263x36  — occluded by unknown
@@ -240,7 +240,7 @@
       (1 regions span multiple fills — no single background to judge)
 
   v2-fleet.html @1440 light  (123 candidates, 0 skipped)
-    PASS  13.36:1  B "Whiffle"                        text rgb(44,46,49) on fill rgb(252,253,253)
+    PASS  13.36:1  B "CawCo"                        text rgb(44,46,49) on fill rgb(252,253,253)
     PASS  5.90:1  sec "Fleet"                        text rgb(96,99,106) on fill rgb(252,253,253)
     PASS  11.95:1  nav-i on "Fleet6"                  text rgb(44,46,49) on fill rgb(239,240,243)
     PASS  8.73:1  nav-i "Tools"                      text rgb(71,74,79) on fill rgb(252,253,253)
@@ -365,7 +365,7 @@
       (1 regions span multiple fills — no single background to judge)
 
   v2-fleet.html @1440 dark   (123 candidates, 0 skipped)
-    PASS  12.98:1  B "Whiffle"                        text rgb(230,232,236) on fill rgb(33,34,36)
+    PASS  12.98:1  B "CawCo"                        text rgb(230,232,236) on fill rgb(33,34,36)
     PASS  7.93:1  sec "Fleet"                        text rgb(180,183,190) on fill rgb(33,34,36)
     PASS  15.17:1  nav-i on "Fleet6"                  text rgb(230,232,236) on fill rgb(18,19,19)
     PASS  9.23:1  nav-i "Tools"                      text rgb(195,197,204) on fill rgb(33,34,36)
@@ -490,7 +490,7 @@
       (1 regions span multiple fills — no single background to judge)
 
   v3-assistant.html @390 light  (8 candidates, 118 skipped)
-      SKIP  B "Whiffle"                        rect -235,18 58x20  — occluded by unknown
+      SKIP  B "CawCo"                        rect -235,18 58x20  — occluded by unknown
       SKIP  sec "Fleet"                        rect -284,71 283x16  — occluded by unknown
       SKIP  nav-i on "Fleet6"                  rect -274,93 263x36  — occluded by unknown
       SKIP  nav-i "Tools"                      rect -274,130 263x36  — occluded by unknown
@@ -608,8 +608,8 @@
       SKIP  BUTTON "Peek"                      rect 229,3021 42x18  — occluded by unknown
       SKIP  BUTTON "Resume"                    rect 289,3021 60x18  — occluded by unknown
       SKIP  foot "Showing 8 of 2"              rect 27,3056 336x87  — occluded by unknown
-    PASS  13.36:1  a-t "Whiffle Assist"               text rgb(44,46,49) on fill rgb(252,253,253)
-    PASS  13.36:1  B "Whiffle"                        text rgb(44,46,49) on fill rgb(252,253,253)
+    PASS  13.36:1  a-t "CawCo Assist"               text rgb(44,46,49) on fill rgb(252,253,253)
+    PASS  13.36:1  B "CawCo"                        text rgb(44,46,49) on fill rgb(252,253,253)
     PASS  13.36:1  H3 "Hey there!"                    text rgb(44,46,49) on fill rgb(252,253,253)
     PASS  5.90:1  P "Ask me anythin"                 text rgb(96,99,106) on fill rgb(252,253,253)
     PASS  13.36:1  BUTTON "Start a sessio"            text rgb(44,46,49) on fill rgb(252,253,253)
@@ -618,7 +618,7 @@
     PASS  5.90:1  a-in "Ask anything a"              text rgb(96,99,106) on fill rgb(252,253,253)
 
   v3-assistant.html @390 dark   (8 candidates, 118 skipped)
-      SKIP  B "Whiffle"                        rect -235,18 58x20  — occluded by unknown
+      SKIP  B "CawCo"                        rect -235,18 58x20  — occluded by unknown
       SKIP  sec "Fleet"                        rect -284,71 283x16  — occluded by unknown
       SKIP  nav-i on "Fleet6"                  rect -274,93 263x36  — occluded by unknown
       SKIP  nav-i "Tools"                      rect -274,130 263x36  — occluded by unknown
@@ -736,8 +736,8 @@
       SKIP  BUTTON "Peek"                      rect 229,3021 42x18  — occluded by unknown
       SKIP  BUTTON "Resume"                    rect 289,3021 60x18  — occluded by unknown
       SKIP  foot "Showing 8 of 2"              rect 27,3056 336x87  — occluded by unknown
-    PASS  11.70:1  a-t "Whiffle Assist"               text rgb(230,232,236) on fill rgb(41,42,45)
-    PASS  11.70:1  B "Whiffle"                        text rgb(230,232,236) on fill rgb(41,42,45)
+    PASS  11.70:1  a-t "CawCo Assist"               text rgb(230,232,236) on fill rgb(41,42,45)
+    PASS  11.70:1  B "CawCo"                        text rgb(230,232,236) on fill rgb(41,42,45)
     PASS  11.70:1  H3 "Hey there!"                    text rgb(230,232,236) on fill rgb(41,42,45)
     PASS  7.15:1  P "Ask me anythin"                 text rgb(180,183,190) on fill rgb(41,42,45)
     PASS  12.98:1  BUTTON "Start a sessio"            text rgb(230,232,236) on fill rgb(33,34,36)
@@ -796,7 +796,7 @@
       SKIP  BUTTON "Peek"                      rect 1280,667 42x18  — occluded by BUTTON.
       SKIP  BUTTON "Resume"                    rect 1336,667 60x18  — occluded by BUTTON.
       SKIP  foot "Showing 8 of 2"              rect 264,697 1144x55  — occluded by SECTION.asst
-    PASS  12.03:1  B "Whiffle"                        text rgb(44,46,49) on fill rgb(240,241,241)
+    PASS  12.03:1  B "CawCo"                        text rgb(44,46,49) on fill rgb(240,241,241)
     PASS  5.57:1  sec "Fleet"                        text rgb(93,96,102) on fill rgb(240,241,241)
     PASS  10.71:1  nav-i on "Fleet6"                  text rgb(44,46,49) on fill rgb(227,228,231)
     PASS  8.11:1  nav-i "Tools"                      text rgb(69,72,77) on fill rgb(240,241,241)
@@ -869,8 +869,8 @@
     PASS  5.57:1  mut "pi"                           text rgb(93,96,102) on fill rgb(240,241,241)
     PASS  12.03:1  num "12"                           text rgb(44,46,49) on fill rgb(240,241,241)
     PASS  6.30:1  num ok "30k"                       text rgb(30,101,38) on fill rgb(240,241,241)
-    PASS  13.36:1  a-t "Whiffle Assist"               text rgb(44,46,49) on fill rgb(252,253,253)
-    PASS  13.36:1  B "Whiffle"                        text rgb(44,46,49) on fill rgb(252,253,253)
+    PASS  13.36:1  a-t "CawCo Assist"               text rgb(44,46,49) on fill rgb(252,253,253)
+    PASS  13.36:1  B "CawCo"                        text rgb(44,46,49) on fill rgb(252,253,253)
     PASS  13.36:1  H3 "Hey there!"                    text rgb(44,46,49) on fill rgb(252,253,253)
     PASS  5.90:1  P "Ask me anythin"                 text rgb(96,99,106) on fill rgb(252,253,253)
     PASS  13.36:1  BUTTON "Start a sessio"            text rgb(44,46,49) on fill rgb(252,253,253)
@@ -929,7 +929,7 @@
       SKIP  BUTTON "Peek"                      rect 1280,667 42x18  — occluded by BUTTON.
       SKIP  BUTTON "Resume"                    rect 1336,667 60x18  — occluded by BUTTON.
       SKIP  foot "Showing 8 of 2"              rect 264,697 1144x55  — occluded by SECTION.asst
-    PASS  7.06:1  B "Whiffle"                        text rgb(165,168,171) on fill rgb(28,29,31)
+    PASS  7.06:1  B "CawCo"                        text rgb(165,168,171) on fill rgb(28,29,31)
     PASS  4.56:1  sec "Fleet"                        text rgb(130,133,138) on fill rgb(28,29,31)
     PASS  7.80:1  nav-i on "Fleet6"                  text rgb(165,168,171) on fill rgb(17,19,19)
     PASS  5.21:1  nav-i "Tools"                      text rgb(141,143,148) on fill rgb(28,29,31)
@@ -1002,8 +1002,8 @@
     PASS  4.56:1  mut "pi"                           text rgb(130,133,138) on fill rgb(28,29,31)
     PASS  7.06:1  num "12"                           text rgb(165,168,171) on fill rgb(28,29,31)
     PASS  4.81:1  num ok "30k"                       text rgb(92,150,95) on fill rgb(28,29,31)
-    PASS  11.70:1  a-t "Whiffle Assist"               text rgb(230,232,236) on fill rgb(41,42,45)
-    PASS  11.70:1  B "Whiffle"                        text rgb(230,232,236) on fill rgb(41,42,45)
+    PASS  11.70:1  a-t "CawCo Assist"               text rgb(230,232,236) on fill rgb(41,42,45)
+    PASS  11.70:1  B "CawCo"                        text rgb(230,232,236) on fill rgb(41,42,45)
     PASS  11.70:1  H3 "Hey there!"                    text rgb(230,232,236) on fill rgb(41,42,45)
     PASS  7.15:1  P "Ask me anythin"                 text rgb(180,183,190) on fill rgb(41,42,45)
     PASS  12.98:1  BUTTON "Start a sessio"            text rgb(230,232,236) on fill rgb(33,34,36)
@@ -1012,7 +1012,7 @@
     PASS  7.15:1  a-in "Ask anything a"              text rgb(180,183,190) on fill rgb(41,42,45)
 
   v4-transcript.html @390 light  (47 candidates, 25 skipped)
-      SKIP  B "Whiffle"                        rect -235,18 58x20  — occluded by unknown
+      SKIP  B "CawCo"                        rect -235,18 58x20  — occluded by unknown
       SKIP  sec "Fleet"                        rect -284,71 283x16  — occluded by unknown
       SKIP  SPAN "Fleet"                       rect -254,101 35x20  — occluded by unknown
       SKIP  SPAN "Tools"                       rect -254,138 35x20  — occluded by unknown
@@ -1086,7 +1086,7 @@
       (1 regions span multiple fills — no single background to judge)
 
   v4-transcript.html @390 dark   (47 candidates, 25 skipped)
-      SKIP  B "Whiffle"                        rect -235,18 58x20  — occluded by unknown
+      SKIP  B "CawCo"                        rect -235,18 58x20  — occluded by unknown
       SKIP  sec "Fleet"                        rect -284,71 283x16  — occluded by unknown
       SKIP  SPAN "Fleet"                       rect -254,101 35x20  — occluded by unknown
       SKIP  SPAN "Tools"                       rect -254,138 35x20  — occluded by unknown
@@ -1161,7 +1161,7 @@
 
   v4-transcript.html @1440 light  (77 candidates, 1 skipped)
       SKIP  sr "Agent is waiti"                rect 0,0 1x1  — occluded by ASIDE.
-    PASS  13.36:1  B "Whiffle"                        text rgb(44,46,49) on fill rgb(252,253,253)
+    PASS  13.36:1  B "CawCo"                        text rgb(44,46,49) on fill rgb(252,253,253)
     PASS  5.90:1  sec "Fleet"                        text rgb(96,99,106) on fill rgb(252,253,253)
     PASS  8.73:1  SPAN "Fleet"                       text rgb(71,74,79) on fill rgb(252,253,253)
     PASS  8.73:1  SPAN "Tools"                       text rgb(71,74,79) on fill rgb(252,253,253)
@@ -1241,7 +1241,7 @@
 
   v4-transcript.html @1440 dark   (77 candidates, 1 skipped)
       SKIP  sr "Agent is waiti"                rect 0,0 1x1  — occluded by ASIDE.
-    PASS  12.98:1  B "Whiffle"                        text rgb(230,232,236) on fill rgb(33,34,36)
+    PASS  12.98:1  B "CawCo"                        text rgb(230,232,236) on fill rgb(33,34,36)
     PASS  7.93:1  sec "Fleet"                        text rgb(180,183,190) on fill rgb(33,34,36)
     PASS  9.23:1  SPAN "Fleet"                       text rgb(195,197,204) on fill rgb(33,34,36)
     PASS  9.23:1  SPAN "Tools"                       text rgb(195,197,204) on fill rgb(33,34,36)

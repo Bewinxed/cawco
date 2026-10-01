@@ -1,7 +1,7 @@
 /**
  * BM25 search over transcript documents, backed by SQLite FTS5 (bun:sqlite).
  *
- * Subpath export: `@whiffle/jsonl-parser/fts5`. Bun-only; the core parser
+ * Subpath export: `@cawco/jsonl-parser/fts5`. Bun-only; the core parser
  * stays runtime-neutral.
  *
  * Layout: a `docs` content table plus an external-content FTS5 table

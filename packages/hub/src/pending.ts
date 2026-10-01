@@ -1,4 +1,4 @@
-import type { Envelope, PermissionResult } from "@whiffle/core";
+import type { Envelope, PermissionResult } from "@cawco/core";
 import { Context, Effect, Layer } from "effect";
 
 /**

@@ -1,9 +1,9 @@
 <script lang="ts">
-  import type { WorkflowRun } from "@whiffle/core";
+  import type { WorkflowRun } from "@cawco/core";
+  import { cawco } from "$lib/cawco/client.svelte";
+  import { workflowState } from "$lib/cawco/workflow-state.svelte";
   import { IconWorkflow } from "$lib/icons";
   import { formatAgeShort } from "$lib/utils/time";
-  import { whiffle } from "$lib/whiffle/client.svelte";
-  import { workflowState } from "$lib/whiffle/workflow-state.svelte";
   import WorkflowRail from "./WorkflowRail.svelte";
   import WorkflowStatus from "./WorkflowStatus.svelte";
 
@@ -25,7 +25,7 @@
     ><WorkflowStatus status={run.status} /></a
   >
   <ul>
-    {#each whiffle.instances.filter((entry) => entry.workflowRunId === run.id) as instance (instance.id)}
+    {#each cawco.instances.filter((entry) => entry.workflowRunId === run.id) as instance (instance.id)}
       <li data-flip>
         <a
           aria-current={instance.id === activeSession ? 'page' : undefined}

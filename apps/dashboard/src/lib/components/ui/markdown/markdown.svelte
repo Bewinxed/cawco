@@ -5,9 +5,9 @@
     theme as streamdownTheme,
     type Theme,
   } from "svelte-streamdown";
+  import { dur, motionOk } from "$lib/cawco/motion/curves.svelte";
   import OutputBlock from "$lib/components/features/tool-cards/OutputBlock.svelte";
   import { PROSE } from "$lib/prose";
-  import { dur, motionOk } from "$lib/whiffle/motion/curves.svelte";
   import { draw, stepping } from "../collapsible/draw";
   import type { Trail } from "./trail";
 

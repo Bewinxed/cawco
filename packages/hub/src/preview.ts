@@ -1,16 +1,16 @@
-import type { FramePayload, PreviewSource } from "@whiffle/core";
+import type { FramePayload, PreviewSource } from "@cawco/core";
 import {
   type PreviewSocket,
   previewWebSocket,
   proxyHeaders,
   upgradePreview,
-} from "@whiffle/core/preview-proxy";
+} from "@cawco/core/preview-proxy";
 import { PREVIEW_PORT } from "./config";
 
 /**
  * Each preview target maps an instance id to the daemon address and port that
  * serves its content. The dashboard routes `/preview/<id>/…` here via the
- * `x-whiffle-preview` header, so there is no per-browser limitation — every
+ * `x-cawco-preview` header, so there is no per-browser limitation — every
  * tab can show a different preview simultaneously.
  *
  * A target is the operator's intent, and it outlives the listener: while its
@@ -46,7 +46,7 @@ export function startPreviewListener(hostname: string) {
     port: PREVIEW_PORT,
     websocket: previewWebSocket,
     async fetch(request, server) {
-      const instanceId = request.headers.get("x-whiffle-preview");
+      const instanceId = request.headers.get("x-cawco-preview");
       const target = instanceId ? previewTargets.get(instanceId) : undefined;
       if (!target) {
         return new Response("No preview selected.", { status: 404 });

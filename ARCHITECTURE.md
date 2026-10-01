@@ -7,7 +7,7 @@
 
 ## The operator's question
 
-Whiffle is three programs cooperating on one belief: what is actually running, right now,
+CawCo is three programs cooperating on one belief: what is actually running, right now,
 across every machine. The question that forced this document was blunt — "what goes into the
 hub, what goes into the daemon, what goes into the UI, and is the splitting logical?" The
 verdict is that the three roles are right and nothing needs to merge. What was wrong is a
@@ -58,7 +58,7 @@ changed the instant after the row was written and nothing re-checked it. Serving
 to a reader as if it still held is the exact violation this document exists to name: a live
 fact was stored, and then quietly promoted to a claim about the present.
 
-Whiffle has one instance of this law already obeyed and one instance it was violating.
+CawCo has one instance of this law already obeyed and one instance it was violating.
 
 **Obeyed: machine presence.** `packages/hub/src/server.ts` defines `withPresence()`, which maps
 every agent row through the hub's live socket registry at read time — `status: registry.agent(
@@ -167,7 +167,7 @@ formed from its own stale copy.
 
 ## The trust boundary: the tailnet is the perimeter
 
-Whiffle is a single-operator fleet reachable only over a tailnet (or a trusted LAN), and
+CawCo is a single-operator fleet reachable only over a tailnet (or a trusted LAN), and
 that network boundary *is* the authentication. It is stated here because several things in
 the system only make sense once it is: the hub's `/ws` accepts a `register` for any
 `machineId` and relays any `control` verb without a token
@@ -184,8 +184,8 @@ What follows from that, concretely, and what must stay true:
 
 - **The hub must not be bound to a public interface or port-forwarded.** Everything else in
   this section assumes it is not.
-- **`origin` is pinned.** The poller reads its remote and branch from the `.whiffle-deploy`
-  marker (`0600`, written by `whiffle deploy init`) and never from the wire; the fast-forward
+- **`origin` is pinned.** The poller reads its remote and branch from the `.cawco-deploy`
+  marker (`0600`, written by `cawco deploy init`) and never from the wire; the fast-forward
   is `git pull --ff-only origin <branch>` with both named explicitly
   (`packages/agent/src/update.ts` `pullArgs`), and a diverged clone is refused rather than
   reset (`deploy.ts` `DeployState.diverged`, `update.ts` `deployUpdate`). Push access to
@@ -200,7 +200,7 @@ What follows from that, concretely, and what must stay true:
   the hub. A second origin would cost every operator a second hostname for no
   security gain.
 - **Generated unit files carry no secrets.** The only `Environment=` lines
-  `packages/cli/src/service.ts` writes are `PATH`, `WHIFFLE_DB_PATH`, `PORT` and `HOST`, and
+  `packages/cli/src/service.ts` writes are `PATH`, `CAWCO_DB_PATH`, `PORT` and `HOST`, and
   the units are written `0600` outside the clone.
 
 ## The sessiond boundary
@@ -225,7 +225,7 @@ there is nothing in it that a harness change, a new agent feature, or a wire-pro
 would ever need to touch. Harness adapters are the opposite: they are the highest-churn surface
 in the whole system, because every provider (Claude Code, OpenCode, pi) ships its own wire
 format and its own idea of what a tool call looks like, and that surface changes on the
-provider's schedule, not Whiffle's. Anthropic's own SDK acknowledges this exact seam at the
+provider's schedule, not CawCo's. Anthropic's own SDK acknowledges this exact seam at the
 transport level — `@anthropic-ai/claude-agent-sdk` (pinned `0.3.220`) exposes a
 `spawnClaudeCodeProcess` option (`sdk.d.ts`, `ClaudeAgentOptions`) specifically so the caller can
 substitute *how* the child process is launched without the SDK needing to know anything about

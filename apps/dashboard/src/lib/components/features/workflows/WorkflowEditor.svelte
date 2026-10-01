@@ -4,13 +4,28 @@
     Problem,
     WorkflowGraph,
     WorkflowNode,
-  } from "@whiffle/core";
-  import { validateWorkflow } from "@whiffle/core";
+  } from "@cawco/core";
+  import { validateWorkflow } from "@cawco/core";
   import { onMount } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { TextMorph } from "torph/svelte";
   import { beforeNavigate, goto } from "$app/navigation";
   import { page } from "$app/state";
+  import { cawco } from "$lib/cawco/client.svelte";
+  import { loadDelegateTypes, message } from "$lib/cawco/delegate-types";
+  import { newId } from "$lib/cawco/id";
+  import { crossIn, dur, morphMs } from "$lib/cawco/motion/curves.svelte";
+  import { reflow } from "$lib/cawco/motion/rows.svelte";
+  import {
+    refreshWorkflows,
+    workflowState,
+  } from "$lib/cawco/workflow-state.svelte";
+  import {
+    loadWorkflow,
+    saveWorkflow,
+    type WorkflowDetail,
+    WorkflowProblems,
+  } from "$lib/cawco/workflows";
   import PendingContent, {
     whileIdle,
   } from "$lib/components/ui/button/pending-content.svelte";
@@ -24,21 +39,6 @@
   import { Skeleton } from "$lib/components/ui/skeleton";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
   import * as Tabs from "$lib/components/ui/tabs";
-  import { whiffle } from "$lib/whiffle/client.svelte";
-  import { loadDelegateTypes, message } from "$lib/whiffle/delegate-types";
-  import { newId } from "$lib/whiffle/id";
-  import { crossIn, dur, morphMs } from "$lib/whiffle/motion/curves.svelte";
-  import { reflow } from "$lib/whiffle/motion/rows.svelte";
-  import {
-    refreshWorkflows,
-    workflowState,
-  } from "$lib/whiffle/workflow-state.svelte";
-  import {
-    loadWorkflow,
-    saveWorkflow,
-    type WorkflowDetail,
-    WorkflowProblems,
-  } from "$lib/whiffle/workflows";
   import { paneSlide, towards } from "./pane-slide";
   import WorkflowCanvas from "./WorkflowCanvas.svelte";
   import WorkflowInspector from "./WorkflowInspector.svelte";
@@ -145,7 +145,7 @@
     }
     return `Saved · ${Math.max(0, Math.floor((now - savedAt) / 1000))}s ago`;
   });
-  const live = $derived(whiffle.hub === "connected");
+  const live = $derived(cawco.hub === "connected");
   /**
    * The hub's word on exactly what is on screen, or nothing. An edit the hub
    * has not answered yet has no hub problems: an earlier answer described an

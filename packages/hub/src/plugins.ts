@@ -2,7 +2,7 @@
  * Resolving a fleet plugin to its files, at the hub, once for every machine.
  *
  * The rest of the fleet already works this way — skills.ts says it outright:
- * "an installer CLI is a wrapper around copying a directory, so whiffle runs
+ * "an installer CLI is a wrapper around copying a directory, so cawco runs
  * none of them". Plugins were the exception. Sync told every machine to run
  * `claude plugin install`, and that command goes to the network: it reads the
  * marketplace's manifest, finds `{ "source": "github", "repo": "owner/name" }`,
@@ -21,7 +21,7 @@
  * writes them into a marketplace of its own and installs from that directory,
  * which is a form the CLI already supports (a plugin `source` may be a path
  * relative to its marketplace, which is how the official marketplace vendors
- * its own). The CLI still registers the plugin — whiffle does not pretend to
+ * its own). The CLI still registers the plugin — cawco does not pretend to
  * own `installed_plugins.json` — but it no longer fetches anything.
  */
 
@@ -29,7 +29,7 @@ import { mkdtemp, rm, stat } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, normalize } from "node:path";
 import { fileURLToPath } from "node:url";
-import type { FleetPluginPayload, MarketplacePluginInfo } from "@whiffle/core";
+import type { FleetPluginPayload, MarketplacePluginInfo } from "@cawco/core";
 import { downloadRepo, get, readTree, unpack } from "./skills";
 
 /** `owner/repo` as a marketplace source names it, with an optional `@ref`. */
@@ -117,7 +117,7 @@ const marketplaceRoot = async (
     return await unpack(response, work, url.pathname);
   }
   throw new Error(
-    `${source} is not a marketplace source whiffle knows how to fetch — ` +
+    `${source} is not a marketplace source cawco knows how to fetch — ` +
       "give owner/repo, a git URL, or an absolute directory path on the hub"
   );
 };
@@ -142,7 +142,7 @@ const pluginRoot = async (
     return inside(marketplace, source);
   }
   if (!source || typeof source !== "object") {
-    throw new Error(`${entry.name} has no source whiffle can read`);
+    throw new Error(`${entry.name} has no source cawco can read`);
   }
   const spec = source as Record<string, unknown>;
   const kind = typeof spec.source === "string" ? spec.source : undefined;
@@ -189,7 +189,7 @@ const pluginRoot = async (
   }
 
   throw new Error(
-    `${entry.name}'s source kind "${kind ?? "unknown"}" is not one whiffle fetches`
+    `${entry.name}'s source kind "${kind ?? "unknown"}" is not one cawco fetches`
   );
 };
 
@@ -213,7 +213,7 @@ export const resolveMarketplacePlugins = async (
   if (names.length === 0) {
     return [];
   }
-  const work = await mkdtemp(join(tmpdir(), "whiffle-plugins-"));
+  const work = await mkdtemp(join(tmpdir(), "cawco-plugins-"));
   try {
     const root = await marketplaceRoot(marketplaceSource, work);
     const manifestPath = join(root, ".claude-plugin", "marketplace.json");
@@ -222,7 +222,7 @@ export const resolveMarketplacePlugins = async (
       .catch(() => undefined)) as Manifest | undefined;
     if (!manifest?.plugins) {
       throw new Error(
-        `${marketplaceSource} has no .claude-plugin/marketplace.json whiffle could read`
+        `${marketplaceSource} has no .claude-plugin/marketplace.json cawco could read`
       );
     }
 

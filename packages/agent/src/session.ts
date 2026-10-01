@@ -29,10 +29,11 @@ import type {
   SessionPulse,
   SpawnPayload,
   StopPayload,
-} from "@whiffle/core";
+} from "@cawco/core";
 import {
   AGENT_BUSY,
   alreadyIngested,
+  CAWCO_SCRATCH_TAG,
   CONTROL_GIT_CHANGES,
   CONTROL_QUERIES,
   CONTROL_RUN_COMMAND,
@@ -45,10 +46,9 @@ import {
   readIngested,
   repoPath,
   resumeCursor,
-  UPDATE_WHIFFLE,
-  WHIFFLE_SCRATCH_TAG,
+  UPDATE_CAWCO,
   withWorktreeLine,
-} from "@whiffle/core";
+} from "@cawco/core";
 import { Effect } from "effect";
 import { type Boundary, boundaryFor } from "./boundary";
 import { fetchDefaultBranch } from "./clone";
@@ -438,7 +438,7 @@ export class SessionSupervisor {
       startPreview(options as Parameters<typeof startPreview>[0]),
     [PREVIEW_STOP]: (options) => stopPreview(options as { instanceId: string }),
     [AGENT_BUSY]: () => this.busyNow(),
-    [UPDATE_WHIFFLE]: async (options) =>
+    [UPDATE_CAWCO]: async (options) =>
       updateCheckout({
         ...(options as Pick<UpdateOptions, "force" | "restartAgent">),
         branch: DEPLOY_BRANCH,
@@ -1321,7 +1321,7 @@ export class SessionSupervisor {
     quest.tagged = true;
     // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — #tagQuest itself is synchronous and does not wait on the tag landing
     void adapter
-      .tagSession(sessionId, WHIFFLE_SCRATCH_TAG, dir)
+      .tagSession(sessionId, CAWCO_SCRATCH_TAG, dir)
       .catch((error: unknown) => {
         quest.tagged = false;
         warn(`could not tag side quest ${sessionId}: ${error}`);
@@ -1640,7 +1640,7 @@ export class SessionSupervisor {
     config: FleetConfig | undefined,
     which: "syncFleet" | "fleetStatus"
   ): Promise<FleetSyncReport> {
-    type State = import("@whiffle/core").FleetItemState;
+    type State = import("@cawco/core").FleetItemState;
     const mcp: FleetSyncReport["mcp"] = {};
     const marketplaces: FleetSyncReport["marketplaces"] = {};
     const plugins: FleetSyncReport["plugins"] = {};

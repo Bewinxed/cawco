@@ -6,7 +6,7 @@
  */
 import { rm } from "node:fs/promises";
 import { basename } from "node:path";
-import type { WorkspaceCheckout, WorkspaceRef } from "@whiffle/core";
+import type { WorkspaceCheckout, WorkspaceRef } from "@cawco/core";
 import { closeBoundary, ensureBoundary } from "./boundary";
 import { git, prepareClone } from "./clone";
 import { expandHome } from "./fs";

@@ -3,14 +3,14 @@ import type { HarnessReport } from "./harness";
 import type { ToolStatus } from "./tools";
 
 // "Continue in new session": the size rules the hub and the dashboard share.
-// biome-ignore lint/performance/noBarrelFile: this is the package's public API surface — packages/core's consumers (hub, cli, dashboard) import from "@whiffle/core" as one module, not per-file.
+// biome-ignore lint/performance/noBarrelFile: this is the package's public API surface — packages/core's consumers (hub, cli, dashboard) import from "@cawco/core" as one module, not per-file.
 export * from "./continuation";
 // Delegate types: named presets the `delegate` tool's `type` param resolves,
 // so routing is by description instead of a raw model string.
 export * from "./delegate-types";
 // Fleet MCP + skills desired state, sync reports, and the `/` menu (NEW.md §11).
 export * from "./fleet";
-// The harness-neutral spine (2026-08 rework). Whiffle owns these types; the
+// The harness-neutral spine (2026-08 rework). CawCo owns these types; the
 // harness adapters (claude, opencode, pi) translate their native events into
 // them, the hub peeks them, the dashboard folds them. See harness.ts for the
 // rules. The `SDK*` names are kept for one release so the dashboard's imports
@@ -24,7 +24,7 @@ export * from "./harness";
 export * from "./hooks";
 export * from "./injected";
 // Adding a machine: the join routes' shapes and the install script's step
-// prefix, which `whiffle join` prints and the hub reads back off SSH output.
+// prefix, which `cawco join` prints and the hub reads back off SSH output.
 export * from "./join";
 // How an `AskUserQuestion` answer is shaped, wherever it is answered from —
 // the dashboard, a parent session's `answer_delegate`, the Telegram bridge.
@@ -44,7 +44,7 @@ export * from "./stream";
 // The workflow-tool catalog and its status/policy shapes (NEW.md §10).
 export * from "./tools";
 // Usage, cost & limits (USAGE-SPEC.md §4). Pure types/math only; `limits.ts`
-// reads credentials with node:fs and lives under the `@whiffle/core/usage/limits`
+// reads credentials with node:fs and lives under the `@cawco/core/usage/limits`
 // subpath instead.
 export * from "./usage";
 
@@ -52,7 +52,7 @@ export * from "./usage";
 // reaches for `node:os` and `node:path` to derive its endpoint, and this barrel
 // is imported by the dashboard — a browser bundle, where Vite externalises
 // `node:*` and the first property access throws, taking the whole client module
-// down with it. Import them from `@whiffle/core/sessiond` instead; the subpath
+// down with it. Import them from `@cawco/core/sessiond` instead; the subpath
 // export exists for exactly that, as `./usage/limits` already does.
 
 // How a session with no given title names itself: its first user message,
@@ -210,7 +210,7 @@ export interface RepoInfo {
 
 /**
  * What the machine-scoped `listRepos` control answers with. The GitHub CLI is
- * the machine's own credential store — whiffle never holds a token.
+ * the machine's own credential store — cawco never holds a token.
  */
 export type ReposResult =
   | RepoInfo[]
@@ -370,7 +370,7 @@ export interface AgentRow {
   /** `unknown` until a daemon that probes has registered at least once. */
   auth: import("./harness").AuthState | "unknown";
   /**
-   * The whiffle build this machine's daemon is running (NEW.md §12).
+   * The cawco build this machine's daemon is running (NEW.md §12).
    */
   build?: BuildInfo;
   /**
@@ -462,12 +462,12 @@ export interface BuildInfo {
   dirty?: boolean;
   /** When this daemon started, ms epoch. */
   startedAt: number;
-  /** `@whiffle/agent`'s package version. */
+  /** `@cawco/agent`'s package version. */
   version: string;
 }
 
 /**
- * What an {@link UPDATE_WHIFFLE} run did. Every field is what actually
+ * What an {@link UPDATE_CAWCO} run did. Every field is what actually
  * happened, not what was asked for.
  */
 export interface UpdateReport {
@@ -494,7 +494,7 @@ export interface UpdateReport {
  * Turns the machine's checkout into the current one: `git pull`, install,
  * rebuild the dashboard, restart the hub and dashboard services.
  */
-export const UPDATE_WHIFFLE = "updateWhiffle";
+export const UPDATE_CAWCO = "updateCawco";
 
 /**
  * Whether this machine's daemon is in the middle of anything — how a restart
@@ -652,7 +652,7 @@ export interface WorkItemSummary {
  * nothing" has to show up the same as "it spoke".
  *
  * `DelegateEvent`, the nearest sibling shape, lives in the dashboard app
- * (`apps/dashboard/src/lib/whiffle/types.ts`) rather than here — but both the
+ * (`apps/dashboard/src/lib/cawco/types.ts`) rather than here — but both the
  * hub (which records these rows) and the dashboard (which reads them) need
  * this type, and the hub does not import from the dashboard app. Core is the
  * one home both sides already share.
@@ -862,7 +862,7 @@ export type FramePayload =
   /** Hub-originated workflow run transition (§7.2). */
   | import("./workflow").WorkflowFrame;
 
-export const WHIFFLE_HUB_PORT = 3456;
+export const CAWCO_HUB_PORT = 3456;
 
 export type PreviewSource = { port: number } | { dir: string };
 
@@ -907,10 +907,10 @@ export const PREVIEW_STOP = "previewStop";
  * applies it when the session names itself and clears it when the quest is
  * kept; the catalogs the rails read hide what wears it.
  */
-export const WHIFFLE_SCRATCH_TAG = "whiffle-scratch";
+export const CAWCO_SCRATCH_TAG = "cawco-scratch";
 
 /**
- * Every environment variable whiffle reads, by the name it is spelled on a
+ * Every environment variable cawco reads, by the name it is spelled on a
  * machine. This is the inventory: a variable that is not in here is one nobody
  * will find next time, so add it here first and read it through
  * {@link readEnv}.
@@ -924,44 +924,44 @@ export const WHIFFLE_SCRATCH_TAG = "whiffle-scratch";
  * source in `packages/agent/src/harnesses/opencode.ts` (a string executed in
  * the opencode child process).
  */
-export const WHIFFLE_ENV = {
-  hubUrl: "WHIFFLE_HUB_URL",
-  hubPort: "WHIFFLE_HUB_PORT",
-  previewPort: "WHIFFLE_PREVIEW_PORT",
-  machineId: "WHIFFLE_MACHINE_ID",
+export const CAWCO_ENV = {
+  hubUrl: "CAWCO_HUB_URL",
+  hubPort: "CAWCO_HUB_PORT",
+  previewPort: "CAWCO_PREVIEW_PORT",
+  machineId: "CAWCO_MACHINE_ID",
   /** `1` stops the hub advertising itself over mDNS. */
-  noMdns: "WHIFFLE_NO_MDNS",
+  noMdns: "CAWCO_NO_MDNS",
   /**
    * Overrides the socket `sessiondEndpoint()` derives — the daemon listens on
    * it and every client dials it, so both ends must read the same variable.
    */
-  sessiondEndpoint: "WHIFFLE_SESSIOND_ENDPOINT",
+  sessiondEndpoint: "CAWCO_SESSIOND_ENDPOINT",
   /** Where the links the bridge sends point. */
-  dashboardUrl: "WHIFFLE_DASHBOARD_URL",
+  dashboardUrl: "CAWCO_DASHBOARD_URL",
   /** The bot the hub reaches its owner's Telegram on. */
-  telegramToken: "WHIFFLE_TELEGRAM_TOKEN",
+  telegramToken: "CAWCO_TELEGRAM_TOKEN",
   /** Telegram's API origin, for pointing the bridge at a proxy. */
-  telegramApi: "WHIFFLE_TELEGRAM_API",
-  telegramAsrUrl: "WHIFFLE_TELEGRAM_ASR_URL",
-  telegramAsrModel: "WHIFFLE_TELEGRAM_ASR_MODEL",
-  telegramAsrMode: "WHIFFLE_TELEGRAM_ASR_MODE",
+  telegramApi: "CAWCO_TELEGRAM_API",
+  telegramAsrUrl: "CAWCO_TELEGRAM_ASR_URL",
+  telegramAsrModel: "CAWCO_TELEGRAM_ASR_MODEL",
+  telegramAsrMode: "CAWCO_TELEGRAM_ASR_MODE",
   /** Where the hub's SQLite file lives, overriding the default data dir. */
-  dbPath: "WHIFFLE_DB_PATH",
+  dbPath: "CAWCO_DB_PATH",
   /** The deployment clone the daemon watches (PLAN.md contract C8). */
-  deployRoot: "WHIFFLE_DEPLOY_ROOT",
+  deployRoot: "CAWCO_DEPLOY_ROOT",
   /** How often that clone is polled, in seconds. */
-  deployPoll: "WHIFFLE_DEPLOY_POLL",
+  deployPoll: "CAWCO_DEPLOY_POLL",
   /** Which service manager the installer targets: `systemd`, `launchd`, … */
-  serviceMode: "WHIFFLE_SERVICE_MODE",
+  serviceMode: "CAWCO_SERVICE_MODE",
   /** The npm registry installs and self-updates go through. */
-  registry: "WHIFFLE_REGISTRY",
+  registry: "CAWCO_REGISTRY",
 } as const;
 
-/** One of {@link WHIFFLE_ENV}'s variable names. */
-export type WhiffleEnvVar = (typeof WHIFFLE_ENV)[keyof typeof WHIFFLE_ENV];
+/** One of {@link CAWCO_ENV}'s variable names. */
+export type CawcoEnvVar = (typeof CAWCO_ENV)[keyof typeof CAWCO_ENV];
 
 /**
- * Reads one of whiffle's environment variables. Typed to the registry so a
+ * Reads one of cawco's environment variables. Typed to the registry so a
  * variable cannot escape it as a bare literal again — which is how five of
  * them escaped in the first place.
  *
@@ -969,14 +969,14 @@ export type WhiffleEnvVar = (typeof WHIFFLE_ENV)[keyof typeof WHIFFLE_ENV];
  * spawner, the installer's rendered unit — can resolve against it too.
  */
 export const readEnv = (
-  name: WhiffleEnvVar,
+  name: CawcoEnvVar,
   env: Record<string, string | undefined> = process.env
 ): string | undefined => env[name];
 
 /**
- * The mDNS service the hub advertises and `whiffle` browses for.
+ * The mDNS service the hub advertises and `cawco` browses for.
  */
-export const WHIFFLE_MDNS_TYPE = "whiffle";
+export const CAWCO_MDNS_TYPE = "cawco";
 export * from "./image-generation";
 export * from "./workflow";
 export * from "./workflow-compile";

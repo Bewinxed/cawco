@@ -1,16 +1,12 @@
 <script lang="ts">
-  import { type RuleRow, ruleSentence } from "@whiffle/core";
+  import { type RuleRow, ruleSentence } from "@cawco/core";
   import { toast } from "svelte-sonner";
-  import { Button } from "$lib/components/ui/button";
-  import { EmptyState } from "$lib/components/ui/empty";
-  import { Toggle } from "$lib/components/ui/toggle";
-  import { IconAlert, IconPlus, IconRules, IconTrash } from "$lib/icons";
-  import RowList from "$lib/whiffle/config/RowList.svelte";
-  import SectionFrame from "$lib/whiffle/config/SectionFrame.svelte";
-  import SectionRow from "$lib/whiffle/config/SectionRow.svelte";
-  import { sectionOf } from "$lib/whiffle/config/sections";
-  import { configStore, withStats } from "$lib/whiffle/config/store.svelte";
-  import { confirm } from "$lib/whiffle/confirm.svelte";
+  import RowList from "$lib/cawco/config/RowList.svelte";
+  import SectionFrame from "$lib/cawco/config/SectionFrame.svelte";
+  import SectionRow from "$lib/cawco/config/SectionRow.svelte";
+  import { sectionOf } from "$lib/cawco/config/sections";
+  import { configStore, withStats } from "$lib/cawco/config/store.svelte";
+  import { confirm } from "$lib/cawco/confirm.svelte";
   import {
     createRule,
     draftOf,
@@ -20,7 +16,11 @@
     saveRule,
     since,
     times,
-  } from "$lib/whiffle/rules";
+  } from "$lib/cawco/rules";
+  import { Button } from "$lib/components/ui/button";
+  import { EmptyState } from "$lib/components/ui/empty";
+  import { Toggle } from "$lib/components/ui/toggle";
+  import { IconAlert, IconPlus, IconRules, IconTrash } from "$lib/icons";
 
   /**
    * The rules. Each row reads as the sentence the rule is, because a rule is a

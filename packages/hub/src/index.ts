@@ -3,7 +3,7 @@ import { buildInfo } from "./build";
 import { DB_PATH, HUB_PORT, HUB_VERSION } from "./config";
 import { Db, DbLayer } from "./db";
 import { advertise } from "./mdns";
-// The move itself lives in its own module so `whiffle deploy init` can run it
+// The move itself lives in its own module so `cawco deploy init` can run it
 // from the checkout that actually holds the legacy file. See migrate-db.ts.
 import { migrateLegacyDb } from "./migrate-db";
 import { Pending, PendingLayer } from "./pending";
@@ -13,7 +13,7 @@ import { createServer } from "./server";
 import { createTelegramBridge } from "./telegram";
 import { backfillUsage } from "./usage-count";
 
-// biome-ignore lint/performance/noBarrelFile: re-exporting one already-imported name is not a barrel; `whiffle deploy init` (see migrate-db.ts) needs migrateLegacyDb importable from this entrypoint.
+// biome-ignore lint/performance/noBarrelFile: re-exporting one already-imported name is not a barrel; `cawco deploy init` (see migrate-db.ts) needs migrateLegacyDb importable from this entrypoint.
 export { migrateLegacyDb } from "./migrate-db";
 
 const main = Effect.gen(function* () {
@@ -35,7 +35,7 @@ const main = Effect.gen(function* () {
     idleTimeout: 120,
   });
   startPreviewListener(hostname);
-  yield* Effect.log(`whiffle hub ${HUB_VERSION} listening on :${HUB_PORT}`);
+  yield* Effect.log(`cawco hub ${HUB_VERSION} listening on :${HUB_PORT}`);
   advertise(HUB_PORT);
   // After `listen`, so the first ask the bridge can be handed is one this hub
   // is already able to receive.
@@ -45,7 +45,7 @@ const main = Effect.gen(function* () {
   void backfillUsage(db);
 });
 
-/** Boots the hub: what running this file does, and what `whiffle hub` calls. */
+/** Boots the hub: what running this file does, and what `cawco hub` calls. */
 export const startHub = async (): Promise<void> => {
   migrateLegacyDb(DB_PATH);
   await Effect.runPromise(
@@ -55,7 +55,7 @@ export const startHub = async (): Promise<void> => {
 
 // A checkout's service spec (`packages/cli/src/service.ts`) and `bun --watch`
 // run this file directly, where `import.meta.main` is true; the published
-// package runs `whiffle hub`, which imports it and calls `startHub`.
+// package runs `cawco hub`, which imports it and calls `startHub`.
 if (import.meta.main) {
   await startHub();
 }

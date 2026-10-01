@@ -18,7 +18,7 @@
  * in them — running, as it leaves the sessions. A machine that cannot hold a
  * boundary refuses the work: a work item never runs without one.
  *
- * Each workspace's executor is a script, `~/.whiffle/workspaces/<id>/exec
+ * Each workspace's executor is a script, `~/.cawco/workspaces/<id>/exec
  * [--cwd-out FILE] COMMAND`, that every harness runs its shell commands
  * through: claude by a PreToolUse hook that rewrites the command
  * (`boundary-hook.ts`), OpenCode by its plugin's `bash` tool, pi by its bash
@@ -37,8 +37,8 @@ import {
 } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
-import type { WorkspaceRef } from "@whiffle/core";
-import { type ProcSpec, sessiondEndpoint } from "@whiffle/core/sessiond";
+import type { WorkspaceRef } from "@cawco/core";
+import { type ProcSpec, sessiondEndpoint } from "@cawco/core/sessiond";
 import { cloneInPlace } from "./clone";
 import { ensureSessiond, SessiondClient } from "./sessiond-client";
 
@@ -61,19 +61,19 @@ interface Held extends Boundary {
 
 /** Where a workspace's boundary keeps its executor and state; read-only inside the boundary. */
 export const workspacesDir = (): string =>
-  join(homedir(), ".whiffle", "workspaces");
+  join(homedir(), ".cawco", "workspaces");
 const stateDir = (id: string): string => join(workspacesDir(), id);
 
 /** A workspace's scratch dir: under its clone's `.git`, so on disk, never in git status. */
 export const scratchOf = (path: string): string =>
-  join(path, ".git", "whiffle-tmp");
+  join(path, ".git", "cawco-tmp");
 
 const procIdOf = (id: string): string => `boundary-${id}`;
 
 const WHITESPACE = /\s+/;
 
 /** The line a boundary prints once a command can join it. */
-const READY = "whiffle-boundary-ready";
+const READY = "cawco-boundary-ready";
 const START_TIMEOUT_MS = 15_000;
 const STOP_TIMEOUT_MS = 2000;
 
@@ -138,7 +138,7 @@ export const boundaryFor = (
   workspace ? ensureBoundary(workspace) : Promise.resolve(undefined);
 
 const sessiondPath = (): string =>
-  process.env.WHIFFLE_SESSIOND_ENDPOINT ?? sessiondEndpoint();
+  process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint();
 
 let connection: Promise<SessiondClient> | undefined;
 
@@ -303,7 +303,7 @@ const linuxSpec = async (
       "bash",
       "-c",
       ANCHOR,
-      "whiffle-boundary",
+      "cawco-boundary",
       ref.path,
       scratch,
       String(process.getuid?.() ?? 0),
@@ -328,7 +328,7 @@ echo ${READY}
 while :; do
   while IFS= read -r req; do
     (
-      /usr/bin/perl -e 'setpgrp(0, 0); exec @ARGV' /bin/bash --norc --noprofile -c '. "$1/env" >/dev/null 2>&1; cd "$(cat "$1/cwd")" || exit 1; eval "$(cat "$1/cmd")"; status=$?; pwd -P > "$1/cwd-out"; exit $status' whiffle "$req" > "$req/out" 2> "$req/err" < /dev/null &
+      /usr/bin/perl -e 'setpgrp(0, 0); exec @ARGV' /bin/bash --norc --noprofile -c '. "$1/env" >/dev/null 2>&1; cd "$(cat "$1/cwd")" || exit 1; eval "$(cat "$1/cmd")"; status=$?; pwd -P > "$1/cwd-out"; exit $status' cawco "$req" > "$req/out" 2> "$req/err" < /dev/null &
       echo $! > "$req/pid"
       wait $!
       echo $? > "$req/status"
@@ -342,7 +342,7 @@ const sbString = (path: string): string =>
 /**
  * The Seatbelt profile for one workspace. Paths are real paths: Seatbelt
  * matches the resolved path, so a rule on a symlink never fires (a Mac's
- * `~/.whiffle` has been one).
+ * `~/.cawco` has been one).
  */
 const profileOf = async (ws: string, caches: string[]): Promise<string> => {
   const writable = await Promise.all(
@@ -396,11 +396,11 @@ const darwinSpec = async (
       "--noprofile",
       "-c",
       RUNNER,
-      "whiffle-boundary",
+      "cawco-boundary",
       fifo,
     ],
     // The marker is how an archive finds every process the workspace started.
-    env: { WHIFFLE_WORKSPACE: ref.id, TMPDIR: scratch },
+    env: { CAWCO_WORKSPACE: ref.id, TMPDIR: scratch },
   };
 };
 
@@ -455,14 +455,14 @@ const GH_TOKEN = `if [ -z "\${GH_TOKEN:-}" ] && command -v gh >/dev/null 2>&1; t
 fi`;
 
 const stoppedLine = (id: string): string =>
-  `whiffle: workspace ${id}'s boundary is not running, so this command did not run. The workspace's next session starts it again.`;
+  `cawco: workspace ${id}'s boundary is not running, so this command did not run. The workspace's next session starts it again.`;
 
 const linuxExec = (
   id: string,
   pid: number,
   identity: string
 ): string => `#!/bin/sh
-# Whiffle workspace ${id}: runs one shell command inside the workspace's boundary.
+# CawCo workspace ${id}: runs one shell command inside the workspace's boundary.
 # exec [--cwd-out FILE] COMMAND — FILE gets the directory COMMAND ended in.
 anchor=${pid}
 if [ "$(readlink /proc/$anchor/ns/user 2>/dev/null)" != ${shellQuote(identity)} ]; then
@@ -473,7 +473,7 @@ cwd_out=
 if [ "$1" = --cwd-out ]; then cwd_out=$2; shift 2; fi
 ${GH_TOKEN}
 exec nsenter --user --mount --pid --preserve-credentials --target "$anchor" --wdns="$PWD" \\
-  env TMPDIR=/tmp bash -c 'eval "$1"; status=$?; [ -z "$2" ] || pwd -P > "$2"; exit $status' whiffle "$1" "$cwd_out"
+  env TMPDIR=/tmp bash -c 'eval "$1"; status=$?; [ -z "$2" ] || pwd -P > "$2"; exit $status' cawco "$1" "$cwd_out"
 `;
 
 const darwinExec = (
@@ -482,7 +482,7 @@ const darwinExec = (
   fifo: string,
   scratch: string
 ): string => `#!/bin/bash
-# Whiffle workspace ${id}: runs one shell command inside the workspace's boundary.
+# CawCo workspace ${id}: runs one shell command inside the workspace's boundary.
 # exec [--cwd-out FILE] COMMAND — FILE gets the directory COMMAND ended in.
 fifo=${shellQuote(fifo)}
 if ! [ -p "$fifo" ] || ! kill -0 ${pid} 2>/dev/null; then
@@ -584,7 +584,7 @@ const kill = (pid: number, signal: NodeJS.Signals): void => {
 const killMarked = async (id: string): Promise<void> => {
   const listing = await Bun.$`ps -axwwE -o pid=,command=`.quiet().nothrow();
   for (const line of listing.text().split("\n")) {
-    if (line.includes(`WHIFFLE_WORKSPACE=${id}`)) {
+    if (line.includes(`CAWCO_WORKSPACE=${id}`)) {
       const pid = Number.parseInt(line.trim(), 10);
       if (pid && pid !== process.pid) {
         kill(pid, "SIGKILL");

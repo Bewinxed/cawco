@@ -6,7 +6,7 @@
  * `~/.config/opencode/skills/`, pi to `~/.pi/agent/skills/`. A skill *is* its
  * files and the memory document *is* its text, so the hash is the whole
  * economy: an unchanged skill costs one comparison however many megabytes it
- * arrived with. What whiffle wrote is named in a per-directory sidecar, and
+ * arrived with. What cawco wrote is named in a per-directory sidecar, and
  * only what the sidecar names is ever taken away.
  */
 
@@ -16,7 +16,7 @@ import type {
   FleetItemState,
   FleetMemory,
   FleetSkillPayload,
-} from "@whiffle/core";
+} from "@cawco/core";
 import { memoryPlan } from "../fleet";
 import {
   guardWorkflowSkillRemoval,
@@ -43,7 +43,7 @@ export const writeJson = async (
   path: string,
   value: unknown
 ): Promise<void> => {
-  const temp = `${path}.whiffle-${process.pid}`;
+  const temp = `${path}.cawco-${process.pid}`;
   await Bun.write(temp, JSON.stringify(value, null, 2));
   await rename(temp, path);
 };
@@ -198,7 +198,7 @@ const DRIFTED = "edited on this machine — adopt it or overwrite";
 /**
  * Applies the memory plan and answers with the hash the harness now manages, or
  * nothing when it manages none. The file is only ever deleted when it is still
- * exactly what whiffle wrote.
+ * exactly what cawco wrote.
  */
 export const syncMemory = async (
   path: string,

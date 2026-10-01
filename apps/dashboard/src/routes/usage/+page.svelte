@@ -5,18 +5,18 @@
    * then where the spend goes, then its history, both over one range. Nothing
    * is said twice and no row is named by an id.
    */
-  import { floorToHour, type LimitWindow } from "@whiffle/core";
+  import { floorToHour, type LimitWindow } from "@cawco/core";
   import { invalidateAll } from "$app/navigation";
+  import { cawco } from "$lib/cawco/client.svelte";
+  import { speakingReading, windowStart } from "$lib/cawco/usage";
+  import History from "$lib/cawco/usage/History.svelte";
+  import LimitsBlock from "$lib/cawco/usage/LimitsBlock.svelte";
+  import WhereItGoes from "$lib/cawco/usage/WhereItGoes.svelte";
   import { Button } from "$lib/components/ui/button";
   import { TabItem, Tabs, TabsList } from "$lib/components/ui/fluid-tabs";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { IconDownload, IconRefresh } from "$lib/icons";
-  import { whiffle } from "$lib/whiffle/client.svelte";
-  import { speakingReading, windowStart } from "$lib/whiffle/usage";
-  import History from "$lib/whiffle/usage/History.svelte";
-  import LimitsBlock from "$lib/whiffle/usage/LimitsBlock.svelte";
-  import WhereItGoes from "$lib/whiffle/usage/WhereItGoes.svelte";
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();
@@ -54,13 +54,13 @@
   const since = $derived.by(
     (): Record<"claude" | "opencode", number | null | undefined> => {
       if (range === "window") {
-        if (!whiffle.usageLimitsRead) {
+        if (!cawco.usageLimitsRead) {
           return { claude: undefined, opencode: undefined };
         }
         return {
-          claude: fiveHourStart(speakingReading(whiffle.claudeLimits)?.reading),
+          claude: fiveHourStart(speakingReading(cawco.claudeLimits)?.reading),
           opencode: fiveHourStart(
-            speakingReading(whiffle.openCodeGoLimits)?.reading
+            speakingReading(cawco.openCodeGoLimits)?.reading
           ),
         };
       }
@@ -103,7 +103,7 @@
 </script>
 
 <svelte:head>
-  <title>Usage &middot; Whiffle</title>
+  <title>Usage &middot; CawCo</title>
 </svelte:head>
 
 <div class="page">

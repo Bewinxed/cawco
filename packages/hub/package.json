@@ -1,5 +1,5 @@
 {
-  "name": "@whiffle/hub",
+  "name": "@cawco/hub",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -14,10 +14,10 @@
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.41",
+    "@cawco/auth": "workspace:*",
+    "@cawco/core": "workspace:*",
     "@effect/sql-sqlite-bun": "4.0.0-beta.107",
     "@modelcontextprotocol/sdk": "1.25.2",
-    "@whiffle/auth": "workspace:*",
-    "@whiffle/core": "workspace:*",
     "ai": "^7.0.87",
     "ajv": "^8.20.0",
     "bonjour-service": "^1.4.4",

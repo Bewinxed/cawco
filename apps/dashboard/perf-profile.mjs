@@ -87,7 +87,7 @@ async function getMetrics() {
 }
 
 // ──────────────────────────────────────────────────────────────────────
-console.log("\n=== WHIFFLE DASHBOARD PERFORMANCE PROFILE ===");
+console.log("\n=== CAWCO DASHBOARD PERFORMANCE PROFILE ===");
 console.log(`URL: ${TARGET}\n`);
 
 await cdp("Performance.enable");
@@ -114,7 +114,7 @@ console.log(`  Load → idle: ${loadMs}ms`);
 
 // Find a session with messages and navigate to it
 const sessionId = await evaluate(`(() => {
-  const d = window.__whiffleDebug;
+  const d = window.__cawcoDebug;
   if (!d?.state?.sessions) return null;
   // Find first session that has a running instance
   const instances = d.state.instances || [];
@@ -213,7 +213,7 @@ console.log(`  will-change: ${gpuCss.willChange} elements`);
 // ── 4. STORE STATE ──────────────────────────────────────────────────
 console.log("\n── 4. STORE STATE ──");
 const storeStats = await evaluate(`(() => {
-  const d = window.__whiffleDebug;
+  const d = window.__cawcoDebug;
   if (!d?.state?.sessions) return { sessions: 0, messages: 0, instances: 0 };
   let messages = 0;
   const sessions = Object.keys(d.state.sessions).length;

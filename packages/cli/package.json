@@ -1,11 +1,11 @@
 {
-  "name": "@whiffle/cli",
+  "name": "@cawco/cli",
   "version": "0.1.0",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "bin": {
-    "whiffle": "./src/cli.ts"
+    "cawco": "./src/cli.ts"
   },
   "files": [
     "src"
@@ -15,10 +15,10 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@whiffle/agent": "workspace:*",
-    "@whiffle/core": "workspace:*",
-    "@whiffle/hub": "workspace:*",
-    "@whiffle/sessiond": "workspace:*",
+    "@cawco/agent": "workspace:*",
+    "@cawco/core": "workspace:*",
+    "@cawco/hub": "workspace:*",
+    "@cawco/sessiond": "workspace:*",
     "bonjour-service": "^1.4.4"
   },
   "devDependencies": {

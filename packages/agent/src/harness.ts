@@ -1,7 +1,7 @@
 /**
  * The daemon-side harness abstraction (2026-08 rework).
  *
- * A harness is a plugin that turns one coding-agent runtime into whiffle's
+ * A harness is a plugin that turns one coding-agent runtime into cawco's
  * neutral spine: it spawns sessions, translates their events into
  * {@link NeutralMessage} frames, parks permission requests under a `requestId`,
  * and answers the machine-scoped session catalog. The supervisor
@@ -29,7 +29,7 @@ import type {
   SentMessage,
   SessionMessage,
   SpawnPayload,
-} from "@whiffle/core";
+} from "@cawco/core";
 
 /** Everything a harness needs from the supervisor while it owns a session. */
 export interface HarnessContext {
@@ -129,7 +129,7 @@ export interface Harness {
   detect(): Promise<HarnessReport>;
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   dispose?(): Promise<void>;
-  /** What the harness has of what whiffle last put on it, without changing it. */
+  /** What the harness has of what cawco last put on it, without changing it. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   fleetStatus?(): Promise<FleetSyncReport>;
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance

@@ -1,4 +1,9 @@
 <script lang="ts">
+  import {
+    type FleetMemoryVersion,
+    memoryHistory,
+    memoryVersion,
+  } from "$lib/cawco/fleet";
   /**
    * What a `manage_memory` call read or wrote, as the document it is. The
    * sentence above already names the action and the path, so none of the raw
@@ -14,11 +19,6 @@
   import * as Collapsible from "$lib/components/ui/collapsible";
   import { Skeleton } from "$lib/components/ui/skeleton";
   import { IconChevronRight } from "$lib/icons";
-  import {
-    type FleetMemoryVersion,
-    memoryHistory,
-    memoryVersion,
-  } from "$lib/whiffle/fleet";
   import DiffView from "../DiffView.svelte";
   import { memoryResult } from "./descriptors";
   import ToolProse from "./ToolProse.svelte";

@@ -10,7 +10,7 @@ import { fileURLToPath } from "node:url";
  * be run from this directory.
  */
 export const LEGACY_DB_PATH = fileURLToPath(
-  new URL("../whiffle.db", import.meta.url)
+  new URL("../cawco.db", import.meta.url)
 );
 
 /**
@@ -23,7 +23,7 @@ export const LEGACY_DB_PATH = fileURLToPath(
  * file reappearing later (a restored backup, a stray checkout) is left alone
  * rather than clobbering a live target.
  *
- * Lives in its own module so `whiffle deploy init` can run it too. The hub only
+ * Lives in its own module so `cawco deploy init` can run it too. The hub only
  * ever finds the legacy file relative to ITSELF, and a deployment clone is a
  * different checkout from the one that has been writing the database — so from
  * the clone the module-relative guess points at a file that was never there,

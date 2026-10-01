@@ -34,7 +34,7 @@ export const emptyIndex = (): UsageIndex => ({
 export const usageIndexPath = (): string =>
   join(
     process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share"),
-    "whiffle",
+    "cawco",
     FILE_NAME
   );
 
@@ -92,7 +92,7 @@ export const loadIndex = async (): Promise<UsageIndex | null> => {
 export const saveIndex = async (index: UsageIndex): Promise<void> => {
   const path = usageIndexPath();
   await mkdir(dirname(path), { recursive: true });
-  const temp = `${path}.whiffle-${process.pid}`;
+  const temp = `${path}.cawco-${process.pid}`;
   await Bun.write(temp, JSON.stringify(index));
   await rename(temp, path);
 };

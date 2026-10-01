@@ -8,7 +8,7 @@ import type { PermissionResult, UserAnswers, UserQuestion } from "./harness";
  * answered input goes back to the harness, so an `updatedInput` of `{ answers }`
  * alone is refused ("The required parameter `questions` is missing") and the
  * tool call dies with it. The dashboard has always answered this way
- * (`questionAnswer` in apps/dashboard/src/lib/whiffle/question.ts, which calls
+ * (`questionAnswer` in apps/dashboard/src/lib/cawco/question.ts, which calls
  * this); everything that answers from somewhere the original input never
  * reached — a parent's `answer_delegate`, the relay route — has to come back
  * through {@link settledQuestionResult} before its answer meets a harness.

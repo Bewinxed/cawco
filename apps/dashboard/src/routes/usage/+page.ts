@@ -1,4 +1,4 @@
-import type { UsageSummary } from "@whiffle/core";
+import type { UsageSummary } from "@cawco/core";
 import type { PageLoad } from "./$types";
 
 /** Local midnight, and the Monday that starts this week. */

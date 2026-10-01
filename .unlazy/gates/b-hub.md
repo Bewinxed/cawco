@@ -3,7 +3,7 @@
 Scope: packages/hub/src/stream.ts (sequencer + ring + subscription registry), server.ts wiring (fan-out wrap of the existing per-frame relay, STREAM_V1 in the handshake capabilities, CommandEnvelope routing onto existing relay ops with CommandAck emission), stream.test.ts.
 
 - [x] G1: Sequencer assigns 1..N monotonic per session, independent across sessions
-  CHECK: cd /home/bewinxed/whiffle && bun test packages/hub/src/stream.test.ts 2>&1 | grep -E "^ [0-9]+ pass" | tail -1
+  CHECK: cd /home/bewinxed/cawco && bun test packages/hub/src/stream.test.ts 2>&1 | grep -E "^ [0-9]+ pass" | tail -1
   EXPECT: /^\s*[5-9] pass|^\s*[1-9][0-9] pass/
   EVIDENCE: 28 pass
 
@@ -15,7 +15,7 @@ Scope: packages/hub/src/stream.ts (sequencer + ring + subscription registry), se
   The junit reporter names every test; a passing one is a self-closing
   <testcase ... />, a failing one carries a <failure> child, so `grep '/>'`
   counts passes only (verified against a deliberately failing probe).
-  CHECK: cd /home/bewinxed/whiffle && bun test packages/hub/src/stream.test.ts --reporter=junit --reporter-outfile=/tmp/b-hub-gates.xml >/dev/null 2>&1; grep '<testcase' /tmp/b-hub-gates.xml | grep '/>' | grep -cE "backlog|reset"
+  CHECK: cd /home/bewinxed/cawco && bun test packages/hub/src/stream.test.ts --reporter=junit --reporter-outfile=/tmp/b-hub-gates.xml >/dev/null 2>&1; grep '<testcase' /tmp/b-hub-gates.xml | grep '/>' | grep -cE "backlog|reset"
   EXPECT: /^([2-9]|[1-9][0-9]+)/
   EVIDENCE: 6
 
@@ -23,17 +23,17 @@ Scope: packages/hub/src/stream.ts (sequencer + ring + subscription registry), se
   NOTE: same mechanism substitution as G2, same reason. EXPECT also widened
   to two digits (same regex trap the driver fixed in a-core G1): the intent is
   "three or more", and `^[3-9]` silently fails at ten.
-  CHECK: cd /home/bewinxed/whiffle && bun test packages/hub/src/stream.test.ts --reporter=junit --reporter-outfile=/tmp/b-hub-gates.xml >/dev/null 2>&1; grep '<testcase' /tmp/b-hub-gates.xml | grep '/>' | grep -ciE "command"
+  CHECK: cd /home/bewinxed/cawco && bun test packages/hub/src/stream.test.ts --reporter=junit --reporter-outfile=/tmp/b-hub-gates.xml >/dev/null 2>&1; grep '<testcase' /tmp/b-hub-gates.xml | grep '/>' | grep -ciE "command"
   EXPECT: /^([3-9]|[1-9][0-9]+)/
   EVIDENCE: 10
 
 - [x] G4: Hub suite whole, 0 fail
-  CHECK: cd /home/bewinxed/whiffle && bun test packages/hub 2>&1 | grep -E "^ [0-9]+ fail" | tail -1
+  CHECK: cd /home/bewinxed/cawco && bun test packages/hub 2>&1 | grep -E "^ [0-9]+ fail" | tail -1
   EXPECT: 0 fail
   EVIDENCE: 0 fail
 
 - [x] G5: Workspace typecheck clean
-  CHECK: cd /home/bewinxed/whiffle && bun run typecheck 2>&1 | grep -c "Exited with code 0"
+  CHECK: cd /home/bewinxed/cawco && bun run typecheck 2>&1 | grep -c "Exited with code 0"
   EXPECT: 6
   EVIDENCE: 6
 

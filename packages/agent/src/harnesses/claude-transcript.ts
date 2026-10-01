@@ -2,7 +2,7 @@
  * Direct transcript reader for Claude Code sessions.
  *
  * Replaces the SDK's `getSessionMessages` black box with an in-house reader
- * built on `@whiffle/jsonl-parser`. The hot path — first page, newest records
+ * built on `@cawco/jsonl-parser`. The hot path — first page, newest records
  * — backward-scans from EOF via `readTranscriptEnd`, reading ~1 MB instead of
  * the full file. The full-read path falls back to `readTranscript` when callers
  * page deeper than the tail window covers.
@@ -19,9 +19,9 @@
  * `AskUserQuestion` answers without a second pass.
  */
 
-import type { NeutralSystemMessage } from "@whiffle/core";
-import type { LocatedRecord } from "@whiffle/jsonl-parser";
-import { readTranscriptEnd, typeFilter } from "@whiffle/jsonl-parser";
+import type { NeutralSystemMessage } from "@cawco/core";
+import type { LocatedRecord } from "@cawco/jsonl-parser";
+import { readTranscriptEnd, typeFilter } from "@cawco/jsonl-parser";
 import { cache } from "./transcript-cache.ts";
 
 /** The shape the SDK's `getSessionMessages` returns — kept structurally identical. */

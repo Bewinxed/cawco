@@ -1,5 +1,5 @@
 /**
- * The tool catalog: workflow CLIs whiffle can put on a machine (NEW.md §10).
+ * The tool catalog: workflow CLIs cawco can put on a machine (NEW.md §10).
  *
  * The catalog is data and the agent's executor is generic — adding a tool is
  * adding one {@link ToolSpec} here and nothing anywhere else. The hub decides

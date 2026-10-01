@@ -60,11 +60,11 @@ The agent needs the fleet baseline to spawn a session. Two cases:
   compiled default into `~/.claude/settings.json` on boot exactly as it does
   now, and uses the same list for spawns. No regression possible.
 - **Synced at least once** (hub goes away mid-operation): the last-synced fleet
-  baseline is in the sidecar (`~/.claude/whiffle-fleet.json`) under a new
+  baseline is in the sidecar (`~/.claude/cawco-fleet.json`) under a new
   `deniedTools` key. The spawn path reads it from there. `settings.json` was
   also converged on the last sync, so the user's own `claude` is consistent.
 
-Cache location: `~/.claude/whiffle-fleet.json` (`deniedTools: string[]`),
+Cache location: `~/.claude/cawco-fleet.json` (`deniedTools: string[]`),
 written by `converge()` alongside `mcp`, `skills`, etc. Same atomic-rename
 write path, same stale-is-safe semantics: a stale deny list is more restrictive
 than intended at worst, never less — because the only real-world edit is

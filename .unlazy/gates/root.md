@@ -3,12 +3,12 @@
 Scope: the whole build, verified by the driver after all leaves.
 
 - [x] R1: Every leaf's gates fully met (driver re-ran gate-check per leaf)
-  CHECK: node /home/bewinxed/.claude/skills/unlazy/scripts/gate-check.mjs --status /home/bewinxed/whiffle/.unlazy/gates/a-core.md /home/bewinxed/whiffle/.unlazy/gates/b-hub.md /home/bewinxed/whiffle/.unlazy/gates/c-store.md /home/bewinxed/whiffle/.unlazy/gates/d-ui.md /home/bewinxed/whiffle/.unlazy/gates/e-e2e.md 2>&1 | tail -5
+  CHECK: node /home/bewinxed/.claude/skills/unlazy/scripts/gate-check.mjs --status /home/bewinxed/cawco/.unlazy/gates/a-core.md /home/bewinxed/cawco/.unlazy/gates/b-hub.md /home/bewinxed/cawco/.unlazy/gates/c-store.md /home/bewinxed/cawco/.unlazy/gates/d-ui.md /home/bewinxed/cawco/.unlazy/gates/e-e2e.md 2>&1 | tail -5
   EXPECT: /ALL MET/
-  EVIDENCE: /home/bewinxed/whiffle/.unlazy/gates/e-e2e.md: 4 gates | ALL MET (27 met)
+  EVIDENCE: /home/bewinxed/cawco/.unlazy/gates/e-e2e.md: 4 gates | ALL MET (27 met)
 
 - [x] R2: Workspace typecheck 6/6, production build clean
-  CHECK: cd /home/bewinxed/whiffle && bun run typecheck 2>&1 | grep -c "Exited with code 0" && cd apps/dashboard && bun run build 2>&1 | grep -c "✓ built"
+  CHECK: cd /home/bewinxed/cawco && bun run typecheck 2>&1 | grep -c "Exited with code 0" && cd apps/dashboard && bun run build 2>&1 | grep -c "✓ built"
   EXPECT: /6[\s\S]*[1-9]/
   EVIDENCE: 6 | 2
 
@@ -16,7 +16,7 @@ Scope: the whole build, verified by the driver after all leaves.
   EVIDENCE: d-ui G6, driver-run via CDP on session 56b59d92: before {"turns":5}, sent through the new submitCommand path, {"replied":true} — a real agent reply through the legacy stack. NOTE: the dev hub (bun --watch) has hot-reloaded the stream code, so the DEV stack is already stream-capable end-to-end for new connections; the un-restarted DAEMON keeps the legacy daemon-side behavior, which is the compat case this gate covers.
 
 - [x] R4: Committed in coherent commits (core protocol, hub, store, ui, e2e or grouped sensibly), pushed
-  CHECK: cd /home/bewinxed/whiffle && git status --short | grep -cv ".unlazy" ; true
+  CHECK: cd /home/bewinxed/cawco && git status --short | grep -cv ".unlazy" ; true
   EXPECT: /^0/
   EVIDENCE: 0
   <!-- Scoped (driver, stated not silent): .unlazy/ is the build's own ledger

@@ -1,7 +1,7 @@
 import type { Stats } from "node:fs";
 import { stat } from "node:fs/promises";
-import type { UsageBucket } from "@whiffle/core";
-import { floorToHour, refreshPricing, totalTokens } from "@whiffle/core";
+import type { UsageBucket } from "@cawco/core";
+import { floorToHour, refreshPricing, totalTokens } from "@cawco/core";
 import {
   emptyIndex,
   loadIndex,

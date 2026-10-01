@@ -15,9 +15,9 @@
     ]
   },
   "javascript": {
-    // __WHIFFLE_COMMIT__: the dashboard's build commit, a `define` in
+    // __CAWCO_COMMIT__: the dashboard's build commit, a `define` in
     // apps/dashboard/vite.config.ts.
-    "globals": ["Bun", "__WHIFFLE_COMMIT__"]
+    "globals": ["Bun", "__CAWCO_COMMIT__"]
   },
   // Both sorters can change what the code does: JS object key order is
   // observable through Object.keys/entries and JSON output, and a CSS
@@ -60,8 +60,8 @@
       // caught the same as the bare forms.
       "includes": [
         "apps/dashboard/src/**",
-        "!apps/dashboard/src/lib/whiffle/id.ts",
-        "!apps/dashboard/src/lib/whiffle/copy.ts",
+        "!apps/dashboard/src/lib/cawco/id.ts",
+        "!apps/dashboard/src/lib/cawco/copy.ts",
         "!apps/dashboard/src/lib/hooks/use-clipboard.svelte.ts",
         "!apps/dashboard/src/**/*.test.ts"
       ],
@@ -74,11 +74,11 @@
                 "entries": [
                   {
                     "property": "randomUUID",
-                    "message": "Secure-context only — absent over plain http off localhost. Use newId() from $lib/whiffle/id."
+                    "message": "Secure-context only — absent over plain http off localhost. Use newId() from $lib/cawco/id."
                   },
                   {
                     "property": "clipboard",
-                    "message": "Secure-context only. Use copyToClipboard() from $lib/whiffle/copy, or the use-clipboard hook."
+                    "message": "Secure-context only. Use copyToClipboard() from $lib/cawco/copy, or the use-clipboard hook."
                   }
                 ]
               }

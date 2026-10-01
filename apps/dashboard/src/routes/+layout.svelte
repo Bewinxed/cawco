@@ -5,17 +5,17 @@
   import { onMount } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { onNavigate } from "$app/navigation";
+  import { ensureConnected } from "$lib/cawco/client.svelte";
+  import { GROUPS } from "$lib/cawco/config/sections";
+  import { restWhenHidden } from "$lib/cawco/motion/rest";
+  import { leaving, plan, route } from "$lib/cawco/motion/route.svelte";
+  import { departAll } from "$lib/cawco/motion/share.svelte";
+  import Shell from "$lib/cawco/Shell.svelte";
+  import { tallestComposer } from "$lib/cawco/transcript/composer-presence.svelte";
+  import { workspace } from "$lib/cawco/workspace/workspace.svelte";
   import { Toaster } from "$lib/components/ui/sonner";
   import { NARROW_QUERY } from "$lib/hooks/is-mobile.svelte";
   import { enableLongPressMenus } from "$lib/utils/longpress";
-  import { ensureConnected } from "$lib/whiffle/client.svelte";
-  import { GROUPS } from "$lib/whiffle/config/sections";
-  import { restWhenHidden } from "$lib/whiffle/motion/rest";
-  import { leaving, plan, route } from "$lib/whiffle/motion/route.svelte";
-  import { departAll } from "$lib/whiffle/motion/share.svelte";
-  import Shell from "$lib/whiffle/Shell.svelte";
-  import { tallestComposer } from "$lib/whiffle/transcript/composer-presence.svelte";
-  import { workspace } from "$lib/whiffle/workspace/workspace.svelte";
   import type { LayoutServerData } from "./$types";
 
   let { children, data }: { children: Snippet; data: LayoutServerData } =

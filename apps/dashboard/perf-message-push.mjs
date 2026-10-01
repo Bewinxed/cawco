@@ -91,7 +91,7 @@ await new Promise((r) => {
 await sleep(3000);
 
 const sessions = await evaluate(`(() => {
-  const d = window.__whiffleDebug;
+  const d = window.__cawcoDebug;
   if (!d?.state) return [];
   return (d.state.instances || [])
     .filter(r => r.status === 'running' || r.status === 'starting')
@@ -134,7 +134,7 @@ for (let attempt = 0; attempt < 15; attempt += 1) {
   transcriptCheck = await evaluate(`(() => {
     const transcript = document.querySelector('[data-transcript-content]');
     const scroller = document.querySelector('[tabindex="-1"]');
-    const msgCount = window.__whiffleDebug?.state?.sessions?.['${chosen.id}']?.messages?.length ?? 0;
+    const msgCount = window.__cawcoDebug?.state?.sessions?.['${chosen.id}']?.messages?.length ?? 0;
     return {
       hasTranscript: !!transcript,
       hasScroller: !!scroller,
@@ -195,7 +195,7 @@ for (let i = 0; i < 10; i += 1) {
 
   // Push one message and wait for rendering
   const _pushResult = await evaluate(`new Promise(resolve => {
-    const d = window.__whiffleDebug;
+    const d = window.__cawcoDebug;
     const s = d?.state?.sessions?.['${chosen.id}'];
     if (!s) { resolve({ error: 'no session' }); return; }
 
@@ -318,7 +318,7 @@ console.log(
 
 // ── CLEANUP ─────────────────────────────────────────────────────────
 await evaluate(`(() => {
-  const s = window.__whiffleDebug?.state?.sessions?.['${chosen.id}'];
+  const s = window.__cawcoDebug?.state?.sessions?.['${chosen.id}'];
   if (!s) return;
   s.messages = s.messages.filter(m => !m.id?.startsWith('perf-push-'));
 })()`);

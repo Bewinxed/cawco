@@ -7,7 +7,7 @@
  * way. Without motion only the fade runs.
  */
 import type { TransitionConfig } from "svelte/transition";
-import { dur, easeDrawer, motionOk } from "$lib/whiffle/motion/curves.svelte";
+import { dur, easeDrawer, motionOk } from "$lib/cawco/motion/curves.svelte";
 
 export function paneSlide(
   _node: Element,

@@ -2,7 +2,7 @@
  * Fleet-wide tool denials. The fleet baseline lives in the hub's
  * `supervisor_config.denied_tools` column and reaches every machine through
  * the normal fleet-sync path (`FleetConfig.deniedTools`). The sidecar
- * (`~/.claude/whiffle-fleet.json`) caches the last-synced value so a machine
+ * (`~/.claude/cawco-fleet.json`) caches the last-synced value so a machine
  * that loses its hub still has a policy.
  *
  * Two consumers read the resolved list:
@@ -20,7 +20,7 @@ import { expandHome } from "./fs";
 const SETTINGS = expandHome("~/.claude/settings.json");
 
 /** The sidecar the fleet sync writes after every converge. */
-const SIDECAR = expandHome("~/.claude/whiffle-fleet.json");
+const SIDECAR = expandHome("~/.claude/cawco-fleet.json");
 
 /**
  * Compiled bootstrap defaults — what a machine uses when it has never synced
@@ -140,7 +140,7 @@ export const convergeDeniedTools = async (): Promise<DenyConvergence> => {
 
     // Written whole and moved into place: a half-written settings file is a
     // machine whose next `claude` starts with none of the user's settings.
-    const temp = `${SETTINGS}.whiffle-${process.pid}`;
+    const temp = `${SETTINGS}.cawco-${process.pid}`;
     await Bun.write(temp, JSON.stringify(next, null, 2));
     await rename(temp, SETTINGS);
     return { state: "applied" };

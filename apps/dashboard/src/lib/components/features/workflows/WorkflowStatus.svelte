@@ -1,6 +1,7 @@
 <script lang="ts">
-  import type { WorkflowRunStatus, WorkflowStepStatus } from "@whiffle/core";
+  import type { WorkflowRunStatus, WorkflowStepStatus } from "@cawco/core";
   import { TextMorph } from "torph/svelte";
+  import { crossIn, morphMs } from "$lib/cawco/motion/curves.svelte";
   import {
     IconCheck,
     IconChevronUp,
@@ -8,7 +9,6 @@
     IconError,
     IconStop,
   } from "$lib/icons";
-  import { crossIn, morphMs } from "$lib/whiffle/motion/curves.svelte";
 
   let {
     status,

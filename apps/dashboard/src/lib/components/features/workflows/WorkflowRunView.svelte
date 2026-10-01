@@ -1,8 +1,24 @@
 <script lang="ts">
-  import type { UsageSummary } from "@whiffle/core";
+  import type { UsageSummary } from "@cawco/core";
   import { onMount, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { goto } from "$app/navigation";
+  import { cawco } from "$lib/cawco/client.svelte";
+  import { confirm } from "$lib/cawco/confirm.svelte";
+  import { message } from "$lib/cawco/delegate-types";
+  import { crossIn, crossOut } from "$lib/cawco/motion/curves.svelte";
+  import { unfold } from "$lib/cawco/motion/fold.svelte";
+  import { reflow } from "$lib/cawco/motion/rows.svelte";
+  import {
+    refreshWorkflowLog,
+    refreshWorkflowRun,
+    workflowState,
+  } from "$lib/cawco/workflow-state.svelte";
+  import {
+    answerWorkflow,
+    cancelWorkflowRun,
+    rerunWorkflow,
+  } from "$lib/cawco/workflows";
   import PendingContent, {
     whileIdle,
   } from "$lib/components/ui/button/pending-content.svelte";
@@ -12,22 +28,6 @@
   import { Skeleton } from "$lib/components/ui/skeleton";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
   import * as Tabs from "$lib/components/ui/tabs";
-  import { whiffle } from "$lib/whiffle/client.svelte";
-  import { confirm } from "$lib/whiffle/confirm.svelte";
-  import { message } from "$lib/whiffle/delegate-types";
-  import { crossIn, crossOut } from "$lib/whiffle/motion/curves.svelte";
-  import { unfold } from "$lib/whiffle/motion/fold.svelte";
-  import { reflow } from "$lib/whiffle/motion/rows.svelte";
-  import {
-    refreshWorkflowLog,
-    refreshWorkflowRun,
-    workflowState,
-  } from "$lib/whiffle/workflow-state.svelte";
-  import {
-    answerWorkflow,
-    cancelWorkflowRun,
-    rerunWorkflow,
-  } from "$lib/whiffle/workflows";
   import { followTail } from "./follow-tail";
   import {
     type JournalCheckpoint,
@@ -68,7 +68,7 @@
   let sessionCosts = $state<Record<string, number>>({});
   const costs = $derived(
     Object.fromEntries(
-      whiffle.instances
+      cawco.instances
         .filter(
           (entry) =>
             entry.sessionId && sessionCosts[entry.sessionId] !== undefined
@@ -165,7 +165,7 @@
       .filter((entry) => entry.stepId === step?.id)
       .sort((a, b) => a.number - b.number) ?? []
   );
-  const live = $derived(whiffle.hub === "connected");
+  const live = $derived(cawco.hub === "connected");
   const graph = $derived.by(() => {
     if (!run || scope === "root") {
       return run?.graph;

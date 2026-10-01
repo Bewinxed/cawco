@@ -7,7 +7,7 @@
       content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"
       name="viewport"
     >
-    <title>Whiffle — mission control for Claude Code</title>
+    <title>CawCo — mission control for Claude Code</title>
     %sveltekit.head%
     <!--
       The faces the first paint sets its text in, decoded before it. The build
@@ -26,7 +26,7 @@
     <script>
       "use strict";
       try {
-        const stored = localStorage.getItem("whiffle-theme");
+        const stored = localStorage.getItem("cawco-theme");
         const dark =
           stored === "dark" ||
           (stored !== "light" &&
@@ -91,10 +91,7 @@
     <script>
       "use strict";
       try {
-        const w = Number.parseInt(
-          localStorage.getItem("whiffle-rail-width"),
-          10
-        );
+        const w = Number.parseInt(localStorage.getItem("cawco-rail-width"), 10);
         if (w >= 216 && w <= 520) {
           document.documentElement.style.setProperty("--rail-w", `${w}px`);
         }

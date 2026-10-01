@@ -1,4 +1,4 @@
-import type { ClaudeLimits, InstanceRow } from "@whiffle/core";
+import type { ClaudeLimits, InstanceRow } from "@cawco/core";
 import type { LayoutServerLoad } from "./$types";
 
 /**
@@ -8,7 +8,7 @@ import type { LayoutServerLoad } from "./$types";
  * the default and the rail visibly jumped once the client read the real value
  * on mount. The bounds mirror Shell.svelte's clamp.
  */
-const RAIL_KEY = "whiffle-rail-width";
+const RAIL_KEY = "cawco-rail-width";
 const RAIL_MIN = 216;
 const RAIL_MAX = 520;
 const RAIL_DEFAULT = 228;
@@ -18,9 +18,9 @@ const RAIL_DEFAULT = 228;
  * rather than imported so the server never pulls the client store (and its
  * module-level `$state`) into a request. The shapes mirror that module's.
  */
-const WORKSPACE_KEY = "whiffle-workspace";
+const WORKSPACE_KEY = "cawco-workspace";
 /** The addresses of what the tree holds, kept apart from it (workspace.svelte.ts, Persistence). */
-const WORKSPACE_CTX_KEY = "whiffle-workspace-ctx";
+const WORKSPACE_CTX_KEY = "cawco-workspace-ctx";
 
 const SESSION_PATH = /^\/session\/([^/]+)/;
 
@@ -32,7 +32,7 @@ const SESSION_PATH = /^\/session\/([^/]+)/;
  * visit, before any cookie, the client hints and the user agent stand in. The
  * cookie is primary because an iPad in desktop mode reports a Macintosh UA.
  */
-const NARROW_KEY = "whiffle-narrow";
+const NARROW_KEY = "cawco-narrow";
 const PHONE_UA = /iPhone|iPod|Android.*Mobile|Windows Phone/i;
 
 function narrowOf(cookie: string | undefined, headers: Headers): boolean {

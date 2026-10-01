@@ -11,8 +11,8 @@ incoming screenshots, ui-observer for rendered-layout ground truth.
 
 ## Project
 
-Whiffle (UI wordmark "Whiffle") is a self-hosted fleet control plane for AI coding agents. A
-`whiffle` daemon runs on each machine, joins a hub over tailnet/LAN via mDNS, and a browser
+Caw&Co (UI wordmark "CawCo") is a self-hosted fleet control plane for AI coding agents. A
+`cawco` daemon runs on each machine, joins a hub over tailnet/LAN via mDNS, and a browser
 dashboard gives one board across every machine, project, and running agent session. Harnesses:
 Claude Code, OpenCode, pi. A Telegram bridge lets the operator approve permissions from a phone.
 

@@ -1,4 +1,4 @@
-# WORDS.md — Voice, tone, and terminology for Whiffle ("Whiffle")
+# WORDS.md — Voice, tone, and terminology for Caw&Co ("CawCo")
 
 **Date:** 2026-08-21 · **Status:** confirmed
 **Doctorate authority:** `content-design` (design-for-ai 4.2.0) — voice/tone per Podmajersky (2019), error
@@ -140,7 +140,7 @@ it actually means.
 | The AI coding agent that performs the work (the harness identity) | **agent** | Claude Code, OpenCode, or pi — the actor named in the transcript. | "session" (when meaning the actor); "model" |
 | A child task an agent spawns inside its own session, folded into the parent transcript as a branch | **subagent** | The collapsed "branch" in the transcript; its tag under the parent turn. | "delegate" (a delegate is a *separate* fleet session, not an in-session child); "branch" as the user-facing label in prose (the word *branch* stays, the label is *subagent*) |
 | A separate fleet session spawned by a parent session (a full fleet instance, hub-named `<checkout>#<short id>`) | **delegate** | A whole other session handed a task; reported back to the parent. | "subagent" (a subagent is a child task inside one session); "handoff" as the noun for the entity (allowed as the verb/event) |
-| A host running the whiffle daemon | **machine** | The roster rows, the offline states, the select-at-spawn type. | "host" in user-facing copy (fine as a network term in the code) |
+| A host running the cawco daemon | **machine** | The roster rows, the offline states, the select-at-spawn type. | "host" in user-facing copy (fine as a network term in the code) |
 | The connected collective of machines the operator supervises | **fleet** | The board, the global-nav entry, "the fleet is down". | "cluster", "network" (ambiguous) |
 | A standing permission rule watching sessions | **rule** | The Rules surface and its rows. | "policy", "permission set" |
 | Daily cost against a limit | **spend** (the number) / **budget** (the limit) | The Usage surface's total and threshold. | "cost" when the operator-facing term for the whole surface is Spend/Usage |

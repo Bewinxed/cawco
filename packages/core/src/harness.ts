@@ -1,10 +1,10 @@
 /**
  * The harness-neutral spine (the 2026-08 rework).
  *
- * Whiffle once tunnelled Claude Agent SDK types verbatim — `@whiffle/core`
+ * CawCo once tunnelled Claude Agent SDK types verbatim — `@cawco/core`
  * re-exported the SDK, the agent spawned `query()` and the dashboard folded SDK
  * messages into view state. Making the product harness-agnostic means the wire,
- * the hub and the dashboard all speak a vocabulary whiffle owns, and each
+ * the hub and the dashboard all speak a vocabulary cawco owns, and each
  * harness (claude, opencode, pi, …) is a daemon-side adapter that translates its
  * native events into it.
  *
@@ -20,7 +20,7 @@
  *   dependencies, never shared on the wire.
  */
 
-/** The harnesses whiffle can spawn sessions on. Adding one is a new adapter. */
+/** The harnesses cawco can spawn sessions on. Adding one is a new adapter. */
 export type HarnessKind = "claude" | "opencode" | "pi";
 
 export const HARNESSES: readonly HarnessKind[] = ["claude", "opencode", "pi"];
@@ -37,7 +37,7 @@ export type PermissionMode =
 /**
  * How hard the model thinks, and how much it spends doing it: Claude Code's
  * effort scale, in its own order. Hand-written rather than tunnelled from the
- * SDK — nothing in this file imports a harness SDK, and `@whiffle/core` has no
+ * SDK — nothing in this file imports a harness SDK, and `@cawco/core` has no
  * dependencies at all — but it is the SDK's `EffortLevel` verbatim, so the
  * claude adapter hands it straight on.
  *
@@ -441,7 +441,7 @@ export type NeutralOrigin =
       body?: string;
     }
   /**
-   * Whiffle's own word, not the user's and not another session's: today, a rule
+   * CawCo's own word, not the user's and not another session's: today, a rule
    * that fired. `name` is what fired it, e.g. `rule:Honest caveat`. Kept apart
    * from `peer` so a transcript can say who is really talking — a model that
    * mistakes a rule for the user apologises to nobody.
@@ -506,7 +506,7 @@ export interface NeutralUserMessage {
 }
 
 /**
- * A message sent to a session, by the reader or by whiffle. `uuid` is its one
+ * A message sent to a session, by the reader or by cawco. `uuid` is its one
  * identity from the press to a reload: the dashboard's command id for a
  * reader's send, minted where the hub builds its own. The hub keeps one
  * {@link SendRecord} under it, and every copy of the message on every screen
@@ -766,7 +766,7 @@ export interface HarnessCapabilities {
   /** Fork a stored session into a new one. */
   fork: boolean;
   getSessionMessages: boolean;
-  /** Peer-to-peer hand-off tools (`mcp__whiffle__*` for claude). */
+  /** Peer-to-peer hand-off tools (`mcp__cawco__*` for claude). */
   handoff: boolean;
   hooks: boolean;
   images: boolean;

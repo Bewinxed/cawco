@@ -2,8 +2,8 @@ import { Database } from "bun:sqlite";
 import { readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { basename, join } from "node:path";
-import type { RawOpenCodeMessage, UsageTokens } from "@whiffle/core";
-import { costForUsage, totalTokens } from "@whiffle/core";
+import type { RawOpenCodeMessage, UsageTokens } from "@cawco/core";
+import { costForUsage, totalTokens } from "@cawco/core";
 import type { ScannedRecord } from "./types";
 
 /**

@@ -1,5 +1,5 @@
 /**
- * Fleet administration tools: agents manage whiffle's settings (delegate types,
+ * Fleet administration tools: agents manage cawco's settings (delegate types,
  * skills, plugins, MCP servers, rules, hooks, memory) through the same MCP server
  * the handoff tools ride.
  *
@@ -573,7 +573,7 @@ export function adminTools() {
           .string()
           .optional()
           .describe(
-            "A command hook's script body. Whiffle writes it to a file on every machine " +
+            "A command hook's script body. CawCo writes it to a file on every machine " +
               "and points the registration at that path. Optional for command hooks."
           ),
       },

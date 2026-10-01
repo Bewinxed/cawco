@@ -5,8 +5,8 @@ import {
   generateCodeChallenge,
   generateCodeVerifier,
   saveCredentials,
-} from "@whiffle/auth";
-import type { AuthState } from "@whiffle/core";
+} from "@cawco/auth";
+import type { AuthState } from "@cawco/core";
 import { probeAuth } from "./auth";
 
 /**

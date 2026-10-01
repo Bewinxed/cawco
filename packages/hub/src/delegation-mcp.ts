@@ -12,6 +12,7 @@ import {
   writeFileSync,
 } from "node:fs";
 import { dirname, join } from "node:path";
+import type { Envelope, InstanceRow } from "@cawco/core";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
 import {
@@ -20,7 +21,6 @@ import {
   LATEST_PROTOCOL_VERSION,
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
-import type { Envelope, InstanceRow } from "@whiffle/core";
 import { adminTools } from "./admin-tools";
 import { DB_PATH, HUB_PORT, SPAWN_START_TIMEOUT_MS } from "./config";
 import { handoffInstructions, handoffTools } from "./delegation-tools";
@@ -40,7 +40,7 @@ const LONG_CALLS: Record<string, string> = {
  * where the tool modules are folded into `cli.js` and there is no source file
  * to reload.
  */
-declare const __WHIFFLE_RELEASE__: boolean | undefined;
+declare const __CAWCO_RELEASE__: boolean | undefined;
 
 /**
  * The key MCP session ids are signed with, beside the hub's database so a
@@ -125,7 +125,7 @@ export function createDelegationMcp(options: {
 
   const moduleUrl = new URL("./delegation-tools.ts", import.meta.url);
   const adminModuleUrl = new URL("./admin-tools.ts", import.meta.url);
-  if (typeof __WHIFFLE_RELEASE__ !== "boolean") {
+  if (typeof __CAWCO_RELEASE__ !== "boolean") {
     // Our choice: one-second polling keeps deployment updates responsive without a watcher per session.
     watchFile(moduleUrl, { interval: 1000, persistent: false }, () => {
       // biome-ignore lint/complexity/noVoid: file watcher callback cannot await; errors preserve the previous registry below
@@ -177,7 +177,7 @@ export function createDelegationMcp(options: {
       }
       return actor;
     }
-    const context = args.__whiffle as
+    const context = args.__cawco as
       | { sessionId?: string; directory?: string }
       | undefined;
     const candidates = rows.filter(
@@ -189,7 +189,7 @@ export function createDelegationMcp(options: {
     );
     if (candidates.length !== 1) {
       throw new Error(
-        "Whiffle requires one registered session matching the harness-injected context"
+        "CawCo requires one registered session matching the harness-injected context"
       );
     }
     return candidates[0];
@@ -233,7 +233,7 @@ export function createDelegationMcp(options: {
       throw new Error(
         response.status < 500
           ? text
-          : `Whiffle ${operation}: HTTP ${response.status}: ${text}`
+          : `CawCo ${operation}: HTTP ${response.status}: ${text}`
       );
     }
   };
@@ -330,7 +330,7 @@ export function createDelegationMcp(options: {
       : undefined;
     const canDelegate = bound?.canDelegate ?? undefined;
     const server = new Server(
-      { name: "whiffle", version: "1.0.0" },
+      { name: "cawco", version: "1.0.0" },
       {
         capabilities: { tools: { listChanged: true } },
         instructions: handoffInstructions({
@@ -457,7 +457,7 @@ export function createDelegationMcp(options: {
         params: {
           protocolVersion: version,
           capabilities: {},
-          clientInfo: { name: "whiffle-restored-session", version: "1" },
+          clientInfo: { name: "cawco-restored-session", version: "1" },
         },
       });
       await handshake({ method: "notifications/initialized" }, id);
@@ -495,7 +495,7 @@ export function createDelegationMcp(options: {
     // Opening a connection, or putting one back, binds it to the instance its
     // URL names: one the hub has a row for.
     if (binding && !options.instances().some((row) => row.id === binding)) {
-      return new Response("Unknown Whiffle instance", { status: 404 });
+      return new Response("Unknown CawCo instance", { status: 404 });
     }
     if (id) {
       if (!mintedFor(id, binding)) {

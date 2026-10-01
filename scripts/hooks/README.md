@@ -7,11 +7,11 @@ default — each one documents the `settings.json` stanza needed to enable it.
 
 A `PreToolUse` hook for `Bash` that counts consecutive read-only exploration
 commands (grep, rg, find, cat, head, tail, ls, jq, awk, wc, sqlite3, sed -n,
-git log/grep/show) and nudges the model toward `mcp__whiffle__delegate` after
+git log/grep/show) and nudges the model toward `mcp__cawco__delegate` after
 5 and 10 consecutive hits. Non-read-only commands reset the counter. The hook
 never blocks or denies a command — it only injects advisory context.
 
-State lives in `/tmp/whiffle-delegate-nudge/` keyed by session id.
+State lives in `/tmp/cawco-delegate-nudge/` keyed by session id.
 
 ### Enable
 

@@ -1,4 +1,4 @@
-import { generateCodeChallenge, generateCodeVerifier } from "@whiffle/auth";
+import { generateCodeChallenge, generateCodeVerifier } from "@cawco/auth";
 import type {
   AgentRow,
   BuildInfo,
@@ -51,7 +51,7 @@ import type {
   UsageBucket,
   UsageLimitsResponse,
   Verb,
-} from "@whiffle/core";
+} from "@cawco/core";
 import {
   AGENT_BUSY,
   ASK_USER_QUESTION,
@@ -104,9 +104,9 @@ import {
   TARGET_HEADROOM_TOKENS,
   TOOL_CATALOG,
   toolSpec,
-  UPDATE_WHIFFLE,
+  UPDATE_CAWCO,
   validateWorkflow,
-} from "@whiffle/core";
+} from "@cawco/core";
 import { Elysia, t, ValidationError } from "elysia";
 import { websocket } from "elysia/websocket";
 import { DB_PATH, HUB_VERSION, SPAWN_START_TIMEOUT_MS } from "./config";
@@ -585,7 +585,7 @@ const peekResume = (payload: unknown): string | undefined => {
  * The hub row is the single authority for an instance's session key. A spawn
  * addressed to an existing row resumes under the row's key, whatever the
  * client sent: the dashboard once resumed two opencode sessions under their
- * whiffle instance ids, the harness rejected both, and the rows went `error`.
+ * cawco instance ids, the harness rejected both, and the rows went `error`.
  * A row that never reported a key has nothing to resume, and a key the
  * client made up for it is refused rather than tried. Mutates `payload` in
  * place; returns the reason the spawn must be refused, or `undefined` when
@@ -883,7 +883,7 @@ const peekResumableAt = (
 };
 
 /**
- * `register`'s word on the whiffle the daemon is running (NEW.md §12). Absent
+ * `register`'s word on the cawco the daemon is running (NEW.md §12). Absent
  * from a daemon that predates it and from the re-announce, and the row keeps
  * what it had either way.
  */
@@ -1619,7 +1619,7 @@ export const createServer = ({
   };
   /**
    * A session's standing instructions reach it through the one send path,
-   * while its machine is connected and the session takes whiffle's own word:
+   * while its machine is connected and the session takes cawco's own word:
    * never finished work. A rule or supervisor verdict with no route is not
    * sent and not counted.
    */
@@ -5246,7 +5246,7 @@ export const createServer = ({
       return answerWorkflow(
         pending,
         answer.requestId,
-        answer.result as import("@whiffle/core").PermissionResult
+        answer.result as import("@cawco/core").PermissionResult
       );
     } catch (error) {
       dashboard.send(
@@ -5609,7 +5609,7 @@ export const createServer = ({
                     );
                   }
                   const inspection =
-                    answer.result as import("@whiffle/core").ConfigInspection;
+                    answer.result as import("@cawco/core").ConfigInspection;
                   const matches = inspection.skills.filter(
                     (skill) => skill.name === name
                   );
@@ -5645,7 +5645,7 @@ export const createServer = ({
                       markdown &&
                       Buffer.from(markdown.contentBase64, "base64")
                         .toString()
-                        .includes(`<!-- whiffle-workflow:${workflowId} -->`)
+                        .includes(`<!-- cawco-workflow:${workflowId} -->`)
                     )
                   ) {
                     throw new Error(
@@ -5658,7 +5658,7 @@ export const createServer = ({
           }
         )
       )
-      .all("/mcp/whiffle", ({ request, body, server }) => {
+      .all("/mcp/cawco", ({ request, body, server }) => {
         // Tool deadlines govern long calls; the HTTP idle timer must not cut them short.
         server?.timeout(request, 0);
         return delegationMcp.handle(request, body);
@@ -6018,7 +6018,7 @@ export const createServer = ({
         async ({ params, body, status }) => {
           const answer = await callAgent(
             params.machineId,
-            UPDATE_WHIFFLE,
+            UPDATE_CAWCO,
             [body],
             UPDATE_TIMEOUT_MS
           );
@@ -6264,7 +6264,7 @@ export const createServer = ({
         async ({ params, query, status }) => {
           // Two mutually exclusive cases, never mixed. A hub row for this id is
           // the single authority for the session it holds: its key, machine,
-          // folder and harness. (An opencode session resumed under its whiffle
+          // folder and harness. (An opencode session resumed under its cawco
           // instance id instead of its `ses_…` key is how two rows went
           // unrevivable after a hub restart.) Without a row, the id is by
           // definition a stored session key whose location is resolved below.
@@ -6276,7 +6276,7 @@ export const createServer = ({
           if (row) {
             if (!row.sessionId) {
               // Never reported a session key, so nothing is stored under this
-              // id anywhere; asking a machine with the whiffle id as the key
+              // id anywhere; asking a machine with the cawco id as the key
               // would only make the harness reject it. What it was sent is
               // the hub's own to say: the records, and nothing else.
               return new Response(
@@ -6285,10 +6285,10 @@ export const createServer = ({
                   headers: {
                     "Content-Type": "application/x-ndjson",
                     "Cache-Control": "no-store",
-                    "X-Whiffle-Machine": row.machineId,
-                    "X-Whiffle-Session": "",
-                    "X-Whiffle-Cwd": encodeURIComponent(row.cwd || ""),
-                    "X-Whiffle-Harness": row.harness || "claude",
+                    "X-Cawco-Machine": row.machineId,
+                    "X-Cawco-Session": "",
+                    "X-Cawco-Cwd": encodeURIComponent(row.cwd || ""),
+                    "X-Cawco-Harness": row.harness || "claude",
                   },
                 }
               );
@@ -6323,7 +6323,7 @@ export const createServer = ({
           if (answer === "offline") {
             return new Response(`machine ${machineId} is not connected`, {
               status: 503,
-              headers: { "X-Whiffle-Machine": machineId },
+              headers: { "X-Cawco-Machine": machineId },
             });
           }
           if (answer === "timeout") {
@@ -6408,10 +6408,10 @@ export const createServer = ({
             headers: {
               "Content-Type": "application/x-ndjson",
               "Cache-Control": "no-store",
-              "X-Whiffle-Machine": machineId,
-              "X-Whiffle-Session": encodeURIComponent(sessionKey),
-              "X-Whiffle-Cwd": encodeURIComponent(cwd ?? ""),
-              "X-Whiffle-Harness": harness ?? "claude",
+              "X-Cawco-Machine": machineId,
+              "X-Cawco-Session": encodeURIComponent(sessionKey),
+              "X-Cawco-Cwd": encodeURIComponent(cwd ?? ""),
+              "X-Cawco-Harness": harness ?? "claude",
             },
           });
         }
@@ -7219,7 +7219,7 @@ export const createServer = ({
           return memory;
         }
       )
-      // The machines take back only what their own sidecar says whiffle wrote:
+      // The machines take back only what their own sidecar says cawco wrote:
       // one edited by hand on a machine stays there, unmanaged. The set goes with
       // it — a linked document with no main file to link it is not a memory, and
       // the machines would keep converging on documents nothing points at.
@@ -8096,7 +8096,7 @@ export const createServer = ({
             answerWorkflow(
               pending,
               workflowRequestId,
-              (body as { result: import("@whiffle/core").PermissionResult })
+              (body as { result: import("@cawco/core").PermissionResult })
                 .result
             )
           ) {

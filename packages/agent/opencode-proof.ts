@@ -5,7 +5,7 @@
  * neutral frames the harness folds. Run with `bun opencode-proof.ts`.
  */
 
-import type { NeutralMessage, SpawnPayload } from "@whiffle/core";
+import type { NeutralMessage, SpawnPayload } from "@cawco/core";
 import type { Harness, HarnessContext, HarnessSession } from "./src/harness";
 import { OpencodeHarness } from "./src/harnesses/opencode";
 

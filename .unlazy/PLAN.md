@@ -115,9 +115,9 @@ export interface CommandAck {
 
 - Leaf A: packages/core/src/stream.ts (new), packages/core/src/index.ts (export line only)
 - Leaf B: packages/hub/src/stream.ts (new), packages/hub/src/server.ts (wiring), packages/hub/src/stream.test.ts (new)
-- Leaf C: apps/dashboard/src/lib/whiffle/client.svelte.ts, apps/dashboard/src/lib/whiffle/client-stream.test.ts (new)
-- Leaf D: apps/dashboard/src/lib/whiffle/transcript/{Composer,Prompt,SessionHeader}.svelte, SessionPane.svelte
-- Leaf E: apps/dashboard/src/lib/whiffle/stream-e2e.test.ts (new; may import hub)
+- Leaf C: apps/dashboard/src/lib/cawco/client.svelte.ts, apps/dashboard/src/lib/cawco/client-stream.test.ts (new)
+- Leaf D: apps/dashboard/src/lib/cawco/transcript/{Composer,Prompt,SessionHeader}.svelte, SessionPane.svelte
+- Leaf E: apps/dashboard/src/lib/cawco/stream-e2e.test.ts (new; may import hub)
 - Root (driver): integration gates, commits
 
 ## Tree

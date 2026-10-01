@@ -186,7 +186,7 @@ button{cursor:pointer}
   .choice button.refuse:hover{background-color:var(--surface-active)}
 }
 /* A STANDING GRANT MUST READ AS CONSEQUENTIAL.
-   "Always allow rm -rf in ~/whiffle" painted 1.00:1 against its panel —
+   "Always allow rm -rf in ~/cawco" painted 1.00:1 against its panel —
    treatment-identical to a benign quick-reply chip, while its scope is strictly
    wider than the command being approved. The one control here with unbounded
    blast radius had the least visual weight on the surface. */
@@ -647,7 +647,7 @@ def transform(path: Path):
     # 15. CRITICAL — the permission gate misrepresented what it was granting.
     # At 320 every <dd> ended at x=410.5 against a 320px viewport: `.scope`
     # measured 380 wide inside 258, so Path rendered as
-    # "/home/bewinxed/whiffle/apps/dashboard/.svel" and the operator read a path
+    # "/home/bewinxed/cawco/apps/dashboard/.svel" and the operator read a path
     # that is not the path, with Approve fully legible underneath. The document
     # reported clean because a `.tr{overflow-x:auto}` ancestor absorbed it.
     # Nothing is truncated here: the values wrap in full. A path breaks at any

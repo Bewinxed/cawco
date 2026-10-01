@@ -26,7 +26,7 @@ import {
   type PermissionMode,
   type SessionMessage,
   SUMMARY_CAP_TOKENS,
-} from "@whiffle/core";
+} from "@cawco/core";
 
 /** The session being continued, as the header names it. */
 export interface ContinuationSource {

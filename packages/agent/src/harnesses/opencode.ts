@@ -26,23 +26,6 @@ import { createHash } from "node:crypto";
 import { readdir, rename } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
-import {
-  type AssistantMessage,
-  type Command,
-  createOpencodeClient,
-  type Event,
-  type FilePart,
-  type McpStatus,
-  type Message,
-  type OpencodeClient,
-  type Part,
-  type PermissionRequest,
-  type Project,
-  type Provider,
-  type Session,
-  type TextPart,
-  type Todo,
-} from "@opencode-ai/sdk/v2";
 import type {
   EffortLevel,
   FleetConfig,
@@ -64,7 +47,7 @@ import type {
   UserAnswers,
   UserQuestion,
   UserQuestionResult,
-} from "@whiffle/core";
+} from "@cawco/core";
 import {
   ASK_USER_QUESTION,
   CONTROL_CONTEXT_USAGE,
@@ -85,10 +68,27 @@ import {
   MESSAGES_READ,
   MESSAGES_STORED,
   PROVIDER_RETRY,
-} from "@whiffle/core";
-// The protocol subpath, never the `@whiffle/core` barrel: `sessiond.ts` reaches
+} from "@cawco/core";
+// The protocol subpath, never the `@cawco/core` barrel: `sessiond.ts` reaches
 // for `node:os` and the barrel is imported by the browser bundle (see f2e1c4c).
-import { type ProcSpec, sessiondEndpoint } from "@whiffle/core/sessiond";
+import { type ProcSpec, sessiondEndpoint } from "@cawco/core/sessiond";
+import {
+  type AssistantMessage,
+  type Command,
+  createOpencodeClient,
+  type Event,
+  type FilePart,
+  type McpStatus,
+  type Message,
+  type OpencodeClient,
+  type Part,
+  type PermissionRequest,
+  type Project,
+  type Provider,
+  type Session,
+  type TextPart,
+  type Todo,
+} from "@opencode-ai/sdk/v2";
 import { workspacesDir } from "../boundary";
 import { delegationHubUrl } from "../delegation";
 import type { Harness, HarnessContext, HarnessSession } from "../harness";
@@ -158,7 +158,7 @@ export function messageId(): string {
  * opencode's own config files — the machine profile the fleet sync converges.
  * Resolved the way opencode resolves its global config (`xdg-basedir`'s
  * `xdgConfig`, joined with "opencode") and the way `CONFIG_PATH` (../config)
- * resolves whiffle's: an agent run under another `XDG_CONFIG_HOME` joins the hub its own
+ * resolves cawco's: an agent run under another `XDG_CONFIG_HOME` joins the hub its own
  * config names, so the opencode config it writes must be that root's too, never
  * the machine's.
  */
@@ -169,7 +169,7 @@ const OPENCODE_DIR = join(
 const OPENCODE_SKILLS = join(OPENCODE_DIR, "skills");
 const OPENCODE_MEMORY = join(OPENCODE_DIR, "AGENTS.md");
 const OPENCODE_CONFIG = join(OPENCODE_DIR, "opencode.json");
-const OPENCODE_SIDECAR = join(OPENCODE_DIR, "whiffle-fleet.json");
+const OPENCODE_SIDECAR = join(OPENCODE_DIR, "cawco-fleet.json");
 const OPENCODE_PLUGINS = join(OPENCODE_DIR, "plugins");
 
 /**
@@ -185,9 +185,9 @@ const STATIC_POLICY = {
 } as const;
 
 /** The hub's MCP server as opencode configures a remote server. */
-const whiffleMcp = () => ({
+const cawcoMcp = () => ({
   type: "remote" as const,
-  url: `${delegationHubUrl()}/mcp/whiffle`,
+  url: `${delegationHubUrl()}/mcp/cawco`,
   timeout: IMAGE_GENERATION_TIMEOUT_MS + 60_000,
   enabled: true,
   oauth: false as const,
@@ -233,7 +233,7 @@ export async function retireLegacyHandoffPlugin(
   }
 }
 
-const GENERATED_BRIDGE = /^whiffle-(?:handoff|context)(?:-[a-f0-9]+)?\.js$/;
+const GENERATED_BRIDGE = /^cawco-(?:handoff|context)(?:-[a-f0-9]+)?\.js$/;
 
 /** A new import URL bypasses Bun's plugin module cache without restarting OpenCode. */
 export async function writeHandoffPlugin(
@@ -241,7 +241,7 @@ export async function writeHandoffPlugin(
   directory = OPENCODE_DIR
 ): Promise<string> {
   const plugins = join(directory, "plugins");
-  const name = `whiffle-context-${Bun.hash(source).toString(16)}.js`;
+  const name = `cawco-context-${Bun.hash(source).toString(16)}.js`;
   const target = join(plugins, name);
   if (!(await Bun.file(target).exists())) {
     await Bun.write(target, source);
@@ -305,7 +305,7 @@ export const STALLED_TURN_MS = 3 * 60_000;
  * What an opencode session id looks like — the server's own shape (verified
  * live: it answers `Expected a string starting with "ses"` to anything else).
  * Every server call keyed by a caller-supplied session key is guarded by
- * {@link assertOpencodeKey}, so a whiffle instance id handed over as a key is
+ * {@link assertOpencodeKey}, so a cawco instance id handed over as a key is
  * refused here, loudly, and never sent: two sessions once went unrevivable
  * because the hub resumed them under their instance uuids.
  */
@@ -335,8 +335,8 @@ const canonicalizeJson = (value: unknown): string => {
 /**
  * Whether every leaf in `desired` is present in `resolved` with the same value.
  * The runtime config is not the desired document read back: the server fills in
- * its own defaults (`agent.*.options`), and the plugin list carries Whiffle's
- * own injected `whiffle-context-*.js`. It is a superset of the parts Whiffle
+ * its own defaults (`agent.*.options`), and the plugin list carries CawCo's
+ * own injected `cawco-context-*.js`. It is a superset of the parts CawCo
  * controls, so convergence means containment, not equality.
  *
  * A key the server genuinely lacks is still divergence, and stays divergence —
@@ -419,7 +419,7 @@ const OPENCODE_SESSION_ID = /^ses_/;
 const assertOpencodeKey = (key: string, what: string): void => {
   if (!OPENCODE_SESSION_ID.test(key)) {
     throw new Error(
-      `${what}: "${key}" is not an opencode session id (they start with "ses_") — this looks like a whiffle instance id`
+      `${what}: "${key}" is not an opencode session id (they start with "ses_") — this looks like a cawco instance id`
     );
   }
 };
@@ -558,14 +558,14 @@ export const buildHandoffPluginSource =
   (): string => `import { spawn } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { tool } from "@opencode-ai/plugin";
-const whiffleBase = ${JSON.stringify(delegationHubUrl())};
-const whiffleWorkspaces = ${JSON.stringify(workspacesDir())};
+const cawcoBase = ${JSON.stringify(delegationHubUrl())};
+const cawcoWorkspaces = ${JSON.stringify(workspacesDir())};
 const boundaryOf = (directory) => {
   let ids = [];
-  try { ids = readdirSync(whiffleWorkspaces); } catch { return undefined; }
+  try { ids = readdirSync(cawcoWorkspaces); } catch { return undefined; }
   for (const id of ids) {
     try {
-      const held = JSON.parse(readFileSync(whiffleWorkspaces + "/" + id + "/boundary.json", "utf8"));
+      const held = JSON.parse(readFileSync(cawcoWorkspaces + "/" + id + "/boundary.json", "utf8"));
       if (held.path === directory) return held;
     } catch {}
   }
@@ -602,10 +602,10 @@ const boundedBash = (held) => tool({
     return { title: args.description, output: cut + notes, metadata: { exit, description: args.description } };
   },
 });
-export const WhiffleContext = async ({ directory }) => {
+export const CawcoContext = async ({ directory }) => {
 const bounded = boundaryOf(directory);
-const whiffleStep = async (context) => {
-  const response = await fetch(whiffleBase + "/api/instances");
+const cawcoStep = async (context) => {
+  const response = await fetch(cawcoBase + "/api/instances");
   if (!response.ok) throw new Error(await response.text());
   const rows = await response.json();
   const actor = rows.find(row => row.sessionId === context.sessionID && row.cwd === directory && row.workflowStepId);
@@ -614,33 +614,33 @@ const whiffleStep = async (context) => {
 };
 return ({
   tool: {
-    whiffle_submit_result: tool({
+    cawco_submit_result: tool({
       description: "Call exactly once with an object matching the schema in your instructions, then end your turn. The hub's validation message is returned verbatim on failure.",
       args: { result: tool.schema.record(tool.schema.string(), tool.schema.unknown()) },
       async execute({ result }, context) {
-        const actor = await whiffleStep(context);
-        const recorded = await fetch(whiffleBase + "/api/workflow-steps/" + encodeURIComponent(actor.workflowStepId) + "/result", {
+        const actor = await cawcoStep(context);
+        const recorded = await fetch(cawcoBase + "/api/workflow-steps/" + encodeURIComponent(actor.workflowStepId) + "/result", {
           method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ instanceId: actor.id, result })
         });
         return recorded.text();
       }
     }),
-    whiffle_workflow_state_read: tool({
+    cawco_workflow_state_read: tool({
       description: "Read a named slot of this workflow run's shared state. Only slots the run's program declared with w.state(name, schema) exist.",
       args: { name: tool.schema.string() },
       async execute({ name }, context) {
-        const actor = await whiffleStep(context);
-        const read = await fetch(whiffleBase + "/api/workflow-runs/" + encodeURIComponent(actor.workflowRunId) + "/state/" + encodeURIComponent(name) + "?instanceId=" + encodeURIComponent(actor.id));
+        const actor = await cawcoStep(context);
+        const read = await fetch(cawcoBase + "/api/workflow-runs/" + encodeURIComponent(actor.workflowRunId) + "/state/" + encodeURIComponent(name) + "?instanceId=" + encodeURIComponent(actor.id));
         if (!read.ok) throw new Error(await read.text());
         return read.text();
       }
     }),
-    whiffle_workflow_state_write: tool({
+    cawco_workflow_state_write: tool({
       description: "Write a named slot of this workflow run's shared state. The value is validated against the schema the run's program declared; the validator's message comes back verbatim on failure.",
       args: { name: tool.schema.string(), value: tool.schema.unknown() },
       async execute({ name, value }, context) {
-        const actor = await whiffleStep(context);
-        const written = await fetch(whiffleBase + "/api/workflow-runs/" + encodeURIComponent(actor.workflowRunId) + "/state/" + encodeURIComponent(name), {
+        const actor = await cawcoStep(context);
+        const written = await fetch(cawcoBase + "/api/workflow-runs/" + encodeURIComponent(actor.workflowRunId) + "/state/" + encodeURIComponent(name), {
           method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ instanceId: actor.id, value })
         });
         return written.text();
@@ -649,8 +649,8 @@ return ({
     ...(bounded ? { bash: boundedBash(bounded) } : {})
   },
   "tool.execute.before": async (input, output) => {
-    if (input.tool.startsWith("whiffle_")) {
-      output.args.__whiffle = { sessionId: input.sessionID, directory };
+    if (input.tool.startsWith("cawco_")) {
+      output.args.__cawco = { sessionId: input.sessionID, directory };
     }
   },
 });
@@ -721,7 +721,7 @@ const questionsOf = (raw: unknown): UserQuestion[] | null => {
  *
  * Taking it from the part rather than from the `question.*` events is what
  * makes every route agree. The part completes whether the answer came through
- * whiffle, through opencode's own TUI, or from any other client on the server —
+ * cawco, through opencode's own TUI, or from any other client on the server —
  * and because opencode stores it, a reloaded transcript replays it too. Events
  * would have covered only the live case, and only the routes we thought of.
  *
@@ -852,8 +852,8 @@ export const OPENCODE_CAPABILITIES: HarnessCapabilities = {
   fleet: true,
 };
 
-/** The scratch tag sidecar — opencode sessions have no tag, so whiffle keeps its own. */
-const TAGS_PATH = join(homedir(), ".config", "opencode", "whiffle-tags.json");
+/** The scratch tag sidecar — opencode sessions have no tag, so cawco keeps its own. */
+const TAGS_PATH = join(homedir(), ".config", "opencode", "cawco-tags.json");
 
 const readTags = async (): Promise<Record<string, string>> => {
   const file = Bun.file(TAGS_PATH);
@@ -887,7 +887,7 @@ const writeTag = async (
  * session reads it here, and ends that turn from the server's own history if
  * the server finished it meanwhile (see `watchResumedTurn`).
  */
-const OPEN_TURNS_PATH = join(OPENCODE_DIR, "whiffle-open-turns.json");
+const OPEN_TURNS_PATH = join(OPENCODE_DIR, "cawco-open-turns.json");
 let openTurns: Promise<Set<string>> | undefined;
 let openTurnsWritten: Promise<void> = Promise.resolve();
 
@@ -1484,17 +1484,17 @@ export class OpencodeSession implements HarnessSession {
         });
         break;
       }
-      // A question can also be settled where whiffle cannot see it — in
+      // A question can also be settled where cawco cannot see it — in
       // opencode's own TUI, or by any other client on the same server. Without
       // these the `tool_use` the ask emitted never closes, and the row sits on
       // "waiting for your answer" for the rest of the session while the model
       // has long since moved on.
       //
       // `#questionData` is the guard against answering twice: `resolvePermission`
-      // clears the entry before it replies, so the echo of whiffle's own reply
-      // finds nothing here and falls through. Only a settlement whiffle did not
+      // clears the entry before it replies, so the echo of cawco's own reply
+      // finds nothing here and falls through. Only a settlement cawco did not
       // make still has its questions on hand.
-      // A settlement whiffle did not make — opencode's own TUI, or any other
+      // A settlement cawco did not make — opencode's own TUI, or any other
       // client on the server. The transcript needs nothing here, because the
       // `question` tool part completes on every route and carries the answers
       // with it; this only lets go of the parked request so a later
@@ -2569,9 +2569,9 @@ export class OpencodeSession implements HarnessSession {
         messageID,
         parts: parts as never,
         tools: {
-          whiffle_submit_result: !!this.#workflowStepId,
-          whiffle_workflow_state_read: !!this.#workflowStepId,
-          whiffle_workflow_state_write: !!this.#workflowStepId,
+          cawco_submit_result: !!this.#workflowStepId,
+          cawco_workflow_state_read: !!this.#workflowStepId,
+          cawco_workflow_state_write: !!this.#workflowStepId,
           ...Object.fromEntries(
             [
               "start_session",
@@ -2585,7 +2585,7 @@ export class OpencodeSession implements HarnessSession {
               "steer_workflow",
               "workflow_read",
               "list_workflows",
-            ].map((name) => [`whiffle_${name}`, this.#canDelegate !== false])
+            ].map((name) => [`cawco_${name}`, this.#canDelegate !== false])
           ),
         },
         ...(this.#effort ? { variant: this.#effort } : {}),
@@ -3026,7 +3026,7 @@ export class OpencodeSession implements HarnessSession {
 export class OpencodeHarness implements Harness {
   readonly kind = "opencode" as const;
   readonly capabilities = OPENCODE_CAPABILITIES;
-  auth: import("@whiffle/core").AuthState = "authenticated";
+  auth: import("@cawco/core").AuthState = "authenticated";
 
   #client: OpencodeClient | null = null;
   #sessiond: Promise<SessiondClient> | undefined;
@@ -3670,11 +3670,10 @@ export class OpencodeHarness implements Harness {
    * property the whole leaf exists for.
    */
   async sessiond(
-    // `WHIFFLE_SESSIOND_ENDPOINT` is sessiond's own override
+    // `CAWCO_SESSIOND_ENDPOINT` is sessiond's own override
     // (`sessiond/src/main.ts`), honoured here too so a dev run — or a test —
     // points both halves at a scratch socket instead of the real one.
-    endpoint: string = process.env.WHIFFLE_SESSIOND_ENDPOINT ??
-      sessiondEndpoint()
+    endpoint: string = process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint()
   ): Promise<SessiondClient> {
     const existing = await this.#sessiond?.catch(() => undefined);
     if (existing && !existing.closed) {
@@ -3834,7 +3833,7 @@ export class OpencodeHarness implements Harness {
    * opencode's global config, where every opencode on the machine finds them.
    * Any other agent (a worktree's, against a test hub) must not: it hands them
    * to its own server alone, through the config it launches that server with,
-   * and keeps the plugin in a whiffle-owned directory named for its hub.
+   * and keeps the plugin in a cawco-owned directory named for its hub.
    */
   async installDelegationTools(): Promise<void> {
     const source = buildHandoffPluginSource();
@@ -3847,7 +3846,7 @@ export class OpencodeHarness implements Harness {
         ...config,
         mcp: {
           ...(config.mcp as Record<string, unknown> | undefined),
-          whiffle: whiffleMcp(),
+          cawco: cawcoMcp(),
         },
       });
       this.#bridgePlugin = await writeHandoffPlugin(source);
@@ -3856,7 +3855,7 @@ export class OpencodeHarness implements Harness {
     }
     const own = join(
       homedir(),
-      ".whiffle",
+      ".cawco",
       "hub-opencode",
       new URL(delegationHubUrl()).host.replaceAll(":", "_")
     );
@@ -3865,7 +3864,7 @@ export class OpencodeHarness implements Harness {
     this.#bridgePlugin = plugin;
     this.#serverConfig = {
       ...STATIC_POLICY,
-      mcp: { whiffle: whiffleMcp() },
+      mcp: { cawco: cawcoMcp() },
       plugin: [`file://${plugin}`],
     };
   }
@@ -4148,7 +4147,7 @@ export class OpencodeHarness implements Harness {
     return this.#withRecovery(async () => {
       try {
         const client = await SessiondClient.connect(
-          process.env.WHIFFLE_SESSIOND_ENDPOINT ?? sessiondEndpoint()
+          process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint()
         );
         const held = client.procs.some(
           (proc) => proc.procId === OPENCODE_SERVER_PROC_ID && proc.alive
@@ -4252,18 +4251,15 @@ export class OpencodeHarness implements Harness {
       );
     }
     // An agent that is not the machine's always points the server at its own
-    // hub: a `whiffle` server read from the global config is the machine's.
-    if (
-      mcp.data?.whiffle?.status !== "connected" ||
-      !(await isMachineAgent())
-    ) {
+    // hub: a `cawco` server read from the global config is the machine's.
+    if (mcp.data?.cawco?.status !== "connected" || !(await isMachineAgent())) {
       const connected = await client.mcp.add(
-        { directory: ctx.cwd, name: "whiffle", config: whiffleMcp() },
+        { directory: ctx.cwd, name: "cawco", config: cawcoMcp() },
         { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
       );
-      if (connected.error || connected.data?.whiffle?.status !== "connected") {
+      if (connected.error || connected.data?.cawco?.status !== "connected") {
         throw new Error(
-          `Could not connect Whiffle MCP: ${errorText(connected.error ?? connected.data?.whiffle)}`
+          `Could not connect CawCo MCP: ${errorText(connected.error ?? connected.data?.cawco)}`
         );
       }
     }
@@ -4672,7 +4668,7 @@ export class OpencodeHarness implements Harness {
         return (result.data as Todo[])
           .map((todo, index) => ({ todo, id: String(index + 1) }))
           .filter(({ todo }) => todo.status !== "cancelled")
-          .map(({ todo, id }): import("@whiffle/core").NeutralTask => ({
+          .map(({ todo, id }): import("@cawco/core").NeutralTask => ({
             id,
             subject: todo.content,
             status:
@@ -4727,7 +4723,7 @@ export class OpencodeHarness implements Harness {
       report.mcp
     );
     // Remove the skills/memory the pre-2026-08-14 sync wrote; opencode reads
-    // ~/.claude/skills/ and its own memory file, so whiffle no longer owns these.
+    // ~/.claude/skills/ and its own memory file, so cawco no longer owns these.
     if (Object.keys(sidecar.skills).length > 0) {
       // biome-ignore lint/style/noNonNullAssertion: invariant: report.skills is initialized to {} a few lines above; TS drops the narrowing across the earlier await
       await syncSkillFiles(OPENCODE_SKILLS, [], sidecar.skills, report.skills!);

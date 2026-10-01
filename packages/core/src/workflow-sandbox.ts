@@ -19,7 +19,7 @@ const ALLOWED_IMPORTS = new Set(["zod"]);
  * so nothing a program leaves behind lands in the source tree.
  */
 const programDir = (): string => {
-  const dir = new URL("../node_modules/.whiffle-programs/", import.meta.url)
+  const dir = new URL("../node_modules/.cawco-programs/", import.meta.url)
     .pathname;
   mkdirSync(dir, { recursive: true });
   return dir;
@@ -30,8 +30,8 @@ const programDir = (): string => {
  * where this module is `cli.js` and the worker — bundled on its own — and the
  * ambient declarations sit beside it.
  */
-declare const __WHIFFLE_RELEASE__: boolean | undefined;
-const RELEASE = typeof __WHIFFLE_RELEASE__ === "boolean";
+declare const __CAWCO_RELEASE__: boolean | undefined;
+const RELEASE = typeof __CAWCO_RELEASE__ === "boolean";
 
 /** The ambient declarations every program is typechecked against. */
 const AMBIENT = new URL("./workflow-globals.d.ts", import.meta.url).pathname;

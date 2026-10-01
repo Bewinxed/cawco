@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * Screenshot harness for the Whiffle redesign preview (port 3457).
+ * Screenshot harness for the CawCo redesign preview (port 3457).
  *
  * Usage:
  *   node scripts/shot.mjs --url http://localhost:3457/session --out /tmp/x.png \
@@ -44,7 +44,7 @@ const page = await browser.newPage({
 
 // Theme is applied from localStorage before hydration, so seed it first.
 await page.addInitScript(
-  (theme) => localStorage.setItem("whiffle-theme", theme),
+  (theme) => localStorage.setItem("cawco-theme", theme),
   has("--dark") ? "dark" : "light"
 );
 

@@ -6,7 +6,7 @@
  */
 
 import { resolve } from "node:path";
-import type { BuildInfo } from "@whiffle/core";
+import type { BuildInfo } from "@cawco/core";
 import { HUB_VERSION } from "./config";
 
 /** The checkout this hub runs out of — up from `packages/hub/src`. */

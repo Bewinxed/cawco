@@ -2,7 +2,7 @@
 
 ## Context
 
-Whiffle's operator wants an LLM that watches agent sessions and responds on their behalf —
+CawCo's operator wants an LLM that watches agent sessions and responds on their behalf —
 primarily as an **adversarial "whip"** that beats bad patterns out of coding agents (false
 done-claims, permission-seeking stalls, scope drift), plus a per-session **autopilot** with a
 standing custom prompt that keeps long runs moving and escalates real decisions to the operator.
@@ -156,7 +156,7 @@ choice over zod; AI SDK v5 takes Standard Schema natively). New `packages/hub/sr
 Config: configure it in Settings — the single-row table `supervisor_config` (`id`='supervisor',
 `enabled` default false, `baseUrl`, `model`, `apiKey` nullable, `updatedAt`) is the only source;
 precedent `fleetMemory`/`MEMORY_ID`. No row ⇒ disabled, status "not configured". (Amended
-2026-09-23: the `WHIFFLE_SUPERVISOR_URL/_MODEL/_KEY` env bootstrap was removed.)
+2026-09-23: the `CAWCO_SUPERVISOR_URL/_MODEL/_KEY` env bootstrap was removed.)
 
 ### C5 — Autopilot state
 - `instances` gains JSON column `autopilot`: `{enabled, prompt, updatedAt} | null` (idiom:
@@ -183,7 +183,7 @@ precedent `fleetMemory`/`MEMORY_ID`. No row ⇒ disabled, status "not configured
 ### C7 — Origin tag + transcript rendering
 Origin `{kind:'system', name:'supervisor:autopilot'}` / `{kind:'system',
 name:'supervisor:<rule name>'}`. `kind:'system'` already means harness echoes the injected frame
-(`core/harness.ts:317-318`, `claude.ts:828-830`) and transcripts render it as whiffle's word
+(`core/harness.ts:317-318`, `claude.ts:828-830`) and transcripts render it as cawco's word
 (`frames.ts:477-485`). Extend `ruleLabel` (`frames.ts:1231`): names starting `supervisor:`
 render "Autopilot" / "Supervisor — <rule>". Label only this slice; no new row component.
 
@@ -198,7 +198,7 @@ render "Autopilot" / "Supervisor — <rule>". Label only this slice; no new row 
 - `TelegramBridge` gains `onSupervisor(instanceId, text)`.
 
 ### C9 — Assistant panel slice + composer toggle + whip presets
-New `apps/dashboard/src/lib/whiffle/assistant/`:
+New `apps/dashboard/src/lib/cawco/assistant/`:
 - `AssistantOrb.svelte` — summon button; the **single** place `--accent-solid` is a solid fill
   (DESIGN.md L81; token verified in `app.css:276`). Rest placement fixed bottom-right 24px (our
   choice — mocks only show the open state; one-line CSS to move).
@@ -220,7 +220,7 @@ New `apps/dashboard/src/lib/whiffle/assistant/`:
   `AutopilotToggle.svelte` — toggle button (aria-pressed; active = accent-colored glyph, no
   solid fill — that stays the orb's) opening a popover (`NewProjectPopover.svelte` pattern) with
   standing-prompt textarea + enable switch + save → `PUT /api/autopilot/:id` via new
-  `lib/whiffle/autopilot.ts` (rules.ts fetch idiom).
+  `lib/cawco/autopilot.ts` (rules.ts fetch idiom).
 - **Whip preset rack** (operator decision 5): `WHIP_PRESETS` const in the rules editor — 4
   prewritten LLM-rule templates, click-to-fill the form (client-side templates, not seeded DB
   rows — our choice: no migration, operator opts in): *done-claim without evidence → "run the
@@ -248,8 +248,8 @@ New `apps/dashboard/src/lib/whiffle/assistant/`:
 | A3 | LLM verdict caller: hub deps (`ai`, `@ai-sdk/openai-compatible`, `valibot`), new `hub/src/llm.ts` + `llm.test.ts` (fake HTTP server); gate includes a live-router `generateObject` transcript | opus | A1 |
 | B1 | Engine: new `hub/src/supervisor.ts` + `supervisor.test.ts`; `hub/src/rules.ts` reload filter + test | opus | A2, A3 |
 | B2 | Wiring: `hub/src/server.ts` (construct, observe site, REST, ruleBody, publish), `hub/src/telegram.ts` (`onSupervisor`) | opus | B1 |
-| C1 | Dashboard plumbing: `client.svelte.ts` (ingest, state), new `lib/whiffle/autopilot.ts` + `supervisor.ts`, `frames.ts` ruleLabel + tests | opus | A1 (B2 for live gates) |
-| C2 | Rules editor: `routes/rules/*` + `lib/whiffle/rules.ts` (trigger/action/prompt controls, sentence, validation, WHIP_PRESETS) | opus | A1 |
+| C1 | Dashboard plumbing: `client.svelte.ts` (ingest, state), new `lib/cawco/autopilot.ts` + `supervisor.ts`, `frames.ts` ruleLabel + tests | opus | A1 (B2 for live gates) |
+| C2 | Rules editor: `routes/rules/*` + `lib/cawco/rules.ts` (trigger/action/prompt controls, sentence, validation, WHIP_PRESETS) | opus | A1 |
 | C3 | Composer toggle: `transcript/Composer.svelte` (leading snippet), `SessionPane.svelte`, new `AutopilotToggle.svelte` | opus | C1 |
 | C4 | Panel: new `assistant/AssistantPanel.svelte` + `AssistantOrb.svelte`, mount in `Shell.svelte`; a11y per v3 JS | opus | C1 |
 | C5 | JOURNEY.md decision-log append: the DW-9b.2 autopilot override, dated, citing this plan | opus | — |
@@ -275,9 +275,9 @@ Peak 3. File-ownership collisions forcing the order: `core/index.ts` (A1), `serv
   unreachable skip, aborted skip, files-touched extraction, noteRuleFire + ceiling, error
   verdict on bad JSON · `bun test packages/hub/src/rules.test.ts` (reload filter added, existing
   green).
-- **B2**: `bun test packages/hub` · `bun test apps/dashboard/src/lib/whiffle/stream-e2e.test.ts`
+- **B2**: `bun test packages/hub` · `bun test apps/dashboard/src/lib/cawco/stream-e2e.test.ts`
   (proves HubServices/RegistryShape untouched) · curl checks per new endpoint recorded.
-- **C1**: `bun test apps/dashboard/src/lib/whiffle/frames.test.ts` (supervisor label cases) ·
+- **C1**: `bun test apps/dashboard/src/lib/cawco/frames.test.ts` (supervisor label cases) ·
   dashboard baseline preserved.
 - **C2**: `bun test apps/dashboard` · editor screenshot + live `ruleSentence` for an every-turn
   LLM rule quoted · each preset fills the form and validates.

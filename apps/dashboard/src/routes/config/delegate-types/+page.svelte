@@ -1,20 +1,20 @@
 <script lang="ts">
   import { toast } from "svelte-sonner";
-  import { Button } from "$lib/components/ui/button";
-  import { EmptyState } from "$lib/components/ui/empty";
-  import { IconPlus, IconTrash } from "$lib/icons";
-  import RowList from "$lib/whiffle/config/RowList.svelte";
-  import SectionFrame from "$lib/whiffle/config/SectionFrame.svelte";
-  import SectionRow from "$lib/whiffle/config/SectionRow.svelte";
-  import { sectionOf } from "$lib/whiffle/config/sections";
-  import { configStore } from "$lib/whiffle/config/store.svelte";
-  import { confirm } from "$lib/whiffle/confirm.svelte";
+  import RowList from "$lib/cawco/config/RowList.svelte";
+  import SectionFrame from "$lib/cawco/config/SectionFrame.svelte";
+  import SectionRow from "$lib/cawco/config/SectionRow.svelte";
+  import { sectionOf } from "$lib/cawco/config/sections";
+  import { configStore } from "$lib/cawco/config/store.svelte";
+  import { confirm } from "$lib/cawco/confirm.svelte";
   import {
     type DelegateType,
     message,
     removeDelegateType,
-  } from "$lib/whiffle/delegate-types";
-  import HarnessLogo from "$lib/whiffle/HarnessLogo.svelte";
+  } from "$lib/cawco/delegate-types";
+  import HarnessLogo from "$lib/cawco/HarnessLogo.svelte";
+  import { Button } from "$lib/components/ui/button";
+  import { EmptyState } from "$lib/components/ui/empty";
+  import { IconPlus, IconTrash } from "$lib/icons";
 
   /**
    * The presets a session's `delegate` call routes against. A calling agent

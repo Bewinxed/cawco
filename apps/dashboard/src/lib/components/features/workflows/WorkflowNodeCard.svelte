@@ -1,6 +1,6 @@
 <script lang="ts">
-  import type { WorkflowNode, WorkflowRun, WorkflowStep } from "@whiffle/core";
-  import { workflowPorts } from "@whiffle/core";
+  import type { WorkflowNode, WorkflowRun, WorkflowStep } from "@cawco/core";
+  import { workflowPorts } from "@cawco/core";
   import { Handle, type NodeProps, Position } from "@xyflow/svelte";
   import {
     IconCpu,

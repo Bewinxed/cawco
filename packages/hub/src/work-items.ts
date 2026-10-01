@@ -30,7 +30,7 @@ import type {
   WorkItemSummary,
   WorkspaceCheckout,
   WorkspaceRef,
-} from "@whiffle/core";
+} from "@cawco/core";
 import {
   CONTROL_WORKSPACE_ARCHIVE,
   CONTROL_WORKSPACE_BOUNDARY,
@@ -38,7 +38,7 @@ import {
   CONTROL_WORKSPACE_MIGRATE,
   handoffMarker,
   withWorkspaceLine,
-} from "@whiffle/core";
+} from "@cawco/core";
 import type { DbShape, WorkItemRow, WorkspaceRow } from "./db";
 import type { WorkItemCheck, WorkItemSubmission } from "./db/schema";
 

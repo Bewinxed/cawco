@@ -29,7 +29,7 @@ import {
   type Socket,
 } from "node:net";
 import { dirname } from "node:path";
-import { type BuildInfo, SessionRing } from "@whiffle/core";
+import { type BuildInfo, SessionRing } from "@cawco/core";
 // The protocol lives behind its own subpath: `sessiond.ts` reaches for `node:os`
 // to derive the endpoint, and the core barrel is imported by the browser bundle.
 import {
@@ -39,7 +39,7 @@ import {
   type SessiondLine,
   type SessiondProcInfo,
   type SessiondServerMessage,
-} from "@whiffle/core/sessiond";
+} from "@cawco/core/sessiond";
 
 /**
  * The idempotency window, from the hub's own discipline
