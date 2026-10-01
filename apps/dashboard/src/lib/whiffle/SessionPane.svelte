@@ -514,23 +514,8 @@
   const waiting = $derived(
     !!session && !session.initialized && session.messages.length === 0
   );
-  /**
-   * The placeholder stays over a transcript that has mounted and not yet
-   * drawn its rows. Transcript keeps its list unpainted until every row in
-   * view is measured (its `.listing` gains `shown`), so dropping the
-   * placeholder when the transcript mounts left the pane blank for those
-   * frames. It stands from the pane's first frame until the first reveal,
-   * and again whenever the read starts over.
-   */
-  let holding = $state(true);
-  $effect.pre(() => {
-    if (waiting) {
-      holding = true;
-    }
-  });
-  const veiled = $derived(
-    !(fault || unaddressable || blank) && (waiting || holding)
-  );
+  /** A named state stands in the transcript area instead of a transcript. */
+  const namedState = $derived(!!(fault || unaddressable || blank));
 
   /**
    * Whether the transcript may be built. On screen, at once. Off screen, a
@@ -557,27 +542,31 @@
     });
   });
 
+  /** The transcript is mounted in the transcript area. */
+  const mounted = $derived(!(namedState || waiting) && buildable);
+
   /**
-   * Hears the transcript's list being drawn, and lets the placeholder go:
-   * it fades over --dur-control on top of rows already in place, which is
-   * the cross-fade, and nothing under it moves.
+   * Whether the mounted transcript has drawn its rows: its own `shown`,
+   * bound. Transcript keeps its list unpainted until every row in view is
+   * measured, so the placeholder stands over it until then; dropping the
+   * placeholder when the transcript mounted left the pane blank for those
+   * frames. A transcript that unmounts takes its reveal with it, so the
+   * next one starts unrevealed rather than inheriting this value.
    */
-  function reveals(node: HTMLElement) {
-    const listing = node.querySelector(".listing");
-    if (!listing) {
-      return;
+  let shown = $state(false);
+  $effect.pre(() => {
+    if (!mounted) {
+      shown = false;
     }
-    const check = () => {
-      if (listing.classList.contains("shown")) {
-        holding = false;
-        watch.disconnect();
-      }
-    };
-    const watch = new MutationObserver(check);
-    watch.observe(listing, { attributes: true, attributeFilter: ["class"] });
-    check();
-    return () => watch.disconnect();
-  }
+  });
+
+  /**
+   * The placeholder, as a function of what stands in the area: over the
+   * history still on its way, and over a transcript not yet drawn. Its
+   * leaving fades over --dur-control on top of rows already in place, which
+   * is the cross-fade, and nothing under it moves.
+   */
+  const veiled = $derived(!namedState && (waiting || !shown));
 
   /**
    * A named state leaving under the one arriving: out of the flow where it
@@ -1146,9 +1135,15 @@
                     title="Nothing has been said here yet"
                   />
                 </div>
-              {:else if !waiting && buildable}
-                <div class="state" {@attach reveals}>
-                  <Transcript {agentName} {focused} {session} {visible} />
+              {:else if mounted}
+                <div class="state">
+                  <Transcript
+                    {agentName}
+                    {focused}
+                    {session}
+                    {visible}
+                    bind:shown
+                  />
                 </div>
               {/if}
               {#if veiled}
