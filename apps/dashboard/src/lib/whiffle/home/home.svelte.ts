@@ -148,7 +148,7 @@ export interface RecentItem {
 export const instanceTitle = (row: InstanceRow): string =>
   resolveSessionTitle({ title: row.title, cwd: row.cwd, id: row.id });
 
-const machineName = (machineId: string): string => {
+export const machineName = (machineId: string): string => {
   const machine = whiffle.machines.find((m) => m.machineId === machineId);
   return machine ? machineLabel(machine.hostname) : machineId;
 };

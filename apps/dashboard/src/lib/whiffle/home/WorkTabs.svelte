@@ -32,6 +32,7 @@
    * no switch at all. The delegates button lists work other sessions started.
    */
   import { flushSync, untrack } from "svelte";
+  import type { Attachment } from "svelte/attachments";
   import { page } from "$app/state";
   import { TabItem, Tabs, TabsList } from "$lib/components/ui/fluid-tabs";
   import Tip from "$lib/components/ui/tooltip/tip.svelte";
@@ -44,6 +45,7 @@
   import { REFLOW_REREAD, reflow } from "../motion/rows.svelte";
   import OsMark from "../OsMark.svelte";
   import { rail } from "../rail.svelte";
+  import { tree } from "../tree";
   import { workspace } from "../workspace/workspace.svelte";
   import HomeRow from "./HomeRow.svelte";
   import {
@@ -53,6 +55,7 @@
     instanceTitle,
     lastAt,
     type MachineGroup,
+    machineName,
     projectOf,
     span,
   } from "./home.svelte";
@@ -71,6 +74,46 @@
   ] as const;
   /** Rows a tab lists before "N more". */
   const MORE_AT = 8;
+  /** Past this a delegate's indent eats its name; deeper ones stop moving in. */
+  const MAX_DEPTH = 2;
+
+  /**
+   * Where a row's glyph sits in its line, and how tall a line is: the
+   * nesting lines hang off these (measured once a row is drawn).
+   */
+  const glyphs: Attachment<HTMLElement> = (node) => {
+    const measure = (): boolean => {
+      const line = node.querySelector<HTMLElement>(
+        "[data-key]:not(.nested):has(.project-mark)"
+      );
+      const mark = line?.querySelector<HTMLElement>(".project-mark");
+      if (!(line && mark)) {
+        return false;
+      }
+      const m = mark.getBoundingClientRect();
+      const l = line.getBoundingClientRect();
+      node.style.setProperty(
+        "--glyph-x",
+        `${Math.round(m.left + m.width / 2 - l.left)}px`
+      );
+      node.style.setProperty(
+        "--glyph-y",
+        `${Math.round(m.top + m.height / 2 - l.top)}px`
+      );
+      node.style.setProperty("--row-h", `${Math.round(l.height)}px`);
+      return true;
+    };
+    if (measure()) {
+      return;
+    }
+    const watch = new MutationObserver(() => {
+      if (measure()) {
+        watch.disconnect();
+      }
+    });
+    watch.observe(node, { childList: true, subtree: true });
+    return () => watch.disconnect();
+  };
   /** The boxes whose heights a change drives: each group, and the "N more" row's. */
   const BOXES = ":scope > .group, :scope > .more-slot";
 
@@ -157,8 +200,67 @@
   };
 
   /** A tab's groups as listed: all of them, or the first MORE_AT rows. */
+  /**
+   * A tab's rows by machine, each session followed by its delegates (tree.ts)
+   * under the machine its top-level session runs on, so a delegate on
+   * another machine still hangs under the session that started it.
+   */
+  function grouped(tab: WorkTab): Group[] {
+    const lines = tree(rowsOf(tab));
+    const tops = byMachine(
+      lines.filter((line) => line.depth === 0).map((line) => line.row)
+    );
+    const at = new Map(
+      tops.map((group) => [
+        group.machineId,
+        { ...group, rows: [] as InstanceRow[] },
+      ])
+    );
+    let top = "";
+    for (const line of lines) {
+      if (line.depth === 0) {
+        top = line.row.machineId;
+      }
+      at.get(top)?.rows.push(line.row);
+    }
+    return [...at.values()];
+  }
+
+  /** Every row's place in its tab's tree: depth, last sibling, rails through it. */
+  const shapes = $derived(
+    new Map(
+      [...tree(home.working), ...tree(home.finished)].map((line) => [
+        line.row.id,
+        line,
+      ])
+    )
+  );
+
+  /**
+   * A nested row's lines (the .kit-nest elbow, drawn from its own wrapper
+   * since the list is flat): its depth, its place in the stagger, and a
+   * straight rail for each ancestor whose line runs on past it.
+   */
+  function nestStyle(id: string, i: number): string {
+    const line = shapes.get(id);
+    if (!line || line.depth === 0) {
+      return "";
+    }
+    const rails = line.through.map(
+      (depth) =>
+        `linear-gradient(var(--nest-ink), var(--nest-ink)) no-repeat calc(var(--glyph-x) + ${depth - 1} * var(--nest-step) - 0.5px) 0 / 1px 100%`
+    );
+    return [
+      `--nest-d: ${Math.min(line.depth, MAX_DEPTH)}`,
+      `--nest-i: ${i}`,
+      rails.length ? `background: ${rails.join(", ")}` : "",
+    ]
+      .filter(Boolean)
+      .join("; ");
+  }
+
   function listed(tab: WorkTab, all: boolean): Group[] {
-    const groups = byMachine(rowsOf(tab));
+    const groups = grouped(tab);
     if (all) {
       return groups;
     }
@@ -455,13 +557,14 @@
   </h3>
 {/snippet}
 
-{#snippet sessionRow(row: InstanceRow, tab: WorkTab)}
+{#snippet sessionRow(row: InstanceRow, tab: WorkTab, group: string)}
+  {@const said = tab === 'working' ? workingLine(row) : finishedLine(row)}
   <HomeRow
     active={current === row.id}
     done={tab === 'finished'}
     href={conversationHref(row.id, whiffle.instanceIndex)}
     instance={row}
-    line={tab === 'working' ? workingLine(row) : finishedLine(row)}
+    line={row.machineId === group ? said : `${machineName(row.machineId)} · ${said}`}
     machineId={row.machineId}
     {stale}
     title={instanceTitle(row)}
@@ -476,9 +579,18 @@
     data-leaving
     inert
   >
-    {#each lines.filter((line) => line.row) as line (line.key)}
-      <div style={leaveAnim(line.key)}>
-        {@render sessionRow(line.row as InstanceRow, line.tab)}
+    {#each lines.filter((line) => line.row) as line, i (line.key)}
+      {@const shape = shapes.get(line.key)}
+      <div
+        data-first={shape?.first || undefined}
+        data-last={shape?.last || undefined}
+        style={[leaveAnim(line.key), nestStyle(line.key, i)].join('; ')}
+        class:nested={(shape?.depth ?? 0) > 0}
+      >
+        {#if (shape?.depth ?? 0) > 0}
+          <span aria-hidden="true" class="tip"></span>
+        {/if}
+        {@render sessionRow(line.row as InstanceRow, line.tab, line.machineId)}
       </div>
     {/each}
   </div>
@@ -530,6 +642,7 @@
       class="list"
       bind:this={listEl}
       {@attach reflow()}
+      {@attach glyphs}
       {@attach holdWhileInside('home:')}
     >
       {#each drawn as entry (entry.group.machineId)}
@@ -552,13 +665,20 @@
                    ones take, each new one arriving as its place clears. -->
               {@render leaving(entry.gone, true)}
             {/if}
-            {#each entry.rows as row (`${swap.gen}:${row.id}`)}
+            {#each entry.rows as row, i (`${swap.gen}:${row.id}`)}
+              {@const shape = shapes.get(row.id)}
               <div
+                data-first={shape?.first || undefined}
                 data-flip={plan ? undefined : ''}
                 data-key={row.id}
-                style={enterAnim(row.id)}
+                data-last={shape?.last || undefined}
+                style={[enterAnim(row.id), nestStyle(row.id, i)].join('; ')}
+                class:nested={(shape?.depth ?? 0) > 0}
               >
-                {@render sessionRow(row, shown)}
+                {#if (shape?.depth ?? 0) > 0}
+                  <span aria-hidden="true" class="tip"></span>
+                {/if}
+                {@render sessionRow(row, shown, id)}
               </div>
             {/each}
             {#if !plan?.layered.has(id) && entry.gone.length}
@@ -706,6 +826,68 @@
     display: flex;
     flex-direction: column;
     gap: 2px;
+  }
+  /* A delegate under its session (tree.ts): moved in a step per depth, and
+     joined to its parent's glyph by the .kit-nest lines — down the rail,
+     round the corner, out along the arm to a tip just short of the row, so
+     the row's pill never covers a line. */
+  .list {
+    --nest-step: 32px;
+  }
+  .nested {
+    position: relative;
+    padding-left: calc(var(--nest-d) * var(--nest-step));
+  }
+  .nested::before,
+  .nested:not([data-last])::after {
+    content: "";
+    position: absolute;
+    left: calc(var(--glyph-x) + (var(--nest-d) - 1) * var(--nest-step) - 0.5px);
+    border: 0 solid var(--nest-ink);
+    pointer-events: none;
+  }
+  .nested::before {
+    top: -2px;
+    width: calc(var(--nest-step) - var(--glyph-x) - 3px);
+    height: calc(var(--glyph-y) + 2px);
+    border-left-width: 1px;
+    border-bottom-width: 1px;
+    border-bottom-left-radius: 6px;
+  }
+  /* The first delegate's elbow starts at its parent's glyph, a row up. */
+  .nested[data-first]::before {
+    top: calc(var(--glyph-y) + 9px - var(--row-h) - 2px);
+    height: calc(var(--row-h) - 9px + 2px);
+  }
+  .nested:not([data-last])::after {
+    top: var(--glyph-y);
+    bottom: -2px;
+    border-left-width: 1px;
+  }
+  .tip {
+    position: absolute;
+    left: calc(var(--nest-d) * var(--nest-step) - 9px);
+    top: calc(var(--glyph-y) - 2.5px);
+    inline-size: 5px;
+    block-size: 5px;
+    border-top: 1px solid var(--nest-ink);
+    border-right: 1px solid var(--nest-ink);
+    rotate: 45deg;
+    pointer-events: none;
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .nested::before {
+      animation: nest-elbow var(--dur-panel) var(--ease-out) both;
+      animation-delay: calc(var(--nest-i, 0) * 40ms);
+    }
+    .nested::after {
+      animation: nest-rail var(--dur-panel) var(--ease-out) both;
+      animation-delay: calc(var(--nest-i, 0) * 40ms + var(--dur-panel) / 2);
+    }
+    .tip {
+      animation: nest-tip var(--dur-fade) var(--ease-out) both;
+      animation-delay: calc(var(--nest-i, 0) * 40ms + var(--dur-panel));
+    }
   }
   .leaving {
     display: flex;

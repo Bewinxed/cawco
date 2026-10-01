@@ -419,11 +419,25 @@
      waits there between presses) all hold every loop they carry still. A
      list swap's leaving layer (`data-leaving`) is inert so nobody clicks a
      row on its way out, but its rows still play their exit. */
-  :where(:root[data-at-rest], [data-offscreen], [inert]:not([data-leaving]), [data-active="false"])
-  *,
-  :where(:root[data-at-rest], [data-offscreen], [inert]:not([data-leaving]), [data-active="false"])
+  :where(
+    :root[data-at-rest],
+    [data-offscreen],
+    [inert]:not([data-leaving]),
+    [data-active="false"]
+  ) *,
+  :where(
+      :root[data-at-rest],
+      [data-offscreen],
+      [inert]:not([data-leaving]),
+      [data-active="false"]
+    )
     *::before,
-  :where(:root[data-at-rest], [data-offscreen], [inert]:not([data-leaving]), [data-active="false"])
+  :where(
+      :root[data-at-rest],
+      [data-offscreen],
+      [inert]:not([data-leaving]),
+      [data-active="false"]
+    )
     *::after,
   :where([data-offscreen]) {
     animation-play-state: paused !important;

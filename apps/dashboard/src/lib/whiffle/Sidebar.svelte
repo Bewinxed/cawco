@@ -60,11 +60,12 @@
   import { CURVE, dur } from "./motion/curves.svelte";
   import { heldOrder, holdWhileInside } from "./motion/held-order.svelte";
   import { reflow } from "./motion/rows.svelte";
-  import { nestFrom, nestPlace } from "./nest";
   import NewProjectPopover from "./NewProjectPopover.svelte";
+  import { nestFrom, nestPlace } from "./nest";
   import ProjectMark from "./ProjectMark.svelte";
   import { type RailSort, rail } from "./rail.svelte";
   import NewSessionDialog from "./spawn/NewSessionDialog.svelte";
+  import { tree } from "./tree";
   import UsageMeter from "./UsageMeter.svelte";
   import { workflowState } from "./workflow-state.svelte";
   import { workspace } from "./workspace/workspace.svelte";
@@ -420,41 +421,13 @@
   const MAX_INDENT = 3;
 
   /**
-   * `rows` in tree order, siblings sorted by the reader's {@link ordered}.
-   * A delegate whose parent is not in this same list — filtered out, sleeping
-   * while the child runs, living under a different project — is drawn at the
-   * root rather than dropped: a session the rail can reach is never hidden
-   * because its parent is not on screen.
+   * `rows` in tree order (tree.ts), siblings sorted by the reader's
+   * {@link ordered}.
    */
   function nested(rows: InstanceRow[], key: string): Nested[] {
-    const present = new Set(rows.map((row) => row.id));
-    const children = new Map<string, InstanceRow[]>();
-    const roots: InstanceRow[] = [];
-    for (const row of rows) {
-      const parent = row.parentInstanceId;
-      if (parent && present.has(parent) && parent !== row.id) {
-        const siblings = children.get(parent);
-        if (siblings) {
-          siblings.push(row);
-        } else {
-          children.set(parent, [row]);
-        }
-      } else {
-        roots.push(row);
-      }
-    }
-    const out: Nested[] = [];
-    const walk = (list: InstanceRow[], depth: number, under: string): void => {
-      for (const row of ordered(list, `${key}:${under}`)) {
-        out.push({ row, depth: Math.min(depth, MAX_INDENT) });
-        const kids = children.get(row.id);
-        if (kids) {
-          walk(kids, depth + 1, row.id);
-        }
-      }
-    };
-    walk(roots, 0, "root");
-    return out;
+    return tree(rows, (list, under) => ordered(list, `${key}:${under}`)).map(
+      (line) => ({ row: line.row, depth: Math.min(line.depth, MAX_INDENT) })
+    );
   }
 
   /** The row's own left inset — `px-2.5` plus one 13px step per generation. */
@@ -532,11 +505,11 @@
   {@const activity = whiffle.activityOf(row.id)}
   <li
     class="group/menu-sub-item relative"
-    style={place}
     data-flip
     data-session-row={row.id}
     data-sidebar="menu-sub-item"
     data-slot="sidebar-menu-sub-item"
+    style={place}
   >
     <span aria-hidden="true" class="kit-nest-tip"></span>
     <Sidebar.MenuSubButton
