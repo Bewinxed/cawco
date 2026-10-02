@@ -1350,6 +1350,14 @@
 :root [torph-slot] > span {
   will-change: auto;
 }
+/* A morph never draws outside the box layout gave it. torph tweens the root's
+   width from the old text's and leaves the old letters where they stood while
+   they fade, so unclipped they draw over whatever sits next to the word. Only
+   the inline axis: the digit slots clip the block axis themselves, and clip
+   (unlike hidden) keeps the root's text baseline. */
+:root [torph-root] {
+  overflow-x: clip;
+}
 
 /* ---- Motion is opt-in: every travelling transition and keyframe animation
    in this sheet and in the components sits under

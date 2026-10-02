@@ -423,10 +423,9 @@
 {/snippet}
 
 <!-- A changing figure in the stats strip. A still copy of the text sizes its
-     box, so the strip lays out and wraps by the text's own width. The morph
-     draws inside that box, clipped to it: torph animates its own width from the
-     old size and draws leaving and moving letters outside it, which put the
-     context figure over the next meter. -->
+     box, so the strip lays out and wraps by the text's final width while
+     torph tweens its own width from the old size (it clips to that width:
+     app.css). -->
 {#snippet figure(text: string)}
   <span class="figure">
     <span aria-hidden="true" class="figure-size">{text}</span>
@@ -711,13 +710,6 @@
     line-height: var(--leading-body);
     color: var(--ink-muted);
   }
-  /* The host and the folder morph as the card moves between sessions. torph
-     leaves the old letters where they stood while they fade, so each clips
-     sideways to its own box and never draws over the dots between them. */
-  .host,
-  .cwd {
-    overflow-x: clip;
-  }
   .cwd {
     min-width: 0;
     padding: 0;
@@ -905,12 +897,10 @@
     width: 64px;
   }
   /* The still copy and the morph share one cell, so the cell is as wide as
-     the wider of the two. Only the sideways overflow is clipped, so the
-     letters' rise and fall still show. */
+     the wider of the two. */
   .figure {
     display: inline-grid;
     flex: none;
-    overflow-x: clip;
     white-space: nowrap;
   }
   .figure > :global(*) {
