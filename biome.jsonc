@@ -3,7 +3,8 @@
   "extends": ["ultracite/biome/core", "ultracite/biome/svelte"],
   // Design mock-ups and their build scratch, not shipped code.
   // jsonl-parser is publishable and linted/formatted by oxlint/oxfmt instead.
-  // drizzle/meta is drizzle-kit generate output.
+  // drizzle/meta is drizzle-kit generate output, and CawCoAPI/openapi.json is
+  // `bun run openapi`'s (packages/hub).
   // .design-foundations holds design artifacts; .mcp.json is local MCP config.
   "files": {
     "includes": [
@@ -11,7 +12,8 @@
       "!.design-foundations",
       "!.mcp.json",
       "!packages/jsonl-parser",
-      "!packages/hub/drizzle/meta"
+      "!packages/hub/drizzle/meta",
+      "!apps/apple/Packages/CawCoKit/Sources/CawCoAPI/openapi.json"
     ]
   },
   "javascript": {
