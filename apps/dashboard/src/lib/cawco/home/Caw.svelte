@@ -15,14 +15,17 @@
 
   /**
    * The status files, as the build emits them: URLs only, so a file is
-   * fetched the first time its status is shown and never before.
+   * fetched the first time its status is shown and never before. The
+   * dashboard's own copy of assets/mascot/caw/, written by
+   * assets/mascot/scripts/build.mjs, so a new Caw redeploys the dashboard.
    */
-  const FILES = import.meta.glob<string>(
-    "../../../../../../assets/mascot/caw/*.riv",
-    { query: "?url", import: "default", eager: true }
-  );
+  const FILES = import.meta.glob<string>("../../assets/caw/*.riv", {
+    query: "?url",
+    import: "default",
+    eager: true,
+  });
   const fileUrl = (status: CawStatus): string =>
-    FILES[`../../../../../../assets/mascot/caw/${status}.riv`];
+    FILES[`../../assets/caw/${status}.riv`];
 
   /** Each status file's bytes, fetched once and shared by every Caw. */
   const bytes = new Map<CawStatus, Promise<ArrayBuffer>>();

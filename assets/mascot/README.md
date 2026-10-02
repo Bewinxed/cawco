@@ -29,10 +29,13 @@ Apps use Rive's current runtimes, which drive state machines only through data b
 (rive.app/docs/runtimes/apple/migrating-from-legacy: "The new runtime does not expose equivalent
 input APIs, and migration should move to data binding properties"). On Apple: one shared
 `Worker`, `File(source: .data(…), worker:)` from bytes read once per status, `Rive(file:…)`, the
-`Caw` view model instance, and `RiveUIViewRepresentable`. A status change loads the new file and
-fades its Caw in over the shown one in 200 ms (`motion.dur-fade` on `motion.ease-out`); the shown
-one stays fully drawn underneath until the fade ends, so no frame is empty, and at most two are
-alive at once.
+`Caw` view model instance, and `RiveUIViewRepresentable`. On the web (the dashboard's
+`Caw.svelte`): `@rive-app/canvas` with `autoBind` and the file's bytes as `buffer`, its WASM served
+by the app through `RuntimeLoader.setWasmUrl` (rive.app/docs/runtimes/web/preloading-wasm: "The
+`rive.wasm` file version must match the `@rive-app` package version"). Both: a status change loads
+the new file and fades its Caw in over the shown one in 200 ms (`motion.dur-fade` on
+`motion.ease-out`); the shown one stays fully drawn underneath until the fade ends, so no frame is
+empty, and at most two are alive at once.
 
 The state machine has no inputs. `Caw` has one instance, `Default` (both booleans off), and the
 artboard points at `Caw`, so a runtime that auto-binds gets that instance.
@@ -46,9 +49,12 @@ them (the editor cannot import `.riv` files). From `assets/mascot/scripts` (`bun
   status's loops, with their take and still) into `assets/mascot/loops/<loop>/` (see Pipeline).
   It needs `ffmpeg` and `curl`; uv installs its Python dependencies from the script's own header.
 - `node build.mjs` writes `caw/<status>.riv` from `scene.mjs` and the traced drawings in
-  `assets/mascot/loops/`, and the same bytes to the Apple package's copies
-  (`apps/apple/Packages/CawCoKit/Sources/CawCoMascot/Resources/caw/`), which `CawView` loads. It
-  removes any other `.riv` in those folders. rive-mcp-server's exported `buildScene` and
+  `assets/mascot/loops/`, and the same bytes to each app's copies:
+  `apps/apple/Packages/CawCoKit/Sources/CawCoMascot/Resources/caw/`, which `CawView` loads, and
+  `apps/dashboard/src/lib/assets/caw/`, which the dashboard's `Caw.svelte` loads. Each app keeps
+  its own copy because a deploy rebuilds a service only when its own directories change
+  (`changedServices` in `packages/agent/src/update.ts`). It removes any other `.riv` in those
+  folders. rive-mcp-server's exported `buildScene` and
   `writeRiv` write each scene; rive-mcp-server has no view-model authoring, so `build.mjs`
   inserts those objects into its object list before writing, in the shapes Rive's own exports use
   (rive-runtime's importers in `src/file.cpp`): the `Caw` view model with its default instance

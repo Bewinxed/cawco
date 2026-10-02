@@ -15,8 +15,10 @@
 // which the writer cannot express (drawStrokesUnder, writeStrokeKeys).
 //
 // usage: node build.mjs [outDir]
-//   Without an argument it writes ../caw/ and the Apple package's copy, CawCoMascot's
-//   Resources/caw/, so the two always hold the same bytes; any other .riv there is removed.
+//   Without an argument it writes ../caw/ and the apps' copies, CawCoMascot's Resources/caw/ and
+//   the dashboard's src/lib/assets/caw/, so all three always hold the same bytes; any other .riv
+//   there is removed. Each app keeps its own copy because a deploy rebuilds a service only when
+//   its own directories change (packages/agent/src/update.ts, changedServices).
 import { mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -36,6 +38,9 @@ const outDirs = process.argv[2]
           "../../../apps/apple/Packages/CawCoKit/Sources/CawCoMascot/Resources/caw/",
           import.meta.url
         )
+      ),
+      fileURLToPath(
+        new URL("../../../apps/dashboard/src/lib/assets/caw/", import.meta.url)
       ),
     ];
 
