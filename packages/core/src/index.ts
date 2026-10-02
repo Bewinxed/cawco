@@ -4,6 +4,7 @@ import type { ToolStatus } from "./tools";
 
 // "Continue in new session": the size rules the hub and the dashboard share.
 // biome-ignore lint/performance/noBarrelFile: this is the package's public API surface — packages/core's consumers (hub, cli, dashboard) import from "@cawco/core" as one module, not per-file.
+export * from "./archive";
 export * from "./continuation";
 // Delegate types: named presets the `delegate` tool's `type` param resolves,
 // so routing is by description instead of a raw model string.

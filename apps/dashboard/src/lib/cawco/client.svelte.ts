@@ -50,6 +50,7 @@ import {
   classifyCommand,
   isEffortLevel,
   RESOLVE_PERMISSION,
+  runDoing,
 } from "@cawco/core";
 import { toast } from "svelte-sonner";
 import { goto } from "$app/navigation";
@@ -126,7 +127,6 @@ import {
 import type { DelegateAskEvent, Message } from "./types";
 import {
   onBoard,
-  runActivity,
   runIdOf,
   runMovedAt,
   runRowOf,
@@ -5559,7 +5559,7 @@ export const cawco = {
   activityOf: (instanceId: string): Activity => {
     const run = runOf(instanceId);
     if (run) {
-      return runActivity(run);
+      return runDoing(run.status);
     }
     const target = state.sessions[instanceId];
     // Blocked wins everywhere: a parked permission is broadcast, not filtered.

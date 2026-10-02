@@ -188,12 +188,24 @@
       ontoggle: () => openTrees.toggle(id),
     };
   }
-  /** Takes a finished row off the list, and with a parent its whole tree. */
+  /**
+   * Takes a finished row off the list, and with a parent its whole tree.
+   * Offered only on a row `home.archivable` allows: nothing in the tree is
+   * still doing anything.
+   */
   function archiveTree(id: string): void {
     const line = shapeOf("finished", id);
-    archive([id, ...(line?.descendants ?? []).map((row) => row.id)]);
+    archive(
+      [line?.row, ...(line?.descendants ?? [])]
+        .filter((row): row is InstanceRow => !!row && home.archivable(row))
+        .map((row) => row.id)
+    );
   }
-  /** Every finished row a machine lists, folded or not: its "Archive all". */
+  /**
+   * Every finished row a machine lists, folded or not, that may be archived:
+   * its "Archive all", shown only when it has one. A row still doing
+   * something, or with something under it that is, stays.
+   */
   function finishedOn(machineId: string): string[] {
     const ids: string[] = [];
     let top = "";
@@ -201,7 +213,7 @@
       if (line.depth === 0) {
         top = line.row.machineId;
       }
-      if (top === machineId && !line.context) {
+      if (top === machineId && !line.context && home.archivable(line.row)) {
         ids.push(line.row.id);
       }
     }
@@ -645,7 +657,9 @@
     instance={row}
     line={context ? '' : metaLine(row, tab, group)}
     machineId={row.machineId}
-    onarchive={tab === 'finished' ? () => archiveTree(row.id) : undefined}
+    onarchive={tab === 'finished' && home.archivable(row)
+      ? () => archiveTree(row.id)
+      : undefined}
     stack={stackOf(tab, row.id)}
     {stale}
     title={instanceTitle(row)}

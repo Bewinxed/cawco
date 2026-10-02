@@ -13,7 +13,7 @@
  *   sessions, and the transcripts stored on the machines.
  */
 import type { NeutralSessionInfo, WorkflowRun } from "@cawco/core";
-import { machineLabel } from "@cawco/core";
+import { archiveRefusal, machineLabel } from "@cawco/core";
 import {
   type BlockedRequest,
   cawco,
@@ -57,17 +57,13 @@ const epochOf = (value: string | number | Date | null | undefined): number => {
 export const seenAt = (row: InstanceRow): number =>
   Math.max(epochOf(row.seenAt), seenHere[row.id] ?? 0);
 
-/** Records that the reader has a conversation on screen now. */
-export function markOpened(id: string): void {
-  archive([id]);
-}
-
 /**
- * Takes sessions (and runs, as `run:<id>`) off Finished without opening
- * them: each is marked seen on the hub, as opening it would, so it is
- * listed again only when it ends another turn.
+ * Marks sessions (and runs, as `run:<id>`) seen on the hub: `look`, the
+ * owner had it in front after it ended; `archive`, taken off Finished
+ * without opening it, which the hub refuses for anything still doing
+ * something (core `archiveRefusal`). A refusal puts the rows back.
  */
-export function archive(ids: string[]): void {
+function markSeen(ids: string[], kind: "archive" | "look"): void {
   if (ids.length === 0) {
     return;
   }
@@ -75,13 +71,42 @@ export function archive(ids: string[]): void {
   for (const id of ids) {
     seenHere[id] = at;
   }
+  const undo = () => {
+    for (const id of ids) {
+      if (seenHere[id] === at) {
+        delete seenHere[id];
+      }
+    }
+  };
   fetch("/api/seen", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ ids }),
-  }).catch((error) => {
-    console.error("[cawco] marking seen failed:", error);
-  });
+    body: JSON.stringify({ ids, kind }),
+  })
+    .then(async (response) => {
+      if (!response.ok) {
+        undo();
+        console.error("[cawco] not marked seen:", await response.text());
+      }
+    })
+    .catch((error) => {
+      undo();
+      console.error("[cawco] marking seen failed:", error);
+    });
+}
+
+/** Records that the reader has a conversation in front of them, ended. */
+export function markOpened(id: string): void {
+  markSeen([id], "look");
+}
+
+/**
+ * Takes sessions (and runs, as `run:<id>`) off Finished without opening
+ * them, so each is listed again only when it ends another turn. Only what
+ * `home.archivable` allows is ever offered; the hub holds the same rule.
+ */
+export function archive(ids: string[]): void {
+  markSeen(ids, "archive");
 }
 
 /* ── One clock for every age on the home ──────────────────────────── */
@@ -317,6 +342,42 @@ function exceptionOf(machine: (typeof cawco.machines)[number]): string | null {
 class Home {
   /** The hub is live: only then can an empty group be believed. */
   readonly live = $derived(cawco.hub === "connected");
+
+  /**
+   * What hangs directly under each session and run, as every list nests it
+   * (a session's delegates and runs, a run's steps and child runs): the
+   * rows' own parents, runs among them.
+   */
+  readonly #children = $derived.by(() => {
+    const children = new Map<string, string[]>();
+    for (const row of cawco.instanceIndex.byId.values()) {
+      if (row.parentInstanceId) {
+        children.set(row.parentInstanceId, [
+          ...(children.get(row.parentInstanceId) ?? []),
+          row.id,
+        ]);
+      }
+    }
+    return children;
+  });
+
+  /**
+   * Whether a row may be archived: neither it nor anything under it is
+   * still doing something (core `archiveRefusal`, the rule the hub's
+   * `/api/seen` holds too). A row that fails offers no archive anywhere.
+   */
+  archivable(row: InstanceRow): boolean {
+    return (
+      archiveRefusal(row.id, {
+        // A session still starting is working, as the hub counts it.
+        doing: (id) =>
+          cawco.instanceIndex.byId.get(id)?.status === "starting"
+            ? "working"
+            : cawco.activityOf(id),
+        childrenOf: (id) => this.#children.get(id) ?? [],
+      }) === null
+    );
+  }
 
   /**
    * The first full read is in: machines, sessions, runs, every online

@@ -1,6 +1,7 @@
 import { generateCodeChallenge, generateCodeVerifier } from "@cawco/auth";
 import type {
   AgentRow,
+  ArchiveView,
   BuildInfo,
   ClaudeLimits,
   CommandResult,
@@ -58,6 +59,7 @@ import {
   AGENT_BUSY,
   ASK_USER_QUESTION,
   agentProblem,
+  archiveRefusal,
   CONTROL_CONTEXT_USAGE,
   CONTROL_GET_SESSION_INFO,
   CONTROL_GET_SESSION_MESSAGES,
@@ -101,6 +103,7 @@ import {
   readProvenance,
   reportMarker,
   ruleProblem,
+  runDoing,
   SUMMARISER_OUTPUT_RESERVE_TOKENS,
   SUMMARY_CAP_TOKENS,
   TARGET_HEADROOM_TOKENS,
@@ -1545,6 +1548,50 @@ export const createServer = ({
    * wait for the next pulse to arrive.
    */
   const pulses = new Map<string, SessionPulse>();
+  /**
+   * What the hub knows for `archiveRefusal` (core archive.ts): a session's
+   * live pulse (a turn, or an ask on the owner), a run's status, and what
+   * hangs under each the way every list nests it — a session's delegates
+   * and the runs it supervises, a run's step sessions and child runs.
+   */
+  const archiveView = (): ArchiveView => {
+    const rows = db.listInstances();
+    const runs = db.listWorkflowRuns();
+    const children = new Map<string, string[]>();
+    const under = (parent: string | null, child: string) => {
+      if (parent) {
+        children.set(parent, [...(children.get(parent) ?? []), child]);
+      }
+    };
+    for (const row of rows) {
+      under(
+        row.workflowRunId ? `run:${row.workflowRunId}` : row.parentInstanceId,
+        row.id
+      );
+    }
+    for (const run of runs) {
+      under(
+        run.parentRunId ? `run:${run.parentRunId}` : run.supervisorInstanceId,
+        `run:${run.id}`
+      );
+    }
+    const runById = new Map(runs.map((run) => [run.id, run]));
+    const starting = new Set(
+      rows.filter((row) => row.status === "starting").map((row) => row.id)
+    );
+    return {
+      childrenOf: (id) => children.get(id) ?? [],
+      doing: (id) => {
+        if (id.startsWith("run:")) {
+          const run = runById.get(id.slice("run:".length));
+          return run ? runDoing(run.status) : "idle";
+        }
+        return starting.has(id)
+          ? "working"
+          : (pulses.get(id)?.activity ?? "idle");
+      },
+    };
+  };
   const heldSessions = new Map<
     string,
     { machineId: string; since: number; reason: string }
@@ -6632,8 +6679,31 @@ export const createServer = ({
       // workflow frame.
       .post(
         "/api/seen",
-        { body: t.Object({ ids: t.Array(t.String(), { minItems: 1 }) }) },
-        ({ body }) => {
+        {
+          body: t.Object({
+            ids: t.Array(t.String(), { minItems: 1 }),
+            /**
+             * `archive`: taken off Finished without opening it, refused for
+             * anything still doing something (`archiveRefusal`). `look`: the
+             * owner had it in front after it ended, which is always so.
+             */
+            kind: t.Union([t.Literal("archive"), t.Literal("look")]),
+          }),
+        },
+        ({ body, status }) => {
+          if (body.kind === "archive") {
+            const view = archiveView();
+            const refused = body.ids.flatMap((id) => {
+              const why = archiveRefusal(id, view);
+              return why ? [`${id}: ${why}`] : [];
+            });
+            if (refused.length > 0) {
+              return status(
+                409,
+                `Not archived, still doing something. ${refused.join(" ")}`
+              );
+            }
+          }
           const runIds = body.ids.flatMap((id) =>
             id.startsWith("run:") ? [id.slice(4)] : []
           );

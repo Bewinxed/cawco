@@ -14,7 +14,6 @@ import type {
   WorkflowRunStatus,
   WorkflowStep,
 } from "@cawco/core";
-import type { Activity } from "./activity";
 
 const PREFIX = "run:";
 
@@ -39,14 +38,6 @@ const STATUS: Record<WorkflowRunStatus, InstanceStatus> = {
   done: "stopped",
   cancelled: "stopped",
 };
-
-/** What a run needs from the reader: an answer when it waits on one, else whether it works. */
-export function runActivity(run: WorkflowRun): Activity {
-  if (run.status === "waiting") {
-    return "blocked";
-  }
-  return run.status === "running" ? "working" : "idle";
-}
 
 const ms = (value: Date | string | null | undefined): number | undefined => {
   if (!value) {
