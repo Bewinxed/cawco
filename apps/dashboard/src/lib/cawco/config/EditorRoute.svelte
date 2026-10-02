@@ -63,7 +63,8 @@
   {:else if !found}
     <div class="stand" in:crossIn><Missing {section} {what} /></div>
   {:else}
-    <div class="stand" in:crossIn>{@render children()}</div>
+    <!-- Every editor here keeps its unsaved fields (`keepDraft`). -->
+    <div class="stand" data-keeps-draft in:crossIn>{@render children()}</div>
   {/if}
 </div>
 

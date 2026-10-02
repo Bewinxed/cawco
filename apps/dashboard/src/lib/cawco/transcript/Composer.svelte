@@ -1215,7 +1215,7 @@
      longer deliver ("ResizeObserver loop completed with undelivered
      notifications", every frame the field grew), and it stood a frame
      behind the panel. -->
-<div class="dock">
+<div class="dock" data-keeps-draft>
   {#if prompts}
     <div class="prompts" {@attach reflow()}>
       <div class="stack" bind:clientHeight={stack}>{@render prompts()}</div>

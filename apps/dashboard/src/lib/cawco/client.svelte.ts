@@ -84,6 +84,7 @@ import {
   transcriptUrl,
 } from "./links";
 import { type PendingSelection, selectionExtras } from "./preview/selection";
+import { reloadForProtocol } from "./protocol-reload";
 import { checkRestartToast } from "./restart-toast";
 import { spawnDefaults } from "./spawnPrefs.svelte";
 import type {
@@ -2055,6 +2056,11 @@ function handleFrame(frame: FramePayload): void {
     // unknown rather than as current.
     state.hubBuild =
       (frame as { hubBuild?: BuildInfo }).hubBuild ?? state.hubBuild;
+    const { protocol } = frame as { protocol?: number };
+    if (protocol !== undefined) {
+      // biome-ignore lint/complexity/noVoid: fire-and-forget — a reload ends this page, and one that is not due changes nothing
+      void reloadForProtocol(protocol);
+    }
     return;
   }
 

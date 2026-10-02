@@ -114,6 +114,7 @@ import {
   toolSpec,
   UPDATE_CAWCO,
   validateWorkflow,
+  WIRE_PROTOCOL,
 } from "@cawco/core";
 import { Elysia, t, ValidationError } from "elysia";
 import { websocket } from "elysia/websocket";
@@ -4619,10 +4620,11 @@ export const createServer = ({
     continuations: continuationTable(),
     // `pulses` seeds the rail's now-state on connect instead of leaving it
     // blank until the next beat. `hubBuild` lets a client tell a hub that is
-    // behind from a machine that is. A page learns its own build is old from
-    // the dashboard it was served by (deploy-toast.ts), not from this.
+    // behind from a machine that is. `protocol` is the wire this hub speaks:
+    // a page built for an older one reloads itself on its first frame.
     pulses: Object.fromEntries(pulses),
     hubBuild,
+    protocol: WIRE_PROTOCOL,
   });
 
   const instancesFrame = (machineId: string): Envelope => ({

@@ -96,6 +96,8 @@
     onexitcontinue?: () => void;
   } = $props();
   const REPO = /^[\w.-]+\/[\w.-]+$/;
+  /** Where this tab keeps the first prompt across a reload. */
+  const KEPT_PROMPT = "cawco:new-session-prompt";
   let card = $state<HTMLElement | null>(null);
   let editor = $state<HTMLDivElement>();
   /**
@@ -462,7 +464,7 @@
       estimate = null;
       model = "";
       effort = null;
-      prompt = "";
+      prompt = sessionStorage.getItem(KEPT_PROMPT) ?? "";
       repo = undefined;
       editing = false;
       sideQuest = false;
@@ -499,6 +501,18 @@
         job = null;
       }
     };
+  });
+  // The first prompt outlives a reload of this tab (`protocol-reload.ts`):
+  // kept as it is typed, read back as the dialog opens, gone once it closes.
+  $effect(() => {
+    if (!open) {
+      return;
+    }
+    if (prompt) {
+      sessionStorage.setItem(KEPT_PROMPT, prompt);
+    } else {
+      sessionStorage.removeItem(KEPT_PROMPT);
+    }
   });
   // The continuation this dialog follows, stage by stage, as the hub publishes it.
   $effect(() => {
@@ -622,6 +636,7 @@
   }
   function close() {
     submission += 1;
+    sessionStorage.removeItem(KEPT_PROMPT);
     onclose();
   }
   /** Cancel while a continuation runs: the hub stops it, and the dialog closes. */

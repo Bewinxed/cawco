@@ -17,6 +17,7 @@
 import { untrack } from "svelte";
 import { SvelteSet } from "svelte/reactivity";
 import { browser } from "$app/environment";
+import { keepsDrafts } from "../protocol-reload";
 import { MAIN } from "./memory";
 import type { SectionSlug } from "./sections";
 import type { ConfigStore } from "./store.svelte";
@@ -69,6 +70,8 @@ class EditorDrafts {
   /** Changes not written yet, by path; null is a deletion. */
   readonly #unwritten = new Map<string, unknown>();
   #timer: ReturnType<typeof setTimeout> | undefined;
+  /** The write in flight, settled once its transaction has committed. */
+  #writing: Promise<void> = Promise.resolve();
 
   constructor() {
     if (!browser) {
@@ -100,6 +103,14 @@ class EditorDrafts {
         }
       );
     window.addEventListener("pagehide", () => this.flush());
+    // A reload this tab does itself waits for every edit to be written.
+    keepsDrafts(() => this.settled());
+  }
+
+  /** Writes every change waiting; resolves once the write has committed. */
+  settled(): Promise<void> {
+    this.flush();
+    return this.#writing;
   }
 
   get(path: string): unknown {
@@ -137,9 +148,13 @@ class EditorDrafts {
     }
     const changes = [...this.#unwritten];
     this.#unwritten.clear();
-    // biome-ignore lint/complexity/noVoid: fire-and-forget; the next change writes again
-    void database().then(async (db) => {
-      const store = db.transaction(STORE, "readwrite").objectStore(STORE);
+    this.#writing = database().then(async (db) => {
+      const transaction = db.transaction(STORE, "readwrite");
+      const committed = new Promise<void>((resolve, reject) => {
+        transaction.oncomplete = () => resolve();
+        transaction.onabort = () => reject(transaction.error);
+      });
+      const store = transaction.objectStore(STORE);
       const now = Date.now();
       for (const [path, fields] of changes) {
         if (fields === null) {
@@ -163,6 +178,7 @@ class EditorDrafts {
         store.delete(old.path);
         total -= old.size;
       }
+      await committed;
     });
   }
 }

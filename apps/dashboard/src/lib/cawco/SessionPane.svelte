@@ -55,6 +55,7 @@
   import { delegateHandle } from "./links";
   import PreviewPane from "./preview/PreviewPane.svelte";
   import PreviewSheet from "./preview/PreviewSheet.svelte";
+  import { keepsDrafts } from "./protocol-reload";
   import { clip, type SuggestCandidate, suggestions } from "./suggest.svelte";
   import Composer, { type Mention } from "./transcript/Composer.svelte";
   import { ComposerDraft } from "./transcript/composer-draft.svelte";
@@ -743,16 +744,16 @@
   /** The draft as it should be stored, waiting for the next write. */
   let unwritten: DraftContent | null = null;
   let draftTimer: ReturnType<typeof setTimeout> | undefined;
-  function writeDraft(): void {
+  /** Writes what is waiting; resolves once it is stored. */
+  function writeDraft(): Promise<void> {
     clearTimeout(draftTimer);
     draftTimer = undefined;
     if (!unwritten) {
-      return;
+      return Promise.resolve();
     }
     const next = unwritten;
     unwritten = null;
-    // biome-ignore lint/complexity/noVoid: fire-and-forget — the next change writes again
-    void saveDraft(viewId, next);
+    return saveDraft(viewId, next);
   }
 
   $effect(() => {
@@ -767,9 +768,13 @@
 
   $effect(() => {
     window.addEventListener("pagehide", writeDraft);
+    // A reload this tab does itself waits for the write to land.
+    const release = keepsDrafts(writeDraft);
     return () => {
       window.removeEventListener("pagehide", writeDraft);
-      writeDraft();
+      release();
+      // biome-ignore lint/complexity/noVoid: fire-and-forget — the pane is closing; the write lands on its own
+      void writeDraft();
     };
   });
 

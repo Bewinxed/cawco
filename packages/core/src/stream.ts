@@ -16,6 +16,17 @@
  */
 
 /**
+ * The dashboard wire's version, raised only when the wire breaks: when a
+ * client built for the version before would misread what the hub now sends.
+ * A tab outlives the deploy that loaded it, so the hub names this on the
+ * board frame every dashboard socket receives first, and a page built for an
+ * older version reloads itself (the dashboard's `protocol-reload.ts`).
+ *
+ * 2: a session's stream carries the hub's transcript events (3721295c).
+ */
+export const WIRE_PROTOCOL = 2;
+
+/**
  * What a session's stream carries: the changes each frame made to its
  * transcript, as the hub built them (`transcript-types.ts`), and its preview's
  * state. Raw frames never reach a dashboard; the hub folds them.
