@@ -111,7 +111,16 @@ const setGlide = (span: HTMLElement, on: boolean) => {
  * it, on `transform` or `translate`). Taken off its drawn rect, what is left
  * is where it lands, to the subpixel.
  */
-const slideOf = (row: HTMLElement, container: HTMLElement) => {
+const slideOf = (
+  row: HTMLElement,
+  container: HTMLElement,
+  /**
+   * Each ancestor's own share, kept across the rows of one pass: rows share
+   * their ancestors, and read again for every row, a list of sixty rows read
+   * five hundred styles each time the pointer was re-aimed.
+   */
+  shares = new Map<HTMLElement, { x: number; y: number }>()
+) => {
   let x = 0;
   let y = 0;
   for (
@@ -119,17 +128,24 @@ const slideOf = (row: HTMLElement, container: HTMLElement) => {
     at && at !== container;
     at = at.parentElement
   ) {
-    const styles = getComputedStyle(at);
-    if (styles.transform !== "none") {
-      const matrix = new DOMMatrixReadOnly(styles.transform);
-      x += matrix.e;
-      y += matrix.f;
+    let share = shares.get(at);
+    if (!share) {
+      share = { x: 0, y: 0 };
+      const styles = getComputedStyle(at);
+      if (styles.transform !== "none") {
+        const matrix = new DOMMatrixReadOnly(styles.transform);
+        share.x += matrix.e;
+        share.y += matrix.f;
+      }
+      if (styles.translate !== "none") {
+        const [tx = "0", ty = "0"] = styles.translate.split(" ");
+        share.x += Number.parseFloat(tx);
+        share.y += Number.parseFloat(ty);
+      }
+      shares.set(at, share);
     }
-    if (styles.translate !== "none") {
-      const [tx = "0", ty = "0"] = styles.translate.split(" ");
-      x += Number.parseFloat(tx);
-      y += Number.parseFloat(ty);
-    }
+    x += share.x;
+    y += share.y;
   }
   return { x, y };
 };
@@ -204,13 +220,16 @@ export function highlight(options: HighlightOptions) {
      * measured there, the pill stayed a row off once the slide ended, with
      * nothing left to move it. Undefined for a row not laid out.
      */
-    const placeOf = (row: HTMLElement): Omit<Box, "r"> | undefined => {
+    const placeOf = (
+      row: HTMLElement,
+      shares?: Map<HTMLElement, { x: number; y: number }>
+    ): Omit<Box, "r"> | undefined => {
       if (laidOut) {
         const at = laidOut().get(row);
         return at && { x: at.left, y: at.top, w: at.width, h: at.height };
       }
       const rect = row.getBoundingClientRect();
-      const slid = slideOf(row, container);
+      const slid = slideOf(row, container, shares);
       const at = toLocal(rect.left - slid.x, rect.top - slid.y);
       return {
         x: at.x,
@@ -332,13 +351,14 @@ export function highlight(options: HighlightOptions) {
       const at = toLocal(clientX, clientY);
       let best: HTMLElement | null = null;
       let bestDistance = Number.POSITIVE_INFINITY;
+      const shares = new Map<HTMLElement, { x: number; y: number }>();
       for (const row of rowsNow()) {
         // A row the pointer cannot reach — one on its way out — is not
         // under it, wherever it is still drawn.
         const box =
           getComputedStyle(row).pointerEvents === "none"
             ? undefined
-            : placeOf(row);
+            : placeOf(row, shares);
         if (!(box && reaches(box, at))) {
           continue;
         }

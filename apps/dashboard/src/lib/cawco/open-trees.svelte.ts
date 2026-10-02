@@ -4,12 +4,13 @@
  * list that nests sessions reads the one answer, so a parent opened under
  * Finished is open under Working and in its project too.
  *
- * The list a turn came from shows it at once; every other list shows it a
- * frame later. Shown in every list in the update the click made, the click
- * rendered the same tree twice and ran past a frame; a frame later, the
- * other list's fold still starts on the same frame as this one's (both land
- * in the batch motion/rows `atTravel` opens, which waits two frames), so
- * the two never part.
+ * The list a turn came from shows it at once; every other list shows it in
+ * a task of its own just after. Shown in every list in the update the click
+ * made, the click rendered the same tree twice and ran past a frame; caught
+ * up in the next frame's own callbacks, it made that frame as long. A task
+ * later, the other list's fold still starts on the same frame as this one's
+ * (both land in the batch motion/rows `atTravel` opens, which waits two
+ * frames), so the two never part.
  */
 import { SvelteSet } from "svelte/reactivity";
 import { readJson, writeJson } from "./storage";
@@ -29,7 +30,7 @@ const open = new SvelteSet<string>(
 const behind = new SvelteSet<string>(open);
 /** The list the turns of this frame came from; null once every list shows them. */
 let turnedIn = $state<TreeList | null>(null);
-let catchingUp = 0;
+let catchingUp: ReturnType<typeof setTimeout> | undefined;
 
 function catchUp(): void {
   for (const id of [...behind]) {
@@ -59,19 +60,18 @@ export const openTrees = {
       open.delete(id);
     }
     writeJson(KEY, [...open]);
-    if (typeof requestAnimationFrame === "undefined") {
-      catchUp();
-      return;
-    }
-    if (turnedIn !== null && turnedIn !== list) {
-      // Two lists turned in one frame: neither is behind the other.
-      cancelAnimationFrame(catchingUp);
+    clearTimeout(catchingUp);
+    if (
+      typeof window === "undefined" ||
+      (turnedIn !== null && turnedIn !== list)
+    ) {
+      // On the server, or two lists turned before either caught up: neither
+      // is behind the other.
       catchUp();
       return;
     }
     turnedIn = list;
-    cancelAnimationFrame(catchingUp);
-    catchingUp = requestAnimationFrame(catchUp);
+    catchingUp = setTimeout(catchUp, 0);
   },
   toggle(id: string, list: TreeList): void {
     openTrees.set(id, !open.has(id), list);
