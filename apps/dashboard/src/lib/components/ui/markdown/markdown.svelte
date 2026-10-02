@@ -5,7 +5,7 @@
     theme as streamdownTheme,
     type Theme,
   } from "svelte-streamdown";
-  import { dur, motionOk } from "$lib/cawco/motion/curves.svelte";
+  import { dur, ease, motionOk } from "$lib/cawco/motion/curves.svelte";
   import OutputBlock from "$lib/components/features/tool-cards/OutputBlock.svelte";
   import { PROSE } from "$lib/prose";
   import { draw, stepping } from "../collapsible/draw";
@@ -187,20 +187,21 @@
     if (fresh.size === 0) {
       return false;
     }
-    const { duration, easing } = fadeTiming(root);
+    const { duration, easing } = fadeTiming();
     for (const element of fresh) {
       element.animate([{ opacity: 0 }, { opacity: 1 }], { duration, easing });
     }
     return true;
   }
 
-  /** A chunk's fade: --dur-menu, --ease-out. */
-  function fadeTiming(root: HTMLElement): { duration: number; easing: string } {
-    const style = getComputedStyle(root);
-    return {
-      duration: dur("--dur-menu"),
-      easing: style.getPropertyValue("--ease-out"),
-    };
+  /**
+   * A chunk's fade: --dur-menu, --ease-out, both from the root's tokens as
+   * curves keeps them. Read off the message's own style, every chunk laid
+   * the words it had just put in out on the spot, inside the update that
+   * put them in.
+   */
+  function fadeTiming(): { duration: number; easing: string } {
+    return { duration: dur("--dur-menu"), easing: ease("--ease-out") };
   }
 
   $effect(() => {
@@ -243,7 +244,7 @@
     if (!(root && carrying && from)) {
       return;
     }
-    const { duration, easing } = fadeTiming(root);
+    const { duration, easing } = fadeTiming();
     const now = document.timeline.currentTime as number;
     // The words the stream never drew arrive now, as one more chunk.
     const chunks = [...from.chunks, { from: from.drawn, start: now }].filter(

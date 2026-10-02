@@ -94,7 +94,7 @@ index 9cbd53c6ee6fa45f390652904e69a50f916c20b4..6b0657dc56fbfdc0dc157294f4591748
        contain: "layout style",
        position: "absolute",
 diff --git a/lib/svelte/Virtualizer.svelte b/lib/svelte/Virtualizer.svelte
-index 605f1b1719d23c6e108fd746e4b40369ad238d75..f8e31f128bff9e9a273c996b172f30fcee609a59 100644
+index 605f1b1719d23c6e108fd746e4b40369ad238d75..b12ec4e5c0fec790a3d19e69a84e5dddffe9b3be 100644
 --- a/lib/svelte/Virtualizer.svelte
 +++ b/lib/svelte/Virtualizer.svelte
 @@ -1,11 +1,14 @@
@@ -129,7 +129,7 @@ index 605f1b1719d23c6e108fd746e4b40369ad238d75..f8e31f128bff9e9a273c996b172f30fc
    }: Props = $props();
  
    const store = createVirtualStore(
-@@ -60,6 +65,9 @@
+@@ -60,13 +65,15 @@
    store.$subscribe(UPDATE_SCROLL_END_EVENT, () => {
      onscrollend && onscrollend();
    });
@@ -139,7 +139,14 @@ index 605f1b1719d23c6e108fd746e4b40369ad238d75..f8e31f128bff9e9a273c996b172f30fc
  
    let containerRef: HTMLDivElement | undefined = $state();
  
-@@ -117,10 +125,48 @@
+   let stateVersion: StateVersion = $state(store.$getStateVersion());
+ 
+   let range = $derived(stateVersion && store.$getRange(bufferSize));
+-  let isScrolling = $derived(stateVersion && store.$isScrolling());
+   let totalSize = $derived(stateVersion && store.$getTotalSize());
+   let negative = $derived(stateVersion && scroller.$isNegative());
+ 
+@@ -117,10 +124,48 @@
      scroller.$dispose();
    });
  
@@ -189,6 +196,18 @@ index 605f1b1719d23c6e108fd746e4b40369ad238d75..f8e31f128bff9e9a273c996b172f30fc
    });
  
    $effect.pre(() => {
+@@ -167,7 +212,10 @@
+       position: "relative",
+       width: horizontal ? totalSize + "px" : "100%",
+       height: horizontal ? "100%" : totalSize + "px",
+-      "pointer-events": isScrolling ? "none" : undefined,
++      // No `pointer-events: none` while scrolling: pointer-events is
++      // inherited, so every toggle restyled every item under the container.
++      // A transcript pinned to its streaming tail scrolls on every chunk,
++      // and each toggle cost a 13,000-element style recalc (~140ms).
+     }),
+   );
+ </script>
 diff --git a/lib/svelte/Virtualizer.type.d.ts b/lib/svelte/Virtualizer.type.d.ts
 index 7bbfbcac12a6842bdfd796e00f2d1cd75893da48..dc89cc71d9d84c2252674db941178b0956a249e8 100644
 --- a/lib/svelte/Virtualizer.type.d.ts

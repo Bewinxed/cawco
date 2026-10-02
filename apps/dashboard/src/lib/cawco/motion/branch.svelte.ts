@@ -33,17 +33,21 @@
  * each stands at its place inside the growing box, so nothing is drawn
  * above the parent row's bottom edge or over another row.
  *
- * Folding. Quicker than opening, and from the next frame: the room closes
- * over --dur-exit, the rows under it sliding up with its edge (the batch's
- * "close" pace), while the line runs back the way it came on --ease-out,
+ * Folding. Quicker than opening, and under way in the next frame, from the
+ * click's own time (motion/rows `now`): the room closes over --dur-exit, the
+ * rows under it sliding up with its edge (the batch's "close" pace), while
+ * the line runs back the way it came on --ease-out,
  * ahead of the edge. As the head leaves a child's glyph, its title wipes out
  * right to left, then its glyph flies out to the left as it fades; then the
  * group unmounts. The room used to wait for the lowest child to swipe out
  * before it started, and then took an opening's whole time to close.
  *
- * Turned back mid-way, every piece carries on from where it is drawn: the
- * fold in flight holds still, and the new one starts from it on the next
- * batch's frame, with the box.
+ * Turned back mid-way, every piece carries on from where it stands: the
+ * fold in flight is held at the click's time, and the new one starts from
+ * it at that same time, with the box and the rows under it, so the next
+ * frame already shows the line on its way back. Waiting for a batch of its
+ * own, the line stood still a frame (a fold) or two (an opening) at every
+ * turn.
  *
  * Reduced motion: nothing travels. Opening, the room lands at once and the
  * children fade in; folding, they fade out where they stand and then the
@@ -774,8 +778,14 @@ interface Piece {
   top: number;
 }
 
-/** Built this far ahead of its start: two frames at 60Hz. */
-const AHEAD = 1000 / 30;
+/**
+ * Built this far ahead of its start: eight frames at 60Hz. A piece once
+ * built runs on the compositor, through whatever holds the main thread; one
+ * not yet built waits for it. With a session streaming, a frame of its
+ * socket's messages held the main thread 120ms, and a stretch of line due
+ * in it, built two frames ahead, stood still until it was over.
+ */
+const AHEAD = (1000 / 60) * 8;
 
 /**
  * Every piece of a plan, to build on its own elements: each row's glyph
@@ -786,8 +796,8 @@ const AHEAD = 1000 / 30;
  *
  * `rests`: until it is built, every piece stands where its plan starts it,
  * hidden under the group's hold (a fresh opening) or at rest (a fold from
- * rest). Then a piece is built just before it moves, and only once it is in
- * view (`fly`): built at once, a tree of forty under the rail's foot cost
+ * rest). Then a piece is built a little before it moves (`AHEAD`), and only
+ * once it is in view (`fly`): built at once, a tree of forty under the rail's foot cost
  * the frame its fold started on 13ms in `animate` alone, mostly for rows
  * nobody could see, and every piece of a tall tree in view still made that
  * frame run past 16ms. A fold turned back mid-way has pieces caught
@@ -972,10 +982,11 @@ function stopFlight(
   }
   flight.hold?.();
   flight.unwatch?.();
-  // Held where the last frame drew it, which is where the next fold is
-  // planned from (and the room's edge read at): a pause alone takes effect
-  // on the next frame, so a line turned back ran on a frame past the edge,
-  // 4px below it, then jumped back.
+  // Held where it stands at the time read here, which is where the next fold
+  // is planned from, and the time its batch starts at (motion/rows `now`),
+  // and the time the room's edge is read at: a pause alone takes effect on
+  // the next frame, so a line turned back ran on a frame past the edge, 4px
+  // below it, then jumped back.
   const frame = Number(document.timeline.currentTime);
   for (const animation of flight.animations) {
     const begun = animation.startTime;
@@ -1108,9 +1119,11 @@ function open(group: HTMLElement, options: BranchOptions): TransitionConfig {
       group.offsetHeight,
       items.filter((el) => el.querySelector(options.glyph)).length
     );
+    // Turned back mid-fold, it carries on from where the fold left it in the
+    // next frame (`now`); from rest it waits for its batch's two frames.
     flight.hold = atTravel(
       (at, batch) => takeOff(at, batch.speed ?? pace.speed),
-      pace
+      { ...pace, now: turning }
     );
   };
   if (turning) {
@@ -1253,7 +1266,7 @@ function fold(group: HTMLElement, options: BranchOptions): TransitionConfig {
       // Folded before it ever opened: its pieces hold it hidden now.
       group.removeAttribute(HELD);
     },
-    { close: true }
+    { close: true, now: true }
   );
   // The group leaves the flow now, so reflow hears it (`data-state`) in
   // this update and holds its box and everything under it until the batch.

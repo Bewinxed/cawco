@@ -227,11 +227,30 @@
     background: var(--surface-recess);
   }
   /* In the rail it is one block of the rail's own scroller, at its full
-     height: the rail scrolls, the home does not shrink into it. */
+     height: the rail scrolls, the home does not shrink into it. The seam
+     under it is drawn by what follows it, a pixel above that and the gap
+     between them, where the home's foot is: as a tree opens or folds in the
+     home, the seam travels with the rows sliding under its edge. Drawn as
+     the home's own border, the seam was cut by the clip its edge moves by
+     while the home grew, and kept the home's edge on the main thread while
+     it shrank (motion/rows `edgeOf`). */
   .home.rail {
     flex: none;
-    border-bottom: 1px solid var(--seam);
+    /* The pixel the seam stands in. */
+    padding-bottom: 1px;
     margin-bottom: var(--space-1);
+  }
+  .home.rail + :global(*) {
+    position: relative;
+  }
+  .home.rail + :global(*)::before {
+    content: "";
+    position: absolute;
+    inset-inline: 0;
+    inset-block-start: calc(-1 * var(--space-1) - 1px);
+    block-size: 1px;
+    background: var(--seam);
+    pointer-events: none;
   }
   .top {
     display: flex;

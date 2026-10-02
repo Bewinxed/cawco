@@ -437,10 +437,23 @@ interface Move {
  * the same curve as the edge next to it: a box's edge and the row under it
  * never part by a frame.
  *
+ * `now`: the batch carries on from the frame it was asked in, the last one
+ * drawn. It runs in the next frame's callbacks with that frame's time as its
+ * start, so the next frame already shows it under way, from exactly where
+ * the last one left everything. A tree folding (motion/branch `fold`) asks
+ * so, and a tree turned back while it opens: its line held where it was
+ * drawn, two frames of waiting were two frames of a line standing still
+ * mid-stroke. A click sets both off, and Chrome leaves a shift within
+ * 500ms of input out of the layout shift score, so the hold the two frames
+ * keep for a change that comes on its own (live data) is not needed here.
+ * A tree opening from rest still waits: it mounts out of the layout and is
+ * shown a task after its click (motion/branch `open`), so building its rows
+ * and laying them out are two tasks, each inside a frame.
+ *
  * `pace`, how the batch's moves travel. A tree closing asks with `close`
- * (motion/branch `fold`): its batch starts on the next frame, and every move
- * in it travels over --dur-exit rather than --dur-panel, so closing is
- * quicker than opening and never waits. A tree opening asks with its line's
+ * (motion/branch `fold`): every move in its batch travels over --dur-exit
+ * rather than --dur-panel, so closing is quicker than opening and never
+ * waits. A tree opening asks with its line's
  * `speed` (px a ms): every move in its batch glides at that speed
  * (curves `glide`), as its line does, so its room's edge, and every row under
  * it, keep step with the line's head and are never outrun by it; on the
@@ -462,13 +475,15 @@ type Run = (at: number, pace: Pace) => void;
 interface Batch {
   pace: Pace;
   runs: Set<Run>;
+  /** Its start, when it carries on from the frame it was asked in (`now`). */
+  since: number | null;
 }
 /** The batch still taking asks: the one the current update joins. */
 let taking: Batch | null = null;
 
 export function atTravel(
   run: Run,
-  ask: { close?: boolean; least?: number; speed?: number } = {}
+  ask: { close?: boolean; least?: number; now?: boolean; speed?: number } = {}
 ): () => void {
   // A tree closing and a tree opening never share a batch: the one asked
   // second opens the next, and every ask after it joins that one.
@@ -480,12 +495,13 @@ export function atTravel(
     const open: Batch = {
       runs: new Set(),
       pace: { close: false, speed: null },
+      since: null,
     };
     taking = open;
     let frames = 0;
     const tick = () => {
       frames += 1;
-      if (frames < (open.pace.close ? 1 : 2)) {
+      if (frames < (open.since === null ? 2 : 1)) {
         requestAnimationFrame(tick);
         return;
       }
@@ -493,7 +509,7 @@ export function atTravel(
       if (taking === open) {
         taking = null;
       }
-      const at = Number(document.timeline.currentTime);
+      const at = open.since ?? Number(document.timeline.currentTime);
       for (const go of open.runs) {
         go(at, open.pace);
       }
@@ -501,6 +517,9 @@ export function atTravel(
     requestAnimationFrame(tick);
   }
   const joined = taking;
+  if (ask.now && joined.since === null) {
+    joined.since = Number(document.timeline.currentTime);
+  }
   if (ask.close) {
     joined.pace.close = true;
   }
@@ -849,29 +868,66 @@ function departure(
  * parent's glyph, an arm out to the left) shows all the while.
  */
 const OPEN = "-100vmax";
-/** A growing box's clip, read for how much of it is still hidden. */
-const CLIP_BOTTOM = /^inset\(\S+ \S+ ([\d.]+)px/;
+/** A box's clip, read for where its bottom edge is drawn: above (hiding) or below its foot. */
+const CLIP_BOTTOM = /^inset\(\S+ \S+ (-?[\d.]+)px/;
+
+/**
+ * A shrinking box, as the change found it: its bottom margin, and whether it
+ * draws anything of its own (a background, a shadow, an outline, a border
+ * down a side or along its foot) that would jump to its new size.
+ */
+interface Shrink {
+  margin: number;
+  paints: boolean;
+}
+
+function shrinkOf(styles: CSSStyleDeclaration): Shrink {
+  const side = (edge: "Right" | "Bottom" | "Left") =>
+    styles[`border${edge}Style`] !== "none" &&
+    Number.parseFloat(styles[`border${edge}Width`]) > 0;
+  return {
+    margin: Number.parseFloat(styles.marginBottom),
+    paints:
+      !["rgba(0, 0, 0, 0)", "transparent"].includes(styles.backgroundColor) ||
+      styles.backgroundImage !== "none" ||
+      styles.boxShadow !== "none" ||
+      (styles.outlineStyle !== "none" &&
+        Number.parseFloat(styles.outlineWidth) > 0) ||
+      side("Right") ||
+      side("Bottom") ||
+      side("Left"),
+  };
+}
 
 /**
  * A box's edge, from where it is drawn to its new size, while the room it
  * takes in the layout is the new size throughout, so nothing after it moves
- * on its account. Growing, the box is laid out at its new height at once and
- * a clip uncovers the new strip. Shrinking, the box holds its drawn height
- * over an equal and opposite bottom margin (negative, it sums with a
- * following margin instead of collapsing into it; a positive one would
- * collapse, and the room would not add up), clipped at that height. Either
- * way the clip is the only cut: overflow is left alone, so the box's layout
- * (its margins, a stacking context) is the same before, during and after.
+ * on its account. The box is laid out at its new height at once, and a clip
+ * moves its bottom edge from where it was drawn: growing, the clip hides the
+ * new strip and uncovers it; shrinking, it reaches below the box over the
+ * strip given up and closes on it. Nothing is laid out again as it moves:
+ * a box that shrank by its height laid the list out on every frame, and
+ * with a session streaming a tree's fold dropped frames that its opening
+ * did not.
+ *
+ * A box that draws something of its own (`Shrink.paints`: at its new size
+ * at once, its background or border would jump) shrinks by its height: held
+ * at its drawn height over an equal and opposite bottom margin (negative, it
+ * sums with a following margin instead of collapsing into it; a positive one
+ * would collapse, and the room would not add up), clipped at that height.
+ * Either way the clip is the only cut: overflow is left alone, so the box's
+ * layout (its margins, a stacking context) is the same before, during and
+ * after.
  */
 function edgeOf(
   element: HTMLElement,
   from: number,
   to: number,
-  /** Its bottom margin, read with every other style of the change. */
-  margin: number,
+  /** Read with every other style of the change, when it shrinks. */
+  shrink: Shrink | null,
   clock: EffectTiming = travel()
 ): Animation {
-  if (to > from) {
+  if (!shrink?.paints) {
     return element.animate(
       [
         { clipPath: `inset(${OPEN} ${OPEN} ${to - from}px ${OPEN})` },
@@ -880,6 +936,7 @@ function edgeOf(
       clock
     );
   }
+  const { margin } = shrink;
   const clipPath = `inset(${OPEN} ${OPEN} 0px ${OPEN})`;
   return element.animate(
     [
@@ -902,16 +959,20 @@ function edgeOf(
  * folding in another list) put the room's edge a frame or two behind the
  * rows sliding up under it, and they slid over the rows it still held.
  */
-interface Carry {
+interface Carry extends Sizes {
   /** Its keyframes as they were made: a glide's own stretches included. */
   frames: Keyframe[];
-  from: number;
   start: number;
   timing: EffectTiming;
+}
+/** An edge's sizes, and whether it moves by its clip, the box laid out at `to`. */
+interface Sizes {
+  clip: boolean;
+  from: number;
   to: number;
 }
 /** Each edge's own sizes, for carrying it across a change. */
-const edgeSizes = new WeakMap<Animation, { from: number; to: number }>();
+const edgeSizes = new WeakMap<Animation, Sizes>();
 
 /**
  * A box's width, from where it is drawn to its new width. In the flow, an
@@ -1034,10 +1095,10 @@ class Reflow {
     const own = plan.slides.map(
       (slide) => getComputedStyle(slide.element).translate
     );
-    const margins = plan.edges.map((edge) =>
-      edge.to < edge.from
-        ? Number.parseFloat(getComputedStyle(edge.element).marginBottom)
-        : 0
+    const shrinks = plan.edges.map((edge) =>
+      edge.to < edge.from && !edge.carry
+        ? shrinkOf(getComputedStyle(edge.element))
+        : null
     );
     const spans = plan.spans.map((span) => {
       const styles = getComputedStyle(span.element);
@@ -1052,16 +1113,19 @@ class Reflow {
     plan.edges.forEach((edge, i) => {
       const { carry } = edge;
       let animation: Animation;
+      let clip: boolean;
       if (carry) {
         animation = edge.element.animate(carry.frames, carry.timing);
         animation.startTime = carry.start;
+        ({ clip } = carry);
       } else {
         animation = heldToTravel(
-          edgeOf(edge.element, edge.from, edge.to, margins[i]),
+          edgeOf(edge.element, edge.from, edge.to, shrinks[i]),
           Math.abs(edge.to - edge.from)
         );
+        clip = !shrinks[i]?.paints;
       }
-      edgeSizes.set(animation, { from: edge.from, to: edge.to });
+      edgeSizes.set(animation, { from: edge.from, to: edge.to, clip });
       this.#keep(this.#edges, edge.element, animation);
     });
     plan.spans.forEach((span, i) => {
@@ -1137,20 +1201,21 @@ class Reflow {
       { carry?: Carry; h?: number; w?: number }
     >();
     for (const [element, animation] of this.#edges) {
-      // A growing box is laid out whole and clipped: its edge is drawn where
-      // the clip's bottom inset leaves it, up from the size it grows to. Read
-      // up from the size it is laid out at now, a tree folded while it
-      // opened (its group already out of the flow) was taken for drawn 81px
-      // above its own top, and the fold "grew" it from there, clipping its
-      // parent row away until it had closed.
+      // A box whose edge moves by its clip is laid out at the size it is
+      // bound for, and drawn to where the clip's bottom inset puts its edge:
+      // above that size (growing) or below it (shrinking). Read from the
+      // size it is laid out at now, a tree folded while it opened (its group
+      // already out of the flow) was taken for drawn 81px above its own top,
+      // and the fold "grew" it from there, clipping its parent row away
+      // until it had closed. One that moves by its height is drawn as tall
+      // as it is.
       const clip = CLIP_BOTTOM.exec(getComputedStyle(element).clipPath);
       const hidden = clip ? Number.parseFloat(clip[1]) : 0;
       const sizes = edgeSizes.get(animation);
       const start = animation.startTime;
-      const whole =
-        sizes && sizes.to > sizes.from
-          ? sizes.to
-          : element.getBoundingClientRect().height;
+      const whole = sizes?.clip
+        ? sizes.to
+        : element.getBoundingClientRect().height;
       drawn.set(element, {
         h: whole - hidden,
         // In flight on its batch's clock: carried if it is bound the same way.
@@ -1257,7 +1322,7 @@ class Reflow {
     // jumped. The slide takes over from the same place when the batch starts
     // (`atTravel`), on the batch's clock. It is on `translate`, composed with
     // the element's own, so a chip's scale and a control's centring are left
-    // alone.
+    // alone; Chrome runs it on the compositor all the same.
     element.style.translate = offsetTranslate(own, x, y);
     const move: Move = { x, y };
     this.#moves.set(element, move);
