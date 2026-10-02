@@ -2,10 +2,7 @@ import CawCoCore
 import UIKit
 
 // The web dashboard's kit, recipe by recipe (apps/dashboard/src/lib/components/ui
-// and app.css), as UIKit views. Values come from the tokens; where the token
-// build does not emit a token for Apple (shadows, the action surface's
-// lightness steps), the recipe mirrors the token's definition in
-// design/tokens/cawco.tokens.json and says so.
+// and app.css), as UIKit views. Every value comes from the tokens.
 
 // MARK: Tile
 
@@ -18,10 +15,6 @@ open class TileView: UIView {
         backgroundColor = Palette.surfaceRaised
         layer.cornerRadius = radius
         layer.cornerCurve = .continuous
-        layer.borderWidth = 1
-        layer.shadowOffset = CGSize(width: 0, height: 1)
-        layer.shadowRadius = 1
-        layer.shadowOpacity = 1
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: TileView, _: UITraitCollection) in
             view.paint()
         }
@@ -34,10 +27,7 @@ open class TileView: UIView {
     }
 
     private func paint() {
-        let dark = traitCollection.userInterfaceStyle == .dark
-        let neutral12 = Palette.neutral12.resolvedColor(with: traitCollection)
-        layer.shadowColor = (dark ? UIColor.black.withAlphaComponent(0.3) : neutral12.withAlphaComponent(0.07)).cgColor
-        layer.borderColor = neutral12.withAlphaComponent(dark ? 0.06 : 0.035).cgColor
+        layer.draw(Shadow.shadowTile, in: traitCollection)
     }
 }
 
@@ -142,7 +132,7 @@ public enum KitButton {
         switch variant {
         case .action:
             config.background.strokeWidth = 0
-            // `--action-surface`: the solid 3% lighter at the top, 3% darker at the foot.
+            // `--action-surface`: the solid lighter at the top, darker at the foot.
             let gradient = ActionSurface()
             config.background.customView = gradient
         case .secondary:
@@ -171,16 +161,23 @@ public enum KitButton {
     }
 }
 
-/// The action button's lightness gradient over its solid.
+/// The action button's surface (`--action-surface`).
 private final class ActionSurface: UIView {
     override class var layerClass: AnyClass { CAGradientLayer.self }
 
     init() {
         super.init(frame: .zero)
         isUserInteractionEnabled = false
-        (layer as? CAGradientLayer)?.colors = [UIColor.white.withAlphaComponent(0.06).cgColor, UIColor.black.withAlphaComponent(0.06).cgColor]
         layer.cornerRadius = Radius.radiusMd
         layer.cornerCurve = .continuous
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: ActionSurface, _: UITraitCollection) in
+            view.paint()
+        }
+        paint()
+    }
+
+    private func paint() {
+        (layer as? CAGradientLayer)?.colors = Palette.actionSurface.colors(for: traitCollection)
     }
 
     @available(*, unavailable)

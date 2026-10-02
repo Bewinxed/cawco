@@ -17,8 +17,11 @@
  * for dimensions (1rem = 16pt), seconds for durations, `UIFont.Weight`,
  * `TimingCurve` for cubic Béziers, font stacks, and `TypeRole`s. A `clamp()`
  * (fluid on the web) is its min...max range. Media variants (`coarse`,
- * `compact`) are separate constants with that suffix. Shadows, gradients and
- * transitions are CSS composites with no Apple counterpart and are not emitted.
+ * `compact`) are separate constants with that suffix. A shadow is its list of
+ * `ShadowLayer`s and a gradient its `Gradient` stops, each colour an `Ink`
+ * with its light and dark Display P3 values (`light-dark()` read per
+ * appearance). Transitions are CSS composites with no Apple counterpart (the
+ * motion tokens they are built from are emitted) and are not emitted.
  */
 import { mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -44,10 +47,11 @@ const NAMESPACES: Record<string, string> = {
   size: "Size",
   effect: "Effect",
   motion: "Motion",
+  shadow: "Shadow",
 };
 
 /** CSS composites the Apple platform does not carry. */
-const NOT_APPLE = new Set(["shadow", "gradient", "transition"]);
+const NOT_APPLE = new Set(["transition"]);
 
 const WEIGHTS: Record<string, string> = {
   "100": ".ultraLight",
@@ -77,6 +81,7 @@ const DOUBLE_QUOTE = /"/g;
 const FONT_REF = /^\{font\.([^}]+)\}$/;
 const EM = /[^r]em$/;
 const DECLARED = /static let (\w+)/;
+const LENGTH = /^-?\d*\.?\d+(?:px|rem)?$/;
 
 type Mode = "light" | "dark";
 
@@ -262,6 +267,13 @@ class Tokens {
     const fn = call(s);
     if (fn?.name === "color-mix") {
       return this.mix(fn.args, mode, where);
+    }
+    if (fn?.name === "light-dark") {
+      const [light, dark] = splitTop(fn.args, ",");
+      if (!(light && dark)) {
+        throw new Error(`${where}: unsupported light-dark(${fn.args})`);
+      }
+      return this.colour(mode === "light" ? light : dark, mode, where);
     }
     if (fn?.name === "oklch" && fn.args.trimStart().startsWith("from ")) {
       return this.relative(fn.args, mode, where);
@@ -516,6 +528,82 @@ function typeRole(raw: string, tokens: Tokens, where: string): string {
   return `TypeRole(weight: ${WEIGHTS[weight]}, size: ${swiftNumber(min)}...${swiftNumber(max)}, leading: ${swiftNumber(tokens.numeric(leading, where))}, family: FontFamily.${swiftName(familyRef[1])})`;
 }
 
+/** A colour as an `Ink`: its light and dark values in Display P3. */
+function ink(raw: string, tokens: Tokens, where: string): string {
+  const p3 = (mode: Mode): string => {
+    const colour = tokens.colour(raw, mode, where);
+    const mapped = colour.to("p3").toGamut({ space: "p3", method: "css" });
+    const [red, green, blue] = mapped.coords.map((v) => Number(v ?? 0));
+    return `P3(${[red, green, blue, Number(colour.alpha)].map((v) => component(v)).join(", ")})`;
+  };
+  return `Ink(light: ${p3("light")}, dark: ${p3("dark")})`;
+}
+
+/** A CSS shadow list as `ShadowLayer`s, references followed. */
+function shadowLayers(raw: string, tokens: Tokens, where: string): string[] {
+  const s = raw.trim();
+  if (s === "none") {
+    return [];
+  }
+  const ref = REF.exec(s);
+  if (ref) {
+    return shadowLayers(authored(tokens.lookup(ref[1], where)), tokens, where);
+  }
+  return splitTop(s, ",").flatMap((layer) => {
+    const inner = REF.exec(layer);
+    if (inner) {
+      return shadowLayers(
+        authored(tokens.lookup(inner[1], where)),
+        tokens,
+        where
+      );
+    }
+    const parts = splitTop(layer, " ");
+    const inset = parts.includes("inset");
+    const lengths: number[] = [];
+    let colour: string | undefined;
+    for (const part of parts.filter((p) => p !== "inset")) {
+      if (LENGTH.test(part)) {
+        lengths.push(tokens.numeric(part, where));
+      } else if (colour === undefined) {
+        colour = part;
+      } else {
+        throw new Error(`${where}: unsupported shadow "${layer}"`);
+      }
+    }
+    const [x, y, blur = 0, spread = 0] = lengths;
+    if (!colour || x === undefined || y === undefined || lengths.length > 4) {
+      throw new Error(`${where}: unsupported shadow "${layer}"`);
+    }
+    const n = [x, y, blur, spread].map(swiftNumber);
+    return [
+      `ShadowLayer(x: ${n[0]}, y: ${n[1]}, blur: ${n[2]}, spread: ${n[3]}, ink: ${ink(colour, tokens, where)}, inset: ${inset})`,
+    ];
+  });
+}
+
+/** A top-to-bottom `linear-gradient()` as its `Gradient` stops. */
+function gradient(raw: string, tokens: Tokens, where: string): string {
+  const fn = call(raw.trim());
+  if (fn?.name !== "linear-gradient") {
+    throw new Error(`${where}: unsupported gradient "${raw}"`);
+  }
+  const stops = splitTop(fn.args, ",");
+  for (const stop of stops) {
+    // A direction or a stop position has no reading here yet: say so rather than guess.
+    if (
+      stop.startsWith("to ") ||
+      stop.endsWith("deg") ||
+      splitTop(stop, " ").at(-1)?.endsWith("%")
+    ) {
+      throw new Error(
+        `${where}: only evenly spaced top-to-bottom stops are supported ("${stop}")`
+      );
+    }
+  }
+  return `Gradient(stops: [${stops.map((stop) => ink(stop, tokens, where)).join(", ")}])`;
+}
+
 interface Declaration {
   doc: string[];
   line: string;
@@ -616,6 +704,16 @@ function declare(token: TransformedToken, tokens: Tokens): Declaration[] {
     case "typography":
       return [
         one(`public static let ${name} = ${typeRole(raw, tokens, where)}`),
+      ];
+    case "shadow":
+      return [
+        one(
+          `public static let ${name}: [ShadowLayer] = [${shadowLayers(raw, tokens, where).join(", ")}]`
+        ),
+      ];
+    case "gradient":
+      return [
+        one(`public static let ${name} = ${gradient(raw, tokens, where)}`),
       ];
     default:
       throw new Error(`${where}: $type "${token.$type}" has no Apple mapping`);

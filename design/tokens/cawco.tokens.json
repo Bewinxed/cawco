@@ -1220,6 +1220,34 @@
         }
       }
     },
+    "count-wash-live": {
+      "$type": "color",
+      "$value": "color-mix(in oklch, {color.status-live-ink} 6%, transparent)",
+      "$description": "The chosen work tab's count, washed in its status ink at the usage tints' strength.",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "color-mix(in oklch, {color.status-live-ink} 10%, transparent)"
+        }
+      }
+    },
+    "count-wash-done": {
+      "$type": "color",
+      "$value": "color-mix(in oklch, {color.status-done-ink} 6%, transparent)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "color-mix(in oklch, {color.status-done-ink} 10%, transparent)"
+        }
+      }
+    },
+    "count-wash-fail": {
+      "$type": "color",
+      "$value": "color-mix(in oklch, {color.status-fail-ink} 6%, transparent)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "color-mix(in oklch, {color.status-fail-ink} 10%, transparent)"
+        }
+      }
+    },
     "presence-online": {
       "$type": "color",
       "$value": "oklch(62.7% 0.17 149)",

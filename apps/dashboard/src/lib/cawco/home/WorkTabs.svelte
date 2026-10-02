@@ -864,6 +864,7 @@
      on the chosen tab only; the other's is a plain numeral. */
   .count {
     --ink: var(--status-live-ink);
+    --wash: var(--count-wash-live);
     display: inline-grid;
     place-items: center;
     min-inline-size: 18px;
@@ -871,20 +872,19 @@
     padding-inline: 3px;
     margin-inline-end: 2px;
     border-radius: var(--radius-xs);
-    background: light-dark(
-      color-mix(in oklch, var(--ink) 6%, transparent),
-      color-mix(in oklch, var(--ink) 10%, transparent)
-    );
+    background: var(--wash);
     color: var(--ink);
     font: var(--type-meta);
     font-variant-numeric: tabular-nums;
   }
   .count[data-tab="finished"] {
     --ink: var(--status-done-ink);
+    --wash: var(--count-wash-done);
   }
   /* Something listed as finished failed: the numeral says so. */
   .count[data-failed] {
     --ink: var(--status-fail-ink);
+    --wash: var(--count-wash-fail);
   }
   :global(.ff-tab:not(.selected)) .count {
     background: none;

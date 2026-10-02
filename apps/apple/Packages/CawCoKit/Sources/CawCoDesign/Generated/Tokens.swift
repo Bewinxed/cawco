@@ -49,6 +49,8 @@ public enum Palette {
     public static let mark7 = Palette.named("mark-7")
     public static let mark8 = Palette.named("mark-8")
     public static let markGlyph = Palette.named("mark-glyph")
+    /// Identity-mark sheen.
+    public static let markOverlay = Gradient(stops: [Ink(light: P3(0.9949, 0.9906, 0.9805, 0.2200), dark: P3(0.0759, 0.0714, 0.0656, 0.2200)), Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0600), dark: P3(0.9247, 0.9128, 0.8883, 0.0600))])
     /// Identity hues for duotone icon tiles (new-session modal, Configure). Dark keeps each hue's chroma and raises its lightness.
     public static let hueCyan400 = Palette.named("hue-cyan-400")
     public static let hueCyan500 = Palette.named("hue-cyan-500")
@@ -144,6 +146,9 @@ public enum Palette {
     public static let actionHover = Palette.named("action-hover")
     public static let onAction = Palette.named("on-action")
     public static let onBrand = Palette.named("on-brand")
+    /// The action is never flat: a top-highlight gradient, lifted ±0.03 L so the top stop keeps 4.5:1 under white.
+    public static let actionSurface = Gradient(stops: [Ink(light: P3(0.7434, 0.3271, 0.2310, 1.0000), dark: P3(0.7170, 0.3158, 0.2231, 1.0000)), Ink(light: P3(0.6648, 0.2530, 0.1607, 1.0000), dark: P3(0.6390, 0.2423, 0.1534, 1.0000))])
+    public static let actionSurfaceHover = Gradient(stops: [Ink(light: P3(0.6779, 0.2792, 0.1884, 1.0000), dark: P3(0.6515, 0.2696, 0.1731, 1.0000)), Ink(light: P3(0.6003, 0.2048, 0.1171, 1.0000), dark: P3(0.5746, 0.1959, 0.1007, 1.0000))])
     /// Selected nav / chosen row: warm apricot wash, coral ink, no shadow.
     public static let selectedBg = Palette.named("selected-bg")
     public static let selectedInk = Palette.named("selected-ink")
@@ -191,6 +196,10 @@ public enum Palette {
     /// A near or over row's only tint: a faint wash of its status ink (owner: "the tints for yellow/red are too overwhelming").
     public static let meterWashNear = Palette.named("meter-wash-near")
     public static let meterWashOver = Palette.named("meter-wash-over")
+    /// The chosen work tab's count, washed in its status ink at the usage tints' strength.
+    public static let countWashLive = Palette.named("count-wash-live")
+    public static let countWashDone = Palette.named("count-wash-done")
+    public static let countWashFail = Palette.named("count-wash-fail")
     public static let presenceOnline = Palette.named("presence-online")
     public static let presenceAway = Palette.named("presence-away")
     public static let presenceOff = Palette.named("presence-off")
@@ -223,6 +232,8 @@ public enum Palette {
     public static let codeString = Palette.named("code-string")
     public static let codeNumber = Palette.named("code-number")
     public static let codeComment = Palette.named("code-comment")
+    /// The transcript rail: one flat 2px line down a run of tool rows. An image, not a colour: rows paint it as a sized background layer (2px wide), and a colour would fill the whole row. Head and continuing rows paint the same, so no seam shows between them.
+    public static let rail = Gradient(stops: [Ink(light: P3(0.3988, 0.3803, 0.3532, 0.4000), dark: P3(0.7298, 0.7141, 0.6870, 0.4000)), Ink(light: P3(0.3988, 0.3803, 0.3532, 0.4000), dark: P3(0.7298, 0.7141, 0.6870, 0.4000))])
     public static let railBody = Palette.named("rail-body")
     /// Chrome materials: structural translucency, never decoration.
     public static let materialPanel = Palette.named("material-panel")
@@ -234,6 +245,36 @@ public enum Palette {
     public static let shadowTint3 = Palette.named("shadow-tint-3")
     /// At night every raised shadow adds a 1px inner ring of ink.
     public static let nightRing = Palette.named("night-ring")
+}
+
+public enum Shadow {
+    public static let shadowXs: [ShadowLayer] = [ShadowLayer(x: 0, y: 1, blur: 2, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: false)]
+    public static let shadowTile: [ShadowLayer] = [ShadowLayer(x: 0, y: 1, blur: 2, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0700), dark: P3(0.0000, 0.0000, 0.0000, 0.3000)), inset: false), ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0350), dark: P3(0.9247, 0.9128, 0.8883, 0.0600)), inset: false)]
+    public static let shadowRaised: [ShadowLayer] = [ShadowLayer(x: 0, y: 1, blur: 3, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: false), ShadowLayer(x: 0, y: 1, blur: 1, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: false), ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.0000, 0.0000, 0.0000, 0.0000), dark: P3(0.9247, 0.9128, 0.8883, 0.0700)), inset: true)]
+    public static let shadowHairline: [ShadowLayer] = [ShadowLayer(x: 0, y: 3, blur: 7, spread: -2, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.1400), dark: P3(0.0759, 0.0714, 0.0656, 0.6600)), inset: false)]
+    /// A stat tile's lift: drawn below the card, not around it; ringed at night.
+    public static let shadowStat: [ShadowLayer] = [ShadowLayer(x: 0, y: 3, blur: 7, spread: -2, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.1400), dark: P3(0.0759, 0.0714, 0.0656, 0.6600)), inset: false), ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.0000, 0.0000, 0.0000, 0.0000), dark: P3(0.9247, 0.9128, 0.8883, 0.0700)), inset: true)]
+    public static let shadowMd: [ShadowLayer] = [ShadowLayer(x: 0, y: 3, blur: 10, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.1400), dark: P3(0.0759, 0.0714, 0.0656, 0.6600)), inset: false), ShadowLayer(x: 0, y: 1, blur: 2, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: false), ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.0000, 0.0000, 0.0000, 0.0000), dark: P3(0.9247, 0.9128, 0.8883, 0.0700)), inset: true)]
+    public static let shadowLg: [ShadowLayer] = [ShadowLayer(x: 0, y: 10, blur: 30, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.1400), dark: P3(0.0759, 0.0714, 0.0656, 0.6600)), inset: false), ShadowLayer(x: 0, y: 3, blur: 8, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: false), ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.0000, 0.0000, 0.0000, 0.0000), dark: P3(0.9247, 0.9128, 0.8883, 0.0700)), inset: true)]
+    public static let shadowXl: [ShadowLayer] = [ShadowLayer(x: 0, y: 24, blur: 64, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.2000), dark: P3(0.0759, 0.0714, 0.0656, 0.7600)), inset: false), ShadowLayer(x: 0, y: 6, blur: 16, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: false), ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.0000, 0.0000, 0.0000, 0.0000), dark: P3(0.9247, 0.9128, 0.8883, 0.0700)), inset: true)]
+    public static let shadowOverlay: [ShadowLayer] = [ShadowLayer(x: 0, y: 18, blur: 48, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.2000), dark: P3(0.0759, 0.0714, 0.0656, 0.7600)), inset: false), ShadowLayer(x: 0, y: 2, blur: 6, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: false), ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.0000, 0.0000, 0.0000, 0.0000), dark: P3(0.9247, 0.9128, 0.8883, 0.0700)), inset: true)]
+    public static let shadowModal: [ShadowLayer] = [ShadowLayer(x: 0, y: 18, blur: 48, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.2000), dark: P3(0.0759, 0.0714, 0.0656, 0.7600)), inset: false), ShadowLayer(x: 0, y: 2, blur: 6, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: false), ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.0000, 0.0000, 0.0000, 0.0000), dark: P3(0.9247, 0.9128, 0.8883, 0.0700)), inset: true)]
+    public static let shadowDrawer: [ShadowLayer] = [ShadowLayer(x: 0, y: 12, blur: 40, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.2000), dark: P3(0.0759, 0.0714, 0.0656, 0.7600)), inset: false)]
+    public static let shadowInsetSel: [ShadowLayer] = [ShadowLayer(x: 0, y: 1, blur: 1, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: true)]
+    /// Shadow per surface level, paired with --surface-1…8.
+    public static let surfaceShadow1: [ShadowLayer] = []
+    public static let surfaceShadow2: [ShadowLayer] = [ShadowLayer(x: 0, y: 1, blur: 2, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0700), dark: P3(0.0000, 0.0000, 0.0000, 0.3000)), inset: false), ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0350), dark: P3(0.9247, 0.9128, 0.8883, 0.0600)), inset: false)]
+    public static let surfaceShadow3: [ShadowLayer] = [ShadowLayer(x: 0, y: 1, blur: 3, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: false), ShadowLayer(x: 0, y: 1, blur: 1, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: false), ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.0000, 0.0000, 0.0000, 0.0000), dark: P3(0.9247, 0.9128, 0.8883, 0.0700)), inset: true)]
+    public static let surfaceShadow4: [ShadowLayer] = [ShadowLayer(x: 0, y: 3, blur: 10, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.1400), dark: P3(0.0759, 0.0714, 0.0656, 0.6600)), inset: false), ShadowLayer(x: 0, y: 1, blur: 2, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: false), ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.0000, 0.0000, 0.0000, 0.0000), dark: P3(0.9247, 0.9128, 0.8883, 0.0700)), inset: true)]
+    public static let surfaceShadow5: [ShadowLayer] = [ShadowLayer(x: 0, y: 6, blur: 18, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.1400), dark: P3(0.0759, 0.0714, 0.0656, 0.6600)), inset: false), ShadowLayer(x: 0, y: 2, blur: 4, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: false), ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.0000, 0.0000, 0.0000, 0.0000), dark: P3(0.9247, 0.9128, 0.8883, 0.0700)), inset: true)]
+    public static let surfaceShadow6: [ShadowLayer] = [ShadowLayer(x: 0, y: 10, blur: 30, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.1400), dark: P3(0.0759, 0.0714, 0.0656, 0.6600)), inset: false), ShadowLayer(x: 0, y: 3, blur: 8, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: false), ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.0000, 0.0000, 0.0000, 0.0000), dark: P3(0.9247, 0.9128, 0.8883, 0.0700)), inset: true)]
+    public static let surfaceShadow7: [ShadowLayer] = [ShadowLayer(x: 0, y: 14, blur: 40, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.2000), dark: P3(0.0759, 0.0714, 0.0656, 0.7600)), inset: false), ShadowLayer(x: 0, y: 2, blur: 6, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: false), ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.0000, 0.0000, 0.0000, 0.0000), dark: P3(0.9247, 0.9128, 0.8883, 0.0700)), inset: true)]
+    public static let surfaceShadow8: [ShadowLayer] = [ShadowLayer(x: 0, y: 18, blur: 48, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.2000), dark: P3(0.0759, 0.0714, 0.0656, 0.7600)), inset: false), ShadowLayer(x: 0, y: 2, blur: 6, spread: 0, ink: Ink(light: P3(0.1850, 0.1722, 0.1560, 0.0900), dark: P3(0.0759, 0.0714, 0.0656, 0.5500)), inset: false), ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.0000, 0.0000, 0.0000, 0.0000), dark: P3(0.9247, 0.9128, 0.8883, 0.0700)), inset: true)]
+    /// The action's edge: a white top hairline and a coral-tinted drop.
+    public static let actionRing: [ShadowLayer] = [ShadowLayer(x: 0, y: 1, blur: 0, spread: 0, ink: Ink(light: P3(1.0000, 1.0000, 1.0000, 0.1800), dark: P3(1.0000, 1.0000, 1.0000, 0.1800)), inset: true), ShadowLayer(x: 0, y: 1, blur: 2, spread: 0, ink: Ink(light: P3(0.5066, 0.2338, 0.1694, 0.2500), dark: P3(0.0000, 0.0000, 0.0000, 0.4000)), inset: false)]
+    /// Inner vermillion ring and soft inner glow on code blocks.
+    public static let codeRing: [ShadowLayer] = [ShadowLayer(x: 0, y: 0, blur: 0, spread: 1, ink: Ink(light: P3(0.7434, 0.3271, 0.2310, 0.2800), dark: P3(0.8285, 0.4329, 0.3286, 0.3200)), inset: true), ShadowLayer(x: 0, y: 1, blur: 6, spread: 0, ink: Ink(light: P3(0.7434, 0.3271, 0.2310, 0.0600), dark: P3(0.8285, 0.4329, 0.3286, 0.1000)), inset: true)]
+    public static let selectedShadow: [ShadowLayer] = []
 }
 
 public enum FontFamily {

@@ -102,10 +102,7 @@ public final class SessionMarkView: UIView {
 
     private func paint() {
         let traits = traitCollection
-        sheen.colors = [
-            Palette.neutral1.resolvedColor(with: traits).withAlphaComponent(0.22).cgColor,
-            Palette.neutral12.resolvedColor(with: traits).withAlphaComponent(0.06).cgColor,
-        ]
+        sheen.colors = Palette.markOverlay.colors(for: traits)
         let sweeping = status == .live && !UIAccessibility.isReduceMotionEnabled
         if !sweeping {
             sweep.removeAllAnimations()

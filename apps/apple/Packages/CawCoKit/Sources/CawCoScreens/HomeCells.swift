@@ -245,8 +245,14 @@ final class TabsCell: HomeCell {
 
     func configure(tab: HomeModel.Tab, working: Int, finished: Int, finishedFailed: Bool, delegatesOn: Bool) {
         tabs.select(tab == .working ? 0 : 1, animated: window != nil)
-        counts[0].configure(count: working, ink: Palette.statusLiveInk, chosen: tab == .working, failed: false)
-        counts[1].configure(count: finished, ink: finishedFailed ? Palette.statusFailInk : Palette.statusDoneInk, chosen: tab == .finished, failed: finishedFailed)
+        counts[0].configure(count: working, ink: Palette.statusLiveInk, wash: Palette.countWashLive, chosen: tab == .working, failed: false)
+        counts[1].configure(
+            count: finished,
+            ink: finishedFailed ? Palette.statusFailInk : Palette.statusDoneInk,
+            wash: finishedFailed ? Palette.countWashFail : Palette.countWashDone,
+            chosen: tab == .finished,
+            failed: finishedFailed
+        )
         delegatesGlyph.glyph = delegatesOn ? .structureOn : .structure
         delegatesGlyph.tintColor = delegatesOn ? Palette.inkStrong : Palette.inkMuted
         delegates.accessibilityValue = delegatesOn ? "Shown" : "Hidden"
@@ -280,9 +286,10 @@ final class CountChip: UIView {
         fatalError("CountChip is built in code")
     }
 
-    func configure(count: Int, ink: UIColor, chosen: Bool, failed: Bool) {
+    /// `wash`: its tab's `count-wash-*`, shown on the chosen tab only.
+    func configure(count: Int, ink: UIColor, wash: UIColor, chosen: Bool, failed: Bool) {
         figure.ink = chosen || failed ? ink : Palette.inkMuted
-        backgroundColor = chosen ? ink.resolvedColor(with: traitCollection).withAlphaComponent(traitCollection.userInterfaceStyle == .dark ? 0.10 : 0.06) : .clear
+        backgroundColor = chosen ? wash : .clear
         guard count != self.count else {
             return
         }
