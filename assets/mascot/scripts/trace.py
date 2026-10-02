@@ -67,6 +67,16 @@ LENGTH = 8.0
 SPLICE = 60
 # Red minus blue a pixel needs to read as yellow (the ink measures 135; neutral greys about 5).
 WARM = 60
+# Green minus blue a pixel also needs to read as yellow. The ink's core measures 74-120 (median
+# 106) in the takes' effect marks; the soft edge of vermilion against paper is warm too but
+# measures -3 to 62 (95% at 25 or under), and was traced as a yellow ring round loading-feather's
+# feather: its edge pixels, about (230, 139, 122), sit 68 from the yellow ink and 92 from vermilion.
+YELLOW_CHROMA = 50
+# How far (512 px artboard pixels) a traced yellow pixel may sit from yellow in the take's own frame
+# before it counts as halo (see halo()): the trace's outlines move about that much.
+HALO_REACH = 2
+# How close (summed |RGB|) a rendered pixel must be to the yellow fill to be traced yellow.
+YELLOW_FILL = 40
 # Brightness from which a thin line inside the body is a lid line (lid lines measure 100-190,
 # the body 20-30 and its faint sheen lines 50-70).
 LID_LINE = 90
@@ -180,12 +190,14 @@ def inks(rgb: np.ndarray, centres: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     px = rgb.astype(np.float64)
     distance = ((px[..., None, :] - centres) ** 2).sum(-1)
     # Yellow is the only mid-light ink, so neutral greys (a closed eye's light lid line, the
-    # anti-aliasing between eye white and black) land nearest to it. Yellow is a warm ink: a pixel
-    # without its warmth takes the nearest neutral ink instead.
+    # anti-aliasing between eye white and black) land nearest to it, and so does the light edge of
+    # vermilion against paper. Yellow is warm and strongly yellow (green well above blue): a pixel
+    # without both takes its nearest other ink instead.
     yellow = list(INKS).index("yellow") + 1
-    distance[..., yellow] = np.where(
-        px[..., 0] - px[..., 2] >= WARM, distance[..., yellow], np.inf
+    is_yellow = (px[..., 0] - px[..., 2] >= WARM) & (
+        px[..., 1] - px[..., 2] >= YELLOW_CHROMA
     )
+    distance[..., yellow] = np.where(is_yellow, distance[..., yellow], np.inf)
     label = distance.argmin(-1)
     light = (label == 0) | (label == WHITE)
     regions, _ = ndimage.label(light)
@@ -412,6 +424,59 @@ def trace_body(label: np.ndarray) -> str:
     return "".join(layers)
 
 
+def lab(rgb: np.ndarray) -> np.ndarray:
+    """sRGB (0-255) to CIE L*a*b* (D65)."""
+    c = np.asarray(rgb, np.float64) / 255
+    c = np.where(c > 0.04045, ((c + 0.055) / 1.055) ** 2.4, c / 12.92)
+    m = np.array(
+        [[0.4124, 0.3576, 0.1805], [0.2126, 0.7152, 0.0722], [0.0193, 0.1192, 0.9505]]
+    )
+    xyz = (c @ m.T) / np.array([0.95047, 1.0, 1.08883])
+    f = np.where(xyz > 0.008856, np.cbrt(xyz), 7.787 * xyz + 16 / 116)
+    return np.stack(
+        [
+            116 * f[..., 1] - 16,
+            500 * (f[..., 0] - f[..., 1]),
+            200 * (f[..., 1] - f[..., 2]),
+        ],
+        -1,
+    )
+
+
+def halo(
+    drawn: str, rgb: np.ndarray, centres: np.ndarray, place: tuple[float, float, float]
+) -> int:
+    """Traced yellow with no yellow under it: the drawing's yellow pixels on the 512 px artboard
+    with no yellow within HALO_REACH in the take's own frame at the same place, the frame
+    quantised to the take's palette by nearest colour in CIE Lab (not by inks()'s rules, which
+    are what this checks). A ring of yellow round vermilion counts; an effect mark's own outline,
+    a pixel or two off its source, does not."""
+    art = np.asarray(
+        Image.open(io.BytesIO(bytes(resvg_py.svg_to_bytes(svg_string=drawn)))).convert(
+            "RGBA"
+        )
+    ).astype(np.int64)
+    yellow = list(INKS).index("yellow") + 1
+    # The yellow fill itself, not whatever lies nearest it: the anti-aliased grey between an eye's
+    # white and the black (about 138, 137, 134) is nearer the yellow fill than either.
+    traced = (art[..., 3] > 127) & (
+        np.abs(art[..., :3] - np.array(INKS["yellow"])).sum(-1) < YELLOW_FILL
+    )
+    scale, tx, ty = place
+    source = Image.fromarray(np.clip(rgb, 0, 255).astype(np.uint8)).transform(
+        (ARTBOARD, ARTBOARD),
+        Image.Transform.AFFINE,
+        (1 / scale, 0, -tx / scale, 0, 1 / scale, -ty / scale),
+        Image.Resampling.NEAREST,
+        fillcolor=PAPER,
+    )
+    nearest = (
+        ((lab(np.asarray(source))[..., None, :] - lab(centres)) ** 2).sum(-1).argmin(-1)
+    )
+    near_yellow = ndimage.binary_dilation(nearest == yellow, iterations=HALO_REACH)
+    return int((traced & ~near_yellow).sum())
+
+
 def holds(drawings: list[tuple[int, int, list[int]]], shown: list[int]) -> list[dict]:
     """The loop's slots: each drawing's start, length and traced drawing, where neighbours that
     came out as the same traced drawing (a near-still stretch) are one longer hold."""
@@ -459,6 +524,7 @@ def trace(loop: str, take: str, still_name: str) -> dict:
     # is the same drawing: it reuses the earlier one's shapes instead of being traced again.
     shown = []
     unique = []
+    halos = {}
     for i, rgb in enumerate(rgbs):
         again = next(
             (
@@ -471,9 +537,9 @@ def trace(loop: str, take: str, still_name: str) -> dict:
         if again is None:
             again = len(unique)
             unique.append(i)
-            (out / f"body-{again:02d}.svg").write_text(
-                svg(trace_body(labels[i]), place)
-            )
+            drawn = svg(trace_body(labels[i]), place)
+            (out / f"body-{again:02d}.svg").write_text(drawn)
+            halos[f"{again:02d}"] = halo(drawn, rgb, centres, place)
         shown.append(again)
     timing = {
         "take": take,
@@ -482,20 +548,54 @@ def trace(loop: str, take: str, still_name: str) -> dict:
         "drawings": holds(drawings, shown),
         "placement": {"scale": place[0], "x": place[1], "y": place[2]},
         "stillOverlap": round(overlap(labels[0], still, place), 4),
+        "halo": halos,
     }
     (out / "timing.json").write_text(json.dumps(timing, indent=2) + "\n")
     return timing
 
 
+def measure_halo(loop: str, take: str) -> dict[str, int]:
+    """halo() for each drawing a loop already has on disk, against the take frames it was traced
+    from (a drawing's first slot), without tracing again."""
+    timing = json.loads((LOOPS / loop / "timing.json").read_text())
+    frames = frames_of(loop, take)
+    drawings = drawings_of(frames)
+    rgbs = [frames[m].astype(np.float64).mean(0) for _, _, m in drawings]
+    centres = take_palette(rgbs)
+    place = tuple(timing["placement"][k] for k in ("scale", "x", "y"))
+    group = {s: i for i, (s, _, _) in enumerate(drawings)}
+    first = {}
+    for slot in timing["drawings"]:
+        first.setdefault(slot["drawing"], slot["start"])
+    return {
+        f"{d:02d}": halo(
+            (LOOPS / loop / f"body-{d:02d}.svg").read_text(),
+            rgbs[group[s]],
+            centres,
+            place,
+        )
+        for d, s in sorted(first.items())
+    }
+
+
 def main() -> None:
     takes = json.loads((LOOPS / "takes.json").read_text())
     loops = {v["loop"]: v for variants in takes.values() for v in variants}
-    for name in sys.argv[1:] or list(loops):
+    args = sys.argv[1:]
+    if args[:1] == ["--halo"]:
+        for name in args[1:] or list(loops):
+            h = measure_halo(name, loops[name]["take"])
+            worst = max(h, key=h.get)
+            print(
+                f"{name}: halo {sum(h.values())} px over {sum(v > 0 for v in h.values())} of {len(h)} drawings, most {h[worst]} in {worst}"
+            )
+        return
+    for name in args or list(loops):
         v = loops[name]
         t = trace(name, v["take"], v["still"])
         print(
             f"{name}: {len(t['drawings'])} drawings over {t['frames']} frames, "
-            f"overlap with still {t['stillOverlap']}"
+            f"overlap with still {t['stillOverlap']}, halo {sum(t['halo'].values())} px"
         )
 
 
