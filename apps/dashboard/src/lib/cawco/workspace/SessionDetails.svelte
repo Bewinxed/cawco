@@ -32,6 +32,7 @@
     easeOut,
     morphMs as morphDuration,
   } from "../motion/curves.svelte";
+  import { morph } from "../motion/morph.svelte";
   import { PERMISSION_MODES } from "../permission-modes";
   import ModelSection from "../spawn/ModelSection.svelte";
   import { modelName } from "../spawn/model-entries";
@@ -563,7 +564,8 @@
       </div>
     {/if}
   </div>
-  <div class="stats" bind:this={statsEl}>
+  <!-- A meter wrapping to a second line tweens the strip's height (morph). -->
+  <div class="stats" bind:this={statsEl} {@attach morph()}>
     <div class="context">
       {#if percent !== null && stats.totalTokens !== null && stats.maxTokens !== null}
         <span class="stat-label">Context</span>
@@ -848,9 +850,12 @@
     row-gap: var(--space-2);
     color: var(--ink-strong);
   }
+  /* The context meter is as wide as its word, bar and figures, then takes
+     what the line has spare. Its size from its content (auto basis and auto
+     minimum) is what the strip breaks lines by, so a meter that does not
+     fit beside the others moves to the next line instead of under them. */
   .context {
-    flex: 1;
-    min-width: 0;
+    flex: auto;
     display: flex;
     align-items: center;
     gap: var(--space-2);
