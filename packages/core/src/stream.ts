@@ -23,8 +23,10 @@
  * older version reloads itself (the dashboard's `protocol-reload.ts`).
  *
  * 2: a session's stream carries the hub's transcript events (3721295c).
+ * 3: raised on the live fleet to show a tab built for 2 reload itself with
+ *    its drafts; what the wire carries is 2's.
  */
-export const WIRE_PROTOCOL = 2;
+export const WIRE_PROTOCOL = 3;
 
 /**
  * What a session's stream carries: the changes each frame made to its
