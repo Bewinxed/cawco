@@ -5,6 +5,16 @@ public import Foundation
 /// and UsageMeter.svelte): each provider's windows against the clock, and the
 /// one that stops you first.
 public enum Usage {
+    /// Dollars as a person reads them (usage.ts `money`): "$12.10", and
+    /// "$3,488" from a thousand up.
+    public static func money(_ n: Double) -> String {
+        let posix = Locale(identifier: "en_US_POSIX")
+        if n >= 1000 {
+            return "$\(n.formatted(.number.grouping(.automatic).precision(.fractionLength(0)).locale(Locale(identifier: "en_US"))))"
+        }
+        return "$\(n.formatted(.number.grouping(.never).precision(.fractionLength(2)).locale(posix)))"
+    }
+
     public typealias Window = Components.Schemas.LimitWindow
 
     private static let minute = 60_000.0

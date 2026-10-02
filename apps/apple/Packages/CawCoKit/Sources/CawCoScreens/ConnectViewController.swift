@@ -155,7 +155,7 @@ final class ConnectViewController: UIViewController, UITextFieldDelegate {
         super.updateProperties()
         // A hub that was never entered has no state to say.
         status.isHidden = hub.address == nil
-        status.configure(hub: hub, ready: false, spend: nil)
+        status.configure(hub: hub, ready: false, spend: "")
         let hubs = discovery.found
         guard hubs != shownFound else {
             return

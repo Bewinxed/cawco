@@ -543,8 +543,12 @@ public final class HomeModel {
         )
     }
 
-    /// What the status line says while live: today's spend across the
-    /// sessions this device has cost readings for (none, until a session is
-    /// opened here, as on the web).
-    public var spend: Double { 0 }
+    /// What the status line says while live (StatusLine.svelte): the hub's
+    /// figure for today, or that it could not be read; nothing before it is.
+    public var spendWords: String {
+        if let spend = fleet.spend {
+            return "\(Usage.money(spend.today)) today"
+        }
+        return fleet.spendFailed ? "Spend not read from the hub" : ""
+    }
 }

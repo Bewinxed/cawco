@@ -118,6 +118,8 @@ public final class HubConnection {
         fleet.catalogsTried = []
         fleet.fleetRead = false
         fleet.liveRead = false
+        fleet.spend = nil
+        fleet.spendFailed = false
         needs.parked = [:]
     }
 
@@ -237,9 +239,16 @@ public final class HubConnection {
         // Read on connect, not only pushed on change: a device that connects
         // between reports has missed every `usage` frame.
         async let limits = try? await client.getApiUsageLimits().ok.body.json
-        let (readMachines, readRows, readProjects, readPending, readLimits) = await (machines, rows, projects, pending, limits)
+        async let spend = try? await client.getApiUsageSpend().ok.body.json
+        let (readMachines, readRows, readProjects, readPending, readLimits, readSpend) = await (machines, rows, projects, pending, limits, spend)
         if let readLimits {
             fleet.adopt(limits: readLimits.machines.map { ($0.machineId, $0.limits, $0.openCodeGo) })
+        }
+        if let readSpend {
+            fleet.adopt(spend: readSpend)
+        } else {
+            fleet.spend = nil
+            fleet.spendFailed = true
         }
         guard !Task.isCancelled else {
             return false
@@ -437,6 +446,7 @@ public final class HubConnection {
         case let .usage(frame):
             // The small limits frame the hub pushes on each report (USAGE-SPEC.md §6.4).
             fleet.adopt(limits: frame.limits.map { ($0.machineId, $0.payload, $0.openCodeGo) })
+            fleet.adopt(spend: frame.spend)
         case .ignored:
             break
         }

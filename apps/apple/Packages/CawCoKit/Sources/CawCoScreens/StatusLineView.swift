@@ -19,7 +19,8 @@ final class StatusLineView: UIView {
     private var phase: Phase?
     private var clock: Timer?
     private weak var hub: HubConnection?
-    var spend: Double?
+    /// What it says while live: the hub's spend for today, or why it has none.
+    private var spend = ""
 
     init() {
         super.init(frame: .zero)
@@ -51,7 +52,7 @@ final class StatusLineView: UIView {
         fatalError("StatusLineView is built in code")
     }
 
-    func configure(hub: HubConnection, ready: Bool, spend: Double?) {
+    func configure(hub: HubConnection, ready: Bool, spend: String) {
         self.hub = hub
         self.spend = spend
         let next: Phase = switch hub.state {
@@ -102,8 +103,7 @@ final class StatusLineView: UIView {
             words.text = "Connected · reading the fleet…"
         case .connected:
             // Live is the quiet default; only what it cost is news.
-            // As the web writes it: `$${spend.toFixed(2)} today`.
-            words.text = spend.map { "$\($0.formatted(.number.precision(.fractionLength(2)).locale(Locale(identifier: "en_US_POSIX")))) today" } ?? "Connected"
+            words.text = spend
         }
     }
 

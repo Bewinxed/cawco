@@ -135,6 +135,17 @@ public final class FleetStore {
     public internal(set) var turnSince: [String: Double] = [:]
     public internal(set) var catalogs: [String: [StoredSession]] = [:]
     /// Every machine's latest Claude and opencode Go limit readings, by machine.
+    /// The fleet's spend as the hub reckons it (`/api/usage/spend`, and every
+    /// `usage` frame): the one "today" every screen reads. Nil until read.
+    public internal(set) var spend: Components.Schemas.UsageSpend?
+    /// The last read of it failed: said, never estimated.
+    public internal(set) var spendFailed = false
+
+    func adopt(spend: Components.Schemas.UsageSpend) {
+        self.spend = spend
+        spendFailed = false
+    }
+
     public internal(set) var claudeLimits: [String: Components.Schemas.ClaudeLimits] = [:]
     public internal(set) var openCodeGoLimits: [String: Components.Schemas.OpenCodeGoLimits] = [:]
 

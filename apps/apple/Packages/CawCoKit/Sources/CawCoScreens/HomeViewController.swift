@@ -60,6 +60,9 @@ final class HomeViewController: UIViewController, UICollectionViewDelegate, Rela
     private var recentItems: [String: HomeModel.RecentItem] = [:]
     private var counts = (working: 0, finished: 0, finishedFailed: false)
     private var cawLine = ""
+    /// Read in `build()`, so a change to either alone runs the update again.
+    private var spendWords = ""
+    private var usageStrip: Usage.Strip?
 
     // The view's own state.
     private var search = ""
@@ -159,12 +162,12 @@ final class HomeViewController: UIViewController, UICollectionViewDelegate, Rela
     private func makeDataSource() -> UICollectionViewDiffableDataSource<Section, Item> {
         let usage = UICollectionView.CellRegistration<UsageCell, Item> { [weak self] cell, _, _ in
             guard let self else { return }
-            cell.configure(home.usage)
+            cell.configure(usageStrip ?? home.usage)
             cell.onOpen = { [weak self] in self?.openUsage() }
         }
         let status = UICollectionView.CellRegistration<StatusCell, Item> { [weak self] cell, _, _ in
             guard let self else { return }
-            cell.line.configure(hub: hub, ready: home.ready, spend: home.spend)
+            cell.line.configure(hub: hub, ready: home.ready, spend: spendWords)
         }
         let headline = UICollectionView.CellRegistration<HeadlineCell, Item> { [weak self] cell, _, _ in
             cell.configure(count: self?.needs.count ?? 0)
@@ -313,6 +316,8 @@ final class HomeViewController: UIViewController, UICollectionViewDelegate, Rela
         let ready = home.ready
         let needList = home.needs
 
+        spendWords = home.spendWords
+        usageStrip = home.usage
         snapshot.appendSections([.top])
         // The phone has no rail: the rail's usage strip stands here, always (owner pick i).
         snapshot.appendItems([.status, .usage], toSection: .top)
