@@ -199,6 +199,35 @@ export function tree<T extends TreeRow>(
 }
 
 /**
+ * The rows of `rows` that hang from a root the list holds: a top-level row,
+ * or a child whose whole chain of parents is in `rows` too. What a list
+ * shows when it does not list work other sessions started on its own (the
+ * Delegates switch off): a delegate under a listed parent stays in its
+ * parent's tree, folded there with the parent's count; one whose parent
+ * the list does not hold is left out, not lifted in as a context chain.
+ */
+export function rooted<T extends TreeRow>(rows: T[]): T[] {
+  const byId = new Map(rows.map((row) => [row.id, row]));
+  const kept = new Map<string, boolean>();
+  const keeps = (row: T, seen: Set<string>): boolean => {
+    const known = kept.get(row.id);
+    if (known !== undefined) {
+      return known;
+    }
+    const parentId = row.parentInstanceId;
+    const parent = parentId ? byId.get(parentId) : undefined;
+    let keep = !parentId;
+    if (parent && !seen.has(parent.id)) {
+      seen.add(row.id);
+      keep = keeps(parent, seen);
+    }
+    kept.set(row.id, keep);
+    return keep;
+  };
+  return rows.filter((row) => keeps(row, new Set()));
+}
+
+/**
  * The lines a reader sees: every tree starts folded, and a line shows only
  * when every line it hangs under is open. `isOpen` is the reader's choice,
  * one id at a time.

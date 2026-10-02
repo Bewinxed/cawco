@@ -67,7 +67,7 @@
   import SessionHover from "./SessionHover.svelte";
   import StackChip from "./StackChip.svelte";
   import NewSessionDialog from "./spawn/NewSessionDialog.svelte";
-  import { collapse, tree } from "./tree";
+  import { collapse, rooted, tree } from "./tree";
   import UsageMeter from "./UsageMeter.svelte";
   import { workflowState } from "./workflow-state.svelte";
   import { workspace } from "./workspace/workspace.svelte";
@@ -248,18 +248,34 @@
   );
 
   /**
-   * Every session list in the rail passes through here. A delegate is work the
-   * reader handed off — six of them under one session is six rows about one
-   * thing — so unless they asked for them (the Delegates checkbox in the
-   * Projects label), the rail lists only sessions nobody delegated. Every list
-   * and not just the running one: "Not running" is where delegates pile up by
-   * the hundred, and a filter that left it alone would not be a filter.
+   * A project's sessions, live and resting, as the rail lists them. A
+   * delegate is work the reader handed off — six of them under one session
+   * is six rows about one thing — so it hangs in its parent's tree, folded
+   * into the parent's stack until opened. With the Delegates switch off, a
+   * delegate whose parent the project does not list is left out (tree.ts
+   * `rooted`): "Not running" is where those pile up by the hundred.
    */
-  const shown = (rows: InstanceRow[]): InstanceRow[] =>
-    rows.filter((row) => rail.delegates || !row.parentInstanceId);
+  function listedIn(project: ProjectRow): {
+    live: InstanceRow[];
+    resting: InstanceRow[];
+  } {
+    const live = running.filter((row) => inProject(row, project));
+    const liveIds = new Set(live.map((row) => row.id));
+    const resting = notRunning.filter(
+      (row) => inProject(row, project) && !liveIds.has(row.id)
+    );
+    if (rail.delegates) {
+      return { live, resting };
+    }
+    const kept = new Set(rooted([...live, ...resting]).map((row) => row.id));
+    return {
+      live: live.filter((row) => kept.has(row.id)),
+      resting: resting.filter((row) => kept.has(row.id)),
+    };
+  }
 
   const sessionsOf = (project: ProjectRow): InstanceRow[] =>
-    shown(running.filter((row) => inProject(row, project)));
+    listedIn(project).live;
 
   /* ---- recent and older ------------------------------------------------
    * A project lists what is recent — running, waiting on you, or moved in
@@ -272,22 +288,40 @@
     recent: InstanceRow[];
     older: InstanceRow[];
   } {
-    const live = sessionsOf(project);
-    const liveIds = new Set(live.map((row) => row.id));
-    const resting = notRunning.filter(
-      (row) => inProject(row, project) && !liveIds.has(row.id)
-    );
-    const recent = [...live];
-    const older: InstanceRow[] = [];
+    const { live, resting } = listedIn(project);
+    const recentIds = new Set(live.map((row) => row.id));
     for (const row of resting) {
       if (
         cawco.activityOf(row.id) === "blocked" ||
         now - lastAt(row) < DAY_MS
       ) {
-        recent.push(row);
-      } else {
-        older.push(row);
+        recentIds.add(row.id);
       }
+    }
+    // A tree stays whole on the side its top row is on, so a delegate of a
+    // recent session folds under it rather than standing alone among the
+    // older ones.
+    const all = [...live, ...resting];
+    const byId = new Map(all.map((row) => [row.id, row]));
+    const topOf = (row: InstanceRow): InstanceRow => {
+      const seen = new Set([row.id]);
+      let at = row;
+      for (
+        let up = at.parentInstanceId
+          ? byId.get(at.parentInstanceId)
+          : undefined;
+        up && !seen.has(up.id);
+        up = at.parentInstanceId ? byId.get(at.parentInstanceId) : undefined
+      ) {
+        seen.add(up.id);
+        at = up;
+      }
+      return at;
+    };
+    const recent: InstanceRow[] = [];
+    const older: InstanceRow[] = [];
+    for (const row of all) {
+      (recentIds.has(topOf(row).id) ? recent : older).push(row);
     }
     return { recent, older };
   }
@@ -339,14 +373,12 @@
   };
 
   /** What a project says when nothing in it runs: how much of it is resumable. */
-  const notRunning = $derived(
-    shown([
-      ...cawco.listedInstances.filter(
-        (row) => isResumable(row) || isStale(row) || isFailed(row)
-      ),
-      ...cawco.runRows.filter(isFailed),
-    ])
-  );
+  const notRunning = $derived([
+    ...cawco.listedInstances.filter(
+      (row) => isResumable(row) || isStale(row) || isFailed(row)
+    ),
+    ...cawco.runRows.filter(isFailed),
+  ]);
 
   /* ---- order -----------------------------------------------------------
    *
