@@ -253,6 +253,29 @@ export function lastAt(row: InstanceRow): number {
   return Number.isNaN(at) ? 0 : at;
 }
 
+/**
+ * When a session (or run) last ended: its failure, else the end of its turn
+ * as its pulse says; `undefined` while it works or waits on the reader.
+ */
+function endedAt(row: InstanceRow): number | undefined {
+  if (isFailed(row)) {
+    return lastAt(row);
+  }
+  return cawco.activityOf(row.id) === "idle"
+    ? cawco.pulseAt(row.id)
+    : undefined;
+}
+
+/**
+ * It ended after the owner last saw it: news. The one rule for both sides
+ * of "seen" — Finished lists exactly these, and a conversation in front of
+ * the owner is marked seen exactly when it is one of these.
+ */
+export function endedUnseen(row: InstanceRow): boolean {
+  const ended = endedAt(row);
+  return ended !== undefined && ended > seenAt(row);
+}
+
 /** When each working session joined Working this stint (see `working`). */
 const enteredWorking = new Map<string, number>();
 
@@ -440,15 +463,7 @@ class Home {
     return heldOrder(
       "home:finished",
       [...cawco.listedInstances, ...cawco.runRows]
-        .filter((row) => {
-          const activity = cawco.activityOf(row.id);
-          if (activity !== "idle" && !isFailed(row)) {
-            return false;
-          }
-          const pulse = cawco.pulseAt(row.id);
-          const ended = isFailed(row) ? lastAt(row) : pulse;
-          return ended !== undefined && ended > seenAt(row);
-        })
+        .filter(endedUnseen)
         // The latest to end first. A failure says so on its own row (its
         // mark, its line, the tab's numeral), not by jumping the queue.
         .sort((a, b) => lastAt(b) - lastAt(a)),

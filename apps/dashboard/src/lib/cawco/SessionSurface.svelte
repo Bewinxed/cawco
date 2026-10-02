@@ -39,7 +39,11 @@
   } from "$lib/cawco/client.svelte";
   import Caw from "$lib/cawco/home/Caw.svelte";
   import Home from "$lib/cawco/home/Home.svelte";
-  import { home as fleetHome, markOpened } from "$lib/cawco/home/home.svelte";
+  import {
+    endedUnseen,
+    home as fleetHome,
+    markOpened,
+  } from "$lib/cawco/home/home.svelte";
   import PeekSheet from "$lib/cawco/home/PeekSheet.svelte";
   import { instanceForSession } from "$lib/cawco/links";
   import {
@@ -122,21 +126,33 @@
     }
   });
 
-  /* ── What is on screen counts as opened (Finished reads it) ──
-     Every group's front conversation on a grid, the focused one on a deck;
-     re-marked as its pulses move, so a turn that ends while it is watched
-     is not news afterwards. */
+  /* ── What the owner looks at counts as opened (Finished reads it) ──
+     A finished conversation is seen when it is in front where the owner can
+     see it: its group's chosen tab on a grid, the focused one on a deck, in
+     a page that is on screen. A tab restored behind another, or a page left
+     in a hidden browser tab, sees nothing. Only one that ended since it
+     was last seen (`endedUnseen`, the rule Finished lists by) is marked, so
+     a turn that ends while it is watched is seen as it ends, a working one
+     is never marked ahead of its end, and nothing is sent twice. */
+  let pageVisible = $state(!browser || document.visibilityState === "visible");
+  onMount(() => {
+    const onVisibility = () => {
+      pageVisible = document.visibilityState === "visible";
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => document.removeEventListener("visibilitychange", onVisibility);
+  });
   $effect(() => {
-    if (!shown || onBoard) {
+    if (!(shown && pageVisible) || onBoard) {
       return;
     }
     const front = narrow
       ? [workspace.activeSessionId]
       : workspace.leaves.map((leaf) => leaf.active);
     for (const id of front) {
-      if (id) {
-        cawco.pulseAt(id);
-        untrack(() => markOpened(id));
+      const row = id ? cawco.instanceIndex.byId.get(id) : undefined;
+      if (row && endedUnseen(row)) {
+        untrack(() => markOpened(row.id));
       }
     }
   });
