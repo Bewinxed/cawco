@@ -720,6 +720,8 @@ A compact tinted row, never a slab: 10px radius, 10×12px padding, body type, an
 
 **The Claim Of Nothing Rule.** An empty state claims there is nothing to show, so it renders only once the data is known to be empty, never while it is still being read. While data loads, the skeleton stands in at the real layout's size, and the first real read replaces it in one cross-fade (120ms) rather than as rows arriving.
 
+**The Real Wait Rule.** Caw stands in for a wait (loading, reconnecting) only once it has lasted `--dur-wait-grace` (1s; NN/g: no feedback is needed under 1.0s). Until then the area is its plain surface, with no Caw and no line. Once he appears he stays until his fade in (`--dur-fade`) has finished, and what arrives waits for that, so he never blinks out mid-fade. Web: SessionSurface's detail area; Apple: `CawWaiting`.
+
 ### Status displays
 - **Session status:** a 16px Solar duotone glyph (refresh-circle for Working, hand-shake for Needs you, close-circle for Failed, pause-circle for Idle and Stopped, moon-sleep for Sleeping, question-circle for Unreachable), then the word in the label role, tinted live, attn or fail where it applies. A new glyph cross-fades in from 0.92 over 120ms, and the word morphs over 180ms. The Working glyph breathes to 45% on `--breath`.
 - **Activity dot:** an 8px dot. Working is info blue and pulses on the 1.2s loop, Needs you is warning amber with a ping ring on the same loop, Idle is muted at 40%, Failed is solid crimson and still, Unreachable is a hollow ring, Sleeping is a moon glyph. The colour moves between states over 280ms; a shape change cross-fades from 0.92 over 120ms.

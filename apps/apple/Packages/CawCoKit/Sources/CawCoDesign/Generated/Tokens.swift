@@ -405,6 +405,9 @@ public enum Motion {
     /// Fades that carry a state change in place.
     /// In seconds.
     public static let durFade: TimeInterval = 0.2
+    /// How long a wait runs before its loading state (Caw at loading or reconnecting) appears; a shorter wait shows its plain surface. NN/g, Response Times: no special feedback is needed for delays under 1.0 second.
+    /// In seconds.
+    public static let durWaitGrace: TimeInterval = 1
     /// In seconds.
     public static let durPop: TimeInterval = 0.26
     /// In seconds.

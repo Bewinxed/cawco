@@ -35,7 +35,11 @@ by the app through `RuntimeLoader.setWasmUrl` (rive.app/docs/runtimes/web/preloa
 `rive.wasm` file version must match the `@rive-app` package version"). Both: a status change loads
 the new file and fades its Caw in over the shown one in 200 ms (`motion.dur-fade` on
 `motion.ease-out`); the shown one stays fully drawn underneath until the fade ends, so no frame is
-empty, and at most two are alive at once.
+empty, and at most two are alive at once. His first appearance fades in too and reports when it
+has finished, so a place that shows him for a wait follows DESIGN.md's Real Wait Rule: nothing for
+`motion.dur-wait-grace`, then Caw, kept until his fade in ends (web: SessionSurface's detail area;
+Apple: `CawWaiting`). The dashboard prefetches Rive's WASM and `loading.riv` from its page head,
+and serves the `.riv` files Brotli-compressed as `application/octet-stream`.
 
 The state machine has no inputs. `Caw` has one instance, `Default` (both booleans off), and the
 artboard points at `Caw`, so a runtime that auto-binds gets that instance.

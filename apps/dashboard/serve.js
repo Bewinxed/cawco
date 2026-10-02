@@ -247,6 +247,11 @@ function serveApp(req, res) {
   ) {
     return;
   }
+  // sirv has no type for Caw's .riv files and would send an empty
+  // Content-Type; it keeps one already set on the response.
+  if (pathname.endsWith(".riv")) {
+    res.setHeader("Content-Type", "application/octet-stream");
+  }
   res.on("pipe", (source) => {
     source.on("error", (error) => {
       if (error.code !== "ENOENT") {

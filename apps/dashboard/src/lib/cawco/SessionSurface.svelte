@@ -95,6 +95,46 @@
     return fleetHome.ready ? "ready" : "loading";
   });
 
+  /* ── Caw stands in only for a real wait ──────────────────────────────────
+     A wide screen with nothing open is usually a moment: the fleet is read
+     and a session lands within a second. Loading and reconnecting are waits,
+     so their Caw appears only once the wait has outlasted --dur-wait-grace;
+     until then the area is its plain surface. Once he appears he is kept
+     until his fade in has finished, and what lands waits for that, so he
+     never blinks out mid-fade. Ready with nothing to open is no wait: it is
+     where to start, and shows at once. */
+  const detailEmpty = $derived(!homePage && workspace.activeSessionId === null);
+  const nothingToOpen = $derived(fleetHome.ready && !fleetHome.landing);
+  const waiting = $derived(detailEmpty && detailState !== "ready");
+  /** The wait outlasted its grace and Caw stands in for it. */
+  let waitShown = $state(false);
+  /** Caw is mounted and his first fade in has not finished: what lands waits. */
+  let entering = $state(false);
+  $effect(() => {
+    if (!waiting || waitShown) {
+      return;
+    }
+    const grace = setTimeout(() => {
+      waitShown = true;
+    }, dur("--dur-wait-grace"));
+    return () => clearTimeout(grace);
+  });
+  $effect(() => {
+    if (!(waiting || entering)) {
+      waitShown = false;
+    }
+  });
+  const detailShown = $derived(detailEmpty || entering);
+  const cawShown = $derived(
+    entering ||
+      waitShown ||
+      (detailEmpty && detailState === "ready" && nothingToOpen)
+  );
+  /** His slot mounting starts the hold; his `onentered` ends it. */
+  const holdWhileEntering = () => {
+    entering = true;
+  };
+
   /** The home page is in front: a narrow screen with no conversation open. */
   const onBoard = $derived(homePage && workspace.activeSessionId === null);
 
@@ -444,35 +484,41 @@
          deck makes them reachable: the groups are a vertical stack that two
          fingers page through, so widening the window restores the grid and
          narrowing it loses nothing. -->
-    {#if !homePage && workspace.activeSessionId === null}
+    {#if detailShown}
       <!-- A wide screen with nothing open: while the fleet is first read,
-           or the hub is being reached again, Caw says so; once it is read
-           and nothing could be opened, the detail area says where to start.
-           The sidebar's home carries the facts either way. -->
+           or the hub is being reached again, for longer than the grace, Caw
+           says so; once it is read and nothing could be opened, the detail
+           area says where to start. Before that it is its plain surface. The
+           sidebar's home carries the facts either way. -->
       <!-- It fades out as the conversation the app lands on fades in under
            it. Caw stays and fades from one state's loops to the next himself;
            the line under him cross-fades in one cell. -->
       <div class="empty-detail" out:crossOut>
-        <div class="detail-state">
-          <Caw
-            next={['loading', 'ready', 'reconnecting']}
-            size={150}
-            status={detailState}
-          />
-          <div class="detail-line">
-            {#key detailState}
-              <p in:crossIn out:crossOut>
-                {#if detailState === 'reconnecting'}
-                  Reaching the hub again…
-                {:else if detailState === 'loading'}
-                  Reading the fleet…
-                {:else}
-                  Open a session from the list, or start one.
-                {/if}
-              </p>
-            {/key}
+        {#if cawShown}
+          <div class="detail-state" {@attach holdWhileEntering}>
+            <Caw
+              next={['loading', 'ready', 'reconnecting']}
+              onentered={() => {
+                entering = false;
+              }}
+              size={150}
+              status={detailState}
+            />
+            <div class="detail-line">
+              {#key detailState}
+                <p in:crossIn out:crossOut>
+                  {#if detailState === 'reconnecting'}
+                    Reaching the hub again…
+                  {:else if detailState === 'loading'}
+                    Reading the fleet…
+                  {:else}
+                    Open a session from the list, or start one.
+                  {/if}
+                </p>
+              {/key}
+            </div>
           </div>
-        </div>
+        {/if}
       </div>
     {:else if narrow}
       <PaneDeck />

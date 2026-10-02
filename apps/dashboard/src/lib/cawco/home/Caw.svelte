@@ -47,18 +47,27 @@
   }
 
   /**
-   * Rive's web runtime, loaded the first time Caw appears, with its WASM
-   * served from this app (the version the package pins) instead of the
-   * runtime's default CDN.
+   * Rive's web runtime, loaded when Caw is warmed or first appears, with its
+   * WASM served from this app (the version the package pins) and no CDN: the
+   * runtime's default URL and its jsdelivr fallback are both off.
    */
   let runtime: Promise<typeof import("@rive-app/canvas")> | undefined;
   function riveRuntime() {
     runtime ??= import("@rive-app/canvas").then((module) => {
       module.RuntimeLoader.setWasmUrl(riveWasm);
+      module.RuntimeLoader.setWasmFallbackUrl(null);
       return module;
     });
     return runtime;
   }
+
+  /**
+   * What the page's head prefetches: Rive's WASM and the file of the Caw a
+   * wait shows. They are needed only once a wait outlasts its grace, so an
+   * idle-priority fetch into the HTTP cache is enough; the URLs are hashed and
+   * immutable, and they are the very ones the runtime and fileBytes fetch.
+   */
+  export const PREFETCHES = [riveWasm, fileUrl("loading")];
 </script>
 
 <script lang="ts">
@@ -69,10 +78,12 @@
    *
    * Drawn by Rive from his status's file, whose loops take turns on their
    * own; this sets only the file's `Caw` view model: `dark` (the cream rim)
-   * and `reducedMotion` (his still). A status change loads the new file and
-   * fades its Caw in over the shown one (--dur-fade on --ease-out), which
-   * stays fully drawn underneath until the fade ends, so no frame is empty.
-   * At most two Caws are alive at once.
+   * and `reducedMotion` (his still). He fades in once his file is drawn
+   * (--dur-fade on --ease-out), and `onentered` says when that first fade
+   * has finished, so a place can keep him until then. A status change loads
+   * the new file and fades its Caw in over the shown one, which stays fully
+   * drawn underneath until the fade ends, so no frame is empty. At most two
+   * Caws are alive at once.
    *
    * `size` is the side of his still in px. His acting reaches past it, so
    * the canvases spill over the box unclipped and never take a pointer.
@@ -84,9 +95,15 @@
   let {
     status,
     next = [],
+    onentered,
     size = 160,
   }: {
     status: CawStatus;
+    /**
+     * Called once his first appearance has fully faded in, or once his file
+     * has failed to load, so whatever waits on him is never stuck.
+     */
+    onentered?: () => void;
     /**
      * The statuses this place can change to. Their files are fetched once
      * Caw is on screen, so a change fades in without waiting on the network.
@@ -182,13 +199,19 @@
           rive = new Rive({
             canvas,
             buffer,
-            stateMachines: "CawStates",
+            stateMachine: "CawStates",
             autoBind: true,
             autoplay: true,
             layout: new Layout({
               fit: Fit.Contain,
               alignment: Alignment.Center,
             }),
+            onLoadError: () => {
+              console.error(`Caw ${layer.status} did not load`);
+              if (!layers.some((l) => l.shown)) {
+                onentered?.();
+              }
+            },
             onLoad: () => {
               if (gone || !rive) {
                 return;
@@ -202,6 +225,9 @@
         })
         .catch((error: unknown) => {
           console.error(`Caw ${layer.status} did not load`, error);
+          if (!layers.some((l) => l.shown)) {
+            onentered?.();
+          }
         });
       return () => {
         gone = true;
@@ -210,18 +236,26 @@
     };
   }
 
-  /** Fades `layer` in; once it is fully drawn, the Caw below it goes. */
+  /**
+   * Fades `layer` in; once it is fully drawn, the Caw below it goes, and on
+   * his first appearance the place hears he has entered.
+   */
   function show(layer: Layer, canvas: HTMLCanvasElement) {
-    const settled = layers.some((l) => l.shown);
+    const first = !layers.some((l) => l.shown);
     performance.measure(`caw ${layer.status} fades in`, { start: layer.asked });
     layer.shown = true;
-    if (!settled) {
+    if (first) {
+      // Rive's render loop draws him in the next frame, ahead of this callback.
+      requestAnimationFrame(() =>
+        performance.measure(`caw ${layer.status} first drawn`, {
+          start: layer.asked,
+        })
+      );
       for (const upcoming of next) {
         fileBytes(upcoming).catch(() => {
           // Fetched again when that status is asked for.
         });
       }
-      return;
     }
     layer.fade = canvas.animate([{ opacity: 0 }, { opacity: 1 }], {
       duration: dur("--dur-fade"),
@@ -231,6 +265,12 @@
       .then(() => {
         layer.fade = undefined;
         layers = layers.filter((l) => l.id >= layer.id);
+        if (first) {
+          performance.measure(`caw ${layer.status} entered`, {
+            start: layer.asked,
+          });
+          onentered?.();
+        }
       })
       .catch(() => {
         // Cancelled: the canvas left the page before its fade ended.

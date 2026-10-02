@@ -1933,6 +1933,11 @@
       "$value": "200ms",
       "$description": "Fades that carry a state change in place."
     },
+    "dur-wait-grace": {
+      "$type": "duration",
+      "$value": "1000ms",
+      "$description": "How long a wait runs before its loading state (Caw at loading or reconnecting) appears; a shorter wait shows its plain surface. NN/g, Response Times: no special feedback is needed for delays under 1.0 second."
+    },
     "dur-pop": {
       "$type": "duration",
       "$value": "260ms"

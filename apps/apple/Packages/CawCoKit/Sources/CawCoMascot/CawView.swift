@@ -29,22 +29,26 @@ public enum CawStatus: String, CaseIterable, Sendable {
 /// He follows the colour scheme (`dark`) and the system's Reduce Motion setting (`reducedMotion`)
 /// on his own. Decorative, so hidden from VoiceOver: the screen around him carries the words.
 ///
-/// A status change loads that status's file and fades the new Caw in over the shown one, which
-/// stays fully drawn underneath until the fade ends, so no frame is ever empty. At most two Caws
-/// are alive at once.
+/// He fades in once his file is drawn (`Motion.durFade` on `Motion.easeOut`), and `onEntered` is
+/// called when that first fade has finished, or when his file fails to load, so a place can keep
+/// him until then (`CawWaiting` does). A status change loads that status's file and fades the new
+/// Caw in over the shown one, which stays fully drawn underneath until the fade ends, so no frame
+/// is ever empty. At most two Caws are alive at once.
 ///
 /// The view's frame holds Caw's still: the largest centred square in it is the files' still box.
 /// His acting reaches past that box, so he draws past the frame there; nothing here clips him, and
 /// he never takes taps from what lies under him.
 public struct CawView: View {
     private let status: CawStatus
+    private let onEntered: (() -> Void)?
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     /// Bottom to top: the Caw on screen, and during a status change the one fading in above it.
     @State private var layers: [CawLayer] = []
 
-    public init(status: CawStatus) {
+    public init(status: CawStatus, onEntered: (() -> Void)? = nil) {
         self.status = status
+        self.onEntered = onEntered
     }
 
     public var body: some View {
@@ -63,8 +67,8 @@ public struct CawView: View {
         .onChange(of: reduceMotion) { apply() }
     }
 
-    /// Loads `status`'s Caw and puts it on screen: at once the first time, faded in over the
-    /// shown Caw after that. A newer status cancels this one while it loads.
+    /// Loads `status`'s Caw and fades it in: over nothing the first time, over the shown Caw after
+    /// that. A newer status cancels this one while it loads.
     private func show(_ status: CawStatus) async {
         guard layers.last?.status != status else {
             return
@@ -75,25 +79,28 @@ public struct CawView: View {
             incoming = try await CawLayer.load(status, dark: colorScheme == .dark, reducedMotion: reduceMotion)
         } catch {
             CawContract.log.error("Caw \(status.rawValue, privacy: .public) did not load: \(String(describing: error), privacy: .public)")
+            if layers.isEmpty {
+                onEntered?()
+            }
             return
         }
         guard !Task.isCancelled else {
             return
         }
         let waited = (ContinuousClock.now - asked).milliseconds
-        guard let shown = layers.last else {
-            layers = [incoming.showing()]
-            CawContract.log.info("Caw \(status.rawValue, privacy: .public) on screen \(waited, format: .fixed(precision: 1)) ms after it was asked for")
-            return
-        }
+        let first = layers.isEmpty
         // At most two: whatever was fading in is drawn fully at once and becomes the one below.
-        layers = [shown.showing(), incoming]
-        CawContract.log.info("Caw \(status.rawValue, privacy: .public) fades in \(waited, format: .fixed(precision: 1)) ms after the change")
+        layers = (layers.last.map { [$0.showing()] } ?? []) + [incoming]
+        CawContract.log.info("Caw \(status.rawValue, privacy: .public) fades in \(waited, format: .fixed(precision: 1)) ms after it was asked for")
         withAnimation(.timingCurve(Motion.easeOut, duration: Motion.durFade)) {
-            layers[1] = incoming.showing()
+            layers[layers.count - 1] = incoming.showing()
         } completion: {
             if let top = layers.firstIndex(where: { $0.id == incoming.id }) {
                 layers.removeFirst(top)
+            }
+            if first {
+                CawContract.log.info("Caw \(status.rawValue, privacy: .public) entered \((ContinuousClock.now - asked).milliseconds, format: .fixed(precision: 1)) ms after it was asked for")
+                onEntered?()
             }
         }
     }
@@ -102,6 +109,54 @@ public struct CawView: View {
     private func apply() {
         for layer in layers {
             CawContract.write(to: layer.caw, dark: colorScheme == .dark, reducedMotion: reduceMotion)
+        }
+    }
+}
+
+/// A place's wait with Caw standing in for it. While `waiting`, the place is its plain surface for
+/// `Motion.durWaitGrace`; a wait that outlasts it shows Caw at `status` (loading or reconnecting).
+/// Once he shows, `content` waits until his fade in has finished, so he never blinks out mid-fade.
+/// A wait shorter than the grace shows no Caw at all: `content` simply appears.
+public struct CawWaiting<Content: View>: View {
+    private let waiting: Bool
+    private let status: CawStatus
+    private let content: Content
+    /// The wait outlasted its grace and Caw stands in for it.
+    @State private var graceOver = false
+    /// Caw is on screen and his first fade in has not finished.
+    @State private var entering = false
+
+    public init(waiting: Bool, status: CawStatus, @ViewBuilder content: () -> Content) {
+        self.waiting = waiting
+        self.status = status
+        self.content = content()
+    }
+
+    public var body: some View {
+        ZStack {
+            if !waiting, !entering {
+                content
+            } else if graceOver {
+                CawView(status: status) {
+                    entering = false
+                    if !waiting {
+                        graceOver = false
+                    }
+                }
+                .onAppear { entering = true }
+            }
+        }
+        .task(id: waiting) {
+            guard waiting, !graceOver else {
+                if !waiting, !entering {
+                    graceOver = false
+                }
+                return
+            }
+            try? await Task.sleep(for: .seconds(Motion.durWaitGrace))
+            if !Task.isCancelled {
+                graceOver = true
+            }
         }
     }
 }
@@ -206,14 +261,16 @@ private enum CawFiles {
     private static var bytes: [CawStatus: Data] = [:]
 
     static func file(for status: CawStatus) async throws -> File {
-        let data: Data
+        try await File(source: .data(cachedBytes(status)), worker: shared())
+    }
+
+    private static func cachedBytes(_ status: CawStatus) async throws -> Data {
         if let cached = bytes[status] {
-            data = cached
-        } else {
-            data = try await read(status)
-            bytes[status] = data
+            return cached
         }
-        return try await File(source: .data(data), worker: shared())
+        let data = try await read(status)
+        bytes[status] = data
+        return data
     }
 
     /// The Worker, made on first use; two Caws loading at once both get the first one made.

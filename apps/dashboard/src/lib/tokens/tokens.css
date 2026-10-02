@@ -553,6 +553,8 @@
     --dur-rail: 180ms;
     /* Fades that carry a state change in place. */
     --dur-fade: 200ms;
+    /* How long a wait runs before its loading state (Caw at loading or reconnecting) appears; a shorter wait shows its plain surface. NN/g, Response Times: no special feedback is needed for delays under 1.0 second. */
+    --dur-wait-grace: 1000ms;
     --dur-pop: 260ms;
     --dur-panel: 280ms;
     /* How long a done state stays up. */

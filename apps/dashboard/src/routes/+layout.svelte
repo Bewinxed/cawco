@@ -7,6 +7,7 @@
   import { onNavigate } from "$app/navigation";
   import { ensureConnected } from "$lib/cawco/client.svelte";
   import { GROUPS } from "$lib/cawco/config/sections";
+  import { PREFETCHES as CAW_PREFETCHES } from "$lib/cawco/home/Caw.svelte";
   import { restWhenHidden } from "$lib/cawco/motion/rest";
   import { leaving, plan, route } from "$lib/cawco/motion/route.svelte";
   import { departAll } from "$lib/cawco/motion/share.svelte";
@@ -86,6 +87,14 @@
     });
   });
 </script>
+
+<svelte:head>
+  <!-- Caw's runtime and his waiting file go to the HTTP cache at idle
+       priority, so a wait that outlasts its grace shows him without fetching. -->
+  {#each CAW_PREFETCHES as href (href)}
+    <link crossorigin="anonymous" {href} rel="prefetch">
+  {/each}
+</svelte:head>
 
 <Toaster
   expand
