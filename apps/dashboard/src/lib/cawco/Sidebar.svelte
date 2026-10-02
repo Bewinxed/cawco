@@ -65,9 +65,9 @@
   import ProjectMark from "./ProjectMark.svelte";
   import { type RailSort, rail } from "./rail.svelte";
   import SessionHover from "./SessionHover.svelte";
-  import StackChip from "./StackChip.svelte";
   import NewSessionDialog from "./spawn/NewSessionDialog.svelte";
-  import { collapse, rooted, tree } from "./tree";
+  import TreeCount from "./TreeCount.svelte";
+  import { rooted, tree } from "./tree";
   import UsageMeter from "./UsageMeter.svelte";
   import { workflowState } from "./workflow-state.svelte";
   import { workspace } from "./workspace/workspace.svelte";
@@ -130,10 +130,11 @@
   const NAV_ROW = "h-[var(--c-nav-h)] gap-2.5 px-2.5 text-body";
   const LIST_ROW = "h-[30px] gap-2.5 px-2.5 py-0";
   /**
-   * A session under its project: indented past the project's rail, so the
-   * name has the least room in the rail. The gaps between its five parts
-   * (mark, name, folded count, age, status) are the tight ones, and its mark
-   * stands just clear of the nesting arrow's tip.
+   * A session under its project: indented so its mark stands under the
+   * project's name, so the name has the least room in the rail. The gaps
+   * between its five parts (mark, name, delegate count, age, status) are the
+   * tight ones; a delegate's nesting arm ends at its mark (`--nest-reach`,
+   * this row's left inset).
    */
   const SUB_ROW = "h-[28px] gap-1 pl-1.5 pr-2";
   /** The height the loading rows stand at: a list row's. */
@@ -251,7 +252,7 @@
    * A project's sessions, live and resting, as the rail lists them. A
    * delegate is work the reader handed off — six of them under one session
    * is six rows about one thing — so it hangs in its parent's tree, folded
-   * into the parent's stack until opened. With the Delegates switch off, a
+   * into the parent's count until opened. With the Delegates switch off, a
    * delegate whose parent the project does not list is left out (tree.ts
    * `rooted`): "Not running" is where those pile up by the hundred.
    */
@@ -454,53 +455,46 @@
   }
 
   /**
-   * A session and how deep to indent it. A delegate names its parent
+   * A session and the sessions it started. A delegate names its parent
    * (`parentInstanceId`), and the rail was drawing every one of them at the
    * root — a project with one session and six delegates read as seven peers,
    * which is exactly backwards about what is running.
    */
-  interface Nested {
-    depth: number;
+  interface Branch {
+    /** The rows under it, as branches of their own. */
+    children: Branch[];
+    /** Every row under it, at any depth. */
+    count: number;
+    /** How many of those failed. */
+    failed: number;
     row: InstanceRow;
-    /** Its folded rows, when it is a parent (tree.ts collapse). */
-    stack: {
-      count: number;
-      failed: number;
-      open: boolean;
-      ontoggle: () => void;
-    } | null;
   }
 
-  /** Past this the indent eats the name; the tree keeps nesting, the offset stops. */
-  const MAX_INDENT = 3;
-
   /**
-   * `rows` in tree order (tree.ts), siblings sorted by the reader's
-   * {@link ordered}, folded as the reader left them (open-trees): every
-   * parent starts folded, its delegates a count on its row.
+   * `rows` as the tree they are (tree.ts), siblings sorted by the reader's
+   * {@link ordered} at every depth. Each parent shows its count and starts
+   * folded; whether it is open is the reader's (open-trees).
    */
-  function nested(rows: InstanceRow[], key: string): Nested[] {
+  function branches(rows: InstanceRow[], key: string): Branch[] {
     const lines = tree(rows, {
       order: (list, under) => ordered(list, `${key}:${under}`),
     });
-    return collapse(lines, openTrees.has).map((line) => ({
-      row: line.row,
-      depth: Math.min(line.depth, MAX_INDENT),
-      stack:
-        line.descendants.length > 0
-          ? {
-              count: line.descendants.length,
-              failed: line.descendants.filter(isFailed).length,
-              open: openTrees.has(line.row.id),
-              ontoggle: () => openTrees.toggle(line.row.id),
-            }
-          : null,
-    }));
+    const byId = new Map<string, Branch>();
+    const roots: Branch[] = [];
+    // Tree order puts each parent before its children.
+    for (const line of lines) {
+      const branch: Branch = {
+        row: line.row,
+        children: [],
+        count: line.descendants.length,
+        failed: line.descendants.filter(isFailed).length,
+      };
+      byId.set(line.row.id, branch);
+      const parent = line.parent ? byId.get(line.parent) : undefined;
+      (parent ? parent.children : roots).push(branch);
+    }
+    return roots;
   }
-
-  /** The row's own left inset — `px-2.5` plus one 13px step per generation. */
-  const indent = (depth: number): string =>
-    depth === 0 ? "" : `padding-left: calc(0.625rem + ${depth * 13}px)`;
 
   /**
    * One clock for every row in the rail. A row that ticked for itself would
@@ -568,19 +562,17 @@
      row in the rail renders this, so "which one was I just in" is answered by
      looking down one column instead of opening six of them. -->
 
-{#snippet subRow(
-  row: InstanceRow,
-  depth: number,
-  place: string,
-  stack: Nested['stack']
-)}
+<!-- A session, and when it is open the sessions it started, on a rail of
+     their own that leaves its mark (app.css .kit-nest): the same row at
+     every depth, each parent folded until its count is clicked. The row
+     opens the session; the count opens the rows under it. -->
+{#snippet subRow(branch: Branch, place: string)}
+  {@const row = branch.row}
   {@const Sprite = sessionSprite(row.id)}
   {@const activity = cawco.activityOf(row.id)}
+  {@const unfolded = branch.count > 0 && openTrees.has(row.id)}
   <li
-    class={[
-      'group/menu-sub-item relative',
-      stack && !stack.open && 'kit-stacked',
-    ]}
+    class="group/menu-sub-item relative"
     data-flip
     data-session-row={row.id}
     data-sidebar="menu-sub-item"
@@ -593,10 +585,9 @@
       data-share="session:{row.id}"
       href={conversationHref(row.id, cawco.instanceIndex)}
       isActive={activeSession === row.id}
-      style={indent(depth)}
     >
       <span
-        class={MARK}
+        class="{MARK} session-mark"
         style="background-image: var(--mark-overlay); background-color: var(--mark-{markHue(row.cwd || row.machineId)});"
       >
         <Sprite
@@ -606,20 +597,28 @@
         />
       </span>
       <span class="min-w-0 flex-1 truncate">{sessionName(row)}</span>
-      {#if stack}
-        <StackChip {...stack} compact />
+      {#if branch.count > 0}
+        <TreeCount
+          compact
+          count={branch.count}
+          failed={branch.failed}
+          ontoggle={() => openTrees.toggle(row.id)}
+          open={unfolded}
+        />
       {/if}
       {@render age(row)}
       <span class={TRAIL}><ActivityDot {activity} /></span>
     </Sidebar.MenuSubButton>
-    {#if stack && !stack.open}
-      <button
-        aria-hidden="true"
-        class="kit-stack-bars"
-        onclick={stack.ontoggle}
-        tabindex="-1"
-        type="button"
-      ></button>
+    {#if unfolded}
+      <ul
+        class="kit-nest mt-1 flex min-w-0 flex-col gap-1 pl-(--nest-pad) [--nest-in:var(--space-2)] [--nest-reach:--spacing(1.5)]"
+        data-flip
+        {@attach nestFrom('.session-mark')}
+      >
+        {#each branch.children as child, i (child.row.id)}
+          {@render subRow(child, nestPlace(i, branch.children.length))}
+        {/each}
+      </ul>
     {/if}
   </li>
 {/snippet}
@@ -886,26 +885,17 @@
                    moved: it is uncovered top to bottom while the rows under it
                    slide down to make its room, and closes the same way. -->
                   <div data-flip>
-                    <!-- The sessions hang off the project's mark on one
-                         rail (app.css .kit-nest): each joins it with its
-                         own elbow, and the last one ends it. -->
-                    <Sidebar.MenuSub
-                      class="kit-nest mx-0 translate-x-0 border-l-0 pr-0 pl-(--nest-pad)"
-                      {@attach nestFrom('.project-mark')}
-                    >
+                    <!-- The project's own sessions: a plain list, set in so
+                         each mark stands under the project's name. Lines
+                         only join what one session started to it. -->
+                    <Sidebar.MenuSub class="pl-(--space-8)">
                       {@const lists = splitOf(project)}
-                      {@const recent = nested(lists.recent, `rail:${project.id}:recent`)}
-                      {@const count =
-                        recent.length + (lists.older.length > 0 || lists.recent.length === 0 ? 1 : 0)}
-                      {#each recent as { row, depth, stack }, i (row.id)}
-                        {@render subRow(row, depth, nestPlace(i, count), stack)}
+                      {#each branches(lists.recent, `rail:${project.id}:recent`) as branch (branch.row.id)}
+                        {@render subRow(branch, '')}
                       {/each}
                       {#if lists.older.length > 0}
                         {@const olderVisible = olderShown(project, lists.older)}
-                        <Sidebar.MenuSubItem
-                          data-flip
-                          style={nestPlace(lists.recent.length, count)}
-                        >
+                        <Sidebar.MenuSubItem data-flip>
                           <Sidebar.MenuSubButton
                             aria-expanded={olderVisible}
                             class="{SUB_ROW} text-muted-foreground"
@@ -915,23 +905,19 @@
                           </Sidebar.MenuSubButton>
                         </Sidebar.MenuSubItem>
                         {#if olderVisible}
-                          {@const older = nested(lists.older, `rail:${project.id}:older`)}
                           <!-- Older sessions scroll in a box of their own,
                                six rows at most, so opening them never pushes
                                the projects below or the footer. -->
-                          <li class="older-wrap" data-flip data-nest="through">
-                            <ul
-                              class="older kit-nest-inner"
-                              {@attach scrollEdges}
-                            >
-                              {#each older as { row, depth, stack }, i (row.id)}
-                                {@render subRow(row, depth, nestPlace(i, older.length), stack)}
+                          <li class="older-wrap" data-flip>
+                            <ul class="older" {@attach scrollEdges}>
+                              {#each branches(lists.older, `rail:${project.id}:older`) as branch (branch.row.id)}
+                                {@render subRow(branch, '')}
                               {/each}
                             </ul>
                           </li>
                         {/if}
                       {:else if lists.recent.length === 0}
-                        <Sidebar.MenuSubItem data-flip style={nestPlace(0, 1)}>
+                        <Sidebar.MenuSubItem data-flip>
                           <Sidebar.MenuSubButton
                             class="{SUB_ROW} text-muted-foreground"
                             onclick={() =>
@@ -1055,17 +1041,14 @@
   .older-wrap {
     list-style: none;
   }
-  /* It reaches back under the rail (and pads its rows forward again), so the
-     elbows drawn left of its rows sit inside its scroll box, not clipped. */
   .older {
     --fade: var(--space-4);
-    --nest-gap: 2px;
     display: flex;
     flex-direction: column;
     gap: 2px;
     max-block-size: calc(6 * 28px + 5 * 2px);
-    margin: 0 0 0 calc(-1 * var(--nest-pad));
-    padding: 0 0 0 var(--nest-pad);
+    margin: 0;
+    padding: 0;
     overflow-y: auto;
     overscroll-behavior: contain;
     scrollbar-width: thin;

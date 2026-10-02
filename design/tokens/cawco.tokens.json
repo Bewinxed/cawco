@@ -674,6 +674,16 @@
         }
       }
     },
+    "surface-fill-strong": {
+      "$type": "color",
+      "$value": "{color.neutral-6}",
+      "$description": "A filled control a step over surface-fill: its hover, and its on state (a parent's child count when its children are open).",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "{color.neutral-7}"
+        }
+      }
+    },
     "surface-hover": {
       "$type": "color",
       "$value": "{color.neutral-2}",

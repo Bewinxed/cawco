@@ -169,11 +169,11 @@
 {/if}
 
 <style>
-  /* The list hangs its rows just right of where each curved arm ends, the
-     rail itself under the parent's glyph; each row's glyph sits level with
-     its arm. */
+  /* The rail under the parent's glyph; each curved arm runs over its line's
+     inset (`--nest-reach`) to the step's status glyph, level with it. */
   .run-steps {
     --nest-glyph-y: 13px;
+    --nest-reach: var(--space-1);
     --nest-gap: 2px;
     list-style: none;
     margin: var(--space-1) 0 0;

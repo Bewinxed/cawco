@@ -24,10 +24,10 @@
    * pane's edge to split, or into a group's tabs. On a wide screen a click
    * opens it in the focused pane.
    *
-   * A parent folds the rows under it (`stack`): their count sits at the end
+   * A parent folds the rows under it (`fold`): their count sits at the end
    * of the meta line, where the title keeps its whole width and the buttons
-   * that rise over the title line's end never cover it, and two cards stand
-   * under the row while it is folded. A finished row can be archived
+   * that rise over the title line's end never cover it, and the count is
+   * what opens and folds them. A finished row can be archived
    * (`onarchive`): a pointer has a button left of Peek, a finger swipes the
    * row away, and both have it in the menu.
    */
@@ -41,8 +41,8 @@
     type MarkStatus,
     STATUS_WORD,
   } from "../ProjectMark.svelte";
-  import StackChip from "../StackChip.svelte";
   import StoredSessionMenu from "../StoredSessionMenu.svelte";
+  import TreeCount from "../TreeCount.svelte";
   import { runIdOf } from "../workflow-runs";
   import { dragSession } from "../workspace/dnd.svelte";
   import { openPeek } from "./peek.svelte";
@@ -60,7 +60,7 @@
     stale = false,
     done = false,
     context = false,
-    stack = null,
+    fold = null,
     onarchive,
   }: {
     instance?: InstanceRow | null;
@@ -83,8 +83,8 @@
      * they hang off it. Its title reads in muted ink.
      */
     context?: boolean;
-    /** The rows folded under it, when it is a parent (tree.ts). */
-    stack?: {
+    /** The rows under it, when it is a parent (tree.ts). */
+    fold?: {
       count: number;
       failed: number;
       open: boolean;
@@ -124,7 +124,7 @@
 
 {#snippet body(trigger: Record<string, unknown>)}
   <div
-    class={stack && !stack.open ? "item kit-stacked" : "item"}
+    class="item"
     data-active={active || undefined}
     data-archivable={onarchive ? true : undefined}
     data-context={context || undefined}
@@ -160,13 +160,13 @@
         <span class="title"
           ><span class="sr-only">{STATUS_WORD[status]}: </span>{title}</span
         >
-        {#if line || stack}
+        {#if line || fold}
           <span class="meta">
             {#if line}
               <span class="line">{line}</span>
             {/if}
-            {#if stack}
-              <StackChip {...stack} />
+            {#if fold}
+              <TreeCount {...fold} />
             {/if}
           </span>
         {/if}
@@ -175,15 +175,6 @@
         <span class="num trail">{trail}</span>
       {/if}
     </a>
-    {#if stack && !stack.open}
-      <button
-        aria-hidden="true"
-        class="kit-stack-bars"
-        onclick={stack.ontoggle}
-        tabindex="-1"
-        type="button"
-      ></button>
-    {/if}
     {#if onarchive}
       <Tip label="Archive">
         {#snippet children(tip)}

@@ -456,26 +456,29 @@
     background: var(--seam);
   }
 
-  /* Nesting: children hang off their parent on a hairline rail that drops
-     from the parent's glyph centre; each child joins it with an elbow that
-     curves (--radius-sm) from the rail into an arm level with its glyph,
-     and the last child's elbow ends the rail. No arrowhead: the curve is
-     the joint. One primitive for every nested list (project → sessions,
-     run → steps). The lines are drawn by the children themselves, so as
+  /* Nesting: children hang off their parent on a hairline rail that leaves
+     the bottom edge of the parent's glyph, under its centre; each child
+     joins it with an elbow that curves (--radius-sm) from the rail into an
+     arm ending at the child's glyph, and the last child's elbow ends the
+     rail. No arrowhead: the curve is the joint. One primitive for every
+     nested list (session → delegates, delegate → its own, run → steps),
+     and only where something really hangs under something: a project's own
+     sessions are a plain list. A child with children of its own holds its
+     own `.kit-nest` list inside its item, so every parent has one rail of
+     its own, and the rail on to the next sibling runs straight past the
+     open subtree. The lines are drawn by the children themselves, so as
      rows unfold, reflow or leave, the rail grows and shrinks with them and
      never jumps.
      Set on the child list:
-       --nest-x      the rail's x from the list's left edge (the parent's
-                     glyph centre, measured: nest.ts `nestFrom`)
-       --nest-in     the arm, rail to its end (12px)
+       --nest-x       the rail's x from the list's left edge, and
+       --nest-lead    the parent glyph's bottom to the list's top, both
+                      measured (nest.ts `nestFrom`)
+       --nest-in      the rail to the child row's left edge (12px)
+       --nest-reach   the child row's left edge to its glyph
        --nest-glyph-y the child glyph's centre from the row's top
-       --nest-gap    the gap between child rows
-       --nest-lead   how far above the list the parent's glyph ends
-     The child rows start just right of the arm's end, so a row's hover or
-     selected pill never lies under the rail or the arm.
-     A child that only carries more children (a scroller) is
-     `data-nest="through"`: it draws no elbow, a straight rail, and its
-     inner list is `.kit-nest-inner`, joined to the same rail.
+       --nest-gap     the gap between child rows
+     The arm runs on over the row's inset to its glyph, drawn over the row's
+     hover or selected pill, so no pill ever covers a line.
      Drawn in: each elbow runs down the rail from the parent, round the
      curve and out along the arm, a stagger step after the row above
      (`--nest-i` on each child, its place); the rail on to the next child
@@ -483,150 +486,81 @@
      the other way, last child first (`--nest-r`, its place from the end). */
   .kit-nest {
     --nest-in: 12px;
+    --nest-reach: 0px;
     --nest-glyph-y: 14px;
     --nest-gap: 4px;
-    --nest-lead: 6px;
-    --nest-pad: calc(var(--nest-x) + var(--nest-in) + 3px);
+    --nest-lead: 0px;
+    --nest-pad: calc(var(--nest-x) + var(--nest-in));
     position: relative;
   }
-  :is(.kit-nest, .kit-nest-inner) > li:not([data-nest="through"]) {
+  .kit-nest > li {
     position: relative;
   }
-  :is(.kit-nest, .kit-nest-inner) > li:not([data-nest="through"])::before,
-  :is(.kit-nest, .kit-nest-inner) > li:not([data-nest="through"])::after {
+  .kit-nest > li::before,
+  .kit-nest > li::after {
     content: "";
     position: absolute;
-    left: calc(var(--nest-x) - var(--nest-pad));
+    z-index: 1;
+    /* Centred on the glyph: the 1px line half a pixel each side of it. */
+    left: calc(var(--nest-x) - var(--nest-pad) - 0.5px);
     pointer-events: none;
     border-color: var(--nest-ink);
     border-style: solid;
     border-width: 0;
   }
   /* The elbow: down the rail from the row above, round the curve, and out
-     along the arm to just short of the child row. */
-  :is(.kit-nest, .kit-nest-inner) > li:not([data-nest="through"])::before {
+     along the arm to the child's glyph. */
+  .kit-nest > li::before {
     top: calc(-1 * var(--nest-gap));
-    width: var(--nest-in);
-    height: calc(var(--nest-glyph-y) + var(--nest-gap));
+    width: calc(var(--nest-in) + var(--nest-reach) + 0.5px);
+    height: calc(var(--nest-glyph-y) + var(--nest-gap) + 0.5px);
     border-left-width: 1px;
     border-bottom-width: 1px;
     border-bottom-left-radius: var(--radius-sm);
   }
-  .kit-nest > li:first-child:not([data-nest="through"])::before {
+  .kit-nest > li:first-child::before {
     top: calc(-1 * var(--nest-lead));
-    height: calc(var(--nest-glyph-y) + var(--nest-lead));
+    height: calc(var(--nest-glyph-y) + var(--nest-lead) + 0.5px);
   }
-  /* The rail on past this child to the next one; the last child has none. */
-  :is(.kit-nest, .kit-nest-inner) > li:not([data-nest="through"])::after {
-    top: var(--nest-glyph-y);
+  /* The rail on past this child (and anything open under it) to the next
+     one; the last child has none. */
+  .kit-nest > li::after {
+    /* From where the elbow starts to curve away, so the rail runs straight
+       on past the joint instead of breaking at the curve. */
+    top: calc(var(--nest-glyph-y) - var(--radius-sm));
     bottom: 0;
     border-left-width: 1px;
   }
-  .kit-nest > li:last-child::after,
-  .kit-nest-inner > li:last-child::after {
+  .kit-nest > li:last-child::after {
     content: none;
-  }
-  /* A scroller (`data-nest="through"`) carries the rail across the gap
-     above it and its own top inset (`--nest-inner-lead`) to its first row. */
-  .kit-nest > li[data-nest="through"] {
-    position: relative;
-  }
-  .kit-nest > li[data-nest="through"]::before {
-    content: "";
-    position: absolute;
-    left: calc(var(--nest-x) - var(--nest-pad));
-    top: calc(-1 * var(--nest-gap));
-    block-size: calc(var(--nest-gap) + var(--nest-inner-lead, 0px) + 1px);
-    border-left: 1px solid var(--nest-ink);
-    pointer-events: none;
-    z-index: 1;
-  }
-  .kit-nest-inner > li:first-child:not([data-nest="through"])::before {
-    top: 0;
-    height: var(--nest-glyph-y);
-  }
-  /* A scroller's last row is not the rail's end when more follow it. */
-  .kit-nest
-    > li[data-nest="through"]:not(:last-child)
-    .kit-nest-inner
-    > li:last-child::after {
-    content: "";
-    bottom: calc(-1 * var(--nest-gap));
   }
   /* The lines' motion, for every list that nests: a `.kit-nest` list's
      children, and any row that draws its own elbow and onward rail on its
      ::before and ::after (`.kit-nest-line`, the home's Working/Finished
      rows). Each carries its place among its siblings (nest.ts `nestPlace`). */
   @media (prefers-reduced-motion: no-preference) {
-    :is(.kit-nest, .kit-nest-inner) > li:not([data-nest="through"])::before,
+    .kit-nest > li::before,
     .kit-nest-line::before {
       animation: nest-elbow var(--dur-panel) var(--ease-out) both;
       animation-delay: calc(var(--nest-i, 0) * 40ms);
     }
     /* The rail on to the next child carries on from the curve, once the
        elbow's rail has reached it (the first 55% of `nest-elbow`). */
-    :is(.kit-nest, .kit-nest-inner) > li:not([data-nest="through"])::after,
+    .kit-nest > li::after,
     .kit-nest-line::after {
       animation: nest-rail var(--dur-panel) var(--ease-out) both;
       animation-delay: calc(var(--nest-i, 0) * 40ms + var(--dur-panel) * 0.55);
     }
     /* A closing copy: the same lines, retracting, last child first. */
-    [data-reflow-ghost]
-      :is(.kit-nest, .kit-nest-inner)
-      > li:not([data-nest="through"])::before,
-    [data-reflow-ghost]
-      :is(.kit-nest, .kit-nest-inner)
-      > li:not([data-nest="through"])::after,
+    [data-reflow-ghost] .kit-nest > li::before,
+    [data-reflow-ghost] .kit-nest > li::after,
+    .kit-nest[data-reflow-ghost] > li::before,
+    .kit-nest[data-reflow-ghost] > li::after,
     .kit-nest-line[data-reflow-ghost]::before,
     .kit-nest-line[data-reflow-ghost]::after {
       animation-direction: reverse;
       animation-duration: var(--dur-exit);
       animation-delay: calc(var(--nest-r, 0) * 24ms);
-    }
-  }
-
-  /* A folded parent (tree.ts `collapse`): its row is the front card of a
-     deck, two cards stacked under it standing for the rows folded into it.
-     The host (position: relative) makes their room with padding, not
-     margin, so a rail running past it runs past them too. The front card is
-     edged in the nesting ink: it is the rail's own surface and would
-     otherwise not show as a card at all. The cards behind it are faint and
-     unedged. `.kit-stack-bars` is both their drawing and the hit that opens
-     the parent. */
-  .kit-stacked {
-    padding-block-end: 9px;
-  }
-  .kit-stacked > [data-rail-row] {
-    box-shadow: inset 0 0 0 1px var(--nest-ink);
-  }
-  .kit-stack-bars {
-    position: absolute;
-    inset-inline: 4px;
-    bottom: 0;
-    block-size: 9px;
-    padding: 0;
-    border: 0;
-    background: none;
-    cursor: pointer;
-
-    &::before,
-    &::after {
-      content: "";
-      position: absolute;
-      border-radius: 0 0 var(--radius-sm) var(--radius-sm);
-      background: var(--surface-fill);
-      pointer-events: none;
-    }
-    &::before {
-      inset-inline: 2px;
-      top: 0;
-      block-size: 5px;
-    }
-    &::after {
-      inset-inline: 8px;
-      top: 5px;
-      block-size: 4px;
-      opacity: 0.6;
     }
   }
 

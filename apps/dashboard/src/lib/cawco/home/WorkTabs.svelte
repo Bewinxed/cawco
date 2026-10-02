@@ -98,8 +98,9 @@
   const MAX_DEPTH = 2;
 
   /**
-   * Where a row's glyph sits in its line, and how tall a line is: the
-   * nesting lines hang off these (measured once a row is drawn).
+   * Where a row's glyph sits in its line (its centre, its bottom edge and
+   * its half width), and how tall a line is: the nesting lines hang off
+   * these (measured once a row is drawn).
    */
   const glyphs: Attachment<HTMLElement> = (node) => {
     const measure = (): boolean => {
@@ -120,6 +121,11 @@
         "--glyph-y",
         `${Math.round(m.top + m.height / 2 - l.top)}px`
       );
+      node.style.setProperty(
+        "--glyph-bottom",
+        `${Math.round(m.bottom - l.top)}px`
+      );
+      node.style.setProperty("--glyph-r", `${Math.round(m.width / 2)}px`);
       node.style.setProperty("--row-h", `${Math.round(l.height)}px`);
       return true;
     };
@@ -142,7 +148,7 @@
     tab === "working" ? home.working : home.finished;
   /**
    * A tab's own rows. Every delegate under a listed parent, folded into
-   * its parent's stack (tree.ts `rooted`); one whose parent the tab does
+   * its parent's count (tree.ts `rooted`); one whose parent the tab does
    * not list only when the Delegates button is on: work another session
    * started is listed on its own on request. A failed one is
    * listed whatever the button says, so a failure is never missed; a
@@ -154,7 +160,7 @@
       return all;
     }
     // A delegate under a listed parent stays, folded into its parent's
-    // stack; only one whose parent this tab does not list waits for the
+    // count; only one whose parent this tab does not list waits for the
     // switch.
     const kept = new Set(rooted(all).map((row) => row.id));
     return all.filter((row) => kept.has(row.id) || isFailed(row));
@@ -211,8 +217,8 @@
     finished: placesOf(trees.finished),
   });
 
-  /** A parent's folded rows, for its row's count and cards; null otherwise. */
-  function stackOf(tab: WorkTab, id: string) {
+  /** A parent's folded rows, for its row's count; null otherwise. */
+  function foldOf(tab: WorkTab, id: string) {
     const line = shapeOf(tab, id);
     if (!line?.descendants.length) {
       return null;
@@ -685,6 +691,7 @@
     active={current === row.id}
     {context}
     done={tab === 'finished'}
+    fold={foldOf(tab, row.id)}
     href={conversationHref(row.id, cawco.instanceIndex)}
     instance={row}
     line={context ? '' : metaLine(row, tab, group)}
@@ -692,7 +699,6 @@
     onarchive={tab === 'finished' && home.archivable(row)
       ? () => archiveTree(row.id)
       : undefined}
-    stack={stackOf(tab, row.id)}
     {stale}
     title={instanceTitle(row)}
     trail={context ? '' : age(row, tab)}
@@ -1009,25 +1015,35 @@
   .nested:not([data-last])::after {
     content: "";
     position: absolute;
+    z-index: 1;
     left: calc(var(--glyph-x) + (var(--nest-d) - 1) * var(--nest-step) - 0.5px);
     border: 0 solid var(--nest-ink);
     pointer-events: none;
   }
+  /* Out along the arm to the child's glyph, over the row's pill. */
   .nested::before {
     top: -2px;
-    width: calc(var(--nest-step) - var(--glyph-x) - 3px);
-    height: calc(var(--glyph-y) + 2px);
+    width: calc(var(--nest-step) - var(--glyph-r) + 0.5px);
+    height: calc(var(--glyph-y) + 2px + 0.5px);
     border-left-width: 1px;
     border-bottom-width: 1px;
     border-bottom-left-radius: var(--radius-sm);
   }
-  /* The first delegate's elbow starts at its parent's glyph, a row up. */
+  /* The first delegate's elbow leaves its parent's glyph's bottom edge, a
+     row up. */
   .nested[data-first]::before {
-    top: calc(var(--glyph-y) + 9px - var(--row-h) - 2px);
-    height: calc(var(--row-h) - 9px + 2px);
+    top: calc(var(--glyph-bottom) - var(--row-h) - 2px);
+    height: calc(
+      var(--row-h) +
+      2px -
+      var(--glyph-bottom) +
+      var(--glyph-y) +
+      0.5px
+    );
   }
+  /* From where the elbow curves away, so the rail runs on past the joint. */
   .nested:not([data-last])::after {
-    top: var(--glyph-y);
+    top: calc(var(--glyph-y) - var(--radius-sm));
     bottom: -2px;
     border-left-width: 1px;
   }

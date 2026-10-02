@@ -1,16 +1,15 @@
 <script lang="ts">
   /**
    * A parent's count of the rows under it (tree.ts), and the switch that
-   * opens and folds them: the folded rows are a number here and the two
-   * cards under the row (app.css .kit-stack-bars), never a list. Failures
-   * among them are said beside the count in their own ink.
+   * opens and folds them. Folded, the rows under it are this number and
+   * nothing else; open, they hang under the row on its nesting rail
+   * (app.css .kit-nest). Failures among them are said beside the count in
+   * their own ink.
    *
-   * It sits inside the row's own link (the row's meta line), so it is a
-   * button by role: a <button> cannot nest in an <a>. Its click is its own
-   * and never the link's.
+   * It sits inside the row's own link, so it is a button by role: a
+   * <button> cannot nest in an <a>. Its click is its own and never the
+   * link's: the row opens the session, the count opens the rows under it.
    */
-  import Layers from "~icons/solar/layers-minimalistic-bold-duotone";
-
   let {
     count,
     failed = 0,
@@ -20,7 +19,7 @@
   }: {
     /**
      * On a one-line row (the projects list), where the title shares the
-     * line: the count alone, a failure count beside it in its ink.
+     * line: a failure count beside the count without its word.
      */
     compact?: boolean;
     /** Rows under the parent, at every depth. */
@@ -46,7 +45,7 @@
 <span
   aria-expanded={open}
   aria-label={open ? `Hide ${label}` : `Show ${label}`}
-  class="chip num"
+  class="count num pressable focus-inset pointer-hit touch-hit"
   onclick={toggle}
   onkeydown={(event) => {
     if (event.key === 'Enter' || event.key === ' ') {
@@ -56,9 +55,6 @@
   role="button"
   tabindex="0"
 >
-  {#if !compact}
-    <Layers aria-hidden="true" />
-  {/if}
   <span>{count}</span>
   {#if failed}
     <span class="failed">· {failed}{compact ? '' : ' failed'}</span>
@@ -66,12 +62,16 @@
 </span>
 
 <style>
-  .chip {
+  /* A plain filled chip: a step stronger under the pointer and while its
+     rows are open, the press every compact control takes (.pressable). */
+  .count {
     display: inline-flex;
     flex: none;
     align-items: center;
     gap: 3px;
     block-size: 18px;
+    min-inline-size: 20px;
+    justify-content: center;
     padding-inline: 5px;
     border-radius: var(--radius-xs);
     background: var(--surface-fill);
@@ -80,18 +80,18 @@
     font-variant-numeric: tabular-nums;
     white-space: nowrap;
     cursor: pointer;
-    transition: var(--transition-control);
-
-    & :global(svg) {
-      inline-size: 12px;
-      block-size: 12px;
-    }
+    transition:
+      background-color var(--dur-control) var(--ease-out),
+      color var(--dur-control) var(--ease-out),
+      transform var(--dur-toggle) var(--ease-out);
   }
-  .chip[aria-expanded="true"] {
+  .count[aria-expanded="true"] {
+    background: var(--surface-fill-strong);
     color: var(--ink-strong);
   }
   @media (hover: hover) and (pointer: fine) {
-    .chip:hover {
+    .count:hover {
+      background: var(--surface-fill-strong);
       color: var(--ink-strong);
     }
   }

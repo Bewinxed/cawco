@@ -99,6 +99,8 @@ public enum Palette {
     public static let surfaceShelf = Color("surface-shelf", bundle: .module)
     public static let surfaceLift = Color("surface-lift", bundle: .module)
     public static let surfaceFill = Color("surface-fill", bundle: .module)
+    /// A filled control a step over surface-fill: its hover, and its on state (a parent's child count when its children are open).
+    public static let surfaceFillStrong = Color("surface-fill-strong", bundle: .module)
     public static let surfaceHover = Color("surface-hover", bundle: .module)
     /// The reader's well edge: darker than the well by day, the ink at 8% at night.
     public static let wellEdge = Color("well-edge", bundle: .module)
