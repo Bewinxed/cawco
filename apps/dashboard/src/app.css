@@ -486,9 +486,10 @@
        --nest-gap     the gap between child rows
      The arm runs on over the row's inset to its glyph, drawn over the row's
      hover or selected pill, so no pill ever covers a line.
-     Drawn in and out by the fold (motion/branch): the rail grows down from
-     the parent's glyph as a list opens, each arm drawing out to its child's
-     glyph as the child swipes out along it, and both retract as it folds. */
+     Drawn in and out by the fold (motion/branch): one head runs the whole
+     line as a list opens, down the rail, round each elbow's corner and out
+     along its arm to the child's glyph without a pause, and runs back the
+     same way as it folds. */
   .kit-nest {
     /* Until measured (the frame it mounts, before paint): valid, so nothing
        built on it (`--nest-pad`) drops a whole declaration and then lands a
@@ -543,11 +544,12 @@
   .kit-nest > li:last-child::after {
     content: none;
   }
-  /* A tree's rows just mounted, and their rails, held hidden until each is
-     built as the rail reaches it; the hold goes as the fold lands
-     (motion/branch). */
+  /* A tree's rows just mounted, and their line, held hidden until each is
+     built as the line reaches it; the hold goes as the fold lands
+     (motion/branch). A row is held by the clip its title wipes in by, which
+     its glyph's own flight shows through. */
   [data-branch-hold] [data-branch-item] {
-    opacity: 0;
+    clip-path: inset(0 100% 0 0);
   }
   [data-branch-hold].kit-nest > li::before,
   [data-branch-hold].kit-nest > li::after,

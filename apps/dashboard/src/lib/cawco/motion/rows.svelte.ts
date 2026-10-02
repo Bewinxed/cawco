@@ -388,9 +388,10 @@ export function tableReflow(options: {
  * marks inside it are read against it, so they travel only for what moves
  * inside it, and it is never slid, uncovered or copied here.
  *
- * Movement eases in-out over --dur-panel; entrances ease out over
- * --dur-pop and exits over --dur-exit (app.css). With reduced motion nothing
- * travels: arrivals and departures only fade.
+ * Movement eases in-out over --dur-panel (over --dur-exit in a batch a
+ * tree's closing paces, `atTravel`); entrances ease out over --dur-pop and
+ * exits over --dur-exit (app.css). With reduced motion nothing travels:
+ * arrivals and departures only fade.
  */
 interface Box {
   h: number;
@@ -417,68 +418,59 @@ interface Move {
 }
 
 /**
- * The one frame every move a change sets off starts on, and its time on the
- * document timeline. A change's slides, its boxes' edges, its arrivals and
- * departures, and a tree fold (motion/branch) all ask for it in the update
- * that changes the DOM; the first ask opens a batch that starts two frames
- * on (the hold `#slide` explains), and every ask until then joins it. Each
- * animation is created held at its first frame and given this start time,
- * so every edge is on the same frame of the same curve as the edge next to
- * it: a box's edge and the row under it never part by a frame.
+ * The one frame every move a change sets off starts on, its time on the
+ * document timeline, and the pace they travel at. A change's slides, its
+ * boxes' edges, its arrivals and departures, and a tree fold (motion/branch)
+ * all ask for it in the update that changes the DOM; the first ask opens a
+ * batch that starts two frames on (the hold `#slide` explains), and every
+ * ask until then joins it. Each animation is created held at its first
+ * frame and given this start time, so every edge is on the same frame of
+ * the same curve as the edge next to it: a box's edge and the row under it
+ * never part by a frame.
  *
- * `notBefore` (a time on the document timeline) holds the whole batch until
- * then: a fold whose rows leave before its room closes starts the room, and
- * so everything under it, once they have gone. A change made while a batch
- * is held that way waits for it too, so nothing slides into a room that is
- * still being emptied; the hold lifts when the fold that asked for it is
- * turned back (its cancel).
+ * `pace`: a tree closing asks with "close" (motion/branch `fold`). Its batch
+ * starts on the next frame, and every move in it travels over --dur-exit
+ * rather than --dur-panel: closing is quicker than opening and never waits.
+ * The fold used to hold the whole batch until its lowest row had swiped out,
+ * so the room, and every row under it, stood still for that row's exit
+ * before taking the opening's whole time to close.
  */
-type Run = (at: number) => void;
+export type Pace = "travel" | "close";
+type Run = (at: number, pace: Pace) => void;
 interface Batch {
-  /** Each run, and the earliest it may start. */
-  runs: Map<Run, number>;
+  pace: Pace;
+  runs: Set<Run>;
 }
 /** The batch still taking asks: the one the current update joins. */
 let taking: Batch | null = null;
-/** Every batch not yet started. */
-const waiting = new Set<Batch>();
 
-const holdOf = (one: Batch): number => Math.max(0, ...one.runs.values());
-
-export function atTravel(run: Run, notBefore = 0): () => void {
+export function atTravel(run: Run, pace: Pace = "travel"): () => void {
   if (!taking) {
-    const open: Batch = { runs: new Map() };
+    const open: Batch = { runs: new Set(), pace };
     taking = open;
-    waiting.add(open);
     let frames = 0;
-    let second = 0;
     const tick = () => {
       frames += 1;
-      const frame = Number(document.timeline.currentTime);
-      if (frames === 2) {
-        second = frame;
-        // From here on it is closed: a later ask opens the next batch.
-        if (taking === open) {
-          taking = null;
-        }
-      }
-      let at = Math.max(second, holdOf(open));
-      for (const other of waiting) {
-        at = Math.max(at, holdOf(other));
-      }
-      if (frames < 2 || frame < at) {
+      if (frames < (open.pace === "close" ? 1 : 2)) {
         requestAnimationFrame(tick);
         return;
       }
-      waiting.delete(open);
-      for (const go of open.runs.keys()) {
-        go(at);
+      // From here on it is closed: a later ask opens the next batch.
+      if (taking === open) {
+        taking = null;
+      }
+      const at = Number(document.timeline.currentTime);
+      for (const go of open.runs) {
+        go(at, open.pace);
       }
     };
     requestAnimationFrame(tick);
   }
   const joined = taking;
-  joined.runs.set(run, notBefore);
+  if (pace === "close") {
+    joined.pace = "close";
+  }
+  joined.runs.add(run);
   return () => {
     joined.runs.delete(run);
   };
@@ -487,15 +479,19 @@ export function atTravel(run: Run, notBefore = 0): () => void {
 /**
  * An animation held at its first frame until the batch starts, then run
  * from the batch's start. One that is cancelled in the meantime stays
- * cancelled.
+ * cancelled. `travels`: it moves rows (an edge, a width, a slide, a box's
+ * size), so it takes the batch's pace.
  */
-export function heldToTravel(animation: Animation, notBefore = 0): Animation {
+export function heldToTravel(animation: Animation, travels = false): Animation {
   animation.pause();
-  atTravel((at) => {
+  atTravel((at, pace) => {
     if (animation.playState === "paused") {
+      if (travels && pace === "close") {
+        animation.effect?.updateTiming(closing());
+      }
       animation.startTime = at;
     }
-  }, notBefore);
+  });
   return animation;
 }
 
@@ -626,6 +622,12 @@ const travel = () => ({
   duration: dur("--dur-panel"),
   easing: ease("--ease-in-out"),
 });
+/** Travel in a batch a tree's closing paces (`atTravel`). */
+const closing = () => ({
+  duration: dur("--dur-exit"),
+  easing: ease("--ease-in-out"),
+});
+const travelAt = (pace: Pace) => (pace === "close" ? closing() : travel());
 
 /**
  * Drawn somewhere in the viewport. An element that arrives out of sight has
@@ -682,7 +684,8 @@ function arrival(element: HTMLElement, still: boolean) {
       element.animate(
         [{ clipPath: "inset(0 0 100% 0)" }, { clipPath: "inset(0 0 0 0)" }],
         travel()
-      )
+      ),
+      true
     );
     heldToTravel(element.animate([{ opacity: 0 }, { opacity: 1 }], entrance()));
   }
@@ -717,6 +720,7 @@ function departure(
   node.append(copy);
   const done = () => copy.remove();
   let last: Animation;
+  let travels = false;
   if (still) {
     last = copy.animate([{ opacity: 1 }, { opacity: 0 }], exit());
   } else if (pops(element)) {
@@ -738,9 +742,10 @@ function departure(
       [{ clipPath: "inset(0 0 0 0)" }, { clipPath: "inset(0 0 100% 0)" }],
       { ...travel(), fill: "forwards" }
     );
+    travels = true;
   }
   // It closes from the frame the rows around it start moving on.
-  heldToTravel(last).finished.then(done, done);
+  heldToTravel(last, travels).finished.then(done, done);
 }
 
 /**
@@ -768,7 +773,8 @@ function edgeOf(
   from: number,
   to: number,
   /** Its bottom margin, read with every other style of the change. */
-  margin: number
+  margin: number,
+  clock: EffectTiming = travel()
 ): Animation {
   if (to > from) {
     return element.animate(
@@ -776,7 +782,7 @@ function edgeOf(
         { clipPath: `inset(${OPEN} ${OPEN} ${to - from}px ${OPEN})` },
         { clipPath: `inset(${OPEN} ${OPEN} 0px ${OPEN})` },
       ],
-      travel()
+      clock
     );
   }
   const clipPath = `inset(${OPEN} ${OPEN} 0px ${OPEN})`;
@@ -789,9 +795,26 @@ function edgeOf(
       },
       { height: `${to}px`, marginBottom: `${margin}px`, clipPath },
     ],
-    travel()
+    clock
   );
 }
+
+/**
+ * An edge in flight that a change found still bound for the same size: it
+ * is made again from the same size, on the same clock, rather than started
+ * afresh from where it is drawn on a later batch's frame. Started afresh, a
+ * change made while a tree closed (a row's time ticking over, the same tree
+ * folding in another list) put the room's edge a frame or two behind the
+ * rows sliding up under it, and they slid over the rows it still held.
+ */
+interface Carry {
+  from: number;
+  start: number;
+  timing: EffectTiming;
+  to: number;
+}
+/** Each edge's own sizes, for carrying it across a change. */
+const edgeSizes = new WeakMap<Animation, { from: number; to: number }>();
 
 /**
  * A box's width, from where it is drawn to its new width. In the flow, an
@@ -823,7 +846,7 @@ function spanOf(
 
 /** What one change will do, decided before anything is written. */
 interface Plan {
-  edges: { element: HTMLElement; from: number; to: number }[];
+  edges: { carry?: Carry; element: HTMLElement; from: number; to: number }[];
   slides: { element: HTMLElement; x: number; y: number }[];
   spans: { element: HTMLElement; from: number; to: number }[];
   stops: HTMLElement[];
@@ -930,17 +953,31 @@ class Reflow {
       this.#slide(slide.element, slide.x, slide.y, own[i]);
     });
     plan.edges.forEach((edge, i) => {
-      this.#keep(
-        this.#edges,
-        edge.element,
-        heldToTravel(edgeOf(edge.element, edge.from, edge.to, margins[i]))
-      );
+      const { carry } = edge;
+      let animation: Animation;
+      if (carry) {
+        animation = edgeOf(
+          edge.element,
+          edge.from,
+          edge.to,
+          margins[i],
+          carry.timing
+        );
+        animation.startTime = carry.start;
+      } else {
+        animation = heldToTravel(
+          edgeOf(edge.element, edge.from, edge.to, margins[i]),
+          true
+        );
+      }
+      edgeSizes.set(animation, { from: edge.from, to: edge.to });
+      this.#keep(this.#edges, edge.element, animation);
     });
     plan.spans.forEach((span, i) => {
       this.#keep(
         this.#spans,
         span.element,
-        heldToTravel(spanOf(span.element, span.from, span.to, spans[i]))
+        heldToTravel(spanOf(span.element, span.from, span.to, spans[i]), true)
       );
     });
     for (const element of arrivals) {
@@ -1001,14 +1038,28 @@ class Reflow {
    * its natural size. Every box is read before any tween is dropped.
    */
   #releaseEdges() {
-    const drawn = new Map<HTMLElement, { h?: number; w?: number }>();
-    for (const element of this.#edges.keys()) {
+    const drawn = new Map<
+      HTMLElement,
+      { carry?: Carry; h?: number; w?: number }
+    >();
+    for (const [element, animation] of this.#edges) {
       // A growing box is laid out whole and clipped: its edge is drawn where
       // the clip's bottom inset leaves it.
       const clip = CLIP_BOTTOM.exec(getComputedStyle(element).clipPath);
       const hidden = clip ? Number.parseFloat(clip[1]) : 0;
+      const sizes = edgeSizes.get(animation);
+      const start = animation.startTime;
       drawn.set(element, {
         h: element.getBoundingClientRect().height - hidden,
+        // In flight on its batch's clock: carried if it is bound the same way.
+        carry:
+          sizes && start !== null && animation.playState === "running"
+            ? {
+                ...sizes,
+                start: Number(start),
+                timing: animation.effect?.getTiming() ?? travel(),
+              }
+            : undefined,
       });
     }
     for (const element of this.#spans.keys()) {
@@ -1033,7 +1084,7 @@ class Reflow {
     element: HTMLElement,
     was: Placed,
     place: Placed,
-    drawn: { h?: number; w?: number } | undefined,
+    drawn: { carry?: Carry; h?: number; w?: number } | undefined,
     scrolled: number,
     plan: Plan
   ) {
@@ -1062,9 +1113,13 @@ class Reflow {
       return;
     }
     // Held at the drawn size until the batch starts, so the edge leaves on
-    // the frame the rows after it do.
+    // the frame the rows after it do; one in flight to this same size
+    // carries on, on its own clock (`Carry`).
+    const carry = drawn?.carry;
     const tall = drawn?.h ?? was.h;
-    if (Math.abs(tall - place.h) > 0.5) {
+    if (carry && Math.abs(carry.to - place.h) <= 0.5) {
+      plan.edges.push({ element, from: carry.from, to: carry.to, carry });
+    } else if (Math.abs(tall - place.h) > 0.5) {
       plan.edges.push({ element, from: tall, to: place.h });
     }
     const wide = drawn?.w ?? was.w;
@@ -1103,12 +1158,12 @@ class Reflow {
     element.style.translate = offsetTranslate(own, x, y);
     const move: Move = { x, y };
     this.#moves.set(element, move);
-    move.hold = atTravel((at) => {
+    move.hold = atTravel((at, pace) => {
       move.hold = undefined;
       element.style.translate = "";
       const animation = element.animate(
         [{ translate: `${x}px ${y}px` }, { translate: "0px 0px" }],
-        { ...travel(), composite: "add" }
+        { ...travelAt(pace), composite: "add" }
       );
       animation.startTime = at;
       move.animation = animation;

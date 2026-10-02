@@ -61,7 +61,8 @@ export function morph({
             node.animate(frames, {
               duration: dur("--dur-panel"),
               easing: ease("--ease-in-out"),
-            })
+            }),
+            true
           )
         : node.animate(frames, {
             duration: ms ?? dur("--dur-morph"),

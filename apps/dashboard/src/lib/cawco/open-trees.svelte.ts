@@ -4,13 +4,14 @@
  * list that nests sessions reads the one answer, so a parent opened under
  * Finished is open under Working and in its project too.
  *
- * The list a turn came from shows it at once; every other list shows it in
- * a task of its own just after. Shown in every list in the update the click
- * made, the click rendered the same tree twice and ran past a frame; caught
- * up in the next frame's own callbacks, it made that frame as long. A task
- * later, the other list's fold still starts on the same frame as this one's
- * (both land in the batch motion/rows `atTravel` opens, which waits two
- * frames), so the two never part.
+ * A tree opened in one list shows at once there; every other list shows it
+ * in a task of its own just after. Shown in every list in the update the
+ * click made, the click rendered the same tree twice and ran past a frame;
+ * caught up in the next frame's own callbacks, it made that frame as long. A
+ * task later, the other list's opening still starts on the same frame as
+ * this one's (both land in the batch motion/rows `atTravel` opens, which
+ * waits two frames), so the two never part. A tree closed closes in every
+ * list at once (`set`).
  */
 import { SvelteSet } from "svelte/reactivity";
 import { readJson, writeJson } from "./storage";
@@ -63,10 +64,16 @@ export const openTrees = {
     clearTimeout(catchingUp);
     if (
       typeof window === "undefined" ||
+      !opened ||
       (turnedIn !== null && turnedIn !== list)
     ) {
       // On the server, or two lists turned before either caught up: neither
-      // is behind the other.
+      // is behind the other. A tree closing draws nothing new, so every list
+      // folds it in this update, in the one batch that starts on the next
+      // frame (motion/rows "close" pace): caught up a task later, the other
+      // list's fold landed after that frame, re-planned the room's edge a
+      // frame behind the rows sliding up under it, and they slid over its
+      // rows.
       catchUp();
       return;
     }
