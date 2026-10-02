@@ -37,20 +37,9 @@ export const UPDATE_TIMEOUT_MS = 180_000;
 /** Installing a workflow tool fetches an installer and runs it — slower still. */
 export const INSTALL_TIMEOUT_MS = 300_000;
 
-/** Entries per chunk of a streamed transcript after the first, mapped one chunk per macrotask. */
-export const TRANSCRIPT_CHUNK_SIZE = 250;
-
 /**
- * Entries in the first chunk of a *streamed* transcript. Small on purpose: it
- * is the tail, the part the reader lands on, and it paints as soon as it is
- * complete rather than after the chunk behind it has finished arriving.
+ * Blocks per older transcript page, read one page per task once the newest
+ * page is on screen. The newest page is the hub's own size (`TRANSCRIPT_PAGE`,
+ * @cawco/core): small, so a tab paints from its first read.
  */
-export const TRANSCRIPT_FIRST_CHUNK = 40;
-
-/**
- * Entries a tail-first transcript read asks the agent for. The agent answers a
- * tail request by parsing only the newest window of the file (~4ms on a 97MB
- * transcript), so this is what stands between opening a session and its first
- * paint. Also the point past which a first-chunk cut stops looking.
- */
-export const TRANSCRIPT_TAIL_CEILING = TRANSCRIPT_FIRST_CHUNK * 4;
+export const TRANSCRIPT_OLDER_PAGE = 250;

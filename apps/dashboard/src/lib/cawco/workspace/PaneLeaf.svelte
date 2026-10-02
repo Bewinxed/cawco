@@ -28,7 +28,6 @@
   } from "$lib/cawco/motion/curves.svelte";
   import { land } from "$lib/cawco/motion/share.svelte";
   import WorkflowRunView from "$lib/components/features/workflows/WorkflowRunView.svelte";
-  import type { HistorySource } from "../client.svelte";
   import SessionPane from "../SessionPane.svelte";
   import Composer from "../transcript/Composer.svelte";
   import { runIdOf } from "../workflow-runs";
@@ -393,9 +392,6 @@
             browsingCwd={ctx?.cwd ?? ''}
             browsingHarness={ctx?.harness ?? 'claude'}
             focused={false}
-            serverHistory={paneId === page.params.id
-              ? ((page.data as { history?: Promise<HistorySource | null> | null }).history ?? null)
-              : null}
             serverTail={paneId === page.params.id
               ? ((page.data as { tail?: unknown }).tail ?? null)
               : null}

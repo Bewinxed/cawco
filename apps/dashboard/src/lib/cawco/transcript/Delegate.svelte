@@ -17,17 +17,10 @@
   import { formatDuration } from "$lib/utils/time";
   import {
     cawco,
-    preloadHistory,
+    readTranscript,
     unwatchDelegate,
     watchDelegate,
   } from "../client.svelte";
-  import {
-    askDetail,
-    askDetailOf,
-    askShort,
-    askShortOf,
-    matchesSession,
-  } from "../frames";
   import { conversationHref, delegateHandle } from "../links";
   import { markHue, sessionSprite } from "../mark";
   import { modelLabel } from "../models.svelte";
@@ -42,6 +35,13 @@
   import { disclosure } from "./disclosure.svelte";
   import MessageBody from "./MessageBody.svelte";
   import MessageRow from "./MessageRow.svelte";
+  import {
+    askDetail,
+    askDetailOf,
+    askShort,
+    askShortOf,
+    matchesSession,
+  } from "./present";
   import RunBlock from "./RunBlock.svelte";
   import { foldMessages, wellRuns } from "./rows";
   import Subagent from "./Subagent.svelte";
@@ -137,7 +137,7 @@
         body: latest.content,
         failed: latest.metadata?.reportKind === "failed",
         count: peers.length,
-        at: latest.timestamp?.getTime(),
+        at: latest.timestamp ? Date.parse(latest.timestamp) : undefined,
       };
     }
   );
@@ -285,7 +285,9 @@
     }, 1000);
     return () => clearInterval(tick);
   });
-  const startedAt = $derived(message.timestamp?.getTime());
+  const startedAt = $derived(
+    message.timestamp ? Date.parse(message.timestamp) : undefined
+  );
   const endedAt = $derived(inFlight ? now : report?.at);
   const elapsed = $derived(
     startedAt && endedAt && endedAt > startedAt
@@ -379,7 +381,7 @@
     if (next) {
       watchDelegate(id);
       // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — onToggle is a sync callback, nothing here awaits the backfill.
-      void preloadHistory(id);
+      void readTranscript(id);
     } else {
       unwatchDelegate(id);
     }
@@ -557,7 +559,7 @@
                 {branch.readFault.message}
               </p>
               <Button
-                onclick={() => id && preloadHistory(id)}
+                onclick={() => id && readTranscript(id, true)}
                 size="sm"
                 variant="outline"
               >

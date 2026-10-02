@@ -25,7 +25,7 @@
   import type { TransitionConfig } from "svelte/transition";
   import {
     cawco,
-    preloadHistory,
+    readTranscript,
     unwatchDelegate,
     watchDelegate,
   } from "./client.svelte";
@@ -112,7 +112,7 @@
       watchDelegate(id);
       if (!cawco.session(id)?.messages.length) {
         // biome-ignore lint/complexity/noVoid: fire-and-forget; the tail draws whatever has arrived.
-        void preloadHistory(id);
+        void readTranscript(id);
       }
     });
     return () => {

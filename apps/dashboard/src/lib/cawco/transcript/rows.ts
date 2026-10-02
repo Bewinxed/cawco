@@ -6,11 +6,11 @@
  * fixed chrome.
  */
 
-import { ASK_USER_QUESTION } from "@cawco/core";
+import { ASK_USER_QUESTION, type ToolGlance } from "@cawco/core";
 import type { SubagentState } from "$lib/utils/flow-types";
 import type { SessionState } from "../client.svelte";
-import { parkedAsks, type ToolGlance } from "../frames";
 import type { Message } from "../types";
+import { parkedAsks } from "./present";
 
 /**
  * `grouped`, on the rows that can carry a speaker line: the speaker's previous
@@ -408,8 +408,7 @@ const branchOf = (
   return id ? (subagents[id] ?? null) : null;
 };
 
-const keyOf = (m: Message, index: number): string =>
-  m.id ?? m.sdkUuid ?? `${m.type}:${index}`;
+const keyOf = (m: Message, _index: number): string => m.id;
 
 /**
  * Where the messages still waiting on the session begin. The store keeps them

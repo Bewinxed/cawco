@@ -33,8 +33,7 @@
   import { page } from "$app/state";
   import {
     cawco,
-    type HistorySource,
-    preloadHistory,
+    readTranscript,
     syncSubscriptions,
   } from "$lib/cawco/client.svelte";
   import Caw from "$lib/cawco/home/Caw.svelte";
@@ -205,7 +204,6 @@
      transcript mid-animation. */
 
   interface EntryData {
-    history: Promise<HistorySource | null> | null;
     id: string;
     tail: unknown;
   }
@@ -213,9 +211,6 @@
   const captureEntry = (): EntryData => ({
     id: page.params.id ?? "",
     tail: (page.data as { tail?: unknown }).tail ?? null,
-    history:
-      (page.data as { history?: Promise<HistorySource | null> | null })
-        .history ?? null,
   });
 
   let entry = $state<EntryData>(captureEntry());
@@ -321,7 +316,7 @@
       historyQueue.shift();
       if (id !== workspace.activeSessionId && workspace.openIds.includes(id)) {
         // biome-ignore lint/performance/noAwaitInLoops: background reads deliberately run one at a time
-        await preloadHistory(id);
+        await readTranscript(id);
       }
       await new Promise<void>((resolve) => {
         setTimeout(resolve, 0);
@@ -527,11 +522,7 @@
     {/if}
     <!-- After the groups on purpose: their slots register first, so a pane
          is born straight into the group that asked for it. -->
-    <PaneHost
-      entryHistory={entry.history}
-      entryId={entry.id}
-      entryTail={entry.tail}
-    />
+    <PaneHost entryId={entry.id} entryTail={entry.tail} />
   </div>
 </div>
 

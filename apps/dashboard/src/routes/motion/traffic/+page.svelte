@@ -38,7 +38,7 @@
       scenarios, because a transcript rejects a row whose key it has seen. */
   let n = 0;
 
-  const now = (): Date => new Date();
+  const now = (): string => new Date().toISOString();
 
   function push(m: Omit<Message, "instanceId">): void {
     session.messages.push({ instanceId: INSTANCE, ...m } as Message);
@@ -233,7 +233,7 @@
         session.records[id] = {
           uuid: id,
           instanceId: INSTANCE,
-          acceptedAt: now().toISOString(),
+          acceptedAt: now(),
           body: { type: "user", message: { role: "user", content: "" } },
           mode: "turn",
           state: "replaced",

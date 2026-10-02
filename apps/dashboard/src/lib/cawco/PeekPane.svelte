@@ -11,7 +11,7 @@
 </script>
 
 <script lang="ts">
-  import { machineLabel } from "@cawco/core";
+  import { getToolGlance, machineLabel } from "@cawco/core";
   /**
    * The middle step of the board's loop: glance at the fleet, peek at one
    * session, dive into it. A peek answers "what is this one actually doing"
@@ -37,7 +37,6 @@
     IconTick,
   } from "$lib/icons";
   import { smoothText } from "$lib/utils/smooth-text.svelte";
-  import { getToolGlance } from "$lib/utils/tool-display";
   import {
     ACTIVITY_LABEL,
     SLEEPING_LABEL,
@@ -55,7 +54,7 @@
     type PendingPermission,
     type PermissionAnswer,
     permissionAnswer,
-    preloadHistory,
+    readTranscript,
     refreshContext,
     setPeeked,
     stopSession,
@@ -104,7 +103,7 @@
       const held = cawco.session(id);
       if (!(held?.initialized && held.messages.length > 0)) {
         // biome-ignore lint/complexity/noVoid: fire-and-forget inside untrack — the read publishes into the store the tail below reads
-        void preloadHistory(id);
+        void readTranscript(id);
       }
     });
   });
@@ -161,7 +160,6 @@
       cwd,
       sessionId: forkable,
       harness: session?.harness ?? "claude",
-      history: session?.messages ?? [],
     });
     await goto(conversationHref(instanceId, cawco.instanceIndex));
   }

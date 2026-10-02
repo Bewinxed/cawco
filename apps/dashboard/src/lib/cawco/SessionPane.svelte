@@ -1,10 +1,5 @@
 <script lang="ts">
-  import type {
-    HarnessKind,
-    PermissionResult,
-    SendRecord,
-    SessionMessage,
-  } from "@cawco/core";
+  import type { PermissionResult, TranscriptPage } from "@cawco/core";
   /**
    * One conversation, whole: the identity header, the transcript (Chat) or its
    * graph (Flow), and the floating composer with any parked permission or
@@ -37,11 +32,9 @@
   import { IconAlert, IconChat, IconLaptop } from "$lib/icons";
   import AutopilotToggle from "./AutopilotToggle.svelte";
   import {
-    blankSession,
     cawco,
     clearReadFault,
     clearRestore,
-    type HistorySource,
     interrupt,
     latestCommandFor,
     loadMcpServers,
@@ -49,16 +42,16 @@
     type PendingPermission,
     pendingRestore,
     type ReadFault,
+    readTranscript,
     refreshCommands,
     type SendExtras,
     type SessionState,
+    seededSession,
     selectionCommands,
     sendFailureNotice,
-    streamHistory,
     submitCommand,
   } from "./client.svelte";
   import { cleanDetail } from "./command-detail";
-  import { mapTranscript, parkedAsks } from "./frames";
   import { delegateHandle } from "./links";
   import PreviewPane from "./preview/PreviewPane.svelte";
   import PreviewSheet from "./preview/PreviewSheet.svelte";
@@ -71,7 +64,7 @@
     saveDraft,
   } from "./transcript/draft-store";
   import Prompt from "./transcript/Prompt.svelte";
-  import { placeSends } from "./transcript/sends";
+  import { parkedAsks } from "./transcript/present";
   import { settleInto } from "./transcript/settle";
   import Transcript from "./transcript/Transcript.svelte";
   import TranscriptSkeleton from "./transcript/TranscriptSkeleton.svelte";
@@ -89,7 +82,6 @@
     visible,
     focused,
     serverTail = null,
-    serverHistory = null,
   }: {
     viewId: string;
     browsing: string | null;
@@ -103,18 +95,11 @@
      */
     focused?: boolean;
     /**
-     * The newest turns the SERVER read back, handed down by value.
-     *
-     * This used to be claimed from `page.data` under a `page.params.id ===
-     * viewId` guard — which only worked while the URL was the thing that
-     * decided which conversation was on screen. It no longer is. The layout
-     * captures the page's data once per real navigation and gives it to the
-     * one pane it was loaded for; every other pane reads its transcript over
-     * the socket, exactly as a background tab always did.
+     * The newest transcript page the SERVER read, handed down by value. The
+     * layout captures the page's data once per real navigation and gives it
+     * to the one pane it was loaded for; every other pane reads its own.
      */
     serverTail?: unknown;
-    /** Where the server said this conversation's transcript can be read from. */
-    serverHistory?: Promise<HistorySource | null> | null;
   } = $props();
 
   const previewVisible = $derived(cawco.previewVisible[viewId] === true);
@@ -227,15 +212,9 @@
     };
   });
 
-  /** The newest turns the server read back, and the identity that names them. */
+  /** The newest transcript page the server read, and the view it belongs to. */
   interface ServerTail {
-    cwd: string;
-    harness: string;
-    machineId: string;
-    messages: SessionMessage[];
-    /** The send records the read carried, by uuid: what places the reader's sends. */
-    records: Record<string, SendRecord>;
-    sessionId: string;
+    page: TranscriptPage;
     viewId: string;
   }
 
@@ -259,52 +238,13 @@
   const isLive = $derived(cawco.instances.some((row) => row.id === viewId));
 
   /**
-   * Where the server said this conversation's transcript can be read from —
-   * streamed with the page, so it is in hand before the socket is. The layout
-   * hands it to the pane this navigation actually loaded; the others are open
-   * tabs, not this navigation, and read over the socket instead.
+   * Reads a conversation's transcript: one page read, addressed by the id
+   * alone. The hub resolves the id — a live row to its key, anything else to
+   * whichever machine holds the file — and every way this ends is a named
+   * state.
    */
-  const history = $derived<Promise<HistorySource | null> | null>(serverHistory);
-
-  /**
-   * Reads a conversation's history: one read, addressed by the id alone.
-   *
-   * The hub resolves the id — a live row to its SDK key, anything else to
-   * whichever machine holds the file — so there is no stored read to try
-   * first and no live read to fall back to. What used to be two reads and a
-   * fleet-wide locate was also two chances to end with nothing in flight and
-   * nothing on screen; now every way this ends is a named state.
-   *
-   * `source` is the server's descriptor when this pane is the one the URL
-   * loaded, and carries the identity resolved from the hub's instance row.
-   */
-  async function readHistory(
-    id: string,
-    source: Promise<HistorySource | null> | null,
-    hint: { machineId: string; cwd: string; harness: string } | null,
-    running: boolean
-  ): Promise<void> {
-    const named = await source;
-    const outcome = await streamHistory(
-      named && named.viewId === id
-        ? { ...named, live: named.live || running }
-        : {
-            viewId: id,
-            machineId: hint?.machineId ?? "",
-            // The rail row's real SDK key when it has one — never the view id
-            // itself, and nothing at all when the row has not named one yet.
-            // The store adopts this sessionId, and any later
-            // revive/relaunch/rewind re-sends it as the resume key; an
-            // instance id there becomes a bogus handle the hub then cements
-            // into the row permanently. The read's own header names the key
-            // when this is blank; the id tail stays for the read, which the
-            // hub resolves on its own.
-            sessionId: cawco.instanceIndex.byId.get(id)?.sessionId ?? undefined,
-            cwd: hint?.cwd ?? "",
-            harness: hint?.harness as never,
-            live: running,
-          }
-    );
+  async function readHistory(id: string, running: boolean): Promise<void> {
+    const outcome = await readTranscript(id);
     // Each outcome replaces what the last read said, and only an outcome
     // does: a read in flight leaves the pane showing what it showed.
     if (!outcome.ok) {
@@ -393,22 +333,17 @@
       });
       return;
     }
-    // The server's answer for whichever conversation the URL names; a pane the
-    // reader left open in another tab was never part of this navigation and
-    // is read by its id like any other.
-    const named = history;
     untrack(() => {
       // biome-ignore lint/complexity/noVoid: fire-and-forget inside untrack — readHistory reports its outcome through the store fields this effect reads
-      void readHistory(id, named, hint, running);
+      void readHistory(id, running);
     });
   });
 
   /**
-   * The newest turns, read at render time and shipped with the page. This is
-   * what the SERVER paints: without it the first response carried an empty pane
-   * and the conversation only appeared once the bundle had hydrated and the
-   * stream had answered. Claimed by the pane the URL names, exactly as the
-   * history descriptor above is.
+   * The newest transcript page, read at render time and shipped with the page.
+   * This is what the SERVER paints: without it the first response carried an
+   * empty pane and the conversation only appeared once the bundle had hydrated
+   * and the stream had answered. Claimed by the pane the URL names.
    */
   const tail = $derived((serverTail as ServerTail | null) ?? null);
 
@@ -424,25 +359,10 @@
   const seeded = $derived.by<SessionState | null>(() => {
     // Nothing read back means nothing to stand in for: the store's own empty
     // and loading states are better than a blank pane pretending to be one.
-    // tail may be a deferred placeholder during SSR streaming (no .messages yet).
-    if (!tail || tail.viewId !== viewId || tail.messages.length === 0) {
+    if (!tail || tail.viewId !== viewId || tail.page.blocks.length === 0) {
       return null;
     }
-    const blank = blankSession(viewId);
-    const mapped = mapTranscript(viewId, tail.messages);
-    blank.machineId = tail.machineId;
-    blank.cwd = tail.cwd;
-    blank.sessionId = tail.sessionId ?? null;
-    blank.harness = tail.harness as HarnessKind;
-    // The harness's rows with the reader's sends placed among them by their
-    // records: the one derive the store runs on the same read, so the rows
-    // the server paints are the rows the store takes over.
-    blank.harnessRows = mapped.messages;
-    blank.records = tail.records;
-    blank.messages = placeSends(mapped.messages, tail.records, []);
-    blank.subagents = mapped.subagents;
-    blank.initialized = blank.messages.length > 0;
-    return blank;
+    return seededSession(viewId, tail.page);
   });
 
   /**

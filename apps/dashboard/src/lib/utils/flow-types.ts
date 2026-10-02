@@ -3,41 +3,20 @@
  * Provides type safety for node data across all flow components
  */
 
+import type { TranscriptBranch } from "@cawco/core";
 import type { Edge, Node } from "@xyflow/svelte";
 import type { Message } from "$lib/cawco/types";
 
 /**
  * A subagent branch, as both the chat view's branch card and the flow view draw
- * it. Produced by `frames.ts` from the `parent_tool_use_id` that forwarded
- * subagent messages carry, and moved by the `task_*` system messages.
+ * it: the hub's branch (`TranscriptBranch`), its blocks, and the text it is
+ * streaming right now.
  */
-export interface SubagentState {
-  completedAt?: Date;
-  description?: string;
-  error?: string;
-  instanceId: string;
-  isBackground?: boolean;
-  /** When the last branch event arrived, for recency sorting. */
-  lastEventAt?: Date;
-  lastToolName?: string;
+export type SubagentState = TranscriptBranch & {
   messages: Message[];
-  /** Model that answered (wire id from assistant frames), or the requested alias until the first frame arrives. */
-  model?: string;
-  /** Parent subagent's toolUseId, for nested branches. */
-  parentSubagentId?: string;
-  result?: string;
-  startedAt: Date;
-  status: "starting" | "running" | "complete" | "error";
   /** Partial assistant text, between `stream_event`s and the final message. */
   streaming: string;
-  subagentType: string;
-  /** `agentProgressSummaries`' present-tense line, when enabled. */
-  summary?: string;
-  /** The task the `task_*` progress messages report under. */
-  taskId?: string;
-  /** The Task tool.use id that spawned this subagent. */
-  toolUseId: string;
-}
+};
 
 // ============================================================
 // Node Data Types

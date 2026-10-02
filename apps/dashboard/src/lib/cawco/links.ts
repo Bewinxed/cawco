@@ -18,6 +18,22 @@ interface SessionLocation {
 }
 
 /**
+ * Where a session's transcript is read from: the view's id alone, the newest
+ * page unless `before` names where an older one ends. The hub maps a live
+ * instance to its key and locates any other, so the same address works before
+ * this browser knows anything about the conversation.
+ */
+export const transcriptUrl = (
+  viewId: string,
+  before?: { cursor: string; limit: number }
+): string =>
+  `/api/instances/${encodeURIComponent(viewId)}/transcript${
+    before
+      ? `?${new URLSearchParams({ before: before.cursor, limit: String(before.limit) })}`
+      : ""
+  }`;
+
+/**
  * Every instance row, looked up by id and by session. Built once per change to
  * the instance list, so resolving a conversation's address is two map reads —
  * the rail and the board resolve one per row, and a scan per row made that

@@ -11,7 +11,6 @@
    */
   import { onMount, untrack } from "svelte";
   import WorkflowRunView from "$lib/components/features/workflows/WorkflowRunView.svelte";
-  import type { HistorySource } from "../client.svelte";
   import SessionPane from "../SessionPane.svelte";
   import Lightbox from "../transcript/Lightbox.svelte";
   import { runIdOf } from "../workflow-runs";
@@ -21,12 +20,10 @@
   let {
     entryId = "",
     entryTail = null,
-    entryHistory = null,
   }: {
     /** Which conversation this page's server data belongs to, if any. */
     entryId?: string;
     entryTail?: unknown;
-    entryHistory?: Promise<HistorySource | null> | null;
   } = $props();
 
   let hosted = $state<string[]>([]);
@@ -102,7 +99,6 @@
           browsingCwd={ctx?.cwd ?? ''}
           browsingHarness={ctx?.harness ?? 'claude'}
           focused={isActive && leaf?.id === workspace.focusedLeafId}
-          serverHistory={id === entryId ? entryHistory : null}
           serverTail={id === entryId ? entryTail : null}
           viewId={id}
           visible={shownPanes.get(id) ?? false}

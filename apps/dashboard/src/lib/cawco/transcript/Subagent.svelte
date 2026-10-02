@@ -5,7 +5,6 @@
   import { IconChevronRight } from "$lib/icons";
   import type { SubagentState } from "$lib/utils/flow-types";
   import { formatDuration } from "$lib/utils/time";
-  import { subagentView } from "../frames";
   import { markHue, sessionSprite } from "../mark";
   import { modelLabel } from "../models.svelte";
   /**
@@ -20,6 +19,7 @@
   import { disclosure } from "./disclosure.svelte";
   import MessageBody from "./MessageBody.svelte";
   import MessageRow from "./MessageRow.svelte";
+  import { subagentView } from "./present";
   import { branchRows, wellRuns } from "./rows";
   import Thinking from "./Thinking.svelte";
   import ToolGroup from "./ToolGroup.svelte";
@@ -61,7 +61,8 @@
   });
   const elapsed = $derived(
     formatDuration(
-      (branch.completedAt?.getTime() ?? now) - branch.startedAt.getTime()
+      (branch.completedAt ? Date.parse(branch.completedAt) : now) -
+        Date.parse(branch.startedAt)
     )
   );
 

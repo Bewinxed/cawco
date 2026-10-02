@@ -23,7 +23,6 @@
     IconWarningTriangle,
   } from "$lib/icons";
   import { cawco, dismissWorkItem } from "../client.svelte";
-  import { askDetailOf, askShortOf, matchesSession } from "../frames";
   import HoverPanel from "../HoverPanel.svelte";
   import { conversationHref } from "../links";
   import { markHue, sessionSprite } from "../mark";
@@ -31,6 +30,7 @@
   import { reflow } from "../motion/rows.svelte";
   import { land } from "../motion/share.svelte";
   import DelegateTail, { type TailNote } from "./DelegateTail.svelte";
+  import { askDetailOf, askShortOf, matchesSession } from "./present";
   import {
     admit,
     cardVisible,

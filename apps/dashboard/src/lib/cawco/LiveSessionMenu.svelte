@@ -91,7 +91,6 @@
       harness: (session?.harness ??
         instance.harness ??
         "claude") as HarnessKind,
-      history: session?.messages ?? [],
     });
     await goto(conversationHref(forked, cawco.instanceIndex));
   }

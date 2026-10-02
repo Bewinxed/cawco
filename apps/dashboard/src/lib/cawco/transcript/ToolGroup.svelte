@@ -5,7 +5,6 @@
   import { toast } from "svelte-sonner";
   import { cawco, openPreview, revealPreview } from "$lib/cawco/client.svelte";
   import { fleetMcpServers } from "$lib/cawco/fleet-mcp.svelte";
-  import { SHOW_IMAGE_TOOLS, SHOW_PREVIEW_TOOLS } from "$lib/cawco/frames";
   import { mcpServerHost } from "$lib/cawco/mcp";
   import { dur, easeOut, motionOk } from "$lib/cawco/motion/curves.svelte";
   import { previewSourceKey } from "$lib/cawco/preview/source";
@@ -43,6 +42,7 @@
   import type { Message } from "../types";
   import { useLedger } from "./arrivals.svelte";
   import { disclosure } from "./disclosure.svelte";
+  import { SHOW_IMAGE_TOOLS, SHOW_PREVIEW_TOOLS } from "./present";
   import TranscriptRow from "./Row.svelte";
   import Shot from "./Shot.svelte";
 

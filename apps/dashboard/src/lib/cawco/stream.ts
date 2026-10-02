@@ -55,6 +55,12 @@ export interface SessionCursor {
   /** The highest seq applied. Meaningless until {@link seen}. */
   lastSeq: number;
   /**
+   * The session's transcript page is being read. Its events are not applied
+   * meanwhile: the page carries what they did, and the resume from the page's
+   * `seq` replays the rest out of the hub's ring.
+   */
+  reading: boolean;
+  /**
    * The `afterSeq` of the resume that is out, or null when none is. One resume
    * per gap: a burst of fifty out-of-order deltas is one hole, not fifty.
    */
@@ -148,6 +154,9 @@ export interface StreamHost {
   // biome-ignore lint/style/useConsistentMethodSignatures: property-style signatures check contravariantly; client.svelte.ts's streamHost object literal implements this port and a switch could reject that assignment.
   applyFrame(sessionId: string, frame: unknown): void;
   clearTimer?: (handle: number) => void;
+  /** Whether the dashboard follows this session's stream: a tab, the peek, a watched delegate. */
+  // biome-ignore lint/style/useConsistentMethodSignatures: property-style signatures check contravariantly; client.svelte.ts's streamHost object literal implements this port and a switch could reject that assignment.
+  follows(sessionId: string): boolean;
   /**
    * Called once, the moment any command record settles at `failed`, whatever
    * killed it — a refusing ack, a dispatch that could not leave the tab, the
@@ -167,7 +176,10 @@ export interface StreamHost {
   noteFailure?: (record: CommandRecord) => void;
   // biome-ignore lint/style/useConsistentMethodSignatures: property-style signatures check contravariantly; client.svelte.ts's streamHost object literal implements this port and a switch could reject that assignment.
   now(): number;
-  /** Re-read this session's transcript through the path that already exists. */
+  /**
+   * Read this session's newest transcript page; the read ends in
+   * {@link adoptPage}, which resumes the stream from the page's `seq`.
+   */
   // biome-ignore lint/style/useConsistentMethodSignatures: property-style signatures check contravariantly; client.svelte.ts's streamHost object literal implements this port and a switch could reject that assignment.
   rereadHistory(sessionId: string): void;
   /** Put a client message on the dashboard socket; false when it is not open. */
@@ -197,6 +209,7 @@ export function createStreamState(): StreamState {
 function newCursor(): SessionCursor {
   return {
     lastSeq: 0,
+    reading: false,
     seen: false,
     subscribed: false,
     resyncAfter: null,
@@ -272,11 +285,12 @@ export function subscribeSession(
 
 /**
  * Brings the subscribed set into line with what the dashboard is watching:
- * subscribes what is new, forgets what has been closed.
+ * resumes what it has followed before and forgets what has been closed. A
+ * session it has not read yet is followed once its transcript page lands
+ * ({@link adoptPage}) — the pane that shows it is what reads it.
  *
- * Forgetting drops the cursor with it, so a session re-opened later joins fresh
- * rather than resuming from a seq the ring has long since dropped — the reset
- * that would answer that resume costs a whole transcript re-read.
+ * Forgetting drops the cursor with it, so a session re-opened later is read
+ * again rather than resumed from a seq the ring has long since dropped.
  */
 export function syncStreamSubscriptions(
   state: StreamState,
@@ -291,9 +305,39 @@ export function syncStreamSubscriptions(
   }
   for (const sessionId of wanted) {
     const cursor = state.cursors[sessionId];
-    if (cursor?.subscribed) {
-      continue;
+    if (cursor?.seen && !cursor.subscribed && !cursor.reading) {
+      subscribeSession(state, host, sessionId);
     }
+  }
+}
+
+/**
+ * A transcript page read has started: the session's events wait for it.
+ * Applied meanwhile, they would land on the transcript the page replaces.
+ */
+export function beginRead(state: StreamState, sessionId: string): void {
+  cursorFor(state, sessionId).reading = true;
+}
+
+/**
+ * A transcript page landed, read at `seq`: the session's stream resumes from
+ * there when the dashboard follows it. The hub replays what came after out of
+ * its ring, or resets honestly when the page took longer than the ring holds.
+ * One it does not follow keeps the place, for whenever it does.
+ */
+export function adoptPage(
+  state: StreamState,
+  host: StreamHost,
+  sessionId: string,
+  seq: number
+): void {
+  const cursor = cursorFor(state, sessionId);
+  cursor.reading = false;
+  cursor.lastSeq = seq;
+  cursor.seen = true;
+  cursor.resyncFailures = 0;
+  cursor.warned = false;
+  if (host.follows(sessionId)) {
     subscribeSession(state, host, sessionId);
   }
 }
@@ -407,6 +451,11 @@ function applyDelta(
     return "malformed";
   }
   const cursor = cursorFor(state, event.sessionId);
+  // A page read is out: what this event did is in the page, or after its
+  // `seq`, which the resume that ends the read replays.
+  if (cursor.reading) {
+    return "duplicate";
+  }
 
   // No origin yet: the hub's first word IS the origin. Reading `lastSeq = 0` as
   // a hole here would make every late join demand a replay of a whole session.
@@ -487,6 +536,10 @@ function applyBacklog(
   const events = Array.isArray(message.events) ? message.events : [];
   const cursor = cursorFor(state, sessionId);
   cursor.subscribed = true;
+  // The page being read carries these; the resume that ends the read asks again.
+  if (cursor.reading) {
+    return;
+  }
 
   if (events.length === 0) {
     // "Nothing to replay" is a complete answer, and a healed one.
@@ -536,9 +589,8 @@ function applyBacklog(
     // The ring cannot heal this. Stop asking it to and go and read the truth,
     // exactly as a reset would have us do.
     cursor.resyncFailures = 0;
-    cursor.seen = false;
+    cursor.reading = true;
     host.rereadHistory(sessionId);
-    subscribeSession(state, host, sessionId);
     return;
   }
   requestResync(host, sessionId, cursor);
@@ -546,14 +598,9 @@ function applyBacklog(
 
 /**
  * The hub's honest refusal: the gap is older than its ring, so there is nothing
- * to replay. The client re-reads history through the path it already has and
- * follows from `nextSeq`.
- *
- * The cursor moves to `nextSeq - 1` BEFORE the re-read is asked for, so live
- * deltas racing the read are contiguous and apply immediately. That is not a
- * race the store has to referee: the existing backfill holds frames that arrive
- * while it is reading and replays them behind the transcript, deduplicated by
- * uuid — the same discipline every other late join uses.
+ * to replay. The client reads the newest transcript page again, and the read
+ * resumes the stream from the `seq` that page carries; deltas meanwhile wait
+ * for it ({@link SessionCursor.reading}).
  */
 function applyReset(
   state: StreamState,
@@ -561,8 +608,7 @@ function applyReset(
   message: StreamReset
 ): void {
   const cursor = cursorFor(state, message.sessionId);
-  cursor.lastSeq = message.nextSeq - 1;
-  cursor.seen = true;
+  cursor.reading = true;
   cursor.subscribed = true;
   cursor.resyncAfter = null;
   cursor.resyncFailures = 0;
@@ -953,33 +999,4 @@ export function latestCommand(
     }
   }
   return latest;
-}
-
-/**
- * Whether THIS client interrupted the session moments ago — the classifier
- * that turns the SDK's `result.error` receipt of a deliberate stop into a
- * quiet "Interrupted" line instead of a failure card. The command records are
- * the memory: any interrupt on the session inside the window that was not
- * refused counts. Only this client's own stops are recognisable — another
- * device's interrupt still reads as an error here until the daemon tags the
- * result itself (protocol v2, noted in the plan).
- */
-export function interruptedRecently(
-  state: StreamState,
-  sessionId: string,
-  now: number,
-  windowMs = 15_000
-): boolean {
-  for (const record of Object.values(state.commands)) {
-    if (record.kind !== "interrupt" || record.sessionId !== sessionId) {
-      continue;
-    }
-    if (record.stage === "failed") {
-      continue;
-    }
-    if (now - record.at <= windowMs) {
-      return true;
-    }
-  }
-  return false;
 }

@@ -12,8 +12,7 @@
    * the card (bridged) keeps it. A fine pointer only; touch has no hover.
    */
   import { IconAsk, IconSuccess, IconWarningTriangle } from "$lib/icons";
-  import { cawco, isFailed, preloadHistory } from "./client.svelte";
-  import { askDetailOf } from "./frames";
+  import { cawco, isFailed, readTranscript } from "./client.svelte";
   import HoverPanel from "./HoverPanel.svelte";
   import { instanceTitle } from "./home/home.svelte";
   import { markHue, sessionSprite } from "./mark";
@@ -21,6 +20,7 @@
   import DelegateTail, {
     type TailNote,
   } from "./transcript/DelegateTail.svelte";
+  import { askDetailOf } from "./transcript/present";
   import { runIdOf } from "./workflow-runs";
   import { workflowState } from "./workflow-state.svelte";
 
@@ -52,7 +52,7 @@
     const tail = runningStep(id) ?? (runIdOf(id) ? null : id);
     if (tail && !cawco.session(tail)?.messages.length) {
       // biome-ignore lint/complexity/noVoid: fire-and-forget; the card draws whatever has arrived.
-      void preloadHistory(tail);
+      void readTranscript(tail);
     }
   }
 

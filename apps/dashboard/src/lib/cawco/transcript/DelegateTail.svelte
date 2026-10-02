@@ -64,7 +64,7 @@
       .at(-1) ?? "";
 
   const keyOf = (m: Message, i: number) =>
-    m.id ?? m.sdkUuid ?? `${m.type}:${m.timestamp?.getTime() ?? i}`;
+    m.id ?? m.sdkUuid ?? `${m.type}:${m.timestamp ?? i}`;
 
   function rowOf(m: Message, i: number): Row | null {
     const meta = m.metadata ?? {};

@@ -1,6 +1,7 @@
 /**
- * The browser end of the Envelope spine: one WebSocket to the hub, the frames
- * it returns folded into per-instance UI state (NEW.md §6).
+ * The browser end of the Envelope spine: one WebSocket to the hub, and each
+ * session's transcript as the hub built it — a page fetched once, then the
+ * changes its stream carries (NEW.md §6).
  */
 import type {
   AgentRow,
@@ -16,7 +17,6 @@ import type {
   FramePayload,
   FsPayload,
   HarnessKind,
-  HistoryLine,
   InstanceRow,
   McpServerStatus,
   ModelInfo,
@@ -30,14 +30,22 @@ import type {
   SendPayload,
   SendRecord,
   SessionEffort,
-  SessionMessage,
   SessionPulse,
+  SessionStreamFrame,
   SessionTooling,
   SlashCommand,
   SpawnPayload,
   StopPayload,
   SupervisorEvent,
   SupportedCommands,
+  ToolGlance,
+  TranscriptBlock,
+  TranscriptBranch,
+  TranscriptEvent,
+  TranscriptFacts,
+  TranscriptPage,
+  TranscriptPageBranch,
+  TranscriptTail,
   UsageLimitsReading,
   UsageLimitsResponse,
   WorkflowRun,
@@ -58,9 +66,7 @@ import {
   CONTROL_TIMEOUT_MS,
   DISCARD_TIMEOUT_MS,
   SESSION_CATALOG_LIMIT,
-  TRANSCRIPT_CHUNK_SIZE,
-  TRANSCRIPT_FIRST_CHUNK,
-  TRANSCRIPT_TAIL_CEILING,
+  TRANSCRIPT_OLDER_PAGE,
   WS_RECONNECT_BASE_DELAY,
   WS_RECONNECT_MAX_ATTEMPTS,
   WS_RECONNECT_MAX_DELAY,
@@ -69,23 +75,13 @@ import type { SubagentState } from "$lib/utils/flow-types";
 import type { Activity } from "./activity";
 import { activityOf, runningSubagents } from "./activity";
 import { checkDeployToast } from "./deploy-toast";
-import type { ToolGlance } from "./frames";
-import {
-  applyBranchEvent,
-  applyToolResult,
-  branchFor,
-  errorMessage,
-  foldDelegateEvent,
-  localUserMessage,
-  mapFrame,
-  mapTranscript,
-  mergePulses,
-  routedToParent,
-  suppressesTaskLine,
-  turnStart,
-} from "./frames";
 import { newId } from "./id";
-import { conversationHref, indexInstances, instanceForSession } from "./links";
+import {
+  conversationHref,
+  indexInstances,
+  instanceForSession,
+  transcriptUrl,
+} from "./links";
 import { type PendingSelection, selectionExtras } from "./preview/selection";
 import { checkRestartToast } from "./restart-toast";
 import { spawnDefaults } from "./spawnPrefs.svelte";
@@ -96,11 +92,12 @@ import type {
   StreamHost,
 } from "./stream";
 import {
+  adoptPage,
+  beginRead,
   createStreamState,
   disarmCommandSweep,
   failLocally,
   handleStreamMessage,
-  interruptedRecently,
   latestCommand,
   noteDisconnect,
   SETTLED_COMMAND_LIMIT,
@@ -116,14 +113,8 @@ import {
   refreshTasks,
   TASK_LEDGER_TOOLS,
 } from "./tasks.svelte";
-import { type Voice, voiceOfMessage } from "./transcript/rows";
-import {
-  isSendRef,
-  newer,
-  placeSends,
-  sendRef,
-  sendRow,
-} from "./transcript/sends";
+import { errorMessage, localUserMessage } from "./transcript/local";
+import { routedToParent } from "./transcript/present";
 import type { DelegateAskEvent, Message } from "./types";
 import {
   onBoard,
@@ -317,6 +308,12 @@ export type ReadFault =
   | { message: string; reason: "failed" };
 
 export interface SessionState {
+  /**
+   * The main transcript as the hub built it, oldest first: every block it has
+   * sent this view, sends drawn in their place. What is on screen,
+   * {@link messages}, is these with this tab's own rows ({@link place}).
+   */
+  blocks: Message[];
   /** A turn is in flight (sent, no `result` yet). */
   busy: boolean;
   /** What this session offers behind `/` — see {@link commandsOf}. */
@@ -331,6 +328,11 @@ export interface SessionState {
   contextPending: boolean;
   /** The main loop's tool in flight, cleared by its result or the turn's end. */
   currentTool: ToolGlance | null;
+  /**
+   * Where the page older than {@link blocks} begins: the `before` the hub
+   * named, or null once the conversation's start is in hand.
+   */
+  cursor: string | null;
   cwd: string;
   /**
    * How hard that model thinks: what the session actually sends, as its agent
@@ -340,14 +342,7 @@ export interface SessionState {
   effort: SessionEffort | null;
   /** Which harness owns {@link sessionId} — what a resume and a catalog read route on. */
   harness: HarnessKind;
-  /**
-   * The transcript as the harness said it: its own rows, in order, with a
-   * placeholder (`send.ref`) wherever a send was read or stored. What is on
-   * screen, {@link messages}, is these with every send drawn in its place
-   * ({@link place}).
-   */
-  harnessRows: Message[];
-  /** The older chunks of a long transcript are still being prepended. */
+  /** An older page of the transcript is being read. */
   hydrating: boolean;
   /** The `system.init` banner is re-emitted every turn; render it once. */
   initialized: boolean;
@@ -372,12 +367,12 @@ export interface SessionState {
    * "cannot answer" apart from an answer nobody liked.
    */
   lastTurnFailed: boolean;
-  /** A stored transcript is being fetched. */
+  /** The newest page of the transcript is being fetched. */
   loading: boolean;
   /**
    * This tab's own sends the hub has not taken: on their way, or never
-   * arrived. Each gives way to its record the moment the hub's word on it
-   * lands, as the same row.
+   * arrived. Each gives way to its block the moment the hub has it, as the
+   * same row.
    */
   local: Message[];
   machineId: string;
@@ -385,12 +380,17 @@ export interface SessionState {
   mcp: McpServerStatus[] | null;
   mcpPending: boolean;
   /**
-   * What is on screen: {@link harnessRows} with every send in its place
-   * (`placeSends`). Only {@link place} writes it.
+   * What is on screen: {@link blocks} with this tab's failure lines among
+   * them, then {@link queued}, then {@link local}. Only {@link place} writes it.
    */
   messages: Message[];
   /** Which model answers the next turn, learnt and corrected the same way. */
   model: string | null;
+  /**
+   * Failures this tab saw, each after the block that was last when it saw
+   * it (null: before everything).
+   */
+  notes: { after: string | null; message: Message }[];
   /**
    * Which content block the main loop has open right now, from the partials —
    * `null` between blocks and outside a turn. This is the only evidence of what
@@ -405,6 +405,8 @@ export interface SessionState {
    * opens with. `null` until something has said — see {@link adoptSettings}.
    */
   permissionMode: PermissionMode | null;
+  /** The sends the session has not read yet, oldest first, as the hub placed them. */
+  queued: Message[];
   /**
    * How the last transcript read ended, when it ended with nothing on screen.
    * Every read path sets this on a terminal failure and clears it when a read
@@ -413,7 +415,7 @@ export interface SessionState {
    * and leave the pane on its loading state for the life of the tab.
    */
   readFault: ReadFault | null;
-  /** The hub's record of every send this view knows of, by uuid. */
+  /** The hub's record of every send this view has heard of, by uuid. */
   records: Record<string, SendRecord>;
   /** Started again in place for a mode it could not switch into; ends at the next init. */
   relaunching: boolean;
@@ -660,12 +662,8 @@ interface Waiter {
 /** Control calls awaiting their `control_result`, keyed by the SDK `requestId`. */
 const inflight = new Map<string, Waiter>();
 
-/** Frames held back while a late-joined session reads its transcript, by instance. */
-const backfilling = new Map<string, FramePayload[]>();
-/** Instances whose transcript has been read back — it is only ever read once. */
-const backfilled = new Set<string>();
-/** The current transcript read per view; a chunk loop stops once it is not it. */
-const hydrations = new Map<string, number>();
+/** The newest-page read in flight per view: a second ask joins it. */
+const pageReads = new Map<string, Promise<TranscriptOutcome>>();
 
 // Lets the store be asserted from the console while developing.
 if (import.meta.env.DEV && typeof window !== "undefined") {
@@ -747,9 +745,12 @@ export function blankSession(instanceId: string): SessionState {
     cwd: "",
     sessionId: null,
     harness: "claude",
-    harnessRows: [],
+    blocks: [],
+    queued: [],
+    cursor: null,
     records: {},
     local: [],
+    notes: [],
     messages: [],
     subagents: {},
     pending: [],
@@ -804,34 +805,21 @@ function session(instanceId: string): SessionState {
 }
 
 /**
- * THE ONE WRITER of what a session shows: {@link SessionState.harnessRows}
- * with every send drawn in its place (`placeSends`, transcript/sends.ts).
+ * THE ONE WRITER of what a session shows: the hub's blocks with this tab's
+ * failure lines among them, then the sends waiting, then this tab's own sends
+ * the hub has not taken.
  *
- * A send's row already on screen is kept, its fields moved to what its record
- * says now — so the row that was `sending` is the row that is `queued`, then
- * read in its place: one element for the life of the send. The list itself is
- * kept wherever it changed only past its first row: the transcript reads a
- * kept list that changed as the conversation arriving, and a new one as
- * history.
+ * The list itself is kept wherever it changed only past its first row: the
+ * transcript reads a kept list that changed as the conversation arriving, and
+ * a new one as history.
  */
 function place(target: SessionState): void {
   const current = target.messages;
-  const sends = new Map(
-    current.flatMap((message) =>
-      message.state && message.id ? [[message.id, message] as const] : []
-    )
-  );
-  const next = placeSends(target.harnessRows, target.records, target.local).map(
-    (message) => {
-      const held =
-        message.state && message.id ? sends.get(message.id) : undefined;
-      if (!held || held === message) {
-        return message;
-      }
-      adopt(held, message);
-      return held;
-    }
-  );
+  const next = [
+    ...withNotes(target.blocks, target.notes),
+    ...target.queued,
+    ...target.local,
+  ];
   let same = 0;
   while (
     same < current.length &&
@@ -874,10 +862,12 @@ function equal(a: unknown, b: unknown): boolean {
 }
 
 /**
- * A send's row on screen, moved to what its record says now: the same row.
- * Only what changed is written. A row this tab drew from its own send keeps
- * the pictures it sent: the record names the same ones by the hub's media
- * references, and trading one for the other would load them all again.
+ * A row on screen, moved to what the hub says it is now: the same object, so
+ * the rows built on it stay put and only what changed is written — a tool
+ * call taking its result, a send moving from waiting to read. A row this tab
+ * drew from its own send keeps the pictures it sent: the hub names the same
+ * ones by its media references, and trading one for the other would load
+ * them all again.
  */
 function adopt(held: Message, fresh: Message): void {
   if (held.type !== fresh.type) {
@@ -895,8 +885,11 @@ function adopt(held: Message, fresh: Message): void {
   if (held.sdkUuid !== fresh.sdkUuid) {
     held.sdkUuid = fresh.sdkUuid;
   }
-  if (held.timestamp?.getTime() !== fresh.timestamp?.getTime()) {
+  if (held.timestamp !== fresh.timestamp) {
     held.timestamp = fresh.timestamp;
+  }
+  if (held.toolCallId !== fresh.toolCallId) {
+    held.toolCallId = fresh.toolCallId;
   }
   const drawn = held.metadata?.images;
   const pictures =
@@ -910,43 +903,194 @@ function adopt(held: Message, fresh: Message): void {
   }
 }
 
-/**
- * The harness's rows, onto the end of what it has said. A row already there
- * — a frame replayed behind a history read — is not said twice.
- */
-function addRows(target: SessionState, rows: Message[]): void {
-  const held = new Set(target.harnessRows.map((message) => message.id));
-  const fresh: Message[] = [];
-  for (const message of rows) {
-    if (!held.has(message.id)) {
-      held.add(message.id);
-      fresh.push(message);
-    }
+/** The blocks with this tab's failure lines after the block each followed. */
+function withNotes(blocks: Message[], notes: SessionState["notes"]): Message[] {
+  if (notes.length === 0) {
+    return blocks;
   }
-  if (fresh.length > 0) {
-    target.harnessRows.push(...fresh);
-    place(target);
+  const after = new Map<string | null, Message[]>();
+  for (const { after: anchor, message } of notes) {
+    after.set(anchor, [...(after.get(anchor) ?? []), message]);
+  }
+  const placed = [...(after.get(null) ?? [])];
+  for (const block of blocks) {
+    placed.push(block, ...(after.get(block.id) ?? []));
+  }
+  return placed;
+}
+
+/** A failure this tab saw, said after whatever is last on screen now. */
+function addNote(target: SessionState, message: Message): void {
+  target.notes.push({ after: target.blocks.at(-1)?.id ?? null, message });
+  place(target);
+}
+
+/**
+ * A block the hub sent, as the object this view holds it under. A send this
+ * view already draws — its own copy on the way, or the row waiting to be read
+ * — is the same row taking the hub's word, so it is adopted in place rather
+ * than drawn twice; this tab's own copy then leaves its list.
+ */
+function take(target: SessionState, block: TranscriptBlock): Message {
+  const fresh = block as Message;
+  if (!block.state) {
+    return fresh;
+  }
+  const held = target.messages.find(
+    (message) => message.id === block.id && message.state
+  );
+  if (target.local.some((message) => message.id === block.id)) {
+    target.local = target.local.filter((message) => message.id !== block.id);
+  }
+  if (!held) {
+    return fresh;
+  }
+  adopt(held, fresh);
+  return held;
+}
+
+/** A hub branch as this view holds it: its blocks, and the text it streams. */
+function branchState(
+  branch: TranscriptBranch,
+  blocks: Message[],
+  streaming: string
+): SubagentState {
+  return { ...branch, messages: blocks, streaming };
+}
+
+/** The branch a block names, created on first sight as the hub created it. */
+function branchOf(target: SessionState, toolUseId: string): SubagentState {
+  target.subagents[toolUseId] ??= branchState(
+    {
+      toolUseId,
+      instanceId: target.instanceId,
+      subagentType: "subagent",
+      status: "starting",
+      startedAt: new Date().toISOString(),
+    },
+    [],
+    ""
+  );
+  return target.subagents[toolUseId];
+}
+
+/** The tail's fields the hub moved. */
+function applyTail(target: SessionState, tail: Partial<TranscriptTail>): void {
+  if (tail.busy !== undefined) {
+    target.busy = tail.busy;
+  }
+  if (tail.currentTool !== undefined) {
+    target.currentTool = tail.currentTool;
+  }
+  if (tail.openBlock !== undefined) {
+    target.openBlock = tail.openBlock;
+  }
+  if (tail.streaming !== undefined) {
+    target.streaming = tail.streaming;
+  }
+  if (tail.thinkingClosing !== undefined) {
+    target.thinkingClosing = tail.thinkingClosing;
+  }
+  if (tail.thinkingSince !== undefined) {
+    target.thinkingSince = tail.thinkingSince;
+  }
+  if (tail.thinkingStream !== undefined) {
+    target.thinkingStream = tail.thinkingStream;
+  }
+  if (tail.streams) {
+    for (const branch of Object.values(target.subagents)) {
+      branch.streaming = tail.streams[branch.toolUseId] ?? "";
+    }
   }
 }
 
 /**
- * The hub's word on one send (a `send` frame). Read, it takes its place where
- * the word arrives — after everything said so far, before whatever the model
- * says about it — unless a history read already found where it was stored.
- * This tab's own copy of the send gives way to it; an older word than the
- * one in hand changes nothing.
+ * What the session has said about itself. `live` is a change as it happened:
+ * an `init` then also clears what belonged to the process before it, and a
+ * turn ending or a compaction landing asks for a fresh context reading. A
+ * page's facts state where things stand and set only what they name.
  */
-function receive(target: SessionState, record: SendRecord): void {
-  const held = target.records[record.uuid];
-  if (!newer(held, record)) {
+// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one assignment per fact the hub can move, each guarded by whether this change named it
+function applyFacts(
+  target: SessionState,
+  facts: Partial<TranscriptFacts>,
+  live: boolean
+): void {
+  if (facts.harness) {
+    target.harness = facts.harness as HarnessKind;
+  }
+  if (facts.sessionId) {
+    target.sessionId = facts.sessionId;
+  }
+  if (facts.model) {
+    target.model = facts.model;
+  }
+  if (facts.permissionMode) {
+    target.permissionMode = facts.permissionMode;
+  }
+  if (facts.commands) {
+    const { names, skills, detailed } = facts.commands;
+    target.commands = {
+      ...target.commands,
+      ...(names.length > 0 ? { names } : {}),
+      ...(skills.length > 0 ? { skills } : {}),
+      ...(detailed ? { detailed: detailsOf(detailed) } : {}),
+    };
+  }
+  if (facts.tooling) {
+    target.tooling = facts.tooling;
+  }
+  if (facts.initialized) {
+    target.initialized = true;
+  }
+  if (facts.lastTurnFailed !== undefined) {
+    target.lastTurnFailed = facts.lastTurnFailed;
+  }
+  if (facts.totalCost !== undefined && facts.totalCost !== null) {
+    target.totalCost = facts.totalCost;
+  }
+  if (facts.sdkStatus !== undefined) {
+    target.sdkStatus = facts.sdkStatus;
+  }
+  if (facts.lastCompaction !== undefined) {
+    target.lastCompaction = facts.lastCompaction;
+  }
+  if (!live) {
     return;
   }
+  if (facts.inits !== undefined) {
+    // A relaunch can change the MCP set; null makes the header ask again.
+    target.mcp = null;
+    // The process behind a relaunch is up: this is the frame it opens with.
+    target.relaunching = false;
+    // Anything still parked belongs to a process that is gone: a permission
+    // blocks the turn that asked it, so an `init` on top of pending questions
+    // means the process holding their resolvers died.
+    if (target.pending.length > 0) {
+      target.pending = [];
+    }
+  }
+  // The turn or the compaction just changed how full the window is; ask
+  // rather than guess.
+  if (
+    (facts.turnsEnded !== undefined || facts.lastCompaction) &&
+    target.machineId
+  ) {
+    // biome-ignore lint/complexity/noVoid: fire-and-forget — the change is already on screen, this refreshes the reading
+    void refreshContext(target.instanceId, target.machineId);
+  }
+}
+
+/**
+ * The hub's record of one send, as it moved. Its row is the hub's to place;
+ * this is what the tab's own bookkeeping reads: a send this tab made that
+ * failed before the session read it is said where every failure of a send
+ * this tab made is said, and the turn it took that send to start never
+ * started.
+ */
+function noteRecord(target: SessionState, record: SendRecord): void {
+  const held = target.records[record.uuid];
   target.records[record.uuid] = record;
-  target.local = target.local.filter((message) => message.id !== record.uuid);
-  // A send this tab made that failed before the session read it: said where
-  // every failure of a send this tab made is said, and the turn this tab
-  // took it to start never started — whether the session is working is the
-  // daemon's word again (none, from a machine that is not there).
   if (
     record.state === "failed" &&
     held?.state !== "read" &&
@@ -956,35 +1100,185 @@ function receive(target: SessionState, record: SendRecord): void {
       ? `Message not sent: ${record.reason}`
       : "Message not sent.";
     target.busy = state.pulses[target.instanceId]?.busy ?? false;
-    trackWorking(target);
   }
-  if (
-    record.state === "read" &&
-    !target.harnessRows.some((row) => isSendRef(row) && row.id === record.uuid)
-  ) {
-    target.harnessRows.push(sendRef(target.instanceId, record.uuid));
+}
+
+/** A block the hub moved, into the object this view holds it under. */
+function updateBlock(target: SessionState, block: TranscriptBlock): void {
+  const list = block.parentToolUseId
+    ? target.subagents[block.parentToolUseId]?.messages
+    : target.blocks;
+  const held = list?.findLast((message) => message.id === block.id);
+  if (!held) {
+    return;
+  }
+  adopt(held, block as Message);
+  // The ledger on disk just moved: what it now says is read back from the
+  // files, never parsed out of here.
+  if (TASK_LEDGER_TOOLS.has(block.metadata?.toolName ?? "")) {
+    invalidateTasks(target.instanceId);
+  }
+}
+
+/**
+ * One batch of the hub's changes to a session's transcript, applied in the
+ * order it made them. A `reset` ends the batch: the transcript was read again
+ * from its machine, and the newest page carries everything after it.
+ */
+function applyTranscript(
+  target: SessionState,
+  events: TranscriptEvent[]
+): void {
+  for (const event of events) {
+    switch (event.type) {
+      case "reset":
+        beginRead(streamState, target.instanceId);
+        // biome-ignore lint/complexity/noVoid: fire-and-forget — the read adopts the page and resumes the stream when it lands
+        void readTranscript(target.instanceId, true);
+        place(target);
+        return;
+      case "block.append": {
+        const block = take(target, event.block);
+        if (block.parentToolUseId) {
+          branchOf(target, block.parentToolUseId).messages.push(block);
+        } else {
+          target.blocks.push(block);
+        }
+        break;
+      }
+      case "block.insert": {
+        const at =
+          event.after === null
+            ? 0
+            : target.blocks.findLastIndex(
+                (message) => message.id === event.after
+              ) + 1;
+        target.blocks.splice(at, 0, take(target, event.block));
+        break;
+      }
+      case "block.update":
+        updateBlock(target, event.block);
+        break;
+      case "block.remove": {
+        const at = target.blocks.findLastIndex(
+          (message) => message.id === event.id
+        );
+        if (at >= 0) {
+          target.blocks.splice(at, 1);
+        }
+        break;
+      }
+      case "queue":
+        target.queued = event.blocks.map((block) => take(target, block));
+        break;
+      case "branch": {
+        const known = target.subagents[event.branch.toolUseId];
+        target.subagents[event.branch.toolUseId] = branchState(
+          event.branch,
+          known?.messages ?? [],
+          known?.streaming ?? ""
+        );
+        break;
+      }
+      case "tail":
+        applyTail(target, event.tail);
+        break;
+      case "tail.append":
+        if (event.streaming) {
+          target.streaming += event.streaming;
+        }
+        if (event.thinking) {
+          target.thinkingStream += event.thinking;
+        }
+        if (event.branch) {
+          branchOf(target, event.branch.toolUseId).streaming +=
+            event.branch.text;
+        }
+        break;
+      case "facts":
+        applyFacts(target, event.facts, true);
+        break;
+      case "send":
+        noteRecord(target, event.record);
+        break;
+      default:
+        break;
+    }
   }
   place(target);
 }
 
 /**
- * An older page of history, in front of what is on screen, with the records
- * its sends need — unless the view already holds a later word on one.
+ * The newest page of a session's transcript, as what this view shows: the
+ * hub's blocks, branches, waiting sends, live tail and facts replace what the
+ * view held. What only this tab holds survives it: its own sends the hub has
+ * not taken. The failure lines it saw belonged to the transcript it replaced.
  */
-function prependPage(
+function adoptTranscriptPage(target: SessionState, page: TranscriptPage): void {
+  const { where } = page;
+  // The hub's word on machine and folder fills blanks only: a live row's own
+  // values are already in place and are not walked back. The key is the one
+  // thing a later resume is sent under, and the hub resolved it.
+  target.machineId ||= where.machineId;
+  target.cwd ||= where.cwd;
+  if (where.sessionKey) {
+    target.sessionId = where.sessionKey;
+  }
+  target.blocks = page.blocks.map((block) => take(target, block));
+  target.queued = (page.queued ?? []).map((block) => take(target, block));
+  target.notes = [];
+  target.cursor = page.cursor;
+  const { tail } = page;
+  target.subagents = Object.fromEntries(
+    page.branches.map((branch) => [
+      branch.toolUseId,
+      pageBranch(branch, tail?.streams[branch.toolUseId] ?? ""),
+    ])
+  );
+  if (tail) {
+    applyTail(target, { ...tail, streams: undefined });
+  }
+  if (page.facts) {
+    applyFacts(target, page.facts, false);
+  }
+  place(target);
+}
+
+/**
+ * A session built from a transcript page alone, outside the store: what the
+ * server renders for the pane its navigation loaded, and what that pane shows
+ * until the store holds the conversation.
+ */
+export function seededSession(
+  viewId: string,
+  page: TranscriptPage
+): SessionState {
+  const seeded = blankSession(viewId);
+  adoptTranscriptPage(seeded, page);
+  return seeded;
+}
+
+/** A page's branch as this view holds it. */
+function pageBranch(
+  { blocks, ...branch }: TranscriptPageBranch,
+  streaming: string
+): SubagentState {
+  return branchState(branch, blocks as Message[], streaming);
+}
+
+/** An older page, in front of what is on screen, with its branches. */
+function prependTranscriptPage(
   target: SessionState,
-  rows: Message[],
-  records: Record<string, SendRecord>
+  page: TranscriptPage
 ): void {
-  const known = new Set(target.harnessRows.map((message) => message.id));
-  target.harnessRows = [
-    ...rows.filter((message) => !known.has(message.id)),
-    ...target.harnessRows,
+  const known = new Set(target.blocks.map((block) => block.id));
+  target.blocks = [
+    ...(page.blocks as Message[]).filter((block) => !known.has(block.id)),
+    ...target.blocks,
   ];
-  for (const record of Object.values(records)) {
-    if (newer(target.records[record.uuid], record)) {
-      target.records[record.uuid] = record;
-    }
+  target.cursor = page.cursor;
+  for (const branch of page.branches) {
+    target.subagents[branch.toolUseId] ??= pageBranch(branch, "");
   }
   place(target);
 }
@@ -1458,6 +1752,59 @@ function delegateEventOf(frame: FramePayload): DelegateEvent | null {
   return frame.kind === "delegate_event" ? frame.event : null;
 }
 
+/**
+ * Files one of the hub's delegate events into a delegate's list, kept in row
+ * order. An answer also settles the ask it belongs to: a settled ask is never
+ * re-broadcast, so a reader watching the exchange live has only this to learn
+ * the verdict from — the next fresh read carries it on the ask itself.
+ */
+function foldDelegateEvent(list: DelegateEvent[], event: DelegateEvent): void {
+  // Both sources deliver the same rows — the read on arrival and the pushes
+  // that follow it overlap by however long the read was out.
+  if (list.some((row) => row.id === event.id)) {
+    return;
+  }
+  const after = list.findIndex((row) => row.id > event.id);
+  if (after === -1) {
+    list.push(event);
+  } else {
+    list.splice(after, 0, event);
+  }
+  if (event.kind !== "answer" || !event.requestId) {
+    return;
+  }
+  const asked = list.find(
+    (row) => row.kind === "ask" && row.requestId === event.requestId
+  );
+  if (asked) {
+    asked.status = event.payload.behavior === "deny" ? "denied" : "answered";
+  }
+}
+
+/**
+ * Folds the hub's pulse snapshot (`instancesFrame.pulses`) into the client's
+ * own pulse map. A merge, not a replace: a per-instance `pulse` frame is not
+ * ordered against a snapshot the hub took moments before the `instances`
+ * frame carrying it left, so whichever pulse actually happened later, by its
+ * own `at`, is the one kept.
+ */
+function mergePulses(
+  current: Record<string, SessionPulse>,
+  incoming: Record<string, SessionPulse> | undefined
+): Record<string, SessionPulse> {
+  if (!incoming) {
+    return current;
+  }
+  const next = { ...current };
+  for (const [instanceId, pulse] of Object.entries(incoming)) {
+    const existing = next[instanceId];
+    if (!existing || pulse.at >= existing.at) {
+      next[instanceId] = pulse;
+    }
+  }
+  return next;
+}
+
 /** Files one event under the delegate it is about, pushed or freshly read. */
 function recordDelegateEvent(event: DelegateEvent): void {
   // Written, then read back: a `$state` write lands on the proxy and never on
@@ -1565,11 +1912,6 @@ function clearTurnPhase(target: SessionState): void {
   target.thinkingClosing = false;
   target.thinkingSince = null;
 }
-
-/** Which tool a result answers, from the call it lands on. */
-const nameOfCall = (messages: Message[], toolId: string): string =>
-  messages.findLast((message) => message.metadata?.toolId === toolId)?.metadata
-    ?.toolName ?? "";
 
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches every FramePayload kind the socket can deliver; splitting it would scatter one state machine across files
 function handleFrame(frame: FramePayload): void {
@@ -1699,7 +2041,7 @@ function handleFrame(frame: FramePayload): void {
       const target = session(instanceId);
       // A relaunch that never came up has no init frame to end its wait.
       target.relaunching = false;
-      addRows(target, [errorMessage(instanceId, message)]);
+      addNote(target, errorMessage(instanceId, message));
     } else {
       console.error("[cawco] hub error:", message);
     }
@@ -1721,20 +2063,19 @@ function handleFrame(frame: FramePayload): void {
     }
     // Fire-and-forget controls (interrupt, permission replies) still report failure.
     if (!frame.ok && frame.instanceId) {
-      addRows(session(frame.instanceId), [
+      addNote(
+        session(frame.instanceId),
         errorMessage(
           frame.instanceId,
           frame.error ?? "The machine could not carry out that request."
-        ),
-      ]);
+        )
+      );
     }
     return;
   }
 
-  // The hub's own record of what a delegate asked and was answered. Filed
-  // before the session below, not behind it: the reader of this traffic is the
-  // parent's delegate card, so it has no business waiting out the delegate's
-  // own backfill.
+  // The hub's own record of what a delegate asked and was answered: the reader
+  // of this traffic is the parent's delegate card.
   const delegateEvent = delegateEventOf(frame);
   if (delegateEvent) {
     recordDelegateEvent(delegateEvent);
@@ -1777,335 +2118,7 @@ function handleFrame(frame: FramePayload): void {
 
   const target = session(frame.instanceId);
 
-  // A backfill owns the transcript until it lands. Frames that arrive meanwhile
-  // are held and replayed after it, so none is lost and none arrives twice.
-  const held = backfilling.get(frame.instanceId);
-  if (held) {
-    held.push(frame);
-    return;
-  }
-
   switch (frame.kind) {
-    case "send":
-      receive(target, frame.record);
-      break;
-    case "frame": {
-      target.harness = frame.harness;
-      const mapping = mapFrame(frame.instanceId, frame.message);
-      if (mapping.branch) {
-        applyBranchEvent(target.subagents, frame.instanceId, mapping.branch);
-      }
-      // Cost rides every result frame, cumulative across the run. It has no
-      // transcript line on success, so it lives on the session instead.
-      if (mapping.cost !== undefined) {
-        target.totalCost = mapping.cost;
-      }
-
-      // A subagent's turns belong to its branch, not to the main transcript —
-      // interleaving them is what buries the conversation the user is reading.
-      const sink = mapping.agentId
-        ? branchFor(target.subagents, frame.instanceId, mapping.agentId)
-            .messages
-        : target.harnessRows;
-      const append = (message: Message): void => {
-        if (mapping.agentId) {
-          sink.push(message);
-        } else {
-          addRows(target, [message]);
-        }
-      };
-
-      for (const message of mapping.messages) {
-        if (message.type === "system.init") {
-          target.sessionId = message.metadata?.sessionId ?? target.sessionId;
-          // Re-emitted every turn and the session's own word on both settings,
-          // so this confirms a switch, puts the picker back if the agent ignored
-          // one, and catches a `/model` or `/permissions` run somewhere else.
-          // Harvested before the banner is deduplicated, or only the first would.
-          target.model = message.metadata?.model ?? target.model;
-          target.permissionMode =
-            message.metadata?.permissionMode ?? target.permissionMode;
-          // biome-ignore lint/complexity/noVoid: fire-and-forget — the local state is already updated, this just persists it
-          void persistSettings(frame.instanceId, {
-            permissionMode: message.metadata?.permissionMode,
-            model: message.metadata?.model,
-          });
-          // The `/` menu, from the same re-emitted frame and for the same
-          // reason: a skill installed since the last turn is in this list.
-          target.commands.names =
-            message.metadata?.slashCommands ?? target.commands.names;
-          target.commands.skills =
-            message.metadata?.skills ?? target.commands.skills;
-          target.tooling = message.metadata?.tooling ?? target.tooling;
-          // A relaunch can change the MCP set; null makes the header ask again.
-          target.mcp = null;
-          // The process behind a relaunch is up: this is the frame it opens with.
-          target.relaunching = false;
-          target.initialized = true;
-          // Anything still parked belongs to a process that is gone.
-          //
-          // A permission blocks the turn that asked it, so a session cannot
-          // reach its next `init` with one outstanding — an init arriving on top
-          // of pending questions means the process holding their resolvers died
-          // and a new one opened the session. Answering those reaches a daemon
-          // that never asked, which is the "no permission request <id>" the
-          // reader gets for clicking a button the app was still showing them.
-          if (target.pending.length > 0) {
-            target.pending = [];
-          }
-          // Never a transcript line. `init` is re-emitted every single turn, so
-          // any attempt to render it once relies on a flag that survives every
-          // reload, reconnect and daemon restart — and each time that flag is
-          // missed the reader gets "Session started" in the middle of a
-          // conversation that plainly never stopped. Everything it carries is
-          // already on screen: the model in the header, the servers behind it.
-          continue;
-        }
-        // A compaction just landed. The transcript has its own line for it; the
-        // dock needs the fact and the size, and a fresh reading because the
-        // window it is metering just changed underneath it.
-        if (message.type === "system.compact_boundary") {
-          target.lastCompaction = {
-            at: Date.now(),
-            preTokens: message.metadata?.preTokens ?? 0,
-            trigger: message.metadata?.trigger === "manual" ? "manual" : "auto",
-          };
-          if (target.machineId) {
-            // biome-ignore lint/complexity/noVoid: fire-and-forget — the compaction is already recorded, this just refreshes the reading
-            void refreshContext(frame.instanceId, target.machineId);
-          }
-        }
-        // An id the SDK took but could not honour: the init that opened this
-        // turn still names what was asked for, so the picker follows this
-        // instead rather than going on claiming a model that is not answering.
-        if (message.type === "system.model_fallback") {
-          target.model = message.metadata?.model ?? target.model;
-          // biome-ignore lint/complexity/noVoid: fire-and-forget — the local state is already updated, this just persists it
-          void persistSettings(frame.instanceId, {
-            model: message.metadata?.model,
-          });
-        }
-        // The settle that precedes a relaunch ends the old turn with an error
-        // result the reader asked for — a quiet note, not a red card.
-        if (target.relaunching && message.type === "result.error") {
-          append({
-            ...message,
-            type: "system.status",
-            content: "Turn stopped to change the permission mode.",
-            metadata: {},
-          });
-          continue;
-        }
-        // A real subagent's `task_notification` names a `tool_use_id` whose
-        // branch already exists — its completion is the branch card. The branch
-        // event above ran first, so the registry already answers whether this
-        // line is redundant; a plain tool task keeps its line only when it ran
-        // in the background, as a reload does.
-        if (
-          suppressesTaskLine(
-            target.subagents,
-            sink,
-            message,
-            mapping.branch?.toolUseId
-          )
-        ) {
-          continue;
-        }
-        // The harness said the turn was cut short — its interrupt line, just
-        // drawn — and the error result closing that turn is the line's
-        // receipt. It stores the line and not the result, so a reload draws
-        // the line alone, and so does this.
-        if (
-          message.type === "result.error" &&
-          !mapping.agentId &&
-          target.harnessRows.at(-1)?.type === "ui.interrupted"
-        ) {
-          continue;
-        }
-        // A `result.error` in the shadow of this client's own interrupt is the
-        // receipt of a deliberate stop, not a failure — the crimson card is
-        // the ledger's loudest treatment and must not be spent on the
-        // operator's own action. Retyped to the quiet one-word line.
-        if (
-          message.type === "result.error" &&
-          interruptedRecently(streamState, frame.instanceId, Date.now())
-        ) {
-          message.type = "ui.interrupted";
-          message.metadata = { ...message.metadata, noteTitle: "Interrupted" };
-        }
-        append(message);
-      }
-      for (const result of mapping.toolResults) {
-        applyToolResult(sink, result);
-        // The ledger on disk just moved. The result says only that it did —
-        // what it now says is read back from the files, never parsed out of
-        // here. Answered against `sink`, so a subagent editing the plan
-        // invalidates the session the same way the main loop does; searched
-        // backwards because a result answers one of the last calls made.
-        if (TASK_LEDGER_TOOLS.has(nameOfCall(sink, result.toolId))) {
-          invalidateTasks(frame.instanceId);
-        }
-        // The Task call's own result is the authoritative end of the subagent it
-        // spawned: branches are keyed by that `tool_use_id`. Progress frames can
-        // re-open a branch that already reported itself finished, and nothing
-        // closes it again — which is how every subagent ends up reading
-        // "running" forever, whether it is working or was done an hour ago.
-        const branch = target.subagents[result.toolId];
-        if (!branch) {
-          continue;
-        }
-        branch.status = result.isError ? "error" : "complete";
-        branch.completedAt ??= new Date();
-        // The tool_result carries the full report; task_notification only had
-        // a short summary, so this overwrites unconditionally.
-        if (result.isError) {
-          branch.error = result.result;
-        } else {
-          branch.result = result.result;
-        }
-      }
-
-      // A push the SDK sends when the commands on disk changed: the full list,
-      // so it replaces what was cached — including the names, which are now
-      // fresher than the init that listed them.
-      if (mapping.commands) {
-        target.commands = {
-          ...target.commands,
-          names: mapping.commands.map((command) => command.name),
-          detailed: detailsOf(mapping.commands),
-          ...(mapping.commands.some((command) => command.kind)
-            ? {
-                skills: mapping.commands
-                  .filter((command) => command.kind === "skill")
-                  .map((command) => command.name),
-              }
-            : {}),
-        };
-      }
-
-      // `undefined` is "this frame said nothing about it"; `null` is the session
-      // saying it stopped. Only the latter clears the meter's label.
-      if (mapping.status !== undefined) {
-        target.sdkStatus = mapping.status;
-      }
-      if (mapping.compaction) {
-        target.lastCompaction = {
-          at: Date.now(),
-          preTokens: target.lastCompaction?.preTokens ?? 0,
-          trigger: target.lastCompaction?.trigger ?? "auto",
-          result: mapping.compaction.result,
-          error: mapping.compaction.error,
-        };
-        if (target.machineId) {
-          // biome-ignore lint/complexity/noVoid: fire-and-forget — the compaction result is already recorded, this just refreshes the reading
-          void refreshContext(frame.instanceId, target.machineId);
-        }
-      }
-
-      if (mapping.currentTool && !mapping.agentId) {
-        target.currentTool = mapping.currentTool;
-      }
-      // What the partials say the model is writing right now. Only ever the
-      // main loop's — `mapFrame` files nothing here for a subagent's frames.
-      if (mapping.blockStart) {
-        target.openBlock = mapping.blockStart;
-        // A fresh block of reasoning, not a continuation of the last one.
-        if (mapping.blockStart === "thinking") {
-          target.thinkingStream = "";
-          target.thinkingClosing = false;
-          target.thinkingSince = Date.now();
-        }
-      }
-      if (mapping.thinkingDelta) {
-        target.thinkingStream += mapping.thinkingDelta;
-      }
-      if (mapping.thinkingClosing) {
-        target.thinkingClosing = true;
-      }
-      if (mapping.blockStop) {
-        target.openBlock = null;
-      }
-      // The glance is empty until the full frame lands, so it never overwrites
-      // one that already has the arguments in it.
-      if (mapping.toolStarting && !target.currentTool) {
-        target.currentTool = mapping.toolStarting;
-      }
-      // The turn's own thinking message has landed in the transcript, which is
-      // where the reasoning is read from now — same frame, so the live trace
-      // gives way without a gap between the two. Before it does, the measured
-      // start of that block becomes the message's duration: two blocks of one
-      // frame share a mapped timestamp, so adjacency reads 0 there and only
-      // this clock knows. One thinking message consumes it; more than one in a
-      // frame shares no honest split, so none of them gets a number.
-      if (frame.message.type === "assistant" && !mapping.agentId) {
-        if (target.thinkingSince !== null) {
-          const settled = mapping.messages.filter(
-            (message) => message.type === "thinking"
-          );
-          if (settled.length === 1 && settled[0].metadata) {
-            settled[0].metadata.thinkingDurationMs =
-              Date.now() - target.thinkingSince;
-          }
-        }
-        clearTurnPhase(target);
-      }
-      const answered = target.currentTool?.toolId;
-      if (mapping.toolResults.some((result) => result.toolId === answered)) {
-        target.currentTool = null;
-      }
-      // A subagent's deltas feed its branch's buffer, not the main loop's.
-      if (mapping.agentId) {
-        const branch = branchFor(
-          target.subagents,
-          frame.instanceId,
-          mapping.agentId
-        );
-        if (mapping.delta) {
-          branch.streaming += mapping.delta;
-        }
-        if (mapping.clearsStream) {
-          branch.streaming = "";
-        }
-      } else {
-        if (mapping.delta) {
-          target.streaming += mapping.delta;
-        }
-        if (mapping.clearsStream) {
-          target.streaming = "";
-        }
-      }
-      if (mapping.failedTurn !== undefined) {
-        target.lastTurnFailed = mapping.failedTurn;
-      }
-      if (mapping.endsTurn) {
-        target.busy = false;
-        target.currentTool = null;
-        target.sdkStatus = null;
-        clearTurnPhase(target);
-        // The turn just changed how full the window is; ask rather than guess.
-        if (target.machineId) {
-          // biome-ignore lint/complexity/noVoid: fire-and-forget — the turn already ended, this just refreshes the context reading
-          void refreshContext(frame.instanceId, target.machineId);
-        }
-      } else if (
-        mapping.delta ||
-        mapping.currentTool ||
-        // A turn that opens on a long reasoning block sends neither text nor a
-        // tool call for minutes; the block itself is the evidence.
-        mapping.blockStart ||
-        mapping.thinkingDelta ||
-        mapping.messages.some(
-          (message) =>
-            message.type === "assistant" || message.type === "thinking"
-        )
-      ) {
-        // A tab that joined after the turn started never sent anything, so nothing
-        // ever set `busy` — the frames themselves are the evidence it is working.
-        target.busy = true;
-      }
-      break;
-    }
-
     case "permission_request": {
       const { routedTo } = frame as { routedTo?: "parent" };
       const existing = target.pending.find(
@@ -2159,19 +2172,25 @@ function handleFrame(frame: FramePayload): void {
 const streamState = $state(createStreamState());
 
 const streamHost: StreamHost = {
-  // A session's own frames arrive only here, sequenced; everything broadcast
-  // (the board, pulses, permissions, replies) comes as an envelope (`bind`).
-  applyFrame: (_sessionId, frame) => handleFrame(frame as FramePayload),
-  /**
-   * A reset is the late-join problem the history read solves, including
-   * holding the deltas that land while it reads. The latch it keeps is
-   * released first: a session may be reset more than once in a tab's life,
-   * and the second one must not be a silent no-op.
-   */
+  // A session's own changes arrive only here, sequenced: what the hub's builder
+  // made of each frame, and its preview's state. Everything broadcast (the
+  // board, pulses, permissions, replies) comes as an envelope (`bind`).
+  applyFrame: (sessionId, frame) => {
+    const payload = frame as SessionStreamFrame;
+    if (payload.kind !== "transcript") {
+      handleFrame(payload);
+      return;
+    }
+    const target = session(sessionId);
+    applyTranscript(target, payload.events);
+    trackWorking(target);
+    target.lastActivityAt = new Date();
+  },
+  follows: (sessionId) => subscriptionIds().includes(sessionId),
+  // The newest page again, which resumes the stream from the `seq` it carries.
   rereadHistory: (sessionId) => {
-    backfilled.delete(sessionId);
-    // biome-ignore lint/complexity/noVoid: fire-and-forget — the latch is already released, the reread fills in when it lands
-    void preloadHistory(sessionId);
+    // biome-ignore lint/complexity/noVoid: fire-and-forget — the read adopts the page and resumes the stream when it lands
+    void readTranscript(sessionId, true);
   },
   sendToHub: (message) => {
     const socket = globalThis.__cawcoSocket;
@@ -3466,21 +3485,19 @@ export function spawnSession({
 }
 
 /**
- * Re-opens a stored session as a live one. The transcript already on screen is
- * seeded into the new view, so the conversation reads as one continuous thread.
+ * Re-opens a stored session as a live one. The hub reads the conversation it
+ * resumes into the new view's transcript, so it reads as one continuous thread.
  */
 export function resumeSession({
   machineId,
   cwd,
   sessionId,
   harness = "claude",
-  history = [],
 }: {
   machineId: string;
   cwd: string;
   sessionId: string;
   harness?: HarnessKind;
-  history?: Message[];
 }): string {
   const live = instanceForSession(
     instanceIndex,
@@ -3505,42 +3522,28 @@ export function resumeSession({
     resume: { sessionKey: sessionId },
   });
   created.sessionId = sessionId;
-  seed(created, history);
   // biome-ignore lint/complexity/noVoid: fire-and-forget — the session already started locally, this just resyncs the fleet list
   void refresh();
   return created.instanceId;
 }
 
 /**
- * A new view's transcript, carried over from the one on screen: the rows as
- * they are drawn there, sends included, now the new view's own.
- */
-function seed(target: SessionState, history: Message[]): void {
-  addRows(
-    target,
-    history.map((message) => ({ ...message, instanceId: target.instanceId }))
-  );
-}
-
-/**
  * Branches a side quest off a session (NEW.md §1): the same context carried into
  * a new SDK session, kept apart from mainline work until it is kept or
- * discarded. The transcript on screen is seeded so the branch reads on from
- * where it left.
+ * discarded. The hub reads the conversation it branches, up to the turn it
+ * branches at, into the new view's transcript.
  */
 export function forkSession({
   machineId,
   cwd,
   sessionId,
   harness = "claude",
-  history = [],
   at,
 }: {
   machineId: string;
   cwd: string;
   sessionId: string;
   harness?: HarnessKind;
-  history?: Message[];
   /** Branch from this assistant turn rather than from the end — see {@link rewindPoint}. */
   at?: string;
 }): string {
@@ -3562,7 +3565,6 @@ export function forkSession({
       : {}),
     ...(isEffortLevel(source?.effort) ? { effort: source.effort } : {}),
   });
-  seed(created, history);
   // biome-ignore lint/complexity/noVoid: fire-and-forget — the session already started locally, this just resyncs the fleet list
   void refresh();
   return created.instanceId;
@@ -3722,8 +3724,6 @@ export async function discardSession(
     );
   } finally {
     delete state.sessions[instanceId];
-    // The view this session's chunks were being prepended to is gone with it.
-    hydrations.delete(instanceId);
     await refresh();
   }
 }
@@ -4053,45 +4053,6 @@ export async function loadCatalog(machineId: string): Promise<void> {
 }
 
 /**
- * Publishes a stored transcript into a session view, newest first. A short one
- * lands in one pass. A long one paints its last turns on their own — mapping the
- * whole of it, and handing the view thousands of messages at once, is what the
- * reader would wait through — and the rest are prepended a chunk at a time with
- * the event loop free in between. `onPublished` runs once the last turns are on
- * screen, and the loop stops early if a later read for this view supersedes it.
- */
-/**
- * The `/` menu, harvested from a hydrated transcript. `commands.names` is set
- * only by the live `system.init` frame handler — but a session read back from
- * history (a reload, a stored session, or the HTTP stream) never runs that
- * handler, so its command menu came up empty and typing `/` opened nothing.
- * `system.init` is re-emitted every turn and carries the current list, so the
- * newest one in what was just mapped is the session's own word for it.
- */
-function harvestCommands(target: SessionState, messages: Message[]): void {
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    const init = messages[i];
-    if (init.type !== "system.init") {
-      continue;
-    }
-    if (init.metadata?.slashCommands) {
-      target.commands.names = init.metadata.slashCommands;
-    }
-    if (init.metadata?.skills) {
-      target.commands.skills = init.metadata.skills;
-    }
-    return;
-  }
-}
-
-/** Starts a read of this view's transcript, superseding whatever was reading it. */
-function claimTranscript(viewId: string): number {
-  const epoch = (hydrations.get(viewId) ?? 0) + 1;
-  hydrations.set(viewId, epoch);
-  return epoch;
-}
-
-/**
  * How a stored transcript read ended. A read that fails with nothing on screen
  * has to be *said* — a stored session whose machine is asleep otherwise sits on
  * an empty pane forever, which reads as a broken link rather than an
@@ -4115,243 +4076,77 @@ export function clearReadFault(instanceId: string): void {
   }
 }
 
-/** The content blocks of a stored entry, for the tool pairing a cut must not split. */
-function contentBlocks(
-  entry: SessionMessage
-): { type?: string; id?: string; tool_use_id?: string }[] {
-  const content = (entry.message as { content?: unknown } | null)?.content;
-  return Array.isArray(content)
-    ? (content as { type?: string; id?: string; tool_use_id?: string }[])
-    : [];
-}
-
-/** What a streamed history read carries, and how the URL that names it is built. */
-export interface HistorySource {
-  cwd: string;
-  harness?: HarnessKind;
-  /** A running session, whose live frames have to be held and reconciled behind the read. */
-  live?: boolean;
-  /**
-   * Where the transcript is believed to live. A hint for naming the session
-   * before the read answers, not an address: the hub resolves the id itself
-   * and its answer is what the view ends up carrying.
-   */
-  machineId: string;
-  /**
-   * The key the transcript is stored under: the SDK session id, never the
-   * view. Only a hub row's own key belongs here; absent, the read's header
-   * names it.
-   */
-  sessionId?: string;
-  viewId: string;
+/** Why a page read ended with nothing, said the way the pane says it. */
+async function pageFault(response: Response): Promise<TranscriptOutcome> {
+  const detail = (await response.text().catch(() => "")) || response.statusText;
+  // A 503 naming a machine is the hub saying that machine is not connected —
+  // a state of the fleet, not a fault in the read, and a different sentence.
+  const away =
+    response.status === 503 ? response.headers.get("x-cawco-machine") : null;
+  if (away) {
+    const machine = state.machines.find((row) => row.machineId === away);
+    return {
+      ok: false,
+      status: response.status,
+      reason: "offline",
+      machineId: away,
+      message: `${machine?.hostname || away} is offline — its stored transcript can't be read right now.`,
+    };
+  }
+  return {
+    ok: false,
+    status: response.status,
+    reason: "failed",
+    message: detail,
+  };
 }
 
 /**
- * Where a session's transcript is read from. The view's id alone, in both
- * tenses: the hub maps a live instance to its SDK key and locates any other,
- * so the same address works before this browser knows anything about the
- * conversation.
+ * A session's transcript, read once: the newest page the hub built, then its
+ * stream from the `seq` that page was read at. `again` reads it whether or not
+ * the view already holds one — the hub said the transcript changed under it,
+ * or its stream could not replay a gap. A read already in flight answers for
+ * any ask that lands meanwhile.
  */
-export function messagesUrl(
-  source: HistorySource,
-  page: { tail: number } | { before: string }
-): string {
-  const path = `/api/instances/${encodeURIComponent(source.viewId)}/messages`;
-  const params = new URLSearchParams();
-  // A tail request is answered by parsing only the newest window of the
-  // transcript file — the difference between ~4ms and a full-file parse. An
-  // older page is everything strictly before the oldest entry already read.
-  if ("tail" in page) {
-    params.set("tail", String(page.tail));
-  } else {
-    params.set("before", page.before);
-  }
-  const suffix = params.size > 0 ? `?${params}` : "";
-  return `${path}${suffix}`;
-}
-
-export function preloadHistory(viewId: string): Promise<TranscriptOutcome> {
+export function readTranscript(
+  viewId: string,
+  again = false
+): Promise<TranscriptOutcome> {
   // A workflow run's tab has no transcript of its own: its steps' do.
   if (runIdOf(viewId)) {
     return Promise.resolve({ ok: true, skipped: true });
   }
-  const row = cawco.instanceIndex.byId.get(viewId);
-  return streamHistory({
-    viewId,
-    machineId: "",
-    sessionId: row?.sessionId ?? undefined,
-    cwd: "",
-    harness: (row?.harness ?? "claude") as HarnessKind,
-    live: !!row,
-  });
+  const inFlight = pageReads.get(viewId);
+  if (inFlight) {
+    return inFlight;
+  }
+  // A stream this view already follows carries everything after the page it
+  // was read at — or, for a session this tab just started, everything there
+  // is.
+  if (!again && streamState.cursors[viewId]?.subscribed) {
+    return Promise.resolve({ ok: true, skipped: true });
+  }
+  const read = readNewestPage(session(viewId)).finally(() =>
+    pageReads.delete(viewId)
+  );
+  pageReads.set(viewId, read);
+  return read;
 }
 
 /**
- * A session's stored transcript over HTTP, published as it arrives.
- *
- * The only read of a stored transcript there is. The hub answers
- * `GET /api/instances/:id/messages` with the `getSessionMessages` read, so it
- * needs nothing but a page — no socket to wait for — and it arrives a line at
- * a time: a read that came back as one socket message was decoded, parsed and
- * mapped in one task (50-57ms for a 12,000px delegate transcript).
- *
- * It arrives newest entry first, one JSON object per line, and is published in
- * turn-aligned chunks the moment each one is complete: the newest turns paint
- * from the first flush — which is where the reader is looking — and the rest
- * prepend behind them, exactly as a socket-read transcript hydrates. Time to
- * the first message is one flush, not the whole file.
+ * The newest page into the view, its stream resumed from the page's `seq`, and
+ * the older pages after it, each in a task of its own so the reader scrolls
+ * and types through them.
  */
-// biome-ignore lint/complexity/noExcessiveCognitiveComplexity: streams, parses and republishes turn-aligned chunks in one pass; splitting the state machine would scatter it across functions
-export async function streamHistory({
-  viewId,
-  machineId,
-  sessionId,
-  cwd,
-  harness,
-  live,
-}: HistorySource): Promise<TranscriptOutcome> {
-  const target = session(viewId);
-  if (machineId) {
-    target.machineId = machineId;
-  }
-  if (cwd) {
-    target.cwd = cwd;
-  }
-  // Only a key the hub row named is taken ahead of the read. A view id in the
-  // key's place is a caller standing in for one it did not have — and the
-  // read's own header names the real key, so nothing is lost by waiting.
-  if (sessionId && sessionId !== viewId) {
-    target.sessionId = sessionId;
-  }
-  if (harness) {
-    target.harness = harness;
-  }
+async function readNewestPage(
+  target: SessionState
+): Promise<TranscriptOutcome> {
+  const viewId = target.instanceId;
+  beginRead(streamState, viewId);
   // A stored session's plan is still on its machine, and no frame will ever
   // arrive to say so — opening it is the only moment there is to ask.
   refreshTasks(viewId);
-
-  // A read in hand, on either tense, is the one that answers: a second read
-  // over the top of it would replace what it is publishing.
-  if (backfilling.has(viewId) || target.loading) {
-    return { ok: true, skipped: true };
-  }
-  if (live) {
-    // The same latch the socket backfill takes, taken here: whichever path
-    // reads this session's history first is the only one that reads it. But
-    // only a latch with a transcript behind it holds — one left set by a read
-    // that landed empty, or never landed, is read past, because the
-    // alternative was a skeleton nothing would ever resolve.
-    if (backfilled.has(viewId) && target.messages.length > 0) {
-      return { ok: true, skipped: true };
-    }
-    backfilled.add(viewId);
-    backfilling.set(viewId, []);
-  } else if (target.messages.length > 0) {
-    // Re-opening what is already read must not start a second read over it.
-    return { ok: true, skipped: true };
-  }
-
-  /** Undoes the latch, so a failed read leaves the socket path free to try. */
-  const release = (): void => {
-    if (!live) {
-      return;
-    }
-    backfilled.delete(viewId);
-    if (backfilling.has(viewId)) {
-      replayHeld(viewId, new Set());
-    }
-  };
-
-  /** A failure with nothing on screen, said where the pane can read it. */
-  const fail = (fault: ReadFault, status?: number): TranscriptOutcome => {
-    target.readFault = fault;
-    return { ok: false, ...fault, status };
-  };
-
-  const source: HistorySource = {
-    viewId,
-    machineId,
-    sessionId,
-    cwd,
-    harness,
-    live,
-  };
-
-  const epoch = claimTranscript(viewId);
   target.loading = true;
-  // A fault the last read left stands until this one answers: a re-read
-  // after a reconnect happens behind the state the pane is showing, and only
-  // a read the hub answers replaces it (below).
-
-  /** Entries buffered newest-first, waiting for a cut a chunk can start at. */
-  let buffered: SessionMessage[] = [];
-  /**
-   * A cut at one of the reader's own turns, held until the entry older than
-   * it says whether the reader's run goes on: how many buffered entries the
-   * chunk takes, or 0. A chunk that began mid-run drew its first turn with a
-   * speaker line the older chunk then took away (rows.ts `grouped`), so the
-   * cut moves back to the run's first turn.
-   */
-  let held = 0;
-  /** Tool results in the buffer whose `tool_use` is older still — a cut here would split them. */
-  const dangling = new Set<string>();
-  const seeded = new Set<string>();
-  /** The oldest entry read so far: where an older page ends. */
-  let oldest: string | undefined;
-  let consumed = 0;
-  let chunks = 0;
-  /**
-   * The send records the read has carried so far, by uuid. Each page leads
-   * with its records, so every entry that names one arrives after it.
-   */
-  const records: Record<string, SendRecord> = {};
-
-  const publish = (chunk: SessionMessage[]): void => {
-    const mapped = mapTranscript(viewId, chunk);
-    if (chunks === 0) {
-      // The read REPLACES what history put on screen, rows and records; it
-      // does not merge into them. What only this tab holds survives it: its
-      // sends the hub has not taken (`local`).
-      target.harnessRows = mapped.messages;
-      target.records = { ...records };
-      place(target);
-      target.subagents = mapped.subagents;
-      // The tail chunk is newest-first, so it carries the latest `system.init`:
-      // harvest the `/` menu from it, which the live-frame handler is otherwise
-      // the only thing that sets.
-      harvestCommands(target, mapped.messages);
-      // A transcript that already has turns in it is a session that already
-      // started, so the banner announcing the start has had its moment.
-      if (chunk.length > 0) {
-        target.initialized = true;
-      }
-      target.loading = false;
-      target.hydrating = true;
-      if (live) {
-        target.streaming = "";
-        clearTurnPhase(target);
-        // What was held belongs to the end of the transcript, which is now on
-        // screen: it appends while the older chunks prepend, so neither waits.
-        replayHeld(viewId, seeded);
-      }
-    } else {
-      prependPage(target, mapped.messages, records);
-      // Branches are keyed by the Task `tool_use_id` that opened them, so an
-      // older chunk mostly adds keys — except where a compacted transcript
-      // re-emits the same call, and then its turns belong in front of the ones
-      // already read back for it.
-      for (const [toolUseId, branch] of Object.entries(mapped.subagents)) {
-        const known = target.subagents[toolUseId];
-        if (known) {
-          known.messages = [...branch.messages, ...known.messages];
-        } else {
-          target.subagents[toolUseId] = branch;
-        }
-      }
-    }
-    chunks += 1;
-  };
-
   // The `/` palette's servers and tools are read beside the transcript: the
   // board's rows do not carry them. A session with no hub row has none.
   // biome-ignore lint/complexity/noVoid: runs beside the transcript read; the palette reads it off the session when it lands
@@ -4362,292 +4157,58 @@ export async function streamHistory({
       }
     }
   );
-
   try {
-    // Tail first: the agent parses only the newest window of the transcript
-    // file, so the first paint is not behind a full-file parse. The full read
-    // follows below, continuing the same stream state for scrollback.
-    const response = await fetch(
-      messagesUrl(source, { tail: TRANSCRIPT_TAIL_CEILING })
-    );
-    if (!(response.ok && response.body)) {
-      const detail =
-        (await response.text().catch(() => "")) || response.statusText;
-      release();
-      target.loading = false;
-      // A 503 naming a machine is the hub saying that machine is not
-      // connected — a state of the fleet, not a fault in the read, and a
-      // different sentence to say. The hub names it: a read addressed by id
-      // alone knows no machine of its own.
-      const away =
-        response.status === 503
-          ? response.headers.get("x-cawco-machine")
-          : null;
-      if (away) {
-        const machine = state.machines.find((row) => row.machineId === away);
-        return fail(
-          {
-            reason: "offline",
-            machineId: away,
-            message: `${machine?.hostname || away} is offline — its stored transcript can't be read right now.`,
-          },
-          response.status
-        );
+    const response = await fetch(transcriptUrl(viewId));
+    if (!response.ok) {
+      const fault = await pageFault(response);
+      if (!fault.ok) {
+        target.readFault = fault;
       }
-      return fail({ reason: "failed", message: detail }, response.status);
+      return fault;
     }
+    const page = (await response.json()) as TranscriptPage;
     target.readFault = null;
-
-    // Where the hub found it. A session addressed by id alone arrives here
-    // knowing nothing about itself, and the composer, the header and the
-    // machine's tools all want the machine — this is the one round trip that
-    // learns it. The hub's word on machine and folder fills blanks only: a
-    // live row's own values are already in place and are not walked back.
-    const found = response.headers.get("x-cawco-machine");
-    if (found && !target.machineId) {
-      target.machineId = found;
-    }
-    const foundCwd = response.headers.get("x-cawco-cwd");
-    if (foundCwd && !target.cwd) {
-      target.cwd = decodeURIComponent(foundCwd);
-    }
-    // The key is different: the hub resolved the id to it, and it is the one
-    // thing here a later resume is sent under. It overwrites whatever the view
-    // holds — a stored transcript opened by its id has nothing until now.
-    const foundKey = response.headers.get("x-cawco-session");
-    if (foundKey) {
-      target.sessionId = decodeURIComponent(foundKey);
-    }
-    const foundHarness = response.headers.get("x-cawco-harness");
-    if (foundHarness && !harness) {
-      target.harness = foundHarness as HarnessKind;
-    }
-
-    /** One entry, oldest of everything read so far; flushes a chunk once one can start here. */
-    const consume = async (entry: SessionMessage): Promise<void> => {
-      for (const block of contentBlocks(entry)) {
-        if (block.type === "tool_result" && block.tool_use_id) {
-          dangling.add(block.tool_use_id);
-        } else if (block.type === "tool_use" && block.id) {
-          dangling.delete(block.id);
-        }
-      }
-      buffered.push(entry);
-      seeded.add(entry.uuid);
-      oldest = entry.uuid;
-      consumed += 1;
-      if (held > 0 && !(await resolveHeld(entry))) {
-        return;
-      }
-      // Only a turn opener with no tool pair left hanging can begin a chunk:
-      // anywhere else the slice would open mid-turn, with results arriving for
-      // a `tool_use` on the other side of the cut.
-      const size =
-        chunks === 0 ? TRANSCRIPT_FIRST_CHUNK : TRANSCRIPT_CHUNK_SIZE;
-      if (buffered.length < size || dangling.size > 0 || !turnStart(entry)) {
-        return;
-      }
-      if (voiceOfEntry(entry) === "you") {
-        held = buffered.length;
-        return;
-      }
-      await flush(buffered.length);
-    };
-
-    /**
-     * The held cut, answered by the entry older than it: the reader's run goes
-     * on (the cut is dropped, and moves back), or it ended there (the chunk
-     * goes out). False while the entry draws nothing and the question stays
-     * with the one before it.
-     */
-    const resolveHeld = async (entry: SessionMessage): Promise<boolean> => {
-      const voice = voiceOfEntry(entry);
-      if (voice === "none") {
-        return false;
-      }
-      if (voice === "you") {
-        held = 0;
-      } else {
-        await flush(held);
-      }
-      return true;
-    };
-
-    /** Whose voice a stored entry's rows are, by the transcript's own rule. */
-    const voiceOfEntry = (entry: SessionMessage): Voice =>
-      entryVoice(viewId, entry, records);
-
-    /** The newest `count` buffered entries, published as one chunk. */
-    const flush = async (count: number): Promise<void> => {
-      // Mapping a chunk is the blocking work, so the loop hands the event loop
-      // back between them — this is what the reader scrolls and types through.
-      if (chunks > 0) {
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      }
-      publish(buffered.slice(0, count).reverse());
-      buffered = buffered.slice(count);
-      held = 0;
-    };
-
-    /**
-     * One newest-first NDJSON body into the shared cut state. The tail body
-     * and the older page drain through here in turn, as one continuous
-     * stream: the older page begins strictly before the tail's oldest entry,
-     * so every chunk boundary invariant holds across the seam. Returns false
-     * when a later read superseded this one mid-stream.
-     */
-    const drain = async (
-      body: ReadableStream<Uint8Array>
-    ): Promise<boolean> => {
-      const reader = body.getReader();
-      // A stream torn down mid-read (the page navigated away) rejects both
-      // `read()` and `closed`. `read()` is where that is handled, below; the
-      // `closed` promise would otherwise reject with nobody listening.
-      reader.closed.catch(() => {
-        /* reported through read() */
-      });
-      const decoder = new TextDecoder();
-      let carry = "";
-      // A send's record is kept for the entries that name it; an entry is
-      // read into the chunks.
-      const take = (line: string): Promise<void> => {
-        const read = JSON.parse(line) as HistoryLine;
-        if ("record" in read) {
-          records[read.record.uuid] = read.record;
-          return Promise.resolve();
-        }
-        return consume(read);
-      };
-      for (;;) {
-        // biome-ignore lint/performance/noAwaitInLoops: a stream reads sequentially by definition — each chunk depends on the last read landing first
-        const { done, value } = await reader.read();
-        if (done) {
-          break;
-        }
-        // A later read for this view supersedes this one; the rest of the
-        // stream is somebody else's transcript now.
-        if (hydrations.get(viewId) !== epoch) {
-          await reader.cancel();
-          return false;
-        }
-        carry += decoder.decode(value, { stream: true });
-        for (
-          let newline = carry.indexOf("\n");
-          newline >= 0;
-          newline = carry.indexOf("\n")
-        ) {
-          const line = carry.slice(0, newline);
-          carry = carry.slice(newline + 1);
-          if (line) {
-            // biome-ignore lint/performance/noAwaitInLoops: entries land newest-first — the transcript would be scrambled if two consumes raced
-            await take(line);
-          }
-        }
-      }
-      carry += decoder.decode();
-      if (carry.trim()) {
-        await take(carry);
-      }
-      return hydrations.get(viewId) === epoch;
-    };
-
-    if (!(await drain(response.body))) {
-      return { ok: true, skipped: true };
-    }
-
-    // Everything older than the tail, for scrollback: strictly before the
-    // oldest entry the tail read, so nothing on it can be a row already on
-    // screen — a line written between the two reads belongs to the newest
-    // end, which the live stream carries. A tail shorter than its bound is the
-    // whole conversation already. By now the newest turns are long since on
-    // screen, so this read's full-file parse is off the visible path.
-    if (oldest && consumed >= TRANSCRIPT_TAIL_CEILING) {
-      const rest = await fetch(messagesUrl(source, { before: oldest }));
-      if (!(rest.ok && rest.body)) {
-        throw new Error(
-          (await rest.text().catch(() => "")) || rest.statusText || "unreadable"
-        );
-      }
-      if (!(await drain(rest.body))) {
-        return { ok: true, skipped: true };
-      }
-    }
-
-    // The head of a transcript is always somewhere a chunk can start, and an
-    // empty one still has to publish: it is what says the session is empty.
-    // The last chunk is mapped in a task of its own, like every chunk before
-    // it, and the read ends in the task after that: what waits for the whole
-    // read to draw (a delegate's card) draws in its own task, not in the one
-    // that mapped the last 250 entries.
-    if (buffered.length > 0 || chunks === 0) {
-      if (chunks > 0) {
-        await new Promise((resolve) => setTimeout(resolve, 0));
-      }
-      publish(buffered.reverse());
-    }
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    return { ok: true };
+    adoptTranscriptPage(target, page);
+    adoptPage(streamState, streamHost, viewId, page.seq ?? 0);
+    trackWorking(target);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    release();
-    // The newest turns may already be on screen; a failure reading the rest
-    // joins them rather than taking the transcript down with it. With nothing
-    // on screen there is no transcript to join, so the failure is handed back
-    // for the pane to state outright.
-    if (chunks > 0) {
-      target.harnessRows = [
-        errorMessage(viewId, `could not read transcript: ${message}`),
-        ...target.harnessRows,
-      ];
-      place(target);
-      return { ok: true };
-    }
-    return fail({ reason: "failed", message });
+    target.readFault = { reason: "failed", message };
+    return { ok: false, reason: "failed", message };
   } finally {
     target.loading = false;
-    target.hydrating = false;
   }
+  // biome-ignore lint/complexity/noVoid: the older pages fill in behind the newest; the read's outcome is the newest page's
+  void readOlder(target);
+  return { ok: true };
 }
 
 /**
- * Whose voice a stored entry's rows are, by the transcript's own rule — what
- * the history reader cuts its chunks by. Sends' are their rows', where they
- * draw one in this place; one waiting, or retired, draws nothing here.
+ * Every page older than what the view holds, oldest last, each prepended in a
+ * task of its own. Stops at the conversation's start, or when the view's
+ * transcript is read again under it.
  */
-function entryVoice(
-  viewId: string,
-  entry: SessionMessage,
-  records: Record<string, SendRecord>
-): Voice {
-  const voices = entry.sends
-    ? entry.sends
-        .map((uuid) => records[uuid])
-        .filter((held) => held.state === "read" || held.state === "failed")
-        .map((held) => voiceOfMessage(sendRow(held)))
-    : mapTranscript(viewId, [entry]).messages.map(voiceOfMessage);
-  if (voices.includes("you")) {
-    return "you";
-  }
-  return voices.find((voice) => voice !== "none") ?? "none";
-}
-
-/** Hands the held frames back to the store, minus what the transcript already had. */
-function replayHeld(instanceId: string, seeded: Set<string>): void {
-  const held = backfilling.get(instanceId) ?? [];
-  backfilling.delete(instanceId);
-  for (const frame of held) {
-    if (frame.kind === "frame") {
-      // A partial paints text whose final message may already be seeded. The
-      // turn's own frames land right behind it, so dropping these costs nothing.
-      if (frame.message.type === "stream_event") {
-        continue;
+async function readOlder(target: SessionState): Promise<void> {
+  target.hydrating = true;
+  let { cursor } = target;
+  try {
+    while (cursor) {
+      // biome-ignore lint/performance/noAwaitInLoops: each page starts where the last one ended
+      await new Promise((resolve) => setTimeout(resolve, 0));
+      const response = await fetch(
+        transcriptUrl(target.instanceId, {
+          cursor,
+          limit: TRANSCRIPT_OLDER_PAGE,
+        })
+      );
+      if (!response.ok || target.cursor !== cursor) {
+        return;
       }
-      const uuid = "uuid" in frame.message ? frame.message.uuid : undefined;
-      if (uuid && seeded.has(uuid)) {
-        continue;
-      }
+      prependTranscriptPage(target, (await response.json()) as TranscriptPage);
+      ({ cursor } = target);
     }
-    handleFrame(frame);
+  } finally {
+    target.hydrating = false;
   }
 }
 
@@ -5010,8 +4571,7 @@ export async function relaunchSession(
 }
 
 /**
- * Where a rewind lands: the turn `resumeSessionAt` names, and how much of the
- * transcript survives it.
+ * Where a rewind lands: the assistant frame `resumeSessionAt` names.
  *
  * The SDK resumes "up to and including" an `SDKAssistantMessage.uuid`, so the
  * anchor has to be an assistant frame — and one that ended in words. A frame
@@ -5019,10 +4579,7 @@ export async function relaunchSession(
  * result behind it, which the API refuses outright, so the search walks past
  * those to the last turn that closed.
  */
-function rewindPoint(
-  target: SessionState,
-  id: string
-): { at: string; cut: number } | null {
+function rewindPoint(target: SessionState, id: string): string | null {
   const edited = target.messages.findIndex((message) => message.id === id);
   if (edited < 0) {
     return null;
@@ -5033,13 +4590,7 @@ function rewindPoint(
     if (type !== "assistant" || !uuid || calls.has(uuid)) {
       continue;
     }
-    // One assistant turn is several messages under one uuid; the whole frame
-    // the anchor belongs to stays, because the SDK keeps all of it too.
-    let cut = index + 1;
-    while (cut < edited && target.messages[cut].sdkUuid === uuid) {
-      cut += 1;
-    }
-    return { at: uuid, cut };
+    return uuid;
   }
   return null;
 }
@@ -5127,7 +4678,7 @@ export async function editAndResend(
     instanceId,
     cwd: target.cwd,
     harness: target.harness,
-    resume: { sessionKey, atMessage: point.at },
+    resume: { sessionKey, atMessage: point },
     // The same four a relaunch carries: a rewind changes what the session has
     // said, not what it is.
     scratch: target.scratch ? {} : undefined,
@@ -5137,45 +4688,17 @@ export async function editAndResend(
     requestId,
   });
 
-  // Cut on screen before the process is cut, so the rewind reads as the reader
-  // asked for it — and put every bit of it back if the spawn never lands, or
-  // they are left with a transcript shorter than the conversation behind it.
-  // The cut is made in the harness's rows, after the answer the rewind lands
-  // on: the row that ends the kept part on screen is one of them.
-  const transcript = target.harnessRows;
-  const branches = target.subagents;
-  const read = backfilled.has(instanceId);
-  target.harnessRows = transcript.slice(
-    0,
-    transcript.indexOf(target.messages[point.cut - 1]) + 1
-  );
-  place(target);
-  const spawned = new Set(
-    target.messages.map((message) => message.metadata?.toolId)
-  );
-  target.subagents = Object.fromEntries(
-    Object.entries(branches).filter(([toolUseId]) => spawned.has(toolUseId))
-  );
-  target.streaming = "";
+  // The hub cuts the transcript back to the answer the rewind lands on as it
+  // starts the process, and puts it back whole if the spawn never lands; every
+  // screen reads the cut from it.
   // Whatever was in flight belongs to the process being replaced.
   settleStopped(instanceId);
-  // What is on screen is no longer the whole of what is on disk: the next join
-  // has to read this session back rather than trust the latch.
-  backfilled.delete(instanceId);
   target.relaunching = true;
   try {
     await ask<void>(requestId, "rewind", CONTROL_TIMEOUT_MS, () =>
       send({ verb: "spawn", machineId, instanceId, requestId, payload })
     );
     submitCommand(instanceId, machineId, "send", { text: content });
-  } catch (error) {
-    target.harnessRows = transcript;
-    place(target);
-    target.subagents = branches;
-    if (read) {
-      backfilled.add(instanceId);
-    }
-    throw error;
   } finally {
     target.relaunching = false;
     // biome-ignore lint/complexity/noVoid: fire-and-forget — the relaunch already landed, this just resyncs the fleet list
@@ -5206,8 +4729,7 @@ export function forkFrom(instanceId: string, id: string): string {
     cwd: target.cwd,
     sessionId: target.sessionId,
     harness: target.harness,
-    history: target.messages.slice(0, point.cut),
-    at: point.at,
+    at: point,
   });
 }
 
@@ -5342,8 +4864,8 @@ const branchOrder = (a: SubagentState, b: SubagentState): number => {
   if (rankA !== rankB) {
     return rankA - rankB;
   }
-  const timeA = (a.lastEventAt ?? a.startedAt).getTime();
-  const timeB = (b.lastEventAt ?? b.startedAt).getTime();
+  const timeA = Date.parse(a.lastEventAt ?? a.startedAt);
+  const timeB = Date.parse(b.lastEventAt ?? b.startedAt);
   return timeB - timeA;
 };
 
