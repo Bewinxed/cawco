@@ -1,8 +1,5 @@
 {
-  "fill-specializations" : [
-    { "value" : { "solid" : "extended-srgb:0.94902,0.82745,0.41961,1.00000" } },
-    { "appearance" : "dark", "value" : { "solid" : "extended-srgb:0.09020,0.09020,0.08235,1.00000" } }
-  ],
+  "fill" : { "solid" : "extended-srgb:0.94902,0.82745,0.41961,1.00000" },
   "groups" : [
     {
       "name" : "Caw",
@@ -10,11 +7,7 @@
         {
           "name" : "Caw",
           "glass" : false,
-          "image-name-specializations" : [
-            { "value" : "caw-light.png" },
-            { "appearance" : "dark", "value" : "caw-dark.png" },
-            { "appearance" : "tinted", "value" : "caw-dark.png" }
-          ]
+          "image-name" : "caw.png"
         }
       ],
       "shadow" : { "kind" : "none", "opacity" : 0 },
