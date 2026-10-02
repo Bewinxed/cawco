@@ -59,8 +59,9 @@ export function swipeToArchive(onarchive: () => void): Attachment<HTMLElement> {
         if (-dx <= SLOP) {
           return;
         }
+        // A touch is captured by the element it starts on already, so the
+        // row keeps the finger however far it strays.
         swiping = true;
-        node.setPointerCapture(event.pointerId);
         node.setAttribute("data-swiping", "");
       }
       node.style.setProperty("--swipe", `${-dx}px`);
