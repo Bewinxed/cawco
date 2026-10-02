@@ -80,9 +80,10 @@ YELLOW_CHROMA = 50
 # How far (512 px artboard pixels) a traced yellow pixel may sit from yellow in the take's own frame
 # before it counts as halo (see halo()): the trace's outlines move about that much.
 HALO_REACH = 2
-# An enclosed white region decided by neither end's evidence is an eye below this solidity (see
-# see_through()): eyes measure 0.74-0.92, gaps between a raised wing and the beak 0.98-1.03.
-EYE_SOLIDITY = 0.95
+# An enclosed white region decided by neither end's evidence is an eye only with a solidity in
+# this band (see see_through()): eyes measure 0.74-0.92; gaps between a raised wing and the beak
+# 0.98-1.03, and the ragged gaps among splayed feathers or inside an impact burst 0.40-0.64.
+EYE_SOLIDITY = (0.70, 0.95)
 # See-through pixels (512 px artboard) on an eye white from which a drawing's eye counts as cut out
 # (--eyes); fewer are the trace's outline sitting a pixel off the take's region.
 CUT_EYE = 20
@@ -305,12 +306,15 @@ def see_through(
     on, a hole that only shows on dark. So per region: evidence beats a guess, and between two
     pieces of evidence, the pass from the nearer end. Where both passes only guess, the region's
     shape decides, since an eye white always has its pupil cut into it (enclosed, or biting in from
-    the side in profile) while a gap that opens mid-move is a solid wedge: measured, eyes 0.74-0.92
-    solidity, gaps 0.98-1.03. And his eyes sit only in the black, so a region ringed by vermilion
-    (a slit in a feather) is paper."""
+    the side in profile): measured, eyes 0.74-0.92 solidity, while a gap that opens mid-move is a
+    solid wedge (0.98-1.03) or a ragged hole among splayed feathers or inside an impact burst
+    (0.40-0.64). And his eyes sit only in the black, so a region ringed mostly by any other ink (a
+    slit in a feather, the inside of a yellow burst) is paper; an eye's ring is black with a third
+    or less of vermilion bled in by the video."""
     forward = decide(enclosed, start_paper)
     backward = decide(enclosed[::-1], end_paper)[::-1]
-    vermilion = list(INKS).index("vermilion") + 1
+    black = list(INKS).index("black") + 1
+    low, high = EYE_SOLIDITY
     papers = []
     for i, regions in enumerate(enclosed):
         paper = np.zeros(regions.shape, bool)
@@ -322,10 +326,10 @@ def see_through(
             elif fwd_seen or bwd_seen:
                 is_paper = fwd if fwd_seen else bwd
             else:
-                is_paper = solidity(region) >= EYE_SOLIDITY
+                is_paper = not low <= solidity(region) < high
             around = labels[i][ndimage.binary_dilation(region, iterations=2) & ~region]
             around = around[around > 0]
-            if around.size and np.bincount(around).argmax() == vermilion:
+            if around.size and np.bincount(around).argmax() != black:
                 is_paper = True
             if is_paper:
                 paper |= region
