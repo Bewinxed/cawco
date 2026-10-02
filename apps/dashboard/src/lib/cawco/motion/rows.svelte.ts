@@ -1162,12 +1162,32 @@ function heard(state: Reflow, depth: number): void {
     queueMicrotask(() => {
       const order = [...changed].sort((a, b) => b[1] - a[1]);
       changed.clear();
+      const settles = [...settling];
+      settling.clear();
+      for (const settle of settles) {
+        settle();
+      }
       for (const [each] of order) {
         each.change();
       }
     });
   }
   changed.set(state, depth);
+}
+
+/** Writes that the next change must read rows after (`beforeReflow`). */
+const settling = new Set<() => void>();
+
+/**
+ * Runs `settle` once, before the next change reads where rows are: in the
+ * microtask after the update that made it, which comes after everything the
+ * update set off (Svelte starts a transition in a microtask of its own). A
+ * nested list's inset (motion/branch `nestFrom`) lands here: measured in a
+ * microtask of its own, it ran before the transition that holds its list
+ * out of the layout, and laid out a tree of forty in the click.
+ */
+export function beforeReflow(settle: () => void): void {
+  settling.add(settle);
 }
 
 /** How many elements up to the root: a container's nesting. */

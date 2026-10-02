@@ -59,6 +59,12 @@
   let { instance, ongroup, onarchive, children }: Props = $props();
 
   let renaming = $state(false);
+  /**
+   * The rename dialog is built the first time it is asked for, then kept so
+   * it closes with its own motion: built for every row of a long list, it
+   * made opening a tree of sessions run past a frame.
+   */
+  let renameAsked = $state(false);
 
   const href = $derived(conversationHref(instance.id, cawco.instanceIndex));
   const scratch = $derived(instance.kind === "scratch");
@@ -197,6 +203,7 @@
     {/if}
     <ContextMenu.Item
       onSelect={() => {
+        renameAsked = true;
         renaming = true;
       }}
     >
@@ -249,8 +256,10 @@
   </ContextMenu.Content>
 </ContextMenu.Root>
 
-<RenameDialog
-  current={sessionName(instance.id, {}, instance.cwd).label}
-  onrename={(title) => renameInstance(instance.id, title)}
-  bind:open={renaming}
-/>
+{#if renameAsked}
+  <RenameDialog
+    current={sessionName(instance.id, {}, instance.cwd).label}
+    onrename={(title) => renameInstance(instance.id, title)}
+    bind:open={renaming}
+  />
+{/if}

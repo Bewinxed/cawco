@@ -48,6 +48,8 @@
   const where = $derived({ dir: info.cwd || undefined });
 
   let renaming = $state(false);
+  /** Built the first time it is asked for, as LiveSessionMenu's is. */
+  let renameAsked = $state(false);
   let confirmingDelete = $state(false);
   let busy = $state(false);
 
@@ -139,6 +141,7 @@
 
     <ContextMenu.Item
       onSelect={() => {
+        renameAsked = true;
         renaming = true;
       }}
     >
@@ -170,7 +173,9 @@
   </ContextMenu.Content>
 </ContextMenu.Root>
 
-<RenameDialog current={title} onrename={rename} bind:open={renaming} />
+{#if renameAsked}
+  <RenameDialog current={title} onrename={rename} bind:open={renaming} />
+{/if}
 
 <AlertDialog.Root bind:open={confirmingDelete}>
   <AlertDialog.Content>
