@@ -21,10 +21,14 @@ anything else). Apps load `caw.riv` and set its inputs, and that is all they do 
 | `reducedMotion` | bool | bound to the system setting |
 | `dark` | bool | bound to the colour scheme |
 
-Apple apps drive these with rive-ios 6.x through `RiveViewModel` (`setInput("status", value:)`).
-The 6.x package's new `Rive`/`File`/`Worker` API has no state-machine input setters
-(rive.app/docs/runtimes/apple/migrating-from-legacy: "The new runtime does not expose
-equivalent input APIs").
+**Open owner decision: inputs or data binding.** rive-ios 6.x's new `Rive`/`File`/`Worker` API
+has no state-machine input API; it drives state machines through data binding (view model
+properties) instead. rive.app/docs/runtimes/apple/migrating-from-legacy: "The new runtime does
+not expose equivalent input APIs, and migration should move to data binding properties". The
+inputs above work only through the legacy `RiveViewModel` (`setInput("status", value:)`), which
+still ships in the 6.x package. The choice is to keep the inputs and use `RiveViewModel`, or to
+move the contract to a view model carrying the same three values. Until the owner decides, the
+contract stays as written.
 
 ## What the file holds today
 
