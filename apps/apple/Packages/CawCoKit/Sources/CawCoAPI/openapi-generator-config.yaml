@@ -1,0 +1,7 @@
+# swift-openapi-generator (build plugin): the hub's wire types and HTTP client,
+# generated at build time from openapi.json beside this file.
+generate:
+  - types
+  - client
+accessModifier: public
+namingStrategy: idiomatic

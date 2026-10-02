@@ -12,13 +12,35 @@ let package = Package(
     name: "CawCoKit",
     platforms: [.iOS("27.1"), .macOS("27.0")],
     products: [
+        .library(name: "CawCoAPI", targets: ["CawCoAPI"]),
         .library(name: "CawCoCore", targets: ["CawCoCore"]),
         .library(name: "CawCoDesign", targets: ["CawCoDesign"]),
         .library(name: "CawCoTranscript", targets: ["CawCoTranscript"]),
         .library(name: "CawCoMascot", targets: ["CawCoMascot"]),
     ],
+    dependencies: [
+        .package(url: "https://github.com/apple/swift-openapi-generator", from: "1.13.1"),
+        .package(url: "https://github.com/apple/swift-openapi-runtime", from: "1.12.2"),
+        .package(url: "https://github.com/apple/swift-openapi-urlsession", from: "1.3.2"),
+    ],
     targets: [
-        .target(name: "CawCoCore", swiftSettings: concurrency),
+        // The hub's wire types and client, generated at build time from
+        // openapi.json (written by packages/hub/scripts/openapi.ts).
+        .target(
+            name: "CawCoAPI",
+            dependencies: [.product(name: "OpenAPIRuntime", package: "swift-openapi-runtime")],
+            swiftSettings: concurrency,
+            plugins: [.plugin(name: "OpenAPIGenerator", package: "swift-openapi-generator")]
+        ),
+        .target(
+            name: "CawCoCore",
+            dependencies: [
+                "CawCoAPI",
+                .product(name: "OpenAPIRuntime", package: "swift-openapi-runtime"),
+                .product(name: "OpenAPIURLSession", package: "swift-openapi-urlsession"),
+            ],
+            swiftSettings: concurrency
+        ),
         .target(
             name: "CawCoDesign",
             dependencies: ["CawCoCore"],

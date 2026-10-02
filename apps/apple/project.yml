@@ -28,7 +28,7 @@ targets:
       - path: CawCo
     dependencies:
       - package: CawCoKit
-        products: [CawCoCore, CawCoDesign, CawCoTranscript, CawCoMascot]
+        products: [CawCoAPI, CawCoCore, CawCoDesign, CawCoTranscript, CawCoMascot]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.cawco.app
