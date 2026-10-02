@@ -2,12 +2,14 @@
   /**
    * A workflow run's steps, hung under the run on the nesting rails (app.css
    * `.kit-nest`, measured off the parent's glyph by `nestFrom`): each a
-   * delegate's line — its status glyph, what it is, how long it took — drawn
-   * in as it arrives (`reflow`), its elbow drawing in with it.
+   * delegate's line — its status glyph, what it is, how long it took —
+   * arriving as it starts (`reflow`).
    *
    * Where the reader can act on them (`interactive`: the run's tab, its block
-   * in the chat), a step with a result or a failure opens it under itself
-   * (`unfold`), and a step that ran as a session, or as a run of its own,
+   * in the chat), a step with a result or a failure folds it under itself,
+   * the count of what is folded at the row's trailing edge and its time just
+   * before it, opening and folding as every tree in the app does
+   * (motion/branch); a step that ran as a session, or as a run of its own,
    * opens that tab. On the rail's hover card they are only read.
    */
   import type { WorkflowStep } from "@cawco/core";
@@ -17,9 +19,9 @@
   import { IconExternal } from "$lib/icons";
   import { cawco } from "./client.svelte";
   import { conversationHref } from "./links";
-  import { unfold } from "./motion/fold.svelte";
+  import { type BranchOptions, branch, nestFrom } from "./motion/branch.svelte";
   import { reflow } from "./motion/rows.svelte";
-  import { nestFrom, nestPlace } from "./nest";
+  import TreeCount from "./TreeCount.svelte";
   import { runHref, stepTitle } from "./workflow-runs";
   import { refreshWorkflowRun, workflowState } from "./workflow-state.svelte";
   import SessionStatus from "./workspace/SessionStatus.svelte";
@@ -93,6 +95,20 @@
     return step.childRunId ? runHref(step.childRunId) : null;
   };
 
+  /** A step's status glyph: where its rail ends, and what its result opens off. */
+  const STEP_GLYPH = ".session-status .glyph";
+  /** A result opens under its step as a tree's rows do (motion/branch). */
+  const RESULT: BranchOptions = { glyph: STEP_GLYPH };
+
+  /**
+   * What a step folds, counted for its switch: the lines of its result, or
+   * with none, the actions under it.
+   */
+  const folded = (result: string | null): { count: number; noun: string } =>
+    result === null
+      ? { count: 1, noun: "action" }
+      : { count: result.split("\n").length, noun: "line" };
+
   const opened = new SvelteSet<string>();
   const toggle = (id: string) => {
     if (opened.has(id)) {
@@ -118,16 +134,24 @@
 {#snippet line(step: WorkflowStep)}
   <SessionStatus compact step={step.status} />
   <span class="title">{titleOf(step)}</span>
-  <span class="num time">{duration(step.startedAt, step.endedAt, now)}</span>
 {/snippet}
 
 {#if steps.length > 0}
-  <ul class="kit-nest run-steps" {@attach nestFrom(glyph)} {@attach reflow()}>
-    {#each steps as step, i (step.id)}
+  <ul
+    class="kit-nest run-steps"
+    {@attach nestFrom(glyph, STEP_GLYPH)}
+    {@attach reflow()}
+  >
+    {#each steps as step (step.id)}
       {@const result = interactive ? returned(step) : null}
       {@const tab = interactive ? tabOf(step) : null}
       {@const foldable = interactive && (result !== null || !!more)}
-      <li data-flip style={nestPlace(i, steps.length)}>
+      <!-- The step's box (`data-flip="box"`): its result takes its room at
+           once and the edge travels to it, the steps under it sliding with
+           that edge. -->
+      <li data-flip="box">
+        <!-- Its words, the way into its own tab, its time, and last, at the
+             trailing edge, the count of what it folds. -->
         <div class="step">
           {#if foldable}
             <button
@@ -154,13 +178,34 @@
               <IconExternal aria-hidden="true" />
             </a>
           {/if}
+          <span class="num time"
+            >{duration(step.startedAt, step.endedAt, now)}</span
+          >
+          {#if foldable}
+            <TreeCount
+              {...folded(result)}
+              ontoggle={() => toggle(step.id)}
+              open={opened.has(step.id)}
+            />
+          {/if}
         </div>
         {#if foldable && opened.has(step.id)}
-          <div class="opened" in:unfold out:unfold>
+          <div
+            class="opened"
+            data-flip-anchor
+            in:branch={RESULT}
+            out:branch={RESULT}
+          >
             {#if result}
-              <pre class="result" class:err={!!step.failure}>{result}</pre>
+              <pre
+                class="result"
+                data-branch-item
+                class:err={!!step.failure}
+              >{result}</pre>
             {/if}
-            {@render more?.(step)}
+            {#if more}
+              <div class="more" data-branch-item>{@render more(step)}</div>
+            {/if}
           </div>
         {/if}
       </li>
@@ -170,11 +215,10 @@
 
 <style>
   /* The rail under the parent's glyph; each curved arm runs over its line's
-     inset (`--nest-reach`) to the step's status glyph, level with it. */
+     inset to the step's status glyph, level with it (both measured,
+     `nestFrom`). */
   .run-steps {
-    --nest-glyph-y: 13px;
-    --nest-reach: var(--space-1);
-    --nest-gap: 2px;
+    --nest-gap: var(--space-row);
     list-style: none;
     margin: var(--space-1) 0 0;
     padding: 0 0 0 var(--nest-pad);
@@ -277,9 +321,6 @@
     .line,
     .jump {
       min-block-size: 44px;
-    }
-    .run-steps {
-      --nest-glyph-y: 22px;
     }
   }
 </style>

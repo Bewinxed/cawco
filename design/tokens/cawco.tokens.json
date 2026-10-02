@@ -1613,6 +1613,11 @@
       "$type": "dimension",
       "$value": "{space.space-5}",
       "$description": "Between the groups of a page (stat row, queue, a card)."
+    },
+    "space-row": {
+      "$type": "dimension",
+      "$value": "2px",
+      "$description": "Between the rows of one list in the rail (the home's Working and Finished, a tree's children there): rows of one list, not separate things."
     }
   },
   "radius": {

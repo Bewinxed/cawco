@@ -11,6 +11,7 @@
   import { confirm } from "$lib/cawco/confirm.svelte";
   import { message } from "$lib/cawco/delegate-types";
   import { unfold } from "$lib/cawco/motion/fold.svelte";
+  import { morph } from "$lib/cawco/motion/morph.svelte";
   import { reflow } from "$lib/cawco/motion/rows.svelte";
   import RunSteps from "$lib/cawco/RunSteps.svelte";
   import { runHref, runTabId } from "$lib/cawco/workflow-runs";
@@ -202,7 +203,9 @@
       <Skeleton class="h-24 w-full" />
     </div>
   {:else}
-    <section class="run" data-nest-host>
+    <!-- Its height moves with its steps as one opens or folds its result
+         (`morph` on the rows' clock), so what is under it never jumps. -->
+    <section class="run" data-nest-host {@attach morph({ rows: true })}>
       <header class="head">
         <h1>
           <span class="run-mark"

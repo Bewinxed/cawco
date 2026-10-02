@@ -9,6 +9,7 @@
    */
   import { formatDuration } from "$lib/utils/time";
   import { cawco } from "../client.svelte";
+  import { morph } from "../motion/morph.svelte";
   import RunSteps from "../RunSteps.svelte";
   import type { Message } from "../types";
   import { runHref, runTabId } from "../workflow-runs";
@@ -81,7 +82,9 @@
   );
 </script>
 
-<div class="run-block rail-row" data-nest-host>
+<!-- Its height moves with its steps as one opens or folds its result
+     (`morph` on the rows' clock), so the chat under it never jumps. -->
+<div class="run-block rail-row" data-nest-host {@attach morph({ rows: true })}>
   {#if runId}
     <a class="head rail-line press-tint" href={runHref(runId)}>
       <span class="mark rail-cell"

@@ -55,12 +55,11 @@
   import HomeRecent from "./home/HomeRecent.svelte";
   import { conversationHref } from "./links";
   import { markHue } from "./mark";
+  import { type BranchOptions, branch, nestFrom } from "./motion/branch.svelte";
   import { CURVE, dur } from "./motion/curves.svelte";
-  import { unfold } from "./motion/fold.svelte";
   import { heldOrder, holdWhileInside } from "./motion/held-order.svelte";
   import { reflow } from "./motion/rows.svelte";
   import NewProjectPopover from "./NewProjectPopover.svelte";
-  import { nestFrom, nestPlace } from "./nest";
   import { openTrees } from "./open-trees.svelte";
   import ProjectMark from "./ProjectMark.svelte";
   import { type RailSort, rail } from "./rail.svelte";
@@ -132,15 +131,24 @@
    * 40px rows is a rail that fits eight things.
    */
   const NAV_ROW = "h-[var(--c-nav-h)] gap-2.5 px-2.5 text-body";
-  const LIST_ROW = "h-[30px] gap-2.5 px-2.5 py-0";
+  /** A project's row: it ends where a session's does (`pr-2`), so the
+   *  counts at the trailing edge stand in one column down the rail. */
+  const LIST_ROW = "h-[30px] gap-2.5 pl-2.5 pr-2 py-0";
   /**
    * A session under its project: the name has the least room in the rail,
-   * so the gaps between its four parts (mark, name, delegate count, age) are
+   * so the gaps between its four parts (mark, name, age, delegate count) are
    * the tight ones, wide enough that the mark's rim (SessionMark, 2.5px out)
    * clears the name; a delegate's nesting arm ends at its mark
-   * (`--nest-reach`, this row's left inset).
+   * (`--nest-reach`, measured: this row's left inset).
    */
   const SUB_ROW = "h-[28px] gap-1.5 pl-1.5 pr-2";
+  /** How a tree's rows open and fold (motion/branch): off each row's mark. */
+  const TREE: BranchOptions = { glyph: ".session-mark" };
+  /** A project's sessions open off the project's own mark. */
+  const PROJECT_TREE: BranchOptions = {
+    glyph: ".session-mark",
+    parent: ".project-mark",
+  };
   /** The height the loading rows stand at: a list row's. */
   const LIST_ROW_H = "h-[30px]";
   /** `Sidebar.Group`'s own `p-2` plus `Sidebar.Content`'s `gap-2` stacked to
@@ -482,15 +490,15 @@
     const roots: Branch[] = [];
     // Tree order puts each parent before its children.
     for (const line of lines) {
-      const branch: Branch = {
+      const node: Branch = {
         row: line.row,
         children: [],
         count: line.descendants.length,
         failed: line.descendants.filter(isFailed).length,
       };
-      byId.set(line.row.id, branch);
+      byId.set(line.row.id, node);
       const parent = line.parent ? byId.get(line.parent) : undefined;
-      (parent ? parent.children : roots).push(branch);
+      (parent ? parent.children : roots).push(node);
     }
     return roots;
   }
@@ -565,20 +573,23 @@
      their own that leaves its mark (app.css .kit-nest): the same row at
      every depth, each parent folded until its count is clicked. The row
      opens the session; the count opens the rows under it. -->
-{#snippet subRow(branch: Branch, place: string)}
-  {@const row = branch.row}
+{#snippet subRow(node: Branch)}
+  {@const row = node.row}
   {@const state = sessionStatus(row)}
-  {@const unfolded = branch.count > 0 && openTrees.has(row.id)}
+  {@const unfolded = node.count > 0 && openTrees.has(row.id)}
+  <!-- The row's box (`data-flip="box"`): when its delegates open, it takes
+       their room at once and its edge travels down to it, the rows under
+       it sliding with that edge (motion/rows). -->
   <li
     class="group/menu-sub-item relative"
-    data-flip
+    data-flip="box"
     data-session-row={row.id}
     data-sidebar="menu-sub-item"
     data-slot="sidebar-menu-sub-item"
-    style={place}
   >
     <Sidebar.MenuSubButton
       class={SUB_ROW}
+      data-branch-item
       data-hover-session={row.id}
       data-share="session:{row.id}"
       href={conversationHref(row.id, cawco.instanceIndex)}
@@ -595,37 +606,31 @@
           row
         )}</span
       >
-      <span class="kit-count-col">
-        {#if branch.count > 0}
-          <TreeCount
-            compact
-            count={branch.count}
-            failed={branch.failed}
-            ontoggle={() => openTrees.toggle(row.id)}
-            open={unfolded}
-          />
-        {/if}
-      </span>
       {@render age(row)}
+      {#if node.count > 0}
+        <TreeCount
+          compact
+          count={node.count}
+          failed={node.failed}
+          ontoggle={() => openTrees.toggle(row.id)}
+          open={unfolded}
+        />
+      {/if}
     </Sidebar.MenuSubButton>
     {#if unfolded}
-      <!-- It opens and folds by its height (`unfold`), its lines drawing in
-           and retracting with it, the rail's first stretch up to this row's
-           mark showing all the while (`bleed`); the gap above its first row
-           is padding, so it folds with it. reflow only slides the rows inside
-           it (`data-flip-anchor`: never copied or uncovered by reflow). -->
+      <!-- Its delegates, on a rail of their own that grows from this row's
+           mark; each swipes out along its arm as the rail reaches it, and
+           folds back into it the same way (motion/branch). reflow never
+           copies or uncovers what is inside (`data-flip-anchor`). -->
       <ul
-        class="kit-nest flex min-w-0 flex-col gap-1 pt-1 pl-(--nest-pad) [--nest-in:var(--space-2)] [--nest-reach:--spacing(1.5)]"
+        class="kit-nest flex min-w-0 flex-col gap-(--nest-gap) pt-1 pl-(--nest-pad)"
         data-flip-anchor
-        onoutrostart={(event) => {
-          event.currentTarget.dataset.leaving = '';
-        }}
-        in:unfold={{ bleed: 'var(--nest-lead)' }}
-        out:unfold={{ bleed: 'var(--nest-lead)' }}
+        in:branch={TREE}
+        out:branch={TREE}
         {@attach nestFrom('.session-mark')}
       >
-        {#each branch.children as child, i (child.row.id)}
-          {@render subRow(child, nestPlace(i, branch.children.length))}
+        {#each node.children as child (child.row.id)}
+          {@render subRow(child)}
         {/each}
       </ul>
     {/if}
@@ -633,8 +638,9 @@
 {/snippet}
 
 {#snippet age(row: InstanceRow)}
-  <!-- A column of its own, the same width with or without a label, so the
-       counts before it line up down the list. -->
+  <!-- When it last moved: at the row's trailing edge, or just before its
+       count where it has one, so the counts stand in one column at the
+       edge. -->
   <span
     class="num kit-age-col text-meta text-muted-foreground"
     title={ageHint(row)}
@@ -856,7 +862,7 @@
               {@const expanded = !folderPrefs.collapsed(project.cwd)}
               <li
                 class="group/menu-item relative"
-                data-flip
+                data-flip="box"
                 data-sidebar="menu-item"
                 data-slot="sidebar-menu-item"
               >
@@ -869,40 +875,45 @@
                   {project}
                 >
                   <Sidebar.MenuButton
+                    aria-expanded={expanded}
                     class={LIST_ROW}
                     onclick={() => toggle(project)}
                   >
                     <ProjectMark hue={markHue(project.cwd)} />
-                    <span class="min-w-0 truncate">{project.name}</span>
+                    <span class="min-w-0 flex-1 truncate">{project.name}</span>
+                    <!-- What is running in it, at the trailing edge where
+                         every row's count stands; the whole row is the
+                         switch, so the count only says it. -->
                     {#if sessions.length > 0}
                       {#key sessions.length}
-                        <span
-                          class="num ml-auto shrink-0 text-meta text-muted-foreground"
+                        <TreeCount
+                          count={sessions.length}
                           data-flip="pop"
-                          >{sessions.length}</span
-                        >
+                          noun="running session"
+                          open={expanded}
+                          passive
+                        />
                       {/key}
                     {/if}
                   </Sidebar.MenuButton>
                 </FolderMenu>
 
-                <!-- Sub-items: sessions under this project -->
+                <!-- Its sessions open under it the way a session's delegates
+                     do (motion/branch), with no rail: lines only join what
+                     one session started to it. -->
                 {#if expanded}
-                  <!-- The sub-list opens by growing rather than appearing, so a
-                   folder toggled by mistake is legible as the thing that just
-                   moved: it grows from nothing while the rows under it move
-                   down with its edge, and folds back the same way (`unfold`,
-                   as a delegate list does); reflow only slides the rows inside
-                   it (`data-flip-anchor`). -->
-                  <div data-flip-anchor in:unfold out:unfold>
+                  <div
+                    data-flip-anchor
+                    in:branch={PROJECT_TREE}
+                    out:branch={PROJECT_TREE}
+                  >
                     <!-- The project's own sessions: a plain list with no
                          rail, so set in only a step, just inside the
-                         project's row. Lines only join what one session
-                         started to it. -->
+                         project's row. -->
                     <Sidebar.MenuSub class="pl-(--space-4)">
                       {@const lists = splitOf(project)}
-                      {#each branches(lists.recent, `rail:${project.id}:recent`) as branch (branch.row.id)}
-                        {@render subRow(branch, '')}
+                      {#each branches(lists.recent, `rail:${project.id}:recent`) as node (node.row.id)}
+                        {@render subRow(node)}
                       {/each}
                       {#if lists.older.length > 0}
                         {@const olderVisible = olderShown(project, lists.older)}
@@ -910,6 +921,7 @@
                           <Sidebar.MenuSubButton
                             aria-expanded={olderVisible}
                             class="{SUB_ROW} text-muted-foreground"
+                            data-branch-item
                             onclick={() => toggleOlder(project.id)}
                           >
                             <span class="num">{lists.older.length} older</span>
@@ -921,8 +933,8 @@
                                the projects below or the footer. -->
                           <li class="older-wrap" data-flip>
                             <ul class="older" {@attach scrollEdges}>
-                              {#each branches(lists.older, `rail:${project.id}:older`) as branch (branch.row.id)}
-                                {@render subRow(branch, '')}
+                              {#each branches(lists.older, `rail:${project.id}:older`) as node (node.row.id)}
+                                {@render subRow(node)}
                               {/each}
                             </ul>
                           </li>
@@ -931,6 +943,7 @@
                         <Sidebar.MenuSubItem data-flip>
                           <Sidebar.MenuSubButton
                             class="{SUB_ROW} text-muted-foreground"
+                            data-branch-item
                             onclick={() =>
                         newSession({
                           projectId: project.id,

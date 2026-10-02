@@ -448,6 +448,8 @@
     --space-8: 32px;
     /* Between the groups of a page (stat row, queue, a card). */
     --space-group: var(--space-5);
+    /* Between the rows of one list in the rail (the home's Working and Finished, a tree's children there): rows of one list, not separate things. */
+    --space-row: 2px;
     /* Hair: chart swatches, a tooltip's arrow. */
     --radius-hair: 2px;
     /* Marks, tiles, badges, kbd. */

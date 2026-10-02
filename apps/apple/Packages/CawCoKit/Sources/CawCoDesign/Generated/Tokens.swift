@@ -284,6 +284,8 @@ public enum Space {
     public static let space8: Double = 32
     /// Between the groups of a page (stat row, queue, a card).
     public static let spaceGroup: Double = 18
+    /// Between the rows of one list in the rail (the home's Working and Finished, a tree's children there): rows of one list, not separate things.
+    public static let spaceRow: Double = 2
 }
 
 public enum Radius {

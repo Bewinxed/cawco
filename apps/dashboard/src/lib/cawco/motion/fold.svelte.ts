@@ -175,14 +175,12 @@ function rereadOnEnd(node: HTMLElement): void {
  * (--dur-pop), `out:unfold` folds it back (--dur-exit), fading with the height, so
  * what sits below slides instead of jumping. In a column with a gap, the
  * gap it brings folds with it. `ms` overrides the length (0: no motion).
- * `bleed` (a CSS length) is how far above its own box its content draws, a
- * nested list's rail reaching up to its parent's glyph: the fold clips at
- * its other three edges only, so that stretch shows while it opens and
- * folds. With reduced motion, a fade in place.
+ * With reduced motion, a fade in place. A tree's rows open and fold on
+ * their own primitive (motion/branch).
  */
 export function unfold(
   node: HTMLElement,
-  { ms, bleed }: { ms?: number; bleed?: string } = {},
+  { ms }: { ms?: number } = {},
   { direction }: { direction?: "in" | "out" | "both" } = {}
 ): TransitionConfig {
   rereadOnEnd(node);
@@ -211,9 +209,7 @@ export function unfold(
     easing: easeOut,
     css: (t) =>
       [
-        bleed
-          ? `overflow: visible; clip-path: inset(calc(-1 * ${bleed}) 0 0 0)`
-          : "overflow: hidden",
+        "overflow: hidden",
         `height: ${(t * height).toFixed(2)}px`,
         ...edges.map(
           ([edge, px]) => `${edge}: ${(t * Number(px)).toFixed(2)}px`

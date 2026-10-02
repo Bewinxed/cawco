@@ -26,10 +26,11 @@
    * pane's edge to split, or into a group's tabs. On a wide screen a click
    * opens it in the focused pane.
    *
-   * A parent folds the rows under it (`fold`): their count, in its column
-   * before the age, is what opens and folds them. A finished row can be archived
-   * (`onarchive`): a pointer has a button left of Peek, a finger swipes the
-   * row away, and both have it in the menu.
+   * A parent folds the rows under it (`fold`): their count, the last thing
+   * on the title line, flush with the row's trailing edge and the age just
+   * before it, is what opens and folds them (motion/branch). A finished row
+   * can be archived (`onarchive`): a pointer has a button left of Peek, a
+   * finger swipes the row away, and both have it in the menu.
    */
   import type { NeutralSessionInfo } from "@cawco/core";
   import Tip from "$lib/components/ui/tooltip/tip.svelte";
@@ -102,6 +103,8 @@
   const place = $derived(
     instance?.cwd || info?.cwd || instance?.machineId || machineId
   );
+  /** The count's width: what rises over the row's end on hover stops short of it. */
+  let foldWidth = $state(0);
 </script>
 
 {#snippet body(trigger: Record<string, unknown>)}
@@ -109,9 +112,12 @@
     class="item"
     data-active={active || undefined}
     data-archivable={onarchive ? true : undefined}
+    data-branch-item
     data-context={context || undefined}
     data-flip
+    data-folds={fold ? true : undefined}
     data-stale={stale || undefined}
+    style:--fold-w={fold ? `${foldWidth}px` : undefined}
     {@attach onarchive ? swipeToArchive(onarchive) : undefined}
   >
     {#if onarchive}
@@ -138,24 +144,23 @@
     }}
     >
       <SessionMark id={sessionId} {place} {status} />
-      <!-- Two lines: the title ending in the age, then what it is doing
-           ending in the count's column, a fixed width at the row's end, so
-           every count in the list starts at one x and the title gives up
-           only the age's own width. -->
+      <!-- Two lines: the title, its age and, on a parent, the count of the
+           rows under it, flush with the row's trailing edge so every count in
+           the list stands in one column at the edge; then what it is doing. -->
       <span class="text">
         <span class="first">
           <span class="title"
             ><span class="sr-only">{STATUS_WORD[status]}: </span>{title}</span
           >
           <span class="num trail">{trail}</span>
+          {#if fold}
+            <span class="fold" bind:offsetWidth={foldWidth}>
+              <TreeCount compact {...fold} />
+            </span>
+          {/if}
         </span>
         <span class="second">
           <span class="line">{line}</span>
-          <span class="kit-count-col">
-            {#if fold}
-              <TreeCount compact {...fold} />
-            {/if}
-          </span>
         </span>
       </span>
     </a>
@@ -257,11 +262,19 @@
     width: 16px;
     height: 16px;
   }
-  /* At a desk it takes no room until wanted: it rises over the row's end. */
+  /* At a desk it takes no room until wanted: it rises over the row's end,
+     short of the count where the row has one, so the count is never under
+     it. */
+  .item {
+    --peek-end: var(--space-1);
+  }
+  .item[data-folds] {
+    --peek-end: calc(var(--space-3) + var(--fold-w, 0px) + var(--space-1));
+  }
   @media (hover: hover) and (pointer: fine) {
     .peek {
       position: absolute;
-      right: var(--space-1);
+      right: var(--peek-end);
       margin: 0;
       background: var(--surface-hover);
       opacity: 0;
@@ -279,7 +292,7 @@
     }
     /* Archive rises beside Peek, left of it. */
     .archive {
-      right: calc(var(--space-1) + 30px);
+      right: calc(var(--peek-end) + 30px);
     }
   }
   /* A finger swipes the row away instead: no button for it. */
@@ -331,7 +344,7 @@
     flex-direction: column;
     min-width: 0;
   }
-  /* Each line: its words, then the trailing column. */
+  /* Each line: its words, then what trails them. */
   .first,
   .second {
     display: flex;
@@ -339,11 +352,17 @@
     gap: var(--space-1);
     min-width: 0;
   }
-  /* The second line stands at the count's height with or without one (a
-     context row says nothing on it), so every row in a list is one height
+  /* Both lines stand at the count's height with or without one (a context
+     row says nothing on its second), so every row in a list is one height
      and the nesting lines meet each glyph alike. */
+  .first,
   .second {
     min-block-size: var(--space-5);
+  }
+  /* The count: the row's last thing, at its trailing edge. */
+  .fold {
+    display: inline-flex;
+    flex: none;
   }
   .title,
   .line {

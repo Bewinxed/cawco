@@ -140,6 +140,8 @@ export const morphMs = (): number =>
   typeof document === "undefined" ? 0 : dur("--dur-morph");
 export const popScale = (): number =>
   Number.parseFloat(rootToken("--pop-scale"));
+/** `--pop-rise` in px: how far a small entrance travels. */
+export const popRise = (): number => Number.parseFloat(rootToken("--pop-rise"));
 
 /** The CSS strings of the same curves, for `element.animate()`. */
 export const CURVE = {

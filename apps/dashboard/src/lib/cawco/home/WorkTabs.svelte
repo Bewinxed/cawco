@@ -24,9 +24,11 @@
    * coming or going never moves one.
    *
    * Every tree starts folded to its parent's row (tree.ts, open-trees): a
-   * count on the row and two cards under it, opened one level at a time by
-   * the count, the cards or →, and folded again by the count, the parent's
-   * rail or ←. Each machine lists its first MORE_AT trees and its own "N
+   * count at the row's trailing edge, opened one level at a time by the
+   * count or →, and folded again by the count, the parent's rail or ←. A
+   * parent's rows hang under it in a list of their own on its nesting rail,
+   * opening and folding as every tree in the app does (motion/branch). Each
+   * machine lists its first MORE_AT trees and its own "N
    * more", so every machine with rows keeps its header and its Archive all;
    * opening the rest (or closing them) is the same relay, the rows arriving
    * or leaving in place. A finished row, or a whole tree, can be archived
@@ -50,6 +52,11 @@
   import Structure from "~icons/solar/structure-bold-duotone";
   import { cawco, type InstanceRow, isFailed } from "../client.svelte";
   import { conversationHref } from "../links";
+  import {
+    type BranchOptions,
+    branch,
+    nestFrom,
+  } from "../motion/branch.svelte";
   import { dur, motionOk } from "../motion/curves.svelte";
   import { holdWhileInside } from "../motion/held-order.svelte";
   import { IN_MS, ListSwap } from "../motion/list-swap.svelte";
@@ -60,7 +67,6 @@
     waitForBoxes,
   } from "../motion/relay-boxes";
   import { REFLOW_REREAD, reflow } from "../motion/rows.svelte";
-  import { nestPlace } from "../nest";
   import OsMark from "../OsMark.svelte";
   import { openTrees } from "../open-trees.svelte";
   import { rail } from "../rail.svelte";
@@ -94,46 +100,8 @@
   ] as const;
   /** Rows a tab lists before "N more". */
   const MORE_AT = 8;
-  /** Past this a delegate's indent eats its name; deeper ones stop moving in. */
-  const MAX_DEPTH = 2;
-
-  /**
-   * Where a row's glyph sits in its line (its centre x, its bottom edge and
-   * its half width), and how tall a line is: the nesting lines hang off
-   * these (measured once a row is drawn).
-   */
-  const glyphs: Attachment<HTMLElement> = (node) => {
-    const measure = (): boolean => {
-      const line = node.querySelector<HTMLElement>(
-        "[data-key]:not(.nested):has(.session-mark)"
-      );
-      const mark = line?.querySelector<HTMLElement>(".session-mark");
-      if (!(line && mark)) {
-        return false;
-      }
-      // Exact, not rounded: the rows stand at fractional heights, and a
-      // rounded offset puts a line half a pixel off its glyph.
-      const m = mark.getBoundingClientRect();
-      const l = line.getBoundingClientRect();
-      const set = (name: string, value: number) =>
-        node.style.setProperty(name, `${value.toFixed(2)}px`);
-      set("--glyph-x", m.left + m.width / 2 - l.left);
-      set("--glyph-bottom", m.bottom - l.top);
-      set("--glyph-r", m.width / 2);
-      set("--row-h", l.height);
-      return true;
-    };
-    if (measure()) {
-      return;
-    }
-    const watch = new MutationObserver(() => {
-      if (measure()) {
-        watch.disconnect();
-      }
-    });
-    watch.observe(node, { childList: true, subtree: true });
-    return () => watch.disconnect();
-  };
+  /** How a parent's rows open and fold (motion/branch): off each row's mark. */
+  const TREE: BranchOptions = { glyph: ".session-mark" };
   /** The boxes whose heights a change drives: each group, its "N more" line in it. */
   const BOXES = ":scope > .group";
 
@@ -184,32 +152,13 @@
     finished: new Map(trees.finished.map((line) => [line.row.id, line])),
   });
   const shapeOf = (tab: WorkTab, id: string) => shapes[tab].get(id);
-  /**
-   * Every nested row's place among its siblings, for the lines' stagger:
-   * in first child first, out last child first (nest.ts `nestPlace`).
-   */
-  const placesOf = (lines: TreeLine<InstanceRow>[]) => {
-    const siblings = new Map<string, string[]>();
-    for (const line of lines) {
-      if (line.parent) {
-        siblings.set(line.parent, [
-          ...(siblings.get(line.parent) ?? []),
-          line.row.id,
-        ]);
-      }
-    }
-    const places = new Map<string, string>();
-    for (const ids of siblings.values()) {
-      for (const [i, id] of ids.entries()) {
-        places.set(id, nestPlace(i, ids.length));
-      }
-    }
-    return places;
-  };
-  const places = $derived({
-    working: placesOf(trees.working),
-    finished: placesOf(trees.finished),
-  });
+  /** The rows of `rows` that hang directly under `parent` (null: the tops). */
+  const under = (
+    tab: WorkTab,
+    rows: InstanceRow[],
+    parent: string | null
+  ): InstanceRow[] =>
+    rows.filter((row) => (shapeOf(tab, row.id)?.parent ?? null) === parent);
 
   /** A parent's folded rows, for its row's count; null otherwise. */
   function foldOf(tab: WorkTab, id: string) {
@@ -302,30 +251,6 @@
       at.get(top)?.rows.push(line.row);
     }
     return [...at.values()];
-  }
-
-  /**
-   * A nested row's lines (the .kit-nest elbow, drawn from its own wrapper
-   * since the list is flat): its depth, its place among its siblings for
-   * the stagger in and out (`places`), and a straight rail for each
-   * ancestor whose line runs on past it.
-   */
-  function nestStyle(tab: WorkTab, id: string): string {
-    const line = shapeOf(tab, id);
-    if (!line || line.depth === 0) {
-      return "";
-    }
-    const rails = line.through.map(
-      (depth) =>
-        `linear-gradient(var(--nest-ink), var(--nest-ink)) no-repeat calc(var(--glyph-x) + ${depth - 1} * var(--nest-step) - 0.5px) 0 / 1px 100%`
-    );
-    return [
-      `--nest-d: ${Math.min(line.depth, MAX_DEPTH)}`,
-      places[tab].get(id) ?? "",
-      rails.length ? `background: ${rails.join(", ")}` : "",
-    ]
-      .filter(Boolean)
-      .join("; ");
   }
 
   /**
@@ -699,7 +624,64 @@
   />
 {/snippet}
 
+{#snippet treeNode(row: InstanceRow, rows: InstanceRow[], group: string)}
+  {@const shape = shapeOf(shown, row.id)}
+  {@const kids = under(shown, rows, row.id)}
+  <!-- A row and, open, the rows under it: its box (`data-flip="box"`)
+       takes their room at once and its edge travels to it, what is under
+       it sliding with that edge (motion/rows); they open and fold on its
+       rail (motion/branch). -->
+  <li class="node" data-flip={plan ? undefined : 'box'}>
+    <div class="line" data-key={row.id} style={enterAnim(row.id)}>
+      {#if shape?.parent && shape.depth > 0}
+        {@const above = shape.parent}
+        <!-- The parent's column: a click on its rail folds it. -->
+        <button
+          aria-hidden="true"
+          class="gutter"
+          onclick={() => openTrees.set(above, false)}
+          tabindex="-1"
+          type="button"
+        ></button>
+      {/if}
+      {@render sessionRow(row, shown, group)}
+    </div>
+    {#if kids.length > 0}
+      <ul
+        class="kit-nest branch"
+        data-flip-anchor
+        in:branch={TREE}
+        out:branch={TREE}
+        {@attach nestFrom('.session-mark')}
+      >
+        {#each kids as kid (kid.id)}
+          {@render treeNode(kid, rows, group)}
+        {/each}
+      </ul>
+    {/if}
+  </li>
+{/snippet}
+
+{#snippet leavingTree(line: Line, lines: Line[])}
+  {@const kids = lines.filter(
+    (other) => other.row && shapeOf(other.tab, other.key)?.parent === line.key
+  )}
+  <li class="node">
+    <div class="line" style={leaveAnim(line.key)}>
+      {@render sessionRow(line.row as InstanceRow, line.tab, line.machineId)}
+    </div>
+    {#if kids.length > 0}
+      <ul class="kit-nest branch" {@attach nestFrom('.session-mark')}>
+        {#each kids as kid (kid.key)}
+          {@render leavingTree(kid, lines)}
+        {/each}
+      </ul>
+    {/if}
+  </li>
+{/snippet}
+
 {#snippet leaving(lines: Line[], layer: boolean)}
+  {@const keys = new Set(lines.map((line) => line.key))}
   <div
     aria-hidden="true"
     class={layer ? "leaving layer" : "leaving"}
@@ -707,18 +689,11 @@
     data-reflow
     inert
   >
-    {#each lines.filter((line) => line.row) as line (line.key)}
-      {@const shape = shapeOf(line.tab, line.key)}
-      <div
-        data-first={shape?.first || undefined}
-        data-last={shape?.last || undefined}
-        style={[leaveAnim(line.key), nestStyle(line.tab, line.key)].join('; ')}
-        class:kit-nest-line={(shape?.depth ?? 0) > 0}
-        class:nested={(shape?.depth ?? 0) > 0}
-      >
-        {@render sessionRow(line.row as InstanceRow, line.tab, line.machineId)}
-      </div>
-    {/each}
+    <ul class="tree">
+      {#each lines.filter((line) => line.row && !keys.has(shapeOf(line.tab, line.key)?.parent ?? '')) as line (line.key)}
+        {@render leavingTree(line, lines)}
+      {/each}
+    </ul>
   </div>
 {/snippet}
 
@@ -780,7 +755,6 @@
       class="list"
       bind:this={listEl}
       {@attach reflow()}
-      {@attach glyphs}
       {@attach highlight(ROW_PILL)}
       {@attach holdWhileInside('home:')}
       {@attach arrowKeys}
@@ -805,31 +779,11 @@
                    ones take, each new one arriving as its place clears. -->
               {@render leaving(entry.gone, true)}
             {/if}
-            {#each entry.rows as row (`${swap.gen}:${row.id}`)}
-              {@const shape = shapeOf(shown, row.id)}
-              <div
-                data-first={shape?.first || undefined}
-                data-flip={plan ? undefined : ''}
-                data-key={row.id}
-                data-last={shape?.last || undefined}
-                style={[enterAnim(row.id), nestStyle(shown, row.id)].join('; ')}
-                class:kit-nest-line={(shape?.depth ?? 0) > 0}
-                class:nested={(shape?.depth ?? 0) > 0}
-              >
-                {#if shape?.parent && shape.depth > 0}
-                  {@const above = shape.parent}
-                  <!-- The parent's column: a click on its rail folds it. -->
-                  <button
-                    aria-hidden="true"
-                    class="gutter"
-                    onclick={() => openTrees.set(above, false)}
-                    tabindex="-1"
-                    type="button"
-                  ></button>
-                {/if}
-                {@render sessionRow(row, shown, id)}
-              </div>
-            {/each}
+            <ul class="tree">
+              {#each under(shown, entry.rows, null) as row (`${swap.gen}:${row.id}`)}
+                {@render treeNode(row, entry.rows, id)}
+              {/each}
+            </ul>
             {#if !plan?.layered.has(id) && entry.gone.length}
               {@render leaving(entry.gone, false)}
             {/if}
@@ -839,8 +793,11 @@
                line, inside its machine's box. -->
           {#if entry.kind !== 'gone' && more.get(id)}
             {@const line = more.get(id) as More}
+            <!-- A line of the list like the rows above it (`data-flip`): when
+                 a tree over it opens or folds, it slides with them. -->
             <button
               class="more focus-inset touch-hit press-tint"
+              data-flip={plan ? undefined : ''}
               data-key={moreKey(id)}
               data-rail-row
               onclick={() => fold(id)}
@@ -990,67 +947,41 @@
   }
   .rows {
     position: relative;
+  }
+  /* A machine's trees, and each parent's rows under it: lists of rows,
+     --space-row apart. */
+  .tree,
+  .branch {
     display: flex;
     flex-direction: column;
-    gap: 2px;
+    gap: var(--space-row);
+    margin: 0;
+    padding: 0;
+    list-style: none;
   }
-  /* A delegate under its session (tree.ts): moved in a step per depth, and
-     joined to its parent's glyph by the .kit-nest lines — down the rail,
-     round the curve (--radius-sm), out along the arm to the child's glyph,
-     over the row's pill. No arrowhead. The step is the rail's own: rail to
-     glyph centre as in the sidebar's lists (an arm of --space-2, the row's
-     6px inset, half an 18px mark), so a tree nests alike in both and a
-     narrow list keeps its titles. */
-  .list {
-    --nest-step: calc(var(--space-2) + 6px + 9px);
+  /* A delegate under its session (tree.ts): in a list of its own, set in
+     under its parent's glyph and joined to it by the .kit-nest lines (down
+     the rail, round the curve, out along the arm to the child's glyph, over
+     the row's pill), placed as the sidebar's are (motion/branch `nestFrom`),
+     so a tree nests alike in both. */
+  .branch {
+    --nest-gap: var(--space-row);
+    padding-block-start: var(--space-row);
+    padding-inline-start: var(--nest-pad);
   }
-  .nested {
+  .node,
+  .line {
     position: relative;
-    padding-left: calc(var(--nest-d) * var(--nest-step));
   }
-  .nested::before,
-  .nested:not([data-last])::after {
-    content: "";
-    position: absolute;
-    z-index: 1;
-    left: calc(var(--glyph-x) + (var(--nest-d) - 1) * var(--nest-step) - 0.5px);
-    border: 0 solid var(--nest-ink);
-    pointer-events: none;
-  }
-  /* Out along the arm to the child's glyph, over the row's pill. The glyph
-     is centred in its row, so the arm stands at half the row's own height
-     (the row is the elbow's containing block). */
-  .nested::before {
-    top: -2px;
-    width: calc(var(--nest-step) - var(--glyph-r) + 0.5px);
-    height: calc(50% + 2px + 0.5px);
-    border-left-width: 1px;
-    border-bottom-width: 1px;
-    border-bottom-left-radius: var(--radius-sm);
-  }
-  /* The first delegate's elbow leaves its parent's glyph's bottom edge, a
-     row up (every row is one height: HomeRow's meta line). */
-  .nested[data-first]::before {
-    top: calc(var(--glyph-bottom) - var(--row-h) - 2px);
-    height: calc(var(--row-h) + 2px - var(--glyph-bottom) + 50% + 0.5px);
-  }
-  /* From where the elbow curves away, so the rail runs on past the joint. */
-  .nested:not([data-last])::after {
-    top: calc(50% - var(--radius-sm));
-    bottom: -2px;
-    border-left-width: 1px;
-  }
-  /* Their drawing in and retracting is every nested list's own (app.css
-     `.kit-nest-line`): in a stagger by place among siblings, out last
-     child first. */
   /* A child's parent column: a click on the rail there folds the parent,
-     and the rail brightens under the pointer to say so. */
+     and the rail brightens under the pointer to say so. It reaches from a
+     step left of the rail to the row's own left edge. */
   .gutter {
     position: absolute;
     inset-block: 0;
-    left: calc((var(--nest-d) - 1) * var(--nest-step));
+    left: calc(var(--nest-x) - var(--nest-pad) - var(--space-2));
     z-index: 1;
-    inline-size: var(--nest-step);
+    inline-size: calc(var(--nest-pad) - var(--nest-x) + var(--space-2));
     padding: 0;
     border: 0;
     background: none;
@@ -1060,7 +991,7 @@
       content: "";
       position: absolute;
       inset-block: 0;
-      left: calc(var(--glyph-x) - 1px);
+      left: calc(var(--space-2) - 1px);
       inline-size: 3px;
       border-radius: var(--radius-hair);
       background: var(--ink-strong);
@@ -1080,19 +1011,16 @@
   .leaving {
     position: absolute;
     inset: 0 0 auto;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
     pointer-events: none;
   }
-  /* With no successor (a fold, a group that goes), where they stood: under
-     what stays. Layered, over the rows' top, each old row in the place its
-     successor takes. */
+  /* With no successor (a group that goes, "Show fewer"), where they stood:
+     under what stays. Layered, over the rows' top, each old row in the
+     place its successor takes. */
   .leaving:not(.layer) {
     top: 100%;
   }
-  .rows:has(> [data-key]) > .leaving:not(.layer) {
-    top: calc(100% + 2px);
+  .rows:has([data-key]) > .leaving:not(.layer) {
+    top: calc(100% + var(--space-row));
   }
   .machine {
     display: flex;

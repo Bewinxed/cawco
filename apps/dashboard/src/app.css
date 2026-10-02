@@ -474,28 +474,30 @@
      own `.kit-nest` list inside its item, so every parent has one rail of
      its own, and the rail on to the next sibling runs straight past the
      open subtree. The lines are drawn by the children themselves, so as
-     rows unfold, reflow or leave, the rail grows and shrinks with them and
+     rows open, reflow or leave, the rail grows and shrinks with them and
      never jumps.
      Set on the child list:
-       --nest-x       the rail's x from the list's left edge, and
-       --nest-lead    the parent glyph's bottom to the list's top, both
-                      measured (nest.ts `nestFrom`)
-       --nest-in      the rail to the child row's left edge (12px)
-       --nest-reach   the child row's left edge to its glyph
-       --nest-glyph-y the child glyph's centre from the row's top
+       --nest-x       the rail's x from the list's left edge,
+       --nest-lead    the parent glyph's bottom to the list's top,
+       --nest-glyph-y a child glyph's centre from its row's top, and
+       --nest-reach   a child row's left edge to its glyph, all measured
+                      (motion/branch `nestFrom`)
+       --nest-in      the rail to the child row's left edge
        --nest-gap     the gap between child rows
      The arm runs on over the row's inset to its glyph, drawn over the row's
      hover or selected pill, so no pill ever covers a line.
-     Drawn in: each elbow runs down the rail from the parent, round the
-     curve and out along the arm, a stagger step after the row above
-     (`--nest-i` on each child, its place); the rail on to the next child
-     follows from the curve. A closing copy (reflow's ghost) retracts them
-     the other way, last child first (`--nest-r`, its place from the end). */
+     Drawn in and out by the fold (motion/branch): the rail grows down from
+     the parent's glyph as a list opens, each arm drawing out to its child's
+     glyph as the child swipes out along it, and both retract as it folds. */
   .kit-nest {
-    --nest-in: 12px;
+    /* Until measured (the frame it mounts, before paint): valid, so nothing
+       built on it (`--nest-pad`) drops a whole declaration and then lands a
+       frame later with no change to the DOM. */
+    --nest-x: 0px;
+    --nest-in: var(--space-2);
     --nest-reach: 0px;
-    --nest-glyph-y: 14px;
-    --nest-gap: 4px;
+    --nest-glyph-y: var(--space-4);
+    --nest-gap: var(--space-1);
     --nest-lead: 0px;
     --nest-pad: calc(var(--nest-x) + var(--nest-in));
     position: relative;
@@ -541,61 +543,12 @@
   .kit-nest > li:last-child::after {
     content: none;
   }
-  /* The lines' motion, for every list that nests: a `.kit-nest` list's
-     children, and any row that draws its own elbow and onward rail on its
-     ::before and ::after (`.kit-nest-line`, the home's Working/Finished
-     rows). Each carries its place among its siblings (nest.ts `nestPlace`). */
-  @media (prefers-reduced-motion: no-preference) {
-    .kit-nest > li::before,
-    .kit-nest-line::before {
-      animation: nest-elbow var(--dur-panel) var(--ease-out) both;
-      animation-delay: calc(var(--nest-i, 0) * 40ms);
-    }
-    /* The rail on to the next child carries on from the curve, once the
-       elbow's rail has reached it (the first 55% of `nest-elbow`). */
-    .kit-nest > li::after,
-    .kit-nest-line::after {
-      animation: nest-rail var(--dur-panel) var(--ease-out) both;
-      animation-delay: calc(var(--nest-i, 0) * 40ms + var(--dur-panel) * 0.55);
-    }
-    /* A list folding away (`data-leaving`, while its `unfold` plays): its
-       lines retract where they stand, last child first. */
-    .kit-nest[data-leaving] > li::before {
-      animation: nest-elbow-out var(--dur-exit) var(--ease-out) both;
-      animation-delay: calc(var(--nest-r, 0) * 24ms);
-    }
-    .kit-nest[data-leaving] > li::after {
-      animation: nest-rail-out var(--dur-exit) var(--ease-out) both;
-      animation-delay: calc(var(--nest-r, 0) * 24ms);
-    }
-    /* A closing copy: the same lines, retracting, last child first. */
-    [data-reflow-ghost] .kit-nest > li::before,
-    [data-reflow-ghost] .kit-nest > li::after,
-    .kit-nest[data-reflow-ghost] > li::before,
-    .kit-nest[data-reflow-ghost] > li::after,
-    .kit-nest-line[data-reflow-ghost]::before,
-    .kit-nest-line[data-reflow-ghost]::after {
-      animation-direction: reverse;
-      animation-duration: var(--dur-exit);
-      animation-delay: calc(var(--nest-r, 0) * 24ms);
-    }
-  }
 
-  /* A session row's trailing columns, so they line up down a list at every
-     depth (rows end at the same right edge whatever their indent). The count
-     of the rows under a parent (TreeCount) stands at the column's start, so
-     every count in a list starts at one x; a row with none leaves the column
-     empty. It is as wide as the widest compact count ("43 · 2": six figures
-     in the count's own face, and its padding). The age after it is right
-     aligned in a column as wide as its longest word ("59m"). */
-  .kit-count-col {
-    display: flex;
-    flex: none;
-    align-items: center;
-    inline-size: calc(6ch + var(--space-3));
-    font: var(--type-meta);
-    font-variant-numeric: tabular-nums;
-  }
+  /* A session row's time, at the row's trailing edge or, on a parent, just
+     before its count (TreeCount), which is the row's last thing: every row
+     ends at the same right edge whatever its indent, so the counts stand in
+     one column at the edge. Right aligned, as wide as its longest word
+     ("59m"). */
   .kit-age-col {
     flex: none;
     inline-size: 3ch;
@@ -1347,54 +1300,10 @@
    home's Working/Finished switch. Global, because the rows name them from
    an inline style: Svelte rewrites `animation:` inside a component's own
    <style> to a scoped name but cannot rewrite a string built in script. */
-/* The nesting lines drawing in (.kit-nest): the rail's column first, top
-   down, through the curve (as wide as its radius), then out along the arm;
-   the rail on to the next child follows. */
-@keyframes nest-elbow {
-  0% {
-    clip-path: inset(0 calc(100% - 1px) 100% 0);
-  }
-  55% {
-    clip-path: inset(0 calc(100% - var(--radius-sm)) 0 0);
-  }
-  100% {
-    clip-path: inset(0 0 0 0);
-  }
-}
-/* The same lines retracting in place (a list folding away): out along the
-   arm first, round the curve, and up the rail; the rail on past a child
-   from its bottom up. Their own names, so a line already drawn starts them. */
-@keyframes nest-elbow-out {
-  0% {
-    clip-path: inset(0 0 0 0);
-  }
-  45% {
-    clip-path: inset(0 calc(100% - var(--radius-sm)) 0 0);
-  }
-  100% {
-    clip-path: inset(0 calc(100% - 1px) 100% 0);
-  }
-}
-@keyframes nest-rail-out {
-  from {
-    clip-path: inset(0 0 0 0);
-  }
-  to {
-    clip-path: inset(0 0 100% 0);
-  }
-}
 /* A working session's rim (SessionMark): its arc once round. */
 @keyframes kit-rim-sweep {
   to {
     --rim-turn: 1turn;
-  }
-}
-@keyframes nest-rail {
-  from {
-    clip-path: inset(0 0 100% 0);
-  }
-  to {
-    clip-path: inset(0 0 0 0);
   }
 }
 

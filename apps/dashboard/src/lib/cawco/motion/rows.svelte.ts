@@ -410,10 +410,93 @@ interface Placed extends Box {
 interface Move {
   /** The slide, once it has taken over from the hold. */
   animation?: Animation;
-  /** The frame request while a style still holds the element. */
-  hold?: number;
+  /** Drops the slide's start while a style still holds the element. */
+  hold?: () => void;
   x: number;
   y: number;
+}
+
+/**
+ * The one frame every move a change sets off starts on, and its time on the
+ * document timeline. A change's slides, its boxes' edges, its arrivals and
+ * departures, and a tree fold (motion/branch) all ask for it in the update
+ * that changes the DOM; the first ask opens a batch that starts two frames
+ * on (the hold `#slide` explains), and every ask until then joins it. Each
+ * animation is created held at its first frame and given this start time,
+ * so every edge is on the same frame of the same curve as the edge next to
+ * it: a box's edge and the row under it never part by a frame.
+ *
+ * `notBefore` (a time on the document timeline) holds the whole batch until
+ * then: a fold whose rows leave before its room closes starts the room, and
+ * so everything under it, once they have gone. A change made while a batch
+ * is held that way waits for it too, so nothing slides into a room that is
+ * still being emptied; the hold lifts when the fold that asked for it is
+ * turned back (its cancel).
+ */
+type Run = (at: number) => void;
+interface Batch {
+  /** Each run, and the earliest it may start. */
+  runs: Map<Run, number>;
+}
+/** The batch still taking asks: the one the current update joins. */
+let taking: Batch | null = null;
+/** Every batch not yet started. */
+const waiting = new Set<Batch>();
+
+const holdOf = (one: Batch): number => Math.max(0, ...one.runs.values());
+
+export function atTravel(run: Run, notBefore = 0): () => void {
+  if (!taking) {
+    const open: Batch = { runs: new Map() };
+    taking = open;
+    waiting.add(open);
+    let frames = 0;
+    let second = 0;
+    const tick = () => {
+      frames += 1;
+      const frame = Number(document.timeline.currentTime);
+      if (frames === 2) {
+        second = frame;
+        // From here on it is closed: a later ask opens the next batch.
+        if (taking === open) {
+          taking = null;
+        }
+      }
+      let at = Math.max(second, holdOf(open));
+      for (const other of waiting) {
+        at = Math.max(at, holdOf(other));
+      }
+      if (frames < 2 || frame < at) {
+        requestAnimationFrame(tick);
+        return;
+      }
+      waiting.delete(open);
+      for (const go of open.runs.keys()) {
+        go(at);
+      }
+    };
+    requestAnimationFrame(tick);
+  }
+  const joined = taking;
+  joined.runs.set(run, notBefore);
+  return () => {
+    joined.runs.delete(run);
+  };
+}
+
+/**
+ * An animation held at its first frame until the batch starts, then run
+ * from the batch's start. One that is cancelled in the meantime stays
+ * cancelled.
+ */
+export function heldToTravel(animation: Animation, notBefore = 0): Animation {
+  animation.pause();
+  atTravel((at) => {
+    if (animation.playState === "paused") {
+      animation.startTime = at;
+    }
+  }, notBefore);
+  return animation;
 }
 
 /** It pops (scales in and out) rather than being uncovered like a row. */
@@ -545,10 +628,17 @@ function onScreen(element: HTMLElement): boolean {
  * from where it is drawn, so while the reader scrolls it trails further and
  * further behind its place until it is drawn on screen, still sliding away:
  * the fleet board's Not running, its Show moving out from under the pointer.
- * `dy` is how far above its place it is drawn.
+ * `dy` is how far above its place it is drawn. Places are read in the
+ * container's content, so a container that scrolls (the rail) is read at its
+ * scroll: unscrolled, a row half a rail down was taken for one below the
+ * viewport, and jumped where it should have slid.
  */
 function unseen(node: HTMLElement, place: Placed, dy: number): boolean {
-  const top = node.getBoundingClientRect().top + node.clientTop + place.cy;
+  const top =
+    node.getBoundingClientRect().top +
+    node.clientTop -
+    node.scrollTop +
+    place.cy;
   const off = (at: number) => at + place.h <= 0 || at >= window.innerHeight;
   return off(top) && off(top + dy);
 }
@@ -560,23 +650,27 @@ function arrival(element: HTMLElement, still: boolean) {
     return;
   }
   if (still) {
-    element.animate([{ opacity: 0 }, { opacity: 1 }], entrance());
+    heldToTravel(element.animate([{ opacity: 0 }, { opacity: 1 }], entrance()));
   } else if (pops(element)) {
-    element.animate(
-      [
-        { opacity: 0, transform: `scale(${popScale()})` },
-        { opacity: 1, transform: "none" },
-      ],
-      entrance()
+    heldToTravel(
+      element.animate(
+        [
+          { opacity: 0, transform: `scale(${popScale()})` },
+          { opacity: 1, transform: "none" },
+        ],
+        entrance()
+      )
     );
   } else {
-    // Uncovered on the curve the rows after it slide down on, so its bottom
-    // edge is their top edge all the way.
-    element.animate(
-      [{ clipPath: "inset(0 0 100% 0)" }, { clipPath: "inset(0 0 0 0)" }],
-      travel()
+    // Uncovered on the curve the rows after it slide down on, from the frame
+    // they start on, so its bottom edge is their top edge all the way.
+    heldToTravel(
+      element.animate(
+        [{ clipPath: "inset(0 0 100% 0)" }, { clipPath: "inset(0 0 0 0)" }],
+        travel()
+      )
     );
-    element.animate([{ opacity: 0 }, { opacity: 1 }], entrance());
+    heldToTravel(element.animate([{ opacity: 0 }, { opacity: 1 }], entrance()));
   }
 }
 
@@ -620,20 +714,27 @@ function departure(
       { ...exit(), fill: "forwards" }
     );
   } else {
-    copy.animate([{ opacity: 1 }, { opacity: 0 }], {
-      ...exit(),
-      fill: "forwards",
-    });
+    heldToTravel(
+      copy.animate([{ opacity: 1 }, { opacity: 0 }], {
+        ...exit(),
+        fill: "forwards",
+      })
+    );
     last = copy.animate(
       [{ clipPath: "inset(0 0 0 0)" }, { clipPath: "inset(0 0 100% 0)" }],
       { ...travel(), fill: "forwards" }
     );
   }
-  last.finished.then(done, done);
+  // It closes from the frame the rows around it start moving on.
+  heldToTravel(last).finished.then(done, done);
 }
 
-/** The room a box's shadow takes past its edge, kept inside the clip. */
-const SHADOW_ROOM = 12;
+/**
+ * A moving edge clips only at the edge: above it and either side, whatever
+ * the box draws outside itself (a shadow, a nesting rail reaching up to its
+ * parent's glyph, an arm out to the left) shows all the while.
+ */
+const OPEN = "-100vmax";
 /** A growing box's clip, read for how much of it is still hidden. */
 const CLIP_BOTTOM = /^inset\(\S+ \S+ ([\d.]+)px/;
 
@@ -641,36 +742,33 @@ const CLIP_BOTTOM = /^inset\(\S+ \S+ ([\d.]+)px/;
  * A box's edge, from where it is drawn to its new size, while the room it
  * takes in the layout is the new size throughout, so nothing after it moves
  * on its account. Growing, the box is laid out at its new height at once and
- * a clip uncovers the new strip, the clip's corners rounded as the box's.
- * Shrinking, the box holds its drawn height over an equal and opposite
- * bottom margin: negative, it sums with a following margin instead of
- * collapsing into it (a positive one would collapse, and the room would not
- * add up).
+ * a clip uncovers the new strip. Shrinking, the box holds its drawn height
+ * over an equal and opposite bottom margin (negative, it sums with a
+ * following margin instead of collapsing into it; a positive one would
+ * collapse, and the room would not add up), clipped at that height. Either
+ * way the clip is the only cut: overflow is left alone, so the box's layout
+ * (its margins, a stacking context) is the same before, during and after.
  */
 function edgeOf(element: HTMLElement, from: number, to: number): Animation {
-  const styles = getComputedStyle(element);
   if (to > from) {
-    const round = styles.borderBottomLeftRadius;
-    const out = `${-SHADOW_ROOM}px`;
     return element.animate(
       [
-        {
-          clipPath: `inset(${out} ${out} ${to - from}px ${out} round ${round})`,
-        },
-        { clipPath: `inset(${out} ${out} ${out} ${out} round ${round})` },
+        { clipPath: `inset(${OPEN} ${OPEN} ${to - from}px ${OPEN})` },
+        { clipPath: `inset(${OPEN} ${OPEN} 0px ${OPEN})` },
       ],
       travel()
     );
   }
-  const margin = Number.parseFloat(styles.marginBottom);
+  const margin = Number.parseFloat(getComputedStyle(element).marginBottom);
+  const clipPath = `inset(${OPEN} ${OPEN} 0px ${OPEN})`;
   return element.animate(
     [
       {
         height: `${from}px`,
         marginBottom: `${margin + to - from}px`,
-        overflow: "hidden",
+        clipPath,
       },
-      { height: `${to}px`, marginBottom: `${margin}px`, overflow: "hidden" },
+      { height: `${to}px`, marginBottom: `${margin}px`, clipPath },
     ],
     travel()
   );
@@ -707,10 +805,13 @@ class Reflow {
   readonly #edges = new Map<HTMLElement, Animation>();
   readonly #spans = new Map<HTMLElement, Animation>();
   #placed: Map<HTMLElement, Placed>;
+  /** The scroll the rows were last drawn at (`#anchor`). */
+  #scroll: number;
 
   constructor(node: HTMLElement) {
     this.#node = node;
     this.#placed = placesIn(node);
+    this.#scroll = node.scrollTop;
   }
 
   /** Every place is new and none of it is a change to animate (the container resized). */
@@ -722,13 +823,14 @@ class Reflow {
     const still = !motionOk.current;
     const drawn = this.#releaseEdges();
     const now = placesIn(this.#node);
+    const scrolled = this.#anchor(now);
     for (const [element, place] of now) {
       if (element.hasAttribute("data-flip-anchor")) {
         continue;
       }
       const was = this.#placed.get(element);
       if (was && !still) {
-        this.#travel(element, was, place, drawn.get(element));
+        this.#travel(element, was, place, drawn.get(element), scrolled);
       } else if (
         !was &&
         (place.ref === this.#node || this.#placed.has(place.ref)) &&
@@ -744,16 +846,60 @@ class Reflow {
         element.hasAttribute("data-flip-anchor")
       );
       if (gone && (was.ref === this.#node || now.has(was.ref))) {
+        // Where it was drawn: a scroll this change made moves the content
+        // under the viewport, and the copy with it.
+        const held = heldBy(this.#moves.get(element));
         departure(
           this.#node,
           element,
           was,
-          heldBy(this.#moves.get(element)),
+          { x: held.x, y: held.y + scrolled },
           still
         );
       }
     }
     this.#placed = now;
+    this.#scroll = this.#node.scrollTop;
+  }
+
+  /**
+   * The container's own scroll anchoring, in place of the browser's (off on
+   * every reflow container): content above the first row in view grew or
+   * shrank (a tree opening in a list higher up), so the container scrolls by
+   * as much and that row stays where it is drawn. The browser's anchoring
+   * scrolls the same way, but after this has placed every slide from where
+   * rows were drawn, so each was moved twice: the whole rail jumped by the
+   * change and slid back. Here the scroll is made first and every move,
+   * copy and edge is read with it. Returns how far it scrolled.
+   */
+  #anchor(now: Map<HTMLElement, Placed>): number {
+    const node = this.#node;
+    // The scroll the rows were drawn at: content that got shorter may have
+    // had the browser clamp it already, in the layout reading the places.
+    const before = this.#scroll;
+    if (before <= 0) {
+      return node.scrollTop - before;
+    }
+    let anchor: { cy: number; was: number } | null = null;
+    for (const [element, was] of this.#placed) {
+      const place = now.get(element);
+      if (
+        place &&
+        was.cy >= before &&
+        (anchor === null || was.cy < anchor.was)
+      ) {
+        anchor = { was: was.cy, cy: place.cy };
+      }
+    }
+    if (anchor && Math.abs(anchor.cy - anchor.was) >= 0.5) {
+      node.scrollTop = before + anchor.cy - anchor.was;
+    }
+    return node.scrollTop - before;
+  }
+
+  /** The reader (or a page) scrolled: rows are drawn at this scroll now. */
+  scrolled() {
+    this.#scroll = this.#node.scrollTop;
   }
 
   /** Where each box mid-tween is drawn; its tween is dropped so it reads at its natural size. */
@@ -785,30 +931,50 @@ class Reflow {
     element: HTMLElement,
     was: Placed,
     place: Placed,
-    drawn: { h?: number; w?: number } | undefined
+    drawn: { h?: number; w?: number } | undefined,
+    scrolled: number
   ) {
     const step = heldBy(this.#moves.get(element));
+    // Read against the container itself, a place is in its content: a scroll
+    // this change made (`#anchor`) moved the content under the viewport, so
+    // it is drawn that much further down than its place says.
+    const shift = place.ref === this.#node ? scrolled : 0;
     const x = was.x + step.x - place.x;
-    const y = was.y + step.y - place.y;
+    const y = was.y + shift + step.y - place.y;
     const moved =
-      was.ref === place.ref && (was.x !== place.x || was.y !== place.y);
+      was.ref === place.ref &&
+      (was.x !== place.x || Math.abs(was.y + shift - place.y) > 0.01);
     if (moved && (Math.abs(x) > 0.5 || Math.abs(y) > 0.5)) {
       if (unseen(this.#node, place, y)) {
         this.#stop(element);
       } else {
         this.#slide(element, x, y);
       }
+    } else if (moved) {
+      // Laid out where it is drawn (a change turned back before its slide
+      // started): whatever slide it was waiting on is dropped, not run late.
+      this.#stop(element);
     }
     if (!hasEdges(element)) {
       return;
     }
+    // Held at the drawn size until the batch starts, so the edge leaves on
+    // the frame the rows after it do.
     const tall = drawn?.h ?? was.h;
     if (Math.abs(tall - place.h) > 0.5) {
-      this.#keep(this.#edges, element, edgeOf(element, tall, place.h));
+      this.#keep(
+        this.#edges,
+        element,
+        heldToTravel(edgeOf(element, tall, place.h))
+      );
     }
     const wide = drawn?.w ?? was.w;
     if (Math.abs(wide - place.w) > 0.5) {
-      this.#keep(this.#spans, element, spanOf(element, wide, place.w));
+      this.#keep(
+        this.#spans,
+        element,
+        heldToTravel(spanOf(element, wide, place.w))
+      );
     }
   }
 
@@ -832,12 +998,13 @@ class Reflow {
 
   #slide(element: HTMLElement, x: number, y: number) {
     this.#stop(element);
-    // The first frame holds it with a style, which that frame's layout reads.
-    // An animation started in the same update runs off the main thread, and
-    // the frame is drawn, and counted as a layout shift, as though it had
-    // jumped. The slide takes over from the same place two frames on. It is
-    // on `translate`, composed with the element's own, so a chip's scale and
-    // a control's centring are left alone.
+    // The first frames hold it with a style, which their layout reads. An
+    // animation started in the same update runs off the main thread, and the
+    // frame is drawn, and counted as a layout shift, as though it had
+    // jumped. The slide takes over from the same place when the batch starts
+    // (`atTravel`), on the batch's clock. It is on `translate`, composed with
+    // the element's own, so a chip's scale and a control's centring are left
+    // alone.
     element.style.translate = offsetTranslate(
       getComputedStyle(element).translate,
       x,
@@ -845,26 +1012,25 @@ class Reflow {
     );
     const move: Move = { x, y };
     this.#moves.set(element, move);
-    move.hold = requestAnimationFrame(() => {
-      move.hold = requestAnimationFrame(() => {
-        move.hold = undefined;
-        element.style.translate = "";
-        const animation = element.animate(
-          [{ translate: `${x}px ${y}px` }, { translate: "0px 0px" }],
-          { ...travel(), composite: "add" }
-        );
-        move.animation = animation;
-        animation.finished.then(
-          () => {
-            if (this.#moves.get(element) === move) {
-              this.#moves.delete(element);
-            }
-          },
-          () => {
-            /* superseded by the next slide */
+    move.hold = atTravel((at) => {
+      move.hold = undefined;
+      element.style.translate = "";
+      const animation = element.animate(
+        [{ translate: `${x}px ${y}px` }, { translate: "0px 0px" }],
+        { ...travel(), composite: "add" }
+      );
+      animation.startTime = at;
+      move.animation = animation;
+      animation.finished.then(
+        () => {
+          if (this.#moves.get(element) === move) {
+            this.#moves.delete(element);
           }
-        );
-      });
+        },
+        () => {
+          /* superseded by the next slide */
+        }
+      );
     });
   }
 
@@ -875,7 +1041,7 @@ class Reflow {
       return;
     }
     if (move.hold !== undefined) {
-      cancelAnimationFrame(move.hold);
+      move.hold();
       element.style.translate = "";
     }
     move.animation?.cancel();
@@ -890,14 +1056,50 @@ class Reflow {
  */
 export const REFLOW_REREAD = "reflow:reread";
 
+/**
+ * Every container that heard a change in this update, placed from the
+ * innermost out. A container inside another is a box of the outer one, and
+ * until the inner one has placed its own rows its last change's edges are
+ * still applied: the outer one read the inner box at the size it was
+ * leaving (a tree reopened in the home list mid-fold was read as still
+ * folded), placed nothing under it, and the rail jumped once the inner one
+ * caught up.
+ */
+const changed = new Map<Reflow, number>();
+function heard(state: Reflow, depth: number): void {
+  if (changed.size === 0) {
+    queueMicrotask(() => {
+      const order = [...changed].sort((a, b) => b[1] - a[1]);
+      changed.clear();
+      for (const [each] of order) {
+        each.change();
+      }
+    });
+  }
+  changed.set(state, depth);
+}
+
+/** How many elements up to the root: a container's nesting. */
+const depthOf = (node: Element): number => {
+  let depth = 0;
+  for (let at = node.parentElement; at; at = at.parentElement) {
+    depth += 1;
+  }
+  return depth;
+};
+
 export function reflow() {
   return (node: HTMLElement) => {
     node.setAttribute("data-reflow", "");
     if (getComputedStyle(node).position === "static") {
       node.style.position = "relative";
     }
+    // It anchors its own scroll (`#anchor`): the browser's would move every
+    // row a second time.
+    node.style.overflowAnchor = "none";
     const state = new Reflow(node);
-    const watcher = new MutationObserver(() => state.change());
+    const depth = depthOf(node);
+    const watcher = new MutationObserver(() => heard(state, depth));
     watcher.observe(node, {
       subtree: true,
       childList: true,
@@ -911,8 +1113,11 @@ export function reflow() {
     sizes.observe(node);
     const reread = () => state.reread();
     node.addEventListener(REFLOW_REREAD, reread);
+    const scrolled = () => state.scrolled();
+    node.addEventListener("scroll", scrolled, { passive: true });
     return () => {
       node.removeEventListener(REFLOW_REREAD, reread);
+      node.removeEventListener("scroll", scrolled);
       watcher.disconnect();
       sizes.disconnect();
     };

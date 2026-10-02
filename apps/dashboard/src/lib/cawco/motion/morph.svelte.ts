@@ -11,15 +11,25 @@
  * box it resizes would report its own animation back to itself. For the
  * tween's length the children hold their natural size (no flex shrink), so
  * the container clips them instead of squashing a scrolling list inside it.
+ *
+ * `rows`: what changes inside is a `reflow`'s rows (a run's steps opening
+ * a result under one, motion/branch), so the container's edge moves with
+ * them: on their curve and length (--ease-in-out, --dur-panel), from the
+ * frame their batch starts on (motion/rows `atTravel`), held at its drawn
+ * size until then. What sits under the container moves with its edge, and
+ * the rows inside are never cut by it.
  */
-import { CURVE, dur, motionOk } from "./curves.svelte";
+import { CURVE, dur, ease, motionOk } from "./curves.svelte";
+import { heldToTravel } from "./rows.svelte";
 
 export function morph({
   width = false,
   ms,
+  rows = false,
 }: {
   width?: boolean;
   ms?: number;
+  rows?: boolean;
 } = {}) {
   return (node: HTMLElement) => {
     /**
@@ -30,6 +40,20 @@ export function morph({
      */
     let natural: { w: number; h: number } | null = null;
     let running: Animation | undefined;
+
+    /** The tween itself: its own curve, or the rows' (`rows`). */
+    const play = (frames: Keyframe[]): Animation =>
+      rows
+        ? heldToTravel(
+            node.animate(frames, {
+              duration: dur("--dur-panel"),
+              easing: ease("--ease-in-out"),
+            })
+          )
+        : node.animate(frames, {
+            duration: ms ?? dur("--dur-morph"),
+            easing: CURVE.drawer,
+          });
 
     const tween = (settled: { w: number; h: number }) => {
       // The size to start from: where a tween in flight has the box right
@@ -61,10 +85,7 @@ export function morph({
       for (const child of held) {
         child.style.flexShrink = "0";
       }
-      const animation = node.animate(frames, {
-        duration: ms ?? dur("--dur-morph"),
-        easing: CURVE.drawer,
-      });
+      const animation = play(frames);
       running = animation;
       const done = () => {
         for (const child of held) {
