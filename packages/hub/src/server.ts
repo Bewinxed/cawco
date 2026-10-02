@@ -9918,7 +9918,11 @@ export const createServer = ({
               }
               break;
             default:
-              console.warn(`[hub] unhandled dashboard verb ${message.verb}`);
+              // The client is named: a verb no build sends any more comes
+              // from a page or app still running an older one.
+              console.warn(
+                `[hub] unhandled dashboard verb ${message.verb} from ${ws.headers["user-agent"] ?? "a client with no user agent"} at ${ws.headers.origin ?? ws.remoteAddress}`
+              );
           }
         },
         close(ws) {
