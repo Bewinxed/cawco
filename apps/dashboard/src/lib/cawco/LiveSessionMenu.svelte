@@ -15,6 +15,7 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as ContextMenu from "$lib/components/ui/context-menu";
   import {
+    IconArchive,
     IconArrowRight,
     IconCheck,
     IconExternal,
@@ -42,6 +43,8 @@
     /** The row, spreading the trigger's props on its root element. */
     children: Snippet<[Record<string, unknown>]>;
     instance: InstanceRow;
+    /** Set only where the row is listed as finished: takes it off the list. */
+    onarchive?: () => void;
     /**
      * Set only where the rail has flattened this session's directory out of
      * its folder — the way back. A row drawn inside a folder is already
@@ -50,7 +53,7 @@
     ongroup?: () => void;
   }
 
-  let { instance, ongroup, children }: Props = $props();
+  let { instance, ongroup, onarchive, children }: Props = $props();
 
   const href = $derived(conversationHref(instance.id, cawco.instanceIndex));
   const scratch = $derived(instance.kind === "scratch");
@@ -179,6 +182,12 @@
       <ContextMenu.Item onSelect={ongroup}>
         <IconFolder />
         Group into folder
+      </ContextMenu.Item>
+    {/if}
+    {#if onarchive}
+      <ContextMenu.Item onSelect={onarchive}>
+        <IconArchive />
+        Archive
       </ContextMenu.Item>
     {/if}
 

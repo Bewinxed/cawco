@@ -62,11 +62,13 @@
   import { reflow } from "./motion/rows.svelte";
   import NewProjectPopover from "./NewProjectPopover.svelte";
   import { nestFrom, nestPlace } from "./nest";
+  import { openTrees } from "./open-trees.svelte";
   import ProjectMark from "./ProjectMark.svelte";
   import { type RailSort, rail } from "./rail.svelte";
   import SessionHover from "./SessionHover.svelte";
+  import StackChip from "./StackChip.svelte";
   import NewSessionDialog from "./spawn/NewSessionDialog.svelte";
-  import { tree } from "./tree";
+  import { collapse, tree } from "./tree";
   import UsageMeter from "./UsageMeter.svelte";
   import { workflowState } from "./workflow-state.svelte";
   import { workspace } from "./workspace/workspace.svelte";
@@ -420,6 +422,13 @@
   interface Nested {
     depth: number;
     row: InstanceRow;
+    /** Its folded rows, when it is a parent (tree.ts collapse). */
+    stack: {
+      count: number;
+      failed: number;
+      open: boolean;
+      ontoggle: () => void;
+    } | null;
   }
 
   /** Past this the indent eats the name; the tree keeps nesting, the offset stops. */
@@ -427,12 +436,26 @@
 
   /**
    * `rows` in tree order (tree.ts), siblings sorted by the reader's
-   * {@link ordered}.
+   * {@link ordered}, folded as the reader left them (open-trees): every
+   * parent starts folded, its delegates a count on its row.
    */
   function nested(rows: InstanceRow[], key: string): Nested[] {
-    return tree(rows, (list, under) => ordered(list, `${key}:${under}`)).map(
-      (line) => ({ row: line.row, depth: Math.min(line.depth, MAX_INDENT) })
-    );
+    const lines = tree(rows, {
+      order: (list, under) => ordered(list, `${key}:${under}`),
+    });
+    return collapse(lines, openTrees.has).map((line) => ({
+      row: line.row,
+      depth: Math.min(line.depth, MAX_INDENT),
+      stack:
+        line.descendants.length > 0
+          ? {
+              count: line.descendants.length,
+              failed: line.descendants.filter(isFailed).length,
+              open: openTrees.has(line.row.id),
+              ontoggle: () => openTrees.toggle(line.row.id),
+            }
+          : null,
+    }));
   }
 
   /** The row's own left inset — `px-2.5` plus one 13px step per generation. */
@@ -505,11 +528,19 @@
      row in the rail renders this, so "which one was I just in" is answered by
      looking down one column instead of opening six of them. -->
 
-{#snippet subRow(row: InstanceRow, depth: number, place: string)}
+{#snippet subRow(
+  row: InstanceRow,
+  depth: number,
+  place: string,
+  stack: Nested['stack']
+)}
   {@const Sprite = sessionSprite(row.id)}
   {@const activity = cawco.activityOf(row.id)}
   <li
-    class="group/menu-sub-item relative"
+    class={[
+      'group/menu-sub-item relative',
+      stack && !stack.open && 'kit-stacked',
+    ]}
     data-flip
     data-session-row={row.id}
     data-sidebar="menu-sub-item"
@@ -536,9 +567,21 @@
         />
       </span>
       <span class="min-w-0 flex-1 truncate">{sessionName(row)}</span>
+      {#if stack}
+        <StackChip {...stack} compact />
+      {/if}
       {@render age(row)}
       <span class={TRAIL}><ActivityDot {activity} /></span>
     </Sidebar.MenuSubButton>
+    {#if stack && !stack.open}
+      <button
+        aria-hidden="true"
+        class="kit-stack-bars"
+        onclick={stack.ontoggle}
+        tabindex="-1"
+        type="button"
+      ></button>
+    {/if}
   </li>
 {/snippet}
 
@@ -812,10 +855,11 @@
                       {@attach nestFrom('.project-mark')}
                     >
                       {@const lists = splitOf(project)}
+                      {@const recent = nested(lists.recent, `rail:${project.id}:recent`)}
                       {@const count =
-                        lists.recent.length + (lists.older.length > 0 || lists.recent.length === 0 ? 1 : 0)}
-                      {#each nested(lists.recent, `rail:${project.id}:recent`) as { row, depth }, i (row.id)}
-                        {@render subRow(row, depth, nestPlace(i, count))}
+                        recent.length + (lists.older.length > 0 || lists.recent.length === 0 ? 1 : 0)}
+                      {#each recent as { row, depth, stack }, i (row.id)}
+                        {@render subRow(row, depth, nestPlace(i, count), stack)}
                       {/each}
                       {#if lists.older.length > 0}
                         {@const olderVisible = olderShown(project, lists.older)}
@@ -833,6 +877,7 @@
                           </Sidebar.MenuSubButton>
                         </Sidebar.MenuSubItem>
                         {#if olderVisible}
+                          {@const older = nested(lists.older, `rail:${project.id}:older`)}
                           <!-- Older sessions scroll in a box of their own,
                                six rows at most, so opening them never pushes
                                the projects below or the footer. -->
@@ -841,8 +886,8 @@
                               class="older kit-nest-inner"
                               {@attach scrollEdges}
                             >
-                              {#each nested(lists.older, `rail:${project.id}:older`) as { row, depth }, i (row.id)}
-                                {@render subRow(row, depth, nestPlace(i, lists.older.length))}
+                              {#each older as { row, depth, stack }, i (row.id)}
+                                {@render subRow(row, depth, nestPlace(i, older.length), stack)}
                               {/each}
                             </ul>
                           </li>

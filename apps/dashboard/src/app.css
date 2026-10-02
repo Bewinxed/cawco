@@ -591,6 +591,51 @@
     }
   }
 
+  /* A folded parent (tree.ts `collapse`): its row is the front card of a
+     deck, two cards stacked under it standing for the rows folded into it.
+     The host (position: relative) makes their room with padding, not
+     margin, so a rail running past it runs past them too. The front card is
+     edged in the nesting ink: it is the rail's own surface and would
+     otherwise not show as a card at all. The cards behind it are faint and
+     unedged. `.kit-stack-bars` is both their drawing and the hit that opens
+     the parent. */
+  .kit-stacked {
+    padding-block-end: 9px;
+  }
+  .kit-stacked > [data-rail-row] {
+    box-shadow: inset 0 0 0 1px var(--nest-ink);
+  }
+  .kit-stack-bars {
+    position: absolute;
+    inset-inline: 4px;
+    bottom: 0;
+    block-size: 9px;
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+
+    &::before,
+    &::after {
+      content: "";
+      position: absolute;
+      border-radius: 0 0 var(--radius-sm) var(--radius-sm);
+      background: var(--surface-fill);
+      pointer-events: none;
+    }
+    &::before {
+      inset-inline: 2px;
+      top: 0;
+      block-size: 5px;
+    }
+    &::after {
+      inset-inline: 8px;
+      top: 5px;
+      block-size: 4px;
+      opacity: 0.6;
+    }
+  }
+
   /* A list section's header (the home's Needs you, Recent): its label at
      the start, its count pushed to the end in tabular figures, and a
      neutral hairline under it marking where the section begins. */

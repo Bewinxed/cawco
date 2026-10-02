@@ -60,7 +60,18 @@ const opened = $state<Record<string, number>>(loadOpened());
 
 /** Records that the reader has a conversation on screen now. */
 export function markOpened(id: string): void {
-  opened[id] = Date.now();
+  archive([id]);
+}
+
+/**
+ * Takes sessions off Finished without opening them: each is marked seen, as
+ * opening it would, so it is listed again only when it ends another turn.
+ */
+export function archive(ids: string[]): void {
+  const at = Date.now();
+  for (const id of ids) {
+    opened[id] = at;
+  }
   try {
     localStorage.setItem(OPENED_KEY, JSON.stringify(opened));
   } catch {
@@ -388,7 +399,7 @@ class Home {
     const rows = cawco.runningInstances.filter(
       (row) => !row.workflowRunId && cawco.activityOf(row.id) === "working"
     );
-    // Ordered by when each joined Working this stint, oldest first: a key
+    // Ordered by when each joined Working this stint, newest first: a key
     // that never moves while it works, so two agents trading turns never
     // swap places. Stamped on arrival, forgotten on leaving.
     const present = new Set(rows.map((row) => row.id));
@@ -406,7 +417,7 @@ class Home {
     }
     return rows.sort(
       (a, b) =>
-        (enteredWorking.get(a.id) ?? at) - (enteredWorking.get(b.id) ?? at) ||
+        (enteredWorking.get(b.id) ?? at) - (enteredWorking.get(a.id) ?? at) ||
         a.id.localeCompare(b.id)
     );
   });
@@ -436,12 +447,9 @@ class Home {
           const ended = isFailed(row) ? lastAt(row) : pulse;
           return ended !== undefined && ended > (opened[row.id] ?? 0);
         })
-        // A failure is the more urgent news, then the latest first; a
-        // machine's group leads with its most urgent row (`byMachine`).
-        .sort(
-          (a, b) =>
-            Number(isFailed(b)) - Number(isFailed(a)) || lastAt(b) - lastAt(a)
-        ),
+        // The latest to end first. A failure says so on its own row (its
+        // mark, its line, the tab's numeral), not by jumping the queue.
+        .sort((a, b) => lastAt(b) - lastAt(a)),
       (row) => row.id
     );
   });

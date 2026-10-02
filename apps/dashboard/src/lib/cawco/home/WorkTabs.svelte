@@ -23,8 +23,13 @@
    * with the layout. The seams between groups never take room, so a group
    * coming or going never moves one.
    *
-   * A tab lists its first MORE_AT rows and "N more"; opening the rest (or
-   * closing them) is the same relay, the rows arriving or leaving in place.
+   * Every tree starts folded to its parent's row (tree.ts, open-trees): a
+   * count on the row and two cards under it, opened one level at a time by
+   * the count, the cards or →, and folded again by the count, the parent's
+   * rail or ←. A tab lists its first MORE_AT trees and "N more"; opening
+   * the rest (or closing them) is the same relay, the rows arriving or
+   * leaving in place. A finished row, or a whole tree, can be archived
+   * without opening it, and a machine's header archives all it finished.
    * With nothing changing, the list's own `reflow` carries live changes: a
    * row arriving, a held re-sort.
    *
@@ -39,6 +44,8 @@
   import { TabItem, Tabs, TabsList } from "$lib/components/ui/fluid-tabs";
   import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   import Tip from "$lib/components/ui/tooltip/tip.svelte";
+  import { IconArchive } from "$lib/icons";
+  import StructureOn from "~icons/solar/structure-bold";
   import Structure from "~icons/solar/structure-bold-duotone";
   import { cawco, type InstanceRow, isFailed } from "../client.svelte";
   import { conversationHref } from "../links";
@@ -53,11 +60,13 @@
   } from "../motion/relay-boxes";
   import { REFLOW_REREAD, reflow } from "../motion/rows.svelte";
   import OsMark from "../OsMark.svelte";
+  import { openTrees } from "../open-trees.svelte";
   import { rail } from "../rail.svelte";
-  import { tree } from "../tree";
+  import { collapse, type TreeLine, tree } from "../tree";
   import { workspace } from "../workspace/workspace.svelte";
   import HomeRow, { ROW_PILL } from "./HomeRow.svelte";
   import {
+    archive,
     byMachine,
     clock,
     home,
@@ -144,12 +153,19 @@
     cawco.instanceIndex.byId.get(id);
   /**
    * Each tab as its tree (tree.ts): every session followed by its
-   * delegates, and a parent the tab does not list drawn as a context line
-   * in its delegates' place, so none stands alone.
+   * delegates, and each ancestor the tab does not list drawn as a context
+   * line in its delegates' place, so none stands alone. Newest on top: the
+   * rows come newest first, and Finished stands a tree at its latest member,
+   * Working at its earliest (so two agents trading turns never swap).
    */
   const trees = $derived({
-    working: tree(rowsOf("working"), undefined, known),
-    finished: tree(rowsOf("finished"), undefined, known),
+    working: tree(rowsOf("working"), { anchor: "last", context: known }),
+    finished: tree(rowsOf("finished"), { anchor: "first", context: known }),
+  });
+  /** Each tab as the reader sees it: every tree folded until opened. */
+  const folded = $derived({
+    working: collapse(trees.working, openTrees.has),
+    finished: collapse(trees.finished, openTrees.has),
   });
   /** Every row's place in its tab's tree: depth, last sibling, rails through it. */
   const shapes = $derived({
@@ -157,6 +173,39 @@
     finished: new Map(trees.finished.map((line) => [line.row.id, line])),
   });
   const shapeOf = (tab: WorkTab, id: string) => shapes[tab].get(id);
+
+  /** A parent's folded rows, for its row's count and cards; null otherwise. */
+  function stackOf(tab: WorkTab, id: string) {
+    const line = shapeOf(tab, id);
+    if (!line?.descendants.length) {
+      return null;
+    }
+    return {
+      count: line.descendants.length,
+      failed: line.descendants.filter(isFailed).length,
+      open: openTrees.has(id),
+      ontoggle: () => openTrees.toggle(id),
+    };
+  }
+  /** Takes a finished row off the list, and with a parent its whole tree. */
+  function archiveTree(id: string): void {
+    const line = shapeOf("finished", id);
+    archive([id, ...(line?.descendants ?? []).map((row) => row.id)]);
+  }
+  /** Every finished row a machine lists, folded or not: its "Archive all". */
+  function finishedOn(machineId: string): string[] {
+    const ids: string[] = [];
+    let top = "";
+    for (const line of trees.finished) {
+      if (line.depth === 0) {
+        top = line.row.machineId;
+      }
+      if (top === machineId && !line.context) {
+        ids.push(line.row.id);
+      }
+    }
+    return ids;
+  }
 
   type Group = MachineGroup<InstanceRow>;
   /** A line that is leaving: a machine's header, or one of its rows. */
@@ -191,7 +240,7 @@
    * another machine still hangs under the session that started it.
    */
   function grouped(tab: WorkTab): Group[] {
-    const lines = trees[tab];
+    const lines = folded[tab];
     const tops = byMachine(
       lines.filter((line) => line.depth === 0).map((line) => line.row)
     );
@@ -235,9 +284,9 @@
   }
 
   /**
-   * A tab's groups as listed: all of them, or its first MORE_AT rows. A
-   * context line takes no room; it is listed with the first of its
-   * delegates that is.
+   * A tab's groups as listed: all of them, or its first MORE_AT trees, each
+   * with whatever of it is open. A tree is one line until it is opened, so
+   * the count is of top-level lines.
    */
   function listed(tab: WorkTab, all: boolean): Group[] {
     const groups = grouped(tab);
@@ -248,18 +297,14 @@
     const out: Group[] = [];
     for (const group of groups) {
       const rows: InstanceRow[] = [];
-      let waiting: InstanceRow[] = [];
       for (const row of group.rows) {
-        if (room === 0) {
-          break;
+        if (shapeOf(tab, row.id)?.depth === 0) {
+          if (room === 0) {
+            break;
+          }
+          room -= 1;
         }
-        if (shapeOf(tab, row.id)?.context) {
-          waiting.push(row);
-          continue;
-        }
-        rows.push(...waiting, row);
-        waiting = [];
-        room -= 1;
+        rows.push(row);
       }
       if (rows.length > 0) {
         out.push({ ...group, rows });
@@ -268,20 +313,40 @@
     return out;
   }
 
+  /** The trees past the first MORE_AT, in the order the groups list them. */
+  function beyondCap(tab: WorkTab): TreeLine<InstanceRow>[] {
+    const tops = grouped(tab).flatMap((group) =>
+      group.rows
+        .map((row) => shapeOf(tab, row.id))
+        .filter((line) => line?.depth === 0)
+    ) as TreeLine<InstanceRow>[];
+    return tops.slice(MORE_AT);
+  }
+
   /** The tab whose rows are drawn; it follows the choice in the click. */
   let shown = $state<WorkTab>(untrack(() => workTab.current));
   const groups = $derived(listed(shown, workTab.showsAll(shown)));
   /** The words on the row under the list: "N more", "Show fewer", or none. */
   function moreOf(tab: WorkTab, all: boolean): string | null {
-    const total = rowsOf(tab).length;
-    if (total <= MORE_AT) {
+    const hidden = beyondCap(tab).length;
+    if (hidden === 0) {
       return null;
     }
-    return all ? "Show fewer" : `Show ${total - MORE_AT} more`;
+    return all ? "Show fewer" : `Show ${hidden} more`;
   }
   const more = $derived(moreOf(shown, workTab.showsAll(shown)));
-  /** The delegates the button is keeping out of the tab shown. */
-  const hiddenCount = $derived(allOf(shown).length - rowsOf(shown).length);
+  /** Failures in the trees "Show N more" keeps folded away, said beside it. */
+  const moreFailed = $derived(
+    workTab.showsAll(shown)
+      ? 0
+      : beyondCap(shown)
+          .flatMap((line) =>
+            line.context ? line.descendants : [line.row, ...line.descendants]
+          )
+          .filter(isFailed).length
+  );
+  /** Whether anything listed as finished failed: its numeral says so. */
+  const finishedFailed = $derived(rowsOf("finished").some(isFailed));
 
   let plan = $state.raw<Plan | null>(null);
   const swap = new ListSwap<Line>();
@@ -417,6 +482,39 @@
     });
   }
 
+  /**
+   * → opens the tree of the row with focus, ← folds it; ← on a row that is
+   * not open goes up to its parent, the way a tree view walks.
+   */
+  const arrowKeys: Attachment<HTMLElement> = (node) => {
+    node.addEventListener("keydown", onkey);
+    return () => node.removeEventListener("keydown", onkey);
+  };
+  function onkey(event: KeyboardEvent): void {
+    if (event.key !== "ArrowRight" && event.key !== "ArrowLeft") {
+      return;
+    }
+    const id = (event.target as Element).closest<HTMLElement>("[data-key]")
+      ?.dataset.key;
+    const line = id ? shapeOf(shown, id) : undefined;
+    if (!(id && line)) {
+      return;
+    }
+    const parent = line.descendants.length > 0;
+    const open = event.key === "ArrowRight";
+    if (parent && openTrees.has(id) !== open) {
+      event.preventDefault();
+      openTrees.set(id, open);
+    } else if (!open && line.parent) {
+      event.preventDefault();
+      listEl
+        ?.querySelector<HTMLElement>(
+          `[data-key="${CSS.escape(line.parent)}"] [data-rail-row]`
+        )
+        ?.focus();
+    }
+  }
+
   function fold(): void {
     const all = !workTab.showsAll(shown);
     relay(all ? 1 : -1, shown, all, () => workTab.setShowsAll(shown, all));
@@ -474,10 +572,23 @@
 </script>
 
 {#snippet header(group: Group, style: string)}
+  {@const finished = shown === 'finished' ? finishedOn(group.machineId) : []}
   <!-- Where these run, said once for the rows under it. -->
   <h3 class="machine" data-key="head:{group.machineId}" {style}>
     <OsMark class="size-3.5" os={group.os} />
     <span>{group.name}</span>
+    {#if finished.length > 0}
+      <!-- Everything this machine has finished, failures too, off the list
+           in one go. -->
+      <button
+        aria-label="Archive all finished on {group.name}"
+        class="archive-all focus-inset touch-hit press-tint"
+        onclick={() => archive(finished)}
+        type="button"
+      >
+        <IconArchive aria-hidden="true" />Archive all
+      </button>
+    {/if}
   </h3>
 {/snippet}
 
@@ -493,6 +604,8 @@
     instance={row}
     line={context ? '' : metaLine(row, tab, group)}
     machineId={row.machineId}
+    onarchive={tab === 'finished' ? () => archiveTree(row.id) : undefined}
+    stack={stackOf(tab, row.id)}
     {stale}
     title={instanceTitle(row)}
     trail={context ? '' : age(row, tab)}
@@ -541,7 +654,12 @@
             <TabItem label={tab.label} value={tab.id}>
               {#snippet trail()}
                 {#key count}
-                  <span class="num count" data-flip="pop" data-tab={tab.id}
+                  <span
+                    class="num count"
+                    data-failed={(tab.id === 'finished' && finishedFailed) ||
+                      undefined}
+                    data-flip="pop"
+                    data-tab={tab.id}
                     >{count}</span
                   >
                 {/key}
@@ -552,29 +670,22 @@
       </Tabs>
       <Tip label={rail.delegates ? 'Hide delegates' : 'Show delegates'}>
         {#snippet children(tip)}
+          <!-- A switch with no count of its own, at a fixed size, so
+               nothing in the header moves when it is pressed. On, its
+               glyph turns solid in strong ink; off, the duotone, muted. -->
           <button
             {...tip}
-            aria-label={hiddenCount > 0
-              ? `Show delegates, ${hiddenCount} hidden`
-              : 'Show delegates'}
+            aria-label="Delegates"
             aria-pressed={rail.delegates}
             class="delegates focus-inset touch-hit"
             data-on={rail.delegates || undefined}
             onclick={() => rail.setDelegates(!rail.delegates)}
             type="button"
           >
-            <Structure aria-hidden="true" />
-            {#if hiddenCount > 0}
-              <!-- How many the button is keeping out, in the tab's ink. -->
-              {#key hiddenCount}
-                <span
-                  aria-hidden="true"
-                  class="num count"
-                  data-flip="pop"
-                  data-tab={shown}
-                  >{hiddenCount}</span
-                >
-              {/key}
+            {#if rail.delegates}
+              <StructureOn aria-hidden="true" />
+            {:else}
+              <Structure aria-hidden="true" />
             {/if}
           </button>
         {/snippet}
@@ -587,6 +698,7 @@
       {@attach glyphs}
       {@attach highlight(ROW_PILL)}
       {@attach holdWhileInside('home:')}
+      {@attach arrowKeys}
     >
       {#each drawn as entry (entry.group.machineId)}
         {@const id = entry.group.machineId}
@@ -618,8 +730,17 @@
                 style={[enterAnim(row.id), nestStyle(shown, row.id, i)].join('; ')}
                 class:nested={(shape?.depth ?? 0) > 0}
               >
-                {#if (shape?.depth ?? 0) > 0}
+                {#if shape?.parent && shape.depth > 0}
+                  {@const above = shape.parent}
                   <span aria-hidden="true" class="tip"></span>
+                  <!-- The parent's column: a click on its rail folds it. -->
+                  <button
+                    aria-hidden="true"
+                    class="gutter"
+                    onclick={() => openTrees.set(above, false)}
+                    tabindex="-1"
+                    type="button"
+                  ></button>
                 {/if}
                 {@render sessionRow(row, shown, id)}
               </div>
@@ -647,6 +768,9 @@
             type="button"
           >
             {more}
+            {#if moreFailed > 0}
+              <span class="more-failed">· {moreFailed} failed</span>
+            {/if}
           </button>
         {:else if plan?.more}
           <span aria-hidden="true" class="more" style={leaveAnim('more')}
@@ -679,23 +803,32 @@
     padding: 0;
     background: none;
   }
-  /* The session tabs' sizes (PaneTabs): sized to their content plus --px. */
+  /* The session tabs' sizes (PaneTabs): sized to their content plus --px.
+     The chosen sheet stands off the rail in both themes (raised on the light
+     rail, lit on the dark one), and hovering an unchosen tab is a lighter
+     tint than choosing it. */
   :global(.work-tabs[data-slot="tabs"] .ff-tabs-list) {
-    --px: 10px;
+    --px: 6px;
     --text: var(--text-label);
     --item: 32px;
-    --sheet: var(--surface-hover);
-    --tab-hover: var(--surface-hover);
+    --sheet: light-dark(var(--surface-raised), var(--surface-hover));
+    --tab-hover: color-mix(in oklch, var(--surface-fill) 50%, transparent);
   }
-  /* The count, washed in its tab's status ink (the usage tints' strength). */
+  /* An unchosen tab draws no card of its own: on the light rail its card was
+     the darker shape, and read as the chosen one. */
+  :global(.work-tabs[data-slot="tabs"] .ff-tabs-list .ff-tab::before) {
+    background: none;
+  }
+  /* The count, washed in its tab's status ink (the usage tints' strength),
+     on the chosen tab only; the other's is a plain numeral. */
   .count {
     --ink: var(--status-live-ink);
     display: inline-grid;
     place-items: center;
-    min-inline-size: 20px;
+    min-inline-size: 18px;
     block-size: 18px;
-    padding-inline: 5px;
-    margin-inline-end: 8px;
+    padding-inline: 3px;
+    margin-inline-end: 2px;
     border-radius: var(--radius-xs);
     background: light-dark(
       color-mix(in oklch, var(--ink) 6%, transparent),
@@ -708,17 +841,25 @@
   .count[data-tab="finished"] {
     --ink: var(--status-done-ink);
   }
-  /* The corner actions' icon button (Sidebar .head-action), its pressed
-     state their selected tint. */
+  /* Something listed as finished failed: the numeral says so. */
+  .count[data-failed] {
+    --ink: var(--status-fail-ink);
+  }
+  :global(.ff-tab:not(.selected)) .count {
+    background: none;
+  }
+  :global(.ff-tab:not(.selected)) .count:not([data-failed]) {
+    color: var(--ink-muted);
+  }
+  /* The corner actions' icon button (Sidebar .head-action), at one size
+     whatever it shows. Pressed, its glyph turns solid in strong ink: no
+     fill, nothing that moves. */
   .delegates {
-    display: inline-flex;
+    display: inline-grid;
     flex: none;
-    align-items: center;
-    justify-content: center;
-    gap: var(--space-1);
-    min-inline-size: 28px;
+    place-items: center;
+    inline-size: 28px;
     block-size: 28px;
-    padding-inline: 6px;
     margin-block-end: 2px;
     border: 0;
     border-radius: var(--radius-sm);
@@ -730,20 +871,14 @@
       color var(--dur-control) var(--ease-out);
   }
   .delegates :global(svg) {
-    flex: none;
     inline-size: 16px;
     block-size: 16px;
   }
-  /* The hidden delegates' count, the tab counts' badge at its own end. */
-  .delegates .count {
-    margin-inline-end: 0;
-  }
   .delegates[data-on] {
-    background: var(--selected-bg);
-    color: var(--selected-ink);
+    color: var(--ink-strong);
   }
   @media (hover: hover) and (pointer: fine) {
-    .delegates:not([data-on]):hover {
+    .delegates:hover {
       background: var(--surface-hover);
       color: var(--ink-strong);
     }
@@ -839,6 +974,44 @@
       animation: nest-tip var(--dur-fade) var(--ease-out) both;
       animation-delay: calc(var(--nest-i, 0) * 40ms + var(--dur-panel));
     }
+    /* A folding row's copy (the list's reflow): its lines retract. */
+    .nested:global([data-reflow-ghost])::before,
+    .nested:global([data-reflow-ghost])::after,
+    .nested:global([data-reflow-ghost]) .tip {
+      animation-direction: reverse;
+      animation-duration: var(--dur-exit);
+      animation-delay: 0s;
+    }
+  }
+  /* A child's parent column: a click on the rail there folds the parent,
+     and the rail brightens under the pointer to say so. */
+  .gutter {
+    position: absolute;
+    inset-block: 0;
+    left: calc((var(--nest-d) - 1) * var(--nest-step));
+    z-index: 1;
+    inline-size: var(--nest-step);
+    padding: 0;
+    border: 0;
+    background: none;
+    cursor: pointer;
+
+    &::before {
+      content: "";
+      position: absolute;
+      inset-block: 0;
+      left: calc(var(--glyph-x) - 1px);
+      inline-size: 3px;
+      border-radius: var(--radius-hair);
+      background: var(--ink-strong);
+      opacity: 0;
+      transition: opacity var(--dur-control) var(--ease-out);
+    }
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .gutter:hover::before {
+      opacity: 0.3;
+    }
   }
   /* The old rows, out of the layout either way: the group's own height is
      only what stays, so the height drive holds it while they leave and then
@@ -870,6 +1043,37 @@
     min-height: 22px;
     font: var(--type-meta);
     color: var(--ink-muted);
+  }
+  /* "Archive all", at the header's end. */
+  .archive-all {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-1);
+    block-size: 22px;
+    margin-inline: auto calc(var(--space-1) * -1);
+    padding-inline: var(--space-1);
+    border: 0;
+    border-radius: var(--radius-xs);
+    background: none;
+    color: var(--ink-muted);
+    font: var(--type-meta);
+    cursor: pointer;
+    transition: var(--transition-control);
+
+    & :global(svg) {
+      inline-size: 14px;
+      block-size: 14px;
+    }
+  }
+  @media (hover: hover) and (pointer: fine) {
+    .archive-all:hover {
+      background: var(--surface-hover);
+      color: var(--ink-strong);
+    }
+  }
+  .more-failed {
+    margin-inline-start: 0.3em;
+    color: var(--status-fail-ink);
   }
   .more-slot {
     display: flex;

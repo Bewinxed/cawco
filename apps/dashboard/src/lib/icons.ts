@@ -15,6 +15,7 @@ export { default as IconChevronDown } from "~icons/solar/alt-arrow-down-linear";
 export { default as IconChevronLeft } from "~icons/solar/alt-arrow-left-linear";
 export { default as IconChevronRight } from "~icons/solar/alt-arrow-right-linear";
 export { default as IconChevronUp } from "~icons/solar/alt-arrow-up-linear";
+export { default as IconArchive } from "~icons/solar/archive-down-minimlistic-bold-duotone";
 export { default as IconArrowDown } from "~icons/solar/arrow-down-linear";
 export { default as IconArrowRight } from "~icons/solar/arrow-right-linear";
 export { default as IconArrowUp } from "~icons/solar/arrow-up-linear";
