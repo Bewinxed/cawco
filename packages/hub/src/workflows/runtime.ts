@@ -78,10 +78,12 @@ export interface WorkflowRuntimeDeps {
   problems: (graph: WorkflowGraph, workflowId: string) => Problem[];
   settle: (requestId: string) => void;
   spawn: (machineId: string, payload: SpawnPayload) => Promise<void>;
+  /** Spawns a run's supervisor, named by `title` as a delegate is by its spawn's. */
   supervisor: (
     type: string,
     workspace: string,
     machineId: string,
+    title: string,
     prompt: string
   ) => Promise<string>;
 }
@@ -827,6 +829,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
       chosen.delegateType,
       workspace.path,
       workspace.machineId,
+      `Supervise ${workflow.name}`,
       `${workflowNoticeMarker(workflow.name, "supervisor brief")}Supervise workflow ${workflow.name}, run ${runId}.\n${workflow.description}\nYou receive a receipt for each step, checkpoint and the run's end: its status, attempt, time, a \`ref\`, and the result itself when it is 1,000 characters or less. Read more of a result only when you need it, with workflow_read {runId, ref, path}. Pass a result on to a later step as {{ref:N.path}} in what you hand the program; the hub fills it in when the step starts. A step that runs out of attempts is held for your decision, up to an hour: steer_workflow retry runs another attempt on the same session, fail hands the program the failure. Answer its questions and steer it with steer_workflow (note, retry, fail, answer, cancel); the program controls routing.`
     );
   };

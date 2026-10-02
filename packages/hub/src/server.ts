@@ -5537,7 +5537,7 @@ export const createServer = ({
         payload: { kind: "user_message", instanceId: "workflow", text },
       });
     },
-    supervisor: async (type, cwd, machineId, prompt) => {
+    supervisor: async (type, cwd, machineId, title, prompt) => {
       const preset = delegateTypes.list().find((entry) => entry.name === type);
       if (!preset) {
         throw new Error(`No delegate type ${type}.`);
@@ -5551,6 +5551,7 @@ export const createServer = ({
           instanceId,
           cwd,
           machineId,
+          title,
           canDelegate: true,
           permissionMode: "bypassPermissions",
         }),
