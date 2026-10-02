@@ -1338,6 +1338,19 @@
   scrollbar-width: none;
 }
 
+/* ---- Morphing text (torph). Its injected sheet sets will-change on every
+   morph root, letter and digit slot for good, which keeps each one its own
+   compositor layer while it sits still: 10.9ms of Layerize a frame at idle with
+   four tabs open. A running transform or opacity animation gets its layer
+   without the hint, and a width animation is never composited, so the hint
+   only costs. Unlayered and one :root deeper than torph's selectors, because
+   torph's sheet is unlayered and lands after this one. */
+:root [torph-root],
+:root [torph-item]:not(br),
+:root [torph-slot] > span {
+  will-change: auto;
+}
+
 /* ---- Motion is opt-in: every travelling transition and keyframe animation
    in this sheet and in the components sits under
    `@media (prefers-reduced-motion: no-preference)`, and motion driven from

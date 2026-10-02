@@ -233,7 +233,6 @@
                 duration={morphMs()}
                 text={capital(label)}
               />
-              <span class="sr-only">{label}</span>
             {:else}
               <span class="lvl">{label}</span>
             {/if}
@@ -383,14 +382,6 @@
   }
   .knob :global(.lvl) {
     text-transform: none;
-    white-space: nowrap;
-  }
-  .sr-only {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-    clip-path: inset(50%);
     white-space: nowrap;
   }
   .content {

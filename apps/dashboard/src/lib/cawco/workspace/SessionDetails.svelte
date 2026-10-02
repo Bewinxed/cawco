@@ -711,6 +711,13 @@
     line-height: var(--leading-body);
     color: var(--ink-muted);
   }
+  /* The host and the folder morph as the card moves between sessions. torph
+     leaves the old letters where they stood while they fade, so each clips
+     sideways to its own box and never draws over the dots between them. */
+  .host,
+  .cwd {
+    overflow-x: clip;
+  }
   .cwd {
     min-width: 0;
     padding: 0;

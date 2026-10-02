@@ -103,6 +103,12 @@
     font-weight: var(--weight-strong);
     white-space: nowrap;
   }
+  /* torph leaves a changing word's old letters where they stood while they
+     fade; clipped sideways to the word's own box, they never draw over
+     whatever follows it. */
+  .session-status > :global([torph-root]) {
+    overflow-x: clip;
+  }
   .session-status :global(svg) {
     width: 16px;
     height: 16px;

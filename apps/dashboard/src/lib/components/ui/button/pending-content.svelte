@@ -118,13 +118,11 @@
 {#if label === undefined}
 <!-- Icon only: nothing to morph. -->
 {:else if morphMs}
-  <!-- TextMorph draws the words as one box per letter once it has morphed,
-       which a screen reader spells out; the name comes from the plain copy
-       beside it. -->
-  <span aria-hidden="true" class="kit-label"
+  <!-- TextMorph hides its letters from screen readers and names itself with
+       one plain copy of the words. -->
+  <span class="kit-label"
     ><TextMorph as="span" duration={morphMs} ease={CURVE.out} {text} /></span
   >
-  <span class="sr-only">{text}</span>
 {:else}
   <span class="kit-label">{text}</span>
 {/if}
