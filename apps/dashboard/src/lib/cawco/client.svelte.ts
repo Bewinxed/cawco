@@ -3462,12 +3462,23 @@ export function forkSession({
   /** Branch from this assistant turn rather than from the end — see {@link rewindPoint}. */
   at?: string;
 }): string {
+  // The branch runs on what its source runs on, never on the machine's
+  // defaults: the hub's row for the conversation says what that is.
+  const source = instanceForSession(instanceIndex, sessionId, {
+    machineId,
+    cwd,
+  });
   const created = start({
     machineId,
     cwd,
     harness,
     resume: { sessionKey: sessionId, fork: true, ...(at && { atMessage: at }) },
     scratch: {},
+    ...(source?.model ? { model: source.model } : {}),
+    ...(source?.permissionMode
+      ? { permissionMode: source.permissionMode as PermissionMode }
+      : {}),
+    ...(isEffortLevel(source?.effort) ? { effort: source.effort } : {}),
   });
   seed(created, history);
   // biome-ignore lint/complexity/noVoid: fire-and-forget — the session already started locally, this just resyncs the fleet list

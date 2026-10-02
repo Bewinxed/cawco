@@ -49,7 +49,8 @@ export interface ContinueRequest {
     harness: HarnessKind;
     machineId?: string;
     model: string;
-    permissionMode?: PermissionMode;
+    /** Always said: a continued session never answers by its machine's default. */
+    permissionMode: PermissionMode;
     projectId?: string;
     scratch?: { worktree?: boolean; baseCwd?: string };
   };

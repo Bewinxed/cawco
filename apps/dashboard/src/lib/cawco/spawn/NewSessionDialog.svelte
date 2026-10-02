@@ -770,6 +770,15 @@
       return false;
     }
   }
+  /**
+   * The model the form shows as chosen, sent by name so the session never
+   * falls to its machine's default: the picked entry, or the machine's
+   * default entry by the model it resolves to. Empty only when the machine
+   * names its default no more precisely than "default".
+   */
+  function shownModel(draft: SessionDraft): string {
+    return draft.usedModel === "default" ? "" : draft.usedModel;
+  }
   function spawnOne(target: string, draft: SessionDraft): string {
     const toAttach =
       draft.projectId && cawco.project(draft.projectId)?.machineId === target
@@ -781,7 +790,7 @@
       prompt: draft.prompt,
       harness: draft.harness,
       permissionMode: draft.permissionMode,
-      ...(draft.model ? { model: draft.model } : {}),
+      ...(shownModel(draft) ? { model: shownModel(draft) } : {}),
       ...(draft.effort ? { effort: draft.effort } : {}),
       scratch: draft.scratch,
       bootstrap:
@@ -844,7 +853,7 @@
       recordModelUse(draft.harness, draft.usedModel);
       rememberSpawn({
         harness: draft.harness,
-        model: draft.model,
+        model: shownModel(draft),
         permissionMode: draft.permissionMode,
         effort: draft.effort,
       });
@@ -904,7 +913,7 @@
     recordModelUse(draft.harness, draft.usedModel);
     rememberSpawn({
       harness: draft.harness,
-      model: draft.model,
+      model: shownModel(draft),
       permissionMode: draft.permissionMode,
       effort: draft.effort,
     });

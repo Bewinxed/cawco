@@ -15,6 +15,7 @@ import type {
   GeneratedImage,
   ImageGenerationRequest,
   InstanceRow,
+  PermissionMode,
   PermissionResult,
   PreviewSource,
   SendPayload,
@@ -31,6 +32,7 @@ import {
   QUESTION_DISMISSED,
 } from "@cawco/core";
 import type { WorkItemCheck, WorkItemSubmission } from "./db/schema";
+import { resolveSpawnType } from "./work-items";
 
 const WS_SCHEME = /^ws/;
 const WS_PATH_SUFFIX = /\/ws$/;
@@ -196,6 +198,24 @@ async function fetchInstances(): Promise<{
   );
   return { rows, hosts };
 }
+
+/**
+ * The permission mode the calling session runs in: what a session it starts
+ * takes when nothing else is named, so none answers by its machine's default.
+ */
+const callerMode = (
+  rows: InstanceRow[],
+  instanceId: string,
+  remedy = ""
+): PermissionMode => {
+  const mode = rows.find((row) => row.id === instanceId)?.permissionMode;
+  if (!mode) {
+    throw new Error(
+      `This session's own permission mode is not on record, so the new session has none to take.${remedy ? ` ${remedy}` : ""}`
+    );
+  }
+  return mode as PermissionMode;
+};
 
 const toPeer = (row: InstanceRow, hosts: Map<string, string>): Peer => {
   const name = leafOf(row.cwd);
@@ -543,10 +563,17 @@ export interface HandoffActions {
     cwd: string,
     prompt: string,
     title: string,
-    sideQuest?: boolean,
-    model?: string,
-    /** The machine it runs on, by hostname or machineId; the caller's by default. */
-    machine?: string
+    options: {
+      sideQuest?: boolean;
+      /** A delegate type; `medium` (work-items' DEFAULT_DELEGATE_TYPE) when omitted. */
+      type?: string;
+      /** Overrides the type's model. */
+      model?: string;
+      /** This session's own mode when omitted. */
+      permissionMode?: PermissionMode;
+      /** The machine it runs on, by hostname or machineId; the caller's by default. */
+      machine?: string;
+    }
   ): Promise<HandoffResult>;
   /** A supervisor's action on its run; answers one line saying what it did. */
   readonly steerWorkflow: (
@@ -641,18 +668,20 @@ export const handoffActions = ({
   workflowRunId,
   workflowStepId,
   cwd,
-  harness: callerHarness,
   emit,
 }: HandoffDeps): HandoffActions => ({
   async continueSession(input) {
     let source = instanceId;
+    const { rows, hosts } = await fetchInstances();
     if (input.session) {
-      const { rows, hosts } = await fetchInstances();
       source = resolve(
         rows.map((row) => toPeer(row, hosts)),
         input.session
       ).row.id;
     }
+    // The new session answers permissions as the caller does, never by its
+    // machine's default.
+    const permissionMode = callerMode(rows, instanceId);
     const response = await fetch(
       `${hubHttpUrl()}/api/instances/${encodeURIComponent(source)}/continue`,
       {
@@ -663,7 +692,11 @@ export const handoffActions = ({
             harness: input.summarizer_harness,
             model: input.summarizer_model,
           },
-          target: { harness: input.target_harness, model: input.target_model },
+          target: {
+            harness: input.target_harness,
+            model: input.target_model,
+            permissionMode,
+          },
           ...(input.note ? { note: input.note } : {}),
         }),
       }
@@ -932,9 +965,7 @@ export const handoffActions = ({
     workdir: string,
     prompt: string,
     title: string,
-    sideQuest = false,
-    model?: string,
-    machine?: string
+    { sideQuest = false, type: typeName, model: modelName, machine, ...opts }
   ): Promise<HandoffResult> {
     // Named: that machine, which must be online. Unnamed: "" is the caller's
     // own, which the hub's forwarder fills in.
@@ -942,14 +973,33 @@ export const handoffActions = ({
       ? resolveMachine(await fetchMachines(), machine)
       : undefined;
     const machineId = target?.machineId ?? "";
+    // Nothing is left to the machine's defaults: the type (or `medium`) says
+    // what runs, and the caller's own mode is how it answers permissions.
+    const [types, { rows }] = await Promise.all([
+      fetchDelegateTypes((message) => {
+        throw new Error(message);
+      }),
+      fetchInstances(),
+    ]);
+    const { type, harness, model } = resolveSpawnType(types, {
+      type: typeName,
+      model: modelName,
+    });
+    const permissionMode =
+      opts.permissionMode ??
+      callerMode(rows, instanceId, "Pass permissionMode.");
     const id = crypto.randomUUID();
     const from = leafOf(cwd);
     const payload: SpawnPayload = {
       instanceId: id,
       cwd: workdir,
       title,
-      ...(callerHarness ? { harness: callerHarness } : {}),
-      ...(model ? { model } : {}),
+      harness,
+      model,
+      permissionMode,
+      ...(type?.effort ? { effort: type.effort } : {}),
+      ...(type?.skills?.length ? { skills: type.skills } : {}),
+      ...(type?.denyTools?.length ? { denyTools: type.denyTools } : {}),
       ...(sideQuest ? { scratch: { baseCwd: workdir } } : {}),
       // Provenance only — a started session is not a delegate. The hub reads
       // it to hold a leaf to `canDelegate` on this door as well.
@@ -986,7 +1036,8 @@ export const handoffActions = ({
       id,
       title,
       text:
-        `Started "${title}" (${leafOf(workdir)})${sideQuest ? " as a side quest" : ""}${on} in ${workdir}. ` +
+        `Started "${title}" (${leafOf(workdir)})${sideQuest ? " as a side quest" : ""}${on} in ${workdir}, ` +
+        `on ${harness} ${model}${type?.effort ? ` at ${type.effort} effort` : ""} in ${permissionMode} mode${type ? ` (type '${type.name}')` : ""}. ` +
         "It is in the sidebar now and the user can open its transcript. " +
         `Hand it more work later with handoff("${id}", ...).`,
     };

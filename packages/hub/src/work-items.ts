@@ -79,6 +79,50 @@ export class WorkItemRefusal extends Error {
   }
 }
 
+/** The delegate type a session the fleet starts runs as when its caller names none. */
+export const DEFAULT_DELEGATE_TYPE = "medium";
+
+/**
+ * What a session the fleet starts runs on — `delegate`'s and
+ * `start_session`'s one rule, so neither ever leaves its model to the
+ * machine's default. A named type sets harness and model, and an explicit
+ * harness or model still overrides it. With no type, {@link
+ * DEFAULT_DELEGATE_TYPE} applies; a harness other than that type's has no
+ * model to take from it, so it must come with one.
+ */
+export const resolveSpawnType = (
+  types: DelegateType[],
+  request: { type?: string; harness?: HarnessKind; model?: string }
+): { type?: DelegateType; harness: HarnessKind; model: string } => {
+  const named = (name: string): DelegateType => {
+    const found = types.find((entry) => entry.name === name);
+    if (!found) {
+      const names =
+        types.map((entry) => entry.name).join(", ") || "none are configured";
+      throw new WorkItemRefusal(
+        400,
+        `No delegate type "${name}". Available: ${names}.`
+      );
+    }
+    return found;
+  };
+  const type = named(request.type ?? DEFAULT_DELEGATE_TYPE);
+  if (request.type || !request.harness || request.harness === type.harness) {
+    return {
+      type,
+      harness: request.harness ?? type.harness,
+      model: request.model ?? type.model,
+    };
+  }
+  if (!request.model) {
+    throw new WorkItemRefusal(
+      400,
+      `No type was named, and the default type '${type.name}' runs on ${type.harness}, not ${request.harness}. Name a type, or a model for ${request.harness}.`
+    );
+  }
+  return { harness: request.harness, model: request.model };
+};
+
 /** What `delegate` asks for. */
 export interface WorkItemRequest {
   canDelegate?: boolean;
@@ -430,19 +474,6 @@ export const createWorkItems = ({
     id: string,
     change: Parameters<DbShape["updateWorkItem"]>[1]
   ): WorkItemRow | undefined => published(db.updateWorkItem(id, change));
-  const typeNamed = (name: string): DelegateType => {
-    const known = types();
-    const found = known.find((type) => type.name === name);
-    if (!found) {
-      const names =
-        known.map((type) => type.name).join(", ") || "none are configured";
-      throw new WorkItemRefusal(
-        400,
-        `No delegate type "${name}". Available: ${names}.`
-      );
-    }
-    return found;
-  };
 
   /**
    * The workspace a follow-up names, and the item before it there. Refused
@@ -526,11 +557,11 @@ export const createWorkItems = ({
     request: WorkItemRequest,
     parent: InstanceRow
   ): Settings => {
-    const type = request.type ? typeNamed(request.type) : undefined;
+    const { type, harness, model } = resolveSpawnType(types(), request);
     const settings: Settings = {
       type,
-      harness: request.harness ?? type?.harness ?? "claude",
-      model: request.model ?? type?.model,
+      harness,
+      model,
       skills: request.skills?.length ? request.skills : type?.skills,
       canDelegate: request.canDelegate ?? type?.canDelegate ?? false,
     };

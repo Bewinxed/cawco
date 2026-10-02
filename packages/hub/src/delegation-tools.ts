@@ -400,10 +400,13 @@ export function handoffTools(deps: HandoffDeps) {
     ),
     tool(
       "start_session",
-      "Start a NEW session on the fleet using the caller's harness and give it work. Unlike a subagent, this " +
+      "Start a NEW session on the fleet and give it work. Unlike a subagent, this " +
         "is a full session of its own: it gets its own row in the sidebar, its own transcript " +
-        "the user can open and read, its own model and permission mode, and it survives after " +
-        "this turn ends. It runs on this session's machine unless `machine` names another one of the fleet. " +
+        "the user can open and read, and it survives after this turn ends. " +
+        "It runs on the harness, model, effort and denied tools of a delegate type — `type`, the same catalog delegate uses, " +
+        "'medium' when omitted — and answers tool permissions in `permissionMode`, this session's own mode when omitted. " +
+        "Nothing is left to the machine's defaults. " +
+        "It runs on this session's machine unless `machine` names another one of the fleet. " +
         "Use it when the user asks you to spin something off, or when work " +
         "belongs in a different directory or on a different machine and no session is running there yet. Prefer " +
         "`handoff` when a session is ALREADY running in that directory. " +
@@ -438,20 +441,49 @@ export function handoffTools(deps: HandoffDeps) {
             "A detour from this session's work. It appears nested under this session in the " +
               "sidebar and shares its directory. Default false."
           ),
+        type: z
+          .string()
+          .optional()
+          .describe(
+            "A named delegate type (see list_delegate_types): sets harness, model, effort and denied tools. Default 'medium'. Match the type to the work, as with delegate."
+          ),
         model: z
           .string()
           .optional()
-          .describe("Model id. Omit to let the SDK choose."),
+          .describe(
+            "Overrides the type's model. Omit to run the type's own model."
+          ),
+        permissionMode: z
+          .enum([
+            "default",
+            "acceptEdits",
+            "bypassPermissions",
+            "plan",
+            "dontAsk",
+            "auto",
+          ])
+          .optional()
+          .describe(
+            "How the new session answers tool permissions. Default: this session's own mode."
+          ),
       },
-      async ({ cwd, prompt, title, sideQuest, model, machine }) => {
-        const result = await actions.startSession(
-          cwd,
-          prompt,
-          title,
+      async ({
+        cwd,
+        prompt,
+        title,
+        sideQuest,
+        type,
+        model,
+        permissionMode,
+        machine,
+      }) => {
+        const result = await actions.startSession(cwd, prompt, title, {
           sideQuest,
+          type,
           model,
-          machine
-        );
+          permissionMode,
+          machine,
+        });
         const sc = { instanceId: result.id, title: result.title };
         return {
           content: [{ type: "text" as const, text: result.text }],
@@ -484,6 +516,7 @@ export function handoffTools(deps: HandoffDeps) {
           .describe(
             "A named delegate type — see the types listed above. Sets harness/model/effort/skills " +
               "for you; an explicit harness/model/skills below still overrides what the type says. " +
+              "Default 'medium'; with a harness other than medium's and no type, `model` is required. " +
               "The description below is a startup snapshot; execution reads the current hub definition. " +
               "Use list_delegate_types to see edits made since this session started."
           ),
@@ -492,14 +525,14 @@ export function handoffTools(deps: HandoffDeps) {
           .optional()
           .describe(
             "Which runtime runs the delegate. 'opencode' with model 'opencode-go/deepseek-v4-pro' " +
-              "delegates to DeepSeek. Default claude. Overrides `type`'s harness when both are set."
+              "delegates to DeepSeek. Default: the type's harness. Overrides `type`'s harness when both are set."
           ),
         model: z
           .string()
           .optional()
           .describe(
-            "Model id for the harness, e.g. opencode-go/deepseek-v4-flash. Omit for the harness " +
-              "default, or for `type`'s own model. Overrides `type`'s model when both are set."
+            "Model id for the harness, e.g. opencode-go/deepseek-v4-flash. Omit for the type's " +
+              "own model. Overrides `type`'s model when both are set."
           ),
         cwd: z
           .string()

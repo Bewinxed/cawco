@@ -362,16 +362,16 @@ const continueBody = t.Object({
         t.Literal("max"),
       ])
     ),
-    permissionMode: t.Optional(
-      t.Union([
-        t.Literal("default"),
-        t.Literal("acceptEdits"),
-        t.Literal("bypassPermissions"),
-        t.Literal("plan"),
-        t.Literal("dontAsk"),
-        t.Literal("auto"),
-      ])
-    ),
+    // Required: the new session never answers permissions by its machine's
+    // default, so whoever continues says how it does.
+    permissionMode: t.Union([
+      t.Literal("default"),
+      t.Literal("acceptEdits"),
+      t.Literal("bypassPermissions"),
+      t.Literal("plan"),
+      t.Literal("dontAsk"),
+      t.Literal("auto"),
+    ]),
     scratch: t.Optional(
       t.Object({
         worktree: t.Optional(t.Boolean()),
@@ -3517,6 +3517,9 @@ export const createServer = ({
           cwd: source.cwd,
           harness: summarizer.harness,
           model: summarizer.model,
+          // The hub's own worker, which nobody watches: it never parks on a
+          // permission prompt, as workflow steps and supervisors never do.
+          permissionMode: "bypassPermissions",
           title: `Summary of ${source.title}`,
           scratch: {},
           spawnedBy: { instanceId: source.instanceId },
@@ -4143,7 +4146,7 @@ export const createServer = ({
     harness: target.harness,
     model: target.model,
     ...(target.effort ? { effort: target.effort } : {}),
-    ...(target.permissionMode ? { permissionMode: target.permissionMode } : {}),
+    permissionMode: target.permissionMode,
     ...(target.scratch ? { scratch: target.scratch } : {}),
     ...(target.bootstrap ? { bootstrap: target.bootstrap } : {}),
     ...(target.projectId ? { projectId: target.projectId } : {}),
