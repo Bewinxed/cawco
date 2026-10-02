@@ -69,7 +69,7 @@
       return known;
     }
     const response = await fetch(
-      `/api/usage/summary?harness=${harness}&groupBy=hour&since=${start}`
+      `/api/usage/summary?harness=${harness}&groupBy=start&since=${start}`
     );
     if (!response.ok) {
       throw new Error(`The hub answered ${response.status}.`);
@@ -119,11 +119,15 @@
     retrying = false;
   }
 
-  /** Every hour from the range's start to now. */
+  /**
+   * Every hour from the range's start to now, counted from that start (a
+   * midnight in the hub's zone, or the quarter a window opened in), so each
+   * hour takes four whole quarter-hour buckets in any zone.
+   */
   const hoursFrom = (start: number): number[] => {
     const out: number[] = [];
     const now = Date.now();
-    for (let at = Math.floor(start / HOUR_MS) * HOUR_MS; at <= now; ) {
+    for (let at = start; at <= now; ) {
       out.push(at);
       at += HOUR_MS;
     }
@@ -162,7 +166,7 @@
     const costs = periods.map(() => 0);
     for (const row of summary.rows) {
       const at = Number(row.key);
-      // The last period that starts at or before the row's hour.
+      // The last period that starts at or before the row's bucket.
       let i = periods.length - 1;
       while (i >= 0 && periods[i] > at) {
         i -= 1;

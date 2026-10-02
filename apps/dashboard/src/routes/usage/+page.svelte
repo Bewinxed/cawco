@@ -5,7 +5,7 @@
    * then where the spend goes, then its history, both over one range. Nothing
    * is said twice and no row is named by an id.
    */
-  import { floorToHour, type LimitWindow } from "@cawco/core";
+  import { bucketStart, type LimitWindow } from "@cawco/core";
   import { cawco, readSpend } from "$lib/cawco/client.svelte";
   import { hubMidnight, speakingReading, windowStart } from "$lib/cawco/usage";
   import History from "$lib/cawco/usage/History.svelte";
@@ -30,16 +30,17 @@
   });
 
   /**
-   * The hour a provider's current 5-hour window opened in; null without one.
-   * Usage is recorded by the hour, so the window's first hour is read whole
-   * rather than dropped for starting before the window did.
+   * The quarter hour a provider's current 5-hour window opened in; null
+   * without one. Usage is recorded by the quarter hour, so the window's first
+   * quarter is read whole rather than dropped for starting before the window
+   * did.
    */
   const fiveHourStart = (
     reading: { windows: LimitWindow[] } | undefined
   ): number | null => {
     const w = reading?.windows.find((x) => x.group === "session");
     const start = w ? windowStart(w) : null;
-    return start === null ? null : floorToHour(start);
+    return start === null ? null : bucketStart(start);
   };
 
   /**
