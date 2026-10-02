@@ -135,13 +135,14 @@ export function stepUnderRun(
   row: InstanceRow,
   workflowName: string | undefined
 ): InstanceRow {
-  if (!row.workflowRunId) {
+  const runId = row.workflowRunId;
+  if (!runId) {
     return row;
   }
   const prefix = workflowName ? `${workflowName} · ` : null;
   return {
     ...row,
-    parentInstanceId: runTabId(row.workflowRunId),
+    parentInstanceId: runTabId(runId),
     ...(prefix && row.title?.startsWith(prefix)
       ? { title: row.title.slice(prefix.length) }
       : {}),
