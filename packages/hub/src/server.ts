@@ -51,6 +51,7 @@ import type {
   SupervisorStatusSignal,
   ToolState,
   ToolStatus,
+  TranscriptWhere,
   UsageBucket,
   UsageLimitsResponse,
   Verb,
@@ -156,6 +157,7 @@ import { createStreamHub } from "./stream";
 import { suggest } from "./suggest";
 import { SupervisorEngine } from "./supervisor";
 import type { TelegramBridge } from "./telegram";
+import { createTranscripts, type HistoryRead } from "./transcripts";
 import { UsageCounter } from "./usage-count";
 import {
   createWorkItems,
@@ -1970,11 +1972,13 @@ export const createServer = ({
 
   /** A record's latest state onto its session's stream: where every screen hears it. */
   const publishSend = (row: SentMessageRow): void => {
-    streams.sequence(row.instanceId, {
+    const frame = {
       kind: "send",
       instanceId: row.instanceId,
       record: toSendRecord(row),
-    } satisfies FramePayload);
+    } satisfies FramePayload;
+    streams.sequence(row.instanceId, frame);
+    transcripts.ingest(row.instanceId, frame);
   };
 
   /** One change to a record: stored, then said. The only way a record moves. */
@@ -5513,6 +5517,8 @@ export const createServer = ({
   const noteControl = (message: Envelope<ControlPayload>): void => {
     if (message.payload.method === CONTROL_INTERRUPT && message.instanceId) {
       noteInterrupt(message.instanceId);
+      // The error closing that turn is the stop's receipt, on every screen.
+      transcripts.noteInterrupt(message.instanceId);
     }
   };
 
@@ -5527,6 +5533,214 @@ export const createServer = ({
     relayControl: (envelope, dashboard) =>
       relayControl(envelope, dashboard, false),
   });
+
+  /**
+   * Forks the hub has started and not yet heard name their own conversation:
+   * the conversation each reads its history from until then, and the turn it
+   * branched at. A fork's row records no key until its `init` (`peekResume`).
+   */
+  const forkSeeds = new Map<string, { sessionKey: string; at?: string }>();
+
+  /** A send record list as a map, by uuid. */
+  const recordMap = (
+    lines: { record: SendRecord }[]
+  ): Record<string, SendRecord> =>
+    Object.fromEntries(lines.map(({ record }) => [record.uuid, record]));
+
+  /**
+   * Where a session's transcript is stored, and where its history ends when
+   * it is a fork not yet named. The hub's row is the single authority for a
+   * session it holds; an id with no row is a stored key, located. A row that
+   * never reported a key has nothing stored anywhere: what it was sent is the
+   * hub's own to say, and that is its whole history.
+   */
+  const historyWhere = async (
+    instanceId: string
+  ): Promise<
+    { where: TranscriptWhere; cut?: string; row?: InstanceRow } | HistoryRead
+  > => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    if (!row) {
+      const located = await locateSession(instanceId);
+      if (!located) {
+        return { fault: "missing", message: `no session ${instanceId}` };
+      }
+      return {
+        where: {
+          machineId: located.machineId,
+          sessionKey: located.sessionId,
+          cwd: located.cwd || "",
+          harness: located.harness,
+        },
+      };
+    }
+    const fork = row.sessionId ? undefined : forkSeeds.get(row.id);
+    const where = {
+      machineId: row.machineId,
+      sessionKey: row.sessionId ?? fork?.sessionKey ?? "",
+      cwd: row.cwd || "",
+      harness: row.harness || "claude",
+    };
+    if (!where.sessionKey) {
+      return {
+        entries: [],
+        records: recordMap(sendLines(row.id, [], true, true)),
+        where,
+      };
+    }
+    return { where, cut: fork?.at, row };
+  };
+
+  /** The stored entries under `where`, as its machine answers, or why it could not. */
+  const storedEntries = async (
+    where: TranscriptWhere
+  ): Promise<
+    { entries: SessionMessage[] } | Extract<HistoryRead, { fault: string }>
+  > => {
+    const { machineId } = where;
+    const answer = await callAgent(
+      machineId,
+      CONTROL_GET_SESSION_MESSAGES,
+      [where.sessionKey, { dir: where.cwd || undefined }],
+      READ_TIMEOUT_MS,
+      where.harness as HarnessKind
+    );
+    if (answer === "offline") {
+      return {
+        fault: "offline",
+        machineId,
+        message: `machine ${machineId} is not connected`,
+      };
+    }
+    if (answer === "timeout") {
+      return {
+        fault: "timeout",
+        message: `machine ${machineId} did not answer in time`,
+      };
+    }
+    if (!answer.ok) {
+      return {
+        fault: "failed",
+        message: answer.error ?? "the transcript could not be read",
+      };
+    }
+    // A session the machine has never stored answers with nothing: an empty
+    // transcript, the same shape a brand new session has.
+    return {
+      entries: (Array.isArray(answer.result)
+        ? answer.result
+        : []) as SessionMessage[],
+    };
+  };
+
+  /**
+   * A session's whole stored transcript, from its machine, with the records of
+   * the sends it holds — cut after the entry `at` when given (a rewind, a fork
+   * from the middle).
+   */
+  const readHistory = async (
+    instanceId: string,
+    at?: string
+  ): Promise<HistoryRead> => {
+    const found = await historyWhere(instanceId);
+    if ("entries" in found || "fault" in found) {
+      return found;
+    }
+    const { where, row } = found;
+    const cut = at ?? found.cut;
+    const answer = await storedEntries(where);
+    if ("fault" in answer) {
+      return answer;
+    }
+    let transcript = answer.entries;
+    if (cut) {
+      const end = transcript.findIndex((entry) => entry.uuid === cut);
+      if (end >= 0) {
+        transcript = transcript.slice(0, end + 1);
+      }
+    }
+    // Pictures as references to the media store, before a send's record is
+    // filled from one of these entries.
+    externalizeImages(transcript);
+    const records = recordMap(sendLines(row?.id, transcript, true, true));
+    if (row) {
+      readRowHistory(row, transcript);
+    }
+    return { entries: transcript, records, where };
+  };
+
+  /**
+   * What a whole stored transcript says about the row it belongs to: its
+   * oldest user turn is the unambiguous answer to what the session is called
+   * (write-once), and a session the hub holds in custody ends on the notice
+   * that says so.
+   */
+  const readRowHistory = (
+    row: InstanceRow,
+    transcript: SessionMessage[]
+  ): void => {
+    if (!(row.title || row.derivedTitle)) {
+      const first = firstTurnOf(transcript);
+      if (first) {
+        nameFromFirstTurn(row.machineId, row.id, first);
+      }
+    }
+    const held = heldSessions.get(row.id);
+    if (
+      held &&
+      registry.agent(row.machineId) &&
+      (row.status === "sleeping" || row.status === "error")
+    ) {
+      transcript.push(custodyNotice(row, held.reason));
+    }
+  };
+
+  /** Every session's blocks, built here once, whether or not anyone watches. */
+  const transcripts = createTranscripts({
+    readHistory,
+    sequence: () => undefined,
+    head: (instanceId) => streams.head(instanceId),
+    followed: (instanceId) => streams.followerCount(instanceId) > 0,
+    live: (instanceId) => {
+      const [row] = db.getInstancesByIds([instanceId]);
+      return row?.status === "running";
+    },
+  });
+
+  /** A rewind's spawn, by its request: its transcript is read whole again if the spawn fails. */
+  const rewinds = new Map<string, string>();
+
+  /**
+   * What a dashboard's spawn does to a transcript. A fork reads its history
+   * from the conversation it branches, up to the turn it branched at. One
+   * addressed to a session already running is a relaunch: the error closing
+   * the old turn is the reader's own doing. A rewind (`atMessage`) also cuts
+   * the transcript back to its turn, as the process it starts reads it — and
+   * puts it back whole if the spawn fails.
+   */
+  const noteRespawn = (
+    instanceId: string,
+    requestId: string | undefined,
+    payload: unknown
+  ): void => {
+    const resume = (payload as { resume?: unknown }).resume as
+      | { sessionKey?: string; fork?: boolean; atMessage?: string }
+      | undefined;
+    if (resume?.fork && resume.sessionKey) {
+      forkSeeds.set(instanceId, {
+        sessionKey: resume.sessionKey,
+        ...(resume.atMessage ? { at: resume.atMessage } : {}),
+      });
+      return;
+    }
+    transcripts.noteRelaunch(instanceId);
+    if (resume?.atMessage) {
+      transcripts.reread(instanceId, resume.atMessage);
+      if (requestId) {
+        rewinds.set(requestId, instanceId);
+      }
+    }
+  };
 
   // Delegate types (fleet-wide `delegate` presets): a standalone table and
   // route group, mounted rather than folded into the routes below — see
@@ -6449,6 +6663,53 @@ export const createServer = ({
         }
         return row.tooling ?? { servers: [], tools: [] };
       })
+      // A page of a session's transcript as blocks the hub built, newest
+      // first: the newest page carries the sends waiting, the live tail, the
+      // session's facts and the stream position it is consistent with, so a
+      // reader subscribes with `afterSeq: seq` and applies what follows. An
+      // older page is everything before `before`, a block id a newer page
+      // named as its cursor. Addressed by id alone: the hub's row names a
+      // session it holds, and any other id is a stored key, located.
+      .get(
+        "/api/instances/:id/transcript",
+        {
+          query: t.Object({
+            limit: t.Optional(t.String()),
+            before: t.Optional(t.String()),
+          }),
+        },
+        async ({ params, query, status }) => {
+          const limit =
+            Number(query.limit) > 0
+              ? Math.floor(Number(query.limit))
+              : undefined;
+          const page = await transcripts.page(params.id, limit, query.before);
+          if ("gone" in page) {
+            return status(
+              409,
+              `the transcript no longer holds block ${page.gone}`
+            );
+          }
+          if (!("fault" in page)) {
+            return page;
+          }
+          switch (page.fault) {
+            // Named with the machine, so a reader can say which one is away
+            // and hear it come back.
+            case "offline":
+              return new Response(page.message, {
+                status: 503,
+                headers: { "X-Cawco-Machine": page.machineId ?? "" },
+              });
+            case "missing":
+              return status(404, page.message);
+            case "timeout":
+              return status(504, page.message);
+            default:
+              return status(500, page.message);
+          }
+        }
+      )
       // Where the transcript was found rides back in headers, so a reader that
       // addressed a session by id alone learns which machine can act on it
       // without a second round trip.
@@ -9009,6 +9270,7 @@ export const createServer = ({
                     message: custodyNotice(row, note),
                   };
                   streams.sequence(row.id, message.payload);
+                  transcripts.ingest(row.id, message.payload as FramePayload);
                   break;
                 }
               }
@@ -9504,6 +9766,17 @@ export const createServer = ({
                   message.requestId,
                   message.payload as ControlResult
                 );
+              // A rewind that never started: its transcript was never cut.
+              const rewound =
+                kind === "control_result" && message.requestId
+                  ? rewinds.get(message.requestId)
+                  : undefined;
+              if (rewound && message.requestId) {
+                rewinds.delete(message.requestId);
+                if (!(message.payload as ControlResult).ok) {
+                  transcripts.reread(rewound);
+                }
+              }
               // A control's reply belongs to the dashboard that asked; the rest is fan-out.
               const requester =
                 message.requestId && kind === "control_result"
@@ -9528,6 +9801,10 @@ export const createServer = ({
                 // error, and any kind a future build adds — broadcasts, so an
                 // unknown kind is never silently dropped.
                 streams.sequence(message.instanceId, message.payload);
+                transcripts.ingest(
+                  message.instanceId,
+                  message.payload as FramePayload
+                );
               } else {
                 registry.broadcast(message);
               }
@@ -9678,6 +9955,11 @@ export const createServer = ({
                 // A relaunch replaces the process — questions the old one had
                 // open are settled by its teardown and must not replay.
                 forgetPending(message.instanceId, UNREAD.restarted);
+                noteRespawn(
+                  message.instanceId,
+                  message.requestId,
+                  message.payload
+                );
                 // Brought back by the operator: nothing of the stop is left to carry.
                 ending.delete(message.instanceId);
                 db.openInstance({

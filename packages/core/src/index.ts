@@ -44,6 +44,11 @@ export * from "./rules";
 export * from "./stream";
 // The workflow-tool catalog and its status/policy shapes (NEW.md §10).
 export * from "./tools";
+// Transcripts: the hub folds each session's frames into blocks once
+// (TranscriptBuilder) and every client renders what it serves.
+export { TRANSCRIPT_PAGE, TranscriptBuilder } from "./transcript";
+export { getToolGlance } from "./transcript-rules";
+export * from "./transcript-types";
 // Usage, cost & limits (USAGE-SPEC.md §4). Pure types/math only; `limits.ts`
 // reads credentials with node:fs and lives under the `@cawco/core/usage/limits`
 // subpath instead.
