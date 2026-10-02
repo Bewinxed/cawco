@@ -813,8 +813,7 @@
                   "fromStepId": {
                     "type": "string"
                   }
-                },
-                "required": []
+                }
               }
             }
           }
@@ -1083,8 +1082,7 @@
                           "baseCwd": {
                             "type": "string"
                           }
-                        },
-                        "required": []
+                        }
                       },
                       "bootstrap": {
                         "type": "object",
@@ -1255,8 +1253,7 @@
                     "pattern": "^/",
                     "type": "string"
                   }
-                },
-                "required": []
+                }
               }
             }
           }
@@ -1611,8 +1608,7 @@
                   "model": {
                     "type": "string"
                   }
-                },
-                "required": []
+                }
               }
             }
           }
@@ -1684,8 +1680,7 @@
                   "cwd": {
                     "type": "string"
                   }
-                },
-                "required": []
+                }
               }
             }
           }
@@ -1894,10 +1889,13 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/getApiInstancesByIdLocation200"
+                  "$ref": "#/components/schemas/SessionLocation"
                 }
               }
             }
+          },
+          "204": {
+            "description": "getApiInstancesByIdLocation 204"
           }
         }
       }
@@ -2304,8 +2302,7 @@
                       "null"
                     ]
                   }
-                },
-                "required": []
+                }
               }
             }
           }
@@ -2545,8 +2542,7 @@
                       "model": {
                         "type": "string"
                       }
-                    },
-                    "required": []
+                    }
                   },
                   "trigger": {
                     "type": "string",
@@ -2705,8 +2701,7 @@
                       "model": {
                         "type": "string"
                       }
-                    },
-                    "required": []
+                    }
                   },
                   "trigger": {
                     "type": "string",
@@ -3410,8 +3405,7 @@
                   "enabled": {
                     "type": "boolean"
                   }
-                },
-                "required": []
+                }
               }
             }
           }
@@ -3534,8 +3528,7 @@
                   "cwd": {
                     "type": "string"
                   }
-                },
-                "required": []
+                }
               }
             }
           }
@@ -4009,10 +4002,13 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/MachineMemory"
+                  "$ref": "#/components/schemas/MachineMemorySet"
                 }
               }
             }
+          },
+          "204": {
+            "description": "postApiFleetMemoryPeek 204"
           },
           "404": {
             "description": "postApiFleetMemoryPeek 404",
@@ -4420,8 +4416,7 @@
                   "expectedHash": {
                     "type": "string"
                   }
-                },
-                "required": []
+                }
               }
             }
           }
@@ -4609,10 +4604,13 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiFleetHooksPeek200"
+                  "$ref": "#/components/schemas/MachineHookScript"
                 }
               }
             }
+          },
+          "204": {
+            "description": "postApiFleetHooksPeek 204"
           },
           "404": {
             "description": "postApiFleetHooksPeek 404",
@@ -4846,8 +4844,7 @@
                   "machineId": {
                     "type": "string"
                   }
-                },
-                "required": []
+                }
               }
             }
           }
@@ -5197,14 +5194,7 @@
                   "type": "string"
                 },
                 "graph": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/WorkflowGraph"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/WorkflowGraph"
                 },
                 "program": {
                   "type": "string"
@@ -5222,7 +5212,6 @@
               "required": [
                 "createdAt",
                 "description",
-                "graph",
                 "id",
                 "inputs",
                 "name",
@@ -5268,14 +5257,7 @@
             "type": "string"
           },
           "graph": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/WorkflowGraph"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/WorkflowGraph"
           },
           "program": {
             "type": "string"
@@ -5293,7 +5275,6 @@
         "required": [
           "createdAt",
           "description",
-          "graph",
           "id",
           "inputs",
           "name",
@@ -5348,14 +5329,7 @@
             "type": "string"
           },
           "graph": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/WorkflowGraph"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/WorkflowGraph"
           },
           "program": {
             "type": "string"
@@ -5373,7 +5347,6 @@
         "required": [
           "createdAt",
           "description",
-          "graph",
           "id",
           "inputs",
           "name",
@@ -5414,14 +5387,7 @@
             "type": "string"
           },
           "graph": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/WorkflowGraph"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/WorkflowGraph"
           },
           "program": {
             "type": "string"
@@ -5439,7 +5405,6 @@
         "required": [
           "createdAt",
           "description",
-          "graph",
           "id",
           "inputs",
           "name",
@@ -5536,26 +5501,12 @@
                   ]
                 },
                 "startedAt": {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
+                  "type": "string",
+                  "format": "date-time"
                 },
                 "endedAt": {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
+                  "type": "string",
+                  "format": "date-time"
                 },
                 "runId": {
                   "type": "string"
@@ -5579,14 +5530,7 @@
                   "type": "string"
                 },
                 "spec": {
-                  "anyOf": [
-                    {
-                      "type": "object"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
+                  "type": "object"
                 },
                 "mapIndex": {
                   "type": [
@@ -5597,7 +5541,6 @@
               },
               "required": [
                 "childRunId",
-                "endedAt",
                 "failure",
                 "id",
                 "instanceId",
@@ -5607,8 +5550,6 @@
                 "result",
                 "runId",
                 "seq",
-                "spec",
-                "startedAt",
                 "status"
               ]
             }
@@ -5639,15 +5580,8 @@
                   "format": "date-time"
                 },
                 "endedAt": {
-                  "anyOf": [
-                    {
-                      "type": "string",
-                      "format": "date-time"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
+                  "type": "string",
+                  "format": "date-time"
                 },
                 "stepId": {
                   "type": "string"
@@ -5657,7 +5591,6 @@
                 }
               },
               "required": [
-                "endedAt",
                 "failure",
                 "id",
                 "number",
@@ -5679,14 +5612,7 @@
           },
           "result": {},
           "graph": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/WorkflowGraph"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/WorkflowGraph"
           },
           "program": {
             "type": "string"
@@ -5732,15 +5658,8 @@
             "format": "date-time"
           },
           "endedAt": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "string",
+            "format": "date-time"
           },
           "rerunOfRunId": {
             "type": [
@@ -5761,9 +5680,7 @@
         "required": [
           "attempts",
           "edges",
-          "endedAt",
           "failure",
-          "graph",
           "id",
           "inputs",
           "launchedBy",
@@ -5800,14 +5717,7 @@
                   "$ref": "#/components/schemas/WorkflowEffectKind"
                 },
                 "failure": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/WorkflowFailure"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/WorkflowFailure"
                 },
                 "runId": {
                   "type": "string"
@@ -5816,20 +5726,11 @@
                   "type": "number"
                 },
                 "args": {
-                  "anyOf": [
-                    {
-                      "type": "object"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
+                  "type": "object"
                 }
               },
               "required": [
-                "args",
                 "at",
-                "failure",
                 "kind",
                 "result",
                 "runId",
@@ -5858,14 +5759,7 @@
               },
               "result": {},
               "graph": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/WorkflowGraph"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
+                "$ref": "#/components/schemas/WorkflowGraph"
               },
               "program": {
                 "type": "string"
@@ -5911,15 +5805,8 @@
                 "format": "date-time"
               },
               "endedAt": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "format": "date-time"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
+                "type": "string",
+                "format": "date-time"
               },
               "rerunOfRunId": {
                 "type": [
@@ -5932,9 +5819,7 @@
               }
             },
             "required": [
-              "endedAt",
               "failure",
-              "graph",
               "id",
               "inputs",
               "launchedBy",
@@ -6210,22 +6095,15 @@
             ]
           },
           "effort": {
-            "anyOf": [
-              {
-                "enum": [
-                  "high",
-                  "low",
-                  "max",
-                  "medium",
-                  "none",
-                  "xhigh"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "enum": [
+              "high",
+              "low",
+              "max",
+              "medium",
+              "none",
+              "xhigh"
+            ],
+            "type": "string"
           },
           "canDelegate": {
             "type": [
@@ -6298,14 +6176,7 @@
             ]
           },
           "tooling": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/SessionTooling"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/SessionTooling"
           },
           "derivedTitle": {
             "type": [
@@ -6334,29 +6205,22 @@
             ]
           },
           "autopilot": {
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "enabled": {
-                    "type": "boolean"
-                  },
-                  "prompt": {
-                    "type": "string"
-                  },
-                  "updatedAt": {
-                    "type": "number"
-                  }
-                },
-                "required": [
-                  "enabled",
-                  "prompt",
-                  "updatedAt"
-                ]
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
               },
-              {
-                "type": "null"
+              "prompt": {
+                "type": "string"
+              },
+              "updatedAt": {
+                "type": "number"
               }
+            },
+            "required": [
+              "enabled",
+              "prompt",
+              "updatedAt"
             ]
           },
           "updatedAt": {
@@ -6364,15 +6228,8 @@
             "format": "date-time"
           },
           "spawnedAt": {
-            "anyOf": [
-              {
-                "type": "string",
-                "format": "date-time"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "type": "string",
+            "format": "date-time"
           },
           "workItemId": {
             "type": [
@@ -6382,12 +6239,10 @@
           }
         },
         "required": [
-          "autopilot",
           "canDelegate",
           "createdAt",
           "cwd",
           "derivedTitle",
-          "effort",
           "harness",
           "id",
           "kind",
@@ -6399,10 +6254,8 @@
           "permissionMode",
           "projectId",
           "sessionId",
-          "spawnedAt",
           "status",
           "title",
-          "tooling",
           "updatedAt",
           "workItemId",
           "workflowRunId",
@@ -6430,22 +6283,15 @@
               ]
             },
             "effort": {
-              "anyOf": [
-                {
-                  "enum": [
-                    "high",
-                    "low",
-                    "max",
-                    "medium",
-                    "none",
-                    "xhigh"
-                  ],
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "enum": [
+                "high",
+                "low",
+                "max",
+                "medium",
+                "none",
+                "xhigh"
+              ],
+              "type": "string"
             },
             "canDelegate": {
               "type": [
@@ -6544,29 +6390,22 @@
               ]
             },
             "autopilot": {
-              "anyOf": [
-                {
-                  "type": "object",
-                  "properties": {
-                    "enabled": {
-                      "type": "boolean"
-                    },
-                    "prompt": {
-                      "type": "string"
-                    },
-                    "updatedAt": {
-                      "type": "number"
-                    }
-                  },
-                  "required": [
-                    "enabled",
-                    "prompt",
-                    "updatedAt"
-                  ]
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean"
                 },
-                {
-                  "type": "null"
+                "prompt": {
+                  "type": "string"
+                },
+                "updatedAt": {
+                  "type": "number"
                 }
+              },
+              "required": [
+                "enabled",
+                "prompt",
+                "updatedAt"
               ]
             },
             "updatedAt": {
@@ -6574,15 +6413,8 @@
               "format": "date-time"
             },
             "spawnedAt": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                {
-                  "type": "null"
-                }
-              ]
+              "type": "string",
+              "format": "date-time"
             },
             "workItemId": {
               "type": [
@@ -6592,12 +6424,10 @@
             }
           },
           "required": [
-            "autopilot",
             "canDelegate",
             "createdAt",
             "cwd",
             "derivedTitle",
-            "effort",
             "harness",
             "id",
             "kind",
@@ -6609,7 +6439,6 @@
             "permissionMode",
             "projectId",
             "sessionId",
-            "spawnedAt",
             "status",
             "title",
             "updatedAt",
@@ -6639,16 +6468,6 @@
             "title"
           ]
         }
-      },
-      "getApiInstancesByIdLocation200": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/SessionLocation"
-          },
-          {
-            "type": "null"
-          }
-        ]
       },
       "getApiHandoffs200": {
         "type": "object",
@@ -6836,30 +6655,23 @@
             }
           },
           "memory": {
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "content": {
-                    "type": "string"
-                  },
-                  "hash": {
-                    "type": "string"
-                  },
-                  "updatedAt": {
-                    "type": "string",
-                    "format": "date-time"
-                  }
-                },
-                "required": [
-                  "content",
-                  "hash",
-                  "updatedAt"
-                ]
+            "type": "object",
+            "properties": {
+              "content": {
+                "type": "string"
               },
-              {
-                "type": "null"
+              "hash": {
+                "type": "string"
+              },
+              "updatedAt": {
+                "type": "string",
+                "format": "date-time"
               }
+            },
+            "required": [
+              "content",
+              "hash",
+              "updatedAt"
             ]
           },
           "memoryDocs": {
@@ -6878,7 +6690,6 @@
         "required": [
           "agents",
           "config",
-          "memory",
           "memoryDocs",
           "skills",
           "unpushable"
@@ -7724,16 +7535,6 @@
         "items": {
           "$ref": "#/components/schemas/HookVersion"
         }
-      },
-      "postApiFleetHooksPeek200": {
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/MachineHookScript"
-          },
-          {
-            "type": "null"
-          }
-        ]
       },
       "postApiFleetHooksPush200": {
         "type": "object",
@@ -9049,9 +8850,6 @@
                 "required": [
                   "kind"
                 ]
-              },
-              {
-                "type": "null"
               }
             ]
           },
@@ -9075,7 +8873,6 @@
           "lines",
           "machineId",
           "port",
-          "problem",
           "state",
           "target"
         ]
@@ -9130,9 +8927,6 @@
                     "required": [
                       "instanceId"
                     ]
-                  },
-                  {
-                    "type": "null"
                   }
                 ]
               }
@@ -9912,14 +9706,7 @@
               },
               "result": {},
               "graph": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/WorkflowGraph"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
+                "$ref": "#/components/schemas/WorkflowGraph"
               },
               "program": {
                 "type": "string"
@@ -9965,15 +9752,8 @@
                 "format": "date-time"
               },
               "endedAt": {
-                "anyOf": [
-                  {
-                    "type": "string",
-                    "format": "date-time"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ]
+                "type": "string",
+                "format": "date-time"
               },
               "rerunOfRunId": {
                 "type": [
@@ -9986,9 +9766,7 @@
               }
             },
             "required": [
-              "endedAt",
               "failure",
-              "graph",
               "id",
               "inputs",
               "launchedBy",
@@ -10762,55 +10540,48 @@
           },
           "memory": {
             "description": "The machine's own user CLAUDE.md, or null when it has none. `managed` says\ncawco wrote what is there — an unmanaged one is worth adopting. `docs`\nis whatever the machine has under `~/.claude/memories/`, read the same way\nand absent from a daemon that predates the set.",
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "hash": {
-                    "type": "string"
-                  },
-                  "bytes": {
-                    "type": "number"
-                  },
-                  "managed": {
-                    "type": "boolean"
-                  },
-                  "docs": {
-                    "type": "array",
-                    "items": {
-                      "type": "object",
-                      "properties": {
-                        "path": {
-                          "type": "string"
-                        },
-                        "hash": {
-                          "type": "string"
-                        },
-                        "bytes": {
-                          "type": "number"
-                        },
-                        "managed": {
-                          "type": "boolean"
-                        }
-                      },
-                      "required": [
-                        "bytes",
-                        "hash",
-                        "managed",
-                        "path"
-                      ]
-                    }
-                  }
-                },
-                "required": [
-                  "bytes",
-                  "hash",
-                  "managed"
-                ]
+            "type": "object",
+            "properties": {
+              "hash": {
+                "type": "string"
               },
-              {
-                "type": "null"
+              "bytes": {
+                "type": "number"
+              },
+              "managed": {
+                "type": "boolean"
+              },
+              "docs": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string"
+                    },
+                    "hash": {
+                      "type": "string"
+                    },
+                    "bytes": {
+                      "type": "number"
+                    },
+                    "managed": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "bytes",
+                    "hash",
+                    "managed",
+                    "path"
+                  ]
+                }
               }
+            },
+            "required": [
+              "bytes",
+              "hash",
+              "managed"
             ]
           },
           "plugins": {
@@ -11091,34 +10862,20 @@
             ]
           },
           "requestKind": {
-            "anyOf": [
-              {
-                "enum": [
-                  "question",
-                  "tool"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "enum": [
+              "question",
+              "tool"
+            ],
+            "type": "string"
           },
           "status": {
             "description": "An ask's own state; null on an answer and a report, which settle nothing.",
-            "anyOf": [
-              {
-                "enum": [
-                  "answered",
-                  "denied",
-                  "pending"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "enum": [
+              "answered",
+              "denied",
+              "pending"
+            ],
+            "type": "string"
           },
           "toolName": {
             "type": [
@@ -11135,8 +10892,6 @@
           "parentInstanceId",
           "payload",
           "requestId",
-          "requestKind",
-          "status",
           "toolName"
         ]
       },
@@ -11974,17 +11729,6 @@
           "verdict"
         ]
       },
-      "MachineMemory": {
-        "description": "What a machine answered `readMemoryFile` with: its own memory set, or nothing.",
-        "anyOf": [
-          {
-            "$ref": "#/components/schemas/MachineMemorySet"
-          },
-          {
-            "type": "null"
-          }
-        ]
-      },
       "MachineMemorySet": {
         "description": "A machine's own memory set: the user CLAUDE.md and whatever is under\n`~/.claude/memories/`. What {@link READ_MEMORY_FILE} answers with, and what a\npeek and an adoption read. A daemon that predates the set answers without\n`docs`, which reads as a machine that keeps none.",
         "type": "object",
@@ -12480,21 +12224,13 @@
                   "type": "string"
                 },
                 "openCodeGo": {
-                  "anyOf": [
-                    {
-                      "$ref": "#/components/schemas/OpenCodeGoLimits"
-                    },
-                    {
-                      "type": "null"
-                    }
-                  ]
+                  "$ref": "#/components/schemas/OpenCodeGoLimits"
                 }
               },
               "required": [
                 "hostname",
                 "limits",
-                "machineId",
-                "openCodeGo"
+                "machineId"
               ]
             }
           }
@@ -12697,14 +12433,7 @@
             "type": "string"
           },
           "machine": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/UsageRowMachine"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/UsageRowMachine"
           },
           "messages": {
             "type": "number"
@@ -12724,7 +12453,6 @@
           "instanceId",
           "key",
           "label",
-          "machine",
           "messages",
           "output",
           "reasoning"
@@ -13791,21 +13519,14 @@
             "type": "string"
           },
           "effort": {
-            "anyOf": [
-              {
-                "enum": [
-                  "high",
-                  "low",
-                  "max",
-                  "medium",
-                  "xhigh"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "enum": [
+              "high",
+              "low",
+              "max",
+              "medium",
+              "xhigh"
+            ],
+            "type": "string"
           },
           "exit_code": {
             "type": "number"
@@ -14122,29 +13843,22 @@
         "properties": {
           "autopilot": {
             "description": "The supervisor's standing autopilot for this session, set from the\ncomposer popover. `null` means never configured; disabling keeps the\nprompt rather than discarding it, so re-enabling does not mean retyping\nit. Absent on a hub that predates the column.",
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "enabled": {
-                    "type": "boolean"
-                  },
-                  "prompt": {
-                    "type": "string"
-                  },
-                  "updatedAt": {
-                    "type": "number"
-                  }
-                },
-                "required": [
-                  "enabled",
-                  "prompt",
-                  "updatedAt"
-                ]
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
               },
-              {
-                "type": "null"
+              "prompt": {
+                "type": "string"
+              },
+              "updatedAt": {
+                "type": "number"
               }
+            },
+            "required": [
+              "enabled",
+              "prompt",
+              "updatedAt"
             ]
           },
           "canDelegate": {
@@ -14166,22 +13880,15 @@
           },
           "effort": {
             "description": "The effort the session actually sends, as its agent last read it back from\nthe harness ({@link import (\"./harness\").EFFORT_READ}): a level, `none` when\nit sends no effort, null until the first reading lands. A restart hands a\nlevel back to the new process, so it keeps working at the one it was on.",
-            "anyOf": [
-              {
-                "enum": [
-                  "high",
-                  "low",
-                  "max",
-                  "medium",
-                  "none",
-                  "xhigh"
-                ],
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "enum": [
+              "high",
+              "low",
+              "max",
+              "medium",
+              "none",
+              "xhigh"
+            ],
+            "type": "string"
           },
           "harness": {
             "description": "Which harness owns {@link sessionId} — what a resume and a catalog read route on.",
@@ -14463,14 +14170,7 @@
             "type": "string"
           },
           "openCodeGo": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/OpenCodeGoLimits"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/OpenCodeGoLimits"
           },
           "payload": {
             "$ref": "#/components/schemas/ClaudeLimits"
@@ -14479,7 +14179,6 @@
         "required": [
           "fetchedAt",
           "machineId",
-          "openCodeGo",
           "payload"
         ]
       },
@@ -14505,29 +14204,22 @@
           },
           "currentTool": {
             "description": "The tool the main loop is inside, addressed as the transcript addresses it.",
-            "anyOf": [
-              {
-                "type": "object",
-                "properties": {
-                  "name": {
-                    "type": "string"
-                  },
-                  "glance": {
-                    "type": "string"
-                  },
-                  "toolId": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "glance",
-                  "name",
-                  "toolId"
-                ]
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
               },
-              {
-                "type": "null"
+              "glance": {
+                "type": "string"
+              },
+              "toolId": {
+                "type": "string"
               }
+            },
+            "required": [
+              "glance",
+              "name",
+              "toolId"
             ]
           },
           "instanceId": {
@@ -14541,7 +14233,6 @@
           "activity",
           "at",
           "busy",
-          "currentTool",
           "instanceId",
           "runningSubagents"
         ]
@@ -14712,14 +14403,7 @@
             ]
           },
           "graph": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/WorkflowGraph"
-              },
-              {
-                "type": "null"
-              }
-            ]
+            "$ref": "#/components/schemas/WorkflowGraph"
           },
           "id": {
             "type": "string"
@@ -14792,7 +14476,6 @@
           "edges",
           "endedAt",
           "failure",
-          "graph",
           "id",
           "inputs",
           "launchedBy",
