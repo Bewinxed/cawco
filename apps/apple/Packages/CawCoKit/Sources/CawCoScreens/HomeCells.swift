@@ -13,7 +13,11 @@ class HomeCell: UICollectionViewListCell {
         super.init(frame: frame)
         clipsToBounds = false
         contentView.clipsToBounds = false
-        backgroundConfiguration = .clear()
+        // The page's own ground: a line that arrives or leaves beneath it is
+        // uncovered or covered as it slides, never drawn through (HomeLayout).
+        var ground = UIBackgroundConfiguration.clear()
+        ground.backgroundColor = Palette.surfaceRecess
+        backgroundConfiguration = ground
         indentationWidth = 0
         separatorLayoutGuide.leadingAnchor.constraint(equalTo: trailingAnchor).isActive = true
     }
@@ -478,7 +482,17 @@ final class SessionRowView: UIView {
             first.heightAnchor.constraint(greaterThanOrEqualToConstant: Space.space5),
             line.heightAnchor.constraint(greaterThanOrEqualToConstant: Space.space5),
         ])
-        isAccessibilityElement = true
+        // The row reads as one element (status word, title, line, age), and a
+        // parent's count is a second one, its own button.
+        isAccessibilityElement = false
+        accessibilityElements = [summary]
+    }
+
+    private lazy var summary = UIAccessibilityElement(accessibilityContainer: self)
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        summary.accessibilityFrameInContainerSpace = bounds
     }
 
     @available(*, unavailable)
@@ -512,9 +526,9 @@ final class SessionRowView: UIView {
             count.isHidden = true
         }
         alpha = content.stale ? 0.55 : 1
-        accessibilityLabel = "\(content.status.word): \(content.title)"
-        accessibilityValue = [content.line, content.trail].filter { !$0.isEmpty }.joined(separator: ", ")
-        accessibilityElements = content.fold == nil ? nil : [count]
+        summary.accessibilityLabel = "\(content.status.word): \(content.title)"
+        summary.accessibilityValue = [content.line, content.trail].filter { !$0.isEmpty }.joined(separator: ", ")
+        accessibilityElements = content.fold == nil ? [summary] : [summary, count]
     }
 }
 

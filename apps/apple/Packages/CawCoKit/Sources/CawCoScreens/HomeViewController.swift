@@ -67,8 +67,8 @@ final class HomeViewController: UIViewController, UICollectionViewDelegate {
     /// A tab switch on its way: the direction its new lines arrive from.
     private var relayDirection: Double?
     private var relaying = false
-    /// The parent whose tree just opened, so its rows take the branch's wipe.
-    private var opened: String?
+    /// The parent whose tree was just opened or folded, so its rows take the branch's motion.
+    private var branch: (id: String, opening: Bool)?
 
     init(hub: HubConnection, home: HomeModel) {
         self.hub = hub
@@ -417,17 +417,22 @@ final class HomeViewController: UIViewController, UICollectionViewDelegate {
             collectionView.layoutIfNeeded()
             Reflow.enter(views(for: inserted.filter(\.isWorkLine)), direction: direction)
             relaying = false
-        } else {
-            Reflow.travel(in: collectionView) { self.dataSource.apply(next, animatingDifferences: true) }
-            if let opened {
-                self.opened = nil
+        } else if let branch {
+            // A tree opening or folding: the room moves at the line's pace.
+            self.branch = nil
+            let under = inserted.filter { item in
+                guard case let .row(id, _) = item, let line = rows[id]?.line.line else { return false }
+                return isUnder(line, branch.id)
+            }
+            Reflow.branch(opening: branch.opening ? under.count : 0, in: collectionView) {
+                self.dataSource.apply(next, animatingDifferences: true)
+            }
+            if branch.opening {
                 collectionView.layoutIfNeeded()
-                let under = inserted.filter { item in
-                    guard case let .row(id, _) = item, let line = rows[id]?.line.line else { return false }
-                    return isUnder(line, opened)
-                }
                 Reflow.branchOpen(views(for: under))
             }
+        } else {
+            Reflow.travel(in: collectionView) { self.dataSource.apply(next, animatingDifferences: true) }
         }
     }
 
@@ -488,7 +493,7 @@ final class HomeViewController: UIViewController, UICollectionViewDelegate {
     }
 
     private func toggleTree(_ id: String) {
-        opened = home.openTrees.contains(id) ? nil : id
+        branch = (id, !home.openTrees.contains(id))
         home.toggleTree(id)
     }
 

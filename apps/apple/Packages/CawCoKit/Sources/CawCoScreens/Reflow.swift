@@ -91,6 +91,24 @@ enum Reflow {
 
     // MARK: A tree's fold (motion/branch.svelte)
 
+    /// The room under a parent opens at the pace its line reaches the rows:
+    /// one row per `durStagger`, the whole never longer than `durCascade`, at
+    /// one steady speed. It folds quicker: over `durExit` on the in-out curve.
+    static func branch(opening rows: Int, in view: UIView, _ changes: @escaping @MainActor () -> Void) {
+        guard !UIAccessibility.isReduceMotionEnabled else {
+            travel(in: view, changes)
+            return
+        }
+        if rows > 0 {
+            let duration = min(Motion.durCascade, Double(rows) * Motion.durStagger + Motion.durStagger)
+            let animator = UIViewPropertyAnimator(duration: duration, curve: .linear)
+            animator.addAnimations(changes)
+            animator.startAnimation()
+        } else {
+            Motion.easeInOut.animator(Motion.durExit, animations: changes).startAnimation()
+        }
+    }
+
     /// A tree opening: each row under the parent is reached `durStagger`
     /// after the one above it (closer in a tree too tall to open within
     /// `durCascade`), its title wiping in left to right over `durRail`.
@@ -129,9 +147,13 @@ enum Reflow {
 /// self-sized height. Arrivals fade in while the rows after them make room;
 /// departures fade where they stood while the rows after them close over.
 final class HomeLayout: UICollectionViewCompositionalLayout {
+    /// An arriving row sits beneath the rows that stay: they are drawn on the
+    /// page's own ground, so as they slide down they uncover it, the way the
+    /// web's growing box uncovers a row (no row is ever drawn over another).
     override func initialLayoutAttributesForAppearingItem(at itemIndexPath: IndexPath) -> UICollectionViewLayoutAttributes? {
-        let attributes = super.initialLayoutAttributesForAppearingItem(at: itemIndexPath)
+        let attributes = super.initialLayoutAttributesForAppearingItem(at: itemIndexPath)?.copy() as? UICollectionViewLayoutAttributes
         attributes?.alpha = 0
+        attributes?.zIndex = -1
         return attributes
     }
 
@@ -140,9 +162,7 @@ final class HomeLayout: UICollectionViewCompositionalLayout {
     override func finalLayoutAttributesForDisappearingItem(at itemIndexPath: IndexPath) -> UICollectionViewLayoutAttributes? {
         let attributes = super.finalLayoutAttributesForDisappearingItem(at: itemIndexPath)?.copy() as? UICollectionViewLayoutAttributes
         attributes?.alpha = 0
-        if !UIAccessibility.isReduceMotionEnabled, let frame = attributes?.frame {
-            attributes?.transform = CGAffineTransform(translationX: 0, y: -frame.height / 2).scaledBy(x: 1, y: 0.01)
-        }
+        attributes?.zIndex = -1
         return attributes
     }
 }
