@@ -12,7 +12,7 @@ him.
 ## Contract
 
 - File: `assets/mascot/caw.riv`
-- Artboard: `Caw`
+- Artboard: `Caw`, 592 × 592
 - State machine: `CawStates`, its transitions bound to the view model below
 - View model `Caw` (data binding, the owner's choice: "use latest best practice on rive"):
 
@@ -36,8 +36,11 @@ the artboard points at `Caw`, so a runtime that auto-binds gets that instance.
 `caw.riv` is generated; it is never edited by hand and there is no Rive editor project behind it
 (the editor cannot import `.riv` files). From `assets/mascot/scripts` (`bun install` once):
 
-- `node build.mjs` writes `caw.riv` from `scene.mjs` and the stills in `assets/mascot/stills/`,
-  and the same bytes to the Apple package's copy
+- `uv run trace.py [state …]` traces the takes listed in `assets/mascot/loops/takes.json` into
+  `assets/mascot/loops/<state>/` (see Pipeline). It needs `ffmpeg` and `curl`; uv installs its
+  Python dependencies from the script's own header.
+- `node build.mjs` writes `caw.riv` from `scene.mjs` and the traced drawings in
+  `assets/mascot/loops/`, and the same bytes to the Apple package's copy
   (`apps/apple/Packages/CawCoKit/Sources/CawCoMascot/Resources/caw.riv`), which `CawView` loads.
   rive-mcp-server's exported `buildScene` and `writeRiv` write the scene; rive-mcp-server has no
   view-model authoring, so `build.mjs` inserts those objects into its object list before writing,
@@ -47,48 +50,64 @@ the artboard points at `Caw`, so a runtime that auto-binds gets that instance.
   view-model condition whose data bind reads `Caw`'s property. It fails if any state-machine
   input is left.
 - `node prove-viewmodel.mjs` runs the file on Rive's official runtime (@rive-app/canvas-advanced,
-  WASM, in headless Chromium). It lists `Caw`'s properties and enum values, binds the default
-  instance, and sets every status × `dark` × `reducedMotion`, plus repeated loading and
-  reconnecting entries. Each frame must pixel-match the same step on the last input-driven file
-  (git 407a705e); the random turns are pinned the same way in both by fixing the runtime's
-  clocks and entropy. It prints `inputs: 0` and, on success,
-  `Caw view model drives the state machine`.
+  WASM, in headless Chromium). It renders every drawing of every loop, light and dark, by
+  applying that loop's own animations directly, then drives the state machine only through the
+  `Caw` view model:
+  - every status × `dark` × `reducedMotion`, plus repeated loading and reconnecting entries, must
+    each render exactly a drawing of the loop the status selects, in the scheme `dark` selects,
+    and the loop's first drawing (its still) under `reducedMotion`;
+  - each status watched over time must show all its loop's drawings and repeat after one loop
+    length (`loops animate: 8/8`), and must not move at all under `reducedMotion`
+    (`reducedMotion holds still: 8/8`).
+
+  The runtime's clocks and entropy are pinned so the random turns repeat across two runs. It
+  prints `inputs: 0` and, on success, `Caw view model drives the state machine`.
 
 ## What the file holds today
 
-This is a skeleton that already honours the contract. Each state shows that pose's still, and
-there is no motion yet; the shot loops replace the stills.
+Caw is vector, and every state is a loop: the takes the owner watched, traced into flat-ink shapes
+and held on twos exactly as each take holds them (12 drawings a second, longer holds where the
+take holds). Each loop starts and ends on its state's still. Every loop is two Solo groups switched
+in step: one group of ink shapes per drawing, and one silhouette shape per drawing carrying the
+cream rim stroke.
 
-- **Pose** layer: one state per `status` value, entered from Any State when `status` equals it. Changes
-  crossfade over 200 ms (`motion.dur-fade`, "Fades that carry a state change in place"), so
-  nothing pops in.
-- **Turn** layer: loading and reconnecting each have three stills (loading: feather, dots, peer;
+- **Pose** layer: one state per `status` value, entered from Any State when `status` equals it.
+  Its animation plays that status's loop. Changes crossfade over 200 ms (`motion.dur-fade`,
+  "Fades that carry a state change in place"), so nothing pops in.
+- **Turn** layer: loading and reconnecting each have three loops (loading: feather, dots, peer;
   reconnecting: reach, search, hop). Its `rest` state is flagged Random, so each time Caw enters
-  loading or reconnecting he picks one of the three at random (the owner: "You can alternate
-  them they're all cute").
-- **Scheme** layer: `dark` crossfades between the light stills and the dark stills (the thin
-  cream rim the owner picked) over the same 200 ms.
-- **Motion** layer: `full` and `reduced` states on `reducedMotion`. They hold no animation yet.
-  When the loops land, `reduced` holds each state's still, and state changes keep their opacity
-  fades.
-- Design-time state (the bare artboard, drawn without `CawStates`) is Ready in light.
+  loading or reconnecting he picks one of the three at random and plays it (the owner: "You can
+  alternate them they're all cute").
+- **Scheme** layer: `dark` fades in the thin cream rim the owner picked (Ivory #F4F0E6, the kit's
+  dark-rim-cream recipe: 5.31 px at the stills' scale) around every drawing, over the same
+  200 ms. Light and dark share every drawing, so switching mid-loop never jumps. The kit has no
+  light-mode line: light Caw has none, as in the stills.
+- **Motion** layer: `full` lets the loops play; `reduced` holds every loop on its first drawing,
+  the state's still. State changes keep their fades.
+- The artboard is 592 square with Caw on the stills' scale and ground line, 43 px right and
+  40 px down: the acting leaves the stills' 512 box (the search turn reaches x -42, the hop lands
+  at y 541), and every drawing fits whole.
+- Design-time state (the bare artboard, drawn without `CawStates`) is Ready's still in light.
 
 ## Pipeline
 
-1. **Shoot.** For each state, write the video prompt, then shoot image-to-video from that
-   state's still: flat plain background, locked camera, a seamless loop. Review the takes and
-   pick one per state.
-2. **Vectorise with OmniLottie** (open weights `OmniLottie/OmniLottie`, CVPR 2026, about 15 GB of
-   VRAM):
-   `python inference_hf.py --model_path OmniLottie/OmniLottie --video take.mp4 --output take.json`
-   Open owner decision: on a clip of Caw it lost his body in all 7 runs tried (default and the
-   maintainers' tuned sampling), so what replaces this step is the owner's pick.
-3. **Import into Rive.** `riv_lottie_import` turns each `take.json` into a scene fragment.
-   Replace that state's still in `scene.mjs` with its loop, keeping every name and the view-model
-   bindings above, then run `build.mjs` and `prove-viewmodel.mjs`, plus `riv_critique`. Render
-   stills for widgets and Live Activities (they can't run Rive) with `riv_render_frame`.
+1. **Shoot.** Each state's loop is a Backlot take shot with alvdansen's H3 keyframe-animation
+   sequence adapter (huggingface.co/alvdansen/h3-keyframe-animation; `h3_seq_step12000` at 1.0,
+   both references the state's still so the loop returns to its pose, 22 or 56 frames at 24 fps,
+   50 steps, seed 7), with the caption written as character acting "animated on twos". The
+   chosen takes are listed in `loops/takes.json`; Backlot film `UhDXc9y9Goj-yn2sUU9A5`.
+2. **Trace.** `trace.py` reads each take's frames and groups the held pairs into drawings, keeping
+   each drawing's start frame. It cuts Caw from the paper, snapping every pixel to one of his four
+   inks as measured from his masters (black, vermilion, eye white, yellow). Thin fringes go, closed
+   eyes' lid lines stay, and gaps in his silhouette (between a raised wing and his beak) are told
+   from eye whites by the still. It registers drawing 00 onto the state's still and traces each
+   ink and the silhouette with vtracer (spline, holes kept) into `body-NN.svg` and `rim-NN.svg`,
+   with `timing.json`.
+3. **Build.** `scene.mjs` imports the SVGs with rive-mcp-server's `importSvg`, one shape per ink
+   per drawing, then `build.mjs` writes `caw.riv`, and `prove-viewmodel.mjs` proves it.
 
-Static art (loading states, onboarding, app icon) comes from `generate_image` with the pose sheet
-as reference. Backgrounds are removed with BiRefNet
-(`uvx --from "rembg[cli,cpu]" rembg i -m birefnet-general in.png out.png`). Every asset comes in a
-light and a dark variant.
+Static art (onboarding, app icon) comes from `generate_image` with the pose sheet as reference.
+Backgrounds are removed with BiRefNet
+(`uvx --from "rembg[cli,cpu]" rembg i -m birefnet-general in.png out.png`). `assets/mascot/stills/`
+holds each state's light and dark still; `trace.py` registers the loops onto them, and they
+serve where Rive can't run.

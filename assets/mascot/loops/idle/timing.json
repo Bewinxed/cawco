@@ -1,0 +1,77 @@
+{
+  "take": "tk_HDtSnpn7nra346HbyzbY1",
+  "frames": 56,
+  "fps": 24,
+  "drawings": [
+    {
+      "start": 0,
+      "length": 8
+    },
+    {
+      "start": 8,
+      "length": 2
+    },
+    {
+      "start": 10,
+      "length": 2
+    },
+    {
+      "start": 12,
+      "length": 2
+    },
+    {
+      "start": 14,
+      "length": 2
+    },
+    {
+      "start": 16,
+      "length": 2
+    },
+    {
+      "start": 18,
+      "length": 4
+    },
+    {
+      "start": 22,
+      "length": 2
+    },
+    {
+      "start": 24,
+      "length": 2
+    },
+    {
+      "start": 26,
+      "length": 10
+    },
+    {
+      "start": 36,
+      "length": 2
+    },
+    {
+      "start": 38,
+      "length": 2
+    },
+    {
+      "start": 40,
+      "length": 2
+    },
+    {
+      "start": 42,
+      "length": 2
+    },
+    {
+      "start": 44,
+      "length": 2
+    },
+    {
+      "start": 46,
+      "length": 10
+    }
+  ],
+  "placement": {
+    "scale": 0.6095238095238096,
+    "x": -56.076190476190504,
+    "y": -53.7714285714286
+  },
+  "stillOverlap": 0.9929
+}

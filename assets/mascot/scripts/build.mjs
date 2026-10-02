@@ -16,7 +16,7 @@
 // usage: node build.mjs [out.riv]
 //   Without an argument it writes ../caw.riv and the Apple package's copy, CawCoMascot's
 //   Resources/caw.riv, so the two are always the same bytes.
-import { readFileSync, writeFileSync } from "node:fs";
+import { writeFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { buildScene, writeRiv } from "rive-mcp-server/dist/rivWriter.js";
 import { cawScene, STATUS } from "./scene.mjs";
@@ -138,9 +138,6 @@ function emittedTransitions({ transitions, states }) {
 }
 
 const spec = cawScene();
-for (const image of spec.images) {
-  image.bytes = new Uint8Array(readFileSync(image.pngPath));
-}
 const { layers } = spec.stateMachine;
 const { objects, warnings } = buildScene(spec);
 

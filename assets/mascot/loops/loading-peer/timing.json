@@ -1,0 +1,45 @@
+{
+  "take": "tk_ONIMLObKPr5E6PjBxH9k1",
+  "frames": 22,
+  "fps": 24,
+  "drawings": [
+    {
+      "start": 0,
+      "length": 2
+    },
+    {
+      "start": 2,
+      "length": 2
+    },
+    {
+      "start": 4,
+      "length": 6
+    },
+    {
+      "start": 10,
+      "length": 2
+    },
+    {
+      "start": 12,
+      "length": 2
+    },
+    {
+      "start": 14,
+      "length": 2
+    },
+    {
+      "start": 16,
+      "length": 2
+    },
+    {
+      "start": 18,
+      "length": 4
+    }
+  ],
+  "placement": {
+    "scale": 0.5576662143826323,
+    "x": -29.52510176390774,
+    "y": -7.746268656716438
+  },
+  "stillOverlap": 0.9943
+}
