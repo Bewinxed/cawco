@@ -127,7 +127,8 @@ final class ConnectViewController: UIViewController, UITextFieldDelegate {
             scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             scroll.topAnchor.constraint(equalTo: view.topAnchor),
             scroll.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor),
-            column.topAnchor.constraint(equalTo: content.topAnchor, constant: Space.space5),
+            // Caw's acting reaches past his still box: room for it under the bars.
+            column.topAnchor.constraint(equalTo: content.topAnchor, constant: Space.space8 + Space.space5),
             column.bottomAnchor.constraint(equalTo: content.bottomAnchor, constant: -Space.space5),
             // A readable column, centred in a wide window.
             column.leadingAnchor.constraint(greaterThanOrEqualTo: frame.leadingAnchor, constant: Space.space5),
