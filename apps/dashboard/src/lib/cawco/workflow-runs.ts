@@ -110,6 +110,7 @@ export function runRowOf(run: WorkflowRun, name: string): InstanceRow {
       : run.supervisorInstanceId,
     lastError: run.failure,
     updatedAt: run.endedAt ?? run.startedAt,
+    seenAt: run.seenAt ?? null,
   };
 }
 

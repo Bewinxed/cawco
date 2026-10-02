@@ -884,6 +884,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
       parentRunId: options.parentRunId ?? null,
       parentStepId: options.parentStepId ?? null,
       launchedBy: options.launchedBy ?? "dashboard",
+      seenAt: null,
     };
     write(run);
     return run;
@@ -1543,6 +1544,8 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
       steps.recover(machineId);
       flushNotices();
     },
+    /** A run whose row changed outside the engine (seen, archived): every dashboard hears it. */
+    announce: (run: WorkflowRunRow) => announce(run),
     /** A deleted workflow's ended runs: their executions leave the engine's storage too. */
     forget: (runIds: string[]) =>
       Promise.all(runIds.map((runId) => engine.forget(runId))),

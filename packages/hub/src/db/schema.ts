@@ -90,6 +90,11 @@ export const workflowRuns = sqliteTable("workflow_runs", {
   endedAt: timestamp("ended_at"),
   rerunOfRunId: text("rerun_of_run_id"),
   launchedBy: text("launched_by").notNull(),
+  /**
+   * When the owner last looked at the run (its tab in front) or archived it
+   * off Finished, on any device: a run that ended after this is news.
+   */
+  seenAt: timestamp("seen_at"),
 });
 export const workflowSteps = sqliteTable("workflow_steps", {
   childRunId: text("child_run_id"),
@@ -276,6 +281,12 @@ export const instances = sqliteTable("instances", {
    * written over `title`, and never rewritten — a given title always wins.
    */
   derivedTitle: text("derived_title"),
+  /**
+   * When the owner last looked at the session (its tab in front, after it
+   * ended) or archived it off Finished, on any device: a turn that ended
+   * after this is news. Null on one never seen.
+   */
+  seenAt: timestamp("seen_at"),
   /**
    * `scratch`: a side quest (NEW.md §1), shown apart from mainline work.
    * `summariser`: a continuation's internal worker, never on the board.

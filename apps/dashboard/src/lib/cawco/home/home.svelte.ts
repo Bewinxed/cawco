@@ -37,27 +37,25 @@ import { runHref } from "../workflow-runs";
 import { workflowState } from "../workflow-state.svelte";
 import { choices } from "./choices.svelte";
 
-/* ── Last opened, per device ──────────────────────────────────────────
-   Kept in this browser for now: what "finished since you last looked"
-   means is this device's looking. */
+/* ── Seen, on the hub ──────────────────────────────────────────────────
+   What "finished since you last looked" means is the owner's looking on
+   any device: each session and run carries `seenAt` from the hub, and
+   every dashboard hears it change on the frames it already reads. */
 
-const OPENED_KEY = "cawco-last-opened";
+/**
+ * What this dashboard marked seen and the hub has not yet echoed back: the
+ * row leaves Finished in the click that archived it, not a round trip later.
+ */
+const seenHere = $state<Record<string, number>>({});
 
-function loadOpened(): Record<string, number> {
-  if (typeof localStorage === "undefined") {
-    return {};
-  }
-  try {
-    return JSON.parse(localStorage.getItem(OPENED_KEY) ?? "{}") as Record<
-      string,
-      number
-    >;
-  } catch {
-    return {};
-  }
-}
+const epochOf = (value: string | number | Date | null | undefined): number => {
+  const at = value ? new Date(value).getTime() : 0;
+  return Number.isNaN(at) ? 0 : at;
+};
 
-const opened = $state<Record<string, number>>(loadOpened());
+/** When the owner last looked at it or archived it, on any device. */
+export const seenAt = (row: InstanceRow): number =>
+  Math.max(epochOf(row.seenAt), seenHere[row.id] ?? 0);
 
 /** Records that the reader has a conversation on screen now. */
 export function markOpened(id: string): void {
@@ -65,20 +63,25 @@ export function markOpened(id: string): void {
 }
 
 /**
- * Takes sessions off Finished without opening them: each is marked seen, as
- * opening it would, so it is listed again only when it ends another turn.
+ * Takes sessions (and runs, as `run:<id>`) off Finished without opening
+ * them: each is marked seen on the hub, as opening it would, so it is
+ * listed again only when it ends another turn.
  */
 export function archive(ids: string[]): void {
+  if (ids.length === 0) {
+    return;
+  }
   const at = Date.now();
   for (const id of ids) {
-    opened[id] = at;
+    seenHere[id] = at;
   }
-  try {
-    localStorage.setItem(OPENED_KEY, JSON.stringify(opened));
-  } catch {
-    // A browser that will not store forgets what it has seen; Finished
-    // then only lasts the page.
-  }
+  fetch("/api/seen", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids }),
+  }).catch((error) => {
+    console.error("[cawco] marking seen failed:", error);
+  });
 }
 
 /* ── One clock for every age on the home ──────────────────────────── */
@@ -444,7 +447,7 @@ class Home {
           }
           const pulse = cawco.pulseAt(row.id);
           const ended = isFailed(row) ? lastAt(row) : pulse;
-          return ended !== undefined && ended > (opened[row.id] ?? 0);
+          return ended !== undefined && ended > seenAt(row);
         })
         // The latest to end first. A failure says so on its own row (its
         // mark, its line, the tab's numeral), not by jumping the queue.

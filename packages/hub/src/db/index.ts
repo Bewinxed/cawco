@@ -418,6 +418,19 @@ export interface DbShape {
    * Returns whether the row moved.
    */
   readonly markInstanceLive: (id: string) => boolean;
+  /**
+   * The owner looked at these sessions and runs (a tab in front) or archived
+   * them off Finished, at `at`. `updatedAt` stays: being looked at is not
+   * the session moving. Returns the rows it changed, to publish.
+   */
+  readonly markSeen: (
+    instanceIds: string[],
+    runIds: string[],
+    at: Date
+  ) => {
+    instances: (typeof instances.$inferSelect)[];
+    runs: WorkflowRunRow[];
+  };
   /** A whole report: every id it names is replaced, every other cell survives. */
   readonly mergeAgentTools: (machineId: string, statuses: ToolStatus[]) => void;
   /**
@@ -1713,6 +1726,26 @@ const make = (path: string): DbShape => {
         .where(eq(instances.id, id))
         .returning()
         .get(),
+    markSeen: (instanceIds, runIds, at) => ({
+      instances:
+        instanceIds.length > 0
+          ? db
+              .update(instances)
+              .set({ seenAt: at })
+              .where(inArray(instances.id, instanceIds))
+              .returning()
+              .all()
+          : [],
+      runs:
+        runIds.length > 0
+          ? db
+              .update(workflowRuns)
+              .set({ seenAt: at })
+              .where(inArray(workflowRuns.id, runIds))
+              .returning()
+              .all()
+          : [],
+    }),
     // `updatedAt` deliberately untouched: a reading is not the session moving.
     noteInstanceEffort: (id, effort) =>
       db

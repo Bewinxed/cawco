@@ -6502,6 +6502,32 @@ export const createServer = ({
           return row;
         }
       )
+      // The owner looked at these (a tab in front, after it ended) or
+      // archived them off Finished. Sessions by id, workflow runs as
+      // `run:<id>`, the dashboard's own address for a run. Every dashboard
+      // hears it on the frames it already reads: the instance list, a run's
+      // workflow frame.
+      .post(
+        "/api/seen",
+        { body: t.Object({ ids: t.Array(t.String(), { minItems: 1 }) }) },
+        ({ body }) => {
+          const runIds = body.ids.flatMap((id) =>
+            id.startsWith("run:") ? [id.slice(4)] : []
+          );
+          const instanceIds = body.ids.filter((id) => !id.startsWith("run:"));
+          const at = new Date();
+          const seen = db.markSeen(instanceIds, runIds, at);
+          for (const machineId of new Set(
+            seen.instances.map((row) => row.machineId)
+          )) {
+            publishInstances(machineId);
+          }
+          for (const run of seen.runs) {
+            workflowRuntime.announce(run);
+          }
+          return { at: at.getTime() };
+        }
+      )
       // The session naming itself (`set_title`). Refused, with the owner's
       // name in the answer, once the owner has renamed it.
       .post(

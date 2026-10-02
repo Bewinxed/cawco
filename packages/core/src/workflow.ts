@@ -127,6 +127,8 @@ export interface WorkflowRun {
   program: string;
   rerunOfRunId: string | null;
   result: unknown;
+  /** When the owner last looked at it or archived it, on any device. */
+  seenAt?: Date | string | null;
   startedAt: Date | string;
   state: Record<string, unknown>;
   status: WorkflowRunStatus;
