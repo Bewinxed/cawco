@@ -1,0 +1,7 @@
+# Written by `xcodegen generate` from project.yml.
+/CawCo.xcodeproj
+/CawCo/Info.plist
+# SwiftPM and Xcode build state.
+.build/
+.swiftpm/
+DerivedData/

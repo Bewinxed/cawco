@@ -1,0 +1,63 @@
+# XcodeGen 2.46. Generate with `xcodegen generate` in apps/apple; the
+# .xcodeproj and CawCo/Info.plist are written from this file, never edited
+# and never committed.
+name: CawCo
+options:
+  bundleIdPrefix: dev.cawco
+  deploymentTarget:
+    iOS: "27.1"
+    macOS: "27.0"
+  createIntermediateGroups: true
+packages:
+  CawCoKit:
+    path: Packages/CawCoKit
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    SWIFT_APPROACHABLE_CONCURRENCY: YES
+    SWIFT_DEFAULT_ACTOR_ISOLATION: MainActor
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+targets:
+  # One multiplatform app: iPhone, iPad (iOS) and the Mac. It holds only
+  # scenes and platform chrome; shared code lives in CawCoKit.
+  CawCo:
+    type: application
+    supportedDestinations: [iOS, macOS]
+    sources:
+      - path: CawCo
+    dependencies:
+      - package: CawCoKit
+        products: [CawCoCore, CawCoDesign, CawCoTranscript, CawCoMascot]
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: dev.cawco.app
+        PRODUCT_NAME: CawCo
+        TARGETED_DEVICE_FAMILY: "1,2"
+        SUPPORTS_MACCATALYST: NO
+        # Sign to Run Locally until a development team is chosen.
+        "CODE_SIGN_IDENTITY[sdk=macosx*]": "-"
+        # The Mac app is sandboxed and may open connections to the hub.
+        ENABLE_APP_SANDBOX: YES
+        ENABLE_OUTGOING_NETWORK_CONNECTIONS: YES
+        ENABLE_HARDENED_RUNTIME: YES
+    info:
+      path: CawCo/Info.plist
+      properties:
+        CFBundleDisplayName: CawCo
+        UILaunchScreen: {}
+        UIApplicationSceneManifest:
+          UIApplicationSupportsMultipleScenes: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        # The hub is a LAN address (http://192.168.3.100:3456). Local
+        # networking only; ATS stays on for everything else.
+        NSAppTransportSecurity:
+          NSAllowsLocalNetworking: true
