@@ -92,6 +92,35 @@ const place = (span: HTMLElement, box: Box) => {
   span.style.borderRadius = box.r;
 };
 
+/**
+ * How far a row is drawn from where it is laid out: the translation its own
+ * and its ancestors' transforms carry, up to the container (a FLIP sliding
+ * it, on `transform` or `translate`). Taken off its drawn rect, what is left
+ * is where it lands, to the subpixel.
+ */
+const slideOf = (row: HTMLElement, container: HTMLElement) => {
+  let x = 0;
+  let y = 0;
+  for (
+    let at: HTMLElement | null = row;
+    at && at !== container;
+    at = at.parentElement
+  ) {
+    const styles = getComputedStyle(at);
+    if (styles.transform !== "none") {
+      const matrix = new DOMMatrixReadOnly(styles.transform);
+      x += matrix.e;
+      y += matrix.f;
+    }
+    if (styles.translate !== "none") {
+      const [tx = "0", ty = "0"] = styles.translate.split(" ");
+      x += Number.parseFloat(tx);
+      y += Number.parseFloat(ty);
+    }
+  }
+  return { x, y };
+};
+
 const same = (a: Box | null, b: Box | null) =>
   a !== null &&
   b !== null &&
@@ -154,15 +183,22 @@ export function highlight(options: HighlightOptions) {
         sy,
       };
     };
-    /** A row's box in the same space: where the list laid it out, when it
-        says, or else where it is drawn. Undefined for a row not laid out. */
+    /**
+     * A row's box in the same space: where the list laid it out, when it
+     * says, or else where the page laid it out, transforms ignored. A row a
+     * FLIP is still carrying (reflow sliding the rows under a list that just
+     * opened) is aimed at where it lands, not where it is drawn mid-slide:
+     * measured there, the pill stayed a row off once the slide ended, with
+     * nothing left to move it. Undefined for a row not laid out.
+     */
     const placeOf = (row: HTMLElement): Omit<Box, "r"> | undefined => {
       if (laidOut) {
         const at = laidOut().get(row);
         return at && { x: at.left, y: at.top, w: at.width, h: at.height };
       }
       const rect = row.getBoundingClientRect();
-      const at = toLocal(rect.left, rect.top);
+      const slid = slideOf(row, container);
+      const at = toLocal(rect.left - slid.x, rect.top - slid.y);
       return {
         x: at.x,
         y: at.y,
