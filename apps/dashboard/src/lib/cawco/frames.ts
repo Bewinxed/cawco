@@ -6,6 +6,7 @@
  * re-models them.
  */
 import type {
+  DelegateEvent,
   NeutralAssistantMessage,
   NeutralMessage,
   NeutralStatus,
@@ -26,13 +27,7 @@ import type { SubagentState } from "$lib/utils/flow-types";
 import { getToolGlance } from "$lib/utils/tool-display";
 import { newId } from "./id";
 import { sendRef } from "./transcript/sends";
-import type {
-  DelegateEvent,
-  JsonValue,
-  Message,
-  MessageMetadata,
-  MessageType,
-} from "./types";
+import type { JsonValue, Message, MessageMetadata, MessageType } from "./types";
 
 type AssistantBlock = NeutralAssistantMessage["message"]["content"][number];
 
@@ -1599,8 +1594,9 @@ export function askBodyParts(
  * per question, its options listed under it. Empty for anything else, which is
  * how the callers below tell a question ask from a tool ask.
  */
-function questionBlocks(input: Record<string, JsonValue>): string[] {
-  const { questions } = input;
+function questionBlocks(input: Record<string, unknown>): string[] {
+  // It came over the wire, so it is JSON.
+  const { questions } = input as Record<string, JsonValue>;
   if (!Array.isArray(questions)) {
     return [];
   }
@@ -1634,7 +1630,7 @@ function questionBlocks(input: Record<string, JsonValue>): string[] {
  */
 export function askShortOf(
   toolName: string | null,
-  input: Record<string, JsonValue>
+  input: Record<string, unknown>
 ): string {
   const questions = questionBlocks(input);
   if (questions.length > 0) {
@@ -1658,7 +1654,7 @@ export function askShortOf(
  */
 export function askDetailOf(
   _toolName: string | null,
-  input: Record<string, JsonValue>
+  input: Record<string, unknown>
 ): string {
   const questions = questionBlocks(input);
   if (questions.length > 0) {

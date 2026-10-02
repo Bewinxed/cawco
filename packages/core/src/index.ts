@@ -644,32 +644,21 @@ export interface WorkItemSummary {
   title: string;
 }
 
-/** The three things a delegate and its parent ever say to each other. */
-export type DelegateEventKind = "ask" | "answer" | "report";
-
 /** An ask's life: parked on the parent, then allowed or refused by it. */
 export type DelegateAskStatus = "pending" | "answered" | "denied";
 
-/** What each kind carries: the ask's own input, the answer, the turn's report. */
-export type DelegateEventPayload =
-  | { input: unknown }
-  | { behavior: string; answers?: Record<string, unknown> }
-  | { body: string; failed: boolean };
-
-/**
- * One line of what a delegate and its parent said to each other through the
- * hub — a `delegate_events` row (packages/hub `db/schema.ts`), read over
- * `GET /api/delegate-events` and pushed as a `delegate_event` frame.
- */
-export interface DelegateEvent {
-  createdAt: Date;
+/** What every kind of {@link DelegateEvent} carries, whichever it is. */
+interface DelegateEventBase {
+  /**
+   * When the hub recorded it, as JSON carries a date.
+   * @format date-time
+   */
+  createdAt: string;
   /** The hub's row id — what a fold deduplicates on and orders by. */
   id: number;
   /** The delegate the traffic is about — never the parent, on any of the kinds. */
   instanceId: string;
-  kind: DelegateEventKind;
   parentInstanceId: string;
-  payload: DelegateEventPayload;
   /** The permission request an ask and its answer share. Null on a report. */
   requestId: string | null;
   requestKind: "question" | "tool" | null;
@@ -677,6 +666,34 @@ export interface DelegateEvent {
   status: DelegateAskStatus | null;
   toolName: string | null;
 }
+
+/**
+ * One line of what a delegate and its parent said to each other through the
+ * hub — a `delegate_events` row (packages/hub `db/schema.ts`), read over
+ * `GET /api/delegate-events` and pushed as a `delegate_event` frame. The hub is
+ * the system of record: the transcript markers say the same things, but only
+ * for a reader who was watching, and only as text to be parsed back.
+ */
+export type DelegateEvent =
+  | (DelegateEventBase & {
+      kind: "ask";
+      /** The tool input as the harness asked it — `{filepath, diff}`, `{questions}`, … */
+      payload: { input?: Record<string, unknown> };
+    })
+  | (DelegateEventBase & {
+      kind: "answer";
+      payload: { behavior: string; answers?: Record<string, unknown> };
+    })
+  | (DelegateEventBase & {
+      kind: "report";
+      payload: { body: string; failed: boolean };
+    });
+
+/** The three things a delegate and its parent ever say to each other. */
+export type DelegateEventKind = DelegateEvent["kind"];
+
+/** What each kind carries: the ask's own input, the answer, the turn's report. */
+export type DelegateEventPayload = DelegateEvent["payload"];
 
 /**
  * One line of the supervisor's intervention log — `supervisor_events`

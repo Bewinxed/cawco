@@ -1822,7 +1822,14 @@ export const createServer = ({
           toolName === ASK_USER_QUESTION
             ? "question"
             : "tool",
-        payload: { input: (ask.payload as { input?: unknown } | null)?.input },
+        payload: {
+          input: (
+            ask.payload as Extract<
+              FramePayload,
+              { kind: "permission_request" }
+            > | null
+          )?.input,
+        },
         status: "pending",
       })
     );

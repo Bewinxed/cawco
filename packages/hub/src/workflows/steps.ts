@@ -19,8 +19,9 @@
  * machine, its attempt row keeps counting, and `resume` re-arms the timeout
  * the restart dropped.
  */
-import type { EffortLevel, SpawnPayload, WorkflowFailure } from "@cawco/core";
+import type { SpawnPayload, WorkflowFailure } from "@cawco/core";
 import { workflowNoticeMarker, workflowStepMarker } from "@cawco/core";
+import type { StepSpecJson } from "@cawco/core/workflow-program";
 import Ajv from "ajv";
 import type {
   DbShape,
@@ -29,23 +30,6 @@ import type {
   WorkflowStepRow,
 } from "../db";
 import { failureText, receiptOf } from "./refs";
-
-/** What `w.run` / `w.spawn` asked for, as it crossed the worker boundary. */
-export interface StepSpec {
-  denyTools?: string[];
-  effort?: EffortLevel;
-  harness: "claude" | "opencode" | "pi";
-  model: string;
-  node?: string;
-  /** Out of attempts in a supervised run: held for the supervisor (default), or failed. */
-  onExhausted?: "fail" | "hold";
-  outputSchema: Record<string, unknown>;
-  prompt: string;
-  retries?: number;
-  skills?: string[];
-  timeoutMinutes?: number;
-  title: string;
-}
 
 /** What the steps need from the run around them. */
 export interface StepContext {
@@ -122,7 +106,7 @@ export function stepError(
  * attempts past the step's budget, counted from 1. The budget's last attempt
  * is hold 1; each supervisor retry adds one.
  */
-const holdAfter = (spec: StepSpec, attempt: WorkflowAttemptRow) =>
+const holdAfter = (spec: StepSpecJson, attempt: WorkflowAttemptRow) =>
   attempt.number - (spec.retries ?? 2);
 
 /** How long something took, in the words a receipt uses. */
@@ -159,11 +143,11 @@ export function createSteps(ctx: StepContext) {
     }
     return step;
   };
-  const specOf = (step: WorkflowStepRow): StepSpec => {
+  const specOf = (step: WorkflowStepRow): StepSpecJson => {
     if (!step.spec) {
       throw new Error(`Workflow step ${step.id} has no recorded spec.`);
     }
-    return step.spec as unknown as StepSpec;
+    return step.spec as unknown as StepSpecJson;
   };
   const latest = (step: WorkflowStepRow) =>
     db.listWorkflowAttempts(step.id).at(-1);
@@ -172,7 +156,7 @@ export function createSteps(ctx: StepContext) {
     timers.delete(id);
     deadlines.delete(id);
   };
-  const denied = (run: WorkflowRunRow, spec: StepSpec) =>
+  const denied = (run: WorkflowRunRow, spec: StepSpecJson) =>
     spec.harness === "claude"
       ? [
           ...(spec.denyTools ?? []),
@@ -183,7 +167,7 @@ export function createSteps(ctx: StepContext) {
   /** The prompt an attempt is handed: its refs filled, notes and retry cause added. */
   const briefOf = (
     run: WorkflowRunRow,
-    spec: StepSpec,
+    spec: StepSpecJson,
     notes: string[],
     previousError: string
   ) => {
@@ -207,7 +191,7 @@ export function createSteps(ctx: StepContext) {
   const attemptStep = async (
     run: WorkflowRunRow,
     step: WorkflowStepRow,
-    spec: StepSpec,
+    spec: StepSpecJson,
     previousError = ""
   ) => {
     const number = (latest(step)?.number ?? 0) + 1;
@@ -255,7 +239,7 @@ export function createSteps(ctx: StepContext) {
     run: WorkflowRunRow,
     step: WorkflowStepRow,
     instanceId: string,
-    spec: StepSpec,
+    spec: StepSpecJson,
     body: string
   ) => {
     const [instance] = db.getInstancesByIds([instanceId]);
@@ -362,7 +346,7 @@ export function createSteps(ctx: StepContext) {
     run: WorkflowRunRow,
     step: WorkflowStepRow,
     attempt: WorkflowAttemptRow,
-    spec: StepSpec
+    spec: StepSpecJson
   ) => {
     const budget = (spec.retries ?? 2) + 1;
     const count =
@@ -389,7 +373,7 @@ export function createSteps(ctx: StepContext) {
     run: WorkflowRunRow,
     step: WorkflowStepRow,
     attempt: WorkflowAttemptRow,
-    spec: StepSpec,
+    spec: StepSpecJson,
     why: string
   ) =>
     `${workflowNoticeMarker(ctx.nameOf(run), `step ${spec.title} failed`)}${receiptHead(run, step, attempt, spec)} · ${failureText(attempt.failure ?? "no-result")}${why ? ` · ${why}` : ""}`;
@@ -402,7 +386,7 @@ export function createSteps(ctx: StepContext) {
    */
   const holdRefusal = (
     run: WorkflowRunRow,
-    spec: StepSpec,
+    spec: StepSpecJson,
     hold: number
   ): string | undefined => {
     if (spec.onExhausted === "fail" || !run.supervisorInstanceId) {
@@ -424,7 +408,7 @@ export function createSteps(ctx: StepContext) {
     run: WorkflowRunRow,
     step: WorkflowStepRow,
     attempt: WorkflowAttemptRow,
-    spec: StepSpec
+    spec: StepSpecJson
   ) => {
     const hold = holdAfter(spec, attempt);
     const why = holdRefusal(run, spec, hold);
@@ -494,7 +478,7 @@ export function createSteps(ctx: StepContext) {
 
   return {
     /** Opens a `run`/`spawn` call's step once; a replay finds the row and leaves it. */
-    open(run: WorkflowRunRow, seq: number, id: string, spec: StepSpec) {
+    open(run: WorkflowRunRow, seq: number, id: string, spec: StepSpecJson) {
       return ctx.serial(run.id, async () => {
         if (db.getWorkflowStep(id)) {
           return;

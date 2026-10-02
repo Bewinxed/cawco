@@ -5,8 +5,10 @@
  */
 import type {
   AvailableCommand,
+  DelegateEvent,
   NeutralStatus,
   NeutralSystemMessage,
+  SendState,
   SessionTooling,
   UserQuestionResult,
 } from "@cawco/core";
@@ -70,7 +72,7 @@ export interface Message {
    * own: on its way (`sending`), or it never reached the hub (`unreached`).
    * Absent on everything that is not a send.
    */
-  state?: SendState;
+  state?: SendRowState;
   /**
    * When the turn happened. A send: when the hub accepted it, live and stored
    * alike (`SendRecord.acceptedAt`). Anything else: when the harness stored
@@ -85,7 +87,14 @@ export interface Message {
   type: MessageType;
 }
 
-export type SendState = "sending" | "unreached" | "pending" | "read" | "failed";
+/**
+ * A send's row state: its record's (`SendState`, core) — a replaced send is
+ * no row — or, before the hub has it, this tab's own.
+ */
+export type SendRowState =
+  | "sending"
+  | "unreached"
+  | Exclude<SendState, "replaced">;
 
 /** Everything a renderer may need beyond `content`, keyed by the type that uses it. */
 export interface MessageMetadata {
@@ -230,47 +239,6 @@ export interface MessageMetadata {
   /** Set when a `user.peer` is a workflow's notice: what happened, e.g. `step Build failed`. */
   workflowEvent?: string;
 }
-
-/** An ask's life: parked on the parent, then allowed or refused by it. */
-export type DelegateAskStatus = "pending" | "answered" | "denied";
-
-/** What every kind of {@link DelegateEvent} carries, whichever it is. */
-interface DelegateEventBase {
-  createdAt: string;
-  /** The hub's row id — what a fold deduplicates on and orders by. */
-  id: number;
-  /** The delegate the traffic is about, never the parent, on any of the kinds. */
-  instanceId: string;
-  parentInstanceId: string;
-  /** The permission request an ask and its answer share; null on a report. */
-  requestId: string | null;
-  requestKind: "question" | "tool" | null;
-  /** An ask's own state; null on an answer and a report, which settle nothing. */
-  status: DelegateAskStatus | null;
-  toolName: string | null;
-}
-
-/**
- * One line of the hub's record of what a delegate and its parent said to each
- * other — `delegate_events` (packages/hub `db/schema.ts`), read over
- * `GET /api/delegate-events` and pushed as a `delegate_event` frame. The hub is
- * the system of record: the transcript markers say the same things, but only
- * for a reader who was watching, and only as text to be parsed back.
- */
-export type DelegateEvent =
-  | (DelegateEventBase & {
-      kind: "ask";
-      /** The tool input as the harness asked it — `{filepath, diff}`, `{questions}`, … */
-      payload: { input?: Record<string, JsonValue> };
-    })
-  | (DelegateEventBase & {
-      kind: "answer";
-      payload: { behavior?: string; answers?: Record<string, JsonValue> };
-    })
-  | (DelegateEventBase & {
-      kind: "report";
-      payload: { body: string; failed: boolean };
-    });
 
 /** The two kinds a card renders directly; an answer only settles its ask. */
 export type DelegateAskEvent = Extract<DelegateEvent, { kind: "ask" }>;

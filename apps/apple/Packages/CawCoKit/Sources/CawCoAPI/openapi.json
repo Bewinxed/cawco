@@ -10830,12 +10830,122 @@
         "type": "string"
       },
       "DelegateEvent": {
-        "description": "One line of what a delegate and its parent said to each other through the\nhub — a `delegate_events` row (packages/hub `db/schema.ts`), read over\n`GET /api/delegate-events` and pushed as a `delegate_event` frame.",
+        "description": "One line of what a delegate and its parent said to each other through the\nhub — a `delegate_events` row (packages/hub `db/schema.ts`), read over\n`GET /api/delegate-events` and pushed as a `delegate_event` frame. The hub is\nthe system of record: the transcript markers say the same things, but only\nfor a reader who was watching, and only as text to be parsed back.",
+        "anyOf": [
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DelegateEventBase"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "ask"
+                    ]
+                  },
+                  "payload": {
+                    "description": "The tool input as the harness asked it — `{filepath, diff}`, `{questions}`, …",
+                    "type": "object",
+                    "properties": {
+                      "input": {
+                        "type": "object"
+                      }
+                    }
+                  }
+                },
+                "required": [
+                  "kind",
+                  "payload"
+                ]
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DelegateEventBase"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "answer"
+                    ]
+                  },
+                  "payload": {
+                    "type": "object",
+                    "properties": {
+                      "behavior": {
+                        "type": "string"
+                      },
+                      "answers": {
+                        "type": "object"
+                      }
+                    },
+                    "required": [
+                      "behavior"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "payload"
+                ]
+              }
+            ]
+          },
+          {
+            "allOf": [
+              {
+                "$ref": "#/components/schemas/DelegateEventBase"
+              },
+              {
+                "type": "object",
+                "properties": {
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "report"
+                    ]
+                  },
+                  "payload": {
+                    "type": "object",
+                    "properties": {
+                      "body": {
+                        "type": "string"
+                      },
+                      "failed": {
+                        "type": "boolean"
+                      }
+                    },
+                    "required": [
+                      "body",
+                      "failed"
+                    ]
+                  }
+                },
+                "required": [
+                  "kind",
+                  "payload"
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "DelegateEventBase": {
+        "description": "What every kind of {@link DelegateEvent} carries, whichever it is.",
         "type": "object",
         "properties": {
           "createdAt": {
-            "type": "string",
-            "format": "date-time"
+            "description": "When the hub recorded it, as JSON carries a date.",
+            "format": "date-time",
+            "type": "string"
           },
           "id": {
             "description": "The hub's row id — what a fold deduplicates on and orders by.",
@@ -10845,14 +10955,8 @@
             "description": "The delegate the traffic is about — never the parent, on any of the kinds.",
             "type": "string"
           },
-          "kind": {
-            "$ref": "#/components/schemas/DelegateEventKind"
-          },
           "parentInstanceId": {
             "type": "string"
-          },
-          "payload": {
-            "$ref": "#/components/schemas/DelegateEventPayload"
           },
           "requestId": {
             "description": "The permission request an ask and its answer share. Null on a report.",
@@ -10888,63 +10992,9 @@
           "createdAt",
           "id",
           "instanceId",
-          "kind",
           "parentInstanceId",
-          "payload",
           "requestId",
           "toolName"
-        ]
-      },
-      "DelegateEventKind": {
-        "description": "The three things a delegate and its parent ever say to each other.",
-        "enum": [
-          "answer",
-          "ask",
-          "report"
-        ],
-        "type": "string"
-      },
-      "DelegateEventPayload": {
-        "description": "What each kind carries: the ask's own input, the answer, the turn's report.",
-        "anyOf": [
-          {
-            "type": "object",
-            "properties": {
-              "input": {}
-            },
-            "required": [
-              "input"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "behavior": {
-                "type": "string"
-              },
-              "answers": {
-                "type": "object"
-              }
-            },
-            "required": [
-              "behavior"
-            ]
-          },
-          {
-            "type": "object",
-            "properties": {
-              "body": {
-                "type": "string"
-              },
-              "failed": {
-                "type": "boolean"
-              }
-            },
-            "required": [
-              "body",
-              "failed"
-            ]
-          }
         ]
       },
       "WorkItemSummary": {

@@ -7,12 +7,15 @@
  */
 
 import type {
-  EffortLevel,
   WorkflowEffectKind,
   WorkflowLogEntry,
   WorkflowNode,
 } from "@cawco/core";
-import type { JevAnswer, JevResult } from "@cawco/core/workflow-program";
+import type {
+  JevAnswer,
+  JevResult,
+  StepSpecJson,
+} from "@cawco/core/workflow-program";
 import dagre from "@dagrejs/dagre";
 
 /** The 260px node of §9.2, and the rank/row gaps that keep edges readable. */
@@ -75,24 +78,10 @@ export interface JournalLogLine {
   text: string;
 }
 
-interface StepSpec {
-  denyTools?: string[];
-  effort?: EffortLevel;
-  harness: "claude" | "opencode" | "pi";
-  model: string;
-  node?: string;
-  outputSchema: Record<string, unknown>;
-  prompt: string;
-  retries?: number;
-  skills?: string[];
-  timeoutMinutes?: number;
-  title: string;
-}
-
 /** A `run`/`spawn` call's spec: the arguments the log keeps for it. */
-const specOf = (effect: WorkflowLogEntry): StepSpec | undefined =>
+const specOf = (effect: WorkflowLogEntry): StepSpecJson | undefined =>
   effect.kind === "run" || effect.kind === "spawn"
-    ? ((effect.args as unknown as StepSpec | null) ?? undefined)
+    ? ((effect.args as unknown as StepSpecJson | null) ?? undefined)
     : undefined;
 
 /**

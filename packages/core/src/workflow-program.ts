@@ -46,6 +46,15 @@ export interface StepSpec<Output extends ZodTypeAny = ZodTypeAny> {
 }
 
 /** A step started with `w.spawn`: its row id now, its result when it lands. */
+/**
+ * A {@link StepSpec} as it crosses the worker boundary and is kept in the
+ * run's log: the program's zod `output` written as JSON Schema
+ * (`strip` in workflow-worker.ts).
+ */
+export type StepSpecJson = Omit<StepSpec, "output"> & {
+  outputSchema: Record<string, unknown>;
+};
+
 export interface StepHandle<Output extends ZodTypeAny = ZodTypeAny> {
   readonly id: string;
   readonly result: Promise<z.infer<Output>>;

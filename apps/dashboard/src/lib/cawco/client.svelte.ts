@@ -10,6 +10,7 @@ import type {
   CommandKind,
   ContinuationJob,
   ControlPayload,
+  DelegateEvent,
   EffortLevel,
   Envelope,
   FramePayload,
@@ -120,7 +121,7 @@ import {
   sendRef,
   sendRow,
 } from "./transcript/sends";
-import type { DelegateAskEvent, DelegateEvent, Message } from "./types";
+import type { DelegateAskEvent, Message } from "./types";
 import {
   acceptWorkflowFrame,
   refreshWorkflows,
@@ -1404,22 +1405,9 @@ function settle(
   return true;
 }
 
-/**
- * The hub's delegate-traffic push (`publishDelegateEvent`, packages/hub). It is
- * none of core's `FramePayload` kinds — the hub sends it to dashboards only —
- * so it is read off the frame structurally, the way `routedTo` and `handoffs`
- * are.
- */
+/** The hub's delegate-traffic push (`publishDelegateEvent`, packages/hub). */
 function delegateEventOf(frame: FramePayload): DelegateEvent | null {
-  const candidate: { kind: string; event?: unknown } = frame;
-  if (candidate.kind !== "delegate_event") {
-    return null;
-  }
-  const { event } = candidate;
-  if (typeof event !== "object" || event === null) {
-    return null;
-  }
-  return event as DelegateEvent;
+  return frame.kind === "delegate_event" ? frame.event : null;
 }
 
 /** Files one event under the delegate it is about, pushed or freshly read. */
@@ -1431,39 +1419,18 @@ function recordDelegateEvent(event: DelegateEvent): void {
   foldDelegateEvent(state.delegateEvents[event.instanceId], event);
 }
 
-/** The hub's supervisor-event push, structurally the same as delegate events. */
+/** The hub's supervisor-event push. */
 function supervisorEventOf(frame: FramePayload): SupervisorEvent | null {
-  const candidate: { kind: string; event?: unknown } = frame;
-  if (candidate.kind !== "supervisor_event") {
-    return null;
-  }
-  const { event } = candidate;
-  if (typeof event !== "object" || event === null) {
-    return null;
-  }
-  return event as SupervisorEvent;
+  return frame.kind === "supervisor_event" ? frame.event : null;
 }
 
-/** The transient "supervisor is thinking" push — structural twin of the event. */
+/** The transient "supervisor is thinking" push. */
 function supervisorStatusOf(
   frame: FramePayload
 ): { instanceId: string; source: "rule" | "autopilot"; at: number } | null {
-  const candidate: { kind: string; instanceId?: unknown; status?: unknown } =
-    frame;
-  if (candidate.kind !== "supervisor_status") {
-    return null;
-  }
-  const { status } = candidate;
-  if (typeof status !== "object" || status === null) {
-    return null;
-  }
-  if (typeof candidate.instanceId !== "string") {
-    return null;
-  }
-  return {
-    instanceId: candidate.instanceId,
-    ...(status as { source: "rule" | "autopilot"; at: number }),
-  };
+  return frame.kind === "supervisor_status"
+    ? { instanceId: frame.instanceId, ...frame.status }
+    : null;
 }
 
 /** Cap sourced from PLAN §C9: 200 in memory. */

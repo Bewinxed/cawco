@@ -21,6 +21,7 @@ import type {
   WorkflowRun,
 } from "@cawco/core";
 import { workflowNoticeMarker } from "@cawco/core";
+import type { StepSpecJson } from "@cawco/core/workflow-program";
 import {
   failureOf,
   type JevSpec,
@@ -45,7 +46,7 @@ import {
   receiptOf,
   valueAt,
 } from "./refs";
-import { createSteps, durationText, type StepSpec, stepError } from "./steps";
+import { createSteps, durationText, stepError } from "./steps";
 
 /** A workflow waits on Jev longer than a meaning rule does. */
 const WORKFLOW_JEV_TIMEOUT_MS = 60_000;
@@ -1170,7 +1171,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
             logCall(runId, seq, kind, args);
           }
           await steps.open(run, seq, stepIdFor(runId, seq), {
-            ...(args as unknown as StepSpec),
+            ...(args as unknown as StepSpecJson),
           });
           return {};
         case "ask":

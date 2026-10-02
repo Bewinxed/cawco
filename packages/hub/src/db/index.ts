@@ -905,6 +905,15 @@ export interface DbShape {
 
 export class Db extends Context.Service<Db, DbShape>()("Db") {}
 
+/**
+ * A delegate_events row as everything reads it: its date as JSON writes one,
+ * and its payload paired with its kind, which the two columns cannot say.
+ */
+const delegateEventOf = (
+  row: typeof delegateEvents.$inferSelect
+): DelegateEvent =>
+  ({ ...row, createdAt: row.createdAt.toISOString() }) as DelegateEvent;
+
 /** A stored rule row back into the shape the fleet and the dashboard share. */
 const ruleOf = (row: typeof rules.$inferSelect): Rule => ({
   id: row.id,
@@ -2802,9 +2811,11 @@ const make = (path: string): DbShape => {
         .run();
     },
     recordDelegateEvent: (event) =>
-      db.insert(delegateEvents).values(event).returning().get(),
-    delegateAsk: (requestId) =>
-      db
+      delegateEventOf(
+        db.insert(delegateEvents).values(event).returning().get()
+      ),
+    delegateAsk: (requestId) => {
+      const row = db
         .select()
         .from(delegateEvents)
         .where(
@@ -2813,7 +2824,9 @@ const make = (path: string): DbShape => {
             eq(delegateEvents.requestId, requestId)
           )
         )
-        .get(),
+        .get();
+      return row && delegateEventOf(row);
+    },
     settleDelegateAsk: (requestId, status) => {
       db.update(delegateEvents)
         .set({ status })
@@ -2839,7 +2852,8 @@ const make = (path: string): DbShape => {
           )
         )
         .orderBy(delegateEvents.createdAt, delegateEvents.id)
-        .all(),
+        .all()
+        .map(delegateEventOf),
     putUsageBuckets: (machineId, buckets) => {
       if (buckets.length === 0) {
         return;

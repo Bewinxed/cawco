@@ -1,4 +1,13 @@
 <script lang="ts">
+  /**
+   * A fleet delegate — a session this one spawned with `delegate` or
+   * `start_session` — folded onto the parent's spine the way a subagent branch
+   * is, so the operator can follow a fan-out without leaving the orchestrator.
+   * The delegate is a full instance with its own row and transcript; this card
+   * only composes what the store already holds: the hub's record of its asks
+   * and reports, the daemon's pulse, and, once opened, its live transcript.
+   */
+  import type { DelegateAskStatus } from "@cawco/core";
   import { TextMorph } from "torph/svelte";
   import { Button } from "$lib/components/ui/button";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
@@ -24,17 +33,8 @@
   import { modelLabel } from "../models.svelte";
   import { CURVE, dur, easeOut } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";
-  /**
-   * A fleet delegate — a session this one spawned with `delegate` or
-   * `start_session` — folded onto the parent's spine the way a subagent branch
-   * is, so the operator can follow a fan-out without leaving the orchestrator.
-   * The delegate is a full instance with its own row and transcript; this card
-   * only composes what the store already holds: the hub's record of its asks
-   * and reports, the daemon's pulse, and, once opened, its live transcript.
-   */
   import type {
     DelegateAskEvent,
-    DelegateAskStatus,
     DelegateReportEvent,
     Message,
   } from "../types";
