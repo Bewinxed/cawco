@@ -40,6 +40,7 @@ import type {
   SupportedCommands,
   UsageLimitsReading,
   UsageLimitsResponse,
+  WorkflowRun,
   WorkItemSummary,
 } from "@cawco/core";
 import {
@@ -123,6 +124,16 @@ import {
   sendRow,
 } from "./transcript/sends";
 import type { DelegateAskEvent, Message } from "./types";
+import {
+  onBoard,
+  runActivity,
+  runIdOf,
+  runMovedAt,
+  runRowOf,
+  runSince,
+  stepTitle,
+  stepUnderRun,
+} from "./workflow-runs";
 import {
   acceptWorkflowFrame,
   refreshWorkflows,
@@ -475,9 +486,45 @@ const catalogsTried = $state<Record<string, true>>({});
  * made every field read of every row a tracked signal, so a list render or a
  * lookup paid a proxy trap per row per field.
  */
-let instances = $state.raw<InstanceRow[]>([]);
-/** The same rows looked up by id and by session, rebuilt once per change. */
-const instanceIndex = $derived(indexInstances(instances));
+let hubRows = $state.raw<InstanceRow[]>([]);
+/** What a run is called: its workflow's name. */
+const runName = (runId: string): string | undefined => {
+  const run = workflowState.runs[runId];
+  return run
+    ? workflowState.workflows.find((each) => each.id === run.workflowId)?.name
+    : undefined;
+};
+/**
+ * The hub's rows with each workflow step hung under its run and called by
+ * its step (workflow-runs.ts), so every reader of the rows nests and names
+ * it the one way. A row that is not a step is the hub's own object.
+ */
+const instances = $derived(
+  hubRows.map((row) =>
+    stepUnderRun(
+      row,
+      row.workflowRunId ? runName(row.workflowRunId) : undefined
+    )
+  )
+);
+/**
+ * Every workflow run as a session row (workflow-runs.ts): what the lists
+ * nest, fold and archive it by, and what its tab is named and marked from.
+ */
+const runRows = $derived(
+  Object.values(workflowState.runs).map((run) =>
+    runRowOf(run, runName(run.id) ?? "Workflow")
+  )
+);
+/** The runs the board lists, by the hub's window for sessions (`onBoard`). */
+const boardRuns = $derived(runRows.filter((row) => onBoard(row, Date.now())));
+/** The run a `run:` id names, when it is one this browser has. */
+const runOf = (id: string): WorkflowRun | undefined => {
+  const runId = runIdOf(id);
+  return runId ? workflowState.runs[runId] : undefined;
+};
+/** The same rows looked up by id and by session, runs among them, rebuilt once per change. */
+const instanceIndex = $derived(indexInstances([...instances, ...runRows]));
 const runningInstances = $derived(instances.filter(isLive));
 const staleInstances = $derived(instances.filter(isStale));
 const listedInstances = $derived(instances.filter(isListed));
@@ -1172,7 +1219,7 @@ async function load<T>(path: string): Promise<T | null> {
  * from it, so a snapshot is also how a bare `/session/[id]` fills itself in.
  */
 function adoptInstances(rows: InstanceRow[]): void {
-  instances = rows;
+  hubRows = rows;
   for (const target of Object.values(state.sessions)) {
     hydrate(target);
   }
@@ -1187,7 +1234,7 @@ function adoptInstances(rows: InstanceRow[]): void {
  */
 function patchInstances(upserts: InstanceRow[], removed: string[]): void {
   const gone = new Set(removed);
-  const next = instances.filter((row) => !gone.has(row.id));
+  const next = hubRows.filter((row) => !gone.has(row.id));
   if (upserts.length > 0) {
     const at = new Map(next.map((row, i) => [row.id, i]));
     for (const row of upserts) {
@@ -1200,7 +1247,7 @@ function patchInstances(upserts: InstanceRow[], removed: string[]): void {
       }
     }
   }
-  instances = next;
+  hubRows = next;
   for (const row of upserts) {
     const held = state.sessions[row.id];
     if (held) {
@@ -3002,7 +3049,9 @@ function subscriptionIds(): string[] {
   for (const id of watchedDelegates.keys()) {
     ids.add(id);
   }
-  return [...ids];
+  // A run's tab streams no frames of its own: its run and steps come with
+  // the workflow frames every dashboard already receives.
+  return [...ids].filter((id) => !runIdOf(id));
 }
 
 /** The last subscription set sent, so an unchanged set of tabs stays quiet. */
@@ -3041,6 +3090,10 @@ export function setPeeked(id: string | null): void {
 
 /** One more reader of this delegate: its frames stream while any reader remains. */
 export function watchDelegate(instanceId: string): void {
+  // A workflow run streams no frames of its own (see `subscriptionIds`).
+  if (runIdOf(instanceId)) {
+    return;
+  }
   watchedDelegates.set(instanceId, (watchedDelegates.get(instanceId) ?? 0) + 1);
   syncSubscriptions();
 }
@@ -4116,6 +4169,10 @@ export function messagesUrl(
 }
 
 export function preloadHistory(viewId: string): Promise<TranscriptOutcome> {
+  // A workflow run's tab has no transcript of its own: its steps' do.
+  if (runIdOf(viewId)) {
+    return Promise.resolve({ ok: true, skipped: true });
+  }
   const row = cawco.instanceIndex.byId.get(viewId);
   return streamHistory({
     viewId,
@@ -5400,6 +5457,13 @@ export const cawco = {
   get listedInstances(): InstanceRow[] {
     return listedInstances;
   },
+  /**
+   * Every workflow run as a session row (workflow-runs.ts), for the lists
+   * that show runs the way they show sessions: Working, Finished, projects.
+   */
+  get runRows(): InstanceRow[] {
+    return boardRuns;
+  },
   /** Side quests across the fleet — kept in their own section, not per machine. */
   get scratchInstances(): InstanceRow[] {
     return instances.filter((row) => isListed(row) && row.kind === "scratch");
@@ -5491,6 +5555,10 @@ export const cawco = {
   },
   /** What a session needs from you — `idle` for one nothing has been heard from. */
   activityOf: (instanceId: string): Activity => {
+    const run = runOf(instanceId);
+    if (run) {
+      return runActivity(run);
+    }
     const target = state.sessions[instanceId];
     // Blocked wins everywhere: a parked permission is broadcast, not filtered.
     if (target && target.pending.length > 0) {
@@ -5511,6 +5579,24 @@ export const cawco = {
   currentToolOf: (
     instanceId: string
   ): { name: string; glance: string } | null => {
+    const runId = runIdOf(instanceId);
+    if (runId) {
+      // A run is doing whichever of its steps is running.
+      const detail = workflowState.details[runId];
+      const step = detail?.steps.find((each) => each.status === "running");
+      return detail && step
+        ? {
+            name: stepTitle(
+              detail,
+              step,
+              step.instanceId
+                ? instanceIndex.byId.get(step.instanceId)?.title
+                : null
+            ),
+            glance: "",
+          }
+        : null;
+    }
     const target = state.sessions[instanceId];
     if (target && isSubscribed(instanceId)) {
       return target.currentTool;
@@ -5520,13 +5606,21 @@ export const cawco = {
   /**
    * When the daemon last pulsed a session, ms epoch — the freshest signal a
    * rail has for an unsubscribed session, since the pulse is broadcast for
-   * every session while its transcript frames only flow to a watcher.
+   * every session while its transcript frames only flow to a watcher. A
+   * run's is when it last moved.
    */
-  pulseAt: (instanceId: string): number | undefined =>
-    state.pulses[instanceId]?.at,
-  /** When the session's current turn began, ms epoch; `undefined` while it is idle. */
-  turnSince: (instanceId: string): number | undefined =>
-    state.turnSince[instanceId],
+  pulseAt: (instanceId: string): number | undefined => {
+    const run = runOf(instanceId);
+    if (run) {
+      return runMovedAt(run, workflowState.details[run.id]?.steps);
+    }
+    return state.pulses[instanceId]?.at;
+  },
+  /** When the session's current turn began, ms epoch; `undefined` while it is idle. A run's turn is the run. */
+  turnSince: (instanceId: string): number | undefined => {
+    const run = runOf(instanceId);
+    return run ? runSince(run) : state.turnSince[instanceId];
+  },
   /** When the hub parked a waiting workflow run's question, ms epoch. */
   runAskRaisedAt: (runId: string): number | undefined =>
     state.runAskRaisedAt[runId],

@@ -42,6 +42,7 @@
   import { disclosure } from "./disclosure.svelte";
   import MessageBody from "./MessageBody.svelte";
   import MessageRow from "./MessageRow.svelte";
+  import RunBlock from "./RunBlock.svelte";
   import { foldMessages, wellRuns } from "./rows";
   import Subagent from "./Subagent.svelte";
   import Thinking from "./Thinking.svelte";
@@ -574,6 +575,8 @@
                 <ToolGroup messages={[r.message]} />
               {:else if r.kind === 'delegate'}
                 <Self message={r.message} />
+              {:else if r.kind === 'run'}
+                <RunBlock message={r.message} runId={r.runId} />
               {:else if r.kind === 'subagent'}
                 <Subagent branch={r.branch} spawn={r.spawn} />
               {:else if r.kind === 'thinking'}

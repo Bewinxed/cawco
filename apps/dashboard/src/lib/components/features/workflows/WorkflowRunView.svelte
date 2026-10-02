@@ -1,14 +1,19 @@
 <script lang="ts">
-  import type { UsageSummary } from "@cawco/core";
-  import { onMount, untrack } from "svelte";
-  import { MediaQuery } from "svelte/reactivity";
+  /**
+   * A workflow run's tab: what a session's tab is for a session. The run's
+   * name, where it stands, when it started and what it was given; its steps
+   * hung under it on the nesting rails (RunSteps), each opening its result
+   * and its own session's tab; the question it waits on, and its log.
+   * There is no graph here: a graph is for editing (/workflows/[id]).
+   */
   import { goto } from "$app/navigation";
   import { cawco } from "$lib/cawco/client.svelte";
   import { confirm } from "$lib/cawco/confirm.svelte";
   import { message } from "$lib/cawco/delegate-types";
-  import { crossIn, crossOut } from "$lib/cawco/motion/curves.svelte";
   import { unfold } from "$lib/cawco/motion/fold.svelte";
   import { reflow } from "$lib/cawco/motion/rows.svelte";
+  import RunSteps from "$lib/cawco/RunSteps.svelte";
+  import { runHref, runTabId } from "$lib/cawco/workflow-runs";
   import {
     refreshWorkflowLog,
     refreshWorkflowRun,
@@ -19,45 +24,20 @@
     cancelWorkflowRun,
     rerunWorkflow,
   } from "$lib/cawco/workflows";
+  import SessionStatus from "$lib/cawco/workspace/SessionStatus.svelte";
   import PendingContent, {
     whileIdle,
   } from "$lib/components/ui/button/pending-content.svelte";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
   import { Skeleton } from "$lib/components/ui/skeleton";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
-  import * as Tabs from "$lib/components/ui/tabs";
   import { followTail } from "./follow-tail";
-  import {
-    type JournalCheckpoint,
-    journalCheckpoints,
-    journalGraph,
-    journalJev,
-    journalLog,
-    journalStateTouches,
-  } from "./journal-graph";
-  import { paneSlide, towards } from "./pane-slide";
-  import WorkflowCanvas from "./WorkflowCanvas.svelte";
-  import WorkflowStatus from "./WorkflowStatus.svelte";
+  import { journalCheckpoints, journalLog } from "./journal-graph";
   import { duration } from "./workflow-ui";
+  import "./workflows.css";
 
-  let { runId, onprogram }: { onprogram?: () => void; runId: string } =
-    $props();
-  const narrow = new MediaQuery("(max-width: 1023px)");
-  let selected = $state<string>();
-  let selectedEnd = $state(false);
-  let stepsOpen = $state(true);
-  let tab = $state("steps");
-  const TABS = ["steps", "canvas"] as const;
-  /** Which way the last tab change went, for the panes' slide. */
-  let dir = $state(1);
-  function show(next: string) {
-    dir = towards(TABS, tab, next);
-    tab = next;
-  }
+  let { runId }: { runId: string } = $props();
+
   let errorMessage = $state("");
-  /** The action whose request is out ("rerun", "answer:<label>", "cancel"). */
+  /** The action whose request is out ("rerun", "rerun-step", "answer:<label>", "cancel"). */
   let acting = $state<string | null>(null);
   const busy = $derived(acting !== null);
   let now = $state(Date.now());
@@ -65,125 +45,48 @@
   let note = $state("");
   /** A typed answer, as JSON, for a question that declared an answer schema. */
   let valueText = $state("");
-  let sessionCosts = $state<Record<string, number>>({});
-  const costs = $derived(
-    Object.fromEntries(
-      cawco.instances
-        .filter(
-          (entry) =>
-            entry.sessionId && sessionCosts[entry.sessionId] !== undefined
-        )
-        .map((entry) => [entry.id, sessionCosts[entry.sessionId as string]])
-    )
-  );
-  let scope = $state("root");
   let logOpen = $state(false);
+
   const run = $derived(workflowState.details[runId]);
   const workflow = $derived(
     workflowState.workflows.find((entry) => entry.id === run?.workflowId)
   );
-  const origin = $derived(workflow?.origin ?? "editor");
   const effects = $derived(workflowState.logs[runId] ?? []);
-  // A code-origin run has no graph to paint: the shape comes from its log.
-  const journal = $derived(
-    origin === "code" ? journalGraph(effects) : undefined
-  );
-  const journalNodes = $derived(
-    new Map((journal?.nodes ?? []).map((entry) => [entry.id, entry]))
-  );
-  const checkpoints = $derived(journalCheckpoints(effects));
-  const pinned = $derived.by(() => {
-    const byNode: Record<string, JournalCheckpoint[]> = {};
-    for (const mark of checkpoints) {
-      if (mark.nodeId) {
-        byNode[mark.nodeId] ??= [];
-        byNode[mark.nodeId].push(mark);
-      }
-    }
-    return byNode;
-  });
-  const logLines = $derived(journalLog(effects));
-  const jevCalls = $derived(journalJev(effects));
-  const stateTouches = $derived(journalStateTouches(effects));
-  const slots = $derived(
-    Object.entries((run?.state.slots ?? {}) as Record<string, unknown>)
-  );
-  const sorted = $derived(
-    run
-      ? [...run.steps].sort(
-          (a, b) =>
-            +(a.startedAt ? new Date(a.startedAt) : Number.MAX_SAFE_INTEGER) -
-            +(b.startedAt ? new Date(b.startedAt) : Number.MAX_SAFE_INTEGER)
-        )
-      : []
-  );
-  const step = $derived(run?.steps.find((entry) => entry.id === selected));
-  const node = $derived(
-    run?.graph?.nodes.find((entry) => entry.id === step?.nodeId) ??
-      (step ? journalNodes.get(step.nodeId)?.node : undefined)
-  );
-  const titleOf = (nodeId: string) =>
-    run?.graph?.nodes.find((entry) => entry.id === nodeId)?.title ??
-    journalNodes.get(nodeId)?.title ??
-    nodeId;
-  /** Steps and checkpoint markers in one schedule order. */
-  const timeline = $derived.by(() => {
-    const at = (value: Date | string | null) =>
-      value ? +new Date(value) : Number.MAX_SAFE_INTEGER;
-    return [
-      ...sorted.map((entry) => ({
-        key: entry.id,
-        at: at(entry.startedAt),
-        step: entry,
-        mark: undefined as JournalCheckpoint | undefined,
+  /** The program's log lines and its checkpoints, in the order they happened. */
+  const logLines = $derived(
+    [
+      ...journalLog(effects).map((line) => ({
+        seq: line.seq,
+        at: line.at,
+        text: line.text,
       })),
-      ...checkpoints.map((mark) => ({
-        key: `checkpoint-${mark.seq}`,
-        at: at(mark.at),
-        step: undefined,
-        mark,
+      ...journalCheckpoints(effects).map((mark) => ({
+        seq: mark.seq,
+        at: mark.at,
+        text: `Checkpoint · ${mark.label}`,
       })),
-    ].sort((a, b) => a.at - b.at);
-  });
-  /**
-   * The header's account of the run. A run of only Jev, Branch and End nodes
-   * keeps no step rows, so the count shows only when there are steps to count.
-   */
-  const headline = $derived.by(() => {
+    ].sort((a, b) => a.seq - b.seq)
+  );
+  const going = $derived(
+    run?.status === "running" || run?.status === "waiting"
+  );
+  const live = $derived(cawco.hub === "connected");
+  const inputs = $derived(Object.entries(run?.inputs ?? {}));
+  /** When it started, to the minute, with the day when it was not today. */
+  const startedAt = $derived.by(() => {
     if (!run) {
       return "";
     }
-    const took = duration(run.startedAt, run.endedAt, now);
-    if (!run.steps.length) {
-      return took;
-    }
-    const passed = run.steps.filter((entry) => entry.status === "passed");
-    return `${passed.length}/${run.steps.length} steps passed · ${took}`;
+    const at = new Date(run.startedAt);
+    const today = at.toDateString() === new Date().toDateString();
+    return at.toLocaleString(
+      undefined,
+      today
+        ? { hour: "numeric", minute: "2-digit" }
+        : { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }
+    );
   });
-  const attempts = $derived(
-    run?.attempts
-      .filter((entry) => entry.stepId === step?.id)
-      .sort((a, b) => a.number - b.number) ?? []
-  );
-  const live = $derived(cawco.hub === "connected");
-  const graph = $derived.by(() => {
-    if (!run || scope === "root") {
-      return run?.graph;
-    }
-    const id = scope.slice(0, scope.lastIndexOf("["));
-    const map = run.graph?.nodes.find((entry) => entry.id === id);
-    return map?.kind === "map" ? map.body : run.graph;
-  });
-  const scopedSteps = $derived(
-    scope === "root"
-      ? sorted.filter((entry) => entry.mapIndex === null)
-      : sorted.filter(
-          (entry) =>
-            entry.mapIndex ===
-              Number(scope.slice(scope.lastIndexOf("[") + 1, -1)) &&
-            graph?.nodes.some((item) => item.id === entry.nodeId)
-        )
-  );
+
   $effect(() => {
     const id = runId;
     refreshWorkflowRun(id).catch((caught) => {
@@ -200,43 +103,17 @@
       });
     }
   });
+  // The clock runs while the run does.
   $effect(() => {
-    // Narrow shows the drawer as a modal sheet; opening one unasked on arrival
-    // would bury the run behind a dialog the operator never opened.
-    if (run?.status === "done" && !(selectedEnd || narrow.current)) {
-      selectedEnd = true;
-      selected = run.steps.find(
-        (entry) => entry.kind === "end" && entry.status === "passed"
-      )?.id;
+    if (!going) {
+      return;
     }
-  });
-  onMount(() => {
     const timer = setInterval(() => {
       now = Date.now();
     }, 1000);
     return () => clearInterval(timer);
   });
-  $effect(() => {
-    const current = run;
-    if (current) {
-      untrack(refreshCosts);
-    }
-  });
-  function refreshCosts() {
-    fetch("/api/usage/summary?groupBy=session")
-      .then(async (response) => {
-        if (!response.ok) {
-          throw new Error(await response.text());
-        }
-        const summary = (await response.json()) as UsageSummary;
-        sessionCosts = Object.fromEntries(
-          summary.rows.map((row) => [String(row.key), row.costUsd])
-        );
-      })
-      .catch((caught) => {
-        errorMessage = message(caught);
-      });
-  }
+
   async function act(key: string, action: () => Promise<unknown>) {
     acting = key;
     errorMessage = "";
@@ -250,9 +127,13 @@
     }
   }
   async function cancel() {
-    const names = sorted
+    const names = (run?.steps ?? [])
       .filter((entry) => entry.status === "running" && entry.instanceId)
-      .map((entry) => `${titleOf(entry.nodeId)} (${entry.instanceId})`);
+      .map(
+        (entry) =>
+          cawco.instanceIndex.byId.get(entry.instanceId as string)?.title ??
+          entry.nodeId
+      );
     await confirm({
       title: "Cancel workflow run?",
       body: `Stops these live sessions and any child runs: ${names.length ? names.join(", ") : "No live step sessions reported"}. Pending steps will be skipped.`,
@@ -271,187 +152,80 @@
       },
     });
   }
-  /** Runs the workflow again: from the start, or from one of this run's steps. */
+  /** Runs the workflow again, from the start or from one step, and opens the new run's tab. */
   async function rerun(fromStepId?: string) {
-    if (!run) {
-      return;
-    }
-    const { workflowId } = run;
     await act(fromStepId ? "rerun-step" : "rerun", async () => {
       const result = await rerunWorkflow(runId, fromStepId);
-      await goto(`/workflows/${workflowId}/runs/${result.runId}`);
+      await goto(runHref(result.runId));
     });
   }
   /** The typed answer's JSON, parsed; undefined when the field is empty. */
   function typedValue(): unknown {
     return valueText.trim() ? JSON.parse(valueText) : undefined;
   }
+  /** An input's value in a line: text as itself, anything else as JSON. */
+  const shown = (value: unknown): string =>
+    typeof value === "string" ? value : JSON.stringify(value);
 </script>
-{#snippet drawer()}
-  {#if step && run}
-    <div class="wf wf-stack drawer">
-      <div class="wf-row wf-spread">
-        <h2>{node?.title ?? step.nodeId}</h2>
-        <WorkflowStatus status={step.status} />
-      </div>
-      <p class="wf-muted">
-        {#if node?.kind === 'step'}
-          Attempt
-          {attempts.at(-1)?.number ?? 0}/{(node.retries ?? 2) + 1}
-          ·
-          {duration(step.startedAt, step.endedAt, now)}
-          ·
-          {step.instanceId && costs[step.instanceId] !== undefined ? `$${costs[step.instanceId].toFixed(4)}` : 'Cost unreported'}
-        {:else}
-          {duration(step.startedAt, step.endedAt, now)}
-        {/if}
-      </p>
-      {#if attempts.at(-1)?.renderedPrompt}
-        <section class="wf-stack">
-          <h3>Told</h3>
-          <pre class="wf-well">{attempts.at(-1)?.renderedPrompt}</pre>
-        </section>
-      {/if}
-      <section class="wf-stack">
-        <h3>Returned</h3>
-        {#if step.failure}
-          <p class="wf-error">Step failed: {step.failure}</p>
-        {:else}
-          <pre
-            class="wf-well"
-          >{JSON.stringify(step.kind === 'end' ? run.result : step.result, null, 2) ?? 'No result reported.'}</pre>
-        {/if}
-      </section>
-      {#if pinned[step.nodeId]?.length}
-        <section class="wf-stack">
-          <h3>Checkpoints</h3>
-          {#each pinned[step.nodeId] as mark (mark.seq)}
-            <div class="wf-well">
-              <div class="wf-row wf-spread">
-                <strong>{mark.label}</strong
-                ><span class="wf-muted"
-                  >{new Date(mark.at).toLocaleTimeString()}</span
-                >
-              </div>
-              {#if mark.data !== null}
-                <pre>{JSON.stringify(mark.data, null, 2)}</pre>
-              {/if}
-            </div>
-          {/each}
-        </section>
-      {/if}
-      {#if stateTouches[step.nodeId]}
-        {@const touch = stateTouches[step.nodeId]}
-        <section class="wf-stack">
-          <h3>State</h3>
-          <p class="wf-muted">
-            {touch.reads}
-            {touch.reads === 1 ? 'read' : 'reads'}
-            ·
-            {touch.writes}
-            {touch.writes === 1 ? 'write' : 'writes'}
-            of {touch.names.join(', ')}
-            while this step was the program's latest call.
-          </p>
-          {#each slots as [slot, value] (slot)}
-            <div class="wf-well">
-              <strong>{slot}</strong>
-              <pre>{JSON.stringify(value, null, 2)}</pre>
-            </div>
-          {/each}
-        </section>
-      {/if}
-      {#if step.instanceId}
-        <a class="wf-btn" href="/session/{step.instanceId}">Open session</a>
-      {/if}
-      {#if step.childRunId && workflowState.runs[step.childRunId]}
-        {@const child = workflowState.runs[step.childRunId]}
-        <div class="wf-row">
-          <WorkflowStatus status={child.status} />
-          <a class="wf-btn" href="/workflows/{child.workflowId}/runs/{child.id}"
-            >Open child run</a
-          >
-        </div>
-      {/if}
-      {#if attempts.length}
-        <h3>Attempts</h3>
-      {/if}
-      {#each attempts as attempt (attempt.id)}
-        <details class="wf-well">
-          <summary>
-            Attempt {attempt.number} ·
-            {duration(attempt.startedAt, attempt.endedAt, now)}
-          </summary>
-          <h3>Told</h3>
-          <pre>{attempt.renderedPrompt}</pre>
-          <h3>Returned</h3>
-          <pre
-          >{attempt.failure ?? JSON.stringify(attempt.result, null, 2)}</pre>
-        </details>
-      {/each}
-      <!-- Everything this run did before the step is kept: the new run is
-           handed those results and goes live from here. -->
-      <button
-        aria-busy={acting === 'rerun-step' || undefined}
-        aria-disabled={acting === 'rerun-step' || undefined}
-        class="wf-btn"
-        disabled={(busy && acting !== 'rerun-step') || !live}
-        onclick={whileIdle(() => acting === 'rerun-step', () => rerun(step?.id))}
-        title={live ? 'Run the workflow again from this step, keeping what came before it' : "Can't re-run while the hub is unreachable"}
-        type="button"
-      >
-        <PendingContent
-          failed={errorMessage !== ''}
-          label="Re-run from this step"
-          pending={acting === 'rerun-step'}
-          pendingLabel="Re-running…"
-        />
-      </button>
-      <button
-        class="wf-btn"
-        onclick={() => { selected = undefined; }}
-        type="button"
-      >
-        Close step
-      </button>
-    </div>
-  {/if}
+
+{#snippet rerunFrom(step: { id: string })}
+  <!-- Everything this run did before the step is kept: the new run is
+       handed those results and goes live from here. -->
+  <button
+    aria-busy={acting === 'rerun-step' || undefined}
+    aria-disabled={acting === 'rerun-step' || undefined}
+    class="wf-btn"
+    disabled={(busy && acting !== 'rerun-step') || !live || going}
+    onclick={whileIdle(() => acting === 'rerun-step', () => rerun(step.id))}
+    title={live ? 'Run the workflow again from this step, keeping what came before it' : "Can't re-run while the hub is unreachable"}
+    type="button"
+  >
+    <PendingContent
+      failed={errorMessage !== ''}
+      label="Re-run from this step"
+      pending={acting === 'rerun-step'}
+      pendingLabel="Re-running…"
+    />
+  </button>
 {/snippet}
+
 <div class="wf run-view">
   {#if errorMessage}
     <p class="wf-error" role="alert">{errorMessage}</p>
   {/if}
-  <!-- The header names the run's workflow and its origin, and the canvas
-       takes its shape from the origin: both wait for the workflow list, so
-       the name never paints as "Workflow" and then widens into the real one. -->
+  <!-- The name waits for the workflow list, so it never paints as
+       "Workflow" and then widens into the real one. -->
   {#if !(run && (workflow || workflowState.loaded))}
-    <div
-      aria-label="Loading workflow run"
-      class="wf-stack loading"
-      role="status"
-    >
-      <Skeleton class="h-20 w-full" />
-      <Skeleton class="h-20 w-full" />
-      <p>Loading workflow run…</p>
+    <div aria-label="Loading workflow run" class="loading" role="status">
+      <Skeleton class="h-6 w-56" />
+      <Skeleton class="h-4 w-40" />
+      <Skeleton class="h-24 w-full" />
     </div>
   {:else}
-    <header class="wf-stack">
-      <div class="wf-row wf-spread">
-        <div>
-          <p class="wf-muted origin">
-            <a href="/workflows/{run.workflowId}"
-              >{workflow?.name ?? 'Workflow'}</a
-            ><span class="origin-word"
-              >{origin === 'code' ? 'program' : 'editor'}</span
-            >
-          </p>
-          <h1>Workflow run {run.id.slice(0, 8)}</h1>
-        </div>
-        <WorkflowStatus status={run.status} />
-      </div>
-      <div class="wf-row wf-spread">
-        <div class="wf-row">
-          {#if run.status === 'running' || run.status === 'waiting'}
+    <section class="run" data-nest-host>
+      <header class="head">
+        <h1>
+          <span class="run-mark"
+            ><SessionStatus sessionId={runTabId(runId)} /></span
+          >
+          <span class="name">{workflow?.name ?? 'Workflow'}</span>
+        </h1>
+        <p class="meta">
+          <span>Started {startedAt}</span>
+          <span class="num">{duration(run.startedAt, run.endedAt, now)}</span>
+        </p>
+        {#if inputs.length}
+          <dl class="inputs">
+            {#each inputs as [key, value] (key)}
+              <div>
+                <dt>{key}</dt>
+                <dd>{shown(value)}</dd>
+              </div>
+            {/each}
+          </dl>
+        {/if}
+        <div class="wf-row actions">
+          {#if going}
             <button
               class="wf-btn"
               disabled={busy || !live}
@@ -479,42 +253,17 @@
               />
             </button>
           {/if}
-          {#if onprogram}
-            <button class="wf-btn" onclick={onprogram} type="button">
-              View program
-            </button>
-          {:else}
-            <a class="wf-btn" href="/workflows/{run.workflowId}?tab=program"
-              >View program</a
-            >
-          {/if}
-          <span class="wf-muted">{headline}</span>
-        </div>
-        {#if run.supervisorInstanceId}
-          <a class="wf-btn" href="/session/{run.supervisorInstanceId}"
-            >Supervisor</a
+          <a class="wf-btn" href="/workflows/{run.workflowId}?tab=program"
+            >Edit workflow</a
           >
-        {/if}
-      </div>
-    </header>
-    {#if logLines.length}
-      <details class="log" bind:open={logOpen} in:unfold out:unfold>
-        <summary>Log · {logLines.length}</summary>
-        <!-- A line arrives the house way (motion/rows), and the log keeps
-             the newest in view only while the reader is at its end. -->
-        <ol {@attach reflow()} {@attach followTail()}>
-          {#each logLines as line (line.seq)}
-            <li data-flip>
-              <time>{new Date(line.at).toLocaleTimeString()}</time
-              ><span>{line.text}</span>
-            </li>
-          {/each}
-        </ol>
-      </details>
-    {/if}
-    {#if run.failure}
-      <p class="wf-error">Workflow run failed: {run.failure}</p>
-    {/if}
+        </div>
+      </header>
+      {#if run.failure}
+        <p class="wf-error failure">{run.failure}</p>
+      {/if}
+      <RunSteps glyph=".run-mark .glyph" more={rerunFrom} {runId} />
+    </section>
+
     {#if run.status === 'waiting' && run.ask}
       {@const ask = run.ask}
       <!-- The question folds open; answered, the picked option pends until
@@ -602,232 +351,114 @@
         {/if}
       </section>
     {/if}
-    {#snippet stepsList()}
-      <!-- The kit pill glides to the chosen step; rows that arrive as the
-           run moves (steps, checkpoints) come in the house way (motion/rows). -->
-      <aside
-        class="steps"
-        class:collapsed={!(stepsOpen || narrow.current)}
-        {@attach highlight({ rows: ".step-row", selected: '[aria-current="true"]' })}
-        {@attach reflow()}
-      >
-        {#if !narrow.current}
-          <button
-            aria-expanded={stepsOpen}
-            class="wf-btn"
-            onclick={() => { stepsOpen = !stepsOpen; }}
-            type="button"
-          >
-            Steps
-          </button>
-        {/if}
-        {#if stepsOpen || narrow.current}
-          {#each timeline as row (row.key)}
-            {#if row.step}
-              {@const entry = row.step}
-              <button
-                aria-current={entry.id === selected ? 'true' : undefined}
-                class="step-row press-tint"
-                data-flip
-                onclick={() => { selected = entry.id; }}
-                type="button"
-              >
-                <span
-                  >{titleOf(entry.nodeId)}
-                  {entry.mapIndex === null ? '' : ` [${entry.mapIndex}]`}</span
-                ><WorkflowStatus status={entry.status} />
-                <small>{duration(entry.startedAt, entry.endedAt, now)}</small>
-              </button>
-            {:else if row.mark}
-              <p class="checkpoint-row" data-flip>
-                <span aria-hidden="true" class="mark"></span
-                ><span>{row.mark.label}</span
-                ><small>{new Date(row.mark.at).toLocaleTimeString()}</small>
-              </p>
-            {/if}
+
+    {#if logLines.length}
+      <details class="log" bind:open={logOpen} in:unfold out:unfold>
+        <summary>Log · {logLines.length}</summary>
+        <!-- A line arrives the house way (motion/rows), and the log keeps
+             the newest in view only while the reader is at its end. -->
+        <ol {@attach reflow()} {@attach followTail()}>
+          {#each logLines as line (line.seq)}
+            <li data-flip>
+              <time>{new Date(line.at).toLocaleTimeString()}</time
+              ><span>{line.text}</span>
+            </li>
           {/each}
-        {/if}
-      </aside>
-    {/snippet}
-    {#snippet canvasPane(shown: NonNullable<typeof run>)}
-      <div class="graph">
-        {#if Object.keys(shown.edges).length > 1}
-          <label class="scope"
-            >Scope<select bind:value={scope}>
-              {#each Object.keys(shown.edges) as key (key)}
-                <option>{key}</option>
-              {/each}
-            </select></label
-          >
-        {/if}
-        <WorkflowCanvas
-          checkpoints={pinned}
-          {costs}
-          executionScope={scope}
-          graph={graph ?? { nodes: [], edges: [] }}
-          jev={jevCalls}
-          {journal}
-          {now}
-          onselect={(id) => { selected = scopedSteps.find((entry) => entry.nodeId === id)?.id; }}
-          readonly
-          run={shown}
-          selection={step?.nodeId}
-          steps={scopedSteps}
-        />
-      </div>
-    {/snippet}
-    {#if narrow.current}
-      <div class="tabs">
-        <Tabs.Root onValueChange={show} value={tab}>
-          <Tabs.List aria-label="Workflow run views">
-            <Tabs.Trigger value="steps">Steps</Tabs.Trigger>
-            <Tabs.Trigger value="canvas">Canvas</Tabs.Trigger>
-          </Tabs.List>
-        </Tabs.Root>
-      </div>
-      <!-- One pane gives way to the other in one cell, sliding across in
-           tab order (pane-slide). -->
-      <div class="run-body panes">
-        {#key tab}
-          <div class="pane" in:paneSlide={{ dir }} out:paneSlide={{ dir }}>
-            {#if tab === 'steps'}
-              {@render stepsList()}
-            {:else if graph || journal}
-              {@render canvasPane(run)}
-            {/if}
-          </div>
-        {/key}
-      </div>
-    {:else}
-      <div class="run-body">
-        {@render stepsList()}
-        {#if graph || journal}
-          {@render canvasPane(run)}
-        {/if}
-        {#if step}
-          <!-- One step's detail gives way to the next in place: the two
-               cross-fade, the one leaving taken out of the flow. -->
-          <aside class="detail">
-            {#key step.id}
-              <div class="detail-view" in:crossIn out:crossOut>
-                {@render drawer()}
-              </div>
-            {/key}
-          </aside>
-        {/if}
-      </div>
+        </ol>
+      </details>
     {/if}
   {/if}
 </div>
-{#if narrow.current && step}
-  <Dialog.Root
-    onOpenChange={(open) => { if (!open) { selected = undefined; } }}
-    open
-    ><Dialog.Content class="max-h-[90dvh] overflow-y-auto"
-      ><Dialog.Title>Step details</Dialog.Title
-      ><Dialog.Description
-        >The prompt, result and attempts recorded by the
-        hub.</Dialog.Description
-      >{@render drawer()}</Dialog.Content
-    ></Dialog.Root
-  >
-{/if}
+
 <style>
+  /* The tab's column: the transcript's own ledger padding, so a run reads
+     in the place a conversation would. */
   .run-view {
     display: flex;
     flex-direction: column;
-    min-height: 0;
-    height: 100%;
+    gap: var(--space-5);
+    flex: 1 1 auto;
+    min-inline-size: 0;
+    min-block-size: 0;
     overflow-y: auto;
-  }
-  header {
-    padding: var(--space-4) var(--space-5);
-    border-bottom: 1px solid var(--border-hairline);
-  }
-  header a {
-    display: inline-flex;
-    min-height: 24px;
-    align-items: center;
-  }
-  .run-body {
-    display: flex;
-    flex: 1;
-    min-height: 350px;
-  }
-  .steps {
-    width: 232px;
-    flex-shrink: 0;
-    padding: var(--space-3);
-    overflow-y: auto;
-    border-right: 1px solid var(--border-hairline);
-  }
-  .steps h2 {
-    padding: var(--space-2);
-  }
-  .steps.collapsed {
-    width: 86px;
-  }
-  .step-row {
-    width: 100%;
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    align-items: center;
-    text-align: left;
-    gap: var(--space-2);
-    padding: var(--space-3) var(--space-2);
-    min-height: 60px;
-    border-radius: var(--radius-sm);
-  }
-  .step-row span {
-    overflow-wrap: anywhere;
-  }
-  .step-row small,
-  .checkpoint-row small {
-    color: var(--ink-muted);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    font-variant-numeric: tabular-nums;
-  }
-  /* A checkpoint is a marker in the schedule, not a step: no chip, no target. */
-  .checkpoint-row {
-    display: grid;
-    grid-template-columns: auto minmax(0, 1fr) auto;
-    align-items: center;
-    gap: var(--space-2);
-    padding: var(--space-2);
-    color: var(--ink-muted);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-  }
-  .checkpoint-row .mark {
-    width: 6px;
-    height: 6px;
-    border-radius: var(--radius-pill);
-    border: 1px solid var(--neutral-8);
-  }
-  .checkpoint-row small {
-    color: var(--ink-muted);
-    font-variant-numeric: tabular-nums;
-  }
-  .origin {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  .origin a {
-    color: inherit;
-  }
-  /* Every workflow in the fleet is named with a middle dot, so a bare word
-     after one more dot reads as part of the name. The origin gets an edge. */
-  .origin-word {
-    padding: 1px var(--space-2);
-    border: 1px solid var(--border-hairline);
-    border-radius: var(--radius-pill);
+    padding: var(--space-6) var(--space-6) var(--space-7) var(--space-7);
     background: var(--surface-recess);
   }
+  .loading {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+  }
+  .run {
+    max-inline-size: 760px;
+  }
+  .head {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  h1 {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+    margin: 0;
+    min-inline-size: 0;
+  }
+  /* The status's glyph leads the name and its word follows it: the status
+     is laid out in the heading's own row. */
+  .run-mark,
+  .run-mark :global(.session-status) {
+    display: contents;
+  }
+  .run-mark :global(.session-status > :not(.glyph)) {
+    order: 2;
+  }
+  .name {
+    order: 1;
+    min-inline-size: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1) var(--space-3);
+    margin: 0;
+    color: var(--ink-muted);
+    font-size: var(--text-meta);
+    font-weight: var(--weight-body);
+  }
+  .inputs {
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: var(--space-1) var(--space-3);
+    margin: 0;
+    font-size: var(--text-meta);
+
+    & > div {
+      display: contents;
+    }
+    & dt {
+      color: var(--ink-muted);
+      font-weight: var(--weight-body);
+    }
+    & dd {
+      margin: 0;
+      color: var(--ink-strong);
+      font-family: var(--font-mono);
+      overflow-wrap: anywhere;
+    }
+  }
+  .actions {
+    margin-block-start: var(--space-1);
+  }
+  .failure {
+    margin-block-start: var(--space-3);
+  }
   .log {
-    padding: var(--space-3) var(--space-5);
-    border-bottom: 1px solid var(--border-hairline);
+    max-inline-size: 760px;
   }
   /* Left as a list-item so the native disclosure marker survives: a flex
      summary silently loses the triangle, and then nothing says it opens. */
@@ -860,48 +491,15 @@
     color: var(--ink-muted);
     font-variant-numeric: tabular-nums;
   }
-  .graph {
-    position: relative;
-    flex: 1;
-    min-width: 0;
-  }
-  .scope {
-    position: absolute;
-    top: var(--space-2);
-    left: var(--space-2);
-    z-index: 5;
-    max-width: 180px;
-  }
-  .detail {
-    position: relative;
-    width: 340px;
-    flex-shrink: 0;
-    overflow-y: auto;
-    border-left: 1px solid var(--border-hairline);
-  }
-  .panes {
-    display: grid;
-    grid-template: minmax(0, 1fr) / minmax(0, 1fr);
-    overflow: hidden;
-  }
-  .pane {
-    grid-area: 1 / 1;
-    display: flex;
-    flex-direction: column;
-    min-width: 0;
-    min-height: 0;
-  }
-  .drawer {
-    padding: var(--space-4);
-  }
   .answer {
-    padding: var(--space-4) var(--space-5);
+    max-inline-size: 760px;
+    padding: var(--space-4);
+    border-radius: var(--radius-sm);
     background: var(--surface-raised);
-    border-bottom: 1px solid var(--border-hairline);
   }
   /* The options are peers the workflow author wrote, not one recommended
      action, so none of them takes the never-flat graphite. On a waiting run
-     the needs-you chip is the only thing that should be loud. */
+     the needs-you glyph is the only thing that should be loud. */
   .options {
     display: flex;
     flex-wrap: wrap;
@@ -937,32 +535,15 @@
     line-height: 1.4;
     overflow-wrap: anywhere;
   }
-  .tabs,
-  .loading {
-    padding: var(--space-4);
-  }
-  /* DESIGN.md: every affordance reaches 44px under a coarse pointer, at any
-     width. The summary grows by padding so it keeps its disclosure marker. */
+  /* DESIGN.md: every affordance reaches 44px under a coarse pointer. */
   @media (pointer: coarse) {
     .log summary {
       padding-block: var(--space-4);
     }
-    .origin a {
-      min-height: 44px;
-      display: inline-flex;
-      align-items: center;
-    }
   }
-  @media (max-width: 1023px) {
-    .steps {
-      width: 100%;
-      border: 0;
-    }
-    .graph {
-      min-height: 450px;
-    }
-    .run-body {
-      min-height: 0;
+  @media (max-width: 640px) {
+    .run-view {
+      padding-inline: var(--space-4);
     }
   }
 </style>

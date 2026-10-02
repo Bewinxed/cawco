@@ -10,9 +10,11 @@
    * measures a real viewport and not a zero one.
    */
   import { onMount, untrack } from "svelte";
+  import WorkflowRunView from "$lib/components/features/workflows/WorkflowRunView.svelte";
   import type { HistorySource } from "../client.svelte";
   import SessionPane from "../SessionPane.svelte";
   import Lightbox from "../transcript/Lightbox.svelte";
+  import { runIdOf } from "../workflow-runs";
   import { dock, shownPanes, slots } from "./dock.svelte";
   import { contextOf, workspace } from "./workspace.svelte";
 
@@ -89,17 +91,23 @@
     {@const ctx = contextOf(id)}
     {@const leaf = workspace.leafOf(id)}
     {@const isActive = leaf?.active === id}
+    {@const runId = runIdOf(id)}
     <div class="hosted" use:dock={id}>
-      <SessionPane
-        browsing={ctx?.machine ?? null}
-        browsingCwd={ctx?.cwd ?? ''}
-        browsingHarness={ctx?.harness ?? 'claude'}
-        focused={isActive && leaf?.id === workspace.focusedLeafId}
-        serverHistory={id === entryId ? entryHistory : null}
-        serverTail={id === entryId ? entryTail : null}
-        viewId={id}
-        visible={shownPanes.get(id) ?? false}
-      />
+      {#if runId}
+        <!-- A workflow run's tab: the run, as its own view. -->
+        <WorkflowRunView {runId} />
+      {:else}
+        <SessionPane
+          browsing={ctx?.machine ?? null}
+          browsingCwd={ctx?.cwd ?? ''}
+          browsingHarness={ctx?.harness ?? 'claude'}
+          focused={isActive && leaf?.id === workspace.focusedLeafId}
+          serverHistory={id === entryId ? entryHistory : null}
+          serverTail={id === entryId ? entryTail : null}
+          viewId={id}
+          visible={shownPanes.get(id) ?? false}
+        />
+      {/if}
     </div>
   {/each}
 </div>

@@ -20,7 +20,6 @@
   import { SvelteSet } from "svelte/reactivity";
   import { TextMorph } from "torph/svelte";
   import { page } from "$app/state";
-  import WorkflowRail from "$lib/components/features/workflows/WorkflowRail.svelte";
   import { Button } from "$lib/components/ui/button";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
@@ -231,7 +230,11 @@
       !!row.cwd &&
       (row.cwd === project.cwd || row.cwd.startsWith(`${project.cwd}/`)));
 
-  const running = $derived(cawco.runningInstances);
+  /** What is running now: sessions, and workflow runs still going. */
+  const running = $derived([
+    ...cawco.runningInstances,
+    ...cawco.runRows.filter((row) => row.status === "running"),
+  ]);
 
   const orderedProjects = $derived.by(() =>
     [...cawco.projects].sort((a, b) => {
@@ -253,9 +256,7 @@
    * the hundred, and a filter that left it alone would not be a filter.
    */
   const shown = (rows: InstanceRow[]): InstanceRow[] =>
-    rows.filter(
-      (row) => !row.workflowRunId && (rail.delegates || !row.parentInstanceId)
-    );
+    rows.filter((row) => rail.delegates || !row.parentInstanceId);
 
   const sessionsOf = (project: ProjectRow): InstanceRow[] =>
     shown(running.filter((row) => inProject(row, project)));
@@ -339,11 +340,12 @@
 
   /** What a project says when nothing in it runs: how much of it is resumable. */
   const notRunning = $derived(
-    shown(
-      cawco.listedInstances.filter(
+    shown([
+      ...cawco.listedInstances.filter(
         (row) => isResumable(row) || isStale(row) || isFailed(row)
-      )
-    )
+      ),
+      ...cawco.runRows.filter(isFailed),
+    ])
   );
 
   /* ---- order -----------------------------------------------------------
@@ -922,18 +924,6 @@
           </Sidebar.Menu>
         {/if}
       </Sidebar.Group>
-      {#if Object.keys(workflowState.runs).length}
-        <Sidebar.Group class={GROUP} data-flip>
-          <Sidebar.GroupLabel class={GROUP_LABEL}
-            >Workflow runs</Sidebar.GroupLabel
-          >
-          <Sidebar.Menu class={MENU}>
-            {#each Object.values(workflowState.runs).filter((run) => !run.parentRunId).sort((a, b) => +new Date(b.startedAt) - +new Date(a.startedAt)) as run (run.id)}
-              <WorkflowRail {activeSession} {run} />
-            {/each}
-          </Sidebar.Menu>
-        </Sidebar.Group>
-      {/if}
     {:else}
       {@render pending(6, LIST_ROW_H)}
     {/if}

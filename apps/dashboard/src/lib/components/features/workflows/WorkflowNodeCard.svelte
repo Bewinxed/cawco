@@ -1,41 +1,16 @@
 <script lang="ts">
-  import type { WorkflowNode, WorkflowRun, WorkflowStep } from "@cawco/core";
+  /**
+   * One node of a workflow being edited. Watching a run is the run's tab
+   * (WorkflowRunView), never this graph.
+   */
+  import type { WorkflowNode } from "@cawco/core";
   import { workflowPorts } from "@cawco/core";
   import { Handle, type NodeProps, Position } from "@xyflow/svelte";
-  import {
-    IconCpu,
-    IconJev,
-    IconToolQuestion,
-    IconToolTodo,
-    IconWorkflow,
-  } from "$lib/icons";
-  import type {
-    JournalCheckpoint,
-    JournalJev,
-    JournalNode,
-  } from "./journal-graph";
   import WorkflowStatus from "./WorkflowStatus.svelte";
   import { JEV_TYPE_NAMES, kinds } from "./workflow-ui";
 
   let { data, selected }: NodeProps = $props();
-  /** Present for an authored node, and for the journal's `run`/`spawn` steps. */
-  const node = $derived(data.node as WorkflowNode | undefined);
-  /** Present only on a code-origin run, where the journal is the graph. */
-  const journal = $derived(data.journal as JournalNode | undefined);
-  const checkpoints = $derived((data.checkpoints ?? []) as JournalCheckpoint[]);
-  /** What a Jev call on this node answered, once it has. */
-  const jevCall = $derived(data.jev as JournalJev | undefined);
-  /** A call the journal records but no authored node stands behind. */
-  const effectGlyphs = {
-    run: IconCpu,
-    spawn: IconCpu,
-    ask: IconToolQuestion,
-    exec: IconToolTodo,
-    exists: IconToolTodo,
-    jev: IconJev,
-    workflow: IconWorkflow,
-  } as const;
-  const step = $derived(data.step as WorkflowStep | undefined);
+  const node = $derived(data.node as WorkflowNode);
 
   /**
    * Stacked ports sit a few screen pixels apart at fit zoom, too close for
@@ -76,28 +51,13 @@
       })
     );
   };
-  const child = $derived(data.child as WorkflowRun | undefined);
-  // A journal node has no authored ports — the journal records calls, not a
-  // wiring the operator drew — so it carries one plain out handle.
-  const ports = $derived(journal || !node ? [] : workflowPorts(node));
-  const title = $derived(node?.title ?? journal?.title ?? "");
-  const modelled = $derived(
-    node?.kind === "step" ||
-      journal?.kind === "run" ||
-      journal?.kind === "spawn"
-  );
+  const ports = $derived(workflowPorts(node));
+  const title = $derived(node.title);
+  const modelled = $derived(node.kind === "step");
   const Glyph = $derived(
-    node
-      ? (kinds.find((entry) => entry.kind === node.kind)?.icon ?? kinds[0].icon)
-      : (effectGlyphs[journal?.kind as keyof typeof effectGlyphs] ??
-          kinds[0].icon)
+    kinds.find((entry) => entry.kind === node.kind)?.icon ?? kinds[0].icon
   );
   const summary = $derived.by(() => {
-    if (!node) {
-      return journal?.kind === "workflow"
-        ? String(data.childName ?? "Child workflow")
-        : (journal?.lines.join(" · ") ?? "");
-    }
     switch (node.kind) {
       case "start":
         return node.inputs.map((input) => input.name).join(", ") || "No inputs";
@@ -128,11 +88,10 @@
 </script>
 <article
   class="wf-node"
-  class:map={node?.kind === 'map'}
-  class:running={step?.status === 'running'}
+  class:map={node.kind === 'map'}
   class:selected={selected}
 >
-  {#if node?.kind !== 'start'}
+  {#if node.kind !== 'start'}
     <Handle
       aria-label="Input for {title}"
       class="pointer-hit"
@@ -144,49 +103,14 @@
     <span class="glyph" class:filled={modelled}
       ><Glyph aria-hidden="true" class="size-4" /></span
     ><strong>{title}</strong>
-    {#if step}
-      <WorkflowStatus status={step.status} />
-    {/if}
   </header>
   <div class="body">
-    {#if node?.kind === 'step'}
+    {#if node.kind === 'step'}
       <p class="meta">{node.harness} · {node.model || 'Choose a model'}</p>
     {/if}
     <p class="summary">{summary}</p>
-    {#if node?.kind === 'map'}
+    {#if node.kind === 'map'}
       <p class="group">{node.body.nodes.length} nodes in body</p>
-    {/if}
-    {#if step && node?.kind === 'step'}
-      <p class="meta">{String(data.duration)} · {String(data.cost)}</p>
-    {/if}
-    {#if jevCall?.failure}
-      <div class="problem">
-        <WorkflowStatus status="failed" /><span>{jevCall.failure}</span>
-      </div>
-    {:else if jevCall}
-      <dl class="answers">
-        {#each jevCall.answers as answer (answer.id)}
-          <div>
-            <dt>{answer.id}</dt>
-            <dd>{answer.text}</dd>
-          </div>
-        {/each}
-      </dl>
-      <p class="meta">{jevCall.cost}</p>
-    {/if}
-    {#each checkpoints as mark (mark.seq)}
-      <p class="checkpoint">
-        <span aria-hidden="true" class="mark"></span>{mark.label}
-        <time>{new Date(mark.at).toLocaleTimeString()}</time>
-      </p>
-    {/each}
-    {#if child}
-      <div class="child nodrag">
-        <WorkflowStatus status={child.status} />
-        <a href="/workflows/{child.workflowId}/runs/{child.id}"
-          >Open child run</a
-        >
-      </div>
     {/if}
     {#if data.problem}
       <div class="problem">
@@ -221,13 +145,6 @@
       aria-label="{title}: {ports[0]}"
       class="pointer-hit"
       id={ports[0]}
-      position={Position.Right}
-      type="source"
-    />
-  {:else if journal}
-    <Handle
-      aria-label="{title}: out"
-      class="pointer-hit"
       position={Position.Right}
       type="source"
     />
@@ -341,78 +258,15 @@
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
   }
-  /* A Jev call's answers: the question id, then what came back. */
-  .answers {
-    display: grid;
-    gap: var(--space-1);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    font-variant-numeric: tabular-nums;
-  }
-  .answers div {
-    display: flex;
-    gap: var(--space-2);
-    align-items: baseline;
-  }
-  .answers dt {
-    color: var(--ink-muted);
-    overflow-wrap: anywhere;
-  }
-  .answers dd {
-    margin-inline-start: auto;
-    text-align: right;
-    overflow-wrap: anywhere;
-    color: var(--ink-strong);
-  }
   .problem {
     display: grid;
     gap: var(--space-1);
     font-size: var(--text-body);
     font-weight: var(--weight-body);
   }
-  /* A checkpoint is a marker, not a status: the word and the time, on the
-     step the program had just finished when it marked. No hue. */
-  .checkpoint {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    color: var(--ink-muted);
-    background: var(--surface-recess);
-    border-radius: var(--radius-pill);
-    padding: 3px var(--space-3) 3px var(--space-2);
-    overflow-wrap: anywhere;
-  }
-  .checkpoint .mark {
-    width: 6px;
-    height: 6px;
-    flex-shrink: 0;
-    border-radius: var(--radius-pill);
-    border: 1px solid var(--neutral-8);
-  }
-  .checkpoint time {
-    margin-inline-start: auto;
-    color: var(--ink-muted);
-    font-variant-numeric: tabular-nums;
-    white-space: nowrap;
-  }
   .group {
     border: 1px dashed var(--neutral-8);
     padding: var(--space-3);
     border-radius: var(--radius-sm);
-  }
-  .child {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  .child a {
-    text-decoration: underline;
-  }
-  /* Running holds its live outline; nothing breathes. */
-  .running {
-    outline-color: var(--status-live-glyph);
   }
 </style>

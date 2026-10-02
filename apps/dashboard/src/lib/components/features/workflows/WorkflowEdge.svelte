@@ -31,26 +31,13 @@
         : {}),
     })
   );
-  const style = $derived.by(() => {
-    const width = selected ? 3 : 1.5;
-    if (data?.taken === "fired") {
-      return `stroke: var(--status-done-ink); stroke-width: ${selected ? 3 : 2}px`;
-    }
-    if (data?.taken === "skipped") {
-      return `stroke: var(--neutral-8); stroke-width: ${width}px; stroke-opacity: .45; stroke-dasharray: 4 4`;
-    }
-    return `stroke: var(--neutral-8); stroke-width: ${width}px`;
-  });
+  const style = $derived(
+    `stroke: var(--neutral-8); stroke-width: ${selected ? 3 : 1.5}px`
+  );
 </script>
-<!-- On a run, the path the run took reads in a passed node's colour and the
-     edges it passed by fall back, faint and dashed so the difference is not
-     colour alone; in the editor every edge is plain. -->
 <BaseEdge {id} path={route[0]} {style} />
 <EdgeLabel selectEdgeOnClick transparent x={route[1]} y={route[2]}>
-  <div
-    class="edge-label nodrag nopan"
-    class:skipped={data?.taken === 'skipped'}
-  >
+  <div class="edge-label nodrag nopan">
     {#if data?.label}
       <span>{String(data.label)}</span>
     {/if}
@@ -69,7 +56,7 @@
 </EdgeLabel>
 <style>
   /* Keyboard focus on an edge turns its line the ring colour, over the
-     inline stroke that carries the edge's own state. */
+     inline stroke. */
   :global(.svelte-flow__edge:focus-visible .svelte-flow__edge-path) {
     stroke: var(--focus-ring) !important;
   }
@@ -86,9 +73,6 @@
     padding: var(--space-1);
     border-radius: var(--radius-sm);
     color: var(--ink-strong);
-  }
-  .skipped span {
-    opacity: 0.45;
   }
   button {
     display: grid;

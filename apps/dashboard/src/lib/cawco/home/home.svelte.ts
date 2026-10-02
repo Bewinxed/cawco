@@ -33,6 +33,7 @@ import { heldOrder } from "../motion/held-order.svelte";
 import { permissionSummary } from "../permission-summary";
 import { questionsOf } from "../question";
 import { rail } from "../rail.svelte";
+import { runHref } from "../workflow-runs";
 import { workflowState } from "../workflow-state.svelte";
 import { choices } from "./choices.svelte";
 
@@ -254,7 +255,7 @@ const enteredWorking = new Map<string, number>();
 
 /** The rail's delegates switch, kept: work handed off is listed only on request. */
 const listed = (row: InstanceRow): boolean =>
-  !row.workflowRunId && (rail.delegates || !row.parentInstanceId);
+  rail.delegates || !row.parentInstanceId;
 
 /* ── The machines ──────────────────────────────────────────────────── */
 
@@ -379,7 +380,7 @@ class Home {
           workflowState.workflows.find((w) => w.id === run.workflowId)?.name ??
           "Workflow",
         place: machineName(run.machineId),
-        href: `/workflows/${run.workflowId}/runs/${run.id}`,
+        href: runHref(run.id),
         raisedAt: cawco.runAskRaisedAt(run.id),
       }));
     // Longest wait first; an ask the hub has not stamped sorts last.
@@ -393,11 +394,12 @@ class Home {
   /**
    * Every session mid-turn, delegates included whatever the Delegates
    * switch says: work handed off is still work, and Caw only says "all
-   * quiet" when nothing at all is working.
+   * quiet" when nothing at all is working. A running workflow run is one
+   * of them, its steps its delegates.
    */
   readonly working = $derived.by(() => {
-    const rows = cawco.runningInstances.filter(
-      (row) => !row.workflowRunId && cawco.activityOf(row.id) === "working"
+    const rows = [...cawco.runningInstances, ...cawco.runRows].filter(
+      (row) => cawco.activityOf(row.id) === "working"
     );
     // Ordered by when each joined Working this stint, newest first: a key
     // that never moves while it works, so two agents trading turns never
@@ -426,7 +428,7 @@ class Home {
    * Every session that has ended since it was last opened, delegates
    * included whatever the Delegates switch says: the list that shows them
    * (WorkTabs) decides which delegates it lists, so a failed one is never
-   * missed.
+   * missed. A workflow run that has ended is one of them.
    */
   readonly finished = $derived.by<InstanceRow[]>(() => {
     if (choices.finished === "a") {
@@ -434,11 +436,8 @@ class Home {
     }
     return heldOrder(
       "home:finished",
-      cawco.listedInstances
+      [...cawco.listedInstances, ...cawco.runRows]
         .filter((row) => {
-          if (row.workflowRunId) {
-            return false;
-          }
           const activity = cawco.activityOf(row.id);
           if (activity !== "idle" && !isFailed(row)) {
             return false;

@@ -1,10 +1,9 @@
 <script lang="ts">
-  import type {
-    Problem,
-    WorkflowGraph,
-    WorkflowRun,
-    WorkflowStep,
-  } from "@cawco/core";
+  /**
+   * The workflow editor's graph. It is only ever edited here: a run is
+   * watched in its own tab (WorkflowRunView), as a session is.
+   */
+  import type { Problem, WorkflowGraph } from "@cawco/core";
   import {
     Background,
     BackgroundVariant,
@@ -25,29 +24,15 @@
   import * as ContextMenu from "$lib/components/ui/context-menu";
   import { IconChat } from "$lib/icons";
   import { theme } from "$lib/theme.svelte";
-  import type {
-    JournalCheckpoint,
-    JournalGraph,
-    JournalJev,
-  } from "./journal-graph";
   import WorkflowCanvasTools from "./WorkflowCanvasTools.svelte";
   import WorkflowEdge from "./WorkflowEdge.svelte";
   import WorkflowNodeCard from "./WorkflowNodeCard.svelte";
-  import { duration, upstream } from "./workflow-ui";
+  import { upstream } from "./workflow-ui";
 
   let {
     graph,
-    journal,
-    checkpoints = {},
-    jev = {},
     selection,
     problems = [],
-    readonly = false,
-    run,
-    steps = [],
-    executionScope = "root",
-    costs = {},
-    now = Date.now(),
     onselect,
     onchange,
     undo,
@@ -56,19 +41,8 @@
     canRedo = false,
   }: {
     graph: WorkflowGraph;
-    /** A code-origin run: the shape read back out of the effect journal. */
-    journal?: JournalGraph;
-    checkpoints?: Record<string, JournalCheckpoint[]>;
-    /** Each Jev call's answers, by the node it ran on. */
-    jev?: Record<string, JournalJev>;
     selection?: string;
     problems?: Problem[];
-    readonly?: boolean;
-    run?: WorkflowRun;
-    steps?: WorkflowStep[];
-    executionScope?: string;
-    costs?: Record<string, number>;
-    now?: number;
     onselect: (id?: string) => void;
     onchange?: (graph: WorkflowGraph) => void;
     undo?: () => void;
@@ -106,101 +80,41 @@
   onMount(() => {
     mounted = true;
   });
-  /** What every node card shows about the step that ran on it, either origin. */
-  function progress(id: string) {
-    const step = steps.findLast((item) => item.nodeId === id);
-    const child = step?.childRunId
-      ? workflowState.runs[step.childRunId]
-      : undefined;
-    return {
-      step,
-      child,
-      checkpoints: checkpoints[id],
-      jev: jev[id],
-      duration: step ? duration(step.startedAt, step.endedAt, now) : "",
-      cost:
-        step?.instanceId && costs[step.instanceId] !== undefined
-          ? `$${costs[step.instanceId].toFixed(4)}`
-          : "cost unreported",
-    };
-  }
   const nameOf = (key: string | undefined) =>
     workflowState.workflows.find((entry) => entry.id === key)?.name;
   $effect(() => {
-    if (journal) {
-      nodes = journal.nodes.map((entry) => {
-        const state = progress(entry.id);
-        return {
-          id: entry.id,
-          type: "workflow",
-          position: entry.position,
-          selected: selection === entry.id,
-          data: {
-            ...state,
-            node: entry.node,
-            journal: entry,
-            childName: nameOf(state.child?.workflowId),
-          },
-        };
-      });
-      edges = journal.edges.map((edge) => ({
-        id: edge.id,
-        type: "workflow",
-        source: edge.from,
-        target: edge.to,
-        data: { taken: "fired", label: "" },
-      }));
-      return;
-    }
-    nodes = graph.nodes.map((node) => {
-      const state = progress(node.id);
-      return {
-        id: node.id,
-        type: "workflow",
-        position: node.position,
-        selected: selection === node.id,
-        data: {
-          ...state,
-          node,
-          problem: problems.find((problem) => problem.nodeId === node.id)
-            ?.message,
-          childName:
-            node.kind === "workflow"
-              ? nameOf(node.workflowId)
-              : nameOf(state.child?.workflowId),
-        },
-      };
-    });
-    // Edges paint in order, so the ones the run took go last: where a taken
-    // and an untaken edge share a route (two Branch ports into one node), the
-    // taken one is the line on top.
-    const taken = (id: string) =>
-      run?.edges[executionScope]?.[id] === "fired" ? 1 : 0;
-    edges = graph.edges
-      .toSorted((a, b) => taken(a.id) - taken(b.id))
-      .map((edge) => ({
-        id: edge.id,
-        type: "workflow",
-        source: edge.from.node,
-        sourceHandle: edge.from.port,
-        target: edge.to.node,
-        selected: selection === edge.id,
-        data: {
-          // The hub's word on this edge for this run: "fired" or "skipped".
-          taken: run?.edges[executionScope]?.[edge.id],
-          label: [
-            edge.when
-              ? `${edge.when.path} ${edge.when.op} ${edge.when.value === undefined ? "" : JSON.stringify(edge.when.value)}`
-              : "",
-            edge.maxIterations
-              ? `×${run ? `${run.loops[executionScope]?.[edge.id] ?? 0}/` : ""}${edge.maxIterations}`
-              : "",
-          ]
-            .filter(Boolean)
-            .join(" · "),
-          remove: readonly ? undefined : remove,
-        },
-      }));
+    nodes = graph.nodes.map((node) => ({
+      id: node.id,
+      type: "workflow",
+      position: node.position,
+      selected: selection === node.id,
+      data: {
+        node,
+        problem: problems.find((problem) => problem.nodeId === node.id)
+          ?.message,
+        childName:
+          node.kind === "workflow" ? nameOf(node.workflowId) : undefined,
+      },
+    }));
+    edges = graph.edges.map((edge) => ({
+      id: edge.id,
+      type: "workflow",
+      source: edge.from.node,
+      sourceHandle: edge.from.port,
+      target: edge.to.node,
+      selected: selection === edge.id,
+      data: {
+        label: [
+          edge.when
+            ? `${edge.when.path} ${edge.when.op} ${edge.when.value === undefined ? "" : JSON.stringify(edge.when.value)}`
+            : "",
+          edge.maxIterations ? `×${edge.maxIterations}` : "",
+        ]
+          .filter(Boolean)
+          .join(" · "),
+        remove,
+      },
+    }));
   });
   function remove(id: string) {
     onchange?.({
@@ -253,16 +167,16 @@
             fitViewOptions={FIT}
             maxZoom={2}
             minZoom={.15}
-            nodesConnectable={!readonly}
-            nodesDraggable={!(readonly || pan)}
+            nodesConnectable
+            nodesDraggable={!pan}
             {nodeTypes}
             onconnect={connect}
             onedgeclick={({ edge }) => onselect(edge.id)}
             onnodeclick={({ node }) => onselect(node.id)}
             onnodedragstop={() => onchange?.({ ...graph, nodes: graph.nodes.map((node) => ({ ...node, position: nodes.find((entry) => entry.id === node.id)?.position ?? node.position })) })}
             onpaneclick={() => onselect()}
-            panOnDrag={pan || readonly ? true : [1, 2]}
-            selectionOnDrag={!(pan || readonly)}
+            panOnDrag={pan ? true : [1, 2]}
+            selectionOnDrag={!pan}
             snapGrid={[8, 8]}
             bind:edges
             bind:nodes
@@ -276,7 +190,6 @@
                 {canUndo}
                 onpan={() => { pan = !pan; }}
                 {pan}
-                {readonly}
                 {redo}
                 {undo}
                 {zoom}

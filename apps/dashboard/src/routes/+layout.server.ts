@@ -1,4 +1,10 @@
-import type { ClaudeLimits, InstanceRow } from "@cawco/core";
+import type {
+  ClaudeLimits,
+  InstanceRow,
+  Workflow,
+  WorkflowRun,
+} from "@cawco/core";
+import { runIdOf } from "$lib/cawco/workflow-runs";
 import type { LayoutServerLoad } from "./$types";
 
 /**
@@ -260,12 +266,46 @@ export const load: LayoutServerLoad = async ({
     }
   }
 
+  // A workflow run's tab is called by its workflow, as the client names it
+  // (workflow-runs.ts): the run says which workflow, the list says its name.
+  const runs = open.flatMap((id) => {
+    const runId = runIdOf(id);
+    return runId ? [{ id, runId }] : [];
+  });
+  if (runs.length > 0) {
+    try {
+      const [listing, ...read] = await Promise.all([
+        fetch("/api/workflows").then((response) =>
+          response.ok
+            ? (response.json() as Promise<{ workflows: Workflow[] }>)
+            : { workflows: [] }
+        ),
+        ...runs.map(({ runId }) =>
+          fetch(`/api/workflow-runs/${encodeURIComponent(runId)}`).then(
+            (response) =>
+              response.ok ? (response.json() as Promise<WorkflowRun>) : null
+          )
+        ),
+      ]);
+      runs.forEach(({ id }, i) => {
+        const name = listing.workflows.find(
+          (workflow) => workflow.id === read[i]?.workflowId
+        )?.name;
+        if (name) {
+          names[id] = name;
+        }
+      });
+    } catch {
+      // A hub that cannot answer leaves run tabs to their client name.
+    }
+  }
+
   // The board is a working set: it drops a session that has not moved in a day.
   // The strip is not — it carries whatever the reader left open, so a tab on an
   // aged-out conversation has no row to read a name off. The name is not
   // missing, only filtered out of the listing, so ask for it by id: one batched
   // call, and only for the tabs the listing did not name.
-  const unnamed = open.filter((id) => !names[id]);
+  const unnamed = open.filter((id) => !(names[id] || runIdOf(id)));
   if (unnamed.length > 0) {
     const ctx = workspace.ctx ?? {};
     try {

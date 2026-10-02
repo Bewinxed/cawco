@@ -17,9 +17,12 @@
   import HoverPanel from "./HoverPanel.svelte";
   import { instanceTitle } from "./home/home.svelte";
   import { markHue, sessionSprite } from "./mark";
+  import RunSteps from "./RunSteps.svelte";
   import DelegateTail, {
     type TailNote,
   } from "./transcript/DelegateTail.svelte";
+  import { runIdOf } from "./workflow-runs";
+  import { workflowState } from "./workflow-state.svelte";
 
   /** The rail whose session rows open the card. */
   let { within }: { within: HTMLElement | undefined } = $props();
@@ -45,10 +48,25 @@
       return;
     }
     fetched = id;
-    if (!cawco.session(id)?.messages.length) {
+    // A workflow run's card reads its running step's tail, not its own.
+    const tail = runningStep(id) ?? (runIdOf(id) ? null : id);
+    if (tail && !cawco.session(tail)?.messages.length) {
       // biome-ignore lint/complexity/noVoid: fire-and-forget; the card draws whatever has arrived.
-      void preloadHistory(id);
+      void preloadHistory(tail);
     }
+  }
+
+  /** The session of a run's running step, whose tail is the run's live tail. */
+  function runningStep(id: string): string | null {
+    const runId = runIdOf(id);
+    if (!runId) {
+      return null;
+    }
+    return (
+      workflowState.details[runId]?.steps.find(
+        (step) => step.status === "running" && step.instanceId
+      )?.instanceId ?? null
+    );
   }
 
   function open(row: HTMLElement, id: string): void {
@@ -128,7 +146,10 @@
     if (row && isFailed(row)) {
       return "failed";
     }
-    if ((cawco.session(id)?.pending ?? []).some((each) => !each.routedTo)) {
+    if (
+      (runIdOf(id) && cawco.activityOf(id) === "blocked") ||
+      (cawco.session(id)?.pending ?? []).some((each) => !each.routedTo)
+    ) {
       return "needs";
     }
     if (cawco.activityOf(id) === "working") {
@@ -178,30 +199,45 @@
   onpointerleave={release}
   side="right"
   style="--x: {place.x}px; --y: {place.y}px; --origin: {place.origin}px; --room: 360px"
-  watch={openId}
+  watch={openId && runIdOf(openId) ? runningStep(openId) : openId}
 >
   {#snippet children(id)}
     {@const row = cawco.instanceIndex.byId.get(id)}
     {@const tone = toneOf(id)}
     {@const Sprite = sessionSprite(id)}
-    <div class="head">
-      <span aria-hidden="true" class="mark m{markHue(row?.cwd || id)}"
-        ><Sprite /></span
-      >
-      <span class="title">{row ? instanceTitle(row) : 'Session'}</span>
-      <span aria-label={WORD[tone]} class="state {tone}" role="img">
-        {#if tone === 'live'}
-          <span class="dot"></span>
-        {:else if tone === 'needs'}
-          <IconAsk />
-        {:else if tone === 'done'}
-          <IconSuccess />
+    {@const runId = runIdOf(id)}
+    <div data-nest-host>
+      <div class="head">
+        <span aria-hidden="true" class="mark m{markHue(row?.cwd || id)}"
+          ><Sprite /></span
+        >
+        <span class="title">{row ? instanceTitle(row) : 'Session'}</span>
+        <span aria-label={WORD[tone]} class="state {tone}" role="img">
+          {#if tone === 'live'}
+            <span class="dot"></span>
+          {:else if tone === 'needs'}
+            <IconAsk />
+          {:else if tone === 'done'}
+            <IconSuccess />
+          {:else if tone === 'failed'}
+            <IconWarningTriangle />
+          {/if}
+        </span>
+      </div>
+      {#if runId}
+        <!-- A workflow run's card: its steps under it, then the live tail of
+             the one running, the way a session's card ends on its own. -->
+        {@const step = runningStep(id)}
+        <RunSteps glyph=".mark" interactive={false} {runId} />
+        {#if step}
+          <DelegateTail instanceId={step} note={null} />
         {:else if tone === 'failed'}
-          <IconWarningTriangle />
+          <DelegateTail instanceId="" note={noteOf(id, tone)} />
         {/if}
-      </span>
+      {:else}
+        <DelegateTail instanceId={id} note={noteOf(id, tone)} />
+      {/if}
     </div>
-    <DelegateTail instanceId={id} note={noteOf(id, tone)} />
   {/snippet}
 </HoverPanel>
 

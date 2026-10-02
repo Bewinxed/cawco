@@ -6,7 +6,8 @@
  *   <ul class="kit-nest" {@attach nestFrom(".project-mark")}>
  *
  * The glyph is looked for in the nearest list item around the list: the
- * parent row the list hangs under.
+ * parent row the list hangs under. A parent that is not a list item (a
+ * card's head) marks its box `data-nest-host`.
  */
 import type { Attachment } from "svelte/attachments";
 
@@ -21,7 +22,7 @@ export function nestFrom(glyph: string): Attachment<HTMLElement> {
   return (node) => {
     const measure = () => {
       const parent = node.parentElement
-        ?.closest("li")
+        ?.closest("li, [data-nest-host]")
         ?.querySelector<HTMLElement>(glyph);
       if (!parent) {
         return;

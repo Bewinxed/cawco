@@ -27,9 +27,11 @@
     motionOk,
   } from "$lib/cawco/motion/curves.svelte";
   import { land } from "$lib/cawco/motion/share.svelte";
+  import WorkflowRunView from "$lib/components/features/workflows/WorkflowRunView.svelte";
   import type { HistorySource } from "../client.svelte";
   import SessionPane from "../SessionPane.svelte";
   import Composer from "../transcript/Composer.svelte";
+  import { runIdOf } from "../workflow-runs";
   import { composerBindings } from "./composer-dock.svelte";
   import { dropHint, paneDropTarget } from "./dnd.svelte";
   import { slot } from "./dock.svelte";
@@ -383,7 +385,9 @@
              PaneHost mounts the live pane into the slot. The server has no
              group composer to lend a session to, so its pane paints its own
              in the same place. -->
-        {#if !browser}
+        {#if !browser && runIdOf(paneId)}
+          <WorkflowRunView runId={runIdOf(paneId) ?? ''} />
+        {:else if !browser}
           <SessionPane
             browsing={ctx?.machine ?? null}
             browsingCwd={ctx?.cwd ?? ''}

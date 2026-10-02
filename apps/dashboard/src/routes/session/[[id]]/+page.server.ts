@@ -5,6 +5,7 @@ import type {
   SessionMessage,
 } from "@cawco/core";
 import { turnStart } from "$lib/cawco/frames";
+import { runIdOf } from "$lib/cawco/workflow-runs";
 import { TRANSCRIPT_FIRST_CHUNK, TRANSCRIPT_TAIL_CEILING } from "$lib/config";
 import type { PageServerLoad } from "./$types";
 
@@ -211,7 +212,8 @@ export const load: PageServerLoad = async ({
 }) => {
   const viewId = untrack(() => params.id);
 
-  if (!viewId) {
+  // The board, or a workflow run's tab: neither has a transcript to read.
+  if (!viewId || runIdOf(viewId)) {
     return { history: null, tail: null };
   }
 

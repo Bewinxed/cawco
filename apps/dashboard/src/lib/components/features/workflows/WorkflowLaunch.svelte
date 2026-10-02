@@ -5,6 +5,7 @@
   import { cawco } from "$lib/cawco/client.svelte";
   import { loadDelegateTypes, message } from "$lib/cawco/delegate-types";
   import { dur, ease, motionOk } from "$lib/cawco/motion/curves.svelte";
+  import { runHref } from "$lib/cawco/workflow-runs";
   import { launchWorkflow } from "$lib/cawco/workflows";
   import DirectoryPicker from "$lib/components/features/DirectoryPicker.svelte";
   import PendingContent, {
@@ -116,7 +117,7 @@
         workspace: { path: workspace, machineId },
         supervisor: supervisor ? { delegateType: supervisor } : null,
       });
-      await goto(`/workflows/${workflow.id}/runs/${runId}`);
+      await goto(runHref(runId));
       shown = false;
     } catch (caught) {
       errorMessage = message(caught);

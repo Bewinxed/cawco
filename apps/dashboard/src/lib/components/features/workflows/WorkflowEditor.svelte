@@ -16,6 +16,7 @@
   import { newId } from "$lib/cawco/id";
   import { crossIn, dur, morphMs } from "$lib/cawco/motion/curves.svelte";
   import { reflow } from "$lib/cawco/motion/rows.svelte";
+  import { runHref } from "$lib/cawco/workflow-runs";
   import {
     refreshWorkflows,
     workflowState,
@@ -44,7 +45,6 @@
   import WorkflowInspector from "./WorkflowInspector.svelte";
   import WorkflowLaunch from "./WorkflowLaunch.svelte";
   import WorkflowProgram from "./WorkflowProgram.svelte";
-  import WorkflowRunView from "./WorkflowRunView.svelte";
   import WorkflowStatus from "./WorkflowStatus.svelte";
   import { duration, kinds, newNode } from "./workflow-ui";
 
@@ -105,7 +105,6 @@
     tab = next;
   }
   let filter = $state("all");
-  let runId = $state<string>();
   let history = $state<string[]>([]);
   let future = $state<string[]>([]);
   const graph = $derived.by(() => {
@@ -720,46 +719,26 @@
                     No workflow runs in this view.
                   </p>
                 {/if}
+                <!-- A run opens in its own tab, as a session does: watching
+                     a run is not editing its workflow. -->
                 {#each runs as run (run.id)}
-                  <button
+                  {@const supervisor = run.supervisorInstanceId ? cawco.instanceIndex.byId.get(run.supervisorInstanceId) : undefined}
+                  <a
                     class="run-entry wf-stack"
                     data-flip
-                    onclick={() => { runId = run.id; }}
-                    type="button"
+                    href={runHref(run.id)}
                   >
                     <div class="wf-row wf-spread">
-                      <span>{run.id.slice(0, 8)}</span>
+                      <span>{new Date(run.startedAt).toLocaleString()}</span>
                       <WorkflowStatus status={run.status} />
                     </div>
                     <span class="wf-muted"
-                      >{new Date(run.startedAt).toLocaleString()}
-                      · {duration(run.startedAt, run.endedAt, now)}</span
-                    ><span class="wf-muted"
-                      >{run.launchedBy}
-                      ·
-                      {run.supervisorInstanceId ? `Supervisor ${run.supervisorInstanceId.slice(0, 8)}` : 'No supervisor'}</span
+                      >{duration(run.startedAt, run.endedAt, now)}
+                      {supervisor?.title ? ` · from ${supervisor.title}` : ''}</span
                     >
-                  </button>
+                  </a>
                 {/each}
               </aside>
-              <div class="run-preview">
-                {#if runId}
-                  <!-- One run gives way to the next in place: they
-                       cross-fade in one cell. -->
-                  {#key runId}
-                    <div class="run-swap" transition:crossIn>
-                      <WorkflowRunView
-                        onprogram={() => { show('program'); }}
-                        {runId}
-                      />
-                    </div>
-                  {/key}
-                {:else}
-                  <p class="wf-muted">
-                    Select a workflow run to inspect its steps.
-                  </p>
-                {/if}
-              </div>
             </div>
           {/if}
         </div>
@@ -968,18 +947,9 @@
   .run-entry {
     padding: var(--space-3);
     text-align: left;
+    color: inherit;
+    text-decoration: none;
     border-bottom: 1px solid var(--border-hairline);
-  }
-  .run-preview {
-    display: grid;
-    grid-template: minmax(0, 1fr) / minmax(0, 1fr);
-    min-width: 0;
-    flex: 1;
-  }
-  .run-swap {
-    grid-area: 1 / 1;
-    min-width: 0;
-    min-height: 0;
   }
   .filters :global(.wf-btn),
   .filters :global(.wf-btn[aria-pressed="true"]) {
@@ -1001,11 +971,7 @@
     }
     .run-list {
       width: 100%;
-      max-height: 35dvh;
       border-right: 0;
-    }
-    .run-preview {
-      min-height: 400px;
     }
   }
 </style>

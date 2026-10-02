@@ -43,6 +43,7 @@
   } from "../ProjectMark.svelte";
   import StackChip from "../StackChip.svelte";
   import StoredSessionMenu from "../StoredSessionMenu.svelte";
+  import { runIdOf } from "../workflow-runs";
   import { dragSession } from "../workspace/dnd.svelte";
   import { openPeek } from "./peek.svelte";
   import { swipeToArchive } from "./swipe-archive";
@@ -94,6 +95,8 @@
   } = $props();
 
   const sessionId = $derived(instance?.id ?? info?.sessionId ?? "");
+  /** The row is a workflow run (workflow-runs.ts), not a session. */
+  const run = $derived(instance ? runIdOf(instance.id) !== null : false);
   const status = $derived.by<MarkStatus>(() => {
     if (!instance) {
       return "idle";
@@ -101,12 +104,12 @@
     if (isFailed(instance)) {
       return "fail";
     }
-    if (
-      isStale(instance) ||
-      instance.status === "sleeping" ||
-      instance.status === "stopped"
-    ) {
+    if (isStale(instance) || instance.status === "sleeping") {
       return "idle";
+    }
+    // A workflow run that ended has stopped; listed as finished, it is done.
+    if (instance.status === "stopped") {
+      return done ? "done" : "idle";
     }
     const activity = cawco.activityOf(instance.id);
     if (activity === "blocked") {
@@ -196,9 +199,10 @@
         {/snippet}
       </Tip>
     {/if}
-    {#if instance}
+    {#if instance && !run}
       {@const live = instance}
-      <!-- Glance → peek → dive: the tail of this one, without leaving home. -->
+      <!-- Glance → peek → dive: the tail of this one, without leaving home.
+           A workflow run has no tail of its own: its card is its steps. -->
       <Tip label="Peek">
         {#snippet children(tip)}
           <button
@@ -216,7 +220,10 @@
   </div>
 {/snippet}
 
-{#if instance}
+{#if run}
+  <!-- A workflow run takes no session commands; archive is on the row. -->
+  {@render body({})}
+{:else if instance}
   <LiveSessionMenu {instance} {onarchive}>
     {#snippet children(trigger)}
       {@render body(trigger)}

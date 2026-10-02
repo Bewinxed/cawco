@@ -12,7 +12,6 @@
     redo,
     canUndo,
     canRedo,
-    readonly,
   }: {
     zoom: number;
     pan: boolean;
@@ -21,7 +20,6 @@
     redo?: () => void;
     canUndo: boolean;
     canRedo: boolean;
-    readonly: boolean;
   } = $props();
   const { zoomIn, zoomOut, fitView } = useSvelteFlow();
   /** Zoom and fit glide to the new view: movement on screen, --dur-panel. */
@@ -77,35 +75,33 @@
       </button>
     {/snippet}
   </Tip>
-  {#if !readonly}
-    <Tip label="Undo">
-      {#snippet children(tip)}
-        <button
-          {...tip}
-          aria-label="Undo"
-          class="wf-btn"
-          disabled={!canUndo}
-          onclick={undo}
-          type="button"
-        >
-          <IconReset class="size-4" />
-        </button>
-      {/snippet}
-    </Tip><Tip label="Redo">
-      {#snippet children(tip)}
-        <button
-          {...tip}
-          aria-label="Redo"
-          class="wf-btn"
-          disabled={!canRedo}
-          onclick={redo}
-          type="button"
-        >
-          <IconReset class="size-4 rotate-180" />
-        </button>
-      {/snippet}
-    </Tip>
-  {/if}
+  <Tip label="Undo">
+    {#snippet children(tip)}
+      <button
+        {...tip}
+        aria-label="Undo"
+        class="wf-btn"
+        disabled={!canUndo}
+        onclick={undo}
+        type="button"
+      >
+        <IconReset class="size-4" />
+      </button>
+    {/snippet}
+  </Tip><Tip label="Redo">
+    {#snippet children(tip)}
+      <button
+        {...tip}
+        aria-label="Redo"
+        class="wf-btn"
+        disabled={!canRedo}
+        onclick={redo}
+        type="button"
+      >
+        <IconReset class="size-4 rotate-180" />
+      </button>
+    {/snippet}
+  </Tip>
 </div>
 <style>
   .tools {

@@ -47,6 +47,7 @@
   import { continueInNewSession, continueSourceOf } from "../continue.svelte";
   import { conversationHref } from "../links";
   import { sessionName } from "../session-name";
+  import { runIdOf } from "../workflow-runs";
   import { workingSet } from "../working-set.svelte";
   import { dragSession, dropHint, tabDropTarget } from "./dnd.svelte";
   import SessionDetails from "./SessionDetails.svelte";
@@ -193,6 +194,10 @@
     morphing = false;
   }
   function showDetails(id: string, anchor: HTMLElement, pin: boolean) {
+    // A workflow run's tab is its own details: it has no session card.
+    if (runIdOf(id)) {
+      return;
+    }
     clearTimeout(timer);
     holdMove();
     pinned = pin;
@@ -624,26 +629,29 @@
                 <!-- Every tab keeps the details slot, so choosing one never
                      changes its width; the chevron shows on the chosen tab
                      only. The empty slot on another tab is part of that
-                     tab, and a click there chooses it. -->
-                <button
-                  aria-expanded={chosen ? detailsOpen && detailId === tab.id : undefined}
-                  aria-haspopup={chosen ? 'dialog' : undefined}
-                  aria-hidden={chosen ? undefined : 'true'}
-                  aria-label="Session details for {tab.label}"
-                  class="tdetails touch-hit pointer-hit pressable"
-                  onclick={(event) => {
+                     tab, and a click there chooses it. A workflow run's tab
+                     has no details card, and so no slot. -->
+                {#if !runIdOf(tab.id)}
+                  <button
+                    aria-expanded={chosen ? detailsOpen && detailId === tab.id : undefined}
+                    aria-haspopup={chosen ? 'dialog' : undefined}
+                    aria-hidden={chosen ? undefined : 'true'}
+                    aria-label="Session details for {tab.label}"
+                    class="tdetails touch-hit pointer-hit pressable"
+                    onclick={(event) => {
                     if (chosen) {
                       clickTab(tab.id, event);
                     } else {
                       workspace.activate(tab.id, leaf.id);
                     }
                   }}
-                  tabindex={chosen ? undefined : -1}
-                  type="button"
-                  class:idle={!chosen}
-                >
-                  <IconChevronDown />
-                </button>
+                    tabindex={chosen ? undefined : -1}
+                    type="button"
+                    class:idle={!chosen}
+                  >
+                    <IconChevronDown />
+                  </button>
+                {/if}
                 <button
                   aria-label="Close {tab.label}"
                   class="tclose touch-hit pointer-hit pressable"
@@ -656,19 +664,21 @@
             </TabItem>
           </ContextMenu.Trigger>
           <ContextMenu.Content>
-            <ContextMenu.Item
-              onSelect={() => {
+            {#if !runIdOf(tab.id)}
+              <ContextMenu.Item
+                onSelect={() => {
               const anchor = document.querySelector<HTMLElement>(`[data-session-tab="${tab.id}"]`);
               if (anchor) { showDetails(tab.id, anchor, true); }
             }}
-              >Session details</ContextMenu.Item
-            >
-            <ContextMenu.Item
-              onSelect={() => continueInNewSession(continueSourceOf(tab.id, tab.label))}
-            >
-              <IconArrowRight />
-              Continue in new session…
-            </ContextMenu.Item>
+                >Session details</ContextMenu.Item
+              >
+              <ContextMenu.Item
+                onSelect={() => continueInNewSession(continueSourceOf(tab.id, tab.label))}
+              >
+                <IconArrowRight />
+                Continue in new session…
+              </ContextMenu.Item>
+            {/if}
             <!-- Every gesture has a command that does the same thing. Splitting
                  and moving are reachable from here before drag-and-drop exists,
                  and stay reachable for anyone not using a pointer. -->
