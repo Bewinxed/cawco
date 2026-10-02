@@ -564,9 +564,12 @@ export class TranscriptBuilder {
 
   /**
    * A page of the main transcript, newest first: the `limit` blocks before
-   * `before` (the newest when absent), widened back to where a turn opens so
-   * a run of the reader's own turns is never split across two pages. The
-   * newest page carries the sends waiting, the tail and the facts too.
+   * `before` (the newest when absent), widened back — by up to `limit` more —
+   * to where a turn opens, so a page reads from the start of a turn and a run
+   * of the reader's own turns is never split across two. With no turn opening
+   * that near (one long agent turn), the page starts where the limit puts
+   * it: tool results are folded into their calls, so no cut splits a pair.
+   * The newest page carries the sends waiting, the tail and the facts too.
    * Undefined when `before` names no block this transcript holds.
    */
   page(
@@ -578,10 +581,7 @@ export class TranscriptBuilder {
     if (end < 0) {
       return undefined;
     }
-    let start = Math.max(0, end - Math.max(1, limit));
-    while (start > 0 && !this.opensPage(start)) {
-      start -= 1;
-    }
+    const start = this.pageStart(end, Math.max(1, limit));
     const blocks = this.placed.slice(start, end);
     const branches: TranscriptPageBranch[] = [];
     const listed = new Set<string>();
@@ -638,13 +638,36 @@ export class TranscriptBuilder {
   }
 
   /**
-   * Whether a page may begin at `index`: a turn the reader opened, with the
-   * nearest row before it that says anything not also theirs.
+   * Where a page of `span` blocks ending before `end` begins: the nearest turn
+   * opening at or before `end - span`, looking back at most `span` further,
+   * or `end - span` itself when there is none that near.
+   */
+  private pageStart(end: number, span: number): number {
+    const start = Math.max(0, end - span);
+    for (let at = start; at >= Math.max(0, start - span); at -= 1) {
+      if (at === 0 || this.opensPage(at)) {
+        return at;
+      }
+    }
+    return start;
+  }
+
+  /**
+   * Whether a page may begin at `index`: a block that opens a turn — the
+   * reader's words, or another session's, a rule's, a delegate's — and, when
+   * it is the reader's, one whose nearest row before it that says anything
+   * is not also theirs.
    */
   private opensPage(index: number): boolean {
     const block = this.placed[index];
-    if (block.type !== "user" || block.parentToolUseId) {
+    if (
+      block.parentToolUseId ||
+      !(block.type === "user" || block.type.startsWith("user."))
+    ) {
       return false;
+    }
+    if (block.type !== "user") {
+      return true;
     }
     for (let i = index - 1; i >= 0; i -= 1) {
       const prior = this.placed[i];

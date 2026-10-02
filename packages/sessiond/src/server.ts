@@ -86,7 +86,7 @@ interface Proc {
   /** Bytes of the current, not-yet-terminated stdout line. Framing only. */
   partial: string;
   procId: string;
-  ring: SessionRing;
+  ring: SessionRing<string>;
   signal: NodeJS.Signals | null;
   /**
    * Byte size of each resident ring entry, indexed exactly as the ring is
@@ -382,7 +382,7 @@ export class SessiondServer {
     const proc: Proc = {
       procId,
       child,
-      ring: new SessionRing(SESSIOND_RING_LINES),
+      ring: new SessionRing<string>(SESSIOND_RING_LINES),
       sizes: [],
       bytes: 0,
       partial: "",

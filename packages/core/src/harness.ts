@@ -573,12 +573,6 @@ export interface SendRecord {
 }
 
 /**
- * One line of a session's history as the hub serves it: a stored entry, or a
- * send's record. The records of a page come before its entries.
- */
-export type HistoryLine = SessionMessage | { record: SendRecord };
-
-/**
  * The `system` subtype saying the harness has now consumed these sends: each
  * named in `read` by its uuid, or by the id the harness stored it under
  * ({@link MESSAGES_STORED}). The hub turns it into the records' `read`; it

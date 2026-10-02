@@ -17,20 +17,28 @@ import type { SessionStreamEvent } from "./stream";
  */
 export const RING_SIZE = 512;
 
+/** One sequenced event in a ring: what was recorded, under its seq. */
+export interface RingEvent<F> {
+  frame: F;
+  seq: number;
+  sessionId: string;
+}
+
 /**
- * One session's sequence and its replay window.
+ * One session's sequence and its replay window, of whatever it records: the
+ * hub's stream frames by default, sessiond's raw stdout lines.
  *
  * A flat array indexed by `(seq - 1) % size`: because `seq` starts at 1
  * and only ever increments, the index is total and needs no head/tail pair to
  * chase. The two derived numbers are the whole contract — `head` is the last
  * seq assigned, `oldest` the earliest still replayable.
  */
-export class SessionRing {
+export class SessionRing<F = SessionStreamEvent["frame"]> {
   /**
    * Grown as the session speaks rather than pre-allocated: most sessions never
    * reach 512 frames, and a hub holds every session it has ever relayed.
    */
-  #events: (SessionStreamEvent | undefined)[] = [];
+  #events: (RingEvent<F> | undefined)[] = [];
   #head = 0;
   /**
    * How many events this ring keeps. Defaults to {@link RING_SIZE} so the hub's
@@ -64,9 +72,9 @@ export class SessionRing {
     return Math.max(this.#floor, this.#head - this.#size + 1);
   }
 
-  record(sessionId: string, frame: unknown): SessionStreamEvent {
+  record(sessionId: string, frame: F): RingEvent<F> {
     this.#head += 1;
-    const event: SessionStreamEvent = { seq: this.#head, sessionId, frame };
+    const event: RingEvent<F> = { seq: this.#head, sessionId, frame };
     this.#events[(event.seq - 1) % this.#size] = event;
     this.#at = Date.now();
     return event;
@@ -104,8 +112,8 @@ export class SessionRing {
   }
 
   /** The contiguous ascending run `afterSeq + 1 .. head`. Empty when caught up. */
-  since(afterSeq: number): SessionStreamEvent[] {
-    const events: SessionStreamEvent[] = [];
+  since(afterSeq: number): RingEvent<F>[] {
+    const events: RingEvent<F>[] = [];
     for (let seq = afterSeq + 1; seq <= this.#head; seq += 1) {
       const event = this.#events[(seq - 1) % this.#size];
       // Unreachable while `canReplay` guards the call — asserted rather than

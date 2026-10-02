@@ -16,14 +16,22 @@
  */
 
 /**
+ * What a session's stream carries: the changes each frame made to its
+ * transcript, as the hub built them (`transcript-types.ts`), and its preview's
+ * state. Raw frames never reach a dashboard; the hub folds them.
+ */
+export type SessionStreamFrame =
+  | import("./transcript-types").TranscriptStreamFrame
+  | Extract<import("./index").FramePayload, { kind: "preview" }>;
+
+/**
  * One event on a session's canonical stream. `seq` is hub-assigned, monotonic
  * per session, starting at 1 — and NO GAP is ever delivered: a client that
  * observes `seq > lastSeq + 1` re-subscribes with `afterSeq = lastSeq` instead
  * of applying the delta.
  */
 export interface SessionStreamEvent {
-  /** The existing relay frame payload, verbatim. The stream orders; it does not reshape. */
-  frame: unknown;
+  frame: SessionStreamFrame;
   seq: number;
   /** The instance id — what the dashboard calls a viewId. */
   sessionId: string;
@@ -31,8 +39,8 @@ export interface SessionStreamEvent {
 
 /**
  * Client → hub. `afterSeq` present is a resume ("I have up to here — replay the
- * rest"); absent is a fresh join ("start me from now", history arriving through
- * the existing read paths as today).
+ * rest"): a client sends it with the `seq` its transcript page was read at, and
+ * again after a reconnect. Absent is a fresh join ("start me from now").
  */
 export interface StreamSubscribe {
   afterSeq?: number;
@@ -53,8 +61,8 @@ export interface StreamBacklog {
 
 /**
  * Hub → client when the gap is unrecoverable (older than the ring holds):
- * an honest refusal, never a partial replay. The client re-reads history
- * through the existing paths, then follows from `nextSeq`.
+ * an honest refusal, never a partial replay. The client reads the newest
+ * transcript page again and resumes from the `seq` it carries.
  */
 export interface StreamReset {
   nextSeq: number;
