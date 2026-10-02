@@ -143,8 +143,8 @@
   });
   /** Each tab as the reader sees it: every tree folded until opened. */
   const folded = $derived({
-    working: collapse(trees.working, openTrees.has),
-    finished: collapse(trees.finished, openTrees.has),
+    working: collapse(trees.working, (id) => openTrees.has(id, "home")),
+    finished: collapse(trees.finished, (id) => openTrees.has(id, "home")),
   });
   /** Every row's place in its tab's tree: depth, last sibling, rails through it. */
   const shapes = $derived({
@@ -169,8 +169,8 @@
     return {
       count: line.descendants.length,
       failed: line.descendants.filter(isFailed).length,
-      open: openTrees.has(id),
-      ontoggle: () => openTrees.toggle(id),
+      open: openTrees.has(id, "home"),
+      ontoggle: () => openTrees.toggle(id, "home"),
     };
   }
   /**
@@ -503,9 +503,9 @@
     }
     const parent = line.descendants.length > 0;
     const open = event.key === "ArrowRight";
-    if (parent && openTrees.has(id) !== open) {
+    if (parent && openTrees.has(id, "home") !== open) {
       event.preventDefault();
-      openTrees.set(id, open);
+      openTrees.set(id, open, "home");
     } else if (!open && line.parent) {
       event.preventDefault();
       listEl
@@ -639,7 +639,7 @@
         <button
           aria-hidden="true"
           class="gutter"
-          onclick={() => openTrees.set(above, false)}
+          onclick={() => openTrees.set(above, false, 'home')}
           tabindex="-1"
           type="button"
         ></button>

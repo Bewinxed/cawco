@@ -576,7 +576,7 @@
 {#snippet subRow(node: Branch)}
   {@const row = node.row}
   {@const state = sessionStatus(row)}
-  {@const unfolded = node.count > 0 && openTrees.has(row.id)}
+  {@const unfolded = node.count > 0 && openTrees.has(row.id, 'rail')}
   <!-- The row's box (`data-flip="box"`): when its delegates open, it takes
        their room at once and its edge travels down to it, the rows under
        it sliding with that edge (motion/rows). -->
@@ -612,7 +612,7 @@
           compact
           count={node.count}
           failed={node.failed}
-          ontoggle={() => openTrees.toggle(row.id)}
+          ontoggle={() => openTrees.toggle(row.id, 'rail')}
           open={unfolded}
         />
       {/if}
