@@ -422,6 +422,18 @@
   >
 {/snippet}
 
+<!-- A changing figure in the stats strip. A still copy of the text sizes its
+     box, so the strip lays out and wraps by the text's own width. The morph
+     draws inside that box, clipped to it: torph animates its own width from the
+     old size and draws leaving and moving letters outside it, which put the
+     context figure over the next meter. -->
+{#snippet figure(text: string)}
+  <span class="figure">
+    <span aria-hidden="true" class="figure-size">{text}</span>
+    <TextMorph as="span" duration={morphMs} {text} />
+  </span>
+{/snippet}
+
 <!-- One line per field, whatever it is saying: the lines cross-fade at the
      control tier (crossIn / crossOut), the one leaving lifted out of the
      flow so the card only ever holds the one arriving. -->
@@ -578,11 +590,7 @@
             used={percent}
           />
         </span>
-        <TextMorph
-          as="span"
-          duration={morphMs}
-          text={`${percent}% · ${tokens(stats.totalTokens)}/${tokens(stats.maxTokens)}`}
-        />
+        {@render figure(`${percent}% · ${tokens(stats.totalTokens)}/${tokens(stats.maxTokens)}`)}
       {:else if reading}
         <span>Reading…</span>
       {:else if refusal}
@@ -604,26 +612,16 @@
             used={m.used}
           />
         </span>
-        <span>{Math.round(m.used)}%</span>
+        <span class="stat-figure">{Math.round(m.used)}%</span>
       </div>
     {/if}
     {#if session?.mcp}
       <a class="tools" href="/config/mcp"
-        ><TextMorph
-          as="span"
-          duration={morphMs}
-          text={`${session.mcp.length} MCP`}
-        /></a
+        >{@render figure(`${session.mcp.length} MCP`)}</a
       >
     {/if}
     {#if stats.cost !== null}
-      <span class="cost"
-        ><TextMorph
-          as="span"
-          duration={morphMs}
-          text={`$${stats.cost.toFixed(2)}`}
-        /></span
-      >
+      <span class="cost">{@render figure(`$${stats.cost.toFixed(2)}`)}</span>
     {/if}
   </div>
   <div class="footer">
@@ -850,15 +848,26 @@
     row-gap: var(--space-2);
     color: var(--ink-strong);
   }
-  /* The context meter is as wide as its word, bar and figures, then takes
-     what the line has spare. Its size from its content (auto basis and auto
-     minimum) is what the strip breaks lines by, so a meter that does not
-     fit beside the others moves to the next line instead of under them. */
+  /* Each meter (context, the provider's limit, MCP, cost) is one unit, sized
+     by its content: a unit that does not fit beside the others moves to the
+     next line. Only a unit wider than the whole strip wraps inside itself, a
+     part to a line, and no part ever gets narrower than its own text. */
+  .context,
+  .limit {
+    --row-paint: var(--surface-recess);
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: var(--space-1) var(--space-2);
+  }
+  /* Context takes whatever the line has spare, its bar first. */
   .context {
     flex: auto;
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
+  }
+  .limit,
+  .tools,
+  .cost {
+    flex: none;
   }
   .tools {
     display: inline-flex;
@@ -871,14 +880,10 @@
   }
   /* Context and the provider's limit, each a word, a 4px bar and a figure
      (usage/LimitBar); the bar's pace gap shows the strip's own surface. */
-  .limit {
-    --row-paint: var(--surface-recess);
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-  }
-  .context {
-    --row-paint: var(--surface-recess);
+  .stat-label,
+  .stat-figure {
+    flex: none;
+    white-space: nowrap;
   }
   .stat-label {
     color: var(--ink-muted);
@@ -891,6 +896,26 @@
   .limit .stat-bar {
     flex: none;
     width: 64px;
+  }
+  /* The still copy and the morph share one cell, so the cell is as wide as
+     the wider of the two. Only the sideways overflow is clipped, so the
+     letters' rise and fall still show. */
+  .figure {
+    display: inline-grid;
+    flex: none;
+    overflow-x: clip;
+    white-space: nowrap;
+  }
+  .figure > :global(*) {
+    grid-area: 1 / 1;
+    justify-self: start;
+  }
+  .figure-size {
+    visibility: hidden;
+  }
+  .refusal {
+    min-width: 0;
+    overflow-wrap: anywhere;
   }
   /* The modal's action row (SessionFooter): right-aligned, 8px apart. */
   .footer {
