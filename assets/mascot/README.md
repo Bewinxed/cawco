@@ -115,14 +115,20 @@ reused rather than traced again.
    its first frame's drawing, and pairs showing the same drawing are one longer hold. It cuts Caw
    from the paper, snapping every pixel to his inks as measured across the take's drawings (black,
    vermilion, eye white, yellow). Thin fringes go, closed eyes' lid lines stay, and gaps in his
-   silhouette (between a raised wing and his beak) are told from eye whites by the still. It
+   silhouette (between a raised wing and his beak) are told from eye whites from both ends of the
+   take: forward from the opening still and backward from the closing one, evidence over guesses,
+   and where neither end has evidence, by shape (a pupil always bites into an eye white). It
    registers drawing 00 onto the status's still and traces each ink with vtracer (spline, holes
-   kept) into `body-NN.svg`, with `timing.json`.
+   kept) into `body-NN.svg`, with `timing.json`. `trace.py --halo` reports yellow traced where
+   the take has none, and `trace.py --eyes` reports any eye white a drawing on disk shows as
+   see-through (a hole in dark); it ends "eyes: N/24 loops intact" and fails if any loop has one.
 3. **Build.** `scene.mjs` imports the SVGs with rive-mcp-server's `importSvg`, one shape per ink
    per drawing, then `build.mjs` writes the files, and `prove-viewmodel.mjs` proves them.
 
 Static art (onboarding, app icon) comes from `generate_image` with the pose sheet as reference.
 Backgrounds are removed with BiRefNet
 (`uvx --from "rembg[cli,cpu]" rembg i -m birefnet-general in.png out.png`). `assets/mascot/stills/`
-holds each status's light and dark still; `trace.py` registers the loops onto them, and they
-serve where Rive can't run.
+holds each status's light and dark still. They are `trace.py`'s registration targets (drawing 00
+of each loop is placed onto its status's light still: Caw's body, the largest shape, so a
+separate piece such as loading's feather can sit a few px off) and nothing ships them: the apps
+draw Caw only from the `.riv` files.

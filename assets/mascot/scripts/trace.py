@@ -5,6 +5,9 @@
 """Traces Caw's loop takes into the vector drawings the status files (../caw/<status>.riv) are built from.
 
 usage: uv run trace.py [loop ...]        (default: every loop in ../loops/takes.json)
+       uv run trace.py --halo [loop ...] yellow traced where the take has none, per drawing on disk
+       uv run trace.py --eyes [loop ...] eye whites the drawings on disk show see-through; exits
+                                         non-zero if any loop has one
 
 ../loops/takes.json lists each status's variant loops: a loop name, its Backlot take (shot with the
 H3 keyframe sequence adapter, on twos) and the still it opens and closes on. For each loop this
@@ -23,6 +26,7 @@ import json
 import re
 import subprocess
 import sys
+from multiprocessing import Pool
 from pathlib import Path
 
 import numpy as np
@@ -30,6 +34,7 @@ import resvg_py
 import vtracer
 from PIL import Image
 from scipy import ndimage
+from scipy.spatial import ConvexHull, QhullError
 
 HERE = Path(__file__).resolve().parent
 LOOPS = HERE.parent / "loops"
@@ -75,6 +80,12 @@ YELLOW_CHROMA = 50
 # How far (512 px artboard pixels) a traced yellow pixel may sit from yellow in the take's own frame
 # before it counts as halo (see halo()): the trace's outlines move about that much.
 HALO_REACH = 2
+# An enclosed white region decided by neither end's evidence is an eye below this solidity (see
+# see_through()): eyes measure 0.74-0.92, gaps between a raised wing and the beak 0.98-1.03.
+EYE_SOLIDITY = 0.95
+# See-through pixels (512 px artboard) on an eye white from which a drawing's eye counts as cut out
+# (--eyes); fewer are the trace's outline sitting a pixel off the take's region.
+CUT_EYE = 20
 # How close (summed |RGB|) a rendered pixel must be to the yellow fill to be traced yellow.
 YELLOW_FILL = 40
 # Brightness from which a thin line inside the body is a lid line (lid lines measure 100-190,
@@ -211,51 +222,114 @@ def inks(rgb: np.ndarray, centres: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
     return label, enclosed
 
 
-def see_through(
-    enclosed: list[np.ndarray], still_paper: np.ndarray
-) -> list[np.ndarray]:
-    """Which enclosed near-white regions are paper seen through a gap (between a raised wing and
-    the beak, say) rather than an eye white. Some takes draw eye whites exactly as neutral and
-    bright as the paper, and gaps take every shape an eye does, so neither colour nor shape can
-    tell; the still can. Every loop opens on its still, so drawing 00's regions take the still's
-    answer (transparent there = paper), and each later drawing's regions take the answer of the
-    last decided drawing's regions they overlap most, or of the nearest one when the move was too
-    large to overlap.
+def decide(
+    enclosed: list[np.ndarray], seed_paper: np.ndarray
+) -> list[dict[int, tuple[bool, bool]]]:
+    """One pass over the drawings in the order given: per drawing, {region: (is_paper, evidenced)}.
+
+    The first drawing's regions take the seed still's answer (transparent there = paper); each
+    later drawing's regions take the answer of the last decided drawing's regions they overlap.
+    An answer is evidenced when it rests on the still or on overlap with an evidenced region: a
+    region that overlaps only guessed regions, or nothing (it takes the nearest region's answer),
+    is a guess, and a guess never turns into evidence further down the chain.
 
     Only regions of MIN_REGION pixels or more are decided or remembered. Smaller ones are video
     noise (finish drops them as fringes); remembered, they once stood in for a drawing whose eyes
     were shut, and the eyes that opened next took a speck's "paper" and kept it to the loop's end.
     A drawing with no real regions leaves the memory as it was."""
-    papers = []
-    previous = None  # (paper mask, eye mask, [(centroid, is_paper)])
+    out = []
+    previous = None  # ({paper, eye, paper_ev, eye_ev} masks, [(centroid, is_paper)])
     for regions in enclosed:
-        paper = np.zeros(regions.shape, bool)
-        eye = np.zeros(regions.shape, bool)
+        decided = {}
+        masks = {
+            k: np.zeros(regions.shape, bool)
+            for k in ("paper", "eye", "paper_ev", "eye_ev")
+        }
         marks = []
         ids, sizes = np.unique(regions[regions > 0], return_counts=True)
         for r in ids[sizes >= MIN_REGION]:
             m = regions == r
             centre = np.array(ndimage.center_of_mass(m))
             if previous is None:
-                is_paper = still_paper[m].mean() > 0.5
+                is_paper, evidenced = bool(seed_paper[m].mean() > 0.5), True
             else:
-                was_paper, was_eye, was = previous
-                votes = (m & was_paper).sum(), (m & was_eye).sum()
-                if any(votes):
-                    is_paper = votes[0] > votes[1]
+                was, was_marks = previous
+                sure = (m & was["paper_ev"]).sum(), (m & was["eye_ev"]).sum()
+                loose = (m & was["paper"]).sum(), (m & was["eye"]).sum()
+                if any(sure):
+                    is_paper, evidenced = bool(sure[0] > sure[1]), True
+                elif any(loose):
+                    is_paper, evidenced = bool(loose[0] > loose[1]), False
                 else:
-                    is_paper = (
-                        min(was, key=lambda w: np.linalg.norm(w[0] - centre))[1]
-                        if was
-                        else False
+                    nearest = (
+                        min(was_marks, key=lambda w: np.linalg.norm(w[0] - centre))
+                        if was_marks
+                        else None
                     )
-            if is_paper:
-                paper |= m
-            else:
-                eye |= m
+                    is_paper, evidenced = (nearest[1] if nearest else False), False
+            decided[int(r)] = (is_paper, evidenced)
+            kind = "paper" if is_paper else "eye"
+            masks[kind][m] = True
+            if evidenced:
+                masks[f"{kind}_ev"][m] = True
             marks.append((centre, is_paper))
+        out.append(decided)
+        previous = (masks, marks) if marks else previous
+    return out
+
+
+def solidity(region: np.ndarray) -> float:
+    """Area over convex-hull area: an eye white's pupil keeps it well under 1."""
+    ys, xs = np.nonzero(region)
+    try:
+        return float(region.sum() / ConvexHull(np.column_stack([xs, ys])).volume)
+    except QhullError:  # a region too thin for a hull (a line of pixels) is no eye
+        return 1.0
+
+
+def see_through(
+    enclosed: list[np.ndarray],
+    labels: list[np.ndarray],
+    start_paper: np.ndarray,
+    end_paper: np.ndarray,
+) -> list[np.ndarray]:
+    """Which enclosed near-white regions are paper seen through a gap (between a raised wing and
+    the beak, say) rather than an eye white. Some takes draw eye whites exactly as neutral and
+    bright as the paper, so colour cannot tell; the stills can. Every take opens on a still and
+    closes on one (a loop on the same still it opened on), so the regions are decided from both
+    ends: forward from drawing 00 with start_paper (the opening still's transparency in take
+    pixels) and backward from the last drawing with end_paper (decide()).
+
+    Decided from one end only, the answer drifts as Caw moves away from that still: on two
+    loading-feather to ready takes the far eye was cut out as "paper" from the middle of the take
+    on, a hole that only shows on dark. So per region: evidence beats a guess, and between two
+    pieces of evidence, the pass from the nearer end. Where both passes only guess, the region's
+    shape decides, since an eye white always has its pupil cut into it (enclosed, or biting in from
+    the side in profile) while a gap that opens mid-move is a solid wedge: measured, eyes 0.74-0.92
+    solidity, gaps 0.98-1.03. And his eyes sit only in the black, so a region ringed by vermilion
+    (a slit in a feather) is paper."""
+    forward = decide(enclosed, start_paper)
+    backward = decide(enclosed[::-1], end_paper)[::-1]
+    vermilion = list(INKS).index("vermilion") + 1
+    papers = []
+    for i, regions in enumerate(enclosed):
+        paper = np.zeros(regions.shape, bool)
+        for r, (fwd, fwd_seen) in forward[i].items():
+            bwd, bwd_seen = backward[i][r]
+            region = regions == r
+            if fwd_seen and bwd_seen:
+                is_paper = fwd if i < len(enclosed) / 2 else bwd
+            elif fwd_seen or bwd_seen:
+                is_paper = fwd if fwd_seen else bwd
+            else:
+                is_paper = solidity(region) >= EYE_SOLIDITY
+            around = labels[i][ndimage.binary_dilation(region, iterations=2) & ~region]
+            around = around[around > 0]
+            if around.size and np.bincount(around).argmax() == vermilion:
+                is_paper = True
+            if is_paper:
+                paper |= region
         papers.append(paper)
-        previous = (paper, eye, marks) if marks else previous
     return papers
 
 
@@ -489,21 +563,12 @@ def holds(drawings: list[tuple[int, int, list[int]]], shown: list[int]) -> list[
     return slots
 
 
-def trace(loop: str, take: str, still_name: str) -> dict:
-    frames = frames_of(loop, take)
-    drawings = drawings_of(frames)
-    still = STILLS / f"light-{still_name}.png"
-    out = LOOPS / loop
-    out.mkdir(parents=True, exist_ok=True)
-    for old in out.glob("*.svg"):
-        old.unlink()
-    rgbs = [frames[m].astype(np.float64).mean(0) for _, _, m in drawings]
-    centres = take_palette(rgbs)
-    found = [inks(rgb, centres) for rgb in rgbs]
-    place = placement(found[0][0], still)
-    # The still's transparency in take pixels: art = scale * take + offset.
+def paper_of(
+    still: Path, place: tuple[float, float, float], shape: tuple[int, int]
+) -> np.ndarray:
+    """A still's transparency in take pixels (art = scale * take + offset)."""
     scale, tx, ty = place
-    h, w = rgbs[0].shape[:2]
+    h, w = shape
     alpha = (
         Image.open(still)
         .convert("RGBA")
@@ -515,7 +580,33 @@ def trace(loop: str, take: str, still_name: str) -> dict:
             Image.Resampling.BILINEAR,
         )
     )
-    papers = see_through([e for _, e in found], np.asarray(alpha) < 128)
+    return np.asarray(alpha) < 128
+
+
+def trace(
+    loop: str, take: str, still_name: str, end_still_name: str | None = None
+) -> dict:
+    """Traces a take that opens on still_name's still and closes on end_still_name's (a status
+    change), or on the same still it opened on (a loop, the default)."""
+    frames = frames_of(loop, take)
+    drawings = drawings_of(frames)
+    still = STILLS / f"light-{still_name}.png"
+    end_still = STILLS / f"light-{end_still_name or still_name}.png"
+    out = LOOPS / loop
+    out.mkdir(parents=True, exist_ok=True)
+    for old in out.glob("*.svg"):
+        old.unlink()
+    rgbs = [frames[m].astype(np.float64).mean(0) for _, _, m in drawings]
+    centres = take_palette(rgbs)
+    found = [inks(rgb, centres) for rgb in rgbs]
+    place = placement(found[0][0], still)
+    shape = rgbs[0].shape[:2]
+    papers = see_through(
+        [e for _, e in found],
+        [label for label, _ in found],
+        paper_of(still, place, shape),
+        paper_of(end_still, place, shape),
+    )
     labels = [
         finish(label, rgb, paper) for (label, _), rgb, paper in zip(found, rgbs, papers)
     ]
@@ -578,10 +669,95 @@ def measure_halo(loop: str, take: str) -> dict[str, int]:
     }
 
 
+def cut_eyes(
+    loop: str, take: str, still_name: str, end_still_name: str | None = None
+) -> dict[str, int]:
+    """Per drawing a loop has on disk, the eye white it shows as see-through (px at 512).
+
+    The take's enclosed white regions are decided again with see_through() from both ends (a loop
+    opens and closes on its still; a status change names its end still); every region it calls an
+    eye is placed on the artboard with the loop's placement, and the drawing's see-through pixels
+    inside its outline that fall on one are counted. Those pixels show the page through his eye:
+    in dark, a hole ringed by the cream rim."""
+    timing = json.loads((LOOPS / loop / "timing.json").read_text())
+    frames = frames_of(loop, take)
+    drawings = drawings_of(frames)
+    rgbs = [frames[m].astype(np.float64).mean(0) for _, _, m in drawings]
+    centres = take_palette(rgbs)
+    found = [inks(rgb, centres) for rgb in rgbs]
+    place = tuple(timing["placement"][k] for k in ("scale", "x", "y"))
+    shape = rgbs[0].shape[:2]
+    start_paper = paper_of(STILLS / f"light-{still_name}.png", place, shape)
+    end_paper = paper_of(
+        STILLS / f"light-{end_still_name or still_name}.png", place, shape
+    )
+    enclosed = [e for _, e in found]
+    papers = see_through(
+        enclosed, [label for label, _ in found], start_paper, end_paper
+    )
+    scale, tx, ty = place
+    group = {s: i for i, (s, _, _) in enumerate(drawings)}
+    first = {}
+    for slot in timing["drawings"]:
+        first.setdefault(slot["drawing"], slot["start"])
+    cut = {}
+    for d, start in sorted(first.items()):
+        i = group[start]
+        ids, sizes = np.unique(enclosed[i][enclosed[i] > 0], return_counts=True)
+        eyes = np.isin(enclosed[i], ids[sizes >= MIN_REGION]) & ~papers[i]
+        on_art = (
+            np.asarray(
+                Image.fromarray((eyes * 255).astype(np.uint8)).transform(
+                    (ARTBOARD, ARTBOARD),
+                    Image.Transform.AFFINE,
+                    (1 / scale, 0, -tx / scale, 0, 1 / scale, -ty / scale),
+                    Image.Resampling.NEAREST,
+                )
+            )
+            > 127
+        )
+        drawn = (LOOPS / loop / f"body-{d:02d}.svg").read_text()
+        alpha = (
+            np.asarray(
+                Image.open(
+                    io.BytesIO(bytes(resvg_py.svg_to_bytes(svg_string=drawn)))
+                ).convert("RGBA")
+            )[..., 3]
+            > 127
+        )
+        see_through_px = ndimage.binary_fill_holes(alpha) & ~alpha
+        cut[f"{d:02d}"] = int((see_through_px & on_art).sum())
+    return cut
+
+
+def eyes_census(name: str) -> tuple[str, dict[str, int]]:
+    loops = {
+        v["loop"]: v
+        for vs in json.loads((LOOPS / "takes.json").read_text()).values()
+        for v in vs
+    }
+    v = loops[name]
+    return name, cut_eyes(name, v["take"], v["still"])
+
+
 def main() -> None:
     takes = json.loads((LOOPS / "takes.json").read_text())
     loops = {v["loop"]: v for variants in takes.values() for v in variants}
     args = sys.argv[1:]
+    if args[:1] == ["--eyes"]:
+        names = args[1:] or list(loops)
+        with Pool(min(8, len(names))) as pool:
+            results = dict(pool.map(eyes_census, names))
+        intact = 0
+        for name in names:
+            cut = {d: px for d, px in results[name].items() if px >= CUT_EYE}
+            intact += not cut
+            detail = ", ".join(f"{d} ({px} px)" for d, px in cut.items())
+            print(
+                f"{name}: {'eyes intact' if not cut else f'eye cut out in {len(cut)} of {len(results[name])} drawings: {detail}'}"
+            )
+        print(f"eyes: {intact}/{len(names)} loops intact")
+        sys.exit(0 if intact == len(names) else 1)
     if args[:1] == ["--halo"]:
         for name in args[1:] or list(loops):
             h = measure_halo(name, loops[name]["take"])
