@@ -8762,6 +8762,29 @@
             "type": "object",
             "properties": {
               "kind": {
+                "description": "An ask is over, whoever settled it. Daemon → hub when the harness\nsettled it itself (answered in its own UI, or cancelled by an\ninterrupt); hub → every dashboard each time a parked ask leaves the\nhub's pending list — answered from any device, Telegram, a parent\nsession or a workflow, timed out, or dropped with its process — so no\nclient keeps a card nobody can answer.",
+                "type": "string",
+                "enum": [
+                  "permission_settled"
+                ]
+              },
+              "instanceId": {
+                "type": "string"
+              },
+              "requestId": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "instanceId",
+              "kind",
+              "requestId"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
                 "description": "Hub-originated: every machine's latest limit reading, pushed on each\nagent usage report (USAGE-SPEC.md §6.4). Small by design — the heavy\naggregates are pulled over REST.",
                 "type": "string",
                 "enum": [

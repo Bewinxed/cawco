@@ -1639,6 +1639,15 @@ async function refresh(): Promise<boolean> {
     adoptUsageLimits(usage.machines);
   }
   if (pending) {
+    // The read is the whole truth: an ask settled while this tab was away
+    // sent its `permission_settled` to nobody listening.
+    const parked = new Set(pending.map((envelope) => envelope.requestId));
+    for (const target of Object.values(state.sessions)) {
+      if (target.pending.some((p) => !parked.has(p.requestId))) {
+        target.pending = target.pending.filter((p) => parked.has(p.requestId));
+        trackWorking(target);
+      }
+    }
     for (const envelope of pending) {
       handleFrame(envelope.payload);
     }
@@ -1922,6 +1931,17 @@ function handleFrame(frame: FramePayload): void {
     const runId = (frame as { workflowRunId?: unknown }).workflowRunId;
     if (typeof runId === "string" && frame.raisedAt !== undefined) {
       state.runAskRaisedAt[runId] = frame.raisedAt;
+    }
+    return;
+  }
+  if (frame.kind === "permission_settled") {
+    // The hub's word that the ask is over, whoever settled it: the card goes.
+    const target = state.sessions[frame.instanceId];
+    if (target?.pending.some((p) => p.requestId === frame.requestId)) {
+      target.pending = target.pending.filter(
+        (p) => p.requestId !== frame.requestId
+      );
+      trackWorking(target);
     }
     return;
   }

@@ -65,17 +65,6 @@ public final class HubConnection {
             live.post(data)
             return nil
         }
-        ledger.applyFrame = { [weak self] _, data in
-            guard let self, let frame = try? Inbound.frame(data) else {
-                return
-            }
-            apply(frame)
-        }
-        // The board's only per-session state is the asks it parks, and their
-        // truth is the hub's own list.
-        ledger.rereadHistory = { [weak self] _ in
-            self?.readPending()
-        }
         if address != nil {
             start()
         }
@@ -178,13 +167,6 @@ public final class HubConnection {
         outageTimer = nil
         outage = false
         readFleet(after: .seconds(1))
-        // The hub forgot this socket's subscriptions with the last one.
-        ledger.cursors = ledger.cursors.mapValues { cursor in
-            var cursor = cursor
-            cursor.subscribed = false
-            return cursor
-        }
-        syncSubscriptions()
     }
 
     private func closed() {
@@ -318,17 +300,10 @@ public final class HubConnection {
         }
     }
 
-    private func readPending() {
-        Task { [weak self] in
-            guard let client = self?.client, let pending = try? await client.getApiPending().ok.body.json else {
-                return
-            }
-            self?.adopt(pending: pending)
-        }
-    }
-
+    /// The hub's whole list: an ask settled while this device was away sent
+    /// its `permission_settled` to nobody listening.
     private func adopt(pending: [Components.Schemas.GetApiPending200Payload]) {
-        var asks: [(Components.Schemas.FramePayload.Value7Payload, String?)] = []
+        var asks: [(AskFrame, String?)] = []
         for envelope in pending where envelope.verb == .frames {
             guard let data = try? Wire.data(envelope.payload), let frame = try? Inbound.frame(data) else {
                 continue
@@ -343,7 +318,6 @@ public final class HubConnection {
             }
         }
         needs.replace(with: asks)
-        syncSubscriptions()
     }
 
     /// A machine that came online after the connect-time read has its stored sessions read now.
@@ -440,7 +414,8 @@ public final class HubConnection {
             fleet.patch(upserts: delta.upserts, removed: delta.removed)
         case let .permissionRequest(ask, routedTo):
             needs.park(ask, routedTo: routedTo)
-            syncSubscriptions()
+        case let .permissionSettled(settled):
+            needs.settle(settled.instanceId, settled.requestId)
         case let .runQuestion(runId, raisedAt):
             // Represented once, by its waiting run; only the moment it was parked is kept.
             if let raisedAt {
@@ -459,28 +434,12 @@ public final class HubConnection {
             } else {
                 waiter.resume(throwing: ControlError(message: result.error ?? "The machine could not carry out that request."))
             }
-        case let .message(instanceId, type):
-            // A session's next process opens with `system.init`: anything it
-            // had parked belongs to the process that is gone.
-            if type == "system.init" {
-                needs.clear(instanceId)
-                syncSubscriptions()
-            }
         case let .usage(frame):
             // The small limits frame the hub pushes on each report (USAGE-SPEC.md §6.4).
             fleet.adopt(limits: frame.limits.map { ($0.machineId, $0.payload, $0.openCodeGo) })
         case .ignored:
             break
         }
-    }
-
-    /// Follows the streams of the sessions that have something parked: their
-    /// own frames are what says a parked ask's process is gone.
-    private func syncSubscriptions() {
-        guard socket == .connected else {
-            return
-        }
-        ledger.sync(Set(needs.parked.keys))
     }
 
     struct ControlError: LocalizedError {

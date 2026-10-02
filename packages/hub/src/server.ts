@@ -1494,6 +1494,28 @@ export const createServer = ({
   // worth one write at startup.
   db.markAllAgentsOffline();
 
+  // An ask that leaves the hub's pending list is over on every screen: one
+  // frame, whichever path settled it (an answer from any device, Telegram, a
+  // parent session or a workflow; a harness settling it itself; a timeout; its
+  // process ending). Without it every other client kept a card nobody could
+  // answer until it reconnected.
+  pending.onSettled((parked) => {
+    if (!(parked.requestId && parked.instanceId)) {
+      return;
+    }
+    registry.broadcast({
+      verb: "frames",
+      machineId: parked.machineId,
+      instanceId: parked.instanceId,
+      requestId: parked.requestId,
+      payload: {
+        kind: "permission_settled",
+        instanceId: parked.instanceId,
+        requestId: parked.requestId,
+      },
+    });
+  });
+
   // And the same honesty for the sessions those machines were carrying. A hub
   // that just started holds no daemon sockets, so it has no basis for any row
   // claiming `running` or `starting`; and rows the previous taxonomy had to file
@@ -9270,6 +9292,19 @@ export const createServer = ({
               // a dashboard that connects mid-turn is handed the rail's now-state
               // in its first frame instead of a blank row. Relayed unchanged below
               // — this is a copy, not an interception.
+              // The harness settled an ask itself (answered in its own UI, or
+              // withdrawn by an interrupt). Settling it here is what tells every
+              // screen, through `pending.onSettled`; the daemon's frame itself
+              // goes no further.
+              if (kind === "permission_settled") {
+                // Most of these echo an answer the hub relayed and has already
+                // settled; only one still parked is news to Telegram.
+                if (message.requestId && pending.get(message.requestId)) {
+                  telegram?.onSettled(message.requestId);
+                  pending.resolve(message.requestId);
+                }
+                break;
+              }
               if (kind === "pulse" && message.instanceId) {
                 const { pulse } = message.payload as { pulse?: SessionPulse };
                 if (pulse) {

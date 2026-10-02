@@ -82,8 +82,8 @@ public final class Ledger {
 
     /// Puts one client message on the socket; the reason it could not, or nil.
     @ObservationIgnored var send: (Data) -> String? = { _ in "Not connected to the hub." }
-    /// Applies one sequenced frame (its JSON) to the session it belongs to.
-    @ObservationIgnored var applyFrame: (String, Data) -> Void = { _, _ in }
+    /// Applies one sequenced frame (a transcript change or a preview's state) to its session.
+    @ObservationIgnored var applyFrame: (String, Components.Schemas.SessionStreamFrame) -> Void = { _, _ in }
     /// Re-reads a session's history through the path that already exists.
     @ObservationIgnored var rereadHistory: (String) -> Void = { _ in }
     /// Heard exactly once for every command that reaches `failed`.
@@ -185,12 +185,7 @@ public final class Ledger {
     }
 
     private func applyEvent(_ event: Components.Schemas.SessionStreamEvent, to cursor: inout Cursor) {
-        if let data = try? Wire.data(event.frame) {
-            applyFrame(event.sessionId, data)
-        } else if !cursor.warned {
-            cursor.warned = true
-            log.error("stream: an event arrived with no frame for \(event.sessionId, privacy: .public) at \(event.seq)")
-        }
+        applyFrame(event.sessionId, event.frame)
         cursor.lastSeq = event.seq
         cursor.seen = true
         cursor.subscribed = true

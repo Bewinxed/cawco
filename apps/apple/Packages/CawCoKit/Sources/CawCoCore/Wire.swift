@@ -81,16 +81,10 @@ enum Inbound {
     /// outside the frame types (client.svelte.ts reads them the same way).
     /// Content is read only through the generated types.
     fileprivate struct PayloadRoute: Decodable {
-        let kind: String?
-        let instanceId: String?
         /// A delegate's ask the hub sent to its parent.
         let routedTo: String?
         /// A workflow run's question, answered in its run.
         let workflowRunId: String?
-        let message: MessageRoute?
-        struct MessageRoute: Decodable {
-            let type: String?
-        }
     }
 
     private struct Envelope<Payload: Decodable>: Decodable {
@@ -123,49 +117,37 @@ enum Inbound {
             return .other
         }
         let peek = try decoder.decode(Envelope<PayloadRoute>.self, from: data).payload
-        if let message = message(peek) {
-            return .frame(message)
-        }
         let payload = try decoder.decode(Envelope<Components.Schemas.FramePayload>.self, from: data).payload
         return .frame(Frame(payload, peek))
     }
 
-    /// A frame payload on its own (a stream event's `frame`, a `/api/pending` envelope's payload).
+    /// A frame payload on its own (a `/api/pending` envelope's payload).
     static func frame(_ data: Data) throws -> Frame {
         let decoder = Wire.decoder()
         let peek = try decoder.decode(PayloadRoute.self, from: data)
-        if let message = message(peek) {
-            return message
-        }
         return Frame(try decoder.decode(Components.Schemas.FramePayload.self, from: data), peek)
-    }
-
-    /// A session's own neutral message is routed on its `type` alone: the
-    /// stores read nothing else of it, and its full union is the transcript's.
-    private static func message(_ peek: PayloadRoute) -> Frame? {
-        guard peek.kind == "frame", let instanceId = peek.instanceId else {
-            return nil
-        }
-        return .message(instanceId: instanceId, type: peek.message?.type)
     }
 }
 
+/// A session's parked ask as the hub sends it (`permission_request`).
+typealias AskFrame = Components.Schemas.FramePayload.Value7Payload
+
 /// A `FramePayload` by what it is. The generated `anyOf` holds one non-nil
-/// variant; each case reads a field only its own variant has, so a reordered
+/// variant; each case checks its own variant's `kind`, so a reordered
 /// document fails to compile rather than routing a frame to the wrong case.
 enum Frame {
     case instances(Components.Schemas.FramePayload.Value5Payload)
     case instancesDelta(Components.Schemas.FramePayload.Value6Payload)
     /// A session's ask, and where the hub routed it (`parent`: its delegate's parent answers).
-    case permissionRequest(Components.Schemas.FramePayload.Value7Payload, routedTo: String?)
+    case permissionRequest(AskFrame, routedTo: String?)
+    /// An ask is over, whoever settled it.
+    case permissionSettled(Components.Schemas.FramePayload.Value8Payload)
     /// A workflow run's question: answered in its run, never parked as a session's ask.
     case runQuestion(runId: String, raisedAt: Double?)
-    case usage(Components.Schemas.FramePayload.Value8Payload)
-    case controlResult(Components.Schemas.FramePayload.Value10Payload)
-    case pulse(Components.Schemas.FramePayload.Value13Payload)
+    case usage(Components.Schemas.FramePayload.Value9Payload)
+    case controlResult(Components.Schemas.FramePayload.Value11Payload)
+    case pulse(Components.Schemas.FramePayload.Value14Payload)
     case workflow(Components.Schemas.WorkflowFrame)
-    /// A session's own neutral message, with its `type` (`system.init`, …).
-    case message(instanceId: String, type: String?)
     case ignored
 
     fileprivate init(_ payload: Components.Schemas.FramePayload, _ peek: Inbound.PayloadRoute) {
@@ -179,13 +161,15 @@ enum Frame {
             } else {
                 self = .permissionRequest(frame, routedTo: peek.routedTo)
             }
-        } else if let frame = payload.value8, frame.kind == .usage {
+        } else if let frame = payload.value8, frame.kind == .permissionSettled {
+            self = .permissionSettled(frame)
+        } else if let frame = payload.value9, frame.kind == .usage {
             self = .usage(frame)
-        } else if let frame = payload.value10, frame.kind == .controlResult {
+        } else if let frame = payload.value11, frame.kind == .controlResult {
             self = .controlResult(frame)
-        } else if let frame = payload.value13, frame.kind == .pulse {
+        } else if let frame = payload.value14, frame.kind == .pulse {
             self = .pulse(frame)
-        } else if let frame = payload.value18 {
+        } else if let frame = payload.value19 {
             self = .workflow(frame)
         } else {
             self = .ignored

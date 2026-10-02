@@ -1862,6 +1862,9 @@ export class SessionSupervisor {
       return;
     }
     this.#openAsks.delete(requestId);
+    // The hub parks every ask until it hears it is over; an ask the harness
+    // settled itself would otherwise stay on every board.
+    this.sink({ kind: "permission_settled", instanceId, requestId });
     const left = (this.#pulseBlocked.get(instanceId) ?? 1) - 1;
     if (left === 0) {
       this.#pulseBlocked.delete(instanceId);

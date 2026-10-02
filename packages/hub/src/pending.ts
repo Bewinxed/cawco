@@ -11,6 +11,12 @@ export interface PendingShape {
   /** The parked ask itself, for whoever answers it away from a dashboard. */
   readonly get: (requestId: string) => Envelope | undefined;
   readonly list: () => Envelope[];
+  /**
+   * The one place an ask's end is heard: called for every parked ask that
+   * leaves, by `resolve` or `forget`, whichever path settled it. Set once by
+   * the server, which tells every dashboard.
+   */
+  readonly onSettled: (listener: (envelope: Envelope) => void) => void;
   readonly remember: (requestId: string, envelope: Envelope) => void;
   readonly resolve: (requestId: string) => void;
 }
@@ -47,8 +53,12 @@ const raisedAtOf = (envelope: Envelope | undefined): number | undefined => {
 
 const make = (): PendingShape => {
   const requests = new Map<string, Envelope>();
+  let settled: ((envelope: Envelope) => void) | undefined;
 
   return {
+    onSettled: (listener) => {
+      settled = listener;
+    },
     /**
      * Parks an ask and stamps the moment the hub first saw it onto its
      * payload, before the payload is relayed or replayed from `/api/pending`.
@@ -62,12 +72,17 @@ const make = (): PendingShape => {
     },
     get: (requestId) => requests.get(requestId),
     resolve: (requestId) => {
-      requests.delete(requestId);
+      const envelope = requests.get(requestId);
+      if (envelope) {
+        requests.delete(requestId);
+        settled?.(envelope);
+      }
     },
     forget: (instanceId) => {
       for (const [requestId, envelope] of requests) {
         if (envelope.instanceId === instanceId) {
           requests.delete(requestId);
+          settled?.(envelope);
         }
       }
     },

@@ -755,10 +755,22 @@ class ClaudeSession implements HarnessSession {
         canUseTool: (
           toolName,
           toolInput,
-          { requestId, suggestions, toolUseID }
+          { requestId, suggestions, toolUseID, signal }
         ) =>
           new Promise<PermissionResult>((resolve) => {
             this.#permissions.set(requestId, resolve);
+            // The CLI withdrew the ask (an interrupt mid-ask): nobody can
+            // answer it any more, and the hub hears so.
+            signal.addEventListener(
+              "abort",
+              () => {
+                if (this.#permissions.delete(requestId)) {
+                  this.#openQuestions.delete(requestId);
+                  ctx.permissionResolved?.(requestId);
+                }
+              },
+              { once: true }
+            );
             if (toolName === ASK_USER_QUESTION) {
               const questions = normalizeQuestions(
                 (toolInput as { questions?: unknown }).questions

@@ -341,7 +341,7 @@ public final class NeedsYouStore {
         self.ledger = ledger
     }
 
-    func park(_ frame: Components.Schemas.FramePayload.Value7Payload, routedTo: String?) {
+    func park(_ frame: AskFrame, routedTo: String?) {
         var list = parked[frame.instanceId] ?? []
         if let at = list.firstIndex(where: { $0.requestId == frame.requestId }) {
             // A re-broadcast follows the hub's latest word on it.
@@ -353,13 +353,20 @@ public final class NeedsYouStore {
         parked[frame.instanceId] = list
     }
 
-    /// A session's process started again: anything it had parked belongs to one that is gone.
-    func clear(_ instanceId: String) {
-        parked[instanceId] = nil
+    /// The hub's word that an ask is over, whoever settled it, on whichever device.
+    func settle(_ instanceId: String, _ requestId: String) {
+        guard parked[instanceId]?.contains(where: { $0.requestId == requestId }) == true else {
+            return
+        }
+        parked[instanceId]?.removeAll { $0.requestId == requestId }
+        if parked[instanceId]?.isEmpty == true {
+            parked[instanceId] = nil
+        }
+        answers["\(instanceId):\(requestId)"] = nil
     }
 
     /// The hub's whole list (`/api/pending`): what it no longer holds is not parked.
-    func replace(with asks: [(Components.Schemas.FramePayload.Value7Payload, String?)]) {
+    func replace(with asks: [(AskFrame, String?)]) {
         parked = [:]
         for (frame, routedTo) in asks {
             park(frame, routedTo: routedTo)
@@ -401,14 +408,10 @@ public final class NeedsYouStore {
             payload: payload,
             settlesAt: .applied,
             effects: Ledger.Effects(settled: { [weak self] stage, _ in
-                guard stage == .applied, let self else {
+                guard stage == .applied else {
                     return
                 }
-                self.parked[instanceId]?.removeAll { $0.requestId == requestId }
-                if self.parked[instanceId]?.isEmpty == true {
-                    self.parked[instanceId] = nil
-                }
-                self.answers[key] = nil
+                self?.settle(instanceId, requestId)
             })
         )
     }

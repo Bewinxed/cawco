@@ -871,6 +871,19 @@ export type FramePayload =
     }
   | {
       /**
+       * An ask is over, whoever settled it. Daemon → hub when the harness
+       * settled it itself (answered in its own UI, or cancelled by an
+       * interrupt); hub → every dashboard each time a parked ask leaves the
+       * hub's pending list — answered from any device, Telegram, a parent
+       * session or a workflow, timed out, or dropped with its process — so no
+       * client keeps a card nobody can answer.
+       */
+      kind: "permission_settled";
+      instanceId: string;
+      requestId: string;
+    }
+  | {
+      /**
        * Hub-originated: every machine's latest limit reading, pushed on each
        * agent usage report (USAGE-SPEC.md §6.4). Small by design — the heavy
        * aggregates are pulled over REST.
