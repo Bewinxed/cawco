@@ -12,23 +12,28 @@ anything else). Apps load `caw.riv` and set its inputs, and that is all they do 
 
 - File: `assets/mascot/caw.riv`
 - Artboard: `Caw`
-- State machine: `CawStates`
-- Inputs:
+- State machine: `CawStates`, its transitions bound to the view model below
+- View model `Caw` (data binding, the owner's choice: "use latest best practice on rive"):
 
-| Input | Type | Values |
+| Property | Type | Values |
 | --- | --- | --- |
-| `status` | number | 0 ready, 1 working, 2 needs_you, 3 idle, 4 done, 5 trying, 6 loading, 7 reconnecting |
-| `reducedMotion` | bool | bound to the system setting |
-| `dark` | bool | bound to the colour scheme |
+| `status` | enum | ready, working, needs_you, idle, done, trying, loading, reconnecting |
+| `reducedMotion` | boolean | bound to the system setting |
+| `dark` | boolean | bound to the colour scheme |
 
-**Open owner decision: inputs or data binding.** rive-ios 6.x's new `Rive`/`File`/`Worker` API
-has no state-machine input API; it drives state machines through data binding (view model
-properties) instead. rive.app/docs/runtimes/apple/migrating-from-legacy: "The new runtime does
-not expose equivalent input APIs, and migration should move to data binding properties". The
-inputs above work only through the legacy `RiveViewModel` (`setInput("status", value:)`), which
-still ships in the 6.x package. The choice is to keep the inputs and use `RiveViewModel`, or to
-move the contract to a view model carrying the same three values. Until the owner decides, the
-contract stays as written.
+Apps use Rive's current runtimes, which drive state machines only through data binding
+(rive.app/docs/runtimes/apple/migrating-from-legacy: "The new runtime does not expose equivalent
+input APIs, and migration should move to data binding properties"). On Apple: one shared
+`Worker`, `File(source:worker:)`, `Rive(file:…)`, the `Caw` view model instance, and
+`RiveUIViewRepresentable`.
+
+**Not done yet: `caw.riv` still carries state-machine inputs** (number `status` 0–7, bools
+`reducedMotion` and `dark`). The Rive MCP used to build it (rive-mcp-server 0.6.1, the latest)
+reads view models but cannot write them: `riv_create` takes only input-based conditions
+("Condition input 'undefined' not found" for a view-model condition), and `riv_edit` cannot add
+objects ("Expected 'set' | 'setText' | 'delete' | 'setKeyframes'"). The conversion is the Rive
+editor's Menu > Convert Inputs to ViewModels, then renaming the generated view model and
+properties to the table above. Until that lands, no app code binds to `Caw`.
 
 ## What the file holds today
 
