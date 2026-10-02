@@ -446,7 +446,8 @@ export function locate(sessionId: string): Promise<SessionContext | null> {
       const response = await fetch(
         `/api/instances/${encodeURIComponent(sessionId)}/location`
       );
-      if (!response.ok) {
+      // 204: nothing knows where this session lives.
+      if (!response.ok || response.status === 204) {
         return null;
       }
       // The hub answers in its own vocabulary — `machineId`, as every row of
@@ -455,8 +456,8 @@ export function locate(sessionId: string): Promise<SessionContext | null> {
         machineId?: string;
         cwd?: string;
         harness?: string;
-      } | null;
-      if (!found?.machineId) {
+      };
+      if (!found.machineId) {
         return null;
       }
       const where: SessionContext = {

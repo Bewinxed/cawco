@@ -646,9 +646,9 @@ export async function saveMemory(
 
 /** What one machine really has, without adopting it: the read behind Compare. */
 /**
- * A machine with no user CLAUDE.md is answered with no body at all — a fact,
- * not a failure. `send` would choke parsing that empty answer as JSON, and the
- * memory tab would report the fetch's own exception as what the machine said.
+ * A machine with no user CLAUDE.md is answered 204 — a fact, not a failure.
+ * `send` would choke parsing that empty answer as JSON, and the memory tab
+ * would report the fetch's own exception as what the machine said.
  */
 export async function peekMemory(
   machineId: string
@@ -663,8 +663,10 @@ export async function peekMemory(
       `Could not read this machine's memory — ${await said(response)}.`
     );
   }
-  const body = await response.text();
-  return body ? (JSON.parse(body) as MachineMemorySet) : null;
+  if (response.status === 204) {
+    return null;
+  }
+  return (await response.json()) as MachineMemorySet;
 }
 
 /**
@@ -781,20 +783,29 @@ export const pushMemory = (
     "overwrite this machine"
   );
 
-/** One machine's copy of a hook's script, for the compare beside a drift. */
-export const peekHook = (
+/**
+ * One machine's copy of a hook's script, for the compare beside a drift; 204
+ * when the machine has none.
+ */
+export async function peekHook(
   machineId: string,
   id: string
-): Promise<MachineHookScript | null> =>
-  send(
-    "/api/fleet/hooks/peek",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ machineId, id }),
-    },
-    "read this machine's script"
-  );
+): Promise<MachineHookScript | null> {
+  const response = await fetch("/api/fleet/hooks/peek", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ machineId, id }),
+  });
+  if (!response.ok) {
+    throw new Error(
+      `Could not read this machine's script — ${await said(response)}.`
+    );
+  }
+  if (response.status === 204) {
+    return null;
+  }
+  return (await response.json()) as MachineHookScript;
+}
 
 /** Takes one machine's edited script for a hook as the fleet's. */
 export const adoptHook = (machineId: string, id: string): Promise<FleetHook> =>

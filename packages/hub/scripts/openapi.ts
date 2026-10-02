@@ -317,6 +317,11 @@ for (const { op } of operations) {
   op.responses = {};
   for (const [status, returned] of Object.entries(statuses)) {
     const description = `${op.operationId} ${status}`;
+    // No Content: whatever Elysia's type says, the answer has no body.
+    if (status === "204") {
+      op.responses[status] = { description };
+      continue;
+    }
     const bare = withoutResponse(returned);
     const schema = bare && (toDocument(bare) as Schema);
     if (!schema) {
@@ -381,6 +386,106 @@ for (const [name, schema] of Object.entries(definitions)) {
   }
 }
 
+/**
+ * swift-openapi-generator drops a `{type: "null"}` member of an anyOf/oneOf,
+ * and with it the whole schema (apple/swift-openapi-generator#817: "rely on
+ * the `required` property … If it's absent, it'll be optional"). So `X | null`
+ * is written as `X`, and the property holding it leaves `required`: Swift reads
+ * both a missing value and an explicit null as nil. A component that is only
+ * `X | null` gives way to `X` wherever it is used.
+ */
+const isNull = (schema: unknown): boolean =>
+  typeof schema === "object" &&
+  schema !== null &&
+  (schema as Schema).type === "null";
+const UNIONS = ["anyOf", "oneOf"] as const;
+/** The schema without its null member, or undefined when it has none. */
+const withoutNull = (schema: Schema): Schema | undefined => {
+  for (const union of UNIONS) {
+    const members = schema[union];
+    if (Array.isArray(members) && members.some(isNull)) {
+      const { [union]: _, ...others } = schema;
+      const kept = members.filter((member) => !isNull(member)) as Schema[];
+      return kept.length === 1
+        ? { ...others, ...kept[0] }
+        : { ...others, [union]: kept };
+    }
+  }
+  return undefined;
+};
+let unionsRewritten = 0;
+let madeOptional = 0;
+const nullable = new Set<string>();
+const replaced = new Map<string, Schema>();
+for (const [name, schema] of Object.entries(components)) {
+  const kept = withoutNull(schema as Schema);
+  if (kept) {
+    unionsRewritten += 1;
+    nullable.add(name);
+    if (typeof kept.$ref === "string" && Object.keys(kept).length === 1) {
+      replaced.set(name, kept);
+      delete components[name];
+    } else {
+      components[name] = kept;
+    }
+  }
+}
+const isNullableRef = (schema: Schema): boolean =>
+  typeof schema.$ref === "string" &&
+  nullable.has(schema.$ref.slice(COMPONENT.length));
+const dropNulls = (value: unknown): unknown => {
+  if (Array.isArray(value)) {
+    return value.map(dropNulls);
+  }
+  if (typeof value !== "object" || value === null) {
+    return value;
+  }
+  const schema = value as Schema;
+  if (typeof schema.$ref === "string") {
+    const target = replaced.get(schema.$ref.slice(COMPONENT.length));
+    if (target) {
+      const { $ref: _, ...siblings } = schema;
+      return { ...siblings, ...target };
+    }
+  }
+  const out: Schema = Object.fromEntries(
+    Object.entries(schema).map(([key, item]) => [
+      key,
+      key === "properties" ? item : dropNulls(item),
+    ])
+  );
+  const properties = schema.properties as Record<string, Schema> | undefined;
+  if (properties && typeof properties === "object") {
+    const optional = new Set<string>();
+    out.properties = Object.fromEntries(
+      Object.entries(properties).map(([field, property]) => {
+        const kept = withoutNull(property);
+        if (kept) {
+          unionsRewritten += 1;
+        }
+        if (kept || isNullableRef(property)) {
+          optional.add(field);
+        }
+        return [field, dropNulls(kept ?? property)];
+      })
+    );
+    const required = (schema.required as string[] | undefined) ?? [];
+    const still = required.filter((field) => !optional.has(field));
+    madeOptional += required.length - still.length;
+    // Left undefined, an emptied `required` is not written at all.
+    out.required = still.length ? still : undefined;
+  }
+  return out;
+};
+for (const [name, schema] of Object.entries(components)) {
+  components[name] = dropNulls(schema);
+}
+for (const item of Object.values(paths)) {
+  for (const op of Object.values(item ?? {})) {
+    Object.assign(op as object, dropNulls(op));
+  }
+}
+
 // Only what a path or a frame reaches: a type the converter met on the way
 // (a `Response`'s internals) is not part of the contract.
 const reached = new Set<string>(Object.values(FRAMES).flat());
@@ -432,10 +537,32 @@ const document = {
   components: { schemas: components },
 };
 
+// The Swift generator would drop each of these, so none may be written.
+const leftNulls: string[] = [];
+const findNulls = (value: unknown, at: string): void => {
+  if (typeof value !== "object" || value === null) {
+    return;
+  }
+  for (const [key, item] of Object.entries(value)) {
+    if (
+      (UNIONS as readonly string[]).includes(key) &&
+      Array.isArray(item) &&
+      item.some(isNull)
+    ) {
+      leftNulls.push(`${at}/${key}`);
+    }
+    findNulls(item, `${at}/${key}`);
+  }
+};
+findNulls(document, "#");
+if (leftNulls.length) {
+  throw new Error(`null left in a union:\n${leftNulls.join("\n")}`);
+}
+
 mkdirSync(dirname(OUT), { recursive: true });
 writeFileSync(OUT, `${JSON.stringify(document, null, 2)}\n`);
 rmSync(scratch, { recursive: true, force: true });
 console.log(
-  `${operations.length} operations, ${Object.keys(components).length} schemas → ${OUT}`
+  `${operations.length} operations, ${Object.keys(components).length} schemas, ${unionsRewritten} null unions rewritten, ${madeOptional} properties made optional → ${OUT}`
 );
 process.exit(0);

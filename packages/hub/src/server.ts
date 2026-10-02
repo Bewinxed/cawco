@@ -6252,12 +6252,10 @@ export const createServer = ({
           },
         });
       })
-      .get("/api/instances/:id/location", ({ params }) => {
-        const { id } = params;
-        if (!id) {
-          return null;
-        }
-        return locateSession(id);
+      // 204 when nothing knows where it lives.
+      .get("/api/instances/:id/location", async ({ params, status }) => {
+        const location = params.id ? await locateSession(params.id) : null;
+        return location ?? status(204);
       })
       // A session's stored transcript over HTTP, which is the only way a page can
       // have one before its socket is up. The dashboard used to read history with
@@ -7327,7 +7325,11 @@ export const createServer = ({
         { body: t.Object({ machineId: t.String() }) },
         async ({ body, status }) => {
           const read = await readMachineMemory(body.machineId);
-          return read.ok ? read.copy : status(read.code, read.said);
+          if (!read.ok) {
+            return status(read.code, read.said);
+          }
+          // 204: the machine has no user CLAUDE.md.
+          return read.copy ?? status(204);
         }
       )
       // The first document has to come from somewhere, and a machine that has been
@@ -7678,7 +7680,11 @@ export const createServer = ({
             return status(404, `the fleet keeps no hook ${body.id}`);
           }
           const read = await readMachineHookScript(body.machineId, body.id);
-          return read.ok ? read.copy : status(read.code, read.said);
+          if (!read.ok) {
+            return status(read.code, read.said);
+          }
+          // 204: the machine has no copy of this hook's script.
+          return read.copy ?? status(204);
         }
       )
       // The other way to settle a drifted hook: the machine's edited script
