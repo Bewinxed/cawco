@@ -8,6 +8,29 @@ import UIKit
 /// bar's commands and hands each to the key window's board.
 @main
 final class AppDelegate: UIResponder, UIApplicationDelegate {
+    /// A device that ran the SwiftUI build kept that build's window session,
+    /// and UIKit reconnects a kept session with the delegate it was saved
+    /// with (SwiftUI's `AppSceneDelegate`, still in the process through
+    /// RiveRuntime) without asking `configurationForConnecting`: the window
+    /// came up black until the app was deleted. Ending that session needs
+    /// multiple-scene support an iPhone refuses ("The current device does not
+    /// support multiple scenes"), so a window scene that connects with any
+    /// other delegate is handed this app's own, which builds its window.
+    func application(_: UIApplication, didFinishLaunchingWithOptions _: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        NotificationCenter.default.addObserver(self, selector: #selector(sceneWillConnect(_:)), name: UIScene.willConnectNotification, object: nil)
+        return true
+    }
+
+    @objc private func sceneWillConnect(_ note: Notification) {
+        guard let scene = note.object as? UIWindowScene, let current = scene.delegate, !(current is SceneDelegate) else {
+            return
+        }
+        Logger(subsystem: "dev.cawco.app", category: "Scene").info("a saved window session connected with another build's delegate; taking it over")
+        let delegate = SceneDelegate()
+        scene.delegate = delegate
+        delegate.open(scene)
+    }
+
     func application(_: UIApplication, configurationForConnecting session: UISceneSession, options _: UIScene.ConnectionOptions) -> UISceneConfiguration {
         let configuration = UISceneConfiguration(name: "Default", sessionRole: session.role)
         configuration.delegateClass = SceneDelegate.self
@@ -75,6 +98,14 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
 
     func scene(_ scene: UIScene, willConnectTo _: UISceneSession, options _: UIScene.ConnectionOptions) {
         guard let scene = scene as? UIWindowScene else {
+            return
+        }
+        open(scene)
+    }
+
+    /// Builds the scene's window: its root controller and its own hub connection.
+    func open(_ scene: UIWindowScene) {
+        guard window == nil else {
             return
         }
         Logger(subsystem: "dev.cawco.app", category: "Scene").info("window scene connected")
