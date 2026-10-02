@@ -9,6 +9,7 @@
     "db:generate": "drizzle-kit generate",
     "db:push": "drizzle-kit push",
     "dev": "bun --watch src/index.ts",
+    "openapi": "bun scripts/openapi.ts",
     "start": "bun src/index.ts",
     "typecheck": "tsc --noEmit"
   },
@@ -31,9 +32,11 @@
     "zod-to-json-schema": "3.25.1"
   },
   "devDependencies": {
+    "@elysia/openapi": "2.0.0-beta.4",
     "@libsql/client": "^0.18.0",
     "@types/bun": "latest",
     "drizzle-kit": "^0.31.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "typescript-json-schema": "0.68.0"
   }
 }

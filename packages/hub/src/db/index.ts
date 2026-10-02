@@ -231,7 +231,7 @@ export interface DbShape {
     machineId: string;
     name: string;
     cwd: string;
-  }) => typeof projects.$inferSelect | undefined;
+  }) => typeof projects.$inferSelect;
   /** Files a work item as the hub accepted it. */
   readonly createWorkItem: (item: typeof workItems.$inferInsert) => WorkItemRow;
   /** Files a workspace whose checkout its machine has just made. */

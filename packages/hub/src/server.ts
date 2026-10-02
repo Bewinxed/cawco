@@ -135,6 +135,7 @@ import { hashHookMaterial } from "./db";
 import { delegateTypesRoutes, makeDelegateTypes } from "./delegate-types";
 import { hubHttpUrl } from "./delegation-actions";
 import { createDelegationMcp } from "./delegation-mcp";
+import { hidden } from "./hidden";
 import { joinRoutes } from "./join";
 import { probe } from "./llm";
 import { MeaningJudge } from "./meaning";
@@ -212,6 +213,9 @@ const RECONNECT_GRACE_MS = 60_000;
  * horizon — so anything finer is a write nobody can observe.
  */
 const ACTIVITY_TOUCH_MS = 60_000;
+
+/** The relay routes': agent-only, and their bodies are read by hand. */
+const relayHook = { ...hidden, body: t.Any() };
 
 /**
  * And how many, newest first.
@@ -2924,11 +2928,20 @@ export const createServer = ({
     return frame;
   };
 
-  const closePreview = async (instanceId: string): Promise<Response> => {
+  const closePreview = async (
+    instanceId: string
+  ): Promise<
+    | { ok: true; closed: { instanceId: string; state: "closed" } }
+    | { ok: false; code: 500 | 503 | 504; error: string }
+  > => {
+    const closed = {
+      ok: true,
+      closed: { instanceId, state: "closed" },
+    } as const;
     nextPreviewGeneration(instanceId);
     const target = previewTargets.get(instanceId);
     if (!target) {
-      return Response.json({ instanceId, state: "closed" });
+      return closed;
     }
     previewTargets.delete(instanceId);
     publishPreview(instanceId, "closed", target.source);
@@ -2939,15 +2952,15 @@ export const createServer = ({
       BUSY_TIMEOUT_MS
     );
     if (answer === "offline") {
-      return new Response("Machine is not connected", { status: 503 });
+      return { ok: false, code: 503, error: "Machine is not connected" };
     }
     if (answer === "timeout") {
-      return new Response("Machine did not answer", { status: 504 });
+      return { ok: false, code: 504, error: "Machine did not answer" };
     }
     if (!answer.ok) {
-      return new Response(answer.error, { status: 500 });
+      return { ok: false, code: 500, error: answer.error ?? "" };
     }
-    return Response.json({ instanceId, state: "closed" });
+    return closed;
   };
 
   /**
@@ -5658,19 +5671,19 @@ export const createServer = ({
           }
         )
       )
-      .all("/mcp/cawco", ({ request, body, server }) => {
+      .all("/mcp/cawco", hidden, ({ request, body, server }) => {
         // Tool deadlines govern long calls; the HTTP idle timer must not cut them short.
         server?.timeout(request, 0);
         return delegationMcp.handle(request, body);
       })
-      .get("/api/delegation/tools", ({ query }) =>
+      .get("/api/delegation/tools", hidden, ({ query }) =>
         delegationMcp.list(
           typeof query.instanceId === "string" ? query.instanceId : undefined
         )
       )
       .post(
         "/api/delegation/call/:instanceId",
-        { body: t.Any() },
+        { ...hidden, body: t.Any() },
         ({ params, body, request, server }) => {
           const input = body as {
             name: string;
@@ -5692,7 +5705,7 @@ export const createServer = ({
       )
       // The hub's own build rides along (NEW.md §12), so a machine's can be read
       // against something rather than taken on faith.
-      .get("/health", async () => ({
+      .get("/health", hidden, async () => ({
         ok: true,
         version: HUB_VERSION,
         build: hubBuild,
@@ -5700,7 +5713,7 @@ export const createServer = ({
       .get("/api/agents", () => withPresence(db.listAgents()))
       .post(
         "/api/instances/:id/generate-image",
-        { body: t.Any() },
+        { ...hidden, body: t.Any() },
         async ({ params, body, status, request, server }) => {
           const row = db
             .listInstances()
@@ -5833,6 +5846,7 @@ export const createServer = ({
       // waits here.
       .get(
         "/api/continuations/:id/outcome",
+        hidden,
         async ({ params, request, server, status }) => {
           // A summariser can take minutes; the wait must outlast Bun's idle cut.
           server?.timeout(request, 0);
@@ -5879,9 +5893,12 @@ export const createServer = ({
             : status(started.code, started.error);
         }
       )
-      .delete("/api/instances/:id/preview", ({ params }) =>
-        closePreview(params.id)
-      )
+      .delete("/api/instances/:id/preview", async ({ params, status }) => {
+        const stopped = await closePreview(params.id);
+        return stopped.ok
+          ? stopped.closed
+          : status(stopped.code, stopped.error);
+      })
       // What a restart polls to find a moment that cuts nothing in half.
       // A picture on a machine's disk, for the transcript's image cards. No
       // caching: the file is the agent's working state and may be rewritten or
@@ -5987,29 +6004,34 @@ export const createServer = ({
         publishInstances(row.machineId);
         return { ok: true };
       })
-      .get("/api/agents/:machineId/busy", async ({ params, status }) => {
-        const answer = await callAgent(
-          params.machineId,
-          AGENT_BUSY,
-          [],
-          BUSY_TIMEOUT_MS
-        );
-        if (answer === "offline") {
-          return status(404, `machine ${params.machineId} is not connected`);
+      .get(
+        "/api/agents/:machineId/busy",
+        hidden,
+        async ({ params, status }) => {
+          const answer = await callAgent(
+            params.machineId,
+            AGENT_BUSY,
+            [],
+            BUSY_TIMEOUT_MS
+          );
+          if (answer === "offline") {
+            return status(404, `machine ${params.machineId} is not connected`);
+          }
+          if (answer === "timeout") {
+            return status(504, `machine ${params.machineId} did not answer`);
+          }
+          if (!answer.ok) {
+            return status(500, answer.error ?? "the busy probe failed");
+          }
+          return answer.result;
         }
-        if (answer === "timeout") {
-          return status(504, `machine ${params.machineId} did not answer`);
-        }
-        if (!answer.ok) {
-          return status(500, answer.error ?? "the busy probe failed");
-        }
-        return answer.result;
-      })
+      )
       // And the update itself: the machine pulls, installs, rebuilds and restarts
       // what it serves, then says what it actually did.
       .post(
         "/api/agents/:machineId/update",
         {
+          ...hidden,
           body: t.Object({
             restartAgent: t.Optional(t.Boolean()),
             force: t.Optional(t.Boolean()),
@@ -6065,7 +6087,7 @@ export const createServer = ({
               answer.error ?? "the machine could not read its config"
             );
           }
-          return answer.result;
+          return answer.result as import("@cawco/core").ConfigInspection;
         }
       )
       .get("/api/instances", () => boardRows())
@@ -7597,7 +7619,7 @@ export const createServer = ({
           typeof query.hookId === "string" ? query.hookId : undefined
         )
       )
-      .get("/api/fleet/hooks/history/:id", ({ params, status }) => {
+      .get("/api/fleet/hooks/history/:id", hidden, ({ params, status }) => {
         const version = db.fleetHookVersion(Number(params.id));
         return version ?? status(404, `no hook version ${params.id}`);
       })
@@ -7804,6 +7826,7 @@ export const createServer = ({
       .post(
         "/api/work-items",
         {
+          ...hidden,
           body: t.Object({
             parentInstanceId: t.String({ minLength: 1 }),
             prompt: t.String(),
@@ -7872,6 +7895,7 @@ export const createServer = ({
       .post(
         "/api/work-items/finish",
         {
+          ...hidden,
           body: t.Object({
             instanceId: t.String({ minLength: 1 }),
             summary: t.String(),
@@ -7902,6 +7926,7 @@ export const createServer = ({
       .post(
         "/api/work-items/checks",
         {
+          ...hidden,
           body: t.Object({
             from: t.String({ minLength: 1 }),
             instanceId: t.String({ minLength: 1 }),
@@ -7928,30 +7953,34 @@ export const createServer = ({
           }
         }
       )
-      .get("/api/work-items/:id", ({ params, status }) => {
+      .get("/api/work-items/:id", hidden, ({ params, status }) => {
         const item = workItems.item(params.id);
         return item ?? status(404, `no work item ${params.id}`);
       })
       // Archiving a workspace: its machine kills the boundary with every
       // process in it and deletes the clone. Refused while an item runs there.
-      .post("/api/workspaces/:id/archive", async ({ params, status }) => {
-        try {
-          return await workItems.archive(params.id);
-        } catch (error) {
-          const message =
-            error instanceof Error ? error.message : String(error);
-          return status(
-            error instanceof WorkItemRefusal ? error.status : 502,
-            message
-          );
+      .post(
+        "/api/workspaces/:id/archive",
+        hidden,
+        async ({ params, status }) => {
+          try {
+            return await workItems.archive(params.id);
+          } catch (error) {
+            const message =
+              error instanceof Error ? error.message : String(error);
+            return status(
+              error instanceof WorkItemRefusal ? error.status : 502,
+              message
+            );
+          }
         }
-      })
+      )
       // A session's own tools reach the fleet over plain HTTP — the hub's MCP
       // server forwards `start_session`'s spawn here, and the workflow runtime
       // spawns its steps the same way — and the hub relays them like the
       // dashboard's own. start_session's is answered once its machine has the
       // session in place, or with why not ({@link relaySpawn}).
-      .post("/api/relay/spawn", { body: t.Any() }, async ({ body, status }) => {
+      .post("/api/relay/spawn", relayHook, async ({ body, status }) => {
         const payload = body as SpawnPayload & { machineId?: string };
         const { machineId } = payload;
         if (!(machineId && payload.instanceId)) {
@@ -7996,7 +8025,7 @@ export const createServer = ({
         }
         return { ok: true, instanceId: payload.instanceId, machineId };
       })
-      .post("/api/relay/send", { body: t.Any() }, ({ body, status }) => {
+      .post("/api/relay/send", relayHook, ({ body, status }) => {
         const instanceId = peek(body, "instanceId");
         const machineId = peek(body, "machineId");
         if (!(instanceId && machineId)) {
@@ -8025,7 +8054,7 @@ export const createServer = ({
         }
         return { ok: true };
       })
-      .post("/api/relay/stop", { body: t.Any() }, ({ body, status }) => {
+      .post("/api/relay/stop", relayHook, ({ body, status }) => {
         const instanceId = peek(body, "instanceId");
         const from = peek(body, "from");
         const row = instanceId
@@ -8052,7 +8081,7 @@ export const createServer = ({
         workItems.cancelled(row);
         return { ok: true };
       })
-      .post("/api/relay/interrupt", { body: t.Any() }, ({ body, status }) => {
+      .post("/api/relay/interrupt", relayHook, ({ body, status }) => {
         const instanceId = peek(body, "instanceId");
         const from = peek(body, "from");
         const row = instanceId
@@ -8087,7 +8116,7 @@ export const createServer = ({
         noteInterrupt(instanceId);
         return { ok: true };
       })
-      .post("/api/relay/answer", { body: t.Any() }, ({ body, status }) => {
+      .post("/api/relay/answer", relayHook, ({ body, status }) => {
         const workflowRequestId = peek(body, "requestId");
         try {
           if (
@@ -8158,7 +8187,7 @@ export const createServer = ({
       // A session's message to the owner, over plain HTTP like the other relay
       // verbs (the opencode plugin's `send_to_user`). No target machine — the hub
       // hands it to the bridge and nobody waits on an answer.
-      .post("/api/relay/message", { body: t.Any() }, ({ body, status }) => {
+      .post("/api/relay/message", relayHook, ({ body, status }) => {
         const machineId = peek(body, "machineId");
         const instanceId = peek(body, "instanceId");
         const text = peek(body, "text");
@@ -8201,6 +8230,7 @@ export const createServer = ({
       .get(
         "/api/usage/limits/history",
         {
+          ...hidden,
           query: t.Object({
             machineId: t.String(),
             kind: t.Optional(t.String()),

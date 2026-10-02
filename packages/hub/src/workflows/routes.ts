@@ -7,6 +7,7 @@ import {
 } from "@cawco/core/workflow-sandbox";
 import { Elysia, t } from "elysia";
 import type { DbShape } from "../db";
+import { hidden } from "../hidden";
 import { type createWorkflowRuntime, publicRun } from "./runtime";
 
 const NOT_SLUG = /[^a-z0-9]+/g;
@@ -25,7 +26,7 @@ export function workflowRoutes(
     new Response(error instanceof Error ? error.message : String(error), {
       status: 400,
     });
-  const attempt = async (action: () => unknown) => {
+  const attempt = async <T>(action: () => T | Promise<T>) => {
     try {
       return await action();
     } catch (error) {
@@ -155,7 +156,7 @@ export function workflowRoutes(
         return saved;
       })
     )
-    .get("/api/workflows/:id/program", ({ params }) => {
+    .get("/api/workflows/:id/program", hidden, ({ params }) => {
       const row = db.getWorkflow(params.id);
       return row
         ? new Response(row.program, {
@@ -268,7 +269,7 @@ export function workflowRoutes(
     .get("/api/workflow-runs/:id/log", ({ params }) => ({
       log: runtime.log(params.id),
     }))
-    .get("/api/workflow-runs/:id/read", ({ params, query }) =>
+    .get("/api/workflow-runs/:id/read", hidden, ({ params, query }) =>
       attempt(() => {
         const caller = String(query.instanceId ?? "");
         if (!caller) {
@@ -353,7 +354,10 @@ export function workflowRoutes(
     )
     .post(
       "/api/workflow-runs/:id/state/:name",
-      { body: t.Object({ instanceId: t.String(), value: t.Unknown() }) },
+      {
+        ...hidden,
+        body: t.Object({ instanceId: t.String(), value: t.Unknown() }),
+      },
       ({ params, body }) =>
         attempt(() => {
           const [row] = db.getInstancesByIds([body.instanceId]);
@@ -363,7 +367,7 @@ export function workflowRoutes(
           return runtime.writeState(params.id, params.name, body.value);
         })
     )
-    .get("/api/workflow-runs/:id/state/:name", ({ params, query }) =>
+    .get("/api/workflow-runs/:id/state/:name", hidden, ({ params, query }) =>
       attempt(() => {
         const [row] = db.getInstancesByIds([String(query.instanceId ?? "")]);
         if (!row || row.workflowRunId !== params.id) {
