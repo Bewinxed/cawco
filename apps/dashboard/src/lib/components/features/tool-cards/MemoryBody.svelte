@@ -30,8 +30,8 @@
   }: {
     input: Record<string, unknown> | undefined;
     result: unknown;
-    /** When the call was made: what a `remove_doc` is matched by. */
-    at: Date | undefined;
+    /** When the call was made, ISO: what a `remove_doc` is matched by. */
+    at: string | undefined;
   } = $props();
 
   const action = $derived(input?.action);
@@ -98,9 +98,8 @@
     if (!at) {
       return { kind: "missing", why: "the call carries no time to match" };
     }
-    const after = rows.filter(
-      (row) => Date.parse(row.createdAt) >= at.getTime()
-    );
+    const called = Date.parse(at);
+    const after = rows.filter((row) => Date.parse(row.createdAt) >= called);
     return (
       after.at(-1) ?? {
         kind: "missing",
