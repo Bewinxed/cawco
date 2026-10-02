@@ -587,7 +587,6 @@
     data-slot="sidebar-menu-sub-item"
     style={place}
   >
-    <span aria-hidden="true" class="kit-nest-tip"></span>
     <Sidebar.MenuSubButton
       class={SUB_ROW}
       data-hover-session={row.id}
@@ -907,7 +906,6 @@
                           data-flip
                           style={nestPlace(lists.recent.length, count)}
                         >
-                          <span aria-hidden="true" class="kit-nest-tip"></span>
                           <Sidebar.MenuSubButton
                             aria-expanded={olderVisible}
                             class="{SUB_ROW} text-muted-foreground"
@@ -934,7 +932,6 @@
                         {/if}
                       {:else if lists.recent.length === 0}
                         <Sidebar.MenuSubItem data-flip style={nestPlace(0, 1)}>
-                          <span aria-hidden="true" class="kit-nest-tip"></span>
                           <Sidebar.MenuSubButton
                             class="{SUB_ROW} text-muted-foreground"
                             onclick={() =>

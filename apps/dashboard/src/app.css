@@ -457,28 +457,30 @@
   }
 
   /* Nesting: children hang off their parent on a hairline rail that drops
-     from the parent's glyph centre; each child joins it with a rounded
-     elbow into its own glyph, and the last child's elbow ends the rail.
-     One primitive for every nested list (project → sessions, run → steps).
-     The lines are drawn by the children themselves, so as rows unfold,
-     reflow or leave, the rail grows and shrinks with them and never jumps.
+     from the parent's glyph centre; each child joins it with an elbow that
+     curves (--radius-sm) from the rail into an arm level with its glyph,
+     and the last child's elbow ends the rail. No arrowhead: the curve is
+     the joint. One primitive for every nested list (project → sessions,
+     run → steps). The lines are drawn by the children themselves, so as
+     rows unfold, reflow or leave, the rail grows and shrinks with them and
+     never jumps.
      Set on the child list:
        --nest-x      the rail's x from the list's left edge (the parent's
                      glyph centre, measured: nest.ts `nestFrom`)
-       --nest-in     the arm, rail to the arrow tip (12px)
+       --nest-in     the arm, rail to its end (12px)
        --nest-glyph-y the child glyph's centre from the row's top
        --nest-gap    the gap between child rows
        --nest-lead   how far above the list the parent's glyph ends
-     The child rows start just right of the tip, so a row's hover or
+     The child rows start just right of the arm's end, so a row's hover or
      selected pill never lies under the rail or the arm.
      A child that only carries more children (a scroller) is
-     `data-nest="through"`: it draws no elbow and its inner list is
-     `.kit-nest-inner`, joined to the same rail.
+     `data-nest="through"`: it draws no elbow, a straight rail, and its
+     inner list is `.kit-nest-inner`, joined to the same rail.
      Drawn in: each elbow runs down the rail from the parent, round the
-     corner and out along the arm, then its tip fades in, a stagger step
-     after the row above (`--nest-i` on each child, its place). A closing
-     copy (reflow's ghost) retracts them the other way, last child first
-     (`--nest-r`, its place from the end). */
+     curve and out along the arm, a stagger step after the row above
+     (`--nest-i` on each child, its place); the rail on to the next child
+     follows from the curve. A closing copy (reflow's ghost) retracts them
+     the other way, last child first (`--nest-r`, its place from the end). */
   .kit-nest {
     --nest-in: 12px;
     --nest-glyph-y: 14px;
@@ -500,15 +502,15 @@
     border-style: solid;
     border-width: 0;
   }
-  /* The elbow: down the rail from the row above, then round into the glyph,
-     ending at the arrow tip (`.kit-nest-tip`) — |_> */
+  /* The elbow: down the rail from the row above, round the curve, and out
+     along the arm to just short of the child row. */
   :is(.kit-nest, .kit-nest-inner) > li:not([data-nest="through"])::before {
     top: calc(-1 * var(--nest-gap));
-    width: calc(var(--nest-in) - 3px);
+    width: var(--nest-in);
     height: calc(var(--nest-glyph-y) + var(--nest-gap));
     border-left-width: 1px;
     border-bottom-width: 1px;
-    border-bottom-left-radius: 6px;
+    border-bottom-left-radius: var(--radius-sm);
   }
   .kit-nest > li:first-child:not([data-nest="through"])::before {
     top: calc(-1 * var(--nest-lead));
@@ -523,19 +525,6 @@
   .kit-nest > li:last-child::after,
   .kit-nest-inner > li:last-child::after {
     content: none;
-  }
-  /* The arm's arrow tip, a hairline chevron pointing into the child's
-     glyph. Each child row carries one: <span class="kit-nest-tip">. */
-  .kit-nest-tip {
-    position: absolute;
-    left: calc(var(--nest-x) - var(--nest-pad) + var(--nest-in) - 6px);
-    top: calc(var(--nest-glyph-y) - 2.5px);
-    inline-size: 5px;
-    block-size: 5px;
-    border-top: 1px solid var(--nest-ink);
-    border-right: 1px solid var(--nest-ink);
-    rotate: 45deg;
-    pointer-events: none;
   }
   /* A scroller (`data-nest="through"`) carries the rail across the gap
      above it and its own top inset (`--nest-inner-lead`) to its first row. */
@@ -569,13 +558,11 @@
       animation: nest-elbow var(--dur-panel) var(--ease-out) both;
       animation-delay: calc(var(--nest-i, 0) * 40ms);
     }
+    /* The rail on to the next child carries on from the curve, once the
+       elbow's rail has reached it (the first 55% of `nest-elbow`). */
     :is(.kit-nest, .kit-nest-inner) > li:not([data-nest="through"])::after {
       animation: nest-rail var(--dur-panel) var(--ease-out) both;
-      animation-delay: calc(var(--nest-i, 0) * 40ms + var(--dur-panel) / 2);
-    }
-    .kit-nest-tip {
-      animation: nest-tip var(--dur-fade) var(--ease-out) both;
-      animation-delay: calc(var(--nest-i, 0) * 40ms + var(--dur-panel));
+      animation-delay: calc(var(--nest-i, 0) * 40ms + var(--dur-panel) * 0.55);
     }
     /* A closing copy: the same lines, retracting, last child first. */
     [data-reflow-ghost]
@@ -583,8 +570,7 @@
       > li:not([data-nest="through"])::before,
     [data-reflow-ghost]
       :is(.kit-nest, .kit-nest-inner)
-      > li:not([data-nest="through"])::after,
-    [data-reflow-ghost] .kit-nest-tip {
+      > li:not([data-nest="through"])::after {
       animation-direction: reverse;
       animation-duration: var(--dur-exit);
       animation-delay: calc(var(--nest-r, 0) * 24ms);
@@ -1379,15 +1365,15 @@
    home's Working/Finished switch. Global, because the rows name them from
    an inline style: Svelte rewrites `animation:` inside a component's own
    <style> to a scoped name but cannot rewrite a string built in script. */
-/* The nesting lines drawing in (.kit-nest): the rail's one-pixel column
-   first, top down, then out along the arm; the rail on to the next child;
-   the tip last. */
+/* The nesting lines drawing in (.kit-nest): the rail's column first, top
+   down, through the curve (as wide as its radius), then out along the arm;
+   the rail on to the next child follows. */
 @keyframes nest-elbow {
   0% {
     clip-path: inset(0 calc(100% - 1px) 100% 0);
   }
   55% {
-    clip-path: inset(0 calc(100% - 7px) 0 0);
+    clip-path: inset(0 calc(100% - var(--radius-sm)) 0 0);
   }
   100% {
     clip-path: inset(0 0 0 0);
@@ -1399,14 +1385,6 @@
   }
   to {
     clip-path: inset(0 0 0 0);
-  }
-}
-@keyframes nest-tip {
-  from {
-    opacity: 0;
-  }
-  to {
-    opacity: 1;
   }
 }
 

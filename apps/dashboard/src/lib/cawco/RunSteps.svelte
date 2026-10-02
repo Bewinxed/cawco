@@ -128,7 +128,6 @@
       {@const tab = interactive ? tabOf(step) : null}
       {@const foldable = interactive && (result !== null || !!more)}
       <li data-flip style={nestPlace(i, steps.length)}>
-        <span aria-hidden="true" class="kit-nest-tip"></span>
         <div class="step">
           {#if foldable}
             <button
@@ -170,8 +169,9 @@
 {/if}
 
 <style>
-  /* The list hangs its rows right of the rail's arrow tips, the rail itself
-     under the parent's glyph; each row's glyph sits level with its elbow. */
+  /* The list hangs its rows just right of where each curved arm ends, the
+     rail itself under the parent's glyph; each row's glyph sits level with
+     its arm. */
   .run-steps {
     --nest-glyph-y: 13px;
     --nest-gap: 2px;

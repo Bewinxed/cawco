@@ -687,9 +687,6 @@
         style={[leaveAnim(line.key), nestStyle(line.tab, line.key, i)].join('; ')}
         class:nested={(shape?.depth ?? 0) > 0}
       >
-        {#if (shape?.depth ?? 0) > 0}
-          <span aria-hidden="true" class="tip"></span>
-        {/if}
         {@render sessionRow(line.row as InstanceRow, line.tab, line.machineId)}
       </div>
     {/each}
@@ -791,7 +788,6 @@
               >
                 {#if shape?.parent && shape.depth > 0}
                   {@const above = shape.parent}
-                  <span aria-hidden="true" class="tip"></span>
                   <!-- The parent's column: a click on its rail folds it. -->
                   <button
                     aria-hidden="true"
@@ -970,8 +966,8 @@
   }
   /* A delegate under its session (tree.ts): moved in a step per depth, and
      joined to its parent's glyph by the .kit-nest lines — down the rail,
-     round the corner, out along the arm to a tip just short of the row, so
-     the row's pill never covers a line. */
+     round the curve (--radius-sm), out along the arm to just short of the
+     row, so the row's pill never covers a line. No arrowhead. */
   .list {
     --nest-step: 32px;
   }
@@ -993,7 +989,7 @@
     height: calc(var(--glyph-y) + 2px);
     border-left-width: 1px;
     border-bottom-width: 1px;
-    border-bottom-left-radius: 6px;
+    border-bottom-left-radius: var(--radius-sm);
   }
   /* The first delegate's elbow starts at its parent's glyph, a row up. */
   .nested[data-first]::before {
@@ -1005,34 +1001,19 @@
     bottom: -2px;
     border-left-width: 1px;
   }
-  .tip {
-    position: absolute;
-    left: calc(var(--nest-d) * var(--nest-step) - 9px);
-    top: calc(var(--glyph-y) - 2.5px);
-    inline-size: 5px;
-    block-size: 5px;
-    border-top: 1px solid var(--nest-ink);
-    border-right: 1px solid var(--nest-ink);
-    rotate: 45deg;
-    pointer-events: none;
-  }
   @media (prefers-reduced-motion: no-preference) {
     .nested::before {
       animation: nest-elbow var(--dur-panel) var(--ease-out) both;
       animation-delay: calc(var(--nest-i, 0) * 40ms);
     }
+    /* The rail on carries on from the curve (app.css .kit-nest). */
     .nested::after {
       animation: nest-rail var(--dur-panel) var(--ease-out) both;
-      animation-delay: calc(var(--nest-i, 0) * 40ms + var(--dur-panel) / 2);
-    }
-    .tip {
-      animation: nest-tip var(--dur-fade) var(--ease-out) both;
-      animation-delay: calc(var(--nest-i, 0) * 40ms + var(--dur-panel));
+      animation-delay: calc(var(--nest-i, 0) * 40ms + var(--dur-panel) * 0.55);
     }
     /* A folding row's copy (the list's reflow): its lines retract. */
     .nested:global([data-reflow-ghost])::before,
-    .nested:global([data-reflow-ghost])::after,
-    .nested:global([data-reflow-ghost]) .tip {
+    .nested:global([data-reflow-ghost])::after {
       animation-direction: reverse;
       animation-duration: var(--dur-exit);
       animation-delay: 0s;
