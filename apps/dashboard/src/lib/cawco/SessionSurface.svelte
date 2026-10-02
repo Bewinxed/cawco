@@ -27,7 +27,7 @@
    * left, because nothing was rebuilt.
    */
   import { onMount, untrack } from "svelte";
-  import { MediaQuery } from "svelte/reactivity";
+  import { MediaQuery, SvelteSet } from "svelte/reactivity";
   import { browser } from "$app/environment";
   import { afterNavigate } from "$app/navigation";
   import { page } from "$app/state";
@@ -137,6 +137,14 @@
   /** The home page is in front: a narrow screen with no conversation open. */
   const onBoard = $derived(homePage && workspace.activeSessionId === null);
 
+  /**
+   * What the app put in front on its own (`land`, `fillGroups`), not the
+   * owner: shown, but not looked at, until the owner opens it or switches to
+   * it. Seen is the owner looking (c3f704cb); a wide screen landing on the
+   * latest work (c3d33dce) marked that work seen with nobody there.
+   */
+  const picked = new SvelteSet<string>();
+
   /* ── Wide screens never show an empty detail if anything can be opened ──
      With nothing open, the longest-waiting ask's session opens, else the
      most recently active one. Replaced in the history rather than pushed,
@@ -146,14 +154,25 @@
       return;
     }
     if (workspace.leaves.some((leaf) => !leaf.active && leaf.tabs.length > 0)) {
-      untrack(() => workspace.fillGroups());
+      untrack(() => {
+        const before = new Set(workspace.leaves.map((leaf) => leaf.active));
+        workspace.fillGroups();
+        for (const { active } of workspace.leaves) {
+          if (active && !before.has(active)) {
+            picked.add(active);
+          }
+        }
+      });
     }
     if (workspace.activeSessionId !== null) {
       return;
     }
     const { landing } = fleetHome;
     if (landing) {
-      untrack(() => workspace.land(landing));
+      untrack(() => {
+        workspace.land(landing);
+        picked.add(landing);
+      });
     }
   });
 
@@ -190,10 +209,22 @@
       : workspace.leaves.map((leaf) => leaf.active);
     for (const id of front) {
       const row = id ? cawco.instanceIndex.byId.get(id) : undefined;
-      if (row && endedUnseen(row)) {
+      if (row && endedUnseen(row) && !picked.has(row.id)) {
         untrack(() => markOpened(row.id));
       }
     }
+  });
+  // One the app picked that has left the front was switched away from: the
+  // app never puts one back, so in front again it is the owner's doing.
+  $effect(() => {
+    const front = new Set(workspace.leaves.map((leaf) => leaf.active));
+    untrack(() => {
+      for (const id of picked) {
+        if (!front.has(id)) {
+          picked.delete(id);
+        }
+      }
+    });
   });
 
   /* ── The server's answer, claimed once ───────────────────────────────
@@ -216,9 +247,15 @@
   let entry = $state<EntryData>(captureEntry());
   // Only a `/session` page carries a conversation's server answer; a trip to
   // another spoke leaves the one this surface holds alone.
-  afterNavigate(({ to }) => {
+  afterNavigate(({ to, type }) => {
     if (to?.url.pathname.startsWith("/session")) {
       entry = captureEntry();
+    }
+    // A real navigation is the owner's: the app moves the URL shallowly.
+    // One to a conversation the app had put in front opens it.
+    const opened = to?.url.pathname.split("/")[2];
+    if (type !== "enter" && opened) {
+      picked.delete(opened);
     }
     reconcileFromUrl();
   });
