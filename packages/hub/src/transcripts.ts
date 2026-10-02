@@ -99,6 +99,12 @@ export interface TranscriptsShape {
    */
   readonly reread: (instanceId: string, at?: string) => void;
   readonly stop: () => void;
+  /**
+   * Builds these sessions' transcripts now, one machine read at a time, so
+   * opening any of them is a page off what is built — the sessions a machine
+   * says it is running as it registers, before any of them speaks.
+   */
+  readonly warm: (instanceIds: readonly string[]) => Promise<void>;
 }
 
 export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
@@ -268,5 +274,13 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
       entries.get(instanceId)?.builder.noteRelaunch(),
     reread,
     stop: () => clearInterval(timer),
+    warm: async (instanceIds) => {
+      for (const instanceId of instanceIds) {
+        if (!entries.has(instanceId)) {
+          // biome-ignore lint/performance/noAwaitInLoops: one machine read at a time, on purpose — a register names every session it runs
+          await entryFor(instanceId).loading;
+        }
+      }
+    },
   };
 };

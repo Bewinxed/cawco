@@ -8784,6 +8784,15 @@ export const createServer = ({
                 peekResumable(message.payload),
                 peekResumableAt(message.payload)
               );
+              // What this machine runs is built now, so opening any of it is
+              // a page off what is built rather than a read of its machine.
+              transcripts
+                .warm(peekInstances(message.payload))
+                .catch((error: unknown) =>
+                  console.warn(
+                    `[hub] building ${message.machineId}'s transcripts failed: ${error instanceof Error ? error.message : String(error)}`
+                  )
+                );
               const custody = peekCustody(message.payload);
               const heldIds = new Set(custody.instances);
               // Whose process outlived the agent: a child sessiond kept alive,
