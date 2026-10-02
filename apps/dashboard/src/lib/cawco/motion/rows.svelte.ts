@@ -763,7 +763,13 @@ const CLIP_BOTTOM = /^inset\(\S+ \S+ ([\d.]+)px/;
  * way the clip is the only cut: overflow is left alone, so the box's layout
  * (its margins, a stacking context) is the same before, during and after.
  */
-function edgeOf(element: HTMLElement, from: number, to: number): Animation {
+function edgeOf(
+  element: HTMLElement,
+  from: number,
+  to: number,
+  /** Its bottom margin, read with every other style of the change. */
+  margin: number
+): Animation {
   if (to > from) {
     return element.animate(
       [
@@ -773,7 +779,6 @@ function edgeOf(element: HTMLElement, from: number, to: number): Animation {
       travel()
     );
   }
-  const margin = Number.parseFloat(getComputedStyle(element).marginBottom);
   const clipPath = `inset(${OPEN} ${OPEN} 0px ${OPEN})`;
   return element.animate(
     [
@@ -794,15 +799,19 @@ function edgeOf(element: HTMLElement, from: number, to: number): Animation {
  * (inline margins never collapse); placed absolutely, nothing follows it and
  * only the width travels.
  */
-function spanOf(element: HTMLElement, from: number, to: number): Animation {
-  const styles = getComputedStyle(element);
-  if (styles.position === "absolute" || styles.position === "fixed") {
+function spanOf(
+  element: HTMLElement,
+  from: number,
+  to: number,
+  /** Read with every other style of the change: placed out of the flow, its right margin. */
+  { placed, margin }: { margin: number; placed: boolean }
+): Animation {
+  if (placed) {
     return element.animate(
       [{ width: `${from}px` }, { width: `${to}px` }],
       travel()
     );
   }
-  const margin = Number.parseFloat(styles.marginRight);
   return element.animate(
     [
       { width: `${from}px`, marginRight: `${margin + to - from}px` },
@@ -810,6 +819,14 @@ function spanOf(element: HTMLElement, from: number, to: number): Animation {
     ],
     travel()
   );
+}
+
+/** What one change will do, decided before anything is written. */
+interface Plan {
+  edges: { element: HTMLElement; from: number; to: number }[];
+  slides: { element: HTMLElement; x: number; y: number }[];
+  spans: { element: HTMLElement; from: number; to: number }[];
+  stops: HTMLElement[];
 }
 
 /** One container's marked elements: where each was last laid out, and what is moving. */
@@ -843,27 +860,36 @@ class Reflow {
     this.#placed = placesIn(this.#node);
   }
 
+  /**
+   * In three passes over the DOM: every decision first, reading only; then
+   * every style it needs, read in one go; then every write. Read and written
+   * a row at a time, each row's write laid the page out again for the next
+   * row's read, ten layouts in the update that opened a tree.
+   */
   change() {
     const still = !motionOk.current;
     const drawn = this.#releaseEdges();
     const now = placesIn(this.#node);
     const scrolled = this.#anchor(now);
     this.#view = null;
+    const plan: Plan = { slides: [], stops: [], edges: [], spans: [] };
+    const arrivals: HTMLElement[] = [];
     for (const [element, place] of now) {
       if (element.hasAttribute("data-flip-anchor")) {
         continue;
       }
       const was = this.#placed.get(element);
       if (was && !still) {
-        this.#travel(element, was, place, drawn.get(element), scrolled);
+        this.#travel(element, was, place, drawn.get(element), scrolled, plan);
       } else if (
         !was &&
         (place.ref === this.#node || this.#placed.has(place.ref)) &&
         onScreen(element)
       ) {
-        arrival(element, still);
+        arrivals.push(element);
       }
     }
+    const departures: [HTMLElement, Placed, { x: number; y: number }][] = [];
     for (const [element, was] of this.#placed) {
       const gone = !(
         now.has(element) ||
@@ -874,14 +900,54 @@ class Reflow {
         // Where it was drawn: a scroll this change made moves the content
         // under the viewport, and the copy with it.
         const held = heldBy(this.#moves.get(element));
-        departure(
-          this.#node,
-          element,
-          was,
-          { x: held.x, y: held.y + scrolled },
-          still
-        );
+        departures.push([element, was, { x: held.x, y: held.y + scrolled }]);
       }
+    }
+    // Writes that the reads after them must see: holds dropped.
+    for (const element of [
+      ...plan.stops,
+      ...plan.slides.map((s) => s.element),
+    ]) {
+      this.#stop(element);
+    }
+    // Every style the writes need, in one pass.
+    const own = plan.slides.map(
+      (slide) => getComputedStyle(slide.element).translate
+    );
+    const margins = plan.edges.map((edge) =>
+      edge.to < edge.from
+        ? Number.parseFloat(getComputedStyle(edge.element).marginBottom)
+        : 0
+    );
+    const spans = plan.spans.map((span) => {
+      const styles = getComputedStyle(span.element);
+      return {
+        placed: styles.position === "absolute" || styles.position === "fixed",
+        margin: Number.parseFloat(styles.marginRight),
+      };
+    });
+    plan.slides.forEach((slide, i) => {
+      this.#slide(slide.element, slide.x, slide.y, own[i]);
+    });
+    plan.edges.forEach((edge, i) => {
+      this.#keep(
+        this.#edges,
+        edge.element,
+        heldToTravel(edgeOf(edge.element, edge.from, edge.to, margins[i]))
+      );
+    });
+    plan.spans.forEach((span, i) => {
+      this.#keep(
+        this.#spans,
+        span.element,
+        heldToTravel(spanOf(span.element, span.from, span.to, spans[i]))
+      );
+    });
+    for (const element of arrivals) {
+      arrival(element, still);
+    }
+    for (const [element, was, at] of departures) {
+      departure(this.#node, element, was, at, still);
     }
     this.#placed = now;
     this.#scroll = this.#node.scrollTop;
@@ -927,10 +993,13 @@ class Reflow {
     this.#scroll = this.#node.scrollTop;
   }
 
-  /** Where each box mid-tween is drawn; its tween is dropped so it reads at its natural size. */
+  /**
+   * Where each box mid-tween is drawn; its tween is dropped so it reads at
+   * its natural size. Every box is read before any tween is dropped.
+   */
   #releaseEdges() {
     const drawn = new Map<HTMLElement, { h?: number; w?: number }>();
-    for (const [element, animation] of this.#edges) {
+    for (const element of this.#edges.keys()) {
       // A growing box is laid out whole and clipped: its edge is drawn where
       // the clip's bottom inset leaves it.
       const clip = CLIP_BOTTOM.exec(getComputedStyle(element).clipPath);
@@ -938,13 +1007,17 @@ class Reflow {
       drawn.set(element, {
         h: element.getBoundingClientRect().height - hidden,
       });
-      animation.cancel();
     }
-    for (const [element, animation] of this.#spans) {
+    for (const element of this.#spans.keys()) {
       drawn.set(element, {
         ...drawn.get(element),
         w: element.getBoundingClientRect().width,
       });
+    }
+    for (const animation of [
+      ...this.#edges.values(),
+      ...this.#spans.values(),
+    ]) {
       animation.cancel();
     }
     this.#edges.clear();
@@ -952,12 +1025,14 @@ class Reflow {
     return drawn;
   }
 
+  /** What a change does to one element, decided with reads only (`plan`). */
   #travel(
     element: HTMLElement,
     was: Placed,
     place: Placed,
     drawn: { h?: number; w?: number } | undefined,
-    scrolled: number
+    scrolled: number,
+    plan: Plan
   ) {
     const step = heldBy(this.#moves.get(element));
     // Read against the container itself, a place is in its content: a scroll
@@ -971,14 +1046,14 @@ class Reflow {
       (was.x !== place.x || Math.abs(was.y + shift - place.y) > 0.01);
     if (moved && (Math.abs(x) > 0.5 || Math.abs(y) > 0.5)) {
       if (unseen(this.#viewTop(), place, y)) {
-        this.#stop(element);
+        plan.stops.push(element);
       } else {
-        this.#slide(element, x, y);
+        plan.slides.push({ element, x, y });
       }
     } else if (moved) {
       // Laid out where it is drawn (a change turned back before its slide
       // started): whatever slide it was waiting on is dropped, not run late.
-      this.#stop(element);
+      plan.stops.push(element);
     }
     if (!hasEdges(element)) {
       return;
@@ -987,19 +1062,11 @@ class Reflow {
     // the frame the rows after it do.
     const tall = drawn?.h ?? was.h;
     if (Math.abs(tall - place.h) > 0.5) {
-      this.#keep(
-        this.#edges,
-        element,
-        heldToTravel(edgeOf(element, tall, place.h))
-      );
+      plan.edges.push({ element, from: tall, to: place.h });
     }
     const wide = drawn?.w ?? was.w;
     if (Math.abs(wide - place.w) > 0.5) {
-      this.#keep(
-        this.#spans,
-        element,
-        heldToTravel(spanOf(element, wide, place.w))
-      );
+      plan.spans.push({ element, from: wide, to: place.w });
     }
   }
 
@@ -1021,8 +1088,8 @@ class Reflow {
     );
   }
 
-  #slide(element: HTMLElement, x: number, y: number) {
-    this.#stop(element);
+  /** `own`: its own `translate`, read with its hold dropped (`change`). */
+  #slide(element: HTMLElement, x: number, y: number, own: string) {
     // The first frames hold it with a style, which their layout reads. An
     // animation started in the same update runs off the main thread, and the
     // frame is drawn, and counted as a layout shift, as though it had
@@ -1030,11 +1097,7 @@ class Reflow {
     // (`atTravel`), on the batch's clock. It is on `translate`, composed with
     // the element's own, so a chip's scale and a control's centring are left
     // alone.
-    element.style.translate = offsetTranslate(
-      getComputedStyle(element).translate,
-      x,
-      y
-    );
+    element.style.translate = offsetTranslate(own, x, y);
     const move: Move = { x, y };
     this.#moves.set(element, move);
     move.hold = atTravel((at) => {
