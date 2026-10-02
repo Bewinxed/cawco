@@ -511,23 +511,39 @@ const ownedBy = (node: HTMLElement, element: HTMLElement) =>
   element.parentElement?.closest("[data-reflow]") === node;
 
 /** The layout box against the container, or null where it is not laid out in it. */
-function boxIn(node: HTMLElement, element: HTMLElement): Box | null {
-  let x = 0;
-  let y = 0;
-  let at: HTMLElement | null = element;
-  while (at && at !== node) {
-    x += at.offsetLeft;
-    y += at.offsetTop;
-    const parent = at.offsetParent as HTMLElement | null;
-    if (parent && parent !== node) {
-      x += parent.clientLeft;
-      y += parent.clientTop;
+/**
+ * Layout boxes against a container, each offset parent read once: walked
+ * from every element in turn, a list's shared ancestors were read again for
+ * every row in them, a long task of offsets in the frame a tree opened.
+ */
+function boxesIn(node: HTMLElement) {
+  /** An element's border-box corner in the container, or null outside it. */
+  const corners = new Map<HTMLElement, { x: number; y: number } | null>();
+  const cornerOf = (at: HTMLElement): { x: number; y: number } | null => {
+    const known = corners.get(at);
+    if (known !== undefined) {
+      return known;
     }
-    at = parent;
-  }
-  return at === node
-    ? { x, y, w: element.offsetWidth, h: element.offsetHeight }
-    : null;
+    const parent = at.offsetParent as HTMLElement | null;
+    let corner: { x: number; y: number } | null = null;
+    if (parent === node) {
+      corner = { x: at.offsetLeft, y: at.offsetTop };
+    } else if (parent) {
+      const base = cornerOf(parent);
+      corner = base && {
+        x: base.x + parent.clientLeft + at.offsetLeft,
+        y: base.y + parent.clientTop + at.offsetTop,
+      };
+    }
+    corners.set(at, corner);
+    return corner;
+  };
+  return (element: HTMLElement): Box | null => {
+    const corner = cornerOf(element);
+    return corner
+      ? { ...corner, w: element.offsetWidth, h: element.offsetHeight }
+      : null;
+  };
 }
 
 function referenceIn(node: HTMLElement, element: HTMLElement): HTMLElement {
@@ -547,10 +563,11 @@ function referenceIn(node: HTMLElement, element: HTMLElement): HTMLElement {
 /** Every marked element the container lays out, placed against its reference. */
 function placesIn(node: HTMLElement): Map<HTMLElement, Placed> {
   const boxes = new Map<HTMLElement, Box>();
+  const boxIn = boxesIn(node);
   for (const element of node.querySelectorAll<HTMLElement>(
     "[data-flip], [data-flip-anchor]"
   )) {
-    const box = ownedBy(node, element) ? boxIn(node, element) : null;
+    const box = ownedBy(node, element) ? boxIn(element) : null;
     if (box) {
       boxes.set(element, box);
     }
@@ -629,16 +646,13 @@ function onScreen(element: HTMLElement): boolean {
  * further behind its place until it is drawn on screen, still sliding away:
  * the fleet board's Not running, its Show moving out from under the pointer.
  * `dy` is how far above its place it is drawn. Places are read in the
- * container's content, so a container that scrolls (the rail) is read at its
- * scroll: unscrolled, a row half a rail down was taken for one below the
- * viewport, and jumped where it should have slid.
+ * container's content, so `view` is where that content's top is in the
+ * viewport, scroll included (the rail): unscrolled, a row half a rail down
+ * was taken for one below the viewport, and jumped where it should have
+ * slid.
  */
-function unseen(node: HTMLElement, place: Placed, dy: number): boolean {
-  const top =
-    node.getBoundingClientRect().top +
-    node.clientTop -
-    node.scrollTop +
-    place.cy;
+function unseen(view: number, place: Placed, dy: number): boolean {
+  const top = view + place.cy;
   const off = (at: number) => at + place.h <= 0 || at >= window.innerHeight;
   return off(top) && off(top + dy);
 }
@@ -807,6 +821,16 @@ class Reflow {
   #placed: Map<HTMLElement, Placed>;
   /** The scroll the rows were last drawn at (`#anchor`). */
   #scroll: number;
+  /** Where the content's top is in the viewport, read once a change. */
+  #view: number | null = null;
+
+  #viewTop(): number {
+    this.#view ??=
+      this.#node.getBoundingClientRect().top +
+      this.#node.clientTop -
+      this.#node.scrollTop;
+    return this.#view;
+  }
 
   constructor(node: HTMLElement) {
     this.#node = node;
@@ -824,6 +848,7 @@ class Reflow {
     const drawn = this.#releaseEdges();
     const now = placesIn(this.#node);
     const scrolled = this.#anchor(now);
+    this.#view = null;
     for (const [element, place] of now) {
       if (element.hasAttribute("data-flip-anchor")) {
         continue;
@@ -945,7 +970,7 @@ class Reflow {
       was.ref === place.ref &&
       (was.x !== place.x || Math.abs(was.y + shift - place.y) > 0.01);
     if (moved && (Math.abs(x) > 0.5 || Math.abs(y) > 0.5)) {
-      if (unseen(this.#node, place, y)) {
+      if (unseen(this.#viewTop(), place, y)) {
         this.#stop(element);
       } else {
         this.#slide(element, x, y);

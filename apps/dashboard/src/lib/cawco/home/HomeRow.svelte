@@ -33,6 +33,7 @@
    * finger swipes the row away, and both have it in the menu.
    */
   import type { NeutralSessionInfo } from "@cawco/core";
+  import type { Attachment } from "svelte/attachments";
   import Tip from "$lib/components/ui/tooltip/tip.svelte";
   import { IconArchive, IconMaximize } from "$lib/icons";
   import { cn } from "$lib/utils";
@@ -103,8 +104,21 @@
   const place = $derived(
     instance?.cwd || info?.cwd || instance?.machineId || machineId
   );
-  /** The count's width: what rises over the row's end on hover stops short of it. */
-  let foldWidth = $state(0);
+  /**
+   * The count's width, on its row as `--fold-w`: what rises over the row's
+   * end on hover stops short of it. Written from a size observer, after
+   * layout: read where the row renders (`bind:offsetWidth`), it laid the
+   * page out in the middle of the update that opened a tree, once a row.
+   */
+  const foldWidth: Attachment<HTMLElement> = (node) => {
+    const item = node.closest<HTMLElement>(".item");
+    const sizes = new ResizeObserver(([entry]) => {
+      const [box] = entry.borderBoxSize;
+      item?.style.setProperty("--fold-w", `${box.inlineSize}px`);
+    });
+    sizes.observe(node);
+    return () => sizes.disconnect();
+  };
 </script>
 
 {#snippet body(trigger: Record<string, unknown>)}
@@ -117,7 +131,6 @@
     data-flip
     data-folds={fold ? true : undefined}
     data-stale={stale || undefined}
-    style:--fold-w={fold ? `${foldWidth}px` : undefined}
     {@attach onarchive ? swipeToArchive(onarchive) : undefined}
   >
     {#if onarchive}
@@ -154,7 +167,7 @@
           >
           <span class="num trail">{trail}</span>
           {#if fold}
-            <span class="fold" bind:offsetWidth={foldWidth}>
+            <span class="fold" {@attach foldWidth}>
               <TreeCount compact {...fold} />
             </span>
           {/if}
