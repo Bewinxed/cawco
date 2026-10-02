@@ -64,8 +64,11 @@
 
     /* ---- Block rhythm. The plugin's em-scaled margins are off the --space
        ladder; one gap between every pair of blocks puts them back on it, and
-       `* + *` means a turn never opens or closes with dead space. */
-    & :global(.prose > * + *) {
+       a turn never opens or closes with dead space. Every block takes the gap
+       and the first gives it back (the more specific rule): written `* + *`,
+       a sibling ending on anything, every block streamed in restyled the
+       whole reply. */
+    & :global(.prose > *) {
       margin-block-start: var(--space-3);
     }
     & :global(.prose > :first-child) {
@@ -80,11 +83,13 @@
     & :global(blockquote) {
       margin-block: 0;
     }
-    /* Nested rhythm the top-level `> * + *` rule cannot reach. */
+    /* Nested rhythm the top-level rule cannot reach. */
     & :global(p + p) {
       margin-block-start: var(--space-3);
     }
-    & :global(li + li) {
+    /* A list holds only items: every one but the first. Structural, not a
+       sibling ending on the item, so an item put in restyles its list. */
+    & :global(li:where(:not(:first-child))) {
       margin-block-start: var(--space-1);
     }
     & :global(li > ul),
@@ -103,7 +108,7 @@
       font-weight: var(--weight-strong);
       color: var(--ink-strong);
     }
-    & :global(.prose > * + :is(h1, h2, h3, h4, h5, h6)) {
+    & :global(.prose > :is(h1, h2, h3, h4, h5, h6):where(:not(:first-child))) {
       margin-block-start: var(--space-5);
     }
 

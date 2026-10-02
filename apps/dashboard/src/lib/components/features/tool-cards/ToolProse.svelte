@@ -20,7 +20,9 @@
     line-height: var(--leading-body);
     color: var(--ink-strong);
   }
-  .tprose :global(.prose > * + *) {
+  /* Every block takes the gap and the first gives it back (the more
+     specific rule below): `* + *` restyled the whole document per block. */
+  .tprose :global(.prose > *) {
     margin-top: var(--space-2);
   }
   .tprose :global(.prose > :first-child) {
@@ -35,7 +37,8 @@
   .tprose :global(blockquote) {
     margin-block: 0;
   }
-  .tprose :global(li + li) {
+  /* A list holds only items: every one but the first. */
+  .tprose :global(li:where(:not(:first-child))) {
     margin-top: var(--space-1);
   }
   .tprose :global(ul),
@@ -53,10 +56,7 @@
     font-weight: var(--weight-strong);
     color: var(--ink-strong);
   }
-  .tprose :global(.prose > * + h1),
-  .tprose :global(.prose > * + h2),
-  .tprose :global(.prose > * + h3),
-  .tprose :global(.prose > * + h4) {
+  .tprose :global(.prose > :is(h1, h2, h3, h4):where(:not(:first-child))) {
     margin-top: var(--space-4);
   }
   /* prose wraps inline code in literal backticks; the code face already

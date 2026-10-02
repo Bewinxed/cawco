@@ -43,7 +43,7 @@
    * in one frame at the end.
    */
   import { type Snippet, untrack } from "svelte";
-  import { dur, motionOk } from "$lib/cawco/motion/curves.svelte";
+  import { dur, ease, motionOk } from "$lib/cawco/motion/curves.svelte";
   import {
     type Handoff,
     type Motion,
@@ -194,7 +194,7 @@
     row: HTMLElement,
     { from, delay, content, clip, over }: Draw
   ): Animation | null {
-    const easing = getComputedStyle(row).getPropertyValue("--ease-out");
+    const easing = ease("--ease-out");
     const moving = motionOk.current;
     const opening = moving ? dur(over) : 0;
     const place = moving
@@ -234,7 +234,7 @@
    * opening's own clip holds it and it never reaches past the list's end.
    */
   function fadeGhost(row: HTMLElement, ghost: HTMLElement): void {
-    const easing = getComputedStyle(row).getPropertyValue("--ease-out");
+    const easing = ease("--ease-out");
     row.style.position = "relative";
     Object.assign(ghost.style, {
       position: "absolute",
@@ -309,19 +309,27 @@
     }
   }
 
+  // Measured and set going in the next frame's callbacks, never in the
+  // update that drew the row: that update is a socket message's, and a
+  // height read there laid out (and restyled) the transcript inside it, once
+  // a row. The callbacks run before that frame's layout and paint, so the row
+  // is never drawn at its own height before its entrance holds it.
   $effect(() => {
     const row = node;
     const given = handoff;
     if (!row) {
       return;
     }
-    untrack(() => {
-      if (given && !given.taken) {
-        takePlace(row, given);
-      } else if (toDraw) {
-        arrive(row);
-      }
-    });
+    const frame = requestAnimationFrame(() =>
+      untrack(() => {
+        if (given && !given.taken) {
+          takePlace(row, given);
+        } else if (toDraw) {
+          arrive(row);
+        }
+      })
+    );
+    return () => cancelAnimationFrame(frame);
   });
 
   $effect(() => {
@@ -334,13 +342,14 @@
     // Read as the fold starts, while this row is still the one it names: the
     // list can move under it before the fold ends (Transcript's `leaver`).
     const report = untrack(() => onleft);
-    untrack(() => {
-      if (!(motionOk.current && ledger?.watched)) {
-        report?.();
-        return;
-      }
-      // Measured where any tween still running has it, then the fold takes
-      // the row over from there.
+    if (!untrack(() => motionOk.current && ledger?.watched)) {
+      report?.();
+      return;
+    }
+    // Measured where any tween still running has it, then the fold takes
+    // the row over from there: in the next frame's callbacks, as the
+    // entrance above is.
+    const frame = requestAnimationFrame(() => {
       const { height } = row.getBoundingClientRect();
       growing?.cancel();
       growing = null;
@@ -352,7 +361,7 @@
         ],
         {
           duration: dur("--dur-panel"),
-          easing: getComputedStyle(row).getPropertyValue("--ease-out"),
+          easing: ease("--ease-out"),
           fill: "forwards",
         }
       );
@@ -375,6 +384,7 @@
     // queued: `standing` answers that one.
     return () => {
       standing = false;
+      cancelAnimationFrame(frame);
       fold?.cancel();
     };
   });

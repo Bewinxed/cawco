@@ -199,14 +199,18 @@
         line-height: inherit;
         color: inherit;
       }
-      & :global(.prose > *),
       & :global(p),
       & :global(ul),
       & :global(ol) {
         margin-block: 0;
       }
-      & :global(.prose > * + *) {
-        margin-block-start: var(--space-1);
+      /* Every block takes the gap above it and the first gives it back:
+         `* + *` restyled the whole step per block streamed in. */
+      & :global(.prose > *) {
+        margin-block: var(--space-1) 0;
+      }
+      & :global(.prose > :first-child) {
+        margin-block-start: 0;
       }
       & :global(ul),
       & :global(ol) {

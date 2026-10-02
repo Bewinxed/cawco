@@ -8,6 +8,8 @@
    (`bun run tokens`). This sheet defines none of its own. */
 @import "./lib/tokens/tokens.css";
 @plugin "@tailwindcss/typography";
+/* The plugin's rules, minus the four that restyled a whole reply per block. */
+@config "../typography.config.ts";
 
 /* One cascade order for the whole app, and it is Tailwind's own: tokens in
    theme, element defaults in base, kit recipes in components, single-purpose
