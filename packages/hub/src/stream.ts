@@ -37,6 +37,7 @@ import {
   type SendPayload,
   SessionRing,
   type SessionStreamEvent,
+  type SessionStreamFrame,
   type StreamBacklog,
   type StreamDelta,
   type StreamReset,
@@ -149,7 +150,10 @@ export interface StreamHubShape {
    * not a function of who happens to be listening, and a ring with holes in it
    * could not answer a resume.
    */
-  readonly sequence: (sessionId: string, frame: unknown) => SessionStreamEvent;
+  readonly sequence: (
+    sessionId: string,
+    frame: SessionStreamFrame
+  ) => SessionStreamEvent;
   /**
    * A `control_result` off an agent socket. Returns true when it answered a
    * command — that reply is that command's ack and nobody else's news, exactly
@@ -301,7 +305,10 @@ export const createStreamHub = (ports: StreamPorts): StreamHubShape => {
     ackTo(socket, { type: "command.ack", commandId, stage: "failed", reason });
   };
 
-  const sequence = (sessionId: string, frame: unknown): SessionStreamEvent => {
+  const sequence = (
+    sessionId: string,
+    frame: SessionStreamFrame
+  ): SessionStreamEvent => {
     const event = ringOf(sessionId).record(sessionId, frame);
     const perSession = followers.get(sessionId);
     if (perSession) {

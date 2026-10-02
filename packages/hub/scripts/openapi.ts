@@ -33,12 +33,20 @@ const OUT = resolve(
 
 /**
  * The dashboard socket's frames, by the core file that declares them: the
- * Ledger Protocol's messages both ways, and the envelope every other message
- * rides in — `FramePayload` out (a session's `NeutralMessage`s among them),
- * the verbs' payloads in. The fleet types they carry come along as components.
+ * Ledger Protocol's messages both ways, the transcript a session's stream
+ * carries (blocks the hub built, and the events that change them), and the
+ * envelope every other message rides in — `FramePayload` out, the verbs'
+ * payloads in. The fleet types they carry come along as components.
  */
 const FRAMES: Record<string, string[]> = {
   "stream.ts": ["StreamServerMessage", "StreamClientMessage"],
+  "transcript-types.ts": [
+    "TranscriptBlock",
+    "TranscriptBranch",
+    "TranscriptEvent",
+    "TranscriptPage",
+    "TranscriptStreamFrame",
+  ],
   "index.ts": [
     "Envelope",
     "FramePayload",

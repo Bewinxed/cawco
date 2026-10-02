@@ -1921,7 +1921,7 @@
         }
       }
     },
-    "/api/instances/{id}/messages": {
+    "/api/instances/{id}/transcript": {
       "get": {
         "parameters": [
           {
@@ -1933,7 +1933,7 @@
             }
           },
           {
-            "name": "tail",
+            "name": "limit",
             "in": "query",
             "required": false,
             "schema": {
@@ -1949,21 +1949,20 @@
             }
           }
         ],
-        "operationId": "getApiInstancesByIdMessages",
+        "operationId": "getApiInstancesByIdTranscript",
         "responses": {
           "200": {
-            "description": "getApiInstancesByIdMessages 200",
+            "description": "getApiInstancesByIdTranscript 200",
             "content": {
-              "application/octet-stream": {
+              "application/json": {
                 "schema": {
-                  "type": "string",
-                  "format": "binary"
+                  "$ref": "#/components/schemas/TranscriptPage"
                 }
               }
             }
           },
           "404": {
-            "description": "getApiInstancesByIdMessages 404",
+            "description": "getApiInstancesByIdTranscript 404",
             "content": {
               "text/plain": {
                 "schema": {
@@ -1973,7 +1972,7 @@
             }
           },
           "409": {
-            "description": "getApiInstancesByIdMessages 409",
+            "description": "getApiInstancesByIdTranscript 409",
             "content": {
               "text/plain": {
                 "schema": {
@@ -1983,7 +1982,7 @@
             }
           },
           "422": {
-            "description": "getApiInstancesByIdMessages 422",
+            "description": "getApiInstancesByIdTranscript 422",
             "content": {
               "application/problem+json": {
                 "schema": {
@@ -1993,7 +1992,7 @@
             }
           },
           "500": {
-            "description": "getApiInstancesByIdMessages 500",
+            "description": "getApiInstancesByIdTranscript 500",
             "content": {
               "text/plain": {
                 "schema": {
@@ -2003,7 +2002,7 @@
             }
           },
           "504": {
-            "description": "getApiInstancesByIdMessages 504",
+            "description": "getApiInstancesByIdTranscript 504",
             "content": {
               "text/plain": {
                 "schema": {
@@ -7747,6 +7746,614 @@
           }
         ]
       },
+      "TranscriptBlock": {
+        "description": "One row of a transcript, as the hub built it.",
+        "type": "object",
+        "properties": {
+          "content": {
+            "type": "string"
+          },
+          "id": {
+            "description": "Stable for the life of the transcript, on every screen and after every\nreload: the harness's uuid for the frame it came from (one assistant frame\nis several blocks, `<uuid>:<index>`), a send's uuid, `task:<id>` for a\ntask line — and a hash of the frame for the few that carry no uuid.",
+            "type": "string"
+          },
+          "instanceId": {
+            "type": "string"
+          },
+          "metadata": {
+            "$ref": "#/components/schemas/BlockMetadata",
+            "description": "Everything a renderer may need beyond `content`, keyed by the kind that uses it."
+          },
+          "parentToolUseId": {
+            "description": "The Task call whose subagent said this. Absent on the main transcript.",
+            "type": "string"
+          },
+          "queued": {
+            "description": "A send not read yet ({@link TranscriptPage.queued}).",
+            "type": "boolean"
+          },
+          "sdkUuid": {
+            "description": "The harness's own uuid for the frame — the handle for rewind and fork.",
+            "type": "string"
+          },
+          "state": {
+            "description": "A send's row: where its record stands.",
+            "enum": [
+              "failed",
+              "pending",
+              "read"
+            ],
+            "type": "string"
+          },
+          "timestamp": {
+            "description": "When the turn happened, ISO-8601. A send: when the hub accepted it.\nAnything else: when the harness stored its record. Absent when the\nharness gives none — an invented clock would date a row by when it was read.",
+            "type": "string"
+          },
+          "toolCallId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "type": {
+            "$ref": "#/components/schemas/BlockType"
+          }
+        },
+        "required": [
+          "content",
+          "id",
+          "instanceId",
+          "type"
+        ]
+      },
+      "TranscriptBranch": {
+        "description": "A subagent's branch: the Task call it hangs under, and how far it has got.\nIts blocks are the blocks whose `parentToolUseId` is {@link toolUseId}.",
+        "type": "object",
+        "properties": {
+          "completedAt": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "error": {
+            "type": "string"
+          },
+          "instanceId": {
+            "type": "string"
+          },
+          "lastEventAt": {
+            "description": "When the last branch event arrived, ISO-8601, for recency sorting.",
+            "type": "string"
+          },
+          "lastToolName": {
+            "type": "string"
+          },
+          "model": {
+            "description": "Model that answered (wire id from assistant frames), or the requested alias until the first frame arrives.",
+            "type": "string"
+          },
+          "result": {
+            "type": "string"
+          },
+          "startedAt": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "complete",
+              "error",
+              "running",
+              "starting"
+            ],
+            "type": "string"
+          },
+          "subagentType": {
+            "type": "string"
+          },
+          "summary": {
+            "description": "`agentProgressSummaries`' present-tense line, when enabled.",
+            "type": "string"
+          },
+          "taskId": {
+            "description": "The task the `task_*` progress messages report under.",
+            "type": "string"
+          },
+          "toolUseId": {
+            "description": "The Task tool.use id that spawned this subagent.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "instanceId",
+          "startedAt",
+          "status",
+          "subagentType",
+          "toolUseId"
+        ]
+      },
+      "TranscriptEvent": {
+        "description": "One change to a transcript, in the order the hub made it. Applied in\nsequence to the page a client fetched, it gives exactly the blocks the hub\nholds.",
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "block.append"
+                ]
+              },
+              "block": {
+                "$ref": "#/components/schemas/TranscriptBlock"
+              }
+            },
+            "required": [
+              "block",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "block.insert"
+                ]
+              },
+              "block": {
+                "$ref": "#/components/schemas/TranscriptBlock"
+              },
+              "after": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              }
+            },
+            "required": [
+              "after",
+              "block",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "block.update"
+                ]
+              },
+              "block": {
+                "$ref": "#/components/schemas/TranscriptBlock"
+              }
+            },
+            "required": [
+              "block",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "block.remove"
+                ]
+              },
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "id",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "queue"
+                ]
+              },
+              "blocks": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/TranscriptBlock"
+                }
+              }
+            },
+            "required": [
+              "blocks",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "branch"
+                ]
+              },
+              "branch": {
+                "$ref": "#/components/schemas/TranscriptBranch"
+              }
+            },
+            "required": [
+              "branch",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "tail"
+                ]
+              },
+              "tail": {
+                "type": "object",
+                "properties": {
+                  "busy": {
+                    "description": "A turn is in flight, as the frames show it.",
+                    "type": "boolean"
+                  },
+                  "currentTool": {
+                    "description": "The main loop's tool in flight, cleared by its result or the turn's end.",
+                    "$ref": "#/components/schemas/ToolGlance"
+                  },
+                  "openBlock": {
+                    "description": "Which content block the main loop has open right now, from the partials.",
+                    "enum": [
+                      "text",
+                      "thinking",
+                      "tool"
+                    ],
+                    "type": "string"
+                  },
+                  "streaming": {
+                    "description": "Partial assistant text of the main loop, between partials and the final message.",
+                    "type": "string"
+                  },
+                  "streams": {
+                    "type": "object",
+                    "description": "Partial assistant text, per subagent branch, by its Task call id."
+                  },
+                  "thinkingClosing": {
+                    "description": "The SDK signed the thinking block: it is wrapping up, not still going.",
+                    "type": "boolean"
+                  },
+                  "thinkingSince": {
+                    "description": "When the open thinking block started, epoch ms, by the hub's clock.",
+                    "type": [
+                      "null",
+                      "number"
+                    ]
+                  },
+                  "thinkingStream": {
+                    "description": "What the open thinking block has reasoned so far.",
+                    "type": "string"
+                  }
+                }
+              }
+            },
+            "required": [
+              "tail",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "tail.append"
+                ]
+              },
+              "streaming": {
+                "type": "string"
+              },
+              "thinking": {
+                "type": "string"
+              },
+              "branch": {
+                "type": "object",
+                "properties": {
+                  "toolUseId": {
+                    "type": "string"
+                  },
+                  "text": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "text",
+                  "toolUseId"
+                ]
+              }
+            },
+            "required": [
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "facts"
+                ]
+              },
+              "facts": {
+                "type": "object",
+                "properties": {
+                  "commands": {
+                    "description": "The `/` menu: names as the session lists them, which are skills, and their details once pushed.",
+                    "type": "object",
+                    "properties": {
+                      "names": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "skills": {
+                        "type": "array",
+                        "items": {
+                          "type": "string"
+                        }
+                      },
+                      "detailed": {
+                        "type": "array",
+                        "items": {
+                          "$ref": "#/components/schemas/SlashCommand"
+                        }
+                      }
+                    },
+                    "required": [
+                      "names",
+                      "skills"
+                    ]
+                  },
+                  "harness": {
+                    "description": "The harness the frames came from.",
+                    "type": [
+                      "null",
+                      "string"
+                    ]
+                  },
+                  "initialized": {
+                    "description": "The transcript has turns in it: the session has already started.",
+                    "type": "boolean"
+                  },
+                  "inits": {
+                    "description": "How many `init`s this transcript has seen since the hub built it.",
+                    "type": "number"
+                  },
+                  "lastCompaction": {
+                    "description": "What the last compaction did, from the frames that reported it.",
+                    "type": "object",
+                    "properties": {
+                      "at": {
+                        "type": "number"
+                      },
+                      "preTokens": {
+                        "type": "number"
+                      },
+                      "trigger": {
+                        "enum": [
+                          "auto",
+                          "manual"
+                        ],
+                        "type": "string"
+                      },
+                      "result": {
+                        "enum": [
+                          "failed",
+                          "success"
+                        ],
+                        "type": "string"
+                      },
+                      "error": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "at",
+                      "preTokens",
+                      "trigger"
+                    ]
+                  },
+                  "lastTurnFailed": {
+                    "description": "The last turn came back an error — the SDK's `is_error`.",
+                    "type": "boolean"
+                  },
+                  "model": {
+                    "description": "Which model answers the next turn, by the newest `init` or fallback.",
+                    "type": [
+                      "null",
+                      "string"
+                    ]
+                  },
+                  "permissionMode": {
+                    "description": "How the session answers tool permissions, by the newest `init`.",
+                    "enum": [
+                      "acceptEdits",
+                      "auto",
+                      "bypassPermissions",
+                      "default",
+                      "dontAsk",
+                      "plan"
+                    ],
+                    "type": "string"
+                  },
+                  "sdkStatus": {
+                    "description": "The session's own word on what it is doing: `compacting`, `requesting`, or nothing.",
+                    "enum": [
+                      "compacting",
+                      "requesting"
+                    ],
+                    "type": "string"
+                  },
+                  "sessionId": {
+                    "description": "The harness session key the newest `init` named.",
+                    "type": [
+                      "null",
+                      "string"
+                    ]
+                  },
+                  "tooling": {
+                    "description": "The servers and tools the newest `init` announced.",
+                    "$ref": "#/components/schemas/BlockTooling"
+                  },
+                  "totalCost": {
+                    "description": "The cumulative cost the latest `result` reported, in dollars.",
+                    "type": [
+                      "null",
+                      "number"
+                    ]
+                  },
+                  "turnsEnded": {
+                    "description": "How many turns have ended since the hub built this transcript.",
+                    "type": "number"
+                  }
+                }
+              }
+            },
+            "required": [
+              "facts",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "send"
+                ]
+              },
+              "record": {
+                "$ref": "#/components/schemas/SendRecord"
+              }
+            },
+            "required": [
+              "record",
+              "type"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "type": {
+                "type": "string",
+                "enum": [
+                  "reset"
+                ]
+              }
+            },
+            "required": [
+              "type"
+            ]
+          }
+        ]
+      },
+      "TranscriptPage": {
+        "description": "One page of a session's transcript, newest first. The newest page carries\nthe live state too, and the stream position it is consistent with: a client\nsubscribes with `afterSeq: seq` and applies the events after it.",
+        "type": "object",
+        "properties": {
+          "blocks": {
+            "description": "The main transcript's blocks on this page, oldest first.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TranscriptBlock"
+            }
+          },
+          "branches": {
+            "description": "The branches whose Task call is on this page, each with its blocks.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TranscriptPageBranch"
+            }
+          },
+          "cursor": {
+            "description": "Pass as `before` for the page older than this; null at the conversation's start.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "facts": {
+            "$ref": "#/components/schemas/TranscriptFacts",
+            "description": "Newest page only: what the session has said about itself."
+          },
+          "queued": {
+            "description": "Newest page only: the sends waiting to be read.",
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TranscriptBlock"
+            }
+          },
+          "seq": {
+            "description": "Newest page only: the stream position this page is consistent with.",
+            "type": "number"
+          },
+          "tail": {
+            "$ref": "#/components/schemas/TranscriptTail",
+            "description": "Newest page only: the live tail."
+          },
+          "where": {
+            "$ref": "#/components/schemas/TranscriptWhere",
+            "description": "Where the transcript lives."
+          }
+        },
+        "required": [
+          "blocks",
+          "branches",
+          "cursor",
+          "where"
+        ]
+      },
+      "TranscriptStreamFrame": {
+        "description": "A transcript event batch, as it rides a session's Ledger stream.",
+        "type": "object",
+        "properties": {
+          "events": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/TranscriptEvent"
+            }
+          },
+          "instanceId": {
+            "type": "string"
+          },
+          "kind": {
+            "type": "string",
+            "enum": [
+              "transcript"
+            ]
+          }
+        },
+        "required": [
+          "events",
+          "instanceId",
+          "kind"
+        ]
+      },
       "Envelope": {
         "description": "Every message on every hop. `payload` is whatever the verb carries — a neutral\nmessage, a harness option object, a control call — passed through. The hub\nroutes on the envelope fields and peeks only what harness.ts names.",
         "type": "object",
@@ -10923,6 +11530,744 @@
           "scope"
         ]
       },
+      "BlockMetadata": {
+        "description": "Everything a renderer may need beyond `content`, keyed by the kind that uses it.",
+        "type": "object",
+        "properties": {
+          "askLabel": {
+            "description": "A `user.delegate_ask`'s display label, e.g. `cawco#506dfafb`.",
+            "type": "string"
+          },
+          "askRequestId": {
+            "description": "A `user.delegate_ask`'s hub permission requestId — what it waits on to be answered.",
+            "type": "string"
+          },
+          "attachments": {
+            "description": "Files the reader attached to the turn, parsed back out of its `<pasted-text>` blocks.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "content",
+                "name"
+              ]
+            }
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "delegateInstanceId": {
+            "description": "The delegate a `tool.handoff` started, read once off its result.",
+            "type": "string"
+          },
+          "delegateTitle": {
+            "description": "The delegate's brief headline, carried beside {@link delegateInstanceId}.",
+            "type": "string"
+          },
+          "exitCode": {
+            "type": "number"
+          },
+          "handoffBrief": {
+            "type": "string"
+          },
+          "handoffKind": {
+            "enum": [
+              "delegate",
+              "handoff",
+              "start"
+            ],
+            "type": "string"
+          },
+          "hookName": {
+            "type": "string"
+          },
+          "images": {
+            "description": "A stored transcript can name an image it no longer carries, hence the optional src.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "mediaType": {
+                  "type": "string"
+                },
+                "src": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "mediaType"
+              ]
+            }
+          },
+          "isRedactedThinking": {
+            "type": "boolean"
+          },
+          "model": {
+            "type": "string"
+          },
+          "noteKind": {
+            "description": "Harness-injected user-role content (task notifications, reminders, compaction).",
+            "type": "string"
+          },
+          "noteTaskToolId": {
+            "description": "A task notification's Task `tool_use_id` — folds the note into its branch.",
+            "type": "string"
+          },
+          "noteTitle": {
+            "type": "string"
+          },
+          "numTurns": {
+            "type": "number"
+          },
+          "peerName": {
+            "description": "Its display name, as the sender's host asserted it.",
+            "type": "string"
+          },
+          "peerSession": {
+            "description": "The sender's host-openable session, so the card can link back to it.",
+            "type": "string"
+          },
+          "permissionMode": {
+            "description": "`init` only, and re-reported every turn: what the session answers tools with.",
+            "enum": [
+              "acceptEdits",
+              "auto",
+              "bypassPermissions",
+              "default",
+              "dontAsk",
+              "plan"
+            ],
+            "type": "string"
+          },
+          "preTokens": {
+            "type": "number"
+          },
+          "reportKind": {
+            "description": "Set when a `user.peer` is a delegate's auto-report rather than a hand-off.",
+            "enum": [
+              "failed",
+              "report"
+            ],
+            "type": "string"
+          },
+          "result": {
+            "type": "string"
+          },
+          "resultErrors": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "resultImages": {
+            "description": "Images returned by the tool, as the hub's media references.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "mediaType": {
+                  "type": "string"
+                },
+                "src": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "mediaType",
+                "src"
+              ]
+            }
+          },
+          "resultSubtype": {
+            "type": "string"
+          },
+          "ruleName": {
+            "description": "A `user.rule`'s rule name, read off its `[Rule: <name>]` marker line.",
+            "type": "string"
+          },
+          "sendFailed": {
+            "description": "Why a send did not go: its record's reason.",
+            "type": "string"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "skills": {
+            "description": "`init` only: which of the commands are skills rather than commands.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "slashCommands": {
+            "description": "`init` only: what this session answers behind `/`, without the leading slash.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "subagentDescription": {
+            "type": "string"
+          },
+          "subagentModel": {
+            "description": "The `model` override the spawn input asked for, when present.",
+            "type": "string"
+          },
+          "subagentType": {
+            "type": "string"
+          },
+          "subtype": {
+            "type": "string"
+          },
+          "taskId": {
+            "description": "The task a `system.task` line reports — the dedupe key against the harness's own note.",
+            "type": "string"
+          },
+          "thinking": {
+            "type": "string"
+          },
+          "thinkingDurationMs": {
+            "description": "How long the thinking block ran, measured by the hub's clock between the\nblock opening and its settled message. Preferred over transcript\nadjacency, which reads 0 when thinking and a tool call land in one frame.",
+            "type": "number"
+          },
+          "thinkingSignature": {
+            "type": "string"
+          },
+          "toolId": {
+            "type": "string"
+          },
+          "toolInput": {
+            "type": "object"
+          },
+          "tooling": {
+            "$ref": "#/components/schemas/BlockTooling",
+            "description": "`init` only: the MCP servers and tools behind the `/` palette."
+          },
+          "toolName": {
+            "type": "string"
+          },
+          "toolResult": {
+            "type": "string"
+          },
+          "toolStatus": {
+            "enum": [
+              "error",
+              "pending",
+              "success"
+            ],
+            "type": "string"
+          },
+          "toolUseResult": {
+            "description": "The reader's answers to an `AskUserQuestion`, normalised by the harness adapter.",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserQuestionAnswered"
+              },
+              {
+                "$ref": "#/components/schemas/UserQuestionDismissed"
+              }
+            ]
+          },
+          "totalCost": {
+            "type": "number"
+          },
+          "trigger": {
+            "enum": [
+              "auto",
+              "manual"
+            ],
+            "type": "string"
+          },
+          "urgent": {
+            "description": "A send made urgently (`SendRecord.mode`): into the running turn, or ahead of it.",
+            "const": true,
+            "type": "boolean"
+          },
+          "workflowEvent": {
+            "description": "Set when a `user.peer` is a workflow's notice: what happened, e.g. `step Build failed`.",
+            "type": "string"
+          }
+        }
+      },
+      "BlockTooling": {
+        "description": "The MCP servers and tools an `init` announced.",
+        "type": "object",
+        "properties": {
+          "servers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "status"
+              ]
+            }
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "servers",
+          "tools"
+        ]
+      },
+      "UserQuestionAnswered": {
+        "description": "A question the reader answered: the questions asked and the choices made,\nkeyed by question text.\n\n`answers` values are `string | string[]` by wire truth: the Claude SDK types\nthem `string` (\"multi-select answers are comma-separated\") but a real\ntranscript carries an array for a multi-select answer, and freeform \"Other\"\ntext lands inside `answers` too — so a value is not guaranteed to match any\noption `label`. The union is the truth; nothing coerces it.",
+        "type": "object",
+        "properties": {
+          "annotations": {
+            "type": "object",
+            "description": "Per-question notes (preview selections), keyed by question text."
+          },
+          "answers": {
+            "$ref": "#/components/schemas/UserAnswers"
+          },
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "answered"
+            ]
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserQuestion"
+            }
+          },
+          "response": {
+            "description": "Freeform text the reader typed instead of selecting a structured option.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "answers",
+          "outcome",
+          "questions"
+        ]
+      },
+      "UserAnswers": {
+        "description": "The reader's choices, back the way the tool reads them.",
+        "type": "object"
+      },
+      "UserQuestion": {
+        "description": "One question of an `AskUserQuestion`-shaped prompt, as every harness can express.",
+        "type": "object",
+        "properties": {
+          "header": {
+            "type": "string"
+          },
+          "multiSelect": {
+            "type": "boolean"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "label": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "description",
+                "label"
+              ]
+            }
+          },
+          "question": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "header",
+          "multiSelect",
+          "options",
+          "question"
+        ]
+      },
+      "UserQuestionDismissed": {
+        "description": "A question the reader walked away from. Every harness expresses this as a\ndenial of the question's permission, and it carries no answers at all — so\nit is a separate member rather than an answered result with an empty map,\nwhich would let a consumer draw a card with blank choices and call it an\nanswer.",
+        "type": "object",
+        "properties": {
+          "outcome": {
+            "type": "string",
+            "enum": [
+              "dismissed"
+            ]
+          },
+          "questions": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/UserQuestion"
+            }
+          }
+        },
+        "required": [
+          "outcome",
+          "questions"
+        ]
+      },
+      "BlockType": {
+        "description": "What a block is: the row kind a renderer draws it as.",
+        "anyOf": [
+          {
+            "type": "string",
+            "pattern": "^system\\..*$"
+          },
+          {
+            "type": "string",
+            "pattern": "^ui\\..*$"
+          },
+          {
+            "enum": [
+              "assistant",
+              "result.error",
+              "result.success",
+              "send.ref",
+              "thinking",
+              "tool.handoff",
+              "tool.progress",
+              "tool.result",
+              "tool.use",
+              "user",
+              "user.delegate_ask",
+              "user.peer",
+              "user.rule"
+            ],
+            "type": "string"
+          }
+        ]
+      },
+      "TranscriptPageBranch": {
+        "description": "A subagent branch with its own blocks, as a page carries it.",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/TranscriptBranch"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "blocks": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/TranscriptBlock"
+                }
+              }
+            },
+            "required": [
+              "blocks"
+            ]
+          }
+        ]
+      },
+      "TranscriptFacts": {
+        "description": "What the session has said about itself, kept beside its blocks.",
+        "type": "object",
+        "properties": {
+          "commands": {
+            "description": "The `/` menu: names as the session lists them, which are skills, and their details once pushed.",
+            "type": "object",
+            "properties": {
+              "names": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "skills": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              },
+              "detailed": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/SlashCommand"
+                }
+              }
+            },
+            "required": [
+              "names",
+              "skills"
+            ]
+          },
+          "harness": {
+            "description": "The harness the frames came from.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "initialized": {
+            "description": "The transcript has turns in it: the session has already started.",
+            "type": "boolean"
+          },
+          "inits": {
+            "description": "How many `init`s this transcript has seen since the hub built it.",
+            "type": "number"
+          },
+          "lastCompaction": {
+            "description": "What the last compaction did, from the frames that reported it.",
+            "type": "object",
+            "properties": {
+              "at": {
+                "type": "number"
+              },
+              "preTokens": {
+                "type": "number"
+              },
+              "trigger": {
+                "enum": [
+                  "auto",
+                  "manual"
+                ],
+                "type": "string"
+              },
+              "result": {
+                "enum": [
+                  "failed",
+                  "success"
+                ],
+                "type": "string"
+              },
+              "error": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "at",
+              "preTokens",
+              "trigger"
+            ]
+          },
+          "lastTurnFailed": {
+            "description": "The last turn came back an error — the SDK's `is_error`.",
+            "type": "boolean"
+          },
+          "model": {
+            "description": "Which model answers the next turn, by the newest `init` or fallback.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "permissionMode": {
+            "description": "How the session answers tool permissions, by the newest `init`.",
+            "enum": [
+              "acceptEdits",
+              "auto",
+              "bypassPermissions",
+              "default",
+              "dontAsk",
+              "plan"
+            ],
+            "type": "string"
+          },
+          "sdkStatus": {
+            "$ref": "#/components/schemas/NeutralStatus",
+            "description": "The session's own word on what it is doing: `compacting`, `requesting`, or nothing."
+          },
+          "sessionId": {
+            "description": "The harness session key the newest `init` named.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tooling": {
+            "description": "The servers and tools the newest `init` announced.",
+            "$ref": "#/components/schemas/BlockTooling"
+          },
+          "totalCost": {
+            "description": "The cumulative cost the latest `result` reported, in dollars.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "turnsEnded": {
+            "description": "How many turns have ended since the hub built this transcript.",
+            "type": "number"
+          }
+        },
+        "required": [
+          "commands",
+          "harness",
+          "initialized",
+          "inits",
+          "lastTurnFailed",
+          "model",
+          "sessionId",
+          "totalCost",
+          "turnsEnded"
+        ]
+      },
+      "SlashCommand": {
+        "description": "What the composer's `/` menu renders. Replaces the SDK's `SlashCommand`.",
+        "type": "object",
+        "properties": {
+          "aliases": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "argumentHint": {
+            "type": "string"
+          },
+          "description": {
+            "type": "string"
+          },
+          "kind": {
+            "description": "What the harness says this is, when it knows. Absent → derived from the name and the session's skill list.",
+            "enum": [
+              "builtin",
+              "custom",
+              "mcp",
+              "skill"
+            ],
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "argumentHint",
+          "description",
+          "name"
+        ]
+      },
+      "NeutralStatus": {
+        "description": "A session's own word on what it is doing right now.",
+        "enum": [
+          "compacting",
+          "requesting"
+        ],
+        "type": "string"
+      },
+      "TranscriptTail": {
+        "description": "The live tail: what the turn is doing between frames. The one part of a\ntranscript that moves token by token.",
+        "type": "object",
+        "properties": {
+          "busy": {
+            "description": "A turn is in flight, as the frames show it.",
+            "type": "boolean"
+          },
+          "currentTool": {
+            "description": "The main loop's tool in flight, cleared by its result or the turn's end.",
+            "$ref": "#/components/schemas/ToolGlance"
+          },
+          "openBlock": {
+            "description": "Which content block the main loop has open right now, from the partials.",
+            "enum": [
+              "text",
+              "thinking",
+              "tool"
+            ],
+            "type": "string"
+          },
+          "streaming": {
+            "description": "Partial assistant text of the main loop, between partials and the final message.",
+            "type": "string"
+          },
+          "streams": {
+            "type": "object",
+            "description": "Partial assistant text, per subagent branch, by its Task call id."
+          },
+          "thinkingClosing": {
+            "description": "The SDK signed the thinking block: it is wrapping up, not still going.",
+            "type": "boolean"
+          },
+          "thinkingSince": {
+            "description": "When the open thinking block started, epoch ms, by the hub's clock.",
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "thinkingStream": {
+            "description": "What the open thinking block has reasoned so far.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "busy",
+          "streaming",
+          "streams",
+          "thinkingClosing",
+          "thinkingSince",
+          "thinkingStream"
+        ]
+      },
+      "ToolGlance": {
+        "description": "The tool a session is running right now — the fleet view's glance line.",
+        "type": "object",
+        "properties": {
+          "glance": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "toolId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "glance",
+          "name",
+          "toolId"
+        ]
+      },
+      "TranscriptWhere": {
+        "description": "Where a transcript was found: the machine, folder, key and harness.",
+        "type": "object",
+        "properties": {
+          "cwd": {
+            "type": "string"
+          },
+          "harness": {
+            "type": "string"
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "sessionKey": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "cwd",
+          "harness",
+          "machineId",
+          "sessionKey"
+        ]
+      },
       "T": {
         "type": "object"
       },
@@ -12707,7 +14052,7 @@
         "type": "object",
         "properties": {
           "frame": {
-            "description": "The existing relay frame payload, verbatim. The stream orders; it does not reshape."
+            "$ref": "#/components/schemas/SessionStreamFrame"
           },
           "seq": {
             "type": "number"
@@ -12723,148 +14068,124 @@
           "sessionId"
         ]
       },
-      "StreamReset": {
-        "description": "Hub → client when the gap is unrecoverable (older than the ring holds):\nan honest refusal, never a partial replay. The client re-reads history\nthrough the existing paths, then follows from `nextSeq`.",
-        "type": "object",
-        "properties": {
-          "nextSeq": {
-            "type": "number"
-          },
-          "sessionId": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "stream.reset"
+      "SessionStreamFrame": {
+        "description": "What a session's stream carries: the changes each frame made to its\ntranscript, as the hub built them (`transcript-types.ts`), and its preview's\nstate. Raw frames never reach a dashboard; the hub folds them.",
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "preview"
+                ]
+              },
+              "instanceId": {
+                "type": "string"
+              },
+              "state": {
+                "enum": [
+                  "closed",
+                  "open"
+                ],
+                "type": "string"
+              },
+              "path": {
+                "description": "The path on the dashboard's own origin, e.g. `/preview/<id>/`.",
+                "type": "string"
+              },
+              "source": {
+                "anyOf": [
+                  {
+                    "type": "object",
+                    "properties": {
+                      "port": {
+                        "type": "number"
+                      }
+                    },
+                    "required": [
+                      "port"
+                    ]
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "dir": {
+                        "type": "string"
+                      }
+                    },
+                    "required": [
+                      "dir"
+                    ]
+                  }
+                ]
+              }
+            },
+            "required": [
+              "instanceId",
+              "kind",
+              "path",
+              "state"
             ]
+          },
+          {
+            "$ref": "#/components/schemas/TranscriptStreamFrame"
           }
-        },
-        "required": [
-          "nextSeq",
-          "sessionId",
-          "type"
         ]
       },
-      "StreamDelta": {
-        "description": "Hub → client, live fan-out of one sequenced event.",
+      "SendRecord": {
+        "description": "THE ONE RECORD OF A SEND. The hub writes it when it accepts the send and is\nits only writer after that: every change is stored, then sequenced into the\nsession's stream as a `send` frame, and a history read serves it beside the\nentries. Every screen draws the send from this, live and after any reload.",
         "type": "object",
         "properties": {
-          "event": {
-            "$ref": "#/components/schemas/SessionStreamEvent"
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "stream.event"
-            ]
-          }
-        },
-        "required": [
-          "event",
-          "type"
-        ]
-      },
-      "CommandAck": {
-        "description": "Hub → client, the command's lifecycle:\n- `accepted` — validated, the target daemon reachable, dispatched;\n- `applied`  — the daemon confirmed, where its protocol carries a\n  confirmation today; where it does not, the hub stops at `accepted` and\n  the stream event reflecting the change is the proof of application;\n- `failed`   — terminal, with the reason a human can read.",
-        "type": "object",
-        "properties": {
-          "commandId": {
+          "acceptedAt": {
+            "description": "ISO-8601: when the hub took the send. The only clock its row shows.",
             "type": "string"
+          },
+          "anchor": {
+            "description": "A failed send the harness never stored: the uuid of the last thing the\nsession said before it failed — an assistant frame, or a send it read.\nIts row goes right after that. Absent when the hub knew of nothing the\nsession had said: its row then goes after the last row dated before\n`acceptedAt`, or first when none is.",
+            "type": "string"
+          },
+          "body": {
+            "$ref": "#/components/schemas/NeutralUserMessage",
+            "description": "Exactly what the sender submitted: its words, its pictures (as the hub's\nmedia references) and pastes, and who it is from. What the agent adds on\nthe way to the harness (a worktree line, an urgent prefix) is not in it."
+          },
+          "harnessId": {
+            "description": "The id the harness stored the send under, where that is not its uuid:\nopencode's message id, pi's entry id, and — for a send Claude joined into\nanother's record ({@link SessionMessage.joined}) — that record's uuid.",
+            "type": "string"
+          },
+          "instanceId": {
+            "type": "string"
+          },
+          "mode": {
+            "$ref": "#/components/schemas/SendMode"
           },
           "reason": {
+            "description": "Why it failed, in the harness's words or the hub's.",
             "type": "string"
           },
-          "stage": {
-            "enum": [
-              "accepted",
-              "applied",
-              "failed"
-            ],
+          "replacedBy": {
+            "description": "The retry that replaced it.",
             "type": "string"
           },
-          "type": {
-            "type": "string",
-            "enum": [
-              "command.ack"
-            ]
+          "replaces": {
+            "description": "The failed send this one was sent in place of.",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/SendState"
+          },
+          "uuid": {
+            "type": "string"
           }
         },
         "required": [
-          "commandId",
-          "stage",
-          "type"
+          "acceptedAt",
+          "body",
+          "instanceId",
+          "mode",
+          "state",
+          "uuid"
         ]
-      },
-      "StreamSubscribe": {
-        "description": "Client → hub. `afterSeq` present is a resume (\"I have up to here — replay the\nrest\"); absent is a fresh join (\"start me from now\", history arriving through\nthe existing read paths as today).",
-        "type": "object",
-        "properties": {
-          "afterSeq": {
-            "type": "number"
-          },
-          "sessionId": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "stream.subscribe"
-            ]
-          }
-        },
-        "required": [
-          "sessionId",
-          "type"
-        ]
-      },
-      "CommandEnvelope": {
-        "description": "Client → hub: an operator action as a durable, trackable object rather than\na fire-and-forget call. `commandId` is client-generated and unique per\nsubmission; `payload` is exactly what the corresponding legacy relay\noperation takes today.",
-        "type": "object",
-        "properties": {
-          "commandId": {
-            "type": "string"
-          },
-          "kind": {
-            "$ref": "#/components/schemas/CommandKind"
-          },
-          "machineId": {
-            "type": "string"
-          },
-          "payload": {},
-          "sessionId": {
-            "type": "string"
-          },
-          "type": {
-            "type": "string",
-            "enum": [
-              "command"
-            ]
-          }
-        },
-        "required": [
-          "commandId",
-          "kind",
-          "machineId",
-          "payload",
-          "sessionId",
-          "type"
-        ]
-      },
-      "CommandKind": {
-        "description": "The operations a command envelope can carry — 1:1 with existing relay ops.",
-        "enum": [
-          "interrupt",
-          "permission.answer",
-          "send",
-          "set-effort",
-          "set-model",
-          "set-permission-mode"
-        ],
-        "type": "string"
-      },
-      "T_1": {
-        "type": "object"
       },
       "NeutralUserMessage": {
         "description": "A user-role message. Two things wear this shape: what the harness says in\nthe user's role (tool results, its own notices), and a message SENT to the\nsession — which always carries `origin` and `uuid` ({@link SentMessage}),\nand nothing else does.",
@@ -13152,104 +14473,167 @@
           }
         ]
       },
-      "UserQuestionAnswered": {
-        "description": "A question the reader answered: the questions asked and the choices made,\nkeyed by question text.\n\n`answers` values are `string | string[]` by wire truth: the Claude SDK types\nthem `string` (\"multi-select answers are comma-separated\") but a real\ntranscript carries an array for a multi-select answer, and freeform \"Other\"\ntext lands inside `answers` too — so a value is not guaranteed to match any\noption `label`. The union is the truth; nothing coerces it.",
+      "SendMode": {
+        "description": "How a send asks to be read: as a turn of its own, as a note the next turn\nfolds in (`shouldQuery: false`), or urgently — into the running turn, or\nahead of it.",
+        "enum": [
+          "note",
+          "turn",
+          "urgent"
+        ],
+        "type": "string"
+      },
+      "SendState": {
+        "description": "Where a send stands, as the hub alone decides it: waiting for the harness\n(`pending`), taken up by it (`read`), never going to be (`failed`, with\nwhy), or sent again as another send (`replaced`).",
+        "enum": [
+          "failed",
+          "pending",
+          "read",
+          "replaced"
+        ],
+        "type": "string"
+      },
+      "StreamReset": {
+        "description": "Hub → client when the gap is unrecoverable (older than the ring holds):\nan honest refusal, never a partial replay. The client reads the newest\ntranscript page again and resumes from the `seq` it carries.",
         "type": "object",
         "properties": {
-          "annotations": {
-            "type": "object",
-            "description": "Per-question notes (preview selections), keyed by question text."
+          "nextSeq": {
+            "type": "number"
           },
-          "answers": {
-            "$ref": "#/components/schemas/UserAnswers"
+          "sessionId": {
+            "type": "string"
           },
-          "outcome": {
+          "type": {
             "type": "string",
             "enum": [
-              "answered"
+              "stream.reset"
             ]
-          },
-          "questions": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/UserQuestion"
-            }
-          },
-          "response": {
-            "description": "Freeform text the reader typed instead of selecting a structured option.",
-            "type": "string"
           }
         },
         "required": [
-          "answers",
-          "outcome",
-          "questions"
+          "nextSeq",
+          "sessionId",
+          "type"
         ]
       },
-      "UserAnswers": {
-        "description": "The reader's choices, back the way the tool reads them.",
+      "StreamDelta": {
+        "description": "Hub → client, live fan-out of one sequenced event.",
+        "type": "object",
+        "properties": {
+          "event": {
+            "$ref": "#/components/schemas/SessionStreamEvent"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "stream.event"
+            ]
+          }
+        },
+        "required": [
+          "event",
+          "type"
+        ]
+      },
+      "CommandAck": {
+        "description": "Hub → client, the command's lifecycle:\n- `accepted` — validated, the target daemon reachable, dispatched;\n- `applied`  — the daemon confirmed, where its protocol carries a\n  confirmation today; where it does not, the hub stops at `accepted` and\n  the stream event reflecting the change is the proof of application;\n- `failed`   — terminal, with the reason a human can read.",
+        "type": "object",
+        "properties": {
+          "commandId": {
+            "type": "string"
+          },
+          "reason": {
+            "type": "string"
+          },
+          "stage": {
+            "enum": [
+              "accepted",
+              "applied",
+              "failed"
+            ],
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "command.ack"
+            ]
+          }
+        },
+        "required": [
+          "commandId",
+          "stage",
+          "type"
+        ]
+      },
+      "StreamSubscribe": {
+        "description": "Client → hub. `afterSeq` present is a resume (\"I have up to here — replay the\nrest\"): a client sends it with the `seq` its transcript page was read at, and\nagain after a reconnect. Absent is a fresh join (\"start me from now\").",
+        "type": "object",
+        "properties": {
+          "afterSeq": {
+            "type": "number"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "stream.subscribe"
+            ]
+          }
+        },
+        "required": [
+          "sessionId",
+          "type"
+        ]
+      },
+      "CommandEnvelope": {
+        "description": "Client → hub: an operator action as a durable, trackable object rather than\na fire-and-forget call. `commandId` is client-generated and unique per\nsubmission; `payload` is exactly what the corresponding legacy relay\noperation takes today.",
+        "type": "object",
+        "properties": {
+          "commandId": {
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/CommandKind"
+          },
+          "machineId": {
+            "type": "string"
+          },
+          "payload": {},
+          "sessionId": {
+            "type": "string"
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "command"
+            ]
+          }
+        },
+        "required": [
+          "commandId",
+          "kind",
+          "machineId",
+          "payload",
+          "sessionId",
+          "type"
+        ]
+      },
+      "CommandKind": {
+        "description": "The operations a command envelope can carry — 1:1 with existing relay ops.",
+        "enum": [
+          "interrupt",
+          "permission.answer",
+          "send",
+          "set-effort",
+          "set-model",
+          "set-permission-mode"
+        ],
+        "type": "string"
+      },
+      "T_1": {
         "type": "object"
-      },
-      "UserQuestion": {
-        "description": "One question of an `AskUserQuestion`-shaped prompt, as every harness can express.",
-        "type": "object",
-        "properties": {
-          "header": {
-            "type": "string"
-          },
-          "multiSelect": {
-            "type": "boolean"
-          },
-          "options": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "label": {
-                  "type": "string"
-                },
-                "description": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "description",
-                "label"
-              ]
-            }
-          },
-          "question": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "header",
-          "multiSelect",
-          "options",
-          "question"
-        ]
-      },
-      "UserQuestionDismissed": {
-        "description": "A question the reader walked away from. Every harness expresses this as a\ndenial of the question's permission, and it carries no answers at all — so\nit is a separate member rather than an answered result with an empty map,\nwhich would let a consumer draw a card with blank choices and call it an\nanswer.",
-        "type": "object",
-        "properties": {
-          "outcome": {
-            "type": "string",
-            "enum": [
-              "dismissed"
-            ]
-          },
-          "questions": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/UserQuestion"
-            }
-          }
-        },
-        "required": [
-          "outcome",
-          "questions"
-        ]
       },
       "NeutralAssistantMessage": {
         "type": "object",
@@ -13858,42 +15242,6 @@
           "type"
         ]
       },
-      "SlashCommand": {
-        "description": "What the composer's `/` menu renders. Replaces the SDK's `SlashCommand`.",
-        "type": "object",
-        "properties": {
-          "aliases": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          },
-          "argumentHint": {
-            "type": "string"
-          },
-          "description": {
-            "type": "string"
-          },
-          "kind": {
-            "description": "What the harness says this is, when it knows. Absent → derived from the name and the session's skill list.",
-            "enum": [
-              "builtin",
-              "custom",
-              "mcp",
-              "skill"
-            ],
-            "type": "string"
-          },
-          "name": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "argumentHint",
-          "description",
-          "name"
-        ]
-      },
       "NeutralRawMessage": {
         "description": "A frame that has no neutral meaning yet, forwarded whole for a future renderer.",
         "type": "object",
@@ -13926,79 +15274,6 @@
           "message",
           "type"
         ]
-      },
-      "SendRecord": {
-        "description": "THE ONE RECORD OF A SEND. The hub writes it when it accepts the send and is\nits only writer after that: every change is stored, then sequenced into the\nsession's stream as a `send` frame, and a history read serves it beside the\nentries. Every screen draws the send from this, live and after any reload.",
-        "type": "object",
-        "properties": {
-          "acceptedAt": {
-            "description": "ISO-8601: when the hub took the send. The only clock its row shows.",
-            "type": "string"
-          },
-          "anchor": {
-            "description": "A failed send the harness never stored: the uuid of the last thing the\nsession said before it failed — an assistant frame, or a send it read.\nIts row goes right after that. Absent when the hub knew of nothing the\nsession had said: its row then goes after the last row dated before\n`acceptedAt`, or first when none is.",
-            "type": "string"
-          },
-          "body": {
-            "$ref": "#/components/schemas/NeutralUserMessage",
-            "description": "Exactly what the sender submitted: its words, its pictures (as the hub's\nmedia references) and pastes, and who it is from. What the agent adds on\nthe way to the harness (a worktree line, an urgent prefix) is not in it."
-          },
-          "harnessId": {
-            "description": "The id the harness stored the send under, where that is not its uuid:\nopencode's message id, pi's entry id, and — for a send Claude joined into\nanother's record ({@link SessionMessage.joined}) — that record's uuid.",
-            "type": "string"
-          },
-          "instanceId": {
-            "type": "string"
-          },
-          "mode": {
-            "$ref": "#/components/schemas/SendMode"
-          },
-          "reason": {
-            "description": "Why it failed, in the harness's words or the hub's.",
-            "type": "string"
-          },
-          "replacedBy": {
-            "description": "The retry that replaced it.",
-            "type": "string"
-          },
-          "replaces": {
-            "description": "The failed send this one was sent in place of.",
-            "type": "string"
-          },
-          "state": {
-            "$ref": "#/components/schemas/SendState"
-          },
-          "uuid": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "acceptedAt",
-          "body",
-          "instanceId",
-          "mode",
-          "state",
-          "uuid"
-        ]
-      },
-      "SendMode": {
-        "description": "How a send asks to be read: as a turn of its own, as a note the next turn\nfolds in (`shouldQuery: false`), or urgently — into the running turn, or\nahead of it.",
-        "enum": [
-          "note",
-          "turn",
-          "urgent"
-        ],
-        "type": "string"
-      },
-      "SendState": {
-        "description": "Where a send stands, as the hub alone decides it: waiting for the harness\n(`pending`), taken up by it (`read`), never going to be (`failed`, with\nwhy), or sent again as another send (`replaced`).",
-        "enum": [
-          "failed",
-          "pending",
-          "read",
-          "replaced"
-        ],
-        "type": "string"
       },
       "InstanceRow": {
         "type": "object",

@@ -18,6 +18,7 @@ import {
   type NeutralMessage,
   type SendRecord,
   type SessionMessage,
+  type SessionStreamFrame,
   TRANSCRIPT_PAGE,
   TranscriptBuilder,
   type TranscriptEvent,
@@ -33,11 +34,14 @@ export type HistoryRead =
       records: Record<string, SendRecord>;
       where: TranscriptWhere;
     }
-  | {
-      fault: "missing" | "offline" | "timeout" | "failed";
-      message: string;
-      machineId?: string;
-    };
+  | HistoryFault;
+
+/** Why a stored transcript could not be read. */
+export interface HistoryFault {
+  fault: "missing" | "offline" | "timeout" | "failed";
+  machineId?: string;
+  message: string;
+}
 
 export interface TranscriptPorts {
   /** Whether a dashboard follows the session's stream. */
@@ -52,7 +56,7 @@ export interface TranscriptPorts {
     at?: string
   ) => Promise<HistoryRead>;
   /** One frame onto the session's Ledger stream. */
-  readonly sequence: (instanceId: string, frame: unknown) => void;
+  readonly sequence: (instanceId: string, frame: SessionStreamFrame) => void;
 }
 
 /** A transcript nobody follows and no process writes leaves memory after this. */
@@ -61,9 +65,15 @@ const IDLE_MS = 10 * 60_000;
 const IDLE_KEEP = 40;
 const SWEEP_MS = 60_000;
 
+/** What a session says that changes its transcript: a frame, or a send's record. */
+export type TranscriptPayload = Extract<
+  FramePayload,
+  { kind: "frame" | "send" }
+>;
+
 interface Entry {
   builder: TranscriptBuilder;
-  held: FramePayload[];
+  held: TranscriptPayload[];
   /** The read in flight, while one is; frames meanwhile wait in `held`. */
   loading: Promise<HistoryRead> | null;
   usedAt: number;
@@ -71,8 +81,8 @@ interface Entry {
 }
 
 export interface TranscriptsShape {
-  /** A session frame (`frame` or `send`), folded in; anything else passes onto the stream. */
-  readonly ingest: (instanceId: string, payload: FramePayload) => void;
+  /** A session frame or a send's record, folded in; its changes go out on the stream. */
+  readonly ingest: (instanceId: string, payload: TranscriptPayload) => void;
   /** An interrupt was carried to the session. */
   readonly noteInterrupt: (instanceId: string) => void;
   /** The session is being started again in place. */
@@ -82,7 +92,7 @@ export interface TranscriptsShape {
     instanceId: string,
     limit: number | undefined,
     before: string | undefined
-  ) => Promise<TranscriptPage | HistoryRead | { gone: string }>;
+  ) => Promise<TranscriptPage | HistoryFault | { gone: string }>;
   /**
    * Read the session again from its machine — its stored transcript changed
    * under it — cut after the entry `at` when given (a rewind).
@@ -106,23 +116,13 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
   };
 
   /** One held or live payload into a built transcript. */
-  const fold = (
-    entry: Entry,
-    instanceId: string,
-    payload: FramePayload
-  ): TranscriptEvent[] => {
-    if (payload.kind === "send") {
-      return entry.builder.applyRecord(payload.record);
-    }
-    if (payload.kind === "frame") {
-      return entry.builder.applyFrame(
-        payload.message as NeutralMessage,
-        payload.harness
-      );
-    }
-    ports.sequence(instanceId, payload);
-    return [];
-  };
+  const fold = (entry: Entry, payload: TranscriptPayload): TranscriptEvent[] =>
+    payload.kind === "send"
+      ? entry.builder.applyRecord(payload.record)
+      : entry.builder.applyFrame(
+          payload.message as NeutralMessage,
+          payload.harness
+        );
 
   /**
    * Reads the stored transcript and folds it in, then whatever arrived while
@@ -149,7 +149,7 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
       entry.builder.seed(read.entries, read.records);
       emit(instanceId, [
         ...(reset ? [{ type: "reset" } as const] : []),
-        ...replayHeld(entry, instanceId),
+        ...replayHeld(entry),
       ]);
       return read;
     });
@@ -158,7 +158,7 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
   };
 
   /** What arrived during a read, folded in behind it, less what it already carried. */
-  const replayHeld = (entry: Entry, instanceId: string): TranscriptEvent[] =>
+  const replayHeld = (entry: Entry): TranscriptEvent[] =>
     entry.held.splice(0).flatMap((payload) => {
       if (payload.kind === "frame") {
         const message = payload.message as { type?: string; uuid?: string };
@@ -169,7 +169,7 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
           return [];
         }
       }
-      return fold(entry, instanceId, payload);
+      return fold(entry, payload);
     });
 
   const entryFor = (instanceId: string): Entry => {
@@ -192,17 +192,13 @@ export const createTranscripts = (ports: TranscriptPorts): TranscriptsShape => {
     return entry;
   };
 
-  const ingest = (instanceId: string, payload: FramePayload): void => {
-    if (payload.kind !== "frame" && payload.kind !== "send") {
-      ports.sequence(instanceId, payload);
-      return;
-    }
+  const ingest = (instanceId: string, payload: TranscriptPayload): void => {
     const entry = entryFor(instanceId);
     if (entry.loading) {
       entry.held.push(payload);
       return;
     }
-    emit(instanceId, fold(entry, instanceId, payload));
+    emit(instanceId, fold(entry, payload));
   };
 
   const page: TranscriptsShape["page"] = async (instanceId, limit, before) => {

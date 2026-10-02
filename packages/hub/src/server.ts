@@ -157,7 +157,11 @@ import { createStreamHub } from "./stream";
 import { suggest } from "./suggest";
 import { SupervisorEngine } from "./supervisor";
 import type { TelegramBridge } from "./telegram";
-import { createTranscripts, type HistoryRead } from "./transcripts";
+import {
+  createTranscripts,
+  type HistoryRead,
+  type TranscriptPayload,
+} from "./transcripts";
 import { UsageCounter } from "./usage-count";
 import {
   createWorkItems,
@@ -324,9 +328,6 @@ interface SessionLocation {
  */
 const TITLE_ASK_LIMIT = 64;
 
-/** Entries per flush of a streamed transcript — small enough to paint, big enough not to thrash. */
-const TRANSCRIPT_FLUSH = 25;
-
 /**
  * A rule draft as the wire carries it — shared by create (POST, the hub mints
  * the id) and edit (PUT to an id that already exists). Validated loosely here
@@ -431,37 +432,6 @@ const ruleBody = t.Object({
   ),
   prompt: t.Optional(t.Union([t.String(), t.Null()], { default: null })),
 });
-
-/**
- * A transcript on its way to a browser, newest entry first, one JSON object per
- * line. Newest first because that is what the reader is looking at: the tail
- * lands in the first flush and the rest fills in behind it, so a long session
- * paints in milliseconds instead of after its last line has crossed the wire.
- * The whole array is already in hand — `getSessionMessages` answers in one
- * `control_result` — so this streams the *delivery*, which is what the reader
- * waits through.
- */
-const ndjsonNewestFirst = (rows: unknown[]): ReadableStream<Uint8Array> => {
-  const encoder = new TextEncoder();
-  let cursor = rows.length - 1;
-  return new ReadableStream({
-    pull(controller) {
-      if (cursor < 0) {
-        controller.close();
-        return;
-      }
-      let chunk = "";
-      for (
-        let n = 0;
-        n < TRANSCRIPT_FLUSH && cursor >= 0;
-        n += 1, cursor -= 1
-      ) {
-        chunk += `${JSON.stringify(rows[cursor])}\n`;
-      }
-      controller.enqueue(encoder.encode(chunk));
-    },
-  });
-};
 
 export interface HubServices {
   /**
@@ -1972,13 +1942,11 @@ export const createServer = ({
 
   /** A record's latest state onto its session's stream: where every screen hears it. */
   const publishSend = (row: SentMessageRow): void => {
-    const frame = {
+    transcripts.ingest(row.instanceId, {
       kind: "send",
       instanceId: row.instanceId,
       record: toSendRecord(row),
-    } satisfies FramePayload;
-    streams.sequence(row.instanceId, frame);
-    transcripts.ingest(row.instanceId, frame);
+    });
   };
 
   /** One change to a record: stored, then said. The only way a record moves. */
@@ -2762,6 +2730,50 @@ export const createServer = ({
     return row
       ? modeRefusal(row.machineId, row.harness ?? "claude", mode)
       : undefined;
+  };
+
+  /**
+   * The session's own word on its settings, written on its row: every `init`
+   * names its model and permission mode, and a `model_fallback` the model
+   * that answers instead of the one asked for. True when the row moved. A
+   * mode the session's harness does not have is not recorded (`settleMode`'s
+   * rule).
+   */
+  const noteSessionSettings = (
+    instanceId: string,
+    payload: unknown
+  ): boolean => {
+    const frame = (payload as { message?: Record<string, unknown> }).message;
+    if (frame?.type !== "system") {
+      return false;
+    }
+    const model =
+      frame.subtype === "model_fallback" ? frame.fallback_model : frame.model;
+    const mode = frame.subtype === "init" ? frame.permissionMode : undefined;
+    if (!(frame.subtype === "init" || frame.subtype === "model_fallback")) {
+      return false;
+    }
+    const [row] = db.getInstancesByIds([instanceId]);
+    if (!row) {
+      return false;
+    }
+    const patch: { model?: string; permissionMode?: string } = {};
+    if (typeof model === "string" && model && model !== row.model) {
+      patch.model = model;
+    }
+    if (
+      typeof mode === "string" &&
+      mode &&
+      mode !== row.permissionMode &&
+      !sessionModeRefusal(instanceId, mode)
+    ) {
+      patch.permissionMode = mode;
+    }
+    if (Object.keys(patch).length === 0) {
+      return false;
+    }
+    db.patchInstance(instanceId, patch);
+    return true;
   };
 
   /**
@@ -5698,7 +5710,9 @@ export const createServer = ({
   /** Every session's blocks, built here once, whether or not anyone watches. */
   const transcripts = createTranscripts({
     readHistory,
-    sequence: () => undefined,
+    sequence: (instanceId, frame) => {
+      streams.sequence(instanceId, frame);
+    },
     head: (instanceId) => streams.head(instanceId),
     followed: (instanceId) => streams.followerCount(instanceId) > 0,
     live: (instanceId) => {
@@ -6708,175 +6722,6 @@ export const createServer = ({
             default:
               return status(500, page.message);
           }
-        }
-      )
-      // Where the transcript was found rides back in headers, so a reader that
-      // addressed a session by id alone learns which machine can act on it
-      // without a second round trip.
-      .get(
-        "/api/instances/:id/messages",
-        {
-          query: t.Object({
-            tail: t.Optional(t.String()),
-            // An older page: every entry strictly before this one's uuid,
-            // which is the oldest the reader already holds.
-            before: t.Optional(t.String()),
-          }),
-        },
-        // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: resolves the session's machine/cwd/harness from the row or a live locate in one place; splitting it would scatter the fallback order this route depends on.
-        async ({ params, query, status }) => {
-          // Two mutually exclusive cases, never mixed. A hub row for this id is
-          // the single authority for the session it holds: its key, machine,
-          // folder and harness. (An opencode session resumed under its cawco
-          // instance id instead of its `ses_…` key is how two rows went
-          // unrevivable after a hub restart.) Without a row, the id is by
-          // definition a stored session key whose location is resolved below.
-          const [row] = db.getInstancesByIds([params.id]);
-          let machineId: string;
-          let sessionKey: string;
-          let cwd: string | undefined;
-          let harness: HarnessKind | undefined;
-          if (row) {
-            if (!row.sessionId) {
-              // Never reported a session key, so nothing is stored under this
-              // id anywhere; asking a machine with the cawco id as the key
-              // would only make the harness reject it. What it was sent is
-              // the hub's own to say: the records, and nothing else.
-              return new Response(
-                ndjsonNewestFirst(sendLines(row.id, [], true, true)),
-                {
-                  headers: {
-                    "Content-Type": "application/x-ndjson",
-                    "Cache-Control": "no-store",
-                    "X-Cawco-Machine": row.machineId,
-                    "X-Cawco-Session": "",
-                    "X-Cawco-Cwd": encodeURIComponent(row.cwd || ""),
-                    "X-Cawco-Harness": row.harness || "claude",
-                  },
-                }
-              );
-            }
-            ({ machineId } = row);
-            sessionKey = row.sessionId;
-            cwd = row.cwd || undefined;
-            harness = (row.harness || undefined) as HarnessKind | undefined;
-          } else {
-            const where = await locateSession(params.id);
-            if (!where) {
-              return status(404, `no session ${params.id}`);
-            }
-            ({ machineId, harness } = where);
-            sessionKey = where.sessionId;
-            cwd = where.cwd || undefined;
-          }
-
-          // A tail read parses only the newest window of the transcript file
-          // (~4ms on a 97MB session vs ~150ms full).
-          const tail =
-            Number(query.tail) > 0 ? Math.floor(Number(query.tail)) : undefined;
-          const answer = await callAgent(
-            machineId,
-            CONTROL_GET_SESSION_MESSAGES,
-            [sessionKey, { dir: cwd, ...(tail ? { tail } : {}) }],
-            READ_TIMEOUT_MS,
-            harness
-          );
-          // Named with the machine, so a reader that asked by id alone can say
-          // which one is away and hear it come back.
-          if (answer === "offline") {
-            return new Response(`machine ${machineId} is not connected`, {
-              status: 503,
-              headers: { "X-Cawco-Machine": machineId },
-            });
-          }
-          if (answer === "timeout") {
-            return status(504, `machine ${machineId} did not answer in time`);
-          }
-          if (!answer.ok) {
-            return status(
-              500,
-              answer.error ?? "the transcript could not be read"
-            );
-          }
-
-          // A session the machine has never stored answers with nothing, which is
-          // an empty transcript rather than a fault — the same shape a brand new
-          // session has.
-          let transcript = Array.isArray(answer.result) ? answer.result : [];
-          // An older page never reaches the reader's oldest entry, so nothing
-          // on it can be something the reader already holds. A cursor the
-          // transcript no longer has (rewound, compacted away) has no page
-          // behind it, and says so.
-          if (query.before) {
-            const cut = transcript.findIndex(
-              (entry) => (entry as SessionMessage).uuid === query.before
-            );
-            if (cut < 0) {
-              return status(
-                409,
-                `the transcript no longer holds entry ${query.before}`
-              );
-            }
-            transcript = transcript.slice(0, cut);
-          }
-
-          // Pictures as references to the media store, before a send's
-          // record is filled from one of these entries.
-          externalizeImages(transcript);
-          // Every send on this page, linked to the entry it was stored as,
-          // and the records the page draws: a tail page reaches the newest
-          // entry, and one shorter than asked for — like every page before a
-          // cursor — reaches the conversation's start.
-          const records = sendLines(
-            row?.id,
-            transcript as SessionMessage[],
-            query.before === undefined,
-            query.before !== undefined || !tail || transcript.length < tail
-          );
-
-          // A complete transcript's oldest user turn is the unambiguous answer
-          // to what the session is called — including for conversations this
-          // hub never started, which no live turn can name. A tail read cannot
-          // say (its oldest row is mid-conversation); the full read that
-          // follows every tail-first open derives it there. Write-once, so
-          // this costs one statement the first time and nothing after.
-          if (
-            !(tail || query.before) &&
-            row &&
-            !row.title &&
-            !row.derivedTitle
-          ) {
-            const first = firstTurnOf(transcript);
-            if (first) {
-              nameFromFirstTurn(machineId, row.id, first);
-            }
-          }
-
-          const held = row && heldSessions.get(row.id);
-          if (
-            !query.before &&
-            row &&
-            held &&
-            registry.agent(row.machineId) &&
-            (row.status === "sleeping" || row.status === "error")
-          ) {
-            transcript.push(custodyNotice(row, held.reason));
-          }
-
-          // Newest first, so the records — written last — lead the page: a
-          // reader has every record in hand before the entries that name one.
-          // URI-encoded headers because a header is Latin-1 on the wire and a
-          // folder path is not.
-          return new Response(ndjsonNewestFirst([...transcript, ...records]), {
-            headers: {
-              "Content-Type": "application/x-ndjson",
-              "Cache-Control": "no-store",
-              "X-Cawco-Machine": machineId,
-              "X-Cawco-Session": encodeURIComponent(sessionKey),
-              "X-Cawco-Cwd": encodeURIComponent(cwd ?? ""),
-              "X-Cawco-Harness": harness ?? "claude",
-            },
-          });
         }
       )
       .patch(
@@ -9269,8 +9114,10 @@ export const createServer = ({
                     ...frame,
                     message: custodyNotice(row, note),
                   };
-                  streams.sequence(row.id, message.payload);
-                  transcripts.ingest(row.id, message.payload as FramePayload);
+                  transcripts.ingest(
+                    row.id,
+                    message.payload as TranscriptPayload
+                  );
                   break;
                 }
               }
@@ -9318,6 +9165,9 @@ export const createServer = ({
                     }
                     heldSessions.delete(message.instanceId);
                   }
+                  publishInstances(message.machineId);
+                }
+                if (noteSessionSettings(message.instanceId, message.payload)) {
                   publishInstances(message.machineId);
                 }
               }
@@ -9793,17 +9643,16 @@ export const createServer = ({
               else if (settled) {
                 break;
               } else if (kind === "frame" && message.instanceId) {
-                // The session's canonical order is assigned here, for every frame
-                // and whether or not anyone follows it: the ring has to be able to
-                // answer a resume from a socket that connects a minute from now.
-                // Its followers get it from there. Everything else —
+                // Folded into the session's transcript here, for every frame and
+                // whether or not anyone follows it: what it changed is sequenced
+                // onto the session's stream, so the ring can answer a resume from
+                // a socket that connects a minute from now. Everything else —
                 // permission_request, instances, delegate_event, usage, pulse,
                 // error, and any kind a future build adds — broadcasts, so an
                 // unknown kind is never silently dropped.
-                streams.sequence(message.instanceId, message.payload);
                 transcripts.ingest(
                   message.instanceId,
-                  message.payload as FramePayload
+                  message.payload as TranscriptPayload
                 );
               } else {
                 registry.broadcast(message);
