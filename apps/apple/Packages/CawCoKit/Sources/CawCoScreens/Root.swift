@@ -50,6 +50,42 @@ public final class RootViewController: UIViewController {
         show(key: "board") { waiting }
     }
 
+    // MARK: Commands (the menu bar and the keyboard)
+
+    /// The first ask in the needs-you queue, the card at its top: a session's
+    /// permission or question (a run's is answered in its run).
+    private var firstAsk: (ask: ParkedAsk, machineId: String)? {
+        guard home.live else {
+            return nil
+        }
+        for item in home.needs {
+            if case let .ask(ask) = item.kind {
+                // One answer at a time: an ask already answered here waits for the hub.
+                return hub.needs.answerSent(for: ask) == nil ? (ask, item.machineId) : nil
+            }
+        }
+        return nil
+    }
+
+    /// Whether Approve and Deny have an ask to act on.
+    public var canAnswer: Bool { firstAsk != nil }
+
+    /// Approves (or denies) the first card in the needs-you queue, as its own buttons do.
+    public func answerFirstAsk(allow: Bool) {
+        guard let first = firstAsk else {
+            return
+        }
+        hub.needs.answer(first.ask, machineId: first.machineId, allow ? .allow : .deny)
+    }
+
+    /// Whether the socket is down and waiting out its backoff.
+    public var canReconnect: Bool { hub.address != nil && hub.socket == .closed }
+
+    /// Reconnects now instead of waiting out the backoff.
+    public func reconnect() {
+        hub.reconnectNow()
+    }
+
     /// Puts `make()`'s controller on screen unless the one for `key` already is; the two cross-fade.
     private func show(key: String, _ make: () -> UIViewController) {
         guard key != shownKey else {
