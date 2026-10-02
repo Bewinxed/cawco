@@ -1107,9 +1107,19 @@ export function reflow() {
       attributes: true,
       attributeFilter: ["class", "hidden", "data-state", "open"],
     });
-    // The container resized (a window, the rail's width): every place is new,
-    // and none of it is a change to animate.
-    const sizes = new ResizeObserver(() => state.reread());
+    // The container's width changed (a window, the rail's width): every place
+    // is new, and none of it is a change to animate. Its height alone is its
+    // rows' own doing, which the change that made it has placed already:
+    // read again, every place in the list was laid out a second time in the
+    // frame a tree opened.
+    let across = -1;
+    const sizes = new ResizeObserver(([entry]) => {
+      const { width } = entry.contentRect;
+      if (width !== across) {
+        across = width;
+        state.reread();
+      }
+    });
     sizes.observe(node);
     const reread = () => state.reread();
     node.addEventListener(REFLOW_REREAD, reread);

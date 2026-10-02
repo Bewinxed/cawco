@@ -122,55 +122,75 @@ function parentGlyph(group: HTMLElement, selector: string) {
  *
  * Measured in layout, transforms ignored, and only once the page is laid
  * out: the size observer's first call comes after layout and before paint.
+ * One observer for every list, which reads them all and then writes them
+ * all: read and written a list at a time, each list's write laid the page
+ * out again for the next one's read, a tree opening in the rail and the
+ * home at once paid a layout a list.
  */
+type Measured = [HTMLElement, Record<string, string>];
+
+/** Where a list's rails go: down in drawn boxes, across in layout. */
+function nestOf(
+  node: HTMLElement,
+  glyph: string,
+  child: string
+): Measured | null {
+  const parent = parentGlyph(node, glyph);
+  if (!parent) {
+    return null;
+  }
+  // Across in layout (a row caught mid-swipe is drawn off its place); down
+  // in drawn boxes read against each other, to the subpixel (nothing here
+  // moves vertically on its own transform; see `topIn`).
+  const mark = layoutBox(parent);
+  const first =
+    node.getBoundingClientRect().top +
+    node.clientTop +
+    Number.parseFloat(getComputedStyle(node).paddingTop);
+  const vars: Record<string, string> = {
+    "--nest-x": px(mark.left + mark.width / 2 - layoutBox(node).left),
+    "--nest-lead": px(first - parent.getBoundingClientRect().bottom),
+  };
+  const row = node.querySelector<HTMLElement>(":scope > li");
+  const own = row?.querySelector<HTMLElement>(child);
+  if (row && own) {
+    const tile = own.getBoundingClientRect();
+    vars["--nest-glyph-y"] = px(
+      tile.top + tile.height / 2 - row.getBoundingClientRect().top
+    );
+    vars["--nest-reach"] = px(layoutBox(own).left - layoutBox(row).left);
+  }
+  return [node, vars];
+}
+
+const nests = new Map<Element, () => Measured | null>();
+let nestSizes: ResizeObserver | null = null;
+
 export function nestFrom(
   glyph: string,
   child = glyph
 ): Attachment<HTMLElement> {
   return (node) => {
-    // Across in layout (a row caught mid-swipe is drawn off its place);
-    // down in drawn boxes read against each other, to the subpixel (nothing
-    // here moves vertically on its own transform; see `topIn`).
-    const place = () => {
-      const parent = parentGlyph(node, glyph);
-      if (!parent) {
-        return;
-      }
-      const mark = layoutBox(parent);
-      const list = layoutBox(node);
-      const first =
-        node.getBoundingClientRect().top +
-        node.clientTop +
-        Number.parseFloat(getComputedStyle(node).paddingTop);
-      node.style.setProperty(
-        "--nest-x",
-        px(mark.left + mark.width / 2 - list.left)
-      );
-      node.style.setProperty(
-        "--nest-lead",
-        px(first - parent.getBoundingClientRect().bottom)
-      );
-      const row = node.querySelector<HTMLElement>(":scope > li");
-      const own = row?.querySelector<HTMLElement>(child);
-      if (row && own) {
-        const tile = own.getBoundingClientRect();
-        node.style.setProperty(
-          "--nest-glyph-y",
-          px(tile.top + tile.height / 2 - row.getBoundingClientRect().top)
-        );
-        node.style.setProperty(
-          "--nest-reach",
-          px(layoutBox(own).left - layoutBox(row).left)
-        );
-      }
-    };
+    nests.set(node, () => nestOf(node, glyph, child));
     // Its first call is the measure, after layout; after that, a rail or
     // font change that moves a glyph measures again. The border box: the
     // inset this sets (`--nest-pad`) resizes the content box, and watching
     // that would hear its own write back as a second resize.
-    const sizes = new ResizeObserver(place);
-    sizes.observe(node, { box: "border-box" });
-    return () => sizes.disconnect();
+    nestSizes ??= new ResizeObserver((entries) => {
+      const measured = entries
+        .map((entry) => nests.get(entry.target)?.() ?? null)
+        .filter((each): each is Measured => each !== null);
+      for (const [list, vars] of measured) {
+        for (const [name, value] of Object.entries(vars)) {
+          list.style.setProperty(name, value);
+        }
+      }
+    });
+    nestSizes.observe(node, { box: "border-box" });
+    return () => {
+      nests.delete(node);
+      nestSizes?.unobserve(node);
+    };
   };
 }
 
@@ -316,15 +336,35 @@ interface Plan {
   edge: (t: number) => number;
   /** How far in (0–1) each child is: 1 at its place, 0 gone into the rail. */
   shown: ((t: number) => number)[];
+  /**
+   * Each child's swipe, on --ease-out: from `from` of the way in to `to`,
+   * over `length` ms from `start` (the arm draws out or back over the same).
+   */
+  swipes: Swipe[];
   /** The tip of the rail, from the group's top. */
   tip: (t: number) => number;
   total: number;
+}
+
+interface Swipe {
+  from: number;
+  length: number;
+  start: number;
+  to: number;
 }
 
 const tipOf =
   (shape: Shape, edge: (t: number) => number) =>
   (t: number): number =>
     clamp(edge(t) - (shape.height - shape.end), shape.start, shape.end);
+
+/** How far in a child is at `t` on its swipe. */
+const progress = (swipe: Swipe, t: number): number =>
+  swipe.length <= 0
+    ? swipe.to
+    : swipe.from +
+      (swipe.to - swipe.from) *
+        easeOut(clamp((t - swipe.start) / swipe.length, 0, 1));
 
 /** Opening from a room `from` px tall, each child `was` of the way in. */
 function planOpen(shape: Shape, from: number, was: number[]): Plan {
@@ -333,19 +373,19 @@ function planOpen(shape: Shape, from: number, was: number[]): Plan {
   const grow = shape.height - from;
   const edge = (t: number) => from + grow * easeInOut(clamp(t / travel, 0, 1));
   const lag = shape.height - shape.end;
-  let total = travel;
-  const shown = shape.items.map((item, i) => {
-    const p0 = was[i] ?? 0;
-    if (p0 >= 1) {
-      return () => 1;
-    }
+  const swipes = shape.items.map((item, i): Swipe => {
+    const p0 = Math.min(1, was[i] ?? 0);
     const cross = grow < 0.5 ? 0 : travel * reach((item.y + lag - from) / grow);
-    const length = swipe * (1 - p0);
-    total = Math.max(total, cross + length);
-    return (t: number) =>
-      p0 + (1 - p0) * easeOut(clamp((t - cross) / length, 0, 1));
+    return { from: p0, to: 1, start: cross, length: swipe * (1 - p0) };
   });
-  return { edge, tip: tipOf(shape, edge), shown, total };
+  const total = Math.max(travel, ...swipes.map((s) => s.start + s.length));
+  return {
+    edge,
+    tip: tipOf(shape, edge),
+    swipes,
+    shown: swipes.map((s) => (t: number) => progress(s, t)),
+    total,
+  };
 }
 
 /**
@@ -372,16 +412,19 @@ function planFold(
   });
   const edge = (t: number) =>
     from * (1 - easeInOut(clamp((t - lead) / travel, 0, 1)));
-  const shown = shape.items.map((_, i) => {
-    const p0 = was[i] ?? 0;
-    if (p0 <= 0) {
-      return () => 0;
-    }
+  const swipes = shape.items.map((_, i): Swipe => {
+    const p0 = Math.max(0, was[i] ?? 0);
     const length = swipe * p0;
-    const begin = lead + crossings[i] - length;
-    return (t: number) => p0 * (1 - easeOut(clamp((t - begin) / length, 0, 1)));
+    return { from: p0, to: 0, start: lead + crossings[i] - length, length };
   });
-  return { edge, tip: tipOf(shape, edge), shown, total: lead + travel, lead };
+  return {
+    edge,
+    tip: tipOf(shape, edge),
+    swipes,
+    shown: swipes.map((s) => (t: number) => progress(s, t)),
+    total: lead + travel,
+    lead,
+  };
 }
 
 /** Keyframes half a 60Hz frame apart, linear between: finer than any frame. */
@@ -389,69 +432,122 @@ const STEP = 1000 / 120;
 /** A batch's two frames at 60Hz (motion/rows `atTravel`). */
 const HOLD = 1000 / 30;
 
-/** Every piece of a plan as keyframes on its own element, linear between samples. */
+/** A child at `p` of the way in: off its place along its arm, faded with it. */
+const swiped = (item: Item, p: number): Keyframe => ({
+  translate: `${(-item.dx * (1 - p)).toFixed(2)}px 0px`,
+  opacity: p.toFixed(3),
+});
+
+/**
+ * The keyframes of a stretch of rail. Its tip-driven part is sampled where
+ * it moves, and only there: a stretch the tip is not passing holds still,
+ * and a run of equal frames is two. An elbow's arm draws out or back on its
+ * child's swipe, one segment on the same curve, so the arm's end is the
+ * glyph's left edge on every frame. Within the swipe the tip has passed the
+ * glyph (opening) or not reached it (folding): the stretch is whole, and
+ * only the arm moves.
+ */
+function railFrames(
+  shape: Shape,
+  plan: Plan,
+  rail: Rail,
+  times: number[]
+): Keyframe[] {
+  const own = rail.item === null ? null : shape.items[rail.item];
+  const swipe = rail.item === null ? null : plan.swipes[rail.item];
+  const end = rail.top + rail.height;
+  const clip = (t: number, p: number): string => {
+    const tip = plan.tip(t);
+    const below = own && tip >= own.y ? 0 : clamp(end - tip, 0, rail.height);
+    const right = own ? (rail.width - 1) * (1 - p) : 0;
+    return `inset(0px ${right.toFixed(2)}px ${below.toFixed(2)}px 0px)`;
+  };
+  const frames: Keyframe[] = [];
+  const at = (t: number) => t / plan.total;
+  const inSwipe = (t: number) =>
+    swipe !== null &&
+    swipe.length > 0 &&
+    t > swipe.start &&
+    t < swipe.start + swipe.length;
+  for (const t of times) {
+    if (inSwipe(t)) {
+      continue;
+    }
+    const p = swipe ? progress(swipe, t) : 1;
+    frames.push({ offset: at(t), clipPath: clip(t, p) });
+    if (swipe && swipe.length > 0 && t <= swipe.start) {
+      const next = times.find((u) => u > t);
+      if (next !== undefined && next > swipe.start) {
+        frames.push({
+          offset: at(swipe.start),
+          clipPath: clip(swipe.start, swipe.from),
+          easing: CURVE.out,
+        });
+        frames.push({
+          offset: at(swipe.start + swipe.length),
+          clipPath: clip(swipe.start + swipe.length, swipe.to),
+        });
+      }
+    }
+  }
+  return frames.filter(
+    (frame, k) =>
+      k === 0 ||
+      k === frames.length - 1 ||
+      frame.easing !== undefined ||
+      frames[k - 1].easing !== undefined ||
+      frame.clipPath !== frames[k - 1].clipPath ||
+      frame.clipPath !== frames[k + 1].clipPath
+  );
+}
+
+/**
+ * Every piece of a plan as an animation on its own element: each child's
+ * swipe as one segment on --ease-out, each stretch of rail as the frames it
+ * moves on. Opening (`fill: "none"`), a child holds where it starts until
+ * its swipe and is at rest after it; folding (`"both"`), each piece holds
+ * where it ends until the group unmounts.
+ */
 function animate(shape: Shape, plan: Plan, fill: FillMode): Animation[] {
   const count = Math.max(2, Math.ceil(plan.total / STEP));
   const times = Array.from(
     { length: count + 1 },
     (_, k) => (plan.total * k) / count
   );
-  const timing: KeyframeAnimationOptions = {
-    duration: plan.total,
-    easing: "linear",
-    fill,
-  };
   const animations: Animation[] = [];
-  const play = (
-    el: HTMLElement,
-    frames: Keyframe[],
-    pseudoElement?: string
-  ) => {
-    // Opening, a piece that never moves is at rest already; folding, it is
-    // held where it ends until the group unmounts.
-    const first = JSON.stringify({ ...frames[0], offset: 0 });
-    if (
-      fill !== "both" &&
-      frames.every((f) => JSON.stringify({ ...f, offset: 0 }) === first)
-    ) {
+  shape.items.forEach((item, i) => {
+    const swipe = plan.swipes[i];
+    if (fill === "none" && swipe.from >= 1) {
       return;
     }
-    animations.push(el.animate(frames, { ...timing, pseudoElement }));
-  };
-  shape.items.forEach((item, i) => {
-    play(
-      item.el,
-      times.map((t, k) => {
-        const p = plan.shown[i](t);
-        return {
-          offset: k / count,
-          translate: `${(-item.dx * (1 - p)).toFixed(2)}px 0px`,
-          opacity: p.toFixed(3),
-        };
+    animations.push(
+      item.el.animate([swiped(item, swipe.from), swiped(item, swipe.to)], {
+        delay: swipe.start,
+        duration: Math.max(swipe.length, 1),
+        easing: CURVE.out,
+        fill: fill === "none" ? "backwards" : "both",
       })
     );
   });
   for (const rail of shape.rails) {
-    const end = rail.top + rail.height;
-    play(
-      rail.li,
-      times.map((t, k) => {
-        const tip = plan.tip(t);
-        const own = rail.item === null ? null : shape.items[rail.item];
-        // An elbow is whole once the tip reaches its glyph; its arm is out
-        // as far as its child has come.
-        const below =
-          own && tip >= own.y ? 0 : clamp(end - tip, 0, rail.height);
-        const right =
-          rail.item === null
-            ? 0
-            : (rail.width - 1) * (1 - plan.shown[rail.item](t));
-        return {
-          offset: k / count,
-          clipPath: `inset(0px ${right.toFixed(2)}px ${below.toFixed(2)}px 0px)`,
-        };
-      }),
-      rail.pseudo
+    const frames = railFrames(shape, plan, rail, times);
+    const still = frames.every(
+      (frame) => frame.clipPath === frames[0].clipPath
+    );
+    if (
+      fill === "none" &&
+      still &&
+      frames[0].clipPath === "inset(0px 0.00px 0.00px 0px)"
+    ) {
+      continue;
+    }
+    animations.push(
+      rail.li.animate(frames, {
+        duration: plan.total,
+        easing: "linear",
+        fill,
+        pseudoElement: rail.pseudo,
+      })
     );
   }
   return animations;
@@ -533,27 +629,13 @@ const itemsOf = (group: HTMLElement) => [
   ...group.querySelectorAll<HTMLElement>("[data-branch-item]"),
 ];
 
-/** Every rail stretch inside a group, held hidden: no measure needed. */
-function holdHidden(group: HTMLElement): Animation[] {
-  const held: Animation[] = [];
-  const hide = (el: HTMLElement, frame: Keyframe, pseudoElement?: string) => {
-    const animation = el.animate([frame, frame], {
-      duration: 1,
-      pseudoElement,
-    });
-    animation.pause();
-    held.push(animation);
-  };
-  for (const item of itemsOf(group)) {
-    hide(item, { opacity: 0 });
-  }
-  for (const li of group.querySelectorAll<HTMLElement>(".kit-nest > li")) {
-    for (const pseudo of ["::before", "::after"]) {
-      hide(li, { clipPath: "inset(0 0 100% 0)" }, pseudo);
-    }
-  }
-  return held;
-}
+/**
+ * A group just mounted is held hidden, its rows and its rails, from the
+ * update that mounts it to the frame its fold starts (app.css
+ * `[data-branch-hold]`): one attribute, where an animation a piece cost
+ * the click its own long task.
+ */
+const HELD = "data-branch-hold";
 
 /** How far in each measured child was, by element: a new one was nowhere. */
 const wasOf = (shape: Shape, items: HTMLElement[], was: number[]) =>
@@ -574,13 +656,17 @@ function open(group: HTMLElement, options: BranchOptions): TransitionConfig {
   const flight: Flight = {
     // Held where they are (turned back) or hidden (just mounted) until the
     // batch starts.
-    animations: turning ? from.held : holdHidden(group),
+    animations: from.held,
     items,
     plan: null,
     start: null,
   };
+  if (!turning) {
+    group.setAttribute(HELD, "");
+  }
   flights.set(group, flight);
   if (!motionOk.current) {
+    group.removeAttribute(HELD);
     for (const animation of flight.animations) {
       animation.cancel();
     }
@@ -613,6 +699,8 @@ function open(group: HTMLElement, options: BranchOptions): TransitionConfig {
     for (const animation of animations) {
       animation.startTime = at;
     }
+    // In the same frame the pieces take over from the hold.
+    group.removeAttribute(HELD);
     flight.animations = animations;
     flight.items = shape.items.map((item) => item.el);
     flight.plan = plan;
@@ -655,6 +743,8 @@ function fold(group: HTMLElement, options: BranchOptions): TransitionConfig {
   for (const animation of animations) {
     animation.startTime = start;
   }
+  // Folded before it ever opened: the pieces hold it hidden now.
+  group.removeAttribute(HELD);
   // The room closes from the batch's frame, after the lead; the group leaves
   // the flow now, so reflow hears it (`data-state`) in this update and holds
   // its box and everything under it until then.

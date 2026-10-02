@@ -41,6 +41,19 @@ export function morph({
     let natural: { w: number; h: number } | null = null;
     let running: Animation | undefined;
 
+    /**
+     * Its laid-out size. Following rows, to the subpixel: they stand at
+     * fractional places, and a box rounded to whole pixels cut the last of
+     * them by the difference while it slid.
+     */
+    const sizeOf = (): { w: number; h: number } => {
+      if (rows) {
+        const box = node.getBoundingClientRect();
+        return { w: box.width, h: box.height };
+      }
+      return { w: node.offsetWidth, h: node.offsetHeight };
+    };
+
     /** The tween itself: its own curve, or the rows' (`rows`). */
     const play = (frames: Keyframe[]): Animation =>
       rows
@@ -63,7 +76,7 @@ export function morph({
       const from = drawn ? { w: drawn.width, h: drawn.height } : settled;
       running?.cancel();
       running = undefined;
-      const next = { w: node.offsetWidth, h: node.offsetHeight };
+      const next = sizeOf();
       const moved =
         Math.abs(next.h - from.h) > 0.5 ||
         (width && Math.abs(next.w - from.w) > 0.5);
@@ -100,7 +113,7 @@ export function morph({
 
     const sizes = new ResizeObserver(() => {
       if (natural === null) {
-        natural = { w: node.offsetWidth, h: node.offsetHeight };
+        natural = sizeOf();
       } else {
         tween(natural);
       }

@@ -543,6 +543,17 @@
   .kit-nest > li:last-child::after {
     content: none;
   }
+  /* A tree's rows just mounted, and their rails, held hidden until the
+     frame their fold starts (motion/branch). */
+  [data-branch-hold] [data-branch-item] {
+    opacity: 0;
+  }
+  [data-branch-hold].kit-nest > li::before,
+  [data-branch-hold].kit-nest > li::after,
+  [data-branch-hold] .kit-nest > li::before,
+  [data-branch-hold] .kit-nest > li::after {
+    clip-path: inset(0 0 100% 0);
+  }
 
   /* A session row's time, at the row's trailing edge or, on a parent, just
      before its count (TreeCount), which is the row's last thing: every row
