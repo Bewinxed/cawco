@@ -380,6 +380,25 @@ class Home {
   }
 
   /**
+   * A row and everything under it, listed or not (the Delegates switch hides
+   * rows, not what they are): what archiving a parent takes off Finished.
+   */
+  treeOf(id: string): string[] {
+    const out: string[] = [];
+    const walk = (at: string) => {
+      if (out.includes(at)) {
+        return;
+      }
+      out.push(at);
+      for (const child of this.#children.get(at) ?? []) {
+        walk(child);
+      }
+    };
+    walk(id);
+    return out;
+  }
+
+  /**
    * The first full read is in: machines, sessions, runs, every online
    * machine's stored sessions, and the socket's own snapshot of what is
    * mid-turn (or the hub is known to be unreachable). It only rises: a

@@ -189,17 +189,12 @@
     };
   }
   /**
-   * Takes a finished row off the list, and with a parent its whole tree.
-   * Offered only on a row `home.archivable` allows: nothing in the tree is
-   * still doing anything.
+   * Takes a finished row off the list, and with a parent its whole tree,
+   * the rows the Delegates switch hides too. Offered only on a row
+   * `home.archivable` allows: nothing in the tree is still doing anything.
    */
   function archiveTree(id: string): void {
-    const line = shapeOf("finished", id);
-    archive(
-      [line?.row, ...(line?.descendants ?? [])]
-        .filter((row): row is InstanceRow => !!row && home.archivable(row))
-        .map((row) => row.id)
-    );
+    archive(home.treeOf(id));
   }
   /**
    * Every finished row a machine lists, folded or not, that may be archived:
