@@ -6242,8 +6242,6 @@ export const createServer = ({
           );
         }
       )
-      // Where a conversation lives, for a client that wants the answer without
-      // the transcript — see `locateSession` for the resolution order.
       // An image a transcript referenced, by the hash of its bytes: the same
       // name can only ever mean the same picture, so the browser keeps it.
       .get("/api/media/:name", async ({ params, status }) => {
@@ -6259,11 +6257,6 @@ export const createServer = ({
           },
         });
       })
-      // 204 when nothing knows where it lives.
-      .get("/api/instances/:id/location", async ({ params, status }) => {
-        const location = params.id ? await locateSession(params.id) : null;
-        return location ?? status(204);
-      })
       // A session's stored transcript over HTTP, which is the only way a page can
       // have one before its socket is up. The dashboard used to read history with
       // a `getSessionMessages` control over its own WebSocket, so a reload showed
@@ -6274,7 +6267,7 @@ export const createServer = ({
       // Addressed by id alone. The hub's own row answers for a session it holds —
       // including the SDK session key, which is what the machine stores the
       // transcript under. An id with no row is a stored session key, located
-      // the way `/location` is.
+      // by `locateSession`.
       //
       // The MCP servers and tools the session's newest `init` announced, as
       // stored on its row. Read when a view opens, beside its transcript: the

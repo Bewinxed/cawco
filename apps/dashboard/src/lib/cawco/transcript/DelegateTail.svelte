@@ -20,7 +20,7 @@
   import { fade } from "svelte/transition";
   import {
     describeTool,
-    type ToolStatus,
+    type ToolCallStatus,
   } from "$lib/components/features/tool-cards/descriptors";
   import { Skeleton } from "$lib/components/ui/skeleton";
   import { IconCpu, IconHandoff, IconReport, IconRules } from "$lib/icons";
@@ -72,7 +72,7 @@
     switch (m.type) {
       case "tool.use":
       case "tool.handoff": {
-        const status = (meta.toolStatus ?? "pending") as ToolStatus;
+        const status = (meta.toolStatus ?? "pending") as ToolCallStatus;
         const d = describeTool(
           meta.toolName,
           (meta.toolInput ?? undefined) as Record<string, unknown> | undefined,

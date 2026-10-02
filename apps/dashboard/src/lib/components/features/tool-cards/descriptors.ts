@@ -28,7 +28,7 @@ import {
   IconToolWrite,
 } from "$lib/icons";
 
-export type ToolStatus = "pending" | "success" | "error";
+export type ToolCallStatus = "pending" | "success" | "error";
 
 /** Which body an expanded row opens: each family has one shape worth reading. */
 export type ExpandedKind =
@@ -601,7 +601,7 @@ export function describeTool(
   toolName: string | undefined,
   input: Record<string, unknown> | undefined,
   result: string | undefined,
-  status: ToolStatus,
+  status: ToolCallStatus,
   /** The configured URL's host for an MCP server segment, when the session knows it. */
   serverHost?: (server: string) => string | undefined
 ): ToolDescriptor {
@@ -628,7 +628,7 @@ function sentence(
   toolName: string | undefined,
   input: Record<string, unknown> | undefined,
   result: string | undefined,
-  status: ToolStatus
+  status: ToolCallStatus
 ): ToolDescriptor {
   const name = toolName ?? "Tool";
   const output = status === "success" ? result : undefined;

@@ -15,8 +15,8 @@
     getDiffInfo,
     memoryResult,
     pathLeaf,
+    type ToolCallStatus,
     type ToolDescriptor,
-    type ToolStatus,
   } from "$lib/components/features/tool-cards/descriptors";
   import MemoryBody from "$lib/components/features/tool-cards/MemoryBody.svelte";
   import ToolProse from "$lib/components/features/tool-cards/ToolProse.svelte";
@@ -171,7 +171,7 @@
       meta.toolName,
       (meta.toolInput ?? undefined) as Record<string, unknown> | undefined,
       asString(meta.toolResult),
-      (meta.toolStatus ?? "pending") as ToolStatus,
+      (meta.toolStatus ?? "pending") as ToolCallStatus,
       (server) =>
         mcpServerHost(cawco.session(m.instanceId)?.mcp ?? null, server) ??
         mcpServerHost(fleetMcpServers(), server)

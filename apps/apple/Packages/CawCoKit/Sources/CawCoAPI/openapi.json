@@ -1870,36 +1870,6 @@
         }
       }
     },
-    "/api/instances/{id}/location": {
-      "get": {
-        "parameters": [
-          {
-            "name": "id",
-            "in": "path",
-            "required": true,
-            "schema": {
-              "type": "string"
-            }
-          }
-        ],
-        "operationId": "getApiInstancesByIdLocation",
-        "responses": {
-          "200": {
-            "description": "getApiInstancesByIdLocation 200",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/SessionLocation"
-                }
-              }
-            }
-          },
-          "204": {
-            "description": "getApiInstancesByIdLocation 204"
-          }
-        }
-      }
-    },
     "/api/instances/{id}/tooling": {
       "get": {
         "parameters": [
@@ -10781,34 +10751,6 @@
           "name",
           "path",
           "scope"
-        ]
-      },
-      "SessionLocation": {
-        "description": "Where a conversation lives, resolved from its id alone. `sessionId` is the\nkey the machine stores the transcript under — the SDK's, which for a session\nthe hub spawned is not the instance id the reader addressed it by.",
-        "type": "object",
-        "properties": {
-          "cwd": {
-            "type": "string"
-          },
-          "harness": {
-            "$ref": "#/components/schemas/HarnessKind"
-          },
-          "id": {
-            "type": "string"
-          },
-          "machineId": {
-            "type": "string"
-          },
-          "sessionId": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "cwd",
-          "harness",
-          "id",
-          "machineId",
-          "sessionId"
         ]
       },
       "T": {
