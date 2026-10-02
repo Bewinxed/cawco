@@ -5046,6 +5046,23 @@
         }
       }
     },
+    "/api/usage/spend": {
+      "get": {
+        "operationId": "getApiUsageSpend",
+        "responses": {
+          "200": {
+            "description": "getApiUsageSpend 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UsageSpend"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/usage/summary": {
       "get": {
         "parameters": [
@@ -8785,7 +8802,7 @@
             "type": "object",
             "properties": {
               "kind": {
-                "description": "Hub-originated: every machine's latest limit reading, pushed on each\nagent usage report (USAGE-SPEC.md §6.4). Small by design — the heavy\naggregates are pulled over REST.",
+                "description": "Hub-originated: every machine's latest limit reading and the fleet's\nspend, pushed on each agent usage report (USAGE-SPEC.md §6.4), which\nis when spend lands. Small by design — the heavy aggregates are\npulled over REST.",
                 "type": "string",
                 "enum": [
                   "usage"
@@ -8796,11 +8813,15 @@
                 "items": {
                   "$ref": "#/components/schemas/UsageLimitsReading"
                 }
+              },
+              "spend": {
+                "$ref": "#/components/schemas/UsageSpend"
               }
             },
             "required": [
               "kind",
-              "limits"
+              "limits",
+              "spend"
             ]
           },
           {
@@ -13899,6 +13920,38 @@
           "error",
           "fetchedAt",
           "windows"
+        ]
+      },
+      "UsageSpend": {
+        "description": "The fleet's real spend, as the hub reckons it and serves it at\n`/api/usage/spend` and on every `kind: 'usage'` frame: the one figure every\n\"today\" in CawCo reads.\n\nReal money is opencode's own per-message cost; Claude is a subscription\nwhose constraint is a percentage, so its API-price estimate is never added\nin. The days are the hub's: `todayStart` is local midnight and `weekStart`\nthis Monday's midnight in `timeZone`, the hub's own zone (IANA name).",
+        "type": "object",
+        "properties": {
+          "all": {
+            "type": "number"
+          },
+          "timeZone": {
+            "type": "string"
+          },
+          "today": {
+            "type": "number"
+          },
+          "todayStart": {
+            "type": "number"
+          },
+          "week": {
+            "type": "number"
+          },
+          "weekStart": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "all",
+          "timeZone",
+          "today",
+          "todayStart",
+          "week",
+          "weekStart"
         ]
       },
       "UsageSummary": {

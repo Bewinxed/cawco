@@ -884,12 +884,14 @@ export type FramePayload =
     }
   | {
       /**
-       * Hub-originated: every machine's latest limit reading, pushed on each
-       * agent usage report (USAGE-SPEC.md §6.4). Small by design — the heavy
-       * aggregates are pulled over REST.
+       * Hub-originated: every machine's latest limit reading and the fleet's
+       * spend, pushed on each agent usage report (USAGE-SPEC.md §6.4), which
+       * is when spend lands. Small by design — the heavy aggregates are
+       * pulled over REST.
        */
       kind: "usage";
       limits: import("./usage").UsageLimitsReading[];
+      spend: import("./usage").UsageSpend;
     }
   | {
       /** Authoritative daemon confirmation, never merely delivery of a stop request. */

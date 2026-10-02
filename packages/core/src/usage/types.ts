@@ -144,6 +144,25 @@ export interface UsageSummary {
   totals: UsageTotals;
 }
 
+/**
+ * The fleet's real spend, as the hub reckons it and serves it at
+ * `/api/usage/spend` and on every `kind: 'usage'` frame: the one figure every
+ * "today" in CawCo reads.
+ *
+ * Real money is opencode's own per-message cost; Claude is a subscription
+ * whose constraint is a percentage, so its API-price estimate is never added
+ * in. The days are the hub's: `todayStart` is local midnight and `weekStart`
+ * this Monday's midnight in `timeZone`, the hub's own zone (IANA name).
+ */
+export interface UsageSpend {
+  all: number;
+  timeZone: string;
+  today: number;
+  todayStart: number;
+  week: number;
+  weekStart: number;
+}
+
 /** What `/api/usage/limits` returns: every machine's latest readings. */
 export interface UsageLimitsResponse {
   machines: {

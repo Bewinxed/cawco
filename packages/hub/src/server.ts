@@ -54,6 +54,7 @@ import type {
   TranscriptWhere,
   UsageBucket,
   UsageLimitsResponse,
+  UsageSpend,
   Verb,
   WorkspaceRef,
 } from "@cawco/core";
@@ -1653,6 +1654,26 @@ export const createServer = ({
   const meaningJudge = new MeaningJudge(db);
   /** Counts skill, tool and MCP server uses for suggestion ranking. */
   const usageCounter = new UsageCounter(db);
+  /**
+   * The fleet's real spend ({@link UsageSpend}): opencode's recorded cost
+   * since local midnight, since this Monday and in all, its days reckoned in
+   * the hub's own zone, the calendar the hub's usage counts already keep
+   * (usage-count `dayOf`). Every "today" CawCo shows is this.
+   */
+  const spendNow = (): UsageSpend => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const week = new Date(today);
+    week.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+    const todayStart = today.getTime();
+    const weekStart = week.getTime();
+    return {
+      ...db.usageSpend({ harness: "opencode", todayStart, weekStart }),
+      todayStart,
+      weekStart,
+      timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    };
+  };
   /**
    * The PKCE verifier of the OpenRouter connect in progress. One at a time: a
    * new connect replaces it, and a finished exchange spends it.
@@ -8654,6 +8675,7 @@ export const createServer = ({
           })),
         };
       })
+      .get("/api/usage/spend", (): UsageSpend => spendNow())
       .get(
         "/api/usage/limits/history",
         {
@@ -9036,8 +9058,9 @@ export const createServer = ({
               break;
             }
             // The per-machine scanner's usage report (USAGE-SPEC.md §6.4): store
-            // the buckets and the limit reading, then push only the small limits
-            // frame — the dashboard pulls the heavy aggregates over REST.
+            // the buckets and the limit reading, then push the small frame of
+            // limits and the fleet's spend, which moves exactly here — the
+            // dashboard pulls the heavy aggregates over REST.
             case "usage": {
               const { buckets, limits, openCodeGo } = message.payload as {
                 buckets?: UsageBucket[];
@@ -9057,7 +9080,11 @@ export const createServer = ({
               registry.broadcast({
                 verb: "frames",
                 machineId: message.machineId,
-                payload: { kind: "usage", limits: db.listUsageLimits() },
+                payload: {
+                  kind: "usage",
+                  limits: db.listUsageLimits(),
+                  spend: spendNow(),
+                },
               });
               break;
             }

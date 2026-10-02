@@ -30,6 +30,7 @@ import type {
   ToolStatus,
   UsageBucket,
   UsageGroupBy,
+  UsageHarness,
   UsageSummary,
   UsageSummaryRow,
   UsageTotals,
@@ -908,6 +909,16 @@ export interface DbShape {
     since?: number;
     until?: number;
   }) => UsageLimitHistoryRow[];
+  /**
+   * One harness's recorded cost since each boundary and in all, in one SQL
+   * pass. A bucket counts toward a boundary when its hour starts at or after
+   * it.
+   */
+  readonly usageSpend: (q: {
+    harness: UsageHarness;
+    todayStart: number;
+    weekStart: number;
+  }) => { today: number; week: number; all: number };
   /** Aggregates buckets in SQL (SUM/GROUP BY) and names the unpriced models. */
   readonly usageSummary: (q: {
     since?: number;
@@ -3025,6 +3036,24 @@ const make = (path: string): DbShape => {
         .orderBy(usageLimitHistory.fetchedAt)
         .all(),
     listUsageLimits: () => db.select().from(usageLimits).all(),
+    usageSpend: ({ harness, todayStart, weekStart }) => {
+      const since = (start: number) =>
+        sql<number>`coalesce(sum(case when ${usageBuckets.hourStart} >= ${start} then ${usageBuckets.costUsd} else 0 end), 0)`;
+      const row = db
+        .select({
+          today: since(todayStart),
+          week: since(weekStart),
+          all: sql<number>`coalesce(sum(${usageBuckets.costUsd}), 0)`,
+        })
+        .from(usageBuckets)
+        .where(eq(usageBuckets.harness, harness))
+        .get();
+      return {
+        today: row?.today ?? 0,
+        week: row?.week ?? 0,
+        all: row?.all ?? 0,
+      };
+    },
     usageSummary: ({ since, until, harness, machineId, groupBy }) => {
       const key = usageKey(groupBy);
       const groups = db
