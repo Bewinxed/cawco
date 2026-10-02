@@ -1,0 +1,26 @@
+{
+  "fill-specializations" : [
+    { "value" : { "solid" : "extended-srgb:0.95686,0.94118,0.90196,1.00000" } },
+    { "appearance" : "dark", "value" : { "solid" : "extended-srgb:0.09020,0.09020,0.08235,1.00000" } }
+  ],
+  "groups" : [
+    {
+      "name" : "Caw",
+      "layers" : [
+        {
+          "name" : "Caw",
+          "glass" : false,
+          "image-name-specializations" : [
+            { "value" : "caw-light.png" },
+            { "appearance" : "dark", "value" : "caw-dark.png" },
+            { "appearance" : "tinted", "value" : "caw-dark.png" }
+          ]
+        }
+      ],
+      "shadow" : { "kind" : "none", "opacity" : 0 },
+      "specular" : false,
+      "translucency" : { "enabled" : false, "value" : 0 }
+    }
+  ],
+  "supported-platforms" : { "squares" : [ "iOS", "macOS" ] }
+}

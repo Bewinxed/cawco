@@ -35,6 +35,9 @@ targets:
         PRODUCT_NAME: CawCo
         TARGETED_DEVICE_FAMILY: "1,2"
         SUPPORTS_MACCATALYST: NO
+        # CawCo/AppIcon.icon (Icon Composer): Ivory by default, Ink with the
+        # cream-rim Caw in dark and tinted.
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
         # Sign to Run Locally until a development team is chosen.
         "CODE_SIGN_IDENTITY[sdk=macosx*]": "-"
         # The Mac app is sandboxed and may open connections to the hub.
