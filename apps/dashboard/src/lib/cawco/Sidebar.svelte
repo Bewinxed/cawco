@@ -130,7 +130,13 @@
    */
   const NAV_ROW = "h-[var(--c-nav-h)] gap-2.5 px-2.5 text-body";
   const LIST_ROW = "h-[30px] gap-2.5 px-2.5 py-0";
-  const SUB_ROW = "h-[28px] gap-2.5 px-2.5";
+  /**
+   * A session under its project: indented past the project's rail, so the
+   * name has the least room in the rail. The gaps between its five parts
+   * (mark, name, folded count, age, status) are the tight ones, and its mark
+   * stands just clear of the nesting arrow's tip.
+   */
+  const SUB_ROW = "h-[28px] gap-1 pl-1.5 pr-2";
   /** The height the loading rows stand at: a list row's. */
   const LIST_ROW_H = "h-[30px]";
   /** `Sidebar.Group`'s own `p-2` plus `Sidebar.Content`'s `gap-2` stacked to
