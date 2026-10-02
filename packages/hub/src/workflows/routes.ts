@@ -5,7 +5,7 @@ import {
   typecheckProgram,
   workflowProgramCheck,
 } from "@cawco/core/workflow-sandbox";
-import { Elysia, t } from "elysia";
+import { Elysia, ElysiaStatus, status, t } from "elysia";
 import type { DbShape } from "../db";
 import { hidden } from "../hidden";
 import { type createWorkflowRuntime, publicRun } from "./runtime";
@@ -23,10 +23,10 @@ export function workflowRoutes(
   }
 ) {
   const refusal = (error: unknown) =>
-    new Response(error instanceof Error ? error.message : String(error), {
-      status: 400,
-    });
-  const attempt = async <T>(action: () => T | Promise<T>) => {
+    status(400, error instanceof Error ? error.message : String(error));
+  const attempt = async <T>(
+    action: () => T
+  ): Promise<Awaited<T> | ReturnType<typeof refusal>> => {
     try {
       return await action();
     } catch (error) {
@@ -38,14 +38,10 @@ export function workflowRoutes(
    * still saves and is refused at launch instead (§9.3), because the editor
    * autosaves; one the compiler cannot take, or a call cycle, is refused now.
    */
-  const compileGraph = (
-    graph: WorkflowGraph,
-    id: string,
-    name: string
-  ): Response | { program: string; problems: Problem[] } => {
+  const compileGraph = (graph: WorkflowGraph, id: string, name: string) => {
     const fatal = workflowProgramCheck(graph);
     if (fatal.length) {
-      return Response.json({ problems: fatal }, { status: 400 });
+      return status(400, { problems: fatal });
     }
     const problems = validateWorkflow(graph, {
       workflowId: id,
@@ -58,7 +54,8 @@ export function workflowRoutes(
       problem.message.startsWith("Workflow call cycle:")
     );
     if (cycle) {
-      return Response.json({ problems: [cycle] }, { status: 400 });
+      const refused: Problem[] = [cycle];
+      return status(400, { problems: refused });
     }
     return { program: compileWorkflow(graph).program, problems };
   };
@@ -67,7 +64,7 @@ export function workflowRoutes(
     input: { graph?: WorkflowGraph; program?: string },
     id: string,
     name: string
-  ): Response | { program: string; problems: Problem[] } => {
+  ) => {
     if (input.graph && input.program) {
       throw new Error(
         "A workflow is authored either as a graph or as a program, never both."
@@ -84,8 +81,8 @@ export function workflowRoutes(
     // A program that will not typecheck is refused with the diagnostics.
     const fatal = typecheckProgram(input.program);
     return fatal.length
-      ? Response.json({ problems: fatal }, { status: 400 })
-      : { program: input.program, problems: [] };
+      ? status(400, { problems: fatal })
+      : { program: input.program, problems: [] as Problem[] };
   };
   /**
    * A new workflow (POST) names itself in the body. An existing one (PUT) is
@@ -106,7 +103,7 @@ export function workflowRoutes(
       throw new Error("A workflow needs a name.");
     }
     const compiled = compile(input, id, name);
-    if (compiled instanceof Response) {
+    if (compiled instanceof ElysiaStatus) {
       return compiled;
     }
     const { program, problems } = compiled;
@@ -147,13 +144,10 @@ export function workflowRoutes(
   };
   return new Elysia()
     .get("/api/workflows", () => ({ workflows: db.listWorkflows() }))
-    .post("/api/workflows", { body: t.Any() }, ({ body, set }) =>
+    .post("/api/workflows", { body: t.Any() }, ({ body }) =>
       attempt(async () => {
         const saved = await save(body as Parameters<typeof save>[0]);
-        if (!(saved instanceof Response)) {
-          set.status = 201;
-        }
-        return saved;
+        return saved instanceof ElysiaStatus ? saved : status(201, saved);
       })
     )
     .get("/api/workflows/:id/program", hidden, ({ params }) => {
@@ -168,7 +162,7 @@ export function workflowRoutes(
       attempt(() => {
         const row = db.getWorkflow(params.id);
         if (!row) {
-          return new Response("Workflow not found.", { status: 404 });
+          return status(404, "Workflow not found.");
         }
         return {
           ...row,
@@ -192,9 +186,9 @@ export function workflowRoutes(
         // No program compiles back to a graph: a program saved over a canvas
         // would drop the canvas.
         if (row.origin === "editor" && input.program !== undefined) {
-          return new Response(
-            "This workflow is authored as a graph; edit it in the canvas or save a graph.",
-            { status: 409 }
+          return status(
+            409,
+            "This workflow is authored as a graph; edit it in the canvas or save a graph."
           );
         }
         return save(input, row);

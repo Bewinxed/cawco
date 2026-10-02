@@ -644,18 +644,46 @@ export interface WorkItemSummary {
   title: string;
 }
 
+/** The three things a delegate and its parent ever say to each other. */
+export type DelegateEventKind = "ask" | "answer" | "report";
+
+/** An ask's life: parked on the parent, then allowed or refused by it. */
+export type DelegateAskStatus = "pending" | "answered" | "denied";
+
+/** What each kind carries: the ask's own input, the answer, the turn's report. */
+export type DelegateEventPayload =
+  | { input: unknown }
+  | { behavior: string; answers?: Record<string, unknown> }
+  | { body: string; failed: boolean };
+
+/**
+ * One line of what a delegate and its parent said to each other through the
+ * hub — a `delegate_events` row (packages/hub `db/schema.ts`), read over
+ * `GET /api/delegate-events` and pushed as a `delegate_event` frame.
+ */
+export interface DelegateEvent {
+  createdAt: Date;
+  /** The hub's row id — what a fold deduplicates on and orders by. */
+  id: number;
+  /** The delegate the traffic is about — never the parent, on any of the kinds. */
+  instanceId: string;
+  kind: DelegateEventKind;
+  parentInstanceId: string;
+  payload: DelegateEventPayload;
+  /** The permission request an ask and its answer share. Null on a report. */
+  requestId: string | null;
+  requestKind: "question" | "tool" | null;
+  /** An ask's own state; null on an answer and a report, which settle nothing. */
+  status: DelegateAskStatus | null;
+  toolName: string | null;
+}
+
 /**
  * One line of the supervisor's intervention log — `supervisor_events`
  * (packages/hub `db/schema.ts`), read over `GET /api/supervisor/events` and
  * pushed as a `supervisor_event` frame. Silent verdicts are recorded too: the
  * log is the only place any of this is visible, so "it looked and did
  * nothing" has to show up the same as "it spoke".
- *
- * `DelegateEvent`, the nearest sibling shape, lives in the dashboard app
- * (`apps/dashboard/src/lib/cawco/types.ts`) rather than here — but both the
- * hub (which records these rows) and the dashboard (which reads them) need
- * this type, and the hub does not import from the dashboard app. Core is the
- * one home both sides already share.
  */
 export interface SupervisorEvent {
   createdAt: number;
@@ -674,6 +702,19 @@ export interface SupervisorEvent {
   /** Which mechanism produced the verdict. */
   source: "rule" | "autopilot";
   verdict: "silent" | "reply" | "escalate" | "ask" | "error" | "skipped";
+}
+
+/**
+ * Fired the moment an evaluation actually begins — the transient half of the
+ * supervisor's visible life. Every evaluation is guaranteed to terminate in a
+ * published {@link SupervisorEvent}, so a consumer can treat that event as
+ * this signal's close; nothing here is persisted.
+ */
+export interface SupervisorStatusSignal {
+  at: number;
+  phase: "evaluating";
+  ruleId: string | null;
+  source: "rule" | "autopilot";
 }
 
 /**
@@ -858,6 +899,27 @@ export type FramePayload =
       kind: "work_item";
       instanceId: string;
       item: WorkItemSummary;
+    }
+  | {
+      /**
+       * Hub-originated: a line of delegate traffic the moment it is recorded.
+       * `instanceId` is the delegate's.
+       */
+      kind: "delegate_event";
+      instanceId: string;
+      event: DelegateEvent;
+    }
+  | {
+      /** Hub-originated: a supervisor verdict the moment it is logged. */
+      kind: "supervisor_event";
+      instanceId: string;
+      event: SupervisorEvent;
+    }
+  | {
+      /** Hub-originated, never stored: the supervisor began evaluating. */
+      kind: "supervisor_status";
+      instanceId: string;
+      status: SupervisorStatusSignal;
     }
   /** Hub-originated workflow run transition (§7.2). */
   | import("./workflow").WorkflowFrame;

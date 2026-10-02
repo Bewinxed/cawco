@@ -3,6 +3,9 @@ import type {
   BuildInfo,
   ClaudeLimits,
   ContinuationJob,
+  DelegateAskStatus,
+  DelegateEventKind,
+  DelegateEventPayload,
   FleetMcpConfig,
   FleetScope,
   FleetSyncReport,
@@ -498,18 +501,6 @@ export const workItems = sqliteTable(
     index("work_items_parent").on(table.parentInstanceId, table.state),
   ]
 );
-
-/** The three things a delegate and its parent ever say to each other. */
-export type DelegateEventKind = "ask" | "answer" | "report";
-
-/** An ask's life: parked on the parent, then allowed or refused by it. */
-export type DelegateAskStatus = "pending" | "answered" | "denied";
-
-/** What each kind carries: the ask's own input, the answer, the turn's report. */
-export type DelegateEventPayload =
-  | { input: unknown }
-  | { behavior: string; answers?: Record<string, unknown> }
-  | { body: string; failed: boolean };
 
 /**
  * What a delegate and its parent said to each other through the hub: every ask

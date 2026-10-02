@@ -6,6 +6,7 @@ import type {
   RuleFacts,
   SendPayload,
   SupervisorEvent,
+  SupervisorStatusSignal,
 } from "@cawco/core";
 import {
   RULE_FIRE_CEILING,
@@ -42,19 +43,6 @@ const FILES_CAP = 40;
 
 export interface SupervisorSender {
   send: (envelope: Envelope<SendPayload>) => void;
-}
-
-/**
- * Fired the moment an evaluation actually begins — the transient half of the
- * supervisor's visible life. Every evaluation is guaranteed to terminate in a
- * published {@link SupervisorEvent}, so a consumer can treat that event as
- * this signal's close; nothing here is persisted.
- */
-export interface SupervisorStatusSignal {
-  at: number;
-  phase: "evaluating";
-  ruleId: string | null;
-  source: "rule" | "autopilot";
 }
 
 export interface SupervisorEngineDeps {

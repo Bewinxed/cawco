@@ -2,6 +2,10 @@ import type {
   AgentRow,
   BuildInfo,
   ClaudeLimits,
+  DelegateAskStatus,
+  DelegateEvent,
+  DelegateEventKind,
+  DelegateEventPayload,
   FleetAgent,
   FleetConfig,
   FleetHook,
@@ -52,11 +56,6 @@ import { migrate } from "drizzle-orm/bun-sqlite/migrator";
 import { Context, Effect, Layer } from "effect";
 import { DB_PATH } from "../config";
 import { workflowSkill } from "../workflows/skills";
-import type {
-  DelegateAskStatus,
-  DelegateEventKind,
-  DelegateEventPayload,
-} from "./schema";
 import {
   agents,
   capabilityUsageDaily,
@@ -142,8 +141,6 @@ const LIMIT_HISTORY_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
 
 export type AgentAuth = (typeof agents.$inferSelect)["auth"];
 
-/** One line of what a delegate and its parent said, as everything reads it. */
-export type DelegateEvent = typeof delegateEvents.$inferSelect;
 export type SentMessageRow = typeof sentMessages.$inferSelect;
 
 /** One superseded version of the fleet's memory, as a listing reads it. */

@@ -6,6 +6,7 @@ import type {
   CommandResult,
   ContinuationJob,
   ControlPayload,
+  DelegateEvent,
   DeployInfo,
   DeployKind,
   Envelope,
@@ -46,6 +47,7 @@ import type {
   SkillFile,
   SpawnPayload,
   SupervisorEvent,
+  SupervisorStatusSignal,
   ToolState,
   ToolStatus,
   UsageBucket,
@@ -127,7 +129,6 @@ import type {
   AgentAuth,
   ContinuationRow,
   DbShape,
-  DelegateEvent,
   InstanceKind,
   SentMessageRow,
 } from "./db";
@@ -149,7 +150,7 @@ import { RuleEngine } from "./rules";
 import { hashFiles, resolveSkill } from "./skills";
 import { createStreamHub } from "./stream";
 import { suggest } from "./suggest";
-import { SupervisorEngine, type SupervisorStatusSignal } from "./supervisor";
+import { SupervisorEngine } from "./supervisor";
 import type { TelegramBridge } from "./telegram";
 import { UsageCounter } from "./usage-count";
 import {
@@ -1653,7 +1654,11 @@ export const createServer = ({
       verb: "frames",
       machineId: row.machineId,
       instanceId,
-      payload: { kind: "supervisor_event", instanceId, event },
+      payload: {
+        kind: "supervisor_event",
+        instanceId,
+        event,
+      } satisfies FramePayload,
     });
   };
 
@@ -1670,7 +1675,11 @@ export const createServer = ({
       verb: "frames",
       machineId: row.machineId,
       instanceId,
-      payload: { kind: "supervisor_status", instanceId, status },
+      payload: {
+        kind: "supervisor_status",
+        instanceId,
+        status,
+      } satisfies FramePayload,
     });
   };
 
@@ -4594,7 +4603,11 @@ export const createServer = ({
       verb: "frames",
       machineId,
       instanceId: event.instanceId,
-      payload: { kind: "delegate_event", instanceId: event.instanceId, event },
+      payload: {
+        kind: "delegate_event",
+        instanceId: event.instanceId,
+        event,
+      } satisfies FramePayload,
     });
   };
 
@@ -6465,9 +6478,10 @@ export const createServer = ({
             permissionMode,
             model,
           });
-          if (row) {
-            publishInstances(row.machineId);
+          if (!row) {
+            return status(404, `no session ${params.id}`);
           }
+          publishInstances(row.machineId);
           return row;
         }
       )

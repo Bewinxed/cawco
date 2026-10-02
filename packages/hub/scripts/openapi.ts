@@ -210,11 +210,21 @@ const toDocument = (
     return value;
   }
   const { $ref, ...rest } = value as Schema;
-  const fields = Object.fromEntries(
+  let fields: Schema = Object.fromEntries(
     Object.entries(rest)
       .filter(([field]) => key === "properties" || field !== "default")
       .map(([field, item]) => [field, toDocument(item, field, inlining)])
   );
+  // A tuple as the generator's draft-07 writes it (`items: [...]`) is
+  // `prefixItems` in the 2020-12 dialect OpenAPI 3.1 speaks.
+  if (key !== "properties" && Array.isArray(fields.items)) {
+    const { items, additionalItems, ...others } = fields;
+    fields = {
+      ...others,
+      prefixItems: items,
+      ...(additionalItems === undefined ? {} : { items: additionalItems }),
+    };
+  }
   if (typeof $ref !== "string" || !$ref.startsWith(DEFINITION)) {
     return $ref === undefined ? fields : { $ref, ...fields };
   }
@@ -248,10 +258,29 @@ const withoutResponse = (schema: Schema): Schema | undefined => {
   return rest.length === 1 ? rest[0] : { ...schema, anyOf: rest };
 };
 
-const isText = (schema: Schema): boolean =>
-  schema.type === "string" ||
-  (Array.isArray(schema.anyOf) &&
-    schema.anyOf.every((one) => (one as Schema).type === "string"));
+/** Elysia sends a string as text/plain, whatever named type it has. */
+const isText = (schema: Schema): boolean => {
+  if (typeof schema.$ref === "string") {
+    const named =
+      definitions[
+        decodeURIComponent(
+          schema.$ref.replace(COMPONENT, "").replace(DEFINITION, "")
+        )
+      ];
+    return named !== undefined && isText(named);
+  }
+  return (
+    schema.type === "string" ||
+    (Array.isArray(schema.anyOf) &&
+      (schema.anyOf as Schema[]).every((one) => isText(one)))
+  );
+};
+
+/** Elysia's 422 body (`ValidationErrorResponse`), by the literal it carries. */
+const isValidationProblem = (schema: Schema): boolean => {
+  const kind = (schema.properties as Record<string, Schema> | undefined)?.type;
+  return Array.isArray(kind?.enum) && kind.enum[0] === "validation";
+};
 
 /**
  * The plugin's request schemas at 3.1 still carry TypeBox's 3.0 `nullable`
@@ -290,40 +319,50 @@ for (const { op } of operations) {
     const description = `${op.operationId} ${status}`;
     const bare = withoutResponse(returned);
     const schema = bare && (toDocument(bare) as Schema);
-    const target =
-      typeof schema?.$ref === "string"
-        ? definitions[schema.$ref.slice(COMPONENT.length)]
-        : schema;
     if (!schema) {
       // Only a `Response`: the handler answers with bytes of its own.
       op.responses[status] = { description, content: binary };
-    } else if (target && isText(target)) {
-      // `status(code, "words")`: Elysia sends a string as text/plain.
-      op.responses[status] = {
-        description,
-        content: { "text/plain": { schema: { type: "string" } } },
-      };
-    } else if (Object.keys(schema).length === 0) {
-      untyped.push(description);
-    } else {
-      // An anonymous body is named by its operation; a named type is its own.
-      const name = schema.$ref ? undefined : `${op.operationId}${status}`;
-      if (name) {
-        components[name] = schema;
-      }
-      const ref = name ? `${COMPONENT}${name}` : (schema.$ref as string);
-      // Elysia answers a failed validation as a problem document.
-      const type = ref.endsWith("/ValidationErrorResponse")
-        ? "application/problem+json"
-        : "application/json";
-      op.responses[status] = {
-        description,
-        content: { [type]: { schema: { $ref: ref } } },
-      };
+      continue;
     }
+    if (Object.keys(schema).length === 0) {
+      untyped.push(description);
+      continue;
+    }
+    // One status can answer words (text/plain) or a body (JSON), as a
+    // workflow's 400 does: each part goes under its own content type.
+    const parts = Array.isArray(schema.anyOf)
+      ? (schema.anyOf as Schema[])
+      : [schema];
+    const text = parts.filter((part) => isText(part));
+    const rest = parts.filter((part) => !isText(part));
+    const content: Record<string, unknown> = {};
+    if (text.length) {
+      content["text/plain"] = { schema: { type: "string" } };
+    }
+    if (rest.length) {
+      const body = rest.length === 1 ? rest[0] : { ...schema, anyOf: rest };
+      // Elysia answers a failed validation with its own problem document; the
+      // generator writes Elysia's type out wherever it meets it, so it is
+      // known by its `type: "validation"` and kept as one component.
+      const validation = isValidationProblem(body);
+      // An anonymous body is named by its operation; a named type is its own.
+      let name: string | undefined;
+      if (validation) {
+        name = "ValidationErrorResponse";
+      } else if (!body.$ref) {
+        name = `${op.operationId}${status}`;
+      }
+      if (name) {
+        components[name] = body;
+      }
+      const ref = name ? `${COMPONENT}${name}` : (body.$ref as string);
+      const type = validation ? "application/problem+json" : "application/json";
+      content[type] = { schema: { $ref: ref } };
+    }
+    op.responses[status] = { description, content };
   }
-  if (!op.responses["200"]) {
-    untyped.push(`${op.operationId} 200`);
+  if (!Object.keys(op.responses).some((status) => status.startsWith("2"))) {
+    untyped.push(`${op.operationId} 2xx`);
   }
   // The dashboard and the Swift client send JSON; the form encodings Elysia
   // also parses are not part of the contract.
