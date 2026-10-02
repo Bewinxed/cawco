@@ -248,9 +248,9 @@ export function isHarnessNote(m: Message): boolean {
     return false;
   }
   const head = m.content.trimStart();
-  // TOP-LEVEL only. `frames.ts` tests `includes` over the first 200 characters,
-  // which also swallows an operator who merely WRITES the tag ("fix the
-  // <task-notification> renderer") and buries their message in a fold. The
+  // TOP-LEVEL only. An `includes` over the first 200 characters would also
+  // swallow an operator who merely WRITES the tag ("fix the
+  // <task-notification> renderer") and bury their message in a fold. The
   // block either opens the message or it is prose about the block.
   if (head.startsWith("[SYSTEM NOTIFICATION")) {
     return true;
@@ -736,11 +736,9 @@ const sameMessage = (a: Message | undefined, b: Message | undefined): boolean =>
   a !== undefined && a === b;
 
 /**
- * The message-side reading of the chunker's cut rule (`streamHistory`,
- * client.svelte.ts): a turn opens on the reader's own message, not a
- * delegate's, and a fold may begin there. Tool results never make it here as
- * messages of their own — `mapTranscript` attaches them to the call — so
- * there is no dangling pair for a cut to split.
+ * Where a fold may begin: a turn the reader opened, not a delegate's. Tool
+ * results never make it here as messages of their own — the hub's builder
+ * folds them into the call — so there is no dangling pair for a cut to split.
  */
 const opensTurn = (m: Message): boolean =>
   m.type === "user" && !m.parentToolUseId && !isHarnessNote(m);
@@ -974,7 +972,7 @@ function settledInto(
  *
  * A thinking block is shown the moment it opens, even with no delta text yet
  * — Claude's extended thinking is often REDACTED and streams no deltas at all
- * (see frames.ts), so gating on thinkingStream meant "reasoning, silently,
+ * (see `streamPhase`, @cawco/core), so gating on thinkingStream meant "reasoning, silently,
  * with no indicator". The row itself is the indicator; the text fills in if
  * and when it arrives. A block that has CLOSED keeps its place until its
  * message lands: that message is this row, settled, and the gap between the

@@ -1012,9 +1012,9 @@ export const handoffActions = ({
       };
     emit({ verb: "spawn", machineId, instanceId: id, payload });
     // The marker prefix survives SDK storage (which strips `origin`) so that
-    // `mapTranscript` → `handoffFrom()` can still detect the opening prompt as
-    // a peer message and render it as `user.peer` instead of the reader's own
-    // words — the same marker `handoff()` already uses.
+    // the transcript builder (`sentRow`, @cawco/core) can still detect the
+    // opening prompt as a peer message and render it as `user.peer` instead of
+    // the reader's own words — the same marker `handoff()` already uses.
     const body = `${handoffMarker(from)}${prompt}`;
     const opening: SendPayload = {
       instanceId: id,

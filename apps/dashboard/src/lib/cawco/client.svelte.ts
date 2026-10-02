@@ -2335,7 +2335,8 @@ function rememberAnswerSurface(
  * Whether a card holding this command is STILL RENDERED, re-derived from the
  * same predicate the pane renders by rather than from anything this file
  * wishes were true — `session.pending`, minus the delegate asks a parent's
- * queue filters out (`parked` in SessionPane; `routedToParent` in frames.ts).
+ * queue filters out (`parked` in SessionPane; `routedToParent` in
+ * transcript/present.ts).
  *
  * Checked against both dialects, because they answer it differently and both
  * answers are right:

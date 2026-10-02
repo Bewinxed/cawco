@@ -831,7 +831,7 @@ export async function readSessionWhole(
  * compact-boundary anchor whose preserved records lie before the window, or a
  * root whose parent does), then the loop below widens the window until N
  * chain messages survive. A fire-and-forget `cache.get(path)` populates the
- * cache so the next caller (typically `streamHistory` phase 2) awaits the
+ * cache so the next caller (typically the hub's whole-transcript read) awaits the
  * same single-flighted populate instead of re-parsing.
  *
  * Proven corpus-wide by `bench/transcript-tail-parity.ts`.
