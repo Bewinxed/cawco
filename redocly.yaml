@@ -1,0 +1,11 @@
+# Lints apps/apple/Packages/CawCoKit/Sources/CawCoAPI/openapi.json, the
+# document `bun run openapi` (packages/hub) writes for the Swift client.
+extends:
+  - recommended
+rules:
+  # Summaries are optional in OpenAPI 3.1, and the document is generated from
+  # code: a summary would be prose written twice.
+  operation-summary: off
+  # The hub's API has no authentication, and swift-openapi-generator does not
+  # read `security`; declaring none is the truth, not an omission.
+  security-defined: off
