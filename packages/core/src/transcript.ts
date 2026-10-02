@@ -85,6 +85,18 @@ const frameHash = (frame: unknown): string => {
   return (hash >>> 0).toString(36);
 };
 
+/**
+ * A block onto a branch's transcript unless one with its id is already there:
+ * an id names one block. Whether it was added.
+ */
+const holdOnce = (sink: TranscriptBlock[], block: TranscriptBlock): boolean => {
+  if (sink.some((held) => held.id === block.id)) {
+    return false;
+  }
+  sink.push(block);
+  return true;
+};
+
 /** A branch's state without its blocks: what an event carries. */
 const branchState = ({ blocks: _, ...state }: BranchState): TranscriptBranch =>
   state;
@@ -121,7 +133,7 @@ export class TranscriptBuilder {
   readonly instanceId: string;
   /** The harness's rows, with a placeholder where each send was read or stored. */
   private rows: TranscriptBlock[] = [];
-  private readonly rowIds = new Set<string>();
+  private rowIds = new Set<string>();
   /** The hub's record of every send this transcript knows of, by uuid. */
   private records: Record<string, SendRecord> = {};
   private branches = new Map<string, BranchState>();
@@ -175,8 +187,20 @@ export class TranscriptBuilder {
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one pass folding every stored transcript entry kind, as the live path folds frames
   seed(entries: SessionMessage[], records: Record<string, SendRecord>): void {
     const rows: TranscriptBlock[] = [];
+    const rowIds = new Set<string>();
     const branches = new Map<string, BranchState>();
     const now = this.stamp();
+    // An id names one block: an entry the harness stored twice is drawn once.
+    const put = (sink: TranscriptBlock[], block: TranscriptBlock): void => {
+      if (sink !== rows) {
+        holdOnce(sink, block);
+        return;
+      }
+      if (!rowIds.has(block.id)) {
+        rowIds.add(block.id);
+        rows.push(block);
+      }
+    };
     for (const entry of entries) {
       // The one honest clock a replayed turn has.
       const recorded = storedAt(entry);
@@ -184,18 +208,17 @@ export class TranscriptBuilder {
       // rows, under the same ids, the live stream drew, several where the
       // harness joined them into one entry.
       if (entry.sends) {
-        rows.push(
-          ...entry.sends.map((send) =>
-            sendRef(this.instanceId, send, entry.uuid)
-          )
-        );
+        for (const send of entry.sends) {
+          put(rows, sendRef(this.instanceId, send, entry.uuid));
+        }
         continue;
       }
       // A user turn the hub has no record of — typed into the harness itself,
       // or from before the hub kept records — is the harness's own row.
       const opening = turnStart(entry);
       if (opening) {
-        rows.push(
+        put(
+          rows,
           sentRow(opening.text, entry.message, {
             id: entry.sourceUuid ?? entry.uuid,
             instanceId: this.instanceId,
@@ -223,17 +246,13 @@ export class TranscriptBuilder {
         ? branchFor(branches, this.instanceId, mapping.agentId, now).blocks
         : rows;
       // A real subagent's "task done" line yields to its branch card.
-      sink.push(
-        ...mapping.blocks.filter(
-          (block) =>
-            !suppressesTaskLine(
-              branches,
-              sink,
-              block,
-              mapping.branch?.toolUseId
-            )
-        )
-      );
+      for (const block of mapping.blocks) {
+        if (
+          !suppressesTaskLine(branches, sink, block, mapping.branch?.toolUseId)
+        ) {
+          put(sink, block);
+        }
+      }
       for (const result of mapping.toolResults) {
         applyToolResult(sink, result);
         // The Task call's own tool_result is the authoritative end of its branch.
@@ -259,10 +278,7 @@ export class TranscriptBuilder {
     }
 
     this.rows = rows;
-    this.rowIds.clear();
-    for (const row of rows) {
-      this.rowIds.add(row.id);
-    }
+    this.rowIds = rowIds;
     this.records = { ...records };
     this.branches = branches;
     this.seeded = new Set(entries.map((entry) => entry.uuid));
@@ -721,8 +737,9 @@ export class TranscriptBuilder {
     block: TranscriptBlock
   ): void {
     if (branch) {
-      branch.blocks.push(block);
-      this.events.push({ type: "block.append", block });
+      if (holdOnce(branch.blocks, block)) {
+        this.events.push({ type: "block.append", block });
+      }
       return;
     }
     // A row already there — a frame replayed behind a history read — is not

@@ -218,8 +218,6 @@ export interface HarnessNote {
   body: string;
   /** `completed` / `failed` / `stopped`, or '' where the block carried none. */
   status: string;
-  /** The `<task-id>` this notification echoes, when it named one. */
-  taskId?: string;
   /** The `<summary>` line — what the fold says while it is closed. */
   title: string;
 }
@@ -281,12 +279,10 @@ export function parseHarnessNote(text: string): HarnessNote {
   if (!(title || body)) {
     return { title: "Harness notification", status: "", body: whole };
   }
-  const taskId = inner("task-id", text)?.trim();
   return {
     title: title || "Harness notification",
     status: inner("status", text)?.trim() ?? "",
     body,
-    ...(taskId ? { taskId } : {}),
   };
 }
 
@@ -471,59 +467,8 @@ export function foldMessages(
   messages: Message[],
   subagents: Record<string, SubagentState>
 ): Row[] {
-  return foldRange(messages, subagents, 0, notedTasks(messages), {
-    ...NO_VOICE,
-  }).rows;
+  return foldRange(messages, subagents, 0, { ...NO_VOICE }).rows;
 }
-
-/**
- * The task ids the harness has posted a full note about.
- *
- * One completion, one row. The SDK's `task_notification` frame (the "task
- * done" line) and the harness's XML note are two wire forms of the SAME
- * event; when the richer note is present its bare line yields to it, keyed by
- * the task id both sides carry. A plain task with no note — a background
- * Bash — keeps its line, which is the only place it reports.
- */
-function notedTasks(messages: Message[]): Set<string> {
-  const noted = new Set<string>();
-  for (const m of messages) {
-    const tid = notedTask(m);
-    if (tid) {
-      noted.add(tid);
-    }
-  }
-  return noted;
-}
-
-/**
- * Whether `messages[index]` is a "task done" line another row already tells:
- * a harness note about the same task, or an earlier line for it. A reload's
- * history carries the stored notification as that line, and the live stream
- * can replay the frame it came from on top: one completion, one row. Read
- * over the whole array, so a fold that restarts at a cut still sees it.
- */
-function repeatsTask(
-  messages: Message[],
-  index: number,
-  noted: Set<string>
-): boolean {
-  const m = messages[index];
-  const taskId = m.type === "system.task" ? m.metadata?.taskId : undefined;
-  if (!taskId) {
-    return false;
-  }
-  return (
-    noted.has(taskId) ||
-    messages
-      .slice(0, index)
-      .some((e) => e.type === "system.task" && e.metadata?.taskId === taskId)
-  );
-}
-
-/** The task id a harness note reports on, when the message is one and names one. */
-const notedTask = (m: Message): string | undefined =>
-  isHarnessNote(m) ? parseHarnessNote(m.content).taskId : undefined;
 
 /**
  * The row a message makes on its own, when it is one that never joins a run
@@ -578,7 +523,6 @@ function foldRange(
   messages: Message[],
   subagents: Record<string, SubagentState>,
   from: number,
-  noted: Set<string>,
   voices: Voices
 ): { rows: Row[]; starts: number[] } {
   const rows: Row[] = [];
@@ -590,7 +534,7 @@ function foldRange(
     const m = messages[i];
     const receipt = receiptAt(m, i);
 
-    if (repeatsTask(messages, i, noted) || receipt?.fold) {
+    if (receipt?.fold) {
       i += 1;
       continue;
     }
@@ -691,7 +635,6 @@ export interface FoldMemo {
   last: Message | undefined;
   /** The live row this fold ended on. */
   live: LiveMemo;
-  noted: Set<string>;
   /** The settled rows — everything before the live tail — and where each begins. */
   rows: Row[];
   starts: number[];
@@ -746,10 +689,8 @@ const opensTurn = (m: Message): boolean =>
 /**
  * Where a fold of `messages` may restart given what `memo` was folded from,
  * or -1 where it has to start over. The transcript must still be the memo's
- * — same first message, same message at the old end, no new branch — with
- * nothing new that reaches back: a note about a task whose bare line is
- * already folded would have to unfold it. The cut is then the last turn
- * opener at or before the old end.
+ * — same first message, same message at the old end, no new branch. The cut
+ * is then the last turn opener at or before the old end.
  */
 function cutFor(messages: Message[], memo: FoldMemo, branches: number): number {
   if (
@@ -760,11 +701,6 @@ function cutFor(messages: Message[], memo: FoldMemo, branches: number): number {
     !sameMessage(messages[memo.count - 1], memo.last)
   ) {
     return -1;
-  }
-  for (let i = memo.count; i < messages.length; i += 1) {
-    if (notedTask(messages[i])) {
-      return -1;
-    }
   }
   let cut = Math.min(memo.count, messages.length - 1);
   while (cut > 0 && !opensTurn(messages[cut])) {
@@ -787,10 +723,9 @@ function cutFor(messages: Message[], memo: FoldMemo, branches: number): number {
  * are folded. The live tail is always re-derived from the session.
  *
  * Anything else is a full fold: a read that replaced the array, a rewind
- * that cut it, an older chunk prepended in front, a subagent branch that
- * has since opened (which turns a call row into a fold), or a harness note
- * about a task whose line is already on the rail. All of those change rows
- * BEFORE the old end, which an append cannot express.
+ * that cut it, an older chunk prepended in front, or a subagent branch that
+ * has since opened (which turns a call row into a fold). All of those change
+ * rows BEFORE the old end, which an append cannot express.
  */
 export function buildRowsFrom(
   session: SessionState,
@@ -800,7 +735,7 @@ export function buildRowsFrom(
   const branches = Object.keys(session.subagents).length;
   const cut = memo ? cutFor(messages, memo, branches) : -1;
   const appended = memo !== null && cut >= 0;
-  const { rows, starts, noted, voices } =
+  const { rows, starts, voices } =
     memo && appended
       ? foldOnto(messages, session.subagents, memo, cut)
       : foldAll(messages, session.subagents);
@@ -832,7 +767,6 @@ export function buildRowsFrom(
       first: messages[0],
       last: messages.at(-1),
       branches,
-      noted,
       voices,
       ahead,
       waited,
@@ -851,7 +785,6 @@ export function buildRowsFrom(
 }
 
 interface Settled {
-  noted: Set<string>;
   rows: Row[];
   starts: number[];
   voices: Voices;
@@ -862,13 +795,8 @@ function foldAll(
   messages: Message[],
   subagents: Record<string, SubagentState>
 ): Settled {
-  const noted = notedTasks(messages);
   const voices = { ...NO_VOICE };
-  return {
-    ...foldRange(messages, subagents, 0, noted, voices),
-    noted,
-    voices,
-  };
+  return { ...foldRange(messages, subagents, 0, voices), voices };
 }
 
 /** The memo's rows, with only the turn at the cut and what follows it folded again. */
@@ -895,11 +823,10 @@ function foldOnto(
   // their grouping stands; the refolded turn picks up where they leave off.
   const kept = memo.rows.slice(0, keep);
   const voices = voicesAfter(kept);
-  const tail = foldRange(messages, subagents, cut, memo.noted, voices);
+  const tail = foldRange(messages, subagents, cut, voices);
   return {
     rows: kept.concat(tail.rows),
     starts: memo.starts.slice(0, keep).concat(tail.starts),
-    noted: memo.noted,
     voices,
   };
 }

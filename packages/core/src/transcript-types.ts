@@ -108,8 +108,6 @@ export interface BlockMetadata {
   subagentModel?: string;
   subagentType?: string;
   subtype?: string;
-  /** The task a `system.task` line reports — the dedupe key against the harness's own note. */
-  taskId?: string;
   thinking?: string;
   /**
    * How long the thinking block ran, measured by the hub's clock between the

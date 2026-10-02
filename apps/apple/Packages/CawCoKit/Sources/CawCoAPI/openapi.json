@@ -11750,10 +11750,6 @@
           "subtype": {
             "type": "string"
           },
-          "taskId": {
-            "description": "The task a `system.task` line reports — the dedupe key against the harness's own note.",
-            "type": "string"
-          },
           "thinking": {
             "type": "string"
           },

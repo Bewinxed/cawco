@@ -522,6 +522,14 @@ function subagentLaunch(result: string): boolean {
   return result.includes("agentId:") && result.includes("output_file:");
 }
 
+/** What a task line says happened: it ended well, it ended badly, or it reported. */
+const taskVerb = (status: string | null | undefined): string => {
+  if (!status) {
+    return "task update";
+  }
+  return status === "completed" ? "task done" : "task failed";
+};
+
 function systemLine(
   base: BlockBase,
   type: BlockType,
@@ -810,29 +818,29 @@ export function mapFrame(
           // `suppressesTaskLine` when a real subagent's branch owns it: for a
           // background Bash this line is the only place its completion shows.
           //
-          // Keyed by the task, not the frame: a reload reads the stored copy
-          // back under the stored record's own uuid, and the line has to be
-          // the same row either way.
+          // The notification that ends a task carries its status, and is keyed
+          // by the task: the live frame and the stored copy a reload reads
+          // back carry different uuids, and the line has to be the same row
+          // either way. A watcher's event (a Monitor's) carries no status and
+          // comes any number of times per task; it is stored only, so its
+          // record's own uuid names it.
           mapping.blocks.push(
             systemLine(
-              { ...base, id: `task:${sdk.task_id}` },
+              sdk.status ? { ...base, id: `task:${sdk.task_id}` } : base,
               "system.task",
-              done ? "task done" : "task failed",
-              {
-                result: truncateSummary(sdk.summary),
-                // Named so the fold can drop this line when the harness ALSO
-                // delivers its richer XML notification for the same task.
-                taskId: sdk.task_id,
-              }
+              taskVerb(sdk.status),
+              { result: truncateSummary(sdk.summary) }
             )
           );
-          mapping.branch = {
-            toolUseId: sdk.tool_use_id,
-            taskId: sdk.task_id,
-            status: done ? "complete" : "error",
-            summary: sdk.summary,
-            result: sdk.result ?? sdk.summary,
-          };
+          if (sdk.status) {
+            mapping.branch = {
+              toolUseId: sdk.tool_use_id,
+              taskId: sdk.task_id,
+              status: done ? "complete" : "error",
+              summary: sdk.summary,
+              result: sdk.result ?? sdk.summary,
+            };
+          }
           break;
         }
         case "task_updated": {
@@ -1630,11 +1638,19 @@ export function placeSends(
   const referenced = new Set(
     rows.flatMap((row) => (isSendRef(row) ? [row.id] : []))
   );
+  // A send the harness stored as its own row is drawn by that row: an id
+  // names one block.
+  const stored = new Set(
+    rows.flatMap((row) => (isSendRef(row) ? [] : [row.id]))
+  );
   const first: SendRecord[] = [];
   const waiting: SendRecord[] = [];
   const anchored = new Map<string, SendRecord[]>();
   const dated: SendRecord[] = [];
   for (const record of Object.values(records)) {
+    if (stored.has(record.uuid)) {
+      continue;
+    }
     if (record.state === "pending") {
       waiting.push(record);
     } else if (record.state === "failed" && !referenced.has(record.uuid)) {
