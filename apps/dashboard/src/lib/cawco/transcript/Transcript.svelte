@@ -898,10 +898,11 @@
    * would lose that height in one frame. So a row that goes WITHOUT becoming
    * something else in the list is kept where it stood while it folds shut
    * (`Row`'s `leaving`), the rows under it closing up over the fold, and the
-   * end of its own fold is what takes it out — at no height by then, and
-   * virtua's sizes follow their rows (patches/virtua), so taking it out moves
-   * nothing. A live row that settled is not leaving: the row it became is
-   * already on screen, in its place.
+   * end of its own fold is what takes it out, at no height by then. virtua
+   * keeps its sizes by index, so a row taken out of the middle hands its
+   * size to the row after it until that one is measured again. A live row
+   * that settled is not leaving: the row it became is already on screen, in
+   * its place.
    */
   const TAIL_KINDS = new Set<Row["kind"]>(["live", "livetool", "queued"]);
   /**
@@ -1010,11 +1011,10 @@
   /**
    * The row drawn as `node` hands its place to `taker`: the height the taker
    * starts from — the place's, or the place's on top of its own when it
-   * absorbs it — which is also the size the list lays it out at before it is
-   * measured (virtua's `sizeOf`, patches/virtua). A row that becomes another
-   * is drawn at the place's height whether or not it moves; a run taking a
-   * call in is drawn at its own new height at once when nothing moves, and
-   * is handed nothing. False when nothing takes the place.
+   * absorbs it. A row that becomes another is drawn at the place's height
+   * whether or not it moves; a run taking a call in is drawn at its own new
+   * height at once when nothing moves, and is handed nothing. False when
+   * nothing takes the place.
    */
   function handOn(
     node: HTMLElement,
@@ -1064,31 +1064,6 @@
       hooked.removeAttribute("aria-live");
     }
     return copy;
-  }
-
-  /**
-   * The size the list lays the row `key` out at before it has measured it —
-   * the size it is drawn at in its first frame (virtua's `sizeOf`): the
-   * height it was handed, or nothing for a row arriving, which opens from
-   * there (`Row`). Laid out at the estimate instead, the rows after it stood
-   * 21px off for the frame the measurement took and jumped back.
-   */
-  function heldSize(key: string): number | undefined {
-    const handed = presentation.handed.get(key);
-    if (handed) {
-      return handed.from;
-    }
-    // Until the row is drawn: the list reads this on every update, and a
-    // row already drawn is one it measures — held at nothing again, it lost
-    // its height mid-opening and the tail jumped. Keyed off the ticket's
-    // start instead, a row whose mount had stamped it before the list first
-    // laid it out stood at the 21px estimate for that frame, then dropped to
-    // the nothing its opening starts from.
-    return tickets.get(key)?.kind === "arrive" &&
-      motionOk.current &&
-      !drawnRow(key)
-      ? 0
-      : undefined;
   }
 
   /** The row `key` as it is drawn now, before the update lands. */
@@ -1949,27 +1924,6 @@
     });
   }
 
-  /**
-   * THE TAIL IS HELD IN THE FRAME THE LIST MEASURES IT. A row arriving, a
-   * streamed answer growing, a live row settling taller than it was: virtua
-   * measures each in its ResizeObserver — the rendering step of the frame
-   * that draws it, after layout — and lays the rows out again from there.
-   * `followBottom` pinned the view a frame after that, so for one frame the
-   * tail stood where the growth left it (a note under a settling answer
-   * dipped 19px and came back). The pin now runs right behind virtua's own
-   * update, still inside that rendering step, where the layout it reads is
-   * the one about to be painted.
-   */
-  function onmeasured(): void {
-    // virtua applies what it measured in the microtask behind this call.
-    queueMicrotask(() => {
-      carrySlides(0);
-      if (active && landed && atBottom && !jumping) {
-        pinBottom();
-      }
-    });
-  }
-
   function land(): void {
     if (landed && opening > 0) {
       return;
@@ -2664,10 +2618,8 @@
       getKey={(r) => r.key}
       itemSize={ROW_ESTIMATE}
       {keepMounted}
-      onresize={onmeasured}
       scrollRef={scroller}
       shift={built.shifted}
-      sizeOf={(key) => heldSize(String(key))}
       {ssrCount}
       startMargin={spare}
       bind:this={
@@ -2751,6 +2703,15 @@
 <style>
   .listing:not(.shown) {
     visibility: hidden;
+  }
+  /* virtua writes `pointer-events: none` on its container while it scrolls
+     and takes it off after. pointer-events is inherited, so each write
+     restyled every row under it: the pin scrolls the list on every streamed
+     chunk, and each write cost a style recalculation of the whole
+     transcript (13,000 elements, ~140ms). Held at auto here, the inherited
+     value never changes and the rows are left alone. */
+  .listing > :global(:first-child) {
+    pointer-events: auto !important;
   }
   .tr {
     flex: 1 1 auto;
