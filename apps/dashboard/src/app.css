@@ -30,6 +30,13 @@
   inherits: false;
   initial-value: 0px;
 }
+/* Where a working session's rim sweep stands (SessionMark), registered so
+   the sweep can turn it. */
+@property --rim-turn {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0turn;
+}
 
 @layer theme {
   :root {
@@ -551,6 +558,16 @@
       animation: nest-rail var(--dur-panel) var(--ease-out) both;
       animation-delay: calc(var(--nest-i, 0) * 40ms + var(--dur-panel) * 0.55);
     }
+    /* A list folding away (`data-leaving`, while its `unfold` plays): its
+       lines retract where they stand, last child first. */
+    .kit-nest[data-leaving] > li::before {
+      animation: nest-elbow-out var(--dur-exit) var(--ease-out) both;
+      animation-delay: calc(var(--nest-r, 0) * 24ms);
+    }
+    .kit-nest[data-leaving] > li::after {
+      animation: nest-rail-out var(--dur-exit) var(--ease-out) both;
+      animation-delay: calc(var(--nest-r, 0) * 24ms);
+    }
     /* A closing copy: the same lines, retracting, last child first. */
     [data-reflow-ghost] .kit-nest > li::before,
     [data-reflow-ghost] .kit-nest > li::after,
@@ -562,6 +579,29 @@
       animation-duration: var(--dur-exit);
       animation-delay: calc(var(--nest-r, 0) * 24ms);
     }
+  }
+
+  /* A session row's trailing columns, so they line up down a list at every
+     depth (rows end at the same right edge whatever their indent). The count
+     of the rows under a parent (TreeCount) stands at the column's start, so
+     every count in a list starts at one x; a row with none leaves the column
+     empty. It is as wide as the widest compact count ("43 · 2": six figures
+     in the count's own face, and its padding). The age after it is right
+     aligned in a column as wide as its longest word ("59m"). */
+  .kit-count-col {
+    display: flex;
+    flex: none;
+    align-items: center;
+    inline-size: calc(6ch + var(--space-3));
+    font: var(--type-meta);
+    font-variant-numeric: tabular-nums;
+  }
+  .kit-age-col {
+    flex: none;
+    inline-size: 3ch;
+    text-align: end;
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
   }
 
   /* A list section's header (the home's Needs you, Recent): its label at
@@ -1319,6 +1359,34 @@
   }
   100% {
     clip-path: inset(0 0 0 0);
+  }
+}
+/* The same lines retracting in place (a list folding away): out along the
+   arm first, round the curve, and up the rail; the rail on past a child
+   from its bottom up. Their own names, so a line already drawn starts them. */
+@keyframes nest-elbow-out {
+  0% {
+    clip-path: inset(0 0 0 0);
+  }
+  45% {
+    clip-path: inset(0 calc(100% - var(--radius-sm)) 0 0);
+  }
+  100% {
+    clip-path: inset(0 calc(100% - 1px) 100% 0);
+  }
+}
+@keyframes nest-rail-out {
+  from {
+    clip-path: inset(0 0 0 0);
+  }
+  to {
+    clip-path: inset(0 0 100% 0);
+  }
+}
+/* A working session's rim (SessionMark): its arc once round. */
+@keyframes kit-rim-sweep {
+  to {
+    --rim-turn: 1turn;
   }
 }
 @keyframes nest-rail {

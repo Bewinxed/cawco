@@ -7,6 +7,7 @@
  */
 import type { TransitionConfig } from "svelte/transition";
 import { dur, easeOut, motionOk } from "./curves.svelte";
+import { REFLOW_REREAD } from "./rows.svelte";
 
 export interface FoldOptions {
   easing: string;
@@ -142,18 +143,49 @@ export function folds(open: () => boolean, options: FoldOptions) {
 }
 
 /**
+ * A fold moves everything after it with no change to the DOM, and a
+ * `reflow` around it places rows only when the DOM changes: its picture of
+ * where each row stands would stay the one from before the fold, and its
+ * next change would slide every row after the fold from there, a jump back
+ * and a second slide. When the fold ends, every `reflow` around it reads
+ * the rows where they now stand.
+ */
+function rereadOnEnd(node: HTMLElement): void {
+  // Found now, while it is in the page: a fold out may end detached.
+  const around: HTMLElement[] = [];
+  for (
+    let at = node.parentElement?.closest<HTMLElement>("[data-reflow]");
+    at;
+    at = at.parentElement?.closest<HTMLElement>("[data-reflow]")
+  ) {
+    around.push(at);
+  }
+  const reread = () => {
+    for (const at of around) {
+      at.dispatchEvent(new Event(REFLOW_REREAD));
+    }
+  };
+  node.addEventListener("introend", reread, { once: true });
+  node.addEventListener("outroend", reread, { once: true });
+}
+
+/**
  * The same fold for content an `{#if}` mounts and unmounts, as a Svelte
  * transition: `in:unfold` grows it from nothing to its measured height
  * (--dur-pop), `out:unfold` folds it back (--dur-exit), fading with the height, so
  * what sits below slides instead of jumping. In a column with a gap, the
  * gap it brings folds with it. `ms` overrides the length (0: no motion).
- * With reduced motion, a fade in place.
+ * `bleed` (a CSS length) is how far above its own box its content draws, a
+ * nested list's rail reaching up to its parent's glyph: the fold clips at
+ * its other three edges only, so that stretch shows while it opens and
+ * folds. With reduced motion, a fade in place.
  */
 export function unfold(
   node: HTMLElement,
-  { ms }: { ms?: number } = {},
+  { ms, bleed }: { ms?: number; bleed?: string } = {},
   { direction }: { direction?: "in" | "out" | "both" } = {}
 ): TransitionConfig {
+  rereadOnEnd(node);
   if (!motionOk.current) {
     return { duration: dur("--dur-control"), css: (t) => `opacity: ${t}` };
   }
@@ -179,7 +211,9 @@ export function unfold(
     easing: easeOut,
     css: (t) =>
       [
-        "overflow: hidden",
+        bleed
+          ? `overflow: visible; clip-path: inset(calc(-1 * ${bleed}) 0 0 0)`
+          : "overflow: hidden",
         `height: ${(t * height).toFixed(2)}px`,
         ...edges.map(
           ([edge, px]) => `${edge}: ${(t * Number(px)).toFixed(2)}px`

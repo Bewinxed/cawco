@@ -13,8 +13,8 @@
    * SidebarMenuSub / SidebarMenuSubButton rather than hand-rolled CSS, inheriting
    * built-in hover, active, focus, and spacing from the component library.
    *
-   * Sessions use ActivityDot (status dots) rather than text pills — far more
-   * space-efficient and less noisy.
+   * A session says what it is doing on its mark's rim (SessionMark) rather
+   * than in a text pill or a dot of its own.
    */
   import type { Attachment } from "svelte/attachments";
   import { SvelteSet } from "svelte/reactivity";
@@ -38,7 +38,6 @@
     IconWorkflow,
   } from "$lib/icons";
   import { formatAgeShort, formatDistanceToNow } from "$lib/utils/time";
-  import ActivityDot from "./ActivityDot.svelte";
   import type { Activity } from "./activity";
   import {
     cawco,
@@ -55,8 +54,9 @@
   import Home from "./home/Home.svelte";
   import HomeRecent from "./home/HomeRecent.svelte";
   import { conversationHref } from "./links";
-  import { markHue, sessionSprite } from "./mark";
+  import { markHue } from "./mark";
   import { CURVE, dur } from "./motion/curves.svelte";
+  import { unfold } from "./motion/fold.svelte";
   import { heldOrder, holdWhileInside } from "./motion/held-order.svelte";
   import { reflow } from "./motion/rows.svelte";
   import NewProjectPopover from "./NewProjectPopover.svelte";
@@ -65,6 +65,10 @@
   import ProjectMark from "./ProjectMark.svelte";
   import { type RailSort, rail } from "./rail.svelte";
   import SessionHover from "./SessionHover.svelte";
+  import SessionMark, {
+    STATUS_WORD,
+    sessionStatus,
+  } from "./SessionMark.svelte";
   import NewSessionDialog from "./spawn/NewSessionDialog.svelte";
   import TreeCount from "./TreeCount.svelte";
   import { rooted, tree } from "./tree";
@@ -130,13 +134,13 @@
   const NAV_ROW = "h-[var(--c-nav-h)] gap-2.5 px-2.5 text-body";
   const LIST_ROW = "h-[30px] gap-2.5 px-2.5 py-0";
   /**
-   * A session under its project: indented so its mark stands under the
-   * project's name, so the name has the least room in the rail. The gaps
-   * between its five parts (mark, name, delegate count, age, status) are the
-   * tight ones; a delegate's nesting arm ends at its mark (`--nest-reach`,
-   * this row's left inset).
+   * A session under its project: the name has the least room in the rail,
+   * so the gaps between its four parts (mark, name, delegate count, age) are
+   * the tight ones, wide enough that the mark's rim (SessionMark, 2.5px out)
+   * clears the name; a delegate's nesting arm ends at its mark
+   * (`--nest-reach`, this row's left inset).
    */
-  const SUB_ROW = "h-[28px] gap-1 pl-1.5 pr-2";
+  const SUB_ROW = "h-[28px] gap-1.5 pl-1.5 pr-2";
   /** The height the loading rows stand at: a list row's. */
   const LIST_ROW_H = "h-[30px]";
   /** `Sidebar.Group`'s own `p-2` plus `Sidebar.Content`'s `gap-2` stacked to
@@ -188,13 +192,8 @@
   const SLOT = "inline-flex size-[18px] shrink-0 items-center justify-center";
   /** A line glyph in the slot: 16px, 1px of air. */
   const SLOT_GLYPH = "size-4";
-  /** An identity chip fills the slot, and carries a 12px glyph — 3px of
-   *  inset, which is the difference between a mark and a glyph in a box. */
-  const MARK = `${SLOT} rounded-[var(--radius-xs)]`;
+  /** The brand tile's glyph: 12px in the 18px slot, 3px of inset. */
   const MARK_GLYPH = "size-3";
-  /** The trailing column: one 16px box, so a 6px dot, an 8px dot and a 16px
-   *  warning triangle all hang off the same right edge. */
-  const TRAIL = "flex size-4 shrink-0 items-center justify-center";
 
   /* ---- spawn ---------------------------------------------------------- */
 
@@ -568,8 +567,7 @@
      opens the session; the count opens the rows under it. -->
 {#snippet subRow(branch: Branch, place: string)}
   {@const row = branch.row}
-  {@const Sprite = sessionSprite(row.id)}
-  {@const activity = cawco.activityOf(row.id)}
+  {@const state = sessionStatus(row)}
   {@const unfolded = branch.count > 0 && openTrees.has(row.id)}
   <li
     class="group/menu-sub-item relative"
@@ -586,33 +584,44 @@
       href={conversationHref(row.id, cawco.instanceIndex)}
       isActive={activeSession === row.id}
     >
-      <span
-        class="{MARK} session-mark"
-        style="background-image: var(--mark-overlay); background-color: var(--mark-{markHue(row.cwd || row.machineId)});"
+      <SessionMark
+        id={row.id}
+        place={row.cwd || row.machineId}
+        status={state}
+      />
+      <span class="min-w-0 flex-1 truncate"
+        ><span class="sr-only">{STATUS_WORD[state]}: </span>
+        {sessionName(
+          row
+        )}</span
       >
-        <Sprite
-          aria-hidden="true"
-          class={MARK_GLYPH}
-          style="color: var(--mark-glyph);"
-        />
+      <span class="kit-count-col">
+        {#if branch.count > 0}
+          <TreeCount
+            compact
+            count={branch.count}
+            failed={branch.failed}
+            ontoggle={() => openTrees.toggle(row.id)}
+            open={unfolded}
+          />
+        {/if}
       </span>
-      <span class="min-w-0 flex-1 truncate">{sessionName(row)}</span>
-      {#if branch.count > 0}
-        <TreeCount
-          compact
-          count={branch.count}
-          failed={branch.failed}
-          ontoggle={() => openTrees.toggle(row.id)}
-          open={unfolded}
-        />
-      {/if}
       {@render age(row)}
-      <span class={TRAIL}><ActivityDot {activity} /></span>
     </Sidebar.MenuSubButton>
     {#if unfolded}
+      <!-- It opens and folds by its height (`unfold`), its lines drawing in
+           and retracting with it, the rail's first stretch up to this row's
+           mark showing all the while (`bleed`); the gap above its first row
+           is padding, so it folds with it. reflow only slides the rows inside
+           it (`data-flip-anchor`: never copied or uncovered by reflow). -->
       <ul
-        class="kit-nest mt-1 flex min-w-0 flex-col gap-1 pl-(--nest-pad) [--nest-in:var(--space-2)] [--nest-reach:--spacing(1.5)]"
-        data-flip
+        class="kit-nest flex min-w-0 flex-col gap-1 pt-1 pl-(--nest-pad) [--nest-in:var(--space-2)] [--nest-reach:--spacing(1.5)]"
+        data-flip-anchor
+        onoutrostart={(event) => {
+          event.currentTarget.dataset.leaving = '';
+        }}
+        in:unfold={{ bleed: 'var(--nest-lead)' }}
+        out:unfold={{ bleed: 'var(--nest-lead)' }}
         {@attach nestFrom('.session-mark')}
       >
         {#each branch.children as child, i (child.row.id)}
@@ -624,14 +633,13 @@
 {/snippet}
 
 {#snippet age(row: InstanceRow)}
-  {@const label = ageOf(row)}
-  {#if label}
-    <span
-      class="num shrink-0 text-meta text-muted-foreground"
-      title={ageHint(row)}
-      >{label}</span
-    >
-  {/if}
+  <!-- A column of its own, the same width with or without a label, so the
+       counts before it line up down the list. -->
+  <span
+    class="num kit-age-col text-meta text-muted-foreground"
+    title={ageHint(row)}
+    >{ageOf(row)}</span
+  >
 {/snippet}
 
 <div
@@ -882,13 +890,16 @@
                 {#if expanded}
                   <!-- The sub-list opens by growing rather than appearing, so a
                    folder toggled by mistake is legible as the thing that just
-                   moved: it is uncovered top to bottom while the rows under it
-                   slide down to make its room, and closes the same way. -->
-                  <div data-flip>
-                    <!-- The project's own sessions: a plain list, set in so
-                         each mark stands under the project's name. Lines
-                         only join what one session started to it. -->
-                    <Sidebar.MenuSub class="pl-(--space-8)">
+                   moved: it grows from nothing while the rows under it move
+                   down with its edge, and folds back the same way (`unfold`,
+                   as a delegate list does); reflow only slides the rows inside
+                   it (`data-flip-anchor`). -->
+                  <div data-flip-anchor in:unfold out:unfold>
+                    <!-- The project's own sessions: a plain list with no
+                         rail, so set in only a step, just inside the
+                         project's row. Lines only join what one session
+                         started to it. -->
+                    <Sidebar.MenuSub class="pl-(--space-4)">
                       {@const lists = splitOf(project)}
                       {#each branches(lists.recent, `rail:${project.id}:recent`) as branch (branch.row.id)}
                         {@render subRow(branch, '')}

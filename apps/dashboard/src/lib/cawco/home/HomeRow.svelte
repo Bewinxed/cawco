@@ -12,22 +12,22 @@
 
 <script lang="ts">
   /**
-   * One session in a home group. It leads with its project's mark, the
-   * folder tile the rail's projects list draws, coloured by the session's
-   * status; the status word is read out with the title, so colour is never
-   * the only signal. Under the title, the project and what it is doing now;
-   * at the end, the age. Where it runs is said once by the machine header
-   * above it, never per row; only a flat list (Recent) names the machine.
+   * One session in a home group. It leads with the session's mark, the same
+   * tile the rail draws for it, its rim saying what it is doing
+   * (SessionMark); the status word is read out with the title, so colour is
+   * never the only signal. Under the title, the project and what it is doing
+   * now; at the end, the count of the rows under it and the age, each in a
+   * column of its own so they line up down the list. Where it runs is said
+   * once by the machine header above it, never per row; only a flat list
+   * (Recent) names the machine.
    *
    * The row is the session menu's trigger (right-click, long-press, the menu
    * key), as every session row in the app is; a pointer can drag it onto a
    * pane's edge to split, or into a group's tabs. On a wide screen a click
    * opens it in the focused pane.
    *
-   * A parent folds the rows under it (`fold`): their count sits at the end
-   * of the meta line, where the title keeps its whole width and the buttons
-   * that rise over the title line's end never cover it, and the count is
-   * what opens and folds them. A finished row can be archived
+   * A parent folds the rows under it (`fold`): their count, in its column
+   * before the age, is what opens and folds them. A finished row can be archived
    * (`onarchive`): a pointer has a button left of Peek, a finger swipes the
    * row away, and both have it in the menu.
    */
@@ -35,12 +35,12 @@
   import Tip from "$lib/components/ui/tooltip/tip.svelte";
   import { IconArchive, IconMaximize } from "$lib/icons";
   import { cn } from "$lib/utils";
-  import { cawco, type InstanceRow, isFailed, isStale } from "../client.svelte";
+  import type { InstanceRow } from "../client.svelte";
   import LiveSessionMenu from "../LiveSessionMenu.svelte";
-  import ProjectMark, {
-    type MarkStatus,
+  import SessionMark, {
     STATUS_WORD,
-  } from "../ProjectMark.svelte";
+    sessionStatus,
+  } from "../SessionMark.svelte";
   import StoredSessionMenu from "../StoredSessionMenu.svelte";
   import TreeCount from "../TreeCount.svelte";
   import { runIdOf } from "../workflow-runs";
@@ -97,29 +97,11 @@
   const sessionId = $derived(instance?.id ?? info?.sessionId ?? "");
   /** The row is a workflow run (workflow-runs.ts), not a session. */
   const run = $derived(instance ? runIdOf(instance.id) !== null : false);
-  const status = $derived.by<MarkStatus>(() => {
-    if (!instance) {
-      return "idle";
-    }
-    if (isFailed(instance)) {
-      return "fail";
-    }
-    if (isStale(instance) || instance.status === "sleeping") {
-      return "idle";
-    }
-    // A workflow run that ended has stopped; listed as finished, it is done.
-    if (instance.status === "stopped") {
-      return done ? "done" : "idle";
-    }
-    const activity = cawco.activityOf(instance.id);
-    if (activity === "blocked") {
-      return "attn";
-    }
-    if (activity === "working") {
-      return "live";
-    }
-    return done ? "done" : "idle";
-  });
+  const status = $derived(sessionStatus(instance, done));
+  /** Where it runs, for its mark's hue: the same seed the rail uses. */
+  const place = $derived(
+    instance?.cwd || info?.cwd || instance?.machineId || machineId
+  );
 </script>
 
 {#snippet body(trigger: Record<string, unknown>)}
@@ -155,25 +137,19 @@
           : null,
     }}
     >
-      <ProjectMark {status} />
+      <SessionMark id={sessionId} {place} {status} />
       <span class="text">
         <span class="title"
           ><span class="sr-only">{STATUS_WORD[status]}: </span>{title}</span
         >
-        {#if line || fold}
-          <span class="meta">
-            {#if line}
-              <span class="line">{line}</span>
-            {/if}
-            {#if fold}
-              <TreeCount {...fold} />
-            {/if}
-          </span>
+        <span class="line">{line}</span>
+      </span>
+      <span class="kit-count-col">
+        {#if fold}
+          <TreeCount compact {...fold} />
         {/if}
       </span>
-      {#if trail}
-        <span class="num trail">{trail}</span>
-      {/if}
+      <span class="num trail">{trail}</span>
     </a>
     {#if onarchive}
       <Tip label="Archive">
@@ -353,35 +329,27 @@
     text-overflow: ellipsis;
     white-space: nowrap;
   }
-  /* The second line: what it is doing, then the count of the rows folded
-     under it. The words give way first; the count always shows. It stands
-     at the count's height with or without one, so every row in a list is
-     one height and the nesting lines meet each glyph alike. */
-  .meta {
-    display: flex;
-    align-items: center;
-    gap: var(--space-1);
-    min-width: 0;
-    min-block-size: var(--space-5);
-  }
-  .meta .line {
-    flex: 0 1 auto;
-    min-width: 0;
-  }
   .title {
     font: var(--type-label);
   }
+  /* The second line: what it is doing. A line tall even when it says
+     nothing (a context row), so every row in a list is one height and the
+     nesting lines meet each glyph alike. */
   .line {
+    min-block-size: 1lh;
     font: var(--type-meta);
     color: var(--ink-muted);
   }
+  /* The age, in a column as wide as its longest word ("23h 59m") and
+     right aligned, so the count column before it stands at one x down the
+     list. */
   .trail {
-    flex: 0 1 auto;
-    max-width: 45%;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    flex: none;
+    inline-size: 7ch;
+    text-align: end;
     white-space: nowrap;
     font: var(--type-meta);
+    font-variant-numeric: tabular-nums;
     color: var(--ink-muted);
   }
   .item[data-active] {

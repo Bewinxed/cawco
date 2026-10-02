@@ -38,7 +38,6 @@
   } from "$lib/icons";
   import { smoothText } from "$lib/utils/smooth-text.svelte";
   import { getToolGlance } from "$lib/utils/tool-display";
-  import ActivityDot from "./ActivityDot.svelte";
   import {
     ACTIVITY_LABEL,
     SLEEPING_LABEL,
@@ -67,6 +66,7 @@
   import OsMark from "./OsMark.svelte";
   import { permissionSummary } from "./permission-summary";
   import { questionsOf } from "./question";
+  import SessionMark, { sessionStatus } from "./SessionMark.svelte";
   import TaskPanel from "./TaskPanel.svelte";
   import { refreshTasks, taskProgress, tasksOf } from "./tasks.svelte";
   import type { Message } from "./types";
@@ -317,11 +317,11 @@
   </ContextMenu.Root>
 
   <div class="flex items-center gap-2 px-4 pb-3 text-meta">
-    {#if failed}
-      <span class="size-2 shrink-0 rounded-full bg-error"></span>
-    {:else}
-      <ActivityDot {activity} {sleeping} {stale} />
-    {/if}
+    <SessionMark
+      id={target.viewId}
+      place={row?.cwd || row?.machineId || target.viewId}
+      status={sessionStatus(row)}
+    />
     <span
       class="shrink-0 {failed || activity === 'blocked'
         ? 'font-medium text-error'

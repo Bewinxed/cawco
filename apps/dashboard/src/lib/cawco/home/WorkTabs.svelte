@@ -105,9 +105,9 @@
   const glyphs: Attachment<HTMLElement> = (node) => {
     const measure = (): boolean => {
       const line = node.querySelector<HTMLElement>(
-        "[data-key]:not(.nested):has(.project-mark)"
+        "[data-key]:not(.nested):has(.session-mark)"
       );
-      const mark = line?.querySelector<HTMLElement>(".project-mark");
+      const mark = line?.querySelector<HTMLElement>(".session-mark");
       if (!(line && mark)) {
         return false;
       }

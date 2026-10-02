@@ -93,6 +93,19 @@ const place = (span: HTMLElement, box: Box) => {
 };
 
 /**
+ * Whether a layer glides to its next place, written only when it changes: a
+ * class list writes its attribute on every add or remove, changed or not,
+ * and a `reflow` around the list hears each write as a change to re-place
+ * every row. A list folding open (`unfold`) resizes the container every
+ * frame, and each resize set the pill's glide again: a full reflow a frame.
+ */
+const setGlide = (span: HTMLElement, on: boolean) => {
+  if (span.classList.contains("kit-glide") !== on) {
+    span.classList.toggle("kit-glide", on);
+  }
+};
+
+/**
  * How far a row is drawn from where it is laid out: the translation its own
  * and its ancestors' transforms carry, up to the container (a FLIP sliding
  * it, on `transform` or `translate`). Taken off its drawn rect, what is left
@@ -248,7 +261,7 @@ export function highlight(options: HighlightOptions) {
       }
       // Out of view, the ghost lands where it is going without a glide;
       // from under a covering row it glides out as it would from view.
-      ghost.classList.toggle("kit-glide", ghostRow !== null);
+      setGlide(ghost, ghostRow !== null);
       place(ghost, box);
       ghostBox = box;
       ghostRow = row;
@@ -286,7 +299,7 @@ export function highlight(options: HighlightOptions) {
         });
       }
       const move = glide && !fromGhost && pillBox !== null && row !== pillRow;
-      pill.classList.toggle("kit-glide", move);
+      setGlide(pill, move);
       place(pill, box);
       pill.style.opacity = "1";
       pillBox = box;
@@ -448,11 +461,11 @@ export function highlight(options: HighlightOptions) {
     const onResize = () => {
       pillRow = null;
       pillBox = null;
-      pill.classList.remove("kit-glide");
+      setGlide(pill, false);
       syncPill(false);
       const box = ghostRow?.isConnected ? boxOf(ghostRow) : undefined;
       if (box) {
-        ghost.classList.remove("kit-glide");
+        setGlide(ghost, false);
         place(ghost, box);
         ghostBox = box;
       }

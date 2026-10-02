@@ -52,17 +52,15 @@ export const ACTIVITY_LABEL: Record<Activity, string> = {
 /**
  * The fourth word the rails use, and deliberately not an {@link Activity}: a
  * session that has lost its process reports no activity at all, so a resumable
- * row (`isResumable`) means this instead of claiming to be idle. `ActivityDot`
- * renders it as its own glyph now (leaf Y1) rather than this word in a pill —
- * the word survives only as that glyph's accessible name and tooltip.
+ * row (`isResumable`) means this instead of claiming to be idle. A row says it
+ * in its tooltip and dims its mark; the word is never a pill.
  */
 export const SLEEPING_LABEL = "Sleeping";
 
 /**
- * The sixth word, for a session whose process exited badly (`isFailed`). Like
- * sleeping and unknown it is carried by `ActivityDot`'s own rendering rather
- * than a word in a pill — the word survives as the dot's accessible name and
- * tooltip only.
+ * The sixth word, for a session whose process exited badly (`isFailed`). A row
+ * carries it on its mark's rim (SessionMark), the word as its accessible name
+ * and tooltip.
  */
 export const FAILED_LABEL = "Failed";
 
@@ -80,8 +78,7 @@ export const SLEEPING_HINT =
  * idle — nothing said the session stopped working — and not asleep — nothing
  * said the process is gone. Rendering it as either would be exactly the stale
  * confidence ARCHITECTURE.md's derived-liveness law exists to rule out. Same
- * fate as {@link SLEEPING_LABEL}: `ActivityDot`'s hollow glyph carries this
- * now, and the word survives as its accessible name and tooltip only.
+ * as {@link SLEEPING_LABEL}: a row says it in its tooltip and dims its mark.
  */
 export const UNKNOWN_LABEL = "Unknown";
 

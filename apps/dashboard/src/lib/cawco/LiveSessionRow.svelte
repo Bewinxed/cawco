@@ -29,7 +29,6 @@
   import { TextMorph } from "torph/svelte";
   import { Badge } from "$lib/components/ui/badge";
   import { formatDuration } from "$lib/utils/time";
-  import ActivityDot from "./ActivityDot.svelte";
   import { FAILED_HINT, SLEEPING_HINT, UNKNOWN_HINT } from "./activity";
   import {
     cawco,
@@ -41,8 +40,11 @@
   import { identityVar } from "./folder-prefs.svelte";
   import LiveSessionMenu from "./LiveSessionMenu.svelte";
   import { conversationHref, sessionTitle } from "./links";
-  import { markHue, sessionSprite } from "./mark";
   import { CURVE, crossIn, dur } from "./motion/curves.svelte";
+  import SessionMark, {
+    STATUS_WORD,
+    sessionStatus,
+  } from "./SessionMark.svelte";
   import TaskRing from "./TaskRing.svelte";
   import { taskProgress, tasksOf } from "./tasks.svelte";
   import { dragSession } from "./workspace/dnd.svelte";
@@ -58,11 +60,6 @@
 
   const showCwd = $derived(Boolean(instance.cwd) && instance.cwd !== groupCwd);
 
-  // The per-session identity sprite: distinct per session (seeded by the
-  // instance id), so two sessions in one project are told apart by SHAPE, not
-  // only by the project hue. markHue below still carries the project colour.
-  const Sprite = $derived(sessionSprite(instance.id));
-
   const activity = $derived(cawco.activityOf(instance.id));
   const tool = $derived(cawco.currentToolOf(instance.id));
   const sleeping = $derived(isResumable(instance));
@@ -71,14 +68,13 @@
   const stale = $derived(isStale(instance));
   const quest = $derived(instance.kind === "scratch");
   /**
-   * No state word anywhere on this row any more. "Working" and "Needs you" are
-   * long, they sat in a pill wide enough to shove the title into an ellipsis on
-   * every row of a card of thirty, and they said the same thing the dot beside
-   * them already said in 8px. The dot is now the whole vocabulary: blue that
-   * breathes for working, amber that pings for needs-you, quiet neutral for
-   * idle, a moon for sleeping, a hollow ring for unreachable, still red for
-   * failed — each with the word as its accessible name and tooltip.
+   * No state word on screen: "Working" and "Needs you" are long, and in a
+   * pill they shoved the title into an ellipsis on every row of a card of
+   * thirty. The state is the rim round the session's mark (SessionMark), the
+   * same in every list, with the word read out before the title and the row's
+   * tooltip saying the rest (asleep, unreachable).
    */
+  const status = $derived(sessionStatus(instance));
 
   // What the session is about, not where it runs: the SDK's own title for the
   // transcript this instance is writing. A quest is tagged out of the catalog,
@@ -187,17 +183,21 @@
            the rows it heads. -->
         <span
           class="flex shrink-0 items-center justify-center {sleeping || stale ? 'opacity-60' : ''}"
-          style="--c-mark:20px;--c-mark-glyph:12px"
+          style="--mark-size:20px"
         >
-          <span class="mark m{markHue(instance.cwd || instance.machineId)}">
-            <Sprite aria-hidden="true" />
-          </span>
+          <SessionMark
+            id={instance.id}
+            place={instance.cwd || instance.machineId}
+            {status}
+          />
         </span>
         <!-- `max-w-xl`: a title that runs on — a pasted URL, usually — stops at a
            readable measure instead of crushing the path beside it. It is wider
            than it was because the state pill that used to sit at the end of
            this row is gone. -->
-        <span class="min-w-0 max-w-xl truncate text-label">{title}</span>
+        <span class="min-w-0 max-w-xl truncate text-label"
+          ><span class="sr-only">{STATUS_WORD[status]}: </span>{title}</span
+        >
         <!-- A quest is named beside its title rather than glyphed in front of it:
            the lead slot belongs to state, and the titles keep their column. -->
         {#if quest}
@@ -230,9 +230,8 @@
            session runs, a turning arc and how long it has been on this step,
            which is what is actually known. At a glance and nothing more: the
            row is already a link, and a control inside one is two targets
-           sharing a 36px band. It takes the right cluster's `ml-auto` when it
-           is here, so the state word beside it keeps reading as one group.
-           One element for both, so the arc eases from turning to counted
+           sharing a 36px band. It stands at the row's end (`ml-auto`). One
+           element for both, so the arc eases from turning to counted
            (TaskRing) and the figure morphs, and it fades in and out as a
            whole. -->
         {#if progress || unmeasured}
@@ -264,15 +263,6 @@
             {/if}
           </span>
         {/if}
-        <!-- The state, in one dot and no words (see the note in the script). It
-           is the last thing in the row and the smallest, which is the right
-           weight for something you read peripherally and only act on when it
-           is amber or red. -->
-        <span
-          class="flex shrink-0 items-center {progress || unmeasured ? 'ml-2' : 'ml-auto'}"
-        >
-          <ActivityDot {activity} {failed} size={2.5} {sleeping} {stale} />
-        </span>
       </span>
       <!-- The tool it is running: the name morphs from one tool to the next,
          and the line fades in and out as the session starts and stops one. -->
