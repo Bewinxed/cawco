@@ -250,11 +250,17 @@ export const instances = sqliteTable("instances", {
   parentToolUseId: text("parent_tool_use_id"),
   cwd: text("cwd").notNull(),
   /**
-   * What the session is for, one line, as its spawn said: a delegate's brief
-   * headline. Null on a session that was started without one — the rails fall
-   * back to the transcript's own title, then to where it runs.
+   * The session's given name: the owner's rename, or the name the session
+   * gave itself (`set_title`) or was spawned under (a delegate's title).
+   * Null on a session nobody named — the rails fall back to `derivedTitle`,
+   * then to where it runs.
    */
   title: text("title"),
+  /**
+   * Who gave `title`: `owner` (a rename in the dashboard), which nothing the
+   * session does overwrites, or `agent` (its spawn's title or `set_title`).
+   */
+  titleSource: text("title_source").$type<"owner" | "agent">(),
   /**
    * The MCP servers and tool names the session's newest `init` announced, as
    * JSON — overwritten on every `init` that carries them, so a reload or a hub

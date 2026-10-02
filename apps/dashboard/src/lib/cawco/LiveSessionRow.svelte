@@ -125,7 +125,7 @@
           .find((row) => row.sessionId === instance.sessionId)
       : undefined;
     if (info) {
-      return sessionTitle(info);
+      return sessionTitle(info, instance);
     }
     // What its spawn said it is for — a delegate's brief, first line — before
     // the fallback, since a delegate is never in the catalog to begin with.

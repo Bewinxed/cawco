@@ -12,9 +12,6 @@
   import { Button } from "$lib/components/ui/button";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as ContextMenu from "$lib/components/ui/context-menu";
-  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Input } from "$lib/components/ui/input";
   import {
     IconArrowRight,
     IconExternal,
@@ -28,9 +25,11 @@
     forkSession,
     loadCatalog,
     machineControl,
+    renameInstance,
   } from "./client.svelte";
   import { continueInNewSession } from "./continue.svelte";
-  import { conversationHref, sessionTitle } from "./links";
+  import { conversationHref, instanceForSession, sessionTitle } from "./links";
+  import RenameDialog from "./RenameDialog.svelte";
 
   let {
     machineId,
@@ -49,39 +48,35 @@
   const where = $derived({ dir: info.cwd || undefined });
 
   let renaming = $state(false);
-  let title = $state("");
   let confirmingDelete = $state(false);
   let busy = $state(false);
-  /** The last rename went through (a failed one leaves the dialog open). */
-  let renamed = $state(false);
 
-  function openRename() {
-    title = sessionTitle(info);
-    renaming = true;
-  }
+  /** The hub's row for this conversation, when the hub keeps one. */
+  const row = $derived(
+    instanceForSession(cawco.instanceIndex, info.sessionId, {
+      machineId,
+      cwd: info.cwd,
+    })
+  );
+  const title = $derived(sessionTitle(info, row));
 
-  async function rename(event: SubmitEvent) {
-    event.preventDefault();
-    const next = title.trim();
-    if (!next || busy) {
+  /**
+   * A session the hub keeps is named there, the one place every listing
+   * reads; a transcript the hub never ran is named in the transcript itself.
+   */
+  async function rename(next: string) {
+    if (row) {
+      await renameInstance(row.id, next);
       return;
     }
-    busy = true;
-    renamed = false;
-    try {
-      await machineControl(
-        machineId,
-        "renameSession",
-        [info.sessionId, next, where],
-        undefined,
-        info.harness
-      );
-      await loadCatalog(machineId);
-      renamed = true;
-      renaming = false;
-    } finally {
-      busy = false;
-    }
+    await machineControl(
+      machineId,
+      "renameSession",
+      [info.sessionId, next, where],
+      undefined,
+      info.harness
+    );
+    await loadCatalog(machineId);
   }
 
   /** The last delete went through (a failed one leaves the dialog open). */
@@ -126,7 +121,7 @@
       Open
     </ContextMenu.Item>
     <ContextMenu.Item
-      onSelect={() => continueInNewSession({ instanceId: info.sessionId, machineId, cwd: info.cwd ?? '', harness: info.harness, title: sessionTitle(info) })}
+      onSelect={() => continueInNewSession({ instanceId: info.sessionId, machineId, cwd: info.cwd ?? '', harness: info.harness, title })}
     >
       <IconArrowRight />
       Continue in new session…
@@ -142,7 +137,11 @@
 
     <ContextMenu.Separator />
 
-    <ContextMenu.Item onSelect={openRename}>
+    <ContextMenu.Item
+      onSelect={() => {
+        renaming = true;
+      }}
+    >
       <IconPenLine />
       Rename…
     </ContextMenu.Item>
@@ -171,47 +170,15 @@
   </ContextMenu.Content>
 </ContextMenu.Root>
 
-<Dialog.Root bind:open={renaming}>
-  <Dialog.Content>
-    <form class="grid gap-6" onsubmit={rename}>
-      <Dialog.Header>
-        <Dialog.Title>Rename session</Dialog.Title>
-        <Dialog.Description>
-          What this session is called in your history. It does not change the
-          transcript.
-        </Dialog.Description>
-      </Dialog.Header>
-      <!-- First tabbable thing in the dialog, so it is what opens focused. -->
-      <Input aria-label="Session title" autocomplete="off" bind:value={title} />
-      <Dialog.Footer>
-        <Button
-          onclick={() => {
-            renaming = false;
-          }}
-          type="button"
-          variant="outline"
-          >Cancel</Button
-        >
-        <Button
-          disabled={!title.trim()}
-          failed={!renamed}
-          label="Rename"
-          pending={busy}
-          pendingLabel="Renaming…"
-          type="submit"
-        />
-      </Dialog.Footer>
-    </form>
-  </Dialog.Content>
-</Dialog.Root>
+<RenameDialog current={title} onrename={rename} bind:open={renaming} />
 
 <AlertDialog.Root bind:open={confirmingDelete}>
   <AlertDialog.Content>
     <AlertDialog.Header>
       <AlertDialog.Title>Delete this transcript?</AlertDialog.Title>
       <AlertDialog.Description>
-        “{sessionTitle(info)}” is removed from {info.cwd || 'this machine'}, for
-        good. Nothing else on the machine is touched.
+        “{title}” is removed from {info.cwd || 'this machine'}, for good.
+        Nothing else on the machine is touched.
       </AlertDialog.Description>
     </AlertDialog.Header>
     <AlertDialog.Footer>

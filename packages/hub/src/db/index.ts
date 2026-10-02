@@ -420,6 +420,19 @@ export interface DbShape {
   readonly markInstanceLive: (id: string) => boolean;
   /** A whole report: every id it names is replaced, every other cell survives. */
   readonly mergeAgentTools: (machineId: string, statuses: ToolStatus[]) => void;
+  /**
+   * Gives the session its name. The owner's always lands; the session's own
+   * (`set_title`) is refused once the owner has named it, and the answer
+   * carries the owner's name. Undefined when there is no such session.
+   */
+  readonly nameInstance: (
+    id: string,
+    title: string,
+    by: "owner" | "agent"
+  ) =>
+    | { named: true; row: typeof instances.$inferSelect }
+    | { named: false; row: typeof instances.$inferSelect }
+    | undefined;
   /** Records the window a claude turn reported for its model. */
   readonly noteClaudeContextWindow: (
     model: string,
@@ -1567,6 +1580,7 @@ const make = (path: string): DbShape => {
           parentInstanceId,
           parentToolUseId,
           title,
+          ...(title ? { titleSource: "agent" as const } : {}),
           kind,
           permissionMode,
           model,
@@ -1610,10 +1624,41 @@ const make = (path: string): DbShape => {
             ...(projectId ? { projectId } : {}),
             ...(parentInstanceId ? { parentInstanceId } : {}),
             ...(parentToolUseId ? { parentToolUseId } : {}),
-            ...(title ? { title } : {}),
+            // A re-issued spawn's title never replaces the owner's name.
+            ...(title
+              ? {
+                  title: sql`CASE WHEN ${instances.titleSource} = 'owner' THEN ${instances.title} ELSE ${title} END`,
+                  titleSource: sql`CASE WHEN ${instances.titleSource} = 'owner' THEN 'owner' ELSE 'agent' END`,
+                }
+              : {}),
           },
         })
         .run();
+    },
+    nameInstance: (id, title, by) => {
+      // `updatedAt` deliberately untouched, as with `noteDerivedTitle`:
+      // naming a row is not the session moving.
+      const [named] = db
+        .update(instances)
+        .set({ title, titleSource: by })
+        .where(
+          by === "owner"
+            ? eq(instances.id, id)
+            : and(
+                eq(instances.id, id),
+                or(
+                  isNull(instances.titleSource),
+                  ne(instances.titleSource, "owner")
+                )
+              )
+        )
+        .returning()
+        .all();
+      if (named) {
+        return { named: true, row: named };
+      }
+      const row = db.select().from(instances).where(eq(instances.id, id)).get();
+      return row ? { named: false, row } : undefined;
     },
     noteDerivedTitle: (id, derivedTitle) => {
       if (!derivedTitle) {

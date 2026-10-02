@@ -157,6 +157,7 @@ import {
   createWorkItems,
   LEAF_DELEGATE_REFUSAL,
   SESSION_TITLE_DESCRIPTION,
+  titleProblem,
   WorkItemRefusal,
 } from "./work-items";
 import { workflowRoutes } from "./workflows/routes";
@@ -6460,27 +6461,67 @@ export const createServer = ({
             // the session reported it is answering with, whatever that grows into.
             permissionMode: t.Optional(t.String()),
             model: t.Optional(t.String()),
+            /** The owner's name for it, which the session's `set_title` never replaces. */
+            title: t.Optional(t.String()),
           }),
         },
         ({ params, body, status }) => {
           const { kind, permissionMode, model } = body;
+          const title = body.title?.trim();
+          if (body.title !== undefined && !title) {
+            return status(400, "title is blank");
+          }
           if (
             kind === undefined &&
             permissionMode === undefined &&
-            model === undefined
+            model === undefined &&
+            title === undefined
           ) {
             return status(400, "name a field to change");
           }
-          const row = db.patchInstance(params.id, {
-            kind,
-            permissionMode,
-            model,
-          });
+          const named = title
+            ? db.nameInstance(params.id, title, "owner")?.row
+            : undefined;
+          if (title && !named) {
+            return status(404, `no session ${params.id}`);
+          }
+          // A rename alone is not the session moving: its age stays.
+          const row =
+            kind === undefined &&
+            permissionMode === undefined &&
+            model === undefined
+              ? named
+              : db.patchInstance(params.id, { kind, permissionMode, model });
           if (!row) {
             return status(404, `no session ${params.id}`);
           }
           publishInstances(row.machineId);
           return row;
+        }
+      )
+      // The session naming itself (`set_title`). Refused, with the owner's
+      // name in the answer, once the owner has renamed it.
+      .post(
+        "/api/instances/:id/title",
+        { ...hidden, body: t.Object({ title: t.String() }) },
+        ({ params, body, status }) => {
+          const title = body.title.trim();
+          const problem = titleProblem(title);
+          if (problem) {
+            return status(400, problem);
+          }
+          const result = db.nameInstance(params.id, title, "agent");
+          if (!result) {
+            return status(404, `no session ${params.id}`);
+          }
+          if (!result.named) {
+            return status(
+              409,
+              `The owner named this session "${result.row.title}", so set_title leaves it alone. Carry on with the task; do not call set_title again.`
+            );
+          }
+          publishInstances(result.row.machineId);
+          return `Named this session "${title}".`;
         }
       )
       // Broadcast on change *and* readable on connect: a dashboard that opens

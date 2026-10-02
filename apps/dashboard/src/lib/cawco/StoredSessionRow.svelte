@@ -3,7 +3,7 @@
   import type { NeutralSessionInfo } from "@cawco/core";
   import { formatDistanceToNow } from "$lib/utils/time";
   import { cawco } from "./client.svelte";
-  import { conversationHref, sessionTitle } from "./links";
+  import { catalogTitle, conversationHref } from "./links";
   import { markHue, sessionSprite } from "./mark";
   import StoredSessionMenu from "./StoredSessionMenu.svelte";
   import { dragSession } from "./workspace/dnd.svelte";
@@ -57,7 +57,7 @@
       <!-- Stops at a readable measure, as the live rows do, so a runaway title
            does not crush the path beside it. -->
       <span class="min-w-0 max-w-lg truncate text-label"
-        >{sessionTitle(info)}</span
+        >{catalogTitle(info, cawco.instanceIndex, machineId)}</span
       >
       <!-- Beside the title, as the live rows carry it: it yields three times as
            readily, and what it keeps it gives up from the left — the leaf is

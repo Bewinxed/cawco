@@ -421,6 +421,13 @@
       "when": 1790886291375,
       "tag": "0059_usage_open_code_go",
       "breakpoints": true
+    },
+    {
+      "idx": 60,
+      "version": "6",
+      "when": 1790920101668,
+      "tag": "0060_session_title_source",
+      "breakpoints": true
     }
   ]
 }

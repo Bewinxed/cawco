@@ -133,14 +133,37 @@ export function resolveSessionTitle(input: {
   return input.id ? input.id.slice(0, 8) : "session";
 }
 
-/** The same title, for a stored session the machine's catalog described. */
-export function sessionTitle(info: NeutralSessionInfo): string {
+/**
+ * The same title, for a stored session the machine's catalog described. The
+ * hub row behind it, when there is one, names it first if it has been given a
+ * name: the owner's rename, else the session's own `set_title`. Then the
+ * harness's custom title or summary, then the first prompt.
+ */
+export function sessionTitle(
+  info: NeutralSessionInfo,
+  row?: Pick<InstanceRow, "title" | "titleSource"> | null
+): string {
   return resolveSessionTitle({
-    title: info.customTitle || info.summary,
+    title:
+      (row?.titleSource ? row.title : undefined) ||
+      info.customTitle ||
+      info.summary,
     firstMessage: info.firstPrompt,
     cwd: info.cwd,
     id: info.sessionId,
   });
+}
+
+/** {@link sessionTitle}, with the hub row looked up from the fleet's index. */
+export function catalogTitle(
+  info: NeutralSessionInfo,
+  index: InstanceIndex<InstanceRow>,
+  machineId: string
+): string {
+  return sessionTitle(
+    info,
+    instanceForSession(index, info.sessionId, { machineId, cwd: info.cwd })
+  );
 }
 
 /**

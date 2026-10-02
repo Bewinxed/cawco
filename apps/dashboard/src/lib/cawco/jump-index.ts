@@ -1,5 +1,5 @@
 import type { InstanceRow, NeutralSessionInfo } from "@cawco/core";
-import { conversationHref, indexInstances, sessionTitle } from "./links";
+import { catalogTitle, conversationHref, indexInstances } from "./links";
 
 /** Which of the four groups a row belongs to — decides its icon and its cap. */
 export type JumpKind = "project" | "machine" | "live" | "stored";
@@ -129,7 +129,7 @@ export function buildJumpIndex(input: JumpIndexInput): JumpIndex {
   const destinations = new Set(groups[2].rows.map((row) => row.href));
   for (const machine of input.stored) {
     for (const [i, info] of machine.catalog.entries()) {
-      const title = sessionTitle(info);
+      const title = catalogTitle(info, index, machine.machineId);
       sessionTitles.set(info.sessionId, title);
       const href = conversationHref(info.sessionId, index, {
         machineId: machine.machineId,

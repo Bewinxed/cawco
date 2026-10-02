@@ -28,7 +28,7 @@ import {
   isDeployDiverged,
 } from "../convergence";
 import { machineFaults } from "../fleet-faults";
-import { conversationHref, resolveSessionTitle, sessionTitle } from "../links";
+import { catalogTitle, conversationHref, resolveSessionTitle } from "../links";
 import { heldOrder } from "../motion/held-order.svelte";
 import { permissionSummary } from "../permission-summary";
 import { questionsOf } from "../question";
@@ -495,7 +495,7 @@ class Home {
             instance: null,
             info,
             machineId: machine.machineId,
-            title: sessionTitle(info),
+            title: catalogTitle(info, cawco.instanceIndex, machine.machineId),
             place: placeOf(machine.machineId, info.cwd),
             href: conversationHref(info.sessionId, cawco.instanceIndex, {
               machineId: machine.machineId,

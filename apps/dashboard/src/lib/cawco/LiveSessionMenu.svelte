@@ -21,6 +21,7 @@
     IconExternal,
     IconFolder,
     IconFork,
+    IconPenLine,
     IconStop,
     IconTrash,
   } from "$lib/icons";
@@ -32,11 +33,13 @@
     type InstanceRow,
     keepSession,
     removeSession,
+    renameInstance,
     stopSession,
   } from "./client.svelte";
   import { confirm } from "./confirm.svelte";
   import { continueInNewSession } from "./continue.svelte";
   import { conversationHref } from "./links";
+  import RenameDialog from "./RenameDialog.svelte";
   import { sessionName } from "./session-name";
 
   interface Props {
@@ -54,6 +57,8 @@
   }
 
   let { instance, ongroup, onarchive, children }: Props = $props();
+
+  let renaming = $state(false);
 
   const href = $derived(conversationHref(instance.id, cawco.instanceIndex));
   const scratch = $derived(instance.kind === "scratch");
@@ -190,6 +195,14 @@
         Archive
       </ContextMenu.Item>
     {/if}
+    <ContextMenu.Item
+      onSelect={() => {
+        renaming = true;
+      }}
+    >
+      <IconPenLine />
+      Rename…
+    </ContextMenu.Item>
 
     {#if asleepWithTranscript}
       <ContextMenu.Separator />
@@ -235,3 +248,9 @@
     </ContextMenu.CopyItem>
   </ContextMenu.Content>
 </ContextMenu.Root>
+
+<RenameDialog
+  current={sessionName(instance.id, {}, instance.cwd).label}
+  onrename={(title) => renameInstance(instance.id, title)}
+  bind:open={renaming}
+/>

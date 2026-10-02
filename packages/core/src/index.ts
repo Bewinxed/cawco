@@ -609,10 +609,15 @@ export interface InstanceRow {
   sessionId: string | null;
   status: InstanceStatus;
   /**
-   * What the session is for, as its {@link SpawnPayload.title} said — a
-   * delegate's brief headline. Null on a session that was started without one.
+   * What the session is called: the owner's rename, else the name the session
+   * gave itself (`set_title`) or was spawned under, else {@link derivedTitle}.
    */
   title?: string | null;
+  /**
+   * Who gave the session its name: `owner` (a dashboard rename, which the
+   * session's own `set_title` cannot replace) or `agent`. Null while nobody has.
+   */
+  titleSource?: "owner" | "agent" | null;
   /** When the row last moved. */
   updatedAt?: string | number | Date | null;
   workflowRunId?: string | null;

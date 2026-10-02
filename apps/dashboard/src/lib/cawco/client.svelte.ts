@@ -3640,6 +3640,27 @@ export async function discardSession(
  * the tag that kept its transcript out of the machine's catalog comes off, so
  * the session joins the history it was being hidden from.
  */
+/**
+ * The owner's name for a session the hub keeps. It outranks the name the
+ * session gives itself (`set_title`), which the hub refuses from then on;
+ * the new name reaches every dashboard through the instance-update frame.
+ */
+export async function renameInstance(
+  instanceId: string,
+  title: string
+): Promise<void> {
+  const response = await fetch(`/api/instances/${instanceId}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ title }),
+  });
+  if (!response.ok) {
+    throw new Error(
+      `Could not rename this session — the hub answered ${response.status}. Try again.`
+    );
+  }
+}
+
 export async function keepSession(instanceId: string): Promise<void> {
   const target = session(instanceId);
   const response = await fetch(`/api/instances/${instanceId}`, {

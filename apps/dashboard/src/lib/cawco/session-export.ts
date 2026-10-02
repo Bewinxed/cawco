@@ -11,7 +11,7 @@
 import { machineLabel, type UsageSummaryRow } from "@cawco/core";
 import { cawco, isFailed } from "./client.svelte";
 import { instanceTitle, lastAt } from "./home/home.svelte";
-import { sessionTitle } from "./links";
+import { catalogTitle } from "./links";
 
 const HARNESS: Record<string, string> = {
   claude: "Claude Code",
@@ -110,7 +110,7 @@ export function sessionsCsv(spend: SessionSpend): string {
       .map((info) => {
         seen.add(info.sessionId);
         return [
-          sessionTitle(info),
+          catalogTitle(info, cawco.instanceIndex, machine.machineId),
           machineLabel(machine.hostname),
           HARNESS[info.harness] ?? info.harness,
           "",

@@ -782,6 +782,32 @@ export function handoffTools(deps: HandoffDeps) {
       })
     ),
     tool(
+      "set_title",
+      "Name this session in 3 to 6 plain words, verb first if it is a task (e.g. 'Fix tray chip overflow'). " +
+        "Call it once the task is clear, and again only when the task changes.",
+      {
+        title: z
+          .string()
+          .trim()
+          .min(1)
+          .max(SESSION_TITLE_MAX)
+          .describe(
+            `The session's name, at most ${SESSION_TITLE_MAX} characters, e.g. 'Fix tray chip overflow'.`
+          ),
+      },
+      async ({ title }) => ({
+        content: [
+          { type: "text" as const, text: await actions.setTitle(title) },
+        ],
+      }),
+      {
+        readOnlyHint: false,
+        destructiveHint: false,
+        idempotentHint: true,
+        openWorldHint: false,
+      }
+    ),
+    tool(
       "show_image",
       "Show an image file to the user inline in this session's transcript, by path. The " +
         "dashboard renders it from disk when the user looks; you do not read the image and " +
@@ -844,10 +870,12 @@ export function handoffTools(deps: HandoffDeps) {
 }
 
 export function handoffInstructions(deps: HandoffDeps): string {
+  const naming =
+    "Name this session with set_title in 3 to 6 plain words once its task is clear; call it again only when the task changes.";
   const images =
     "CawCo can generate images regardless of your model: use generate_image (Claude: mcp__cawco__generate_image; OpenCode: cawco_generate_image). It uses the machine's ChatGPT subscription login only. Pass reference_images for edits or visual guidance, then show the returned path with show_image. Discover deferred tools before claiming image generation is unavailable. Do not delegate image generation to a different model.";
   if (deps.canDelegate === false) {
-    return `This session is a leaf delegate. Do the assigned work yourself and call finish_item when it is done; delegate and start_session are unavailable. Use mcp__cawco__handoff to reach your parent or a session that already owns related work.\n\n${images}`;
+    return `This session is a leaf delegate. Do the assigned work yourself and call finish_item when it is done; delegate and start_session are unavailable. Use mcp__cawco__handoff to reach your parent or a session that already owns related work.\n\n${naming}\n\n${images}`;
   }
   let catalog = deps.delegateTypes?.length
     ? delegateTypeLine(deps.delegateTypes).trim()
@@ -856,6 +884,7 @@ export function handoffInstructions(deps: HandoffDeps): string {
     catalog = `${deps.delegateTypesError}. The catalog is unavailable, not empty. A delegate call naming a known type retries the fetch; if no type is known, report the catalog blocker rather than guessing a model.`;
   }
   return [
+    naming,
     images,
     "Use CawCo's delegate tool for bounded fleet work that must report back to its parent. Native harness subagents are a separate mechanism and do not resolve CawCo presets.",
     'Call list_delegate_types for current model/effort mappings. Claude names these tools mcp__cawco__list_delegate_types and mcp__cawco__delegate; if deferred, use ToolSearch(query="select:mcp__cawco__delegate"). OpenCode names them cawco_list_delegate_types and cawco_delegate. These are tools, not MCP resources. list_sessions lists running sessions, not configured types.',

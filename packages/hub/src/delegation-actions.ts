@@ -535,6 +535,8 @@ export interface HandoffActions {
     target: string,
     checks: WorkItemCheck[]
   ) => Promise<string>;
+  /** Names this session; refused, in the hub's words, once the owner has named it. */
+  readonly setTitle: (title: string) => Promise<string>;
   readonly showPreview: (source: PreviewSource) => Promise<string>;
   // biome-ignore lint/style/useConsistentMethodSignatures: implemented below; property-style would change parameter variance against that implementation
   startSession(
@@ -1152,5 +1154,21 @@ export const handoffActions = ({
       },
     });
     return "Sent to the user — it lands in their Telegram when the hub has a bridge, and is dropped otherwise.";
+  },
+
+  async setTitle(title) {
+    const response = await fetch(
+      `${hubHttpUrl()}/api/instances/${encodeURIComponent(instanceId)}/title`,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ title }),
+      }
+    );
+    const text = await response.text();
+    if (!response.ok) {
+      throw new Error(text);
+    }
+    return text;
   },
 });

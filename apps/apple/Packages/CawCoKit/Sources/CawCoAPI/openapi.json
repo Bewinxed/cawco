@@ -1607,6 +1607,9 @@
                   },
                   "model": {
                     "type": "string"
+                  },
+                  "title": {
+                    "type": "string"
                   }
                 }
               }
@@ -6145,6 +6148,13 @@
               "string"
             ]
           },
+          "titleSource": {
+            "enum": [
+              "agent",
+              "owner"
+            ],
+            "type": "string"
+          },
           "tooling": {
             "$ref": "#/components/schemas/SessionTooling"
           },
@@ -6332,6 +6342,13 @@
                 "null",
                 "string"
               ]
+            },
+            "titleSource": {
+              "enum": [
+                "agent",
+                "owner"
+              ],
+              "type": "string"
             },
             "derivedTitle": {
               "type": [
@@ -13967,11 +13984,19 @@
             "$ref": "#/components/schemas/InstanceStatus"
           },
           "title": {
-            "description": "What the session is for, as its {@link SpawnPayload.title} said — a\ndelegate's brief headline. Null on a session that was started without one.",
+            "description": "What the session is called: the owner's rename, else the name the session\ngave itself (`set_title`) or was spawned under, else {@link derivedTitle}.",
             "type": [
               "null",
               "string"
             ]
+          },
+          "titleSource": {
+            "description": "Who gave the session its name: `owner` (a dashboard rename, which the\nsession's own `set_title` cannot replace) or `agent`. Null while nobody has.",
+            "enum": [
+              "agent",
+              "owner"
+            ],
+            "type": "string"
           },
           "updatedAt": {
             "description": "When the row last moved.",
