@@ -384,6 +384,16 @@ public enum Motion {
     public static let easeOut = UnitCurve.bezier(startControlPoint: UnitPoint(x: 0.23, y: 1), endControlPoint: UnitPoint(x: 0.32, y: 1))
     public static let easeInOut = UnitCurve.bezier(startControlPoint: UnitPoint(x: 0.77, y: 0), endControlPoint: UnitPoint(x: 0.175, y: 1))
     public static let easeDrawer = UnitCurve.bezier(startControlPoint: UnitPoint(x: 0.32, y: 0.72), endControlPoint: UnitPoint(x: 0, y: 1))
+    /// A glide's first stretch: speed rising evenly from rest (its position the square of its time), into the steady pace a tree's line, its room and the rows under it travel at.
+    public static let easeGlideIn = UnitCurve.bezier(startControlPoint: UnitPoint(x: 0.3333, y: 0), endControlPoint: UnitPoint(x: 0.6667, y: 0.3333))
+    /// A glide's last stretch: from the steady pace, speed falling evenly to rest.
+    public static let easeGlideOut = UnitCurve.bezier(startControlPoint: UnitPoint(x: 0.3333, y: 0.6667), endControlPoint: UnitPoint(x: 0.6667, y: 1))
+    /// Between one row of an opening tree and the next: its line reaches each in turn at a steady pace, one row's room per stagger.
+    /// In seconds.
+    public static let durStagger: TimeInterval = 0.06
+    /// The most an opening tree's line takes to reach its last row: a longer tree's rows come closer together.
+    /// In seconds.
+    public static let durCascade: TimeInterval = 0.48
     /// The hover ghost following the pointer from row to row.
     /// In seconds.
     public static let durGhost: TimeInterval = 0.08

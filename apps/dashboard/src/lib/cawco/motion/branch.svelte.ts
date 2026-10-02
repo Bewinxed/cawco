@@ -7,8 +7,8 @@
  *
  * The line. Each child's line (app.css .kit-nest) runs from the parent's
  * glyph down the rail, round the corner of its elbow and out along its arm
- * to the child's glyph. Its head travels the whole tree at one pace on one
- * curve: as far along every branch at once, so where the rail meets a
+ * to the child's glyph. Its head travels the whole tree at one pace: as far
+ * along every branch at once, so where the rail meets a
  * corner it carries on round it and out along the arm without a pause,
  * while the rail carries on down to the next child. Each stretch of line is
  * cut where the head has got to, along the stroke, the corner by its arc's
@@ -16,17 +16,22 @@
  * arm on its child's own swipe, the line stalled at every corner and
  * restarted at another speed.
  *
- * Opening. The room opens downward from the parent row's bottom edge: the
+ * Opening. The line leads. Its head glides at one steady speed (curves
+ * `glide`: easing in over its first few px and out over its last), so the
+ * children are reached at even times: --dur-stagger apart, or closer
+ * together in a tree too tall to open within --dur-cascade. The room opens
+ * downward from the parent row's bottom edge at the same speed: the
  * parent's box (`data-flip="box"` in a `reflow`, motion/rows) is laid out at
- * its new size at once and its edge is uncovered on the rows' curve, while
- * everything under it slides down with that edge, all from one frame
- * (`atTravel`). The line grows on the room's curve and clock, never below
- * its edge. The moment the head reaches a child's glyph, the glyph flies in
+ * its new size at once and its edge is uncovered, while everything under it
+ * slides down with that edge, all from one frame and at the pace the tree
+ * asks of the batch (`atTravel`), so the head, which starts above the room's
+ * top, is never below its edge. On the rows' in-out curve, the room set the
+ * pace and the head rode it: the children were reached 22ms, then 134ms
+ * apart. The moment the head reaches a child's glyph, the glyph flies in
  * from the row's left edge as it fades in, and its title wipes in left to
- * right, both on --ease-out over --dur-rail; the line's pace is the
- * stagger. No row ever moves vertically: each stands at its place inside
- * the growing box, so nothing is drawn above the parent row's bottom edge or
- * over another row.
+ * right, both on --ease-out over --dur-rail. No row ever moves vertically:
+ * each stands at its place inside the growing box, so nothing is drawn
+ * above the parent row's bottom edge or over another row.
  *
  * Folding. Quicker than opening, and from the next frame: the room closes
  * over --dur-exit, the rows under it sliding up with its edge (the batch's
@@ -65,10 +70,12 @@ import {
   dur,
   easeInOut,
   easeOut,
+  glide,
+  glideSpeed,
   motionOk,
   popRise,
 } from "./curves.svelte";
-import { atTravel, beforeReflow, heldToTravel, type Pace } from "./rows.svelte";
+import { atTravel, beforeReflow, heldToTravel } from "./rows.svelte";
 
 export interface BranchOptions {
   /** A row's glyph, a selector inside the row: its line ends there. */
@@ -600,35 +607,22 @@ interface Plan {
 }
 
 /**
- * Opening from where `now` left it. The head runs the rest of the line on
- * the room's own curve, and its clock unless an arm long enough to outrun
- * the room's edge needs a longer one: it never runs below the edge.
+ * Opening from where `now` left it, at the batch's `speed`. The head glides
+ * the rest of the line, and the room's edge glides open, both at that
+ * speed (curves `glide`), as the rows under the room slide down: they keep
+ * step, and the head, which leaves the parent's glyph above the room's top
+ * and only ever goes down the rail as far as the last corner, is never
+ * below the edge. Each child enters as the head reaches its glyph, so
+ * children an even distance apart along the line enter at even times.
  */
-function planOpen(shape: Shape, now: State, travel: number): Plan {
+function planOpen(shape: Shape, now: State, speed: number): Plan {
   const grow = shape.height - now.room;
-  const edge = (t: number) =>
-    now.room + grow * easeInOut(clamp(t / travel, 0, 1));
+  const room = glide(Math.abs(grow), speed);
+  const edge = (t: number) => now.room + Math.sign(grow) * room.covered(t);
   const from = now.head * shape.length;
-  const rest = shape.length - from;
-  const headOver = (over: number) => (t: number) =>
-    from + rest * easeInOut(clamp(t / over, 0, 1));
-  const inRoom = (over: number) => {
-    const ahead = headOver(over);
-    for (let k = 0; k <= 32; k += 1) {
-      const t = (over * k) / 32;
-      if (shape.start + Math.min(ahead(t), shape.trunk) > edge(t) + 0.5) {
-        return false;
-      }
-    }
-    return true;
-  };
-  let span = travel;
-  while (span < travel * 2 && !inRoom(span)) {
-    span *= 1.05;
-  }
-  const head = headOver(span);
-  const when = (s: number) =>
-    s <= from || rest <= 0 ? 0 : span * inverse(easeInOut, (s - from) / rest);
+  const line = glide(Math.max(0, shape.length - from), speed);
+  const head = (t: number) => from + line.covered(t);
+  const when = (s: number) => (s <= from ? 0 : line.reached(s - from));
   const rail = dur("--dur-rail");
   const enter = (was: number[]) =>
     shape.items.map((item, i): Seg => {
@@ -650,8 +644,8 @@ function planOpen(shape: Shape, now: State, travel: number): Plan {
     titles,
     length: shape.length,
     total: Math.max(
-      span,
-      travel,
+      line.duration,
+      room.duration,
       ...[...glyphs, ...titles].map((seg) => seg.start + seg.length)
     ),
   };
@@ -971,8 +965,17 @@ function stopFlight(
   }
   flight.hold?.();
   flight.unwatch?.();
+  // Held where the last frame drew it, which is where the next fold is
+  // planned from (and the room's edge read at): a pause alone takes effect
+  // on the next frame, so a line turned back ran on a frame past the edge,
+  // 4px below it, then jumped back.
+  const frame = Number(document.timeline.currentTime);
   for (const animation of flight.animations) {
+    const begun = animation.startTime;
     animation.pause();
+    if (begun !== null) {
+      animation.currentTime = frame - Number(begun);
+    }
   }
   const held = flight.animations;
   const { plan, start } = flight;
@@ -1087,9 +1090,21 @@ function open(group: HTMLElement, options: BranchOptions): TransitionConfig {
     return { duration: dur("--dur-pop") };
   }
   // Measured on the batch's frame, where every row and rail is placed, and
-  // planned from where every piece is held.
+  // planned from where every piece is held. Its pace is asked for now, from
+  // the room it takes and the glyphs in it (curves `glideSpeed`):
+  // --dur-stagger from one row's glyph to the next, --dur-cascade at most for
+  // the whole tree; a result with no glyph opens over --dur-panel. The same
+  // tree opening in another list in the same batch travels at this one's
+  // speed (motion/rows `atTravel`).
   const begin = () => {
-    flight.hold = atTravel(takeOff);
+    const pace = glideSpeed(
+      group.offsetHeight,
+      items.filter((el) => el.querySelector(options.glyph)).length
+    );
+    flight.hold = atTravel(
+      (at, batch) => takeOff(at, batch.speed ?? pace.speed),
+      pace
+    );
   };
   if (turning) {
     begin();
@@ -1107,30 +1122,27 @@ function open(group: HTMLElement, options: BranchOptions): TransitionConfig {
       group.style.display = "";
     };
     const shown = setTimeout(() => {
-      // Every write first, then the one read: the lists' measure lays the
-      // group out, and reflow reads it as it stands.
+      // Every write first, then the one layout its height and the lists'
+      // measure are read in, and reflow reads it as it stands.
       show();
       group.dataset.state = "open";
-      measureNestsIn(group);
       begin();
+      measureNestsIn(group);
     }, 0);
     flight.hold = () => {
       clearTimeout(shown);
       show();
     };
   }
-  return { duration: dur("--dur-panel") + dur("--dur-rail") };
+  return { duration: dur("--dur-cascade") + dur("--dur-rail") };
 
-  function takeOff(at: number, pace: Pace): void {
+  /** On the batch's frame, at its speed (motion/rows `atTravel`). */
+  function takeOff(at: number, speed: number): void {
     if (flights.get(group) !== flight) {
       return;
     }
     const shape = measure(group, options);
-    const plan = planOpen(
-      shape,
-      stateFor(shape, items, now),
-      dur(pace === "close" ? "--dur-exit" : "--dur-panel")
-    );
+    const plan = planOpen(shape, stateFor(shape, items, now), speed);
     for (const animation of flight.animations) {
       animation.cancel();
     }
@@ -1205,34 +1217,37 @@ function fold(group: HTMLElement, options: BranchOptions): TransitionConfig {
   flights.set(group, flight);
   // From the next frame, the batch the room and every row under it close
   // in: nothing waits for the rows to leave first.
-  flight.hold = atTravel((at) => {
-    if (flights.get(group) !== flight) {
-      return;
-    }
-    for (const animation of flight.animations) {
-      animation.cancel();
-    }
-    flight.animations = [];
-    flight.plan = plan;
-    flight.start = at;
-    // The group closes with its room, on the room's curve, and stays shut
-    // until it unmounts: out of the flow, it stands under the rows that
-    // slide up, and once its parent's box had closed, what was left of each
-    // row past its title's cut (its glyph's place, a selected row's fill)
-    // showed over them until the unmount.
-    const room = group.animate(
-      [
-        { clipPath: shut(shape.height - state.room) },
-        { clipPath: shut(shape.height) },
-      ],
-      { duration: plan.total, easing: CURVE.inOut, fill: "both" }
-    );
-    room.startTime = at;
-    flight.animations.push(room);
-    fly(group, flight, piecesOf(shape, plan, rests, false), shape.seen);
-    // Folded before it ever opened: its pieces hold it hidden now.
-    group.removeAttribute(HELD);
-  }, "close");
+  flight.hold = atTravel(
+    (at) => {
+      if (flights.get(group) !== flight) {
+        return;
+      }
+      for (const animation of flight.animations) {
+        animation.cancel();
+      }
+      flight.animations = [];
+      flight.plan = plan;
+      flight.start = at;
+      // The group closes with its room, on the room's curve, and stays shut
+      // until it unmounts: out of the flow, it stands under the rows that
+      // slide up, and once its parent's box had closed, what was left of each
+      // row past its title's cut (its glyph's place, a selected row's fill)
+      // showed over them until the unmount.
+      const room = group.animate(
+        [
+          { clipPath: shut(shape.height - state.room) },
+          { clipPath: shut(shape.height) },
+        ],
+        { duration: plan.total, easing: CURVE.inOut, fill: "both" }
+      );
+      room.startTime = at;
+      flight.animations.push(room);
+      fly(group, flight, piecesOf(shape, plan, rests, false), shape.seen);
+      // Folded before it ever opened: its pieces hold it hidden now.
+      group.removeAttribute(HELD);
+    },
+    { close: true }
+  );
   // The group leaves the flow now, so reflow hears it (`data-state`) in
   // this update and holds its box and everything under it until the batch.
   outOfFlow(group);

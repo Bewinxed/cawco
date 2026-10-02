@@ -540,6 +540,14 @@
     --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
     --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
     --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+    /* A glide's first stretch: speed rising evenly from rest (its position the square of its time), into the steady pace a tree's line, its room and the rows under it travel at. */
+    --ease-glide-in: cubic-bezier(0.3333, 0, 0.6667, 0.3333);
+    /* A glide's last stretch: from the steady pace, speed falling evenly to rest. */
+    --ease-glide-out: cubic-bezier(0.3333, 0.6667, 0.6667, 1);
+    /* Between one row of an opening tree and the next: its line reaches each in turn at a steady pace, one row's room per stagger. */
+    --dur-stagger: 60ms;
+    /* The most an opening tree's line takes to reach its last row: a longer tree's rows come closer together. */
+    --dur-cascade: 480ms;
     /* The hover ghost following the pointer from row to row. */
     --dur-ghost: 80ms;
     --dur-control: 120ms;

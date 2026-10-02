@@ -1896,6 +1896,26 @@
       "$type": "cubicBezier",
       "$value": "cubic-bezier(0.32, 0.72, 0, 1)"
     },
+    "ease-glide-in": {
+      "$type": "cubicBezier",
+      "$value": "cubic-bezier(0.3333, 0, 0.6667, 0.3333)",
+      "$description": "A glide's first stretch: speed rising evenly from rest (its position the square of its time), into the steady pace a tree's line, its room and the rows under it travel at."
+    },
+    "ease-glide-out": {
+      "$type": "cubicBezier",
+      "$value": "cubic-bezier(0.3333, 0.6667, 0.6667, 1)",
+      "$description": "A glide's last stretch: from the steady pace, speed falling evenly to rest."
+    },
+    "dur-stagger": {
+      "$type": "duration",
+      "$value": "60ms",
+      "$description": "Between one row of an opening tree and the next: its line reaches each in turn at a steady pace, one row's room per stagger."
+    },
+    "dur-cascade": {
+      "$type": "duration",
+      "$value": "480ms",
+      "$description": "The most an opening tree's line takes to reach its last row: a longer tree's rows come closer together."
+    },
     "dur-ghost": {
       "$type": "duration",
       "$value": "80ms",

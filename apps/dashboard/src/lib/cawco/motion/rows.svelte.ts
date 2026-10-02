@@ -40,7 +40,14 @@
  * the first child of the table's box, which is the element that styles the
  * table and is `position: relative`.
  */
-import { dur, ease, easeInOut, motionOk, popScale } from "./curves.svelte";
+import {
+  dur,
+  ease,
+  easeInOut,
+  glide,
+  motionOk,
+  popScale,
+} from "./curves.svelte";
 
 /** Samples for the one piece whose value is not a straight line in the curve. */
 const STEPS = 48;
@@ -413,6 +420,8 @@ interface Move {
   animation?: Animation;
   /** Drops the slide's start while a style still holds the element. */
   hold?: () => void;
+  /** How much of the way it has come at a progress of its timing (`paced`). */
+  share?: (progress: number) => number;
   x: number;
   y: number;
 }
@@ -428,14 +437,27 @@ interface Move {
  * the same curve as the edge next to it: a box's edge and the row under it
  * never part by a frame.
  *
- * `pace`: a tree closing asks with "close" (motion/branch `fold`). Its batch
- * starts on the next frame, and every move in it travels over --dur-exit
- * rather than --dur-panel: closing is quicker than opening and never waits.
- * The fold used to hold the whole batch until its lowest row had swiped out,
- * so the room, and every row under it, stood still for that row's exit
- * before taking the opening's whole time to close.
+ * `pace`, how the batch's moves travel. A tree closing asks with `close`
+ * (motion/branch `fold`): its batch starts on the next frame, and every move
+ * in it travels over --dur-exit rather than --dur-panel, so closing is
+ * quicker than opening and never waits. A tree opening asks with its line's
+ * `speed` (px a ms): every move in its batch glides at that speed
+ * (curves `glide`), as its line does, so its room's edge, and every row under
+ * it, keep step with the line's head and are never outrun by it; on the
+ * rows' in-out curve the room had to open in 110–212ms to stay ahead of a
+ * line running at an even pace, and at 280ms the head ran up to 29px below
+ * its edge. Two trees opening in one batch (the same tree in the rail's
+ * Sessions and in its project, open-trees) travel at the first one's speed,
+ * the list it was opened in, which asks a task before the other: each line
+ * runs at that speed too, so no room falls behind its line. A later tree
+ * only makes it faster, as far as its `least`: the speed it needs to open
+ * within --dur-cascade. A closing and an opening are batches apart, each at
+ * its own pace.
  */
-export type Pace = "travel" | "close";
+export interface Pace {
+  close: boolean;
+  speed: number | null;
+}
 type Run = (at: number, pace: Pace) => void;
 interface Batch {
   pace: Pace;
@@ -444,14 +466,26 @@ interface Batch {
 /** The batch still taking asks: the one the current update joins. */
 let taking: Batch | null = null;
 
-export function atTravel(run: Run, pace: Pace = "travel"): () => void {
-  if (!taking) {
-    const open: Batch = { runs: new Set(), pace };
+export function atTravel(
+  run: Run,
+  ask: { close?: boolean; least?: number; speed?: number } = {}
+): () => void {
+  // A tree closing and a tree opening never share a batch: the one asked
+  // second opens the next, and every ask after it joins that one.
+  const apart =
+    taking !== null &&
+    ((ask.close === true && taking.pace.speed !== null) ||
+      (ask.speed !== undefined && taking.pace.close));
+  if (!taking || apart) {
+    const open: Batch = {
+      runs: new Set(),
+      pace: { close: false, speed: null },
+    };
     taking = open;
     let frames = 0;
     const tick = () => {
       frames += 1;
-      if (frames < (open.pace === "close" ? 1 : 2)) {
+      if (frames < (open.pace.close ? 1 : 2)) {
         requestAnimationFrame(tick);
         return;
       }
@@ -467,8 +501,14 @@ export function atTravel(run: Run, pace: Pace = "travel"): () => void {
     requestAnimationFrame(tick);
   }
   const joined = taking;
-  if (pace === "close") {
-    joined.pace = "close";
+  if (ask.close) {
+    joined.pace.close = true;
+  }
+  if (ask.speed !== undefined) {
+    joined.pace.speed = Math.max(
+      joined.pace.speed ?? ask.speed,
+      ask.least ?? ask.speed
+    );
   }
   joined.runs.add(run);
   return () => {
@@ -477,20 +517,74 @@ export function atTravel(run: Run, pace: Pace = "travel"): () => void {
 }
 
 /**
+ * A move `distance` px long, from `from` to `to`, at a batch's pace, and
+ * how much of the way it has come at a given progress of its timing.
+ */
+function paced(
+  pace: Pace,
+  from: Keyframe,
+  to: Keyframe,
+  distance: number
+): {
+  frames: Keyframe[];
+  share: (progress: number) => number;
+  timing: { duration: number; easing: string };
+} {
+  if (pace.speed && distance > 0) {
+    const along = glide(distance, pace.speed);
+    return {
+      frames: along.frames(from, to),
+      share: (progress) => along.covered(progress * along.duration) / distance,
+      timing: { duration: Math.max(1, along.duration), easing: "linear" },
+    };
+  }
+  return {
+    frames: [from, to],
+    share: (progress) => progress,
+    timing: pace.close ? closing() : travel(),
+  };
+}
+
+/** A keyframe as an animation reads it back, without its timing. */
+const valuesOf = (frame: ComputedKeyframe): Keyframe => {
+  const { offset, easing, composite, computedOffset, ...values } = frame;
+  return values;
+};
+
+/** An animation's keyframes, each at its place and on its curve, to make it again. */
+const framesOf = (animation: Animation): Keyframe[] =>
+  ((animation.effect as KeyframeEffect | null)?.getKeyframes() ?? []).map(
+    ({ computedOffset, ...frame }) => ({ ...frame, offset: computedOffset })
+  );
+
+/**
  * An animation held at its first frame until the batch starts, then run
  * from the batch's start. One that is cancelled in the meantime stays
- * cancelled. `travels`: it moves rows (an edge, a width, a slide, a box's
- * size), so it takes the batch's pace.
+ * cancelled. `distance`: it moves rows (an edge, a width, a box's size, a
+ * row's uncovering), that many px, so it takes the batch's pace.
  */
-export function heldToTravel(animation: Animation, travels = false): Animation {
+export function heldToTravel(
+  animation: Animation,
+  distance?: number
+): Animation {
   animation.pause();
   atTravel((at, pace) => {
-    if (animation.playState === "paused") {
-      if (travels && pace === "close") {
-        animation.effect?.updateTiming(closing());
-      }
-      animation.startTime = at;
+    if (animation.playState !== "paused") {
+      return;
     }
+    const effect = animation.effect as KeyframeEffect | null;
+    if (effect && distance !== undefined && (pace.speed || pace.close)) {
+      const [first, ...after] = effect.getKeyframes();
+      const move = paced(
+        pace,
+        valuesOf(first),
+        valuesOf(after.at(-1) ?? first),
+        distance
+      );
+      effect.setKeyframes(move.frames);
+      effect.updateTiming(move.timing);
+    }
+    animation.startTime = at;
   });
   return animation;
 }
@@ -597,7 +691,8 @@ function heldBy(move: Move | undefined) {
   if (move.animation?.playState !== "running") {
     return { x: 0, y: 0 };
   }
-  const progress = move.animation.effect?.getComputedTiming().progress ?? 1;
+  const timed = move.animation.effect?.getComputedTiming().progress ?? 1;
+  const progress = move.share ? move.share(timed) : timed;
   return { x: move.x * (1 - progress), y: move.y * (1 - progress) };
 }
 
@@ -627,7 +722,6 @@ const closing = () => ({
   duration: dur("--dur-exit"),
   easing: ease("--ease-in-out"),
 });
-const travelAt = (pace: Pace) => (pace === "close" ? closing() : travel());
 
 /**
  * Drawn somewhere in the viewport. An element that arrives out of sight has
@@ -659,7 +753,8 @@ function unseen(view: number, place: Placed, dy: number): boolean {
   return off(top) && off(top + dy);
 }
 
-function arrival(element: HTMLElement, still: boolean) {
+/** `height`: its laid-out height, how far its uncovering travels. */
+function arrival(element: HTMLElement, still: boolean, height: number) {
   // It brings its own entrance (a delegate chip whose mark flew in, or one
   // that was simply there when the page loaded); its neighbours still slide.
   if (element.dataset.flipEnter === "own") {
@@ -685,7 +780,7 @@ function arrival(element: HTMLElement, still: boolean) {
         [{ clipPath: "inset(0 0 100% 0)" }, { clipPath: "inset(0 0 0 0)" }],
         travel()
       ),
-      true
+      height
     );
     heldToTravel(element.animate([{ opacity: 0 }, { opacity: 1 }], entrance()));
   }
@@ -720,7 +815,7 @@ function departure(
   node.append(copy);
   const done = () => copy.remove();
   let last: Animation;
-  let travels = false;
+  let travels: number | undefined;
   if (still) {
     last = copy.animate([{ opacity: 1 }, { opacity: 0 }], exit());
   } else if (pops(element)) {
@@ -742,7 +837,7 @@ function departure(
       [{ clipPath: "inset(0 0 0 0)" }, { clipPath: "inset(0 0 100% 0)" }],
       { ...travel(), fill: "forwards" }
     );
-    travels = true;
+    travels = was.h;
   }
   // It closes from the frame the rows around it start moving on.
   heldToTravel(last, travels).finished.then(done, done);
@@ -808,6 +903,8 @@ function edgeOf(
  * rows sliding up under it, and they slid over the rows it still held.
  */
 interface Carry {
+  /** Its keyframes as they were made: a glide's own stretches included. */
+  frames: Keyframe[];
   from: number;
   start: number;
   timing: EffectTiming;
@@ -896,7 +993,7 @@ class Reflow {
     const scrolled = this.#anchor(now);
     this.#view = null;
     const plan: Plan = { slides: [], stops: [], edges: [], spans: [] };
-    const arrivals: HTMLElement[] = [];
+    const arrivals: [HTMLElement, number][] = [];
     for (const [element, place] of now) {
       if (element.hasAttribute("data-flip-anchor")) {
         continue;
@@ -909,7 +1006,7 @@ class Reflow {
         (place.ref === this.#node || this.#placed.has(place.ref)) &&
         onScreen(element)
       ) {
-        arrivals.push(element);
+        arrivals.push([element, place.h]);
       }
     }
     const departures: [HTMLElement, Placed, { x: number; y: number }][] = [];
@@ -956,18 +1053,12 @@ class Reflow {
       const { carry } = edge;
       let animation: Animation;
       if (carry) {
-        animation = edgeOf(
-          edge.element,
-          edge.from,
-          edge.to,
-          margins[i],
-          carry.timing
-        );
+        animation = edge.element.animate(carry.frames, carry.timing);
         animation.startTime = carry.start;
       } else {
         animation = heldToTravel(
           edgeOf(edge.element, edge.from, edge.to, margins[i]),
-          true
+          Math.abs(edge.to - edge.from)
         );
       }
       edgeSizes.set(animation, { from: edge.from, to: edge.to });
@@ -977,11 +1068,14 @@ class Reflow {
       this.#keep(
         this.#spans,
         span.element,
-        heldToTravel(spanOf(span.element, span.from, span.to, spans[i]), true)
+        heldToTravel(
+          spanOf(span.element, span.from, span.to, spans[i]),
+          Math.abs(span.to - span.from)
+        )
       );
     });
-    for (const element of arrivals) {
-      arrival(element, still);
+    for (const [element, height] of arrivals) {
+      arrival(element, still, height);
     }
     for (const [element, was, at] of departures) {
       departure(this.#node, element, was, at, still);
@@ -1044,18 +1138,27 @@ class Reflow {
     >();
     for (const [element, animation] of this.#edges) {
       // A growing box is laid out whole and clipped: its edge is drawn where
-      // the clip's bottom inset leaves it.
+      // the clip's bottom inset leaves it, up from the size it grows to. Read
+      // up from the size it is laid out at now, a tree folded while it
+      // opened (its group already out of the flow) was taken for drawn 81px
+      // above its own top, and the fold "grew" it from there, clipping its
+      // parent row away until it had closed.
       const clip = CLIP_BOTTOM.exec(getComputedStyle(element).clipPath);
       const hidden = clip ? Number.parseFloat(clip[1]) : 0;
       const sizes = edgeSizes.get(animation);
       const start = animation.startTime;
+      const whole =
+        sizes && sizes.to > sizes.from
+          ? sizes.to
+          : element.getBoundingClientRect().height;
       drawn.set(element, {
-        h: element.getBoundingClientRect().height - hidden,
+        h: whole - hidden,
         // In flight on its batch's clock: carried if it is bound the same way.
         carry:
           sizes && start !== null && animation.playState === "running"
             ? {
                 ...sizes,
+                frames: framesOf(animation),
                 start: Number(start),
                 timing: animation.effect?.getTiming() ?? travel(),
               }
@@ -1161,12 +1264,19 @@ class Reflow {
     move.hold = atTravel((at, pace) => {
       move.hold = undefined;
       element.style.translate = "";
-      const animation = element.animate(
-        [{ translate: `${x}px ${y}px` }, { translate: "0px 0px" }],
-        { ...travelAt(pace), composite: "add" }
+      const slide = paced(
+        pace,
+        { translate: `${x}px ${y}px` },
+        { translate: "0px 0px" },
+        Math.hypot(x, y)
       );
+      const animation = element.animate(slide.frames, {
+        ...slide.timing,
+        composite: "add",
+      });
       animation.startTime = at;
       move.animation = animation;
+      move.share = slide.share;
       animation.finished.then(
         () => {
           if (this.#moves.get(element) === move) {

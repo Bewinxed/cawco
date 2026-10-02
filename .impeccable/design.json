@@ -2100,6 +2100,21 @@
         "purpose": "Popovers, sheets, page swaps, shared-element flights, container morphs."
       },
       {
+        "name": "ease-glide-in",
+        "value": "cubic-bezier(0.3333, 0, 0.6667, 0.3333)",
+        "purpose": "A glide's first stretch (--space-3): speed rising evenly from rest into the steady pace an opening tree's line, its room and the rows under it travel at."
+      },
+      {
+        "name": "ease-glide-out",
+        "value": "cubic-bezier(0.3333, 0.6667, 0.6667, 1)",
+        "purpose": "A glide's last stretch (--space-1): speed falling evenly from the steady pace to rest."
+      },
+      {
+        "name": "dur-stagger",
+        "value": "60ms",
+        "purpose": "Between one row of an opening tree and the next: its line reaches each glyph in turn at a steady pace."
+      },
+      {
         "name": "dur-ghost",
         "value": "80ms",
         "purpose": "The hover ghost gliding from row to row."
@@ -2148,6 +2163,11 @@
         "name": "dur-panel",
         "value": "280ms",
         "purpose": "Dialogs and sheets entering, list movement, toasts rising, badge tint changes."
+      },
+      {
+        "name": "dur-cascade",
+        "value": "480ms",
+        "purpose": "The most an opening tree's line takes to reach its last row: a longer tree's rows come closer together."
       },
       {
         "name": "dur-hold",
@@ -2223,6 +2243,11 @@
         "name": "unfold",
         "value": "in --dur-pop / out --dur-exit, ease-out; reduced motion --dur-control fade",
         "purpose": "Content an {#if} mounts growing from nothing (motion/fold.svelte.ts)."
+      },
+      {
+        "name": "tree-fold",
+        "value": "open: line glides (ease-glide-in over --space-3, steady, ease-glide-out over --space-1) at --dur-stagger a glyph, --dur-cascade at most, the room and the rows under it at the same speed; a glyph-less result over --dur-panel; each row's glyph and title over --dur-rail, ease-out. Close: from the next frame, room over --dur-exit ease-in-out, line back on ease-out",
+        "purpose": "A tree's rows opening and folding under their parent (motion/branch.svelte.ts, the batch pace in motion/rows.svelte.ts)."
       },
       {
         "name": "route-nudge",
