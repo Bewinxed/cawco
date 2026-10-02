@@ -138,18 +138,26 @@
     }}
     >
       <SessionMark id={sessionId} {place} {status} />
+      <!-- Two lines: the title ending in the age, then what it is doing
+           ending in the count's column, a fixed width at the row's end, so
+           every count in the list starts at one x and the title gives up
+           only the age's own width. -->
       <span class="text">
-        <span class="title"
-          ><span class="sr-only">{STATUS_WORD[status]}: </span>{title}</span
-        >
-        <span class="line">{line}</span>
+        <span class="first">
+          <span class="title"
+            ><span class="sr-only">{STATUS_WORD[status]}: </span>{title}</span
+          >
+          <span class="num trail">{trail}</span>
+        </span>
+        <span class="second">
+          <span class="line">{line}</span>
+          <span class="kit-count-col">
+            {#if fold}
+              <TreeCount compact {...fold} />
+            {/if}
+          </span>
+        </span>
       </span>
-      <span class="kit-count-col">
-        {#if fold}
-          <TreeCount compact {...fold} />
-        {/if}
-      </span>
-      <span class="num trail">{trail}</span>
     </a>
     {#if onarchive}
       <Tip label="Archive">
@@ -323,8 +331,24 @@
     flex-direction: column;
     min-width: 0;
   }
+  /* Each line: its words, then the trailing column. */
+  .first,
+  .second {
+    display: flex;
+    align-items: center;
+    gap: var(--space-1);
+    min-width: 0;
+  }
+  /* The second line stands at the count's height with or without one (a
+     context row says nothing on it), so every row in a list is one height
+     and the nesting lines meet each glyph alike. */
+  .second {
+    min-block-size: var(--space-5);
+  }
   .title,
   .line {
+    flex: 1 1 auto;
+    min-width: 0;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -332,21 +356,14 @@
   .title {
     font: var(--type-label);
   }
-  /* The second line: what it is doing. A line tall even when it says
-     nothing (a context row), so every row in a list is one height and the
-     nesting lines meet each glyph alike. */
   .line {
-    min-block-size: 1lh;
     font: var(--type-meta);
     color: var(--ink-muted);
   }
-  /* The age, in a column as wide as its longest word ("23h 59m") and
-     right aligned, so the count column before it stands at one x down the
-     list. */
+  /* The age, at the title line's end: only as wide as it is, so the title
+     keeps the rest; its right edge is the row's, the same down the list. */
   .trail {
     flex: none;
-    inline-size: 7ch;
-    text-align: end;
     white-space: nowrap;
     font: var(--type-meta);
     font-variant-numeric: tabular-nums;

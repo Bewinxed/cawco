@@ -996,10 +996,13 @@
   }
   /* A delegate under its session (tree.ts): moved in a step per depth, and
      joined to its parent's glyph by the .kit-nest lines — down the rail,
-     round the curve (--radius-sm), out along the arm to just short of the
-     row, so the row's pill never covers a line. No arrowhead. */
+     round the curve (--radius-sm), out along the arm to the child's glyph,
+     over the row's pill. No arrowhead. The step is the rail's own: rail to
+     glyph centre as in the sidebar's lists (an arm of --space-2, the row's
+     6px inset, half an 18px mark), so a tree nests alike in both and a
+     narrow list keeps its titles. */
   .list {
-    --nest-step: 32px;
+    --nest-step: calc(var(--space-2) + 6px + 9px);
   }
   .nested {
     position: relative;
