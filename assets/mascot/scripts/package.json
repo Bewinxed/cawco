@@ -1,0 +1,15 @@
+{
+  "name": "caw-mascot-build",
+  "private": true,
+  "description": "Builds assets/mascot/caw.riv (with its Caw view model) and proves it on Rive's official runtime.",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "prove": "node prove-viewmodel.mjs"
+  },
+  "dependencies": {
+    "@rive-app/canvas-advanced": "2.44.0",
+    "playwright-core": "1.63.0",
+    "rive-mcp-server": "0.6.1"
+  }
+}
