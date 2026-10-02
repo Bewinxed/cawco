@@ -772,19 +772,24 @@ export const credentials = sqliteTable("credentials", {
 });
 
 /**
- * One (session, model, hour) bucket of usage the agent reports (USAGE-SPEC.md
- * §6.1). The id is the full `${machineId}:${harness}:${sessionId}:${model}:
- * ${hourStart}` key, so a re-report of the same bucket is an idempotent upsert
- * over absolute totals rather than an addition.
+ * One (session, model, quarter hour) bucket of usage the agent reports
+ * (USAGE-SPEC.md §6.1). The id is the full `${machineId}:${harness}:
+ * ${sessionId}:${model}:${start}` key, so a re-report of the same bucket is an
+ * idempotent upsert over absolute totals rather than an addition.
+ *
+ * Rows stored before quarters run an hour (`spanMs` 3600000, the column's
+ * default, which is what every one of them is); a quarter reported for the
+ * same session, model and hour replaces that hour's row (`putUsageBuckets`).
  */
 export const usageBuckets = sqliteTable(
   "usage_buckets",
   {
-    /** `${machineId}:${harness}:${sessionId}:${model}:${hourStart}` */
+    /** `${machineId}:${harness}:${sessionId}:${model}:${start}` */
     id: text("id").primaryKey(),
     machineId: text("machine_id").notNull(),
     harness: text("harness").$type<"claude" | "opencode">().notNull(),
-    hourStart: integer("hour_start").notNull(),
+    start: integer("start").notNull(),
+    spanMs: integer("span_ms").notNull().default(3_600_000),
     firstTs: integer("first_ts").notNull(),
     lastTs: integer("last_ts").notNull(),
     sessionId: text("session_id").notNull(),
@@ -804,11 +809,11 @@ export const usageBuckets = sqliteTable(
       .$defaultFn(() => new Date()),
   },
   (table) => [
-    index("usage_buckets_hour_start_idx").on(table.hourStart),
-    index("usage_buckets_machine_harness_hour_idx").on(
+    index("usage_buckets_start_idx").on(table.start),
+    index("usage_buckets_machine_harness_start_idx").on(
       table.machineId,
       table.harness,
-      table.hourStart
+      table.start
     ),
     index("usage_buckets_session_idx").on(table.sessionId),
   ]

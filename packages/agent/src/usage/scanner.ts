@@ -1,7 +1,12 @@
 import type { Stats } from "node:fs";
 import { stat } from "node:fs/promises";
 import type { UsageBucket } from "@cawco/core";
-import { floorToHour, refreshPricing, totalTokens } from "@cawco/core";
+import {
+  BUCKET_MS,
+  bucketStart,
+  refreshPricing,
+  totalTokens,
+} from "@cawco/core";
 import {
   emptyIndex,
   loadIndex,
@@ -19,8 +24,6 @@ import type { ScannedRecord } from "./types";
  * `(mtimeMs, size)` per Claude transcript and a `time_created` watermark for
  * opencode; a full rebuild re-heals every 30 minutes.
  */
-
-const HOUR_MS = 60 * 60 * 1000;
 
 interface DedupEntry {
   bucketKey: string;
@@ -105,8 +108,8 @@ export class UsageScanner {
   }
 
   private fold(rec: ScannedRecord): string {
-    const hourStart = floorToHour(rec.ts);
-    const key = `${rec.harness}:${rec.sessionId}:${rec.model}:${hourStart}`;
+    const start = bucketStart(rec.ts);
+    const key = `${rec.harness}:${rec.sessionId}:${rec.model}:${start}`;
     const b = this.buckets.get(key);
     if (b) {
       b.tokens.input += rec.tokens.input;
@@ -125,7 +128,8 @@ export class UsageScanner {
     } else {
       this.buckets.set(key, {
         harness: rec.harness,
-        hourStart,
+        start,
+        spanMs: BUCKET_MS,
         firstTs: rec.ts,
         lastTs: rec.ts,
         sessionId: rec.sessionId,
@@ -364,24 +368,25 @@ export class UsageScanner {
     };
   }
 
-  /** Every absolute bucket total, keyed `${harness}:${sessionId}:${model}:${hourStart}`. */
+  /** Every absolute bucket total, keyed `${harness}:${sessionId}:${model}:${start}`. */
   listBuckets(): UsageBucket[] {
     return [...this.buckets.values()];
   }
 
   /**
    * Absolute totals for the buckets the hub must (re-)learn: every bucket in
-   * the current and previous hour (still moving) plus anything touched since
-   * the last report. Re-sends are idempotent because the hub upserts by id.
+   * the current and previous quarter hour (still moving) plus anything
+   * touched since the last report — after a full rebuild, every bucket. Re-sends
+   * are idempotent because the hub upserts by id.
    */
   reportBuckets(now: number): UsageBucket[] {
-    const currentHour = floorToHour(now);
-    const prevHour = currentHour - HOUR_MS;
+    const current = bucketStart(now);
+    const previous = current - BUCKET_MS;
     const out: UsageBucket[] = [];
     for (const [key, b] of this.buckets) {
       if (
-        b.hourStart === currentHour ||
-        b.hourStart === prevHour ||
+        b.start === current ||
+        b.start === previous ||
         this.touchedKeys.has(key)
       ) {
         out.push(b);

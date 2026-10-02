@@ -63,6 +63,7 @@ import {
   ASK_USER_QUESTION,
   agentProblem,
   archiveRefusal,
+  BUCKET_MS,
   CONTROL_CONTEXT_USAGE,
   CONTROL_GET_SESSION_INFO,
   CONTROL_GET_SESSION_MESSAGES,
@@ -8705,16 +8706,13 @@ export const createServer = ({
             until: t.Optional(t.Numeric()),
             harness: t.Optional(t.String()),
             machineId: t.Optional(t.String()),
-            groupBy: t.Optional(
-              t.Union([
-                t.Literal("day"),
-                t.Literal("hour"),
-                t.Literal("machine"),
-                t.Literal("model"),
-                t.Literal("project"),
-                t.Literal("session"),
-              ])
-            ),
+            groupBy: t.Union([
+              t.Literal("machine"),
+              t.Literal("model"),
+              t.Literal("project"),
+              t.Literal("session"),
+              t.Literal("start"),
+            ]),
           }),
         },
         ({ query }) =>
@@ -8723,7 +8721,7 @@ export const createServer = ({
             until: query.until,
             harness: query.harness,
             machineId: query.machineId,
-            groupBy: query.groupBy ?? "day",
+            groupBy: query.groupBy,
           })
       )
       .ws("/ws", {
@@ -9070,7 +9068,16 @@ export const createServer = ({
                 openCodeGo?: OpenCodeGoLimits | null;
               };
               if (buckets && buckets.length > 0) {
-                db.putUsageBuckets(message.machineId, buckets);
+                // Quarter-hour buckets only: a daemon that still reports hour
+                // buckets predates them, and its spend is not stored until it
+                // is restarted on this build. Its limits still are.
+                if (buckets.every((bucket) => bucket.spanMs === BUCKET_MS)) {
+                  db.putUsageBuckets(message.machineId, buckets);
+                } else {
+                  console.warn(
+                    `[hub] usage buckets from ${message.machineId} refused: its daemon reports hour buckets; restart it on this build`
+                  );
+                }
               }
               if (limits) {
                 db.putUsageLimits(

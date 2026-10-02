@@ -13,12 +13,15 @@ export interface UsageTokens {
   reasoning: number; // opencode only; 0 for Claude
 }
 
-/** One (session, model, hour) bucket. The unit the agent reports and the hub stores. */
+/**
+ * One (session, model, quarter hour) bucket. The unit the agent reports and
+ * the hub stores. The hub also keeps rows stored before quarters, an hour
+ * long; `spanMs` says which a row is.
+ */
 export interface UsageBucket {
   costUsd: number;
   firstTs: number; // ms epoch of the earliest record in the bucket
   harness: UsageHarness;
-  hourStart: number; // ms epoch, floored to the UTC hour
   lastTs: number; // ms epoch of the latest record in the bucket
   messages: number;
   model: string;
@@ -26,6 +29,10 @@ export interface UsageBucket {
   projectPath: string | null;
   provider: string | null; // opencode only
   sessionId: string;
+  /** How long the bucket runs: `BUCKET_MS`, a quarter hour. */
+  spanMs: number;
+  /** ms epoch the bucket starts at, floored to `BUCKET_MS` (`bucketStart`). */
+  start: number;
   tokens: UsageTokens;
 }
 
@@ -90,14 +97,18 @@ export interface UsageLimitsReading {
   payload: ClaudeLimits;
 }
 
-/** How `/api/usage/summary` folds the buckets it returns (USAGE-SPEC.md §6.3). */
+/**
+ * How `/api/usage/summary` folds the buckets it returns (USAGE-SPEC.md §6.3).
+ * `start` is one group per bucket start, a quarter hour (an hour for rows
+ * stored before quarters): a reader folds them into hours or days on its own
+ * clock, so no fold here picks a zone.
+ */
 export type UsageGroupBy =
-  | "day"
-  | "hour"
   | "machine"
   | "model"
   | "project"
-  | "session";
+  | "session"
+  | "start";
 
 /** The machine a summary row ran on: named, never shown by id. */
 export interface UsageRowMachine {

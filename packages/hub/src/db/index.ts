@@ -139,6 +139,8 @@ const STALE_AFTER_MS = 24 * 60 * 60 * 1000;
 
 /** 30 days — long enough to cover several weekly windows, short enough that the table stays small. */
 const LIMIT_HISTORY_RETENTION_MS = 30 * 24 * 60 * 60 * 1000;
+/** The span of a usage bucket stored before quarters (`usage_buckets.span_ms`). */
+const HOUR_MS = 60 * 60 * 1000;
 
 export type AgentAuth = (typeof agents.$inferSelect)["auth"];
 
@@ -911,8 +913,8 @@ export interface DbShape {
   }) => UsageLimitHistoryRow[];
   /**
    * One harness's recorded cost since each boundary and in all, in one SQL
-   * pass. A bucket counts toward a boundary when its hour starts at or after
-   * it.
+   * pass. A bucket counts toward a boundary when it starts at or after it;
+   * a quarter-hour bucket never straddles a midnight in any zone.
    */
   readonly usageSpend: (q: {
     harness: UsageHarness;
@@ -1231,11 +1233,8 @@ const make = (path: string): DbShape => {
 
   /** The column a usage summary groups on. */
   const usageKey = (groupBy: UsageGroupBy) => {
-    if (groupBy === "day") {
-      return sql<number>`(${usageBuckets.hourStart} / 86400000) * 86400000`;
-    }
-    if (groupBy === "hour") {
-      return usageBuckets.hourStart;
+    if (groupBy === "start") {
+      return usageBuckets.start;
     }
     if (groupBy === "machine") {
       return usageBuckets.machineId;
@@ -1312,8 +1311,8 @@ const make = (path: string): DbShape => {
     machineId?: string;
   }) =>
     and(
-      q.since === undefined ? undefined : gte(usageBuckets.hourStart, q.since),
-      q.until === undefined ? undefined : lte(usageBuckets.hourStart, q.until),
+      q.since === undefined ? undefined : gte(usageBuckets.start, q.since),
+      q.until === undefined ? undefined : lte(usageBuckets.start, q.until),
       q.harness === undefined
         ? undefined
         : eq(usageBuckets.harness, q.harness as "claude" | "opencode"),
@@ -2951,12 +2950,33 @@ const make = (path: string): DbShape => {
       // a half-written report is worse than a deferred one.
       db.transaction((tx) => {
         for (const bucket of buckets) {
-          const id = `${machineId}:${bucket.harness}:${bucket.sessionId}:${bucket.model}:${bucket.hourStart}`;
+          // The hour row stored before quarters for this session, model and
+          // hour goes as its quarters arrive: a daemon's report after any
+          // start is a full rebuild, carrying every quarter of every hour it
+          // still holds, so the hour is replaced whole, never counted twice.
+          // An hour the daemon no longer holds keeps its hour row.
+          tx.delete(usageBuckets)
+            .where(
+              and(
+                eq(usageBuckets.machineId, machineId),
+                eq(usageBuckets.harness, bucket.harness),
+                eq(usageBuckets.sessionId, bucket.sessionId),
+                eq(usageBuckets.model, bucket.model),
+                eq(usageBuckets.spanMs, HOUR_MS),
+                eq(
+                  usageBuckets.start,
+                  Math.floor(bucket.start / HOUR_MS) * HOUR_MS
+                )
+              )
+            )
+            .run();
+          const id = `${machineId}:${bucket.harness}:${bucket.sessionId}:${bucket.model}:${bucket.start}`;
           const row = {
             id,
             machineId,
             harness: bucket.harness,
-            hourStart: bucket.hourStart,
+            start: bucket.start,
+            spanMs: bucket.spanMs,
             firstTs: bucket.firstTs,
             lastTs: bucket.lastTs,
             sessionId: bucket.sessionId,
@@ -2979,7 +2999,8 @@ const make = (path: string): DbShape => {
               // Absolute, not additive: the agent reports bucket totals, so a
               // re-send must overwrite rather than double-count.
               set: {
-                hourStart: row.hourStart,
+                start: row.start,
+                spanMs: row.spanMs,
                 firstTs: row.firstTs,
                 lastTs: row.lastTs,
                 project: row.project,
@@ -3038,7 +3059,7 @@ const make = (path: string): DbShape => {
     listUsageLimits: () => db.select().from(usageLimits).all(),
     usageSpend: ({ harness, todayStart, weekStart }) => {
       const since = (start: number) =>
-        sql<number>`coalesce(sum(case when ${usageBuckets.hourStart} >= ${start} then ${usageBuckets.costUsd} else 0 end), 0)`;
+        sql<number>`coalesce(sum(case when ${usageBuckets.start} >= ${start} then ${usageBuckets.costUsd} else 0 end), 0)`;
       const row = db
         .select({
           today: since(todayStart),

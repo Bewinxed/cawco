@@ -5115,16 +5115,15 @@
           {
             "name": "groupBy",
             "in": "query",
-            "required": false,
+            "required": true,
             "schema": {
               "type": "string",
               "enum": [
-                "day",
-                "hour",
                 "machine",
                 "model",
                 "project",
-                "session"
+                "session",
+                "start"
               ]
             }
           }
