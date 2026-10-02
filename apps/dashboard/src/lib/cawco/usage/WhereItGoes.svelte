@@ -333,7 +333,7 @@
     const relayed = planRelay(
       old,
       fresh,
-      { before: more, after: freshMore },
+      [{ key: "more", box: "more", before: more, after: freshMore }],
       drawnNow
     );
     const base = {

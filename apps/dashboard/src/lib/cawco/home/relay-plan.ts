@@ -105,22 +105,41 @@ function arrivals<T extends { id: string }>(
 }
 
 /**
- * The whole relay from `old` (what is drawn) to `fresh`, with the "N more"
- * row as the list's last line: `more` is its words before and after.
+ * An "N more" line: its `key`, the `box` it is drawn in (a group's machine
+ * id, or a box of its own), and its words before and after the change.
+ */
+export interface MoreLine {
+  after: string | null;
+  before: string | null;
+  box: string;
+  key: string;
+}
+
+/**
+ * The whole relay from `old` (what is drawn) to `fresh`, with each "N more"
+ * line coming or going after the rows: one that goes holds its box open
+ * until it has gone.
  */
 export function planRelay<T extends { id: string }>(
   old: RelayGroup<T>[],
   fresh: RelayGroup<T>[],
-  more: { before: string | null; after: string | null },
+  more: MoreLine[],
   drawn: (key: string) => boolean
 ): RelayPlan<T> {
   const { batons, lastOut, leave, lines } = departures(old, fresh, drawn);
   const { enter, layered } = arrivals(old, fresh, batons);
-  if (more.before && !more.after) {
-    leave.set("more", lines.length);
-    lastOut.set("more", ListSwap.leaveEnd(lines.length));
-  } else if (more.after && !more.before) {
-    enter.set("more", { i: enter.size, notBefore: 0 });
+  let leaving = lines.length;
+  for (const line of more) {
+    if (line.before && !line.after) {
+      leave.set(line.key, leaving);
+      lastOut.set(
+        line.box,
+        Math.max(lastOut.get(line.box) ?? 0, ListSwap.leaveEnd(leaving))
+      );
+      leaving += 1;
+    } else if (line.after && !line.before) {
+      enter.set(line.key, { i: enter.size, notBefore: 0 });
+    }
   }
   return { enter, lastOut, layered, leave, lines };
 }

@@ -26,9 +26,10 @@
    * Every tree starts folded to its parent's row (tree.ts, open-trees): a
    * count on the row and two cards under it, opened one level at a time by
    * the count, the cards or →, and folded again by the count, the parent's
-   * rail or ←. A tab lists its first MORE_AT trees and "N more"; opening
-   * the rest (or closing them) is the same relay, the rows arriving or
-   * leaving in place. A finished row, or a whole tree, can be archived
+   * rail or ←. Each machine lists its first MORE_AT trees and its own "N
+   * more", so every machine with rows keeps its header and its Archive all;
+   * opening the rest (or closing them) is the same relay, the rows arriving
+   * or leaving in place. A finished row, or a whole tree, can be archived
    * without opening it, and a machine's header archives all it finished.
    * With nothing changing, the list's own `reflow` carries live changes: a
    * row arriving, a held re-sort.
@@ -132,8 +133,8 @@
     watch.observe(node, { childList: true, subtree: true });
     return () => watch.disconnect();
   };
-  /** The boxes whose heights a change drives: each group, and the "N more" row's. */
-  const BOXES = ":scope > .group, :scope > .more-slot";
+  /** The boxes whose heights a change drives: each group, its "N more" line in it. */
+  const BOXES = ":scope > .group";
 
   /** Every session a tab could list, delegates included. */
   const allOf = (tab: WorkTab): InstanceRow[] =>
@@ -220,8 +221,8 @@
     layered: Set<string>;
     /** Each leaving line's place in the cascade. */
     leave: Map<string, number>;
-    /** The "N more" row's words before the change, while it fades. */
-    more: string | null;
+    /** Each machine's "N more" words before the change, while they fade. */
+    more: Map<string, string>;
     /** The groups drawn before the change, as they were drawn. */
     old: Group[];
     /** The tab the leaving rows came from. */
@@ -284,67 +285,85 @@
   }
 
   /**
-   * A tab's groups as listed: all of them, or its first MORE_AT trees, each
+   * A machine's group as listed: all of it, or its first MORE_AT trees, each
    * with whatever of it is open. A tree is one line until it is opened, so
-   * the count is of top-level lines.
+   * the count is of top-level lines. The cap is each machine's own: every
+   * machine with rows keeps its group, its header and its Archive all,
+   * however many trees the machines above it list.
    */
-  function listed(tab: WorkTab, all: boolean): Group[] {
-    const groups = grouped(tab);
-    if (all) {
-      return groups;
+  function capped(
+    tab: WorkTab,
+    group: Group,
+    whole: ReadonlySet<string>
+  ): Group {
+    if (whole.has(group.machineId)) {
+      return group;
     }
     let room = MORE_AT;
-    const out: Group[] = [];
-    for (const group of groups) {
-      const rows: InstanceRow[] = [];
-      for (const row of group.rows) {
-        if (shapeOf(tab, row.id)?.depth === 0) {
-          if (room === 0) {
-            break;
-          }
-          room -= 1;
+    const rows: InstanceRow[] = [];
+    for (const row of group.rows) {
+      if (shapeOf(tab, row.id)?.depth === 0) {
+        if (room === 0) {
+          break;
         }
-        rows.push(row);
+        room -= 1;
       }
-      if (rows.length > 0) {
-        out.push({ ...group, rows });
+      rows.push(row);
+    }
+    return { ...group, rows };
+  }
+
+  /** A tab's groups as listed, `whole` naming the machines shown in full. */
+  const listed = (tab: WorkTab, whole: ReadonlySet<string>): Group[] =>
+    grouped(tab).map((group) => capped(tab, group, whole));
+
+  /** A machine's trees past its first MORE_AT. */
+  const beyondCap = (tab: WorkTab, group: Group): TreeLine<InstanceRow>[] =>
+    (
+      group.rows
+        .map((row) => shapeOf(tab, row.id))
+        .filter((line) => line?.depth === 0) as TreeLine<InstanceRow>[]
+    ).slice(MORE_AT);
+
+  /** A group's last line: its words, and the failures it keeps folded away. */
+  interface More {
+    failed: number;
+    words: string;
+  }
+  /**
+   * Each machine's line under its rows: "Show N more", with the failures in
+   * those trees beside it, or "Show fewer"; none for a machine within the cap.
+   */
+  function moreOf(tab: WorkTab, whole: ReadonlySet<string>): Map<string, More> {
+    const out = new Map<string, More>();
+    for (const group of grouped(tab)) {
+      const hidden = beyondCap(tab, group);
+      if (hidden.length === 0) {
+        continue;
       }
+      const all = whole.has(group.machineId);
+      out.set(group.machineId, {
+        words: all ? "Show fewer" : `Show ${hidden.length} more`,
+        failed: all
+          ? 0
+          : hidden
+              .flatMap((line) =>
+                line.context
+                  ? line.descendants
+                  : [line.row, ...line.descendants]
+              )
+              .filter(isFailed).length,
+      });
     }
     return out;
   }
 
-  /** The trees past the first MORE_AT, in the order the groups list them. */
-  function beyondCap(tab: WorkTab): TreeLine<InstanceRow>[] {
-    const tops = grouped(tab).flatMap((group) =>
-      group.rows
-        .map((row) => shapeOf(tab, row.id))
-        .filter((line) => line?.depth === 0)
-    ) as TreeLine<InstanceRow>[];
-    return tops.slice(MORE_AT);
-  }
-
   /** The tab whose rows are drawn; it follows the choice in the click. */
   let shown = $state<WorkTab>(untrack(() => workTab.current));
-  const groups = $derived(listed(shown, workTab.showsAll(shown)));
-  /** The words on the row under the list: "N more", "Show fewer", or none. */
-  function moreOf(tab: WorkTab, all: boolean): string | null {
-    const hidden = beyondCap(tab).length;
-    if (hidden === 0) {
-      return null;
-    }
-    return all ? "Show fewer" : `Show ${hidden} more`;
-  }
-  const more = $derived(moreOf(shown, workTab.showsAll(shown)));
-  /** Failures in the trees "Show N more" keeps folded away, said beside it. */
-  const moreFailed = $derived(
-    workTab.showsAll(shown)
-      ? 0
-      : beyondCap(shown)
-          .flatMap((line) =>
-            line.context ? line.descendants : [line.row, ...line.descendants]
-          )
-          .filter(isFailed).length
-  );
+  const groups = $derived(listed(shown, workTab.shownWhole(shown)));
+  const more = $derived(moreOf(shown, workTab.shownWhole(shown)));
+  /** The key of a machine's "N more" line. */
+  const moreKey = (machineId: string): string => `more:${machineId}`;
   /** Whether anything listed as finished failed: its numeral says so. */
   const finishedFailed = $derived(rowsOf("finished").some(isFailed));
 
@@ -389,15 +408,20 @@
 
   /**
    * Changes what the list shows, as one relay: `apply` changes the state
-   * (the tab, how many rows), and every line, header and height moves from
-   * what is drawn this frame to what that state draws.
+   * (the tab, which machines show in full), and every line, header and
+   * height moves from what is drawn this frame to what that state draws.
    */
-  function relay(dir: number, next: WorkTab, all: boolean, apply: () => void) {
+  function relay(
+    dir: number,
+    next: WorkTab,
+    whole: ReadonlySet<string>,
+    apply: () => void
+  ) {
     const list = listEl;
     const before = list ? boxHeights(list, BOXES) : new Map<string, number>();
     // Mid-change, only what is on screen this frame is drawn: a line not
     // yet arrived, or still below its opening box, has nothing to leave.
-    const seen = plan && list ? onScreen(list, ".group, .more-slot") : null;
+    const seen = plan && list ? onScreen(list, ".group") : null;
     const drawnNow = (key: string) => !seen || seen.has(key);
     // What is drawn now: the groups as they stand, mid-change or not. A
     // group already closing has said its goodbye; it is not said twice.
@@ -412,16 +436,24 @@
     }
     heights = [];
 
+    const after = moreOf(next, whole);
     const relayed = planRelay(
       old,
-      listed(next, all),
-      { before: more, after: moreOf(next, all) },
+      listed(next, whole),
+      [...new Set([...more.keys(), ...after.keys()])].map((machineId) => ({
+        key: moreKey(machineId),
+        box: machineId,
+        before: more.get(machineId)?.words ?? null,
+        after: after.get(machineId)?.words ?? null,
+      })),
       drawnNow
     );
     const base = {
       layered: relayed.layered,
       leave: relayed.leave,
-      more,
+      more: new Map(
+        [...more].map(([machineId, line]) => [machineId, line.words])
+      ),
       old,
       tab: shown,
     };
@@ -476,7 +508,7 @@
       workTab.set(next);
       return;
     }
-    relay(next === "finished" ? 1 : -1, next, workTab.showsAll(next), () => {
+    relay(next === "finished" ? 1 : -1, next, workTab.shownWhole(next), () => {
       shown = next;
       workTab.set(next);
     });
@@ -515,9 +547,18 @@
     }
   }
 
-  function fold(): void {
-    const all = !workTab.showsAll(shown);
-    relay(all ? 1 : -1, shown, all, () => workTab.setShowsAll(shown, all));
+  /** Shows one machine's group in full, or back to its first few. */
+  function fold(machineId: string): void {
+    const whole = new Set(workTab.shownWhole(shown));
+    const all = !whole.has(machineId);
+    if (all) {
+      whole.add(machineId);
+    } else {
+      whole.delete(machineId);
+    }
+    relay(all ? 1 : -1, shown, whole, () =>
+      workTab.setShownWhole(shown, machineId, all)
+    );
   }
 
   const enterAnim = (key: string): string => {
@@ -749,35 +790,31 @@
               {@render leaving(entry.gone, false)}
             {/if}
           </div>
+          <!-- The machine's last line: the rest of its trees, or back to
+               its first few. It comes and goes in the relay like any other
+               line, inside its machine's box. -->
+          {#if entry.kind !== 'gone' && more.get(id)}
+            {@const line = more.get(id) as More}
+            <button
+              class="more focus-inset touch-hit press-tint"
+              data-key={moreKey(id)}
+              data-rail-row
+              onclick={() => fold(id)}
+              style={enterAnim(moreKey(id))}
+              type="button"
+            >
+              {line.words}
+              {#if line.failed > 0}
+                <span class="more-failed">· {line.failed} failed</span>
+              {/if}
+            </button>
+          {:else if plan?.more.get(id)}
+            <span aria-hidden="true" class="more" style={leaveAnim(moreKey(id))}
+              >{plan.more.get(id)}</span
+            >
+          {/if}
         </div>
       {/each}
-      <!-- The list's last line: the rest of the tab, or back to its first
-           few. It comes and goes in the relay like any other line. -->
-      <div
-        class="more-slot"
-        data-kind={more ? 'stay' : 'gone'}
-        data-machine="more"
-      >
-        {#if more}
-          <button
-            class="more focus-inset touch-hit press-tint"
-            data-key="more"
-            data-rail-row
-            onclick={fold}
-            style={enterAnim('more')}
-            type="button"
-          >
-            {more}
-            {#if moreFailed > 0}
-              <span class="more-failed">· {moreFailed} failed</span>
-            {/if}
-          </button>
-        {:else if plan?.more}
-          <span aria-hidden="true" class="more" style={leaveAnim('more')}
-            >{plan.more}</span
-          >
-        {/if}
-      </div>
     </div>
   </section>
 {/if}
@@ -1074,10 +1111,6 @@
   .more-failed {
     margin-inline-start: 0.3em;
     color: var(--status-fail-ink);
-  }
-  .more-slot {
-    display: flex;
-    flex-direction: column;
   }
   .more {
     display: flex;
