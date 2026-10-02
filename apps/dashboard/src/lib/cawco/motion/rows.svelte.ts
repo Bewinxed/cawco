@@ -845,7 +845,7 @@ class Reflow {
     this.#view ??=
       this.#node.getBoundingClientRect().top +
       this.#node.clientTop -
-      this.#node.scrollTop;
+      this.#scroll;
     return this.#view;
   }
 
@@ -950,7 +950,6 @@ class Reflow {
       departure(this.#node, element, was, at, still);
     }
     this.#placed = now;
-    this.#scroll = this.#node.scrollTop;
   }
 
   /**
@@ -967,9 +966,12 @@ class Reflow {
     const node = this.#node;
     // The scroll the rows were drawn at: content that got shorter may have
     // had the browser clamp it already, in the layout reading the places.
+    // The scroll it leaves is kept here, read before anything is written:
+    // read after the change's writes, it laid the page out again.
     const before = this.#scroll;
     if (before <= 0) {
-      return node.scrollTop - before;
+      this.#scroll = node.scrollTop;
+      return this.#scroll - before;
     }
     let anchor: { cy: number; was: number } | null = null;
     for (const [element, was] of this.#placed) {
@@ -985,7 +987,8 @@ class Reflow {
     if (anchor && Math.abs(anchor.cy - anchor.was) >= 0.5) {
       node.scrollTop = before + anchor.cy - anchor.was;
     }
-    return node.scrollTop - before;
+    this.#scroll = node.scrollTop;
+    return this.#scroll - before;
   }
 
   /** The reader (or a page) scrolled: rows are drawn at this scroll now. */
