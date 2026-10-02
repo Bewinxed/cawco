@@ -49,6 +49,7 @@ import type {
 import {
   type AgentSession,
   type AgentSessionEvent,
+  type AgentSessionServices,
   createAgentSession,
   createAgentSessionServices,
   createBashToolDefinition,
@@ -150,13 +151,36 @@ const contentOf = (content: unknown): string | NeutralContentBlock[] => {
 const modelIdOf = (model: Model<any>): string =>
   String((model as { id?: unknown }).id ?? "");
 
-/** Every model pi's configured providers can run, with pi's own context window for each. */
-const modelCatalog = async (): Promise<ModelInfo[]> =>
-  (await (await PiHarness.runtime()).getAvailable()).map((model) => ({
+/**
+ * Every model pi's configured providers can run, with pi's own context window
+ * for each, plus a `default` row naming the model pi itself runs when a
+ * session names none: its settings' `defaultProvider`/`defaultModel`, as
+ * pi's SettingsManager reads them. A default pi cannot run (no available
+ * model by that provider and id) gets no row, so nothing names it.
+ */
+const modelCatalog = async (): Promise<ModelInfo[]> => {
+  const { modelRuntime, settingsManager } = await PiHarness.services();
+  const available = await modelRuntime.getAvailable();
+  const rows: ModelInfo[] = available.map((model) => ({
     value: modelIdOf(model),
     displayName: String((model as { name?: unknown }).name ?? modelIdOf(model)),
     contextWindow: model.contextWindow,
   }));
+  const id = settingsManager.getDefaultModel();
+  const provider = settingsManager.getDefaultProvider();
+  const resolved = id
+    ? available.find(
+        (model) =>
+          modelIdOf(model) === id && (!provider || model.provider === provider)
+      )
+    : undefined;
+  const row = resolved
+    ? rows.find((entry) => entry.value === modelIdOf(resolved))
+    : undefined;
+  return row
+    ? [...rows, { ...row, value: "default", resolvedModel: row.value }]
+    : rows;
+};
 
 /**
  * The result a stored failed attempt closed its turn with, when pi did not
@@ -607,7 +631,7 @@ class PiSession implements HarnessSession {
   }
 }
 
-let runtimePromise: Promise<ModelRuntime> | null = null;
+let servicesPromise: Promise<AgentSessionServices> | null = null;
 
 export class PiHarness implements Harness {
   readonly kind = "pi" as const;
@@ -620,9 +644,14 @@ export class PiHarness implements Harness {
    * `anthropic` through a local proxy), and a runtime without them offers
    * none of those models — to the picker or to a spawn.
    */
-  static runtime(): Promise<ModelRuntime> {
-    if (!runtimePromise) {
-      runtimePromise = (async () => {
+  static async runtime(): Promise<ModelRuntime> {
+    return (await PiHarness.services()).modelRuntime;
+  }
+
+  /** The services that runtime is built with: its settings say what pi runs by default. */
+  static services(): Promise<AgentSessionServices> {
+    if (!servicesPromise) {
+      servicesPromise = (async () => {
         const services = await createAgentSessionServices({
           cwd: homedir(),
           modelRuntime: await ModelRuntime.create({ refreshOnCreate: false }),
@@ -630,13 +659,13 @@ export class PiHarness implements Harness {
         for (const diagnostic of services.diagnostics) {
           console.warn(`[pi] ${diagnostic.type}: ${diagnostic.message}`);
         }
-        return services.modelRuntime;
+        return services;
       })().catch((error) => {
-        runtimePromise = null;
+        servicesPromise = null;
         throw error;
       });
     }
-    return runtimePromise;
+    return servicesPromise;
   }
 
   async detect(): Promise<HarnessReport> {
@@ -880,7 +909,7 @@ export class PiHarness implements Harness {
 
   // biome-ignore lint/suspicious/useAwait: implements Harness.dispose's Promise<void> contract; this teardown is synchronous
   async dispose(): Promise<void> {
-    runtimePromise = null;
+    servicesPromise = null;
   }
 
   // biome-ignore lint/suspicious/useAwait: Harness.machine returns Promise<unknown>; the unclaimed branch returns bare undefined

@@ -1070,6 +1070,60 @@ async function connectedProviders(
   return (data.all ?? []).filter((provider) => connected.has(provider.id));
 }
 
+/**
+ * Every model the connected providers offer, plus a `default` row naming the
+ * model this opencode server itself runs when a session names none — so a
+ * spawn that picks no model still names one. Opencode's own rule
+ * (`Provider.defaultModel`, packages/opencode/src/provider/provider.ts
+ * 2030–2062): the config's `model`; else the first provider (among the
+ * configured ones, when the config names any) and that provider's top model,
+ * which is what the server's `default` map holds for it (`defaultModelIDs`,
+ * same file 1188, the same `sort()[0]`). Its recent-model step reads a local
+ * state file the server does not expose, so it is not followed. A default
+ * the catalog does not list gets no row: nothing would run it.
+ */
+export async function opencodeCatalog(
+  client: OpencodeClient,
+  directory?: string
+): Promise<ModelInfo[]> {
+  const scope = directory ? { directory } : {};
+  const [listed, configured] = await Promise.all([
+    client.provider.list(scope),
+    client.config.get(scope),
+  ]);
+  if (listed.error) {
+    throw new Error(errorText(listed.error));
+  }
+  if (configured.error) {
+    throw new Error(errorText(configured.error));
+  }
+  const data = listed.data as unknown as {
+    all?: Pick<Provider, "id" | "models">[];
+    connected?: string[];
+    default?: Record<string, string>;
+  };
+  const connected = new Set(data.connected ?? []);
+  const providers = (data.all ?? []).filter((p) => connected.has(p.id));
+  const models = modelCatalog(providers);
+  const config = configured.data as { model?: string; provider?: object };
+  const named = Object.keys(config.provider ?? {});
+  const first = providers.find(
+    (p) => named.length === 0 || named.includes(p.id)
+  );
+  const id =
+    config.model ??
+    (first && data.default?.[first.id]
+      ? `${first.id}/${data.default[first.id]}`
+      : undefined);
+  const resolved = id ? models.find((row) => row.value === id) : undefined;
+  return resolved
+    ? [
+        ...models,
+        { ...resolved, value: "default", resolvedModel: resolved.value },
+      ]
+    : models;
+}
+
 /** Every model the connected providers offer, with its effort scale and context window. */
 function modelCatalog(
   providers: Pick<Provider, "id" | "models">[]
@@ -2821,7 +2875,7 @@ export class OpencodeSession implements HarnessSession {
         };
       }
       case CONTROL_SUPPORTED_MODELS:
-        return modelCatalog(await this.#connectedProviders());
+        return await opencodeCatalog(this.#client, this.#directory);
       case CONTROL_SUPPORTED_COMMANDS:
         return await this.#commands();
       case CONTROL_RELOAD_SKILLS:
@@ -3648,8 +3702,7 @@ export class OpencodeHarness implements Harness {
     // the report without one, as claude's does when its probe fails.
     const models = installed
       ? await this.#ensure()
-          .then((client) => connectedProviders(client))
-          .then(modelCatalog)
+          .then((client) => opencodeCatalog(client))
           .catch((error: unknown) => {
             console.warn(`[opencode] model catalog unavailable: ${error}`);
           })
@@ -4649,7 +4702,7 @@ export class OpencodeHarness implements Harness {
   async machine(method: string, args: unknown[]): Promise<unknown> {
     switch (method) {
       case CONTROL_MODEL_CATALOG:
-        return modelCatalog(await connectedProviders(await this.#ensure()));
+        return await opencodeCatalog(await this.#ensure());
       case CONTROL_GET_TODOS: {
         assertOpencodeKey(args[0] as string, CONTROL_GET_TODOS);
         const client = await this.#ensure();
