@@ -77,6 +77,13 @@ targets:
         # networking only; ATS stays on for everything else.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+          # A hub reached by its Tailscale MagicDNS name (<host>.<tailnet>.ts.net)
+          # over http: ATS refused it (NSURLErrorDomain -1022) under local
+          # networking alone. The tailnet is the encrypted link.
+          NSExceptionDomains:
+            ts.net:
+              NSIncludesSubdomains: true
+              NSExceptionAllowsInsecureHTTPLoads: true
         # A device asks before it reaches the LAN; the simulator does not.
         NSLocalNetworkUsageDescription: CawCo finds and connects to your hub on this network.
         # The hub announces itself as `_cawco._tcp` (packages/hub/src/mdns.ts).
