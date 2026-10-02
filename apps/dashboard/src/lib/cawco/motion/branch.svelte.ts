@@ -36,7 +36,7 @@
  * Folding. Quicker than opening, and under way in the next frame, from the
  * click's own time (motion/rows `now`): the room closes over --dur-exit, the
  * rows under it sliding up with its edge (the batch's "close" pace), while
- * the line runs back the way it came on --ease-out,
+ * the line runs back the way it came at one steady pace (`RUN_BACK`),
  * ahead of the edge. As the head leaves a child's glyph, its title wipes out
  * right to left, then its glyph flies out to the left as it fades; then the
  * group unmounts. The room used to wait for the lowest child to swipe out
@@ -548,27 +548,6 @@ function viewOf(
 const clamp = (value: number, low: number, high: number) =>
   Math.min(high, Math.max(low, value));
 
-/** When (0–1) a curve reaches `share` of its way. */
-function inverse(curve: (t: number) => number, share: number): number {
-  if (share <= 0) {
-    return 0;
-  }
-  if (share >= 1) {
-    return 1;
-  }
-  let low = 0;
-  let high = 1;
-  for (let step = 0; step < 24; step += 1) {
-    const mid = (low + high) / 2;
-    if (curve(mid) < share) {
-      low = mid;
-    } else {
-      high = mid;
-    }
-  }
-  return high;
-}
-
 /** One value on --ease-out: from `from` to `to`, over `length` ms from `start`. */
 interface Seg {
   from: number;
@@ -656,19 +635,33 @@ function planOpen(shape: Shape, now: State, speed: number): Plan {
 }
 
 /**
+ * How much of a fold's exit its line takes to run back. The room closes on
+ * the rows' in-out curve, which at its steepest is 1.398 times as far on as
+ * a straight run over the same time (the most of easeInOut(x) / x): a line
+ * running back at one pace stays ahead of the room's edge only if it is home
+ * within 1 / 1.398 = 0.715 of the exit.
+ */
+const RUN_BACK = 0.65;
+
+/**
  * Folding from where `now` left it, over --dur-exit. The room closes on the
- * rows' curve; the line runs back on --ease-out, ahead of the edge. As the
- * head leaves a child's glyph, its title wipes out over the first half of
- * the exit and its glyph flies out over the middle half, each done by the
- * time the room has closed: from then the group stands outside its parent's
- * box, under the rows that slid up, until it unmounts (`fold`).
+ * rows' curve; the line runs back ahead of the edge at one steady pace, so
+ * children an even distance apart along it are left at even times. On --ease-out it left the last of them first
+ * and fastest: a tree with a nested branch folded 7.5, 8.6, 10.3 then 15.8ms
+ * apart. As the head leaves a child's glyph, its title wipes out over the
+ * first half of the exit and its glyph flies out over the middle half, each
+ * done by the time the room has closed: from then the group stands outside
+ * its parent's box, under the rows that slid up, until it unmounts (`fold`).
  */
 function planFold(shape: Shape, now: State, exit: number): Plan {
   const edge = (t: number) => now.room * (1 - easeInOut(clamp(t / exit, 0, 1)));
   const from = now.head * shape.length;
-  const head = (t: number) => from * (1 - easeOut(clamp(t / exit, 0, 1)));
+  // Off at full pace, as the room's edge leaves slowly: an eased start (a
+  // glide's) left the first child a third later than the rest.
+  const home = exit * RUN_BACK;
+  const head = (t: number) => from * (1 - clamp(t / home, 0, 1));
   const when = (s: number) =>
-    s >= from || from <= 0 ? 0 : exit * inverse(easeOut, 1 - s / from);
+    s >= from || from <= 0 ? 0 : home * (1 - s / from);
   const half = exit / 2;
   const leave = (was: number[], after: number) =>
     shape.items.map((item, i): Seg => {
