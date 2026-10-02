@@ -301,9 +301,24 @@ public final class HomeModel {
         }
     }
 
-    /// Every session and run that ended since it was last opened, the latest to end first.
+    /// The lists' orders, held still while they settle or are touched.
+    private let held = HeldOrder()
+
+    /// The operator's finger is on the lists: their order stays until they let go.
+    public var holding: Bool {
+        get { held.holding }
+        set { held.holding = newValue }
+    }
+
+    /// Every session and run that ended since it was last opened, the latest
+    /// to end first; two that ended together by id, as on the web.
     public var finished: [InstanceRow] {
-        (fleet.rows.filter(\.isListed) + boardRuns).filter(endedUnseen).sorted { fleet.lastAt($0) > fleet.lastAt($1) }
+        let rows = (fleet.rows.filter(\.isListed) + boardRuns).filter(endedUnseen).sorted {
+            let a = fleet.lastAt($0)
+            let b = fleet.lastAt($1)
+            return a != b ? a > b : $0.id < $1.id
+        }
+        return held.order("home:finished", rows, id: \.id)
     }
 
     public struct RecentItem: Identifiable {
@@ -347,7 +362,8 @@ public final class HomeModel {
                 )
             }
         }
-        return (live + stored).sorted { $0.at > $1.at }
+        let items = (live + stored).sorted { $0.at != $1.at ? $0.at > $1.at : $0.id < $1.id }
+        return held.order("home:recent", items, id: \.id)
     }
 
     private func storedTitle(_ info: StoredSession, machineId: String) -> String {
@@ -365,6 +381,11 @@ public final class HomeModel {
 
     public func fleetTitle(_ row: InstanceRow) -> String {
         fleet.title(row)
+    }
+
+    /// A machine's place in the fleet's one order, which every list keeps.
+    public func machineOrder(_ machineId: String) -> Int {
+        fleet.machineOrder(machineId)
     }
 
     // MARK: A tab's tree

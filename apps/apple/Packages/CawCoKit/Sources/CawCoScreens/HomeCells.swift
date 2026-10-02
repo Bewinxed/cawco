@@ -348,15 +348,25 @@ final class MachineCell: HomeCell {
 /// with its share of the nesting lines.
 final class RowCell: HomeCell {
     let row = SessionRowView()
-    private let nest = CAShapeLayer()
+    /// Its elbow (down from the rail above, round its corner, out to its
+    /// glyph), the rail on past it, and each ancestor's rail through it: each
+    /// its own stroke, so a tree's fold can draw each as far as its line's head.
+    private let elbow = CAShapeLayer()
+    private let onward = CAShapeLayer()
+    private var rails: [Int: CAShapeLayer] = [:]
+    private let room = CALayer()
+    private let wipe = CALayer()
     private var lead: NSLayoutConstraint!
     private var shape = NestShape(depth: 0, first: false, last: true, through: [])
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        nest.fillColor = nil
-        nest.lineWidth = 1
-        contentView.layer.addSublayer(nest)
+        for layer in [elbow, onward] {
+            Self.stroke(layer)
+            contentView.layer.addSublayer(layer)
+        }
+        room.backgroundColor = UIColor.black.cgColor
+        wipe.backgroundColor = UIColor.black.cgColor
         row.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(row)
         lead = row.leadingAnchor.constraint(equalTo: contentView.leadingAnchor)
@@ -377,21 +387,108 @@ final class RowCell: HomeCell {
     func configure(depth: Int, first: Bool, last: Bool, through: [Int]) {
         lead.constant = Double(depth) * Nest.indent
         shape = NestShape(depth: depth, first: first, last: last, through: through)
+        for (depth, layer) in rails where !through.contains(depth) {
+            layer.removeFromSuperlayer()
+            rails[depth] = nil
+        }
+        for depth in through where rails[depth] == nil {
+            let layer = CAShapeLayer()
+            Self.stroke(layer)
+            layer.strokeColor = elbow.strokeColor
+            contentView.layer.addSublayer(layer)
+            rails[depth] = layer
+        }
         setNeedsLayout()
     }
 
     override func layoutSubviews() {
         super.layoutSubviews()
+        let height = contentView.bounds.height
         CATransaction.begin()
         CATransaction.setDisableActions(true)
-        nest.frame = contentView.bounds
-        nest.path = shape.path(height: contentView.bounds.height)
+        for layer in [elbow, onward] + rails.values {
+            layer.frame = contentView.bounds
+        }
+        elbow.path = shape.elbow()
+        onward.path = shape.onward(height: height)
+        for (depth, layer) in rails {
+            layer.path = shape.rail(depth, height: height)
+        }
         CATransaction.commit()
+    }
+
+    override func prepareForReuse() {
+        super.prepareForReuse()
+        rest()
+    }
+
+    private static func stroke(_ layer: CAShapeLayer) {
+        layer.fillColor = nil
+        layer.lineWidth = 1
     }
 
     /// The nesting lines' ink (`nest-ink`).
     private func paintNest() {
-        nest.strokeColor = Palette.nestInk.resolvedColor(with: traitCollection).cgColor
+        let ink = Palette.nestInk.resolvedColor(with: traitCollection).cgColor
+        for layer in [elbow, onward] + rails.values {
+            layer.strokeColor = ink
+        }
+    }
+
+    // MARK: A tree's fold (Branch)
+
+    /// How far (0–1) each stretch of its line is drawn: its elbow, the rail
+    /// on past it, and each ancestor's rail through it, by depth.
+    func drawNest(elbow drawn: Double, onward on: Double, through: [Int: Double]) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        elbow.strokeEnd = drawn
+        onward.strokeEnd = on
+        for (depth, layer) in rails {
+            layer.strokeEnd = through[depth] ?? 1
+        }
+        CATransaction.commit()
+    }
+
+    /// How far in (0–1) its glyph has flown from the row's left edge, and its
+    /// title has wiped in left to right past its glyph.
+    func reveal(glyph: Double, title: Double) {
+        let mark = row.mark
+        mark.alpha = glyph
+        mark.transform = glyph >= 1 ? .identity : CGAffineTransform(translationX: -Space.space3 * (1 - glyph), y: 0)
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        if title >= 1 {
+            row.layer.mask = nil
+        } else {
+            let bounds = row.bounds
+            let past = Space.space3 + Size.rowMarkBox
+            wipe.frame = CGRect(x: 0, y: -bounds.height, width: past + (bounds.width - past) * title, height: bounds.height * 3)
+            row.layer.mask = wipe
+        }
+        CATransaction.commit()
+    }
+
+    /// The room a tree's fold has open over this row: only its top `height`
+    /// shows (what is above its top, its elbow up to the parent, always shows).
+    func clip(below height: Double) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        if height >= bounds.height {
+            layer.mask = nil
+        } else {
+            let width = bounds.width
+            room.frame = CGRect(x: -width, y: -bounds.height * 2, width: width * 3, height: bounds.height * 2 + max(0, height))
+            layer.mask = room
+        }
+        CATransaction.commit()
+    }
+
+    /// Every piece back at rest: drawn, in, uncovered.
+    func rest() {
+        drawNest(elbow: 1, onward: 1, through: [:])
+        reveal(glyph: 1, title: 1)
+        clip(below: .infinity)
     }
 }
 
@@ -417,30 +514,41 @@ struct NestShape {
     let last: Bool
     let through: [Int]
 
-    func path(height: Double) -> CGPath? {
+    private var rail: Double { Double(depth - 1) * Nest.indent + Nest.railX }
+
+    /// Its elbow: down the rail from the row above (a first child's from its
+    /// parent's glyph foot), round a circular corner, out along its arm to its glyph.
+    func elbow() -> CGPath? {
         guard depth > 0 else {
             return nil
         }
+        let glyphY = BranchShape.glyphY
+        let radius = BranchShape.radius
         let path = UIBezierPath()
-        let glyphY = Space.spaceRow + Nest.rowHeight / 2
-        let radius = Radius.radiusSm
-        let rail = Double(depth - 1) * Nest.indent + Nest.railX
-        // The first child's elbow starts at its parent's glyph foot.
-        let top = first ? -(Nest.rowHeight / 2 - Size.rowMarkBox / 2) : 0
-        let glyphLeft = Double(depth) * Nest.indent + Space.space3
-        path.move(to: CGPoint(x: rail, y: top))
+        path.move(to: CGPoint(x: rail, y: BranchShape.elbowTop(first: first)))
         path.addLine(to: CGPoint(x: rail, y: glyphY - radius))
-        path.addQuadCurve(to: CGPoint(x: rail + radius, y: glyphY), controlPoint: CGPoint(x: rail, y: glyphY))
-        path.addLine(to: CGPoint(x: glyphLeft, y: glyphY))
-        if !last {
-            path.move(to: CGPoint(x: rail, y: glyphY - radius))
-            path.addLine(to: CGPoint(x: rail, y: height))
+        path.addArc(withCenter: CGPoint(x: rail + radius, y: glyphY - radius), radius: radius, startAngle: .pi, endAngle: .pi / 2, clockwise: false)
+        path.addLine(to: CGPoint(x: Double(depth) * Nest.indent + Space.space3, y: glyphY))
+        return path.cgPath
+    }
+
+    /// The rail on past it, to its next sibling.
+    func onward(height: Double) -> CGPath? {
+        guard depth > 0, !last else {
+            return nil
         }
-        for ancestor in through {
-            let x = Double(ancestor - 1) * Nest.indent + Nest.railX
-            path.move(to: CGPoint(x: x, y: 0))
-            path.addLine(to: CGPoint(x: x, y: height))
-        }
+        let path = UIBezierPath()
+        path.move(to: CGPoint(x: rail, y: BranchShape.glyphY - BranchShape.radius))
+        path.addLine(to: CGPoint(x: rail, y: height))
+        return path.cgPath
+    }
+
+    /// An ancestor's rail passing it on the way to a later sibling.
+    func rail(_ ancestor: Int, height: Double) -> CGPath {
+        let x = Double(ancestor - 1) * Nest.indent + Nest.railX
+        let path = UIBezierPath()
+        path.move(to: CGPoint(x: x, y: 0))
+        path.addLine(to: CGPoint(x: x, y: height))
         return path.cgPath
     }
 }

@@ -268,6 +268,17 @@ export function byMachine<T extends { machineId: string }>(
   );
 }
 
+/**
+ * Ids in code-unit order, the order Swift's `<` gives them, so a tie in a
+ * list falls the same way here and in the Apple app.
+ */
+function compareIds(a: string, b: string): number {
+  if (a === b) {
+    return 0;
+  }
+  return a < b ? -1 : 1;
+}
+
 /** When a session last moved: its pulse, else the hub's own update time. */
 export function lastAt(row: InstanceRow): number {
   const pulse = cawco.pulseAt(row.id);
@@ -545,8 +556,9 @@ class Home {
       [...cawco.listedInstances, ...cawco.runRows]
         .filter(endedUnseen)
         // The latest to end first. A failure says so on its own row (its
-        // mark, its line, the tab's numeral), not by jumping the queue.
-        .sort((a, b) => lastAt(b) - lastAt(a)),
+        // mark, its line, the tab's numeral), not by jumping the queue. Two
+        // that ended together go by id, so every device lists them alike.
+        .sort((a, b) => lastAt(b) - lastAt(a) || compareIds(a.id, b.id)),
       (row) => row.id
     );
   });
@@ -604,7 +616,9 @@ class Home {
     );
     return heldOrder(
       "home:recent",
-      [...live, ...stored].sort((a, b) => b.at - a.at),
+      [...live, ...stored].sort(
+        (a, b) => b.at - a.at || compareIds(a.key, b.key)
+      ),
       (item) => item.key
     );
   });

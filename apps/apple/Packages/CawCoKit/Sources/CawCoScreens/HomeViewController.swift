@@ -13,7 +13,7 @@ import UIKit
 /// source keyed by stable ids. `updateProperties()` reads the stores, so
 /// UIKit's observation tracking runs it again whenever what it read changes;
 /// each run applies the new snapshot and reconfigures the items that stay.
-final class HomeViewController: UIViewController, UICollectionViewDelegate {
+final class HomeViewController: UIViewController, UICollectionViewDelegate, RelayHost, BranchHost {
     static let cawSide = 160.0
     static let recentPage = 30
 
@@ -21,17 +21,17 @@ final class HomeViewController: UIViewController, UICollectionViewDelegate {
         case top, needs, work, caw, recent
     }
 
-    /// One drawn line. Work lines carry the relay's generation: a tab switch
-    /// replaces every line, even one in both tabs, as the web's relay does.
+    /// One drawn line, by a stable id: a machine's header is the same line in
+    /// both tabs, so a tab switch never takes it out and puts it back.
     nonisolated enum Item: Hashable, Sendable {
         case status
         case usage
         case headline
         case need(String)
         case tabs
-        case machine(String, gen: Int)
-        case row(String, gen: Int)
-        case more(String, gen: Int)
+        case machine(String)
+        case row(String)
+        case more(String)
         case caw
         case recentHead
         case recentSearch
@@ -49,7 +49,8 @@ final class HomeViewController: UIViewController, UICollectionViewDelegate {
 
     private let hub: HubConnection
     private let home: HomeModel
-    private var collectionView: UICollectionView!
+    var collectionView: UICollectionView!
+    private(set) lazy var layout = makeLayout()
     private var dataSource: UICollectionViewDiffableDataSource<Section, Item>!
 
     // What the last update drew, for the cells to read.
@@ -61,14 +62,12 @@ final class HomeViewController: UIViewController, UICollectionViewDelegate {
     private var cawLine = ""
 
     // The view's own state.
-    private var gen = 0
     private var search = ""
     private var recentShown = HomeViewController.recentPage
-    /// A tab switch on its way: the direction its new lines arrive from.
-    private var relayDirection: Double?
-    private var relaying = false
-    /// The parent whose tree was just opened or folded, so its rows take the branch's motion.
-    private var branch: (id: String, opening: Bool)?
+    /// The driven motions: a tab switch or "N more" (the relay), a tree's fold.
+    /// While one runs, the list waits for it before it takes the next change.
+    private let relay = RelayMotion()
+    private let branch = BranchMotion()
 
     init(hub: HubConnection, home: HomeModel) {
         self.hub = hub
@@ -84,7 +83,7 @@ final class HomeViewController: UIViewController, UICollectionViewDelegate {
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = Palette.surfaceRecess
-        collectionView = UICollectionView(frame: view.bounds, collectionViewLayout: makeLayout())
+        collectionView = UICollectionView(frame: view.bounds, collectionViewLayout: layout)
         collectionView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         collectionView.backgroundColor = Palette.surfaceRecess
         collectionView.delegate = self
@@ -95,7 +94,7 @@ final class HomeViewController: UIViewController, UICollectionViewDelegate {
 
     // MARK: Layout
 
-    private func makeLayout() -> UICollectionViewLayout {
+    private func makeLayout() -> HomeLayout {
         HomeLayout { [weak self] index, environment in
             let section = self?.dataSource?.sectionIdentifier(for: index) ?? .top
             let first = self?.dataSource?.snapshot().sectionIdentifiers.first { $0 != .top }
@@ -118,7 +117,7 @@ final class HomeViewController: UIViewController, UICollectionViewDelegate {
     /// A finished row's swipe: what a finger uncovers as it draws the row
     /// away, "Archive", taking the row and its tree off Finished.
     private func archiveSwipe(at indexPath: IndexPath) -> UISwipeActionsConfiguration? {
-        guard home.tab == .finished, case let .row(id, _) = dataSource.itemIdentifier(for: indexPath),
+        guard home.tab == .finished, case let .row(id) = dataSource.itemIdentifier(for: indexPath),
               let row = rows[id], !row.line.line.context, home.archivable(row.line.line.row)
         else {
             return nil
@@ -192,7 +191,7 @@ final class HomeViewController: UIViewController, UICollectionViewDelegate {
             }
         }
         let machine = UICollectionView.CellRegistration<MachineCell, Item> { [weak self] cell, _, item in
-            guard let self, case let .machine(id, _) = item, let entry = groups[id] else { return }
+            guard let self, case let .machine(id) = item, let entry = groups[id] else { return }
             let finished = home.tab == .finished ? home.finishedOn(id) : []
             cell.configure(entry.group, seam: entry.seam, archivable: finished.count)
             cell.onArchiveAll = { [weak self] in
@@ -201,7 +200,7 @@ final class HomeViewController: UIViewController, UICollectionViewDelegate {
             }
         }
         let row = UICollectionView.CellRegistration<RowCell, Item> { [weak self] cell, _, item in
-            guard let self, case let .row(id, _) = item, let entry = rows[id] else { return }
+            guard let self, case let .row(id) = item, let entry = rows[id] else { return }
             let line = entry.line.line
             let session = line.row
             cell.configure(depth: line.depth, first: line.first, last: line.last, through: entry.through)
@@ -219,12 +218,15 @@ final class HomeViewController: UIViewController, UICollectionViewDelegate {
             cell.row.count.onToggle = { [weak self] in self?.toggleTree(session.id) }
         }
         let more = UICollectionView.CellRegistration<MoreCell, Item> { [weak self] cell, _, item in
-            guard let self, case let .more(id, _) = item, let more = groups[id]?.group.more else { return }
+            guard let self, case let .more(id) = item, let more = groups[id]?.group.more else { return }
             cell.configure(words: more.words, failed: more.failed)
             cell.button.removeTarget(nil, action: nil, for: .allEvents)
             cell.button.addAction(UIAction { [weak self] _ in
                 guard let self else { return }
-                Reflow.travel { self.home.toggleWhole(id, in: self.home.tab) }
+                let tab = home.tab
+                // Showing the rest moves forward, back to the first few moves back.
+                let all = !(home.shownWhole[tab] ?? []).contains(id)
+                runRelay(all ? 1 : -1) { self.home.toggleWhole(id, in: tab) }
             }, for: .primaryActionTriggered)
         }
         let caw = UICollectionView.CellRegistration<CawCell, Item> { [weak self] cell, _, _ in
@@ -297,10 +299,11 @@ final class HomeViewController: UIViewController, UICollectionViewDelegate {
 
     override func updateProperties() {
         super.updateProperties()
-        guard dataSource != nil else {
+        // A driven motion owns the list until it lands, and asks again then.
+        guard dataSource != nil, !relay.running, !branch.running else {
             return
         }
-        apply(build())
+        commit(build(), animated: true)
     }
 
     /// The snapshot the model says now, and the lookups its cells read.
@@ -336,17 +339,17 @@ final class HomeViewController: UIViewController, UICollectionViewDelegate {
                 let filled = !group.lines.isEmpty
                 groups[group.machineId] = (group, filled && filledBefore)
                 filledBefore = filledBefore || filled
-                items.append(.machine(group.machineId, gen: gen))
+                items.append(.machine(group.machineId))
                 var lastAt: [Int: Bool] = [:]
                 for line in group.lines {
                     let depth = line.line.depth
                     let through = depth > 1 ? (1 ..< depth).filter { lastAt[$0] == false } : []
                     lastAt[depth] = line.line.last
                     rows[line.id] = RowLine(line: line, tab: home.tab, group: group.machineId, through: through)
-                    items.append(.row(line.id, gen: gen))
+                    items.append(.row(line.id))
                 }
                 if group.more != nil {
-                    items.append(.more(group.machineId, gen: gen))
+                    items.append(.more(group.machineId))
                 }
             }
             snapshot.appendItems(items, toSection: .work)
@@ -398,52 +401,151 @@ final class HomeViewController: UIViewController, UICollectionViewDelegate {
         return all.filter { $0.title.lowercased().contains(needle) || $0.place.lowercased().contains(needle) }
     }
 
-    private func apply(_ next: NSDiffableDataSourceSnapshot<Section, Item>) {
+    /// Applies `next`, the lines that stay reconfigured in place (their cells
+    /// keep their identity). A live change that moves lines travels
+    /// (`Reflow.travel`); a driven motion applies its own unanimated.
+    private func commit(_ next: NSDiffableDataSourceSnapshot<Section, Item>, animated: Bool) {
         var next = next
         let old = dataSource.snapshot()
         let before = Set(old.itemIdentifiers)
         let after = next.itemIdentifiers
-        // Lines that stay are reconfigured in place: their cells keep their identity.
         next.reconfigureItems(after.filter { before.contains($0) })
         let moved = old.itemIdentifiers.filter { after.contains($0) } != after.filter { before.contains($0) }
         let structural = moved || before.count != after.count || !after.allSatisfy(before.contains)
-        let inserted = after.filter { !before.contains($0) }
-
-        if !structural || old.numberOfItems == 0 {
+        if !animated || !structural || old.numberOfItems == 0 {
             dataSource.apply(next, animatingDifferences: false)
-        } else if let direction = relayDirection {
-            relayDirection = nil
-            dataSource.apply(next, animatingDifferences: false)
-            collectionView.layoutIfNeeded()
-            Reflow.enter(views(for: inserted.filter(\.isWorkLine)), direction: direction)
-            relaying = false
-        } else if let branch {
-            // A tree opening or folding: the room moves at the line's pace.
-            self.branch = nil
-            let under = inserted.filter { item in
-                guard case let .row(id, _) = item, let line = rows[id]?.line.line else { return false }
-                return isUnder(line, branch.id)
-            }
-            Reflow.branch(opening: branch.opening ? under.count : 0, in: collectionView) {
-                self.dataSource.apply(next, animatingDifferences: true)
-            }
-            if branch.opening {
-                collectionView.layoutIfNeeded()
-                Reflow.branchOpen(views(for: under))
-            }
         } else {
             Reflow.travel(in: collectionView) { self.dataSource.apply(next, animatingDifferences: true) }
         }
     }
 
-    private func views(for items: [Item]) -> [UIView] {
-        items.compactMap { item in
-            dataSource.indexPath(for: item).flatMap { collectionView.cellForItem(at: $0) }
+    // MARK: Actions
+
+    /// A tab switch: the relay (Relay.swift), old lines leaving toward the
+    /// side the choice moved away from and new ones arriving from the other.
+    private func choose(_ tab: HomeModel.Tab) {
+        guard tab != home.tab else {
+            return
+        }
+        runRelay(tab == .finished ? 1 : -1) { self.home.tab = tab }
+    }
+
+    /// Changes what the work list shows as one relay; with Reduce Motion the
+    /// new list fades in over the old.
+    private func runRelay(_ direction: Double, _ change: @escaping () -> Void) {
+        branch.end()
+        relay.end()
+        guard !UIAccessibility.isReduceMotionEnabled else {
+            change()
+            return
+        }
+        relay.run(on: self, direction: direction, change: {
+            change()
+            commit(build(), animated: false)
+        }, done: { [weak self] in
+            self?.setNeedsUpdateProperties()
+        })
+    }
+
+    // MARK: RelayHost
+
+    func workLines() -> RelayLines {
+        var lines = RelayLines()
+        let snapshot = dataSource.snapshot()
+        guard snapshot.sectionIdentifiers.contains(.work) else {
+            return lines
+        }
+        let frames = layout.frames(in: collectionView)
+        var group: (id: String, rows: [String])?
+        func close() {
+            guard let open = group else {
+                return
+            }
+            lines.groups.append(RelayPlan.Group(
+                id: open.id,
+                rows: open.rows,
+                more: groups[open.id]?.group.more?.words,
+                order: home.machineOrder(open.id)
+            ))
+            group = nil
+        }
+        for item in snapshot.itemIdentifiers(inSection: .work) {
+            guard let key = item.relayKey, let indexPath = dataSource.indexPath(for: item) else {
+                continue
+            }
+            lines.frames[key] = frames[indexPath]
+            if let cell = collectionView.cellForItem(at: indexPath) {
+                lines.cells[key] = cell
+            }
+            switch item {
+            case let .machine(id):
+                close()
+                group = (id, [])
+            case let .row(id):
+                group?.rows.append(id)
+            default:
+                break
+            }
+        }
+        close()
+        return lines
+    }
+
+    func place(at indexPath: IndexPath) -> RelayPlace {
+        guard let item = dataSource.itemIdentifier(for: indexPath) else {
+            return .none
+        }
+        switch item {
+        case let .machine(id): return .line(key: RelayPlan.head(id), group: id)
+        case let .row(id): return .line(key: id, group: rows[id]?.group ?? "")
+        case let .more(id): return .line(key: RelayPlan.more(id), group: id)
+        case .caw, .recentHead, .recentSearch, .recent, .recentNone, .recentMore: return .tail
+        case .status, .usage, .headline, .need, .tabs: return .none
         }
     }
 
-    private func isUnder(_ line: TreeLine<InstanceRow>, _ parent: String) -> Bool {
-        var at = line.parent
+    // MARK: A tree's fold
+
+    /// Opens or folds a tree (Branch.swift): opening, the new rows are laid
+    /// out at once and uncovered as the line reaches them; folding, they
+    /// close away and the list takes the change once they have gone.
+    private func toggleTree(_ id: String) {
+        relay.end()
+        branch.end()
+        let opening = !home.openTrees.contains(id)
+        let frames = layout.frames(in: collectionView)
+        guard let parent = rows[id], let parentPath = dataSource.indexPath(for: .row(id)), let parentFrame = frames[parentPath] else {
+            home.toggleTree(id)
+            return
+        }
+        let held = rows
+        let folding = held.keys.filter { isUnder(held[$0]?.line.line, id, in: held) }
+        home.toggleTree(id)
+        let next = build()
+        if opening {
+            commit(next, animated: false)
+            collectionView.layoutIfNeeded()
+            let laid = layout.frames(in: collectionView)
+            let tree = rows.keys.filter { isUnder(rows[$0]?.line.line, id, in: rows) }
+            branch.run(on: self, parent: parentFrame, parentDepth: parent.line.line.depth, rows: branchRows(tree, in: rows, frames: laid), opening: true) { [weak self] in
+                self?.setNeedsUpdateProperties()
+            }
+        } else {
+            // The leaving rows stay drawn, and their lines read, until they have gone.
+            rows = held.merging(rows) { _, new in new }
+            var now = dataSource.snapshot()
+            now.reconfigureItems([.row(id)])
+            dataSource.apply(now, animatingDifferences: false)
+            branch.run(on: self, parent: parentFrame, parentDepth: parent.line.line.depth, rows: branchRows(folding, in: held, frames: frames), opening: false) { [weak self] in
+                guard let self else { return }
+                commit(build(), animated: false)
+                setNeedsUpdateProperties()
+            }
+        }
+    }
+
+    private func isUnder(_ line: TreeLine<InstanceRow>?, _ parent: String, in rows: [String: RowLine]) -> Bool {
+        var at = line?.parent
         while let id = at {
             if id == parent {
                 return true
@@ -453,35 +555,35 @@ final class HomeViewController: UIViewController, UICollectionViewDelegate {
         return false
     }
 
-    // MARK: Actions
-
-    /// A tab switch, as the web's relay: the old lines leave as copies while
-    /// the list keeps its height, then the new lines arrive.
-    private func choose(_ tab: HomeModel.Tab) {
-        guard tab != home.tab, !relaying else {
-            return
+    /// A tree's rows as the fold reads them, top down.
+    private func branchRows(_ ids: [String], in rows: [String: RowLine], frames: [IndexPath: CGRect]) -> [BranchRow] {
+        var out: [BranchRow] = []
+        for id in ids {
+            guard let entry = rows[id], let indexPath = dataSource.indexPath(for: .row(id)), let frame = frames[indexPath] else {
+                continue
+            }
+            let line = entry.line.line
+            var through: [(depth: Int, list: String?)] = []
+            for depth in entry.through {
+                // The row whose siblings a rail at `depth` joins: the parent of this row's ancestor at that depth.
+                var at = id
+                while let row = rows[at], row.line.line.depth > depth, let up = row.line.line.parent {
+                    at = up
+                }
+                through.append((depth, rows[at]?.line.line.parent))
+            }
+            out.append(BranchRow(
+                id: id,
+                indexPath: indexPath,
+                frame: frame,
+                depth: line.depth,
+                first: line.first,
+                last: line.last,
+                parent: line.parent,
+                through: through
+            ))
         }
-        if UIAccessibility.isReduceMotionEnabled {
-            // Nothing travels: the new list fades in over the old (Reflow.travel).
-            home.tab = tab
-            return
-        }
-        relaying = true
-        let direction: Double = tab == .finished ? 1 : -1
-        let leaving = dataSource.snapshot().itemIdentifiers(inSection: .work).filter(\.isWorkLine)
-        let cells = views(for: leaving).sorted { $0.frame.minY < $1.frame.minY }
-        Reflow.leave(cells, in: collectionView, direction: direction)
-        for cell in cells {
-            cell.alpha = 0
-        }
-        Task { [weak self] in
-            try? await Task.sleep(for: .seconds(Reflow.Relay.outMs))
-            guard let self else { return }
-            relayDirection = direction
-            gen += 1
-            home.tab = tab
-            setNeedsUpdateProperties()
-        }
+        return out.sorted { $0.frame.minY < $1.frame.minY }
     }
 
     /// Every window, in the house bottom sheet.
@@ -492,9 +594,19 @@ final class HomeViewController: UIViewController, UICollectionViewDelegate {
         present(sheet, animated: true)
     }
 
-    private func toggleTree(_ id: String) {
-        branch = (id, !home.openTrees.contains(id))
-        home.toggleTree(id)
+    // The finger on the list holds its order (holdWhileInside): no row moves from under it.
+    func scrollViewWillBeginDragging(_: UIScrollView) {
+        home.holding = true
+    }
+
+    func scrollViewDidEndDragging(_: UIScrollView, willDecelerate decelerate: Bool) {
+        if !decelerate {
+            home.holding = false
+        }
+    }
+
+    func scrollViewDidEndDecelerating(_: UIScrollView) {
+        home.holding = false
     }
 
     func collectionView(_: UICollectionView, shouldSelectItemAt indexPath: IndexPath) -> Bool {
@@ -534,11 +646,13 @@ final class HomeViewController: UIViewController, UICollectionViewDelegate {
 }
 
 private extension HomeViewController.Item {
-    /// A line the tab relay replaces: a machine's header, a row, a "more".
-    var isWorkLine: Bool {
+    /// A work line's key in the relay: a machine's header, a row, a "more".
+    var relayKey: String? {
         switch self {
-        case .machine, .row, .more: true
-        default: false
+        case let .machine(id): RelayPlan.head(id)
+        case let .row(id): id
+        case let .more(id): RelayPlan.more(id)
+        default: nil
         }
     }
 }

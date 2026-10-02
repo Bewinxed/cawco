@@ -122,6 +122,57 @@ public struct TimingCurve: Sendable {
         CAMediaTimingFunction(controlPoints: Float(x1), Float(y1), Float(x2), Float(y2))
     }
 
+    /// How far along (0–1) the curve is at `x` of its time, for motion driven a frame at a time.
+    public func value(at x: Double) -> Double {
+        guard x > 0 else {
+            return 0
+        }
+        guard x < 1 else {
+            return 1
+        }
+        func bezier(_ t: Double, _ a: Double, _ b: Double) -> Double {
+            let u = 1 - t
+            return 3 * u * u * t * a + 3 * u * t * t * b + t * t * t
+        }
+        var low = 0.0
+        var high = 1.0
+        var t = x
+        for _ in 0 ..< 32 {
+            let at = bezier(t, x1, x2)
+            if abs(at - x) < 1e-7 {
+                break
+            }
+            if at < x {
+                low = t
+            } else {
+                high = t
+            }
+            t = (low + high) / 2
+        }
+        return bezier(t, y1, y2)
+    }
+
+    /// When (0–1 of its time) the curve reaches `share` of its way.
+    public func time(reaching share: Double) -> Double {
+        guard share > 0 else {
+            return 0
+        }
+        guard share < 1 else {
+            return 1
+        }
+        var low = 0.0
+        var high = 1.0
+        for _ in 0 ..< 24 {
+            let mid = (low + high) / 2
+            if value(at: mid) < share {
+                low = mid
+            } else {
+                high = mid
+            }
+        }
+        return high
+    }
+
     /// An interruptible animator on this curve over `duration`.
     @MainActor
     public func animator(_ duration: TimeInterval, animations: (@MainActor () -> Void)? = nil) -> UIViewPropertyAnimator {
