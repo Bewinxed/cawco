@@ -25,6 +25,7 @@ public enum Glyph: String, CaseIterable, Sendable {
     case search = "magnifer-bold-duotone"
     case server = "server-2-bold-duotone"
     case failed = "close-circle-bold-duotone"
+    case archive = "archive-down-minimlistic-bold-duotone"
     case close
     case tick
     case plus

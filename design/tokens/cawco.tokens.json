@@ -1113,6 +1113,113 @@
       "$type": "color",
       "$value": "{color.neutral-11}"
     },
+    "nest-ink": {
+      "$type": "color",
+      "$value": "color-mix(in oklch, {color.neutral-8} 45%, {color.neutral-9})",
+      "$description": "The nesting lines' ink (.kit-nest, WorkflowRail): one neutral, at least 3:1 against the sidebar in both themes (between steps 8 and 9 in light, step 9 in dark).",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "{color.neutral-9}"
+        }
+      }
+    },
+    "meter-calm": {
+      "$type": "color",
+      "$value": "{color.coral-9}",
+      "$description": "Usage meters (design/usage-tracker.md §1, §8): coral is a window with room, spark yellow one near its limit (70% used, or a run-out under an hour away), crimson one from 90%. Each fill rides a lighter step of its own ramp; every fill/track pair passes the dataviz validator (--ordinal) on each surface it is drawn on, in both themes."
+    },
+    "meter-calm-track": {
+      "$type": "color",
+      "$value": "oklch(75.5% 0.085 36)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(45% 0.085 32)"
+        }
+      }
+    },
+    "meter-near": {
+      "$type": "color",
+      "$value": "oklch(62% 0.135 88)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(86% 0.14 95)"
+        }
+      }
+    },
+    "meter-near-track": {
+      "$type": "color",
+      "$value": "oklch(69.5% 0.095 90)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(53% 0.08 92)"
+        }
+      }
+    },
+    "meter-over": {
+      "$type": "color",
+      "$value": "oklch(50% 0.17 15)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(68% 0.16 15)"
+        }
+      }
+    },
+    "meter-over-track": {
+      "$type": "color",
+      "$value": "oklch(72% 0.08 15)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(53% 0.09 15)"
+        }
+      }
+    },
+    "meter-stale": {
+      "$type": "color",
+      "$value": "oklch(56% 0.012 265)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(64% 0.01 265)"
+        }
+      }
+    },
+    "meter-stale-track": {
+      "$type": "color",
+      "$value": "oklch(75% 0.008 265)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(45% 0.008 265)"
+        }
+      }
+    },
+    "meter-share": {
+      "$type": "color",
+      "$value": "oklch(55% 0.012 265)",
+      "$description": "The one neutral the usage breakdown and history bars draw in.",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "oklch(72% 0.01 265)"
+        }
+      }
+    },
+    "meter-wash-near": {
+      "$type": "color",
+      "$value": "color-mix(in oklch, {color.status-attn-ink} 6%, transparent)",
+      "$description": "A near or over row's only tint: a faint wash of its status ink (owner: \"the tints for yellow/red are too overwhelming\").",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "color-mix(in oklch, {color.status-attn-ink} 10%, transparent)"
+        }
+      }
+    },
+    "meter-wash-over": {
+      "$type": "color",
+      "$value": "color-mix(in oklch, {color.status-fail-ink} 6%, transparent)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "color-mix(in oklch, {color.status-fail-ink} 10%, transparent)"
+        }
+      }
+    },
     "presence-online": {
       "$type": "color",
       "$value": "oklch(62.7% 0.17 149)",

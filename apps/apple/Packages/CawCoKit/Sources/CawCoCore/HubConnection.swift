@@ -66,10 +66,10 @@ public final class HubConnection {
             return nil
         }
         ledger.applyFrame = { [weak self] _, data in
-            guard let self, let (frame, routedTo) = try? Inbound.frame(data) else {
+            guard let self, let frame = try? Inbound.frame(data) else {
                 return
             }
-            apply(frame, routedTo: routedTo)
+            apply(frame)
         }
         // The board's only per-session state is the asks it parks, and their
         // truth is the hub's own list.
@@ -233,6 +233,16 @@ public final class HubConnection {
         address.map { Client(hub: $0) }
     }
 
+    /// Marks sessions and runs (`run:<id>`) seen on the hub: `look`, the owner
+    /// had it in front after it ended; `archive`, taken off Finished without
+    /// opening it, which the hub refuses for anything still doing something.
+    func markSeen(_ ids: [String], kind: Operations.PostApiSeen.Input.Body.JsonPayload.KindPayload) async throws {
+        guard let client else {
+            throw URLError(.notConnectedToInternet)
+        }
+        _ = try await client.postApiSeen(body: .json(.init(ids: ids, kind: kind))).ok
+    }
+
     /// Registry reads; true once machines, sessions and projects all landed.
     private func refresh() async -> Bool {
         guard let client else {
@@ -242,7 +252,13 @@ public final class HubConnection {
         async let rows = try? await client.getApiInstances().ok.body.json
         async let projects = try? await client.getApiProjects().ok.body.json
         async let pending = try? await client.getApiPending().ok.body.json
-        let (readMachines, readRows, readProjects, readPending) = await (machines, rows, projects, pending)
+        // Read on connect, not only pushed on change: a device that connects
+        // between reports has missed every `usage` frame.
+        async let limits = try? await client.getApiUsageLimits().ok.body.json
+        let (readMachines, readRows, readProjects, readPending, readLimits) = await (machines, rows, projects, pending, limits)
+        if let readLimits {
+            fleet.adopt(limits: readLimits.machines.map { ($0.machineId, $0.limits, $0.openCodeGo) })
+        }
         guard !Task.isCancelled else {
             return false
         }
@@ -267,7 +283,39 @@ public final class HubConnection {
             return false
         }
         fleet.fleetRead = true
+        await readRuns(client)
         return true
+    }
+
+    /// Every workflow and its runs (workflow-state.svelte.ts `refreshWorkflows`);
+    /// `workflow` frames keep them current from then on.
+    private func readRuns(_ client: Client) async {
+        defer { fleet.runsRead = true }
+        do {
+            let workflows = try await client.getApiWorkflows().ok.body.json.workflows
+            var names: [String: String] = [:]
+            for workflow in workflows {
+                names[workflow.id] = workflow.name
+            }
+            let batches = try await withThrowingTaskGroup(of: [Components.Schemas.PublicRun].self) { group in
+                for workflow in workflows {
+                    group.addTask { try await client.getApiWorkflowsByIdRuns(path: .init(id: workflow.id)).ok.body.json.runs }
+                }
+                var all: [Components.Schemas.PublicRun] = []
+                for try await runs in group {
+                    all += runs
+                }
+                return all
+            }
+            var runs: [String: BoardRun] = [:]
+            for run in batches {
+                runs[run.value1.id] = BoardRun(run)
+            }
+            fleet.workflowNames = names
+            fleet.runs = runs
+        } catch {
+            log.error("workflow runs unreadable: \(String(describing: error), privacy: .public)")
+        }
     }
 
     private func readPending() {
@@ -282,12 +330,17 @@ public final class HubConnection {
     private func adopt(pending: [Components.Schemas.GetApiPending200Payload]) {
         var asks: [(Components.Schemas.FramePayload.Value7Payload, String?)] = []
         for envelope in pending where envelope.verb == .frames {
-            guard let data = try? Wire.data(envelope.payload), let (frame, routedTo) = try? Inbound.frame(data),
-                  case let .permissionRequest(ask) = frame
-            else {
+            guard let data = try? Wire.data(envelope.payload), let frame = try? Inbound.frame(data) else {
                 continue
             }
-            asks.append((ask, routedTo))
+            switch frame {
+            case let .permissionRequest(ask, routedTo):
+                asks.append((ask, routedTo))
+            case let .runQuestion(runId, raisedAt):
+                fleet.runAskRaisedAt[runId] = raisedAt
+            default:
+                break
+            }
         }
         needs.replace(with: asks)
         syncSubscriptions()
@@ -360,8 +413,14 @@ public final class HubConnection {
             switch try Inbound.read(data) {
             case let .stream(message):
                 ledger.handle(message)
-            case let .frame(frame, routedTo):
-                apply(frame, routedTo: routedTo)
+            case let .frame(frame):
+                switch frame {
+                case .instances, .instancesDelta:
+                    fleet.merge(pulses: Inbound.pulses(data, enveloped: true))
+                default:
+                    break
+                }
+                apply(frame)
             case .other:
                 break
             }
@@ -370,7 +429,7 @@ public final class HubConnection {
         }
     }
 
-    private func apply(_ frame: Frame, routedTo: String?) {
+    private func apply(_ frame: Frame) {
         switch frame {
         case let .instances(board):
             adopt(machines: board.agents)
@@ -379,9 +438,16 @@ public final class HubConnection {
         case let .instancesDelta(delta):
             adopt(machines: delta.agents)
             fleet.patch(upserts: delta.upserts, removed: delta.removed)
-        case let .permissionRequest(ask):
+        case let .permissionRequest(ask, routedTo):
             needs.park(ask, routedTo: routedTo)
             syncSubscriptions()
+        case let .runQuestion(runId, raisedAt):
+            // Represented once, by its waiting run; only the moment it was parked is kept.
+            if let raisedAt {
+                fleet.runAskRaisedAt[runId] = raisedAt
+            }
+        case let .workflow(frame):
+            fleet.runs[frame.runId] = BoardRun(frame.run)
         case let .pulse(pulse):
             fleet.adopt(pulse: pulse.pulse)
         case let .controlResult(result):
@@ -400,7 +466,10 @@ public final class HubConnection {
                 needs.clear(instanceId)
                 syncSubscriptions()
             }
-        case .usage, .ignored:
+        case let .usage(frame):
+            // The small limits frame the hub pushes on each report (USAGE-SPEC.md §6.4).
+            fleet.adopt(limits: frame.limits.map { ($0.machineId, $0.payload, $0.openCodeGo) })
+        case .ignored:
             break
         }
     }

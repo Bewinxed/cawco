@@ -135,9 +135,14 @@ final class HomeLayout: UICollectionViewCompositionalLayout {
         return attributes
     }
 
+    /// A row that leaves closes to nothing while it fades, as the web's does,
+    /// so the rows sliding up over its place never show through it.
     override func finalLayoutAttributesForDisappearingItem(at itemIndexPath: IndexPath) -> UICollectionViewLayoutAttributes? {
-        let attributes = super.finalLayoutAttributesForDisappearingItem(at: itemIndexPath)
+        let attributes = super.finalLayoutAttributesForDisappearingItem(at: itemIndexPath)?.copy() as? UICollectionViewLayoutAttributes
         attributes?.alpha = 0
+        if !UIAccessibility.isReduceMotionEnabled, let frame = attributes?.frame {
+            attributes?.transform = CGAffineTransform(translationX: 0, y: -frame.height / 2).scaledBy(x: 1, y: 0.01)
+        }
         return attributes
     }
 }

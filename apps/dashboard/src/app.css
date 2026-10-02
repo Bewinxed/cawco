@@ -38,46 +38,6 @@
   initial-value: 0turn;
 }
 
-@layer theme {
-  :root {
-    /* The nesting lines' ink (.kit-nest, WorkflowRail): one neutral, at
-       least 3:1 against the sidebar in both themes (between steps 8 and 9
-       in light, step 9 in dark). */
-    --nest-ink: light-dark(
-      color-mix(in oklch, var(--neutral-8) 45%, var(--neutral-9)),
-      var(--neutral-9)
-    );
-    /* Usage meters (design/usage-tracker.md §1, §8). The hues are the CawCo
-       kit's (cawco-design-kit/claude-design/tokens/colors.css): coral is a
-       window with room, spark yellow one near its limit (70% used, or a
-       run-out under an hour away), crimson one from 90%. Each fill rides a
-       lighter step of its own ramp; `--meter-share` is the one neutral the
-       breakdown and history bars draw in. Every fill/track pair passes the
-       dataviz validator (--ordinal) on each surface it is drawn on — the
-       card, the rail and the session details' strip, near/over on their
-       row's wash — in both themes. */
-    --meter-calm: var(--coral-9);
-    --meter-calm-track: light-dark(oklch(75.5% 0.085 36), oklch(45% 0.085 32));
-    --meter-near: light-dark(oklch(62% 0.135 88), oklch(86% 0.14 95));
-    --meter-near-track: light-dark(oklch(69.5% 0.095 90), oklch(53% 0.08 92));
-    --meter-over: light-dark(oklch(50% 0.17 15), oklch(68% 0.16 15));
-    --meter-over-track: light-dark(oklch(72% 0.08 15), oklch(53% 0.09 15));
-    --meter-stale: light-dark(oklch(56% 0.012 265), oklch(64% 0.01 265));
-    --meter-stale-track: light-dark(oklch(75% 0.008 265), oklch(45% 0.008 265));
-    --meter-share: light-dark(oklch(55% 0.012 265), oklch(72% 0.01 265));
-    /* A near or over row's only tint: a faint wash of its status ink (owner:
-       "the tints for yellow/red are too overwhelming"). */
-    --meter-wash-near: light-dark(
-      color-mix(in oklch, var(--status-attn-ink) 6%, transparent),
-      color-mix(in oklch, var(--status-attn-ink) 10%, transparent)
-    );
-    --meter-wash-over: light-dark(
-      color-mix(in oklch, var(--status-fail-ink) 6%, transparent),
-      color-mix(in oklch, var(--status-fail-ink) 10%, transparent)
-    );
-  }
-}
-
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

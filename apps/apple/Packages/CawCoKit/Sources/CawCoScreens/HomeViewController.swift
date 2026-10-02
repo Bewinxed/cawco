@@ -25,6 +25,7 @@ final class HomeViewController: UIViewController, UICollectionViewDelegate {
     /// replaces every line, even one in both tabs, as the web's relay does.
     nonisolated enum Item: Hashable, Sendable {
         case status
+        case usage
         case headline
         case need(String)
         case tabs
@@ -95,11 +96,41 @@ final class HomeViewController: UIViewController, UICollectionViewDelegate {
     // MARK: Layout
 
     private func makeLayout() -> UICollectionViewLayout {
-        HomeLayout { [weak self] index, _ in
+        HomeLayout { [weak self] index, environment in
             let section = self?.dataSource?.sectionIdentifier(for: index) ?? .top
             let first = self?.dataSource?.snapshot().sectionIdentifiers.first { $0 != .top }
-            return Self.section(section, firstGroup: section == first)
+            guard section == .work, let self else {
+                return Self.section(section, firstGroup: section == first)
+            }
+            // The work rows are a list, so a finished row swipes away to archive.
+            var list = UICollectionLayoutListConfiguration(appearance: .plain)
+            list.showsSeparators = false
+            list.backgroundColor = .clear
+            list.trailingSwipeActionsConfigurationProvider = { [weak self] indexPath in
+                self?.archiveSwipe(at: indexPath)
+            }
+            let layout = NSCollectionLayoutSection.list(using: list, layoutEnvironment: environment)
+            layout.contentInsets = NSDirectionalEdgeInsets(top: section == first ? Space.space2 : Space.space5, leading: Space.space5, bottom: 0, trailing: Space.space5)
+            return layout
         }
+    }
+
+    /// A finished row's swipe: what a finger uncovers as it draws the row
+    /// away, "Archive", taking the row and its tree off Finished.
+    private func archiveSwipe(at indexPath: IndexPath) -> UISwipeActionsConfiguration? {
+        guard home.tab == .finished, case let .row(id, _) = dataSource.itemIdentifier(for: indexPath),
+              let row = rows[id], !row.line.line.context, home.archivable(row.line.line.row)
+        else {
+            return nil
+        }
+        let action = UIContextualAction(style: .normal, title: "Archive") { [weak self] _, _, done in
+            guard let self else { return }
+            home.archive(home.treeOf(id))
+            done(true)
+        }
+        action.image = Glyph.archive.image.resized(to: Size.iconMd).withTintColor(Palette.selectedInk, renderingMode: .alwaysOriginal)
+        action.backgroundColor = Palette.selectedBg
+        return UISwipeActionsConfiguration(actions: [action])
     }
 
     /// Each section a list of self-sized lines, spaced and inset as the web home's groups.
@@ -127,6 +158,11 @@ final class HomeViewController: UIViewController, UICollectionViewDelegate {
     // MARK: Cells
 
     private func makeDataSource() -> UICollectionViewDiffableDataSource<Section, Item> {
+        let usage = UICollectionView.CellRegistration<UsageCell, Item> { [weak self] cell, _, _ in
+            guard let self else { return }
+            cell.configure(home.usage)
+            cell.onOpen = { [weak self] in self?.openUsage() }
+        }
         let status = UICollectionView.CellRegistration<StatusCell, Item> { [weak self] cell, _, _ in
             guard let self else { return }
             cell.line.configure(hub: hub, ready: home.ready, spend: home.spend)
@@ -136,10 +172,14 @@ final class HomeViewController: UIViewController, UICollectionViewDelegate {
         }
         let need = UICollectionView.CellRegistration<NeedsCardCell, Item> { [weak self] cell, _, item in
             guard let self, case let .need(id) = item, let need = needs[id] else { return }
-            cell.configure(need, now: home.now, sent: hub.needs.answerSent(for: need.ask), stale: !home.live)
+            var sent: Ledger.Command?
+            if case let .ask(parked) = need.kind {
+                sent = hub.needs.answerSent(for: parked)
+            }
+            cell.configure(need, now: home.now, sent: sent, stale: !home.live)
             cell.onAnswer = { [weak self] answer in
-                guard let self, home.live else { return }
-                hub.needs.answer(need.ask, machineId: need.machineId, answer)
+                guard let self, home.live, case let .ask(parked) = need.kind else { return }
+                hub.needs.answer(parked, machineId: need.machineId, answer)
             }
         }
         let tabs = UICollectionView.CellRegistration<TabsCell, Item> { [weak self] cell, _, _ in
@@ -153,7 +193,12 @@ final class HomeViewController: UIViewController, UICollectionViewDelegate {
         }
         let machine = UICollectionView.CellRegistration<MachineCell, Item> { [weak self] cell, _, item in
             guard let self, case let .machine(id, _) = item, let entry = groups[id] else { return }
-            cell.configure(entry.group, seam: entry.seam)
+            let finished = home.tab == .finished ? home.finishedOn(id) : []
+            cell.configure(entry.group, seam: entry.seam, archivable: finished.count)
+            cell.onArchiveAll = { [weak self] in
+                guard let self else { return }
+                home.archive(home.finishedOn(id))
+            }
         }
         let row = UICollectionView.CellRegistration<RowCell, Item> { [weak self] cell, _, item in
             guard let self, case let .row(id, _) = item, let entry = rows[id] else { return }
@@ -231,6 +276,7 @@ final class HomeViewController: UIViewController, UICollectionViewDelegate {
         return UICollectionViewDiffableDataSource(collectionView: collectionView) { view, index, item in
             switch item {
             case .status: view.dequeueConfiguredReusableCell(using: status, for: index, item: item)
+            case .usage: view.dequeueConfiguredReusableCell(using: usage, for: index, item: item)
             case .headline: view.dequeueConfiguredReusableCell(using: headline, for: index, item: item)
             case .need: view.dequeueConfiguredReusableCell(using: need, for: index, item: item)
             case .tabs: view.dequeueConfiguredReusableCell(using: tabs, for: index, item: item)
@@ -265,7 +311,8 @@ final class HomeViewController: UIViewController, UICollectionViewDelegate {
         let needList = home.needs
 
         snapshot.appendSections([.top])
-        snapshot.appendItems([.status], toSection: .top)
+        // The phone has no rail: the rail's usage strip stands here, always (owner pick i).
+        snapshot.appendItems([.status, .usage], toSection: .top)
         if ready, live, !needList.isEmpty {
             snapshot.appendItems([.headline], toSection: .top)
         }
@@ -430,6 +477,14 @@ final class HomeViewController: UIViewController, UICollectionViewDelegate {
             home.tab = tab
             setNeedsUpdateProperties()
         }
+    }
+
+    /// Every window, in the house bottom sheet.
+    private func openUsage() {
+        let sheet = UINavigationController(rootViewController: UsageSheetController(home: home))
+        sheet.sheetPresentationController?.detents = [.medium(), .large()]
+        sheet.sheetPresentationController?.prefersGrabberVisible = true
+        present(sheet, animated: true)
     }
 
     private func toggleTree(_ id: String) {

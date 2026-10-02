@@ -26,6 +26,86 @@ public enum Activity: String, Sendable {
     case working, blocked, idle
 }
 
+/// A workflow run as the board lists it (workflow-runs.ts): read off the
+/// runs list's `PublicRun` or a `workflow` frame's `WorkflowRun`.
+public struct BoardRun: Sendable {
+    public let id: String
+    public let workflowId: String
+    public let status: Components.Schemas.WorkflowRunStatus
+    public let machineId: String
+    public let workspace: String
+    /// ms epoch.
+    public let startedAt: Double
+    public let endedAt: Double?
+    public let failure: String?
+    public let parentRunId: String?
+    public let supervisorInstanceId: String?
+    public let seenAt: Double
+
+    /// A run's row id: `run:<id>`, the tab id the web gives it.
+    public static let prefix = "run:"
+    public var rowId: String { Self.prefix + id }
+
+    public static func runId(of rowId: String) -> String? {
+        rowId.hasPrefix(prefix) ? String(rowId.dropFirst(prefix.count)) : nil
+    }
+
+    init(_ run: Components.Schemas.WorkflowRun) {
+        id = run.id
+        workflowId = run.workflowId
+        status = run.status
+        machineId = run.machineId
+        workspace = run.workspace
+        startedAt = epochMs(run.startedAt.value1, run.startedAt.value2)
+        let ended = epochMs(run.endedAt?.value1, run.endedAt?.value2)
+        endedAt = ended > 0 ? ended : nil
+        failure = run.failure
+        parentRunId = run.parentRunId
+        supervisorInstanceId = run.supervisorInstanceId
+        seenAt = epochMs(run.seenAt?.value1, run.seenAt?.value2)
+    }
+
+    init(_ run: Components.Schemas.PublicRun) {
+        let base = run.value1
+        id = base.id
+        workflowId = base.workflowId
+        status = base.status
+        machineId = base.machineId
+        workspace = base.workspace
+        startedAt = base.startedAt.timeIntervalSince1970 * 1000
+        endedAt = base.endedAt.map { $0.timeIntervalSince1970 * 1000 }
+        failure = base.failure
+        parentRunId = base.parentRunId
+        supervisorInstanceId = base.supervisorInstanceId
+        seenAt = base.seenAt.map { $0.timeIntervalSince1970 * 1000 } ?? 0
+    }
+
+    /// Where its status stands among a session's: still going is running, a
+    /// failure is a failure, and a run that ended any other way has stopped.
+    var rowStatus: Components.Schemas.InstanceStatus {
+        switch status {
+        case .running, .waiting: .running
+        case .failed: .error
+        case .done, .cancelled: .stopped
+        }
+    }
+
+    /// What it is doing now (core `runDoing`).
+    public var activity: Activity {
+        switch status {
+        case .waiting: .blocked
+        case .running: .working
+        case .failed, .done, .cancelled: .idle
+        }
+    }
+
+    /// When it last moved: its end, else its start.
+    var movedAt: Double { endedAt ?? startedAt }
+
+    /// When a run that is still going began; nil once it has ended.
+    var since: Double? { status == .running || status == .waiting ? startedAt : nil }
+}
+
 /// The hub's word on the fleet: machines, sessions, projects, each session's
 /// pulse, and every online machine's stored sessions. Only frames and reads
 /// from the hub write it.
@@ -33,12 +113,42 @@ public enum Activity: String, Sendable {
 @Observable
 public final class FleetStore {
     public internal(set) var machines: [MachineRow] = []
-    public internal(set) var rows: [InstanceRow] = []
+    /// The hub's session rows as it sent them.
+    private var hubRows: [InstanceRow] = []
+    /// The sessions, each workflow step hung under its run (`stepUnderRun`).
+    public private(set) var rows: [InstanceRow] = []
+    /// Every workflow run as a session row (`runRowOf`).
+    public private(set) var runRows: [InstanceRow] = []
+    public internal(set) var runs: [String: BoardRun] = [:] {
+        didSet { reindex() }
+    }
+    public internal(set) var workflowNames: [String: String] = [:] {
+        didSet { reindex() }
+    }
+    /// When the hub parked each waiting run's question, ms epoch.
+    public internal(set) var runAskRaisedAt: [String: Double] = [:]
+    /// The first read of every workflow and its runs came back, or failed.
+    public internal(set) var runsRead = false
     public internal(set) var projects: [Components.Schemas.GetApiProjects200Payload] = []
     public internal(set) var pulses: [String: SessionPulse] = [:]
     /// When each session's current turn began, ms epoch; absent while idle.
     public internal(set) var turnSince: [String: Double] = [:]
     public internal(set) var catalogs: [String: [StoredSession]] = [:]
+    /// Every machine's latest Claude and opencode Go limit readings, by machine.
+    public internal(set) var claudeLimits: [String: Components.Schemas.ClaudeLimits] = [:]
+    public internal(set) var openCodeGoLimits: [String: Components.Schemas.OpenCodeGoLimits] = [:]
+
+    /// Replaces both limits maps with the hub's word: a full snapshot, not a patch.
+    func adopt(limits readings: [(machineId: String, claude: Components.Schemas.ClaudeLimits, go: Components.Schemas.OpenCodeGoLimits?)]) {
+        var claude: [String: Components.Schemas.ClaudeLimits] = [:]
+        var go: [String: Components.Schemas.OpenCodeGoLimits] = [:]
+        for reading in readings {
+            claude[reading.machineId] = reading.claude
+            go[reading.machineId] = reading.go
+        }
+        claudeLimits = claude
+        openCodeGoLimits = go
+    }
     var catalogsTried: Set<String> = []
     /// The connect-time read of machines, sessions and projects landed.
     public internal(set) var fleetRead = false
@@ -54,14 +164,14 @@ public final class FleetStore {
     }
 
     func adopt(rows next: [InstanceRow]) {
-        rows = next
+        hubRows = next
         reindex()
     }
 
     /// What moved since the last publish: each changed row replaced where it stands, each gone id dropped.
     func patch(upserts: [InstanceRow], removed: [String]) {
         let gone = Set(removed)
-        var next = rows.filter { !gone.contains($0.id) }
+        var next = hubRows.filter { !gone.contains($0.id) }
         var at: [String: Int] = [:]
         for (index, row) in next.enumerated() {
             at[row.id] = index
@@ -74,16 +184,67 @@ public final class FleetStore {
                 next.append(row)
             }
         }
-        rows = next
+        hubRows = next
         reindex()
     }
 
     private func reindex() {
+        rows = hubRows.map(stepUnderRun)
+        runRows = runs.values.sorted { $0.startedAt > $1.startedAt }.map(runRow)
         var index: [String: InstanceRow] = [:]
-        for row in rows {
+        for row in rows + runRows {
             index[row.id] = row
         }
         byId = index
+    }
+
+    /// A step's session hangs under its run, called by its step alone: the hub
+    /// titles it `<workflow> · <step>` (workflow-runs.ts `stepUnderRun`).
+    private func stepUnderRun(_ row: InstanceRow) -> InstanceRow {
+        guard let runId = row.workflowRunId else {
+            return row
+        }
+        var row = row
+        row.parentInstanceId = BoardRun.prefix + runId
+        if let name = runs[runId].flatMap({ workflowNames[$0.workflowId] }), let title = row.title, title.hasPrefix("\(name) · ") {
+            row.title = String(title.dropFirst(name.count + 3))
+        }
+        return row
+    }
+
+    /// A run as a session row: its parent the run it is a child of, else the
+    /// session that supervises it; its folder the workspace it runs in.
+    private func runRow(_ run: BoardRun) -> InstanceRow {
+        InstanceRow(
+            cwd: run.workspace,
+            id: run.rowId,
+            lastError: run.failure,
+            machineId: run.machineId,
+            parentInstanceId: run.parentRunId.map { BoardRun.prefix + $0 } ?? run.supervisorInstanceId,
+            seenAt: run.seenAt > 0 ? .init(value1: Date(timeIntervalSince1970: run.seenAt / 1000)) : nil,
+            status: run.rowStatus,
+            title: workflowNames[run.workflowId] ?? "Workflow",
+            updatedAt: .init(value1: Date(timeIntervalSince1970: run.movedAt / 1000))
+        )
+    }
+
+    /// The run a row is, when it is one.
+    public func run(_ rowId: String) -> BoardRun? {
+        BoardRun.runId(of: rowId).flatMap { runs[$0] }
+    }
+
+    /// A board frame's pulses (frames.ts `mergePulses`): each kept unless the
+    /// one already held is newer; then every session's turn clock follows.
+    func merge(pulses incoming: [String: SessionPulse]) {
+        guard !incoming.isEmpty else {
+            return
+        }
+        for (id, pulse) in incoming where pulses[id].map({ pulse.at >= $0.at }) ?? true {
+            pulses[id] = pulse
+        }
+        for pulse in pulses.values {
+            adopt(pulse: pulse)
+        }
     }
 
     func adopt(pulse: SessionPulse) {
@@ -123,9 +284,25 @@ public final class FleetStore {
         Naming.sessionTitle(title: row.title, cwd: row.cwd, id: row.id)
     }
 
-    /// When a session last moved: its pulse, else the hub's own update time.
+    /// When a session last moved: its pulse, else the hub's own update time. A run's is when it last moved.
     public func lastAt(_ row: InstanceRow) -> Double {
-        pulses[row.id]?.at ?? row.updatedMs
+        if let run = run(row.id) {
+            return run.movedAt
+        }
+        return pulses[row.id]?.at ?? row.updatedMs
+    }
+
+    /// When a session last pulsed, ms epoch; a run's is when it last moved.
+    public func pulseAt(_ id: String) -> Double? {
+        run(id)?.movedAt ?? pulses[id]?.at
+    }
+
+    /// When a session's current turn began; a run's turn is the run.
+    public func turn(_ id: String) -> Double? {
+        if let run = run(id) {
+            return run.since
+        }
+        return turnSince[id]
     }
 
     /// The stored sessions a machine lists, side quests left out.

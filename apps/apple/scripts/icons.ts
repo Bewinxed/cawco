@@ -41,6 +41,7 @@ const SOLAR_ICONS = [
   "magnifer-bold-duotone",
   "server-2-bold-duotone",
   "close-circle-bold-duotone",
+  "archive-down-minimlistic-bold-duotone",
 ];
 
 /** The dashboard's own glyphs, drawn where Solar has none. */
@@ -103,5 +104,15 @@ for (const [name, svg] of Object.entries(svgs)) {
       2
     )}\n`
   );
+}
+// Formatted as the token build formats this module's resources (apps/dashboard
+// `bun run tokens`), so the two never rewrite each other's output.
+const format = Bun.spawnSync(["bunx", "biome", "format", "--write", OUT], {
+  cwd: join(ROOT, "apps/dashboard"),
+  stdout: "inherit",
+  stderr: "inherit",
+});
+if (format.exitCode !== 0) {
+  throw new Error("biome format failed");
 }
 console.log(`${Object.keys(svgs).length} icons → ${OUT}`);

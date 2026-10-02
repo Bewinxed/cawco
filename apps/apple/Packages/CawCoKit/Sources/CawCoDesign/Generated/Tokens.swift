@@ -175,6 +175,22 @@ public enum Palette {
     public static let statusDoneGlyph = Palette.named("status-done-glyph")
     public static let statusFailGlyph = Palette.named("status-fail-glyph")
     public static let statusIdleGlyph = Palette.named("status-idle-glyph")
+    /// The nesting lines' ink (.kit-nest, WorkflowRail): one neutral, at least 3:1 against the sidebar in both themes (between steps 8 and 9 in light, step 9 in dark).
+    public static let nestInk = Palette.named("nest-ink")
+    /// Usage meters (design/usage-tracker.md §1, §8): coral is a window with room, spark yellow one near its limit (70% used, or a run-out under an hour away), crimson one from 90%. Each fill rides a lighter step of its own ramp; every fill/track pair passes the dataviz validator (--ordinal) on each surface it is drawn on, in both themes.
+    public static let meterCalm = Palette.named("meter-calm")
+    public static let meterCalmTrack = Palette.named("meter-calm-track")
+    public static let meterNear = Palette.named("meter-near")
+    public static let meterNearTrack = Palette.named("meter-near-track")
+    public static let meterOver = Palette.named("meter-over")
+    public static let meterOverTrack = Palette.named("meter-over-track")
+    public static let meterStale = Palette.named("meter-stale")
+    public static let meterStaleTrack = Palette.named("meter-stale-track")
+    /// The one neutral the usage breakdown and history bars draw in.
+    public static let meterShare = Palette.named("meter-share")
+    /// A near or over row's only tint: a faint wash of its status ink (owner: "the tints for yellow/red are too overwhelming").
+    public static let meterWashNear = Palette.named("meter-wash-near")
+    public static let meterWashOver = Palette.named("meter-wash-over")
     public static let presenceOnline = Palette.named("presence-online")
     public static let presenceAway = Palette.named("presence-away")
     public static let presenceOff = Palette.named("presence-off")

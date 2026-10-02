@@ -6,13 +6,16 @@ import UIKit
 // The home's cells, one per kind of line the web home draws (home/*.svelte).
 // Each is built once and configured from the model on every update.
 
-/// A cell whose content is one view pinned to its content view's edges.
-class HomeCell: UICollectionViewCell {
+/// A cell whose content is one view pinned to its content view's edges. A
+/// list cell, so a finished row takes the list's own swipe to archive.
+class HomeCell: UICollectionViewListCell {
     override init(frame: CGRect) {
         super.init(frame: frame)
         clipsToBounds = false
         contentView.clipsToBounds = false
         backgroundConfiguration = .clear()
+        indentationWidth = 0
+        separatorLayoutGuide.leadingAnchor.constraint(equalTo: trailingAnchor).isActive = true
     }
 
     @available(*, unavailable)
@@ -147,16 +150,23 @@ final class NeedsCardCell: HomeCell {
 
     func configure(_ item: HomeModel.NeedsItem, now: Double, sent: Ledger.Command?, stale: Bool) {
         title.text = item.title
-        waited.text = item.ask.raisedAt.map { "waiting \(Naming.span(ms: now - $0))" } ?? "waiting"
+        waited.text = item.raisedAt.map { "waiting \(Naming.span(ms: now - $0))" } ?? "waiting"
         place.text = item.place
-        ask.text = item.ask.summary
-        // A question is answered in its session; a permission here.
-        actions.isHidden = item.ask.isQuestion
+        switch item.kind {
+        case let .ask(parked):
+            ask.text = parked.summary
+            // A question is answered in its session; a permission here.
+            actions.isHidden = parked.isQuestion
+            deny.accessibilityLabel = "Deny \(parked.summary) on \(item.title)"
+            approve.accessibilityLabel = "Approve \(parked.summary) on \(item.title)"
+        case .run:
+            // A run's question is answered in its run.
+            ask.text = "Waiting on your answer"
+            actions.isHidden = true
+        }
         let inFlight = sent.map { $0.stage != .failed } ?? false
         deny.isEnabled = !stale && !inFlight
         approve.isEnabled = !stale && !inFlight
-        deny.accessibilityLabel = "Deny \(item.ask.summary) on \(item.title)"
-        approve.accessibilityLabel = "Approve \(item.ask.summary) on \(item.title)"
         let words = Self.stageWords(sent)
         stage.isHidden = words == nil
         stage.text = words?.text
@@ -287,12 +297,24 @@ final class MachineCell: HomeCell {
     private let glyph = GlyphView(.server, size: 14)
     private let name = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
     private let seam = UIView()
+    private let archiveAll = UIButton(type: .custom)
+    /// Archives everything this machine has finished, failures too.
+    var onArchiveAll: () -> Void = {}
 
     override init(frame: CGRect) {
         super.init(frame: frame)
-        let row = UIStackView(arrangedSubviews: [glyph, name])
+        var config = UIButton.Configuration.plain()
+        config.image = Glyph.archive.image.resized(to: 14)
+        config.imagePadding = Space.space1
+        config.imageColorTransformer = UIConfigurationColorTransformer { _ in Palette.inkMuted }
+        config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: Space.space1, bottom: 0, trailing: Space.space1)
+        config.attributedTitle = AttributedString("Archive all", attributes: AttributeContainer(TypeScale.typeMeta.attributes(color: Palette.inkMuted)))
+        archiveAll.configuration = config
+        archiveAll.addAction(UIAction { [weak self] _ in self?.onArchiveAll() }, for: .primaryActionTriggered)
+        let row = UIStackView(arrangedSubviews: [glyph, name, UIView(), archiveAll])
         row.spacing = Space.space1
         row.alignment = .center
+        archiveAll.heightAnchor.constraint(equalToConstant: 22).isActive = true
         pin(row, insets: NSDirectionalEdgeInsets(top: Space.space2, leading: Space.space3, bottom: Space.space1, trailing: Space.space3))
         row.heightAnchor.constraint(greaterThanOrEqualToConstant: 22).isActive = true
         seam.backgroundColor = Palette.seam
@@ -304,15 +326,17 @@ final class MachineCell: HomeCell {
             seam.topAnchor.constraint(equalTo: contentView.topAnchor),
             seam.heightAnchor.constraint(equalToConstant: 1),
         ])
-        isAccessibilityElement = true
-        accessibilityTraits = .header
+        name.accessibilityTraits = .header
+        archiveAll.accessibilityLabel = "Archive all"
     }
 
-    func configure(_ group: HomeModel.MachineGroup, seam showsSeam: Bool) {
+    /// `archivable`: what "Archive all" would take; none hides it.
+    func configure(_ group: HomeModel.MachineGroup, seam showsSeam: Bool, archivable: Int) {
         glyph.glyph = Glyph.os(group.os)
         name.text = group.name
         seam.isHidden = !showsSeam
-        accessibilityLabel = group.name
+        archiveAll.isHidden = archivable == 0
+        archiveAll.accessibilityLabel = "Archive all finished on \(group.name)"
     }
 }
 
@@ -361,21 +385,9 @@ final class RowCell: HomeCell {
         CATransaction.commit()
     }
 
-    /// The nesting lines' ink (app.css `--nest-ink`): between neutral steps 8
-    /// and 9 by day, step 9 at night.
+    /// The nesting lines' ink (`nest-ink`).
     private func paintNest() {
-        let traits = traitCollection
-        let nine = Palette.neutral9.resolvedColor(with: traits)
-        if traits.userInterfaceStyle == .dark {
-            nest.strokeColor = nine.cgColor
-        } else {
-            let eight = Palette.neutral8.resolvedColor(with: traits)
-            var a: (r: CGFloat, g: CGFloat, b: CGFloat, a: CGFloat) = (0, 0, 0, 0)
-            var b = a
-            nine.getRed(&a.r, green: &a.g, blue: &a.b, alpha: &a.a)
-            eight.getRed(&b.r, green: &b.g, blue: &b.b, alpha: &b.a)
-            nest.strokeColor = UIColor(red: a.r * 0.55 + b.r * 0.45, green: a.g * 0.55 + b.g * 0.45, blue: a.b * 0.55 + b.b * 0.45, alpha: 1).cgColor
-        }
+        nest.strokeColor = Palette.nestInk.resolvedColor(with: traitCollection).cgColor
     }
 }
 

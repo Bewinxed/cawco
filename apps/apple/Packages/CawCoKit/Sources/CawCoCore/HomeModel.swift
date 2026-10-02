@@ -78,9 +78,11 @@ public final class HomeModel {
     /// The hub is live: only then can an empty group be believed.
     public var live: Bool { hub.state == .connected }
 
-    /// The first full read is in, or the hub is known to be unreachable.
+    /// The first full read is in (machines, sessions, runs, every online
+    /// machine's stored sessions and the socket's own snapshot), or the hub is
+    /// known to be unreachable.
     public var ready: Bool {
-        hub.state == .unreachable || (fleet.fleetRead && fleet.liveRead && fleet.catalogsRead)
+        hub.state == .unreachable || (fleet.fleetRead && fleet.liveRead && fleet.runsRead && fleet.catalogsRead)
     }
 
     /// Machines that have not answered yet; until none, an empty list proves nothing.
@@ -91,7 +93,12 @@ public final class HomeModel {
         }
     }
 
+    /// What a session needs from the operator: a run's own word, a parked
+    /// ask before anything else, then the daemon's pulse.
     public func activity(_ id: String) -> Activity {
+        if let run = fleet.run(id) {
+            return run.activity
+        }
         if needsStore.blocked(id) {
             return .blocked
         }
@@ -104,16 +111,33 @@ public final class HomeModel {
 
     // MARK: Groups
 
+    /// One thing parked on the operator: a session's permission or question,
+    /// or a workflow run's question, which is answered in its run.
     public struct NeedsItem: Identifiable {
-        public var id: String { "\(ask.instanceId):\(ask.requestId)" }
-        public let ask: ParkedAsk
+        public enum Kind {
+            case ask(ParkedAsk)
+            case run(BoardRun)
+        }
+
+        public let id: String
+        public let kind: Kind
         public let machineId: String
         public let title: String
-        /// machine · project
+        /// machine · project (a run: its machine)
         public let place: String
+        /// When the hub parked it, ms epoch.
+        public let raisedAt: Double?
+
+        /// The session whose ask it is, for a session's.
+        public var instanceId: String? {
+            if case let .ask(ask) = kind {
+                return ask.instanceId
+            }
+            return nil
+        }
     }
 
-    /// Every ask parked on the operator, longest wait first.
+    /// Every ask parked on the operator, longest wait first; one the hub has not stamped sorts last.
     public var needs: [NeedsItem] {
         var items: [NeedsItem] = []
         for (instanceId, asks) in needsStore.parked {
@@ -125,25 +149,46 @@ public final class HomeModel {
             for ask in asks where ask.routedTo != "parent" {
                 let machineId = row?.machineId ?? ""
                 items.append(NeedsItem(
-                    ask: ask,
+                    id: "\(ask.instanceId):\(ask.requestId)",
+                    kind: .ask(ask),
                     machineId: machineId,
                     title: row.map(fleet.title) ?? fleet.machineName(machineId),
-                    place: fleet.placeOf(machineId, row?.cwd)
+                    place: fleet.placeOf(machineId, row?.cwd),
+                    raisedAt: ask.raisedAt
                 ))
             }
         }
-        return items.sorted { ($0.ask.raisedAt ?? .infinity, $0.id) < ($1.ask.raisedAt ?? .infinity, $1.id) }
+        for run in fleet.runs.values where run.status == .waiting {
+            items.append(NeedsItem(
+                id: run.rowId,
+                kind: .run(run),
+                machineId: run.machineId,
+                title: fleet.workflowNames[run.workflowId] ?? "Workflow",
+                place: fleet.machineName(run.machineId),
+                raisedAt: fleet.runAskRaisedAt[run.id]
+            ))
+        }
+        return items.sorted { ($0.raisedAt ?? .infinity, $0.id) < ($1.raisedAt ?? .infinity, $1.id) }
     }
 
-    /// Every session mid-turn, ordered by when it joined Working, newest first.
+    /// How long a run that has ended stays on the board: the hub's own window
+    /// for a session that stopped moving (workflow-runs.ts `BOARD_MS`).
+    static let boardWindow = 24.0 * 60 * 60 * 1000
+
+    /// The runs the board lists: still going, or ended within the window (`onBoard`).
+    private var boardRuns: [InstanceRow] {
+        fleet.runRows.filter { $0.status == .running || now - $0.updatedMs < Self.boardWindow }
+    }
+
+    /// Every session and run mid-turn, ordered by when it joined Working, newest first.
     public var working: [InstanceRow] {
-        let rows = fleet.rows.filter { $0.isLive && activity($0.id) == .working }
+        let rows = (fleet.rows + boardRuns).filter { $0.isLive && activity($0.id) == .working }
         let present = Set(rows.map(\.id))
         for id in enteredWorking.keys where !present.contains(id) {
             enteredWorking[id] = nil
         }
         for row in rows where enteredWorking[row.id] == nil {
-            enteredWorking[row.id] = fleet.turnSince[row.id] ?? now
+            enteredWorking[row.id] = fleet.turn(row.id) ?? now
         }
         return rows.sorted {
             let a = enteredWorking[$0.id] ?? now
@@ -157,7 +202,7 @@ public final class HomeModel {
         if row.isFailed {
             return fleet.lastAt(row)
         }
-        return activity(row.id) == .idle ? fleet.pulses[row.id]?.at : nil
+        return activity(row.id) == .idle ? fleet.pulseAt(row.id) : nil
     }
 
     /// It ended after the owner last saw it, on any device.
@@ -165,12 +210,100 @@ public final class HomeModel {
         guard let ended = endedAt(row) else {
             return false
         }
-        return ended > row.seenMs
+        return ended > max(row.seenMs, seenHere[row.id] ?? 0)
     }
 
-    /// Every session that ended since it was last opened, the latest to end first.
+    // MARK: Archive
+
+    /// What this device marked seen and the hub has not yet echoed back: the
+    /// row leaves Finished in the gesture that archived it.
+    private var seenHere: [String: Double] = [:]
+
+    /// What hangs directly under each session and run.
+    private var children: [String: [String]] {
+        var out: [String: [String]] = [:]
+        for row in fleet.byId.values {
+            if let parent = row.parentInstanceId {
+                out[parent, default: []].append(row.id)
+            }
+        }
+        return out
+    }
+
+    /// Whether a row may be archived: neither it nor anything under it is
+    /// still doing something (core `archiveRefusal`, the rule `/api/seen` holds too).
+    public func archivable(_ row: InstanceRow) -> Bool {
+        let children = children
+        var seen = Set<String>()
+        func idle(_ id: String) -> Bool {
+            guard seen.insert(id).inserted else {
+                return true
+            }
+            // A session still starting is working, as the hub counts it.
+            if fleet.byId[id]?.status == .starting || activity(id) != .idle {
+                return false
+            }
+            return (children[id] ?? []).allSatisfy(idle)
+        }
+        return idle(row.id)
+    }
+
+    /// A row and everything under it: what archiving a parent takes off Finished.
+    public func treeOf(_ id: String) -> [String] {
+        let children = children
+        var out: [String] = []
+        func walk(_ at: String) {
+            guard !out.contains(at) else {
+                return
+            }
+            out.append(at)
+            (children[at] ?? []).forEach(walk)
+        }
+        walk(id)
+        return out
+    }
+
+    /// Every finished row a machine lists, folded or not, that may be archived: its "Archive all".
+    public func finishedOn(_ machineId: String) -> [String] {
+        var ids: [String] = []
+        var top = ""
+        for line in lines(.finished) {
+            if line.depth == 0 {
+                top = line.row.machineId
+            }
+            if top == machineId, !line.context, archivable(line.row) {
+                ids.append(line.row.id)
+            }
+        }
+        return ids
+    }
+
+    /// Takes rows off Finished without opening them; a refusal puts them back.
+    public func archive(_ ids: [String]) {
+        guard !ids.isEmpty else {
+            return
+        }
+        let at = Date.now.timeIntervalSince1970 * 1000
+        for id in ids {
+            seenHere[id] = at
+        }
+        Task { [weak self] in
+            guard let self else {
+                return
+            }
+            do {
+                try await hub.markSeen(ids, kind: .archive)
+            } catch {
+                for id in ids where seenHere[id] == at {
+                    seenHere[id] = nil
+                }
+            }
+        }
+    }
+
+    /// Every session and run that ended since it was last opened, the latest to end first.
     public var finished: [InstanceRow] {
-        fleet.rows.filter { $0.isListed && endedUnseen($0) }.sorted { fleet.lastAt($0) > fleet.lastAt($1) }
+        (fleet.rows.filter(\.isListed) + boardRuns).filter(endedUnseen).sorted { fleet.lastAt($0) > fleet.lastAt($1) }
     }
 
     public struct RecentItem: Identifiable {
@@ -189,7 +322,7 @@ public final class HomeModel {
     public var recent: [RecentItem] {
         var shown = Set(working.map(\.id))
         shown.formUnion(finished.map(\.id))
-        shown.formUnion(needs.map(\.ask.instanceId))
+        shown.formUnion(needs.compactMap(\.instanceId))
         let live = fleet.rows.filter { row in
             (delegates || row.parentInstanceId == nil) && row.isListed && !shown.contains(row.id)
                 && (activity(row.id) == .idle || row.isResumable || row.isStale || row.isFailed)
@@ -223,6 +356,11 @@ public final class HomeModel {
             .max { $0.updatedMs < $1.updatedMs }
         let named = (row?.titleSource != nil ? row?.title : nil) ?? info.customTitle ?? info.summary
         return Naming.sessionTitle(title: named, firstMessage: info.firstPrompt, cwd: info.cwd, id: info.sessionId)
+    }
+
+    /// The usage strip: the window that stops you first, from the readings the hub keeps current.
+    public var usage: Usage.Strip {
+        Usage.strip(claude: fleet.claudeLimits, go: fleet.openCodeGoLimits, now: now)
     }
 
     public func fleetTitle(_ row: InstanceRow) -> String {
@@ -355,7 +493,7 @@ public final class HomeModel {
     public func age(_ row: InstanceRow, tab: Tab) -> String {
         switch tab {
         case .working:
-            fleet.turnSince[row.id].map { Naming.span(ms: now - $0) } ?? ""
+            fleet.turn(row.id).map { Naming.span(ms: now - $0) } ?? ""
         case .finished:
             Naming.span(ms: now - fleet.lastAt(row))
         }

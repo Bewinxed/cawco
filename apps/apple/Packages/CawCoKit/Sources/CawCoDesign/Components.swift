@@ -191,7 +191,7 @@ private final class ActionSurface: UIView {
 
 extension UIImage {
     /// The image drawn at `side` points square, keeping its rendering mode.
-    func resized(to side: Double) -> UIImage {
+    public func resized(to side: Double) -> UIImage {
         let size = CGSize(width: side, height: side)
         return UIGraphicsImageRenderer(size: size).image { _ in
             draw(in: CGRect(origin: .zero, size: size))
@@ -287,7 +287,7 @@ public final class FolderTabs: UIControl {
         ])
         for (index, tab) in tabs.enumerated() {
             let cell = Cell(label: tab.label)
-            cell.addAction(UIAction { [weak self] _ in self?.choose(index) }, for: .primaryActionTriggered)
+            cell.addAction(UIAction { [weak self] _ in self?.choose(index) }, for: .touchUpInside)
             cells.append(cell)
             stack.addArrangedSubview(cell)
         }
@@ -351,8 +351,8 @@ public final class FolderTabs: UIControl {
             row.addArrangedSubview(title)
             addSubview(row)
             NSLayoutConstraint.activate([
-                row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: FolderTabs.padX + 6),
-                row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -(FolderTabs.padX + 6)),
+                row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: FolderTabs.padX),
+                row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -FolderTabs.padX),
                 row.centerYAnchor.constraint(equalTo: centerYAnchor),
             ])
             sheetMask.backgroundColor = UIColor.black.cgColor

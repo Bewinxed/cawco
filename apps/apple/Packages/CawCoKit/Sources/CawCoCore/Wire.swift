@@ -68,22 +68,25 @@ extension Components.Schemas.InstanceRow {
 /// payload is a `FramePayload`.
 enum Inbound {
     case stream(Data)
-    case frame(Frame, routedTo: String?)
+    case frame(Frame)
     case other
 
-    /// What every message is routed on: the protocol's discriminators and the
-    /// two structural fields the hub adds outside the frame types. Content is
-    /// read only through the generated types.
+    /// What every message is routed on: the protocol's discriminators.
     private struct Route: Decodable {
         let type: String?
         let verb: String?
     }
 
-    private struct PayloadRoute: Decodable {
+    /// A frame's own discriminators, and the structural fields the hub adds
+    /// outside the frame types (client.svelte.ts reads them the same way).
+    /// Content is read only through the generated types.
+    fileprivate struct PayloadRoute: Decodable {
         let kind: String?
         let instanceId: String?
-        /// Structural on the hub too: a delegate's ask the hub sent to its parent.
+        /// A delegate's ask the hub sent to its parent.
         let routedTo: String?
+        /// A workflow run's question, answered in its run.
+        let workflowRunId: String?
         let message: MessageRoute?
         struct MessageRoute: Decodable {
             let type: String?
@@ -92,6 +95,20 @@ enum Inbound {
 
     private struct Envelope<Payload: Decodable>: Decodable {
         let payload: Payload
+    }
+
+    /// The hub's now-state for every session it lists, riding each board frame.
+    private struct Pulses: Decodable {
+        let pulses: [String: Components.Schemas.SessionPulse]?
+    }
+
+    /// The pulses a board frame carries, when it carries any.
+    static func pulses(_ data: Data, enveloped: Bool) -> [String: Components.Schemas.SessionPulse] {
+        let decoder = Wire.decoder()
+        let read = enveloped
+            ? (try? decoder.decode(Envelope<Pulses>.self, from: data))?.payload
+            : try? decoder.decode(Pulses.self, from: data)
+        return read?.pulses ?? [:]
     }
 
     private static let streamTypes: Set<String> = ["stream.event", "stream.backlog", "stream.reset", "command.ack"]
@@ -107,20 +124,20 @@ enum Inbound {
         }
         let peek = try decoder.decode(Envelope<PayloadRoute>.self, from: data).payload
         if let message = message(peek) {
-            return .frame(message, routedTo: nil)
+            return .frame(message)
         }
         let payload = try decoder.decode(Envelope<Components.Schemas.FramePayload>.self, from: data).payload
-        return .frame(Frame(payload), routedTo: peek.routedTo)
+        return .frame(Frame(payload, peek))
     }
 
     /// A frame payload on its own (a stream event's `frame`, a `/api/pending` envelope's payload).
-    static func frame(_ data: Data) throws -> (Frame, routedTo: String?) {
+    static func frame(_ data: Data) throws -> Frame {
         let decoder = Wire.decoder()
         let peek = try decoder.decode(PayloadRoute.self, from: data)
         if let message = message(peek) {
-            return (message, nil)
+            return message
         }
-        return (Frame(try decoder.decode(Components.Schemas.FramePayload.self, from: data)), peek.routedTo)
+        return Frame(try decoder.decode(Components.Schemas.FramePayload.self, from: data), peek)
     }
 
     /// A session's own neutral message is routed on its `type` alone: the
@@ -139,27 +156,37 @@ enum Inbound {
 enum Frame {
     case instances(Components.Schemas.FramePayload.Value5Payload)
     case instancesDelta(Components.Schemas.FramePayload.Value6Payload)
-    case permissionRequest(Components.Schemas.FramePayload.Value7Payload)
+    /// A session's ask, and where the hub routed it (`parent`: its delegate's parent answers).
+    case permissionRequest(Components.Schemas.FramePayload.Value7Payload, routedTo: String?)
+    /// A workflow run's question: answered in its run, never parked as a session's ask.
+    case runQuestion(runId: String, raisedAt: Double?)
     case usage(Components.Schemas.FramePayload.Value8Payload)
     case controlResult(Components.Schemas.FramePayload.Value10Payload)
     case pulse(Components.Schemas.FramePayload.Value13Payload)
+    case workflow(Components.Schemas.WorkflowFrame)
     /// A session's own neutral message, with its `type` (`system.init`, …).
     case message(instanceId: String, type: String?)
     case ignored
 
-    init(_ payload: Components.Schemas.FramePayload) {
+    fileprivate init(_ payload: Components.Schemas.FramePayload, _ peek: Inbound.PayloadRoute) {
         if let frame = payload.value5, frame.kind == .instances {
             self = .instances(frame)
         } else if let frame = payload.value6, frame.kind == .instancesDelta {
             self = .instancesDelta(frame)
         } else if let frame = payload.value7, frame.kind == .permissionRequest {
-            self = .permissionRequest(frame)
+            if let runId = peek.workflowRunId {
+                self = .runQuestion(runId: runId, raisedAt: frame.raisedAt)
+            } else {
+                self = .permissionRequest(frame, routedTo: peek.routedTo)
+            }
         } else if let frame = payload.value8, frame.kind == .usage {
             self = .usage(frame)
         } else if let frame = payload.value10, frame.kind == .controlResult {
             self = .controlResult(frame)
         } else if let frame = payload.value13, frame.kind == .pulse {
             self = .pulse(frame)
+        } else if let frame = payload.value18 {
+            self = .workflow(frame)
         } else {
             self = .ignored
         }
