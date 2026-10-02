@@ -129,9 +129,9 @@
           "422": {
             "description": "putApiDelegateTypesByName 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/putApiDelegateTypesByName422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -235,9 +235,14 @@
           "422": {
             "description": "postApiMachinesSsh 422",
             "content": {
-              "application/json": {
+              "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiMachinesSsh422"
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -309,12 +314,27 @@
         },
         "operationId": "postApiWorkflows",
         "responses": {
-          "200": {
-            "description": "postApiWorkflows 200",
+          "201": {
+            "description": "postApiWorkflows 201",
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiWorkflows200"
+                  "$ref": "#/components/schemas/postApiWorkflows201"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiWorkflows 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiWorkflows400"
                 }
               }
             }
@@ -342,6 +362,26 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/getApiWorkflowsById200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiWorkflowsById 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiWorkflowsById 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -378,6 +418,31 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "putApiWorkflowsById 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/putApiWorkflowsById400"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "putApiWorkflowsById 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       },
@@ -400,6 +465,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/deleteApiWorkflowsById200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "deleteApiWorkflowsById 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -463,6 +538,16 @@
                 }
               }
             }
+          },
+          "400": {
+            "description": "postApiWorkflowsByIdRuns 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
           }
         }
       }
@@ -487,6 +572,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/getApiWorkflowRunsById200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "getApiWorkflowRunsById 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -540,7 +635,17 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/PublicRun"
+                  "$ref": "#/components/schemas/postApiWorkflowRunsByIdCancel200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiWorkflowRunsByIdCancel 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -597,12 +702,22 @@
               }
             }
           },
+          "400": {
+            "description": "postApiWorkflowRunsByIdAnswer 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "422": {
             "description": "postApiWorkflowRunsByIdAnswer 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiWorkflowRunsByIdAnswer422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -653,12 +768,22 @@
               }
             }
           },
+          "400": {
+            "description": "postApiWorkflowRunsByIdSteer 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "422": {
             "description": "postApiWorkflowRunsByIdSteer 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiWorkflowRunsByIdSteer422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -706,12 +831,22 @@
               }
             }
           },
+          "400": {
+            "description": "postApiWorkflowRunsByIdRerun 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "422": {
             "description": "postApiWorkflowRunsByIdRerun 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiWorkflowRunsByIdRerun422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -763,12 +898,22 @@
               }
             }
           },
+          "400": {
+            "description": "postApiWorkflowStepsByIdResult 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
           "422": {
             "description": "postApiWorkflowStepsByIdResult 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiWorkflowStepsByIdResult422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -1002,9 +1147,14 @@
           "422": {
             "description": "postApiInstancesByIdContinue 422",
             "content": {
-              "application/json": {
+              "text/plain": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiInstancesByIdContinue422"
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -1156,9 +1306,9 @@
           "422": {
             "description": "postApiInstancesByIdPreview 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiInstancesByIdPreview422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -1297,9 +1447,9 @@
           "422": {
             "description": "getApiAgentsByMachineIdImage 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/getApiAgentsByMachineIdImage422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -1469,8 +1619,28 @@
         },
         "operationId": "patchApiInstancesById",
         "responses": {
+          "200": {
+            "description": "patchApiInstancesById 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/patchApiInstancesById200"
+                }
+              }
+            }
+          },
           "400": {
             "description": "patchApiInstancesById 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "patchApiInstancesById 404",
             "content": {
               "text/plain": {
                 "schema": {
@@ -1482,9 +1652,9 @@
           "422": {
             "description": "patchApiInstancesById 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/patchApiInstancesById422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -1545,9 +1715,9 @@
           "422": {
             "description": "postApiAgentsByMachineIdInspect 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiAgentsByMachineIdInspect422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -1657,9 +1827,9 @@
           "422": {
             "description": "postApiInstancesTitles 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiInstancesTitles422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -1833,9 +2003,9 @@
           "422": {
             "description": "getApiInstancesByIdMessages 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/getApiInstancesByIdMessages422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -1950,9 +2120,9 @@
           "422": {
             "description": "getApiSearch 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/getApiSearch422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -2005,9 +2175,9 @@
           "422": {
             "description": "getApiDelegateEvents 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/getApiDelegateEvents422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -2042,9 +2212,9 @@
           "422": {
             "description": "getApiWorkItems 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/getApiWorkItems422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -2165,9 +2335,9 @@
           "422": {
             "description": "putApiToolsById 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/putApiToolsById422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -2253,9 +2423,9 @@
           "422": {
             "description": "putApiFleetMcpByName 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/putApiFleetMcpByName422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -2443,9 +2613,9 @@
           "422": {
             "description": "postApiRules 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiRules422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -2613,9 +2783,9 @@
           "422": {
             "description": "putApiRulesById 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/putApiRulesById422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -2762,9 +2932,9 @@
           "422": {
             "description": "putApiOpenrouterSuggest 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/putApiOpenrouterSuggest422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -2849,9 +3019,9 @@
           "422": {
             "description": "postApiSuggest 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiSuggest422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -2904,9 +3074,9 @@
           "422": {
             "description": "postApiOpenrouterConnect 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiOpenrouterConnect422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -2959,9 +3129,9 @@
           "422": {
             "description": "postApiOpenrouterExchange 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiOpenrouterExchange422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -3032,9 +3202,9 @@
           "422": {
             "description": "putApiSupervisorConfig 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/putApiSupervisorConfig422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -3128,9 +3298,9 @@
           "422": {
             "description": "putApiAutopilotByInstanceId 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/putApiAutopilotByInstanceId422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -3183,9 +3353,9 @@
           "422": {
             "description": "putApiFleetMarketplacesByName 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/putApiFleetMarketplacesByName422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -3261,9 +3431,9 @@
           "422": {
             "description": "putApiFleetPluginsById 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/putApiFleetPluginsById422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -3405,9 +3575,9 @@
           "422": {
             "description": "putApiFleetSkillsByName 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/putApiFleetSkillsByName422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -3562,9 +3732,9 @@
           "422": {
             "description": "putApiFleetAgentsByName 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/putApiFleetAgentsByName422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -3662,9 +3832,9 @@
           "422": {
             "description": "putApiFleetMemory 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/putApiFleetMemory422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -3749,9 +3919,9 @@
           "422": {
             "description": "putApiFleetMemoryDocs 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/putApiFleetMemoryDocs422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -3802,9 +3972,9 @@
           "422": {
             "description": "deleteApiFleetMemoryDocs 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/deleteApiFleetMemoryDocs422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -3857,9 +4027,9 @@
           "422": {
             "description": "postApiFleetMemoryPeek 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiFleetMemoryPeek422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -3945,9 +4115,9 @@
           "422": {
             "description": "postApiFleetMemoryAdopt 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiFleetMemoryAdopt422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -4033,9 +4203,9 @@
           "422": {
             "description": "postApiFleetMemoryPush 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiFleetMemoryPush422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -4162,9 +4332,9 @@
           "422": {
             "description": "postApiFleetMemoryRestore 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiFleetMemoryRestore422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -4291,9 +4461,9 @@
           "422": {
             "description": "putApiFleetHooksById 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/putApiFleetHooksById422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -4398,9 +4568,9 @@
           "422": {
             "description": "postApiFleetHooksRestore 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiFleetHooksRestore422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -4457,9 +4627,9 @@
           "422": {
             "description": "postApiFleetHooksPeek 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiFleetHooksPeek422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -4546,9 +4716,9 @@
           "422": {
             "description": "postApiFleetHooksAdopt 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiFleetHooksAdopt422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -4634,9 +4804,9 @@
           "422": {
             "description": "postApiFleetHooksPush 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiFleetHooksPush422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -4707,9 +4877,9 @@
           "422": {
             "description": "postApiFleetSync 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiFleetSync422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -4775,9 +4945,9 @@
           "422": {
             "description": "postApiProjects 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/postApiProjects422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -4910,9 +5080,9 @@
           "422": {
             "description": "getApiUsageSummary 422",
             "content": {
-              "application/json": {
+              "application/problem+json": {
                 "schema": {
-                  "$ref": "#/components/schemas/getApiUsageSummary422"
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -4937,7 +5107,7 @@
           "types"
         ]
       },
-      "putApiDelegateTypesByName422": {
+      "ValidationErrorResponse": {
         "description": "Request validation problem. Diagnostic fields are development-only.",
         "type": "object",
         "properties": {
@@ -4996,67 +5166,6 @@
         },
         "required": [
           "ok"
-        ]
-      },
-      "postApiMachinesSsh422": {
-        "anyOf": [
-          {
-            "description": "Request validation problem. Diagnostic fields are development-only.",
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "enum": [
-                  "validation"
-                ]
-              },
-              "code": {
-                "type": "string",
-                "enum": [
-                  "validation"
-                ]
-              },
-              "title": {
-                "type": "string",
-                "enum": [
-                  "Validation Error"
-                ]
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  422
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "on": {
-                "type": "string"
-              },
-              "found": {},
-              "property": {
-                "type": "string"
-              },
-              "expected": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "on",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "enum": [
-              "Enter the SSH target as user@host or a Host from ~/.ssh/config, with no spaces and no leading dash.",
-              "That hub address is not one this hub listed. Pick one from the list."
-            ],
-            "type": "string"
-          }
         ]
       },
       "getApiWorkflows200": {
@@ -5129,7 +5238,7 @@
           "workflows"
         ]
       },
-      "postApiWorkflows200": {
+      "postApiWorkflows201": {
         "type": "object",
         "properties": {
           "problems": {
@@ -5193,6 +5302,20 @@
           "program",
           "slug",
           "updatedAt"
+        ]
+      },
+      "postApiWorkflows400": {
+        "type": "object",
+        "properties": {
+          "problems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        },
+        "required": [
+          "problems"
         ]
       },
       "getApiWorkflowsById200": {
@@ -5325,6 +5448,20 @@
           "program",
           "slug",
           "updatedAt"
+        ]
+      },
+      "putApiWorkflowsById400": {
+        "type": "object",
+        "properties": {
+          "problems": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Problem"
+            }
+          }
+        },
+        "required": [
+          "problems"
         ]
       },
       "deleteApiWorkflowsById200": {
@@ -5705,6 +5842,133 @@
           "log"
         ]
       },
+      "postApiWorkflowRunsByIdCancel200": {
+        "allOf": [
+          {
+            "type": "object",
+            "properties": {
+              "machineId": {
+                "type": "string"
+              },
+              "status": {
+                "$ref": "#/components/schemas/WorkflowRunStatus"
+              },
+              "id": {
+                "type": "string"
+              },
+              "result": {},
+              "graph": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/WorkflowGraph"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "program": {
+                "type": "string"
+              },
+              "inputs": {
+                "type": "object"
+              },
+              "workflowId": {
+                "type": "string"
+              },
+              "parentRunId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "parentStepId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "workspace": {
+                "type": "string"
+              },
+              "supervisorInstanceId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "failure": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "state": {
+                "type": "object"
+              },
+              "startedAt": {
+                "type": "string",
+                "format": "date-time"
+              },
+              "endedAt": {
+                "anyOf": [
+                  {
+                    "type": "string",
+                    "format": "date-time"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
+              "rerunOfRunId": {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              },
+              "launchedBy": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "endedAt",
+              "failure",
+              "graph",
+              "id",
+              "inputs",
+              "launchedBy",
+              "machineId",
+              "parentRunId",
+              "parentStepId",
+              "program",
+              "rerunOfRunId",
+              "result",
+              "startedAt",
+              "state",
+              "status",
+              "supervisorInstanceId",
+              "workflowId",
+              "workspace"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "edges": {
+                "type": "object"
+              },
+              "loops": {
+                "type": "object"
+              }
+            },
+            "required": [
+              "edges",
+              "loops"
+            ]
+          }
+        ]
+      },
       "postApiWorkflowRunsByIdAnswer200": {
         "type": "object",
         "properties": {
@@ -5714,56 +5978,6 @@
         },
         "required": [
           "ok"
-        ]
-      },
-      "postApiWorkflowRunsByIdAnswer422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
         ]
       },
       "postApiWorkflowRunsByIdSteer200": {
@@ -5777,56 +5991,6 @@
           "message"
         ]
       },
-      "postApiWorkflowRunsByIdSteer422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
-        ]
-      },
       "postApiWorkflowRunsByIdRerun200": {
         "type": "object",
         "properties": {
@@ -5836,106 +6000,6 @@
         },
         "required": [
           "runId"
-        ]
-      },
-      "postApiWorkflowRunsByIdRerun422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
-        ]
-      },
-      "postApiWorkflowStepsByIdResult422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
         ]
       },
       "getApiAgents200": {
@@ -6020,63 +6084,6 @@
           "targetInstanceId"
         ]
       },
-      "postApiInstancesByIdContinue422": {
-        "anyOf": [
-          {
-            "description": "Request validation problem. Diagnostic fields are development-only.",
-            "type": "object",
-            "properties": {
-              "type": {
-                "type": "string",
-                "enum": [
-                  "validation"
-                ]
-              },
-              "code": {
-                "type": "string",
-                "enum": [
-                  "validation"
-                ]
-              },
-              "title": {
-                "type": "string",
-                "enum": [
-                  "Validation Error"
-                ]
-              },
-              "status": {
-                "type": "number",
-                "enum": [
-                  422
-                ]
-              },
-              "detail": {
-                "type": "string"
-              },
-              "on": {
-                "type": "string"
-              },
-              "found": {},
-              "property": {
-                "type": "string"
-              },
-              "expected": {
-                "type": "string"
-              }
-            },
-            "required": [
-              "code",
-              "on",
-              "status",
-              "title",
-              "type"
-            ]
-          },
-          {
-            "type": "string"
-          }
-        ]
-      },
       "getApiContinuations200": {
         "type": "array",
         "items": {
@@ -6140,56 +6147,6 @@
           "state"
         ]
       },
-      "postApiInstancesByIdPreview422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
-        ]
-      },
       "deleteApiInstancesByIdPreview200": {
         "type": "object",
         "properties": {
@@ -6206,56 +6163,6 @@
         "required": [
           "instanceId",
           "state"
-        ]
-      },
-      "getApiAgentsByMachineIdImage422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
         ]
       },
       "deleteApiAgentsByMachineId200": {
@@ -6284,104 +6191,222 @@
           "ok"
         ]
       },
-      "patchApiInstancesById422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
+      "patchApiInstancesById200": {
         "type": "object",
         "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
+          "machineId": {
+            "type": "string"
+          },
+          "harness": {
+            "type": [
+              "null",
+              "string"
             ]
           },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
+          "model": {
+            "type": [
+              "null",
+              "string"
             ]
           },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
+          "effort": {
+            "anyOf": [
+              {
+                "enum": [
+                  "high",
+                  "low",
+                  "max",
+                  "medium",
+                  "none",
+                  "xhigh"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "canDelegate": {
+            "type": [
+              "null",
+              "boolean"
             ]
           },
           "status": {
-            "type": "number",
             "enum": [
-              422
+              "discarded",
+              "error",
+              "running",
+              "sleeping",
+              "starting",
+              "stopped",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "workflowRunId": {
+            "type": [
+              "null",
+              "string"
             ]
           },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
-        ]
-      },
-      "postApiAgentsByMachineIdInspect422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
+          "workflowStepId": {
+            "type": [
+              "null",
+              "string"
             ]
           },
-          "code": {
+          "createdAt": {
             "type": "string",
-            "enum": [
-              "validation"
+            "format": "date-time"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sessionId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "parentInstanceId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "parentToolUseId": {
+            "type": [
+              "null",
+              "string"
             ]
           },
           "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "tooling": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SessionTooling"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "derivedTitle": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "kind": {
+            "enum": [
+              "mainline",
+              "scratch",
+              "summariser"
+            ],
+            "type": "string"
+          },
+          "permissionMode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lastError": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "autopilot": {
+            "anyOf": [
+              {
+                "type": "object",
+                "properties": {
+                  "enabled": {
+                    "type": "boolean"
+                  },
+                  "prompt": {
+                    "type": "string"
+                  },
+                  "updatedAt": {
+                    "type": "number"
+                  }
+                },
+                "required": [
+                  "enabled",
+                  "prompt",
+                  "updatedAt"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "updatedAt": {
             "type": "string",
-            "enum": [
-              "Validation Error"
+            "format": "date-time"
+          },
+          "spawnedAt": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
             ]
           },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
+          "workItemId": {
+            "type": [
+              "null",
+              "string"
             ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
           }
         },
         "required": [
-          "code",
-          "on",
+          "autopilot",
+          "canDelegate",
+          "createdAt",
+          "cwd",
+          "derivedTitle",
+          "effort",
+          "harness",
+          "id",
+          "kind",
+          "lastError",
+          "machineId",
+          "model",
+          "parentInstanceId",
+          "parentToolUseId",
+          "permissionMode",
+          "projectId",
+          "sessionId",
+          "spawnedAt",
           "status",
           "title",
-          "type"
+          "tooling",
+          "updatedAt",
+          "workItemId",
+          "workflowRunId",
+          "workflowStepId"
         ]
       },
       "getApiInstances200": {
@@ -6615,56 +6640,6 @@
           ]
         }
       },
-      "postApiInstancesTitles422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
-        ]
-      },
       "getApiInstancesByIdLocation200": {
         "anyOf": [
           {
@@ -6673,56 +6648,6 @@
           {
             "type": "null"
           }
-        ]
-      },
-      "getApiInstancesByIdMessages422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
         ]
       },
       "getApiHandoffs200": {
@@ -6834,241 +6759,17 @@
           "machines"
         ]
       },
-      "getApiSearch422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
-        ]
-      },
       "getApiDelegateEvents200": {
         "type": "array",
         "items": {
-          "type": "object",
-          "properties": {
-            "status": {
-              "anyOf": [
-                {
-                  "enum": [
-                    "answered",
-                    "denied",
-                    "pending"
-                  ],
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "id": {
-              "type": "number"
-            },
-            "createdAt": {
-              "type": "string",
-              "format": "date-time"
-            },
-            "parentInstanceId": {
-              "type": "string"
-            },
-            "kind": {
-              "$ref": "#/components/schemas/DelegateEventKind"
-            },
-            "instanceId": {
-              "type": "string"
-            },
-            "requestId": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "toolName": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "requestKind": {
-              "anyOf": [
-                {
-                  "enum": [
-                    "question",
-                    "tool"
-                  ],
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ]
-            },
-            "payload": {
-              "$ref": "#/components/schemas/DelegateEventPayload"
-            }
-          },
-          "required": [
-            "createdAt",
-            "id",
-            "instanceId",
-            "kind",
-            "parentInstanceId",
-            "payload",
-            "requestId",
-            "requestKind",
-            "status",
-            "toolName"
-          ]
+          "$ref": "#/components/schemas/DelegateEvent"
         }
-      },
-      "getApiDelegateEvents422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
-        ]
       },
       "getApiWorkItems200": {
         "type": "array",
         "items": {
           "$ref": "#/components/schemas/WorkItemSummary"
         }
-      },
-      "getApiWorkItems422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
-        ]
       },
       "getApiTools200": {
         "type": "object",
@@ -7089,56 +6790,6 @@
         "required": [
           "catalog",
           "policies"
-        ]
-      },
-      "putApiToolsById422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
         ]
       },
       "getApiFleet200": {
@@ -7231,56 +6882,6 @@
           "memoryDocs",
           "skills",
           "unpushable"
-        ]
-      },
-      "putApiFleetMcpByName422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
         ]
       },
       "deleteApiFleetMcpByName200": {
@@ -7419,106 +7020,6 @@
           "templates"
         ]
       },
-      "postApiRules422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
-        ]
-      },
-      "putApiRulesById422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
-        ]
-      },
       "deleteApiRulesById200": {
         "type": "object",
         "properties": {
@@ -7645,56 +7146,6 @@
           "ok"
         ]
       },
-      "putApiOpenrouterSuggest422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
-        ]
-      },
       "postApiSuggest200": {
         "type": "object",
         "properties": {
@@ -7721,56 +7172,6 @@
           "suggestions"
         ]
       },
-      "postApiSuggest422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
-        ]
-      },
       "postApiOpenrouterConnect200": {
         "type": "object",
         "properties": {
@@ -7782,56 +7183,6 @@
           "authUrl"
         ]
       },
-      "postApiOpenrouterConnect422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
-        ]
-      },
       "postApiOpenrouterExchange200": {
         "type": "object",
         "properties": {
@@ -7841,56 +7192,6 @@
         },
         "required": [
           "ok"
-        ]
-      },
-      "postApiOpenrouterExchange422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
         ]
       },
       "getApiSupervisor200": {
@@ -8005,56 +7306,6 @@
           "ok"
         ]
       },
-      "putApiSupervisorConfig422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
-        ]
-      },
       "getApiSupervisorEvents200": {
         "type": "array",
         "items": {
@@ -8072,106 +7323,6 @@
           "ok"
         ]
       },
-      "putApiAutopilotByInstanceId422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
-        ]
-      },
-      "putApiFleetMarketplacesByName422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
-        ]
-      },
       "deleteApiFleetMarketplacesByName200": {
         "type": "object",
         "properties": {
@@ -8181,56 +7332,6 @@
         },
         "required": [
           "ok"
-        ]
-      },
-      "putApiFleetPluginsById422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
         ]
       },
       "deleteApiFleetPluginsById200": {
@@ -8306,56 +7407,6 @@
           }
         ]
       },
-      "putApiFleetSkillsByName422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
-        ]
-      },
       "deleteApiFleetSkillsByName200": {
         "type": "object",
         "properties": {
@@ -8365,56 +7416,6 @@
         },
         "required": [
           "ok"
-        ]
-      },
-      "putApiFleetAgentsByName422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
         ]
       },
       "deleteApiFleetAgentsByName200": {
@@ -8486,56 +7487,6 @@
           "updatedAt"
         ]
       },
-      "putApiFleetMemory422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
-        ]
-      },
       "deleteApiFleetMemory200": {
         "type": "object",
         "properties": {
@@ -8571,56 +7522,6 @@
           "updatedAt"
         ]
       },
-      "putApiFleetMemoryDocs422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
-        ]
-      },
       "deleteApiFleetMemoryDocs200": {
         "type": "object",
         "properties": {
@@ -8630,106 +7531,6 @@
         },
         "required": [
           "ok"
-        ]
-      },
-      "deleteApiFleetMemoryDocs422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
-        ]
-      },
-      "postApiFleetMemoryPeek422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
         ]
       },
       "postApiFleetMemoryAdopt200": {
@@ -8752,56 +7553,6 @@
           "updatedAt"
         ]
       },
-      "postApiFleetMemoryAdopt422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
-        ]
-      },
       "postApiFleetMemoryPush200": {
         "type": "object",
         "properties": {
@@ -8811,56 +7562,6 @@
         },
         "required": [
           "ok"
-        ]
-      },
-      "postApiFleetMemoryPush422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
         ]
       },
       "getApiFleetMemoryHistory200": {
@@ -8905,56 +7606,6 @@
           "content",
           "hash",
           "updatedAt"
-        ]
-      },
-      "postApiFleetMemoryRestore422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
         ]
       },
       "getApiFleetHooks200": {
@@ -9057,56 +7708,6 @@
           "name"
         ]
       },
-      "putApiFleetHooksById422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
-        ]
-      },
       "deleteApiFleetHooksById200": {
         "type": "object",
         "properties": {
@@ -9124,56 +7725,6 @@
           "$ref": "#/components/schemas/HookVersion"
         }
       },
-      "postApiFleetHooksRestore422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
-        ]
-      },
       "postApiFleetHooksPeek200": {
         "anyOf": [
           {
@@ -9182,106 +7733,6 @@
           {
             "type": "null"
           }
-        ]
-      },
-      "postApiFleetHooksPeek422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
-        ]
-      },
-      "postApiFleetHooksAdopt422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
         ]
       },
       "postApiFleetHooksPush200": {
@@ -9295,56 +7746,6 @@
           "ok"
         ]
       },
-      "postApiFleetHooksPush422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
-        ]
-      },
       "postApiFleetSync200": {
         "type": "object",
         "properties": {
@@ -9354,56 +7755,6 @@
         },
         "required": [
           "ok"
-        ]
-      },
-      "postApiFleetSync422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
         ]
       },
       "getApiProjects200": {
@@ -9465,56 +7816,6 @@
           "name"
         ]
       },
-      "postApiProjects422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
-        ]
-      },
       "deleteApiProjectsById200": {
         "type": "object",
         "properties": {
@@ -9524,56 +7825,6 @@
         },
         "required": [
           "ok"
-        ]
-      },
-      "getApiUsageSummary422": {
-        "description": "Request validation problem. Diagnostic fields are development-only.",
-        "type": "object",
-        "properties": {
-          "type": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "code": {
-            "type": "string",
-            "enum": [
-              "validation"
-            ]
-          },
-          "title": {
-            "type": "string",
-            "enum": [
-              "Validation Error"
-            ]
-          },
-          "status": {
-            "type": "number",
-            "enum": [
-              422
-            ]
-          },
-          "detail": {
-            "type": "string"
-          },
-          "on": {
-            "type": "string"
-          },
-          "found": {},
-          "property": {
-            "type": "string"
-          },
-          "expected": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "code",
-          "on",
-          "status",
-          "title",
-          "type"
         ]
       },
       "StreamServerMessage": {
@@ -10196,6 +8447,75 @@
               "instanceId",
               "item",
               "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "description": "Hub-originated: a line of delegate traffic the moment it is recorded.\n`instanceId` is the delegate's.",
+                "type": "string",
+                "enum": [
+                  "delegate_event"
+                ]
+              },
+              "instanceId": {
+                "type": "string"
+              },
+              "event": {
+                "$ref": "#/components/schemas/DelegateEvent"
+              }
+            },
+            "required": [
+              "event",
+              "instanceId",
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "description": "Hub-originated: a supervisor verdict the moment it is logged.",
+                "type": "string",
+                "enum": [
+                  "supervisor_event"
+                ]
+              },
+              "instanceId": {
+                "type": "string"
+              },
+              "event": {
+                "$ref": "#/components/schemas/SupervisorEvent"
+              }
+            },
+            "required": [
+              "event",
+              "instanceId",
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "description": "Hub-originated, never stored: the supervisor began evaluating.",
+                "type": "string",
+                "enum": [
+                  "supervisor_status"
+                ]
+              },
+              "instanceId": {
+                "type": "string"
+              },
+              "status": {
+                "$ref": "#/components/schemas/SupervisorStatusSignal"
+              }
+            },
+            "required": [
+              "instanceId",
+              "kind",
+              "status"
             ]
           },
           {
@@ -12382,6 +10702,40 @@
           "targetInstanceId"
         ]
       },
+      "SessionTooling": {
+        "description": "What a session's `init` says about its MCP servers and tools.",
+        "type": "object",
+        "properties": {
+          "servers": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "status": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name",
+                "status"
+              ]
+            }
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "servers",
+          "tools"
+        ]
+      },
       "ConfigInspection": {
         "description": "What a session started in `cwd` would actually see, and what a machine has\noutside any project when `cwd` is absent. The answer to two questions the\ndashboard asks: \"what is on this machine that cawco does not manage?\" and\n\"what will this folder give me?\" — asked the moment a folder is chosen.",
         "type": "object",
@@ -12686,40 +11040,6 @@
           "sessionId"
         ]
       },
-      "SessionTooling": {
-        "description": "What a session's `init` says about its MCP servers and tools.",
-        "type": "object",
-        "properties": {
-          "servers": {
-            "type": "array",
-            "items": {
-              "type": "object",
-              "properties": {
-                "name": {
-                  "type": "string"
-                },
-                "status": {
-                  "type": "string"
-                }
-              },
-              "required": [
-                "name",
-                "status"
-              ]
-            }
-          },
-          "tools": {
-            "type": "array",
-            "items": {
-              "type": "string"
-            }
-          }
-        },
-        "required": [
-          "servers",
-          "tools"
-        ]
-      },
       "T": {
         "type": "object"
       },
@@ -12737,6 +11057,88 @@
           "usage"
         ],
         "type": "string"
+      },
+      "DelegateEvent": {
+        "description": "One line of what a delegate and its parent said to each other through the\nhub — a `delegate_events` row (packages/hub `db/schema.ts`), read over\n`GET /api/delegate-events` and pushed as a `delegate_event` frame.",
+        "type": "object",
+        "properties": {
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "id": {
+            "description": "The hub's row id — what a fold deduplicates on and orders by.",
+            "type": "number"
+          },
+          "instanceId": {
+            "description": "The delegate the traffic is about — never the parent, on any of the kinds.",
+            "type": "string"
+          },
+          "kind": {
+            "$ref": "#/components/schemas/DelegateEventKind"
+          },
+          "parentInstanceId": {
+            "type": "string"
+          },
+          "payload": {
+            "$ref": "#/components/schemas/DelegateEventPayload"
+          },
+          "requestId": {
+            "description": "The permission request an ask and its answer share. Null on a report.",
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "requestKind": {
+            "anyOf": [
+              {
+                "enum": [
+                  "question",
+                  "tool"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "status": {
+            "description": "An ask's own state; null on an answer and a report, which settle nothing.",
+            "anyOf": [
+              {
+                "enum": [
+                  "answered",
+                  "denied",
+                  "pending"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "toolName": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "createdAt",
+          "id",
+          "instanceId",
+          "kind",
+          "parentInstanceId",
+          "payload",
+          "requestId",
+          "requestKind",
+          "status",
+          "toolName"
+        ]
       },
       "DelegateEventKind": {
         "description": "The three things a delegate and its parent ever say to each other.",
@@ -13492,7 +11894,7 @@
         ]
       },
       "SupervisorEvent": {
-        "description": "One line of the supervisor's intervention log — `supervisor_events`\n(packages/hub `db/schema.ts`), read over `GET /api/supervisor/events` and\npushed as a `supervisor_event` frame. Silent verdicts are recorded too: the\nlog is the only place any of this is visible, so \"it looked and did\nnothing\" has to show up the same as \"it spoke\".\n\n`DelegateEvent`, the nearest sibling shape, lives in the dashboard app\n(`apps/dashboard/src/lib/cawco/types.ts`) rather than here — but both the\nhub (which records these rows) and the dashboard (which reads them) need\nthis type, and the hub does not import from the dashboard app. Core is the\none home both sides already share.",
+        "description": "One line of the supervisor's intervention log — `supervisor_events`\n(packages/hub `db/schema.ts`), read over `GET /api/supervisor/events` and\npushed as a `supervisor_event` frame. Silent verdicts are recorded too: the\nlog is the only place any of this is visible, so \"it looked and did\nnothing\" has to show up the same as \"it spoke\".",
         "type": "object",
         "properties": {
           "createdAt": {
@@ -16142,6 +14544,40 @@
           "currentTool",
           "instanceId",
           "runningSubagents"
+        ]
+      },
+      "SupervisorStatusSignal": {
+        "description": "Fired the moment an evaluation actually begins — the transient half of the\nsupervisor's visible life. Every evaluation is guaranteed to terminate in a\npublished {@link SupervisorEvent}, so a consumer can treat that event as\nthis signal's close; nothing here is persisted.",
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "number"
+          },
+          "phase": {
+            "type": "string",
+            "enum": [
+              "evaluating"
+            ]
+          },
+          "ruleId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "source": {
+            "enum": [
+              "autopilot",
+              "rule"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "phase",
+          "ruleId",
+          "source"
         ]
       },
       "WorkflowFrame": {
