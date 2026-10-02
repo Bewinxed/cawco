@@ -14,6 +14,10 @@
  * It runs on every socket open. The socket is relayed through the dashboard's
  * own server (serve.js), so a dashboard deploy always drops it and the
  * reconnect is the moment to ask. One toast per tab.
+ *
+ * A build that also raises the wire (`WIRE_PROTOCOL`) does not ask: a tab
+ * built for the older wire misreads the hub, so it reloads itself with its
+ * drafts kept (protocol-reload.ts).
  */
 import { toast } from "svelte-sonner";
 import { updated } from "$app/state";
