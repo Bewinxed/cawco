@@ -36,12 +36,14 @@ the artboard points at `Caw`, so a runtime that auto-binds gets that instance.
 `caw.riv` is generated; it is never edited by hand and there is no Rive editor project behind it
 (the editor cannot import `.riv` files). From `assets/mascot/scripts` (`bun install` once):
 
-- `node build.mjs` writes `caw.riv` from `scene.mjs` and the stills in `assets/mascot/stills/`.
+- `node build.mjs` writes `caw.riv` from `scene.mjs` and the stills in `assets/mascot/stills/`,
+  and the same bytes to the Apple package's copy
+  (`apps/apple/Packages/CawCoKit/Sources/CawCoMascot/Resources/caw.riv`), which `CawView` loads.
   rive-mcp-server's exported `buildScene` and `writeRiv` write the scene; rive-mcp-server has no
   view-model authoring, so `build.mjs` inserts those objects into its object list before writing,
   in the shapes Rive's own exports use (rive-runtime `tests/unit_tests/assets/custom_property_enum.riv`,
   importers in `src/file.cpp`): the `status` enum and the `Caw` view model with its default
-  instance after the Backboard, `viewModelId` on the artboard, and on every transition a
+  instance after the Backboard, `viewModelId` and `defaultStateMachineId` on the artboard, and on every transition a
   view-model condition whose data bind reads `Caw`'s property. It fails if any state-machine
   input is left.
 - `node prove-viewmodel.mjs` runs the file on Rive's official runtime (@rive-app/canvas-advanced,

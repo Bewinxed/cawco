@@ -38,6 +38,9 @@ targets:
         # CawCo/AppIcon.icon (Icon Composer): Ivory by default, Ink with the
         # cream-rim Caw in dark and tinted.
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+        # Embedded frameworks (RiveRuntime) sit in Contents/Frameworks on the Mac;
+        # the iOS-style default runpath (@executable_path/Frameworks) misses them.
+        "LD_RUNPATH_SEARCH_PATHS[sdk=macosx*]": ["$(inherited)", "@executable_path/../Frameworks"]
         # Sign to Run Locally until a development team is chosen.
         "CODE_SIGN_IDENTITY[sdk=macosx*]": "-"
         # The Mac app is sandboxed and may open connections to the hub.

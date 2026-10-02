@@ -22,6 +22,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-openapi-generator", from: "1.13.1"),
         .package(url: "https://github.com/apple/swift-openapi-runtime", from: "1.12.2"),
         .package(url: "https://github.com/apple/swift-openapi-urlsession", from: "1.3.2"),
+        .package(url: "https://github.com/rive-app/rive-ios", from: "6.24.0"),
     ],
     targets: [
         // The hub's wire types and client, generated at build time from
@@ -48,6 +49,12 @@ let package = Package(
             swiftSettings: concurrency
         ),
         .target(name: "CawCoTranscript", dependencies: ["CawCoDesign"], swiftSettings: concurrency),
-        .target(name: "CawCoMascot", dependencies: ["CawCoDesign"], swiftSettings: concurrency),
+        // Caw, drawn by Rive's Apple runtime from caw.riv (assets/mascot/README.md).
+        .target(
+            name: "CawCoMascot",
+            dependencies: ["CawCoDesign", .product(name: "RiveRuntime", package: "rive-ios")],
+            resources: [.copy("Resources/caw.riv")],
+            swiftSettings: concurrency
+        ),
     ]
 )
