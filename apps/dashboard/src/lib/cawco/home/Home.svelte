@@ -179,7 +179,7 @@
         <!-- Caw only on a fleet with nothing in it yet, or while a machine
              has not answered: an empty group is otherwise just absent. -->
         <figure class="caw" data-flip in:crossIn out:crossOut>
-          <Caw pose="ready" size={variant === 'rail' ? 112 : 160} />
+          <Caw size={variant === 'rail' ? 112 : 160} status="ready" />
           <!-- The line's states share one cell and cross-fade (§8). -->
           <figcaption>
             {#key cawLine}

@@ -1,7 +1,7 @@
 {
   "name": "caw-mascot-build",
   "private": true,
-  "description": "Builds assets/mascot/caw.riv (with its Caw view model) and proves it on Rive's official runtime.",
+  "description": "Builds assets/mascot/caw/<status>.riv (each with its Caw view model) and proves them on Rive's official runtime.",
   "type": "module",
   "scripts": {
     "build": "node build.mjs",

@@ -1,0 +1,158 @@
+{
+  "take": "tk_ytj_tceMI2AKhf8Lk_6p8",
+  "frames": 124,
+  "fps": 24,
+  "drawings": [
+    {
+      "start": 0,
+      "length": 2,
+      "drawing": 0
+    },
+    {
+      "start": 2,
+      "length": 2,
+      "drawing": 1
+    },
+    {
+      "start": 4,
+      "length": 2,
+      "drawing": 2
+    },
+    {
+      "start": 6,
+      "length": 2,
+      "drawing": 3
+    },
+    {
+      "start": 8,
+      "length": 2,
+      "drawing": 4
+    },
+    {
+      "start": 10,
+      "length": 2,
+      "drawing": 5
+    },
+    {
+      "start": 12,
+      "length": 2,
+      "drawing": 6
+    },
+    {
+      "start": 14,
+      "length": 2,
+      "drawing": 7
+    },
+    {
+      "start": 16,
+      "length": 2,
+      "drawing": 8
+    },
+    {
+      "start": 18,
+      "length": 2,
+      "drawing": 9
+    },
+    {
+      "start": 20,
+      "length": 24,
+      "drawing": 10
+    },
+    {
+      "start": 44,
+      "length": 6,
+      "drawing": 11
+    },
+    {
+      "start": 50,
+      "length": 6,
+      "drawing": 12
+    },
+    {
+      "start": 56,
+      "length": 20,
+      "drawing": 13
+    },
+    {
+      "start": 76,
+      "length": 2,
+      "drawing": 14
+    },
+    {
+      "start": 78,
+      "length": 2,
+      "drawing": 15
+    },
+    {
+      "start": 80,
+      "length": 2,
+      "drawing": 16
+    },
+    {
+      "start": 82,
+      "length": 2,
+      "drawing": 17
+    },
+    {
+      "start": 84,
+      "length": 2,
+      "drawing": 18
+    },
+    {
+      "start": 86,
+      "length": 2,
+      "drawing": 19
+    },
+    {
+      "start": 88,
+      "length": 2,
+      "drawing": 20
+    },
+    {
+      "start": 90,
+      "length": 2,
+      "drawing": 21
+    },
+    {
+      "start": 92,
+      "length": 2,
+      "drawing": 22
+    },
+    {
+      "start": 94,
+      "length": 2,
+      "drawing": 23
+    },
+    {
+      "start": 96,
+      "length": 2,
+      "drawing": 24
+    },
+    {
+      "start": 98,
+      "length": 2,
+      "drawing": 25
+    },
+    {
+      "start": 100,
+      "length": 2,
+      "drawing": 26
+    },
+    {
+      "start": 102,
+      "length": 2,
+      "drawing": 27
+    },
+    {
+      "start": 104,
+      "length": 20,
+      "drawing": 0
+    }
+  ],
+  "placement": {
+    "scale": 0.6206452118770736,
+    "x": -62.89570009850189,
+    "y": -17.119219752324113
+  },
+  "stillOverlap": 0.9901
+}

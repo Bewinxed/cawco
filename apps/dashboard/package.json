@@ -29,6 +29,7 @@
     "@lezer/highlight": "^1",
     "@milkdown/crepe": "^7.22.1",
     "@pierre/diffs": "1.5.1",
+    "@rive-app/canvas": "2.44.0",
     "@xyflow/svelte": "^1.6.6",
     "bits-ui": "^2.19.3",
     "clsx": "^2.1.1",

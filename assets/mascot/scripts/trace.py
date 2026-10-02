@@ -1,22 +1,24 @@
 # /// script
 # requires-python = ">=3.12"
-# dependencies = ["numpy>=2.3", "pillow>=11.3", "scipy>=1.16", "vtracer==0.6.15"]
+# dependencies = ["numpy>=2.3", "pillow>=11.3", "scipy>=1.16", "vtracer==0.6.15", "resvg-py==0.5.0"]
 # ///
-"""Traces Caw's loop takes into the vector drawings caw.riv is built from.
+"""Traces Caw's loop takes into the vector drawings the status files (../caw/<status>.riv) are built from.
 
-usage: uv run trace.py [state ...]        (default: every take in ../loops/takes.json)
+usage: uv run trace.py [loop ...]        (default: every loop in ../loops/takes.json)
 
-For each take listed in ../loops/takes.json (a Backlot take shot with the H3 keyframe sequence
-adapter, on twos) this writes ../loops/<state>/:
-  body-NN.svg   drawing NN, Caw's flat inks traced by vtracer (stacked colour layers)
-  rim-NN.svg    drawing NN's silhouette, traced by vtracer (binary), for the cream rim stroke
-and ../loops/<state>/timing.json: the take's frame count and each drawing's start and length in
-24 fps frames, exactly as the take holds them.
+../loops/takes.json lists each status's variant loops: a loop name, its Backlot take (shot with the
+H3 keyframe sequence adapter, on twos) and the still it opens and closes on. For each loop this
+writes ../loops/<loop>/:
+  body-NN.svg   drawing NN: Caw's silhouette in black (which also carries the cream rim) and each
+                other ink over it, traced by vtracer
+and ../loops/<loop>/timing.json: the take's frame count and each hold's start and length in
+24 fps frames, on twos, with the drawing it shows.
 
-Both SVGs are in artboard units (the 512 x 512 `Caw` artboard), placed on the stills' shared scale
-and ground line: drawing 00 is registered onto the state's light still (assets/mascot/stills).
+The SVGs are in the stills' 512 px units, on their shared scale and ground line: drawing 00 is
+registered onto the loop's light still (assets/mascot/stills).
 """
 
+import io
 import json
 import re
 import subprocess
@@ -24,6 +26,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import resvg_py
 import vtracer
 from PIL import Image
 from scipy import ndimage
@@ -48,6 +51,20 @@ PAPER = (255, 255, 255)
 SAME_DRAWING = 1.5
 # The smallest ink region kept, in take pixels (a tick mark or pupil is several hundred).
 MIN_REGION = 40
+# take_palette: the fewest sampled pixels a take's ink needs to be measured from the take, and
+# how far (RGB distance) its measurement may sit from the master ink before it is ignored.
+MIN_INK_PIXELS = 50
+DRIFT = 60
+# How much finer than the stills' 512 px refine() measures drawing 00 against its still.
+SUPERSAMPLE = 4
+# vtracer's spline fit: a corner above CORNER degrees, segments of at least LENGTH take pixels,
+# and splices at SPLICE degrees. Coarser than its defaults (60, 4, 45) to keep each status's
+# file small: about a third fewer path points. Measured against the defaults' fit on ready-
+# attention at the same placement, outlines move at most 2.1 px at the stills' 512 px scale and
+# 99% of edge points within 1.5 px.
+CORNER = 90
+LENGTH = 8.0
+SPLICE = 60
 # Red minus blue a pixel needs to read as yellow (the ink measures 135; neutral greys about 5).
 WARM = 60
 # Brightness from which a thin line inside the body is a lid line (lid lines measure 100-190,
@@ -101,30 +118,55 @@ def frames_of(state: str, take: str) -> np.ndarray:
     return np.frombuffer(raw, np.uint8).reshape(-1, h, w, 3)
 
 
-def drawings_of(frames: np.ndarray) -> list[tuple[int, int]]:
-    """(start, length) of each held drawing, in frames, in take order."""
-    groups = [[0, 1]]
-    for i in range(1, len(frames)):
-        diff = np.abs(
-            frames[i].astype(np.int16) - frames[i - 1].astype(np.int16)
-        ).mean()
-        if diff < SAME_DRAWING:
-            groups[-1][1] += 1
+def drawings_of(frames: np.ndarray) -> list[tuple[int, int, list[int]]]:
+    """(start, length, frames) of each drawing, in take order, held on twos by construction.
+
+    Caw is animated on twos: each frame pair (2k, 2k + 1) shows frame 2k's drawing for both
+    frames, so a stretch the model rendered on ones keeps every other drawing, and a take already
+    on twos is unchanged. Consecutive pairs showing the same drawing are one longer hold. A
+    drawing's frames are the ones that show it (2k, and 2k + 1 when it matches), averaged by the
+    caller to lift video noise.
+    """
+
+    def same(a: int, b: int) -> bool:
+        diff = np.abs(frames[a].astype(np.int16) - frames[b].astype(np.int16)).mean()
+        return diff < SAME_DRAWING
+
+    groups = []
+    for start in range(0, len(frames), 2):
+        members = [start] + (
+            [start + 1] if start + 1 < len(frames) and same(start, start + 1) else []
+        )
+        length = min(2, len(frames) - start)
+        if groups and same(groups[-1][2][0], start):
+            groups[-1][1] += length
+            groups[-1][2].extend(members)
         else:
-            groups.append([i, 1])
-    return [tuple(g) for g in groups]
+            groups.append([start, length, members])
+    return [(s, n, m) for s, n, m in groups]
 
 
-def take_palette(rgb: np.ndarray) -> np.ndarray:
-    """The take's own rendering of paper and each ink: k-means seeded at the masters' colours."""
+def take_palette(drawings: list[np.ndarray]) -> np.ndarray:
+    """The take's own rendering of paper and each ink: k-means seeded at the masters' colours,
+    over pixels from every drawing (an effect mark's yellow may appear in only a few).
+
+    A centre that ends with too few pixels, or wanders more than DRIFT from its master ink, is
+    tracking some other colour, not this take's rendering of that ink; it keeps the master's. A
+    yellow centre that wandered off once let a take's yellow marks snap to vermilion.
+    """
     seeds = np.array([PAPER, *INKS.values()], np.float64)
-    px = rgb.reshape(-1, 3).astype(np.float64)[::7]
+    stride = max(1, sum(d.shape[0] * d.shape[1] for d in drawings) // 600_000)
+    px = np.concatenate([d.reshape(-1, 3) for d in drawings]).astype(np.float64)[
+        ::stride
+    ]
     centres = seeds.copy()
     for _ in range(8):
         nearest = ((px[:, None] - centres[None]) ** 2).sum(-1).argmin(1)
         for k in range(len(centres)):
-            if (nearest == k).any():
-                centres[k] = px[nearest == k].mean(0)
+            members = px[nearest == k]
+            centres[k] = members.mean(0) if len(members) >= MIN_INK_PIXELS else seeds[k]
+    drift = np.sqrt(((centres - seeds) ** 2).sum(-1))
+    centres[drift > DRIFT] = seeds[drift > DRIFT]
     return centres
 
 
@@ -165,14 +207,21 @@ def see_through(
     bright as the paper, and gaps take every shape an eye does, so neither colour nor shape can
     tell; the still can. Every loop opens on its still, so drawing 00's regions take the still's
     answer (transparent there = paper), and each later drawing's regions take the answer of the
-    previous drawing's regions they overlap most, or of the nearest one when the move was too
-    large to overlap."""
+    last decided drawing's regions they overlap most, or of the nearest one when the move was too
+    large to overlap.
+
+    Only regions of MIN_REGION pixels or more are decided or remembered. Smaller ones are video
+    noise (finish drops them as fringes); remembered, they once stood in for a drawing whose eyes
+    were shut, and the eyes that opened next took a speck's "paper" and kept it to the loop's end.
+    A drawing with no real regions leaves the memory as it was."""
     papers = []
     previous = None  # (paper mask, eye mask, [(centroid, is_paper)])
     for regions in enclosed:
         paper = np.zeros(regions.shape, bool)
+        eye = np.zeros(regions.shape, bool)
         marks = []
-        for r in np.unique(regions[regions > 0]):
+        ids, sizes = np.unique(regions[regions > 0], return_counts=True)
+        for r in ids[sizes >= MIN_REGION]:
             m = regions == r
             centre = np.array(ndimage.center_of_mass(m))
             if previous is None:
@@ -190,9 +239,11 @@ def see_through(
                     )
             if is_paper:
                 paper |= m
+            else:
+                eye |= m
             marks.append((centre, is_paper))
         papers.append(paper)
-        previous = (paper, (regions > 0) & ~paper, marks) if marks else previous
+        previous = (paper, eye, marks) if marks else previous
     return papers
 
 
@@ -254,6 +305,55 @@ def placement(label0: np.ndarray, still: Path) -> tuple[float, float, float]:
     return scale, tx, ty
 
 
+def extent(alpha: np.ndarray, sample: int) -> tuple[float, float, float, float]:
+    """Left, top, right and bottom of the largest opaque part, in artboard units."""
+    ys, xs = np.nonzero(largest(alpha > 127))
+    return (
+        xs.min() / sample,
+        ys.min() / sample,
+        (xs.max() + 1) / sample,
+        (ys.max() + 1) / sample,
+    )
+
+
+def refine(
+    silhouette: str, place: tuple[float, float, float], still: Path
+) -> tuple[float, float, float]:
+    """Corrects the placement so the traced drawing 00 sits on the still to a fraction of a pixel.
+
+    The first placement compares extents in whole take pixels (each about 0.6 artboard units, a
+    pixel or two on a phone), and tracing rounds tips like the head tuft a little. Drawing 00's
+    traced silhouette is rendered SUPERSAMPLE times larger than the stills, its extent measured
+    against the still's at the same resolution, and the scale, bottom line and centre corrected.
+    """
+    size = ARTBOARD * SUPERSAMPLE
+    alpha = np.asarray(
+        Image.open(still)
+        .convert("RGBA")
+        .getchannel("A")
+        .resize((size, size), Image.Resampling.BILINEAR)
+    )
+    sl, st, sr, sb = extent(alpha, SUPERSAMPLE)
+    for _ in range(2):
+        drawn = svg(silhouette, place).replace(
+            f'viewBox="0 0 {ARTBOARD} {ARTBOARD}"',
+            f'viewBox="0 0 {ARTBOARD} {ARTBOARD}" width="{size}" height="{size}"',
+        )
+        png = bytes(resvg_py.svg_to_bytes(svg_string=drawn))
+        traced = np.asarray(Image.open(io.BytesIO(png)).convert("RGBA"))[..., 3]
+        tl, tt, tr, tb = extent(traced, SUPERSAMPLE)
+        scale, tx, ty = place
+        k = (sb - st) / (tb - tt)
+        # A traced point sits at p = scale * u + t; scaling by k about the origin of take pixels
+        # gives k * (p - t) + t', and t' puts the bottom and the centre back on the still's.
+        place = (
+            scale * k,
+            (sl + sr) / 2 - k * ((tl + tr) / 2 - tx),
+            sb - k * (tb - ty),
+        )
+    return place
+
+
 def overlap(
     label0: np.ndarray, still: Path, place: tuple[float, float, float]
 ) -> float:
@@ -291,10 +391,10 @@ def trace_mask(mask: np.ndarray, fill: tuple[int, int, int]) -> str:
         colormode="binary",
         mode="spline",
         filter_speckle=8,
-        corner_threshold=60,
-        length_threshold=4.0,
+        corner_threshold=CORNER,
+        length_threshold=LENGTH,
         max_iterations=10,
-        splice_threshold=45,
+        splice_threshold=SPLICE,
         path_precision=2,
     )
     paths = re.findall(r"<path [^>]*/>", traced)
@@ -312,20 +412,28 @@ def trace_body(label: np.ndarray) -> str:
     return "".join(layers)
 
 
-def trace_rim(label: np.ndarray) -> str:
-    return trace_mask(label > 0, INKS["black"])
+def holds(drawings: list[tuple[int, int, list[int]]], shown: list[int]) -> list[dict]:
+    """The loop's slots: each drawing's start, length and traced drawing, where neighbours that
+    came out as the same traced drawing (a near-still stretch) are one longer hold."""
+    slots: list[dict] = []
+    for (start, length, _), drawing in zip(drawings, shown):
+        if slots and slots[-1]["drawing"] == drawing:
+            slots[-1]["length"] += length
+        else:
+            slots.append({"start": start, "length": length, "drawing": drawing})
+    return slots
 
 
-def trace(state: str, take: str) -> dict:
-    frames = frames_of(state, take)
+def trace(loop: str, take: str, still_name: str) -> dict:
+    frames = frames_of(loop, take)
     drawings = drawings_of(frames)
-    still = STILLS / f"light-{state}.png"
-    out = LOOPS / state
+    still = STILLS / f"light-{still_name}.png"
+    out = LOOPS / loop
     out.mkdir(parents=True, exist_ok=True)
     for old in out.glob("*.svg"):
         old.unlink()
-    centres = take_palette(frames[0])
-    rgbs = [frames[s : s + n].astype(np.float64).mean(0) for s, n in drawings]
+    rgbs = [frames[m].astype(np.float64).mean(0) for _, _, m in drawings]
+    centres = take_palette(rgbs)
     found = [inks(rgb, centres) for rgb in rgbs]
     place = placement(found[0][0], still)
     # The still's transparency in take pixels: art = scale * take + offset.
@@ -346,14 +454,32 @@ def trace(state: str, take: str) -> dict:
     labels = [
         finish(label, rgb, paper) for (label, _), rgb, paper in zip(found, rgbs, papers)
     ]
-    for i, label in enumerate(labels):
-        (out / f"body-{i:02d}.svg").write_text(svg(trace_body(label), place))
-        (out / f"rim-{i:02d}.svg").write_text(svg(trace_rim(label), place))
+    place = refine(trace_mask(labels[0] > 0, INKS["black"]), place, still)
+    # A drawing the take comes back to (a tremble between two drawings, a return to a held pose)
+    # is the same drawing: it reuses the earlier one's shapes instead of being traced again.
+    shown = []
+    unique = []
+    for i, rgb in enumerate(rgbs):
+        again = next(
+            (
+                u
+                for u, j in enumerate(unique)
+                if np.abs(rgb - rgbs[j]).mean() < SAME_DRAWING
+            ),
+            None,
+        )
+        if again is None:
+            again = len(unique)
+            unique.append(i)
+            (out / f"body-{again:02d}.svg").write_text(
+                svg(trace_body(labels[i]), place)
+            )
+        shown.append(again)
     timing = {
         "take": take,
         "frames": len(frames),
         "fps": 24,
-        "drawings": [{"start": s, "length": n} for s, n in drawings],
+        "drawings": holds(drawings, shown),
         "placement": {"scale": place[0], "x": place[1], "y": place[2]},
         "stillOverlap": round(overlap(labels[0], still, place), 4),
     }
@@ -363,10 +489,12 @@ def trace(state: str, take: str) -> dict:
 
 def main() -> None:
     takes = json.loads((LOOPS / "takes.json").read_text())
-    for state in sys.argv[1:] or list(takes):
-        t = trace(state, takes[state])
+    loops = {v["loop"]: v for variants in takes.values() for v in variants}
+    for name in sys.argv[1:] or list(loops):
+        v = loops[name]
+        t = trace(name, v["take"], v["still"])
         print(
-            f"{state}: {len(t['drawings'])} drawings over {t['frames']} frames, "
+            f"{name}: {len(t['drawings'])} drawings over {t['frames']} frames, "
             f"overlap with still {t['stillOverlap']}"
         )
 

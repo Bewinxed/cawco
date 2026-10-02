@@ -1,14 +1,138 @@
 {
-  "ready": "tk_slaS3IZhn3-c37ZlBfi4d",
-  "working": "tk_8IDwU2WBWUUd07bbaFe_l",
-  "needs-you": "tk_pKQtYO_Mz8tcOd61vE5ti",
-  "idle": "tk_HDtSnpn7nra346HbyzbY1",
-  "done": "tk_VWS8EULZj9dqjehZ-7l9v",
-  "trying": "tk_7tmFppjdd0kp2MJkHBf_1",
-  "loading-feather": "tk_QhVjpGPt4z9PqQAZO1LYT",
-  "loading-dots": "tk_LY7T_HYUOQ3H5zx-5y2hY",
-  "loading-peer": "tk_ONIMLObKPr5E6PjBxH9k1",
-  "reconnecting-reach": "tk_WB3FMiVanBYVJpXSTN0ab",
-  "reconnecting-search": "tk_PPR1zJmriXHzixf6_mwe3",
-  "reconnecting-hop": "tk_ngeLrSAFkQMzZ5LtNF_JT"
+  "ready": [
+    {
+      "loop": "ready-attention",
+      "take": "tk_ua2aBBXujEaXkd_1u3kB1",
+      "still": "ready"
+    },
+    {
+      "loop": "ready-false-start",
+      "take": "tk_XpQbLPPWOz-3wgNPaSecA",
+      "still": "ready"
+    },
+    {
+      "loop": "ready-warm-up",
+      "take": "tk_S3oPKBHrOPLDLQNZcj5MU",
+      "still": "ready"
+    }
+  ],
+  "working": [
+    {
+      "loop": "working-peck-flurry",
+      "take": "tk_7pl7Ae23bE1OHrVIlvA1x",
+      "still": "working"
+    },
+    {
+      "loop": "working-idea",
+      "take": "tk_ucJ58CwNnCWojfHN43XfX",
+      "still": "working"
+    },
+    {
+      "loop": "working-scratch-inspect",
+      "take": "tk_AHlgJKIi2wana57VDiFJU",
+      "still": "working"
+    }
+  ],
+  "needs_you": [
+    {
+      "loop": "needs-you-hey",
+      "take": "tk_0RXve2nn2_6-6CHzM_jn5",
+      "still": "needs-you"
+    },
+    {
+      "loop": "needs-you-point-plead",
+      "take": "tk__2NFynkrCJnqbT_n1S_My",
+      "still": "needs-you"
+    },
+    {
+      "loop": "needs-you-knock",
+      "take": "tk_ghRQwakO_9yEFkj-BSAXV",
+      "still": "needs-you"
+    }
+  ],
+  "idle": [
+    {
+      "loop": "idle-nod-off",
+      "take": "tk_qZ8uRErHDNRH5qdrwXAEy",
+      "still": "idle"
+    },
+    {
+      "loop": "idle-preen",
+      "take": "tk_3VG0fJ7eeE1bmcHzbNVTI",
+      "still": "idle"
+    },
+    {
+      "loop": "idle-dream-flight",
+      "take": "tk_n7OFBQBl3hZ4BF8DBnztB",
+      "still": "idle"
+    }
+  ],
+  "done": [
+    {
+      "loop": "done-puff-up",
+      "take": "tk_ytj_tceMI2AKhf8Lk_6p8",
+      "still": "done"
+    },
+    {
+      "loop": "done-victory",
+      "take": "tk_DK17fBWqpKpL8sn1oM5mm",
+      "still": "done"
+    },
+    {
+      "loop": "done-dust-off",
+      "take": "tk_XTZkIXiRulRTOqQJUw_MH",
+      "still": "done"
+    }
+  ],
+  "trying": [
+    {
+      "loop": "trying-stumble",
+      "take": "tk_sjMlxtwFL5ySASZndt4nH",
+      "still": "trying"
+    },
+    {
+      "loop": "trying-rally",
+      "take": "tk_X0puN6pSdHiqumOfFRGOQ",
+      "still": "trying"
+    },
+    {
+      "loop": "trying-headwind",
+      "take": "tk_QrZhvRM7wLxYVnXbTqrxw",
+      "still": "trying"
+    }
+  ],
+  "loading": [
+    {
+      "loop": "loading-feather",
+      "take": "tk_WTrnxGDO23IwJC-dwOiGa",
+      "still": "loading-feather"
+    },
+    {
+      "loop": "loading-dots",
+      "take": "tk_hwVzhKF55xkFxoXwfiyZN",
+      "still": "loading-dots"
+    },
+    {
+      "loop": "loading-peer",
+      "take": "tk_Dq9uqON8ktdrLT7qCIQe4",
+      "still": "loading-peer"
+    }
+  ],
+  "reconnecting": [
+    {
+      "loop": "reconnecting-reach",
+      "take": "tk_0n57mEHsIMczmn0WP82o6",
+      "still": "reconnecting-reach"
+    },
+    {
+      "loop": "reconnecting-search",
+      "take": "tk_22usG0w2rIxfxWXyTSKC_",
+      "still": "reconnecting-search"
+    },
+    {
+      "loop": "reconnecting-hop",
+      "take": "tk_HsBMB3sSR8u3GJu6s6RBO",
+      "still": "reconnecting-hop"
+    }
+  ]
 }

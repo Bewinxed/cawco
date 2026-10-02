@@ -1,20 +1,22 @@
-// CawCoMascot: Caw, CawCo's mascot, drawn by Rive from caw.riv.
+// CawCoMascot: Caw, CawCo's mascot, drawn by Rive from one .riv per status.
 //
-// caw.riv's contract (assets/mascot/README.md): view model `Caw` with an enum `status` and the
-// booleans `reducedMotion` and `dark`, bound to its state machine `CawStates`. This module only
-// sets those three values; Caw himself changes in the .riv, never in Swift.
+// The files' contract (assets/mascot/README.md): each status file holds that status's loops,
+// which take turns on their own, and a view model `Caw` with the booleans `reducedMotion` and
+// `dark`, bound to its state machine `CawStates`. This module picks the file for the status and
+// sets those two values; Caw himself changes in the .riv files, never in Swift.
 //
-// Resources/caw.riv is written by assets/mascot/scripts/build.mjs, byte for byte the same file as
-// assets/mascot/caw.riv.
+// Resources/caw/<status>.riv are written by assets/mascot/scripts/build.mjs, byte for byte the
+// same files as assets/mascot/caw/<status>.riv.
+import CawCoDesign
 import OSLog
 import RiveRuntime
 import SwiftUI
 
-/// What Caw shows: the values of the `Caw` view model's `status` enum, in contract order.
+/// What Caw shows. Each status is its own file, `caw/<rawValue>.riv`.
 public enum CawStatus: String, CaseIterable, Sendable {
     case ready
     case working
-    case needsYou = "needs_you"
+    case needsYou = "needs-you"
     case idle
     case done
     case trying
@@ -26,87 +28,170 @@ public enum CawStatus: String, CaseIterable, Sendable {
 ///
 /// He follows the colour scheme (`dark`) and the system's Reduce Motion setting (`reducedMotion`)
 /// on his own. Decorative, so hidden from VoiceOver: the screen around him carries the words.
+///
+/// A status change loads that status's file and fades the new Caw in over the shown one, which
+/// stays fully drawn underneath until the fade ends, so no frame is ever empty. At most two Caws
+/// are alive at once.
+///
+/// The view's frame holds Caw's still: the largest centred square in it is the files' still box.
+/// His acting reaches past that box, so he draws past the frame there; nothing here clips him, and
+/// he never takes taps from what lies under him.
 public struct CawView: View {
     private let status: CawStatus
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var loaded: LoadedCaw?
+    /// Bottom to top: the Caw on screen, and during a status change the one fading in above it.
+    @State private var layers: [CawLayer] = []
 
     public init(status: CawStatus) {
         self.status = status
     }
 
     public var body: some View {
-        RiveUIViewRepresentable(rive: loaded?.rive)
-            .accessibilityHidden(true)
-            .task { await load() }
-            .onChange(of: status) { apply() }
-            .onChange(of: colorScheme) { apply() }
-            .onChange(of: reduceMotion) { apply() }
+        StillBoxLayout {
+            ZStack {
+                ForEach(layers) { layer in
+                    RiveUIViewRepresentable(rive: layer.rive)
+                        .opacity(layer.shown ? 1 : 0)
+                }
+            }
+        }
+        .allowsHitTesting(false)
+        .accessibilityHidden(true)
+        .task(id: status) { await show(status) }
+        .onChange(of: colorScheme) { apply() }
+        .onChange(of: reduceMotion) { apply() }
     }
 
-    private func load() async {
-        guard loaded == nil else {
+    /// Loads `status`'s Caw and puts it on screen: at once the first time, faded in over the
+    /// shown Caw after that. A newer status cancels this one while it loads.
+    private func show(_ status: CawStatus) async {
+        guard layers.last?.status != status else {
             return
         }
+        let asked = ContinuousClock.now
+        let incoming: CawLayer
         do {
-            let file = try await CawFile.shared()
-            let artboard = try await file.createArtboard(CawContract.artboard)
-            let stateMachine = try await artboard.createStateMachine(CawContract.stateMachine)
-            // Retained here and bound explicitly: the view writes to this instance for its lifetime.
-            let caw = try await file.createViewModelInstance(.viewModelDefault(from: .name(CawContract.viewModel)))
-            write(to: caw)
-            try await stateMachine.bindViewModelInstances(main: caw)
-            let rive = try await Rive(file: file, artboard: artboard, stateMachine: stateMachine)
-            loaded = LoadedCaw(rive: rive, caw: caw)
+            incoming = try await CawLayer.load(status, dark: colorScheme == .dark, reducedMotion: reduceMotion)
         } catch {
-            CawContract.log.error("Caw did not load: \(String(describing: error), privacy: .public)")
-        }
-    }
-
-    /// Writes the view's state into the bound `Caw` instance; the state machine follows it.
-    private func apply() {
-        guard let loaded else {
+            CawContract.log.error("Caw \(status.rawValue, privacy: .public) did not load: \(String(describing: error), privacy: .public)")
             return
         }
-        write(to: loaded.caw)
+        guard !Task.isCancelled else {
+            return
+        }
+        let waited = (ContinuousClock.now - asked).milliseconds
+        guard let shown = layers.last else {
+            layers = [incoming.showing()]
+            CawContract.log.info("Caw \(status.rawValue, privacy: .public) on screen \(waited, format: .fixed(precision: 1)) ms after it was asked for")
+            return
+        }
+        // At most two: whatever was fading in is drawn fully at once and becomes the one below.
+        layers = [shown.showing(), incoming]
+        CawContract.log.info("Caw \(status.rawValue, privacy: .public) fades in \(waited, format: .fixed(precision: 1)) ms after the change")
+        withAnimation(.timingCurve(Motion.easeOut, duration: Motion.durFade)) {
+            layers[1] = incoming.showing()
+        } completion: {
+            if let top = layers.firstIndex(where: { $0.id == incoming.id }) {
+                layers.removeFirst(top)
+            }
+        }
     }
 
-    private func write(to caw: ViewModelInstance) {
-        caw.setValue(of: CawContract.status, to: status.rawValue)
-        caw.setValue(of: CawContract.dark, to: colorScheme == .dark)
-        caw.setValue(of: CawContract.reducedMotion, to: reduceMotion)
-        CawContract.logReadBack(caw)
+    /// Writes the view's scheme and motion setting into every live Caw; their state machines follow.
+    private func apply() {
+        for layer in layers {
+            CawContract.write(to: layer.caw, dark: colorScheme == .dark, reducedMotion: reduceMotion)
+        }
     }
 }
 
-/// The Rive view's configuration and the `Caw` instance bound to its state machine, kept together
-/// so the instance lives exactly as long as the view that writes to it.
-private struct LoadedCaw {
+/// One status's Caw: its Rive view configuration and the `Caw` instance bound to its state machine,
+/// kept together so the instance lives exactly as long as the view that writes to it.
+private struct CawLayer: Identifiable {
+    let id = UUID()
+    let status: CawStatus
     let rive: Rive
     let caw: ViewModelInstance
+    var shown = false
+
+    func showing() -> CawLayer {
+        var layer = self
+        layer.shown = true
+        return layer
+    }
+
+    @MainActor
+    static func load(_ status: CawStatus, dark: Bool, reducedMotion: Bool) async throws -> CawLayer {
+        let file = try await CawFiles.file(for: status)
+        let artboard = try await file.createArtboard(CawContract.artboard)
+        let stateMachine = try await artboard.createStateMachine(CawContract.stateMachine)
+        // Retained in the layer and bound explicitly: the view writes to this instance for its lifetime.
+        let caw = try await file.createViewModelInstance(.viewModelDefault(from: .name(CawContract.viewModel)))
+        CawContract.write(to: caw, dark: dark, reducedMotion: reducedMotion)
+        try await stateMachine.bindViewModelInstances(main: caw)
+        let rive = try await Rive(file: file, artboard: artboard, stateMachine: stateMachine)
+        return CawLayer(status: status, rive: rive, caw: caw)
+    }
 }
 
-/// The `Caw` view model's names, as caw.riv defines them. Main-actor isolated: rive-ios's
+/// Where the files draw Caw's still: a 512 × 512 box at (43, 40) in their 592 × 592 artboard. The
+/// room around the box is for his acting (assets/mascot/README.md, Contract).
+private enum CawGeometry {
+    static let artboard = CGSize(width: 592, height: 592)
+    static let stillBox = CGRect(x: 43, y: 40, width: 512, height: 512)
+}
+
+/// Sizes and places the Rive views so the still box fills the largest centred square of the
+/// frame. The view reports the size it is offered; the artboard around the box spills past it.
+/// Rive fits the artboard into the Rive view with its default, `.contain(alignment: .center)`, and
+/// that view has the artboard's aspect, so the artboard scales by exactly side / 512.
+private struct StillBoxLayout: Layout {
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        proposal.replacingUnspecifiedDimensions()
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        let side = min(bounds.width, bounds.height)
+        let scale = side / CawGeometry.stillBox.width
+        let origin = CGPoint(
+            x: bounds.midX - side / 2 - CawGeometry.stillBox.minX * scale,
+            y: bounds.midY - side / 2 - CawGeometry.stillBox.minY * scale
+        )
+        let size = ProposedViewSize(
+            width: CawGeometry.artboard.width * scale,
+            height: CawGeometry.artboard.height * scale
+        )
+        for subview in subviews {
+            subview.place(at: origin, anchor: .topLeading, proposal: size)
+        }
+    }
+}
+
+/// The `Caw` view model's names, as the files define them. Main-actor isolated: rive-ios's
 /// property descriptors are not Sendable, and every use of them is on the main actor.
 @MainActor
 private enum CawContract {
     static let artboard = "Caw"
     static let stateMachine = "CawStates"
     static let viewModel = "Caw"
-    static let status = EnumProperty(path: "status")
     static let reducedMotion = BoolProperty(path: "reducedMotion")
     static let dark = BoolProperty(path: "dark")
     static let log = Logger(subsystem: "dev.cawco.app", category: "Caw")
 
+    static func write(to caw: ViewModelInstance, dark: Bool, reducedMotion: Bool) {
+        caw.setValue(of: self.dark, to: dark)
+        caw.setValue(of: self.reducedMotion, to: reducedMotion)
+        logReadBack(caw)
+    }
+
     /// Logs what the bound instance holds after a set, read back from the runtime.
-    static func logReadBack(_ caw: ViewModelInstance) {
+    private static func logReadBack(_ caw: ViewModelInstance) {
         Task { @MainActor in
             do {
-                let status = try await caw.value(of: status)
                 let dark = try await caw.value(of: dark)
                 let reducedMotion = try await caw.value(of: reducedMotion)
-                log.info("Caw status=\(status, privacy: .public) dark=\(dark) reducedMotion=\(reducedMotion)")
+                log.info("Caw dark=\(dark) reducedMotion=\(reducedMotion)")
             } catch {
                 log.error("Caw read-back failed: \(String(describing: error), privacy: .public)")
             }
@@ -114,33 +199,52 @@ private enum CawContract {
     }
 }
 
-/// The one Worker and the one caw.riv every CawView shares, loaded once on first use.
+/// The one Worker every Caw shares, and each status file's bytes, read from the bundle once.
 @MainActor
-private enum CawFile {
-    private static var file: File?
-    private static var loading: Task<Void, any Error>?
+private enum CawFiles {
+    private static var worker: Worker?
+    private static var bytes: [CawStatus: Data] = [:]
 
-    static func shared() async throws -> File {
-        if let file {
-            return file
+    static func file(for status: CawStatus) async throws -> File {
+        let data: Data
+        if let cached = bytes[status] {
+            data = cached
+        } else {
+            data = try await read(status)
+            bytes[status] = data
         }
-        let task = loading ?? Task { @MainActor in
-            file = try await File(source: .local("caw", .module), worker: Worker())
+        return try await File(source: .data(data), worker: shared())
+    }
+
+    /// The Worker, made on first use; two Caws loading at once both get the first one made.
+    private static func shared() async throws -> Worker {
+        if let worker {
+            return worker
         }
-        loading = task
-        do {
-            try await task.value
-        } catch {
-            loading = nil
-            throw error
+        let made = try await Worker()
+        if let worker {
+            return worker
         }
-        guard let file else {
-            throw CawFileError.notLoaded
+        worker = made
+        return made
+    }
+
+    @concurrent
+    private nonisolated static func read(_ status: CawStatus) async throws -> Data {
+        guard let url = Bundle.module.url(forResource: status.rawValue, withExtension: "riv", subdirectory: "caw") else {
+            throw CawFileError.missing(status.rawValue)
         }
-        return file
+        return try Data(contentsOf: url)
     }
 }
 
 private enum CawFileError: Error {
-    case notLoaded
+    case missing(String)
+}
+
+private extension Duration {
+    var milliseconds: Double {
+        let (seconds, attoseconds) = components
+        return Double(seconds) * 1000 + Double(attoseconds) / 1e15
+    }
 }

@@ -1,0 +1,193 @@
+{
+  "take": "tk_n7OFBQBl3hZ4BF8DBnztB",
+  "frames": 124,
+  "fps": 24,
+  "drawings": [
+    {
+      "start": 0,
+      "length": 14,
+      "drawing": 0
+    },
+    {
+      "start": 14,
+      "length": 2,
+      "drawing": 1
+    },
+    {
+      "start": 16,
+      "length": 2,
+      "drawing": 2
+    },
+    {
+      "start": 18,
+      "length": 2,
+      "drawing": 3
+    },
+    {
+      "start": 20,
+      "length": 2,
+      "drawing": 4
+    },
+    {
+      "start": 22,
+      "length": 2,
+      "drawing": 5
+    },
+    {
+      "start": 24,
+      "length": 2,
+      "drawing": 6
+    },
+    {
+      "start": 26,
+      "length": 2,
+      "drawing": 7
+    },
+    {
+      "start": 28,
+      "length": 2,
+      "drawing": 8
+    },
+    {
+      "start": 30,
+      "length": 2,
+      "drawing": 9
+    },
+    {
+      "start": 32,
+      "length": 2,
+      "drawing": 10
+    },
+    {
+      "start": 34,
+      "length": 2,
+      "drawing": 11
+    },
+    {
+      "start": 36,
+      "length": 2,
+      "drawing": 12
+    },
+    {
+      "start": 38,
+      "length": 2,
+      "drawing": 13
+    },
+    {
+      "start": 40,
+      "length": 2,
+      "drawing": 14
+    },
+    {
+      "start": 42,
+      "length": 2,
+      "drawing": 15
+    },
+    {
+      "start": 44,
+      "length": 2,
+      "drawing": 16
+    },
+    {
+      "start": 46,
+      "length": 2,
+      "drawing": 17
+    },
+    {
+      "start": 48,
+      "length": 2,
+      "drawing": 18
+    },
+    {
+      "start": 50,
+      "length": 2,
+      "drawing": 19
+    },
+    {
+      "start": 52,
+      "length": 2,
+      "drawing": 20
+    },
+    {
+      "start": 54,
+      "length": 2,
+      "drawing": 21
+    },
+    {
+      "start": 56,
+      "length": 2,
+      "drawing": 22
+    },
+    {
+      "start": 58,
+      "length": 2,
+      "drawing": 23
+    },
+    {
+      "start": 60,
+      "length": 2,
+      "drawing": 24
+    },
+    {
+      "start": 62,
+      "length": 2,
+      "drawing": 25
+    },
+    {
+      "start": 64,
+      "length": 2,
+      "drawing": 26
+    },
+    {
+      "start": 66,
+      "length": 12,
+      "drawing": 27
+    },
+    {
+      "start": 78,
+      "length": 2,
+      "drawing": 28
+    },
+    {
+      "start": 80,
+      "length": 2,
+      "drawing": 29
+    },
+    {
+      "start": 82,
+      "length": 2,
+      "drawing": 30
+    },
+    {
+      "start": 84,
+      "length": 2,
+      "drawing": 31
+    },
+    {
+      "start": 86,
+      "length": 6,
+      "drawing": 32
+    },
+    {
+      "start": 92,
+      "length": 2,
+      "drawing": 33
+    },
+    {
+      "start": 94,
+      "length": 2,
+      "drawing": 34
+    },
+    {
+      "start": 96,
+      "length": 28,
+      "drawing": 0
+    }
+  ],
+  "placement": {
+    "scale": 0.6086956521739131,
+    "x": -55.34782608695656,
+    "y": -53.6521739130435
+  },
+  "stillOverlap": 0.9904
+}

@@ -1,45 +1,258 @@
 {
-  "take": "tk_ONIMLObKPr5E6PjBxH9k1",
-  "frames": 22,
+  "take": "tk_Dq9uqON8ktdrLT7qCIQe4",
+  "frames": 124,
   "fps": 24,
   "drawings": [
     {
       "start": 0,
-      "length": 2
+      "length": 2,
+      "drawing": 0
     },
     {
       "start": 2,
-      "length": 2
+      "length": 4,
+      "drawing": 1
     },
     {
-      "start": 4,
-      "length": 6
+      "start": 6,
+      "length": 2,
+      "drawing": 2
     },
     {
-      "start": 10,
-      "length": 2
+      "start": 8,
+      "length": 4,
+      "drawing": 3
     },
     {
       "start": 12,
-      "length": 2
+      "length": 2,
+      "drawing": 4
     },
     {
       "start": 14,
-      "length": 2
+      "length": 2,
+      "drawing": 5
     },
     {
       "start": 16,
-      "length": 2
+      "length": 2,
+      "drawing": 6
     },
     {
       "start": 18,
-      "length": 4
+      "length": 6,
+      "drawing": 7
+    },
+    {
+      "start": 24,
+      "length": 2,
+      "drawing": 8
+    },
+    {
+      "start": 26,
+      "length": 2,
+      "drawing": 9
+    },
+    {
+      "start": 28,
+      "length": 2,
+      "drawing": 10
+    },
+    {
+      "start": 30,
+      "length": 2,
+      "drawing": 11
+    },
+    {
+      "start": 32,
+      "length": 2,
+      "drawing": 12
+    },
+    {
+      "start": 34,
+      "length": 2,
+      "drawing": 13
+    },
+    {
+      "start": 36,
+      "length": 2,
+      "drawing": 14
+    },
+    {
+      "start": 38,
+      "length": 2,
+      "drawing": 15
+    },
+    {
+      "start": 40,
+      "length": 2,
+      "drawing": 16
+    },
+    {
+      "start": 42,
+      "length": 2,
+      "drawing": 17
+    },
+    {
+      "start": 44,
+      "length": 2,
+      "drawing": 18
+    },
+    {
+      "start": 46,
+      "length": 2,
+      "drawing": 19
+    },
+    {
+      "start": 48,
+      "length": 2,
+      "drawing": 20
+    },
+    {
+      "start": 50,
+      "length": 2,
+      "drawing": 21
+    },
+    {
+      "start": 52,
+      "length": 2,
+      "drawing": 22
+    },
+    {
+      "start": 54,
+      "length": 2,
+      "drawing": 23
+    },
+    {
+      "start": 56,
+      "length": 2,
+      "drawing": 24
+    },
+    {
+      "start": 58,
+      "length": 2,
+      "drawing": 25
+    },
+    {
+      "start": 60,
+      "length": 2,
+      "drawing": 26
+    },
+    {
+      "start": 62,
+      "length": 2,
+      "drawing": 27
+    },
+    {
+      "start": 64,
+      "length": 8,
+      "drawing": 28
+    },
+    {
+      "start": 72,
+      "length": 4,
+      "drawing": 29
+    },
+    {
+      "start": 76,
+      "length": 2,
+      "drawing": 30
+    },
+    {
+      "start": 78,
+      "length": 2,
+      "drawing": 31
+    },
+    {
+      "start": 80,
+      "length": 2,
+      "drawing": 32
+    },
+    {
+      "start": 82,
+      "length": 2,
+      "drawing": 33
+    },
+    {
+      "start": 84,
+      "length": 2,
+      "drawing": 34
+    },
+    {
+      "start": 86,
+      "length": 2,
+      "drawing": 35
+    },
+    {
+      "start": 88,
+      "length": 2,
+      "drawing": 36
+    },
+    {
+      "start": 90,
+      "length": 2,
+      "drawing": 37
+    },
+    {
+      "start": 92,
+      "length": 2,
+      "drawing": 38
+    },
+    {
+      "start": 94,
+      "length": 2,
+      "drawing": 39
+    },
+    {
+      "start": 96,
+      "length": 2,
+      "drawing": 40
+    },
+    {
+      "start": 98,
+      "length": 2,
+      "drawing": 41
+    },
+    {
+      "start": 100,
+      "length": 2,
+      "drawing": 42
+    },
+    {
+      "start": 102,
+      "length": 2,
+      "drawing": 43
+    },
+    {
+      "start": 104,
+      "length": 2,
+      "drawing": 44
+    },
+    {
+      "start": 106,
+      "length": 2,
+      "drawing": 45
+    },
+    {
+      "start": 108,
+      "length": 2,
+      "drawing": 46
+    },
+    {
+      "start": 110,
+      "length": 2,
+      "drawing": 47
+    },
+    {
+      "start": 112,
+      "length": 12,
+      "drawing": 0
     }
   ],
   "placement": {
-    "scale": 0.5576662143826323,
-    "x": -29.52510176390774,
-    "y": -7.746268656716438
+    "scale": 0.5573267948973112,
+    "x": -29.226318987423326,
+    "y": -7.69757950963384
   },
-  "stillOverlap": 0.9943
+  "stillOverlap": 0.9925
 }

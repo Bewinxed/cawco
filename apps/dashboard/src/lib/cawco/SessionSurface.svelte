@@ -450,22 +450,29 @@
            and nothing could be opened, the detail area says where to start.
            The sidebar's home carries the facts either way. -->
       <!-- It fades out as the conversation the app lands on fades in under
-           it, and each of its own states cross-fades into the next. -->
+           it. Caw stays and fades from one state's loops to the next himself;
+           the line under him cross-fades in one cell. -->
       <div class="empty-detail" out:crossOut>
-        {#key detailState}
-          <div class="detail-state" in:crossIn out:crossOut>
-            {#if detailState === 'reconnecting'}
-              <Caw pose="reconnecting" size={150} />
-              <p>Reaching the hub again…</p>
-            {:else if detailState === 'loading'}
-              <Caw pose="loading" size={150} />
-              <p>Reading the fleet…</p>
-            {:else}
-              <Caw pose="ready" size={150} />
-              <p>Open a session from the list, or start one.</p>
-            {/if}
+        <div class="detail-state">
+          <Caw
+            next={['loading', 'ready', 'reconnecting']}
+            size={150}
+            status={detailState}
+          />
+          <div class="detail-line">
+            {#key detailState}
+              <p in:crossIn out:crossOut>
+                {#if detailState === 'reconnecting'}
+                  Reaching the hub again…
+                {:else if detailState === 'loading'}
+                  Reading the fleet…
+                {:else}
+                  Open a session from the list, or start one.
+                {/if}
+              </p>
+            {/key}
           </div>
-        {/key}
+        </div>
       </div>
     {:else if narrow}
       <PaneDeck />
@@ -543,5 +550,10 @@
     flex-direction: column;
     align-items: center;
     gap: var(--space-3);
+  }
+  /* The line's states share this cell: the one leaving is pinned in it (crossOut). */
+  .detail-line {
+    position: relative;
+    text-align: center;
   }
 </style>

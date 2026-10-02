@@ -49,11 +49,11 @@ let package = Package(
             swiftSettings: concurrency
         ),
         .target(name: "CawCoTranscript", dependencies: ["CawCoDesign"], swiftSettings: concurrency),
-        // Caw, drawn by Rive's Apple runtime from caw.riv (assets/mascot/README.md).
+        // Caw, drawn by Rive's Apple runtime from one .riv per status (assets/mascot/README.md).
         .target(
             name: "CawCoMascot",
             dependencies: ["CawCoDesign", .product(name: "RiveRuntime", package: "rive-ios")],
-            resources: [.copy("Resources/caw.riv")],
+            resources: [.copy("Resources/caw")],
             swiftSettings: concurrency
         ),
     ]
