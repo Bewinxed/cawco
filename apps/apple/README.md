@@ -20,7 +20,9 @@ milliseconds.
 Build and launch both platforms on the Mac (`ssh mac`), from the repo root:
 
 ```sh
-bash apps/apple/scripts/build-both.sh   # BUILT/LAUNCHED iOS, then BUILT/LAUNCHED macOS
+bash apps/apple/scripts/build-both.sh         # BUILT/LAUNCHED iOS, then BUILT/LAUNCHED macOS
+bash apps/apple/scripts/build-both.sh ios     # the iOS Simulator only
+bash apps/apple/scripts/build-both.sh macos   # the Mac only
 ```
 
 It rsyncs `apps/apple` to `~/build/cawco-apple` (never the deploy clone),
