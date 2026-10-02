@@ -25,6 +25,7 @@ import type {
   HarnessKind,
   InstanceRow,
   NeutralOrigin,
+  PermissionMode,
   SendPayload,
   SpawnPayload,
   WorkItemSummary,
@@ -182,11 +183,16 @@ export interface WorkItemDeps {
     reason: string | null;
     state: string;
   };
-  /** Sends a spawn and records its row under the work item. */
+  /**
+   * Sends a spawn and records its row under the work item. `fallbackMode` is
+   * the mode it runs in when its harness has modes; the hub's one rule
+   * settles it (none at all for a harness without modes).
+   */
   readonly spawn: (
     machineId: string,
     payload: SpawnPayload,
-    workItemId: string
+    workItemId: string,
+    fallbackMode: PermissionMode
   ) => void;
   /** The fleet's delegate types, read at dispatch. */
   readonly types: () => DelegateType[];
@@ -242,9 +248,6 @@ const spawnOf = (
   parent: { instanceId: parent.id },
   spawnedBy: { instanceId: parent.id },
   canDelegate,
-  // Autonomous by definition: it must never sit waiting on a tool permission
-  // prompt nobody is watching for. Questions still ask.
-  permissionMode: "bypassPermissions",
   workspace: refOf(workspace),
 });
 
@@ -760,7 +763,10 @@ export const createWorkItems = ({
       spawn(
         workspace.machineId,
         spawnOf(instanceId, item.title, parent, workspace, settings),
-        item.id
+        item.id,
+        // Autonomous by definition: it must never sit waiting on a tool
+        // permission prompt nobody is watching for. Questions still ask.
+        "bypassPermissions"
       );
       send(
         messageOf(

@@ -200,22 +200,18 @@ async function fetchInstances(): Promise<{
 }
 
 /**
- * The permission mode the calling session runs in: what a session it starts
- * takes when nothing else is named, so none answers by its machine's default.
+ * The permission mode the calling session runs in, if it has one: the
+ * fallback a session it starts takes when nothing else is named. The hub
+ * settles it (`settleMode`): a harness with modes needs one, one without
+ * takes none.
  */
 const callerMode = (
   rows: InstanceRow[],
-  instanceId: string,
-  remedy = ""
-): PermissionMode => {
-  const mode = rows.find((row) => row.id === instanceId)?.permissionMode;
-  if (!mode) {
-    throw new Error(
-      `This session's own permission mode is not on record, so the new session has none to take.${remedy ? ` ${remedy}` : ""}`
-    );
-  }
-  return mode as PermissionMode;
-};
+  instanceId: string
+): PermissionMode | undefined =>
+  (rows.find((row) => row.id === instanceId)?.permissionMode ?? undefined) as
+    | PermissionMode
+    | undefined;
 
 const toPeer = (row: InstanceRow, hosts: Map<string, string>): Peer => {
   const name = leafOf(row.cwd);
@@ -679,9 +675,9 @@ export const handoffActions = ({
         input.session
       ).row.id;
     }
-    // The new session answers permissions as the caller does, never by its
-    // machine's default.
-    const permissionMode = callerMode(rows, instanceId);
+    // The new session answers permissions as the caller does, where its
+    // harness has modes; the hub settles it, never the machine's default.
+    const fallbackPermissionMode = callerMode(rows, instanceId);
     const response = await fetch(
       `${hubHttpUrl()}/api/instances/${encodeURIComponent(source)}/continue`,
       {
@@ -695,7 +691,7 @@ export const handoffActions = ({
           target: {
             harness: input.target_harness,
             model: input.target_model,
-            permissionMode,
+            ...(fallbackPermissionMode ? { fallbackPermissionMode } : {}),
           },
           ...(input.note ? { note: input.note } : {}),
         }),
@@ -985,30 +981,31 @@ export const handoffActions = ({
       type: typeName,
       model: modelName,
     });
-    const permissionMode =
-      opts.permissionMode ??
-      callerMode(rows, instanceId, "Pass permissionMode.");
     const id = crypto.randomUUID();
     const from = leafOf(cwd);
-    const payload: SpawnPayload = {
-      instanceId: id,
-      cwd: workdir,
-      title,
-      harness,
-      model,
-      permissionMode,
-      ...(type?.effort ? { effort: type.effort } : {}),
-      ...(type?.skills?.length ? { skills: type.skills } : {}),
-      ...(type?.denyTools?.length ? { denyTools: type.denyTools } : {}),
-      ...(sideQuest ? { scratch: { baseCwd: workdir } } : {}),
-      // Provenance only — a started session is not a delegate. The hub reads
-      // it to hold a leaf to `canDelegate` on this door as well.
-      spawnedBy: { instanceId },
-      // The machine answers it once the session is in place, or with why it
-      // is not; the hub holds the relay until then, so a failed spawn is this
-      // tool's error rather than a "Started" for a session that never was.
-      requestId: crypto.randomUUID(),
-    };
+    // The mode asked for, if any, and the caller's own to fall back on; the
+    // hub settles them by the harness's modes (none at all for pi).
+    const payload: SpawnPayload & { fallbackPermissionMode?: PermissionMode } =
+      {
+        instanceId: id,
+        cwd: workdir,
+        title,
+        harness,
+        model,
+        permissionMode: opts.permissionMode,
+        fallbackPermissionMode: callerMode(rows, instanceId),
+        ...(type?.effort ? { effort: type.effort } : {}),
+        ...(type?.skills?.length ? { skills: type.skills } : {}),
+        ...(type?.denyTools?.length ? { denyTools: type.denyTools } : {}),
+        ...(sideQuest ? { scratch: { baseCwd: workdir } } : {}),
+        // Provenance only — a started session is not a delegate. The hub reads
+        // it to hold a leaf to `canDelegate` on this door as well.
+        spawnedBy: { instanceId },
+        // The machine answers it once the session is in place, or with why it
+        // is not; the hub holds the relay until then, so a failed spawn is this
+        // tool's error rather than a "Started" for a session that never was.
+        requestId: crypto.randomUUID(),
+      };
     emit({ verb: "spawn", machineId, instanceId: id, payload });
     // The marker prefix survives SDK storage (which strips `origin`) so that
     // `mapTranscript` → `handoffFrom()` can still detect the opening prompt as
@@ -1037,7 +1034,8 @@ export const handoffActions = ({
       title,
       text:
         `Started "${title}" (${leafOf(workdir)})${sideQuest ? " as a side quest" : ""}${on} in ${workdir}, ` +
-        `on ${harness} ${model}${type?.effort ? ` at ${type.effort} effort` : ""} in ${permissionMode} mode${type ? ` (type '${type.name}')` : ""}. ` +
+        `on ${harness} ${model}${type?.effort ? ` at ${type.effort} effort` : ""}${type ? ` (type '${type.name}')` : ""}, ` +
+        `in ${opts.permissionMode ?? "this session's own"} permission mode where its harness has modes. ` +
         "It is in the sidebar now and the user can open its transcript. " +
         `Hand it more work later with handoff("${id}", ...).`,
     };

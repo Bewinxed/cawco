@@ -92,18 +92,23 @@ export const spawnPrefs = {
  * What the New Session form shows before anything is touched, for a spawn
  * that has no form: its default model entry, and the remembered permission
  * mode unless the machine's harness cannot honour it, then the first one it
- * can — the same correction the form makes. A path that starts a session
+ * can — the same correction the form makes. A harness that reports no
+ * modes at all (pi) has none, and none is given. A path that starts a session
  * without saying either takes these, never the machine's own defaults.
  */
 export function spawnDefaults(
   harness: HarnessKind,
   machineId: string,
   report?: HarnessReport
-): { model: string; permissionMode: PermissionMode } {
+): { model: string; permissionMode?: PermissionMode } {
+  const model = defaultModelFor(harness, [machineId]);
+  if (report?.capabilities.permissionModes.length === 0) {
+    return { model };
+  }
   const honoured = (mode: PermissionMode) =>
     !report || report.capabilities.permissionModes.includes(mode);
   return {
-    model: defaultModelFor(harness, [machineId]),
+    model,
     permissionMode: honoured(store.permissionMode)
       ? store.permissionMode
       : (PERMISSION_MODES.find((mode) => honoured(mode.value))?.value ??

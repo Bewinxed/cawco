@@ -3369,28 +3369,30 @@ function userMessage(text: string, uuid: string): SendPayload["message"] {
 
 /** Spawns a session on `machineId` and registers the view it streams into. */
 /**
- * A spawn as it leaves this dashboard, with a model and a permission mode
- * always named. What the path says stands (the form's choice, the session's
- * own settings); what it leaves out is what the New Session form shows by
- * default ({@link spawnDefaults}), never the machine's default. The hub
- * refuses one still missing either.
+ * A spawn as it leaves this dashboard, with a model always named, and a
+ * permission mode named exactly when its harness has modes. What the path
+ * says stands (the form's choice, the session's own settings); what it
+ * leaves out is what the New Session form shows by default
+ * ({@link spawnDefaults}), never the machine's default. The hub settles the
+ * same rule (`settleMode`) and refuses a spawn that breaks it.
  */
 function explicit(machineId: string, payload: SpawnPayload): SpawnPayload {
-  if (payload.model && payload.permissionMode) {
-    return payload;
-  }
   const harness = payload.harness ?? "claude";
-  const defaults = spawnDefaults(
-    harness,
-    machineId,
-    state.machines
-      .find((machine) => machine.machineId === machineId)
-      ?.harnesses?.find((report) => report.harness === harness)
-  );
+  const report = state.machines
+    .find((machine) => machine.machineId === machineId)
+    ?.harnesses?.find((entry) => entry.harness === harness);
+  const defaults = spawnDefaults(harness, machineId, report);
+  const { permissionMode, ...rest } = payload;
+  // A harness with no permission modes (pi) is sent none, whatever the
+  // path carried (a stored row's, a remembered preference).
+  const mode =
+    report?.capabilities.permissionModes.length === 0
+      ? undefined
+      : (permissionMode ?? defaults.permissionMode);
   return {
-    ...payload,
+    ...rest,
     model: payload.model || defaults.model || undefined,
-    permissionMode: payload.permissionMode ?? defaults.permissionMode,
+    ...(mode ? { permissionMode: mode } : {}),
   };
 }
 

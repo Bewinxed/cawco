@@ -404,7 +404,8 @@ export function handoffTools(deps: HandoffDeps) {
         "is a full session of its own: it gets its own row in the sidebar, its own transcript " +
         "the user can open and read, and it survives after this turn ends. " +
         "It runs on the harness, model, effort and denied tools of a delegate type — `type`, the same catalog delegate uses, " +
-        "'medium' when omitted — and answers tool permissions in `permissionMode`, this session's own mode when omitted. " +
+        "'medium' when omitted — and answers tool permissions in `permissionMode`, this session's own mode when omitted, " +
+        "where its harness has permission modes (pi has none, and refuses one). " +
         "Nothing is left to the machine's defaults. " +
         "It runs on this session's machine unless `machine` names another one of the fleet. " +
         "Use it when the user asks you to spin something off, or when work " +
@@ -464,7 +465,7 @@ export function handoffTools(deps: HandoffDeps) {
           ])
           .optional()
           .describe(
-            "How the new session answers tool permissions. Default: this session's own mode."
+            "How the new session answers tool permissions. Default: this session's own mode. Omit it for a harness without permission modes (pi)."
           ),
       },
       async ({

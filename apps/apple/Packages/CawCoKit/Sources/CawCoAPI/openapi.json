@@ -1073,6 +1073,17 @@
                           "auto"
                         ]
                       },
+                      "fallbackPermissionMode": {
+                        "type": "string",
+                        "enum": [
+                          "default",
+                          "acceptEdits",
+                          "bypassPermissions",
+                          "plan",
+                          "dontAsk",
+                          "auto"
+                        ]
+                      },
                       "scratch": {
                         "type": "object",
                         "properties": {
@@ -1105,8 +1116,7 @@
                     },
                     "required": [
                       "harness",
-                      "model",
-                      "permissionMode"
+                      "model"
                     ]
                   },
                   "note": {
@@ -1998,6 +2008,55 @@
               "text/plain": {
                 "schema": {
                   "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/seen": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "ids": {
+                    "minItems": 1,
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "required": [
+                  "ids"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiSeen",
+        "responses": {
+          "200": {
+            "description": "postApiSeen 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiSeen200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiSeen 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -5156,14 +5215,6 @@
                 "id": {
                   "type": "string"
                 },
-                "createdAt": {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                "updatedAt": {
-                  "type": "string",
-                  "format": "date-time"
-                },
                 "slug": {
                   "type": "string"
                 },
@@ -5181,6 +5232,14 @@
                   "items": {
                     "$ref": "#/components/schemas/WorkflowInput"
                   }
+                },
+                "createdAt": {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                "updatedAt": {
+                  "type": "string",
+                  "format": "date-time"
                 }
               },
               "required": [
@@ -5219,14 +5278,6 @@
           "id": {
             "type": "string"
           },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
           "slug": {
             "type": "string"
           },
@@ -5244,6 +5295,14 @@
             "items": {
               "$ref": "#/components/schemas/WorkflowInput"
             }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "required": [
@@ -5291,14 +5350,6 @@
           "id": {
             "type": "string"
           },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
           "slug": {
             "type": "string"
           },
@@ -5316,6 +5367,14 @@
             "items": {
               "$ref": "#/components/schemas/WorkflowInput"
             }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "required": [
@@ -5349,14 +5408,6 @@
           "id": {
             "type": "string"
           },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
-          },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
           "slug": {
             "type": "string"
           },
@@ -5374,6 +5425,14 @@
             "items": {
               "$ref": "#/components/schemas/WorkflowInput"
             }
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
           }
         },
         "required": [
@@ -5454,20 +5513,6 @@
                   "type": "string"
                 },
                 "result": {},
-                "kind": {
-                  "enum": [
-                    "ask",
-                    "branch",
-                    "check",
-                    "end",
-                    "jev",
-                    "map",
-                    "start",
-                    "step",
-                    "workflow"
-                  ],
-                  "type": "string"
-                },
                 "failure": {
                   "type": [
                     "null",
@@ -5481,6 +5526,20 @@
                 "endedAt": {
                   "type": "string",
                   "format": "date-time"
+                },
+                "kind": {
+                  "enum": [
+                    "ask",
+                    "branch",
+                    "check",
+                    "end",
+                    "jev",
+                    "map",
+                    "start",
+                    "step",
+                    "workflow"
+                  ],
+                  "type": "string"
                 },
                 "runId": {
                   "type": "string"
@@ -5585,18 +5644,6 @@
             "type": "string"
           },
           "result": {},
-          "graph": {
-            "$ref": "#/components/schemas/WorkflowGraph"
-          },
-          "program": {
-            "type": "string"
-          },
-          "inputs": {
-            "type": "object"
-          },
-          "workflowId": {
-            "type": "string"
-          },
           "parentRunId": {
             "type": [
               "null",
@@ -5608,6 +5655,18 @@
               "null",
               "string"
             ]
+          },
+          "graph": {
+            "$ref": "#/components/schemas/WorkflowGraph"
+          },
+          "program": {
+            "type": "string"
+          },
+          "inputs": {
+            "type": "object"
+          },
+          "workflowId": {
+            "type": "string"
           },
           "workspace": {
             "type": "string"
@@ -5643,6 +5702,10 @@
           },
           "launchedBy": {
             "type": "string"
+          },
+          "seenAt": {
+            "type": "string",
+            "format": "date-time"
           },
           "edges": {
             "type": "object"
@@ -5687,11 +5750,11 @@
                   "type": "string",
                   "format": "date-time"
                 },
-                "kind": {
-                  "$ref": "#/components/schemas/WorkflowEffectKind"
-                },
                 "failure": {
                   "$ref": "#/components/schemas/WorkflowFailure"
+                },
+                "kind": {
+                  "$ref": "#/components/schemas/WorkflowEffectKind"
                 },
                 "runId": {
                   "type": "string"
@@ -5732,18 +5795,6 @@
                 "type": "string"
               },
               "result": {},
-              "graph": {
-                "$ref": "#/components/schemas/WorkflowGraph"
-              },
-              "program": {
-                "type": "string"
-              },
-              "inputs": {
-                "type": "object"
-              },
-              "workflowId": {
-                "type": "string"
-              },
               "parentRunId": {
                 "type": [
                   "null",
@@ -5755,6 +5806,18 @@
                   "null",
                   "string"
                 ]
+              },
+              "graph": {
+                "$ref": "#/components/schemas/WorkflowGraph"
+              },
+              "program": {
+                "type": "string"
+              },
+              "inputs": {
+                "type": "object"
+              },
+              "workflowId": {
+                "type": "string"
               },
               "workspace": {
                 "type": "string"
@@ -5790,6 +5853,10 @@
               },
               "launchedBy": {
                 "type": "string"
+              },
+              "seenAt": {
+                "type": "string",
+                "format": "date-time"
               }
             },
             "required": [
@@ -6100,6 +6167,18 @@
           "id": {
             "type": "string"
           },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "seenAt": {
+            "type": "string",
+            "format": "date-time"
+          },
           "workflowRunId": {
             "type": [
               "null",
@@ -6111,10 +6190,6 @@
               "null",
               "string"
             ]
-          },
-          "createdAt": {
-            "type": "string",
-            "format": "date-time"
           },
           "cwd": {
             "type": "string"
@@ -6204,10 +6279,6 @@
               "updatedAt"
             ]
           },
-          "updatedAt": {
-            "type": "string",
-            "format": "date-time"
-          },
           "spawnedAt": {
             "type": "string",
             "format": "date-time"
@@ -6295,6 +6366,18 @@
             "id": {
               "type": "string"
             },
+            "createdAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "updatedAt": {
+              "type": "string",
+              "format": "date-time"
+            },
+            "seenAt": {
+              "type": "string",
+              "format": "date-time"
+            },
             "workflowRunId": {
               "type": [
                 "null",
@@ -6306,10 +6389,6 @@
                 "null",
                 "string"
               ]
-            },
-            "createdAt": {
-              "type": "string",
-              "format": "date-time"
             },
             "cwd": {
               "type": "string"
@@ -6396,10 +6475,6 @@
                 "updatedAt"
               ]
             },
-            "updatedAt": {
-              "type": "string",
-              "format": "date-time"
-            },
             "spawnedAt": {
               "type": "string",
               "format": "date-time"
@@ -6456,6 +6531,17 @@
             "title"
           ]
         }
+      },
+      "postApiSeen200": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "at"
+        ]
       },
       "getApiHandoffs200": {
         "type": "object",
@@ -9693,18 +9779,6 @@
                 "type": "string"
               },
               "result": {},
-              "graph": {
-                "$ref": "#/components/schemas/WorkflowGraph"
-              },
-              "program": {
-                "type": "string"
-              },
-              "inputs": {
-                "type": "object"
-              },
-              "workflowId": {
-                "type": "string"
-              },
               "parentRunId": {
                 "type": [
                   "null",
@@ -9716,6 +9790,18 @@
                   "null",
                   "string"
                 ]
+              },
+              "graph": {
+                "$ref": "#/components/schemas/WorkflowGraph"
+              },
+              "program": {
+                "type": "string"
+              },
+              "inputs": {
+                "type": "object"
+              },
+              "workflowId": {
+                "type": "string"
               },
               "workspace": {
                 "type": "string"
@@ -9751,6 +9837,10 @@
               },
               "launchedBy": {
                 "type": "string"
+              },
+              "seenAt": {
+                "type": "string",
+                "format": "date-time"
               }
             },
             "required": [
@@ -9861,28 +9951,6 @@
           "stepId"
         ]
       },
-      "WorkflowEffectKind": {
-        "description": "Every effect kind the bridge can carry: one `w.*` call.",
-        "enum": [
-          "ask",
-          "checkpoint",
-          "exec",
-          "exists",
-          "jev",
-          "log",
-          "notes",
-          "notify",
-          "now",
-          "run",
-          "sleep",
-          "spawn",
-          "state-get",
-          "state-set",
-          "trace",
-          "workflow"
-        ],
-        "type": "string"
-      },
       "WorkflowFailure": {
         "description": "How a typed rejection crosses the worker boundary and comes back.",
         "type": "object",
@@ -9916,6 +9984,28 @@
           "message",
           "name"
         ]
+      },
+      "WorkflowEffectKind": {
+        "description": "Every effect kind the bridge can carry: one `w.*` call.",
+        "enum": [
+          "ask",
+          "checkpoint",
+          "exec",
+          "exists",
+          "jev",
+          "log",
+          "notes",
+          "notify",
+          "now",
+          "run",
+          "sleep",
+          "spawn",
+          "state-get",
+          "state-set",
+          "trace",
+          "workflow"
+        ],
+        "type": "string"
       },
       "AgentRow": {
         "description": "A machine from the hub's `agents` table — what `GET /api/agents` answers with,\nand what rides alongside the sessions in an `instances` frame.",
@@ -13974,6 +14064,22 @@
               "string"
             ]
           },
+          "seenAt": {
+            "description": "When the owner last looked at it (its tab in front, after it ended) or\narchived it off Finished, on any device. Null on one never seen.",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": [
+                  "null",
+                  "string",
+                  "number"
+                ]
+              }
+            ]
+          },
           "sessionId": {
             "description": "The harness's own session id, once the session has named itself.",
             "type": [
@@ -14460,6 +14566,21 @@
             ]
           },
           "result": {},
+          "seenAt": {
+            "description": "When the owner last looked at it or archived it, on any device.",
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": [
+                  "null",
+                  "string"
+                ]
+              }
+            ]
+          },
           "startedAt": {
             "anyOf": [
               {

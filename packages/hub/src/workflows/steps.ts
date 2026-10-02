@@ -19,7 +19,11 @@
  * machine, its attempt row keeps counting, and `resume` re-arms the timeout
  * the restart dropped.
  */
-import type { SpawnPayload, WorkflowFailure } from "@cawco/core";
+import type {
+  PermissionMode,
+  SpawnPayload,
+  WorkflowFailure,
+} from "@cawco/core";
 import { workflowNoticeMarker, workflowStepMarker } from "@cawco/core";
 import type { StepSpecJson } from "@cawco/core/workflow-program";
 import Ajv from "ajv";
@@ -62,7 +66,12 @@ export interface StepContext {
     step: WorkflowStepRow,
     outcome: { result: unknown } | { failure: WorkflowFailure }
   ) => void;
-  readonly spawn: (machineId: string, payload: SpawnPayload) => Promise<void>;
+  /** `fallbackMode`: the mode it runs in when its harness has modes (the hub settles it). */
+  readonly spawn: (
+    machineId: string,
+    payload: SpawnPayload,
+    fallbackMode: PermissionMode
+  ) => Promise<void>;
   readonly stopSession: (run: WorkflowRunRow, instanceId: string) => void;
   /** Whether the run has a supervisor, live now to take a decision. */
   readonly supervisorLive: (run: WorkflowRunRow) => boolean;
@@ -244,26 +253,30 @@ export function createSteps(ctx: StepContext) {
   ) => {
     const [instance] = db.getInstancesByIds([instanceId]);
     if (!(instance && ["running", "starting"].includes(instance.status))) {
-      await ctx.spawn(run.machineId, {
-        instanceId,
-        cwd: run.workspace,
-        harness: spec.harness,
-        model: spec.model,
-        effort: spec.effort,
-        skills: spec.skills,
-        denyTools: denied(run, spec),
-        ...(instance?.sessionId
-          ? { resume: { sessionKey: instance.sessionId } }
-          : {}),
-        permissionMode: "bypassPermissions",
-        canDelegate: false,
-        title: `${ctx.nameOf(run)} · ${spec.title}`,
-        ...(run.supervisorInstanceId
-          ? { parent: { instanceId: run.supervisorInstanceId } }
-          : {}),
-        workflowRunId: run.id,
-        workflowStepId: step.id,
-      });
+      await ctx.spawn(
+        run.machineId,
+        {
+          instanceId,
+          cwd: run.workspace,
+          harness: spec.harness,
+          model: spec.model,
+          effort: spec.effort,
+          skills: spec.skills,
+          denyTools: denied(run, spec),
+          ...(instance?.sessionId
+            ? { resume: { sessionKey: instance.sessionId } }
+            : {}),
+          canDelegate: false,
+          title: `${ctx.nameOf(run)} · ${spec.title}`,
+          ...(run.supervisorInstanceId
+            ? { parent: { instanceId: run.supervisorInstanceId } }
+            : {}),
+          workflowRunId: run.id,
+          workflowStepId: step.id,
+        },
+        // Nobody watches a step's tool asks.
+        "bypassPermissions"
+      );
     }
     if (!active(runOf(run.id))) {
       stop(run, step);

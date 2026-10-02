@@ -343,6 +343,15 @@ const checksSchema = t.Array(
   { minItems: 1 }
 );
 /** Continue in new session: every field of the summariser and target is the caller's to name. */
+const permissionModeSchema = t.Union([
+  t.Literal("default"),
+  t.Literal("acceptEdits"),
+  t.Literal("bypassPermissions"),
+  t.Literal("plan"),
+  t.Literal("dontAsk"),
+  t.Literal("auto"),
+]);
+
 const continueBody = t.Object({
   summarizer: t.Object({
     harness: harnessSchema,
@@ -362,16 +371,12 @@ const continueBody = t.Object({
         t.Literal("max"),
       ])
     ),
-    // Required: the new session never answers permissions by its machine's
-    // default, so whoever continues says how it does.
-    permissionMode: t.Union([
-      t.Literal("default"),
-      t.Literal("acceptEdits"),
-      t.Literal("bypassPermissions"),
-      t.Literal("plan"),
-      t.Literal("dontAsk"),
-      t.Literal("auto"),
-    ]),
+    // The mode the new session is asked to run in, and the one it takes when
+    // none is asked (the caller's own). A harness with modes gets one of the
+    // two or the continuation is refused; one with none (pi) records none and
+    // refuses one asked of it. The hub's `settleMode` decides.
+    permissionMode: t.Optional(permissionModeSchema),
+    fallbackPermissionMode: t.Optional(permissionModeSchema),
     scratch: t.Optional(
       t.Object({
         worktree: t.Optional(t.Boolean()),
@@ -2633,6 +2638,80 @@ export const createServer = ({
     return workspace ? { ...payload, workspace } : payload;
   };
 
+  /** The permission modes a machine's harness reported, or undefined when it has not reported that harness. */
+  const harnessModes = (
+    machineId: string,
+    harness: string
+  ): readonly string[] | undefined =>
+    db
+      .listAgents()
+      .find((agent) => agent.machineId === machineId)
+      ?.harnesses?.find((report) => report.harness === harness)?.capabilities
+      .permissionModes;
+
+  /**
+   * The one rule for the permission mode a spawn runs in and records, applied
+   * where every spawn leaves the hub (dashboard, delegate, start_session,
+   * workflow, continuation, revive, restore). A harness that reports modes
+   * runs in one it offers: the one asked for, else `fallback` — what the hub
+   * picks when nobody asked (a work item's bypass, the caller's or the tree's
+   * own mode, the row's last) — and with neither nothing starts rather than
+   * fall to the machine's default. A harness that reports none (pi) records
+   * none: a fallback is dropped, and a mode asked of it is refused. A machine
+   * that has not reported the harness is taken at its word.
+   */
+  const settleMode = (
+    machineId: string,
+    payload: SpawnPayload,
+    fallback?: string | null
+  ): { payload: SpawnPayload } | { refusal: string } => {
+    const harness = payload.harness ?? "claude";
+    const { permissionMode: asked, ...rest } = payload;
+    if (harnessModes(machineId, harness)?.length === 0) {
+      return asked
+        ? {
+            refusal: `${modeRefusal(machineId, harness, asked)} Start it without one. Nothing was started.`,
+          }
+        : { payload: rest };
+    }
+    const mode = asked ?? fallback ?? undefined;
+    if (!mode) {
+      return {
+        refusal: `A ${harness} session must name its permission mode; none was given, so it would have run on the machine's default. Nothing was started.`,
+      };
+    }
+    const unfit = modeRefusal(machineId, harness, mode);
+    return unfit
+      ? { refusal: `${unfit} Nothing was started.` }
+      : { payload: { ...rest, permissionMode: mode as PermissionMode } };
+  };
+
+  /** Why `harness` on `machineId` cannot run in `mode`, or nothing when it can (or has not said). */
+  const modeRefusal = (
+    machineId: string,
+    harness: string,
+    mode: string
+  ): string | undefined => {
+    const modes = harnessModes(machineId, harness);
+    if (!modes || modes.includes(mode)) {
+      return undefined;
+    }
+    return modes.length === 0
+      ? `${harness} has no permission modes, so a ${harness} session cannot run in "${mode}".`
+      : `${harness} on this machine has no "${mode}" permission mode; it offers ${modes.join(", ")}.`;
+  };
+
+  /** {@link modeRefusal} for a session the hub already has. */
+  const sessionModeRefusal = (
+    instanceId: string,
+    mode: string
+  ): string | undefined => {
+    const [row] = db.getInstancesByIds([instanceId]);
+    return row
+      ? modeRefusal(row.machineId, row.harness ?? "claude", mode)
+      : undefined;
+  };
+
   /**
    * Wakes the session a message is for when its process is gone: sleeping,
    * failed, or stopped with a conversation on record. The resume spawn goes
@@ -2656,18 +2735,24 @@ export const createServer = ({
     ) {
       return;
     }
-    const revive: SpawnPayload = {
-      instanceId,
-      cwd: row.cwd,
-      ...(row.harness ? { harness: row.harness as HarnessKind } : {}),
-      resume: { sessionKey: row.sessionId },
-      ...(row.kind === "scratch" ? { scratch: {} } : {}),
-      ...(row.permissionMode
-        ? { permissionMode: row.permissionMode as PermissionMode }
-        : {}),
-      ...(row.model ? { model: row.model } : {}),
-      ...(isEffortLevel(row.effort) ? { effort: row.effort } : {}),
-    };
+    const settled = settleMode(
+      machineId,
+      {
+        instanceId,
+        cwd: row.cwd,
+        ...(row.harness ? { harness: row.harness as HarnessKind } : {}),
+        resume: { sessionKey: row.sessionId },
+        ...(row.kind === "scratch" ? { scratch: {} } : {}),
+        ...(row.model ? { model: row.model } : {}),
+        ...(isEffortLevel(row.effort) ? { effort: row.effort } : {}),
+      },
+      row.permissionMode
+    );
+    if ("refusal" in settled) {
+      console.warn(`[hub] not waking ${instanceId}: ${settled.refusal}`);
+      return;
+    }
+    const revive = settled.payload;
     agent.send({
       verb: "spawn",
       machineId,
@@ -2683,7 +2768,7 @@ export const createServer = ({
       sessionId: row.sessionId,
       harness: row.harness ?? undefined,
       kind: row.kind ?? undefined,
-      permissionMode: row.permissionMode ?? undefined,
+      permissionMode: revive.permissionMode,
       model: row.model ?? undefined,
     });
     publishInstances(machineId);
@@ -3266,7 +3351,7 @@ export const createServer = ({
     timeoutMs: number,
     send: () => void
   ): Promise<ControlResult | "timeout"> =>
-    new Promise((resolve) => {
+    new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         waiting.delete(requestId);
         waitingMachines.delete(requestId);
@@ -3279,7 +3364,15 @@ export const createServer = ({
         waitingMachines.delete(requestId);
         resolve(frame);
       });
-      send();
+      try {
+        send();
+      } catch (error) {
+        // Refused before it went: nothing will answer, so nothing waits.
+        clearTimeout(timer);
+        waiting.delete(requestId);
+        waitingMachines.delete(requestId);
+        reject(error);
+      }
     });
 
   /**
@@ -3289,13 +3382,19 @@ export const createServer = ({
    */
   const issueSpawn = (
     machineId: string,
-    payload: SpawnPayload,
-    workItemId?: string
+    asked: SpawnPayload,
+    workItemId?: string,
+    fallbackMode?: string | null
   ): void => {
     const agent = registry.agent(machineId);
     if (!agent) {
       throw new Error(`machine ${machineId} is not connected`);
     }
+    const settled = settleMode(machineId, asked, fallbackMode);
+    if ("refusal" in settled) {
+      throw new WorkItemRefusal(400, settled.refusal);
+    }
+    const { payload } = settled;
     agent.send({
       verb: "spawn",
       machineId,
@@ -3333,18 +3432,19 @@ export const createServer = ({
    */
   const relaySpawn = async (
     machineId: string,
-    payload: SpawnPayload
+    payload: SpawnPayload,
+    fallbackMode?: string
   ): Promise<{ code: number; message: string } | undefined> => {
     const { requestId } = payload;
     if (!requestId) {
-      issueSpawn(machineId, payload);
+      issueSpawn(machineId, payload, undefined, fallbackMode);
       return;
     }
     const reply = await awaitReply(
       machineId,
       requestId,
       SPAWN_START_TIMEOUT_MS,
-      () => issueSpawn(machineId, payload)
+      () => issueSpawn(machineId, payload, undefined, fallbackMode)
     );
     if (reply === "timeout") {
       return {
@@ -3368,13 +3468,19 @@ export const createServer = ({
    */
   const spawnFromHub = async (
     machineId: string,
-    payload: SpawnPayload,
-    kind: InstanceKind
+    asked: SpawnPayload,
+    kind: InstanceKind,
+    fallbackMode?: string
   ): Promise<void> => {
     const agent = registry.agent(machineId);
     if (!agent) {
       throw new MachineAway(machineId);
     }
+    const settled = settleMode(machineId, asked, fallbackMode);
+    if ("refusal" in settled) {
+      throw new Error(settled.refusal);
+    }
+    const { payload } = settled;
     const requestId = crypto.randomUUID();
     db.openInstance({
       id: payload.instanceId,
@@ -3517,14 +3623,14 @@ export const createServer = ({
           cwd: source.cwd,
           harness: summarizer.harness,
           model: summarizer.model,
-          // The hub's own worker, which nobody watches: it never parks on a
-          // permission prompt, as workflow steps and supervisors never do.
-          permissionMode: "bypassPermissions",
           title: `Summary of ${source.title}`,
           scratch: {},
           spawnedBy: { instanceId: source.instanceId },
         },
-        "summariser"
+        "summariser",
+        // The hub's own worker, which nobody watches: it never parks on a
+        // permission prompt, as workflow steps and supervisors never do.
+        "bypassPermissions"
       );
       if (cancelled()) {
         throw new Error(CONTINUATION_CANCELLED);
@@ -4068,7 +4174,8 @@ export const createServer = ({
       await spawnFromHub(
         machine,
         targetSpawn(request, prepared.source, row.targetInstanceId),
-        request.target.scratch ? "scratch" : "mainline"
+        request.target.scratch ? "scratch" : "mainline",
+        request.target.fallbackPermissionMode
       );
     }
     sendFromHub(
@@ -4146,7 +4253,7 @@ export const createServer = ({
     harness: target.harness,
     model: target.model,
     ...(target.effort ? { effort: target.effort } : {}),
-    permissionMode: target.permissionMode,
+    ...(target.permissionMode ? { permissionMode: target.permissionMode } : {}),
     ...(target.scratch ? { scratch: target.scratch } : {}),
     ...(target.bootstrap ? { bootstrap: target.bootstrap } : {}),
     ...(target.projectId ? { projectId: target.projectId } : {}),
@@ -4217,7 +4324,7 @@ export const createServer = ({
     reattachOnly: SpawnPayload["reattachOnly"] = false
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: builds the restore payload from the stored row in one place
   ): void => {
-    const payload: SpawnPayload = {
+    const asked: SpawnPayload = {
       instanceId: row.id,
       cwd: row.cwd,
       ...(row.workflowStepId
@@ -4232,9 +4339,6 @@ export const createServer = ({
       ...(row.harness
         ? { harness: row.harness as SpawnPayload["harness"] }
         : {}),
-      ...(row.permissionMode
-        ? { permissionMode: row.permissionMode as PermissionMode }
-        : {}),
       ...(row.model ? { model: row.model } : {}),
       ...(isEffortLevel(row.effort) ? { effort: row.effort } : {}),
       ...(row.projectId ? { projectId: row.projectId } : {}),
@@ -4243,6 +4347,12 @@ export const createServer = ({
       // delegate the `delegate` tool back.
       ...(row.canDelegate === false ? { canDelegate: false } : {}),
     };
+    const settled = settleMode(row.machineId, asked, row.permissionMode);
+    if ("refusal" in settled) {
+      console.warn(`[hub] not restoring ${row.id}: ${settled.refusal}`);
+      return;
+    }
+    const { payload } = settled;
     agent.send({
       verb: "spawn",
       machineId: row.machineId,
@@ -4262,7 +4372,7 @@ export const createServer = ({
       harness: row.harness ?? undefined,
       projectId: row.projectId ?? undefined,
       kind: row.kind === "scratch" ? "scratch" : "mainline",
-      permissionMode: row.permissionMode ?? undefined,
+      permissionMode: payload.permissionMode,
       model: row.model ?? undefined,
       canDelegate: row.canDelegate ?? undefined,
     });
@@ -5455,11 +5565,15 @@ export const createServer = ({
         agent.send(envelope);
       }
     },
-    spawn: async (machineId, payload) => {
+    spawn: async (machineId, payload, fallbackMode) => {
       const response = await fetch(`${hubHttpUrl()}/api/relay/spawn`, {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ ...payload, machineId }),
+        body: JSON.stringify({
+          ...payload,
+          machineId,
+          fallbackPermissionMode: fallbackMode,
+        }),
       });
       if (!response.ok) {
         throw new Error(await response.text());
@@ -5553,7 +5667,7 @@ export const createServer = ({
           machineId,
           title,
           canDelegate: true,
-          permissionMode: "bypassPermissions",
+          fallbackPermissionMode: "bypassPermissions",
         }),
       });
       if (!response.ok) {
@@ -6482,6 +6596,14 @@ export const createServer = ({
             title === undefined
           ) {
             return status(400, "name a field to change");
+          }
+          // A recorded mode is one the session's harness has (`settleMode`'s
+          // rule): one without modes takes none.
+          const unfit = permissionMode
+            ? sessionModeRefusal(params.id, permissionMode)
+            : undefined;
+          if (unfit) {
+            return status(400, unfit);
           }
           const named = title
             ? db.nameInstance(params.id, title, "owner")?.row
@@ -8072,8 +8194,15 @@ export const createServer = ({
       // dashboard's own. start_session's is answered once its machine has the
       // session in place, or with why not ({@link relaySpawn}).
       .post("/api/relay/spawn", relayHook, async ({ body, status }) => {
-        const payload = body as SpawnPayload & { machineId?: string };
-        const { machineId } = payload;
+        // `fallbackPermissionMode` is the mode the caller would have the
+        // session run in when none is asked of it (start_session's caller's
+        // own, a workflow step's bypass); it is the hub's to settle, never
+        // the machine's to see.
+        const { fallbackPermissionMode, machineId, ...payload } =
+          body as SpawnPayload & {
+            machineId?: string;
+            fallbackPermissionMode?: PermissionMode;
+          };
         if (!(machineId && payload.instanceId)) {
           return status(
             400,
@@ -8089,16 +8218,16 @@ export const createServer = ({
           return status(403, LEAF_DELEGATE_REFUSAL);
         }
 
-        // A delegate that names no permission mode inherits the ROOT of its
-        // delegate tree, so a nested delegate of a bypassing session stays
-        // autonomous instead of parking tool asks nobody is watching for.
+        // A delegate that names no permission mode falls back to the ROOT of
+        // its delegate tree, so a nested delegate of a bypassing session stays
+        // autonomous instead of parking tool asks nobody is watching for —
+        // when its harness has modes at all (`settleMode`).
         const { parentInstanceId } = peekParent(payload);
-        if (!payload.permissionMode && parentInstanceId) {
-          const mode = resolveDelegatePermissionMode(rows, parentInstanceId);
-          if (mode) {
-            payload.permissionMode = mode as PermissionMode;
-          }
-        }
+        const fallback =
+          fallbackPermissionMode ??
+          (parentInstanceId
+            ? resolveDelegatePermissionMode(rows, parentInstanceId)
+            : undefined);
 
         const refusal = enforceRowSessionKey(
           rows.find((row) => row.id === payload.instanceId),
@@ -8110,9 +8239,16 @@ export const createServer = ({
         if (!registry.agent(machineId)) {
           return status(404, `machine ${machineId} is not connected`);
         }
-        const refused = await relaySpawn(machineId, payload);
-        if (refused) {
-          return status(refused.code, refused.message);
+        try {
+          const refused = await relaySpawn(machineId, payload, fallback);
+          if (refused) {
+            return status(refused.code, refused.message);
+          }
+        } catch (error) {
+          if (error instanceof WorkItemRefusal) {
+            return status(error.status, error.message);
+          }
+          throw error;
         }
         return { ok: true, instanceId: payload.instanceId, machineId };
       })
@@ -9444,21 +9580,26 @@ export const createServer = ({
                 toDashboard(ws, failure(message, refusal));
                 break;
               }
-              // No session the fleet starts takes its model or its permission
-              // mode from a machine's defaults: a dashboard spawn always says
-              // both, and one that does not is a path that forgot to.
-              const unsaid = ["model", "permissionMode"].filter(
-                (field) => !peek(message.payload, field)
-              );
-              if (unsaid.length > 0) {
-                const why = `A session the dashboard starts must name its ${unsaid.join(" and ")}; this spawn named none, so it would have run on the machine's default. Nothing was started.`;
-                console.warn(`[hub] refused spawn: ${why}`);
-                toDashboard(ws, failure(message, why));
+              // No session the fleet starts takes its model from a machine's
+              // default: a dashboard spawn always names one, and one that does
+              // not is a path that forgot to. Its permission mode is the one
+              // rule's (`settleMode`), with nothing to fall back on: the
+              // dashboard says it for a harness that has modes, and never for
+              // one that has none.
+              const settled = peek(message.payload, "model")
+                ? settleMode(message.machineId, message.payload as SpawnPayload)
+                : {
+                    refusal:
+                      "A session the dashboard starts must name its model; this spawn named none, so it would have run on the machine's default. Nothing was started.",
+                  };
+              if ("refusal" in settled) {
+                console.warn(`[hub] refused spawn: ${settled.refusal}`);
+                toDashboard(ws, failure(message, settled.refusal));
                 break;
               }
               const relaunch = {
                 ...message,
-                payload: bounded(message.payload as SpawnPayload),
+                payload: bounded(settled.payload),
               };
               if (forward(relaunch, ws) && message.instanceId) {
                 // A relaunch replaces the process — questions the old one had
@@ -9475,7 +9616,7 @@ export const createServer = ({
                   projectId: peek(message.payload, "projectId"),
                   title: peek(message.payload, "title"),
                   kind: peekKind(message.payload),
-                  permissionMode: peek(message.payload, "permissionMode"),
+                  permissionMode: settled.payload.permissionMode,
                   model: peek(message.payload, "model"),
                   ...peekParent(message.payload),
                 });

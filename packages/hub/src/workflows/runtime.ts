@@ -9,6 +9,7 @@
 import type {
   CommandResult,
   Envelope,
+  PermissionMode,
   PermissionResult,
   Problem,
   SpawnPayload,
@@ -77,7 +78,12 @@ export interface WorkflowRuntimeDeps {
   /** The graph's authoring problems: a workflow with any cannot run (§9.3). */
   problems: (graph: WorkflowGraph, workflowId: string) => Problem[];
   settle: (requestId: string) => void;
-  spawn: (machineId: string, payload: SpawnPayload) => Promise<void>;
+  /** `fallbackMode`: the mode it runs in when its harness has modes (the hub settles it). */
+  spawn: (
+    machineId: string,
+    payload: SpawnPayload,
+    fallbackMode: PermissionMode
+  ) => Promise<void>;
   /** Spawns a run's supervisor, named by `title` as a delegate is by its spawn's. */
   supervisor: (
     type: string,

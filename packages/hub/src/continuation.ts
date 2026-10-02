@@ -49,8 +49,10 @@ export interface ContinueRequest {
     harness: HarnessKind;
     machineId?: string;
     model: string;
-    /** Always said: a continued session never answers by its machine's default. */
-    permissionMode: PermissionMode;
+    /** The mode asked for; settled with the fallback by the hub's one rule (`settleMode`). */
+    permissionMode?: PermissionMode;
+    /** The caller's own mode, taken when none is asked and the harness has modes. */
+    fallbackPermissionMode?: PermissionMode;
     projectId?: string;
     scratch?: { worktree?: boolean; baseCwd?: string };
   };

@@ -225,17 +225,21 @@
     }
     return efforts.includes("high") ? "high" : (efforts[0] ?? null);
   });
+  /** A harness that reports no permission modes (pi) has none to pick, so no control shows and none is sent. */
+  const modeless = $derived(report?.capabilities.permissionModes.length === 0);
   const modes = $derived(
-    PERMISSION_MODES.map((mode) => ({
-      value: mode.value,
-      disabled: report
-        ? !report.capabilities.permissionModes.includes(mode.value)
-        : false,
-      reason:
-        report && !report.capabilities.permissionModes.includes(mode.value)
-          ? "This agent cannot honor this permission mode."
-          : undefined,
-    }))
+    modeless
+      ? []
+      : PERMISSION_MODES.map((mode) => ({
+          value: mode.value,
+          disabled: report
+            ? !report.capabilities.permissionModes.includes(mode.value)
+            : false,
+          reason:
+            report && !report.capabilities.permissionModes.includes(mode.value)
+              ? "This agent cannot honor this permission mode."
+              : undefined,
+        }))
   );
   const workdir = $derived(
     repo === undefined
@@ -789,7 +793,7 @@
       cwd: draft.cwd,
       prompt: draft.prompt,
       harness: draft.harness,
-      permissionMode: draft.permissionMode,
+      ...(modeless ? {} : { permissionMode: draft.permissionMode }),
       ...(shownModel(draft) ? { model: shownModel(draft) } : {}),
       ...(draft.effort ? { effort: draft.effort } : {}),
       scratch: draft.scratch,
@@ -893,7 +897,7 @@
         cwd: draft.cwd,
         harness: draft.harness,
         model: draft.usedModel,
-        permissionMode: draft.permissionMode,
+        ...(modeless ? {} : { permissionMode: draft.permissionMode }),
         ...(draft.effort ? { effort: draft.effort } : {}),
         ...(draft.scratch ? { scratch: draft.scratch } : {}),
         ...(draft.repo === undefined

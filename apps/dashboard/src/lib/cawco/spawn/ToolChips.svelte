@@ -124,7 +124,7 @@
   {#if readonly}
     <span class="swap" in:crossIn out:crossOut>
       {@render effortStatic()}
-      {#if tools.modes.length}
+      {#if tools.modes.length && tools.permission}
         <span class="ns-chip-btn tool static">{@render permissionChip()}</span>
       {/if}
     </span>
@@ -159,7 +159,8 @@
             </div>
           </NsPopover>
         {/if}
-        {#if tools.modes.length}
+        <!-- A session with no mode (its harness has none) shows nothing here. -->
+        {#if tools.modes.length && tools.permission}
           <NsPopover
             align="end"
             id={`${id}-permission`}
