@@ -4598,9 +4598,8 @@ export const createServer = ({
     continuations: continuationTable(),
     // `pulses` seeds the rail's now-state on connect instead of leaving it
     // blank until the next beat. `hubBuild` lets a client tell a hub that is
-    // behind from a machine that is, and lets a page running an older build
-    // see it on its very first frame and offer a reload — every dashboard
-    // build since 440bdbc6 reads it off this frame, whatever else it speaks.
+    // behind from a machine that is. A page learns its own build is old from
+    // the dashboard it was served by (deploy-toast.ts), not from this.
     pulses: Object.fromEntries(pulses),
     hubBuild,
   });
@@ -9793,8 +9792,7 @@ export const createServer = ({
           registry.noteDashboardOrigin(ws.headers.origin);
           // The board, before it is asked for: the FIRST message every
           // dashboard receives, unconditionally, so the rail fills before the
-          // REST snapshot lands and a page on an older build learns from it
-          // (its `hubBuild`) that it should reload, whatever protocol it speaks.
+          // REST snapshot lands.
           toDashboard(ws, instancesFrame(""));
         },
         // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches every dashboard socket message shape (stream protocol, control, send, ack) through one handler; splitting it would scatter the ordering guarantees across several functions.
