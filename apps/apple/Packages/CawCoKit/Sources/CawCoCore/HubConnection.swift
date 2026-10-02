@@ -1,0 +1,421 @@
+import CawCoAPI
+public import Foundation
+import Observation
+import OpenAPIRuntime
+import OSLog
+
+/// The one connection to the hub: its address, entered once and kept; the
+/// `/ws/dashboard` socket and its reconnects; the connect-time reads; and the
+/// stores every frame lands in. As the web's client does it
+/// (apps/dashboard/src/lib/cawco/client.svelte.ts), state is only ever the
+/// hub's word: nothing here is inferred or echoed ahead of it.
+@MainActor
+@Observable
+public final class HubConnection {
+    /// What to tell a reader about the hub. `connecting` is the transient
+    /// every connect and every first seconds of a drop pass through;
+    /// `unreachable` holds from `outageGrace` after the socket went until it is back.
+    public enum State: Sendable {
+        case connected, connecting, unreachable
+    }
+
+    /// The socket's own state.
+    public enum Socket: Sendable {
+        case connecting, connected, closed
+    }
+
+    /// How long the hub is gone before it is called unreachable.
+    static let outageGrace: Duration = .seconds(4)
+    static let reconnectBase = 1.0
+    static let reconnectMaxAttempts = 10
+    static let reconnectMax = 30.0
+    static let controlTimeout: Duration = .seconds(15)
+    private static let addressKey = "cawco-hub-url"
+
+    /// The hub's address, as the operator entered it; nil until then.
+    public private(set) var address: URL?
+    public private(set) var socket: Socket = .closed
+    /// When the next attempt starts, while one is waited for.
+    public private(set) var retryAt: Date?
+    private var outage = false
+
+    public var state: State {
+        socket == .connected ? .connected : (outage ? .unreachable : .connecting)
+    }
+
+    public let ledger = Ledger()
+    public let fleet = FleetStore()
+    public let needs: NeedsYouStore
+
+    @ObservationIgnored private var run: Task<Void, Never>?
+    @ObservationIgnored private var outageTimer: Task<Void, Never>?
+    @ObservationIgnored private var fleetRead: Task<Void, Never>?
+    @ObservationIgnored private var live: HubSocket?
+    @ObservationIgnored private var attempts = 0
+    @ObservationIgnored private var waiters: [String: CheckedContinuation<OpenAPIValueContainer?, any Error>] = [:]
+    private let log = Logger(subsystem: "dev.cawco.app", category: "Hub")
+
+    public init() {
+        needs = NeedsYouStore(ledger: ledger)
+        address = UserDefaults.standard.string(forKey: Self.addressKey).flatMap(Self.address(from:))
+        ledger.send = { [weak self] data in
+            guard let self, socket == .connected, let live else {
+                return "Not connected to the hub. Check that it is running, then try again."
+            }
+            live.post(data)
+            return nil
+        }
+        ledger.applyFrame = { [weak self] _, data in
+            guard let self, let (frame, routedTo) = try? Inbound.frame(data) else {
+                return
+            }
+            apply(frame, routedTo: routedTo)
+        }
+        // The board's only per-session state is the asks it parks, and their
+        // truth is the hub's own list.
+        ledger.rereadHistory = { [weak self] _ in
+            self?.readPending()
+        }
+        if address != nil {
+            start()
+        }
+    }
+
+    /// Normalises what the operator typed into the hub's http address.
+    public static func address(from text: String) -> URL? {
+        var trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return nil
+        }
+        if !trimmed.contains("://") {
+            trimmed = "http://\(trimmed)"
+        }
+        guard var parts = URLComponents(string: trimmed), let scheme = parts.scheme?.lowercased(),
+              scheme == "http" || scheme == "https", parts.host?.isEmpty == false
+        else {
+            return nil
+        }
+        parts.path = ""
+        parts.query = nil
+        parts.fragment = nil
+        return parts.url
+    }
+
+    /// Keeps `address` as the hub and connects to it.
+    public func connect(to address: URL) {
+        self.address = address
+        UserDefaults.standard.set(address.absoluteString, forKey: Self.addressKey)
+        resetFleet()
+        attempts = 0
+        start()
+    }
+
+    /// Reconnects now instead of waiting out the backoff.
+    public func reconnectNow() {
+        guard socket == .closed else {
+            return
+        }
+        attempts = 0
+        start()
+    }
+
+    private func resetFleet() {
+        fleet.machines = []
+        fleet.adopt(rows: [])
+        fleet.projects = []
+        fleet.pulses = [:]
+        fleet.turnSince = [:]
+        fleet.catalogs = [:]
+        fleet.catalogsTried = []
+        fleet.fleetRead = false
+        fleet.liveRead = false
+        needs.parked = [:]
+    }
+
+    private func start() {
+        run?.cancel()
+        run = Task { [weak self] in
+            await self?.loop()
+        }
+    }
+
+    /// Backs off but never gives up: the delay is capped, not the attempts.
+    private func loop() async {
+        while !Task.isCancelled, let address {
+            retryAt = nil
+            socket = .connecting
+            let hubSocket = HubSocket(hub: address)
+            live = hubSocket
+            do {
+                for try await event in hubSocket.events {
+                    switch event {
+                    case .opened:
+                        opened()
+                    case let .message(data):
+                        receive(data)
+                    }
+                }
+            } catch {
+                log.info("hub socket closed: \(String(describing: error), privacy: .public)")
+            }
+            live = nil
+            closed()
+            guard !Task.isCancelled else {
+                return
+            }
+            let delay = min(Self.reconnectBase * pow(2, Double(min(attempts, Self.reconnectMaxAttempts))), Self.reconnectMax)
+            retryAt = Date.now.addingTimeInterval(delay)
+            try? await Task.sleep(for: .seconds(delay))
+            attempts += 1
+        }
+    }
+
+    private func opened() {
+        socket = .connected
+        retryAt = nil
+        attempts = 0
+        outageTimer?.cancel()
+        outageTimer = nil
+        outage = false
+        readFleet(after: .seconds(1))
+        // The hub forgot this socket's subscriptions with the last one.
+        ledger.cursors = ledger.cursors.mapValues { cursor in
+            var cursor = cursor
+            cursor.subscribed = false
+            return cursor
+        }
+        syncSubscriptions()
+    }
+
+    private func closed() {
+        socket = .closed
+        fleetRead?.cancel()
+        if !outage, outageTimer == nil {
+            outageTimer = Task { [weak self] in
+                try? await Task.sleep(for: Self.outageGrace)
+                guard !Task.isCancelled, let self else {
+                    return
+                }
+                outage = true
+                outageTimer = nil
+            }
+        }
+        for waiter in waiters.values {
+            waiter.resume(throwing: URLError(.networkConnectionLost))
+        }
+        waiters = [:]
+        ledger.noteDisconnect()
+    }
+
+    // MARK: Reads
+
+    /// The connect-time read, again 1 s, 2 s, 4 s, 8 s, then every 10 s
+    /// while the socket stays open, until the board's reads land.
+    private func readFleet(after first: Duration) {
+        fleetRead?.cancel()
+        fleetRead = Task { [weak self] in
+            var delay = first
+            while !Task.isCancelled, let self {
+                if await refresh() {
+                    readCatalogs()
+                    return
+                }
+                guard socket == .connected else {
+                    return
+                }
+                try? await Task.sleep(for: delay)
+                delay = min(delay * 2, .seconds(10))
+            }
+        }
+    }
+
+    private var client: Client? {
+        address.map { Client(hub: $0) }
+    }
+
+    /// Registry reads; true once machines, sessions and projects all landed.
+    private func refresh() async -> Bool {
+        guard let client else {
+            return false
+        }
+        async let machines = try? await client.getApiAgents().ok.body.json
+        async let rows = try? await client.getApiInstances().ok.body.json
+        async let projects = try? await client.getApiProjects().ok.body.json
+        async let pending = try? await client.getApiPending().ok.body.json
+        let (readMachines, readRows, readProjects, readPending) = await (machines, rows, projects, pending)
+        guard !Task.isCancelled else {
+            return false
+        }
+        if let readMachines {
+            adopt(machines: readMachines)
+        }
+        if let readProjects {
+            fleet.projects = readProjects
+        }
+        if let readRows {
+            do {
+                fleet.adopt(rows: try Wire.transcode(readRows, as: [InstanceRow].self))
+            } catch {
+                log.error("instances unreadable: \(String(describing: error), privacy: .public)")
+            }
+        }
+        if let readPending {
+            adopt(pending: readPending)
+        }
+        if readMachines == nil || readRows == nil || readProjects == nil {
+            log.error("fleet read incomplete: machines \(readMachines != nil) rows \(readRows != nil) projects \(readProjects != nil)")
+            return false
+        }
+        fleet.fleetRead = true
+        return true
+    }
+
+    private func readPending() {
+        Task { [weak self] in
+            guard let client = self?.client, let pending = try? await client.getApiPending().ok.body.json else {
+                return
+            }
+            self?.adopt(pending: pending)
+        }
+    }
+
+    private func adopt(pending: [Components.Schemas.GetApiPending200Payload]) {
+        var asks: [(Components.Schemas.FramePayload.Value7Payload, String?)] = []
+        for envelope in pending where envelope.verb == .frames {
+            guard let data = try? Wire.data(envelope.payload), let (frame, routedTo) = try? Inbound.frame(data),
+                  case let .permissionRequest(ask) = frame
+            else {
+                continue
+            }
+            asks.append((ask, routedTo))
+        }
+        needs.replace(with: asks)
+        syncSubscriptions()
+    }
+
+    /// A machine that came online after the connect-time read has its stored sessions read now.
+    private func adopt(machines next: [MachineRow]) {
+        let wasOnline = Set(fleet.machines.filter { $0.status == "online" }.map(\.machineId))
+        fleet.machines = next
+        guard fleet.fleetRead else {
+            return
+        }
+        for machine in next where machine.status == "online" && !wasOnline.contains(machine.machineId) {
+            readCatalog(machine.machineId)
+        }
+    }
+
+    private func readCatalogs() {
+        for machine in fleet.machines where machine.status == "online" {
+            readCatalog(machine.machineId)
+        }
+    }
+
+    /// A machine's stored sessions, by its `listSessions` control.
+    private func readCatalog(_ machineId: String) {
+        Task { [weak self] in
+            guard let self else {
+                return
+            }
+            defer { fleet.catalogsTried.insert(machineId) }
+            do {
+                let result = try await control(machineId, method: "listSessions", args: [[String: (any Sendable)?]()])
+                guard let result else {
+                    return
+                }
+                fleet.catalogs[machineId] = try Wire.decoder().decode([StoredSession].self, from: Wire.data(result))
+            } catch {
+                log.error("listSessions on \(machineId, privacy: .public) failed: \(String(describing: error), privacy: .public)")
+            }
+        }
+    }
+
+    /// A machine-scoped control call, answered by its `control_result`.
+    private func control(_ machineId: String, method: String, args: [(any Sendable)?]) async throws -> OpenAPIValueContainer? {
+        guard socket == .connected, let live else {
+            throw URLError(.notConnectedToInternet)
+        }
+        let requestId = UUID().uuidString.lowercased()
+        let envelope: [String: (any Sendable)?] = [
+            "verb": "control",
+            "machineId": machineId,
+            "requestId": requestId,
+            "payload": ["requestId": requestId, "method": method, "args": args] as [String: (any Sendable)?],
+        ]
+        let data = try Wire.encoder().encode(OpenAPIValueContainer(unvalidatedValue: envelope))
+        return try await withCheckedThrowingContinuation { continuation in
+            waiters[requestId] = continuation
+            live.post(data)
+            Task { [weak self] in
+                try? await Task.sleep(for: Self.controlTimeout)
+                self?.waiters.removeValue(forKey: requestId)?.resume(throwing: URLError(.timedOut))
+            }
+        }
+    }
+
+    // MARK: Frames
+
+    private func receive(_ data: Data) {
+        do {
+            switch try Inbound.read(data) {
+            case let .stream(message):
+                ledger.handle(message)
+            case let .frame(frame, routedTo):
+                apply(frame, routedTo: routedTo)
+            case .other:
+                break
+            }
+        } catch {
+            log.error("unreadable hub message: \(String(describing: error), privacy: .public)")
+        }
+    }
+
+    private func apply(_ frame: Frame, routedTo: String?) {
+        switch frame {
+        case let .instances(board):
+            adopt(machines: board.agents)
+            fleet.adopt(rows: board.instances)
+            fleet.liveRead = true
+        case let .instancesDelta(delta):
+            adopt(machines: delta.agents)
+            fleet.patch(upserts: delta.upserts, removed: delta.removed)
+        case let .permissionRequest(ask):
+            needs.park(ask, routedTo: routedTo)
+            syncSubscriptions()
+        case let .pulse(pulse):
+            fleet.adopt(pulse: pulse.pulse)
+        case let .controlResult(result):
+            guard let waiter = waiters.removeValue(forKey: result.requestId) else {
+                return
+            }
+            if result.ok {
+                waiter.resume(returning: result.result)
+            } else {
+                waiter.resume(throwing: ControlError(message: result.error ?? "The machine could not carry out that request."))
+            }
+        case let .message(instanceId, type):
+            // A session's next process opens with `system.init`: anything it
+            // had parked belongs to the process that is gone.
+            if type == "system.init" {
+                needs.clear(instanceId)
+                syncSubscriptions()
+            }
+        case .usage, .ignored:
+            break
+        }
+    }
+
+    /// Follows the streams of the sessions that have something parked: their
+    /// own frames are what says a parked ask's process is gone.
+    private func syncSubscriptions() {
+        guard socket == .connected else {
+            return
+        }
+        ledger.sync(Set(needs.parked.keys))
+    }
+
+    struct ControlError: LocalizedError {
+        let message: String
+        var errorDescription: String? { message }
+    }
+}

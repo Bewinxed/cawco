@@ -7,10 +7,14 @@
 //
 // Resources/caw/<status>.riv are written by assets/mascot/scripts/build.mjs, byte for byte the
 // same files as assets/mascot/caw/<status>.riv.
+//
+// Drawn by rive-ios 6.28's UIKit view for its current API (`RiveUIView` over a `Rive` built
+// from a `File`, a `Worker` and a bound view-model instance), which the files' view-model
+// contract needs; `RiveViewModel.createRiveView()` is the older API's view.
 import CawCoDesign
 import OSLog
 import RiveRuntime
-import SwiftUI
+import UIKit
 
 /// What Caw shows. Each status is its own file, `caw/<rawValue>.riv`.
 public enum CawStatus: String, CaseIterable, Sendable {
@@ -26,8 +30,9 @@ public enum CawStatus: String, CaseIterable, Sendable {
 
 /// Caw at a brand moment: an empty board, first run, loading, reconnecting.
 ///
-/// He follows the colour scheme (`dark`) and the system's Reduce Motion setting (`reducedMotion`)
-/// on his own. Decorative, so hidden from VoiceOver: the screen around him carries the words.
+/// He follows the trait collection's interface style (`dark`) and the system's Reduce Motion
+/// setting (`reducedMotion`) on his own. Decorative, so hidden from VoiceOver: the screen
+/// around him carries the words.
 ///
 /// He fades in once his file is drawn (`Motion.durFade` on `Motion.easeOut`), and `onEntered` is
 /// called when that first fade has finished, or when his file fails to load, so a place can keep
@@ -35,148 +40,291 @@ public enum CawStatus: String, CaseIterable, Sendable {
 /// Caw in over the shown one, which stays fully drawn underneath until the fade ends, so no frame
 /// is ever empty. At most two Caws are alive at once.
 ///
-/// The view's frame holds Caw's still: the largest centred square in it is the files' still box.
-/// His acting reaches past that box, so he draws past the frame there; nothing here clips him, and
-/// he never takes taps from what lies under him.
-public struct CawView: View {
-    private let status: CawStatus
-    private let onEntered: (() -> Void)?
-    @Environment(\.colorScheme) private var colorScheme
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    /// Bottom to top: the Caw on screen, and during a status change the one fading in above it.
-    @State private var layers: [CawLayer] = []
-
-    public init(status: CawStatus, onEntered: (() -> Void)? = nil) {
-        self.status = status
-        self.onEntered = onEntered
-    }
-
-    public var body: some View {
-        StillBoxLayout {
-            ZStack {
-                ForEach(layers) { layer in
-                    RiveUIViewRepresentable(rive: layer.rive)
-                        .opacity(layer.shown ? 1 : 0)
-                }
+/// The view's bounds hold Caw's still: the largest centred square in them is the files' still
+/// box. His acting reaches past that box, so he draws past the bounds there; nothing here clips
+/// him, and he never takes touches from what lies under him.
+public final class CawView: UIView {
+    public var status: CawStatus {
+        didSet {
+            if status != oldValue {
+                show(status)
             }
         }
-        .allowsHitTesting(false)
-        .accessibilityHidden(true)
-        .task(id: status) { await show(status) }
-        .onChange(of: colorScheme) { apply() }
-        .onChange(of: reduceMotion) { apply() }
     }
 
-    /// Loads `status`'s Caw and fades it in: over nothing the first time, over the shown Caw after
-    /// that. A newer status cancels this one while it loads.
-    private func show(_ status: CawStatus) async {
+    public var onEntered: (() -> Void)?
+
+    /// Bottom to top: the Caw on screen, and during a status change the one fading in above it.
+    private var layers: [CawLayer] = []
+    private var loading: Task<Void, Never>?
+    private var fade: UIViewPropertyAnimator?
+
+    public init(status: CawStatus) {
+        self.status = status
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        isUserInteractionEnabled = false
+        clipsToBounds = false
+        isAccessibilityElement = false
+        accessibilityElementsHidden = true
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: CawView, _: UITraitCollection) in
+            view.apply()
+        }
+        NotificationCenter.default.addObserver(self, selector: #selector(apply), name: UIAccessibility.reduceMotionStatusDidChangeNotification, object: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("CawView is built in code")
+    }
+
+    override public func didMoveToWindow() {
+        super.didMoveToWindow()
+        if window != nil, layers.isEmpty, loading == nil {
+            show(status)
+        }
+    }
+
+    private var dark: Bool { traitCollection.userInterfaceStyle == .dark }
+
+    /// Loads `status`'s Caw and fades it in: over nothing the first time, over the shown Caw
+    /// after that. A newer status cancels this one while it loads.
+    private func show(_ status: CawStatus) {
+        loading?.cancel()
         guard layers.last?.status != status else {
+            loading = nil
             return
         }
         let asked = ContinuousClock.now
-        let incoming: CawLayer
-        do {
-            incoming = try await CawLayer.load(status, dark: colorScheme == .dark, reducedMotion: reduceMotion)
-        } catch {
-            CawContract.log.error("Caw \(status.rawValue, privacy: .public) did not load: \(String(describing: error), privacy: .public)")
-            if layers.isEmpty {
-                onEntered?()
+        loading = Task { [weak self] in
+            guard let self else {
+                return
             }
-            return
-        }
-        guard !Task.isCancelled else {
-            return
-        }
-        let waited = (ContinuousClock.now - asked).milliseconds
-        let first = layers.isEmpty
-        // At most two: whatever was fading in is drawn fully at once and becomes the one below.
-        layers = (layers.last.map { [$0.showing()] } ?? []) + [incoming]
-        CawContract.log.info("Caw \(status.rawValue, privacy: .public) fades in \(waited, format: .fixed(precision: 1)) ms after it was asked for")
-        withAnimation(.timingCurve(Motion.easeOut, duration: Motion.durFade)) {
-            layers[layers.count - 1] = incoming.showing()
-        } completion: {
-            if let top = layers.firstIndex(where: { $0.id == incoming.id }) {
-                layers.removeFirst(top)
-            }
-            if first {
-                CawContract.log.info("Caw \(status.rawValue, privacy: .public) entered \((ContinuousClock.now - asked).milliseconds, format: .fixed(precision: 1)) ms after it was asked for")
-                onEntered?()
-            }
-        }
-    }
-
-    /// Writes the view's scheme and motion setting into every live Caw; their state machines follow.
-    private func apply() {
-        for layer in layers {
-            CawContract.write(to: layer.caw, dark: colorScheme == .dark, reducedMotion: reduceMotion)
-        }
-    }
-}
-
-/// A place's wait with Caw standing in for it. While `waiting`, the place is its plain surface for
-/// `Motion.durWaitGrace`; a wait that outlasts it shows Caw at `status` (loading or reconnecting).
-/// Once he shows, `content` waits until his fade in has finished, so he never blinks out mid-fade.
-/// A wait shorter than the grace shows no Caw at all: `content` simply appears.
-public struct CawWaiting<Content: View>: View {
-    private let waiting: Bool
-    private let status: CawStatus
-    private let content: Content
-    /// The wait outlasted its grace and Caw stands in for it.
-    @State private var graceOver = false
-    /// Caw is on screen and his first fade in has not finished.
-    @State private var entering = false
-
-    public init(waiting: Bool, status: CawStatus, @ViewBuilder content: () -> Content) {
-        self.waiting = waiting
-        self.status = status
-        self.content = content()
-    }
-
-    public var body: some View {
-        ZStack {
-            if !waiting, !entering {
-                content
-            } else if graceOver {
-                CawView(status: status) {
-                    entering = false
-                    if !waiting {
-                        graceOver = false
-                    }
-                }
-                .onAppear { entering = true }
-            }
-        }
-        .task(id: waiting) {
-            guard waiting, !graceOver else {
-                if !waiting, !entering {
-                    graceOver = false
+            let incoming: CawLayer
+            do {
+                incoming = try await CawLayer.load(status, dark: dark, reducedMotion: UIAccessibility.isReduceMotionEnabled)
+            } catch {
+                CawContract.log.error("Caw \(status.rawValue, privacy: .public) did not load: \(String(describing: error), privacy: .public)")
+                loading = nil
+                if layers.isEmpty {
+                    onEntered?()
                 }
                 return
             }
-            try? await Task.sleep(for: .seconds(Motion.durWaitGrace))
-            if !Task.isCancelled {
-                graceOver = true
+            guard !Task.isCancelled else {
+                return
             }
+            loading = nil
+            enter(incoming, asked: asked)
+        }
+    }
+
+    private func enter(_ incoming: CawLayer, asked: ContinuousClock.Instant) {
+        let first = layers.isEmpty
+        // At most two: whatever was fading in is drawn fully at once and becomes the one below.
+        fade?.stopAnimation(true)
+        if let shown = layers.last {
+            shown.view.alpha = 1
+            for old in layers.dropLast() {
+                old.view.removeFromSuperview()
+            }
+            layers = [shown]
+        }
+        incoming.view.alpha = 0
+        addSubview(incoming.view)
+        layers.append(incoming)
+        setNeedsLayout()
+        layoutIfNeeded()
+        CawContract.log.info("Caw \(incoming.status.rawValue, privacy: .public) fades in \((ContinuousClock.now - asked).milliseconds, format: .fixed(precision: 1)) ms after it was asked for")
+        let animator = Motion.easeOut.animator(Motion.durFade) {
+            incoming.view.alpha = 1
+        }
+        animator.addCompletion { [weak self] _ in
+            guard let self else {
+                return
+            }
+            if let at = layers.firstIndex(where: { $0.id == incoming.id }) {
+                for below in layers[..<at] {
+                    below.view.removeFromSuperview()
+                }
+                layers.removeFirst(at)
+            }
+            if first {
+                CawContract.log.info("Caw \(incoming.status.rawValue, privacy: .public) entered \((ContinuousClock.now - asked).milliseconds, format: .fixed(precision: 1)) ms after it was asked for")
+                onEntered?()
+            }
+        }
+        fade = animator
+        animator.startAnimation()
+    }
+
+    /// Writes the interface style and the motion setting into every live Caw; their state
+    /// machines follow.
+    @objc private func apply() {
+        for layer in layers {
+            CawContract.write(to: layer.caw, dark: dark, reducedMotion: UIAccessibility.isReduceMotionEnabled)
+        }
+    }
+
+    /// The still box fills the largest centred square of the bounds; the artboard around the
+    /// box spills past them. Rive fits the artboard into its view with `.contain`, and that view
+    /// has the artboard's aspect, so the artboard scales by exactly side / 512.
+    override public func layoutSubviews() {
+        super.layoutSubviews()
+        let side = min(bounds.width, bounds.height)
+        let scale = side / CawGeometry.stillBox.width
+        let frame = CGRect(
+            x: bounds.midX - side / 2 - CawGeometry.stillBox.minX * scale,
+            y: bounds.midY - side / 2 - CawGeometry.stillBox.minY * scale,
+            width: CawGeometry.artboard.width * scale,
+            height: CawGeometry.artboard.height * scale
+        )
+        for layer in layers {
+            layer.view.frame = frame
         }
     }
 }
 
-/// One status's Caw: its Rive view configuration and the `Caw` instance bound to its state machine,
-/// kept together so the instance lives exactly as long as the view that writes to it.
-private struct CawLayer: Identifiable {
-    let id = UUID()
-    let status: CawStatus
-    let rive: Rive
-    let caw: ViewModelInstance
-    var shown = false
-
-    func showing() -> CawLayer {
-        var layer = self
-        layer.shown = true
-        return layer
+/// A place's wait with Caw standing in for it. While `waiting`, the place is its plain surface
+/// for `Motion.durWaitGrace`; a wait that outlasts it shows Caw at `status` (loading or
+/// reconnecting), centred at `side`. Once he shows, `content` waits until his fade in has
+/// finished, so he never blinks out mid-fade. A wait shorter than the grace shows no Caw at
+/// all: `content` simply appears.
+public final class CawWaiting: UIViewController {
+    public var waiting: Bool {
+        didSet {
+            if waiting != oldValue {
+                update()
+            }
+        }
     }
 
-    @MainActor
+    public var status: CawStatus {
+        didSet { caw?.status = status }
+    }
+
+    /// What the wait stands in for; shown whenever nothing is waited for.
+    public var content: UIViewController? {
+        didSet {
+            if content !== oldValue {
+                oldValue?.willMove(toParent: nil)
+                oldValue?.view.removeFromSuperview()
+                oldValue?.removeFromParent()
+                update()
+            }
+        }
+    }
+
+    private let side: Double
+    private var caw: CawView?
+    private var grace: Task<Void, Never>?
+    /// The wait outlasted its grace and Caw stands in for it.
+    private var graceOver = false
+    /// Caw is on screen and his first fade in has not finished.
+    private var entering = false
+
+    public init(waiting: Bool, status: CawStatus, side: Double) {
+        self.waiting = waiting
+        self.status = status
+        self.side = side
+        super.init(nibName: nil, bundle: nil)
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("CawWaiting is built in code")
+    }
+
+    override public func viewDidLoad() {
+        super.viewDidLoad()
+        update()
+    }
+
+    private func update() {
+        guard isViewLoaded else {
+            return
+        }
+        if !waiting, !entering {
+            grace?.cancel()
+            grace = nil
+            graceOver = false
+            caw?.removeFromSuperview()
+            caw = nil
+            showContent()
+            return
+        }
+        hideContent()
+        if waiting, !graceOver, grace == nil {
+            CawContract.log.info("Caw \(self.status.rawValue, privacy: .public) wait began")
+            grace = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(Motion.durWaitGrace))
+                guard !Task.isCancelled, let self else {
+                    return
+                }
+                CawContract.log.info("Caw \(self.status.rawValue, privacy: .public) wait outlasted its grace")
+                graceOver = true
+                grace = nil
+                showCaw()
+            }
+        }
+    }
+
+    private func showCaw() {
+        guard caw == nil else {
+            return
+        }
+        let caw = CawView(status: status)
+        entering = true
+        caw.onEntered = { [weak self] in
+            guard let self else {
+                return
+            }
+            entering = false
+            if !waiting {
+                graceOver = false
+                update()
+            }
+        }
+        view.addSubview(caw)
+        NSLayoutConstraint.activate([
+            caw.widthAnchor.constraint(equalToConstant: side),
+            caw.heightAnchor.constraint(equalToConstant: side),
+            caw.centerXAnchor.constraint(equalTo: view.centerXAnchor),
+            caw.centerYAnchor.constraint(equalTo: view.centerYAnchor),
+        ])
+        self.caw = caw
+    }
+
+    private func showContent() {
+        guard let content, content.parent !== self else {
+            return
+        }
+        addChild(content)
+        content.view.frame = view.bounds
+        content.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        view.addSubview(content.view)
+        content.didMove(toParent: self)
+    }
+
+    private func hideContent() {
+        guard let content, content.parent === self else {
+            return
+        }
+        content.willMove(toParent: nil)
+        content.view.removeFromSuperview()
+        content.removeFromParent()
+    }
+}
+
+/// One status's Caw: its Rive view and the `Caw` instance bound to its state machine, kept
+/// together so the instance lives exactly as long as the view that draws it.
+@MainActor
+private struct CawLayer {
+    let id = UUID()
+    let status: CawStatus
+    let view: RiveUIView
+    let caw: ViewModelInstance
+
     static func load(_ status: CawStatus, dark: Bool, reducedMotion: Bool) async throws -> CawLayer {
         let file = try await CawFiles.file(for: status)
         let artboard = try await file.createArtboard(CawContract.artboard)
@@ -186,7 +334,11 @@ private struct CawLayer: Identifiable {
         CawContract.write(to: caw, dark: dark, reducedMotion: reducedMotion)
         try await stateMachine.bindViewModelInstances(main: caw)
         let rive = try await Rive(file: file, artboard: artboard, stateMachine: stateMachine)
-        return CawLayer(status: status, rive: rive, caw: caw)
+        let view = RiveUIView(rive: rive, delegate: nil, isPaused: false)
+        view.isUserInteractionEnabled = false
+        view.isAccessibilityElement = false
+        view.backgroundColor = .clear
+        return CawLayer(status: status, view: view, caw: caw)
     }
 }
 
@@ -195,32 +347,6 @@ private struct CawLayer: Identifiable {
 private enum CawGeometry {
     static let artboard = CGSize(width: 592, height: 592)
     static let stillBox = CGRect(x: 43, y: 40, width: 512, height: 512)
-}
-
-/// Sizes and places the Rive views so the still box fills the largest centred square of the
-/// frame. The view reports the size it is offered; the artboard around the box spills past it.
-/// Rive fits the artboard into the Rive view with its default, `.contain(alignment: .center)`, and
-/// that view has the artboard's aspect, so the artboard scales by exactly side / 512.
-private struct StillBoxLayout: Layout {
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
-        proposal.replacingUnspecifiedDimensions()
-    }
-
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let side = min(bounds.width, bounds.height)
-        let scale = side / CawGeometry.stillBox.width
-        let origin = CGPoint(
-            x: bounds.midX - side / 2 - CawGeometry.stillBox.minX * scale,
-            y: bounds.midY - side / 2 - CawGeometry.stillBox.minY * scale
-        )
-        let size = ProposedViewSize(
-            width: CawGeometry.artboard.width * scale,
-            height: CawGeometry.artboard.height * scale
-        )
-        for subview in subviews {
-            subview.place(at: origin, anchor: .topLeading, proposal: size)
-        }
-    }
 }
 
 /// The `Caw` view model's names, as the files define them. Main-actor isolated: rive-ios's

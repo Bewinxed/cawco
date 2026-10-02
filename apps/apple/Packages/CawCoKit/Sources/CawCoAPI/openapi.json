@@ -2030,10 +2030,18 @@
                     "items": {
                       "type": "string"
                     }
+                  },
+                  "kind": {
+                    "type": "string",
+                    "enum": [
+                      "archive",
+                      "look"
+                    ]
                   }
                 },
                 "required": [
-                  "ids"
+                  "ids",
+                  "kind"
                 ]
               }
             }
@@ -2047,6 +2055,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/postApiSeen200"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiSeen 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -8689,6 +8707,50 @@
           {
             "$ref": "#/components/schemas/NeutralRawMessage"
           }
+        ]
+      },
+      "NeutralSessionInfo": {
+        "description": "A stored session as the catalog lists it. `harness` says who owns the id.",
+        "type": "object",
+        "properties": {
+          "createdAt": {
+            "type": "number"
+          },
+          "customTitle": {
+            "type": "string"
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "fileSize": {
+            "type": "number"
+          },
+          "firstPrompt": {
+            "type": "string"
+          },
+          "gitBranch": {
+            "type": "string"
+          },
+          "harness": {
+            "$ref": "#/components/schemas/HarnessKind"
+          },
+          "lastModified": {
+            "type": "number"
+          },
+          "sessionId": {
+            "type": "string"
+          },
+          "summary": {
+            "type": "string"
+          },
+          "tag": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "harness",
+          "lastModified",
+          "sessionId"
         ]
       },
       "DelegateType": {

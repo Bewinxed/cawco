@@ -6,7 +6,6 @@ options:
   bundleIdPrefix: dev.cawco
   deploymentTarget:
     iOS: "27.1"
-    macOS: "27.0"
   createIntermediateGroups: true
 packages:
   CawCoKit:
@@ -19,22 +18,27 @@ settings:
     MARKETING_VERSION: "0.1.0"
     CURRENT_PROJECT_VERSION: "1"
 targets:
-  # One multiplatform app: iPhone, iPad (iOS) and the Mac. It holds only
-  # scenes and platform chrome; shared code lives in CawCoKit.
+  # One UIKit app: iPhone, iPad and, through Mac Catalyst, the Mac. It holds
+  # only the app and scene delegates; shared code lives in CawCoKit.
   CawCo:
     type: application
-    supportedDestinations: [iOS, macOS]
+    supportedDestinations: [iOS, macCatalyst]
     sources:
       - path: CawCo
     dependencies:
       - package: CawCoKit
-        products: [CawCoAPI, CawCoCore, CawCoDesign, CawCoTranscript, CawCoMascot]
+        products: [CawCoAPI, CawCoCore, CawCoDesign, CawCoTranscript, CawCoMascot, CawCoScreens]
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.cawco.app
         PRODUCT_NAME: CawCo
-        TARGETED_DEVICE_FAMILY: "1,2"
-        SUPPORTS_MACCATALYST: NO
+        # iPhone, iPad, and the Mac idiom: Catalyst "Optimize for Mac".
+        TARGETED_DEVICE_FAMILY: "1,2,6"
+        SUPPORTS_MACCATALYST: YES
+        SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
+        # Catalyst runs on the Mac's iOS Support version: macOS 27.0 carries
+        # iOS 27.0. The 27.1 target is iPhone Duo's, which the Mac doesn't need.
+        "IPHONEOS_DEPLOYMENT_TARGET[sdk=macosx*]": "27.0"
         # CawCo/AppIcon.icon (Icon Composer): Ivory by default, Ink with the
         # cream-rim Caw in dark and tinted.
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -52,8 +56,14 @@ targets:
       properties:
         CFBundleDisplayName: CawCo
         UILaunchScreen: {}
+        # Scene life cycle (required from the 27 SDKs): every window is a
+        # scene, and SceneDelegate builds each one's interface.
         UIApplicationSceneManifest:
           UIApplicationSupportsMultipleScenes: true
+          UISceneConfigurations:
+            UIWindowSceneSessionRoleApplication:
+              - UISceneConfigurationName: Default
+                UISceneDelegateClassName: $(PRODUCT_MODULE_NAME).SceneDelegate
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
           - UIInterfaceOrientationLandscapeLeft
@@ -67,3 +77,8 @@ targets:
         # networking only; ATS stays on for everything else.
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
+        # A device asks before it reaches the LAN; the simulator does not.
+        NSLocalNetworkUsageDescription: CawCo finds and connects to your hub on this network.
+        # The hub announces itself as `_cawco._tcp` (packages/hub/src/mdns.ts).
+        NSBonjourServices:
+          - _cawco._tcp

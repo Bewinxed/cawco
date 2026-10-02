@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Builds the CawCo app on the Mac for an iPhone simulator, then for macOS, and
+# Builds the CawCo app on the Mac for an iPhone simulator, then for the Mac
+# (Mac Catalyst), and
 # proves each build starts and stays up for 8 s. A launch-time abort fails it.
 # Run from the repo root: bash apps/apple/scripts/build-both.sh [ios|macos]
 # With no argument it builds both and prints BUILT iOS, LAUNCHED iOS,
@@ -109,11 +110,12 @@ print(best[1], best[2], best[3])
   fi
 }
 
-# macOS: start the executable directly, so its PID and stderr are ours.
+# macOS: the same UIKit app through Mac Catalyst. Start the executable
+# directly, so its PID and stderr are ours.
 macos() {
-  build "generic/platform=macOS" macOS
+  build "platform=macOS,variant=Mac Catalyst" macOS
   LOG=/tmp/cawco-launch-macOS.log
-  "$DD/Build/Products/Debug/CawCo.app/Contents/MacOS/CawCo" >"$LOG" 2>&1 &
+  "$DD/Build/Products/Debug-maccatalyst/CawCo.app/Contents/MacOS/CawCo" >"$LOG" 2>&1 &
   PID=$!
   sleep "$SETTLE"
   STAT=$(ps -o stat= -p "$PID" || true)

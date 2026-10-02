@@ -1,0 +1,167 @@
+public import CawCoAPI
+public import Foundation
+import OpenAPIRuntime
+
+/// The hub's JSON, read and written the one way every hub client does: dates
+/// as `Date.toISOString()` writes them, milliseconds included.
+enum Wire {
+    static func decoder() -> JSONDecoder {
+        let decoder = JSONDecoder()
+        decoder.dateDecodingStrategy = .custom { decoder in
+            let text = try decoder.singleValueContainer().decode(String.self)
+            if let date = parseDate(text) {
+                return date
+            }
+            throw DecodingError.dataCorrupted(.init(codingPath: decoder.codingPath, debugDescription: "not an ISO 8601 date: \(text)"))
+        }
+        return decoder
+    }
+
+    static func encoder() -> JSONEncoder {
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .custom { date, encoder in
+            var container = encoder.singleValueContainer()
+            try container.encode(date.formatted(.iso8601.year().month().day().time(includingFractionalSeconds: true)))
+        }
+        return encoder
+    }
+
+    static func parseDate(_ text: String) -> Date? {
+        if let date = try? Date(text, strategy: .iso8601.year().month().day().time(includingFractionalSeconds: true)) {
+            return date
+        }
+        return try? Date(text, strategy: .iso8601)
+    }
+
+    /// One generated wire type read as another of the same JSON: the REST
+    /// routes and the socket name the same row with two generated types.
+    static func transcode<Out: Decodable>(_ value: some Encodable, as _: Out.Type = Out.self) throws -> Out {
+        try decoder().decode(Out.self, from: encoder().encode(value))
+    }
+
+    /// The bytes of an untyped payload (a frame inside an envelope or a stream event).
+    static func data(_ container: OpenAPIValueContainer) throws -> Data {
+        try encoder().encode(container)
+    }
+}
+
+/// A date the generated types carry as `Date`-or-string: as ms epoch, 0 when absent.
+func epochMs(_ date: Date?, _ text: String?) -> Double {
+    if let date {
+        return date.timeIntervalSince1970 * 1000
+    }
+    if let text, let date = Wire.parseDate(text) {
+        return date.timeIntervalSince1970 * 1000
+    }
+    return 0
+}
+
+extension Components.Schemas.InstanceRow {
+    /// When the hub last moved the row, ms epoch (0 when it never said).
+    var updatedMs: Double { epochMs(updatedAt?.value1, updatedAt?.value2) }
+    /// When the owner last looked at it or archived it, on any device, ms epoch.
+    var seenMs: Double { epochMs(seenAt?.value1, seenAt?.value2) }
+}
+
+/// One socket message, as the hub's two dialects put it on `/ws/dashboard`: a
+/// Ledger Protocol message (`type`), or an envelope (`verb`) whose `frames`
+/// payload is a `FramePayload`.
+enum Inbound {
+    case stream(Data)
+    case frame(Frame, routedTo: String?)
+    case other
+
+    /// What every message is routed on: the protocol's discriminators and the
+    /// two structural fields the hub adds outside the frame types. Content is
+    /// read only through the generated types.
+    private struct Route: Decodable {
+        let type: String?
+        let verb: String?
+    }
+
+    private struct PayloadRoute: Decodable {
+        let kind: String?
+        let instanceId: String?
+        /// Structural on the hub too: a delegate's ask the hub sent to its parent.
+        let routedTo: String?
+        let message: MessageRoute?
+        struct MessageRoute: Decodable {
+            let type: String?
+        }
+    }
+
+    private struct Envelope<Payload: Decodable>: Decodable {
+        let payload: Payload
+    }
+
+    private static let streamTypes: Set<String> = ["stream.event", "stream.backlog", "stream.reset", "command.ack"]
+
+    static func read(_ data: Data) throws -> Inbound {
+        let decoder = Wire.decoder()
+        let route = try decoder.decode(Route.self, from: data)
+        if let type = route.type, streamTypes.contains(type) {
+            return .stream(data)
+        }
+        guard route.verb == "frames" else {
+            return .other
+        }
+        let peek = try decoder.decode(Envelope<PayloadRoute>.self, from: data).payload
+        if let message = message(peek) {
+            return .frame(message, routedTo: nil)
+        }
+        let payload = try decoder.decode(Envelope<Components.Schemas.FramePayload>.self, from: data).payload
+        return .frame(Frame(payload), routedTo: peek.routedTo)
+    }
+
+    /// A frame payload on its own (a stream event's `frame`, a `/api/pending` envelope's payload).
+    static func frame(_ data: Data) throws -> (Frame, routedTo: String?) {
+        let decoder = Wire.decoder()
+        let peek = try decoder.decode(PayloadRoute.self, from: data)
+        if let message = message(peek) {
+            return (message, nil)
+        }
+        return (Frame(try decoder.decode(Components.Schemas.FramePayload.self, from: data)), peek.routedTo)
+    }
+
+    /// A session's own neutral message is routed on its `type` alone: the
+    /// stores read nothing else of it, and its full union is the transcript's.
+    private static func message(_ peek: PayloadRoute) -> Frame? {
+        guard peek.kind == "frame", let instanceId = peek.instanceId else {
+            return nil
+        }
+        return .message(instanceId: instanceId, type: peek.message?.type)
+    }
+}
+
+/// A `FramePayload` by what it is. The generated `anyOf` holds one non-nil
+/// variant; each case reads a field only its own variant has, so a reordered
+/// document fails to compile rather than routing a frame to the wrong case.
+enum Frame {
+    case instances(Components.Schemas.FramePayload.Value5Payload)
+    case instancesDelta(Components.Schemas.FramePayload.Value6Payload)
+    case permissionRequest(Components.Schemas.FramePayload.Value7Payload)
+    case usage(Components.Schemas.FramePayload.Value8Payload)
+    case controlResult(Components.Schemas.FramePayload.Value10Payload)
+    case pulse(Components.Schemas.FramePayload.Value13Payload)
+    /// A session's own neutral message, with its `type` (`system.init`, …).
+    case message(instanceId: String, type: String?)
+    case ignored
+
+    init(_ payload: Components.Schemas.FramePayload) {
+        if let frame = payload.value5, frame.kind == .instances {
+            self = .instances(frame)
+        } else if let frame = payload.value6, frame.kind == .instancesDelta {
+            self = .instancesDelta(frame)
+        } else if let frame = payload.value7, frame.kind == .permissionRequest {
+            self = .permissionRequest(frame)
+        } else if let frame = payload.value8, frame.kind == .usage {
+            self = .usage(frame)
+        } else if let frame = payload.value10, frame.kind == .controlResult {
+            self = .controlResult(frame)
+        } else if let frame = payload.value13, frame.kind == .pulse {
+            self = .pulse(frame)
+        } else {
+            self = .ignored
+        }
+    }
+}

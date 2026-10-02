@@ -10,13 +10,15 @@ let concurrency: [SwiftSetting] = [
 
 let package = Package(
     name: "CawCoKit",
-    platforms: [.iOS("27.1"), .macOS("27.0")],
+    // UIKit everywhere: the Mac is the same app through Mac Catalyst.
+    platforms: [.iOS("27.1"), .macCatalyst("27.0")],
     products: [
         .library(name: "CawCoAPI", targets: ["CawCoAPI"]),
         .library(name: "CawCoCore", targets: ["CawCoCore"]),
         .library(name: "CawCoDesign", targets: ["CawCoDesign"]),
         .library(name: "CawCoTranscript", targets: ["CawCoTranscript"]),
         .library(name: "CawCoMascot", targets: ["CawCoMascot"]),
+        .library(name: "CawCoScreens", targets: ["CawCoScreens"]),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-openapi-generator", from: "1.13.1"),
@@ -55,6 +57,13 @@ let package = Package(
             dependencies: ["CawCoDesign", .product(name: "RiveRuntime", package: "rive-ios")],
             resources: [.copy("Resources/caw")],
             swiftSettings: concurrency
+        ),
+        // The screens, each one view that adapts by size class: Connect, the
+        // home (needs you, the fleet board, Recent). The app target hosts them.
+        .target(
+            name: "CawCoScreens",
+            dependencies: ["CawCoCore", "CawCoDesign", "CawCoMascot"],
+            swiftSettings: concurrency + [.defaultIsolation(MainActor.self)]
         ),
     ]
 )

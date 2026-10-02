@@ -1,0 +1,506 @@
+import CawCoCore
+import UIKit
+
+// The web dashboard's kit, recipe by recipe (apps/dashboard/src/lib/components/ui
+// and app.css), as UIKit views. Values come from the tokens; where the token
+// build does not emit a token for Apple (shadows, the action surface's
+// lightness steps), the recipe mirrors the token's definition in
+// design/tokens/cawco.tokens.json and says so.
+
+// MARK: Tile
+
+/// A raised tile (`--surface-raised` with `--shadow-tile`: a 1pt drop and a
+/// 1pt hairline ring, both of neutral-12, heavier at night).
+open class TileView: UIView {
+    public init(radius: Double = Radius.radiusLg) {
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        backgroundColor = Palette.surfaceRaised
+        layer.cornerRadius = radius
+        layer.cornerCurve = .continuous
+        layer.borderWidth = 1
+        layer.shadowOffset = CGSize(width: 0, height: 1)
+        layer.shadowRadius = 1
+        layer.shadowOpacity = 1
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: TileView, _: UITraitCollection) in
+            view.paint()
+        }
+        paint()
+    }
+
+    @available(*, unavailable)
+    public required init?(coder _: NSCoder) {
+        fatalError("TileView is built in code")
+    }
+
+    private func paint() {
+        let dark = traitCollection.userInterfaceStyle == .dark
+        let neutral12 = Palette.neutral12.resolvedColor(with: traitCollection)
+        layer.shadowColor = (dark ? UIColor.black.withAlphaComponent(0.3) : neutral12.withAlphaComponent(0.07)).cgColor
+        layer.borderColor = neutral12.withAlphaComponent(dark ? 0.06 : 0.035).cgColor
+    }
+}
+
+// MARK: Buttons
+
+/// The web's Button (button.svelte): its variants and heights, as a
+/// `UIButton.Configuration`. A wide button tints on press; a compact one
+/// scales to `pressScale`.
+@MainActor
+public enum KitButton {
+    public enum Variant: Sendable {
+        /// The action: vermilion, on its own lightness gradient.
+        case action
+        /// Recessed, on a hairline.
+        case secondary
+        /// Raised, on the control border.
+        case outline
+    }
+
+    public enum Height: Sendable {
+        case xs, sm, standard, lg
+
+        var points: Double {
+            switch self {
+            case .xs: Size.cBtnHXs
+            case .sm: Size.cBtnHSm
+            case .standard: Size.cBtnH
+            case .lg: Size.cBtnHLg
+            }
+        }
+
+        var padding: Double {
+            switch self {
+            case .xs: 8
+            case .sm: Space.space3
+            case .standard: Space.space4
+            case .lg: 16
+            }
+        }
+
+        var gap: Double {
+            switch self {
+            case .xs: Space.space1
+            case .sm: Space.space2
+            case .standard, .lg: 8
+            }
+        }
+
+        var role: TypeRole {
+            switch self {
+            case .xs, .sm: TypeScale.typeLabel
+            case .standard, .lg: TypeScale.typeButton
+            }
+        }
+    }
+
+    public static func make(
+        _ title: String,
+        glyph: Glyph? = nil,
+        glyphTint: UIColor? = nil,
+        variant: Variant,
+        height: Height = .standard,
+        stretch: Bool = false,
+        action: @escaping () -> Void
+    ) -> UIButton {
+        let button = UIButton(configuration: configuration(title, glyph: glyph, glyphTint: glyphTint, variant: variant, height: height), primaryAction: UIAction { _ in action() })
+        button.translatesAutoresizingMaskIntoConstraints = false
+        button.heightAnchor.constraint(greaterThanOrEqualToConstant: height.points).isActive = true
+        let compact = !stretch
+        button.configurationUpdateHandler = { button in
+            guard var config = button.configuration else {
+                return
+            }
+            let pressed = button.isHighlighted && button.isEnabled
+            config.background.backgroundColor = background(variant, pressed: pressed && !compact)
+            button.configuration = config
+            button.alpha = button.isEnabled ? 1 : 0.5
+            let scale = compact && pressed && !UIAccessibility.isReduceMotionEnabled ? Motion.pressScale : 1
+            Motion.easeOut.animator(Motion.durToggle) {
+                button.transform = CGAffineTransform(scaleX: scale, y: scale)
+            }.startAnimation()
+        }
+        return button
+    }
+
+    public static func setTitle(_ title: String, of button: UIButton, variant: Variant, height: Height) {
+        button.configuration?.attributedTitle = AttributedString(title, attributes: AttributeContainer(height.role.attributes(color: ink(variant), tracking: -0.01)))
+    }
+
+    static func configuration(_ title: String, glyph: Glyph?, glyphTint: UIColor?, variant: Variant, height: Height) -> UIButton.Configuration {
+        var config = UIButton.Configuration.plain()
+        config.attributedTitle = AttributedString(title, attributes: AttributeContainer(height.role.attributes(color: ink(variant), tracking: -0.01)))
+        config.titleLineBreakMode = .byTruncatingTail
+        if let glyph {
+            config.image = glyph.image.resized(to: Size.iconMd)
+            config.imageColorTransformer = UIConfigurationColorTransformer { _ in glyphTint ?? ink(variant) }
+            config.imagePadding = height.gap
+        }
+        config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: height.padding, bottom: 0, trailing: height.padding)
+        config.background.cornerRadius = Radius.radiusMd
+        config.background.backgroundColor = background(variant, pressed: false)
+        switch variant {
+        case .action:
+            config.background.strokeWidth = 0
+            // `--action-surface`: the solid 3% lighter at the top, 3% darker at the foot.
+            let gradient = ActionSurface()
+            config.background.customView = gradient
+        case .secondary:
+            config.background.strokeColor = Palette.borderHairline
+            config.background.strokeWidth = 1
+        case .outline:
+            config.background.strokeColor = Palette.borderControl
+            config.background.strokeWidth = 1
+        }
+        return config
+    }
+
+    private static func ink(_ variant: Variant) -> UIColor {
+        variant == .action ? Palette.onAction : Palette.inkStrong
+    }
+
+    private static func background(_ variant: Variant, pressed: Bool) -> UIColor {
+        if pressed {
+            return Palette.surfaceFill
+        }
+        switch variant {
+        case .action: return Palette.actionSolid
+        case .secondary: return Palette.surfaceRecess
+        case .outline: return Palette.surfaceRaised
+        }
+    }
+}
+
+/// The action button's lightness gradient over its solid.
+private final class ActionSurface: UIView {
+    override class var layerClass: AnyClass { CAGradientLayer.self }
+
+    init() {
+        super.init(frame: .zero)
+        isUserInteractionEnabled = false
+        (layer as? CAGradientLayer)?.colors = [UIColor.white.withAlphaComponent(0.06).cgColor, UIColor.black.withAlphaComponent(0.06).cgColor]
+        layer.cornerRadius = Radius.radiusMd
+        layer.cornerCurve = .continuous
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("ActionSurface is built in code")
+    }
+}
+
+extension UIImage {
+    /// The image drawn at `side` points square, keeping its rendering mode.
+    func resized(to side: Double) -> UIImage {
+        let size = CGSize(width: side, height: side)
+        return UIGraphicsImageRenderer(size: size).image { _ in
+            draw(in: CGRect(origin: .zero, size: size))
+        }.withRenderingMode(renderingMode)
+    }
+}
+
+// MARK: Tree count
+
+/// A parent's count of what is folded under it, and the switch that opens it
+/// (TreeCount.svelte): the last thing on its row, failures beside it in their ink.
+public final class TreeCountButton: UIButton {
+    public var onToggle: () -> Void = {}
+    private var count = 0
+    private var failed = 0
+    private var open = false
+
+    public init() {
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        var config = UIButton.Configuration.plain()
+        config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: Space.space1, bottom: 0, trailing: Space.space1)
+        config.background.cornerRadius = Radius.radiusXs
+        configuration = config
+        addAction(UIAction { [weak self] _ in self?.onToggle() }, for: .primaryActionTriggered)
+        NSLayoutConstraint.activate([
+            heightAnchor.constraint(equalToConstant: Space.space5),
+            widthAnchor.constraint(greaterThanOrEqualToConstant: Space.space5),
+        ])
+        setContentHuggingPriority(.required, for: .horizontal)
+        setContentCompressionResistancePriority(.required, for: .horizontal)
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("TreeCountButton is built in code")
+    }
+
+    public func configure(count: Int, failed: Int, open: Bool) {
+        self.count = count
+        self.failed = failed
+        self.open = open
+        var title = AttributedString("\(count)", attributes: AttributeContainer(TypeScale.typeMeta.attributes(color: open ? Palette.inkStrong : Palette.inkMuted)))
+        if failed > 0 {
+            title += AttributedString(" · \(failed)", attributes: AttributeContainer(TypeScale.typeMeta.attributes(color: Palette.statusFailInk)))
+        }
+        configuration?.attributedTitle = title
+        configuration?.background.backgroundColor = open ? Palette.surfaceFillStrong : Palette.surfaceFill
+        let label = "\(count) delegate\(count == 1 ? "" : "s")\(failed > 0 ? ", \(failed) failed" : "")"
+        accessibilityLabel = open ? "Hide \(label)" : "Show \(label)"
+    }
+}
+
+// MARK: Folder tabs
+
+/// The session tabs' folder tabs, hosted (fluid-tabs, `variant="folder"`): no
+/// shelf, the chosen tab a sheet with rounded shoulders and a foot that
+/// flares into the page below. Each tab owns a sheet, shown by a mask no
+/// wider than its tab: switching grows the chosen one from the side facing
+/// the old one and shrinks the old one toward the new, over `durPop` on the
+/// drawer curve.
+public final class FolderTabs: UIControl {
+    public struct Tab {
+        public let label: String
+        public init(label: String) {
+            self.label = label
+        }
+    }
+
+    /// The strip's sizes as the home's WorkTabs sets them.
+    static let item = Space.space8
+    static let padX = 6.0
+    static let flare = Radius.radiusSm
+
+    public private(set) var selectedIndex = 0
+    private var cells: [Cell] = []
+    private let stack = UIStackView()
+
+    public init(_ tabs: [Tab], selected: Int) {
+        selectedIndex = selected
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        stack.axis = .horizontal
+        stack.spacing = 2
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        addSubview(stack)
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: leadingAnchor, constant: Self.flare),
+            stack.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -Self.flare),
+            stack.topAnchor.constraint(equalTo: topAnchor),
+            stack.bottomAnchor.constraint(equalTo: bottomAnchor),
+            stack.heightAnchor.constraint(equalToConstant: Self.item),
+        ])
+        for (index, tab) in tabs.enumerated() {
+            let cell = Cell(label: tab.label)
+            cell.addAction(UIAction { [weak self] _ in self?.choose(index) }, for: .primaryActionTriggered)
+            cells.append(cell)
+            stack.addArrangedSubview(cell)
+        }
+        apply(animated: false, forward: true)
+        accessibilityTraits = .tabBar
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) {
+        fatalError("FolderTabs is built in code")
+    }
+
+    /// The view that trails a tab's label (its count).
+    public func setTrail(_ view: UIView, at index: Int) {
+        cells[index].setTrail(view)
+    }
+
+    public func select(_ index: Int, animated: Bool) {
+        guard index != selectedIndex else {
+            return
+        }
+        let forward = index > selectedIndex
+        selectedIndex = index
+        apply(animated: animated && !UIAccessibility.isReduceMotionEnabled, forward: forward)
+    }
+
+    private func choose(_ index: Int) {
+        guard index != selectedIndex else {
+            return
+        }
+        select(index, animated: true)
+        sendActions(for: .valueChanged)
+    }
+
+    private func apply(animated: Bool, forward: Bool) {
+        CATransaction.begin()
+        CATransaction.setDisableActions(!animated)
+        CATransaction.setAnimationDuration(Motion.durPop)
+        CATransaction.setAnimationTimingFunction(Motion.easeDrawer.function)
+        for (index, cell) in cells.enumerated() {
+            cell.set(chosen: index == selectedIndex, forward: forward)
+        }
+        CATransaction.commit()
+    }
+
+    private final class Cell: UIControl {
+        private let title: KitLabel
+        private let row = UIStackView()
+        private let sheet = CAShapeLayer()
+        private let sheetMask = CALayer()
+
+        init(label: String) {
+            title = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted)
+            super.init(frame: .zero)
+            title.text = label
+            row.axis = .horizontal
+            row.spacing = Space.space1
+            row.alignment = .center
+            row.isUserInteractionEnabled = false
+            row.translatesAutoresizingMaskIntoConstraints = false
+            row.addArrangedSubview(title)
+            addSubview(row)
+            NSLayoutConstraint.activate([
+                row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: FolderTabs.padX + 6),
+                row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -(FolderTabs.padX + 6)),
+                row.centerYAnchor.constraint(equalTo: centerYAnchor),
+            ])
+            sheetMask.backgroundColor = UIColor.black.cgColor
+            sheet.mask = sheetMask
+            layer.insertSublayer(sheet, at: 0)
+            isAccessibilityElement = true
+            accessibilityLabel = label
+            accessibilityTraits = .button
+            registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (cell: Cell, _: UITraitCollection) in
+                cell.paint()
+            }
+            paint()
+        }
+
+        @available(*, unavailable)
+        required init?(coder _: NSCoder) {
+            fatalError("FolderTabs.Cell is built in code")
+        }
+
+        func setTrail(_ view: UIView) {
+            row.addArrangedSubview(view)
+        }
+
+        func set(chosen: Bool, forward: Bool) {
+            title.ink = chosen ? Palette.inkStrong : Palette.inkMuted
+            accessibilityTraits = chosen ? [.button, .selected] : .button
+            // The chosen sheet grows from the side facing the old tab; the old one shrinks toward the new.
+            anchor = chosen == forward ? 0 : 1
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            placeMask()
+            CATransaction.commit()
+            sheetMask.transform = CATransform3DMakeScale(chosen ? 1 : 0.0001, 1, 1)
+        }
+
+        private var anchor = 0.0
+
+        /// The mask over the whole sheet, pinned at the side it grows from.
+        private func placeMask() {
+            let size = sheet.bounds.size
+            sheetMask.anchorPoint = CGPoint(x: anchor, y: 0.5)
+            sheetMask.bounds = CGRect(origin: .zero, size: size)
+            sheetMask.position = CGPoint(x: anchor * size.width, y: size.height / 2)
+        }
+
+        private func paint() {
+            let dark = traitCollection.userInterfaceStyle == .dark
+            sheet.fillColor = (dark ? Palette.surfaceHover : Palette.surfaceRaised).resolvedColor(with: traitCollection).cgColor
+        }
+
+        override func layoutSubviews() {
+            super.layoutSubviews()
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+            let flare = FolderTabs.flare
+            sheet.frame = bounds.insetBy(dx: -flare, dy: 0)
+            sheet.path = Self.sheetPath(in: sheet.bounds, radius: Radius.radiusSm, flare: flare)
+            placeMask()
+            CATransaction.commit()
+        }
+
+        /// Rounded shoulders, and a foot that curves outward by `flare` each side.
+        static func sheetPath(in rect: CGRect, radius: Double, flare: Double) -> CGPath {
+            let path = UIBezierPath()
+            let left = rect.minX + flare
+            let right = rect.maxX - flare
+            path.move(to: CGPoint(x: rect.minX, y: rect.maxY))
+            path.addArc(withCenter: CGPoint(x: rect.minX, y: rect.maxY - flare), radius: flare, startAngle: .pi / 2, endAngle: 0, clockwise: false)
+            path.addLine(to: CGPoint(x: left, y: rect.minY + radius))
+            path.addArc(withCenter: CGPoint(x: left + radius, y: rect.minY + radius), radius: radius, startAngle: .pi, endAngle: .pi * 1.5, clockwise: true)
+            path.addLine(to: CGPoint(x: right - radius, y: rect.minY))
+            path.addArc(withCenter: CGPoint(x: right - radius, y: rect.minY + radius), radius: radius, startAngle: .pi * 1.5, endAngle: 0, clockwise: true)
+            path.addLine(to: CGPoint(x: right, y: rect.maxY - flare))
+            path.addArc(withCenter: CGPoint(x: rect.maxX, y: rect.maxY - flare), radius: flare, startAngle: .pi, endAngle: .pi / 2, clockwise: false)
+            path.close()
+            return path.cgPath
+        }
+    }
+}
+
+// MARK: Status glyph
+
+/// A session's status as a glyph and its word, so no state reads by colour
+/// alone. The glyph wears its status hue; the word stays muted ink. SF
+/// Symbols stand in until the owner's drawn set replaces them here.
+public final class StatusGlyph: UIStackView {
+    private let glyph = UIImageView()
+    private let word = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted)
+
+    public init(_ status: SessionStatus) {
+        super.init(frame: .zero)
+        axis = .horizontal
+        spacing = Space.space1
+        alignment = .center
+        glyph.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: Size.iconMd, weight: .medium)
+        addArrangedSubview(glyph)
+        addArrangedSubview(word)
+        isAccessibilityElement = true
+        configure(status)
+    }
+
+    @available(*, unavailable)
+    required init(coder _: NSCoder) {
+        fatalError("StatusGlyph is built in code")
+    }
+
+    public func configure(_ status: SessionStatus) {
+        glyph.image = UIImage(systemName: status.symbol)?.applyingSymbolConfiguration(.preferringMulticolor())
+        glyph.tintColor = status.tint
+        word.text = status.word
+        accessibilityLabel = status.word
+    }
+}
+
+extension SessionStatus {
+    var word: String {
+        switch self {
+        case .starting: "Starting"
+        case .working: "Working"
+        case .needsYou: "Needs you"
+        case .idle: "Idle"
+        case .done: "Done"
+        case .stopped: "Stopped"
+        case .error: "Error"
+        case .unknown: "Unknown"
+        }
+    }
+
+    var symbol: String {
+        switch self {
+        case .starting: "circle.dotted"
+        case .working: "arrow.clockwise.circle.fill"
+        case .needsYou: "hand.raised.circle.fill"
+        case .idle: "pause.circle.fill"
+        case .done: "checkmark.circle.fill"
+        case .stopped: "stop.circle.fill"
+        case .error: "xmark.circle.fill"
+        case .unknown: "questionmark.circle.fill"
+        }
+    }
+
+    var tint: UIColor {
+        switch self {
+        case .starting, .working: Palette.statusLiveGlyph
+        case .needsYou: Palette.statusAttnGlyph
+        case .done: Palette.statusDoneGlyph
+        case .error: Palette.statusFailGlyph
+        case .idle, .stopped, .unknown: Palette.statusIdleGlyph
+        }
+    }
+}
