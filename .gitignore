@@ -63,3 +63,6 @@ release/
 # every future pull on that machine.
 .cawco-deploy
 build.bak.*/
+
+# Each workspace's scratch (probes, renders, review pages).
+.context/
