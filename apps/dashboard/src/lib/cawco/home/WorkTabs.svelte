@@ -60,6 +60,7 @@
     waitForBoxes,
   } from "../motion/relay-boxes";
   import { REFLOW_REREAD, reflow } from "../motion/rows.svelte";
+  import { nestPlace } from "../nest";
   import OsMark from "../OsMark.svelte";
   import { openTrees } from "../open-trees.svelte";
   import { rail } from "../rail.svelte";
@@ -183,6 +184,32 @@
     finished: new Map(trees.finished.map((line) => [line.row.id, line])),
   });
   const shapeOf = (tab: WorkTab, id: string) => shapes[tab].get(id);
+  /**
+   * Every nested row's place among its siblings, for the lines' stagger:
+   * in first child first, out last child first (nest.ts `nestPlace`).
+   */
+  const placesOf = (lines: TreeLine<InstanceRow>[]) => {
+    const siblings = new Map<string, string[]>();
+    for (const line of lines) {
+      if (line.parent) {
+        siblings.set(line.parent, [
+          ...(siblings.get(line.parent) ?? []),
+          line.row.id,
+        ]);
+      }
+    }
+    const places = new Map<string, string>();
+    for (const ids of siblings.values()) {
+      for (const [i, id] of ids.entries()) {
+        places.set(id, nestPlace(i, ids.length));
+      }
+    }
+    return places;
+  };
+  const places = $derived({
+    working: placesOf(trees.working),
+    finished: placesOf(trees.finished),
+  });
 
   /** A parent's folded rows, for its row's count and cards; null otherwise. */
   function stackOf(tab: WorkTab, id: string) {
@@ -279,10 +306,11 @@
 
   /**
    * A nested row's lines (the .kit-nest elbow, drawn from its own wrapper
-   * since the list is flat): its depth, its place in the stagger, and a
-   * straight rail for each ancestor whose line runs on past it.
+   * since the list is flat): its depth, its place among its siblings for
+   * the stagger in and out (`places`), and a straight rail for each
+   * ancestor whose line runs on past it.
    */
-  function nestStyle(tab: WorkTab, id: string, i: number): string {
+  function nestStyle(tab: WorkTab, id: string): string {
     const line = shapeOf(tab, id);
     if (!line || line.depth === 0) {
       return "";
@@ -293,7 +321,7 @@
     );
     return [
       `--nest-d: ${Math.min(line.depth, MAX_DEPTH)}`,
-      `--nest-i: ${i}`,
+      places[tab].get(id) ?? "",
       rails.length ? `background: ${rails.join(", ")}` : "",
     ]
       .filter(Boolean)
@@ -679,12 +707,13 @@
     data-reflow
     inert
   >
-    {#each lines.filter((line) => line.row) as line, i (line.key)}
+    {#each lines.filter((line) => line.row) as line (line.key)}
       {@const shape = shapeOf(line.tab, line.key)}
       <div
         data-first={shape?.first || undefined}
         data-last={shape?.last || undefined}
-        style={[leaveAnim(line.key), nestStyle(line.tab, line.key, i)].join('; ')}
+        style={[leaveAnim(line.key), nestStyle(line.tab, line.key)].join('; ')}
+        class:kit-nest-line={(shape?.depth ?? 0) > 0}
         class:nested={(shape?.depth ?? 0) > 0}
       >
         {@render sessionRow(line.row as InstanceRow, line.tab, line.machineId)}
@@ -776,14 +805,15 @@
                    ones take, each new one arriving as its place clears. -->
               {@render leaving(entry.gone, true)}
             {/if}
-            {#each entry.rows as row, i (`${swap.gen}:${row.id}`)}
+            {#each entry.rows as row (`${swap.gen}:${row.id}`)}
               {@const shape = shapeOf(shown, row.id)}
               <div
                 data-first={shape?.first || undefined}
                 data-flip={plan ? undefined : ''}
                 data-key={row.id}
                 data-last={shape?.last || undefined}
-                style={[enterAnim(row.id), nestStyle(shown, row.id, i)].join('; ')}
+                style={[enterAnim(row.id), nestStyle(shown, row.id)].join('; ')}
+                class:kit-nest-line={(shape?.depth ?? 0) > 0}
                 class:nested={(shape?.depth ?? 0) > 0}
               >
                 {#if shape?.parent && shape.depth > 0}
@@ -1001,24 +1031,9 @@
     bottom: -2px;
     border-left-width: 1px;
   }
-  @media (prefers-reduced-motion: no-preference) {
-    .nested::before {
-      animation: nest-elbow var(--dur-panel) var(--ease-out) both;
-      animation-delay: calc(var(--nest-i, 0) * 40ms);
-    }
-    /* The rail on carries on from the curve (app.css .kit-nest). */
-    .nested::after {
-      animation: nest-rail var(--dur-panel) var(--ease-out) both;
-      animation-delay: calc(var(--nest-i, 0) * 40ms + var(--dur-panel) * 0.55);
-    }
-    /* A folding row's copy (the list's reflow): its lines retract. */
-    .nested:global([data-reflow-ghost])::before,
-    .nested:global([data-reflow-ghost])::after {
-      animation-direction: reverse;
-      animation-duration: var(--dur-exit);
-      animation-delay: 0s;
-    }
-  }
+  /* Their drawing in and retracting is every nested list's own (app.css
+     `.kit-nest-line`): in a stagger by place among siblings, out last
+     child first. */
   /* A child's parent column: a click on the rail there folds the parent,
      and the rail brightens under the pointer to say so. */
   .gutter {

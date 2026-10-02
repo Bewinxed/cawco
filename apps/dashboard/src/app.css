@@ -553,14 +553,20 @@
     content: "";
     bottom: calc(-1 * var(--nest-gap));
   }
+  /* The lines' motion, for every list that nests: a `.kit-nest` list's
+     children, and any row that draws its own elbow and onward rail on its
+     ::before and ::after (`.kit-nest-line`, the home's Working/Finished
+     rows). Each carries its place among its siblings (nest.ts `nestPlace`). */
   @media (prefers-reduced-motion: no-preference) {
-    :is(.kit-nest, .kit-nest-inner) > li:not([data-nest="through"])::before {
+    :is(.kit-nest, .kit-nest-inner) > li:not([data-nest="through"])::before,
+    .kit-nest-line::before {
       animation: nest-elbow var(--dur-panel) var(--ease-out) both;
       animation-delay: calc(var(--nest-i, 0) * 40ms);
     }
     /* The rail on to the next child carries on from the curve, once the
        elbow's rail has reached it (the first 55% of `nest-elbow`). */
-    :is(.kit-nest, .kit-nest-inner) > li:not([data-nest="through"])::after {
+    :is(.kit-nest, .kit-nest-inner) > li:not([data-nest="through"])::after,
+    .kit-nest-line::after {
       animation: nest-rail var(--dur-panel) var(--ease-out) both;
       animation-delay: calc(var(--nest-i, 0) * 40ms + var(--dur-panel) * 0.55);
     }
@@ -570,7 +576,9 @@
       > li:not([data-nest="through"])::before,
     [data-reflow-ghost]
       :is(.kit-nest, .kit-nest-inner)
-      > li:not([data-nest="through"])::after {
+      > li:not([data-nest="through"])::after,
+    .kit-nest-line[data-reflow-ghost]::before,
+    .kit-nest-line[data-reflow-ghost]::after {
       animation-direction: reverse;
       animation-duration: var(--dur-exit);
       animation-delay: calc(var(--nest-r, 0) * 24ms);
