@@ -223,10 +223,6 @@ export default defineConfig({
   build: {
     cssTarget: ["chrome131", "edge131", "firefox146", "safari18", "ios18"],
     assetsInlineLimit: (file) => INLINE_FACES.test(file) || undefined,
-    // Rolldown's "plugins took significant time" note: it lands after the
-    // "built in" line whenever the machine is busy, and a log read from
-    // its end then misses the line that says the build finished.
-    rolldownOptions: { checks: { bundlerTimings: false } },
   },
   resolve: {
     alias: {
