@@ -741,10 +741,17 @@ function clipAt(stretch: Stretch, s: number): string {
   return `inset(0px ${px(Math.max(0, right))} ${px(Math.max(0, below))} 0px)`;
 }
 
-/** A stretch's keyframes: sampled where the head passes it, and only there; a run of equal frames is two. */
+/**
+ * A stretch's keyframes: sampled where the head passes it, and only there; a
+ * run of equal frames is two. Each sample's offset is its place in `times`
+ * (evenly spaced over the plan), never its time over the plan's total: the
+ * last one came to 1 and a rounding over, `animate` threw, and the throw
+ * stopped the batch, every room and row after it held at its first frame.
+ */
 function railFrames(plan: Plan, stretch: Stretch, times: number[]): Keyframe[] {
-  const frames = times.map((t) => ({
-    offset: t / plan.total,
+  const last = Math.max(1, times.length - 1);
+  const frames = times.map((t, k) => ({
+    offset: k / last,
     clipPath: clipAt(stretch, plan.head(t)),
   }));
   return frames.filter(
