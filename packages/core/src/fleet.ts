@@ -104,6 +104,8 @@ export interface FleetPlugin extends FleetPlacement {
 export interface SkillFile {
   /** Base64 so a skill's scripts and images survive the JSON hop unharmed. */
   contentBase64: string;
+  /** The source file had an execute bit; the agent writes it 0755. */
+  executable: boolean;
   path: string;
 }
 

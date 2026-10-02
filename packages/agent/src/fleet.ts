@@ -878,6 +878,22 @@ const dirExists = async (path: string): Promise<boolean> => {
 };
 
 /**
+ * One resolved file onto disk under `dir`, executable when its source was. The
+ * callers remove the directory first, so every write is a fresh file and a bit
+ * that flipped off in the source lands off here too.
+ */
+export const writeSkillFile = async (
+  dir: string,
+  file: SkillFile
+): Promise<void> => {
+  const path = join(dir, file.path);
+  await Bun.write(path, Buffer.from(file.contentBase64, "base64"));
+  if (file.executable) {
+    await chmod(path, 0o755);
+  }
+};
+
+/**
  * The skill's directory, as the hub resolved it. Written whole, because the
  * directory is cawco's own: a file the last version carried is not one this
  * version carries, and leaving it there is how a skill drifts.
@@ -887,10 +903,7 @@ const writeSkill = async (skill: FleetSkillPayload): Promise<void> => {
   await rm(dir, { recursive: true, force: true });
   for (const file of skill.files ?? []) {
     // biome-ignore lint/performance/noAwaitInLoops: writes must land after the directory removal above; a failed write partway through still has to leave whatever files it got to
-    await Bun.write(
-      join(dir, file.path),
-      Buffer.from(file.contentBase64, "base64")
-    );
+    await writeSkillFile(dir, file);
   }
 };
 
@@ -927,10 +940,7 @@ export const writeVendoredMarketplace = async (
         throw new Error(`unsafe path ${file.path}`);
       }
       // biome-ignore lint/performance/noAwaitInLoops: must run after this plugin's own rm above completes
-      await Bun.write(
-        join(dir, file.path),
-        Buffer.from(file.contentBase64, "base64")
-      );
+      await writeSkillFile(dir, file);
     }
   }
 
@@ -2508,6 +2518,8 @@ export const readSkillFiles = async (
     files.push({
       path,
       contentBase64: Buffer.from(content).toString("base64"),
+      // biome-ignore lint/suspicious/noBitwiseOperators: the execute bits of a stat mode are a mask, and the mask is the question
+      executable: ((await stat(join(skill.path, path))).mode & 0o111) !== 0,
     });
   }
   return files;

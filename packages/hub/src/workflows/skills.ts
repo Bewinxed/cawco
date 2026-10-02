@@ -11,10 +11,12 @@ export function workflowSkill(
     {
       path: ".cawco-workflow",
       contentBase64: Buffer.from(workflow.id).toString("base64"),
+      executable: false,
     },
     {
       path: "SKILL.md",
       contentBase64: Buffer.from(content).toString("base64"),
+      executable: false,
     },
   ];
   return { name, workflowId: workflow.id, hash: hashFiles(files), files };

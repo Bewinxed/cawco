@@ -17,7 +17,7 @@ import type {
   FleetMemory,
   FleetSkillPayload,
 } from "@cawco/core";
-import { memoryPlan } from "../fleet";
+import { memoryPlan, writeSkillFile } from "../fleet";
 import {
   guardWorkflowSkillRemoval,
   workflowSkillCollision,
@@ -86,10 +86,7 @@ export const writeSkill = async (
   await rm(target, { recursive: true, force: true });
   for (const file of skill.files ?? []) {
     // biome-ignore lint/performance/noAwaitInLoops: writes must land after the directory removal above; a failed write partway through still has to leave whatever files it got to
-    await Bun.write(
-      join(target, file.path),
-      Buffer.from(file.contentBase64, "base64")
-    );
+    await writeSkillFile(target, file);
   }
 };
 

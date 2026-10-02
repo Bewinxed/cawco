@@ -269,6 +269,7 @@ export const readTree = async (
       contentBase64: Buffer.from(await Bun.file(file.path).bytes()).toString(
         "base64"
       ),
+      executable: file.executable,
     }))
   );
   return { files, hash: hashFiles(files), bytes };
@@ -395,6 +396,8 @@ const pickSkillDir = async (
 
 /** One file of the skill, as the walk found it on disk. */
 interface Found {
+  /** Any execute bit as extracted; a zip without Unix modes extracts with none. */
+  executable: boolean;
   path: string;
   rel: string;
   size: number;
@@ -427,17 +430,26 @@ const walk = async (dir: string, prefix = ""): Promise<Found[]> => {
     if (stats.isDirectory()) {
       found.push(...(await walk(path, rel)));
     } else if (stats.isFile()) {
-      found.push({ path, rel, size: stats.size });
+      found.push({
+        path,
+        rel,
+        size: stats.size,
+        // biome-ignore lint/suspicious/noBitwiseOperators: the execute bits of a stat mode are a mask, and the mask is the question
+        executable: (stats.mode & 0o111) !== 0,
+      });
     }
   }
   return found;
 };
 
-/** Sorted `path\0content` pairs, so the same skill hashes the same everywhere. */
+/**
+ * Sorted `path\0mode\0content` triples, so the same skill hashes the same
+ * everywhere and a file that gains or loses its execute bit re-syncs.
+ */
 export const hashFiles = (files: SkillFile[]): string => {
   const hasher = new Bun.CryptoHasher("sha256");
   for (const file of [...files].sort((a, b) => a.path.localeCompare(b.path))) {
-    hasher.update(`${file.path}\0`);
+    hasher.update(`${file.path}\0${file.executable ? "x" : "-"}\0`);
     hasher.update(file.contentBase64);
   }
   return hasher.digest("hex");
@@ -485,7 +497,11 @@ const fetchUrl = async (
   if (MD_PATH_RE.test(path)) {
     const content = Buffer.from(await response.arrayBuffer());
     const files: SkillFile[] = [
-      { path: "SKILL.md", contentBase64: content.toString("base64") },
+      {
+        path: "SKILL.md",
+        contentBase64: content.toString("base64"),
+        executable: false,
+      },
     ];
     // A lone file has no directory of its own; the one it was served from names it.
     return {
