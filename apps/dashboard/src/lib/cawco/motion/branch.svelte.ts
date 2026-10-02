@@ -779,13 +779,24 @@ interface Piece {
 }
 
 /**
- * Built this far ahead of its start: eight frames at 60Hz. A piece once
- * built runs on the compositor, through whatever holds the main thread; one
- * not yet built waits for it. With a session streaming, a frame of its
- * socket's messages held the main thread 120ms, and a stretch of line due
- * in it, built two frames ahead, stood still until it was over.
+ * Built this far ahead of its start when a frame has room for it: eight
+ * frames at 60Hz. A piece once built runs on the compositor, through
+ * whatever holds the main thread; one not yet built waits for it. With a
+ * session streaming, a frame of its socket's messages held the main thread
+ * 120ms, and a stretch of line due in it, built two frames ahead, stood
+ * still until it was over.
  */
 const AHEAD = (1000 / 60) * 8;
+/** Built by this far ahead of its start, whatever else the frame builds: two frames. */
+const SOON = (1000 / 60) * 2;
+/**
+ * Pieces a frame builds ahead of `SOON`, soonest first. Every piece of a
+ * tree due within `AHEAD`, built on the frame its fold started, ran that
+ * frame to 18-20ms in paint, layerize and the compositor's setup of each
+ * new animation, and the fold dropped its first frame; a few a frame, the
+ * rest are built over the frames after, still well before they move.
+ */
+const EARLY = 2;
 
 /**
  * Every piece of a plan, to build on its own elements: each row's glyph
@@ -796,7 +807,8 @@ const AHEAD = (1000 / 60) * 8;
  *
  * `rests`: until it is built, every piece stands where its plan starts it,
  * hidden under the group's hold (a fresh opening) or at rest (a fold from
- * rest). Then a piece is built a little before it moves (`AHEAD`), and only
+ * rest). Then a piece is built a little before it moves (`SOON` at the
+ * latest, `AHEAD` when a frame has room), and only
  * once it is in view (`fly`): built at once, a tree of forty under the rail's foot cost
  * the frame its fold started on 13ms in `animate` alone, mostly for rows
  * nobody could see, and every piece of a tall tree in view still made that
@@ -869,7 +881,8 @@ function piecesOf(
 
 /**
  * A flight's pieces, each built on the fold's clock, so it stands where the
- * plan has it, once it is due (`AHEAD` of its start) and in view: checked
+ * plan has it, once it is in view and due: every one `SOON` of its start,
+ * and `EARLY` more a frame, soonest first, up to `AHEAD` of theirs. Checked
  * every frame until the last is built, and on every scroll that carries the
  * group. A scroll that leaves the group where it is drawn brings nothing in:
  * the rail anchors its own scroll as the home list above it grows
@@ -889,19 +902,27 @@ function fly(
     return;
   }
   let view = seen;
+  pieces.sort((a, b) => a.start - b.start);
   const build = (now: number) => {
-    for (let i = pieces.length - 1; i >= 0; i -= 1) {
+    let early = EARLY;
+    for (let i = 0; i < pieces.length; ) {
       const piece = pieces[i];
-      if (
-        piece.start - (now - start) <= AHEAD &&
-        view(piece.top, piece.bottom)
-      ) {
-        for (const animation of piece.build()) {
-          animation.startTime = start;
-          flight.animations.push(animation);
-        }
-        pieces.splice(i, 1);
+      const due = piece.start - (now - start);
+      if (due > AHEAD) {
+        return;
       }
+      if (!view(piece.top, piece.bottom) || (due > SOON && early === 0)) {
+        i += 1;
+        continue;
+      }
+      if (due > SOON) {
+        early -= 1;
+      }
+      for (const animation of piece.build()) {
+        animation.startTime = start;
+        flight.animations.push(animation);
+      }
+      pieces.splice(i, 1);
     }
   };
   const options = { capture: true, passive: true } as const;
