@@ -166,12 +166,16 @@ export interface WorkItemDeps {
     method: string,
     args: unknown[]
   ) => Promise<unknown>;
-  /** Runs a command on a machine, in a directory; throws when the machine cannot. */
+  /**
+   * Runs a command on a machine, in a directory — inside `workspace`'s
+   * boundary when one is named; throws when the machine cannot.
+   */
   readonly command: (
     machineId: string,
     cwd: string,
     cmd: string,
-    timeoutMs?: number
+    timeoutMs?: number,
+    workspace?: WorkspaceRef
   ) => Promise<CommandResult>;
   readonly db: DbShape;
   /** Tells every dashboard an item moved: its parent's delegate tray follows it. */
@@ -910,7 +914,11 @@ export const createWorkItems = ({
     return { row, item, checks: item.checks };
   };
 
-  /** Runs `checks` in order in the workspace's worktree, on its machine. */
+  /**
+   * Runs `checks` in order in the workspace's worktree, on its machine, inside
+   * the workspace's boundary: a check reads what its delegate wrote, at the
+   * path the delegate wrote it (`/tmp` is the workspace's own there).
+   */
   const runChecks = async (
     workspace: WorkspaceRow,
     checks: WorkItemCheck[]
@@ -923,7 +931,8 @@ export const createWorkItems = ({
         workspace.machineId,
         workspace.path,
         check.command,
-        (check.timeoutSec ?? CHECK_TIMEOUT_SEC) * 1000
+        (check.timeoutSec ?? CHECK_TIMEOUT_SEC) * 1000,
+        refOf(workspace)
       );
       const result = checkTails(complete);
       outcomes.push({

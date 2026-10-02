@@ -1,5 +1,6 @@
 import { spawn } from "node:child_process";
-import type { CommandResult } from "@cawco/core";
+import type { CommandResult, WorkspaceRef } from "@cawco/core";
+import { ensureBoundary } from "./boundary";
 
 /** The most a command may write, stdout and stderr together, in bytes. */
 const OUTPUT_LIMIT = 8 * 1024 * 1024;
@@ -27,16 +28,31 @@ export function abandonCommands(): void {
   console.log(`abandoned ${count} command(s): hub connection ended`);
 }
 
+/** Whether `value` names a delegation workspace: an id and an absolute clone path. */
+const isWorkspaceRef = (value: unknown): value is WorkspaceRef =>
+  typeof value === "object" &&
+  value !== null &&
+  typeof (value as WorkspaceRef).id === "string" &&
+  typeof (value as WorkspaceRef).path === "string" &&
+  (value as WorkspaceRef).path.startsWith("/");
+
 /**
  * `CONTROL_RUN_COMMAND`: runs `cmd` in `cwd` on this machine, killed with its
  * whole process group after `timeoutMs` (exit 124). Answers complete stdout
  * and complete stderr; a command that writes more than {@link OUTPUT_LIMIT}
  * bytes across both is killed the same way and rejects.
+ *
+ * Given a `workspace`, the command runs inside that workspace's boundary,
+ * through the executor its sessions' shell commands run through: the same
+ * mounts, the same private `/tmp`, the same pid namespace. A boundary this
+ * machine cannot start rejects with its reason; the command never runs
+ * outside it.
  */
-export function runWorkflowCommand(
+export async function runWorkflowCommand(
   cwd: unknown,
   cmd: unknown,
-  timeoutMs: unknown
+  timeoutMs: unknown,
+  workspace?: unknown
 ): Promise<CommandResult> {
   if (
     typeof cwd !== "string" ||
@@ -44,16 +60,23 @@ export function runWorkflowCommand(
     typeof cmd !== "string" ||
     !cmd.trim()
   ) {
-    return Promise.reject(
-      new Error(
-        "runCommand requires an absolute workspace directory and a command."
-      )
+    throw new Error(
+      "runCommand requires an absolute workspace directory and a command."
     );
   }
+  // An absent workspace crosses the wire as null.
+  if ((workspace ?? undefined) !== undefined && !isWorkspaceRef(workspace)) {
+    throw new Error("runCommand's workspace must be { id, path }.");
+  }
+  const [file, args] = isWorkspaceRef(workspace)
+    ? [(await ensureBoundary(workspace)).exec, [cmd]]
+    : ["/bin/sh", ["-c", cmd]];
   return new Promise((resolve, reject) => {
-    const child = spawn("/bin/sh", ["-c", cmd], {
+    const child = spawn(file, args, {
       cwd,
       detached: true,
+      // The executor enters the boundary in `$PWD`: it names `cwd`.
+      env: { ...process.env, PWD: cwd },
       stdio: ["ignore", "pipe", "pipe"],
     });
     const { pid } = child;

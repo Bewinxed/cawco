@@ -982,11 +982,14 @@ export const CONTROL_WORKSPACE_MIGRATE = "workspaceMigrate";
 
 /**
  * Runs a shell command on a machine, in a directory, killed with its process
- * group after a limit (exit 124). Args `[cwd, command, timeoutMs?]`; answers
- * {@link CommandResult}. A command that writes more than 8 MiB across stdout
- * and stderr is killed with its process group and the call fails with an
- * error naming the limit. The hub's one way to run something on a machine: a
- * workflow's `w.exec`, and a work item's acceptance checks.
+ * group after a limit (exit 124). Args `[cwd, command, timeoutMs?, workspace?]`;
+ * answers {@link CommandResult}. A command that writes more than 8 MiB across
+ * stdout and stderr is killed with its process group and the call fails with
+ * an error naming the limit. The hub's one way to run something on a machine:
+ * a workflow's `w.exec`, and a work item's acceptance checks. A
+ * {@link WorkspaceRef} runs the command inside that workspace's boundary,
+ * exactly as its sessions' shell commands run; a machine that cannot start the
+ * boundary fails the call with its reason.
  */
 export const CONTROL_RUN_COMMAND = "runCommand";
 

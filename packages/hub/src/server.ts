@@ -54,6 +54,7 @@ import type {
   UsageBucket,
   UsageLimitsResponse,
   Verb,
+  WorkspaceRef,
 } from "@cawco/core";
 import {
   AGENT_BUSY,
@@ -5535,18 +5536,20 @@ export const createServer = ({
    * THE way the hub runs a command on a machine: in `cwd`, killed after
    * `timeoutMs` (the machine's default when not given), answering its
    * complete stdout and stderr (past 8 MiB it fails). A workflow's `w.exec` and a work item's
-   * acceptance checks both go through it.
+   * acceptance checks both go through it; a check names its workspace, so it
+   * runs inside that workspace's boundary, as its delegate's commands do.
    */
   const runOnMachine = async (
     machineId: string,
     cwd: string,
     cmd: string,
-    timeoutMs?: number
+    timeoutMs?: number,
+    workspace?: WorkspaceRef
   ): Promise<CommandResult> => {
     const response = await callAgent(
       machineId,
       CONTROL_RUN_COMMAND,
-      [cwd, cmd, timeoutMs],
+      [cwd, cmd, timeoutMs, workspace],
       (timeoutMs ?? 300_000) + 10_000
     );
     if (typeof response === "string") {
