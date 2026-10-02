@@ -1750,7 +1750,8 @@
 
   /**
    * THE PIN. While the reader is at the tail, the list getting taller is
-   * followed: pinned while a row opens, paced by the teleprompter otherwise.
+   * followed: put back on the foot in the frame a row grew (the rows'
+   * observer below), and a frame after a write virtua made in a task.
    *
    * It listens to virtua's own container — the element whose height virtua
    * sets from the rows it has measured — through a MutationObserver on its
@@ -1795,9 +1796,45 @@
       }
     });
     box.observe(node);
+    // A row growing (an answer streaming in, a row settling taller) is
+    // measured by virtua in its ResizeObserver, which sets the list's height
+    // in the microtask behind it: `follow` hears that write, but puts the tail
+    // back a frame later (`followBottom`), so every frame a row grew in was
+    // painted with the tail that much off the foot. The rows themselves are
+    // watched too, one level inside virtua's items: their observer is called
+    // in the same pass, after virtua's has laid the list out again, so the
+    // tail is back on the foot in the frame it grew.
+    const sized = new ResizeObserver(() => {
+      if (landed && atBottom && !jumping) {
+        pinBottom();
+      }
+    });
+    const watch = (item: Node, as: "observe" | "unobserve"): void => {
+      if (item instanceof Element) {
+        for (const row of item.querySelectorAll("[data-row]")) {
+          sized[as](row);
+        }
+      }
+    };
+    watch(container, "observe");
+    // virtua's items are the container's children: one comes and goes with
+    // its row, and nothing inside a row is listened to.
+    const mounted = new MutationObserver((records) => {
+      for (const record of records) {
+        for (const item of record.removedNodes) {
+          watch(item, "unobserve");
+        }
+        for (const item of record.addedNodes) {
+          watch(item, "observe");
+        }
+      }
+    });
+    mounted.observe(container, { childList: true });
     return () => {
       grew.disconnect();
       box.disconnect();
+      sized.disconnect();
+      mounted.disconnect();
     };
   });
 

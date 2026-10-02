@@ -741,7 +741,7 @@ export function buildRowsFrom(
       : foldAll(messages, session.subagents);
 
   const prior = memo?.live ?? NO_LIVE;
-  const content = liveContent(session);
+  const content = liveContent(session) ?? answerLanding(prior, rows);
   const same = prior.on && content !== null && continues(prior, content);
   const gen = same ? prior.gen : prior.gen + 1;
   const tool =
@@ -892,6 +892,51 @@ function settledInto(
     }
   }
   return null;
+}
+
+/**
+ * The live answer, held as it was last streamed while its message lands.
+ * The hub lands a reply's reasoning and its answer as two blocks of one
+ * message, and the reasoning can come a fold ahead of the answer: the live
+ * row ended there with no answer to settle into, handed its place to the
+ * reasoning row, and the answer opened again from nothing under it, the
+ * whole reply folding to a line and growing back at the end of every turn.
+ * So while the newest settled row is reasoning whose message has no answer
+ * yet, the answer stays live, and the fold its answer lands in settles it
+ * (`settledInto`). The next row of the conversation ends the wait whatever
+ * comes of it.
+ */
+function answerLanding(prior: LiveMemo, rows: Row[]): LiveContent | null {
+  const last = rows.at(-1);
+  if (
+    !(
+      prior.on &&
+      prior.answer &&
+      last?.kind === "single" &&
+      last.message.type === "thinking" &&
+      last.message.sdkUuid
+    )
+  ) {
+    return null;
+  }
+  const message = last.message.sdkUuid;
+  // Its answer landed ahead of it: nothing is waiting.
+  if (
+    rows.some(
+      (row) =>
+        row.kind === "single" &&
+        row.message.type === "assistant" &&
+        row.message.sdkUuid === message
+    )
+  ) {
+    return null;
+  }
+  return {
+    thinking: null,
+    thinkingLive: false,
+    indicating: false,
+    text: prior.answer,
+  };
 }
 
 /**
