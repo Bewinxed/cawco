@@ -403,8 +403,8 @@ export function handoffTools(deps: HandoffDeps) {
       "Start a NEW session on the fleet and give it work. Unlike a subagent, this " +
         "is a full session of its own: it gets its own row in the sidebar, its own transcript " +
         "the user can open and read, and it survives after this turn ends. " +
-        "It runs on the harness, model, effort and denied tools of a delegate type — `type`, the same catalog delegate uses, " +
-        "'medium' when omitted — and answers tool permissions in `permissionMode`, this session's own mode when omitted, " +
+        "It runs on the harness, model and effort of a delegate type — `type`, the same catalog delegate uses, " +
+        "'medium' when omitted; a named type's denied tools apply too — and answers tool permissions in `permissionMode`, this session's own mode when omitted, " +
         "where its harness has permission modes (pi has none, and refuses one). " +
         "Nothing is left to the machine's defaults. " +
         "It runs on this session's machine unless `machine` names another one of the fleet. " +
@@ -446,7 +446,7 @@ export function handoffTools(deps: HandoffDeps) {
           .string()
           .optional()
           .describe(
-            "A named delegate type (see list_delegate_types): sets harness, model, effort and denied tools. Default 'medium'. Match the type to the work, as with delegate."
+            "A named delegate type (see list_delegate_types): sets harness, model, effort and denied tools. Omitted: 'medium' sets harness, model and effort, and no tools are denied. Match the type to the work, as with delegate."
           ),
         model: z
           .string()

@@ -996,7 +996,11 @@ export const handoffActions = ({
         fallbackPermissionMode: callerMode(rows, instanceId),
         ...(type?.effort ? { effort: type.effort } : {}),
         ...(type?.skills?.length ? { skills: type.skills } : {}),
-        ...(type?.denyTools?.length ? { denyTools: type.denyTools } : {}),
+        // Denied tools come only with a type the caller named. The default
+        // type picks what runs, but its deny list is a delegate's (browser
+        // checks in isolated chrome-devtools, not the owner's Chrome); a
+        // started session is not a delegate and keeps Claude in Chrome.
+        ...(typeName ? { denyTools: type?.denyTools } : {}),
         ...(sideQuest ? { scratch: { baseCwd: workdir } } : {}),
         // Provenance only — a started session is not a delegate. The hub reads
         // it to hold a leaf to `canDelegate` on this door as well.

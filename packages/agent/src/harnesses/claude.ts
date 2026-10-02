@@ -534,6 +534,32 @@ class Turn {
 
 const SETTLE_TIMEOUT_MS = 5000;
 
+/**
+ * The CLI child's environment: the agent's own, the spec's over it, and the
+ * session's model as `CAWCO_MODEL`.
+ *
+ * Claude in Chrome follows the session's mode, like every other tool. The
+ * CLI's server-side gate `tengu_cowork_chrome_automode_default` (the
+ * "classifier floor") otherwise holds the claude-in-chrome server at
+ * `default` even under bypassPermissions — effectiveModeForTool reads
+ * `if(i&&(…||$c(e?.mcpInfo)&&n.chromeClassifierFloorEnabled===!0))return
+ * n.canAutoClassifierRun===!0?"auto":"default"` — so every call parks in
+ * `canUseTool` and asks the owner. The floor also makes allow rules for these
+ * tools inert, so `allowedTools` cannot answer it. `CLAUDE_CHROME_CLASSIFIER_FLOOR`
+ * is the CLI's own override of that gate (`a.CLAUDE_CHROME_CLASSIFIER_FLOOR??
+ * x("tengu_cowork_chrome_automode_default",!1)`). In the non-bypass modes cawco
+ * offers, the tool itself still asks for each call. A spec's own env still wins.
+ */
+const sessionEnv = (
+  specEnv: Record<string, string | undefined> | undefined,
+  model: string | undefined
+): Record<string, string | undefined> => ({
+  ...process.env,
+  CLAUDE_CHROME_CLASSIFIER_FLOOR: "0",
+  ...specEnv,
+  ...(model && { CAWCO_MODEL: model }),
+});
+
 /** The `canUseTool` callback, parked until `resolvePermission` answers it. */
 type PermissionResolver = (result: PermissionResult) => void;
 
@@ -678,18 +704,12 @@ class ClaudeSession implements HarnessSession {
                 permissionMode as import("@anthropic-ai/claude-agent-sdk").PermissionMode,
             }
           : {}),
-        ...(model && {
-          model,
-          env: {
-            ...process.env,
-            ...(
-              options as
-                | { env?: Record<string, string | undefined> }
-                | undefined
-            )?.env,
-            CAWCO_MODEL: model,
-          },
-        }),
+        ...(model && { model }),
+        env: sessionEnv(
+          (options as { env?: Record<string, string | undefined> } | undefined)
+            ?.env,
+          model
+        ),
         // Left out entirely when nobody chose: the SDK's own default is the
         // model's, and writing a level here would put cawco's guess in its
         // place on every model whose scale we cannot see.
