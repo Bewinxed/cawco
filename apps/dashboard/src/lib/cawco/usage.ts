@@ -3,7 +3,34 @@
  * (design/usage-tracker.md). The summary and limits JSON shapes are core's
  * (`UsageSummary`, `UsageLimitsResponse`); this module reads them.
  */
-import type { LimitWindow } from "@cawco/core";
+import type { LimitWindow, UsageSpend } from "@cawco/core";
+
+/**
+ * The midnight `days` before the hub's today, in the hub's zone: the start
+ * of a range, reckoned on the same calendar as the hub's spend. A daylight
+ * saving change in between moves midnight by an hour, which the zone's own
+ * clock corrects.
+ */
+export function hubMidnight(
+  spend: Pick<UsageSpend, "todayStart" | "timeZone">,
+  days: number
+): number {
+  const guess = spend.todayStart - days * 24 * HOUR_MS;
+  const hour = Number(
+    new Intl.DateTimeFormat("en-US", {
+      timeZone: spend.timeZone,
+      hour: "numeric",
+      hourCycle: "h23",
+    }).format(guess)
+  );
+  if (hour === 23) {
+    return guess + HOUR_MS;
+  }
+  if (hour === 1) {
+    return guess - HOUR_MS;
+  }
+  return guess;
+}
 
 /** Real or notional dollars — two decimals, never more. */
 export const usd = (n: number): string => `$${n.toFixed(2)}`;

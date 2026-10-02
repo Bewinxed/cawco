@@ -3,8 +3,8 @@
    * History (design/usage-tracker.md §3): what each harness cost over the
    * page's range, as two small charts — one per harness, each on its own
    * scale, never one chart with two axes, because the two are not the same
-   * kind of money. Hours for a window or a day, local days for a week or a
-   * month. Table swaps both charts for their figures.
+   * kind of money. Hours for a window or a day, the hub's days for a week or
+   * a month. Table swaps both charts for their figures.
    */
   import type { UsageSummary } from "@cawco/core";
   import { Button } from "$lib/components/ui/button";
@@ -13,9 +13,10 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { IconRefresh } from "$lib/icons";
+  import { cawco } from "../client.svelte";
   import { ListSwap } from "../motion/list-swap.svelte";
   import { morph } from "../motion/morph.svelte";
-  import { money } from "../usage";
+  import { hubMidnight, money } from "../usage";
 
   type Harness = "claude" | "opencode";
 
@@ -118,15 +119,34 @@
     retrying = false;
   }
 
-  const startOfDay = (ms: number): number => {
-    const d = new Date(ms);
-    d.setHours(0, 0, 0, 0);
-    return d.getTime();
+  /** Every hour from the range's start to now. */
+  const hoursFrom = (start: number): number[] => {
+    const out: number[] = [];
+    const now = Date.now();
+    for (let at = Math.floor(start / HOUR_MS) * HOUR_MS; at <= now; ) {
+      out.push(at);
+      at += HOUR_MS;
+    }
+    return out;
   };
-  const nextDay = (ms: number): number => {
-    const d = new Date(ms);
-    d.setDate(d.getDate() + 1);
-    return d.getTime();
+
+  /**
+   * The hub's midnights from the range's start to today, oldest first: the
+   * days every device folds spend into, the same days the spend line counts.
+   */
+  const hubDaysFrom = (start: number): number[] => {
+    const { spend } = cawco;
+    if (!spend) {
+      return [];
+    }
+    const out: number[] = [];
+    for (let back = 0; ; back += 1) {
+      const at = hubMidnight(spend, back);
+      if (at < start) {
+        return out;
+      }
+      out.unshift(at);
+    }
   };
 
   /** Every period from the range's start to now, empty ones at zero. */
@@ -138,36 +158,43 @@
     if (!summary || start === null) {
       return [];
     }
-    const now = Date.now();
-    const floor = hours
-      ? (ms: number) => Math.floor(ms / HOUR_MS) * HOUR_MS
-      : startOfDay;
-    const step = hours ? (ms: number) => ms + HOUR_MS : nextDay;
-    const byPeriod = new Map<number, number>();
+    const periods = hours ? hoursFrom(start) : hubDaysFrom(start);
+    const costs = periods.map(() => 0);
     for (const row of summary.rows) {
-      const at = floor(Number(row.key));
-      byPeriod.set(at, (byPeriod.get(at) ?? 0) + row.costUsd);
+      const at = Number(row.key);
+      // The last period that starts at or before the row's hour.
+      let i = periods.length - 1;
+      while (i >= 0 && periods[i] > at) {
+        i -= 1;
+      }
+      if (i >= 0) {
+        costs[i] += row.costUsd;
+      }
     }
-    const out: Point[] = [];
-    for (let at = floor(start); at <= now; at = step(at)) {
-      out.push({ at, cost: byPeriod.get(at) ?? 0 });
-    }
-    return out;
+    return periods.map((at, i) => ({ at, cost: costs[i] }));
   }
 
-  const HOUR_LABEL = new Intl.DateTimeFormat(undefined, {
-    hour: "2-digit",
-    minute: "2-digit",
-    hourCycle: "h23",
-  });
-  const DAY_LABEL = new Intl.DateTimeFormat(undefined, {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-  });
+  /** Labels on the hub's clock, so a day reads the same day on every device. */
+  const timeZone = $derived(cawco.spend?.timeZone);
+  const hourLabel = $derived(
+    new Intl.DateTimeFormat(undefined, {
+      hour: "2-digit",
+      minute: "2-digit",
+      hourCycle: "h23",
+      timeZone,
+    })
+  );
+  const dayLabel = $derived(
+    new Intl.DateTimeFormat(undefined, {
+      weekday: "short",
+      day: "numeric",
+      month: "short",
+      timeZone,
+    })
+  );
   const byHour = $derived(shown?.hourly ?? hourly);
   const periodLabel = (at: number): string =>
-    byHour ? HOUR_LABEL.format(at) : DAY_LABEL.format(at);
+    byHour ? hourLabel.format(at) : dayLabel.format(at);
 
   const charts = $derived(
     (["claude", "opencode"] as const).map((harness) => {

@@ -6,9 +6,8 @@
    * is said twice and no row is named by an id.
    */
   import { floorToHour, type LimitWindow } from "@cawco/core";
-  import { invalidateAll } from "$app/navigation";
-  import { cawco } from "$lib/cawco/client.svelte";
-  import { speakingReading, windowStart } from "$lib/cawco/usage";
+  import { cawco, readSpend } from "$lib/cawco/client.svelte";
+  import { hubMidnight, speakingReading, windowStart } from "$lib/cawco/usage";
   import History from "$lib/cawco/usage/History.svelte";
   import LimitsBlock from "$lib/cawco/usage/LimitsBlock.svelte";
   import WhereItGoes from "$lib/cawco/usage/WhereItGoes.svelte";
@@ -17,9 +16,6 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as Tooltip from "$lib/components/ui/tooltip";
   import { IconDownload, IconRefresh } from "$lib/icons";
-  import type { PageData } from "./$types";
-
-  let { data }: { data: PageData } = $props();
 
   type Range = "window" | "today" | "7d" | "30d";
   let range = $state<Range>("window");
@@ -64,20 +60,22 @@
           ),
         };
       }
-      const midnight = new Date(now);
-      midnight.setHours(0, 0, 0, 0);
+      // Days are the hub's (its spend's own midnight and zone), so "Today"
+      // here is the same today as the spend line and the home's status.
+      if (!cawco.spend) {
+        return { claude: undefined, opencode: undefined };
+      }
       const back = { today: 0, "7d": 6, "30d": 29 }[range];
-      midnight.setDate(midnight.getDate() - back);
-      const start = midnight.getTime();
+      const start = hubMidnight(cawco.spend, back);
       return { claude: start, opencode: start };
     }
   );
 
-  /** The hub could not be read: reading it again, shown on the button. */
+  /** The hub's spend could not be read: reading it again, shown on the button. */
   let rereading = $state(false);
   async function reread(): Promise<void> {
     rereading = true;
-    await invalidateAll();
+    await readSpend();
     rereading = false;
   }
 
@@ -136,9 +134,12 @@
       </div>
     </header>
 
-    {#if data.error}
+    {#if cawco.spendFailed}
       <div class="page-error" role="alert">
-        <p class="note">{data.error}</p>
+        <p class="note">
+          Could not reach the hub for usage data. Check that it is running, then
+          try again.
+        </p>
         <Button
           icon={IconRefresh}
           label="Retry"
@@ -151,7 +152,7 @@
       </div>
     {/if}
 
-    <div class="limits"><LimitsBlock {now} spend={data.spend} /></div>
+    <div class="limits"><LimitsBlock {now} /></div>
     <div class="ranged">
       <Tooltip.Provider>
         <WhereItGoes {since} bind:this={where} />

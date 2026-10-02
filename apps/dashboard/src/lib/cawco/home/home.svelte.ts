@@ -460,14 +460,6 @@ class Home {
     )
   );
 
-  /** Today's spend across the running sessions this browser has stats for. */
-  readonly spend = $derived(
-    cawco.runningInstances.reduce(
-      (sum, row) => sum + (cawco.statsOf(row.id).cost ?? 0),
-      0
-    )
-  );
-
   readonly needs = $derived.by<NeedsItem[]>(() => {
     const asks: NeedsItem[] = cawco.blocked.map((item) => {
       const row = cawco.instanceIndex.byId.get(item.instanceId);

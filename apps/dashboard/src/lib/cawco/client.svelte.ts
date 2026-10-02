@@ -48,6 +48,7 @@ import type {
   TranscriptTail,
   UsageLimitsReading,
   UsageLimitsResponse,
+  UsageSpend,
   WorkflowRun,
   WorkItemSummary,
 } from "@cawco/core";
@@ -652,6 +653,13 @@ const state = $state({
   openCodeGoLimits: {} as Record<string, OpenCodeGoLimits>,
   /** The hub's limit readings have been read once, so an empty map means none, not not-yet. */
   usageLimitsRead: false,
+  /**
+   * The fleet's spend as the hub reckons it (`/api/usage/spend`, then every
+   * `kind: 'usage'` frame); null until it lands.
+   */
+  spend: null as UsageSpend | null,
+  /** The last read of `/api/usage/spend` failed and no frame has answered since. */
+  spendFailed: false,
 });
 
 interface Waiter {
@@ -1571,6 +1579,26 @@ function adoptUsageLimits(
   state.usageLimitsRead = true;
 }
 
+function adoptSpend(spend: UsageSpend): void {
+  state.spend = spend;
+  state.spendFailed = false;
+}
+
+/**
+ * Reads the fleet's spend from the hub: on connect, and again when a reader
+ * asks after a failed read. A failed read drops the figure and says so
+ * (`spendFailed`); nothing here estimates one.
+ */
+export async function readSpend(): Promise<void> {
+  const spend = await load<UsageSpend>("/api/usage/spend");
+  if (spend) {
+    adoptSpend(spend);
+  } else {
+    state.spend = null;
+    state.spendFailed = true;
+  }
+}
+
 /** The `kind: 'usage'` frame's readings, in the shape `/api/usage/limits` serves. */
 const usageLimitReadings = (readings: UsageLimitsReading[]) =>
   readings.map((reading) => ({
@@ -1605,6 +1633,9 @@ function adoptContinuations(table: ContinuationJob[]): void {
 async function refresh(): Promise<boolean> {
   // Registry hydration also recovers workflow transitions missed while disconnected.
   refreshWorkflows();
+  // Same reason as the limits below: the frames that carry spend come once a
+  // minute per machine, and a dashboard opened between them has none yet.
+  readSpend();
   const [machines, rows, projects, pending, handoffs, usage, continuations] =
     await Promise.all([
       load<Machine[]>("/api/agents"),
@@ -2030,6 +2061,7 @@ function handleFrame(frame: FramePayload): void {
   if (frame.kind === "usage") {
     // The small limits frame the hub pushes on each report (USAGE-SPEC.md §6.4).
     adoptUsageLimits(usageLimitReadings(frame.limits));
+    adoptSpend(frame.spend);
     return;
   }
 
@@ -4963,6 +4995,14 @@ export const cawco = {
   /** The hub's limit readings have landed at least once. */
   get usageLimitsRead() {
     return state.usageLimitsRead;
+  },
+  /** The fleet's spend, the hub's one figure; null until it is read. */
+  get spend(): UsageSpend | null {
+    return state.spend;
+  },
+  /** The hub could not be asked for spend, and no frame has brought it since. */
+  get spendFailed() {
+    return state.spendFailed;
   },
   get instances() {
     return instances;

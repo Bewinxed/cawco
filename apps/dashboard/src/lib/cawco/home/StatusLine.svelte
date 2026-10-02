@@ -9,6 +9,7 @@
   import { IconWarningTriangle } from "$lib/icons";
   import { cawco, reconnectNow } from "../client.svelte";
   import { crossIn, crossOut } from "../motion/curves.svelte";
+  import { money } from "../usage";
   import { home } from "./home.svelte";
 
   /** The retry countdown is a clock, not a frame: a quarter second is never seen stuck. */
@@ -34,7 +35,13 @@
     return home.ready ? "connected" : "reading";
   });
 
-  const spend = $derived(`$${home.spend.toFixed(2)} today`);
+  /** The hub's figure (`cawco.spend`), the one the Usage page shows too. */
+  const spend = $derived.by(() => {
+    if (cawco.spend) {
+      return `${money(cawco.spend.today)} today`;
+    }
+    return cawco.spendFailed ? "Spend not read from the hub" : "";
+  });
 </script>
 
 <!-- The hub's three states cross-fade in place: the line that leaves is

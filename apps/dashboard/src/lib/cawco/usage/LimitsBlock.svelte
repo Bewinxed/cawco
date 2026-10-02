@@ -37,13 +37,13 @@
 
   let {
     now,
-    spend,
   }: {
     /** The page's clock, a minute at a time. */
     now: number;
-    /** opencode's recorded spend; null while it is read or when it failed. */
-    spend: { today: number; week: number; all: number } | null;
   } = $props();
+
+  /** The fleet's real spend, the hub's one figure; null while read or failed. */
+  const spend = $derived(cawco.spend);
 
   type Row = LimitRow;
 
