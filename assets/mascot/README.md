@@ -69,7 +69,9 @@ them (the editor cannot import `.riv` files). From `assets/mascot/scripts` (`bun
     less, the median of five steady runs.
 
   The runtime's clocks and entropy are pinned so the random turns repeat across two runs. It
-  prints one line per file and, on success, `Caw view model drives every status's state machine`.
+  prints one line per file, the totals (`loops animate: 8/8`, `reducedMotion holds still: 8/8`,
+  `files proven: 8/8`) and, on success, `Caw view model drives the state machine in every status
+  file`.
 
 ## What the files hold today
 

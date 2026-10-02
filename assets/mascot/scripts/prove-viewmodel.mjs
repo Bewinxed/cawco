@@ -353,7 +353,7 @@ const runtimeVersion = JSON.parse(
 console.log(
   `runtime: @rive-app/canvas-advanced ${runtimeVersion} on Chromium ${browser.version()}`
 );
-const totals = { files: 0, ok: 0 };
+const totals = { files: 0, ok: 0, animate: 0, held: 0 };
 const failures = [];
 for (const status of STATUS) {
   const name = fileName(status);
@@ -417,6 +417,7 @@ for (const status of STATUS) {
   // With motion: every play that starts on its first slot and runs to the next play shows all
   // its slots; with several loops, never the same one twice in a row.
   const [full, reduced] = now.watches;
+  const beforeWatch = failures.length;
   const seq = plays(loops, pictures, full.frames);
   let rotation = "one loop";
   if (seq) {
@@ -447,6 +448,8 @@ for (const status of STATUS) {
   } else {
     fail("a watched frame matches none of its loops' slots");
   }
+  // Every play showed all its drawings, and the loops took turns without repeating one.
+  totals.animate += failures.length === beforeWatch ? 1 : 0;
   // On twos, read from the file: each loop's frames at 1/24 s, as runs of the same picture.
   let twos = 0;
   for (const loop of loops) {
@@ -470,7 +473,9 @@ for (const status of STATUS) {
     (pictures.get(reduced.frames[0]) ?? []).some(
       (d) => d.loop === loops[0].name && d.slot === 0 && !d.dark
     );
-  if (!held) {
+  if (held) {
+    totals.held += 1;
+  } else {
     fail(
       `reduced motion shows ${new Set(reduced.frames).size} distinct frames`
     );
@@ -492,9 +497,11 @@ await browser.close();
 for (const f of failures) {
   console.log(`  FAIL ${f}`);
 }
+console.log(`loops animate: ${totals.animate}/${totals.files}`);
+console.log(`reducedMotion holds still: ${totals.held}/${totals.files}`);
 console.log(`files proven: ${totals.ok}/${totals.files}`);
 if (failures.length === 0 && totals.ok === STATUS.length) {
-  console.log("Caw view model drives every status's state machine");
+  console.log("Caw view model drives the state machine in every status file");
 } else {
   process.exitCode = 1;
 }
