@@ -39,7 +39,7 @@
     onScreen,
     waitForBoxes,
   } from "../motion/relay-boxes";
-  import { REFLOW_REREAD, reflow } from "../motion/rows.svelte";
+  import { reflow, reflowsFrom, reread } from "../motion/rows.svelte";
   import OsMark from "../OsMark.svelte";
   import { type SessionSpend, sessionsCsv } from "../session-export";
   import { compactNumber, money, totalTokensOf } from "../usage";
@@ -344,7 +344,7 @@
     };
     const moving = motionOk.current;
 
-    list?.dispatchEvent(new Event(REFLOW_REREAD));
+    reread(reflowsFrom(list ?? null));
     flushSync(() => {
       plan = { ...base, enter: relayed.enter };
       swap.swap(relayed.lines, dir, { keep: relayed.lines.length });
@@ -379,7 +379,7 @@
           run.cancel();
         }
         heights = [];
-        listEl?.dispatchEvent(new Event(REFLOW_REREAD));
+        reread(reflowsFrom(listEl ?? null));
       },
       moving ? done : 0
     );

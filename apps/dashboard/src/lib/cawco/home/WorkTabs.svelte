@@ -66,7 +66,7 @@
     onScreen,
     waitForBoxes,
   } from "../motion/relay-boxes";
-  import { REFLOW_REREAD, reflow } from "../motion/rows.svelte";
+  import { reflow, reflowsFrom, reread } from "../motion/rows.svelte";
   import OsMark from "../OsMark.svelte";
   import { openTrees } from "../open-trees.svelte";
   import { rail } from "../rail.svelte";
@@ -429,8 +429,9 @@
     const lines = relayed.lines.map((line) => ({ ...line, tab: shown }));
     const moving = motionOk.current;
 
-    // The list's reflow lets go of every place: from here this owns them.
-    list?.dispatchEvent(new Event(REFLOW_REREAD));
+    // The list's reflow, and every one around it, lets go of every place:
+    // from here this owns them.
+    reread(reflowsFrom(list ?? null));
     flushSync(() => {
       plan = { ...base, enter: relayed.enter };
       swap.swap(lines, dir, { keep: lines.length });
@@ -466,7 +467,9 @@
           run.cancel();
         }
         heights = [];
-        listEl?.dispatchEvent(new Event(REFLOW_REREAD));
+        // Let go: the list and every box around it stand at their own
+        // heights now, with no change to the DOM their reflows would hear.
+        reread(reflowsFrom(listEl ?? null));
       },
       moving ? done : 0
     );

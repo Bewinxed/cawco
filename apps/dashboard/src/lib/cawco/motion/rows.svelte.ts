@@ -1371,11 +1371,42 @@ class Reflow {
 }
 
 /**
- * Dispatched on a `reflow` container by an owner that moves its contents
- * itself (WorkTabs' tab swap): every place is re-read as it now stands, so
- * what that owner removed and added is not taken for a change to animate.
+ * Sent (`reread`) to a `reflow` container, and every one around it, by an
+ * owner that moves its contents itself (WorkTabs' tab swap, a fold): every
+ * place is re-read as it now stands, so what that owner removed and added
+ * is not taken for a change to animate.
  */
 export const REFLOW_REREAD = "reflow:reread";
+
+/**
+ * The `reflow` container at `node`, if it is one, and every one around it,
+ * the nearest first. What moves rows with no change to the DOM a container
+ * hears (a fold, a relay driving its groups' heights) moves them for every
+ * container around it too, so each of them reads its rows again when it
+ * lets go (`reread`): otherwise its next change starts them from where they
+ * stood before. Told to the Sessions list alone, a tab switch left the home
+ * around it holding the Working tab's height for it, and the next tree
+ * opened there grew the list from that height, its clip hiding every row
+ * under the tree for most of a second.
+ */
+export function reflowsFrom(node: Element | null): HTMLElement[] {
+  const found: HTMLElement[] = [];
+  for (
+    let at = node?.closest<HTMLElement>("[data-reflow]") ?? null;
+    at;
+    at = at.parentElement?.closest<HTMLElement>("[data-reflow]") ?? null
+  ) {
+    found.push(at);
+  }
+  return found;
+}
+
+/** Each container reads its rows where they stand now, animating nothing. */
+export function reread(containers: HTMLElement[]): void {
+  for (const container of containers) {
+    container.dispatchEvent(new Event(REFLOW_REREAD));
+  }
+}
 
 /**
  * Every container that heard a change in this update, placed from the
@@ -1462,12 +1493,12 @@ export function reflow() {
       }
     });
     sizes.observe(node);
-    const reread = () => state.reread();
-    node.addEventListener(REFLOW_REREAD, reread);
+    const readAgain = () => state.reread();
+    node.addEventListener(REFLOW_REREAD, readAgain);
     const scrolled = () => state.scrolled();
     node.addEventListener("scroll", scrolled, { passive: true });
     return () => {
-      node.removeEventListener(REFLOW_REREAD, reread);
+      node.removeEventListener(REFLOW_REREAD, readAgain);
       node.removeEventListener("scroll", scrolled);
       watcher.disconnect();
       sizes.disconnect();

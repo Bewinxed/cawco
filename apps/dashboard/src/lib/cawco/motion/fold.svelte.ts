@@ -7,7 +7,7 @@
  */
 import type { TransitionConfig } from "svelte/transition";
 import { dur, easeOut, motionOk } from "./curves.svelte";
-import { REFLOW_REREAD } from "./rows.svelte";
+import { reflowsFrom, reread } from "./rows.svelte";
 
 export interface FoldOptions {
   easing: string;
@@ -152,21 +152,10 @@ export function folds(open: () => boolean, options: FoldOptions) {
  */
 function rereadOnEnd(node: HTMLElement): void {
   // Found now, while it is in the page: a fold out may end detached.
-  const around: HTMLElement[] = [];
-  for (
-    let at = node.parentElement?.closest<HTMLElement>("[data-reflow]");
-    at;
-    at = at.parentElement?.closest<HTMLElement>("[data-reflow]")
-  ) {
-    around.push(at);
-  }
-  const reread = () => {
-    for (const at of around) {
-      at.dispatchEvent(new Event(REFLOW_REREAD));
-    }
-  };
-  node.addEventListener("introend", reread, { once: true });
-  node.addEventListener("outroend", reread, { once: true });
+  const around = reflowsFrom(node.parentElement);
+  const ended = () => reread(around);
+  node.addEventListener("introend", ended, { once: true });
+  node.addEventListener("outroend", ended, { once: true });
 }
 
 /**
