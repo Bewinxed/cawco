@@ -354,12 +354,15 @@
     white-space: nowrap;
   }
   /* The second line: what it is doing, then the count of the rows folded
-     under it. The words give way first; the count always shows. */
+     under it. The words give way first; the count always shows. It stands
+     at the count's height with or without one, so every row in a list is
+     one height and the nesting lines meet each glyph alike. */
   .meta {
     display: flex;
     align-items: center;
     gap: var(--space-1);
     min-width: 0;
+    min-block-size: var(--space-5);
   }
   .meta .line {
     flex: 0 1 auto;

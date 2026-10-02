@@ -69,7 +69,7 @@
     flex: none;
     align-items: center;
     gap: 3px;
-    block-size: 18px;
+    block-size: var(--space-5);
     min-inline-size: 20px;
     justify-content: center;
     padding-inline: 5px;

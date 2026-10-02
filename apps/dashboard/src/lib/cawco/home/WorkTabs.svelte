@@ -98,7 +98,7 @@
   const MAX_DEPTH = 2;
 
   /**
-   * Where a row's glyph sits in its line (its centre, its bottom edge and
+   * Where a row's glyph sits in its line (its centre x, its bottom edge and
    * its half width), and how tall a line is: the nesting lines hang off
    * these (measured once a row is drawn).
    */
@@ -111,22 +111,16 @@
       if (!(line && mark)) {
         return false;
       }
+      // Exact, not rounded: the rows stand at fractional heights, and a
+      // rounded offset puts a line half a pixel off its glyph.
       const m = mark.getBoundingClientRect();
       const l = line.getBoundingClientRect();
-      node.style.setProperty(
-        "--glyph-x",
-        `${Math.round(m.left + m.width / 2 - l.left)}px`
-      );
-      node.style.setProperty(
-        "--glyph-y",
-        `${Math.round(m.top + m.height / 2 - l.top)}px`
-      );
-      node.style.setProperty(
-        "--glyph-bottom",
-        `${Math.round(m.bottom - l.top)}px`
-      );
-      node.style.setProperty("--glyph-r", `${Math.round(m.width / 2)}px`);
-      node.style.setProperty("--row-h", `${Math.round(l.height)}px`);
+      const set = (name: string, value: number) =>
+        node.style.setProperty(name, `${value.toFixed(2)}px`);
+      set("--glyph-x", m.left + m.width / 2 - l.left);
+      set("--glyph-bottom", m.bottom - l.top);
+      set("--glyph-r", m.width / 2);
+      set("--row-h", l.height);
       return true;
     };
     if (measure()) {
@@ -1020,30 +1014,26 @@
     border: 0 solid var(--nest-ink);
     pointer-events: none;
   }
-  /* Out along the arm to the child's glyph, over the row's pill. */
+  /* Out along the arm to the child's glyph, over the row's pill. The glyph
+     is centred in its row, so the arm stands at half the row's own height
+     (the row is the elbow's containing block). */
   .nested::before {
     top: -2px;
     width: calc(var(--nest-step) - var(--glyph-r) + 0.5px);
-    height: calc(var(--glyph-y) + 2px + 0.5px);
+    height: calc(50% + 2px + 0.5px);
     border-left-width: 1px;
     border-bottom-width: 1px;
     border-bottom-left-radius: var(--radius-sm);
   }
   /* The first delegate's elbow leaves its parent's glyph's bottom edge, a
-     row up. */
+     row up (every row is one height: HomeRow's meta line). */
   .nested[data-first]::before {
     top: calc(var(--glyph-bottom) - var(--row-h) - 2px);
-    height: calc(
-      var(--row-h) +
-      2px -
-      var(--glyph-bottom) +
-      var(--glyph-y) +
-      0.5px
-    );
+    height: calc(var(--row-h) + 2px - var(--glyph-bottom) + 50% + 0.5px);
   }
   /* From where the elbow curves away, so the rail runs on past the joint. */
   .nested:not([data-last])::after {
-    top: calc(var(--glyph-y) - var(--radius-sm));
+    top: calc(50% - var(--radius-sm));
     bottom: -2px;
     border-left-width: 1px;
   }
