@@ -17,13 +17,16 @@ import type { NeutralMessage, SendRecord, SessionMessage } from "./harness";
 import {
   applyBranchEvent,
   applyToolResult,
+  type BranchEvent,
   type BranchState,
   branchFor,
+  type FrameMapping,
   mapFrame,
   newer,
   placeSends,
   sendRef,
   sentRow,
+  spawnsSubagent,
   storedAt,
   suppressesTaskLine,
   type ToolResult,
@@ -96,6 +99,10 @@ const holdOnce = (sink: TranscriptBlock[], block: TranscriptBlock): boolean => {
   sink.push(block);
   return true;
 };
+
+/** A frame's branch events in order: the subagents its calls start, then the branch it moved. */
+const branchEvents = (mapping: FrameMapping): BranchEvent[] =>
+  mapping.branch ? [...mapping.spawns, mapping.branch] : mapping.spawns;
 
 /** A branch's state without its blocks: what an event carries. */
 const branchState = ({ blocks: _, ...state }: BranchState): TranscriptBranch =>
@@ -190,6 +197,21 @@ export class TranscriptBuilder {
     const rowIds = new Set<string>();
     const branches = new Map<string, BranchState>();
     const now = this.stamp();
+    /** When each branch's own frames were stored: its first and its latest. */
+    const heard = new Map<string, { first: string; last: string }>();
+    const hear = (toolUseId: string, at: string): void => {
+      const known = heard.get(toolUseId);
+      if (!known) {
+        heard.set(toolUseId, { first: at, last: at });
+        return;
+      }
+      if (at < known.first) {
+        known.first = at;
+      }
+      if (at > known.last) {
+        known.last = at;
+      }
+    };
     // An id names one block: an entry the harness stored twice is drawn once.
     const put = (sink: TranscriptBlock[], block: TranscriptBlock): void => {
       if (sink !== rows) {
@@ -202,8 +224,12 @@ export class TranscriptBuilder {
       }
     };
     for (const entry of entries) {
-      // The one honest clock a replayed turn has.
+      // The one honest clock a replayed turn has. A branch is dated by its
+      // entries too: started at its first, last heard at its latest, done at
+      // the result that ends it. The read's own time stands in only for an
+      // entry stored without one.
       const recorded = storedAt(entry);
+      const at = recorded ?? now;
       // Sends, stored: each one's place, where its record draws it — the same
       // rows, under the same ids, the live stream drew, several where the
       // harness joined them into one entry.
@@ -235,16 +261,24 @@ export class TranscriptBuilder {
         (entry.type === "system" ? entry.message : entry) as NeutralMessage,
         () => entry.uuid
       );
-      if (mapping.branch) {
-        applyBranchEvent(branches, this.instanceId, mapping.branch, now);
+      for (const event of branchEvents(mapping)) {
+        applyBranchEvent(branches, this.instanceId, event, at);
+      }
+      // A task event the subagent itself reported is one of its own frames.
+      if (entry.type === "system" && mapping.branch?.toolUseId) {
+        hear(mapping.branch.toolUseId, at);
       }
       // The entry's own recorded time, not the frame's.
       for (const block of mapping.blocks) {
         block.timestamp = recorded;
       }
-      const sink = mapping.agentId
-        ? branchFor(branches, this.instanceId, mapping.agentId, now).blocks
-        : rows;
+      const owner = mapping.agentId
+        ? branchFor(branches, this.instanceId, mapping.agentId, at)
+        : undefined;
+      if (owner) {
+        hear(owner.toolUseId, at);
+      }
+      const sink = owner ? owner.blocks : rows;
       // A real subagent's "task done" line yields to its branch card.
       for (const block of mapping.blocks) {
         if (
@@ -254,6 +288,15 @@ export class TranscriptBuilder {
         }
       }
       for (const result of mapping.toolResults) {
+        if (result.launch && spawnsSubagent(sink, result.toolId)) {
+          applyBranchEvent(
+            branches,
+            this.instanceId,
+            { toolUseId: result.toolId, status: "running" },
+            at
+          );
+          continue;
+        }
         applyToolResult(sink, result);
         // The Task call's own tool_result is the authoritative end of its branch.
         const branch = branches.get(result.toolId);
@@ -261,7 +304,7 @@ export class TranscriptBuilder {
           continue;
         }
         branch.status = result.isError ? "error" : "complete";
-        branch.completedAt ??= now;
+        branch.completedAt ??= at;
         if (result.isError) {
           branch.error ??= result.result;
         } else {
@@ -270,10 +313,22 @@ export class TranscriptBuilder {
       }
     }
     // Nothing further will arrive for what was stored; anything still open
-    // ended with it rather than being live.
+    // ended with it rather than being live. A branch whose own frames were
+    // stored ran from the first of them to the last: the call that started it
+    // and the result that answered it are the parent's, and one result entry
+    // can answer several calls at once, long after some of them finished. A
+    // branch stored without frames of its own keeps the call and the result.
     for (const branch of branches.values()) {
       if (branch.status !== "error" && branch.status !== "complete") {
         branch.status = "complete";
+      }
+      const own = heard.get(branch.toolUseId);
+      if (own) {
+        branch.startedAt = own.first;
+        branch.lastEventAt = own.last;
+        branch.completedAt = own.last;
+      } else {
+        branch.completedAt ??= branch.lastEventAt ?? branch.startedAt;
       }
     }
 
@@ -321,11 +376,11 @@ export class TranscriptBuilder {
     }
     const now = this.now();
     const mapping = mapFrame(this.instanceId, frame, () => frameHash(frame));
-    if (mapping.branch) {
+    for (const event of branchEvents(mapping)) {
       const moved = applyBranchEvent(
         this.branches,
         this.instanceId,
-        mapping.branch,
+        event,
         this.stamp()
       );
       if (moved) {
@@ -766,6 +821,18 @@ export class TranscriptBuilder {
     result: ToolResult
   ): void {
     const sink = branch ? branch.blocks : this.rows;
+    if (result.launch && spawnsSubagent(sink, result.toolId)) {
+      const started = applyBranchEvent(
+        this.branches,
+        this.instanceId,
+        { toolUseId: result.toolId, status: "running" },
+        this.stamp()
+      );
+      if (started) {
+        this.movedBranches.add(started.toolUseId);
+      }
+      return;
+    }
     const at = sink.findLastIndex(
       (block) =>
         (block.type === "tool.use" || block.type === "tool.handoff") &&

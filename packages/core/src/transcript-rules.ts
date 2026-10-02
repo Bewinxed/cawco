@@ -41,6 +41,13 @@ export type BlockBase = Omit<TranscriptBlock, "type" | "content">;
 export interface ToolResult {
   images?: Array<{ mediaType: string; src: string }>;
   isError: boolean;
+  /**
+   * Reads as a background subagent's launch receipt ({@link subagentLaunch}).
+   * It is one only when the call it answers started a subagent
+   * ({@link spawnsSubagent}): a file that merely quotes the receipt's words
+   * is an ordinary result.
+   */
+  launch?: boolean;
   /** The answer payload of an `AskUserQuestion`, normalised by the harness adapter. */
   questionResult?: UserQuestionResult;
   result: string;
@@ -114,6 +121,8 @@ export interface FrameMapping {
    * subtype claims. The SDK's own flag — not a reading of what was said.
    */
   failedTurn?: boolean;
+  /** The subagents this message's calls start, one per call: a message can start several at once. */
+  spawns: BranchEvent[];
   /**
    * What the session says it is doing right now: `compacting` while it rewrites
    * its own context, `requesting` while it waits on the model, `null` when it
@@ -320,6 +329,7 @@ const HANDOFF_TOOLS: Record<string, "handoff" | "start" | "delegate"> = {
 
 const empty = (): FrameMapping => ({
   blocks: [],
+  spawns: [],
   toolResults: [],
   delta: "",
   clearsStream: false,
@@ -522,6 +532,46 @@ function subagentLaunch(result: string): boolean {
   return result.includes("agentId:") && result.includes("output_file:");
 }
 
+/**
+ * opencode's `task` result as its model reads it: the subagent's answer
+ * inside a tag naming the session it ran in. Matched whole, so a result that
+ * only mentions the tag is left as written.
+ */
+const TASK_RESULT =
+  /^\s*<task id="[^"]*" state="[^"]*">\s*<task_result>\n?([\s\S]*?)\n?<\/task_result>\s*<\/task>\s*$/;
+
+/** A subagent's answer, out of the wrapper its harness hands the model. */
+const subagentAnswer = (text: string): string =>
+  TASK_RESULT.exec(text)?.[1] ?? text;
+
+/** The calls that start a subagent: Claude's `Task` and `Agent`, opencode's `task`. */
+const SUBAGENT_CALLS = new Set(["Task", "Agent", "task"]);
+
+/**
+ * Whether the call `toolId` in `blocks` started a subagent: one of the calls
+ * that do, or any call whose input names the subagent's type. A launch
+ * receipt answering it is not a report: the branch moves to running and the
+ * receipt reaches no `result`, block or card.
+ */
+export function spawnsSubagent(
+  blocks: TranscriptBlock[],
+  toolId: string
+): boolean {
+  const call = blocks.findLast(
+    (block) =>
+      (block.type === "tool.use" || block.type === "tool.handoff") &&
+      block.metadata?.toolId === toolId
+  );
+  const input = call?.metadata?.toolInput;
+  return (
+    SUBAGENT_CALLS.has(call?.metadata?.toolName ?? "") ||
+    (typeof input === "object" &&
+      input !== null &&
+      !Array.isArray(input) &&
+      typeof (input as Record<string, unknown>).subagent_type === "string")
+  );
+}
+
 /** What a task line says happened: it ended well, it ended badly, or it reported. */
 const taskVerb = (status: string | null | undefined): string => {
   if (!status) {
@@ -637,11 +687,11 @@ export function mapFrame(
         };
         const spawn = subagentSpawn(block.input);
         if (spawn) {
-          mapping.branch = {
+          mapping.spawns.push({
             toolUseId: block.id,
             ...spawn,
             status: "starting",
-          };
+          });
         }
       });
       // The forwarded frame names the model that actually answered — ground truth
@@ -682,16 +732,10 @@ export function mapFrame(
           continue;
         }
         const { text: resultBody, images } = resultParts(block.content);
-        // A launch is not a report. It says the delegate started, so that is all
-        // it does here: the branch moves to running and the metadata stops —
-        // it never reaches a `result`, a block, or the card.
-        if (subagentLaunch(resultBody)) {
-          mapping.branch = { toolUseId: block.tool_use_id, status: "running" };
-          continue;
-        }
         mapping.toolResults.push({
           toolId: block.tool_use_id,
-          result: resultBody,
+          result: subagentAnswer(resultBody),
+          ...(subagentLaunch(resultBody) ? { launch: true } : {}),
           ...(images ? { images } : {}),
           isError: block.is_error === true,
           structuredContent: block.structuredContent,
