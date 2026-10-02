@@ -1,6 +1,12 @@
 // biome-ignore lint/style/useFilenamingConvention: renaming would break the "./spawnPrefs.svelte" import path used by routes/project/[id]/+page.svelte, a file this batch does not own
-import type { EffortLevel, HarnessKind, PermissionMode } from "@cawco/core";
-import { MODEL_DEFAULT } from "./models.svelte";
+import type {
+  EffortLevel,
+  HarnessKind,
+  HarnessReport,
+  PermissionMode,
+} from "@cawco/core";
+import { defaultModelFor, MODEL_DEFAULT } from "./models.svelte";
+import { PERMISSION_MODES } from "./permission-modes";
 
 /**
  * What the new-session form was last set to. A user who picks Fable and a
@@ -81,6 +87,29 @@ export const spawnPrefs = {
     return store.effort;
   },
 };
+
+/**
+ * What the New Session form shows before anything is touched, for a spawn
+ * that has no form: its default model entry, and the remembered permission
+ * mode unless the machine's harness cannot honour it, then the first one it
+ * can — the same correction the form makes. A path that starts a session
+ * without saying either takes these, never the machine's own defaults.
+ */
+export function spawnDefaults(
+  harness: HarnessKind,
+  machineId: string,
+  report?: HarnessReport
+): { model: string; permissionMode: PermissionMode } {
+  const honoured = (mode: PermissionMode) =>
+    !report || report.capabilities.permissionModes.includes(mode);
+  return {
+    model: defaultModelFor(harness, [machineId]),
+    permissionMode: honoured(store.permissionMode)
+      ? store.permissionMode
+      : (PERMISSION_MODES.find((mode) => honoured(mode.value))?.value ??
+        store.permissionMode),
+  };
+}
 
 /** Called when a spawn actually goes out, so a form the user abandoned teaches nothing. */
 export function rememberSpawn(prefs: SpawnPrefs): void {

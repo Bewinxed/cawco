@@ -9417,6 +9417,18 @@ export const createServer = ({
                 toDashboard(ws, failure(message, refusal));
                 break;
               }
+              // No session the fleet starts takes its model or its permission
+              // mode from a machine's defaults: a dashboard spawn always says
+              // both, and one that does not is a path that forgot to.
+              const unsaid = ["model", "permissionMode"].filter(
+                (field) => !peek(message.payload, field)
+              );
+              if (unsaid.length > 0) {
+                const why = `A session the dashboard starts must name its ${unsaid.join(" and ")}; this spawn named none, so it would have run on the machine's default. Nothing was started.`;
+                console.warn(`[hub] refused spawn: ${why}`);
+                toDashboard(ws, failure(message, why));
+                break;
+              }
               const relaunch = {
                 ...message,
                 payload: bounded(message.payload as SpawnPayload),

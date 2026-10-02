@@ -260,6 +260,19 @@ export async function loadModelWindows(): Promise<void> {
   ).claude;
 }
 
+/**
+ * The model the New Session form shows when nothing is picked: the machines'
+ * own default entry, by the model it resolves to (`deriveModelEntries` names
+ * that entry the same way). Empty when no machine names its default more
+ * precisely than "default", which the hub then refuses rather than run.
+ */
+export function defaultModelFor(harness: string, machineIds: string[]): string {
+  const id = modelsForHarness(catalog(), harness, machineIds).find(
+    (row) => row.value === "default"
+  )?.resolvedModel;
+  return id && id !== "default" ? id : "";
+}
+
 export const models = {
   get offered(): ModelInfo[] {
     return modelsForHarness(catalog());

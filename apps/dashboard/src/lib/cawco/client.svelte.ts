@@ -86,6 +86,7 @@ import { newId } from "./id";
 import { conversationHref, indexInstances, instanceForSession } from "./links";
 import { type PendingSelection, selectionExtras } from "./preview/selection";
 import { checkRestartToast } from "./restart-toast";
+import { spawnDefaults } from "./spawnPrefs.svelte";
 import type {
   CommandRecord,
   SettleStage,
@@ -3314,22 +3315,48 @@ function userMessage(text: string, uuid: string): SendPayload["message"] {
 }
 
 /** Spawns a session on `machineId` and registers the view it streams into. */
+/**
+ * A spawn as it leaves this dashboard, with a model and a permission mode
+ * always named. What the path says stands (the form's choice, the session's
+ * own settings); what it leaves out is what the New Session form shows by
+ * default ({@link spawnDefaults}), never the machine's default. The hub
+ * refuses one still missing either.
+ */
+function explicit(machineId: string, payload: SpawnPayload): SpawnPayload {
+  if (payload.model && payload.permissionMode) {
+    return payload;
+  }
+  const harness = payload.harness ?? "claude";
+  const defaults = spawnDefaults(
+    harness,
+    machineId,
+    state.machines
+      .find((machine) => machine.machineId === machineId)
+      ?.harnesses?.find((report) => report.harness === harness)
+  );
+  return {
+    ...payload,
+    model: payload.model || defaults.model || undefined,
+    permissionMode: payload.permissionMode ?? defaults.permissionMode,
+  };
+}
+
 function start({
   machineId,
   ...spawn
 }: Omit<SpawnPayload, "instanceId"> & { machineId: string }): SessionState {
   const instanceId = newId();
-  const payload: SpawnPayload = { instanceId, ...spawn };
+  const payload = explicit(machineId, { instanceId, ...spawn });
   send({ verb: "spawn", machineId, instanceId, payload });
 
   const created = session(instanceId);
   created.machineId = machineId;
   created.cwd = spawn.cwd;
   created.harness = spawn.harness ?? "claude";
-  created.permissionMode = spawn.permissionMode ?? null;
-  // What the form chose, so the header shows it during the wait for the first
+  created.permissionMode = payload.permissionMode ?? null;
+  // What was sent, so the header shows it during the wait for the first
   // init — which then corrects it to whatever the harness resolved it to.
-  created.model = spawn.model ?? null;
+  created.model = payload.model ?? null;
   created.scratch = Boolean(spawn.scratch);
   return created;
 }
@@ -3579,7 +3606,7 @@ export async function ensureAlive(
       );
     }
     const requestId = newId();
-    const payload: SpawnPayload = {
+    const payload = explicit(machineId, {
       instanceId,
       cwd: target.cwd,
       harness: target.harness,
@@ -3598,7 +3625,7 @@ export async function ensureAlive(
       model: target.model ?? row?.model ?? undefined,
       effort: effortToResend(target.effort ?? row?.effort),
       requestId,
-    };
+    });
     target.relaunching = true;
     try {
       await ask<void>(requestId, "revive", CONTROL_TIMEOUT_MS, () =>
@@ -4879,7 +4906,7 @@ export async function relaunchSession(
   }
 
   const requestId = newId();
-  const payload: SpawnPayload = {
+  const payload = explicit(machineId, {
     instanceId,
     cwd: target.cwd,
     harness: target.harness,
@@ -4894,7 +4921,7 @@ export async function relaunchSession(
     model: target.model ?? undefined,
     effort: effortToResend(target.effort),
     requestId,
-  };
+  });
 
   const previous = target.permissionMode;
   // Work the relaunch interrupts must resume on its own: the reader unblocked
@@ -5037,7 +5064,7 @@ export async function editAndResend(
   }
 
   const requestId = newId();
-  const payload: SpawnPayload = {
+  const payload = explicit(machineId, {
     instanceId,
     cwd: target.cwd,
     harness: target.harness,
@@ -5049,7 +5076,7 @@ export async function editAndResend(
     model: target.model ?? undefined,
     effort: effortToResend(target.effort),
     requestId,
-  };
+  });
 
   // Cut on screen before the process is cut, so the rewind reads as the reader
   // asked for it — and put every bit of it back if the spawn never lands, or
