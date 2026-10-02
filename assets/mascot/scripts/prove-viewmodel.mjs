@@ -178,10 +178,13 @@ function chromiumPath() {
         .filter((d) => CHROMIUM_DIR.test(d))
         .sort((a, b) => Number(b.split("-")[1]) - Number(a.split("-")[1]))
     : [];
+  // Newest revision first; newer revisions ship chrome-linux64, older ones chrome-linux.
   for (const rev of revs) {
-    const exe = join(root, rev, "chrome-linux", "chrome");
-    if (existsSync(exe)) {
-      return exe;
+    for (const dir of ["chrome-linux64", "chrome-linux"]) {
+      const exe = join(root, rev, dir, "chrome");
+      if (existsSync(exe)) {
+        return exe;
+      }
     }
   }
   throw new Error(
@@ -264,7 +267,9 @@ function differingPixels(a, b) {
 const runtimeVersion = JSON.parse(
   readFileSync(join(runtimeDir, "package.json"), "utf8")
 ).version;
-console.log(`runtime: @rive-app/canvas-advanced ${runtimeVersion}`);
+console.log(
+  `runtime: @rive-app/canvas-advanced ${runtimeVersion} on Chromium ${browser.version()}`
+);
 const old = await run(before, "inputs");
 const now = await run(after, "viewmodel");
 const again = await run(after, "viewmodel");

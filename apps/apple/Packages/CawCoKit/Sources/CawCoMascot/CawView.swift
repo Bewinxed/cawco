@@ -30,14 +30,14 @@ public struct CawView: View {
     private let status: CawStatus
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var rive: Rive?
+    @State private var loaded: LoadedCaw?
 
     public init(status: CawStatus) {
         self.status = status
     }
 
     public var body: some View {
-        RiveUIViewRepresentable(rive: rive)
+        RiveUIViewRepresentable(rive: loaded?.rive)
             .accessibilityHidden(true)
             .task { await load() }
             .onChange(of: status) { apply() }
@@ -46,16 +46,19 @@ public struct CawView: View {
     }
 
     private func load() async {
-        guard rive == nil else {
+        guard loaded == nil else {
             return
         }
         do {
             let file = try await CawFile.shared()
             let artboard = try await file.createArtboard(CawContract.artboard)
             let stateMachine = try await artboard.createStateMachine(CawContract.stateMachine)
+            // Retained here and bound explicitly: the view writes to this instance for its lifetime.
             let caw = try await file.createViewModelInstance(.viewModelDefault(from: .name(CawContract.viewModel)))
-            rive = try await Rive(file: file, artboard: artboard, stateMachine: stateMachine, dataBind: .instance(caw))
-            apply()
+            write(to: caw)
+            try await stateMachine.bindViewModelInstances(main: caw)
+            let rive = try await Rive(file: file, artboard: artboard, stateMachine: stateMachine)
+            loaded = LoadedCaw(rive: rive, caw: caw)
         } catch {
             CawContract.log.error("Caw did not load: \(String(describing: error), privacy: .public)")
         }
@@ -63,14 +66,25 @@ public struct CawView: View {
 
     /// Writes the view's state into the bound `Caw` instance; the state machine follows it.
     private func apply() {
-        guard let caw = rive?.viewModelInstance else {
+        guard let loaded else {
             return
         }
+        write(to: loaded.caw)
+    }
+
+    private func write(to caw: ViewModelInstance) {
         caw.setValue(of: CawContract.status, to: status.rawValue)
         caw.setValue(of: CawContract.dark, to: colorScheme == .dark)
         caw.setValue(of: CawContract.reducedMotion, to: reduceMotion)
         CawContract.logReadBack(caw)
     }
+}
+
+/// The Rive view's configuration and the `Caw` instance bound to its state machine, kept together
+/// so the instance lives exactly as long as the view that writes to it.
+private struct LoadedCaw {
+    let rive: Rive
+    let caw: ViewModelInstance
 }
 
 /// The `Caw` view model's names, as caw.riv defines them. Main-actor isolated: rive-ios's

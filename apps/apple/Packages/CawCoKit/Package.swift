@@ -22,7 +22,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-openapi-generator", from: "1.13.1"),
         .package(url: "https://github.com/apple/swift-openapi-runtime", from: "1.12.2"),
         .package(url: "https://github.com/apple/swift-openapi-urlsession", from: "1.3.2"),
-        .package(url: "https://github.com/rive-app/rive-ios", from: "6.24.0"),
+        .package(url: "https://github.com/rive-app/rive-ios", from: "6.28.0"),
     ],
     targets: [
         // The hub's wire types and client, generated at build time from
