@@ -11,14 +11,19 @@
  * References (`{group.name}`) are emitted as `var(--name)`, so the cascade
  * keeps resolving them at runtime under the active colour scheme.
  *
+ * The same build emits the Apple app's tokens into CawCoKit's CawCoDesign
+ * module: a colour asset catalog and Tokens.swift (build-tokens-apple.ts).
+ *
  *   bun run tokens
  */
 import StyleDictionary from "style-dictionary";
 import type { Dictionary, TransformedToken } from "style-dictionary/types";
+import { colourSetsAction, swiftFormat } from "./build-tokens-apple";
 
 const SOURCE = "../../design/tokens/cawco.tokens.json";
 const OUT_DIR = "src/lib/tokens/";
 const OUT_FILE = "tokens.css";
+const APPLE_DIR = "../apple/Packages/CawCoKit/Sources/CawCoDesign/";
 const EXT = "dev.cawco";
 
 const MEDIA = {
@@ -103,13 +108,22 @@ const sd = new StyleDictionary({
         transform: (token: TransformedToken) => token.path.at(-1) ?? token.name,
       },
     },
-    formats: { "css/cawco-theme": format },
+    formats: { "css/cawco-theme": format, "swift/cawco-tokens": swiftFormat },
+    actions: { "apple/cawco-colorsets": colourSetsAction },
   },
   platforms: {
     css: {
       transforms: ["name/css-leaf"],
       buildPath: OUT_DIR,
       files: [{ destination: OUT_FILE, format: "css/cawco-theme" }],
+    },
+    apple: {
+      transforms: ["name/css-leaf"],
+      buildPath: APPLE_DIR,
+      files: [
+        { destination: "Generated/Tokens.swift", format: "swift/cawco-tokens" },
+      ],
+      actions: ["apple/cawco-colorsets"],
     },
   },
 });

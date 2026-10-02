@@ -7,7 +7,7 @@
     "build": "vite build && bun scripts/publish-build.ts",
     "dev": "vite dev",
     "preview": "vite preview",
-    "tokens": "bun scripts/build-tokens.ts && biome format --write src/lib/tokens/tokens.css",
+    "tokens": "bun scripts/build-tokens.ts && biome format --write src/lib/tokens/tokens.css ../apple/Packages/CawCoKit/Sources/CawCoDesign/Resources",
     "typecheck": "svelte-kit sync && bun --bun svelte-fast-check --incremental"
   },
   "overrides": {
@@ -53,6 +53,7 @@
     "@tailwindcss/typography": "^0.5.20",
     "@tailwindcss/vite": "^4.3.3",
     "@types/bun": "latest",
+    "colorjs.io": "^0.7.1",
     "jsrepo": "^3.0.10",
     "paneforge": "^1.0.2",
     "shadcn-svelte": "^1.5.0",
