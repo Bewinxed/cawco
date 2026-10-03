@@ -106,6 +106,7 @@ import {
   syncSkillFiles,
   writeJson,
 } from "./fleet-common";
+import { managedMcpMismatches } from "./managed-mcp";
 import { OpencodeActivity } from "./opencode-activity";
 import { OpencodeServerOwner, type ServerIdentity } from "./opencode-server";
 
@@ -3817,11 +3818,7 @@ export class OpencodeHarness implements Harness {
     const managed = new Set(["cawco", ...(sidecar.mcp ?? [])]);
     const desiredMcp = desiredRaw?.mcp as Record<string, unknown> | undefined;
     const liveMcp = liveConfig.mcp as Record<string, unknown> | undefined;
-    const mismatched = [...managed].filter(
-      (name) =>
-        desiredMcp?.[name] === undefined ||
-        !containsJson(desiredMcp[name], liveMcp?.[name])
-    );
+    const mismatched = managedMcpMismatches(managed, desiredMcp, liveMcp);
     console.log(
       JSON.stringify({
         type: "config-convergence",
