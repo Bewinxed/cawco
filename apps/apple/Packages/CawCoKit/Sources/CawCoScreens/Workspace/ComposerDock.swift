@@ -16,6 +16,10 @@ final class ComposerDock {
     private let leading: NSLayoutConstraint
     private let trailing: NSLayoutConstraint
     private let bottom: NSLayoutConstraint
+    /// The fade's foot on the keyboard's top. With no keyboard that top is
+    /// the safe area's foot, so the fade stands that inset lower: Composer.svelte
+    /// `.fade` is `bottom: 0` of the pane, under the home indicator too.
+    private let footFollow: NSLayoutConstraint
 
     /// How far up from the host's foot the composer reaches; the panes keep
     /// their last line clear of it.
@@ -40,10 +44,10 @@ final class ComposerDock {
         // The fade stands on the host's foot: the keyboard's top while it is up.
         let foot = UILayoutGuide()
         host.addLayoutGuide(foot)
-        let follow = foot.topAnchor.constraint(equalTo: host.keyboardLayoutGuide.topAnchor)
-        follow.priority = .defaultHigh
+        footFollow = foot.topAnchor.constraint(equalTo: host.keyboardLayoutGuide.topAnchor)
+        footFollow.priority = .defaultHigh
         NSLayoutConstraint.activate([
-            follow,
+            footFollow,
             foot.topAnchor.constraint(lessThanOrEqualTo: host.bottomAnchor),
             foot.heightAnchor.constraint(equalToConstant: 0),
             foot.leadingAnchor.constraint(equalTo: host.leadingAnchor),
@@ -75,6 +79,9 @@ final class ComposerDock {
     /// Call from the host's `viewDidLayoutSubviews`.
     func layout() {
         avoidFold()
+        let keyboardUp = host.keyboardLayoutGuide.layoutFrame.minY < host.bounds.maxY - host.safeAreaInsets.bottom - 1
+        let below = keyboardUp ? 0 : host.safeAreaInsets.bottom
+        if footFollow.constant != below { footFollow.constant = below }
         let reach = composer.isHidden ? 0 : max(0, host.bounds.maxY - composer.frame.minY)
         guard abs(reach - inset) > 0.5 else { return }
         inset = reach
