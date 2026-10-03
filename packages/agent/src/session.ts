@@ -63,18 +63,19 @@ import { generateImage } from "./image-generation";
 import { isMachineAgent } from "./machine-agent";
 import { prepareFleetMcp } from "./mcp-launcher";
 import { startPreview, stopPreview, stopPreviews } from "./preview";
+import { parseProcId } from "./proc-id";
 import { acknowledgeSessionCredential } from "./session-identity";
 import { procEpoch } from "./sessiond-client";
 import { installTool, probeTools } from "./tools";
 import { type UpdateOptions, updateCheckout } from "./update";
 
 /**
- * What {@link SessionSupervisor.reattach} needs of the claude adapter, named
+ * What {@link SessionSupervisor.reattach} needs of a sessiond-backed adapter, named
  * structurally rather than imported as a class: the supervisor stays
  * harness-agnostic, and an adapter that cannot keep processes simply does not
- * satisfy this shape (design §4.2, §4.3 — opencode and pi deliberately do not).
+ * satisfy this shape. Claude and pi share custody; OpenCode owns its server.
  */
-interface ClaudeAdoption {
+interface SessiondAdoption {
   // biome-ignore lint/style/useConsistentMethodSignatures: a property signature changes parameter variance here and would break the claude adapter's implementation
   adopt(
     instanceId: string,
@@ -405,7 +406,7 @@ export class SessionSupervisor {
    * stamped by whoever read it off the ring (the adapter calls `ctx.line(...)`
    * immediately before `ctx.frame(...)`) and consumed by the very next frame.
    * A frame nobody stamped carries no provenance and is forwarded as it always
-   * was — opencode, pi, and every path that does not read a ring.
+   * was — opencode and every path that does not read a ring.
    *
    * `#ingested` is the hub's OWN mark for an instance, learned from the
    * register ack. The rule it enforces is one line long and is the whole
@@ -1176,24 +1177,24 @@ export class SessionSupervisor {
   async survivors(): Promise<
     { instanceId: string; cwd: string; sessionId: null }[]
   > {
-    const adapter = this.#adapter("claude") as Harness &
-      Partial<ClaudeAdoption>;
-    if (typeof adapter.custodyCandidates !== "function") {
-      return [];
-    }
-    const welcome = await adapter.custodyCandidates();
-    return welcome.procs
-      .filter(
-        (proc) =>
+    const welcomes = await Promise.all(
+      ["claude", "pi"].map(async (kind) => {
+        const adapter = this.#adapter(kind as HarnessKind) as Harness &
+          Partial<SessiondAdoption>;
+        return await adapter.custodyCandidates?.();
+      })
+    );
+    return welcomes
+      .flatMap((welcome) => welcome?.procs ?? [])
+      .flatMap((proc) => {
+        const id = parseProcId(proc.procId);
+        return (id.kind === "claude" || id.kind === "pi") &&
           proc.alive &&
           proc.cwd !== undefined &&
-          !this.#sessions.has(proc.procId)
-      )
-      .map((proc) => ({
-        instanceId: proc.procId,
-        cwd: proc.cwd ?? "",
-        sessionId: null,
-      }));
+          !this.#sessions.has(id.instanceId)
+          ? [{ instanceId: id.instanceId, cwd: proc.cwd, sessionId: null }]
+          : [];
+      });
   }
 
   /**
@@ -1210,7 +1211,7 @@ export class SessionSupervisor {
    * Three steps, and only the middle one decides what busy questions hear:
    *  1. CLAIM every row sessiond is holding, without yielding.
    *  2. DECIDE whether each claimed child is mid-turn, all at once, off the
-   *     end of its own ring ({@link ClaudeAdoption.turnRunning}). Busy answers
+   *     runtime ({@link SessiondAdoption.turnRunning}). Busy answers
    *     are held from this call until every row is decided ({@link holdBusy}),
    *     and a running turn is in `#busy` from then on — attached or not yet.
    *  3. ATTACH them one at a time. On obelisk this took 23 s for 138 rows
@@ -1229,10 +1230,22 @@ export class SessionSupervisor {
      */
     ingested?: Record<string, IngestMark>
   ): Promise<string[]> {
-    const adapter = this.#adapter("claude");
-    // `adopt` is claude's alone: opencode reattaches through its own server
-    // (design §4.2) and pi has no subprocess to keep (§4.3).
-    const candidate = adapter as Harness & Partial<ClaudeAdoption>;
+    return (
+      await Promise.all(
+        ["claude", "pi"].map((kind) =>
+          this.#reattachHarness(kind as HarnessKind, rows, ingested)
+        )
+      )
+    ).flat();
+  }
+
+  async #reattachHarness(
+    kind: HarnessKind,
+    rows: { instanceId: string; cwd: string; sessionId?: string | null }[],
+    ingested?: Record<string, IngestMark>
+  ): Promise<string[]> {
+    const adapter = this.#adapter(kind);
+    const candidate = adapter as Harness & Partial<SessiondAdoption>;
     if (
       typeof candidate.adopt !== "function" ||
       typeof candidate.custodyCandidates !== "function" ||
@@ -1240,7 +1253,7 @@ export class SessionSupervisor {
     ) {
       return [];
     }
-    const claude = candidate as Harness & ClaudeAdoption;
+    const claude = candidate as Harness & SessiondAdoption;
     // Taken before the first `await`, so a caller that has started this
     // reattach can let go of its own hold at once (see daemon.ts).
     const decided = Promise.withResolvers<void>();
@@ -1254,7 +1267,13 @@ export class SessionSupervisor {
       const held = new Map(
         welcome.procs
           .filter((proc) => proc.alive)
-          .map((proc) => [proc.procId, proc])
+          .flatMap((proc) => {
+            const id = parseProcId(proc.procId);
+            return (id.kind === "claude" || id.kind === "pi") &&
+              id.kind === kind
+              ? [[id.instanceId, proc] as const]
+              : [];
+          })
       );
 
       // 1. CLAIM. ONE QUERY PER CHILD. A hub reconnect while a reattach is
@@ -1321,7 +1340,7 @@ export class SessionSupervisor {
       if (this.#sessions.has(row.instanceId)) {
         adopted.push(row.instanceId);
       } else {
-        adopted.push(...(await this.reattach([row], ingested)));
+        adopted.push(...(await this.#reattachHarness(kind, [row], ingested)));
       }
     }
     return adopted;
@@ -1347,7 +1366,7 @@ export class SessionSupervisor {
 
   /** {@link reattach}'s step 3 for one claimed, decided row. */
   async #adoptClaimed(
-    claude: Harness & ClaudeAdoption,
+    claude: Harness & SessiondAdoption,
     epoch: string,
     { row, proc, running, settle }: Claimed,
     ingested: Record<string, IngestMark> | undefined
@@ -1376,6 +1395,7 @@ export class SessionSupervisor {
     });
     holder.session = session;
     this.#sessions.set(row.instanceId, session);
+    session.attached?.();
     this.#adopting.delete(row.instanceId);
     settle();
   }

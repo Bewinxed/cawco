@@ -1,7 +1,7 @@
 /**
  * The pi adapter (badlogic / earendil-works).
  *
- * pi is an in-process TypeScript SDK: `createAgentSession` returns an
+ * pi's TypeScript SDK runs only in the sessiond-owned pi host. `createAgentSession` returns an
  * `AgentSession` whose `subscribe()` streams the events the TUI would render.
  * There is no permission system — pi deliberately has none — so the permission
  * surface is empty and the dashboard hides it (capabilities). Sessions are
@@ -63,6 +63,7 @@ import {
 import { type Boundary, boundaryCommand } from "../boundary";
 import { callDelegationTool, delegationTools } from "../delegation";
 import type { Harness, HarnessContext, HarnessSession } from "../harness";
+import { parseProcId, procIdFor } from "../proc-id";
 import { acknowledgeSessionCredential } from "../session-identity";
 import { resolveBin } from "../tools";
 import {
@@ -72,6 +73,13 @@ import {
   syncSkillFiles,
   writeJson,
 } from "./fleet-common";
+import {
+  adoptPi,
+  piOpenTurns,
+  piSessiond,
+  piSnapshot,
+  spawnPi,
+} from "./pi-sessiond";
 
 /** pi's own config files — the machine profile the fleet sync converges. */
 const PI_DIR = join(homedir(), ".pi", "agent");
@@ -294,7 +302,7 @@ const piHandoffTools = async (
  * send that starts it to the `agent_end` pi will not try again. An attempt
  * that failed inside such a turn is not its result yet (`assistantEntries`).
  */
-const openTurns = new Set<string>();
+const openTurns = piOpenTurns;
 
 class PiSession implements HarnessSession {
   readonly harness = "pi" as const;
@@ -727,6 +735,55 @@ export class PiHarness implements Harness {
   }
 
   async spawn(
+    spec: SpawnPayload,
+    ctx: HarnessContext
+  ): Promise<HarnessSession> {
+    return await spawnPi(spec, ctx);
+  }
+
+  /** Called by pi-host.ts only; the agent never creates an SDK session. */
+  static startHost(
+    spec: SpawnPayload,
+    ctx: HarnessContext
+  ): Promise<HarnessSession> {
+    return new PiHarness().#spawnHost(spec, ctx);
+  }
+
+  async custodyCandidates() {
+    const welcome = await (await piSessiond()).list();
+    return {
+      ...welcome,
+      procs: welcome.procs.filter(
+        (proc) => parseProcId(proc.procId).kind === "pi"
+      ),
+    };
+  }
+
+  async turnRunning(instanceId: string, _head: number): Promise<boolean> {
+    return (await piSnapshot(instanceId)).busy;
+  }
+
+  adopt(
+    instanceId: string,
+    ctx: HarnessContext,
+    options: { afterSeq?: number; head: number }
+  ): Promise<HarnessSession> {
+    return adoptPi(instanceId, ctx, options);
+  }
+
+  async reattach(
+    spec: SpawnPayload,
+    ctx: HarnessContext
+  ): Promise<HarnessSession | undefined> {
+    const proc = (await this.custodyCandidates()).procs.find(
+      (one) => one.alive && one.procId === procIdFor("pi", spec.instanceId)
+    );
+    return proc
+      ? await this.adopt(spec.instanceId, ctx, { head: proc.head })
+      : undefined;
+  }
+
+  async #spawnHost(
     spec: SpawnPayload,
     ctx: HarnessContext
   ): Promise<HarnessSession> {

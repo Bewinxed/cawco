@@ -104,6 +104,17 @@ await run([
   ...external.flatMap((name) => ["--external", name]),
 ]);
 const cli = await readFile(join(OUT, "cli.js"), "utf8");
+// pi's SDK runs in a separate process owned by sessiond, including in releases.
+await run([
+  "bun",
+  "build",
+  join(ROOT, "packages/agent/src/harnesses/pi-host.ts"),
+  "--target",
+  "bun",
+  "--outfile",
+  join(OUT, "pi-host.js"),
+  ...external.flatMap((name) => ["--external", name]),
+]);
 await writeFile(
   join(OUT, "cli.js"),
   `#!/usr/bin/env bun\n${cli.replace(/^#!.*\n/, "")}`
@@ -229,6 +240,7 @@ await writeFile(
       bin: { cawco: "./cli.js" },
       files: [
         "cli.js",
+        "pi-host.js",
         "preview-overlay.js",
         "workflow-worker.js",
         "workflow-globals.d.ts",

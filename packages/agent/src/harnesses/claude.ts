@@ -82,6 +82,7 @@ import {
   exportCredentials,
   importCredentials,
 } from "../login";
+import { parseProcId, procIdFor } from "../proc-id";
 // Type-only, and deliberately so: `session.ts` imports the harness registry
 // this file is part of, so a value import here would close a module cycle.
 import type { SessiondAwareContext } from "../session";
@@ -1719,7 +1720,7 @@ export class ClaudeHarness implements Harness {
       spec.skills,
       spec.denyTools,
       fleetDenyList,
-      { client, procId: ctx.instanceId }
+      { client, procId: procIdFor("claude", ctx.instanceId) }
     );
   }
 
@@ -1742,8 +1743,12 @@ export class ClaudeHarness implements Harness {
       const from = Math.max(head - span, 0);
       const activity = new ChildActivity();
       // biome-ignore lint/performance/noAwaitInLoops: each look reaches further back only when the one before it found nothing about a turn
-      const oldest = await readRing(client, instanceId, from, head, (event) =>
-        activity.read(parseLine(event.data))
+      const oldest = await readRing(
+        client,
+        procIdFor("claude", instanceId),
+        from,
+        head,
+        (event) => activity.read(parseLine(event.data))
       );
       if (activity.decided || from === 0 || oldest > from + 1) {
         return activity.turnRunning;
@@ -1801,7 +1806,7 @@ export class ClaudeHarness implements Harness {
     // every later row behind this one ({@link readRing}).
     const oldest = await readRing(
       client,
-      instanceId,
+      procIdFor("claude", instanceId),
       RING_START,
       head,
       (event) => {
@@ -1861,7 +1866,7 @@ export class ClaudeHarness implements Harness {
       [],
       {
         client,
-        procId: instanceId,
+        procId: procIdFor("claude", instanceId),
         attach: {
           afterSeq: replayable ? (options.afterSeq ?? start) : start,
           head,
@@ -1879,7 +1884,13 @@ export class ClaudeHarness implements Harness {
   /** What sessiond is still holding for this machine — the reattach's first read. */
   async custodyCandidates(): Promise<SessiondWelcomeInfo> {
     const client = await this.sessiond();
-    return client.list();
+    const welcome = await client.list();
+    return {
+      ...welcome,
+      procs: welcome.procs.filter(
+        (proc) => parseProcId(proc.procId).kind === "claude"
+      ),
+    };
   }
 
   listSessions(dir?: string): Promise<NeutralSessionInfo[]> {
