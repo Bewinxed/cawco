@@ -30,7 +30,7 @@ import { convergeDeniedTools } from "./denied-tools";
 import { deployRoot, latestDeploy } from "./deploy";
 import { rediscoverHub, toWsUrl } from "./discovery";
 import { harnesses } from "./harnesses";
-import { OPENCODE_SERVER_PROC_ID } from "./harnesses/opencode";
+import { isOpencodeServerProc } from "./harnesses/opencode-server";
 import { cache as transcriptCache } from "./harnesses/transcript-cache";
 import { machineId } from "./machine-id";
 import {
@@ -458,11 +458,9 @@ const readSessions = async () => {
         const held = client.procs.filter((proc) => proc.alive);
         return {
           instances: held
-            .filter((proc) => proc.procId !== OPENCODE_SERVER_PROC_ID)
+            .filter((proc) => !isOpencodeServerProc(proc.procId))
             .map((proc) => proc.procId),
-          opencode: held.some(
-            (proc) => proc.procId === OPENCODE_SERVER_PROC_ID
-          ),
+          opencode: held.some((proc) => isOpencodeServerProc(proc.procId)),
         };
       } finally {
         client.close();

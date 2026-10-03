@@ -105,6 +105,10 @@ import {
   syncSkillFiles,
   writeJson,
 } from "./fleet-common";
+import {
+  OPENCODE_SERVER_PROC_ID,
+  OpencodeServerOwner,
+} from "./opencode-server";
 
 function withImageAttachments(
   output: string,
@@ -282,7 +286,6 @@ export async function writeHandoffPlugin(
  * which is exactly what lets a returning agent find the server it left running
  * instead of starting a second one.
  */
-export const OPENCODE_SERVER_PROC_ID = "opencode-server";
 
 /**
  * How long the announce line may take to reach the ring. Our choice: the SDK's
@@ -469,6 +472,7 @@ export const parseServerAnnouncement = (line: string): string | undefined => {
 interface OpencodeServerAttach {
   procId?: string;
   sessiond: SessiondClient;
+  signal?: AbortSignal;
   spec: ProcSpec;
   timeoutMs?: number;
 }
@@ -505,6 +509,7 @@ const announceOpencodeServer = async (
   const procId = options.procId ?? OPENCODE_SERVER_PROC_ID;
   const timeoutMs = options.timeoutMs ?? SERVER_ANNOUNCE_TIMEOUT_MS;
   const client = options.sessiond;
+  options.signal?.throwIfAborted();
 
   // Fresh, not the connect-time welcome: this client is long-lived and the
   // server may have exited since.
@@ -512,6 +517,7 @@ const announceOpencodeServer = async (
     (proc) => proc.procId === procId
   );
   const freshlySpawned = !held?.alive;
+  options.signal?.throwIfAborted();
   if (freshlySpawned) {
     await client.spawnProc(procId, options.spec);
   }
@@ -524,6 +530,7 @@ const announceOpencodeServer = async (
       }
       settled = true;
       clearTimeout(timer);
+      options.signal?.removeEventListener("abort", aborted);
       client.unsubscribe(procId);
       finish();
     };
@@ -538,6 +545,12 @@ const announceOpencodeServer = async (
         ),
       timeoutMs
     );
+    const aborted = () => settle(() => reject(options.signal?.reason));
+    options.signal?.addEventListener("abort", aborted, { once: true });
+    if (options.signal?.aborted) {
+      aborted();
+      return;
+    }
     // From seq 0: the announce line is printed once, at boot, and a returning
     // agent reads it out of the replay ring long after it was written. That
     // replay IS the port discovery — there is nowhere else the port is written.
@@ -1224,7 +1237,7 @@ export class OpencodeSession implements HarnessSession {
    */
   get active(): boolean {
     // biome-ignore lint/suspicious/noUnnecessaryConditions: #busy is reassigned elsewhere in the class; biome's per-method inference doesn't see that
-    return this.#busy || this.#questions.size > 0;
+    return this.#busy || this.#turnOpen || this.#questions.size > 0;
   }
   readonly #ctx: HarnessContext;
   #client: OpencodeClient;
@@ -3185,6 +3198,14 @@ export class OpencodeHarness implements Harness {
   #client: OpencodeClient | null = null;
   #sessiond: Promise<SessiondClient> | undefined;
   #ready: Promise<OpencodeClient> | null = null;
+  readonly #serverOwner = new OpencodeServerOwner(
+    () => this.sessiond(),
+    async (sessiond, procId, spec, signal) =>
+      (await attachOpencodeServer({ sessiond, procId, spec, signal })).url,
+    isMachineAgent
+  );
+  #verifiedProcId: string | null = null;
+  #opening = 0;
   // Keyed by instanceId, not opencode's own session id: a resume reuses the
   // same sessionKey (opencode.ts:spawn), so multiple live instances can share
   // one opencode session id, and a map keyed by THAT would silently overwrite
@@ -3239,6 +3260,7 @@ export class OpencodeHarness implements Harness {
   #configError: string | null = null;
   #configWatchTimer: ReturnType<typeof setInterval> | null = null;
   #checkingIdle = false;
+  #retryConfigAt = 0;
   /** Whether this agent keeps the server converged; see {@link #readsThisConfig}. */
   #converging = false;
 
@@ -3345,6 +3367,7 @@ export class OpencodeHarness implements Harness {
     }
     const hash = await this.#hashConfig();
     const version = await this.#installedVersion();
+    this.#serverOwner.maintain();
     const versionChanged = version !== this.#desiredVersion;
     this.#desiredVersion = version;
     if (hash === null) {
@@ -3367,31 +3390,25 @@ export class OpencodeHarness implements Harness {
       }
       return;
     }
+    if (hash === this.#appliedHash && version === this.#appliedVersion) {
+      this.#desiredHash = hash;
+      this.#desiredVersion = version;
+      if (!this.#applyGate) {
+        this.#configState = "applied";
+        this.#configError = null;
+      }
+      return;
+    }
     if (hash === this.#desiredHash && !versionChanged) {
       // No change since last read. But if we're pending (a prior attempt was
       // blocked by busy sessions), retry the apply — the sessions may be idle now.
-      if (this.#configState === "pending") {
+      if (this.#configState === "pending" || this.#configState === "error") {
         // biome-ignore lint/complexity/noVoid: fire-and-forget; the attempt manages its own errors
         void this.#attemptConfigApply();
       }
       return;
     }
     this.#desiredHash = hash;
-    if (hash === this.#appliedHash && version === this.#appliedVersion) {
-      // Desired matches what's running; clear any pending state.
-      if (this.#configState === "pending") {
-        this.#configState = "applied";
-        console.log(
-          JSON.stringify({
-            type: "config-convergence",
-            state: "applied",
-            detail: "desired matches running revision",
-            at: Date.now(),
-          })
-        );
-      }
-      return;
-    }
     // New desired revision differs from applied: coalesce and attempt.
     this.#configState = "pending";
     this.#configError = null;
@@ -3420,7 +3437,11 @@ export class OpencodeHarness implements Harness {
    * started there.
    */
   async #isOpencodeBusy(): Promise<boolean> {
-    if (this.#recovering > 0 || this.#recoveryWaiters.length > 0) {
+    if (
+      this.#opening > 0 ||
+      this.#recovering > 0 ||
+      this.#recoveryWaiters.length > 0
+    ) {
       return true;
     }
     const dirs = new Set<string>(this.#pumps.keys());
@@ -3442,13 +3463,19 @@ export class OpencodeHarness implements Harness {
           })
         )
       );
-      return answers.some(
-        (status) =>
-          status.error ||
-          !status.data ||
-          Object.values(status.data as Record<string, { type: string }>).some(
-            (state) => state.type === "busy" || state.type === "retry"
-          )
+      return (
+        this.#opening > 0 ||
+        this.#recovering > 0 ||
+        this.#recoveryWaiters.length > 0 ||
+        [...this.#sessions.values()].some((session) => session.active) ||
+        answers.some(
+          (status) =>
+            status.error ||
+            !status.data ||
+            Object.values(status.data as Record<string, { type: string }>).some(
+              (state) => state.type === "busy" || state.type === "retry"
+            )
+        )
       );
     } catch {
       // A server that cannot say whether it is busy is not stopped.
@@ -3457,11 +3484,9 @@ export class OpencodeHarness implements Harness {
   }
 
   /**
-   * Attempt to apply the latest desired config revision. Waits for all
-   * opencode sessions to be idle, then SIGTERM's the server process via
-   * sessiond, waits for exit, respawns via {@link attachOpencodeServer},
-   * rebinds retained sessions to the new client, reconnects SSE pumps,
-   * and verifies the runtime config matches the desired revision.
+   * At an idle moment, ask the serialized owner for a candidate-first cutover.
+   * Verification precedes publication; retained sessions and pumps move to the
+   * verified generation before the owner retires the captured predecessor.
    *
    * Global config (~/.config/opencode/opencode.json) is only read at
    * server startup — `instance.dispose()` re-reads project config but
@@ -3471,9 +3496,12 @@ export class OpencodeHarness implements Harness {
    * remain as the next desired revision — the watcher will trigger another
    * attempt after the current one completes.
    */
-  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: sequential idle-wait → SIGTERM → respawn → rebind → verify lifecycle with structured error recovery; splitting loses the gate/finally invariant
   async #attemptConfigApply(): Promise<void> {
-    if (this.#applyGate || this.#checkingIdle) {
+    if (
+      this.#applyGate ||
+      this.#checkingIdle ||
+      Date.now() < this.#retryConfigAt
+    ) {
       return;
     }
     if (!this.#client) {
@@ -3542,76 +3570,46 @@ export class OpencodeHarness implements Harness {
         return;
       }
 
-      // 2. Collect active directories before killing the server.
+      // Keep the incumbent and its event streams working until a verified
+      // candidate is ready. The owner alone launches, publishes and retires.
       const dirs = new Set<string>(this.#pumps.keys());
       for (const session of this.#sessions.values()) {
         dirs.add(session.directory);
       }
 
-      // 3. End all SSE pumps (the server we're about to kill owns them).
-      this.#stopPumps();
-
-      // 4. SIGTERM the server via sessiond and wait for exit.
-      const sessiond = await this.sessiond();
-      try {
-        await sessiond.signal(OPENCODE_SERVER_PROC_ID, "SIGTERM");
-      } catch {
-        // Already dead — that's fine, we're respawning.
-      }
-      const exitDeadline = Date.now() + 15_000;
-      while (Date.now() < exitDeadline) {
-        // biome-ignore lint/performance/noAwaitInLoops: polling for process exit after SIGTERM
-        const procs = await sessiond.list();
-        const held = procs.procs.find(
-          (p) => p.procId === OPENCODE_SERVER_PROC_ID
-        );
-        if (!held?.alive) {
-          break;
-        }
-        await Bun.sleep(200);
-      }
-      // Verify exit — if still alive after 15s, error out (no SIGKILL).
-      const finalCheck = await sessiond.list();
-      const stillAlive = finalCheck.procs.find(
-        (p) => p.procId === OPENCODE_SERVER_PROC_ID && p.alive
-      );
-      if (stillAlive) {
-        throw new Error(
-          "server did not exit within 15s after SIGTERM — refusing SIGKILL"
-        );
-      }
-
-      // 5. Clear old client state.
-      this.#client = null;
-      this.#ready = null;
-
-      // 6. Respawn via the existing attach helper. This reads global config
-      //    at startup — the whole point of a process restart.
       const config = await this.#launchConfig();
-      const { url: newUrl } = await attachOpencodeServer({
-        sessiond,
-        spec: {
+      await this.#serverOwner.replace(
+        {
           command: resolveBin("opencode") ?? "opencode",
           args: ["serve", "--hostname=127.0.0.1", "--port=0"],
           env: { OPENCODE_CONFIG_CONTENT: JSON.stringify(config) },
         },
-      });
-      // 7. The new client, with every retained session rebound to it.
-      const newClient = this.#adopt(newUrl);
-
-      // 8. Reconnect SSE pumps for all active directories.
-      for (const dir of dirs) {
-        // biome-ignore lint/complexity/noVoid: fire-and-forget pump restart
-        void this.#ensurePump(dir).catch(console.warn);
-      }
-
-      // 9. Verify: runtime config matches desired.
-      await this.#verifyApply(newClient, targetHash, targetVersion);
-
-      // 10. Mark applied — only after verification passes.
-      this.#appliedHash = targetHash;
-      this.#appliedVersion = targetVersion;
-      this.#configError = null;
+        async (identity, signal) => {
+          const candidate = createOpencodeClient({
+            baseUrl: identity.url,
+            fetch: Object.assign(fetchOpencode, {
+              preconnect: fetch.preconnect,
+            }),
+          });
+          if (!(await this.#readsThisConfig(candidate))) {
+            throw new Error("Candidate reads another global config root.");
+          }
+          await this.#verifyApply(candidate, targetHash, targetVersion, signal);
+        },
+        (identity) => {
+          this.#stopPumps();
+          const client = this.#adopt(identity.url);
+          this.#ready = Promise.resolve(client);
+          this.#verifiedProcId = identity.procId;
+          this.#appliedHash = targetHash;
+          this.#appliedVersion = targetVersion;
+          this.#configError = null;
+          for (const dir of dirs) {
+            // biome-ignore lint/complexity/noVoid: readiness and snapshots do not block the generation switch
+            void this.#ensurePump(dir).catch(console.warn);
+          }
+        }
+      );
 
       if (
         this.#desiredHash === targetHash &&
@@ -3640,6 +3638,7 @@ export class OpencodeHarness implements Harness {
     } catch (error) {
       this.#configState = "error";
       this.#configError = String(error);
+      this.#retryConfigAt = Date.now() + 5000;
       console.error(
         `[opencode] config convergence: apply failed: ${String(error)}`
       );
@@ -3647,7 +3646,7 @@ export class OpencodeHarness implements Harness {
         JSON.stringify({
           type: "config-convergence",
           state: "error",
-          detail: String(error),
+          detail: `${String(error)}; incumbent retained, retry in 5s`,
           at: Date.now(),
         })
       );
@@ -3686,10 +3685,13 @@ export class OpencodeHarness implements Harness {
   async #verifyApply(
     client: OpencodeClient,
     targetHash: string | null,
-    targetVersion: string | null
+    targetVersion: string | null,
+    signal?: AbortSignal
   ): Promise<void> {
     const health = await reached(
-      client.global.health({ signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) })
+      client.global.health({
+        signal: signal ?? AbortSignal.timeout(RECOVERY_TIMEOUT_MS),
+      })
     );
     const runningVersion = health.data?.version;
     if (!targetVersion || runningVersion !== targetVersion) {
@@ -3709,7 +3711,7 @@ export class OpencodeHarness implements Harness {
     const desiredRaw = await readJson<Record<string, unknown>>(OPENCODE_CONFIG);
     const liveResult = await client.config.get(
       {},
-      { signal: AbortSignal.timeout(10_000) }
+      { signal: signal ?? AbortSignal.timeout(10_000) }
     );
     if (!liveResult.data) {
       throw new Error(
@@ -3913,19 +3915,13 @@ export class OpencodeHarness implements Harness {
         // so every agent restart took the machine's opencode sessions with it.
         // The server goes under sessiond instead and we attach as a client —
         // the same client the bundled pair would have handed us.
-        const sessiond = await this.sessiond();
-        const { url, freshlySpawned } = await attachOpencodeServer({
-          sessiond,
-          spec: {
-            // The SDK builds this exact command line
-            // (`@opencode-ai/sdk/dist/server.js`); we build it here because the
-            // spawn is sessiond's now, not `cross-spawn`'s.
-            command: resolveBin("opencode") ?? "opencode",
-            args: ["serve", "--hostname=127.0.0.1", "--port=0"],
-            env: { OPENCODE_CONFIG_CONTENT: JSON.stringify(config) },
-          },
+        const identity = await this.#serverOwner.ensure({
+          // The owner chooses the ephemeral port and captures the process identity.
+          command: resolveBin("opencode") ?? "opencode",
+          args: ["serve", "--hostname=127.0.0.1", "--port=0"],
+          env: { OPENCODE_CONFIG_CONTENT: JSON.stringify(config) },
         });
-        const client = this.#adopt(url);
+        const client = this.#adopt(identity.url);
 
         // Convergence keeps the server matching the machine's global config;
         // that is the machine agent's to do. Another agent's server runs on
@@ -3933,14 +3929,17 @@ export class OpencodeHarness implements Harness {
         // it must not write. And only a server that reads the config this
         // agent writes is its to restart: an agent under another config root
         // shares the machine's sessiond, and so the machine's server.
-        if ((await isMachineAgent()) && (await this.#readsThisConfig(client))) {
-          this.#converging = true;
+        if (
+          this.#verifiedProcId !== identity.procId &&
+          (await isMachineAgent()) &&
+          (await this.#readsThisConfig(client))
+        ) {
           // The baseline is whatever the running server verifiably loaded.
           // A server this agent just spawned and one it adopted from an
           // earlier agent are checked the same way: the adopted one keeps
           // its sessions running when it already matches, and is restarted
           // by the watcher only when it does not.
-          const origin = freshlySpawned ? "freshly spawned" : "adopted server";
+          const origin = `active generation ${identity.procId}/${identity.pid}`;
           const initialHash = await this.#hashConfig();
           const initialVersion = await this.#installedVersion();
           this.#desiredHash = initialHash;
@@ -3955,6 +3954,7 @@ export class OpencodeHarness implements Harness {
               await this.#verifyApply(client, initialHash, initialVersion);
               this.#appliedHash = initialHash;
               this.#appliedVersion = initialVersion;
+              this.#verifiedProcId = identity.procId;
               this.#configState = "applied";
               console.log(
                 JSON.stringify({
@@ -3975,6 +3975,7 @@ export class OpencodeHarness implements Harness {
               );
             }
           }
+          this.#converging = true;
           this.#startConfigWatcher();
         }
 
@@ -4328,7 +4329,8 @@ export class OpencodeHarness implements Harness {
           process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint()
         );
         const held = client.procs.some(
-          (proc) => proc.procId === OPENCODE_SERVER_PROC_ID && proc.alive
+          (proc) =>
+            proc.procId === this.#serverOwner.active?.procId && proc.alive
         );
         client.close();
         // Register reads the catalog first, which connects the adapter. Do not
@@ -4410,7 +4412,10 @@ export class OpencodeHarness implements Harness {
         this.#pendingSpawns.push({ resolve, reject, spec, ctx });
       });
     }
-    return this.#open(spec, ctx);
+    this.#opening += 1;
+    return this.#open(spec, ctx).finally(() => {
+      this.#opening -= 1;
+    });
   }
 
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: creates/resumes/forks a session across three branches, then wires the session up; not refactored in this pass
@@ -4419,28 +4424,33 @@ export class OpencodeHarness implements Harness {
     ctx: HarnessContext
   ): Promise<OpencodeSession> {
     const client = await this.#ensure();
-    const mcp = await client.mcp.status(
+    // cbd4c3a0 required the correct hub and caller identity, not readiness of
+    // every remote server. Config provenance is fast; MCP health is asynchronous.
+    const configured = await client.config.get(
       { directory: ctx.cwd },
       { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
     );
-    if (mcp.error) {
+    if (!configured.data || configured.error) {
       throw new Error(
-        `Could not read OpenCode MCP status: ${errorText(mcp.error)}`
+        `Could not read OpenCode session config: ${errorText(configured.error)}`
       );
     }
-    // An agent that is not the machine's always points the server at its own
-    // hub: a `cawco` server read from the global config is the machine's.
-    if (mcp.data?.cawco?.status !== "connected" || !(await isMachineAgent())) {
-      const connected = await client.mcp.add(
-        { directory: ctx.cwd, name: "cawco", config: cawcoMcp() },
-        { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+    if (!containsJson(cawcoMcp(), configured.data.mcp?.cawco)) {
+      throw new Error(
+        "OpenCode session config points CawCo tools at another hub."
       );
-      if (connected.error || connected.data?.cawco?.status !== "connected") {
-        throw new Error(
-          `Could not connect CawCo MCP: ${errorText(connected.error ?? connected.data?.cawco)}`
+    }
+    // biome-ignore lint/complexity/noVoid: connection health must never delay publishing a session
+    void client.mcp
+      .status({ directory: ctx.cwd }, { signal: AbortSignal.timeout(65_000) })
+      .then((status) => {
+        console.info(
+          `[opencode] ${ctx.cwd}: MCP status ${JSON.stringify(status.data ?? status.error)}`
         );
-      }
-    }
+      })
+      .catch((error: unknown) =>
+        console.warn(`[opencode] ${ctx.cwd}: MCP status unavailable: ${error}`)
+      );
     let sessionId: string;
 
     if (spec.resume?.fork) {
@@ -4532,6 +4542,11 @@ export class OpencodeHarness implements Harness {
       session.inheritOpenTurn();
     }
     session.attached = () => {
+      // Publishing a handle may follow a generation switch; use the owner's
+      // current client rather than the one captured when creation began.
+      if (this.#client) {
+        session.rebindClient(this.#client);
+      }
       this.#sessions.set(ctx.instanceId, session);
       ctx.session(sessionId);
       // The init frame the dashboard reads the model / cwd / commands off.
@@ -4873,6 +4888,7 @@ export class OpencodeHarness implements Harness {
   // biome-ignore lint/suspicious/useAwait: implements Harness.dispose's Promise<void> contract; this teardown is synchronous
   async dispose(): Promise<void> {
     this.#disposed = true;
+    this.#converging = false;
     this.#stopConfigWatcher();
     this.#stopPumps();
     // The socket, not the child: a closed sessiond connection is re-dialled by
