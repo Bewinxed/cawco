@@ -230,7 +230,8 @@ final class BoardSplitController: UISplitViewController, UISplitViewControllerDe
         controller.onReturnToFleet = { [weak self, weak controller] in
             guard let self, let controller else { return }
             if controller.traitCollection.horizontalSizeClass == .compact {
-                controller.navigationController?.popViewController(animated: true)
+                controller.close()
+                show(.primary)
             } else {
                 controller.close()
                 let placeholder = UIViewController()
