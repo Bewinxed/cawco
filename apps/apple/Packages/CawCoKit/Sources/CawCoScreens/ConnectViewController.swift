@@ -123,8 +123,8 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
         let content = scroll.contentLayoutGuide
         let frame = scroll.frameLayoutGuide
         NSLayoutConstraint.activate([
-            scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            scroll.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
+            scroll.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
             scroll.topAnchor.constraint(equalTo: view.topAnchor),
             scroll.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor),
             // Caw's acting reaches past his still box: room for it under the bars.

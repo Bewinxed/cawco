@@ -57,10 +57,12 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         reconnect.discoverabilityTitle = "Reconnect to the hub"
         let stop = UIKeyCommand(title: "Stop", action: #selector(stopSession), input: ".", modifierFlags: .command)
         let steer = UIKeyCommand(title: "Steer", action: #selector(steerSession), input: "l", modifierFlags: .command)
+        let newWindow = UIKeyCommand(title: "Open session in new window", action: #selector(openSessionWindow), input: "n", modifierFlags: [.command, .shift])
         let fleet = UIMenu(title: "Fleet", children: [
             UIMenu(options: .displayInline, children: [approve, deny]),
             UIMenu(options: .displayInline, children: [reconnect]),
             UIMenu(options: .displayInline, children: [stop, steer]),
+            UIMenu(options: .displayInline, children: [newWindow]),
         ])
         builder.insertSibling(fleet, afterMenu: .view)
     }
@@ -74,6 +76,8 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             command.attributes = board?.canReconnect == true ? [] : .disabled
         case #selector(stopSession), #selector(steerSession):
             command.attributes = board?.canControlSession == true ? [] : .disabled
+        case #selector(openSessionWindow):
+            command.attributes = board?.canOpenSessionWindow == true ? [] : .disabled
         default:
             break
         }
@@ -99,13 +103,14 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     }
     @objc private func stopSession() { board?.stopSession() }
     @objc private func steerSession() { board?.steerSession() }
+    @objc private func openSessionWindow() { board?.openSessionWindow() }
 }
 
 /// One window: the root controller, which holds that window's connection to the hub.
 final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
     func stateRestorationActivity(for scene: UIScene) -> NSUserActivity? {
-        (window?.rootViewController as? RootViewController)?.sessionActivity
+        (window?.rootViewController as? RootViewController)?.restorationActivity
     }
 
     func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options: UIScene.ConnectionOptions) {
@@ -113,19 +118,33 @@ final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
             return
         }
         let activity = options.userActivities.first ?? session.stateRestorationActivity
-        open(scene, sessionId: activity?.userInfo?["sessionId"] as? String)
+        open(scene, sessionId: activity?.userInfo?["sessionId"] as? String, boardTab: activity?.userInfo?["boardTab"] as? String)
+        if let activity { (window?.rootViewController as? RootViewController)?.restore(activity) }
     }
 
     /// Builds the scene's window: its root controller and its own hub connection.
-    func open(_ scene: UIWindowScene, sessionId: String? = nil) {
+    func open(_ scene: UIWindowScene, sessionId: String? = nil, boardTab: String? = nil) {
         guard window == nil else {
             return
         }
         Logger(subsystem: "dev.cawco.app", category: "Scene").info("window scene connected")
         let window = UIWindow(windowScene: scene)
         window.tintColor = Palette.inkStrong
-        window.rootViewController = RootViewController(sessionId: sessionId)
+        window.rootViewController = RootViewController(sessionId: sessionId, boardTab: boardTab)
         window.makeKeyAndVisible()
         self.window = window
+    }
+
+    func scene(_ scene: UIScene, continue userActivity: NSUserActivity) {
+        (window?.rootViewController as? RootViewController)?.restore(userActivity)
+    }
+
+    func sceneDidEnterBackground(_ scene: UIScene) {
+        scene.userActivity = (window?.rootViewController as? RootViewController)?.restorationActivity
+    }
+
+    func sceneDidDisconnect(_ scene: UIScene) {
+        (window?.rootViewController as? RootViewController)?.closeScene()
+        window = nil
     }
 }

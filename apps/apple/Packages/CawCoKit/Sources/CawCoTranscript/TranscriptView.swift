@@ -3,6 +3,14 @@ import CawCoDesign
 import OSLog
 public import UIKit
 
+/// Scene-local reading position, keyed by the stable block-piece id rather
+/// than by a scroll offset that changes as the conversation grows.
+public struct TranscriptPosition: Codable, Sendable {
+    public let following: Bool
+    public let anchor: String?
+    public let offset: Double
+}
+
 /// A virtualized native transcript. Hub blocks are stable list identities;
 /// settled Markdown pieces are cached and only the open tail is reconfigured.
 public final class TranscriptView: UIView, UICollectionViewDelegate {
@@ -36,6 +44,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     private var busy = false
     private var dirty = true
     private var following = true
+    private var pendingPosition: TranscriptPosition?
     private var link: CADisplayLink?
     private var proxy: DisplayTarget?
     private let signposter = OSSignposter(subsystem: "dev.cawco.app", category: "Transcript")
@@ -189,6 +198,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             }
         }
         if dirty { dirty = false; commit() }
+        restoreIfReady()
         // Self-sizing can refine an estimated height after a snapshot's completion.
         // Follow that refinement too, rather than landing halfway through history.
         if following { latest() }
@@ -233,13 +243,40 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     }
 
     public func latest() {
+        pendingPosition = nil
         following = true
         let bottom = max(-collection.adjustedContentInset.top, collection.contentSize.height - collection.bounds.height + collection.adjustedContentInset.bottom)
         collection.setContentOffset(CGPoint(x: 0, y: bottom), animated: false)
     }
 
+    public var restorationPosition: TranscriptPosition {
+        if let pendingPosition { return pendingPosition }
+        guard !following, let index = collection.indexPathsForVisibleItems.sorted().first,
+              let id = dataSource.itemIdentifier(for: index),
+              let frame = collection.layoutAttributesForItem(at: index)?.frame else {
+            return TranscriptPosition(following: following, anchor: nil, offset: 0)
+        }
+        return TranscriptPosition(following: false, anchor: id, offset: collection.contentOffset.y - frame.minY)
+    }
+
+    public func restorePosition(_ position: TranscriptPosition) {
+        following = position.following
+        pendingPosition = position
+        restoreIfReady()
+    }
+
+    private func restoreIfReady() {
+        guard let position = pendingPosition, dataSource.snapshot().numberOfItems > 0 else { return }
+        if position.following { pendingPosition = nil; latest(); return }
+        guard let id = position.anchor, let index = dataSource.indexPath(for: id),
+              let frame = collection.layoutAttributesForItem(at: index)?.frame else { return }
+        pendingPosition = nil
+        collection.setContentOffset(CGPoint(x: 0, y: frame.minY + position.offset), animated: false)
+    }
+
     public func scrollViewDidScroll(_ scrollView: UIScrollView) {
         if scrollView.isDragging || scrollView.isDecelerating {
+            pendingPosition = nil
             following = scrollView.contentSize.height - scrollView.contentOffset.y - scrollView.bounds.height <= Space.space8
         }
     }

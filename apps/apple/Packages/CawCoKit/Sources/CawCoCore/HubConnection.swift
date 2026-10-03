@@ -112,6 +112,18 @@ public final class HubConnection {
         start()
     }
 
+    /// A window was disconnected, not merely backgrounded. Its stream and
+    /// reads have the same lifetime as that scene, including pending RPCs.
+    public func disconnect() {
+        run?.cancel(); run = nil
+        fleetRead?.cancel(); fleetRead = nil
+        outageTimer?.cancel(); outageTimer = nil
+        sessions.reset()
+        live = nil
+        for waiter in waiters.values { waiter.resume(throwing: URLError(.cancelled)) }
+        waiters = [:]
+    }
+
     private func resetFleet() {
         fleet.machines = []
         fleet.adopt(rows: [])

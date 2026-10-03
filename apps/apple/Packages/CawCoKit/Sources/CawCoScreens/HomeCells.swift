@@ -567,6 +567,7 @@ struct NestShape {
 /// project and what it is doing now; at the end its age and, on a parent,
 /// the count of the rows under it. A finger keeps its 44pt.
 final class SessionRowView: UIView {
+    private var pointer: PointerSurface?
     let mark = SessionMarkView()
     private let title = KitLabel(TypeScale.typeLabel)
     private let trail = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
@@ -576,6 +577,7 @@ final class SessionRowView: UIView {
 
     init() {
         super.init(frame: .zero)
+        pointer = PointerSurface(self)
         trail.tabular = true
         trail.setContentHuggingPriority(.required, for: .horizontal)
         trail.setContentCompressionResistancePriority(.required, for: .horizontal)

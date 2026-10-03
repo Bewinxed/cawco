@@ -53,7 +53,7 @@ targets:
       path: CawCo/Info.plist
       properties:
         CFBundleDisplayName: CawCo
-        NSUserActivityTypes: [dev.cawco.session]
+        NSUserActivityTypes: [dev.cawco.session, dev.cawco.scene]
         UILaunchScreen: {}
         # Scene life cycle (required from the 27 SDKs): every window is a
         # scene, and SceneDelegate builds each one's interface.

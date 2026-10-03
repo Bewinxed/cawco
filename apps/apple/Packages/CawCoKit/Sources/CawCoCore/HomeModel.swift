@@ -73,6 +73,8 @@ public final class HomeModel {
         }
     }
 
+    public func stop() { ticker?.cancel(); ticker = nil }
+
     // MARK: State
 
     /// The hub is live: only then can an empty group be believed.

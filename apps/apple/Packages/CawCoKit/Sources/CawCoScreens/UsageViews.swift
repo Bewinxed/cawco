@@ -121,6 +121,8 @@ final class UsageSheetController: ObservedViewController {
         super.viewDidLoad()
         view.backgroundColor = Palette.surfaceRaised
         navigationItem.title = "Usage limits"
+        let close = UIBarButtonItem(title: "Close", image: Glyph.close.image, primaryAction: UIAction { [weak self] _ in self?.dismiss(animated: true) })
+        NavigationItems.configure(navigationItem, leading: [close])
         stack.axis = .vertical
         stack.spacing = 12
         stack.translatesAutoresizingMaskIntoConstraints = false

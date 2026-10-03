@@ -16,9 +16,19 @@ final class SessionViewController: ObservedViewController, UIDragInteractionDele
     private var send: UIButton!
     private var stop: UIBarButtonItem!
     private var steer: UIBarButtonItem!
+    private var approve: UIBarButtonItem!
+    private var deny: UIBarButtonItem!
+    private var back: UIBarButtonItem!
+    private var windowAction: UIWindowScene.ActivationAction!
+    private var barMode: String?
+    private var entry: UIStackView!
+    private var entryLeading: NSLayoutConstraint!
+    private var entryTrailing: NSLayoutConstraint!
+    private var entryBottom: NSLayoutConstraint!
     private var sent: String?
     private var opened = true
     var onClose: () -> Void = {}
+    var onReturnToFleet: () -> Void = {}
 
     init(hub: HubConnection, id: String) {
         self.hub = hub
@@ -36,21 +46,15 @@ final class SessionViewController: ObservedViewController, UIDragInteractionDele
         navigationItem.largeTitleDisplayMode = .never
         stop = UIBarButtonItem(title: "Stop", image: UIImage(systemName: "stop.fill"), primaryAction: UIAction { [weak self] _ in self?.stopTurn() })
         steer = UIBarButtonItem(title: "Steer", image: UIImage(systemName: "paperplane"), primaryAction: UIAction { [weak self] _ in self?.focusComposer() })
-        navigationItem.trailingItemGroups = [UIBarButtonItemGroup(barButtonItems: [steer, stop], representativeItem: nil)]
-        if #available(iOS 27.1, macCatalyst 27.1, *) {
-            navigationItem.pinnedTrailingGroup = UIBarButtonItemGroup(barButtonItems: [steer], representativeItem: nil)
-            navigationItem.trailingItemGroups = [UIBarButtonItemGroup(barButtonItems: [stop], representativeItem: nil)]
-        }
+        back = UIBarButtonItem(title: "Fleet", image: UIImage(systemName: "chevron.backward"), primaryAction: UIAction { [weak self] _ in self?.onReturnToFleet() })
+        approve = UIBarButtonItem(title: "Approve", image: Glyph.tick.image, primaryAction: UIAction { [weak self] _ in self?.answer(.allow) })
+        deny = UIBarButtonItem(title: "Deny", image: Glyph.close.image, primaryAction: UIAction { [weak self] _ in self?.answer(.deny) })
+        NavigationItems.keepVisible([approve, deny])
         let activity = Self.activity(sessionId)
-        let newWindow = UIWindowScene.ActivationAction { _ in UIWindowScene.ActivationConfiguration(userActivity: activity) }
-        newWindow.title = "Open in new window"
-        newWindow.image = UIImage(systemName: "rectangle.badge.plus")
-        let windows = UIBarButtonItem(title: "Window", image: UIImage(systemName: "ellipsis"), menu: UIMenu(children: [newWindow]))
-        if #available(iOS 27.1, macCatalyst 27.1, *) {
-            navigationItem.trailingItemGroups = [UIBarButtonItemGroup(barButtonItems: [stop, windows], representativeItem: nil)]
-        } else {
-            navigationItem.trailingItemGroups = [UIBarButtonItemGroup(barButtonItems: [steer, stop, windows], representativeItem: nil)]
-        }
+        windowAction = UIWindowScene.ActivationAction { _ in UIWindowScene.ActivationConfiguration(userActivity: activity) }
+        windowAction.title = "Open in new window"
+        windowAction.image = UIImage(systemName: "rectangle.badge.plus")
+        configureBar()
 
         let head = UIStackView(arrangedSubviews: [connection, state, place, notice])
         head.axis = .vertical; head.spacing = Space.space2
@@ -67,14 +71,27 @@ final class SessionViewController: ObservedViewController, UIDragInteractionDele
         composer.heightAnchor.constraint(equalToConstant: Space.space8 * 2).isActive = true
         send = KitButton.make("Send", variant: .action, height: .lg) { [weak self] in self?.sendMessage() }
         send.accessibilityIdentifier = "send-steer"
-        let entry = UIStackView(arrangedSubviews: [composer, send])
+        entry = UIStackView(arrangedSubviews: [composer, send])
         entry.axis = .horizontal; entry.spacing = Space.space2; entry.alignment = .bottom
         entry.translatesAutoresizingMaskIntoConstraints = false
         send.setContentHuggingPriority(.required, for: .horizontal)
         view.addSubview(head); view.addSubview(transcriptView); view.addSubview(entry)
+        let material = MaterialPanelView()
+        if material.hasGlass { composer.backgroundColor = .clear }
+        material.translatesAutoresizingMaskIntoConstraints = false
+        view.insertSubview(material, belowSubview: entry)
+        NSLayoutConstraint.activate([
+            material.leadingAnchor.constraint(equalTo: entry.leadingAnchor),
+            material.trailingAnchor.constraint(equalTo: entry.trailingAnchor),
+            material.topAnchor.constraint(equalTo: entry.topAnchor),
+            material.bottomAnchor.constraint(equalTo: entry.bottomAnchor),
+        ])
         head.addInteraction(UIDragInteraction(delegate: self))
         send.isPointerInteractionEnabled = true
         let safe = view.safeAreaLayoutGuide
+        entryLeading = entry.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: Space.space5)
+        entryTrailing = entry.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -Space.space5)
+        entryBottom = entry.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor, constant: -Space.space3)
         NSLayoutConstraint.activate([
             head.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: Space.space5),
             head.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -Space.space5),
@@ -83,9 +100,7 @@ final class SessionViewController: ObservedViewController, UIDragInteractionDele
             transcriptView.leadingAnchor.constraint(equalTo: safe.leadingAnchor),
             transcriptView.trailingAnchor.constraint(equalTo: safe.trailingAnchor),
             transcriptView.bottomAnchor.constraint(equalTo: entry.topAnchor, constant: -Space.space3),
-            entry.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: Space.space5),
-            entry.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -Space.space5),
-            entry.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor, constant: -Space.space3),
+            entryLeading, entryTrailing, entryBottom,
         ])
         let older = UIBarButtonItem(title: "Earlier", image: UIImage(systemName: "clock.arrow.circlepath"), primaryAction: UIAction { [weak self] _ in
             guard let self else { return }; hub.sessions.older(sessionId)
@@ -112,6 +127,20 @@ final class SessionViewController: ObservedViewController, UIDragInteractionDele
         onClose()
     }
 
+    var restorationValues: [String: Any] {
+        var values: [String: Any] = ["draft": composer.text ?? ""]
+        if let position = try? JSONEncoder().encode(transcriptView.restorationPosition) { values["transcriptPosition"] = position }
+        return values
+    }
+
+    func restoreValues(_ values: [AnyHashable: Any]) {
+        if let draft = values["draft"] as? String { composer.text = draft }
+        if let data = values["transcriptPosition"] as? Data,
+           let position = try? JSONDecoder().decode(TranscriptPosition.self, from: data) {
+            transcriptView.restorePosition(position)
+        }
+    }
+
     override func refreshContent() {
         let row = hub.fleet.byId[sessionId]
         navigationItem.title = row.map(hub.fleet.title) ?? "Session"
@@ -128,6 +157,7 @@ final class SessionViewController: ObservedViewController, UIDragInteractionDele
         stop.isEnabled = row?.isLive == true && hub.state == .connected
         steer.isEnabled = stop.isEnabled
         send.isEnabled = steer.isEnabled
+        configureBar()
         if let id = sent, let command = hub.ledger.commands[id] {
             notice.text = command.reason ?? command.stage.rawValue.capitalized
         } else { notice.text = transcript.error ?? (transcript.loading ? "Reading transcript…" : transcript.blocks.isEmpty ? "This session hasn't said anything yet." : "") }
@@ -138,6 +168,58 @@ final class SessionViewController: ObservedViewController, UIDragInteractionDele
 
     func focusComposer() { composer.becomeFirstResponder() }
     var canControl: Bool { hub.fleet.byId[sessionId]?.isLive == true && hub.state == .connected }
+
+    private var pendingAsk: ParkedAsk? { hub.needs.parked[sessionId]?.first { !$0.isQuestion } }
+    var answerTarget: (ask: ParkedAsk, machineId: String)? {
+        guard hub.state == .connected, let ask = pendingAsk, let row = hub.fleet.byId[sessionId] else { return nil }
+        let sent = hub.needs.answerSent(for: ask)
+        return sent == nil || sent?.stage == .failed ? (ask, row.machineId) : nil
+    }
+    private func answer(_ answer: NeedsYouStore.Answer) {
+        guard let target = answerTarget else { return }
+        hub.needs.answer(target.ask, machineId: target.machineId, answer)
+    }
+    private func configureBar() {
+        approve.isEnabled = answerTarget != nil
+        deny.isEnabled = answerTarget != nil
+        let mode = pendingAsk?.requestId ?? "session"
+        guard mode != barMode else { return }
+        barMode = mode
+        NavigationItems.configure(navigationItem, leading: [back],
+            prominent: pendingAsk == nil ? [steer] : [approve],
+            trailing: pendingAsk == nil ? [stop] : [deny, steer, stop],
+            overflow: [windowAction])
+    }
+
+    override func viewDidLayoutSubviews() {
+        super.viewDidLayoutSubviews()
+        guard entryLeading != nil else { return }
+        var leading = Space.space5
+        var trailing = -Space.space5
+        var bottom = -Space.space3
+        if #available(iOS 27.1, macCatalyst 27.1, *) {
+            let safe = view.bounds.inset(by: view.safeAreaInsets)
+            let normal = CGRect(x: safe.minX + Space.space5,
+                y: view.keyboardLayoutGuide.layoutFrame.minY - Space.space3 - entry.bounds.height,
+                width: max(0, safe.width - Space.space5 * 2), height: entry.bounds.height)
+            // Test the undisplaced pose, not the previous layout's displaced
+            // frame; otherwise avoidance would toggle on and off every pass.
+            for region in view.reservedRegions(kind: .division) where region.isActive && normal.intersects(region.frame) {
+                let fold = region.frame // Includes the system's interactive-content margins.
+                if fold.height > fold.width {
+                    let before = fold.minX - safe.minX
+                    let after = safe.maxX - fold.maxX
+                    if after >= before { leading = max(leading, fold.maxX - safe.minX + Space.space3) }
+                    else { trailing = min(trailing, fold.minX - safe.maxX - Space.space3) }
+                } else {
+                    bottom = min(bottom, fold.minY - view.keyboardLayoutGuide.layoutFrame.minY - Space.space3)
+                }
+            }
+        }
+        if entryLeading.constant != leading || entryTrailing.constant != trailing || entryBottom.constant != bottom {
+            entryLeading.constant = leading; entryTrailing.constant = trailing; entryBottom.constant = bottom
+        }
+    }
 
     func stopTurn() {
         guard let row = hub.fleet.byId[sessionId], row.isLive, hub.state == .connected else { return }

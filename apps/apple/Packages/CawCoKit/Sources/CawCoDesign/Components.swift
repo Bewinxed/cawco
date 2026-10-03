@@ -168,6 +168,10 @@ public extension UIButton {
     /// the action button lost its vermilion there.
     func houseStyle() {
         preferredBehavioralStyle = .pad
+        isPointerInteractionEnabled = true
+        pointerStyleProvider = { button, _, _ in
+            UIPointerStyle(effect: .hover(UITargetedPreview(view: button), preferredTintMode: .none, prefersShadow: false, prefersScaledContent: false), shape: .roundedRect(button.bounds, radius: Radius.radiusMd))
+        }
     }
 }
 
