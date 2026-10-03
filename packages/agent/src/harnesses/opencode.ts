@@ -1210,6 +1210,8 @@ export class OpencodeSession implements HarnessSession {
   #openThinking: string | null = null;
   readonly #toolsEmitted = new Map<string, "called" | "resolved">();
   #busy = false;
+  /** Live turn transitions outrank status/history snapshots already in flight. */
+  #turnRevision = 0;
   /**
    * Busy since {@link reattachedMidTurn}, on the server's word alone, until
    * {@link watchResumedTurn} has read the turn again.
@@ -1229,6 +1231,7 @@ export class OpencodeSession implements HarnessSession {
     return this.#open;
   }
   set #turnOpen(open: boolean) {
+    this.#turnRevision += 1;
     if (!open) {
       this.#turnPrompt = undefined;
     }
@@ -1608,6 +1611,7 @@ export class OpencodeSession implements HarnessSession {
         if (sid !== this.sessionId) {
           return;
         }
+        this.#turnRevision += 1;
         this.#ctx.busy(false);
         this.#busy = false;
         this.#flushResult();
@@ -1619,6 +1623,7 @@ export class OpencodeSession implements HarnessSession {
         if (sid !== undefined && sid !== this.sessionId) {
           return;
         }
+        this.#turnRevision += 1;
         // One failure, one result. opencode reports a prompt that dies before
         // the model is reached (an unknown model) twice — its message, then the
         // same error again with a stack — and the first already closed the turn.
@@ -2198,6 +2203,7 @@ export class OpencodeSession implements HarnessSession {
     message?: string;
     next?: number;
   }): void {
+    this.#turnRevision += 1;
     // A retrying turn is still a turn in flight — and the provider's own
     // words go straight to the transcript. A quota notice that only ever
     // lived in this event once hid as a silent hang for an hour.
@@ -2241,6 +2247,7 @@ export class OpencodeSession implements HarnessSession {
     if (this.sessionId === null) {
       return;
     }
+    const revision = this.#turnRevision;
     try {
       const result = await reached(
         this.#client.session.status(
@@ -2253,7 +2260,7 @@ export class OpencodeSession implements HarnessSession {
           }
         )
       );
-      if (this.#lifetime.signal.aborted) {
+      if (!this.#snapshotCurrent(revision)) {
         return;
       }
       const status = result.data?.[this.sessionId];
@@ -2263,7 +2270,12 @@ export class OpencodeSession implements HarnessSession {
         // Idle on the server, yet the hub is still owed this turn's end: it
         // ended while nothing here was subscribed.
         if (this.#turnOpen) {
-          await this.#endMissedTurn();
+          await this.#endMissedTurn(revision);
+          // A replay that closed the missed turn advanced the revision itself;
+          // a newer live turn is likewise left to its own events.
+          if (revision !== this.#turnRevision) {
+            return;
+          }
         }
         // The turn the reattach found running ended before this session was
         // subscribed: no idle event is coming for it. A prompt this process
@@ -2275,7 +2287,10 @@ export class OpencodeSession implements HarnessSession {
         }
         return;
       }
-      await this.#resumeReads();
+      await this.#resumeReads(revision);
+      if (!this.#snapshotCurrent(revision)) {
+        return;
+      }
       this.#applyStatus(status);
       this.#noteServerActivity();
       this.#ctx.frame({
@@ -2295,6 +2310,20 @@ export class OpencodeSession implements HarnessSession {
     }
   }
 
+  /** A snapshot never reopens a turn a live event ended, or closes a newer send. */
+  #snapshotCurrent(revision: number): boolean {
+    if (this.#lifetime.signal.aborted) {
+      return false;
+    }
+    if (revision === this.#turnRevision) {
+      return true;
+    }
+    console.info(
+      `[opencode] ${this.instanceId}: discarded stale turn snapshot revision=${revision} current=${this.#turnRevision} busy=${this.#busy} open=${this.#turnOpen}`
+    );
+    return false;
+  }
+
   /**
    * A turn the hub is owed ended on the server while nothing was subscribed —
    * the agent restarted, the server was respawned, or the subscription was
@@ -2306,7 +2335,7 @@ export class OpencodeSession implements HarnessSession {
    * has just sent and the server has not stored yet is not answered by the
    * replies to the one before it, and is left to its own events.
    */
-  async #endMissedTurn(): Promise<void> {
+  async #endMissedTurn(revision: number): Promise<void> {
     const listed = await reached(
       this.#client.session.messages(
         // biome-ignore lint/style/noNonNullAssertion: invariant: watchResumedTurn returns before this when sessionId is null
@@ -2325,6 +2354,9 @@ export class OpencodeSession implements HarnessSession {
       );
     }
     const rows = listed.data as { info: Message; parts: Part[] }[];
+    if (!this.#snapshotCurrent(revision)) {
+      return;
+    }
     const prompt = rows.findLast((row) => row.info.role === "user")?.info;
     if (!prompt || (this.#turnPrompt && prompt.id !== this.#turnPrompt)) {
       return;
@@ -2373,6 +2405,7 @@ export class OpencodeSession implements HarnessSession {
    * end it reached before anything here was subscribed.
    */
   reattachedMidTurn(): void {
+    this.#turnRevision += 1;
     this.#reattachedBusy = true;
     this.#busy = true;
     this.#ctx.busy(true);
@@ -2394,7 +2427,7 @@ export class OpencodeSession implements HarnessSession {
    * word this process would have given had it written them itself — and every
    * message already there is one it will not count as new.
    */
-  async #resumeReads(): Promise<void> {
+  async #resumeReads(revision: number): Promise<void> {
     const listed = await this.#client.session.messages(
       // biome-ignore lint/style/noNonNullAssertion: invariant: watchResumedTurn returns before this when sessionId is null
       { sessionID: this.sessionId!, directory: this.#directory },
@@ -2411,6 +2444,9 @@ export class OpencodeSession implements HarnessSession {
       );
     }
     const rows = listed.data as { info: Message; parts: Part[] }[];
+    if (revision !== this.#turnRevision || this.#lifetime.signal.aborted) {
+      return;
+    }
     for (const { info } of rows) {
       this.#noteCreated(info);
       if (info.role === "user") {
@@ -2529,6 +2565,7 @@ export class OpencodeSession implements HarnessSession {
       urgent?: boolean;
     }
   ): void {
+    this.#turnRevision += 1;
     const { content } = message.message;
     let text =
       typeof content === "string"
