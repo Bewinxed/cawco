@@ -35,6 +35,7 @@ import type {
   NeutralUserMessage,
   OpenCodeGoLimits,
   PermissionMode,
+  PermissionResult,
   PreviewSource,
   RegisterAckPayload,
   Rule,
@@ -231,9 +232,6 @@ const RECONNECT_GRACE_MS = 60_000;
  * horizon — so anything finer is a write nobody can observe.
  */
 const ACTIVITY_TOUCH_MS = 60_000;
-
-/** The relay routes': agent-only, and their bodies are read by hand. */
-const relayHook = { ...hidden, body: t.Any() };
 
 /**
  * And how many, newest first.
@@ -683,7 +681,7 @@ export const resolveDelegatePermissionMode = (
  * A leaf delegate — a row whose `canDelegate` is `false` — may not spawn
  * delegates or start sessions, so its spawns are refused. No walk up the tree:
  * the flag is per-row, granted (or withheld) by the immediate parent when it
- * delegated. An unknown parent, or one whose column is null or true, allows.
+ * delegated. An unknown parent is refused; null or true allows.
  * `rows` is the hub's instance table. Pure, so it is exercised directly.
  */
 export const resolveCanDelegate = (
@@ -691,15 +689,8 @@ export const resolveCanDelegate = (
   parentInstanceId: string
 ): boolean => {
   const parent = rows.find((row) => row.id === parentInstanceId);
-  return parent?.canDelegate !== false;
+  return !!parent && parent.canDelegate !== false;
 };
-
-/**
- * The session a spawn came FROM — `spawnedBy` when the payload carries it,
- * `parent` otherwise. Undefined when nothing names a requester.
- */
-const resolveRequester = (payload: SpawnPayload): string | undefined =>
-  payload.spawnedBy?.instanceId ?? payload.parent?.instanceId;
 
 /**
  * Urgency is only honoured toward the caller's own delegate; anything else
@@ -3537,7 +3528,7 @@ export const createServer = ({
   };
 
   /**
-   * A relayed spawn, issued. One that carries a `requestId` (start_session's)
+   * An in-process spawn, issued. One that carries a `requestId` (start_session's)
    * is held until its machine says the session is in place, and answers with
    * the machine's own words when it is not; one without is fire-and-forget,
    * its failure reaching the row and its parent later.
@@ -3569,6 +3560,37 @@ export const createServer = ({
         code: 422,
         message: reply.error ?? "the session failed to start",
       };
+    }
+  };
+
+  /** Shared by session tools and trusted workflow callbacks; never an HTTP door. */
+  const spawnSession = async (
+    machineId: string,
+    payload: SpawnPayload,
+    fallbackMode?: string
+  ): Promise<void> => {
+    const rows = db.listInstances();
+    const refusal = enforceRowSessionKey(
+      rows.find((row) => row.id === payload.instanceId),
+      payload
+    );
+    if (refusal) {
+      throw new WorkItemRefusal(409, refusal);
+    }
+    if (!registry.agent(machineId)) {
+      throw new WorkItemRefusal(404, `machine ${machineId} is not connected`);
+    }
+    const { parentInstanceId } = peekParent(payload);
+    const refused = await relaySpawn(
+      machineId,
+      payload,
+      fallbackMode ??
+        (parentInstanceId
+          ? resolveDelegatePermissionMode(rows, parentInstanceId)
+          : undefined)
+    );
+    if (refused) {
+      throw new Error(refused.message);
     }
   };
 
@@ -5927,20 +5949,7 @@ export const createServer = ({
         agent.send(envelope);
       }
     },
-    spawn: async (machineId, payload, fallbackMode) => {
-      const response = await fetch(`${hubHttpUrl()}/api/relay/spawn`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
-          ...payload,
-          machineId,
-          fallbackPermissionMode: fallbackMode,
-        }),
-      });
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
-    },
+    spawn: spawnSession,
     halt: (machineId, instanceId) =>
       new Promise<void>((resolve, reject) => {
         const agent = registry.agent(machineId);
@@ -6019,22 +6028,17 @@ export const createServer = ({
         throw new Error(`No delegate type ${type}.`);
       }
       const instanceId = crypto.randomUUID();
-      const response = await fetch(`${hubHttpUrl()}/api/relay/spawn`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({
+      await spawnSession(
+        machineId,
+        {
           ...preset,
           instanceId,
           cwd,
-          machineId,
           title,
           canDelegate: true,
-          fallbackPermissionMode: "bypassPermissions",
-        }),
-      });
-      if (!response.ok) {
-        throw new Error(await response.text());
-      }
+        },
+        "bypassPermissions"
+      );
       deliverSend({
         verb: "send",
         machineId,
@@ -6069,6 +6073,129 @@ export const createServer = ({
     instances: () => db.listInstances(),
     // finish_item is a tool of a session whose work item carries checks.
     checked: (row) => !!(row.workItemId && db.workItem(row.workItemId)?.checks),
+    // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one in-process dispatcher replaces six relay routes, retaining their ordered ownership and settlement checks.
+    forward: async (envelope, actor) => {
+      // The MCP resolver supplies the caller separately, never from provenance
+      // on an envelope. Recheck the row in case its permission changed mid-call.
+      const [requester] = db.getInstancesByIds([actor.id]);
+      if (!requester) {
+        throw new WorkItemRefusal(400, "Unknown calling CawCo instanceId");
+      }
+      const { instanceId } = envelope;
+      const machineId = envelope.machineId || requester.machineId;
+      if (envelope.verb === "spawn") {
+        if (!resolveCanDelegate([requester], requester.id)) {
+          throw new WorkItemRefusal(403, LEAF_DELEGATE_REFUSAL);
+        }
+        const { fallbackPermissionMode, ...payload } =
+          envelope.payload as SpawnPayload & {
+            fallbackPermissionMode?: PermissionMode;
+          };
+        await spawnSession(machineId, payload, fallbackPermissionMode);
+        return;
+      }
+      if (envelope.verb === "send") {
+        const payload = envelope.payload as SendPayload;
+        const malformed = normalizeRelayMessage(payload);
+        if (malformed) {
+          throw new WorkItemRefusal(400, malformed);
+        }
+        downgradeNonDelegateUrgent(
+          db.listInstances(),
+          payload,
+          instanceId ?? ""
+        );
+        const record = deliverSend({
+          ...envelope,
+          machineId,
+        } as Envelope<SendPayload>);
+        if (record.state === "failed") {
+          throw new WorkItemRefusal(404, record.reason ?? "the send failed");
+        }
+        return;
+      }
+      if (envelope.verb === "frames") {
+        telegram?.onUserMessage({
+          ...envelope,
+          machineId: requester.machineId,
+        });
+        return;
+      }
+      const control = envelope.payload as ControlPayload;
+      if (
+        envelope.verb !== "stop" &&
+        !(
+          envelope.verb === "control" &&
+          (control.method === CONTROL_INTERRUPT ||
+            control.method === RESOLVE_PERMISSION)
+        )
+      ) {
+        throw new Error(`Unsupported delegation operation ${envelope.verb}`);
+      }
+      const row = instanceId
+        ? db.getInstancesByIds([instanceId])[0]
+        : undefined;
+      if (!row || row.parentInstanceId !== requester.id) {
+        throw new WorkItemRefusal(
+          403,
+          "you can only control your own delegates"
+        );
+      }
+      if (envelope.verb === "stop") {
+        const agent = registry.agent(row.machineId);
+        if (!agent) {
+          throw new WorkItemRefusal(
+            404,
+            `machine ${row.machineId} is not connected`
+          );
+        }
+        agent.send({
+          ...envelope,
+          machineId: row.machineId,
+          payload: { instanceId: row.id, from: requester.id },
+        });
+        closePreview(row.id).catch(console.error);
+        noteInterrupt(row.id);
+        workItems.cancelled(row);
+        return;
+      }
+      const retired = workItems.refusal(row, {
+        kind: "peer",
+        fromSession: requester.id,
+      });
+      if (retired) {
+        throw new WorkItemRefusal(409, retired);
+      }
+      const { requestId } = control;
+      const result = control.args?.[1] as PermissionResult;
+      if (
+        control.method === RESOLVE_PERMISSION &&
+        requestId &&
+        pending.get(requestId) &&
+        answerWorkflow(pending, requestId, result)
+      ) {
+        return;
+      }
+      const agent = registry.agent(row.machineId);
+      if (!agent) {
+        throw new WorkItemRefusal(
+          404,
+          `machine ${row.machineId} is not connected`
+        );
+      }
+      agent.send({
+        ...envelope,
+        machineId: row.machineId,
+        payload: { ...control, from: requester.id },
+      });
+      if (control.method === CONTROL_INTERRUPT) {
+        noteInterrupt(row.id);
+      } else {
+        telegram?.onSettled(requestId);
+        pending.resolve(requestId);
+        recordDelegateAnswer(row.machineId, row.id, requestId, result);
+      }
+    },
   });
 
   /**
@@ -6193,7 +6320,34 @@ export const createServer = ({
       .post(
         "/api/delegation/call/:instanceId",
         { ...hidden, body: t.Any() },
-        ({ params, body, request, server }) => {
+        ({ params, body, request, server, status }) => {
+          if (
+            !(
+              params.instanceId.trim() &&
+              db.getInstancesByIds([params.instanceId])[0]
+            )
+          ) {
+            return status(
+              400,
+              "delegation call needs a known non-empty instanceId"
+            );
+          }
+          if (
+            typeof body !== "object" ||
+            body === null ||
+            Array.isArray(body) ||
+            typeof (body as { name?: unknown }).name !== "string" ||
+            !(body as { name: string }).name.trim() ||
+            ("arguments" in body &&
+              (typeof body.arguments !== "object" ||
+                body.arguments === null ||
+                Array.isArray(body.arguments)))
+          ) {
+            return status(
+              400,
+              "delegation call needs a non-empty tool name and object arguments"
+            );
+          }
           const input = body as {
             name: string;
             arguments?: Record<string, unknown>;
@@ -8445,6 +8599,17 @@ export const createServer = ({
           },
         },
         async ({ body, status }) => {
+          if (
+            !(
+              body.parentInstanceId.trim() &&
+              db.getInstancesByIds([body.parentInstanceId])[0]
+            )
+          ) {
+            return status(
+              400,
+              "work item needs a known non-empty parentInstanceId"
+            );
+          }
           try {
             const started = await workItems.start(body);
             // A follow-up lands in a session whose tool list was read before
@@ -8555,256 +8720,6 @@ export const createServer = ({
           }
         }
       )
-      // A session's own tools reach the fleet over plain HTTP — the hub's MCP
-      // server forwards `start_session`'s spawn here, and the workflow runtime
-      // spawns its steps the same way — and the hub relays them like the
-      // dashboard's own. start_session's is answered once its machine has the
-      // session in place, or with why not ({@link relaySpawn}).
-      .post("/api/relay/spawn", relayHook, async ({ body, status }) => {
-        // `fallbackPermissionMode` is the mode the caller would have the
-        // session run in when none is asked of it (start_session's caller's
-        // own, a workflow step's bypass); it is the hub's to settle, never
-        // the machine's to see.
-        const { fallbackPermissionMode, machineId, ...payload } =
-          body as SpawnPayload & {
-            machineId?: string;
-            fallbackPermissionMode?: PermissionMode;
-          };
-        if (!(machineId && payload.instanceId)) {
-          return status(
-            400,
-            "relay spawn needs the target machineId and the new instanceId"
-          );
-        }
-        // A leaf delegate may not delegate OR start sessions: the check is
-        // against whoever asked (`spawnedBy`, falling back to `parent`), so
-        // `start_session` — which nests nothing — is held to the same rule.
-        const rows = db.listInstances();
-        const requester = resolveRequester(payload);
-        if (requester && !resolveCanDelegate(rows, requester)) {
-          return status(403, LEAF_DELEGATE_REFUSAL);
-        }
-
-        // A delegate that names no permission mode falls back to the ROOT of
-        // its delegate tree, so a nested delegate of a bypassing session stays
-        // autonomous instead of parking tool asks nobody is watching for —
-        // when its harness has modes at all (`settleMode`).
-        const { parentInstanceId } = peekParent(payload);
-        const fallback =
-          fallbackPermissionMode ??
-          (parentInstanceId
-            ? resolveDelegatePermissionMode(rows, parentInstanceId)
-            : undefined);
-
-        const refusal = enforceRowSessionKey(
-          rows.find((row) => row.id === payload.instanceId),
-          payload
-        );
-        if (refusal) {
-          return status(409, refusal);
-        }
-        if (!registry.agent(machineId)) {
-          return status(404, `machine ${machineId} is not connected`);
-        }
-        try {
-          const refused = await relaySpawn(machineId, payload, fallback);
-          if (refused) {
-            return status(refused.code, refused.message);
-          }
-        } catch (error) {
-          if (error instanceof WorkItemRefusal) {
-            return status(error.status, error.message);
-          }
-          throw error;
-        }
-        return { ok: true, instanceId: payload.instanceId, machineId };
-      })
-      .post("/api/relay/send", relayHook, ({ body, status }) => {
-        const instanceId = peek(body, "instanceId");
-        const machineId = peek(body, "machineId");
-        if (!(instanceId && machineId)) {
-          return status(
-            400,
-            "relay send needs the target session's instanceId and machineId"
-          );
-        }
-        // Before anything else reads `message`: a shape the far end would
-        // drop in silence is refused here, where the caller can still see it.
-        const malformed = normalizeRelayMessage(body);
-        if (malformed) {
-          return status(400, malformed);
-        }
-
-        downgradeNonDelegateUrgent(db.listInstances(), body, instanceId);
-
-        const record = deliverSend({
-          verb: "send",
-          machineId,
-          instanceId,
-          payload: body as SendPayload,
-        });
-        if (record.state === "failed") {
-          return status(404, record.reason ?? "the send failed");
-        }
-        return { ok: true };
-      })
-      .post("/api/relay/stop", relayHook, ({ body, status }) => {
-        const instanceId = peek(body, "instanceId");
-        const from = peek(body, "from");
-        const row = instanceId
-          ? db.listInstances().find((r) => r.id === instanceId)
-          : undefined;
-        if (!(instanceId && from && row) || row.parentInstanceId !== from) {
-          return status(403, "you can only stop your own delegates");
-        }
-        const agent = registry.agent(row.machineId);
-        if (!agent) {
-          return status(404, `machine ${row.machineId} is not connected`);
-        }
-        agent.send({
-          verb: "stop",
-          machineId: row.machineId,
-          instanceId,
-          payload: { instanceId, from },
-        } satisfies Envelope);
-        closePreview(instanceId).catch(console.error);
-        // A stop cuts the turn it lands in, as an interrupt does. What it
-        // was sent and had not read is settled by its `stopped`.
-        noteInterrupt(instanceId);
-        // Its work is over the moment its parent stops it.
-        workItems.cancelled(row);
-        return { ok: true };
-      })
-      .post("/api/relay/interrupt", relayHook, ({ body, status }) => {
-        const instanceId = peek(body, "instanceId");
-        const from = peek(body, "from");
-        const row = instanceId
-          ? db.listInstances().find((r) => r.id === instanceId)
-          : undefined;
-        if (!(instanceId && from && row) || row.parentInstanceId !== from) {
-          return status(403, "you can only interrupt your own delegates");
-        }
-        const retired = workItems.refusal(row, {
-          kind: "peer",
-          fromSession: from,
-        });
-        if (retired) {
-          return status(409, retired);
-        }
-        const agent = registry.agent(row.machineId);
-        if (!agent) {
-          return status(404, `machine ${row.machineId} is not connected`);
-        }
-        agent.send({
-          verb: "control",
-          machineId: row.machineId,
-          instanceId,
-          payload: {
-            instanceId,
-            requestId: crypto.randomUUID(),
-            method: CONTROL_INTERRUPT,
-            args: [],
-            from,
-          },
-        } satisfies Envelope);
-        noteInterrupt(instanceId);
-        return { ok: true };
-      })
-      .post("/api/relay/answer", relayHook, ({ body, status }) => {
-        const workflowRequestId = peek(body, "requestId");
-        try {
-          if (
-            workflowRequestId &&
-            pending.get(workflowRequestId) &&
-            answerWorkflow(
-              pending,
-              workflowRequestId,
-              (body as { result: import("@cawco/core").PermissionResult })
-                .result
-            )
-          ) {
-            return { ok: true };
-          }
-        } catch (error) {
-          return status(
-            400,
-            error instanceof Error ? error.message : String(error)
-          );
-        }
-        const instanceId = peek(body, "instanceId");
-        const from = peek(body, "from");
-        const requestId = peek(body, "requestId");
-        const row = instanceId
-          ? db.listInstances().find((r) => r.id === instanceId)
-          : undefined;
-        if (
-          !(instanceId && requestId && from && row) ||
-          row.parentInstanceId !== from
-        ) {
-          return status(403, "you can only answer your own delegates");
-        }
-        const retired = workItems.refusal(row, {
-          kind: "peer",
-          fromSession: from,
-        });
-        if (retired) {
-          return status(409, retired);
-        }
-        const agent = registry.agent(row.machineId);
-        if (!agent) {
-          return status(404, `machine ${row.machineId} is not connected`);
-        }
-        const { result } = body as { result?: unknown };
-        agent.send({
-          verb: "control",
-          machineId: row.machineId,
-          instanceId,
-          requestId,
-          payload: {
-            instanceId,
-            requestId,
-            method: RESOLVE_PERMISSION,
-            args: [requestId, result],
-            from,
-          },
-        } satisfies Envelope);
-        // Settled here for the same reason a dashboard's control settles it in
-        // `relayControl`: the ask is answered whoever answered it. Without
-        // this the hub kept parking a question the harness had already moved
-        // past — offered again to the next dashboard that connected, and left
-        // live in Telegram for an answer that could no longer land.
-        telegram?.onSettled(requestId);
-        pending.resolve(requestId);
-        recordDelegateAnswer(row.machineId, instanceId, requestId, result);
-        return { ok: true };
-      })
-      // A session's message to the owner, over plain HTTP like the other relay
-      // verbs (the opencode plugin's `send_to_user`). No target machine — the hub
-      // hands it to the bridge and nobody waits on an answer.
-      .post("/api/relay/message", relayHook, ({ body, status }) => {
-        const machineId = peek(body, "machineId");
-        const instanceId = peek(body, "instanceId");
-        const text = peek(body, "text");
-        if (!(machineId && instanceId && text)) {
-          return status(400, "name a machine, an instance and a message");
-        }
-        const raw = (body as { attachments?: unknown }).attachments;
-        const attachments = Array.isArray(raw)
-          ? raw.filter((p): p is string => typeof p === "string")
-          : undefined;
-        telegram?.onUserMessage({
-          verb: "frames",
-          machineId,
-          instanceId,
-          payload: {
-            kind: "user_message",
-            instanceId,
-            text,
-            ...(attachments?.length ? { attachments } : {}),
-          },
-        });
-        return { ok: true };
-      })
       // ── Usage (USAGE-SPEC.md §6) ─────────────────────────────────────────────
       // The heavy data lives behind these reads; the socket only carries the small
       // limits frame, so the dashboard pulls aggregates when it needs them.

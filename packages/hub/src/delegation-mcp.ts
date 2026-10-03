@@ -22,7 +22,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { adminTools } from "./admin-tools";
-import { DB_PATH, HUB_PORT, SPAWN_START_TIMEOUT_MS } from "./config";
+import { DB_PATH } from "./config";
 import { handoffInstructions, handoffTools } from "./delegation-tools";
 
 type ToolFactory = typeof handoffTools;
@@ -63,11 +63,10 @@ export function createDelegationMcp(options: {
   instances: () => InstanceRow[];
   /** Whether the session runs a work item with acceptance checks: it gets finish_item. */
   checked: (row: InstanceRow) => boolean;
-  baseUrl?: string;
+  forward: (envelope: Envelope, actor: InstanceRow) => Promise<void>;
   tools?: ToolFactory;
 }) {
   let tools = options.tools ?? handoffTools;
-  const baseUrl = options.baseUrl ?? `http://127.0.0.1:${HUB_PORT}`;
   const secret = sessionKey(join(dirname(DB_PATH), "mcp-session.key"));
   const sessions = new Map<
     string,
@@ -166,9 +165,15 @@ export function createDelegationMcp(options: {
     });
   }
 
+  // Temporary until Phase 2's per-session credentials replace this resolver.
+  // PRODUCT.md trusts the network perimeter; here malformed/unknown identities
+  // are refused, but deliberate same-UID impersonation is not yet prevented.
   const actorOf = (binding: string | null, args: Record<string, unknown>) => {
     const rows = options.instances();
-    if (binding) {
+    if (binding !== null) {
+      if (typeof binding !== "string" || !binding.trim()) {
+        throw new Error("CawCo instanceId must be a non-empty string");
+      }
       const actor = rows.find((row) => row.id === binding);
       if (!actor) {
         throw new Error(
@@ -177,14 +182,26 @@ export function createDelegationMcp(options: {
       }
       return actor;
     }
-    const context = args.__cawco as
-      | { sessionId?: string; directory?: string }
-      | undefined;
+    const context = args.__cawco;
+    if (
+      typeof context !== "object" ||
+      context === null ||
+      Array.isArray(context) ||
+      !("sessionId" in context && "directory" in context) ||
+      typeof context.sessionId !== "string" ||
+      !context.sessionId.trim() ||
+      typeof context.directory !== "string" ||
+      !context.directory.trim()
+    ) {
+      throw new Error(
+        "CawCo requires __cawco with non-empty sessionId and directory strings"
+      );
+    }
     const candidates = rows.filter(
       (row) =>
         row.harness === "opencode" &&
-        row.sessionId === context?.sessionId &&
-        row.cwd === context?.directory &&
+        row.sessionId === context.sessionId &&
+        row.cwd === context.directory &&
         ["running", "starting"].includes(row.status)
     );
     if (candidates.length !== 1) {
@@ -193,49 +210,6 @@ export function createDelegationMcp(options: {
       );
     }
     return candidates[0];
-  };
-
-  const forward = async (envelope: Envelope, actor: InstanceRow) => {
-    let operation = envelope.verb as string;
-    let body = envelope.payload as Record<string, unknown>;
-    if (envelope.verb === "frames") {
-      operation = "message";
-      body = { ...body, machineId: actor.machineId };
-    } else if (envelope.verb === "spawn" || envelope.verb === "send") {
-      // A send names its target's machine; a session it starts runs on the
-      // machine its caller named, or on the caller's own.
-      body = { ...body, machineId: envelope.machineId || actor.machineId };
-    } else if (envelope.verb === "control") {
-      if (body.method === "interrupt") {
-        operation = "interrupt";
-      } else if (body.method === "resolvePermission") {
-        operation = "answer";
-        body = { ...body, result: (body.args as unknown[])[1] };
-      } else {
-        throw new Error(
-          `Unsupported delegation control ${String(body.method)}`
-        );
-      }
-    }
-    const response = await fetch(`${baseUrl}/api/relay/${operation}`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-      // A spawn is answered once its machine has the session in place, which
-      // the hub waits on for up to SPAWN_START_TIMEOUT_MS.
-      signal: AbortSignal.timeout(
-        envelope.verb === "spawn" ? SPAWN_START_TIMEOUT_MS + 15_000 : 15_000
-      ),
-    });
-    if (!response.ok) {
-      const text = await response.text();
-      // A 4xx is the hub refusing, in words written for the calling model.
-      throw new Error(
-        response.status < 500
-          ? text
-          : `CawCo ${operation}: HTTP ${response.status}: ${text}`
-      );
-    }
   };
 
   const call = async (
@@ -270,7 +244,7 @@ export function createDelegationMcp(options: {
       const result = (await entry.handler(args)) as CallToolResult;
       for (const envelope of emitted) {
         // biome-ignore lint/performance/noAwaitInLoops: spawn must finish before its first send is relayed
-        await forward(envelope, actor);
+        await options.forward(envelope, actor);
       }
       // Keep routing metadata recoverable in stored transcripts even when a harness drops structuredContent.
       if (result.structuredContent) {
@@ -478,12 +452,33 @@ export function createDelegationMcp(options: {
       { status: 404 }
     );
 
+  const bindingProblem = (bindings: string[]): Response | undefined => {
+    const [binding] = bindings;
+    if (bindings.length > 1 || (binding !== undefined && !binding.trim())) {
+      return new Response("CawCo instanceId must be one non-empty string", {
+        status: 400,
+      });
+    }
+    if (
+      binding !== undefined &&
+      !options.instances().some((row) => row.id === binding)
+    ) {
+      return new Response("Unknown CawCo instanceId", { status: 400 });
+    }
+    return undefined;
+  };
+
   const handle = async (
     request: Request,
     parsedBody?: unknown
   ): Promise<Response> => {
     const id = request.headers.get("mcp-session-id");
-    const binding = new URL(request.url).searchParams.get("instanceId");
+    const bindings = new URL(request.url).searchParams.getAll("instanceId");
+    const invalid = bindingProblem(bindings);
+    if (invalid) {
+      return invalid;
+    }
+    const binding = bindings[0] ?? null;
     const live = id ? sessions.get(id) : undefined;
     if (live) {
       // A connection answers only on the URL it was opened on: its id names
@@ -494,9 +489,6 @@ export function createDelegationMcp(options: {
     }
     // Opening a connection, or putting one back, binds it to the instance its
     // URL names: one the hub has a row for.
-    if (binding && !options.instances().some((row) => row.id === binding)) {
-      return new Response("Unknown CawCo instance", { status: 404 });
-    }
     if (id) {
       if (!mintedFor(id, binding)) {
         return sessionNotFound();

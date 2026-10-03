@@ -1002,9 +1002,6 @@ export const handoffActions = ({
         // started session is not a delegate and keeps Claude in Chrome.
         ...(typeName ? { denyTools: type?.denyTools } : {}),
         ...(sideQuest ? { scratch: { baseCwd: workdir } } : {}),
-        // Provenance only — a started session is not a delegate. The hub reads
-        // it to hold a leaf to `canDelegate` on this door as well.
-        spawnedBy: { instanceId },
         // The machine answers it once the session is in place, or with why it
         // is not; the hub holds the relay until then, so a failed spawn is this
         // tool's error rather than a "Started" for a session that never was.
