@@ -44,6 +44,7 @@ import type {
   SendPayload,
   SendRecord,
   SentMessage,
+  SessionCredentialInstall,
   SessionMessage,
   SessionPulse,
   SessionTooling,
@@ -6293,7 +6294,14 @@ export const createServer = ({
       if (db.sessionIdentity(instanceId)?.pendingHash) {
         throw new Error("Harness returned without an installation ACK");
       }
-      return { instanceId, installed: true };
+      const installed = reply.result as SessionCredentialInstall | undefined;
+      return {
+        instanceId,
+        installed: true,
+        ...(installed?.changedServers
+          ? { changedServers: installed.changedServers }
+          : {}),
+      };
     } catch (problem) {
       const error =
         problem instanceof Error ? problem.message : String(problem);
@@ -8980,6 +8988,8 @@ export const createServer = ({
 
           switch (message.verb) {
             case "register": {
+              // A pending hash without its agent's ACK is not a backed live install.
+              db.expirePendingSessionIdentities(message.machineId);
               for (const [id, held] of heldSessions) {
                 if (held.machineId === message.machineId) {
                   heldSessions.delete(id);

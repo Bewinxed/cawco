@@ -19,6 +19,7 @@ import {
   getSessionInfo,
   listSessions,
   type McpServerConfig,
+  type McpServerStatus,
   type PermissionResult,
   type Query,
   query,
@@ -63,7 +64,11 @@ import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { observeRateLimit } from "@cawco/core/usage/observed";
 import { probeAuth, unlockKeychain } from "../auth";
 import { claudeBoundaryOptions } from "../boundary";
-import { delegationMcp, MCP_SERVER_NAME } from "../delegation";
+import {
+  callDelegationTool,
+  delegationMcp,
+  MCP_SERVER_NAME,
+} from "../delegation";
 import { resolvedDenyList } from "../denied-tools";
 import {
   fleetStatus,
@@ -579,7 +584,7 @@ class ClaudeSession implements HarnessSession {
   readonly harness = "claude" as const;
   sessionId: string | null = null;
   readonly #handle: Query;
-  #mcpServers: Record<string, McpServerConfig>;
+  readonly #mcpServers: Record<string, McpServerConfig>;
   readonly #input: InputStream;
   readonly #turn: Turn;
   readonly #pump: Promise<void>;
@@ -1106,48 +1111,14 @@ class ClaudeSession implements HarnessSession {
 
   async control(method: string, args: unknown[]): Promise<unknown> {
     if (method === INSTALL_SESSION_CREDENTIAL) {
-      const [credential] = args;
+      const [credential, mode] = args;
       if (typeof credential !== "string" || !credential) {
         throw new Error("Session credential is missing.");
       }
-      // The SDK makes replaced tools available on the next turn; leave the current turn intact.
-      await this.#turn.waitForIdle();
-      // Preserve runtime-added remote servers and the SDK instances this query owns.
-      const current = await this.#handle.mcpServerStatus();
-      for (const server of current) {
-        if (
-          server.config &&
-          server.scope !== "plugin" &&
-          server.config.type !== "sdk"
-        ) {
-          this.#mcpServers[server.name] = server.config as McpServerConfig;
-        }
-      }
-      const configured = {
-        ...this.#mcpServers,
-        [MCP_SERVER_NAME]: delegationMcp(this.instanceId, credential),
-      };
-      const applied = await this.#handle.setMcpServers(configured);
-      if (Object.keys(applied.errors).length) {
-        throw new Error(
-          `Live MCP reconfiguration failed: ${Object.keys(applied.errors).join(", ")}`
-        );
-      }
-      const status = (await this.#handle.mcpServerStatus()).find(
-        (server) => server.name === MCP_SERVER_NAME
+      return await this.#installSessionCredential(
+        credential,
+        mode === "initial"
       );
-      if (status?.status !== "connected") {
-        throw new Error(
-          `CawCo MCP is not connected after credential delivery (${status?.status ?? "missing"}).`
-        );
-      }
-      this.#mcpServers = configured;
-      await acknowledgeSessionCredential(credential);
-      return {
-        installed: true,
-        harness: "claude",
-        instanceId: this.instanceId,
-      };
     }
     // Effort is the one neutral verb with no `Query` method behind it: it is a
     // flag setting, applied over user/project/local settings and never written
@@ -1176,6 +1147,107 @@ class ClaudeSession implements HarnessSession {
       await this.#readEffort();
     }
     return answer;
+  }
+
+  async #settledMcpSnapshot(): Promise<McpServerStatus[]> {
+    const deadline = Date.now() + 30_000;
+    for (;;) {
+      // biome-ignore lint/performance/noAwaitInLoops: observe the existing connects; do not replace any connecting slot.
+      const servers = await this.#handle.mcpServerStatus();
+      if (!servers.some((server) => server.status === "pending")) {
+        return servers;
+      }
+      if (Date.now() >= deadline) {
+        throw new Error(
+          "Credential installation waits for dynamic MCP connections to settle."
+        );
+      }
+      await Bun.sleep(250);
+    }
+  }
+
+  async #connectedCawcoSnapshot(): Promise<McpServerStatus[]> {
+    const deadline = Date.now() + 30_000;
+    for (;;) {
+      // biome-ignore lint/performance/noAwaitInLoops: only the cawco slot gates its credential ACK.
+      const servers = await this.#handle.mcpServerStatus();
+      const cawco = servers.find((server) => server.name === MCP_SERVER_NAME);
+      if (cawco?.status === "connected") {
+        return servers;
+      }
+      if (cawco && cawco.status !== "pending") {
+        throw new Error(`CawCo MCP is not connected (${cawco.status}).`);
+      }
+      if (Date.now() >= deadline) {
+        throw new Error("CawCo MCP did not connect within 30 seconds.");
+      }
+      await Bun.sleep(250);
+    }
+  }
+
+  async #installSessionCredential(credential: string, initial: boolean) {
+    if (!initial) {
+      await this.#turn.waitForIdle();
+    }
+    let before = await this.#handle.mcpServerStatus();
+    if (!initial) {
+      const dynamic = (server: McpServerStatus) =>
+        server.name !== MCP_SERVER_NAME &&
+        (server.source === "dynamic" ||
+          server.source === "sdk" ||
+          server.scope === "dynamic");
+      if (before.some(dynamic)) {
+        before = await this.#settledMcpSnapshot();
+      }
+      // SDK 0.3.288 sdk.d.ts:3187/3194 replaces only the dynamic set; never
+      // resubmit startup user/project/plugin configs or normalize a live config.
+      const configured: Record<string, McpServerConfig> = {
+        [MCP_SERVER_NAME]: delegationMcp(this.instanceId, credential),
+      };
+      for (const server of before.filter(dynamic)) {
+        if (!server.config || server.config.type === "claudeai-proxy") {
+          throw new Error(
+            `Cannot preserve dynamic MCP config for ${server.name}.`
+          );
+        }
+        if (server.config.type === "sdk") {
+          const original = this.#mcpServers[server.name];
+          if (original?.type !== "sdk") {
+            throw new Error(
+              `Cannot preserve dynamic SDK instance for ${server.name}.`
+            );
+          }
+          configured[server.name] = original;
+        } else {
+          configured[server.name] = server.config as McpServerConfig;
+        }
+      }
+      const applied = await this.#handle.setMcpServers(configured);
+      if (applied.errors[MCP_SERVER_NAME]) {
+        throw new Error("Live CawCo MCP credential reconfiguration failed.");
+      }
+      this.#mcpServers[MCP_SERVER_NAME] = configured[MCP_SERVER_NAME];
+    }
+    const after = await this.#connectedCawcoSnapshot();
+    await callDelegationTool(this.instanceId, "list_sessions", {}, credential);
+    const changedServers = before.flatMap((server) => {
+      const status =
+        after.find((current) => current.name === server.name)?.status ??
+        "missing";
+      return server.name !== MCP_SERVER_NAME && status !== server.status
+        ? [{ name: server.name, before: server.status, after: status }]
+        : [];
+    });
+    await acknowledgeSessionCredential(credential);
+    console.info(
+      `[claude] credential installed ${this.instanceId}; other MCP changes: ${JSON.stringify(changedServers)}`
+    );
+    return {
+      installed: true,
+      harness: "claude",
+      instanceId: this.instanceId,
+      changedServers,
+    };
   }
 
   resolvePermission(requestId: string, result: PermissionResult): void {

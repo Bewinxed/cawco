@@ -275,6 +275,7 @@ export interface DbShape {
   readonly deleteWorkflowNotice: (id: number) => void;
   /** A side quest thrown away: stopped, and gone from every live listing. */
   readonly discardInstance: (id: string) => void;
+  readonly expirePendingSessionIdentities: (machineId: string) => void;
   /** The agent reported the session dead: what killed it, kept for late readers. */
   readonly failInstance: (id: string, error: string) => void;
   /** The whole desired fleet state (NEW.md §11) — what a machine is sent to converge on. */
@@ -1407,6 +1408,26 @@ const make = (path: string): DbShape => {
   };
 
   return {
+    expirePendingSessionIdentities: (machineId) => {
+      db.update(sessionIdentities)
+        .set({
+          pendingHash: null,
+          error: "Agent re-registered before credential installation ACK",
+        })
+        .where(
+          and(
+            isNotNull(sessionIdentities.pendingHash),
+            inArray(
+              sessionIdentities.instanceId,
+              db
+                .select({ id: instances.id })
+                .from(instances)
+                .where(eq(instances.machineId, machineId))
+            )
+          )
+        )
+        .run();
+    },
     sessionIdentity: (instanceId) =>
       db
         .select()

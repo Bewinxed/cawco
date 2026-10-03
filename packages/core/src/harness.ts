@@ -27,6 +27,7 @@ export type HarnessKind = "claude" | "opencode" | "pi";
 export const INSTALL_SESSION_CREDENTIAL = "installSessionCredential";
 
 export interface SessionCredentialInstall {
+  changedServers?: { name: string; before: string; after: string }[];
   harness: HarnessKind;
   installed: true;
   instanceId: string;

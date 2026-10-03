@@ -111,7 +111,12 @@ interface SessiondAdoption {
 /** A surviving child one reattach has claimed, and what it decided about it. */
 interface Claimed {
   proc: { head: number; pid: number };
-  row: { instanceId: string; cwd: string; sessionId?: string | null };
+  row: {
+    instanceId: string;
+    cwd: string;
+    sessionId?: string | null;
+    sessionCredential?: string;
+  };
   /** Whether its turn was running when its ring was read. */
   running: boolean;
   /** Lets go of the claim, for a reattach waiting on this row. */
@@ -890,10 +895,11 @@ export class SessionSupervisor {
   async #installCredential(
     session: HarnessSession,
     instanceId: string,
-    credential: string
+    credential: string,
+    mode?: "initial"
   ): Promise<void> {
     try {
-      await session.control(INSTALL_SESSION_CREDENTIAL, [credential]);
+      await session.control(INSTALL_SESSION_CREDENTIAL, [credential, mode]);
     } catch (problem) {
       const message =
         problem instanceof Error ? problem.message : String(problem);
@@ -1020,7 +1026,8 @@ export class SessionSupervisor {
         await this.#installCredential(
           session,
           instanceId,
-          payload.sessionCredential
+          payload.sessionCredential,
+          payload.reattachOnly ? undefined : "initial"
         );
       }
       // A reattach that met a running turn said so before there was a session
@@ -1224,7 +1231,7 @@ export class SessionSupervisor {
    * `sleeping`/`restore` path owns it from there.
    */
   async reattach(
-    rows: { instanceId: string; cwd: string; sessionId?: string | null }[],
+    rows: Claimed["row"][],
     /**
      * The hub's ingest ledger off the register ack. Absent — a hub that has
      * nothing of this machine — means every row follows from head.
@@ -1242,7 +1249,7 @@ export class SessionSupervisor {
 
   async #reattachHarness(
     kind: HarnessKind,
-    rows: { instanceId: string; cwd: string; sessionId?: string | null }[],
+    rows: Claimed["row"][],
     ingested?: Record<string, IngestMark>
   ): Promise<string[]> {
     const adapter = this.#adapter(kind);
@@ -1297,7 +1304,9 @@ export class SessionSupervisor {
           elsewhere.push(row);
           continue;
         }
-        if (this.#sessions.has(row.instanceId)) {
+        const carried = this.#sessions.get(row.instanceId);
+        if (carried) {
+          this.#installAdoptedCredential(row, carried);
           adopted.push(row.instanceId);
           continue;
         }
@@ -1339,6 +1348,7 @@ export class SessionSupervisor {
       // biome-ignore lint/performance/noAwaitInLoops: each row waits on whichever reattach holds it
       await this.#adopting.get(row.instanceId);
       if (this.#sessions.has(row.instanceId)) {
+        this.#installAdoptedCredential(row, this.#session(row.instanceId));
         adopted.push(row.instanceId);
       } else {
         adopted.push(...(await this.#reattachHarness(kind, [row], ingested)));
@@ -1387,7 +1397,14 @@ export class SessionSupervisor {
       this.#ingested.delete(row.instanceId);
     }
     const holder: { session: HarnessSession | null } = { session: null };
-    const ctx = this.#context(row.instanceId, row.cwd, claude, holder);
+    const ctx = this.#context(
+      row.instanceId,
+      row.cwd,
+      claude,
+      holder,
+      undefined,
+      row.sessionCredential
+    );
     const session = await claude.adopt(row.instanceId, ctx, {
       ...(cursor === undefined ? {} : { afterSeq: cursor }),
       head: proc.head,
@@ -1396,6 +1413,7 @@ export class SessionSupervisor {
     });
     holder.session = session;
     this.#sessions.set(row.instanceId, session);
+    this.#installAdoptedCredential(row, session);
     session.attached?.();
     this.#adopting.delete(row.instanceId);
     settle();
@@ -1405,11 +1423,22 @@ export class SessionSupervisor {
    * The reattach as the register ack hands it over (design §7, step 4): the
    * ack's payload in, the instance ids attached out.
    */
-  reattachFrom(
-    ackPayload: unknown,
-    rows: { instanceId: string; cwd: string; sessionId?: string | null }[]
-  ): Promise<string[]> {
+  reattachFrom(ackPayload: unknown, rows: Claimed["row"][]): Promise<string[]> {
     return this.reattach(rows, readIngested(ackPayload));
+  }
+
+  #installAdoptedCredential(
+    row: Claimed["row"],
+    session: HarnessSession
+  ): void {
+    if (row.sessionCredential) {
+      // biome-ignore lint/complexity/noVoid: the handle is installed; waiting for its idle boundary must not block adoption of siblings.
+      void this.#installCredential(
+        session,
+        row.instanceId,
+        row.sessionCredential
+      );
+    }
   }
 
   /** The harness session a side quest turned out to be writing, from its init frame. */

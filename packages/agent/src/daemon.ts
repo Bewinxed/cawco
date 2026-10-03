@@ -437,10 +437,18 @@ export const adoptable = (
 /** That restore as `reattachFrom` wants it: where it runs, and its conversation. */
 export const custodyRow = (
   payload: SpawnPayload
-): { instanceId: string; cwd: string; sessionId: string | null } => ({
+): {
+  instanceId: string;
+  cwd: string;
+  sessionId: string | null;
+  sessionCredential?: string;
+} => ({
   instanceId: payload.instanceId,
   cwd: payload.cwd,
   sessionId: payload.resume?.sessionKey ?? null,
+  ...(payload.sessionCredential
+    ? { sessionCredential: payload.sessionCredential }
+    : {}),
 });
 
 /**
