@@ -16,7 +16,6 @@ import { existsSync, readdirSync, readFileSync } from "node:fs";
 import { homedir, hostname, networkInterfaces } from "node:os";
 import { join } from "node:path";
 import {
-  CAWCO_ENV,
   INSTALL_JOINED,
   INSTALL_STEP_PREFIX,
   type JoinAddress,
@@ -24,6 +23,7 @@ import {
   type SshJoinJob,
   type SshJoinProblem,
 } from "@cawco/core";
+import { generateInstallScript } from "@cawco/core/install-script";
 import { Elysia, t } from "elysia";
 import { HUB_PORT } from "./config";
 
@@ -110,117 +110,15 @@ export const sshPublicKey = (): string | null => {
 const hubOrigin = (): Promise<string | undefined> =>
   output(["git", "-C", import.meta.dir, "remote", "get-url", "origin"]);
 
-/** A value inside single quotes in a POSIX shell. */
-const shellQuote = (value: string): string =>
-  `'${value.replaceAll("'", `'\\''`)}'`;
-
 /**
  * A `Host` header that can be pasted into the script as-is: a name or an
  * address and a port. Anything else is refused before a script is written.
  */
 const HOST_HEADER = /^[A-Za-z0-9.\-[\]:]+$/;
 
-/**
- * The deploy clone's marker and branch, as `cawco deploy init` names them
- * (packages/cli/src/service.ts `DEPLOY_MARKER`, `DEPLOY_BRANCH`). Named here
- * rather than imported because the CLI already imports the hub.
- */
-const DEPLOY_MARKER = ".cawco-deploy";
-const DEPLOY_BRANCH = "main";
-
-/**
- * The install script. POSIX `sh`, every step announced with the step prefix
- * and every failure said with the `cawco:` prefix the CLI's own errors use,
- * so the last step line before a failure names the step that failed.
- *
- * The body is one function, started only by the block at the very end: a
- * download cut short defines part of a function and runs nothing. That block
- * runs the install detached from the session that asked for it, so a dropped
- * SSH link cannot stop it part-way.
- *
- * The deploy root is resolved exactly as `deployRoot()` resolves it. The
- * script clones only into a root that is absent or empty; a root with the
- * marker is left for `join` to catch up, and a root without one is refused
- * with deployInit's own words — the script never hands `join` a checkout it
- * did not make itself.
- */
-export const installScript = (hub: string, origin: string): string => `#!/bin/sh
-# Adds this machine to the CawCo fleet whose hub is ${hub}.
-# Installs Bun if it is missing, clones CawCo and runs \`cawco join\`.
-set -eu
-
-HUB=${shellQuote(hub)}
-ORIGIN=${shellQuote(origin)}
-
-say() { printf '${INSTALL_STEP_PREFIX}%s\\n' "$*"; }
-fail() { printf 'cawco: %s\\n' "$*" >&2; exit 1; }
-
-main() {
-  say "checking for git, curl and unzip"
-  missing=""
-  for tool in git curl; do
-    command -v "$tool" >/dev/null 2>&1 || missing="$missing $tool"
-  done
-  if [ "$(uname -s)" = Linux ] && ! command -v unzip >/dev/null 2>&1; then
-    missing="$missing unzip"
-  fi
-  if [ -n "$missing" ]; then
-    fail "this machine is missing:$missing. Install them with its package manager, then run this again."
-  fi
-
-  PATH="$HOME/.bun/bin:$PATH"
-  export PATH
-  if command -v bun >/dev/null 2>&1; then
-    say "using Bun $(bun --version)"
-  else
-    say "installing Bun"
-    # Bun's installer is a bash script; nothing else here needs bash.
-    command -v bash >/dev/null 2>&1 || fail "Bun's installer needs bash, and this machine has none. Install bash with its package manager, then run this command again."
-    curl -fsSL https://bun.com/install | bash
-    command -v bun >/dev/null 2>&1 || fail "Bun did not install. Its installer's output is above."
-  fi
-
-  ROOT="\${${CAWCO_ENV.deployRoot}:-$HOME/.cawco/app}"
-  if [ -z "$(ls -A "$ROOT" 2>/dev/null)" ]; then
-    say "cloning $ORIGIN into $ROOT"
-    git clone --quiet --branch ${DEPLOY_BRANCH} --single-branch "$ORIGIN" "$ROOT"
-  elif [ -f "$ROOT/${DEPLOY_MARKER}" ]; then
-    say "$ROOT is already this machine's deployment clone"
-  else
-    fail "$ROOT already exists and is not a deployment clone (no ${DEPLOY_MARKER}). Refusing to touch it — move it aside, or point elsewhere with ${CAWCO_ENV.deployRoot}."
-  fi
-
-  cd "$ROOT"
-  # The CLI imports its workspace packages the moment it starts, so a fresh
-  # clone needs them before \`join\` can run at all; join's own install after
-  # a catch-up pull then finds nothing left to do.
-  say "installing dependencies"
-  bun install --frozen-lockfile
-
-  say "running cawco join"
-  bun packages/cli/src/cli.ts join --hub "$HUB"
-}
-
-# The session that started this can end under it: a dropped link, or the
-# hub restarting while it runs an SSH add. So the install does not write to
-# that session at all. It runs in the background into a log, the log is
-# followed back to whoever is watching, and the exit status is the install's.
-# Losing the session loses only the follower; the install, hangup ignored,
-# finishes what it started rather than stopping half-way through replacing a
-# running service.
-trap '' HUP
-LOG="$(mktemp)"
-main > "$LOG" 2>&1 &
-INSTALL=$!
-tail -f "$LOG" &
-FOLLOWER=$!
-STATUS=0
-wait "$INSTALL" || STATUS=$?
-sleep 1
-kill "$FOLLOWER" 2>/dev/null || :
-rm -f "$LOG"
-exit "$STATUS"
-`;
+/** The hub and the public site render the same installer body. */
+export const installScript = (hub: string, origin: string): string =>
+  generateInstallScript({ hub, origin });
 
 /** How long a finished SSH add stays readable, for a dialog opened late. */
 const JOB_TTL_MS = 60 * 60 * 1000;

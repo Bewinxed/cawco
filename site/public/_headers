@@ -6,3 +6,6 @@
   Cache-Control: public, max-age=0, must-revalidate, no-transform
 /pricing/
   Cache-Control: public, max-age=0, must-revalidate, no-transform
+/install.sh
+  Content-Type: text/plain; charset=utf-8
+  Cache-Control: public, max-age=0, must-revalidate, no-transform

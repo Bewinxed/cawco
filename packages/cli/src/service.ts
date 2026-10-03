@@ -4,6 +4,7 @@ import { homedir, platform, userInfo } from "node:os";
 import { dirname, join } from "node:path";
 import type { AgentRow } from "@cawco/core";
 import { CAWCO_ENV, CAWCO_HUB_PORT, readEnv } from "@cawco/core";
+import { DEPLOY_BRANCH, DEPLOY_MARKER } from "@cawco/core/install-script";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { migrateLegacyDb } from "@cawco/hub/src/migrate-db";
 
@@ -2045,11 +2046,9 @@ const settleServices = async (
 export const deployRoot = (): string =>
   readEnv(CAWCO_ENV.deployRoot) ?? join(homedir(), ".cawco", "app");
 
-/** The marker that licenses an automatic pull. Its absence is the safety property. */
-export const DEPLOY_MARKER = ".cawco-deploy";
-
-/** The branch a deployment clone tracks. */
-export const DEPLOY_BRANCH = "main";
+/** The deployment branch and marker shared with both shell installers. */
+// biome-ignore lint/performance/noBarrelFile: preserve service's public deployment constants while sharing their definition with the shell generator.
+export { DEPLOY_BRANCH, DEPLOY_MARKER } from "@cawco/core/install-script";
 
 /** Written to `<root>/.cawco-deploy`, read by the daemon's poller. */
 export interface DeployMarker {

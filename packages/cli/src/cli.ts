@@ -45,7 +45,8 @@ Usage
   cawco service <${SERVICE_ACTIONS.join("|")}> [service...]
                                             run cawco as per-user services
   cawco update [--check] [--to <version>] install the newest release and restart
-  cawco deploy init [--origin <url>]      developer mode: run from a git clone
+  cawco deploy init [--origin <url>] [--hub <url>]
+                                             developer mode: run from a git clone
   cawco join --hub <url>                  add this machine to that hub's fleet
   cawco login [--token <token>]           give this machine a Claude Code token
   cawco logout                            forget it
@@ -539,6 +540,13 @@ const runUpdate = async (args: Args): Promise<number> => {
 const runDeploy = async (args: Args): Promise<number> => {
   if (args.action !== "init") {
     throw new UsageError("cawco deploy takes one verb: init");
+  }
+  if (args.hub) {
+    if (!toHttpBase(args.hub)) {
+      throw new UsageError(`--hub ${args.hub} is not a URL`);
+    }
+    // Save the first machine's own hub before its agent starts discovering.
+    await discoverHub({ hub: args.hub });
   }
   const result = await deployInit({
     ...(args.origin === undefined ? {} : { origin: args.origin }),

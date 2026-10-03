@@ -4,6 +4,7 @@
   "private": true,
   "type": "module",
   "exports": {
+    "./install-script": "./src/install-script.ts",
     "./preview-proxy": "./src/preview-proxy.ts",
     "./paths": "./src/paths.ts",
     ".": {

@@ -9,6 +9,9 @@ await rm("dist", { recursive: true, force: true });
 await mkdir("dist/pricing", { recursive: true });
 await mkdir("dist/assets", { recursive: true });
 await cp("public", "dist", { recursive: true });
+const installer = await build({ entryPoints: ["../packages/core/src/install-script.ts"], bundle: true, platform: "node", format: "esm", write: false });
+const { generateInstallScript } = await import(`data:text/javascript;base64,${Buffer.from(installer.outputFiles[0].text).toString("base64")}`);
+await writeFile("dist/install.sh", generateInstallScript({ origin: "https://github.com/Bewinxed/cawco" }));
 const tokens = JSON.parse(await readFile("../design/tokens/cawco.tokens.json", "utf8"));
 const reference = (value) => String(value).replace(/\{[^.]+\.([^}]+)\}/g, "var(--$1)");
 const cssTokens = Object.values(tokens).flatMap((group) => Object.entries(group).map(([name, token]) => {
