@@ -1,9 +1,7 @@
+import { existsSync } from "node:fs";
+import { createRequire } from "node:module";
 import { homedir, platform } from "node:os";
-import {
-  type AccountInfo,
-  query,
-  type SDKUserMessage,
-} from "@anthropic-ai/claude-agent-sdk";
+import type { SDKUserMessage } from "@anthropic-ai/claude-agent-sdk";
 import type { AuthState } from "@cawco/core";
 
 /** The keychain item Claude Code keeps its OAuth credentials in on macOS. */
@@ -17,8 +15,8 @@ const PROBE_TIMEOUT_MS = 20_000;
 
 /**
  * A prompt that never yields. `query()` starts the CLI and its control channel
- * without it, which is the whole point: the probe is a control call, so it costs
- * a process and no tokens.
+ * without it, letting MCP status probes make control calls without a model
+ * turn. This costs a process and no tokens.
  */
 export const idle: AsyncIterable<SDKUserMessage> = {
   [Symbol.asyncIterator]: () => ({
@@ -29,29 +27,37 @@ export const idle: AsyncIterable<SDKUserMessage> = {
   }),
 };
 
-/**
- * Whether the account the CLI reports is one it can actually authenticate with.
- *
- * Observed shapes, from `accountInfo()` on real machines:
- *   logged in     `{ email, organization, subscriptionType, apiProvider: 'firstParty' }`
- *   env token     `{ tokenSource: 'CLAUDE_CODE_OAUTH_TOKEN', apiProvider: 'firstParty' }`
- *   api key       `{ tokenSource: 'none', apiKeySource: 'ANTHROPIC_API_KEY', … }`
- *   nothing       `{ tokenSource: 'none', apiProvider: 'firstParty' }`
- *
- * so the test is for positive evidence of a credential rather than for the empty
- * case. A third-party provider carries none of these fields and authenticates
- * outside Claude Code entirely — AWS credentials, gcloud ADC — so it is taken at
- * its word. This says a credential is *reachable*, not that the server accepts
- * it; a stale token still reads as authenticated until it is used.
- */
-const credentialed = (account: AccountInfo): boolean => {
-  if (account.apiProvider && account.apiProvider !== "firstParty") {
-    return true;
-  }
-  const token = account.tokenSource;
-  return Boolean(
-    account.email ?? account.apiKeySource ?? (token && token !== "none")
+/** The native CLI selected by the SDK's default platform-package resolution. */
+export const resolveClaudeExecutable = (): string | undefined => {
+  const require = createRequire(
+    import.meta.resolve("@anthropic-ai/claude-agent-sdk")
   );
+  const name = `@anthropic-ai/claude-agent-sdk-${process.platform}-${process.arch}`;
+  const report =
+    process.platform === "linux" ? process.report?.getReport() : null;
+  const musl =
+    report !== null &&
+    typeof report === "object" &&
+    (report as { header?: { glibcVersionRuntime?: string } }).header
+      ?.glibcVersionRuntime === undefined;
+  let packages = [name];
+  if (process.platform === "android") {
+    packages = [`@anthropic-ai/claude-agent-sdk-linux-${process.arch}-android`];
+  } else if (process.platform === "linux") {
+    packages = musl ? [`${name}-musl`, name] : [name, `${name}-musl`];
+  }
+  const binary = process.platform === "win32" ? "claude.exe" : "claude";
+  for (const pkg of packages) {
+    try {
+      const path = require.resolve(`${pkg}/${binary}`);
+      if (existsSync(path)) {
+        return path;
+      }
+    } catch {
+      // An optional platform package that is not installed is not a CLI.
+    }
+  }
+  return undefined;
 };
 
 /**
@@ -70,40 +76,49 @@ const keychainRefused = async (): Promise<boolean> => {
 };
 
 /**
- * What this machine can do about Claude Code credentials, asked of the SDK
- * rather than guessed from a file: `accountInfo()` is the CLI's own answer, and
- * it is the same answer a session would get. Only when it comes back empty is
- * the platform asked to tell apart "nobody has logged in here" from "somebody
- * has, and this process cannot reach it".
+ * Claude Code's own login check, run with the agent's environment and the same
+ * bundled executable sessions launch. `loggedIn` says whether the CLI has a
+ * credential it would use, including environment credentials and providers.
+ * The CLI reads the macOS keychain itself, so a working Mac is authenticated;
+ * a logged-out answer with a keychain refusal is `unreadable-credentials`.
  *
  * A probe that cannot get an answer at all reports `unauthenticated`: whatever
  * stopped it would stop a session too, and the fleet is better off saying so.
  */
 export const probeAuth = async (): Promise<AuthState> => {
-  const handle = query({ prompt: idle });
-  const account = await Promise.race([
-    handle.accountInfo(),
-    Bun.sleep(PROBE_TIMEOUT_MS).then(() => undefined),
-  ]).catch(() => undefined);
-  handle.close();
-
-  if (account && credentialed(account)) {
-    return "authenticated";
+  try {
+    const executable = resolveClaudeExecutable();
+    if (!executable) {
+      return "unauthenticated";
+    }
+    const child = Bun.spawn([executable, "auth", "status", "--json"], {
+      env: process.env,
+      stdin: "ignore",
+      stdout: "pipe",
+      stderr: "ignore",
+      timeout: PROBE_TIMEOUT_MS,
+    });
+    const [output] = await Promise.all([
+      new Response(child.stdout).text(),
+      child.exited,
+    ]);
+    if (child.signalCode !== null) {
+      return "unauthenticated";
+    }
+    // Exit 1 with loggedIn:false is the CLI's normal logged-out answer.
+    const status = JSON.parse(output) as { loggedIn?: unknown } | null;
+    if (status?.loggedIn === true) {
+      return "authenticated";
+    }
+    if (status?.loggedIn === false) {
+      return (await keychainRefused())
+        ? "unreadable-credentials"
+        : "unauthenticated";
+    }
+  } catch {
+    // A missing, timed-out or unreadable CLI answer cannot authenticate a session.
   }
-
-  // Absence of evidence is not evidence of absence.
-  //
-  // `accountInfo()` answers `{tokenSource: 'none', apiProvider: 'firstParty'}`
-  // on machines whose sessions work perfectly — measured: a Mac returning
-  // exactly that shape answered a turn seconds later. So an empty answer says
-  // nothing, and reporting `unauthenticated` from it puts "needs sign in" on a
-  // working machine and sends the reader off to fix what is not broken.
-  //
-  // Only a refusal is positive evidence: `errSecInteractionNotAllowed` means
-  // credentials are there and this process cannot reach them. Everything else
-  // gets the benefit of the doubt, because a session that genuinely cannot
-  // answer will say so itself, in the turn, where it is unambiguous.
-  return (await keychainRefused()) ? "unreadable-credentials" : "authenticated";
+  return "unauthenticated";
 };
 
 /**

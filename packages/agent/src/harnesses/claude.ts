@@ -62,7 +62,7 @@ import {
 } from "@cawco/core";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { observeRateLimit } from "@cawco/core/usage/observed";
-import { probeAuth, unlockKeychain } from "../auth";
+import { probeAuth, resolveClaudeExecutable, unlockKeychain } from "../auth";
 import { claudeBoundaryOptions } from "../boundary";
 import {
   callDelegationTool,
@@ -100,7 +100,6 @@ import {
   type SessiondWelcomeInfo,
   sessiondBridge,
 } from "../sessiond-client";
-import { resolveBin } from "../tools";
 import { claudeConfigDirs } from "../usage/scan-claude";
 import {
   hookFailureId,
@@ -1663,8 +1662,7 @@ export class ClaudeHarness implements Harness {
   async detect(): Promise<HarnessReport> {
     const auth = await probeAuth();
     this.auth = auth;
-    const installed =
-      resolveBin("claude") !== undefined || auth === "authenticated";
+    const installed = resolveClaudeExecutable() !== undefined;
     // Nothing to ask when there is no CLI to ask, and an unauthenticated one
     // answers about an account that is not there.
     if (installed && auth === "authenticated") {
