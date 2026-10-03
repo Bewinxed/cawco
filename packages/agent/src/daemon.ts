@@ -4,6 +4,7 @@ import type {
   BuildInfo,
   DeployInfo,
   Envelope,
+  HarnessReport,
   HeartbeatPayload,
   SpawnPayload,
 } from "@cawco/core";
@@ -30,6 +31,8 @@ import { convergeDeniedTools } from "./denied-tools";
 import { deployRoot, latestDeploy } from "./deploy";
 import { rediscoverHub, toWsUrl } from "./discovery";
 import { harnesses } from "./harnesses";
+import type { PiHarness } from "./harnesses/pi";
+import { PI_AUTH_CHECK_INTERVAL_MS } from "./harnesses/pi-auth";
 import { cache as transcriptCache } from "./harnesses/transcript-cache";
 import { machineId } from "./machine-id";
 import {
@@ -588,6 +591,11 @@ const attach = (
     // registry, and so reading offline, for most of the 2.7–3.2s the journal
     // showed between `Connection ended` and `registered with` on every hub
     // restart.
+    let reportedHarnesses: HarnessReport[] = [];
+    let lastPiCheck = Date.now();
+    const pi = harnesses().find((adapter) => adapter.kind === "pi") as
+      | PiHarness
+      | undefined;
     supervisor.reannounce = () => {
       // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — reannounce doesn't await its own send
       void Promise.all([
@@ -597,6 +605,7 @@ const attach = (
         if (socket.readyState !== WebSocket.OPEN) {
           return;
         }
+        reportedHarnesses = detected;
         send(socket, {
           verb: "heartbeat",
           machineId: identity.machineId,
@@ -612,6 +621,59 @@ const attach = (
       });
     };
     supervisor.reannounce();
+
+    // This probe counts tokens through pi's proxy; it never starts a Claude SDK
+    // query or rotates Claude Code's own login. The initial detect already ran it.
+    yield* Effect.forkScoped(
+      Effect.repeat(
+        Effect.promise(async () => {
+          if (!pi || Date.now() - lastPiCheck < PI_AUTH_CHECK_INTERVAL_MS) {
+            return;
+          }
+          lastPiCheck = Date.now();
+          const report = await pi.detect();
+          reportedHarnesses = reportedHarnesses.map((one) =>
+            one.harness === "pi" ? report : one
+          );
+          if (socket.readyState === WebSocket.OPEN) {
+            send(socket, {
+              verb: "heartbeat",
+              machineId: identity.machineId,
+              payload: {
+                at: Date.now(),
+                instances: supervisor.instanceIds,
+                harnesses: reportedHarnesses,
+              } satisfies HeartbeatPayload,
+            });
+          }
+        }),
+        Schedule.spaced(Duration.millis(PI_AUTH_CHECK_INTERVAL_MS))
+      )
+    );
+
+    // A spawn also checks sign-in. Publish a changed default-provider result on
+    // the next heartbeat while preserving the other harnesses' reports.
+    const changedPiAuth = (): HarnessReport[] | undefined => {
+      const old = reportedHarnesses.find((report) => report.harness === "pi");
+      if (
+        !(pi && old) ||
+        (old.auth === pi.auth && old.authReason === pi.authReason)
+      ) {
+        return undefined;
+      }
+      reportedHarnesses = reportedHarnesses.map((report) => {
+        if (report.harness !== "pi") {
+          return report;
+        }
+        const { authReason: _oldReason, ...rest } = report;
+        return {
+          ...rest,
+          auth: pi.auth,
+          ...(pi.authReason ? { authReason: pi.authReason } : {}),
+        };
+      });
+      return reportedHarnesses;
+    };
 
     // An envelope a harness builds itself (opencode's custody inspection
     // frame); hand-offs and spawns go through the hub's MCP, never this socket.
@@ -825,6 +887,7 @@ const attach = (
             payload: {
               at: Date.now(),
               instances: supervisor.instanceIds,
+              ...(changedPiAuth() ? { harnesses: reportedHarnesses } : {}),
               ...(latestDeploy() ? { deploy: latestDeploy() } : {}),
             } satisfies HeartbeatPayload,
           })
@@ -872,7 +935,7 @@ const attach = (
       )
     );
 
-    // No periodic auth re-probe. It cost far more than it was worth:
+    // No periodic Claude Code auth re-probe. It cost far more than it was worth:
     // `probeAuth` starts a real `query()`, which is a Claude Code process that
     // reads the credentials and may refresh them. Refresh tokens rotate, so a
     // probe that refreshes invalidates the token every other process on this
@@ -880,7 +943,7 @@ const attach = (
     // with the credentials file rewritten seconds earlier, and sessions dying
     // of "OAuth session expired and could not be refreshed".
     //
-    // Auth is read once at start. The authoritative signal was never this
+    // Claude Code auth is read once at start. The authoritative signal was never this
     // probe anyway: a session that cannot answer says so in its own turn,
     // where it is unambiguous and costs nothing to learn.
 

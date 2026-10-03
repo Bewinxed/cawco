@@ -33,6 +33,7 @@ import {
   syncSkillFiles,
   writeJson,
 } from "./fleet-common";
+import { checkPiProxyCredential, type PiCredentialState } from "./pi-auth";
 import { piOpenTurns } from "./pi-sessiond";
 
 const PI_DIR = join(homedir(), ".pi", "agent");
@@ -232,12 +233,18 @@ export async function piSessionPath(
 }
 
 let servicesPromise: Promise<AgentSessionServices> | null = null;
+const PI_AUTH_STATE: Record<PiCredentialState["state"], AuthState> = {
+  live: "authenticated",
+  dead: "unauthenticated",
+  unknown: "unreadable-credentials",
+};
 
 /** Read-only SDK metadata plus the machine's pi profile; both processes use it. */
 export class PiProfile {
   readonly kind = "pi" as const;
   readonly capabilities = PI_CAPABILITIES;
   auth: AuthState = "authenticated";
+  authReason: string | undefined;
 
   static async runtime(): Promise<ModelRuntime> {
     return (await PiProfile.services()).modelRuntime;
@@ -270,13 +277,69 @@ export class PiProfile {
           console.warn(`[pi] model catalog unavailable: ${error}`);
         })
       : undefined;
+    const credential = installed ? await this.checkCredential() : undefined;
+    this.#setCredential(credential);
+    if (!installed) {
+      this.auth = "unauthenticated";
+    }
     return {
       harness: "pi",
       installed,
-      auth: installed ? "authenticated" : "unauthenticated",
+      auth: this.auth,
+      ...(credential?.reason ? { authReason: credential.reason } : {}),
       capabilities: PI_CAPABILITIES,
       ...(models ? { models } : {}),
     };
+  }
+
+  async checkCredential(
+    modelId?: string
+  ): Promise<PiCredentialState | undefined> {
+    try {
+      const { modelRuntime, settingsManager } = await PiProfile.services();
+      const id =
+        modelId && modelId !== "default"
+          ? modelId
+          : settingsManager.getDefaultModel();
+      const provider =
+        modelId && modelId !== "default"
+          ? undefined
+          : settingsManager.getDefaultProvider();
+      const model = (await modelRuntime.getAvailable()).find(
+        (one) =>
+          modelIdOf(one) === id && (!provider || one.provider === provider)
+      );
+      const credential: PiCredentialState | undefined = model
+        ? await checkPiProxyCredential(model)
+        : {
+            state: "unknown",
+            reason: "pi: sign-in status unknown — configured model unavailable",
+          };
+      if (
+        !modelId ||
+        modelId === "default" ||
+        (modelId === settingsManager.getDefaultModel() &&
+          model?.provider === settingsManager.getDefaultProvider())
+      ) {
+        this.#setCredential(credential);
+      }
+      return credential;
+    } catch {
+      const credential = {
+        state: "unknown" as const,
+        reason: "pi: sign-in status unknown — provider metadata unavailable",
+      };
+      if (!modelId || modelId === "default") {
+        this.auth = "unreadable-credentials";
+        this.authReason = credential.reason;
+      }
+      return credential;
+    }
+  }
+
+  #setCredential(credential: PiCredentialState | undefined): void {
+    this.auth = PI_AUTH_STATE[credential?.state ?? "live"];
+    this.authReason = credential?.reason;
   }
 
   async listSessions(dir?: string): Promise<NeutralSessionInfo[]> {

@@ -34,6 +34,7 @@ import {
   indexInstances,
   resolveSessionTitle,
 } from "../links";
+import { signInWarning } from "../machine";
 import { heldOrder } from "../motion/held-order.svelte";
 import { permissionSummary } from "../permission-summary";
 import { questionsOf } from "../question";
@@ -413,6 +414,10 @@ export interface MachineException {
 function exceptionOf(machine: (typeof cawco.machines)[number]): string | null {
   if (machine.status !== "online") {
     return "unreachable";
+  }
+  const signIn = signInWarning(machine, "pi");
+  if (signIn) {
+    return signIn;
   }
   if (buildConvergence(machine.build, cawco.hubBuild) === "behind") {
     return "behind hub";

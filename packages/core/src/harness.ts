@@ -801,6 +801,8 @@ export interface HarnessCapabilities {
 /** What a machine knows about one harness: is it installed, can it work, what can it do. */
 export interface HarnessReport {
   auth: AuthState;
+  /** Why sign-in is unavailable or could not be checked, without credential data. */
+  authReason?: string;
   capabilities: HarnessCapabilities;
   harness: HarnessKind;
   installed: boolean;

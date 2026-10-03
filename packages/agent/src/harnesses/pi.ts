@@ -6,8 +6,15 @@ import { PiProfile } from "./pi-services";
 import { adoptPi, piSessiond, piSnapshot, spawnPi } from "./pi-sessiond";
 
 export class PiHarness extends PiProfile implements Harness {
-  spawn(spec: SpawnPayload, ctx: HarnessContext): Promise<HarnessSession> {
-    return spawnPi(spec, ctx);
+  async spawn(
+    spec: SpawnPayload,
+    ctx: HarnessContext
+  ): Promise<HarnessSession> {
+    const credential = await this.checkCredential(spec.model);
+    if (credential?.state === "dead") {
+      throw new Error(credential.reason);
+    }
+    return await spawnPi(spec, ctx);
   }
 
   async custodyCandidates() {

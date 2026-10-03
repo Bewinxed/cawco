@@ -28,7 +28,14 @@ export function machineOs(os: string) {
  * rail needs — which is the remedy, on which machine, and for the macOS case why
  * signing in again is not it. Undefined when there is nothing to say.
  */
-export function signInWarning(machine: AgentRow): string | undefined {
+export function signInWarning(
+  machine: AgentRow,
+  harness: "claude" | "pi" = "claude"
+): string | undefined {
+  if (harness === "pi") {
+    return machine.harnesses?.find((report) => report.harness === "pi")
+      ?.authReason;
+  }
   switch (machine.auth) {
     case "unreadable-credentials":
       return `${machineLabel(machine.hostname)} has Claude Code credentials it cannot read: they are in the login keychain, and its agent is running outside the desktop session. Signing in again will not help. On that machine, run \`cawco service install\` — a LaunchAgent can read the keychain — or \`cawco login\` for a token.`;
