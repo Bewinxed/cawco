@@ -37,7 +37,8 @@
     "@types/bun": "latest",
     "@types/node": "^22.19.0",
     "playwright-core": "^1.62.1",
-    "typescript": "^5.9.3",
+    "@typescript/native": "npm:typescript@^7.0.2",
+    "typescript": "npm:@typescript/typescript6@^6.0.2",
     "ultracite": "7.10.7"
   },
   "patchedDependencies": {

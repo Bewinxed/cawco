@@ -32,7 +32,7 @@ export function proxyHeaders(input: Headers): Headers {
 export interface PreviewSocket {
   closed: boolean;
   headers: Headers;
-  pending: (string | Uint8Array)[];
+   pending: (string | Uint8Array<ArrayBuffer>)[];
   protocol: string;
   upstream?: WebSocket;
   url: string;
