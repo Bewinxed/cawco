@@ -372,8 +372,10 @@
     clearTimeout(settle);
     settle = setTimeout(
       () => {
+        // The leaving lines go in this task too (ListSwap `release`).
         flushSync(() => {
           plan = null;
+          swap.release();
         });
         for (const run of heights) {
           run.cancel();

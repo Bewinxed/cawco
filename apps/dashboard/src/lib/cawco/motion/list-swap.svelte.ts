@@ -79,19 +79,27 @@ export class ListSwap<T> {
   }
 
   /**
-   * Keeps the leaving rows and the entrance standing `ms` from now instead:
-   * for a caller that learns how long its change runs only once the new
-   * rows are laid out.
+   * Keeps the entrance standing `ms` from now, and the leaving rows until
+   * the caller lets them go (`release`): for a caller that learns how long
+   * its change runs only once the new rows are laid out, and settles it
+   * itself. The leaving rows used to go on a timer of their own, a task
+   * before the caller's settle: that one change to the list, made while a
+   * closed box was still held at its end, let the reflow around the list
+   * replay the whole change from where it stood before (the home's Recent
+   * jumped back down the box's height and glided up again).
    */
   hold(ms: number): void {
     clearTimeout(this.#clear);
     clearTimeout(this.#idle);
-    this.#clear = setTimeout(() => {
-      this.leaving = [];
-    }, ms);
     this.#idle = setTimeout(() => {
       this.phase = "idle";
     }, ms);
+  }
+
+  /** The leaving rows go, in the caller's own settle. */
+  release(): void {
+    clearTimeout(this.#clear);
+    this.leaving = [];
   }
 
   /** When the i-th leaving line has gone, from the swap. */

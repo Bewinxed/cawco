@@ -459,8 +459,12 @@
     clearTimeout(settle);
     settle = setTimeout(
       () => {
+        // The leaving lines go in this same task as everything else the
+        // change lets go of, so the reflows around the list hear it once,
+        // after they have read where it all stands (`reread`, below).
         flushSync(() => {
           plan = null;
+          swap.release();
         });
         // Done: every box is at its natural height; a closed one lets go.
         for (const run of heights) {
