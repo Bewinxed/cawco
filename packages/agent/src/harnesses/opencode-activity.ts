@@ -14,14 +14,31 @@ export interface ActivitySnapshot {
 }
 
 /** SessionStatus.get defines an absent entry in a successful list as idle. */
-function statusState(type: string | undefined): ActivityState {
-  if (type === "busy" || type === "retry") {
+function statusState(value: unknown): ActivityState {
+  if (value === undefined) {
+    return "idle";
+  }
+  if (!value || typeof value !== "object" || !("type" in value)) {
+    return "unknown";
+  }
+  if (value.type === "busy" || value.type === "retry") {
     return "busy";
   }
-  if (type === undefined || type === "idle") {
+  if (value.type === "idle") {
     return "idle";
   }
   return "unknown";
+}
+
+function statusData(value: unknown): Record<string, unknown> | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    return null;
+  }
+  const data = value as Record<string, unknown>;
+  if (Object.keys(data).some((id) => !id.startsWith("ses_"))) {
+    return null;
+  }
+  return data;
 }
 
 async function forEachBounded<T>(
@@ -89,6 +106,17 @@ export class OpencodeActivity {
     this.#records.set(sessionId, "idle");
   }
 
+  state(sessionId: string): ActivityState {
+    return this.#records.get(sessionId) ?? "unknown";
+  }
+
+  unbind(sessionId: string, instanceId: string): void {
+    this.#bindings.get(sessionId)?.delete(instanceId);
+    if (this.#bindings.get(sessionId)?.size === 0) {
+      this.#bindings.delete(sessionId);
+    }
+  }
+
   async sessionState(
     client: OpencodeClient,
     sessionId: string,
@@ -100,16 +128,21 @@ export class OpencodeActivity {
     const status = await client.session
       .status({ directory }, { signal })
       .catch(() => null);
-    const state =
-      status?.data && !status.error
-        ? statusState(status.data[sessionId]?.type)
-        : "unknown";
+    const data = status && !status.error ? statusData(status.data) : null;
+    const state = data ? statusState(data[sessionId]) : "unknown";
     const resolved =
       state === "unknown"
         ? await this.#unanswered(client, sessionId, directory, signal)
         : state;
     if (revision !== this.#revision) {
       return "unknown";
+    }
+    if (data) {
+      for (const [id, dir] of this.#directories) {
+        if (dir === directory) {
+          this.#records.set(id, statusState(data[id]));
+        }
+      }
     }
     this.#records.set(sessionId, resolved);
     return resolved;
@@ -270,7 +303,7 @@ export class OpencodeActivity {
           .status({ directory }, { signal })
           .catch(() => null);
         // biome-ignore lint/suspicious/noUnnecessaryConditions: rejected HTTP requests are deliberately caught as null
-        const data = read?.data && !read.error ? read.data : null;
+        const data = read && !read.error ? statusData(read.data) : null;
         for (const id of Object.keys(data ?? {})) {
           sessions.set(id, directory);
         }
@@ -278,7 +311,7 @@ export class OpencodeActivity {
           if (dir !== directory) {
             continue;
           }
-          const state = data ? statusState(data[id]?.type) : "unknown";
+          const state = data ? statusState(data[id]) : "unknown";
           records.set(id, state);
           if (state === "busy") {
             this.#records.set(id, state);

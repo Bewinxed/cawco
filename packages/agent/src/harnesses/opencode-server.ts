@@ -98,6 +98,32 @@ export class OpencodeServerOwner {
     return this.#record?.active ?? null;
   }
 
+  get generations(): ServerIdentity[] {
+    const record = this.#record;
+    if (!record) {
+      return [];
+    }
+    return [
+      ...(record.active ? [record.active] : []),
+      ...record.retired.filter(
+        (identity) => identity.procId !== this.#candidateProcId
+      ),
+    ];
+  }
+
+  async liveGenerations(): Promise<ServerIdentity[]> {
+    await this.#load();
+    const identities = this.generations;
+    const live = await Promise.all(
+      identities.map(async (identity) =>
+        (await this.#matches(identity)) ? identity : null
+      )
+    );
+    return live.filter(
+      (identity): identity is ServerIdentity => identity !== null
+    );
+  }
+
   /** Wall-clock birth is read from the same captured OS identity, never agent uptime. */
   async startedAtMs(identity: ServerIdentity): Promise<number> {
     if (!(await this.#matches(identity))) {
