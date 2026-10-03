@@ -3,7 +3,8 @@
  * place every shell command of the workspace's work items runs. Inside it a
  * command sees and signals only its own workspace's processes, cannot reach
  * the user's service manager, and writes only the workspace's clone, its
- * scratch dir (its `/tmp`, on disk under the clone) and the package caches.
+ * scratch dir (its `/tmp`, on disk at `~/.cawco/workspaces/<id>/tmp`, which no
+ * command inside can remove) and the package caches.
  * The network is the host's, so the hub and the internet stay reachable.
  *
  * Linux: one anchor per workspace — a user, pid and mount namespace whose
@@ -48,7 +49,7 @@ export interface Boundary {
   readonly exec: string;
   /** The anchor (Linux) or runner (macOS) process. */
   readonly pid: number;
-  /** The workspace's scratch dir, on disk under its clone: its `/tmp`. */
+  /** The workspace's scratch dir, its `/tmp`: `~/.cawco/workspaces/<id>/tmp`, on disk and outside the clone. */
   readonly scratch: string;
 }
 
@@ -64,9 +65,16 @@ export const workspacesDir = (): string =>
   join(homedir(), ".cawco", "workspaces");
 const stateDir = (id: string): string => join(workspacesDir(), id);
 
-/** A workspace's scratch dir: under its clone's `.git`, so on disk, never in git status. */
-export const scratchOf = (path: string): string =>
-  join(path, ".git", "cawco-tmp");
+/**
+ * A workspace's scratch dir: beside its state, so on disk (never tmpfs) and
+ * outside its clone (never in git status). A command inside the boundary
+ * writes in it but cannot remove it: on Linux it is a mountpoint, on macOS
+ * Seatbelt refuses its unlink.
+ */
+const scratchOf = (id: string): string => join(stateDir(id), "tmp");
+
+/** The disk behind a Linux boundary's private user runtime dir. */
+const runOf = (id: string): string => join(stateDir(id), "run");
 
 const procIdOf = (id: string): string => `boundary-${id}`;
 
@@ -241,9 +249,15 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
 /**
  * The anchor's setup, run as root of a fresh user namespace (so the mounts
  * are allowed) with its own pid and mount namespaces. Everything goes
- * read-only, the writable paths come back, the scratch dir becomes `/tmp`,
- * the user runtime dir becomes a private one and sessiond's directory an
- * empty one, `/dev/shm` a private tmpfs (Chromium needs it). Then a nested
+ * read-only, the writable paths come back, the scratch dir becomes `/tmp`
+ * (and stays writable at its own path, where the executor's `--cwd-out`
+ * files land; a mountpoint both places, so nothing inside can remove it),
+ * the user runtime dir becomes a private one, sessiond's directory an empty
+ * one, `/dev/shm` a private tmpfs (Chromium needs it). The scratch and run
+ * dirs are bound read-write onto themselves first and `/tmp` and the runtime
+ * dir are binds of those, so they come up read-write: a remount aimed at
+ * `/tmp` itself is refused, because libmount reads the flags of the host
+ * mount beneath it and asks the kernel to change a locked atime flag. Then a nested
  * user namespace maps the user back to their own uid — tools see who they
  * always see, not root — and its own mount namespace locks every mount above.
  * The anchor is that namespace's PID 1: a bash loop, which reaps the orphans
@@ -251,17 +265,16 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
  */
 const ANCHOR = `exec 2>&1
 set -eu
-ws=$1 scratch=$2 uid=$3 gid=$4 runtime=$5 hidden=$6
-shift 6
+ws=$1 scratch=$2 run=$3 uid=$4 gid=$5 runtime=$6 hidden=$7
+shift 7
 mount -o remount,bind,ro=recursive /
 mount -o remount,rw /proc
-for path in "$ws" "$@"; do
+for path in "$ws" "$scratch" "$run" "$@"; do
   mount --bind "$path" "$path"
   mount -o remount,bind,rw "$path"
 done
-mkdir -p "$scratch/.run"
 mount --bind "$scratch" /tmp
-if [ -n "$runtime" ] && [ -d "$runtime" ]; then mount --bind "$scratch/.run" "$runtime"; fi
+if [ -n "$runtime" ] && [ -d "$runtime" ]; then mount --bind "$run" "$runtime"; fi
 if [ -n "$hidden" ] && [ -d "$hidden" ]; then mount -t tmpfs -o size=4k,mode=0555 hidden "$hidden"; fi
 mount -t tmpfs -o mode=1777,nosuid,nodev shm /dev/shm
 exec unshare --user --mount --map-user="$uid" --map-group="$gid" bash -c 'echo ${READY}; while :; do sleep 86400 & wait; done'`;
@@ -273,6 +286,7 @@ const hideable = (dir: string, kept: string[]): string =>
 const linuxSpec = async (
   ref: WorkspaceRef,
   scratch: string,
+  run: string,
   caches: string[]
 ): Promise<ProcSpec> => {
   const runtime = process.env.XDG_RUNTIME_DIR ?? "";
@@ -306,6 +320,7 @@ const linuxSpec = async (
       "cawco-boundary",
       ref.path,
       scratch,
+      run,
       String(process.getuid?.() ?? 0),
       String(process.getgid?.() ?? 0),
       hideable(runtime, kept),
@@ -344,7 +359,12 @@ const sbString = (path: string): string =>
  * matches the resolved path, so a rule on a symlink never fires (a Mac's
  * `~/.cawco` has been one).
  */
-const profileOf = async (ws: string, caches: string[]): Promise<string> => {
+const profileOf = async (
+  ws: string,
+  scratch: string,
+  caches: string[]
+): Promise<string> => {
+  const scratchPath = await realpath(scratch);
   const writable = await Promise.all(
     [ws, ...caches].map((path) => realpath(path))
   );
@@ -360,9 +380,13 @@ const profileOf = async (ws: string, caches: string[]): Promise<string> => {
     "(allow signal (target same-sandbox))",
     "(deny file-write*)",
     "(allow file-write*",
-    ...writable.map((path) => `  (subpath ${sbString(path)})`),
+    ...[...writable, scratchPath].map(
+      (path) => `  (subpath ${sbString(path)})`
+    ),
     '  (literal "/dev/null") (literal "/dev/zero") (literal "/dev/dtracehelper")',
     '  (regex #"^/dev/tty") (regex #"^/dev/fd/"))',
+    // Its contents are the workspace's to write; the scratch dir itself stays.
+    `(deny file-write-unlink (literal ${sbString(scratchPath)}))`,
     '(deny process-exec (literal "/bin/launchctl"))',
     ...[...new Set(sockets)].map(
       (path) =>
@@ -385,7 +409,7 @@ const darwinSpec = async (
     throw refusal(ref.id, `mkfifo failed: ${made.stderr.toString().trim()}`);
   }
   const profile = join(dir, "boundary.sb");
-  await writeFile(profile, await profileOf(ref.path, caches));
+  await writeFile(profile, await profileOf(ref.path, scratch, caches));
   return {
     command: "/usr/bin/sandbox-exec",
     args: [
@@ -515,10 +539,13 @@ const start = async (
   ref: WorkspaceRef
 ): Promise<Boundary> => {
   const dir = stateDir(ref.id);
-  const scratch = scratchOf(ref.path);
+  const scratch = scratchOf(ref.id);
+  const run = runOf(ref.id);
   const caches = cachesOf();
   await Promise.all(
-    [dir, scratch, ...caches].map((path) => mkdir(path, { recursive: true }))
+    [dir, scratch, run, ...caches].map((path) =>
+      mkdir(path, { recursive: true })
+    )
   );
   const procId = procIdOf(ref.id);
   // One this machine can no longer vouch for (its record is gone or names
@@ -528,7 +555,7 @@ const start = async (
   }
   const spec =
     process.platform === "linux"
-      ? await linuxSpec(ref, scratch, caches)
+      ? await linuxSpec(ref, scratch, run, caches)
       : await darwinSpec(ref, dir, scratch, caches);
   await client.spawnProc(procId, spec);
   await ready(client, procId).catch((error: Error) => {
