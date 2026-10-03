@@ -107,7 +107,6 @@
     serverTail?: unknown;
   } = $props();
 
-  const previewVisible = $derived(cawco.previewVisible[viewId] === true);
   /** A named state stands in the middle of the transcript area. */
   const STATEFUL = "m-auto max-w-[46ch] px-[var(--space-6)]";
   let paneWidth = $state(0);
@@ -130,7 +129,7 @@
    * composer over 300ms on every visit — the switch into or out of the tab
    * moved all three.
    */
-  const desktopPreview = $derived(previewOpen && previewVisible && !phone);
+  const desktopPreview = $derived(previewOpen && !phone);
   /**
    * The split is sliding: the reader is watching the preview open or close
    * beside the transcript, and the split's size change is the information.
@@ -1022,10 +1021,7 @@
         <Resizable.Pane class="transcript-pane" defaultSize={100} minSize={30}>
           <div
             class="body"
-            style="--composer-clearance: calc({composerRoom} + {phone &&
-            previewOpen
-              ? 106
-              : 0}px + var(--space-4) + var(--space-4))"
+            style="--composer-clearance: calc({composerRoom} + var(--space-4) + var(--space-4))"
           >
             <!-- The transcript area. Movement between conversations is owned by the
            pane above this one, so nothing here animates on a switch — this is

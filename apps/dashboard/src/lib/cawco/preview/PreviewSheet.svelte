@@ -4,7 +4,7 @@
   import { Drawer as Vaul } from "vaul-svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
   import * as Drawer from "#lib/components/ui/drawer/index.js";
-  import { cawco, hidePreview } from "../client.svelte";
+  import { cawco } from "../client.svelte";
   import { land, waiting } from "../motion/share.svelte";
   import { lightbox } from "../transcript/lightbox-state.svelte";
   import PreviewPane from "./PreviewPane.svelte";
@@ -25,20 +25,20 @@
     ) => "added" | "duplicate" | "full" | undefined;
     onescape: () => boolean;
   } = $props();
-  const peek = "106px";
   /**
-   * How the sheet arrives, decided once as it mounts. Opened by its card's
+   * How the sheet arrives, decided once as it mounts. It always settles on
+   * the middle snap, the page at a usable height. Opened by its card's
    * Preview button in the transcript, it comes out of the card
    * (motion/share.svelte.ts, clipped open from the card's box over
-   * --dur-panel on --ease-drawer) straight to the middle snap the reader
-   * asked for, standing still while it does: vaul's own rise is skipped for
-   * that one open, so the two never move the sheet at once. Opened any other
-   * way (an agent showing a preview), it peeks up from the bottom edge on
-   * vaul's own curve and waits there.
+   * --dur-panel on --ease-drawer) standing still at that snap: vaul's own
+   * rise is skipped for that one open, so the two never move the sheet at
+   * once. Opened any other way (an agent showing a preview, or a preview
+   * already open when the page loads), it rises from the bottom edge on
+   * vaul's own curve.
    */
   const share = untrack(() => `preview:${instanceId}`);
   const fromButton = untrack(() => waiting(share));
-  let snap = $state<number | string | null>(peek);
+  let snap = $state<number | string | null>(null);
   let bottom = $state(0);
   let viewportHeight = $state(0);
   let availableHeight = $state(0);
@@ -51,25 +51,15 @@
   let previewPane = $state<ReturnType<typeof PreviewPane>>();
   let handleStartY = 0;
   let handleDragged = false;
-  function reportSnap() {
-    cawco.previewVisible[instanceId] = snap !== peek;
-  }
   async function cycleSnap() {
     if (handleDragged) {
       return;
     }
     // Vaul finishes its pointer-release transaction before accepting a new snap.
     await tick();
-    if (snap === peek) {
-      snap = middle;
-    } else if (snap === middle) {
-      snap = 1;
-    } else {
-      snap = peek;
-    }
-    reportSnap();
+    snap = snap === middle ? 1 : middle;
   }
-  let snapPoints = $state<(number | string)[]>([peek, 0.6, 1]);
+  let snapPoints = $state<(number | string)[]>([0.6, 1]);
   $effect(() => {
     const dimensions = bottom + viewportHeight + availableHeight;
     const nextMiddle = middle;
@@ -80,7 +70,7 @@
         }
         previousMiddle = nextMiddle;
         // The middle snap is viewport-relative; the composer shortens the host.
-        snapPoints = [peek, nextMiddle, 1];
+        snapPoints = [nextMiddle, 1];
         await tick();
         if (drawer && host && snap !== null) {
           const { height } = host.getBoundingClientRect();
@@ -93,16 +83,11 @@
       });
     }
   });
-  $effect(() => {
-    if (!fromButton) {
-      untrack(() => hidePreview(instanceId));
-    }
-  });
-  // Opened from the button: the sheet mounts at the middle snap, which is
-  // known once the space above the composer has been measured.
+  // The sheet mounts at the middle snap, which is known once the space above
+  // the composer has been measured.
   let placed = false;
   $effect.pre(() => {
-    if (fromButton && !placed && availableHeight) {
+    if (!placed && availableHeight) {
       placed = true;
       snap = middle;
       previousMiddle = middle;
@@ -114,9 +99,9 @@
   );
   $effect(() => {
     const request = cawco.previewRequests[instanceId];
-    if (request !== undefined) {
+    if (request !== undefined && placed) {
       untrack(() => {
-        snap = cawco.previewVisible[instanceId] ? middle : peek;
+        snap = middle;
       });
     }
   });
@@ -176,7 +161,7 @@
 <Portal
   ><div
     class="preview-sheet-host"
-    data-active-snap={typeof snap === "string" && snap !== peek ? 0.6 : snap}
+    data-active-snap={typeof snap === "string" ? 0.6 : snap}
     style={`bottom:${bottom}px`}
     bind:this={host}
   ></div></Portal
@@ -184,15 +169,15 @@
 {#if host && availableHeight}
   <!-- The kit's drawer (vaul): its content follows the finger 1:1 from the
        handle and settles on the nearest snap on vaul's own curve. The
-       lowest snap is the peek, which is how the preview is put away; it is
-       never dismissed past that, and nothing behind it scales. -->
+       lowest snap is the middle one, so the page always stands at a usable
+       height; the header's Close is how the preview is put away, and
+       nothing behind it scales. -->
   <Drawer.Root
     container={host}
     dismissible={false}
     handleOnly
     modal={false}
     noBodyStyles
-    onRelease={reportSnap}
     {open}
     repositionInputs={false}
     shouldScaleBackground={false}

@@ -36,7 +36,20 @@ import net from "node:net";
 import { extname, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import sockets from "socket-activation";
-import { handler } from "./build/handler.js";
+
+/**
+ * The scheme this server speaks, told to adapter-node. Unset, the adapter
+ * assumes a TLS proxy in front and takes its own origin to be `https://<host>`;
+ * SvelteKit's CSRF check then refuses (403) every mutating request it counts
+ * as a form whose `Origin` is the page's `http://<host>` — and from Kit 3 on
+ * that includes any POST or DELETE sent with no body (a preview's Close, a
+ * project's delete, a rule's delete). This server only speaks plain HTTP, so
+ * every request is stamped `http` (`serveApp`). The adapter reads the
+ * header's name once, as its handler module loads.
+ */
+const PROTOCOL_HEADER = "x-cawco-protocol";
+process.env.PROTOCOL_HEADER = PROTOCOL_HEADER;
+const { handler } = await import("./build/handler.js");
 
 const target = new URL(process.env.CAWCO_HUB_URL || "http://localhost:3456");
 const targetPort = Number(target.port || 80);
@@ -261,6 +274,7 @@ function serveApp(req, res) {
       res.destroy();
     });
   });
+  req.headers[PROTOCOL_HEADER] = "http";
   handler(req, res);
 }
 

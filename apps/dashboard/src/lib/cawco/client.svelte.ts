@@ -549,7 +549,6 @@ const state = $state({
       opened?: number;
     }
   >,
-  previewVisible: {} as Record<string, boolean>,
   previewRequests: {} as Record<string, number>,
   status: "disconnected" as ConnectionStatus,
   /**
@@ -3880,19 +3879,10 @@ function control(
 }
 
 /**
- * Whether the pane shows the preview — a view state, not the preview itself:
- * hiding leaves the forwarder running, and only the pane's Close stops it.
- * On a narrow pane the preview stands in for the transcript, so the same
- * toggle is how the operator gets back.
+ * Asks the session's preview to be brought into view: a phone's sheet comes
+ * back to its middle snap from wherever the reader left it.
  */
 export function revealPreview(instanceId: string): void {
-  state.previewVisible[instanceId] = true;
-  state.previewRequests[instanceId] =
-    (state.previewRequests[instanceId] ?? 0) + 1;
-}
-
-export function hidePreview(instanceId: string): void {
-  state.previewVisible[instanceId] = false;
   state.previewRequests[instanceId] =
     (state.previewRequests[instanceId] ?? 0) + 1;
 }
@@ -5024,9 +5014,6 @@ export const cawco = {
   },
   get previews() {
     return state.previews;
-  },
-  get previewVisible() {
-    return state.previewVisible;
   },
   get previewRequests() {
     return state.previewRequests;
