@@ -107,15 +107,16 @@ export function runRowOf(run: WorkflowRun, name: string): InstanceRow {
 
 /**
  * What a step is called: its node's title in a drawn workflow, else what its
- * session was asked to do (a program's `w.run({ title })`), else its node.
+ * call named it (a program's `w.run({ title })`, an ask's question, the
+ * workflow it started; the hub reads it off the call), else its node.
  */
 export const stepTitle = (
   run: Pick<WorkflowRun, "graph">,
-  step: WorkflowStep,
-  sessionTitle?: string | null
+  step: WorkflowStep
 ): string =>
   run.graph?.nodes.find((node) => node.id === step.nodeId)?.title ??
-  (sessionTitle?.trim() || step.nodeId);
+  step.title ??
+  step.nodeId;
 
 /**
  * A step's session hangs under its run, not beside it under the run's

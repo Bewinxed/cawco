@@ -190,9 +190,8 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         }
         return (raw["steps"] as? [[String: Any]] ?? []).map { step in
             let node = step["nodeId"] as? String ?? ""
-            let session = (step["instanceId"] as? String).flatMap { hub?.fleet.byId[$0]?.title }
             var title = nodes.first { $0["id"] as? String == node }?["title"] as? String
-                ?? session?.trimmingCharacters(in: .whitespaces).nonEmpty ?? node
+                ?? step["title"] as? String ?? node
             if let index = step["mapIndex"] as? Int { title += " [\(index)]" }
             return RunStep(id: step["id"] as? String ?? node, status: step["status"] as? String ?? "", title: title,
                            started: date(step["startedAt"]), ended: date(step["endedAt"]))

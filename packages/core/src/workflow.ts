@@ -147,8 +147,16 @@ export interface WorkflowStep {
   nodeId: string;
   result: unknown;
   runId: string;
+  /** The effect sequence that owns this step: `ref` N in its run. */
+  seq: number;
   startedAt: Date | string | null;
   status: WorkflowStepStatus | "unknown";
+  /**
+   * What the call that opened the step named it: a `run`/`spawn` step's
+   * title, an `ask`'s question, the workflow a `workflow` call started.
+   * Null when the call named nothing.
+   */
+  title: string | null;
 }
 export interface WorkflowAttempt {
   endedAt: Date | string | null;

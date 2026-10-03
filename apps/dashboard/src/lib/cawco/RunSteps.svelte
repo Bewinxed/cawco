@@ -75,15 +75,7 @@
   );
 
   const titleOf = (step: WorkflowStep): string => {
-    const title = run
-      ? stepTitle(
-          run,
-          step,
-          step.instanceId
-            ? cawco.instanceIndex.byId.get(step.instanceId)?.title
-            : null
-        )
-      : step.nodeId;
+    const title = run ? stepTitle(run, step) : step.nodeId;
     return step.mapIndex === null ? title : `${title} [${step.mapIndex}]`;
   };
 

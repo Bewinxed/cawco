@@ -165,7 +165,7 @@ final class WorkflowRunViewController: ObservedViewController, UIGestureRecogniz
             return
         }
         loading.isHidden = true
-        let model = RunModel(run, name: named ?? "Workflow", sessionTitle: { [hub] id in hub.fleet.byId[id].map(hub.fleet.title) })
+        let model = RunModel(run, name: named ?? "Workflow")
         navigationItem.title = nil
         let print = model.print + "\(hub.state == .connected)\(detail.acting ?? "")"
         if print != contentPrint {
@@ -481,7 +481,7 @@ struct RunModel {
             : startedAt.formatted(.dateTime.month(.abbreviated).day().hour().minute())
     }
 
-    init(_ run: Components.Schemas.GetApiWorkflowRunsById200, name: String, sessionTitle: (String) -> String?) {
+    init(_ run: Components.Schemas.GetApiWorkflowRunsById200, name: String) {
         let data = (try? JSONEncoder().encode(run)) ?? Data()
         let raw = (try? JSONSerialization.jsonObject(with: data)) as? [String: Any] ?? [:]
         print = String(data: data, encoding: .utf8) ?? ""
@@ -507,9 +507,9 @@ struct RunModel {
         steps = list.map { step in
             let nodeId = step["nodeId"] as? String ?? ""
             let instanceId = step["instanceId"] as? String
-            // workflow-runs.ts `stepTitle`: the node's title, else its session's, else its id.
+            // workflow-runs.ts `stepTitle`: the node's title, else what its call named it, else its id.
             var title = nodes.first { $0["id"] as? String == nodeId }?["title"] as? String
-                ?? instanceId.flatMap(sessionTitle).flatMap { $0.trimmingCharacters(in: .whitespaces).isEmpty ? nil : $0 }
+                ?? step["title"] as? String
                 ?? nodeId
             if let index = step["mapIndex"] as? Double { title += " [\(Int(index))]" }
             let failure = step["failure"] as? String

@@ -5173,13 +5173,7 @@ export const cawco = {
       const step = detail?.steps.find((each) => each.status === "running");
       return detail && step
         ? {
-            name: stepTitle(
-              detail,
-              step,
-              step.instanceId
-                ? instanceIndex.byId.get(step.instanceId)?.title
-                : null
-            ),
+            name: stepTitle(detail, step),
             glance: "",
           }
         : null;

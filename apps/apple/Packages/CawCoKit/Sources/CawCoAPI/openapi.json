@@ -6102,23 +6102,40 @@
                 "status": {
                   "type": "string"
                 },
-                "id": {
-                  "type": "string"
+                "childRunId": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
                 },
-                "result": {},
+                "endedAt": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    }
+                  ]
+                },
                 "failure": {
                   "type": [
                     "null",
                     "string"
                   ]
                 },
-                "startedAt": {
-                  "type": "string",
-                  "format": "date-time"
+                "id": {
+                  "type": "string"
                 },
-                "endedAt": {
-                  "type": "string",
-                  "format": "date-time"
+                "instanceId": {
+                  "type": [
+                    "null",
+                    "string"
+                  ]
                 },
                 "kind": {
                   "enum": [
@@ -6134,39 +6151,48 @@
                   ],
                   "type": "string"
                 },
-                "runId": {
-                  "type": "string"
-                },
-                "seq": {
-                  "type": "number"
-                },
-                "instanceId": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                },
-                "childRunId": {
-                  "type": [
-                    "null",
-                    "string"
-                  ]
-                },
-                "nodeId": {
-                  "type": "string"
-                },
-                "spec": {
-                  "type": "object"
-                },
                 "mapIndex": {
                   "type": [
                     "null",
                     "number"
                   ]
+                },
+                "nodeId": {
+                  "type": "string"
+                },
+                "result": {},
+                "runId": {
+                  "type": "string"
+                },
+                "seq": {
+                  "description": "The effect sequence that owns this step: `ref` N in its run.",
+                  "type": "number"
+                },
+                "startedAt": {
+                  "anyOf": [
+                    {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    {
+                      "type": [
+                        "null",
+                        "string"
+                      ]
+                    }
+                  ]
+                },
+                "title": {
+                  "description": "What the call that opened the step named it: a `run`/`spawn` step's\ntitle, an `ask`'s question, the workflow a `workflow` call started.\nNull when the call named nothing.",
+                  "type": [
+                    "null",
+                    "string"
+                  ]
                 }
               },
               "required": [
                 "childRunId",
+                "endedAt",
                 "failure",
                 "id",
                 "instanceId",
@@ -6176,7 +6202,9 @@
                 "result",
                 "runId",
                 "seq",
-                "status"
+                "startedAt",
+                "status",
+                "title"
               ]
             }
           },
@@ -17307,6 +17335,10 @@
           "runId": {
             "type": "string"
           },
+          "seq": {
+            "description": "The effect sequence that owns this step: `ref` N in its run.",
+            "type": "number"
+          },
           "startedAt": {
             "anyOf": [
               {
@@ -17334,6 +17366,13 @@
               "waiting"
             ],
             "type": "string"
+          },
+          "title": {
+            "description": "What the call that opened the step named it: a `run`/`spawn` step's\ntitle, an `ask`'s question, the workflow a `workflow` call started.\nNull when the call named nothing.",
+            "type": [
+              "null",
+              "string"
+            ]
           }
         },
         "required": [
@@ -17347,8 +17386,10 @@
           "nodeId",
           "result",
           "runId",
+          "seq",
           "startedAt",
-          "status"
+          "status",
+          "title"
         ]
       },
       "WorkspaceRef": {

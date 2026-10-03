@@ -20,6 +20,7 @@ import type {
   WorkflowGraph,
   WorkflowInput,
   WorkflowRun,
+  WorkflowStep,
 } from "@cawco/core";
 import { workflowNoticeMarker } from "@cawco/core";
 import type { StepSpecJson } from "@cawco/core/workflow-program";
@@ -59,7 +60,7 @@ export interface WorkflowRuntimeDeps {
     checkpoint?: { data: unknown; label: string };
     run: PublicRun;
     runId: string;
-    step?: WorkflowStepRow;
+    step?: WorkflowStep;
   }) => void;
   command: (
     machineId: string,
@@ -95,6 +96,44 @@ export interface WorkflowRuntimeDeps {
 }
 
 export type PublicRun = WorkflowRunRow & Pick<WorkflowRun, "edges" | "loops">;
+
+/** What the call that opened a step named it, read off the spec it recorded. */
+function stepTitleOf(row: WorkflowStepRow): string | null {
+  const spec = row.spec ?? {};
+  let named: unknown;
+  if (row.kind === "ask") {
+    named = spec.question;
+  } else if (row.kind === "workflow") {
+    named = spec.slug;
+  } else {
+    named = spec.title;
+  }
+  return typeof named === "string" && named.trim() ? named.trim() : null;
+}
+
+/**
+ * A step as the dashboard and the native apps read it, over the API and the
+ * stream alike: the row without the spec its attempts run from, called by
+ * what its call named.
+ */
+export function publicStep(row: WorkflowStepRow): WorkflowStep {
+  return {
+    id: row.id,
+    runId: row.runId,
+    seq: row.seq,
+    nodeId: row.nodeId,
+    kind: row.kind,
+    title: stepTitleOf(row),
+    status: row.status,
+    instanceId: row.instanceId,
+    childRunId: row.childRunId,
+    result: row.result,
+    failure: row.failure,
+    mapIndex: row.mapIndex,
+    startedAt: row.startedAt,
+    endedAt: row.endedAt,
+  };
+}
 
 /** What an `ask` call carried across the worker boundary. */
 interface AskArgs {
@@ -375,7 +414,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
     deps.broadcast({
       runId: run.id,
       run: publicRun(run, db.listWorkflowLog(run.id)),
-      step,
+      step: step && publicStep(step),
       attempt,
       checkpoint,
       ask: askOf(run),
@@ -1339,7 +1378,7 @@ export function createWorkflowRuntime(deps: WorkflowRuntimeDeps) {
       const ask = askOf(run);
       return {
         ...publicRun(run, db.listWorkflowLog(id)),
-        steps: rows,
+        steps: rows.map(publicStep),
         attempts: rows.flatMap((step) => db.listWorkflowAttempts(step.id)),
         ...(ask ? { ask } : {}),
       };
