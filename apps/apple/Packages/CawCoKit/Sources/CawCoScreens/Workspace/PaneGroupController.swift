@@ -33,6 +33,7 @@ final class PaneGroupController: UIViewController, TabSwipeHost, UIDropInteracti
     private var shownId: String?
     private var shownTabs: [String] = []
     private var swipe: TabSwipe?
+    private var dock: ComposerDock!
     /// The tab a swipe landed on: its switch is already drawn.
     private var flip: String?
     private var openSide = 0
@@ -82,6 +83,12 @@ final class PaneGroupController: UIViewController, TabSwipeHost, UIDropInteracti
             stack.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             stack.bottomAnchor.constraint(equalTo: view.bottomAnchor),
         ])
+        // The group's one composer: above the panes, under the rail and a drop preview.
+        dock = ComposerDock(in: view, below: stack.topAnchor)
+        dock.onInset = { [weak self] inset in
+            guard let self else { return }
+            for id in mounted { panes.session(id)?.composerInset = inset }
+        }
         rail.backgroundColor = Palette.inkMuted
         rail.alpha = 0
         rail.isUserInteractionEnabled = false
@@ -150,9 +157,23 @@ final class PaneGroupController: UIViewController, TabSwipeHost, UIDropInteracti
         let tabsBefore = shownTabs
         shownTabs = leaf.tabs
         layoutPanes()
-        if animated, let from, let to, from != to {
-            switchPanes(from: from, to: to, order: tabsBefore.contains(from) && tabsBefore.contains(to) ? tabsBefore : leaf.tabs)
+        // Which way the switch went along the strip, read off the strip as
+        // it was, else as it is; and how long its transcript motion has left,
+        // for the composer to hold its height until then.
+        var direction = 0
+        var landing: TimeInterval = 0
+        if let from, let to, from != to {
+            let order = [tabsBefore, leaf.tabs].first { $0.contains(from) && $0.contains(to) }
+            if let order, let a = order.firstIndex(of: from), let b = order.firstIndex(of: to) { direction = b > a ? 1 : -1 }
+            let landedBySwipe = flip == to
+            if animated, !landedBySwipe, direction != 0, !UIAccessibility.isReduceMotionEnabled {
+                landing = swipeable && tabsBefore.contains(to) ? TabSwipe.settle : 0.26
+            }
+            if animated {
+                switchPanes(from: from, to: to, order: order ?? leaf.tabs)
+            }
         }
+        dock.bind(panes.binding(for: to), direction: animated ? direction : 0, landing: landing)
         scheduleBackground()
     }
 
@@ -189,6 +210,7 @@ final class PaneGroupController: UIViewController, TabSwipeHost, UIDropInteracti
         controller.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         slot.addSubview(controller.view)
         controller.didMove(toParent: self)
+        (controller as? SessionViewController)?.composerInset = dock.inset
         layoutPanes()
     }
 
@@ -252,6 +274,7 @@ final class PaneGroupController: UIViewController, TabSwipeHost, UIDropInteracti
     override func viewDidLayoutSubviews() {
         super.viewDidLayoutSubviews()
         layoutPanes()
+        dock.layout()
     }
 
     /// A tab chosen without the finger: the swipe's settle where the group
@@ -305,6 +328,8 @@ final class PaneGroupController: UIViewController, TabSwipeHost, UIDropInteracti
 
     func swipeOpen(_ side: Int) {
         openSide = side
+        // Nothing sends while a swipe carries the conversation.
+        dock.held = true
         guard let id = neighbour(side) else { return }
         if !mounted.contains(id) { mount(id) }
         slots[id]?.isHidden = false
@@ -323,6 +348,7 @@ final class PaneGroupController: UIViewController, TabSwipeHost, UIDropInteracti
 
     func swipeLanded(_ side: Int) {
         strip.ride(toward: nil, fraction: 0)
+        dock.held = false
         guard let id = neighbour(side) else { return }
         flip = id
         workspace.activate(id, in: leafId)
@@ -331,6 +357,7 @@ final class PaneGroupController: UIViewController, TabSwipeHost, UIDropInteracti
 
     func swipeReturned(_: Int) {
         strip.ride(toward: nil, fraction: 0)
+        dock.held = false
         layoutPanes()
     }
 

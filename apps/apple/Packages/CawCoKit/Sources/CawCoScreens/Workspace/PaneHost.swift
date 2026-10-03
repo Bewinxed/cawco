@@ -50,6 +50,12 @@ final class PaneHost {
 
     func session(_ id: String) -> SessionViewController? { built[id] as? SessionViewController }
 
+    /// What the group's composer draws for a tab: nil for a run, which has no
+    /// composer, and for no tab at all.
+    func binding(for id: String?) -> SessionComposerBinding? {
+        id.flatMap { (controller(for: $0) as? SessionViewController)?.composerBinding }
+    }
+
     /// A stored conversation's name, before its transcript has answered.
     func title(_ id: String) -> String? {
         for machine in hub.fleet.machines {

@@ -5,26 +5,20 @@ import PhotosUI
 import UIKit
 import UniformTypeIdentifiers
 
-/// One session (SessionPane.svelte under PaneTabs.svelte, a phone's page):
-/// the app bar, the session's folder tab on its shelf, the transcript
-/// running to the foot of the screen under a 96pt recess fade, and the
-/// floating composer over it with the parked permission and question cards
-/// standing on it. Stop and Steer are the composer's own: the action box is
-/// Stop while a turn runs, and the field is Steer.
-final class SessionViewController: ObservedViewController, UIDragInteractionDelegate, PHPickerViewControllerDelegate, UIDocumentPickerDelegate {
+/// One conversation's pane (SessionPane.svelte under PaneLeaf.svelte): the
+/// transcript, running to the pane's foot. The pane draws no composer
+/// (composer-dock.svelte.ts): it publishes what its composer would have been
+/// given in `composerBinding` (its draft, its send and stop, its parked
+/// permission and question cards) and its group draws one composer over the
+/// active tab. The group says how far up the pane that composer stands
+/// (`composerInset`), and the transcript keeps its last line clear of it.
+final class SessionViewController: ObservedViewController, PHPickerViewControllerDelegate, UIDocumentPickerDelegate {
     let sessionId: String
     private let hub: HubConnection
     private let transcript: SessionTranscript
     private let transcriptView = TranscriptView()
     private let transcriptHost = UIViewController()
-    private let tabs = SessionTabsView()
-    private let fade = RecessFade()
-    private let composer = ComposerView()
-    private var back: UIBarButtonItem!
-    private var windowAction: UIWindowScene.ActivationAction!
-    private var composerLeading: NSLayoutConstraint!
-    private var composerTrailing: NSLayoutConstraint!
-    private var composerBottom: NSLayoutConstraint!
+    let composerBinding: SessionComposerBinding
     private var cards: [String: PromptCardView] = [:]
     private var sent: String?
     private var opened = true
@@ -34,11 +28,21 @@ final class SessionViewController: ObservedViewController, UIDragInteractionDele
     /// Opens another session, or a run's board row (`BoardRun.prefix + runId`), as a board row opens.
     var onOpenSession: (String) -> Void = { _ in }
 
+    /// How far up from the pane's foot the group's composer (and the cards
+    /// standing on it) reaches; the transcript's last line clears it.
+    var composerInset: CGFloat = 0 {
+        didSet { if abs(composerInset - oldValue) > 0.5 { clearComposer() } }
+    }
+
     init(hub: HubConnection, id: String) {
         self.hub = hub
         sessionId = id
         transcript = hub.sessions.open(id)
+        composerBinding = SessionComposerBinding(sessionId: id)
         super.init(nibName: nil, bundle: nil)
+        composerBinding.onSend = { [weak self] words, attachments in self?.send(words, attachments) }
+        composerBinding.onStop = { [weak self] in self?.stopTurn() }
+        composerBinding.attachMenu = attachMenu()
     }
 
     @available(*, unavailable)
@@ -47,8 +51,6 @@ final class SessionViewController: ObservedViewController, UIDragInteractionDele
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = Palette.surfaceRecess
-        dressBar()
-
         addChild(transcriptHost)
         transcriptHost.view.backgroundColor = .clear
         transcriptHost.view.translatesAutoresizingMaskIntoConstraints = false
@@ -59,29 +61,8 @@ final class SessionViewController: ObservedViewController, UIDragInteractionDele
         transcriptHost.view.addSubview(transcriptView)
         view.addSubview(transcriptHost.view)
         transcriptHost.didMove(toParent: self)
-        view.addSubview(tabs)
-        view.addSubview(fade)
-        view.addSubview(composer)
-
-        tabs.onDetails = { [weak self] in self?.openDetails() }
-        tabs.onClose = { [weak self] in self?.onReturnToFleet() }
-        tabs.addInteraction(UIDragInteraction(delegate: self))
-
-        composer.onSend = { [weak self] words, attachments in self?.send(words, attachments) }
-        composer.onStop = { [weak self] in self?.stopTurn() }
-        composer.onHeight = { [weak self] in self?.view.setNeedsLayout() }
-        composer.attachMenu = attachMenu()
-
-        let safe = view.safeAreaLayoutGuide
-        // The composer 11pt from each edge, 7pt over the keyboard or the home indicator.
-        composerLeading = composer.leadingAnchor.constraint(equalTo: safe.leadingAnchor, constant: Space.space3)
-        composerTrailing = composer.trailingAnchor.constraint(equalTo: safe.trailingAnchor, constant: -Space.space3)
-        composerBottom = composer.bottomAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor, constant: -Space.space2)
         NSLayoutConstraint.activate([
-            tabs.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            tabs.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            tabs.topAnchor.constraint(equalTo: safe.topAnchor),
-            transcriptHost.view.topAnchor.constraint(equalTo: tabs.bottomAnchor),
+            transcriptHost.view.topAnchor.constraint(equalTo: view.topAnchor),
             transcriptHost.view.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             transcriptHost.view.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             transcriptHost.view.bottomAnchor.constraint(equalTo: view.bottomAnchor),
@@ -89,57 +70,13 @@ final class SessionViewController: ObservedViewController, UIDragInteractionDele
             transcriptView.leadingAnchor.constraint(equalTo: transcriptHost.view.leadingAnchor),
             transcriptView.trailingAnchor.constraint(equalTo: transcriptHost.view.trailingAnchor),
             transcriptView.bottomAnchor.constraint(equalTo: transcriptHost.view.bottomAnchor),
-            // The fade stands on the pane's foot: the keyboard's top while it is up.
-            fade.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            fade.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-            fade.bottomAnchor.constraint(equalTo: fadeGuide.topAnchor),
-            fade.heightAnchor.constraint(equalToConstant: RecessFade.height),
-            composer.topAnchor.constraint(greaterThanOrEqualTo: tabs.bottomAnchor, constant: Space.space3),
-            composerLeading, composerTrailing, composerBottom,
         ])
+        clearComposer()
     }
 
-    /// The pane's foot: the screen's, or the keyboard's top while it is up.
-    private lazy var fadeGuide: UILayoutGuide = {
-        let guide = UILayoutGuide()
-        view.addLayoutGuide(guide)
-        let follow = guide.topAnchor.constraint(equalTo: view.keyboardLayoutGuide.topAnchor)
-        follow.priority = .defaultHigh
-        NSLayoutConstraint.activate([
-            follow,
-            guide.topAnchor.constraint(lessThanOrEqualTo: view.bottomAnchor),
-            guide.heightAnchor.constraint(equalToConstant: 0),
-            guide.leadingAnchor.constraint(equalTo: view.leadingAnchor),
-            guide.trailingAnchor.constraint(equalTo: view.trailingAnchor),
-        ])
-        return guide
-    }()
-
-    /// The system bar, dressed as the web's app bar: the raised surface on a
-    /// seam, its items drawn without the shared glass capsule.
-    private func dressBar() {
-        let appearance = UINavigationBarAppearance()
-        appearance.configureWithOpaqueBackground()
-        appearance.backgroundColor = Palette.surfaceRaised
-        appearance.shadowColor = Palette.seam
-        navigationItem.standardAppearance = appearance
-        navigationItem.scrollEdgeAppearance = appearance
-        navigationItem.compactAppearance = appearance
-        navigationItem.largeTitleDisplayMode = .never
-        navigationItem.title = nil
-        back = UIBarButtonItem(title: "Fleet", image: Glyph.chevronLeft.image.resized(to: Size.iconLg), primaryAction: UIAction { [weak self] _ in self?.onReturnToFleet() })
-        back.tintColor = Palette.inkStrong
-        if #available(iOS 26.0, macCatalyst 26.0, *) {
-            back.hidesSharedBackground = true
-        }
-        let activity = Self.activity(sessionId)
-        windowAction = UIWindowScene.ActivationAction { _ in UIWindowScene.ActivationConfiguration(userActivity: activity) }
-        windowAction.title = "Open in new window"
-        windowAction.image = Glyph.window.image
-        // A session in its own window, where windows can open (iPad, the
-        // Duo's inner display, the Mac); a phone shows no overflow at all.
-        NavigationItems.configure(navigationItem, leading: [back],
-            overflow: UIApplication.shared.supportsMultipleScenes ? [windowAction] : [])
+    override func viewSafeAreaInsetsDidChange() {
+        super.viewSafeAreaInsetsDidChange()
+        clearComposer()
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -152,11 +89,7 @@ final class SessionViewController: ObservedViewController, UIDragInteractionDele
         shownOnce = true
     }
 
-    override func viewDidDisappear(_ animated: Bool) {
-        super.viewDidDisappear(animated)
-        if isMovingFromParent || navigationController?.isBeingDismissed == true { close() }
-    }
-
+    /// Ends the subscription; PaneHost calls it when the tab closes.
     func close() {
         guard opened else { return }; opened = false
         hub.sessions.close(sessionId)
@@ -164,90 +97,69 @@ final class SessionViewController: ObservedViewController, UIDragInteractionDele
     }
 
     var restorationValues: [String: Any] {
-        var values: [String: Any] = ["draft": composer.text]
+        var values: [String: Any] = ["draft": composerBinding.draft]
         if let position = try? JSONEncoder().encode(transcriptView.restorationPosition) { values["transcriptPosition"] = position }
         return values
     }
 
     func restoreValues(_ values: [AnyHashable: Any]) {
-        if let draft = values["draft"] as? String { composer.text = draft }
+        if let draft = values["draft"] as? String { composerBinding.setDraft(draft) }
         if let data = values["transcriptPosition"] as? Data,
            let position = try? JSONDecoder().decode(TranscriptPosition.self, from: data) {
             transcriptView.restorePosition(position)
         }
     }
 
+    /// The transcript's last line stands a step above the composer.
+    private func clearComposer() {
+        guard isViewLoaded else { return }
+        let clearance = max(0, composerInset - view.safeAreaInsets.bottom) + Space.space3
+        guard abs(transcriptHost.additionalSafeAreaInsets.bottom - clearance) > 0.5 else { return }
+        let following = transcriptView.restorationPosition.following
+        transcriptHost.additionalSafeAreaInsets.bottom = clearance
+        transcriptHost.view.layoutIfNeeded()
+        if following { transcriptView.latest() }
+    }
+
     // MARK: Model
 
     override func refreshContent() {
         let row = hub.fleet.byId[sessionId]
-        tabs.configure(title: currentTitle, status: face(row))
         transcriptView.configure(transcript)
 
         let live = canControl
-        composer.writable = live
+        composerBinding.writable = live
         let command = sent.flatMap { hub.ledger.commands[$0] }
         if command?.stage == .submitted {
-            composer.action = .sending
+            composerBinding.action = .sending
         } else {
-            composer.action = transcript.tail?.busy == true && live ? .stop : .send
+            composerBinding.action = transcript.tail?.busy == true && live ? .stop : .send
         }
-        composer.sendError = command?.stage == .failed ? "Couldn't send that message.\(command?.reason.map { " \($0)" } ?? "")" : nil
+        composerBinding.sendError = command?.stage == .failed ? "Couldn't send that message.\(command?.reason.map { " \($0)" } ?? "")" : nil
         syncCards(machineId: row?.machineId)
+        composerBinding.publish()
     }
 
-    /// SessionStatus.svelte's word for this session.
-    private func face(_ row: InstanceRow?) -> SessionStatusView.Face {
-        guard let row else { return .stored }
-        if row.isFailed { return .failed }
-        if row.isStale || hub.state != .connected { return .unreachable }
-        if row.status == .sleeping { return .sleeping }
-        if row.status == .stopped { return .stopped }
-        if hub.needs.blocked(sessionId) { return .needsYou }
-        if transcript.tail?.busy == true { return .working }
-        return .idle
-    }
-
-    /// The parked asks as cards above the composer, in arrival order: a card
-    /// that comes in while the session is on screen settles in, and one the
-    /// hub has settled leaves.
+    /// The parked asks as the composer's cards, in arrival order: a card that
+    /// comes in while the session is on screen settles in, and one the hub
+    /// has settled leaves.
     private func syncCards(machineId: String?) {
         let parked = hub.needs.parked[sessionId] ?? []
-        let ids = parked.map(\.requestId)
-        for (id, card) in cards where !ids.contains(id) {
-            cards[id] = nil
-            leave(card)
-        }
-        for (index, ask) in parked.enumerated() {
+        let ids = Set(parked.map(\.requestId))
+        for id in cards.keys where !ids.contains(id) { cards[id] = nil }
+        var ordered: [UIView] = []
+        for ask in parked {
             let card = cards[ask.requestId] ?? {
-                let made = PromptCardView(ask, arriving: shownOnce && view.window != nil)
+                let made = PromptCardView(ask, arriving: shownOnce && composerBinding.composer != nil)
                 made.onAnswer = { [weak self] choice, picks in self?.answer(ask, choice, picks) }
-                made.onHeight = { [weak self] in self?.view.setNeedsLayout() }
+                made.onHeight = { [weak self] in self?.composerBinding.composer?.onHeight() }
                 cards[ask.requestId] = made
-                composer.prompts.insertArrangedSubview(made, at: min(index, composer.prompts.arrangedSubviews.count))
                 return made
             }()
             card.update(sent: hub.needs.answerSent(for: ask), connected: hub.state == .connected && machineId != nil)
+            ordered.append(card)
         }
-        composer.prompts.isHidden = composer.prompts.arrangedSubviews.isEmpty
-    }
-
-    private func leave(_ card: PromptCardView) {
-        guard view.window != nil, !UIAccessibility.isReduceMotionEnabled else {
-            card.removeFromSuperview()
-            composer.prompts.isHidden = composer.prompts.arrangedSubviews.isEmpty
-            return
-        }
-        let out = Motion.easeOut.animator(Motion.durExit) {
-            card.alpha = 0
-            card.isHidden = true
-            self.view.layoutIfNeeded()
-        }
-        out.addCompletion { _ in
-            card.removeFromSuperview()
-            self.composer.prompts.isHidden = self.composer.prompts.arrangedSubviews.isEmpty
-        }
-        out.startAnimation()
+        composerBinding.prompts = ordered
     }
 
     private func answer(_ ask: ParkedAsk, _ choice: PromptCardView.Choice, _ picks: [String: [String]]) {
@@ -264,55 +176,9 @@ final class SessionViewController: ObservedViewController, UIDragInteractionDele
         requestRefresh()
     }
 
-    // MARK: Layout
-
-    override func viewDidLayoutSubviews() {
-        super.viewDidLayoutSubviews()
-        guard composerLeading != nil else { return }
-        avoidFold()
-        // The transcript runs under the composer and keeps its last line
-        // clear of the pill (and of the cards standing on it).
-        let clearance = max(0, view.bounds.maxY - composer.frame.minY - view.safeAreaInsets.bottom) + Space.space3
-        if abs(transcriptHost.additionalSafeAreaInsets.bottom - clearance) > 0.5 {
-            let following = transcriptView.restorationPosition.following
-            transcriptHost.additionalSafeAreaInsets.bottom = clearance
-            transcriptHost.view.layoutIfNeeded()
-            if following { transcriptView.latest() }
-        }
-    }
-
-    /// Duo: the composer stands clear of the fold, displaced, never hidden.
-    private func avoidFold() {
-        var leading = Space.space3
-        var trailing = -Space.space3
-        var bottom = -Space.space2
-        if #available(iOS 27.1, macCatalyst 27.1, *) {
-            let safe = view.bounds.inset(by: view.safeAreaInsets)
-            let normal = CGRect(x: safe.minX + Space.space3,
-                y: view.keyboardLayoutGuide.layoutFrame.minY - Space.space2 - composer.bounds.height,
-                width: max(0, safe.width - Space.space3 * 2), height: composer.bounds.height)
-            // Test the undisplaced pose, not the previous layout's displaced
-            // frame; otherwise avoidance would toggle on and off every pass.
-            for region in view.reservedRegions(kind: .division) where region.isActive && normal.intersects(region.frame) {
-                let fold = region.frame // Includes the system's interactive-content margins.
-                if fold.height > fold.width {
-                    let before = fold.minX - safe.minX
-                    let after = safe.maxX - fold.maxX
-                    if after >= before { leading = max(leading, fold.maxX - safe.minX + Space.space3) }
-                    else { trailing = min(trailing, fold.minX - safe.maxX - Space.space3) }
-                } else {
-                    bottom = min(bottom, fold.minY - view.keyboardLayoutGuide.layoutFrame.minY - Space.space3)
-                }
-            }
-        }
-        if composerLeading.constant != leading || composerTrailing.constant != trailing || composerBottom.constant != bottom {
-            composerLeading.constant = leading; composerTrailing.constant = trailing; composerBottom.constant = bottom
-        }
-    }
-
     // MARK: Steer and Stop
 
-    func focusComposer() { composer.focus() }
+    func focusComposer() { composerBinding.focus() }
     var canControl: Bool { hub.fleet.byId[sessionId]?.isLive == true && hub.state == .connected }
 
     /// The first permission parked here, for the menu bar's Approve and Deny.
@@ -339,8 +205,9 @@ final class SessionViewController: ObservedViewController, UIDragInteractionDele
             case let .text(name, content): texts.append((name, content))
             }
         }
-        sent = hub.sessions.steer(row, text: words, images: images, texts: texts)
-        if hub.ledger.commands[sent!]?.undelivered != true { composer.sent() }
+        let id = hub.sessions.steer(row, text: words, images: images, texts: texts)
+        sent = id
+        if hub.ledger.commands[id]?.undelivered != true { composerBinding.sent() }
         requestRefresh()
     }
 
@@ -379,7 +246,7 @@ final class SessionViewController: ObservedViewController, UIDragInteractionDele
             let name = provider.suggestedName ?? "Image"
             provider.loadDataRepresentation(forTypeIdentifier: UTType.image.identifier) { [weak self] data, _ in
                 guard let data, let image = Self.sendable(data) else { return }
-                Task { @MainActor in self?.composer.attach(.image(name: name, mediaType: image.type, data: image.data)) }
+                Task { @MainActor in self?.composerBinding.attach(.image(name: name, mediaType: image.type, data: image.data)) }
             }
         }
     }
@@ -389,9 +256,9 @@ final class SessionViewController: ObservedViewController, UIDragInteractionDele
             guard let data = try? Data(contentsOf: url) else { continue }
             let type = UTType(filenameExtension: url.pathExtension)
             if type?.conforms(to: .image) == true, let image = Self.sendable(data) {
-                composer.attach(.image(name: url.lastPathComponent, mediaType: image.type, data: image.data))
+                composerBinding.attach(.image(name: url.lastPathComponent, mediaType: image.type, data: image.data))
             } else if let text = String(data: data, encoding: .utf8) {
-                composer.attach(.text(name: url.lastPathComponent, content: text))
+                composerBinding.attach(.text(name: url.lastPathComponent, content: text))
             }
         }
     }
@@ -403,36 +270,13 @@ final class SessionViewController: ObservedViewController, UIDragInteractionDele
         return ("image/jpeg", jpeg)
     }
 
-    // MARK: Details
-
-    /// Session details, in the house sheet on its edge (PaneTabs.svelte).
-    private func openDetails() {
-        let row = hub.fleet.byId[sessionId]
-        let location = transcript.location
-        let details = SessionIdentityController(
-            title: currentTitle,
-            face: face(row),
-            host: (row?.machineId ?? location?.machineId).map(hub.fleet.machineName) ?? "",
-            cwd: row?.cwd ?? location?.cwd ?? ""
-        )
-        present(HouseSheetController(details, style: .edge), animated: true)
-    }
-
-    private var currentTitle: String {
-        let row = hub.fleet.byId[sessionId]
-        let location = transcript.location
-        let stored = location.flatMap { hub.fleet.storedTitle(sessionKey: $0.sessionKey, machineId: $0.machineId) }
-        return row.map(hub.fleet.title) ?? stored
-            ?? Naming.sessionTitle(title: nil, firstMessage: transcript.blocks.first?.content, cwd: location?.cwd, id: sessionId)
-    }
-
     // MARK: Keys
 
     override var keyCommands: [UIKeyCommand]? {
         var keys = [UIKeyCommand(title: "Stop", action: #selector(stopKey), input: ".", modifierFlags: .command),
                     UIKeyCommand(title: "Steer", action: #selector(steerKey), input: "l", modifierFlags: .command)]
         // The first question card owns the digits, Return and Escape while the field is not being written in.
-        if !composer.isWriting, cards.values.contains(where: \.ask.isQuestion) {
+        if !composerBinding.isWriting, cards.values.contains(where: \.ask.isQuestion) {
             for digit in 1 ... 9 {
                 keys.append(UIKeyCommand(input: "\(digit)", modifierFlags: [], action: #selector(cardKey(_:))))
             }
@@ -445,7 +289,7 @@ final class SessionViewController: ObservedViewController, UIDragInteractionDele
     @objc private func stopKey() { stopTurn() }
     @objc private func steerKey() { focusComposer() }
     @objc private func cardKey(_ command: UIKeyCommand) {
-        let owner = composer.prompts.arrangedSubviews.compactMap { $0 as? PromptCardView }.first { $0.ask.isQuestion }
+        let owner = composerBinding.prompts.compactMap { $0 as? PromptCardView }.first { $0.ask.isQuestion }
         if let input = command.input { owner?.key(input) }
     }
 
@@ -454,10 +298,6 @@ final class SessionViewController: ObservedViewController, UIDragInteractionDele
         activity.userInfo = ["sessionId": id]
         activity.targetContentIdentifier = id
         return activity
-    }
-
-    func dragInteraction(_ interaction: UIDragInteraction, itemsForBeginning session: UIDragSession) -> [UIDragItem] {
-        [UIDragItem(itemProvider: NSItemProvider(object: Self.activity(sessionId)))]
     }
 }
 

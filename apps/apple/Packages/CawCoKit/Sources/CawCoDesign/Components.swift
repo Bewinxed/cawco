@@ -4,6 +4,20 @@ import UIKit
 // The web dashboard's kit, recipe by recipe (apps/dashboard/src/lib/components/ui
 // and app.css), as UIKit views. Every value comes from the tokens.
 
+public extension UIButton {
+    /// The tab controls' press: `pressScale` over `durControl`, none with
+    /// Reduce Motion (PaneTabs.svelte `.tclose:active`).
+    func pressScaling() {
+        configurationUpdateHandler = { button in
+            let pressed = button.isHighlighted && !UIAccessibility.isReduceMotionEnabled
+            let to = pressed ? Motion.pressScale : 1
+            Motion.easeOut.animator(Motion.durControl) {
+                button.transform = CGAffineTransform(scaleX: to, y: to)
+            }.startAnimation()
+        }
+    }
+}
+
 // MARK: Tile
 
 /// A raised tile (`--surface-raised` with `--shadow-tile`: a 1pt drop and a

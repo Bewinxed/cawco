@@ -48,7 +48,7 @@ public final class TabSwipe: NSObject, UIGestureRecognizerDelegate {
     /// Beyond this share of vertical travel it is a scroll (SLOPE).
     public static let slope = 0.7
     /// The web's settle (motion/spring.ts SETTLE, BOUNCE).
-    static let settle = 0.4
+    public static let settle = 0.4
     /// UIScrollView's rubber band constant.
     static let band = 0.55
 
