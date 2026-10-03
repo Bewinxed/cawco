@@ -6,7 +6,7 @@ THESIS: Your agents, under your wing. Caw makes a multi-machine coding fleet fee
 
 OWN-WORLD: A butter-yellow brand field in daylight, roost ink at night, the original Caw animation, Fredoka display and Figtree text. All visual values come from the root DTCG tokens, including the marketing additions.
 
-STORY: See Claude Code, OpenCode and pi together. Self-host the full fleet free. The native app is coming soon: free for 7 days, then $9.99 once. Its trial length, price and purchase period live in one shared plan object. The trial does not imply automatic billing.
+STORY: See Claude Code, OpenCode and pi together. Self-host the full fleet free. The native app is coming soon at $9.99 once, without a trial. Its trial length, price and purchase period live in one shared plan object.
 
 FIRST VIEWPORT: A compact wordmark and navigation frame a centered two-line promise. Caw stands between the three supported harnesses. One coral self-host action sits below him; a compact native-app strip closes the page. Pricing pairs the free fleet with the native app, with Caw in the middle; the phone recomposes this as a native-app panel and a free-fleet row.
 

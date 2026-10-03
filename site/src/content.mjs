@@ -6,7 +6,7 @@ export const APP_STORE_URL = "#";
 export const IOS_PLAN = {
   name: "CawCo for iPhone",
   price: "$9.99",
-  trialDays: 7,
+  trialDays: 0,
   /** @type {'once' | 'month'} */
   period: "once",
   pricingState: "Pricing at launch",
