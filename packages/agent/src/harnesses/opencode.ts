@@ -3424,7 +3424,10 @@ export class OpencodeHarness implements Harness {
     const key = `${identity.epoch}/${identity.procId}/${identity.startedAt}`;
     let activity = this.#activities.get(key);
     if (!activity) {
-      activity = new OpencodeActivity(key);
+      activity = new OpencodeActivity(
+        key,
+        this.#serverOwner.startedAtMs(identity)
+      );
       this.#activities.set(key, activity);
     }
     return activity;
@@ -4191,6 +4194,15 @@ export class OpencodeHarness implements Harness {
           }
           const sid = this.#eventSession(event);
           const identity = this.#serverOwner.active;
+          if (
+            sid &&
+            identity &&
+            (event.type === "session.idle" ||
+              (event.type === "session.status" &&
+                event.properties.status.type === "idle"))
+          ) {
+            this.#activity(identity).observeIdle(sid);
+          }
           if (
             sid &&
             identity &&
@@ -5035,6 +5047,7 @@ export class OpencodeHarness implements Harness {
     }
     const client = await this.#ensure();
     for (const server of config.mcp.filter(
+      // biome-ignore lint/suspicious/noUnnecessaryConditions: fleet rows arrive over the wire; only proxied, enabled entries may be connected
       (row) => row.proxied && row.enabled
     )) {
       const directories = new Set([

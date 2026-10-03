@@ -98,6 +98,32 @@ export class OpencodeServerOwner {
     return this.#record?.active ?? null;
   }
 
+  /** Wall-clock birth is read from the same captured OS identity, never agent uptime. */
+  async startedAtMs(identity: ServerIdentity): Promise<number> {
+    if (!(await this.#matches(identity))) {
+      throw new Error(
+        "OpenCode generation identity changed before birth read."
+      );
+    }
+    const proc = Bun.spawn(
+      ["ps", "-p", String(identity.pid), "-o", "lstart="],
+      {
+        env: { ...process.env, LC_ALL: "C" },
+        stdout: "pipe",
+        stderr: "ignore",
+      }
+    );
+    const birth = Date.parse((await new Response(proc.stdout).text()).trim());
+    if (
+      (await proc.exited) !== 0 ||
+      !Number.isFinite(birth) ||
+      !(await this.#matches(identity))
+    ) {
+      throw new Error("OpenCode generation process birth is unavailable.");
+    }
+    return birth;
+  }
+
   async #load(): Promise<ServerRecord> {
     if (!this.#record) {
       const stored = await readJson<ServerRecord>(this.#path);

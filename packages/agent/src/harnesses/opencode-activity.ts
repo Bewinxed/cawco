@@ -5,29 +5,42 @@ const SAMPLE_BUDGET_MS = 3000;
 const SAMPLE_INTERVAL_MS = 5000;
 const MESSAGE_PAGE_SIZE = 64;
 const HISTORY_PAGES_PER_SAMPLE = 16;
-const MESSAGE_REQUESTS_PER_SAMPLE = 256;
 
 interface HistoryScan {
   before?: string;
   complete: boolean;
-  head?: string;
   terminal: boolean;
   updated: number;
 }
 
 type MessageRows = { info: Message; parts: Part[] }[];
 
-function toolActivity(rows: MessageRows): ActivityState {
-  for (const { parts } of rows) {
+function toolState(part: Part, created: number, born: number): ActivityState {
+  if (part.type !== "tool") {
+    return "idle";
+  }
+  if (part.state.status === "running") {
+    return part.state.time.start >= born ? "busy" : "idle";
+  }
+  if (part.state.status === "pending") {
+    return created >= born ? "busy" : "idle";
+  }
+  if (
+    created >= born &&
+    part.state.status !== "completed" &&
+    part.state.status !== "error"
+  ) {
+    return "unknown";
+  }
+  return "idle";
+}
+
+function toolActivity(rows: MessageRows, born: number): ActivityState {
+  for (const { info, parts } of rows) {
     for (const part of parts) {
-      if (part.type !== "tool") {
-        continue;
-      }
-      if (part.state.status === "pending" || part.state.status === "running") {
-        return "busy";
-      }
-      if (part.state.status !== "completed" && part.state.status !== "error") {
-        return "unknown";
+      const state = toolState(part, info.time.created, born);
+      if (state !== "idle") {
+        return state;
       }
     }
   }
@@ -63,24 +76,6 @@ async function forEachBounded<T>(
   );
 }
 
-function historyHead(rows: { info: Message; parts: Part[] }[]): string {
-  return JSON.stringify(
-    rows.slice(-2).map(({ info, parts }) => ({
-      id: info.id,
-      role: info.role,
-      ...(info.role === "assistant"
-        ? {
-            completed: info.time.completed,
-            finish: info.finish,
-            error: info.error,
-          }
-        : {}),
-      tools: parts
-        .filter((part) => part.type === "tool")
-        .map((part) => [part.id, part.state.status]),
-    }))
-  );
-}
 export interface ActivitySnapshot {
   generation: string;
   instances: string[];
@@ -101,9 +96,17 @@ export class OpencodeActivity {
   #nextSampleAt = 0;
   #historyPosition = 0;
   readonly #history = new Map<string, HistoryScan>();
+  readonly #birth: Promise<number>;
+  readonly #observed = new Set<string>();
+  readonly #inventory = new Map<
+    string,
+    { directory: string; updated: number | undefined }
+  >();
+  #catalogued = false;
 
-  constructor(generation: string) {
+  constructor(generation: string, birth: Promise<number>) {
     this.#generation = generation;
+    this.#birth = birth.catch(() => Number.NaN);
   }
 
   bind(sessionId: string, instanceId: string, directory: string): void {
@@ -123,6 +126,14 @@ export class OpencodeActivity {
     this.#revision += 1;
     this.#records.set(sessionId, "busy");
     this.#history.delete(sessionId);
+    this.#observed.add(sessionId);
+  }
+
+  observeIdle(sessionId: string): void {
+    this.#revision += 1;
+    this.#observed.delete(sessionId);
+    this.#history.delete(sessionId);
+    this.#records.set(sessionId, "unknown");
   }
 
   async sessionState(
@@ -169,7 +180,7 @@ export class OpencodeActivity {
       .filter(([, state]) => state !== "idle")
       .flatMap(([id]) => [...(this.#bindings.get(id) ?? [id])]);
     // biome-ignore lint/suspicious/noUnnecessaryConditions: successful asynchronous sampling sets #known true; pending, failed or raced samples clear it
-    if (!this.#known || Date.now() >= this.#nextSampleAt) {
+    if (!this.#known || Date.now() - this.#sampledAt > 15_000) {
       instances.push("opencode:activity-unknown");
     }
     return {
@@ -196,7 +207,6 @@ export class OpencodeActivity {
       return Promise.resolve(this.snapshot());
     }
     this.#nextSampleAt = Date.now() + SAMPLE_INTERVAL_MS;
-    this.#known = false;
     this.#sampling = this.#read(client, AbortSignal.timeout(SAMPLE_BUDGET_MS))
       .catch(() => {
         this.#known = false;
@@ -234,18 +244,25 @@ export class OpencodeActivity {
     if (updated === undefined) {
       return "unknown";
     }
+    const born = await this.#birth;
+    if (!Number.isFinite(born)) {
+      return "unknown";
+    }
     let scan = this.#history.get(sessionId);
     if (!scan || scan.updated !== updated) {
       scan = { updated, terminal: false, complete: false };
       this.#history.set(sessionId, scan);
+    }
+    if (scan.complete) {
+      return "idle";
     }
     try {
       const read = await client.session.messages(
         {
           sessionID: sessionId,
           directory,
-          limit: scan.complete ? 2 : MESSAGE_PAGE_SIZE,
-          ...(!scan.complete && scan.before ? { before: scan.before } : {}),
+          limit: MESSAGE_PAGE_SIZE,
+          ...(scan.before ? { before: scan.before } : {}),
         },
         { signal }
       );
@@ -260,45 +277,48 @@ export class OpencodeActivity {
       const rows = [...read.data].sort(
         (a, b) => a.info.time.created - b.info.time.created
       );
-      if (scan.complete) {
-        if (rows.length > 2) {
-          return "unknown";
-        }
-        if (historyHead(rows) === scan.head) {
-          return scan.terminal ? "idle" : "unknown";
-        }
-        this.#history.set(sessionId, {
-          updated,
-          terminal: false,
-          complete: false,
-        });
-        return "unknown";
-      }
       // Tool parts are their latest persisted states. A newer queued user
       // message must not hide a tool still executing for an earlier prompt.
-      const tools = toolActivity(rows);
+      const tools = toolActivity(rows, born);
       if (tools !== "idle") {
         return tools;
+      }
+      if (
+        rows.some(
+          ({ info }) =>
+            info.role === "assistant" &&
+            info.time.created >= born &&
+            !info.time.completed
+        )
+      ) {
+        return "busy";
       }
       const last = rows.at(-1)?.info;
       if (!scan.before) {
         scan.terminal = terminalMessage(last);
-        scan.head = historyHead(rows);
       }
       const before = read.response.headers.get("x-next-cursor");
       if (before === scan.before) {
         return "unknown";
       }
       // A server ignoring pagination cannot provide bounded idle evidence.
+      const oldBoundary = rows.some(({ info }) => info.time.created < born);
       if (
         rows.length > MESSAGE_PAGE_SIZE ||
-        (rows.length === MESSAGE_PAGE_SIZE && !before)
+        (rows.length === MESSAGE_PAGE_SIZE && !before && !oldBoundary)
       ) {
         return "unknown";
       }
+      const covered = !before || oldBoundary;
+      if (covered && this.#observed.has(sessionId) && !scan.terminal) {
+        return "busy";
+      }
       scan.before = before ?? undefined;
-      scan.complete = !before;
-      return scan.complete && scan.terminal ? "idle" : "unknown";
+      scan.complete = covered;
+      if (covered) {
+        this.#observed.delete(sessionId);
+      }
+      return covered ? "idle" : "unknown";
     } catch {
       return "unknown";
     }
@@ -310,17 +330,32 @@ export class OpencodeActivity {
     signal: AbortSignal
   ): Promise<ActivitySnapshot> {
     const revision = this.#revision;
-    const sessions = new Map(
-      [...this.#directories].map(([id, directory]) => [
-        id,
-        { directory, updated: undefined as number | undefined },
-      ])
-    );
+    const born = await this.#birth;
+    if (!Number.isFinite(born)) {
+      throw new Error("OpenCode generation birth is unknown.");
+    }
+    const sessions = new Map([
+      ...this.#inventory,
+      ...[...this.#directories]
+        .filter(([id]) => !this.#inventory.has(id))
+        .map(
+          ([id, directory]) =>
+            [
+              id,
+              { directory, updated: undefined as number | undefined },
+            ] as const
+        ),
+    ]);
     let cursor: number | undefined;
     do {
       // biome-ignore lint/performance/noAwaitInLoops: inventory pages depend on the preceding cursor
       const listed = await client.experimental.session.list(
-        { limit: 200, ...(cursor === undefined ? {} : { cursor }) },
+        {
+          limit: 200,
+          // biome-ignore lint/suspicious/noUnnecessaryConditions: the first completed pass sets #catalogued true for every later inventory refresh
+          ...(this.#catalogued ? { start: born } : {}),
+          ...(cursor === undefined ? {} : { cursor }),
+        },
         { signal }
       );
       if (listed.error || !listed.data) {
@@ -339,12 +374,16 @@ export class OpencodeActivity {
       const next = nextText ? Number(nextText) : undefined;
       if (
         next !== undefined &&
-        (!Number.isFinite(next) || (cursor !== undefined && next <= cursor))
+        (!Number.isFinite(next) || (cursor !== undefined && next >= cursor))
       ) {
         throw new Error("OpenCode inventory cursor did not advance.");
       }
       cursor = next;
     } while (cursor !== undefined);
+    this.#catalogued = true;
+    for (const [id, session] of sessions) {
+      this.#inventory.set(id, session);
+    }
 
     const records = new Map<string, ActivityState>();
     const statuses = new Map<
@@ -370,7 +409,6 @@ export class OpencodeActivity {
     );
     const entries = [...sessions];
     // Rotate bounded history work so a long conversation cannot starve others.
-    const tails: typeof entries = [];
     const pending = entries.filter(([id, session]) => {
       const status = statuses.get(session.directory);
       if (!status) {
@@ -389,8 +427,7 @@ export class OpencodeActivity {
       }
       const scan = this.#history.get(id);
       if (scan?.complete && scan.updated === session.updated) {
-        records.set(id, "unknown");
-        tails.push([id, session]);
+        records.set(id, "idle");
         return false;
       }
       records.set(id, "unknown");
@@ -402,7 +439,7 @@ export class OpencodeActivity {
       HISTORY_PAGES_PER_SAMPLE
     );
     this.#historyPosition = start + history.length;
-    const work = [...history, ...tails].slice(0, MESSAGE_REQUESTS_PER_SAMPLE);
+    const work = history;
     await forEachBounded(work, signal, async ([id, session]) => {
       const { directory, updated } = session;
       const status = statuses.get(directory);
