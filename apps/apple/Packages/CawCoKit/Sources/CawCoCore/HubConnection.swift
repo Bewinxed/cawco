@@ -320,7 +320,7 @@ public final class HubConnection {
     }
 
     /// Registry reads; true once machines, sessions and projects all landed.
-    private func refresh() async -> Bool {
+    func refresh() async -> Bool {
         guard let client else {
             return false
         }

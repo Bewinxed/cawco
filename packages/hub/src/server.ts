@@ -6540,29 +6540,39 @@ export const createServer = ({
           return fleetMcp.forward(params.name, request);
         }
       )
-      .get("/api/delegation/tools", hidden, ({ query }) =>
-        delegationMcp.list(
-          typeof query.instanceId === "string" ? query.instanceId : undefined
-        )
+      .get(
+        "/api/delegation/tools",
+        {
+          ...hidden,
+          query: t.Object({ instanceId: t.Optional(t.String()) }),
+        },
+        ({ query }) => delegationMcp.list(query.instanceId)
       )
       // Preparation only: enforcement is a separate cutover after every live row ACKs.
-      .get("/api/session-identities", hidden, ({ query }) => {
-        const rows =
-          typeof query.instanceId === "string"
-            ? db.getInstancesByIds([query.instanceId])
-            : db.listInstances();
-        return rows.map((row) => {
-          const identity = db.sessionIdentity(row.id);
-          return {
-            instanceId: row.id,
-            harness: row.harness,
-            status: row.status,
-            installedAt: identity?.installedAt ?? null,
-            pending: !!identity?.pendingHash,
-            error: identity?.error ?? null,
-          };
-        });
-      })
+      .get(
+        "/api/session-identities",
+        {
+          ...hidden,
+          query: t.Object({ instanceId: t.Optional(t.String()) }),
+        },
+        ({ query }) => {
+          const rows =
+            query.instanceId === undefined
+              ? db.listInstances()
+              : db.getInstancesByIds([query.instanceId]);
+          return rows.map((row) => {
+            const identity = db.sessionIdentity(row.id);
+            return {
+              instanceId: row.id,
+              harness: row.harness,
+              status: row.status,
+              installedAt: identity?.installedAt ?? null,
+              pending: !!identity?.pendingHash,
+              error: identity?.error ?? null,
+            };
+          });
+        }
+      )
       .post(
         "/api/session-identities/ack",
         { ...hidden, body: t.Object({ error: t.Optional(t.String()) }) },
@@ -6725,26 +6735,29 @@ export const createServer = ({
       }))
       // What a continuation of this session would carry, sized — for the
       // dialog's pickers, which enable only models that fit.
-      .get("/api/instances/:id/continue", async ({ params, query, status }) => {
-        try {
-          const prepared = await prepareContinuation(
-            params.id,
-            typeof query.note === "string" ? query.note : undefined
-          );
-          return {
-            liveContextTokens: prepared.liveContextTokens,
-            summariseInputTokens: prepared.summariseInputTokens,
-            openingTokens: prepared.openingTokens,
-            compacted: prepared.compacted,
-            entries: prepared.entries,
-          };
-        } catch (error) {
-          return status(
-            422,
-            error instanceof Error ? error.message : String(error)
-          );
+      .get(
+        "/api/instances/:id/continue",
+        {
+          query: t.Object({ note: t.Optional(t.String()) }),
+        },
+        async ({ params, query, status }) => {
+          try {
+            const prepared = await prepareContinuation(params.id, query.note);
+            return {
+              liveContextTokens: prepared.liveContextTokens,
+              summariseInputTokens: prepared.summariseInputTokens,
+              openingTokens: prepared.openingTokens,
+              compacted: prepared.compacted,
+              entries: prepared.entries,
+            };
+          } catch (error) {
+            return status(
+              422,
+              error instanceof Error ? error.message : String(error)
+            );
+          }
         }
-      })
+      )
       // Continue in new session. The fit of both models is checked before
       // anything starts (a plain 409); then the hub starts the job and
       // answers with its ids at once. The job's stages reach every dashboard
@@ -7942,18 +7955,16 @@ export const createServer = ({
           return { ok: true };
         }
       )
-      .get("/api/supervisor/events", ({ query }) => {
-        const instanceId =
-          typeof query.instanceId === "string" ? query.instanceId : undefined;
-        const limit =
-          typeof query.limit === "string"
-            ? Number.parseInt(query.limit, 10)
-            : 100;
-        return db.listSupervisorEvents({
-          instanceId,
-          limit: Number.isFinite(limit) && limit > 0 ? limit : 100,
-        });
-      })
+      .get(
+        "/api/supervisor/events",
+        {
+          query: t.Object({
+            instanceId: t.Optional(t.String()),
+            limit: t.Optional(t.Integer({ minimum: 1, default: 100 })),
+          }),
+        },
+        ({ query }) => db.listSupervisorEvents(query)
+      )
       .put(
         "/api/autopilot/:instanceId",
         { body: t.Object({ enabled: t.Boolean(), prompt: t.String() }) },
@@ -8522,10 +8533,10 @@ export const createServer = ({
       //
       // One document at a time: `?path=` for a linked one, and the main file when
       // nothing is named — which is what every version written before the set is.
-      .get("/api/fleet/memory/history", ({ query }) =>
-        db.listFleetMemoryHistory(
-          typeof query.path === "string" ? query.path : undefined
-        )
+      .get(
+        "/api/fleet/memory/history",
+        { query: t.Object({ path: t.Optional(t.String()) }) },
+        ({ query }) => db.listFleetMemoryHistory(query.path)
       )
       .get("/api/fleet/memory/history/:id", ({ params, status }) => {
         const version = db.fleetMemoryVersion(Number(params.id));
@@ -8649,10 +8660,10 @@ export const createServer = ({
       // What one hook used to be, newest first, without the material. `?hookId=`
       // narrows to that hook's own history; nothing named lists every hook's,
       // for a fleet-wide undo panel.
-      .get("/api/fleet/hooks/history", ({ query }) =>
-        db.listFleetHookHistory(
-          typeof query.hookId === "string" ? query.hookId : undefined
-        )
+      .get(
+        "/api/fleet/hooks/history",
+        { query: t.Object({ hookId: t.Optional(t.String()) }) },
+        ({ query }) => db.listFleetHookHistory(query.hookId)
       )
       .get("/api/fleet/hooks/history/:id", hidden, ({ params, status }) => {
         const version = db.fleetHookVersion(Number(params.id));

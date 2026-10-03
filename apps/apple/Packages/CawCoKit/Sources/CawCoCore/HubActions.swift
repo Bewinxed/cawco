@@ -43,11 +43,23 @@ extension HubConnection {
     }
 
     @discardableResult
-    public func fork(machineId: String, payload: Components.Schemas.SpawnPayload, sessionKey: String, atMessage: String? = nil) async throws -> String {
-        var payload = payload
-        payload.resume = .init(sessionKey: sessionKey, fork: true, atMessage: atMessage)
-        payload.scratch = payload.scratch ?? .init()
-        return try await spawn(machineId: machineId, payload: payload)
+    public func fork(machineId: String, cwd: String, sessionKey: String,
+        harness: Components.Schemas.SpawnPayload.HarnessPayload = .claude, at: String? = nil) async throws -> String {
+        let sourceId = fleet.conversationId(sessionKey: sessionKey, machineId: machineId, cwd: cwd)
+        let source = fleet.byId[sourceId]
+        let payload = Components.Schemas.SpawnPayload(
+            cwd: cwd,
+            effort: source?.effort.flatMap { .init(rawValue: $0.rawValue) },
+            harness: harness,
+            instanceId: UUID().uuidString.lowercased(),
+            model: source?.model.flatMap { $0.isEmpty ? nil : $0 },
+            permissionMode: source?.permissionMode.flatMap { .init(rawValue: $0) },
+            resume: .init(sessionKey: sessionKey, fork: true, atMessage: at.flatMap { $0.isEmpty ? nil : $0 }),
+            scratch: .init()
+        )
+        let id = try await spawn(machineId: machineId, payload: payload)
+        _ = await refresh()
+        return id
     }
 
     /// Spawn-in-place is the hub's atomic replacement operation. It stops the
@@ -136,6 +148,61 @@ extension HubConnection {
     public func renameSession(machineId: String, sessionKey: String, title: String, dir: String? = nil,
         harness: Components.Schemas.ControlPayload.HarnessPayload? = nil) async throws {
         _ = try await control(machineId, harness: harness, method: "renameSession", args: [sessionKey, title, directory(dir)])
+    }
+
+    /// Names the live hub row; stored-session naming remains `renameSession`.
+    public func renameInstance(id: String, title: String) async throws {
+        try await updateSession(id: id, body: .init(title: title), action: "rename")
+    }
+
+    public func keepSession(id: String) async throws {
+        try await updateSession(id: id, body: .init(kind: .mainline), action: "keep")
+        guard var row = fleet.byId[id] else { return }
+        row.kind = "mainline"
+        fleet.patch(upserts: [row], removed: [])
+        if let sessionKey = row.sessionId, !sessionKey.isEmpty, !row.machineId.isEmpty {
+            try await tagSession(machineId: row.machineId, sessionKey: sessionKey, tag: nil,
+                dir: row.cwd.isEmpty ? nil : row.cwd,
+                harness: row.harness.flatMap { .init(rawValue: $0) })
+            try await reloadCatalog(row.machineId)
+        }
+    }
+
+    private func updateSession(id: String, body: Operations.PatchApiInstancesById.Input.Body.JsonPayload, action: String) async throws {
+        let response = try await api.instances.update(.init(path: .init(id: id), body: .json(body)))
+        let statusCode: Int
+        switch response {
+        case .ok: return
+        case .badRequest: statusCode = 400
+        case .notFound: statusCode = 404
+        case .unprocessableContent: statusCode = 422
+        case .internalServerError: statusCode = 500
+        case .serviceUnavailable: statusCode = 503
+        case .gatewayTimeout: statusCode = 504
+        case let .undocumented(code, _): statusCode = code
+        }
+        throw ControlError(message: "Could not \(action) this session — the hub answered \(statusCode). Try again.")
+    }
+
+    public func removeSession(id: String) async throws {
+        let response = try await api.instances.remove(.init(path: .init(id: id)))
+        let body: HTTPBody?
+        switch response {
+        case .ok:
+            _ = await refresh()
+            return
+        case let .notFound(answer): body = try answer.body.plainText
+        case let .conflict(answer): body = try answer.body.plainText
+        case let .badGateway(answer): body = try answer.body.plainText
+        case let .undocumented(_, answer): body = answer.body
+        }
+        let message: String
+        if let body {
+            message = try await String(collecting: body, upTo: 64_000)
+        } else {
+            message = ""
+        }
+        throw ControlError(message: message)
     }
     public func deleteSession(machineId: String, sessionKey: String, dir: String? = nil,
         harness: Components.Schemas.ControlPayload.HarnessPayload? = nil) async throws {

@@ -1076,6 +1076,14 @@
             "schema": {
               "type": "string"
             }
+          },
+          {
+            "name": "note",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
           }
         ],
         "operationId": "getApiInstancesByIdContinue",
@@ -1096,6 +1104,11 @@
               "text/plain": {
                 "schema": {
                   "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -1777,6 +1790,36 @@
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "patchApiInstancesById 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "patchApiInstancesById 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "patchApiInstancesById 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -3667,6 +3710,26 @@
     },
     "/api/supervisor/events": {
       "get": {
+        "parameters": [
+          {
+            "name": "instanceId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "minimum": 1,
+              "default": 100,
+              "type": "integer"
+            }
+          }
+        ],
         "operationId": "getApiSupervisorEvents",
         "responses": {
           "200": {
@@ -3675,6 +3738,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/getApiSupervisorEvents200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiSupervisorEvents 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -4689,6 +4762,16 @@
     },
     "/api/fleet/memory/history": {
       "get": {
+        "parameters": [
+          {
+            "name": "path",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "operationId": "getApiFleetMemoryHistory",
         "responses": {
           "200": {
@@ -4697,6 +4780,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/getApiFleetMemoryHistory200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiFleetMemoryHistory 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -4961,6 +5054,16 @@
     },
     "/api/fleet/hooks/history": {
       "get": {
+        "parameters": [
+          {
+            "name": "hookId",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
         "operationId": "getApiFleetHooksHistory",
         "responses": {
           "200": {
@@ -4969,6 +5072,16 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/getApiFleetHooksHistory200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiFleetHooksHistory 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -6956,198 +7069,7 @@
       "getApiInstances200": {
         "type": "array",
         "items": {
-          "type": "object",
-          "properties": {
-            "machineId": {
-              "type": "string"
-            },
-            "harness": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "model": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "effort": {
-              "enum": [
-                "high",
-                "low",
-                "max",
-                "medium",
-                "none",
-                "xhigh"
-              ],
-              "type": "string"
-            },
-            "canDelegate": {
-              "type": [
-                "null",
-                "boolean"
-              ]
-            },
-            "status": {
-              "enum": [
-                "discarded",
-                "error",
-                "running",
-                "sleeping",
-                "starting",
-                "stopped",
-                "unknown"
-              ],
-              "type": "string"
-            },
-            "id": {
-              "type": "string"
-            },
-            "createdAt": {
-              "type": "string",
-              "format": "date-time"
-            },
-            "updatedAt": {
-              "type": "string",
-              "format": "date-time"
-            },
-            "seenAt": {
-              "type": "string",
-              "format": "date-time"
-            },
-            "workflowRunId": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "workflowStepId": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "cwd": {
-              "type": "string"
-            },
-            "projectId": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "sessionId": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "parentInstanceId": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "parentToolUseId": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "title": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "titleSource": {
-              "enum": [
-                "agent",
-                "owner"
-              ],
-              "type": "string"
-            },
-            "derivedTitle": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "kind": {
-              "enum": [
-                "mainline",
-                "scratch",
-                "summariser"
-              ],
-              "type": "string"
-            },
-            "permissionMode": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "lastError": {
-              "type": [
-                "null",
-                "string"
-              ]
-            },
-            "autopilot": {
-              "type": "object",
-              "properties": {
-                "enabled": {
-                  "type": "boolean"
-                },
-                "prompt": {
-                  "type": "string"
-                },
-                "updatedAt": {
-                  "type": "number"
-                }
-              },
-              "required": [
-                "enabled",
-                "prompt",
-                "updatedAt"
-              ]
-            },
-            "spawnedAt": {
-              "type": "string",
-              "format": "date-time"
-            },
-            "workItemId": {
-              "type": [
-                "null",
-                "string"
-              ]
-            }
-          },
-          "required": [
-            "canDelegate",
-            "createdAt",
-            "cwd",
-            "derivedTitle",
-            "harness",
-            "id",
-            "kind",
-            "lastError",
-            "machineId",
-            "model",
-            "parentInstanceId",
-            "parentToolUseId",
-            "permissionMode",
-            "projectId",
-            "sessionId",
-            "status",
-            "title",
-            "updatedAt",
-            "workItemId",
-            "workflowRunId",
-            "workflowStepId"
-          ]
+          "$ref": "#/components/schemas/BoardInstanceRow"
         }
       },
       "postApiInstancesTitles200": {
@@ -12762,6 +12684,200 @@
           "scope"
         ]
       },
+      "BoardInstanceRow": {
+        "type": "object",
+        "properties": {
+          "machineId": {
+            "type": "string"
+          },
+          "harness": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "model": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "effort": {
+            "enum": [
+              "high",
+              "low",
+              "max",
+              "medium",
+              "none",
+              "xhigh"
+            ],
+            "type": "string"
+          },
+          "canDelegate": {
+            "type": [
+              "null",
+              "boolean"
+            ]
+          },
+          "status": {
+            "enum": [
+              "discarded",
+              "error",
+              "running",
+              "sleeping",
+              "starting",
+              "stopped",
+              "unknown"
+            ],
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "seenAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "workflowRunId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "workflowStepId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "cwd": {
+            "type": "string"
+          },
+          "projectId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "sessionId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "parentInstanceId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "parentToolUseId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "title": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "titleSource": {
+            "enum": [
+              "agent",
+              "owner"
+            ],
+            "type": "string"
+          },
+          "derivedTitle": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "kind": {
+            "enum": [
+              "mainline",
+              "scratch",
+              "summariser"
+            ],
+            "type": "string"
+          },
+          "permissionMode": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "lastError": {
+            "type": [
+              "null",
+              "string"
+            ]
+          },
+          "autopilot": {
+            "type": "object",
+            "properties": {
+              "enabled": {
+                "type": "boolean"
+              },
+              "prompt": {
+                "type": "string"
+              },
+              "updatedAt": {
+                "type": "number"
+              }
+            },
+            "required": [
+              "enabled",
+              "prompt",
+              "updatedAt"
+            ]
+          },
+          "spawnedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "workItemId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "canDelegate",
+          "createdAt",
+          "cwd",
+          "derivedTitle",
+          "harness",
+          "id",
+          "kind",
+          "lastError",
+          "machineId",
+          "model",
+          "parentInstanceId",
+          "parentToolUseId",
+          "permissionMode",
+          "projectId",
+          "sessionId",
+          "status",
+          "title",
+          "updatedAt",
+          "workItemId",
+          "workflowRunId",
+          "workflowStepId"
+        ]
+      },
       "BlockMetadata": {
         "description": "Everything a renderer may need beyond `content`, keyed by the kind that uses it.",
         "type": "object",
@@ -13606,6 +13722,12 @@
                       },
                       "failed": {
                         "type": "boolean"
+                      },
+                      "resultId": {
+                        "type": "string"
+                      },
+                      "completedAt": {
+                        "type": "string"
                       }
                     },
                     "required": [
@@ -16282,6 +16404,10 @@
             "type": "number"
           },
           "raw": {},
+          "recovered": {
+            "description": "Read from stored history during recovery, rather than a newly completed turn.",
+            "type": "boolean"
+          },
           "result": {
             "type": "string"
           },

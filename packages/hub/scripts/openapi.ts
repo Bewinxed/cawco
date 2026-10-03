@@ -593,9 +593,26 @@ if (leftNulls.length) {
   throw new Error(`null left in a union:\n${leftNulls.join("\n")}`);
 }
 
-mkdirSync(dirname(OUT), { recursive: true });
-writeFileSync(OUT, `${JSON.stringify(document, null, 2)}\n`);
+const generated = `${JSON.stringify(document, null, 2)}\n`;
+const check = process.argv.includes("--check");
+if (!check) {
+  mkdirSync(dirname(OUT), { recursive: true });
+  writeFileSync(OUT, generated);
+}
 rmSync(scratch, { recursive: true, force: true });
+if (check) {
+  if (
+    !(await Bun.file(OUT).exists()) ||
+    (await Bun.file(OUT).text()) !== generated
+  ) {
+    console.error(
+      "openapi.json is out of date — run `bun run openapi` in packages/hub"
+    );
+    process.exit(1);
+  }
+  console.log("openapi.json is up to date");
+  process.exit(0);
+}
 console.log(
   `${operations.length} operations, ${Object.keys(components).length} schemas, ${unionsRewritten} null unions rewritten, ${madeOptional} properties made optional → ${OUT}`
 );
