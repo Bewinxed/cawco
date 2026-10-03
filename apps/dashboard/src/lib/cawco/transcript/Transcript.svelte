@@ -1334,22 +1334,29 @@
   /**
    * Keeps `spare` on the list's height, whatever changed it — a row measured,
    * arriving, or leaving (a parked ask's call taken out moves no row's size,
-   * only the list's). Read in the rendering step that laid the list out, and
-   * the tail pinned again from the whole height, before the frame is painted.
+   * only the list's). The height is the one virtua writes to its container's
+   * style, heard through a MutationObserver as the microtask behind that
+   * write, and the tail pinned again from the whole height, before the frame
+   * is painted. virtua writes it from inside its own ResizeObserver callback,
+   * so the container is never observed for size (THE PIN, below).
    */
   function wholeHeight(node: HTMLElement) {
     const inner = node.firstElementChild as HTMLElement | null;
     if (!inner) {
       return;
     }
-    const watch = new ResizeObserver(() => {
+    const fraction = (): number | null => {
       const height = Number.parseFloat(inner.style.height);
       if (!Number.isFinite(height)) {
-        return;
+        return null;
       }
       const whole = Math.ceil(height - 0.001) - height;
-      const next = whole < 0.001 ? 0 : whole;
-      if (Math.abs(next - spare) <= 0.001) {
+      return whole < 0.001 ? 0 : whole;
+    };
+    spare = fraction() ?? spare;
+    const watch = new MutationObserver(() => {
+      const next = fraction();
+      if (next === null || Math.abs(next - spare) <= 0.001) {
         return;
       }
       spare = next;
@@ -1358,7 +1365,7 @@
         pinBottom();
       }
     });
-    watch.observe(inner);
+    watch.observe(inner, { attributes: true, attributeFilter: ["style"] });
     return () => watch.disconnect();
   }
   let atBottom = $state(true);
