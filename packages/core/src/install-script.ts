@@ -107,7 +107,7 @@ ${
     : `  if [ "$(uname -s)" = Linux ]; then
     [ -d /run/systemd/system ] || fail "this machine is not running systemd; CawCo needs systemd user services."
     say "enabling persistent user services"
-    loginctl enable-linger || fail "enable lingering as an administrator with: sudo loginctl enable-linger $(id -un), then run this again."
+    [ "$(loginctl show-user "$(id -un)" -p Linger --value 2>/dev/null)" = yes ] || loginctl enable-linger || fail "enable lingering as an administrator with: sudo loginctl enable-linger $(id -un), then run this again."
   fi
 
   # Fix the socket address explicitly so the printed URL names this install.
