@@ -41,14 +41,16 @@
   } = $props();
 
   const stale = $derived(!home.live);
-  /** Nothing anywhere yet: the one empty state the home keeps. */
+  /**
+   * Nothing anywhere yet: the one empty state the home keeps. Asked of the
+   * home's `empty`, never of Recent: this home is in the rail on every page,
+   * and reading the list here built it — every stored transcript on every
+   * machine, mapped and sorted — on every turn that ended anywhere.
+   */
   const firstRun = $derived(
     home.live &&
-      home.needs.length +
-        home.working.length +
-        home.finished.length +
-        home.recent.length ===
-        0
+      home.needs.length + home.working.length + home.finished.length === 0 &&
+      home.empty
   );
   /**
    * What Caw's line says. "No sessions" is a claim, so it waits on the data:

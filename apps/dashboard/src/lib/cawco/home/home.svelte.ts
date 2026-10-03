@@ -28,7 +28,12 @@ import {
   isDeployDiverged,
 } from "../convergence";
 import { machineFaults } from "../fleet-faults";
-import { catalogTitle, conversationHref, resolveSessionTitle } from "../links";
+import {
+  catalogTitle,
+  conversationHref,
+  indexInstances,
+  resolveSessionTitle,
+} from "../links";
 import { heldOrder } from "../motion/held-order.svelte";
 import { permissionSummary } from "../permission-summary";
 import { questionsOf } from "../question";
@@ -183,6 +188,15 @@ export interface RecentItem {
   title: string;
 }
 
+/** A transcript stored on a machine, before it is named (see `Home.#stored`). */
+interface StoredEntry {
+  at: number;
+  info: NeutralSessionInfo;
+  key: string;
+  machineId: string;
+  place: string;
+}
+
 /* ── Naming ────────────────────────────────────────────────────────── */
 
 export const instanceTitle = (row: InstanceRow): string =>
@@ -277,6 +291,73 @@ function compareIds(a: string, b: string): number {
     return 0;
   }
   return a < b ? -1 : 1;
+}
+
+/** Recent's order: the latest first, ties by key. */
+const byRecency = (
+  a: { at: number; key: string },
+  b: { at: number; key: string }
+): number => b.at - a.at || compareIds(a.key, b.key);
+
+/**
+ * Two lists each in `byRecency` order as one, in one pass: what sorting the
+ * two together gives, the first list's item first where they tie.
+ */
+function mergeByRecency(
+  first: RecentItem[],
+  second: RecentItem[]
+): RecentItem[] {
+  const merged: RecentItem[] = [];
+  let i = 0;
+  let j = 0;
+  while (i < first.length && j < second.length) {
+    if (byRecency(second[j], first[i]) < 0) {
+      merged.push(second[j]);
+      j += 1;
+    } else {
+      merged.push(first[i]);
+      i += 1;
+    }
+  }
+  while (i < first.length) {
+    merged.push(first[i]);
+    i += 1;
+  }
+  while (j < second.length) {
+    merged.push(second[j]);
+    j += 1;
+  }
+  return merged;
+}
+
+/**
+ * Whether two hub rows name a stored session alike: the same row, or one
+ * whose every field `catalogTitle` and `conversationHref` read is the same.
+ * A row holding no session, or one that is listed (`running`), only lends
+ * its id: a stored transcript of a listed session is not in Recent's stored
+ * half, and a row is looked up by session only through its session.
+ */
+function namesAlike(
+  a: InstanceRow,
+  b: InstanceRow | undefined,
+  running: ReadonlySet<string>
+): boolean {
+  if (a === b) {
+    return true;
+  }
+  if (!b || a.id !== b.id || a.sessionId !== b.sessionId) {
+    return false;
+  }
+  if (!a.sessionId || running.has(a.sessionId)) {
+    return true;
+  }
+  return (
+    a.machineId === b.machineId &&
+    a.cwd === b.cwd &&
+    a.title === b.title &&
+    a.titleSource === b.titleSource &&
+    a.updatedAt === b.updatedAt
+  );
 }
 
 /** When a session last moved: its pulse, else the hub's own update time. */
@@ -555,13 +636,120 @@ class Home {
     );
   });
 
-  readonly recent = $derived.by<RecentItem[]>(() => {
+  /**
+   * Nothing to list anywhere: no session the hub lists, and no transcript
+   * stored on any machine. Asked without building a list (one look per
+   * machine), so the home's empty state costs nothing as the catalogs grow.
+   */
+  get empty(): boolean {
+    return (
+      cawco.listedInstances.length === 0 &&
+      cawco.machines.every((machine) => !cawco.hasStored(machine.machineId))
+    );
+  }
+
+  /* ── Recent ──────────────────────────────────────────────────────────
+     Two halves. The stored transcripts — every catalog entry on every
+     machine, a thousand and more — are mapped and sorted only when a
+     catalog, a machine, the set of listed sessions or a hub row that names
+     one of them changes. The listed sessions, a few dozen, are re-derived on
+     every change and merged in, one pass. A turn ending changes the hub's
+     rows, the machines' list and the listed sessions' array — each a new
+     object on every `instances` frame — and used to map and sort the whole
+     catalog again, on every page, for the rail's count. */
+
+  /** The machines' ids and names, as text: the same text while none is added, removed or renamed. */
+  readonly #machineNames = $derived(
+    cawco.machines
+      .map(
+        (machine) =>
+          `${machine.machineId}\u0000${machineLabel(machine.hostname)}`
+      )
+      .join("\n")
+  );
+
+  /** The listed sessions' ids, as text: the same text while the set is. */
+  readonly #runningKey = $derived(
+    cawco.listedInstances
+      .flatMap((row) => (row.sessionId ? [row.sessionId] : []))
+      .sort()
+      .join("\n")
+  );
+  readonly #running = $derived<ReadonlySet<string>>(
+    new Set(this.#runningKey.split("\n"))
+  );
+
+  /** Every stored transcript not behind a listed session, placed and in order. */
+  readonly #storedEntries = $derived.by<StoredEntry[]>(() => {
+    const running = this.#running;
+    const entries: StoredEntry[] = [];
+    for (const line of this.#machineNames.split("\n")) {
+      const [machineId, name] = line.split("\u0000");
+      if (!machineId) {
+        continue;
+      }
+      for (const info of cawco.catalogOf(machineId)) {
+        if (running.has(info.sessionId)) {
+          continue;
+        }
+        const where = projectOf(machineId, info.cwd);
+        entries.push({
+          key: `${machineId}:${info.sessionId}`,
+          info,
+          machineId,
+          place: where ? `${name} · ${where}` : name,
+          at: info.lastModified,
+        });
+      }
+    }
+    return entries.sort(byRecency);
+  });
+
+  /**
+   * The hub's rows as naming a stored transcript reads them: the same array
+   * while no row has moved in a way `namesAlike` sees, so a turn ending —
+   * a listed row's status and time — names nothing again.
+   */
+  #named: InstanceRow[] = [];
+  readonly #namingRows = $derived.by<InstanceRow[]>(() => {
+    const rows = cawco.instances;
+    const running = this.#running;
+    const was = this.#named;
+    if (
+      rows.length === was.length &&
+      rows.every((row, i) => namesAlike(row, was[i], running))
+    ) {
+      return was;
+    }
+    this.#named = rows;
+    return rows;
+  });
+
+  /** The stored half, named, in order. */
+  readonly #stored = $derived.by<RecentItem[]>(() => {
+    // Runs are rows too, but under `run:` ids no stored session carries.
+    const index = indexInstances(this.#namingRows);
+    return this.#storedEntries.map(
+      (entry): RecentItem => ({
+        ...entry,
+        instance: null,
+        title: catalogTitle(entry.info, index, entry.machineId),
+        href: conversationHref(entry.info.sessionId, index, {
+          machineId: entry.machineId,
+          cwd: entry.info.cwd,
+        }),
+      })
+    );
+  });
+
+  /** The listed sessions Recent lists, in order: what no other group shows. */
+  readonly #recentLive = $derived.by<RecentItem[]>(() => {
     const shown = new Set([
       ...this.working.map((row) => row.id),
       ...this.finished.map((row) => row.id),
       ...cawco.blocked.map((item) => item.instanceId),
     ]);
-    const live = cawco.listedInstances
+    return cawco.listedInstances
       .filter(
         (row) =>
           listed(row) &&
@@ -582,38 +770,23 @@ class Home {
           href: conversationHref(row.id, cawco.instanceIndex),
           at: lastAt(row),
         })
-      );
-    const running = new Set(
-      cawco.listedInstances.map((row) => row.sessionId).filter(Boolean)
-    );
-    const stored = cawco.machines.flatMap((machine) =>
-      cawco
-        .catalogOf(machine.machineId)
-        .filter((info) => !running.has(info.sessionId))
-        .map(
-          (info): RecentItem => ({
-            key: `${machine.machineId}:${info.sessionId}`,
-            instance: null,
-            info,
-            machineId: machine.machineId,
-            title: catalogTitle(info, cawco.instanceIndex, machine.machineId),
-            place: placeOf(machine.machineId, info.cwd),
-            href: conversationHref(info.sessionId, cawco.instanceIndex, {
-              machineId: machine.machineId,
-              cwd: info.cwd,
-            }),
-            at: info.lastModified,
-          })
-        )
-    );
-    return heldOrder(
-      "home:recent",
-      [...live, ...stored].sort(
-        (a, b) => b.at - a.at || compareIds(a.key, b.key)
-      ),
-      (item) => item.key
-    );
+      )
+      .sort(byRecency);
   });
+
+  /** How many Recent lists: what its closed disclosure says, without the list. */
+  readonly recentCount = $derived(
+    this.#recentLive.length + this.#storedEntries.length
+  );
+
+  /** Everything else that can be opened, latest first: read only where it is shown. */
+  readonly recent = $derived.by<RecentItem[]>(() =>
+    heldOrder(
+      "home:recent",
+      mergeByRecency(this.#recentLive, this.#stored),
+      (item) => item.key
+    )
+  );
 
   /** What a wide screen opens with nothing open: the longest wait, else the latest work. */
   readonly landing = $derived.by<string | null>(() => {

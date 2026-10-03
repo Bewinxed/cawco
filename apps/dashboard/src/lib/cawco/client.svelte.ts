@@ -5062,6 +5062,9 @@ export const cawco = {
   /** Stored sessions on one machine, minus the side quests hiding among them. */
   catalogOf: (machineId: string): NeutralSessionInfo[] =>
     (catalog[machineId] ?? []).filter(listedInHistory),
+  /** Whether {@link catalogOf} has anything, asked without building it: it stops at the first. */
+  hasStored: (machineId: string): boolean =>
+    (catalog[machineId] ?? []).some(listedInHistory),
   get projects() {
     return state.projects;
   },

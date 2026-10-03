@@ -45,7 +45,9 @@
   }
 </script>
 
-{#if home.ready && home.recent.length > 0}
+<!-- The count and whether there is anything come from `recentCount`: the
+     list itself is built only while it is open. -->
+{#if home.ready && home.recentCount > 0}
   <section
     class="recent"
     data-flip="box"
@@ -60,8 +62,8 @@
     >
       <span class="chev" class:open={recentOpen}><IconChevronRight /></span>
       Recent
-      {#key home.recent.length}
-        <span class="num count" data-flip="pop">{home.recent.length}</span>
+      {#key home.recentCount}
+        <span class="num count" data-flip="pop">{home.recentCount}</span>
       {/key}
     </button>
     {#if recentOpen}
