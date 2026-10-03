@@ -1,48 +1,113 @@
 import CawCoDesign
 import UIKit
 
-/// A paragraph whose inline code spans stand on their own surface: 1pt above
-/// and below the mono run, 4pt either side, --radius-xs (MessageBody `code`).
-nonisolated final class CodeSpanFragment: NSTextLayoutFragment {
+/// A paragraph of rendered Markdown with what the browser paints that text
+/// can't: inline code spans on their own surface (the run's block padding,
+/// `.inlineCodePad`, above and below the mono run, 4pt either side,
+/// --radius-xs), and a list's disc filled over its stand-in run (ListDisc).
+nonisolated final class ProseFragment: NSTextLayoutFragment {
     override var renderingSurfaceBounds: CGRect {
-        super.renderingSurfaceBounds.insetBy(dx: -Space.space1, dy: -2)
+        super.renderingSurfaceBounds.insetBy(dx: -Space.space1, dy: -Size.proseCodePad)
+    }
+
+    /// Each line's piece of a run: its start and end along the line, and the
+    /// run's own baseline (the line's, raised by the run's baseline offset).
+    private func spans(of range: NSRange, in text: NSAttributedString, at point: CGPoint) -> [(x0: CGFloat, x1: CGFloat, baseline: CGFloat)] {
+        let raise = text.attribute(.baselineOffset, at: range.location, effectiveRange: nil) as? Double ?? 0
+        return textLineFragments.compactMap { line in
+            let lineRange = line.characterRange
+            let start = max(range.location, lineRange.location)
+            let end = min(NSMaxRange(range), NSMaxRange(lineRange))
+            guard start < end else { return nil }
+            let frame = line.typographicBounds
+            return (point.x + frame.minX + line.locationForCharacter(at: start).x,
+                    point.x + frame.minX + line.locationForCharacter(at: end).x,
+                    point.y + frame.minY + line.glyphOrigin.y - raise)
+        }
     }
 
     override func draw(at point: CGPoint, in context: CGContext) {
         if let paragraph = textElement as? NSTextParagraph {
             let text = paragraph.attributedString
-            text.enumerateAttribute(.inlineCode, in: NSRange(location: 0, length: text.length)) { value, range, _ in
+            let all = NSRange(location: 0, length: text.length)
+            text.enumerateAttribute(.inlineCode, in: all) { value, range, _ in
                 guard let surface = value as? UIColor, range.length > 0 else { return }
                 let font = text.attribute(.font, at: range.location, effectiveRange: nil) as? UIFont ?? TypeScale.typeCode.font
-                for line in textLineFragments {
-                    let lineRange = line.characterRange
-                    let start = max(range.location, lineRange.location)
-                    let end = min(NSMaxRange(range), NSMaxRange(lineRange))
-                    guard start < end else { continue }
-                    let x0 = line.locationForCharacter(at: start).x
-                    let x1 = line.locationForCharacter(at: end).x
-                    let frame = line.typographicBounds
-                    let baseline = frame.minY + line.glyphOrigin.y
-                    let rect = CGRect(x: point.x + frame.minX + x0 - Space.space1, y: point.y + baseline - font.ascender - 1,
-                                      width: x1 - x0 + Space.space1, height: font.ascender - font.descender + 2)
+                let pad = text.attribute(.inlineCodePad, at: range.location, effectiveRange: nil) as? Double ?? Size.txCodeSpanPad
+                for span in spans(of: range, in: text, at: point) {
+                    let rect = CGRect(x: span.x0 - Space.space1, y: span.baseline - font.ascender - pad,
+                                      width: span.x1 - span.x0 + Space.space1, height: font.ascender - font.descender + pad * 2)
                     context.setFillColor(surface.cgColor)
                     context.addPath(UIBezierPath(roundedRect: rect, cornerRadius: Radius.radiusXs).cgPath)
                     context.fillPath()
                 }
+            }
+            text.enumerateAttribute(.listDisc, in: all) { value, range, _ in
+                guard let ink = value as? UIColor, range.length > 0,
+                      let font = text.attribute(.font, at: range.location, effectiveRange: nil) as? UIFont,
+                      let span = spans(of: range, in: text, at: point).first else { return }
+                let side = ListDisc.diameter(font)
+                context.setFillColor(ink.cgColor)
+                context.fillEllipse(in: CGRect(x: span.x0, y: span.baseline - ListDisc.top(font), width: side, height: side))
             }
         }
         super.draw(at: point, in: context)
     }
 }
 
-/// Running text, selectable, on TextKit 2: one block of a message.
-final class ProseView: UITextView, NSTextLayoutManagerDelegate {
+/// Running text, selectable, on TextKit 2: one block of a message, a cell, a
+/// listing. Its lines are CSS line boxes (Styled `textKit2`): the leading
+/// below the last line, which TextKit leaves off, stands under it as inset.
+/// Paragraphs marked `pretty` or `balance` wrap as WebKit wraps them (LineWrap).
+class ProseView: UITextView, NSTextLayoutManagerDelegate {
     /// A rect kept clear at the first line's end, for a grouped turn's clock.
     var floatSize: CGSize = .zero { didSet { if floatSize != oldValue { setNeedsLayout(); invalidateIntrinsicContentSize() } } }
     private var fades: [(range: NSRange, at: Double, color: UIColor)] = []
+    private let wrap: LineWrap.Container
+    /// The layout manager holds its content manager weakly.
+    private let content: NSTextContentStorage
+    /// Bumped whenever the text changes; the lines' widths were last chosen
+    /// for `wrappedFor`'s width and version.
+    private var version = 0
+    private var wrappedFor: (width: CGFloat, version: Int)?
+
+    override var attributedText: NSAttributedString! {
+        didSet { textChanged() }
+    }
+
+    private func textChanged() {
+        version += 1
+        closeLastLine()
+        // Widths keyed by where lines start never outlive the text they were chosen for.
+        if bounds.width > 0 {
+            rewrap()
+        } else {
+            wrap.widths = [:]
+            wrap.codeStarts = [:]
+        }
+        setNeedsLayout()
+    }
+
+    /// The last line's leading below it: its paragraph's line spacing.
+    private func closeLastLine() {
+        let length = textStorage.length
+        let style = length > 0 ? textStorage.attribute(.paragraphStyle, at: length - 1, effectiveRange: nil) as? NSParagraphStyle : nil
+        let below = style?.lineSpacing ?? 0
+        guard abs(textContainerInset.bottom - below) > 0.01 else { return }
+        textContainerInset.bottom = below
+        invalidateIntrinsicContentSize()
+    }
 
     init() {
-        super.init(frame: .zero, textContainer: nil)
+        let container = LineWrap.Container(size: .zero)
+        let layout = NSTextLayoutManager()
+        layout.textContainer = container
+        let content = NSTextContentStorage()
+        content.addTextLayoutManager(layout)
+        content.primaryTextLayoutManager = layout
+        wrap = container
+        self.content = content
+        super.init(frame: .zero, textContainer: container)
         isEditable = false
         isSelectable = true
         isScrollEnabled = false
@@ -60,7 +125,7 @@ final class ProseView: UITextView, NSTextLayoutManagerDelegate {
 
     nonisolated func textLayoutManager(_: NSTextLayoutManager, textLayoutFragmentFor location: any NSTextLocation,
                                        in textElement: NSTextElement) -> NSTextLayoutFragment {
-        CodeSpanFragment(textElement: textElement, range: textElement.elementRange)
+        ProseFragment(textElement: textElement, range: textElement.elementRange)
     }
 
     override func layoutSubviews() {
@@ -71,6 +136,23 @@ final class ProseView: UITextView, NSTextLayoutManagerDelegate {
             textContainer.exclusionPaths = paths
             invalidateIntrinsicContentSize()
         }
+        rewrap()
+    }
+
+    /// Chooses the constrained paragraphs' line widths for the width the text
+    /// has, when the width or the text changed since they were last chosen.
+    private func rewrap() {
+        let width = bounds.width - textContainerInset.left - textContainerInset.right
+        guard width > 0 else { return }
+        if let last = wrappedFor, abs(last.width - width) < 0.5, last.version == version { return }
+        wrappedFor = (width, version)
+        let widths = LineWrap.widths(for: textStorage, width: width)
+        let codeStarts = LineWrap.codeStarts(in: textStorage)
+        guard widths != wrap.widths || codeStarts != wrap.codeStarts else { return }
+        wrap.widths = widths
+        wrap.codeStarts = codeStarts
+        if let manager = textLayoutManager { manager.invalidateLayout(for: manager.documentRange) }
+        invalidateIntrinsicContentSize()
     }
 
     /// The text, replacing only what changed from the first differing paragraph
@@ -89,6 +171,7 @@ final class ProseView: UITextView, NSTextLayoutManagerDelegate {
                                   with: next.attributedSubstring(from: NSRange(location: start, length: new.length - start)))
         storage.endEditing()
         invalidateIntrinsicContentSize()
+        textChanged()
         guard fading, !UIAccessibility.isReduceMotionEnabled, new.length > old.length else { return }
         let now = CACurrentMediaTime()
         new.enumerateSubstrings(in: NSRange(location: old.length, length: new.length - old.length),
@@ -101,6 +184,7 @@ final class ProseView: UITextView, NSTextLayoutManagerDelegate {
     func clear() {
         fades = []
         textStorage.setAttributedString(NSAttributedString())
+        textChanged()
     }
 
     /// One frame of the chunk fade: each new word's opacity on --dur-menu, --ease-out.
@@ -124,7 +208,9 @@ final class ProseView: UITextView, NSTextLayoutManagerDelegate {
 /// scrolling sideways rather than wrapping.
 final class CodeWell: UIView {
     private let scroll = UIScrollView()
-    private let label = UILabel()
+    /// The listing, selectable as the web's is, at its own width: it never wraps.
+    private let label = ProseView()
+    private var labelWidth: NSLayoutConstraint!
     private var source: (language: String?, text: String)?
     private var labelTop: NSLayoutConstraint!
     private var labelBottom: NSLayoutConstraint!
@@ -150,8 +236,9 @@ final class CodeWell: UIView {
         scroll.translatesAutoresizingMaskIntoConstraints = false
         scroll.showsHorizontalScrollIndicator = false
         scroll.alwaysBounceHorizontal = false
-        label.numberOfLines = 0
-        label.translatesAutoresizingMaskIntoConstraints = false
+        label.textContainer.lineBreakMode = .byClipping
+        labelWidth = label.widthAnchor.constraint(equalToConstant: 0)
+        labelWidth.isActive = true
         addSubview(scroll)
         scroll.addSubview(label)
         let pad = UIEdgeInsets(top: Size.txCodePadBlock, left: Size.txCodePadInline, bottom: Size.txCodePadBlock, right: Size.txCodePadInline)
@@ -183,31 +270,43 @@ final class CodeWell: UIView {
     private func paint() {
         guard let source else { return }
         let dark = traitCollection.userInterfaceStyle == .dark
-        let font = TypeScale.typeCode.font(TypeScale.textLabel)
-        let height = font.pointSize * TypeScale.leadingBody
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.minimumLineHeight = height
-        paragraph.maximumLineHeight = height
-        paragraph.lineBreakMode = .byClipping
         let runs = Highlight.colors(source.text, language: source.language, dark: dark)
         let ink = runs == nil ? Palette.inkStrong : Highlight.foreground(dark: dark)
-        let text = NSMutableAttributedString(string: source.text, attributes: [
-            .font: font, .foregroundColor: ink, .paragraphStyle: paragraph,
-            .baselineOffset: (height - font.lineHeight) / 4,
-        ])
+        // The mono face at the label size on the body's leading.
+        let text = NSMutableAttributedString(string: source.text, attributes: Styled.attributes(
+            TypeScale.typeBody, color: ink, size: TypeScale.textLabel, weight: TypeScale.weightBody, leading: TypeScale.leadingBody,
+            mono: true, lineBreak: .byClipping, textKit2: true))
         for (range, color) in runs ?? [] where NSMaxRange(range) <= text.length {
             text.addAttribute(.foregroundColor, value: color, range: range)
         }
         label.attributedText = text
+        labelWidth.constant = ceil(text.boundingRect(with: CGSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude),
+                                                     options: [.usesLineFragmentOrigin], context: nil).width) + 1
         label.accessibilityLabel = source.text
     }
 }
 
-/// A Markdown table (prose-sm): rules under the head and each row, cells set
-/// inline, scrolling sideways when wider than the column.
+/// A Markdown table (prose-sm): the table's own margins inside its scrolling
+/// wrapper, rules under the head and each row, and the columns laid out as
+/// CSS lays out a `width: 100%` table with `table-layout: auto`: each column
+/// at its widest cell's one-line width, grown in proportion to fill the
+/// width; where those don't fit, between each column's narrowest (its longest
+/// word, any character of code, which breaks anywhere) and widest, in
+/// proportion to the room between; past the narrowest, at those, scrolling
+/// sideways.
 final class TableBlock: UIView {
     private let scroll = UIScrollView()
     private let grid = UIStackView()
+    /// Each column's narrowest and widest content, cell padding included.
+    private var extents: [(least: Double, most: Double)] = []
+    /// Every cell's width, by column.
+    private var columnWidths: [[NSLayoutConstraint]] = []
+    private var laidWidth: CGFloat = -1
+
+    /// th and td: 1em inline, the first cell's start and the last's end flush;
+    /// .666em below, and above a body cell.
+    private static let cellBlock = TypeScale.textMeta * 2 / 3
+    private static let cellInline = TypeScale.textMeta
 
     init() {
         super.init(frame: .zero)
@@ -216,14 +315,13 @@ final class TableBlock: UIView {
         scroll.showsHorizontalScrollIndicator = false
         grid.axis = .vertical
         grid.translatesAutoresizingMaskIntoConstraints = false
-        pin(scroll)
+        pin(scroll, insets: UIEdgeInsets(top: Size.proseSmTable, left: 0, bottom: Size.proseSmTable, right: 0))
         scroll.addSubview(grid)
         NSLayoutConstraint.activate([
             grid.leadingAnchor.constraint(equalTo: scroll.contentLayoutGuide.leadingAnchor),
             grid.trailingAnchor.constraint(equalTo: scroll.contentLayoutGuide.trailingAnchor),
             grid.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor),
             grid.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor),
-            grid.widthAnchor.constraint(greaterThanOrEqualTo: scroll.frameLayoutGuide.widthAnchor),
             scroll.frameLayoutGuide.heightAnchor.constraint(equalTo: scroll.contentLayoutGuide.heightAnchor),
         ])
     }
@@ -231,33 +329,79 @@ final class TableBlock: UIView {
     @available(*, unavailable)
     required init?(coder _: NSCoder) { fatalError("built in code") }
 
-    func configure(head: [NSAttributedString], rows: [[NSAttributedString]]) {
-        grid.arrangedSubviews.forEach { $0.removeFromSuperview() }
-        let columns = max(head.count, rows.map(\.count).max() ?? 0)
-        // Each column as wide as its widest cell, capped so a long cell wraps.
-        var widths = [Double](repeating: 0, count: columns)
-        let cap = 260.0
-        for row in [head] + rows {
-            for (i, cell) in row.enumerated() where i < columns {
-                let size = cell.boundingRect(with: CGSize(width: cap, height: .greatestFiniteMagnitude),
-                                             options: [.usesLineFragmentOrigin], context: nil).size
-                widths[i] = max(widths[i], ceil(size.width))
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        guard bounds.width > 0, abs(bounds.width - laidWidth) > 0.5 else { return }
+        laidWidth = bounds.width
+        let widths = Self.columns(extents, fitting: bounds.width)
+        for (column, constraints) in columnWidths.enumerated() {
+            for constraint in constraints where abs(constraint.constant - widths[column]) > 0.25 {
+                constraint.constant = widths[column]
             }
         }
-        // th: 0 .666em .666em; td: .666em 1em; the first cell flush, the last flush.
-        let cellPad = (TypeScale.textMeta * 2 / 3).rounded()
-        let inline = TypeScale.textMeta
+    }
+
+    /// CSS's auto table layout for a table as wide as `width`.
+    private static func columns(_ extents: [(least: Double, most: Double)], fitting width: Double) -> [Double] {
+        let least = extents.reduce(0) { $0 + $1.least }
+        let most = extents.reduce(0) { $0 + $1.most }
+        if most > 0, most <= width { return extents.map { $0.most * width / most } }
+        if least >= width || most <= least { return extents.map(\.least) }
+        let share = (width - least) / (most - least)
+        return extents.map { $0.least + ($0.most - $0.least) * share }
+    }
+
+    /// A cell's narrowest and widest one-line widths.
+    private static func extent(_ cell: NSAttributedString) -> (least: Double, most: Double) {
+        let most = ceil(cell.boundingRect(with: CGSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude),
+                                          options: [.usesLineFragmentOrigin], context: nil).width)
+        var least = 0.0
+        let text = cell.string as NSString
+        text.enumerateSubstrings(in: NSRange(location: 0, length: text.length), options: [.byWords, .substringNotRequired]) { _, word, enclosing, _ in
+            // A word runs to the next space: its trailing punctuation stays on it.
+            var run = word
+            let end = NSMaxRange(enclosing)
+            while NSMaxRange(run) < end, let scalar = Unicode.Scalar(text.character(at: NSMaxRange(run))),
+                  !CharacterSet.whitespacesAndNewlines.contains(scalar) { run.length += 1 }
+            var pieces = [run]
+            if cell.attribute(.inlineCode, at: run.location, effectiveRange: nil) != nil {
+                pieces = (0 ..< run.length).map { NSRange(location: run.location + $0, length: 1) }
+            }
+            for piece in pieces {
+                least = max(least, ceil(cell.attributedSubstring(from: piece).size().width))
+            }
+        }
+        return (min(least, most), most)
+    }
+
+    func configure(head: [NSAttributedString], rows: [[NSAttributedString]]) {
+        laidWidth = -1
+        setNeedsLayout()
+        grid.arrangedSubviews.forEach { $0.removeFromSuperview() }
+        let columns = max(head.count, rows.map(\.count).max() ?? 0)
+        extents = (0 ..< columns).map { i in
+            let padding = (i == 0 ? 0 : Self.cellInline) + (i == columns - 1 ? 0 : Self.cellInline)
+            return ([head] + rows).reduce((least: padding, most: padding)) { sofar, row in
+                guard i < row.count else { return sofar }
+                let cell = Self.extent(row[i])
+                return (max(sofar.least, cell.least + padding), max(sofar.most, cell.most + padding))
+            }
+        }
+        columnWidths = Array(repeating: [], count: columns)
+        let start = Self.columns(extents, fitting: bounds.width > 0 ? bounds.width : extents.reduce(0) { $0 + $1.most })
         func line(_ cells: [NSAttributedString], head: Bool) -> UIView {
             let row = UIStackView()
             row.axis = .horizontal
             row.alignment = .top
             for i in 0 ..< columns {
-                let label = WrapLabel()
+                let label = ProseView()
                 label.attributedText = i < cells.count ? cells[i] : NSAttributedString()
                 let box = UIView()
-                box.pin(label, insets: UIEdgeInsets(top: head ? 0 : cellPad, left: i == 0 ? 0 : inline,
-                                                    bottom: cellPad, right: i == columns - 1 ? 0 : inline))
-                box.widthAnchor.constraint(equalToConstant: widths[i] + (i == 0 ? 0 : inline) + (i == columns - 1 ? 0 : inline)).isActive = true
+                box.pin(label, insets: UIEdgeInsets(top: head ? 0 : Self.cellBlock, left: i == 0 ? 0 : Self.cellInline,
+                                                    bottom: Self.cellBlock, right: i == columns - 1 ? 0 : Self.cellInline))
+                let width = box.widthAnchor.constraint(equalToConstant: start[i])
+                width.isActive = true
+                columnWidths[i].append(width)
                 row.addArrangedSubview(box)
             }
             let wrap = UIView()
@@ -284,7 +428,7 @@ final class TableBlock: UIView {
 }
 
 /// A quote (prose-sm `blockquote`): a 4pt rule in --border at its start, the
-/// words muted and oblique 1.11em in.
+/// words 1.11em past it.
 final class QuoteBlock: UIView {
     let text = ProseView()
 
@@ -295,7 +439,7 @@ final class QuoteBlock: UIView {
         bar.backgroundColor = Palette.border
         bar.translatesAutoresizingMaskIntoConstraints = false
         addSubview(bar)
-        let inset = (TypeScale.textBody * 10 / 9).rounded() + Space.space1
+        let inset = Space.space1 + TypeScale.textBody * TypeScale.proseSmQuoteInset
         pin(text, insets: UIEdgeInsets(top: 0, left: inset, bottom: 0, right: 0))
         NSLayoutConstraint.activate([
             bar.leadingAnchor.constraint(equalTo: leadingAnchor),
@@ -362,13 +506,42 @@ final class MessageBody: UIView {
     @available(*, unavailable)
     required init?(coder _: NSCoder) { fatalError("built in code") }
 
+    /// The window width the blocks were drawn for, where the style sizes
+    /// headings on prose's fluid title scale; nil where nothing depends on it.
+    private var rendered: Double?
+
+    private static func viewport(of window: UIWindow?, for style: ProseStyle) -> Double? {
+        guard style.headingSize == nil else { return nil }
+        return window.map { Double($0.bounds.width) }
+    }
+
+    /// Drawn again once the window it stands in is known, or has resized.
+    private func redrawForViewport() {
+        guard window != nil, let source, Self.viewport(of: window, for: style) != rendered else { return }
+        configure(source, style: style)
+    }
+
+    override func didMoveToWindow() {
+        super.didMoveToWindow()
+        redrawForViewport()
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        redrawForViewport()
+    }
+
     /// The words, as blocks. Where the blocks already drawn are the same kinds,
     /// each is updated in place, and a growing one fades its new words in when
     /// `fading` (a streaming reasoning step).
     func configure(_ source: String, style: ProseStyle = .body, fading: Bool = false) {
-        guard source != self.source else { return }
+        let viewport = Self.viewport(of: window, for: style)
+        guard source != self.source || viewport != rendered else { return }
         self.source = source
         self.style = style
+        rendered = viewport
+        var style = style
+        style.viewport = viewport
         let blocks = MarkdownRender.blocks(source, style: style)
         let views = stack.arrangedSubviews
         let same = views.count == blocks.count && zip(views, blocks).allSatisfy { view, block in

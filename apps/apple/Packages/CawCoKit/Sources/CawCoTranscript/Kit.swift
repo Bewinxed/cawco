@@ -47,14 +47,25 @@ enum Styled {
             ]]]), size: font.pointSize)
         }
         let height = font.pointSize * (leading ?? role.leading)
-        let offset = (height - font.lineHeight) / 4
-        let paragraph = NSMutableParagraphStyle()
-        // A TextKit 2 line takes its baseline offset out of its height (measured:
-        // 19.5pt lines for a 20.3pt line height): it is given back here.
-        paragraph.minimumLineHeight = textKit2 ? height + offset : height
-        paragraph.maximumLineHeight = textKit2 ? height + offset : height
+        // CSS line boxes (LineBox): a label's, or a TextKit 2 view's, whose
+        // last line ProseView closes.
+        guard textKit2 else {
+            let line = LineBox.label(font, height: height)
+            line.paragraph.lineBreakMode = lineBreak
+            return [.font: font, .foregroundColor: color, .paragraphStyle: line.paragraph, .baselineOffset: line.baselineOffset]
+        }
+        let paragraph = LineBox.textView(font, height: height)
         paragraph.lineBreakMode = lineBreak
-        return [.font: font, .foregroundColor: color, .paragraphStyle: paragraph, .baselineOffset: offset]
+        return [.font: font, .foregroundColor: color, .paragraphStyle: paragraph]
+    }
+
+    /// `.kit-empty-title` (app.css): the title role at the size its clamp()
+    /// takes in a window `viewport` wide, tracked -0.01em, in the strong ink.
+    static func emptyTitle(_ text: String, viewport: Double?) -> NSAttributedString {
+        let size = viewport.map { TypeScale.typeTitle.points(viewport: $0) } ?? TypeScale.typeTitle.points
+        var attributes = attributes(TypeScale.typeTitle, color: Palette.inkStrong, size: size, lineBreak: .byWordWrapping)
+        attributes[.kern] = TypeScale.trackTitle * size
+        return NSAttributedString(string: text, attributes: attributes)
     }
 
     static func string(_ text: String, _ role: TypeRole, color: UIColor, size: Double? = nil, weight: UIFont.Weight? = nil,
@@ -80,17 +91,46 @@ final class LineLabel: UILabel {
     required init?(coder _: NSCoder) { fatalError("built in code") }
 }
 
-/// Wrapping text that sizes itself to its width.
-final class WrapLabel: UILabel {
-    init() {
-        super.init(frame: .zero)
-        translatesAutoresizingMaskIntoConstraints = false
-        numberOfLines = 0
-        setContentCompressionResistancePriority(.required, for: .vertical)
+/// Wrapping text that sizes itself to its width, read but not touched (taps
+/// go to the row it stands in): a ProseView, so its lines are CSS line boxes
+/// and wrap as the element it stands for does in the browser (`wrap`: a `p`
+/// or `li` pretty, h1–h4 balance, anything else as written). It takes text
+/// set in `Styled` label lines and gives each paragraph the TextKit 2 line
+/// box for the same font and line height (LineBox).
+final class WrapLabel: ProseView {
+    private let wrapStyle: LineWrap.Style
+
+    init(wrap: LineWrap.Style = .greedy) {
+        wrapStyle = wrap
+        super.init()
+        isSelectable = false
+        isUserInteractionEnabled = false
     }
 
-    @available(*, unavailable)
-    required init?(coder _: NSCoder) { fatalError("built in code") }
+    override var attributedText: NSAttributedString! {
+        get { super.attributedText }
+        set { super.attributedText = newValue.map(lined) }
+    }
+
+    private func lined(_ text: NSAttributedString) -> NSAttributedString {
+        let out = NSMutableAttributedString(attributedString: text)
+        let all = NSRange(location: 0, length: out.length)
+        out.removeAttribute(.baselineOffset, range: all)
+        text.enumerateAttributes(in: all) { attributes, range, _ in
+            guard let font = attributes[.font] as? UIFont, let label = attributes[.paragraphStyle] as? NSParagraphStyle,
+                  label.minimumLineHeight > 0, label.minimumLineHeight == label.maximumLineHeight else { return }
+            let line = LineBox.textView(font, height: label.minimumLineHeight)
+            line.alignment = label.alignment
+            // A label of any number of lines wraps by word whatever its mode; a text view would truncate.
+            line.lineBreakMode = label.lineBreakMode == .byCharWrapping ? .byCharWrapping : .byWordWrapping
+            line.headIndent = label.headIndent
+            line.firstLineHeadIndent = label.firstLineHeadIndent
+            line.tabStops = label.tabStops
+            out.addAttribute(.paragraphStyle, value: line, range: range)
+        }
+        if wrapStyle != .greedy { out.addAttribute(.wrapStyle, value: wrapStyle.rawValue, range: all) }
+        return out
+    }
 }
 
 /// A label on its own surface: a badge, a state pill, an option's key cap.
@@ -177,13 +217,73 @@ final class RailCell: UIView {
     required init?(coder _: NSCoder) { fatalError("built in code") }
 }
 
-/// A stack that says when it has laid out, for work that reads its own size.
-final class LayoutStack: UIStackView {
-    var onLayout: (() -> Void)?
+/// One flex row (`display: flex; align-items: center; gap`): its items in
+/// order at their max-content widths, centred on the row; room to spare goes
+/// to the ones that grow (`flex-grow: 1`), and when they overflow the row,
+/// the ones that shrink (`flex-shrink: 1; min-width: 0`) give way in
+/// proportion to their widths, as CSS distributes the shortfall. Laid out
+/// directly on every pass, so the widths always follow the items now in it.
+final class FlexLine: UIView {
+    struct Item {
+        let view: UIView
+        var grows = false
+        var shrinks = false
+        /// A fixed box in place of the view's own size (a glyph's cell).
+        var size: CGSize?
+    }
+
+    private let items: [Item]
+    private let gap: Double
+
+    init(_ items: [Item], gap: Double) {
+        self.items = items
+        self.gap = gap
+        super.init(frame: .zero)
+        translatesAutoresizingMaskIntoConstraints = false
+        for item in items {
+            item.view.translatesAutoresizingMaskIntoConstraints = true
+            addSubview(item.view)
+        }
+    }
+
+    @available(*, unavailable)
+    required init?(coder _: NSCoder) { fatalError("built in code") }
+
+    private func size(of item: Item) -> CGSize {
+        if let size = item.size { return size }
+        let natural = item.view.intrinsicContentSize
+        let scale = window?.screen.scale ?? traitCollection.displayScale
+        // Whole device pixels up, so a label is never laid a hair under its text.
+        return CGSize(width: (max(0, natural.width) * scale).rounded(.up) / scale, height: max(0, natural.height))
+    }
+
+    override var intrinsicContentSize: CGSize {
+        CGSize(width: UIView.noIntrinsicMetric, height: items.filter { !$0.view.isHidden }.map { size(of: $0).height }.max() ?? 0)
+    }
+
+    /// The items changed what they hold: lay the row out again.
+    func refit() {
+        invalidateIntrinsicContentSize()
+        setNeedsLayout()
+    }
 
     override func layoutSubviews() {
         super.layoutSubviews()
-        onLayout?()
+        let shown = items.filter { !$0.view.isHidden }
+        let sizes = shown.map(size(of:))
+        let total = sizes.reduce(0) { $0 + $1.width } + gap * Double(max(0, shown.count - 1))
+        let overflow = max(0, total - bounds.width)
+        let spare = max(0, bounds.width - total)
+        let shrinking = zip(shown, sizes).filter { $0.0.shrinks }.reduce(0) { $0 + $1.1.width }
+        let growing = shown.filter(\.grows).count
+        var x = 0.0
+        for (item, size) in zip(shown, sizes) {
+            var width = size.width
+            if overflow > 0, item.shrinks, shrinking > 0 { width = max(0, width - overflow * width / shrinking) }
+            if spare > 0, item.grows { width += spare / Double(growing) }
+            item.view.frame = CGRect(x: x, y: (bounds.height - size.height) / 2, width: width, height: size.height)
+            x += width + gap
+        }
     }
 }
 

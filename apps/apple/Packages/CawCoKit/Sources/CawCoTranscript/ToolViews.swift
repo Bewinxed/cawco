@@ -62,12 +62,19 @@ final class ToolLineView: RailRow, RowContent, Disclosing {
     private let cell = UIView()
     private let glyph = GlyphView(.toolGeneric, size: Size.iconMd, tint: Palette.inkMuted)
     private let favicon = UIImageView()
-    private let verb = LineLabel(hug: .defaultHigh, resist: .init(249))
-    private let argument = LineLabel(hug: .defaultLow, resist: .init(248))
+    private let verb = LineLabel()
+    private let argument = LineLabel()
     private let chip = ChipLabel(insets: UIEdgeInsets(top: 1, left: Space.space2, bottom: 1, right: Space.space2), radius: Radius.radiusXs)
-    private let fact = LineLabel(hug: .required, resist: .required)
+    private let fact = LineLabel()
     private let chevron = Chevron()
-    private let line = LayoutStack()
+    /// ToolGroup's row: the verb `flex: 0 1 auto`, the argument `1 1 auto`,
+    /// the chip, the fact and the chevron `0 0 auto`.
+    private lazy var line = FlexLine([
+        .init(view: cell, size: CGSize(width: Size.txWGlyph, height: Size.txWGlyph)),
+        .init(view: verb, shrinks: true),
+        .init(view: argument, grows: true, shrinks: true),
+        .init(view: chip), .init(view: fact), .init(view: chevron),
+    ], gap: Columns.gap)
     private let reveal: Reveal
     private let opened = UIStackView()
     private let preview = PreviewCard()
@@ -79,21 +86,13 @@ final class ToolLineView: RailRow, RowContent, Disclosing {
     required init(env: RowEnv) {
         reveal = Reveal(opened)
         super.init(env: env)
-        cell.translatesAutoresizingMaskIntoConstraints = false
         favicon.translatesAutoresizingMaskIntoConstraints = false
         favicon.layer.cornerRadius = Radius.radiusXs
         favicon.clipsToBounds = true
         cell.addSubview(glyph)
         cell.addSubview(favicon)
         chip.backgroundColor = Palette.surfaceRecess
-        line.axis = .horizontal
-        line.alignment = .center
-        line.spacing = Columns.gap
-        for view in [cell, verb, argument, chip, fact, chevron] { line.addArrangedSubview(view) }
-        line.onLayout = { [weak self] in self?.shrink() }
         NSLayoutConstraint.activate([
-            cell.widthAnchor.constraint(equalToConstant: Size.txWGlyph),
-            cell.heightAnchor.constraint(equalToConstant: Size.txWGlyph),
             glyph.centerXAnchor.constraint(equalTo: cell.centerXAnchor),
             glyph.centerYAnchor.constraint(equalTo: cell.centerYAnchor),
             favicon.centerXAnchor.constraint(equalTo: cell.centerXAnchor),
@@ -119,26 +118,6 @@ final class ToolLineView: RailRow, RowContent, Disclosing {
     @objc private func tap() {
         guard !chevron.isHidden else { return }
         env.toggle(key, self)
-    }
-
-    private lazy var verbCap: NSLayoutConstraint = {
-        let cap = verb.widthAnchor.constraint(lessThanOrEqualToConstant: 10_000)
-        cap.isActive = true
-        return cap
-    }()
-
-    /// The verb and the argument both give way (`flex-shrink: 1` on each), each
-    /// in proportion to its own width, once the line is too narrow for both.
-    private func shrink() {
-        guard line.bounds.width > 0 else { return }
-        let others = Size.txWGlyph + [chip, fact, chevron].filter { !$0.isHidden }.reduce(0.0) { $0 + $1.intrinsicContentSize.width }
-        let shown = line.arrangedSubviews.filter { !$0.isHidden }.count
-        let available = line.bounds.width - others - Double(max(0, shown - 1)) * line.spacing
-        let v = verb.isHidden ? 0 : verb.intrinsicContentSize.width
-        let a = argument.isHidden ? 0 : argument.intrinsicContentSize.width
-        var width = v
-        if v + a > available, v + a > 0 { width = max(0, v - (v + a - available) * v / (v + a)) }
-        if abs(verbCap.constant - width) > 0.5 { verbCap.constant = width }
     }
 
     func toggled(open: Bool) -> (() -> Void, () -> Void) {
@@ -199,6 +178,7 @@ final class ToolLineView: RailRow, RowContent, Disclosing {
         chevron.isHidden = !hasBody
         let open = hasBody && env.isOpen(key)
         chevron.set(open: open, animated: false)
+        line.refit()
         line.accessibilityLabel = [d.label, d.object, d.detail, d.chip, d.fact, failed ? "failed" : nil].compactMap(\.self).joined(separator: " ")
         line.accessibilityValue = hasBody ? (open ? "Expanded" : "Collapsed") : nil
         line.accessibilityTraits = hasBody ? .button : .staticText
@@ -266,7 +246,7 @@ final class ToolLineView: RailRow, RowContent, Disclosing {
             stack.axis = .vertical
             stack.spacing = Space.space2
             if failed, let refusal = result?.text.replacing(/<\/?tool_use_error>/, with: "").trimmingCharacters(in: .whitespacesAndNewlines), !refusal.isEmpty {
-                let label = WrapLabel()
+                let label = WrapLabel(wrap: .pretty) // ToolGroup `p.refusal`
                 label.attributedText = Styled.string(refusal, TypeScale.typeLabel, color: Palette.dataBad, weight: TypeScale.weightBody,
                                                      leading: TypeScale.leadingRoot, lineBreak: .byCharWrapping)
                 stack.addArrangedSubview(hung(label, offset: Size.txDiffHeadInline + 1))
@@ -406,12 +386,7 @@ final class CappedText: UIView {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
         let scroll = UIScrollView()
-        let view = UITextView(usingTextLayoutManager: true)
-        view.isEditable = false
-        view.isScrollEnabled = false
-        view.backgroundColor = .clear
-        view.textContainerInset = .zero
-        view.textContainer.lineFragmentPadding = 0
+        let view = ProseView()
         view.attributedText = Styled.string(text, TypeScale.typeCode, color: Palette.inkStrong, size: TypeScale.textLabel,
                                             leading: TypeScale.leadingBody, mono: true, lineBreak: .byCharWrapping, textKit2: true)
         view.translatesAutoresizingMaskIntoConstraints = false
@@ -500,13 +475,18 @@ final class PreviewCard: UIView {
 /// rail line, 26pt tall, its family's glyph in its ink.
 final class LiveToolView: RailRow, RowContent {
     private let cell: RailCell
-    private let verb = LineLabel(hug: .defaultHigh, resist: .init(248))
-    private let argument = LineLabel(hug: .defaultLow, resist: .init(249))
+    private let verb = LineLabel()
+    private let argument = LineLabel()
+    private let line: FlexLine
 
     required init(env: RowEnv) {
         cell = RailCell(.toolGeneric)
+        // Transcript `.livetool`: the verb and the glance both `flex: 0 1 auto`.
+        line = FlexLine([
+            .init(view: cell, size: CGSize(width: Size.txWGlyph, height: Size.txWGlyph)),
+            .init(view: verb, shrinks: true), .init(view: argument, shrinks: true),
+        ], gap: Columns.gap)
         super.init(env: env)
-        let line = railLine([cell, verb, argument, UIView()])
         line.heightAnchor.constraint(greaterThanOrEqualToConstant: Size.txLine).isActive = true
         body.addArrangedSubview(line)
         isAccessibilityElement = true
@@ -522,6 +502,7 @@ final class LiveToolView: RailRow, RowContent {
         verb.attributedText = Styled.string(d.label, TypeScale.typeLabel, color: Palette.inkStrong, leading: TypeScale.leadingRoot)
         verb.isHidden = d.label.isEmpty
         argument.attributedText = Styled.string(glance, TypeScale.typeLabel, color: Palette.inkMuted, size: TypeScale.textLabel, leading: TypeScale.leadingRoot, mono: true)
+        line.refit()
         accessibilityLabel = "\(name) running, \(glance)"
     }
 

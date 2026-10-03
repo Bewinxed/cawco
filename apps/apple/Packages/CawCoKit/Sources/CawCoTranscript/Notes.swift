@@ -134,7 +134,7 @@ final class SystemLineView: RailRow, RowContent, Disclosing {
                 // A failure takes the rail in the fail colours: what failed on the line, why under it.
                 railColor = Palette.statusFailInk
                 set(.failed, title: errorTitle ?? "Turn failed", ink: Palette.statusFailInk)
-                let why = WrapLabel()
+                let why = WrapLabel(wrap: .pretty) // SystemLine `p.handoff`
                 why.attributedText = Styled.string(block.content, TypeScale.typeLabel, color: Palette.statusFailInk,
                                                    leading: TypeScale.leadingBody, lineBreak: .byWordWrapping)
                 let spaced = UIView()
@@ -176,7 +176,7 @@ final class PeerView: RailRow, RowContent, Disclosing {
     private let state = LineLabel(hug: .required, resist: .required)
     private let excerpt = LineLabel(hug: .init(1), resist: .init(1))
     private let chevron = Chevron()
-    private let reason = WrapLabel()
+    private let reason = WrapLabel(wrap: .pretty) // Peer `p.reason`
     private let text = MessageBody()
     private let reveal: Reveal
     private var key = ""
@@ -379,7 +379,7 @@ final class QuestionCardView: UIView, RowContent {
             let text = question["question"] as? String ?? ""
             let options = (question["options"] as? [[String: Any]] ?? []).compactMap { $0["label"] as? String }
             let picks: [String] = (answers[text] as? [String]) ?? (answers[text] as? String).map { [$0] } ?? []
-            let lede = WrapLabel()
+            let lede = WrapLabel(wrap: .pretty) // QuestionCard `p.lede`
             lede.attributedText = Styled.string(text, TypeScale.typeBody, color: Palette.inkStrong, lineBreak: .byWordWrapping)
             content.addArrangedSubview(Self.hang(lede, hang))
             content.setCustomSpacing(Space.space2 + 2, after: content.arrangedSubviews.last!)
@@ -411,7 +411,7 @@ final class QuestionCardView: UIView, RowContent {
         let caps = LineLabel(hug: .required, resist: .required)
         caps.attributedText = NSAttributedString(string: label.uppercased(), attributes: Styled.attributes(TypeScale.typeLabel, color: Palette.inkMuted)
             .merging([.kern: TypeScale.trackCaps * TypeScale.textLabel]) { $1 })
-        let words = WrapLabel()
+        let words = WrapLabel(wrap: .pretty) // QuestionCard `p.answer-free`
         words.attributedText = Styled.string(text, TypeScale.typeBody, color: Palette.inkStrong, lineBreak: .byWordWrapping)
         let row = UIStackView(arrangedSubviews: [caps, words])
         row.spacing = Space.space2
@@ -492,7 +492,8 @@ final class MemoryBody: UIView {
     }
 
     private func line(_ text: String, mono: Bool = false) -> UIView {
-        let label = WrapLabel()
+        // MemoryBody's notes are `p`s; a path stands as written.
+        let label = WrapLabel(wrap: mono ? .greedy : .pretty)
         label.attributedText = mono ? Styled.string(text, TypeScale.typeMeta, color: Palette.inkMuted, mono: true, tabular: true)
             : Styled.string(text, TypeScale.typeLabel, color: Palette.inkMuted, lineBreak: .byWordWrapping)
         return label

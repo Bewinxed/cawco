@@ -172,7 +172,7 @@ final class PhasePill: ChipLabel {
 /// in the glyph cell on the first line when it is live.
 final class BeatLine: UIView {
     private let beat = Dot(Size.txBeat, color: Palette.statusLiveGlyph)
-    private let text = WrapLabel()
+    private let text = WrapLabel(wrap: .pretty) // Subagent `p.now`
 
     init() {
         super.init(frame: .zero)
@@ -282,7 +282,7 @@ final class SubagentView: RailRow, RowContent, Disclosing {
     private let now = BeatLine()
     private let inner: InnerWell
     private let report = ReportCard()
-    private let fail = WrapLabel()
+    private let fail = WrapLabel(wrap: .pretty) // Subagent `p.fail`
     private let reveal: Reveal
     private var key = ""
     private var branch: Branch?
@@ -465,12 +465,12 @@ final class DelegateView: RailRow, RowContent, Disclosing {
     private let may = LineLabel(hug: .required, resist: .required)
     private let pill = PhasePill()
     private let jump = UIButton(type: .system)
-    private let brief = WrapLabel()
+    private let brief = WrapLabel(wrap: .pretty) // Delegate `p.brief`
     private let status = BeatLine()
     private let asks = UIStackView()
     private let inner: InnerWell
     private let report = ReportCard()
-    private let empty = WrapLabel()
+    private let empty = WrapLabel(wrap: .pretty) // Delegate `p.empty`
     private let reveal: Reveal
     private var key = ""
     private var id: String?
@@ -699,7 +699,7 @@ final class AskLine: UIView {
         let state = LineLabel(hug: .required, resist: .required)
         state.attributedText = NSAttributedString(string: "PENDING", attributes: Styled.attributes(TypeScale.typeMeta, color: Palette.statusAttnInk)
             .merging([.kern: TypeScale.trackCaps * TypeScale.textMeta]) { $1 })
-        let words = WrapLabel()
+        let words = WrapLabel(wrap: .pretty) // Delegate `li.ask`
         words.attributedText = Styled.string(short, TypeScale.typeBody, color: Palette.inkStrong, lineBreak: .byCharWrapping)
         let row = UIStackView(arrangedSubviews: [cell, state, words])
         row.spacing = Columns.gap
@@ -749,7 +749,7 @@ final class RunView: RailRow, RowContent {
     private let glyph = SessionStatusView(.unknown, compact: true)
     private let name = LineLabel(hug: .defaultHigh, resist: .defaultLow)
     private let progress = LineLabel(hug: .required, resist: .required)
-    private let failure = WrapLabel()
+    private let failure = WrapLabel(wrap: .pretty) // RunBlock `p.failure`
     private let steps = UIStackView()
     private var runId: String?
     private var ticker: Timer?
@@ -866,10 +866,13 @@ final class StepLine: UIView {
 /// the one empty state (EmptyState, app.css `.kit-empty`).
 final class NoticeView: UIView, RowContent {
     private let mark = GlyphView(.chat, size: Size.iconLg, tint: Palette.inkMuted)
-    private let title = WrapLabel()
-    private let line = WrapLabel()
+    /// `.kit-empty-title` balances; the line and `.empty` are `p`s, pretty.
+    private let title = WrapLabel(wrap: .balance)
+    private let line = WrapLabel(wrap: .pretty)
     private let column = UIStackView()
     private var inset: (top: NSLayoutConstraint, bottom: NSLayoutConstraint)!
+    /// The window width the title's fluid size was set for, while it shows.
+    private var titleViewport: Double??
 
     init(env _: RowEnv) {
         super.init(frame: .zero)
@@ -896,14 +899,14 @@ final class NoticeView: UIView, RowContent {
         case let .notice(text):
             mark.isHidden = true
             title.isHidden = true
+            titleViewport = nil
             line.attributedText = Styled.string(text, TypeScale.typeMeta, color: Palette.inkMuted, lineBreak: .byWordWrapping)
             inset.top.constant = Space.space5
             inset.bottom.constant = -Space.space5
         case .empty:
             mark.isHidden = false
             title.isHidden = false
-            title.attributedText = NSAttributedString(string: "No messages yet", attributes: TypeScale.typeTitle.attributes(
-                color: Palette.inkStrong, tracking: TypeScale.trackTitle))
+            setTitle()
             line.attributedText = Styled.string("Send the first instruction below — / lists this session's commands, @ names a machine or session.",
                                                 TypeScale.typeBody, color: Palette.inkMuted, lineBreak: .byWordWrapping)
             inset.top.constant = Space.space6
@@ -911,5 +914,17 @@ final class NoticeView: UIView, RowContent {
         default: return
         }
         accessibilityElements = [title, line].filter { !$0.isHidden }
+    }
+
+    private func setTitle() {
+        let viewport = window.map { Double($0.bounds.width) }
+        titleViewport = .some(viewport)
+        title.attributedText = Styled.emptyTitle("No messages yet", viewport: viewport)
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        // The title's size follows the window it stands in.
+        if let shown = titleViewport, let window, shown != Double(window.bounds.width) { setTitle() }
     }
 }

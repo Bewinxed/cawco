@@ -31,8 +31,9 @@ final class WhoView: UIView {
         let line = railLine([markBox, role, spacer, note, clock])
         line.setCustomSpacing(0, after: spacer)
         addSubview(line)
-        // One line box of the label at the root leading; the mark centred on it.
-        let height = TypeScale.textLabel * TypeScale.leadingRoot
+        // One line box of the label on the turn's leading (Who.svelte's h2
+        // inherits --leading-body: 18.85pt at the label size); the mark centred on it.
+        let height = TypeScale.textLabel * TypeScale.leadingBody
         NSLayoutConstraint.activate([
             markBox.widthAnchor.constraint(equalToConstant: Size.rowMarkBox),
             markBox.heightAnchor.constraint(equalToConstant: Size.rowMarkBox),
@@ -66,10 +67,10 @@ final class WhoView: UIView {
         let side = you ? Size.rowMarkGlyph : Size.iconSm
         glyph.constraints.forEach { glyph.removeConstraint($0) }
         NSLayoutConstraint.activate([glyph.widthAnchor.constraint(equalToConstant: side), glyph.heightAnchor.constraint(equalToConstant: side)])
-        role.attributedText = Styled.string(header.name, TypeScale.typeLabel, color: Palette.inkStrong, leading: TypeScale.leadingRoot)
-        note.attributedText = header.note.map { Styled.string($0, TypeScale.typeMeta, color: Palette.inkMuted, leading: TypeScale.leadingRoot) }
+        role.attributedText = Styled.string(header.name, TypeScale.typeLabel, color: Palette.inkStrong, leading: TypeScale.leadingBody)
+        note.attributedText = header.note.map { Styled.string($0, TypeScale.typeMeta, color: Palette.inkMuted, leading: TypeScale.leadingBody) }
         note.isHidden = header.note == nil
-        clock.attributedText = header.clock.map { Styled.string($0, TypeScale.typeMeta, color: Palette.inkMuted, leading: TypeScale.leadingRoot, tabular: true) }
+        clock.attributedText = header.clock.map { Styled.string($0, TypeScale.typeMeta, color: Palette.inkMuted, leading: TypeScale.leadingBody, tabular: true) }
         clock.isHidden = header.clock == nil
         accessibilityLabel = [header.name, header.note, header.clock].compactMap(\.self).joined(separator: ", ")
         paint()
@@ -216,7 +217,7 @@ final class UserTurnView: UIView, RowContent {
     private let float = FloatNote()
     private let chips = FlowView()
     private let failure = UIStackView()
-    private let reason = WrapLabel()
+    private let reason = WrapLabel(wrap: .pretty) // MessageRow `p.reason`
     private let retry = UIButton(type: .system)
     private var wellTop: NSLayoutConstraint!
     private var inner: [NSLayoutConstraint] = []

@@ -17,8 +17,12 @@ final class PaneState: UIView {
 
     private let column = UIStackView()
     private let mark = GlyphView(.alert, size: Size.iconLg, tint: Palette.inkMuted)
-    private let title = WrapLabel()
-    private let line = WrapLabel()
+    /// `.kit-empty-title` balances its lines, `.kit-empty-line` wraps pretty (LineWrap).
+    private let title = WrapLabel(wrap: .balance)
+    private let line = WrapLabel(wrap: .pretty)
+    /// The window width the title's fluid size was set for.
+    private var titleViewport: Double?
+    private var titleText = ""
     private var action: UIButton?
     private var shown: State?
     var onRetry: () -> Void = {}
@@ -48,6 +52,18 @@ final class PaneState: UIView {
 
     @available(*, unavailable)
     required init?(coder _: NSCoder) { fatalError("built in code") }
+
+    /// The title at the size its clamp() takes in this window.
+    private func setTitle() {
+        let viewport = window.map { Double($0.bounds.width) }
+        titleViewport = viewport
+        title.attributedText = Styled.emptyTitle(titleText, viewport: viewport)
+    }
+
+    override func layoutSubviews() {
+        super.layoutSubviews()
+        if let window, Double(window.bounds.width) != titleViewport { setTitle() }
+    }
 
     func show(_ state: State) {
         guard state != shown else { return }
@@ -82,7 +98,8 @@ final class PaneState: UIView {
             lineText = NSAttributedString(string: "The transcript was found and has no turns yet. Write the first message below.", attributes: body)
             actionTitle = ""
         }
-        title.attributedText = NSAttributedString(string: titleText, attributes: TypeScale.typeTitle.attributes(color: Palette.inkStrong, tracking: TypeScale.trackTitle))
+        self.titleText = titleText
+        setTitle()
         line.attributedText = lineText
         guard !actionTitle.isEmpty else { action = nil; return }
         let retrying = actionTitle == "Try again"
