@@ -2808,10 +2808,15 @@
   /* A row the list has drawn stays drawn while virtua re-reads its size at
      a new index (Row's `drawn`): virtua hides such an item for the moment
      it takes to measure it, and the visibility it inherits restyled the
-     whole row twice. Once the list is shown; a row virtua has never
+     whole row twice. So the drawn row's ITEM takes no hiding of virtua's
+     own: `inherit` outranks virtua's inline `hidden` and leaves the item
+     exactly as visible as the list above it. Never `visible`: a re-declared
+     `visible` paints through every hidden ancestor (the page parked under
+     another spoke, a tab behind another, a deck card, the pen), and the
+     transcript's rows were drawn over Workflows. A row virtua has never
      measured keeps virtua's hiding. */
-  .listing.shown :global([data-row][data-drawn]) {
-    visibility: visible;
+  .listing :global(:has(> [data-row][data-drawn])) {
+    visibility: inherit !important;
   }
   /* virtua writes `pointer-events: none` on its container while it scrolls
      and takes it off after. pointer-events is inherited, so each write

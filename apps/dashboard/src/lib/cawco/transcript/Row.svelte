@@ -110,8 +110,9 @@
 
   /**
    * The list has drawn this row where it stands: virtua has measured it, so
-   * its item is no longer hidden. From then on the row is drawn whatever its
-   * item says (Transcript's `[data-drawn]`). virtua keeps sizes by index and
+   * its item is no longer hidden. From then on its item ignores virtua's
+   * hiding and inherits the list's visibility (Transcript's `[data-drawn]`),
+   * so a hidden page or pane above still hides it. virtua keeps sizes by index and
    * hides an item at an index it has no size for, so a row drawn long ago
    * that a row put in above moves down an index was hidden and shown again
    * in the same frame, as virtua measured it there. Visibility inherits, so
