@@ -374,7 +374,7 @@ public final class FolderTabs: UIControl {
         CATransaction.commit()
     }
 
-    private final class Cell: UIControl {
+    final class Cell: UIControl {
         private let title: KitLabel
         private let row = UIStackView()
         private let sheet = CAShapeLayer()
@@ -493,88 +493,3 @@ public final class FolderTabs: UIControl {
     }
 }
 
-// MARK: Status glyph
-
-/// A session's status as a glyph and its word, so no state reads by colour
-/// alone. The glyph wears its status hue; the word stays muted ink. SF
-/// Symbols stand in until the owner's drawn set replaces them here.
-public final class StatusGlyph: UIStackView {
-    private let glyph = UIImageView()
-    private let word = KitLabel(TypeScale.typeLabel, ink: Palette.inkMuted)
-
-    public init(_ status: SessionStatus) {
-        super.init(frame: .zero)
-        axis = .horizontal
-        spacing = Space.space1
-        alignment = .center
-        glyph.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: Size.iconMd, weight: .medium)
-        glyph.contentMode = .scaleAspectFit
-        NSLayoutConstraint.activate([
-            glyph.widthAnchor.constraint(equalToConstant: Size.iconMd),
-            glyph.heightAnchor.constraint(equalToConstant: Size.iconMd),
-        ])
-        addArrangedSubview(glyph)
-        addArrangedSubview(word)
-        addArrangedSubview(UIView())
-        isAccessibilityElement = true
-        configure(status)
-    }
-
-    @available(*, unavailable)
-    required init(coder _: NSCoder) {
-        fatalError("StatusGlyph is built in code")
-    }
-
-    /// The glyph alone (SessionStatus.svelte `compact`); the word stays its accessible name.
-    public var compact = false {
-        didSet {
-            word.isHidden = compact
-            arrangedSubviews.last?.isHidden = compact
-        }
-    }
-
-    public func configure(_ status: SessionStatus) {
-        glyph.image = UIImage(systemName: status.symbol)?.applyingSymbolConfiguration(.preferringMulticolor())
-        glyph.tintColor = status.tint
-        word.text = status.word
-        accessibilityLabel = status.word
-    }
-}
-
-extension SessionStatus {
-    var word: String {
-        switch self {
-        case .starting: "Starting"
-        case .working: "Working"
-        case .needsYou: "Needs you"
-        case .idle: "Idle"
-        case .done: "Done"
-        case .stopped: "Stopped"
-        case .error: "Error"
-        case .unknown: "Unknown"
-        }
-    }
-
-    var symbol: String {
-        switch self {
-        case .starting: "circle.dotted"
-        case .working: "arrow.clockwise.circle.fill"
-        case .needsYou: "hand.raised.circle.fill"
-        case .idle: "pause.circle.fill"
-        case .done: "checkmark.circle.fill"
-        case .stopped: "stop.circle.fill"
-        case .error: "xmark.circle.fill"
-        case .unknown: "questionmark.circle.fill"
-        }
-    }
-
-    var tint: UIColor {
-        switch self {
-        case .starting, .working: Palette.statusLiveGlyph
-        case .needsYou: Palette.statusAttnGlyph
-        case .done: Palette.statusDoneGlyph
-        case .error: Palette.statusFailGlyph
-        case .idle, .stopped, .unknown: Palette.statusIdleGlyph
-        }
-    }
-}

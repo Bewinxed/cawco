@@ -68,14 +68,14 @@ final class WorkflowRunViewController: ObservedViewController, UIGestureRecogniz
         if print != contentPrint {
             contentPrint = print
             content.arrangedSubviews.forEach { $0.removeFromSuperview() }
-            let state: SessionStatus = switch run.status {
+            let state: SessionStatusView.Face = switch run.status {
             case .running: .working
             case .waiting: .needsYou
             case .done: .done
-            case .failed: .error
-            case .cancelled: .stopped
+            case .failed: .failed
+            case .cancelled: .cancelled
             }
-            content.addArrangedSubview(StatusGlyph(state))
+            content.addArrangedSubview(SessionStatusView(state))
             content.addArrangedSubview(label("Started \(run.startedAt.formatted(date: .abbreviated, time: .shortened))", role: TypeScale.typeMeta))
             for (key, input) in run.inputs.value.sorted(by: { $0.key < $1.key }) { content.addArrangedSubview(label("\(key)  \(shown(input))", role: TypeScale.typeMeta)) }
             if let failure = run.failure { let error = label(failure); error.ink = Palette.statusFailInk; content.addArrangedSubview(error) }

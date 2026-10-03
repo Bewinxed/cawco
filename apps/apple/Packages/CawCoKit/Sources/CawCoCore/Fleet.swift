@@ -351,6 +351,21 @@ public struct ParkedAsk: Sendable {
     public var isQuestion: Bool { Naming.questions(toolName, input.value) != nil }
     public var questions: [Components.Schemas.UserQuestion] { Naming.questions(toolName, input.value) ?? [] }
     public var summary: String { Naming.permissionSummary(toolName, input.value) }
+    /// The shell command a permission is about, said whole (Prompt.svelte `.cmd`).
+    public var command: String? { input.value["command"] as? String }
+    /// Every field of the tool input, for "What this touches": strings as
+    /// they are, anything else as indented JSON.
+    public var fields: [(key: String, value: String)] {
+        input.value.keys.sorted().map { key in
+            let raw = input.value[key] ?? nil
+            if let text = raw as? String { return (key, text) }
+            guard let raw, JSONSerialization.isValidJSONObject(raw) || raw is NSNumber,
+                  let data = try? JSONSerialization.data(withJSONObject: raw, options: [.prettyPrinted, .fragmentsAllowed, .sortedKeys]),
+                  let text = String(data: data, encoding: .utf8)
+            else { return (key, raw.map { "\($0)" } ?? "null") }
+            return (key, text)
+        }
+    }
 }
 
 /// Every ask parked on the operator, across every machine, and the answers

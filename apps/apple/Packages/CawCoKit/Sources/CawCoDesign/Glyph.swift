@@ -61,6 +61,10 @@ public enum Glyph: String, CaseIterable, Sendable {
     case document = "file-text-bold-duotone"
     case copy = "copy-bold-duotone"
     // The session screen's chrome.
+    case passed = "check-circle-bold-duotone"
+    case sleeping = "moon-sleep-bold-duotone"
+    case pause = "pause-circle-bold-duotone"
+    case working = "refresh-circle-bold-duotone"
     case arrowUp = "arrow-up-linear"
     case chevronDown = "alt-arrow-down-linear"
     case chevronLeft = "alt-arrow-left-linear"

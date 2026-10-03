@@ -80,6 +80,11 @@ const SOLAR_ICONS = [
   "arrow-up-linear", // IconArrowUp: the "needs you" pill
   "alt-arrow-down-linear", // IconChevronDown
   "alt-arrow-left-linear", // IconChevronLeft
+  // SessionStatus.svelte's glyphs not listed above.
+  "check-circle-bold-duotone", // Passed, Done
+  "moon-sleep-bold-duotone", // Sleeping
+  "pause-circle-bold-duotone", // Idle, Stopped, Stored
+  "refresh-circle-bold-duotone", // Working
 ];
 
 /** The dashboard's own glyphs, drawn where Solar has none. */
@@ -143,14 +148,7 @@ for (const [name, svg] of Object.entries(svgs)) {
     )}\n`
   );
 }
-// Formatted as the token build formats this module's resources (apps/dashboard
-// `bun run tokens`), so the two never rewrite each other's output.
-const format = Bun.spawnSync(["bunx", "biome", "format", "--write", OUT], {
-  cwd: join(ROOT, "apps/dashboard"),
-  stdout: "inherit",
-  stderr: "inherit",
-});
-if (format.exitCode !== 0) {
-  throw new Error("biome format failed");
-}
+// Written in its final form: biome.jsonc excludes Icons.xcassets, so neither
+// this script nor `bun run tokens` (apps/dashboard) formats it, and the two
+// never rewrite each other's output.
 console.log(`${Object.keys(svgs).length} icons → ${OUT}`);

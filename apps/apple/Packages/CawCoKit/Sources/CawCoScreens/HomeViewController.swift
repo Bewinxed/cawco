@@ -108,11 +108,6 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         swipe = TabSwipe(host: self, in: view)
     }
 
-    override func viewWillAppear(_ animated: Bool) {
-        super.viewWillAppear(animated)
-        navigationController?.setToolbarHidden(true, animated: animated)
-    }
-
     // MARK: Layout
 
     private func makeLayout() -> HomeLayout {

@@ -204,15 +204,23 @@ public final class SessionsStore {
         return try decode(raw)
     }
 
-    public func steer(_ row: InstanceRow, text: String) -> String {
+    /// A user turn (core `SendPayload`): its words, and what it carries
+    /// beside them, images as base64 with no `data:` prefix and texts the
+    /// reader attached or pasted at length.
+    public func steer(_ row: InstanceRow, text: String, images: [(mediaType: String, data: Data)] = [], texts: [(name: String, content: String)] = []) -> String {
         let uuid = UUID().uuidString.lowercased()
         let message: [String: any Sendable] = [
             "type": "user", "uuid": uuid, "origin": ["kind": "human"],
             "message": ["role": "user", "content": text],
         ]
-        let payload = try! OpenAPIValueContainer(unvalidatedValue: [
-            "instanceId": row.id, "message": message,
-        ] as [String: any Sendable])
+        var body: [String: any Sendable] = ["instanceId": row.id, "message": message]
+        if !images.isEmpty {
+            body["images"] = images.map { ["mediaType": $0.mediaType, "data": $0.data.base64EncodedString()] as [String: any Sendable] }
+        }
+        if !texts.isEmpty {
+            body["attachments"] = texts.map { ["kind": "text", "name": $0.name, "content": $0.content] as [String: any Sendable] }
+        }
+        let payload = try! OpenAPIValueContainer(unvalidatedValue: body)
         return hub.ledger.submit(kind: .send, sessionId: row.id, machineId: row.machineId, payload: payload, settlesAt: .accepted)
     }
 

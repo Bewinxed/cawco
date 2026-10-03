@@ -233,16 +233,7 @@ final class BoardSplitController: UISplitViewController, UISplitViewControllerDe
         controller.onReturnToFleet = { [weak self, weak controller] in
             self?.returnToFleet(from: controller)
         }
-        controller.onQuestion = { [weak self] ask in self?.openQuestion(ask) }
         controller.onOpenSession = { [weak self] id in self?.openSession(id) }
-        showDetailViewController(UINavigationController(rootViewController: controller), sender: self)
-    }
-
-    private func openQuestion(_ ask: ParkedAsk) {
-        guard let row = hub.fleet.byId[ask.instanceId] else { return }
-        selected?.close(); selected = nil; currentId = ask.instanceId
-        let controller = QuestionAnswerViewController(hub: hub, ask: ask, machineId: row.machineId)
-        controller.onReturn = { [weak self, weak controller] in self?.returnToFleet(from: controller) }
         showDetailViewController(UINavigationController(rootViewController: controller), sender: self)
     }
 
@@ -287,7 +278,9 @@ private final class FleetTabsController: UITabBarController {
         selectedTab = tabs.first { $0.identifier == tab.rawValue }
     }
     private func adapt() {
-        tabBar.isHidden = traitCollection.horizontalSizeClass == .compact
+        // Hidden this way, the bar also gives back its height in the safe
+        // area: `tabBar.isHidden` kept 48pt reserved under the composer.
+        setTabBarHidden(traitCollection.horizontalSizeClass == .compact, animated: false)
         sidebar.isHidden = traitCollection.horizontalSizeClass == .compact
         #if !targetEnvironment(macCatalyst)
         if #available(iOS 27.1, *) { sidebar.preferredPlacement = .sidebar }

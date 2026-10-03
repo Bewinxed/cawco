@@ -745,7 +745,7 @@ struct RunStep {
 /// its name, how far along, its failure, and its steps under it.
 final class RunView: RailRow, RowContent {
     private let mark = UIView()
-    private let glyph = StatusGlyph(.unknown)
+    private let glyph = SessionStatusView(.unknown, compact: true)
     private let name = LineLabel(hug: .defaultHigh, resist: .defaultLow)
     private let progress = LineLabel(hug: .required, resist: .required)
     private let failure = WrapLabel()
@@ -757,7 +757,6 @@ final class RunView: RailRow, RowContent {
         super.init(env: env)
         mark.translatesAutoresizingMaskIntoConstraints = false
         glyph.translatesAutoresizingMaskIntoConstraints = false
-        glyph.compact = true
         mark.addSubview(glyph)
         let spacer = UIView()
         spacer.setContentHuggingPriority(.init(1), for: .horizontal)
@@ -824,14 +823,19 @@ final class RunView: RailRow, RowContent {
         body.arrangedSubviews.first?.accessibilityLabel = "\(named), \(progress.text ?? "")"
     }
 
-    static func status(_ status: String) -> SessionStatus {
+    /// A step's or run's status on the session scale (SessionStatus.svelte `STEP`).
+    static func status(_ status: String) -> SessionStatusView.Face {
         switch status {
         case "running": .working
         case "waiting": .needsYou
-        case "failed": .error
-        case "passed", "done": .done
-        case "cancelled", "skipped": .stopped
-        default: .idle
+        case "held": .held
+        case "failed": .failed
+        case "passed": .passed
+        case "done": .done
+        case "pending": .pending
+        case "skipped": .skipped
+        case "cancelled": .cancelled
+        default: .unknown
         }
     }
 }
@@ -841,8 +845,7 @@ final class StepLine: UIView {
     init(_ step: RunStep, env: RowEnv) {
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
-        let glyph = StatusGlyph(RunView.status(step.status))
-        glyph.compact = true
+        let glyph = SessionStatusView(RunView.status(step.status), compact: true)
         let title = LineLabel(hug: .defaultLow, resist: .defaultLow)
         title.attributedText = Styled.string(step.title, TypeScale.typeBody, color: step.status == "failed" ? Palette.statusFailInk : Palette.inkStrong)
         let time = LineLabel(hug: .required, resist: .required)
