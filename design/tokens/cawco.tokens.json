@@ -1,17 +1,60 @@
 {
   "marketing": {
-    "site-heading-ink": { "$type": "color", "$value": "{color.crow-ink}", "$extensions": { "dev.cawco": { "dark": "{color.spark}" } } },
+    "site-heading-ink": {
+      "$type": "color",
+      "$value": "{color.crow-ink}",
+      "$extensions": { "dev.cawco": { "dark": "{color.spark}" } }
+    },
     "site-caw-scale": { "$type": "number", "$value": "1.5" },
-    "site-canvas": { "$type": "color", "$value": "{color.spark}", "$extensions": { "dev.cawco": { "dark": "{color.crow-ink}" } } },
-    "site-ink": { "$type": "color", "$value": "{color.crow-ink}", "$extensions": { "dev.cawco": { "dark": "{color.paper}" } } },
-    "site-secondary": { "$type": "color", "$value": "color-mix(in oklab, {color.crow-ink} 80%, {color.spark})", "$extensions": { "dev.cawco": { "dark": "{color.neutral-11}" } } },
-    "site-line": { "$type": "color", "$value": "color-mix(in oklab, {color.crow-ink} 22%, transparent)", "$extensions": { "dev.cawco": { "dark": "color-mix(in oklab, {color.paper} 22%, transparent)" } } },
-    "site-panel": { "$type": "color", "$value": "color-mix(in oklab, {color.spark} 84%, {color.paper})", "$extensions": { "dev.cawco": { "dark": "{color.surface-raised}" } } },
-    "site-display": { "$type": "dimension", "$value": "clamp(3rem, 6.8vw, 6rem)" },
-    "site-display-phone": { "$type": "dimension", "$value": "clamp(2.25rem, 10vw, 3rem)" },
-    "site-price-display": { "$type": "dimension", "$value": "clamp(2.5rem, 4.5vw, 4rem)" },
-    "site-plan-display": { "$type": "dimension", "$value": "clamp(1.5rem, 2.5vw, 2rem)" },
-    "site-body": { "$type": "dimension", "$value": "clamp(1rem, 1.4vw, 1.25rem)" },
+    "site-canvas": {
+      "$type": "color",
+      "$value": "{color.spark}",
+      "$extensions": { "dev.cawco": { "dark": "{color.crow-ink}" } }
+    },
+    "site-ink": {
+      "$type": "color",
+      "$value": "{color.crow-ink}",
+      "$extensions": { "dev.cawco": { "dark": "{color.paper}" } }
+    },
+    "site-secondary": {
+      "$type": "color",
+      "$value": "color-mix(in oklab, {color.crow-ink} 80%, {color.spark})",
+      "$extensions": { "dev.cawco": { "dark": "{color.neutral-11}" } }
+    },
+    "site-line": {
+      "$type": "color",
+      "$value": "color-mix(in oklab, {color.crow-ink} 22%, transparent)",
+      "$extensions": {
+        "dev.cawco": {
+          "dark": "color-mix(in oklab, {color.paper} 22%, transparent)"
+        }
+      }
+    },
+    "site-panel": {
+      "$type": "color",
+      "$value": "color-mix(in oklab, {color.spark} 84%, {color.paper})",
+      "$extensions": { "dev.cawco": { "dark": "{color.surface-raised}" } }
+    },
+    "site-display": {
+      "$type": "dimension",
+      "$value": "clamp(3rem, 6.8vw, 6rem)"
+    },
+    "site-display-phone": {
+      "$type": "dimension",
+      "$value": "clamp(2.25rem, 10vw, 3rem)"
+    },
+    "site-price-display": {
+      "$type": "dimension",
+      "$value": "clamp(2.5rem, 4.5vw, 4rem)"
+    },
+    "site-plan-display": {
+      "$type": "dimension",
+      "$value": "clamp(1.5rem, 2.5vw, 2rem)"
+    },
+    "site-body": {
+      "$type": "dimension",
+      "$value": "clamp(1rem, 1.4vw, 1.25rem)"
+    },
     "site-heading-leading": { "$type": "number", "$value": "1.02" },
     "site-display-weight": { "$type": "fontWeight", "$value": "600" },
     "site-gutter": { "$type": "dimension", "$value": "clamp(18px, 4vw, 64px)" },
@@ -20,9 +63,18 @@
     "site-stage-width": { "$type": "dimension", "$value": "900px" },
     "site-stage-min": { "$type": "dimension", "$value": "130px" },
     "site-stage-max": { "$type": "dimension", "$value": "340px" },
-    "site-mascot-size": { "$type": "dimension", "$value": "clamp(140px, 31svh, 330px)" },
-    "site-mascot-phone": { "$type": "dimension", "$value": "clamp(120px, 24svh, 190px)" },
-    "site-pricing-mascot": { "$type": "dimension", "$value": "clamp(140px, 24svh, 230px)" },
+    "site-mascot-size": {
+      "$type": "dimension",
+      "$value": "clamp(140px, 31svh, 330px)"
+    },
+    "site-mascot-phone": {
+      "$type": "dimension",
+      "$value": "clamp(120px, 24svh, 190px)"
+    },
+    "site-pricing-mascot": {
+      "$type": "dimension",
+      "$value": "clamp(140px, 24svh, 230px)"
+    },
     "site-pricing-mascot-phone": { "$type": "dimension", "$value": "100px" },
     "site-badge-height": { "$type": "dimension", "$value": "40px" },
     "site-badge-width": { "$type": "dimension", "$value": "120px" },
