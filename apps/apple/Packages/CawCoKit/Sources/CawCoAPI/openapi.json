@@ -2447,16 +2447,6 @@
         },
         "operationId": "putApiFleetMcpByName",
         "responses": {
-          "200": {
-            "description": "putApiFleetMcpByName 200",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/FleetMcpServer"
-                }
-              }
-            }
-          },
           "400": {
             "description": "putApiFleetMcpByName 400",
             "content": {
@@ -2498,6 +2488,170 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/deleteApiFleetMcpByName200"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fleet/mcp/{name}/sign-in-machines": {
+      "get": {
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiFleetMcpByNameSignInMachines",
+        "responses": {
+          "200": {
+            "description": "getApiFleetMcpByNameSignInMachines 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiFleetMcpByNameSignInMachines200"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fleet/mcp/{name}/sign-in": {
+      "post": {
+        "parameters": [
+          {
+            "name": "name",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "machineId": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "machineId"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiFleetMcpByNameSignIn",
+        "responses": {
+          "200": {
+            "description": "postApiFleetMcpByNameSignIn 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiFleetMcpByNameSignIn200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiFleetMcpByNameSignIn 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiFleetMcpByNameSignIn 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiFleetMcpByNameSignIn 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/fleet/mcp/oauth/complete": {
+      "post": {
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "code": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "state": {
+                    "minLength": 1,
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "code",
+                  "state"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiFleetMcpOauthComplete",
+        "responses": {
+          "200": {
+            "description": "postApiFleetMcpOauthComplete 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiFleetMcpOauthComplete200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiFleetMcpOauthComplete 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiFleetMcpOauthComplete 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -6813,6 +6967,53 @@
           "ok"
         ]
       },
+      "getApiFleetMcpByNameSignInMachines200": {
+        "type": "object",
+        "properties": {
+          "machines": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/AgentRow"
+            }
+          },
+          "selectedMachineId": {
+            "type": [
+              "null",
+              "string"
+            ]
+          }
+        },
+        "required": [
+          "machines",
+          "selectedMachineId"
+        ]
+      },
+      "postApiFleetMcpByNameSignIn200": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          },
+          "machineId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "machineId",
+          "ok"
+        ]
+      },
+      "postApiFleetMcpOauthComplete200": {
+        "type": "object",
+        "properties": {
+          "ok": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "ok"
+        ]
+      },
       "getApiRules200": {
         "type": "object",
         "properties": {
@@ -8400,6 +8601,27 @@
       "FramePayload": {
         "description": "`frames`: everything a session produces, flowing agent→hub→dashboard. The\n`frame` kind is a neutral message; `raw` on it carries the harness's own\nevent verbatim.",
         "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "fleet_mcp"
+                ]
+              },
+              "servers": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/FleetMcpServer"
+                }
+              }
+            },
+            "required": [
+              "kind",
+              "servers"
+            ]
+          },
           {
             "type": "object",
             "properties": {
@@ -10733,6 +10955,9 @@
             ],
             "type": "string"
           },
+          "browserAvailable": {
+            "type": "boolean"
+          },
           "build": {
             "$ref": "#/components/schemas/BuildInfo",
             "description": "The cawco build this machine's daemon is running (NEW.md §12)."
@@ -10891,6 +11116,21 @@
           "mcp": {
             "type": "object"
           },
+          "mcpByHarness": {
+            "type": "object",
+            "properties": {
+              "claude": {
+                "type": "object"
+              },
+              "opencode": {
+                "type": "object"
+              },
+              "pi": {
+                "type": "object"
+              }
+            },
+            "description": "Per-harness runtime truth, before the machine row's worst-state aggregation."
+          },
           "memory": {
             "$ref": "#/components/schemas/FleetItemState",
             "description": "The user-scope memory (CLAUDE.md). Absent from a daemon that predates it;\n`failed` is how a machine says its own copy was edited and was not\noverwritten."
@@ -10933,8 +11173,12 @@
           "state": {
             "enum": [
               "applied",
+              "disabled",
               "failed",
-              "removed"
+              "needs-auth",
+              "pending",
+              "removed",
+              "unsupported"
             ],
             "type": "string"
           }
@@ -12713,6 +12957,34 @@
         "description": "One MCP server the fleet should have, keyed by the name sessions see.",
         "type": "object",
         "properties": {
+          "auth": {
+            "description": "Hub-owned sign-in; credentials stay in the hub database.",
+            "type": "object",
+            "properties": {
+              "mode": {
+                "enum": [
+                  "direct",
+                  "oauth"
+                ],
+                "type": "string"
+              },
+              "state": {
+                "enum": [
+                  "failed",
+                  "needs-auth",
+                  "signed-in"
+                ],
+                "type": "string"
+              },
+              "detail": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "mode",
+              "state"
+            ]
+          },
           "config": {
             "$ref": "#/components/schemas/FleetMcpConfig"
           },
@@ -12722,6 +12994,10 @@
           },
           "name": {
             "type": "string"
+          },
+          "proxied": {
+            "description": "The config points at the hub's authenticated forwarder.",
+            "type": "boolean"
           },
           "cwd": {
             "description": "The checkout to write into. The hub fills this in as it sends a sync —\na daemon never resolves a project id, and a machine only ever receives\nthe project rows that live on it.",
@@ -13049,12 +13325,12 @@
               "string"
             ]
           },
-          "enabled": {
-            "type": "boolean"
-          },
           "pattern": {
             "description": "The phrase to watch for, a regular expression, or a yes/no question, as `matchKind` says.",
             "type": "string"
+          },
+          "enabled": {
+            "type": "boolean"
           },
           "matchKind": {
             "$ref": "#/components/schemas/RuleMatchKind"

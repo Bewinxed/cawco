@@ -130,46 +130,46 @@ enum Inbound {
 }
 
 /// A session's parked ask as the hub sends it (`permission_request`).
-typealias AskFrame = Components.Schemas.FramePayload.Value7Payload
+typealias AskFrame = Components.Schemas.FramePayload.Value8Payload
 
 /// A `FramePayload` by what it is. The generated `anyOf` holds one non-nil
 /// variant; each case checks its own variant's `kind`, so a reordered
 /// document fails to compile rather than routing a frame to the wrong case.
 enum Frame {
-    case instances(Components.Schemas.FramePayload.Value5Payload)
-    case instancesDelta(Components.Schemas.FramePayload.Value6Payload)
+    case instances(Components.Schemas.FramePayload.Value6Payload)
+    case instancesDelta(Components.Schemas.FramePayload.Value7Payload)
     /// A session's ask, and where the hub routed it (`parent`: its delegate's parent answers).
     case permissionRequest(AskFrame, routedTo: String?)
     /// An ask is over, whoever settled it.
-    case permissionSettled(Components.Schemas.FramePayload.Value8Payload)
+    case permissionSettled(Components.Schemas.FramePayload.Value9Payload)
     /// A workflow run's question: answered in its run, never parked as a session's ask.
     case runQuestion(runId: String, raisedAt: Double?)
-    case usage(Components.Schemas.FramePayload.Value9Payload)
-    case controlResult(Components.Schemas.FramePayload.Value11Payload)
-    case pulse(Components.Schemas.FramePayload.Value14Payload)
+    case usage(Components.Schemas.FramePayload.Value10Payload)
+    case controlResult(Components.Schemas.FramePayload.Value12Payload)
+    case pulse(Components.Schemas.FramePayload.Value15Payload)
     case workflow(Components.Schemas.WorkflowFrame)
     case ignored
 
     fileprivate init(_ payload: Components.Schemas.FramePayload, _ peek: Inbound.PayloadRoute) {
-        if let frame = payload.value5, frame.kind == .instances {
+        if let frame = payload.value6, frame.kind == .instances {
             self = .instances(frame)
-        } else if let frame = payload.value6, frame.kind == .instancesDelta {
+        } else if let frame = payload.value7, frame.kind == .instancesDelta {
             self = .instancesDelta(frame)
-        } else if let frame = payload.value7, frame.kind == .permissionRequest {
+        } else if let frame = payload.value8, frame.kind == .permissionRequest {
             if let runId = peek.workflowRunId {
                 self = .runQuestion(runId: runId, raisedAt: frame.raisedAt)
             } else {
                 self = .permissionRequest(frame, routedTo: peek.routedTo)
             }
-        } else if let frame = payload.value8, frame.kind == .permissionSettled {
+        } else if let frame = payload.value9, frame.kind == .permissionSettled {
             self = .permissionSettled(frame)
-        } else if let frame = payload.value9, frame.kind == .usage {
+        } else if let frame = payload.value10, frame.kind == .usage {
             self = .usage(frame)
-        } else if let frame = payload.value11, frame.kind == .controlResult {
+        } else if let frame = payload.value12, frame.kind == .controlResult {
             self = .controlResult(frame)
-        } else if let frame = payload.value14, frame.kind == .pulse {
+        } else if let frame = payload.value15, frame.kind == .pulse {
             self = .pulse(frame)
-        } else if let frame = payload.value19 {
+        } else if let frame = payload.value20 {
             self = .workflow(frame)
         } else {
             self = .ignored

@@ -21,8 +21,9 @@
  */
 
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, parse, resolve } from "node:path";
 
 const HUB = resolve(import.meta.dir, "..");
 const CORE = resolve(HUB, "../core/src");
@@ -65,7 +66,13 @@ const scratch = mkdtempSync(join(tmpdir(), "cawco-openapi-"));
 process.env.CAWCO_DB_PATH = join(scratch, "hub.db");
 
 const { Effect, Layer } = await import("effect");
-const ts = (await import("typescript")).default;
+// The schema generator owns its compiler dependency. A Program built by the
+// repository's newer TypeScript has different TypeFlags and cannot be handed
+// to a generator interpreting them with its own TypeScript version.
+const schemaRequire = createRequire(
+  import.meta.resolve("typescript-json-schema")
+);
+const ts = schemaRequire("typescript") as typeof import("typescript");
 const TJS = await import("typescript-json-schema");
 const { toOpenAPISchema } = await import("@elysia/openapi");
 const { CAWCO_HUB_PORT } = await import("@cawco/core");
@@ -163,7 +170,10 @@ const program = ts.createProgram([routesFile, ...frameFiles], {
   composite: false,
   declaration: false,
   noEmit: true,
-  rootDir: undefined,
+  // TypeScript 6 defaults an unset rootDir to the tsconfig directory. This
+  // no-emit program also owns generated aliases under tmpdir(), so its root
+  // must explicitly include both the repository and the scratch directory.
+  rootDir: parse(HUB).root,
 });
 const routeErrors = ts
   .getPreEmitDiagnostics(program, program.getSourceFile(routesFile))
