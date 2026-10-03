@@ -1,0 +1,12 @@
+{
+  "name": "cawco-site",
+  "account_id": "7119532fe266e2a0493f558807a85bab",
+  "compatibility_date": "2026-10-03",
+  "routes": [
+    { "pattern": "cawco.dev/*", "zone_name": "cawco.dev" }
+  ],
+  "assets": {
+    "directory": "./dist",
+    "html_handling": "drop-trailing-slash"
+  }
+}
