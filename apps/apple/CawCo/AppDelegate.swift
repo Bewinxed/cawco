@@ -1,4 +1,5 @@
 import CawCoScreens
+import CawCoDesign
 import OSLog
 import UIKit
 
@@ -17,6 +18,7 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     /// support multiple scenes"), so a window scene that connects with any
     /// other delegate is handed this app's own, which builds its window.
     func application(_: UIApplication, didFinishLaunchingWithOptions _: [UIApplication.LaunchOptionsKey: Any]?) -> Bool {
+        UINavigationBar.appearance().titleTextAttributes = [.font: TypeScale.typeTitle.font, .foregroundColor: Palette.inkStrong]
         NotificationCenter.default.addObserver(self, selector: #selector(sceneWillConnect(_:)), name: UIScene.willConnectNotification, object: nil)
         return true
     }
@@ -53,9 +55,12 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
         deny.discoverabilityTitle = "Deny the first ask"
         let reconnect = UIKeyCommand(title: "Reconnect", action: #selector(reconnectHub), input: "r", modifierFlags: .command)
         reconnect.discoverabilityTitle = "Reconnect to the hub"
+        let stop = UIKeyCommand(title: "Stop", action: #selector(stopSession), input: ".", modifierFlags: .command)
+        let steer = UIKeyCommand(title: "Steer", action: #selector(steerSession), input: "l", modifierFlags: .command)
         let fleet = UIMenu(title: "Fleet", children: [
             UIMenu(options: .displayInline, children: [approve, deny]),
             UIMenu(options: .displayInline, children: [reconnect]),
+            UIMenu(options: .displayInline, children: [stop, steer]),
         ])
         builder.insertSibling(fleet, afterMenu: .view)
     }
@@ -67,6 +72,8 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
             command.attributes = board?.canAnswer == true ? [] : .disabled
         case #selector(reconnectHub):
             command.attributes = board?.canReconnect == true ? [] : .disabled
+        case #selector(stopSession), #selector(steerSession):
+            command.attributes = board?.canControlSession == true ? [] : .disabled
         default:
             break
         }
@@ -90,27 +97,43 @@ final class AppDelegate: UIResponder, UIApplicationDelegate {
     @objc private func reconnectHub() {
         board?.reconnect()
     }
+    @objc private func stopSession() { board?.stopSession() }
+    @objc private func steerSession() { board?.steerSession() }
 }
 
 /// One window: the root controller, which holds that window's connection to the hub.
 final class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
+    func stateRestorationActivity(for scene: UIScene) -> NSUserActivity? {
+        (window?.rootViewController as? RootViewController)?.sessionActivity
+    }
 
-    func scene(_ scene: UIScene, willConnectTo _: UISceneSession, options _: UIScene.ConnectionOptions) {
+    func scene(_ scene: UIScene, willConnectTo session: UISceneSession, options: UIScene.ConnectionOptions) {
         guard let scene = scene as? UIWindowScene else {
             return
         }
-        open(scene)
+        let activity = options.userActivities.first ?? session.stateRestorationActivity
+        open(scene, sessionId: activity?.userInfo?["sessionId"] as? String)
     }
 
     /// Builds the scene's window: its root controller and its own hub connection.
-    func open(_ scene: UIWindowScene) {
+    func open(_ scene: UIWindowScene, sessionId: String? = nil) {
         guard window == nil else {
             return
         }
         Logger(subsystem: "dev.cawco.app", category: "Scene").info("window scene connected")
         let window = UIWindow(windowScene: scene)
-        window.rootViewController = RootViewController()
+        window.tintColor = Palette.inkStrong
+        var selectedSession = sessionId
+        #if DEBUG
+        // Proof runs enter the same scene route as an Open in New Window action.
+        // No mock data, alternate connection or renderer participates.
+        selectedSession = selectedSession ?? ProcessInfo.processInfo.environment["CAWCO_PROOF_SESSION"]
+        if let appearance = ProcessInfo.processInfo.environment["CAWCO_PROOF_APPEARANCE"] {
+            window.overrideUserInterfaceStyle = appearance == "dark" ? .dark : .light
+        }
+        #endif
+        window.rootViewController = RootViewController(sessionId: selectedSession)
         window.makeKeyAndVisible()
         self.window = window
     }

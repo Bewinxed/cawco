@@ -49,6 +49,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
 
     private let hub: HubConnection
     private let home: HomeModel
+    var onOpen: (String) -> Void = { _ in }
     var collectionView: UICollectionView!
     private(set) lazy var layout = makeLayout()
     private var dataSource: UICollectionViewDiffableDataSource<Section, Item>!
@@ -93,6 +94,11 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         collectionView.keyboardDismissMode = .onDrag
         view.addSubview(collectionView)
         dataSource = makeDataSource()
+    }
+
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        navigationController?.setToolbarHidden(true, animated: animated)
     }
 
     // MARK: Layout
@@ -614,13 +620,21 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     }
 
     func collectionView(_: UICollectionView, shouldSelectItemAt indexPath: IndexPath) -> Bool {
-        dataSource.itemIdentifier(for: indexPath) == .recentHead
+        switch dataSource.itemIdentifier(for: indexPath) {
+        case .row, .recent, .need, .recentHead: true
+        default: false
+        }
     }
 
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
         collectionView.deselectItem(at: indexPath, animated: false)
-        if dataSource.itemIdentifier(for: indexPath) == .recentHead {
-            home.recentOpen.toggle()
+        switch dataSource.itemIdentifier(for: indexPath) {
+        case .recentHead: home.recentOpen.toggle()
+        case let .row(id): onOpen(id)
+        case let .recent(id): onOpen(id)
+        case let .need(id):
+            if let need = needs[id], case let .ask(ask) = need.kind { onOpen(ask.instanceId) }
+        default: break
         }
     }
 

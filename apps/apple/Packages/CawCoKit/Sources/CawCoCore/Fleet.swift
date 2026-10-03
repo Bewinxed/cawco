@@ -2,6 +2,7 @@ public import CawCoAPI
 import Foundation
 import Observation
 import OpenAPIRuntime
+import OSLog
 
 public typealias InstanceRow = Components.Schemas.InstanceRow
 public typealias MachineRow = Components.Schemas.AgentRow
@@ -425,6 +426,7 @@ public final class NeedsYouStore {
                 self?.settle(instanceId, requestId)
             })
         )
+        Logger(subsystem: "dev.cawco.app", category: "Permission").notice("request \(requestId, privacy: .public) answered by Apple app command \(self.answers[key] ?? "", privacy: .public)")
     }
 
     /// The answer this device sent for an ask, with the hub's word on it.

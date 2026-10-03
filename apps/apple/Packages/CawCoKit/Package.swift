@@ -25,6 +25,8 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-openapi-runtime", from: "1.12.2"),
         .package(url: "https://github.com/apple/swift-openapi-urlsession", from: "1.3.2"),
         .package(url: "https://github.com/rive-app/rive-ios", from: "6.28.0"),
+        .package(url: "https://github.com/apple/swift-markdown", from: "0.7.3"),
+        .package(url: "https://github.com/raspu/Highlightr", from: "2.3.0"),
     ],
     targets: [
         // The hub's wire types and client, generated at build time from
@@ -50,7 +52,10 @@ let package = Package(
             resources: [.process("Resources")],
             swiftSettings: concurrency
         ),
-        .target(name: "CawCoTranscript", dependencies: ["CawCoDesign"], swiftSettings: concurrency),
+        .target(name: "CawCoTranscript", dependencies: ["CawCoDesign", "CawCoCore",
+            .product(name: "Markdown", package: "swift-markdown"),
+            .product(name: "Highlightr", package: "Highlightr")],
+            swiftSettings: concurrency + [.defaultIsolation(MainActor.self)]),
         // Caw, drawn by Rive's Apple runtime from one .riv per status (assets/mascot/README.md).
         .target(
             name: "CawCoMascot",
@@ -62,7 +67,7 @@ let package = Package(
         // home (needs you, the fleet board, Recent). The app target hosts them.
         .target(
             name: "CawCoScreens",
-            dependencies: ["CawCoCore", "CawCoDesign", "CawCoMascot"],
+            dependencies: ["CawCoCore", "CawCoDesign", "CawCoMascot", "CawCoTranscript"],
             swiftSettings: concurrency + [.defaultIsolation(MainActor.self)]
         ),
     ]

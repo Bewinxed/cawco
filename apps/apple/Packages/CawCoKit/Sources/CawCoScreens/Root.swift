@@ -11,13 +11,16 @@ public final class RootViewController: ObservedViewController {
     private let hub = HubConnection()
     private lazy var home = HomeModel(hub: hub)
     private lazy var board = BoardSplitController(hub: hub, home: home)
+    private lazy var tabs = FleetTabsController(board: board)
     private lazy var waiting = CawWaiting(waiting: true, status: .loading, side: HomeViewController.cawSide)
     /// The hub whose fleet has been read once on this launch.
     private var readFrom: URL?
     private var shown: UIViewController?
     private var shownKey = ""
+    private var initialSession: String?
 
-    public init() {
+    public init(sessionId: String? = nil) {
+        initialSession = sessionId
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -44,9 +47,13 @@ public final class RootViewController: ObservedViewController {
             show(key: "reconnecting") { ConnectViewController(hub: hub, mode: .reconnecting) }
             return
         }
-        waiting.content = board
+        waiting.content = tabs
         waiting.waiting = !read
         show(key: "board") { waiting }
+        if read, let id = initialSession {
+            initialSession = nil
+            board.openSession(id)
+        }
     }
 
     // MARK: Commands (the menu bar and the keyboard)
@@ -68,6 +75,10 @@ public final class RootViewController: ObservedViewController {
 
     /// Whether Approve and Deny have an ask to act on.
     public var canAnswer: Bool { firstAsk != nil }
+    public var canControlSession: Bool { board.selected?.canControl == true }
+    public func stopSession() { board.selected?.stopTurn() }
+    public func steerSession() { board.selected?.focusComposer() }
+    public var sessionActivity: NSUserActivity? { board.selected.map { SessionViewController.activity($0.sessionId) } }
 
     /// Approves (or denies) the first card in the needs-you queue, as its own buttons do.
     public func answerFirstAsk(allow: Bool) {
@@ -121,11 +132,13 @@ public final class RootViewController: ObservedViewController {
 /// controller's `navigationItem`, so the bars stay the system's.
 final class BoardSplitController: UISplitViewController, UISplitViewControllerDelegate {
     private let hub: HubConnection
+    private(set) var selected: SessionViewController?
 
     init(hub: HubConnection, home: HomeModel) {
         self.hub = hub
         super.init(style: .doubleColumn)
         let homeController = HomeViewController(hub: hub, home: home)
+        homeController.onOpen = { [weak self] id in self?.openSession(id) }
         homeController.navigationItem.title = "Fleet"
         homeController.navigationItem.largeTitleDisplayMode = .never
         let change = UIBarButtonItem(title: "Hub", image: Glyph.server.image, primaryAction: UIAction { [weak self] _ in
@@ -139,15 +152,6 @@ final class BoardSplitController: UISplitViewController, UISplitViewControllerDe
 
         setViewController(UINavigationController(rootViewController: homeController), for: .primary)
         setViewController(UINavigationController(rootViewController: detail), for: .secondary)
-        let compactHome = HomeViewController(hub: hub, home: home)
-        compactHome.navigationItem.title = "Fleet"
-        compactHome.navigationItem.largeTitleDisplayMode = .never
-        let compactChange = UIBarButtonItem(title: "Hub", image: Glyph.server.image, primaryAction: UIAction { [weak self] _ in
-            self?.changeHub()
-        })
-        compactChange.accessibilityLabel = "Change hub"
-        compactHome.navigationItem.trailingItemGroups = [UIBarButtonItemGroup(barButtonItems: [compactChange], representativeItem: nil)]
-        setViewController(UINavigationController(rootViewController: compactHome), for: .compact)
         preferredDisplayMode = .oneBesideSecondary
         preferredSplitBehavior = .tile
         delegate = self
@@ -171,7 +175,39 @@ final class BoardSplitController: UISplitViewController, UISplitViewControllerDe
         present(sheet, animated: true)
     }
 
+    func openSession(_ id: String) {
+        guard BoardRun.runId(of: id) == nil else { return }
+        selected?.close()
+        let controller = SessionViewController(hub: hub, id: id)
+        selected = controller
+        controller.onClose = { [weak self, weak controller] in
+            if self?.selected === controller { self?.selected = nil }
+        }
+        showDetailViewController(UINavigationController(rootViewController: controller), sender: self)
+    }
+
     func splitViewController(_: UISplitViewController, topColumnForCollapsingToProposedTopColumn _: UISplitViewController.Column) -> UISplitViewController.Column {
-        .primary
+        selected == nil ? .primary : .secondary
+    }
+}
+
+/// System-managed sidebar on regular widths, the same fleet split in every
+/// size class. The phone's board already contains its navigation controls.
+private final class FleetTabsController: UITabBarController {
+    init(board: BoardSplitController) {
+        super.init(nibName: nil, bundle: nil)
+        tabs = [UITab(title: "Fleet", image: Glyph.server.image, identifier: "fleet") { _ in board }]
+        mode = .tabSidebar
+        registerForTraitChanges([UITraitHorizontalSizeClass.self]) { (controller: FleetTabsController, _: UITraitCollection) in controller.adapt() }
+    }
+    @available(*, unavailable)
+    required init?(coder: NSCoder) { fatalError("FleetTabsController is built in code") }
+    override func viewWillAppear(_ animated: Bool) { super.viewWillAppear(animated); adapt() }
+    private func adapt() {
+        tabBar.isHidden = traitCollection.horizontalSizeClass == .compact
+        sidebar.isHidden = traitCollection.horizontalSizeClass == .compact
+        #if !targetEnvironment(macCatalyst)
+        if #available(iOS 27.1, *) { sidebar.preferredPlacement = .sidebar }
+        #endif
     }
 }

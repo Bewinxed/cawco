@@ -46,6 +46,7 @@ public final class HubConnection {
     public let ledger = Ledger()
     public let fleet = FleetStore()
     public let needs: NeedsYouStore
+    public private(set) var sessions: SessionsStore!
 
     @ObservationIgnored private var run: Task<Void, Never>?
     @ObservationIgnored private var outageTimer: Task<Void, Never>?
@@ -65,6 +66,9 @@ public final class HubConnection {
             live.post(data)
             return nil
         }
+        sessions = SessionsStore(hub: self)
+        ledger.applyFrame = { [weak self] id, data in self?.sessions.apply(id, data: data) }
+        ledger.rereadHistory = { [weak self] id in self?.sessions.read(id) }
         if address != nil {
             start()
         }
@@ -121,6 +125,7 @@ public final class HubConnection {
         fleet.spend = nil
         fleet.spendFailed = false
         needs.parked = [:]
+        sessions.reset()
     }
 
     private func start() {
@@ -168,6 +173,7 @@ public final class HubConnection {
         outageTimer?.cancel()
         outageTimer = nil
         outage = false
+        sessions.reconnected()
         readFleet(after: .seconds(1))
     }
 
@@ -213,7 +219,7 @@ public final class HubConnection {
         }
     }
 
-    private var client: Client? {
+    var client: Client? {
         address.map { Client(hub: $0) }
     }
 

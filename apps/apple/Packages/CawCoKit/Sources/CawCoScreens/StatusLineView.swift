@@ -98,12 +98,11 @@ final class StatusLineView: UIView {
                 words.text = "Hub unreachable, retrying in \(seconds)s"
             }
         case .connecting:
-            words.text = "Connecting…"
+            words.text = hub.fleet.liveRead ? "Reconnecting…" : "Connecting…"
         case .reading:
             words.text = "Connected · reading the fleet…"
         case .connected:
-            // Live is the quiet default; only what it cost is news.
-            words.text = spend
+            words.text = spend.isEmpty ? "Connected" : "Connected · \(spend)"
         }
     }
 

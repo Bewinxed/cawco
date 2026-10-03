@@ -456,8 +456,14 @@ public final class StatusGlyph: UIStackView {
         spacing = Space.space1
         alignment = .center
         glyph.preferredSymbolConfiguration = UIImage.SymbolConfiguration(pointSize: Size.iconMd, weight: .medium)
+        glyph.contentMode = .scaleAspectFit
+        NSLayoutConstraint.activate([
+            glyph.widthAnchor.constraint(equalToConstant: Size.iconMd),
+            glyph.heightAnchor.constraint(equalToConstant: Size.iconMd),
+        ])
         addArrangedSubview(glyph)
         addArrangedSubview(word)
+        addArrangedSubview(UIView())
         isAccessibilityElement = true
         configure(status)
     }

@@ -68,6 +68,7 @@ public final class Ledger {
 
     struct Cursor {
         var lastSeq = 0.0
+        var reading = false
         var seen = false
         var subscribed = false
         var resyncAfter: Double?
@@ -83,7 +84,10 @@ public final class Ledger {
     /// Puts one client message on the socket; the reason it could not, or nil.
     @ObservationIgnored var send: (Data) -> String? = { _ in "Not connected to the hub." }
     /// Applies one sequenced frame (a transcript change or a preview's state) to its session.
-    @ObservationIgnored var applyFrame: (String, Components.Schemas.SessionStreamFrame) -> Void = { _, _ in }
+    @ObservationIgnored var applyFrame: (String, Data) -> Void = { _, _ in }
+    // Keep the original bytes for patch fields: an absent field and an explicit
+    // null differ in the transcript's partial tail/facts updates.
+    @ObservationIgnored private var frameBytes: [Double: Data] = [:]
     /// Re-reads a session's history through the path that already exists.
     @ObservationIgnored var rereadHistory: (String) -> Void = { _ in }
     /// Heard exactly once for every command that reaches `failed`.
@@ -123,9 +127,25 @@ public final class Ledger {
         for id in cursors.keys where !sessionIds.contains(id) {
             cursors[id] = nil
         }
-        for id in sessionIds where cursors[id]?.subscribed != true {
+        for id in sessionIds where cursors[id]?.seen == true && cursors[id]?.subscribed != true && cursors[id]?.reading == false {
             subscribe(id)
         }
+    }
+
+    func beginRead(_ id: String) {
+        var cursor = cursors[id] ?? Cursor()
+        cursor.reading = true
+        cursors[id] = cursor
+    }
+
+    func adoptPage(_ id: String, seq: Double) {
+        var cursor = cursors[id] ?? Cursor()
+        cursor.reading = false
+        cursor.seen = true
+        cursor.lastSeq = seq
+        cursor.resyncFailures = 0
+        cursors[id] = cursor
+        subscribe(id)
     }
 
     /// The socket dropped: cursors keep `lastSeq`, every subscription and
@@ -147,6 +167,15 @@ public final class Ledger {
     func handle(_ data: Data) {
         let decoder = Wire.decoder()
         do {
+            let raw = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+            let events = (raw?["events"] as? [[String: Any]]) ?? (raw?["event"].map { [$0 as? [String: Any] ?? [:]] } ?? [])
+            frameBytes = [:]
+            for event in events {
+                if let seq = event["seq"] as? Double, let frame = event["frame"] {
+                    frameBytes[seq] = try JSONSerialization.data(withJSONObject: frame)
+                }
+            }
+            defer { frameBytes = [:] }
             if let delta = try? decoder.decode(Components.Schemas.StreamDelta.self, from: data) {
                 apply(delta.event)
             } else if let backlog = try? decoder.decode(Components.Schemas.StreamBacklog.self, from: data) {
@@ -167,6 +196,7 @@ public final class Ledger {
 
     private func apply(_ event: Components.Schemas.SessionStreamEvent) {
         var cursor = cursors[event.sessionId] ?? Cursor()
+        guard !cursor.reading else { return }
         // No origin yet: the hub's first word is the origin.
         if !cursor.seen {
             cursor.lastSeq = event.seq - 1
@@ -185,7 +215,9 @@ public final class Ledger {
     }
 
     private func applyEvent(_ event: Components.Schemas.SessionStreamEvent, to cursor: inout Cursor) {
-        applyFrame(event.sessionId, event.frame)
+        if let data = frameBytes[event.seq] {
+            applyFrame(event.sessionId, data)
+        }
         cursor.lastSeq = event.seq
         cursor.seen = true
         cursor.subscribed = true
@@ -207,6 +239,7 @@ public final class Ledger {
 
     private func apply(_ backlog: Components.Schemas.StreamBacklog) {
         var cursor = cursors[backlog.sessionId] ?? Cursor()
+        guard !cursor.reading else { return }
         cursor.subscribed = true
         guard let first = backlog.events.first else {
             cursor.resyncAfter = nil
@@ -241,10 +274,9 @@ public final class Ledger {
         if cursor.resyncFailures >= Self.maxResyncAttempts {
             // The ring cannot heal this: read the truth, as a reset would.
             cursor.resyncFailures = 0
-            cursor.seen = false
+            cursor.reading = true
             cursors[backlog.sessionId] = cursor
             rereadHistory(backlog.sessionId)
-            subscribe(backlog.sessionId)
             return
         }
         cursors[backlog.sessionId] = cursor
@@ -253,8 +285,7 @@ public final class Ledger {
 
     private func apply(_ reset: Components.Schemas.StreamReset) {
         var cursor = cursors[reset.sessionId] ?? Cursor()
-        cursor.lastSeq = reset.nextSeq - 1
-        cursor.seen = true
+        cursor.reading = true
         cursor.subscribed = true
         cursor.resyncAfter = nil
         cursor.resyncFailures = 0
@@ -310,6 +341,7 @@ public final class Ledger {
             record.reason = reason
         }
         commands[id] = record
+        log.notice("command \(id, privacy: .public) \(record.kind.rawValue, privacy: .public) on \(record.sessionId, privacy: .public): \(stage.rawValue, privacy: .public)")
         if record.isSettled, let settled = effects.removeValue(forKey: id)?.settled {
             settled(stage, record.reason)
         }
