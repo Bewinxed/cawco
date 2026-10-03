@@ -3164,6 +3164,10 @@ export class OpencodeHarness implements Harness {
    */
   #desiredHash: string | null = null;
   #appliedHash: string | null = null;
+  #desiredVersion: string | null = null;
+  #appliedVersion: string | null = null;
+  #versionProbe: Promise<string> | null = null;
+  #versionProbedAt = 0;
   #configState: "idle" | "pending" | "applying" | "applied" | "error" = "idle";
   #configError: string | null = null;
   #configWatchTimer: ReturnType<typeof setInterval> | null = null;
@@ -3216,10 +3220,31 @@ export class OpencodeHarness implements Harness {
     return config ? configHash(config) : null;
   }
 
+  /** Poll the installed CLI every 30s; upgrading it does not replace sessiond's server. */
+  #installedVersion(): Promise<string> {
+    if (!this.#versionProbe || Date.now() - this.#versionProbedAt >= 30_000) {
+      this.#versionProbedAt = Date.now();
+      this.#versionProbe = (async () => {
+        const binary = resolveBin("opencode");
+        if (!binary) {
+          throw new Error("opencode binary not found");
+        }
+        const ran = await Bun.$`${binary} --version`.quiet().nothrow();
+        const version = ran.stdout.toString().trim();
+        if (ran.exitCode !== 0 || !version) {
+          throw new Error(
+            `opencode version probe failed: ${ran.stderr.toString()}`
+          );
+        }
+        return version;
+      })();
+    }
+    return this.#versionProbe;
+  }
+
   /**
-   * Start watching opencode.json for changes. Called once from #ensure when the
-   * server is first attached. Polls every 2s — safe for atomic writes, no
-   * inotify edge cases.
+   * Watch config every 2s and the installed binary every 30s. An adopted server
+   * must match both before convergence considers it current.
    */
   #startConfigWatcher(): void {
     if (this.#configWatchTimer) {
@@ -3227,7 +3252,9 @@ export class OpencodeHarness implements Harness {
     }
     this.#configWatchTimer = setInterval(() => {
       // biome-ignore lint/complexity/noVoid: fire-and-forget tick; errors logged, not thrown
-      void this.#configTick();
+      void this.#configTick().catch((error: unknown) =>
+        console.warn(`[opencode] convergence probe failed: ${error}`)
+      );
     }, 2000);
   }
 
@@ -3249,6 +3276,9 @@ export class OpencodeHarness implements Harness {
       return;
     }
     const hash = await this.#hashConfig();
+    const version = await this.#installedVersion();
+    const versionChanged = version !== this.#desiredVersion;
+    this.#desiredVersion = version;
     if (hash === null) {
       // Malformed or missing config — surface the error but don't stop the
       // healthy backend.
@@ -3269,7 +3299,7 @@ export class OpencodeHarness implements Harness {
       }
       return;
     }
-    if (hash === this.#desiredHash) {
+    if (hash === this.#desiredHash && !versionChanged) {
       // No change since last read. But if we're pending (a prior attempt was
       // blocked by busy sessions), retry the apply — the sessions may be idle now.
       if (this.#configState === "pending") {
@@ -3279,7 +3309,7 @@ export class OpencodeHarness implements Harness {
       return;
     }
     this.#desiredHash = hash;
-    if (hash === this.#appliedHash) {
+    if (hash === this.#appliedHash && version === this.#appliedVersion) {
       // Desired matches what's running; clear any pending state.
       if (this.#configState === "pending") {
         this.#configState = "applied";
@@ -3301,7 +3331,7 @@ export class OpencodeHarness implements Harness {
       JSON.stringify({
         type: "config-convergence",
         state: "pending",
-        detail: `new revision ${hash.slice(0, 8)}… vs applied ${this.#appliedHash?.slice(0, 8) ?? "unknown"}`,
+        detail: `new revision ${hash.slice(0, 8)}… vs applied ${this.#appliedHash?.slice(0, 8) ?? "unknown"}; binary ${version} vs running ${this.#appliedVersion ?? "unknown"}`,
         at: Date.now(),
       })
     );
@@ -3381,7 +3411,10 @@ export class OpencodeHarness implements Harness {
     if (!this.#client) {
       return;
     }
-    if (this.#desiredHash === this.#appliedHash) {
+    if (
+      this.#desiredHash === this.#appliedHash &&
+      this.#desiredVersion === this.#appliedVersion
+    ) {
       this.#configState = "applied";
       return;
     }
@@ -3430,18 +3463,22 @@ export class OpencodeHarness implements Harness {
         await Bun.sleep(500);
       }
 
-      if (this.#desiredHash === this.#appliedHash) {
+      if (
+        this.#desiredHash === this.#appliedHash &&
+        this.#desiredVersion === this.#appliedVersion
+      ) {
         this.#configState = "applied";
         return;
       }
       const targetHash = this.#desiredHash;
+      const targetVersion = this.#desiredVersion;
 
       this.#configState = "applying";
       console.log(
         JSON.stringify({
           type: "config-convergence",
           state: "applying",
-          detail: `target ${targetHash?.slice(0, 8)}…, restarting server`,
+          detail: `target ${targetHash?.slice(0, 8)}…, binary ${targetVersion}, restarting server`,
           at: Date.now(),
         })
       );
@@ -3519,13 +3556,17 @@ export class OpencodeHarness implements Harness {
       }
 
       // 9. Verify: runtime config matches desired.
-      await this.#verifyApply(newClient, targetHash);
+      await this.#verifyApply(newClient, targetHash, targetVersion);
 
       // 10. Mark applied — only after verification passes.
       this.#appliedHash = targetHash;
+      this.#appliedVersion = targetVersion;
       this.#configError = null;
 
-      if (this.#desiredHash === targetHash) {
+      if (
+        this.#desiredHash === targetHash &&
+        this.#desiredVersion === targetVersion
+      ) {
         this.#configState = "applied";
         console.log(
           JSON.stringify({
@@ -3599,8 +3640,18 @@ export class OpencodeHarness implements Harness {
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: disk provenance + runtime leaf + MCP status verification; each layer independent with own logging
   async #verifyApply(
     client: OpencodeClient,
-    targetHash: string | null
+    targetHash: string | null,
+    targetVersion: string | null
   ): Promise<void> {
+    const health = await reached(
+      client.global.health({ signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) })
+    );
+    const runningVersion = health.data?.version;
+    if (!targetVersion || runningVersion !== targetVersion) {
+      throw new Error(
+        `binary verification failed: running ${runningVersion ?? "unknown"}, installed ${targetVersion ?? "unknown"}`
+      );
+    }
     // ---- 1. Disk provenance (concurrent-edit detection) --------------------
     const diskHash = await this.#hashConfig();
     if (targetHash && diskHash !== targetHash) {
@@ -3873,15 +3924,19 @@ export class OpencodeHarness implements Harness {
           // by the watcher only when it does not.
           const origin = freshlySpawned ? "freshly spawned" : "adopted server";
           const initialHash = await this.#hashConfig();
+          const initialVersion = await this.#installedVersion();
           this.#desiredHash = initialHash;
+          this.#desiredVersion = initialVersion;
           this.#appliedHash = null;
+          this.#appliedVersion = null;
           this.#configState = "pending";
           if (initialHash) {
             try {
               // No directory is initialized yet; this verifies the global
               // resolved config (no directory query).
-              await this.#verifyApply(client, initialHash);
+              await this.#verifyApply(client, initialHash, initialVersion);
               this.#appliedHash = initialHash;
+              this.#appliedVersion = initialVersion;
               this.#configState = "applied";
               console.log(
                 JSON.stringify({
