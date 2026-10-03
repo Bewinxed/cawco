@@ -45,6 +45,7 @@
   } from "../activity";
   import { cawco, isFailed, isStale } from "../client.svelte";
   import { continueInNewSession, continueSourceOf } from "../continue.svelte";
+  import type { HubRead } from "../hub-read";
   import { conversationHref } from "../links";
   import { sessionName } from "../session-name";
   import { runIdOf } from "../workflow-runs";
@@ -67,7 +68,7 @@
   } = $props();
 
   const servedNames = $derived(
-    (page.data as { names?: Record<string, string> }).names ?? {}
+    (page.data as { names?: Record<string, HubRead<string>> }).names ?? {}
   );
 
   interface Tab {

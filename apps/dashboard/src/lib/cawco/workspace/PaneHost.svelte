@@ -11,6 +11,7 @@
    */
   import { onMount, untrack } from "svelte";
   import WorkflowRunView from "#lib/components/features/workflows/WorkflowRunView.svelte";
+  import type { ServerTail } from "../client.svelte";
   import SessionPane from "../SessionPane.svelte";
   import Lightbox from "../transcript/Lightbox.svelte";
   import { runIdOf } from "../workflow-runs";
@@ -23,7 +24,7 @@
   }: {
     /** Which conversation this page's server data belongs to, if any. */
     entryId?: string;
-    entryTail?: unknown;
+    entryTail?: ServerTail | null;
   } = $props();
 
   let hosted = $state<string[]>([]);

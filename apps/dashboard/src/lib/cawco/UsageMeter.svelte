@@ -24,6 +24,7 @@
   import Failed from "~icons/solar/close-circle-bold-duotone";
   import Attention from "~icons/solar/hand-shake-bold-duotone";
   import { cawco } from "./client.svelte";
+  import type { HubRead } from "./hub-read";
   import {
     about,
     firstToStop,
@@ -44,11 +45,15 @@
     return () => clearInterval(timer);
   });
 
+  /** The reading the layout was served with, or why the hub refused it. */
+  const served = $derived(
+    cawco.usageLimitsRead
+      ? null
+      : ((page.data.usage as HubRead<ClaudeLimits | null> | undefined) ?? null)
+  );
   const claude = $derived(
     speakingReading(cawco.claudeLimits)?.reading ??
-      (cawco.usageLimitsRead
-        ? null
-        : ((page.data.usage as ClaudeLimits | null | undefined) ?? null))
+      (served?.ok ? served.value : null)
   );
   const go = $derived(speakingReading(cawco.openCodeGoLimits)?.reading);
 
@@ -84,6 +89,9 @@
 
   /** Why there is no bar: a normal state, never a fake 0%. */
   const reason = $derived.by(() => {
+    if (served && !served.ok) {
+      return `Limits unreadable: ${served.detail} (${served.status}) · reload to read them again`;
+    }
     const [first] = Object.values(cawco.claudeLimits);
     const error = first?.error ?? claude?.error;
     if (error === "not signed in") {

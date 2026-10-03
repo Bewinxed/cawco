@@ -1,4 +1,6 @@
 import type { TranscriptPage } from "@cawco/core";
+import type { ServerTail } from "#lib/cawco/client.svelte.js";
+import { hubFailure } from "#lib/cawco/hub-read.js";
 import { transcriptUrl } from "#lib/cawco/links.js";
 import { runIdOf } from "#lib/cawco/workflow-runs.js";
 import type { PageServerLoad } from "./$types";
@@ -13,28 +15,42 @@ import type { PageServerLoad } from "./$types";
  * load it is what puts real transcript rows in the server's HTML; on anything
  * the client asks for afterwards the store already holds the conversation,
  * and awaiting a second copy of it only delays the answer.
+ *
+ * A read the hub refused is carried to the pane rather than dropped: the pane
+ * paints that failure — the machine offline, the session not found, the read
+ * failed — until its own read of the transcript answers.
  */
 export const load: PageServerLoad = async ({
   params,
   fetch,
   untrack,
   isDataRequest,
-}) => {
+}): Promise<{ tail: ServerTail | null }> => {
   const viewId = untrack(() => params.id);
   // The board, or a workflow run's tab: neither has a transcript to read.
   if (!viewId || runIdOf(viewId) || isDataRequest) {
     return { tail: null };
   }
-  try {
-    const response = await fetch(transcriptUrl(viewId));
-    if (!response.ok) {
-      return { tail: null };
-    }
+  const response = await fetch(transcriptUrl(viewId));
+  if (!response.ok) {
     return {
-      tail: { viewId, page: (await response.json()) as TranscriptPage },
+      tail: {
+        ok: false,
+        viewId,
+        // A 503 naming a machine is the hub saying that machine is not connected.
+        machineId:
+          response.status === 503
+            ? response.headers.get("x-cawco-machine")
+            : null,
+        ...(await hubFailure(response)),
+      },
     };
-  } catch {
-    // An unreachable hub has no page to paint; the store's read says why.
-    return { tail: null };
   }
+  return {
+    tail: {
+      ok: true,
+      viewId,
+      page: (await response.json()) as TranscriptPage,
+    },
+  };
 };

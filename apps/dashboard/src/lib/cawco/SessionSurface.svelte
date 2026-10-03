@@ -31,6 +31,7 @@
   import {
     cawco,
     readTranscript,
+    type ServerTail,
     syncSubscriptions,
   } from "#lib/cawco/client.svelte.js";
   import Caw from "#lib/cawco/home/Caw.svelte";
@@ -239,12 +240,12 @@
 
   interface EntryData {
     id: string;
-    tail: unknown;
+    tail: ServerTail | null;
   }
 
   const captureEntry = (): EntryData => ({
     id: page.params.id ?? "",
-    tail: (page.data as { tail?: unknown }).tail ?? null,
+    tail: (page.data as { tail?: ServerTail | null }).tail ?? null,
   });
 
   let entry = $state<EntryData>(captureEntry());

@@ -5,6 +5,7 @@
  * folder and a mid-transcript message on the way to the real title.
  */
 import { cawco } from "./client.svelte";
+import type { HubRead } from "./hub-read";
 import { resolveSessionTitle } from "./links";
 import { workingSet } from "./working-set.svelte";
 import { contextOf } from "./workspace/workspace.svelte";
@@ -28,7 +29,7 @@ export interface SessionName {
  */
 export function sessionName(
   id: string,
-  served: Record<string, string>,
+  served: Record<string, HubRead<string>>,
   cwdFallback?: string
 ): SessionName {
   const row = cawco.instanceIndex.byId.get(id);
@@ -49,13 +50,22 @@ export function sessionName(
     id,
   });
   return {
-    // A conversation this browser has named before keeps that name, and a
-    // name the server resolved stands in after it, until the fleet and the
-    // transcript have both answered; falling back to the folder for that
-    // moment is the flash the remembered title removes.
+    // A conversation this browser has named before keeps that name, and the
+    // server's answer comes after it — the name it resolved, or that the hub
+    // refused the read — until the fleet and the transcript have both
+    // answered; falling back to the folder for that moment is the flash the
+    // remembered title removes.
     label: answered
       ? resolved
-      : (workingSet.titleOf(id) ?? served[id] ?? resolved),
+      : (workingSet.titleOf(id) ?? servedLabel(served[id]) ?? resolved),
     named,
   };
+}
+
+/** What the server's answer for a tab says: its name, or that the read failed. */
+function servedLabel(read: HubRead<string> | undefined): string | undefined {
+  if (!read) {
+    return;
+  }
+  return read.ok ? read.value : `Name unreadable (${read.status})`;
 }

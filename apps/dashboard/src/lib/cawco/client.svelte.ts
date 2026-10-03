@@ -76,6 +76,7 @@ import { goto } from "$app/navigation";
 import type { Activity } from "./activity";
 import { activityOf, runningSubagents } from "./activity";
 import { checkDeployToast } from "./deploy-toast";
+import { hubFailure } from "./hub-read";
 import { newId } from "./id";
 import {
   conversationHref,
@@ -4130,29 +4131,44 @@ export function clearReadFault(instanceId: string): void {
   }
 }
 
-/** Why a page read ended with nothing, said the way the pane says it. */
-async function pageFault(response: Response): Promise<TranscriptOutcome> {
-  const detail = (await response.text().catch(() => "")) || response.statusText;
-  // A 503 naming a machine is the hub saying that machine is not connected —
-  // a state of the fleet, not a fault in the read, and a different sentence.
-  const away =
-    response.status === 503 ? response.headers.get("x-cawco-machine") : null;
+/**
+ * The newest transcript page the server read for a view, or how the hub
+ * refused it — what `/session/[id]`'s server load hands the pane it names.
+ */
+export type ServerTail =
+  | { ok: true; page: TranscriptPage; viewId: string }
+  | {
+      detail: string;
+      /** The machine a 503 named as not connected, else null. */
+      machineId: string | null;
+      ok: false;
+      status: number;
+      viewId: string;
+    };
+
+/**
+ * Why a transcript read failed, said the way the pane says it. `away` is the
+ * machine a 503 named: that is the hub saying the machine is not connected —
+ * a state of the fleet, not a fault in the read, and a different sentence.
+ */
+export function readFaultOf(detail: string, away: string | null): ReadFault {
   if (away) {
     const machine = state.machines.find((row) => row.machineId === away);
     return {
-      ok: false,
-      status: response.status,
       reason: "offline",
       machineId: away,
       message: `${machine?.hostname || away} is offline — its stored transcript can't be read right now.`,
     };
   }
-  return {
-    ok: false,
-    status: response.status,
-    reason: "failed",
-    message: detail,
-  };
+  return { reason: "failed", message: detail };
+}
+
+/** Why a page read ended with nothing, said the way the pane says it. */
+async function pageFault(response: Response): Promise<TranscriptOutcome> {
+  const { detail } = await hubFailure(response);
+  const away =
+    response.status === 503 ? response.headers.get("x-cawco-machine") : null;
+  return { ok: false, status: response.status, ...readFaultOf(detail, away) };
 }
 
 /**

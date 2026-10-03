@@ -28,6 +28,7 @@
   import WorkflowRunView from "#lib/components/features/workflows/WorkflowRunView.svelte";
   import { browser } from "$app/env";
   import { page } from "$app/state";
+  import type { ServerTail } from "../client.svelte";
   import SessionPane from "../SessionPane.svelte";
   import Composer from "../transcript/Composer.svelte";
   import { runIdOf } from "../workflow-runs";
@@ -390,7 +391,7 @@
             browsingHarness={ctx?.harness ?? "claude"}
             focused={false}
             serverTail={paneId === page.params.id
-              ? ((page.data as { tail?: unknown }).tail ?? null)
+              ? ((page.data as { tail?: ServerTail | null }).tail ?? null)
               : null}
             viewId={paneId}
             visible={shown}

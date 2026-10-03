@@ -4,6 +4,7 @@ import type {
   Workflow,
   WorkflowRun,
 } from "@cawco/core";
+import { type HubRead, readHub } from "#lib/cawco/hub-read.js";
 import { runIdOf } from "#lib/cawco/workflow-runs.js";
 import type { LayoutServerLoad } from "./$types";
 
@@ -158,26 +159,26 @@ function currentId(pathname: string): string {
  * The account's Claude limits, as the sidebar's usage meter shows them: read
  * here so the first paint draws the meter at the size it will have, not an
  * empty footer that grows when the live reading arrives. Limits belong to the
- * account, so it is the first reading without an error, else the first.
+ * account, so it is the first reading without an error, else the first; null
+ * when no machine has reported one. A read the hub refused is carried to the
+ * meter, which says so in place of the bar.
  */
 async function usageLimits(
   fetch: typeof globalThis.fetch
-): Promise<ClaudeLimits | null> {
-  try {
-    const response = await fetch("/api/usage/limits");
-    if (!response.ok) {
-      return null;
-    }
-    const { machines } = (await response.json()) as {
-      machines: { limits: ClaudeLimits }[];
-    };
-    const readings = machines.map((reading) => reading.limits);
-    return (
-      readings.find((reading) => reading.error === null) ?? readings[0] ?? null
-    );
-  } catch {
-    return null;
+): Promise<HubRead<ClaudeLimits | null>> {
+  const read = await readHub<{ machines: { limits: ClaudeLimits }[] }>(
+    fetch,
+    "/api/usage/limits"
+  );
+  if (!read.ok) {
+    return read;
   }
+  const readings = read.value.machines.map((reading) => reading.limits);
+  return {
+    ok: true,
+    value:
+      readings.find((reading) => reading.error === null) ?? readings[0] ?? null,
+  };
 }
 
 export const load: LayoutServerLoad = async ({
@@ -237,7 +238,9 @@ export const load: LayoutServerLoad = async ({
     leaf.active = null;
   }
 
-  const names: Record<string, string> = {};
+  // Each open tab's name as the hub gave it, or why the hub could not: a tab
+  // whose name read failed says so in the strip until the fleet names it.
+  const names: Record<string, HubRead<string>> = {};
   if (!workspace) {
     return { railWidth, narrow, workspace, names, usage };
   }
@@ -247,22 +250,18 @@ export const load: LayoutServerLoad = async ({
     return { railWidth, narrow, workspace, names, usage };
   }
 
-  // What the fleet calls these conversations. A machine that cannot answer just
-  // leaves every tab named by its folder, which is what the strip falls back to
-  // on the client too.
-  let rows: InstanceRow[] = [];
-  try {
-    const response = await fetch("/api/instances");
-    if (response.ok) {
-      rows = (await response.json()) as InstanceRow[];
+  // What the fleet calls these conversations.
+  const listing = await readHub<InstanceRow[]>(fetch, "/api/instances");
+  for (const id of open.filter((tab) => !runIdOf(tab))) {
+    if (!listing.ok) {
+      names[id] = listing;
+      continue;
     }
-  } catch {
-    rows = [];
-  }
-  for (const id of open) {
-    const title = rows.find((instance) => instance.id === id)?.title?.trim();
+    const title = listing.value
+      .find((instance) => instance.id === id)
+      ?.title?.trim();
     if (title) {
-      names[id] = title;
+      names[id] = { ok: true, value: title };
     }
   }
 
@@ -273,43 +272,46 @@ export const load: LayoutServerLoad = async ({
     return runId ? [{ id, runId }] : [];
   });
   if (runs.length > 0) {
-    try {
-      const [listing, ...read] = await Promise.all([
-        fetch("/api/workflows").then((response) =>
-          response.ok
-            ? (response.json() as Promise<{ workflows: Workflow[] }>)
-            : { workflows: [] }
-        ),
-        ...runs.map(({ runId }) =>
-          fetch(`/api/workflow-runs/${encodeURIComponent(runId)}`).then(
-            (response) =>
-              response.ok ? (response.json() as Promise<WorkflowRun>) : null
-          )
-        ),
-      ]);
-      runs.forEach(({ id }, i) => {
-        const name = listing.workflows.find(
-          (workflow) => workflow.id === read[i]?.workflowId
-        )?.name;
-        if (name) {
-          names[id] = name;
-        }
-      });
-    } catch {
-      // A hub that cannot answer leaves run tabs to their client name.
-    }
+    const [workflows, ...reads] = await Promise.all([
+      readHub<{ workflows: Workflow[] }>(fetch, "/api/workflows"),
+      ...runs.map(({ runId }) =>
+        readHub<WorkflowRun>(
+          fetch,
+          `/api/workflow-runs/${encodeURIComponent(runId)}`
+        )
+      ),
+    ]);
+    runs.forEach(({ id }, i) => {
+      const run = reads[i];
+      if (!workflows.ok) {
+        names[id] = workflows;
+        return;
+      }
+      if (!run.ok) {
+        names[id] = run;
+        return;
+      }
+      const name = workflows.value.workflows.find(
+        (workflow) => workflow.id === run.value.workflowId
+      )?.name;
+      if (name) {
+        names[id] = { ok: true, value: name };
+      }
+    });
   }
 
   // The board is a working set: it drops a session that has not moved in a day.
   // The strip is not — it carries whatever the reader left open, so a tab on an
   // aged-out conversation has no row to read a name off. The name is not
   // missing, only filtered out of the listing, so ask for it by id: one batched
-  // call, and only for the tabs the listing did not name.
+  // call, and only for the tabs the listing answered without naming.
   const unnamed = open.filter((id) => !(names[id] || runIdOf(id)));
   if (unnamed.length > 0) {
     const ctx = workspace.ctx ?? {};
-    try {
-      const response = await fetch("/api/instances/titles", {
+    const titles = await readHub<{ id: string; title: string | null }[]>(
+      fetch,
+      "/api/instances/titles",
+      {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -320,20 +322,18 @@ export const load: LayoutServerLoad = async ({
             harness: ctx[id]?.harness,
           })),
         }),
-      });
-      if (response.ok) {
-        // biome-ignore lint/performance/noAwaitInLoops: the await resolves the iterable once, before the loop starts — the loop body itself never awaits
-        for (const { id, title } of (await response.json()) as {
-          id: string;
-          title: string | null;
-        }[]) {
-          if (title?.trim()) {
-            names[id] = title.trim();
-          }
+      }
+    );
+    if (titles.ok) {
+      for (const { id, title } of titles.value) {
+        if (title?.trim()) {
+          names[id] = { ok: true, value: title.trim() };
         }
       }
-    } catch {
-      // A hub that cannot answer leaves those tabs to their client fallback.
+    } else {
+      for (const id of unnamed) {
+        names[id] = titles;
+      }
     }
   }
 

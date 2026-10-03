@@ -1,5 +1,5 @@
 <script lang="ts">
-  import type { PermissionResult, TranscriptPage } from "@cawco/core";
+  import type { PermissionResult } from "@cawco/core";
   /**
    * One conversation, whole: the identity header, the transcript (Chat) or its
    * graph (Flow), and the floating composer with any parked permission or
@@ -45,9 +45,11 @@
     type PendingPermission,
     pendingRestore,
     type ReadFault,
+    readFaultOf,
     readTranscript,
     refreshCommands,
     type SendExtras,
+    type ServerTail,
     type SessionState,
     seededSession,
     selectionCommands,
@@ -104,7 +106,7 @@
     browsingHarness: string;
     visible: boolean;
     focused?: boolean;
-    serverTail?: unknown;
+    serverTail?: ServerTail | null;
   } = $props();
 
   /** A named state stands in the middle of the transcript area. */
@@ -216,16 +218,15 @@
     };
   });
 
-  /** The newest transcript page the server read, and the view it belongs to. */
-  interface ServerTail {
-    page: TranscriptPage;
-    viewId: string;
-  }
-
   /** Why this pane has nothing to show, when it has nothing to show. */
   let failure = $state<ReadFault | null>(null);
   /** The hub answered 404: no row, no stored file, no machine that knows the id. */
   let missing = $state(false);
+  /**
+   * This pane's own read has answered, so what the server said about its
+   * read (`servedFault`) no longer speaks for it.
+   */
+  let readAnswered = $state(false);
   /** The read finished, cleanly, with nothing in it — a transcript with no turns yet. */
   let empty = $state(false);
   /** Bumped by Retry: the one thing that re-runs the read after it has failed. */
@@ -251,6 +252,7 @@
     const outcome = await readTranscript(id);
     // Each outcome replaces what the last read said, and only an outcome
     // does: a read in flight leaves the pane showing what it showed.
+    readAnswered = true;
     if (!outcome.ok) {
       // 404 is an answer, not a fault: nothing the hub or any machine holds
       // goes by this id. Retrying would ask the same question.
@@ -349,7 +351,20 @@
    * empty pane and the conversation only appeared once the bundle had hydrated
    * and the stream had answered. Claimed by the pane the URL names.
    */
-  const tail = $derived((serverTail as ServerTail | null) ?? null);
+  const tail = $derived(serverTail?.viewId === viewId ? serverTail : null);
+
+  /**
+   * How the server's read of this transcript was refused, said the way the
+   * pane's own read would say it, until that read answers. A 404 is the
+   * hub's "no such session" (`servedMissing`), not a fault.
+   */
+  const served = $derived(tail && !tail.ok && !readAnswered ? tail : null);
+  const servedMissing = $derived(served?.status === 404);
+  const servedFault = $derived(
+    served && !servedMissing
+      ? readFaultOf(served.detail, served.machineId)
+      : null
+  );
 
   /**
    * The conversation as a session, built from the page's own data.
@@ -363,7 +378,7 @@
   const seeded = $derived.by<SessionState | null>(() => {
     // Nothing read back means nothing to stand in for: the store's own empty
     // and loading states are better than a blank pane pretending to be one.
-    if (!tail || tail.viewId !== viewId || tail.page.blocks.length === 0) {
+    if (!tail?.ok || tail.page.blocks.length === 0) {
       return null;
     }
     return seededSession(viewId, tail.page);
@@ -420,7 +435,7 @@
    * which mistook every stored session still being located for a lost one;
    * now it is the hub's own 404.
    */
-  const unaddressable = $derived(missing);
+  const unaddressable = $derived(missing || servedMissing);
 
   /**
    * A stored transcript with no machine behind it: readable, not writable.
@@ -440,7 +455,7 @@
    * itself — a socket backfill, a peek — reports through the session's
    * `readFault`. Either one is a card with a button, never a skeleton.
    */
-  const fault = $derived(failure ?? session?.readFault ?? null);
+  const fault = $derived(failure ?? session?.readFault ?? servedFault);
 
   /** The read finished and there is nothing in it: a named state, not a list. */
   const blank = $derived(empty && session?.messages.length === 0);
@@ -1008,6 +1023,42 @@
   {/each}
 {/snippet}
 
+<!-- A named state, not an empty pane: what happened, in one line, and the one
+     thing that can be done about it. -->
+{#snippet faultState(
+  fault: ReadFault
+)}
+  <EmptyState
+    class={STATEFUL}
+    icon={fault.reason === "offline" ? IconLaptop : IconAlert}
+    line={faultLine}
+    title={fault.reason === "offline"
+      ? "This machine is offline"
+      : "This transcript couldn't be read"}
+  >
+    {#snippet action()}
+      <Button onclick={retry} variant="outline">Try again</Button>
+    {/snippet}
+  </EmptyState>
+{/snippet}
+
+{#snippet missingState()}
+  <EmptyState
+    class={STATEFUL}
+    icon={IconAlert}
+    title="This session isn't reachable from here"
+  >
+    {#snippet line()}
+      The hub has no record of <code>{viewId}</code>, and no machine it can
+      reach has a transcript filed under it. It may live on a machine that is
+      offline, or it may have been deleted.
+    {/snippet}
+    {#snippet action()}
+      <Button href="/session" variant="outline">Back to the fleet</Button>
+    {/snippet}
+  </EmptyState>
+{/snippet}
+
 <div class="pane" bind:clientWidth={paneWidth}>
   {#if session}
     <div
@@ -1031,40 +1082,11 @@
                    and the one thing that can be done about it. -->
               {#if fault}
                 <div class="state" in:crossIn out:leave>
-                  <EmptyState
-                    class={STATEFUL}
-                    icon={fault.reason === "offline" ? IconLaptop : IconAlert}
-                    line={faultLine}
-                    title={fault.reason === "offline"
-                      ? "This machine is offline"
-                      : "This transcript couldn't be read"}
-                  >
-                    {#snippet action()}
-                      <Button onclick={retry} variant="outline"
-                        >Try again</Button
-                      >
-                    {/snippet}
-                  </EmptyState>
+                  {@render faultState(fault)}
                 </div>
               {:else if unaddressable}
                 <div class="state" in:crossIn out:leave>
-                  <EmptyState
-                    class={STATEFUL}
-                    icon={IconAlert}
-                    title="This session isn't reachable from here"
-                  >
-                    {#snippet line()}
-                      The hub has no record of <code>{viewId}</code>, and no
-                      machine it can reach has a transcript filed under it. It
-                      may live on a machine that is offline, or it may have been
-                      deleted.
-                    {/snippet}
-                    {#snippet action()}
-                      <Button href="/session" variant="outline"
-                        >Back to the fleet</Button
-                      >
-                    {/snippet}
-                  </EmptyState>
+                  {@render missingState()}
                 </div>
               {:else if blank}
                 <div class="state" in:crossIn out:leave>
@@ -1178,6 +1200,12 @@
         />
       {/if}
     </div>
+  {:else if fault}
+    <!-- No session in the store yet, and the server's read was refused: the
+         same named state the pane's own read would show. -->
+    <div class="state">{@render faultState(fault)}</div>
+  {:else if unaddressable}
+    <div class="state">{@render missingState()}</div>
   {:else}
     <!-- No session in the store yet: the same placeholder the transcript
          area shows, so the two loading moments look like one. -->
