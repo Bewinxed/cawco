@@ -85,6 +85,7 @@ export class FleetMcp {
       const response = await fetch(config.url, {
         method: "POST",
         headers: {
+          ...config.headers,
           Accept: "application/json, text/event-stream",
           "Content-Type": "application/json",
         },
@@ -407,7 +408,9 @@ export class FleetMcp {
       const upstream = new URL(row.upstream);
       upstream.search = new URL(request.url).search || upstream.search;
       const call = (token: string) => {
-        const headers = new Headers();
+        const headers = new Headers(
+          "url" in server.config ? server.config.headers : undefined
+        );
         for (const header of MCP_HEADERS) {
           const value = request.headers.get(header);
           if (value !== null) {
