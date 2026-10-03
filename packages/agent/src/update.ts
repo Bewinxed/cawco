@@ -9,7 +9,8 @@
 import { homedir, platform } from "node:os";
 import { dirname, join } from "node:path";
 import type { UpdateReport } from "@cawco/core";
-import { REPO_ROOT } from "./build";
+import { CAWCO_ENV, CAWCO_HUB_PORT, readEnv } from "@cawco/core";
+import { buildInfo, REPO_ROOT } from "./build";
 import {
   checkDeploy,
   DEPLOY_BRANCH,
@@ -385,6 +386,70 @@ const builtCommit = async (root: string): Promise<string | undefined> => {
   return stamp?.version;
 };
 
+const probeCommit = async (
+  url: string,
+  service: "hub" | "dashboard"
+): Promise<string | undefined> => {
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(2000) });
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}`);
+    }
+    const body = (await response.json()) as {
+      build?: { commit?: string };
+      version?: string;
+    };
+    return service === "hub" ? body.build?.commit : body.version;
+  } catch (error) {
+    console.error(
+      `cawco deploy: ${service} running commit unavailable: ${String(error)}; restart still owed`
+    );
+    return undefined;
+  }
+};
+
+/** Runtime commits, not the range of the last pull, survive an interrupted deploy. */
+const owedServices = async (
+  root: string,
+  head: string,
+  dashboardUrl?: string
+): Promise<Service[]> => {
+  const owed = await Promise.all(
+    SERVICES.map(async (service) => {
+      if (!(await isInstalled(service))) {
+        return;
+      }
+      if (service === "dashboard" && !dashboardUrl) {
+        throw new Error(
+          "dashboard running-commit probe owed: no installed dashboard address supplied"
+        );
+      }
+      const running =
+        service === "agent"
+          ? (await buildInfo()).commit
+          : await probeCommit(
+              service === "hub"
+                ? `http://127.0.0.1:${readEnv(CAWCO_ENV.hubPort) ?? CAWCO_HUB_PORT}/health`
+                : `${dashboardUrl}/_app/running-version.json`,
+              service
+            );
+      if (running === head) {
+        return;
+      }
+      if (
+        !running ||
+        (await changedServices(root, running, head)).includes(service)
+      ) {
+        console.error(
+          `cawco deploy: ${service} owed ${running ?? "unknown"} → ${head}`
+        );
+        return service;
+      }
+    })
+  );
+  return owed.filter((service): service is Service => service !== undefined);
+};
+
 /**
  * Whether a dashboard build is this machine's business. A worker running only
  * the daemon has no reason to spend minutes on a bundle nobody will serve, and
@@ -452,6 +517,37 @@ export const pullArgs = (branch: string): string[] => [
  */
 let updateQueue: Promise<unknown> = Promise.resolve();
 
+const installCheckout = async (
+  root: string,
+  commit: string,
+  automatic: boolean
+): Promise<boolean> => {
+  const path = await git(
+    ["rev-parse", "--path-format=absolute", "--git-path", "cawco-installed"],
+    root
+  );
+  if (!path.ok) {
+    throw failed("finding the install receipt", path);
+  }
+  const installedCommit = await Bun.file(path.said)
+    .text()
+    .catch(() => "");
+  if (automatic && installedCommit === commit) {
+    return false;
+  }
+  console.error(`cawco deploy: install owed for ${commit}`);
+  const installed = await run(
+    [process.execPath, "install", "--frozen-lockfile"],
+    INSTALL_TIMEOUT_MS,
+    root
+  );
+  if (!installed.ok) {
+    throw failed("bun install", installed);
+  }
+  await Bun.write(path.said, commit);
+  return true;
+};
+
 /**
  * Everything the `updateCawco` control does, in the order it has to happen.
  * Every field of the report is what actually took place: a step that was
@@ -465,13 +561,32 @@ export const updateCheckout = (
   return update;
 };
 
-const pullAndRestart = async ({
-  restartAgent,
-  force,
-  busy = 0,
-  root = REPO_ROOT,
-  branch,
-}: UpdateOptions): Promise<UpdateReport> => {
+/** Include a build interrupted before a service restart, even across later pulls. */
+const includeDashboardDebt = async (
+  root: string,
+  report: UpdateReport
+): Promise<void> => {
+  if (!report.to) {
+    throw new Error("dashboard reconciliation requires the checkout HEAD");
+  }
+  const stamped = await builtCommit(root);
+  if (
+    stamped &&
+    stamped !== report.to &&
+    !report.changed.includes("dashboard") &&
+    (await changedServices(root, stamped, report.to)).includes("dashboard")
+  ) {
+    report.changed = [...report.changed, "dashboard"];
+  }
+};
+
+const pullAndRestart = async (
+  { restartAgent, force, busy = 0, root = REPO_ROOT, branch }: UpdateOptions,
+  deployment?: {
+    state: Extract<DeployState, { kind: "behind" | "current" }>;
+    dashboardUrl?: string;
+  }
+): Promise<UpdateReport> => {
   const head = await git(["rev-parse", "--short", "HEAD"], root);
   if (!head.ok) {
     throw new Error(
@@ -492,9 +607,12 @@ const pullAndRestart = async ({
   }
 
   const args = pullArgs(branch);
-  const pulled = await git(args, root);
+  const pulled =
+    deployment?.state.kind === "current"
+      ? { ok: true, said: "checkout already current" }
+      : await git(args, root);
   if (!pulled.ok) {
-    throw failed(`git ${args.join(" ")}`, pulled);
+    throw failed(`git ${args.join(" ")}`, pulled as Ran);
   }
   const moved = await git(["rev-parse", "--short", "HEAD"], root);
   if (!moved.ok) {
@@ -516,21 +634,20 @@ const pullAndRestart = async ({
         ? SERVICES
         : await changedServices(root, head.said, moved.said),
   };
+  if (deployment) {
+    report.changed = await owedServices(
+      root,
+      moved.said,
+      deployment.dashboardUrl
+    );
+  }
   const skipped: string[] = [];
 
   // The dashboard on disk can be older than this pull's range. An update cut
   // short after its pull (the agent restarted under the build it was running)
   // leaves the checkout current and the build behind, and no later range
   // names the commits in between, so the build it was stamped from decides.
-  const stamped = await builtCommit(root);
-  if (
-    stamped &&
-    stamped !== moved.said &&
-    !report.changed.includes("dashboard") &&
-    (await changedServices(root, stamped, moved.said)).includes("dashboard")
-  ) {
-    report.changed = [...report.changed, "dashboard"];
-  }
+  await includeDashboardDebt(root, report);
 
   // Every step below is decided by what is on disk, not by whether this pull
   // moved HEAD: a deploy that failed partway is retried with nothing left to
@@ -539,15 +656,11 @@ const pullAndRestart = async ({
   // Frozen, so a commit whose bun.lock disagrees with its package.json files
   // fails this one deploy instead of rewriting bun.lock and leaving the clone
   // dirty, which would refuse every later pull. With nothing new it is a no-op.
-  const installed = await run(
-    [process.execPath, "install", "--frozen-lockfile"],
-    INSTALL_TIMEOUT_MS,
-    root
+  report.installed = await installCheckout(
+    root,
+    moved.said,
+    Boolean(deployment)
   );
-  if (!installed.ok) {
-    throw failed("bun install", installed);
-  }
-  report.installed = true;
 
   // The units go in before the build: the build overwrites the assets the
   // running dashboard's pages point at, so anything that can fail between the
@@ -567,6 +680,7 @@ const pullAndRestart = async ({
     } else if ((await builtCommit(root)) === report.to) {
       skipped.push(`the dashboard is already built from ${report.to}`);
     } else {
+      console.error(`cawco deploy: dashboard build owed for ${report.to}`);
       const built = await run(
         [process.execPath, "run", "--filter", "@cawco/dashboard", "build"],
         BUILD_TIMEOUT_MS,
@@ -579,7 +693,15 @@ const pullAndRestart = async ({
     }
   }
 
-  return restartStack(report, { restartAgent, force, busy }, skipped);
+  const result = await restartStack(
+    report,
+    { restartAgent, force, busy },
+    skipped
+  );
+  if (deployment && result.skipped && result.changed.length > 0) {
+    console.error(`cawco deploy: skipped: ${result.skipped}`);
+  }
+  return result;
 };
 
 /**
@@ -619,6 +741,7 @@ export const restartStack = async (
     report.changed.includes("dashboard") &&
     (await isInstalled("dashboard"))
   ) {
+    console.error(`cawco deploy: dashboard restart owed for ${report.to}`);
     const restarted = await run(
       restartCommand("dashboard"),
       SERVICE_TIMEOUT_MS
@@ -629,6 +752,9 @@ export const restartStack = async (
     report.restarted.push("dashboard");
   }
   if (report.changed.includes("hub") && (await isInstalled("hub"))) {
+    console.error(
+      `cawco deploy: hub restart owed for ${report.to}; scheduled in ${RESTART_DELAY_S}s`
+    );
     report.restarted.push("hub");
     scheduleRestart("hub");
   }
@@ -675,29 +801,40 @@ export const restartStack = async (
  * the real busy count and a retry every tick until idle, rather than a
  * one-shot check against a number this call never even asked for.
  */
-export const deployUpdate = (state: DeployState): Promise<UpdateReport> => {
-  if (state.kind !== "behind") {
+export const deployUpdate = (
+  state: DeployState,
+  dashboardUrl?: string
+): Promise<UpdateReport> => {
+  if (state.kind !== "behind" && state.kind !== "current") {
     throw new Error(
       `refusing to update a checkout that is ${state.kind}: ${describeDeploy(state)}`
     );
   }
-  return updateCheckout({
-    root: state.root,
-    branch: DEPLOY_BRANCH,
-    restartAgent: false,
-  });
+  const update = updateQueue.then(() =>
+    pullAndRestart(
+      {
+        root: state.root,
+        branch: DEPLOY_BRANCH,
+        restartAgent: false,
+      },
+      { state, dashboardUrl }
+    )
+  );
+  updateQueue = update.catch(() => undefined);
+  return update;
 };
 
 export type DeployWatchOptions = Partial<
   Omit<DeployWatcherOptions, "update">
 > & {
   readonly intervalMs?: number;
+  readonly dashboardUrl?: string;
 };
 
 /**
  * What the daemon's entry point starts: poll the deployment clone, and run the
- * update flow when — and only when — a marked clone is strictly behind
- * `origin/main`. Started unconditionally: on a machine that was never deployed
+ * reconciliation on every marked, non-diverged tick, even with HEAD already at
+ * `origin/main`. On a machine that was never deployed
  * to, the very first thing every tick does is fail the marker check, so the
  * poller is a no-op in a dev tree by construction rather than by configuration.
  */
@@ -708,7 +845,7 @@ export const watchDeployment = (
     // The real idle-gated restart, unless a caller (the tests) names its own.
     restartAgent: restartAgentNow,
     ...options,
-    update: deployUpdate,
+    update: (state) => deployUpdate(state, options.dashboardUrl),
   });
 
 /**

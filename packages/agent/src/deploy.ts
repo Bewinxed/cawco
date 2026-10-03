@@ -113,7 +113,7 @@ export type DeployState =
       readonly root: string;
       readonly reason: string;
     }
-  /** Level with the branch. Nothing to do, and that is the normal answer. */
+  /** Level with the branch; running services may still owe deploy steps. */
   | { readonly kind: "current"; readonly root: string; readonly head: string }
   /** New commits upstream and none of our own: the one state that deploys. */
   | {
@@ -361,11 +361,11 @@ export interface DeployWatcherOptions {
   /**
    * How many sessions this daemon is carrying mid-turn, once it knows (a
    * restarted daemon knows only when custody of its sessions has said). Read
-   * once per tick — a pending agent restart is held for as long as this says
+   * once per tick — a pending agent restart is held for as long as busy is
    * `> 0` and fired the very first tick it does not. Absent means "always
    * idle": nothing is wired to restart, so there is never a restart to gate.
    */
-  readonly busy?: () => Promise<number>;
+  readonly busy?: () => Promise<{ busy: number; instances: string[] }>;
   readonly git?: GitRunner;
   /**
    * Where a tick goes. The default logs; the hub-facing surface (leaf C2)
@@ -389,8 +389,8 @@ export interface DeployWatcherOptions {
    * {@link restartAgent}, which owns that half now.
    */
   readonly update: (
-    state: Extract<DeployState, { kind: "behind" }>
-  ) => Promise<Pick<UpdateReport, "changed">>;
+    state: Extract<DeployState, { kind: "behind" | "current" }>
+  ) => Promise<Pick<UpdateReport, "changed" | "to">>;
 }
 
 const say = (line: string): void => console.error(`cawco deploy: ${line}`);
@@ -439,16 +439,6 @@ export class DeployBlocked extends Error {}
  */
 export class DeployWatcher {
   readonly #options: DeployWatcherOptions;
-  /**
-   * The last upstream head an update was *attempted* for, so a push triggers
-   * exactly one update run — not one per minute until the pull happens to
-   * take. Attempted, not succeeded: a broken commit that fails to build must
-   * not be retried in a loop, it must be fixed and pushed over.
-   *
-   * A {@link DeployBlocked} failure is the exception, and is not remembered.
-   * See {@link DeployWatcher.act}.
-   */
-  #attempted?: string;
   /** A poll is skipped outright while an update is still running. */
   #busy = false;
   #last?: DeployTick;
@@ -463,6 +453,15 @@ export class DeployWatcher {
    * longer behind anything, that nobody ever asked about again).
    */
   #agentRestartOwedFor?: string;
+  readonly #held = new Map<string, number>();
+
+  #hold(reason: string): void {
+    const now = Date.now();
+    if (now - (this.#held.get(reason) ?? 0) >= DEPLOY_POLL_MS) {
+      say(reason);
+      this.#held.set(reason, now);
+    }
+  }
 
   constructor(options: DeployWatcherOptions) {
     this.#options = options;
@@ -473,8 +472,11 @@ export class DeployWatcher {
   }
 
   async tick(): Promise<DeployTick> {
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: #busy is reassigned true/false further down; Biome doesn't track private field mutation across the class
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: concurrent interval ticks read #busy while an earlier tick awaits.
     if (this.#busy) {
+      this.#hold(
+        "tick held: install/build/restart reconciliation is still running"
+      );
       // Not a state read: an install-and-build can outlast several intervals,
       // and re-entering it would run two `bun install`s over one node_modules.
       return (
@@ -484,23 +486,36 @@ export class DeployWatcher {
         }
       );
     }
-    const state = await checkDeploy({
-      root: this.#options.root,
-      git: this.#options.git,
-    });
-    const tick = await this.#act(state);
-    // Independent of whether THIS tick pulled anything: an earlier pull may
-    // still be waiting on the machine going idle, and every tick is another
-    // chance to ask — the whole point of unifying this with `--when-idle`
-    // instead of asking once and giving up.
-    await this.#drainPendingRestart();
-    this.#last = tick;
-    // Recorded before the report runs, and regardless of which report it is: a
-    // caller that injects its own `report` (the tests do) must not thereby
-    // silence the wire, and a report that throws must not lose the state.
-    latest = deployInfo(tick);
-    (this.#options.report ?? defaultReport)(tick);
-    return tick;
+    this.#busy = true;
+    try {
+      const state = await checkDeploy({
+        root: this.#options.root,
+        git: this.#options.git,
+      });
+      let tick = await this.#act(state);
+      // Independent of whether THIS tick pulled anything: an earlier pull may
+      // still be waiting on the machine going idle, and every tick is another
+      // chance to ask — the whole point of unifying this with `--when-idle`
+      // instead of asking once and giving up.
+      try {
+        if (!tick.failure) {
+          await this.#drainPendingRestart();
+        }
+      } catch (error) {
+        const failure = `agent restart owed: ${error instanceof Error ? error.message : String(error)}`;
+        this.#hold(failure);
+        tick = { ...tick, failure };
+      }
+      this.#last = tick;
+      // Recorded before the report runs, and regardless of which report it is: a
+      // caller that injects its own `report` (the tests do) must not thereby
+      // silence the wire, and a report that throws must not lose the state.
+      latest = deployInfo(tick);
+      (this.#options.report ?? defaultReport)(tick);
+      return tick;
+    } finally {
+      this.#busy = false;
+    }
   }
 
   get #root(): string {
@@ -511,63 +526,58 @@ export class DeployWatcher {
    * The idle-gated half of the channel: an agent restart a pull left owed,
    * retried every tick — forever, no timeout, because nobody is at a
    * terminal waiting on this one — until the machine is idle enough to take
-   * it. Silent while it waits: a busy machine finishing a long session is not
-   * a fault, and logging "still waiting" every minute for hours would bury
-   * whatever else the log has to say.
+   * it. Every held reason is logged at most once per minute, with the busy ids.
    */
   async #drainPendingRestart(): Promise<void> {
     const commit = this.#agentRestartOwedFor;
     if (!commit) {
       return;
     }
-    if (((await this.#options.busy?.()) ?? 0) > 0) {
+    const busy = await this.#options.busy?.();
+    if (busy && busy.busy > 0) {
+      this.#hold(
+        `agent restart to ${commit} held: busy=${busy.busy}; instances=${busy.instances.join(", ")}`
+      );
       return;
     }
     const restart = this.#options.restartAgent;
     if (!restart) {
-      // No restart wiring at all — every test, and a caller that never asked
-      // for one. The debt is real but nothing here can pay it, so it is
-      // dropped rather than retried forever for nothing.
-      this.#agentRestartOwedFor = undefined;
+      this.#hold(`agent restart to ${commit} owed: no restart handler`);
       return;
     }
-    await restart(this.#root, commit);
-    this.#agentRestartOwedFor = undefined;
+    if (await restart(this.#root, commit)) {
+      say(`agent restart to ${commit} scheduled (idle)`);
+      this.#agentRestartOwedFor = undefined;
+    } else {
+      this.#hold(`agent restart to ${commit} owed: no installed agent service`);
+    }
   }
 
   async #act(state: DeployState): Promise<DeployTick> {
-    if (state.kind !== "behind") {
+    if (state.kind !== "behind" && state.kind !== "current") {
+      this.#hold(`reconciliation skipped: ${describeDeploy(state)}`);
       return { state, updated: false };
     }
-    if (state.target === this.#attempted) {
-      return { state, updated: false };
-    }
-    this.#attempted = state.target;
-    this.#busy = true;
     try {
-      const { changed } = await this.#options.update(state);
+      const { changed, to } = await this.#options.update(state);
       // The bits landed. The agent owes a restart only when they reach code it
       // runs, or when it already owed one for an earlier pull, which now moves
       // to this head. Whether it takes it this instant or has to wait for the
       // machine to go idle is `#drainPendingRestart`'s call, asked on every
       // tick from here on — not this one's.
       if (changed.includes("agent") || this.#agentRestartOwedFor) {
-        this.#agentRestartOwedFor = state.target;
+        this.#agentRestartOwedFor = to;
       }
-      return { state, updated: true };
+      return { state, updated: state.kind === "behind" || changed.length > 0 };
     } catch (error) {
-      if (error instanceof DeployBlocked) {
-        // Nothing was tried, so nothing is spent: let the next tick have this
-        // same head once whatever stood in the way is gone.
-        this.#attempted = undefined;
-      }
+      this.#hold(
+        `reconciliation owed: ${error instanceof Error ? error.message : String(error)}`
+      );
       return {
         state,
         updated: false,
         failure: error instanceof Error ? error.message : String(error),
       };
-    } finally {
-      this.#busy = false;
     }
   }
 }

@@ -16,6 +16,7 @@ import {
   CHECKOUT_ROOT,
   DEPLOY_BRANCH,
   DEPLOY_MARKER,
+  dashboardUrl,
   deployInit,
   deployRoot,
   isServiceAction,
@@ -452,7 +453,11 @@ const up = async (args: Args): Promise<number> => {
     // `currentBusy`. Without it, a pull that lands mid-turn would restart
     // the agent onto it blind; with it, the restart waits for `currentBusy()`
     // to read 0 and is retried on every 60s tick until it does.
-    watchDeployment({ busy: currentBusy, root: CHECKOUT_ROOT });
+    watchDeployment({
+      busy: currentBusy,
+      root: CHECKOUT_ROOT,
+      dashboardUrl: dashboardUrl(),
+    });
   }
   return 0;
 };

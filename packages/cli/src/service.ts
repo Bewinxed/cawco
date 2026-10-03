@@ -452,7 +452,7 @@ const probeSessiond = async (): Promise<string | undefined> => {
 };
 
 /** The browser address corresponding to the socket we install. */
-const dashboardUrl = (): string => {
+export const dashboardUrl = (): string => {
   const host =
     DASHBOARD_HOST === "0.0.0.0" || DASHBOARD_HOST === "::"
       ? "localhost"

@@ -88,6 +88,8 @@ export class OpencodeActivity {
   #nextSampleAt = 0;
   #sampling: Promise<ActivitySnapshot> | null = null;
   #requesting = 0;
+  #timer: ReturnType<typeof setTimeout> | undefined;
+  #stopped = false;
   readonly #requestWaiters: (() => void)[] = [];
 
   constructor(generation: string, birth: Promise<number>) {
@@ -360,16 +362,28 @@ export class OpencodeActivity {
   }
 
   report(client: OpencodeClient): ActivitySnapshot {
+    if (!(this.#timer || this.#stopped)) {
+      this.#timer = setTimeout(() => {
+        this.#timer = undefined;
+        this.report(client);
+      }, ACTIVE_INTERVAL_MS);
+      this.#timer.unref();
+    }
     // biome-ignore lint/complexity/noVoid: busy controls read the shared model without waiting for network requests
     void this.sample(client);
     return this.snapshot();
+  }
+
+  stop(): void {
+    this.#stopped = true;
+    clearTimeout(this.#timer);
   }
 
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: inventory coverage and independently ordered directory observations form one sampling round
   async #read(client: OpencodeClient): Promise<ActivitySnapshot> {
     const roundStarted = Date.now();
     const signal = AbortSignal.timeout(
-      // biome-ignore lint/suspicious/noUnnecessaryConditions: the initial inventory changes this field before subsequent rounds
+      // biome-ignore lint/suspicious/noUnnecessaryConditions: earlier sampling rounds set #catalogued true.
       this.#catalogued ? SAMPLE_BUDGET_MS : INITIAL_BUDGET_MS
     );
     const born = await this.#birth;
@@ -388,7 +402,7 @@ export class OpencodeActivity {
       const listed = await client.experimental.session.list(
         {
           limit: 200,
-          // biome-ignore lint/suspicious/noUnnecessaryConditions: subsequent rounds reuse the completed initial inventory
+          // biome-ignore lint/suspicious/noUnnecessaryConditions: earlier sampling rounds set #catalogued true.
           ...(this.#catalogued ? { start: born } : {}),
           ...(cursor === undefined ? {} : { cursor }),
         },

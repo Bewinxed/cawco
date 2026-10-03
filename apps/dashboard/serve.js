@@ -30,7 +30,7 @@
  * request that is a navigation (`Sec-Fetch-Mode: navigate`) gets a 302 back
  * under the prefix so the iframe URL stays correct.
  */
-import { createReadStream, existsSync, statSync } from "node:fs";
+import { createReadStream, existsSync, readFileSync, statSync } from "node:fs";
 import http from "node:http";
 import net from "node:net";
 import { extname, resolve, sep } from "node:path";
@@ -50,6 +50,11 @@ import sockets from "socket-activation";
 const PROTOCOL_HEADER = "x-cawco-protocol";
 process.env.PROTOCOL_HEADER = PROTOCOL_HEADER;
 const { handler } = await import("./build/handler.js");
+// Captured once: version.json on disk changes during a build before this process restarts.
+const runningVersion = readFileSync(
+  new URL("./build/client/_app/version.json", import.meta.url),
+  "utf8"
+);
 
 const target = new URL(process.env.CAWCO_HUB_URL || "http://localhost:3456");
 const targetPort = Number(target.port || 80);
@@ -245,6 +250,14 @@ function serveFresh(req, res, pathname) {
 
 function serveApp(req, res) {
   const [pathname] = req.url.split("?");
+  if (pathname === "/_app/running-version.json") {
+    res.writeHead(200, {
+      "Content-Type": "application/json",
+      "Cache-Control": "no-store",
+    });
+    res.end(runningVersion);
+    return;
+  }
   if (
     pathname.startsWith(IMMUTABLE_PREFIX) &&
     !existsSync(`${CLIENT_DIR}${pathname}`)

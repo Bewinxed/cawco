@@ -3741,7 +3741,20 @@ export class OpencodeHarness implements Harness {
     if (!client) {
       return [...activity.snapshot().instances, "opencode:activity-unknown"];
     }
-    const snapshots = this.#serverOwner.generations.map((generation) =>
+    const { generations } = this.#serverOwner;
+    const live = new Set(
+      generations.map(
+        (generation) =>
+          `${generation.epoch}/${generation.procId}/${generation.startedAt}`
+      )
+    );
+    for (const [key, retired] of this.#activities) {
+      if (!live.has(key)) {
+        retired.stop();
+        this.#activities.delete(key);
+      }
+    }
+    const snapshots = generations.map((generation) =>
       this.#activity(generation).report(this.#clientForGeneration(generation))
     );
     const operations = this.#operationsPending()
@@ -5452,6 +5465,9 @@ export class OpencodeHarness implements Harness {
     this.#disposed = true;
     this.#converging = false;
     this.#stopConfigWatcher();
+    for (const activity of this.#activities.values()) {
+      activity.stop();
+    }
     if (this.#handoffTimer) {
       clearTimeout(this.#handoffTimer);
     }

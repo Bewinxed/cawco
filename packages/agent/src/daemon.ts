@@ -1,5 +1,6 @@
 import { arch, hostname, platform } from "node:os";
 import type {
+  AgentBusyReport,
   AuthState,
   BuildInfo,
   DeployInfo,
@@ -216,8 +217,15 @@ let activeSupervisor: SessionSupervisor | undefined;
  * the supervisor exists, unknown is held busy. The deploy poller holds a restart until
  * idle without asking the hub a question the daemon can answer about itself.
  */
-export const currentBusy = async (): Promise<number> =>
-  activeSupervisor ? (await activeSupervisor.busyNow()).busy : 1;
+export const currentBusy = async (): Promise<AgentBusyReport> =>
+  activeSupervisor
+    ? await activeSupervisor.busyNow()
+    : {
+        busy: 1,
+        instances: ["agent:supervisor-unavailable"],
+        ready: false,
+        recovery: "recovering",
+      };
 
 /**
  * How many consecutive failures against the pinned URL, and how much wall
