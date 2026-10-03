@@ -48,10 +48,12 @@ import {
   resumeCursor,
   UPDATE_CAWCO,
   withWorktreeLine,
+  worstFleetState,
 } from "@cawco/core";
 import { Effect } from "effect";
 import { type Boundary, boundaryFor } from "./boundary";
 import { fetchDefaultBranch } from "./clone";
+import { delegationHubUrl } from "./delegation";
 import { DEPLOY_BRANCH } from "./deploy";
 import { expandHome, runFs } from "./fs";
 import type { Harness, HarnessContext, HarnessSession } from "./harness";
@@ -1637,11 +1639,28 @@ export class SessionSupervisor {
   /** Converges the fleet across every harness that has a profile, merged into one report. */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: merges every FleetSyncReport field across harnesses field-by-field, on purpose (see the comments below on why nothing is dropped)
   async #syncFleet(
-    config: FleetConfig | undefined,
+    incoming: FleetConfig | undefined,
     which: "syncFleet" | "fleetStatus"
   ): Promise<FleetSyncReport> {
+    // The daemon's connection names a hub reachable from this machine.
+    const config = incoming && {
+      ...incoming,
+      mcp: incoming.mcp.map((row) =>
+        row.proxied && "url" in row.config
+          ? {
+              ...row,
+              config: {
+                ...row.config,
+                url: `${delegationHubUrl()}/mcp/fleet/${encodeURIComponent(row.name)}`,
+              },
+            }
+          : row
+      ),
+    };
     type State = import("@cawco/core").FleetItemState;
     const mcp: FleetSyncReport["mcp"] = {};
+    const mcpByHarness: NonNullable<FleetSyncReport["mcpByHarness"]> = {};
+    const mcpFailures = new Map<HarnessKind, string>();
     const marketplaces: FleetSyncReport["marketplaces"] = {};
     const plugins: FleetSyncReport["plugins"] = {};
     const skills: Record<string, State> = {};
@@ -1682,7 +1701,7 @@ export class SessionSupervisor {
               await adapter.syncFleet!(config as FleetConfig)
             : // biome-ignore lint/style/noNonNullAssertion: `apply` was checked truthy above, and it is exactly `adapter.fleetStatus` on this branch
               await adapter.fleetStatus!();
-        Object.assign(mcp, report.mcp);
+        mcpByHarness[adapter.kind] = report.mcp;
         Object.assign(marketplaces, report.marketplaces);
         Object.assign(plugins, report.plugins);
         Object.assign(skills, report.skills ?? {});
@@ -1705,10 +1724,41 @@ export class SessionSupervisor {
         }
       } catch (error) {
         warn(`${which} on ${adapter.kind} failed: ${error}`);
+        mcpFailures.set(adapter.kind, String(error));
+        mcpByHarness[adapter.kind] = Object.fromEntries(
+          (config?.mcp ?? []).map((row) => [
+            row.name,
+            { state: "failed", detail: `${adapter.kind}: ${String(error)}` },
+          ])
+        );
       }
+    }
+    const names = new Set(
+      Object.values(mcpByHarness).flatMap((rows) => Object.keys(rows ?? {}))
+    );
+    for (const [kind, detail] of mcpFailures) {
+      mcpByHarness[kind] = Object.fromEntries(
+        [...names].map((name) => [name, { state: "failed", detail }])
+      );
+    }
+    for (const name of names) {
+      const readings = Object.entries(mcpByHarness).flatMap(([kind, rows]) =>
+        rows?.[name] ? [{ kind, item: rows[name] }] : []
+      );
+      const worst = worstFleetState(readings.map((reading) => reading.item));
+      mcp[name] = {
+        ...worst,
+        detail: readings
+          .map(
+            ({ kind, item }) =>
+              `${kind}: ${item.state}${item.detail ? ` — ${item.detail}` : ""}`
+          )
+          .join("\n"),
+      };
     }
     return {
       mcp,
+      mcpByHarness,
       marketplaces,
       plugins,
       skills,

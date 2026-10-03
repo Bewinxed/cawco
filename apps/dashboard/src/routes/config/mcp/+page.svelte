@@ -2,6 +2,7 @@
   import type { FleetMcpServer } from "@cawco/core";
   import { toast } from "svelte-sonner";
   import { cawco } from "#lib/cawco/client.svelte.js";
+  import McpSignIn from "#lib/cawco/config/McpSignIn.svelte";
   import RolloutChip from "#lib/cawco/config/RolloutChip.svelte";
   import RowFaults from "#lib/cawco/config/RowFaults.svelte";
   import RowList from "#lib/cawco/config/RowList.svelte";
@@ -30,7 +31,7 @@
   } from "#lib/icons.js";
 
   /**
-   * The MCP servers every machine's Claude Code can reach. New sessions pick
+   * The MCP servers every supported harness can reach. New sessions pick
    * them up; a running session keeps the servers it started with.
    */
   const store = configStore();
@@ -173,8 +174,26 @@
               what={row.name}
             />
           {/snippet}
+          {#snippet trailing()}
+            <McpSignIn server={row} />
+          {/snippet}
           {#snippet below()}
-            <RowFaults key={row.name} kind="mcp" {machines} />
+            <RowFaults
+              hub={row.auth?.state === "failed"
+                ? [
+                    {
+                      origin: "hub",
+                      scope: "mcp",
+                      key: row.name,
+                      cause: "auth-discovery",
+                      detail: row.auth.detail,
+                    },
+                  ]
+                : []}
+              key={row.name}
+              kind="mcp"
+              {machines}
+            />
           {/snippet}
         </SectionRow>
       {/each}

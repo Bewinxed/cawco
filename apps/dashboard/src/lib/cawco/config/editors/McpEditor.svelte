@@ -32,6 +32,7 @@
   import EditorFrame from "../EditorFrame.svelte";
   import EditorSection from "../EditorSection.svelte";
   import Field from "../Field.svelte";
+  import McpSignIn from "../McpSignIn.svelte";
   import { configStore, upsert } from "../store.svelte";
   import TitleInput from "../TitleInput.svelte";
 
@@ -270,6 +271,12 @@
     {/if}
     {#if failed}
       <p class="problem" role="alert" in:appear>{failed}</p>
+    {/if}
+    {#if server}
+      <McpSignIn {server} />
+      {#if server.auth?.state === "failed"}
+        <p class="problem" role="alert">{server.auth.detail}</p>
+      {/if}
     {/if}
   {/snippet}
 

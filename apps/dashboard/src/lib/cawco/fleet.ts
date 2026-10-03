@@ -399,6 +399,20 @@ export const saveMcpServer = (
 export const removeMcpServer = (name: string): Promise<void> =>
   erase(`/api/fleet/mcp/${encodeURIComponent(name)}`, `remove ${name}`);
 
+export const startMcpSignIn = (
+  name: string,
+  machineId: string
+): Promise<{ ok: true; machineId: string }> =>
+  send(
+    `/api/fleet/mcp/${encodeURIComponent(name)}/sign-in`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ machineId }),
+    },
+    `start sign-in to ${name}`
+  );
+
 export const saveMarketplace = (
   name: string,
   source: string

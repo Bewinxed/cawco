@@ -67,6 +67,7 @@ import {
   fleetAgents,
   fleetHookHistory,
   fleetHooks,
+  fleetMcpOauth,
   fleetMemory,
   fleetMemoryDocs,
   fleetMemoryHistory,
@@ -256,6 +257,7 @@ export interface DbShape {
     projects: number;
   };
   readonly deleteMarketplace: (name: string) => void;
+  readonly deleteMcpOauth: (name: string) => void;
   readonly deleteMcpServer: (name: string) => void;
   readonly deletePlugin: (id: string) => void;
   readonly deleteProject: (id: string) => void;
@@ -301,6 +303,12 @@ export interface DbShape {
   readonly getInstancesByIds: (
     ids: string[]
   ) => (typeof instances.$inferSelect)[];
+  readonly getMcpOauth: (
+    name: string
+  ) => typeof fleetMcpOauth.$inferSelect | undefined;
+  readonly getMcpServer: (
+    name: string
+  ) => typeof mcpServers.$inferSelect | undefined;
   /** The stored OpenRouter key and when it was connected, or undefined while not connected. */
   readonly getOpenRouterConnection: () =>
     | { apiKey: string; connectedAt: Date; suggestWhileTyping: boolean }
@@ -333,6 +341,7 @@ export interface DbShape {
   readonly instanceBySessionId: (
     sessionId: string
   ) => typeof instances.$inferSelect | undefined;
+  readonly lastMcpSignInMachine: () => string | undefined;
   /** Keys a send to the id its harness stores it under. */
   readonly linkSend: (uuid: string, harnessId: string) => void;
   /**
@@ -548,6 +557,7 @@ export interface DbShape {
     content: string;
   }) => MemoryDocRow;
   readonly putMarketplace: (marketplace: FleetMarketplace) => FleetMarketplace;
+  readonly putMcpOauth: (row: typeof fleetMcpOauth.$inferInsert) => void;
   readonly putMcpServer: (server: {
     name: string;
     config: FleetMcpServer["config"];
@@ -737,6 +747,7 @@ export interface DbShape {
     instanceId: string,
     states: SentMessageRow["state"][]
   ) => SentMessageRow[];
+  readonly setAgentBrowser: (machineId: string, available: boolean) => void;
   /** A machine's own account of what it came to, from the sync it just answered. */
   readonly setAgentFleet: (machineId: string, report: FleetSyncReport) => void;
   /** What each harness on the machine can do, as its daemon's report beat said. */
@@ -756,6 +767,11 @@ export interface DbShape {
   readonly setInstanceAutopilot: (
     instanceId: string,
     value: { enabled: boolean; prompt: string; updatedAt: number } | null
+  ) => void;
+  readonly setMcpAuth: (
+    name: string,
+    mode: "direct" | "oauth",
+    error?: string
   ) => void;
   /** Store (or replace) the OpenRouter key from a completed PKCE exchange. */
   readonly setOpenRouterConnection: (apiKey: string) => void;
@@ -820,6 +836,9 @@ export interface DbShape {
     toUnknown: number;
     toSleeping: number;
   };
+  readonly takeMcpAuthorization: (
+    state: string
+  ) => typeof fleetMcpOauth.$inferSelect | undefined;
   readonly touchAgent: (machineId: string) => void;
   /**
    * The session moved. This is the only write anywhere that means it: every
@@ -1373,6 +1392,56 @@ const make = (path: string): DbShape => {
   };
 
   return {
+    getMcpServer: (name) =>
+      db.select().from(mcpServers).where(eq(mcpServers.name, name)).get(),
+    lastMcpSignInMachine: () =>
+      db
+        .select({ machineId: fleetMcpOauth.lastMachineId })
+        .from(fleetMcpOauth)
+        .where(isNotNull(fleetMcpOauth.lastMachineId))
+        .orderBy(desc(fleetMcpOauth.lastOpenedAt))
+        .get()?.machineId ?? undefined,
+    setAgentBrowser: (machineId, browserAvailable) => {
+      db.update(agents)
+        .set({ browserAvailable })
+        .where(eq(agents.machineId, machineId))
+        .run();
+    },
+    getMcpOauth: (name) =>
+      db.select().from(fleetMcpOauth).where(eq(fleetMcpOauth.name, name)).get(),
+    putMcpOauth: (row) => {
+      db.insert(fleetMcpOauth)
+        .values(row)
+        .onConflictDoUpdate({ target: fleetMcpOauth.name, set: row })
+        .run();
+    },
+    deleteMcpOauth: (name) => {
+      db.delete(fleetMcpOauth).where(eq(fleetMcpOauth.name, name)).run();
+    },
+    setMcpAuth: (name, mode, error) => {
+      db.update(mcpServers)
+        .set({ authMode: mode, authError: error ?? null })
+        .where(eq(mcpServers.name, name))
+        .run();
+    },
+    takeMcpAuthorization: (state) =>
+      db.transaction((tx) => {
+        const row = tx
+          .select()
+          .from(fleetMcpOauth)
+          .where(
+            sql`json_extract(${fleetMcpOauth.pending}, '$.state') = ${state}`
+          )
+          .get();
+        if (!row?.pending || row.pending.expiresAt <= Date.now()) {
+          return;
+        }
+        tx.update(fleetMcpOauth)
+          .set({ pending: null })
+          .where(eq(fleetMcpOauth.name, row.name))
+          .run();
+        return row;
+      }),
     listWorkflows: () =>
       db.select().from(workflows).orderBy(desc(workflows.updatedAt)).all(),
     getWorkflow: (id) =>
@@ -2082,7 +2151,33 @@ const make = (path: string): DbShape => {
           .select()
           .from(mcpServers)
           .all()
-          .map(({ name, config, enabled }) => ({ name, config, enabled })),
+          .map(({ name, config, enabled, authMode, authError }) => {
+            const signedIn =
+              authMode === "direct" ||
+              Boolean(
+                db
+                  .select({ tokens: fleetMcpOauth.tokens })
+                  .from(fleetMcpOauth)
+                  .where(eq(fleetMcpOauth.name, name))
+                  .get()?.tokens
+              );
+            let state: "failed" | "signed-in" | "needs-auth" = signedIn
+              ? "signed-in"
+              : "needs-auth";
+            if (authError) {
+              state = "failed";
+            }
+            return {
+              name,
+              config,
+              enabled,
+              auth: {
+                mode: authMode,
+                state,
+                ...(authError ? { detail: authError } : {}),
+              },
+            };
+          }),
         marketplaces: db
           .select()
           .from(marketplaces)
@@ -2201,17 +2296,34 @@ const make = (path: string): DbShape => {
       };
     },
     putMcpServer: ({ name, config, enabled }) => {
+      const previous = db
+        .select()
+        .from(mcpServers)
+        .where(eq(mcpServers.name, name))
+        .get();
+      const changed =
+        !previous || JSON.stringify(previous.config) !== JSON.stringify(config);
+      if (changed) {
+        db.delete(fleetMcpOauth).where(eq(fleetMcpOauth.name, name)).run();
+      }
       const server: FleetMcpServer = { name, config, enabled: enabled ?? true };
       db.insert(mcpServers)
         .values(server)
         .onConflictDoUpdate({
           target: mcpServers.name,
-          set: { config, enabled: server.enabled },
+          set: {
+            config,
+            enabled: server.enabled,
+            ...(changed
+              ? { authMode: "direct" as const, authError: null }
+              : {}),
+          },
         })
         .run();
       return server;
     },
     deleteMcpServer: (name) => {
+      db.delete(fleetMcpOauth).where(eq(fleetMcpOauth.name, name)).run();
       db.delete(mcpServers).where(eq(mcpServers.name, name)).run();
     },
     putMarketplace: ({ name, source }) => {

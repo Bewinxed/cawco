@@ -20,6 +20,7 @@ import {
 } from "node:fs/promises";
 import { platform } from "node:os";
 import { basename, delimiter, isAbsolute, join } from "node:path";
+import { query } from "@anthropic-ai/claude-agent-sdk";
 import type {
   CliInstall,
   ConfigInspection,
@@ -45,7 +46,8 @@ import type {
   MarketplacePluginInfo,
   SkillFile,
 } from "@cawco/core";
-import { hookProblem, memoryDocProblem } from "@cawco/core";
+import { hookProblem, mcpFleetState, memoryDocProblem } from "@cawco/core";
+import { idle } from "./auth";
 import { expandHome } from "./fs";
 import { resolveBin, toolEnv, toolPath } from "./tools";
 import {
@@ -393,14 +395,41 @@ const syncMcp = async (
     return failed(`could not write ~/.claude.json: ${tail(said(error))}`);
   }
 
-  for (const name of names) {
-    const detail = details.get(name);
-    report[name] = { state: "applied", ...(detail ? { detail } : {}) };
+  Object.assign(report, await readMcpRuntime(names));
+  for (const [name, detail] of details) {
+    report[name] = { state: "failed", detail };
   }
   for (const name of gone) {
     report[name] = { state: "removed" };
   }
   return names;
+};
+
+/** The SDK control channel answers without sending a model a turn. */
+const readMcpRuntime = async (
+  names: string[]
+): Promise<FleetSyncReport["mcp"]> => {
+  if (names.length === 0) {
+    return {};
+  }
+  const handle = query({ prompt: idle, options: { persistSession: false } });
+  const timer = setTimeout(() => handle.close(), 30_000);
+  try {
+    const statuses = await handle.mcpServerStatus();
+    return Object.fromEntries(
+      names.map((name) => [
+        name,
+        mcpFleetState(statuses.find((row) => row.name === name)),
+      ])
+    );
+  } catch (error) {
+    return Object.fromEntries(
+      names.map((name) => [name, { state: "failed", detail: said(error) }])
+    );
+  } finally {
+    clearTimeout(timer);
+    handle.close();
+  }
 };
 
 /** The CLI the skill half drives — on PATH, or where the local installer puts it. */
@@ -2078,16 +2107,7 @@ export const fleetStatus = async (): Promise<FleetSyncReport> => {
     at: Date.now(),
   };
 
-  const file = await readClaudeJson();
-  const servers = file.ok ? mcpServersOf(file.root) : {};
-  for (const name of managed.mcp) {
-    report.mcp[name] = servers[name]
-      ? { state: "applied" }
-      : {
-          state: "failed",
-          detail: file.ok ? "not in ~/.claude.json" : file.detail,
-        };
-  }
+  report.mcp = await readMcpRuntime(managed.mcp);
   for (const { name, linkedAs } of managed.marketplaces) {
     // biome-ignore lint/performance/noAwaitInLoops: a read-only status check; kept sequential like the rest of this report rather than fanning out parallel file reads
     report.marketplaces[name] = (await isLinked(linkedAs))

@@ -5,6 +5,7 @@
    * beside each entry are the rows the section shows.
    */
   import { onMount } from "svelte";
+  import { cawco } from "#lib/cawco/client.svelte.js";
   import ConfigRail from "#lib/cawco/config/ConfigRail.svelte";
   import {
     LAST_KEY,
@@ -23,6 +24,12 @@
   let { children } = $props();
 
   const store = provideConfig(new ConfigStore());
+  $effect(() => {
+    const servers = cawco.fleetMcp;
+    if (servers && store.fleet.value) {
+      store.fleet.value.config.mcp = servers;
+    }
+  });
   onMount(() => {
     // biome-ignore lint/complexity/noVoid: each slot reports its own outcome
     void store.loadAll();

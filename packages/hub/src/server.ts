@@ -21,6 +21,7 @@ import type {
   GitChanges,
   HarnessKind,
   HarnessReport,
+  HeartbeatPayload,
   HookDraft,
   IngestMark,
   InstanceRow,
@@ -92,6 +93,7 @@ import {
   MESSAGES_READ,
   MESSAGES_STORED,
   memoryDocProblem,
+  OPEN_MCP_AUTHORIZATION,
   PREVIEW_START,
   PREVIEW_STOP,
   PROVIDER_RETRY,
@@ -144,6 +146,7 @@ import { hashHookMaterial } from "./db";
 import { delegateTypesRoutes, makeDelegateTypes } from "./delegate-types";
 import { hubHttpUrl } from "./delegation-actions";
 import { createDelegationMcp } from "./delegation-mcp";
+import { FleetMcp } from "./fleet-mcp";
 import { hidden } from "./hidden";
 import { joinRoutes } from "./join";
 import { probe } from "./llm";
@@ -4975,18 +4978,35 @@ export const createServer = ({
     agent: HubSocket,
     config: FleetConfig
   ): void => {
-    const requestId = crypto.randomUUID();
-    const payload: ControlPayload = {
-      requestId,
-      method: FLEET_SYNC,
-      args: [config],
-    };
-    pendingFleet.set(requestId, machineId);
-    agent.send({
-      verb: "control",
-      machineId,
-      payload,
-    } satisfies Envelope<ControlPayload>);
+    // Startup discovery finishes before any harness can see a remote fleet URL.
+    // biome-ignore lint/complexity/noVoid: the control result arrives through pendingFleet
+    void mcpReady.then(async () => {
+      await fleetMcp.ready();
+      const current = new Map(
+        db.fleetConfig().mcp.map((row) => [row.name, row])
+      );
+      const outbound = fleetMcp.syncConfig(
+        {
+          ...config,
+          mcp: config.mcp.flatMap((row) =>
+            current.has(row.name) ? [current.get(row.name) as typeof row] : []
+          ),
+        },
+        hubHttpUrl()
+      );
+      const requestId = crypto.randomUUID();
+      const payload: ControlPayload = {
+        requestId,
+        method: FLEET_SYNC,
+        args: [outbound],
+      };
+      pendingFleet.set(requestId, machineId);
+      agent.send({
+        verb: "control",
+        machineId,
+        payload,
+      } satisfies Envelope<ControlPayload>);
+    });
   };
 
   /**
@@ -5466,6 +5486,19 @@ export const createServer = ({
       publishInstances(machineId);
     }
   };
+
+  const announceMcp = (): void => {
+    registry.broadcast({
+      verb: "frames",
+      machineId: "",
+      payload: { kind: "fleet_mcp", servers: db.fleetConfig().mcp },
+    } satisfies Envelope<FramePayload>);
+    fanOutFleet();
+  };
+  const fleetMcp = new FleetMcp(db, announceMcp);
+  const mcpReady = Promise.all(
+    db.fleetConfig().mcp.map((row) => fleetMcp.probe(row.name))
+  );
 
   /**
    * A dashboard's `send` command, taken: the one send path, and a log line.
@@ -6149,6 +6182,14 @@ export const createServer = ({
         server?.timeout(request, 0);
         return delegationMcp.handle(request, body);
       })
+      .all(
+        "/mcp/fleet/:name",
+        { ...hidden, parse: "none" },
+        ({ params, request, server }) => {
+          server?.timeout(request, 0);
+          return fleetMcp.forward(params.name, request);
+        }
+      )
       .get("/api/delegation/tools", hidden, ({ query }) =>
         delegationMcp.list(
           typeof query.instanceId === "string" ? query.instanceId : undefined
@@ -7052,7 +7093,9 @@ export const createServer = ({
       // must not weigh what the fleet weighs. The subagents do carry their files —
       // a definition is a page of markdown, and an editor that has to fetch each
       // one again is a round trip for nothing.
-      .get("/api/fleet", () => {
+      .get("/api/fleet", async () => {
+        await mcpReady;
+        await fleetMcp.ready();
         const { mcp, marketplaces } = db.fleetConfig();
         return {
           // The plugins come from `listPlugins`, not from `fleetConfig`: the
@@ -7081,26 +7124,120 @@ export const createServer = ({
             enabled: t.Optional(t.Boolean()),
           }),
         },
-        ({ params, body, status }) => {
+        async ({ params, body, status }) => {
           const problem = mcpProblem(params.name, body.config);
           if (problem) {
             return status(400, problem);
           }
 
-          const server = db.putMcpServer({
+          db.putMcpServer({
             name: params.name,
             config: body.config as unknown as FleetMcpConfig,
             enabled: body.enabled,
           });
-          fanOutFleet();
-          return server;
+          await fleetMcp.probe(params.name);
+          announceMcp();
+          return db.fleetConfig().mcp.find((row) => row.name === params.name);
         }
       )
       .delete("/api/fleet/mcp/:name", ({ params }) => {
         db.deleteMcpServer(params.name);
-        fanOutFleet();
+        announceMcp();
         return { ok: true };
       })
+      .get("/api/fleet/mcp/:name/sign-in-machines", ({ request, server }) => {
+        const machines = withPresence(db.listAgents()).filter(
+          (machine) => machine.status === "online" && machine.browserAvailable
+        );
+        const address = (
+          request.headers.get("X-Cawco-Client-Address") ??
+          server?.requestIP(request)?.address
+        )?.replace("::ffff:", "");
+        const matches = machines.filter(
+          (machine) =>
+            registry.address(machine.machineId)?.replace("::ffff:", "") ===
+            address
+        );
+        const last = db.lastMcpSignInMachine();
+        return {
+          machines,
+          selectedMachineId:
+            matches.length === 1
+              ? matches[0].machineId
+              : (machines.find((machine) => machine.machineId === last)
+                  ?.machineId ?? null),
+        };
+      })
+      .post(
+        "/api/fleet/mcp/:name/sign-in",
+        { body: t.Object({ machineId: t.String({ minLength: 1 }) }) },
+        async ({ params, body, status }) => {
+          const machine = withPresence(db.listAgents()).find(
+            (row) => row.machineId === body.machineId
+          );
+          if (!(machine?.status === "online" && machine.browserAvailable)) {
+            return status(
+              400,
+              "This machine cannot open a desktop browser. Pick an online computer with a desktop session."
+            );
+          }
+          try {
+            const { authorizationUrl } = await fleetMcp.start(
+              params.name,
+              machine.machineId
+            );
+            const opened = await callAgent(
+              machine.machineId,
+              OPEN_MCP_AUTHORIZATION,
+              [authorizationUrl],
+              30_000
+            );
+            if (opened === "offline" || opened === "timeout") {
+              return status(
+                503,
+                "The machine did not confirm opening its browser. Check its desktop before retrying sign-in."
+              );
+            }
+            if (!opened.ok) {
+              return status(
+                400,
+                opened.error ??
+                  "The browser could not open. Check the selected computer and retry sign-in."
+              );
+            }
+            return { ok: true, machineId: machine.machineId };
+          } catch (error) {
+            return status(
+              400,
+              error instanceof Error
+                ? error.message
+                : "Sign-in could not start. Save this server and retry sign-in."
+            );
+          }
+        }
+      )
+      .post(
+        "/api/fleet/mcp/oauth/complete",
+        {
+          body: t.Object({
+            code: t.String({ minLength: 1 }),
+            state: t.String({ minLength: 1 }),
+          }),
+        },
+        async ({ body, status }) => {
+          try {
+            await fleetMcp.complete(body.code, body.state);
+            return { ok: true };
+          } catch (error) {
+            return status(
+              400,
+              error instanceof Error
+                ? error.message
+                : "Sign-in could not finish. Start sign-in again."
+            );
+          }
+        }
+      )
       /**
        * Rules: standing instructions the hub enforces on the frame stream. The
        * shape is validated loosely here and strictly by `ruleProblem`, which is
@@ -9048,6 +9185,10 @@ export const createServer = ({
               // everything that reads a machine's harnesses or tools runs here,
               // off the report it reads.
               const reported = peekHarnesses(message.payload);
+              const { browserAvailable } = message.payload as HeartbeatPayload;
+              if (typeof browserAvailable === "boolean") {
+                db.setAgentBrowser(message.machineId, browserAvailable);
+              }
               if (reported) {
                 db.setAgentHarnesses(message.machineId, reported);
                 db.mergeAgentTools(
@@ -9841,6 +9982,19 @@ export const createServer = ({
           // dashboard receives, unconditionally, so the rail fills before the
           // REST snapshot lands.
           toDashboard(ws, instancesFrame(""));
+          // A reconnected dashboard earns the current sign-in state again.
+          // biome-ignore lint/complexity/noVoid: snapshot follows startup discovery on this socket
+          void mcpReady.then(async () => {
+            await fleetMcp.ready();
+            if (ws.readyState !== 1) {
+              return;
+            }
+            toDashboard(ws, {
+              verb: "frames",
+              machineId: "",
+              payload: { kind: "fleet_mcp", servers: db.fleetConfig().mcp },
+            } satisfies Envelope<FramePayload>);
+          });
         },
         // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches every dashboard socket message shape (stream protocol, control, send, ack) through one handler; splitting it would scatter the ordering guarantees across several functions.
         message(ws, message) {

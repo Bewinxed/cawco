@@ -8,6 +8,7 @@
  */
 
 import type {
+  HarnessKind,
   McpHttpServerConfig,
   McpSSEServerConfig,
   McpStdioServerConfig,
@@ -62,11 +63,23 @@ export type FleetMcpConfig =
 
 /** One MCP server the fleet should have, keyed by the name sessions see. */
 export interface FleetMcpServer extends FleetPlacement {
+  /** Hub-owned sign-in; credentials stay in the hub database. */
+  auth?: {
+    mode: "direct" | "oauth";
+    state: "signed-in" | "needs-auth" | "failed";
+    detail?: string;
+  };
   config: FleetMcpConfig;
   /** Disabled rows stay in the hub but are removed from the machines. */
   enabled: boolean;
   name: string;
+  /** The config points at the hub's authenticated forwarder. */
+  proxied?: boolean;
 }
+
+/** OAuth redirects finish on the computer running the browser. */
+export const CAWCO_MCP_CALLBACK_PORT = 43_879;
+export const OPEN_MCP_AUTHORIZATION = "openMcpAuthorization";
 
 /**
  * One linked plugin marketplace. `source` is whatever
@@ -450,8 +463,67 @@ export interface FleetConfig {
 export interface FleetItemState {
   /** `failed`: what the write or the CLI said — the tail of it. */
   detail?: string;
-  state: "applied" | "failed" | "removed";
+  state:
+    | "applied"
+    | "failed"
+    | "removed"
+    | "needs-auth"
+    | "disabled"
+    | "unsupported"
+    | "pending";
 }
+
+/** Every runtime uses this translation; an unknown status cannot claim success. */
+export const mcpFleetState = (status?: {
+  status: string;
+  error?: string;
+}): FleetItemState => {
+  switch (status?.status) {
+    case "connected":
+      return { state: "applied" };
+    case "needs_auth":
+    case "needs_client_registration":
+    case "needs-auth":
+      return {
+        state: "needs-auth",
+        detail: "Sign in to this server from Configure → MCP servers.",
+      };
+    case "disabled":
+      return { state: "disabled" };
+    case "pending":
+    case "connecting":
+      return {
+        state: "pending",
+        detail: "The runtime is connecting to this server.",
+      };
+    default:
+      return {
+        state: "failed",
+        detail:
+          status?.error ??
+          `MCP runtime reported ${status?.status ?? "no server"}.`,
+      };
+  }
+};
+
+export const worstFleetState = (
+  items: readonly FleetItemState[]
+): FleetItemState => {
+  const order: FleetItemState["state"][] = [
+    "failed",
+    "needs-auth",
+    "unsupported",
+    "pending",
+    "disabled",
+    "removed",
+    "applied",
+  ];
+  return (
+    [...items].sort(
+      (a, b) => order.indexOf(a.state) - order.indexOf(b.state)
+    )[0] ?? { state: "pending", detail: "No runtime has reported this server." }
+  );
+};
 
 /**
  * A machine's answer to `syncFleetConfig`, and what `agents.fleet` stores:
@@ -481,6 +553,8 @@ export interface FleetSyncReport {
   hooks?: Record<string, FleetItemState>;
   marketplaces: Record<string, FleetItemState>;
   mcp: Record<string, FleetItemState>;
+  /** Per-harness runtime truth, before the machine row's worst-state aggregation. */
+  mcpByHarness?: Partial<Record<HarnessKind, Record<string, FleetItemState>>>;
   /**
    * The user-scope memory (CLAUDE.md). Absent from a daemon that predates it;
    * `failed` is how a machine says its own copy was edited and was not

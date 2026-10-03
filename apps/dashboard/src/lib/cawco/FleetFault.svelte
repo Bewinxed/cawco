@@ -211,7 +211,9 @@
       {:else if machine}
         <span class="tag">
           <OsMark class="size-4 shrink-0" os={machine.os} />
-          {machineLabel(machine.hostname)}{online ? "" : " · offline"}
+          {machineLabel(machine.hostname)}
+          {group.harness ? ` · ${group.harness}` : ""}
+          {online ? "" : " · offline"}
         </span>
       {:else}
         <span class="tag">{group.machineId}</span>

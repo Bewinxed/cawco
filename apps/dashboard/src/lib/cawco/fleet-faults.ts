@@ -27,6 +27,7 @@ import type {
   FleetPlugin,
   FleetSkillMeta,
   FleetSyncReport,
+  HarnessKind,
 } from "@cawco/core";
 
 /** Which fleet panel a fault belongs to — the key its report is stored under. */
@@ -42,6 +43,9 @@ export type FaultScope =
 
 /** The named causes. `unknown` is not a failure of this table — it is a fault we refuse to guess at. */
 export type FaultCause =
+  | "auth-discovery"
+  | "needs-auth"
+  | "unsupported"
   | "cli-too-old"
   | "cli-missing"
   | "ssh-refused"
@@ -84,6 +88,24 @@ export interface CauseCopy {
 }
 
 export const CAUSE: Record<FaultCause, CauseCopy> = {
+  "auth-discovery": {
+    title: "The hub could not read this server’s authorization",
+    why: "The server or its authorization metadata did not answer discovery.",
+    fix: "Check this server’s URL, then save it again to retry discovery. Its connection starts once discovery succeeds.",
+    action: "none",
+  },
+  "needs-auth": {
+    title: "This server needs sign-in",
+    why: "The fleet has no usable sign-in for this server.",
+    fix: "Open this server and sign in. Every supported agent can use it once approval finishes on the selected computer.",
+    action: "none",
+  },
+  unsupported: {
+    title: "This agent has no MCP support",
+    why: "pi cannot call MCP servers.",
+    fix: "Use Claude Code or OpenCode for this server.",
+    action: "none",
+  },
   // `runClaude`'s output for a flag the CLI does not have. The real one:
   // `claude plugin install … --scope user` against a 2.0.x CLI.
   "cli-too-old": {
@@ -263,6 +285,7 @@ export interface Fault {
   cause: FaultCause;
   /** What was said, verbatim and never rewritten. */
   detail?: string;
+  harness?: HarnessKind;
   /** The row's own key: a server name, a plugin id, a document path. Empty for the singular memory rows. */
   key: string;
   /** Which machine refused it; absent for a hub-side fault, which belongs to no machine. */
@@ -277,14 +300,19 @@ const scan = (
   record: Record<string, FleetItemState> | undefined
 ): Fault[] =>
   Object.entries(record ?? {})
-    .filter(([, item]) => item.state === "failed")
+    .filter(([, item]) =>
+      ["failed", "needs-auth", "unsupported"].includes(item.state)
+    )
     .map(([key, item]) => ({
       origin: "machine" as const,
       scope,
       key,
       machineId,
       ...(item.detail ? { detail: item.detail } : {}),
-      cause: causeOf(item.detail),
+      cause:
+        item.state === "needs-auth" || item.state === "unsupported"
+          ? item.state
+          : causeOf(item.detail),
     }));
 
 /** Every row one machine's report says it could not apply. */
@@ -312,7 +340,14 @@ export function machineFaults(
         ]
       : [];
   return [
-    ...scan("mcp", machineId, fleet.mcp),
+    ...(fleet.mcpByHarness
+      ? Object.entries(fleet.mcpByHarness).flatMap(([harness, rows]) =>
+          scan("mcp", machineId, rows).map((fault) => ({
+            ...fault,
+            harness: harness as HarnessKind,
+          }))
+        )
+      : scan("mcp", machineId, fleet.mcp)),
     ...scan("marketplaces", machineId, fleet.marketplaces),
     ...scan("plugins", machineId, fleet.plugins),
     ...scan("skills", machineId, fleet.skills),
@@ -390,6 +425,9 @@ export const SCOPE_ANCHOR: Record<FaultScope, string> = {
  * its own editor, which is where its per-machine copies are compared.
  */
 export function faultHref(fault: Pick<Fault, "scope" | "key">): string {
+  if (fault.scope === "mcp") {
+    return `/config/mcp/${encodeURIComponent(fault.key)}`;
+  }
   if (fault.scope === "memory") {
     return "/config/memory/CLAUDE.md";
   }
@@ -415,6 +453,7 @@ export const faultLabel = (fault: Fault): string =>
 export interface FaultGroup {
   cause: FaultCause;
   faults: Fault[];
+  harness?: HarnessKind;
   machineId?: string;
   origin: FaultOrigin;
   scope: FaultScope;
@@ -423,7 +462,7 @@ export interface FaultGroup {
 export function groupFaults(faults: readonly Fault[]): FaultGroup[] {
   const groups = new Map<string, FaultGroup>();
   for (const fault of faults) {
-    const id = `${fault.origin}|${fault.cause}|${fault.scope}|${fault.machineId ?? ""}`;
+    const id = `${fault.origin}|${fault.cause}|${fault.scope}|${fault.machineId ?? ""}|${fault.harness ?? ""}`;
     const existing = groups.get(id);
     if (existing) {
       existing.faults.push(fault);
@@ -433,6 +472,7 @@ export function groupFaults(faults: readonly Fault[]): FaultGroup[] {
       origin: fault.origin,
       cause: fault.cause,
       scope: fault.scope,
+      ...(fault.harness ? { harness: fault.harness } : {}),
       ...(fault.machineId ? { machineId: fault.machineId } : {}),
       faults: [fault],
     });

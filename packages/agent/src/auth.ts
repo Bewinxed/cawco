@@ -20,7 +20,7 @@ const PROBE_TIMEOUT_MS = 20_000;
  * without it, which is the whole point: the probe is a control call, so it costs
  * a process and no tokens.
  */
-const idle: AsyncIterable<SDKUserMessage> = {
+export const idle: AsyncIterable<SDKUserMessage> = {
   [Symbol.asyncIterator]: () => ({
     next: () =>
       new Promise<never>(() => {

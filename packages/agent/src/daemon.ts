@@ -16,6 +16,7 @@ import {
   CONTROL_WORKSPACE_BOUNDARY,
   CONTROL_WORKSPACE_CREATE,
   CONTROL_WORKSPACE_MIGRATE,
+  OPEN_MCP_AUTHORIZATION,
 } from "@cawco/core";
 import { sessiondEndpoint } from "@cawco/core/sessiond";
 import { fetchClaudeLimits } from "@cawco/core/usage/limits";
@@ -32,6 +33,11 @@ import { harnesses } from "./harnesses";
 import { OPENCODE_SERVER_PROC_ID } from "./harnesses/opencode";
 import { cache as transcriptCache } from "./harnesses/transcript-cache";
 import { machineId } from "./machine-id";
+import {
+  canOpenDesktopBrowser,
+  openMcpAuthorization,
+  startMcpOAuthCallback,
+} from "./mcp-oauth";
 import { servingPreviews } from "./preview";
 import { TranscriptSearchService } from "./search";
 import { resumableSessions, SessionSupervisor } from "./session";
@@ -518,6 +524,7 @@ const attach = (
     // see {@link sessionsReader}.
     const reading = sessions();
     const socket = yield* connection(url);
+    process.env[CAWCO_ENV.hubUrl] = url;
     const { custody, catalog } = yield* Effect.promise(() => reading);
     const build = yield* Effect.promise(() => buildInfo());
     // Consumed, not just read: true only the first register after THIS
@@ -586,6 +593,7 @@ const attach = (
             instances: supervisor.instanceIds,
             ...(latestDeploy() ? { deploy: latestDeploy() } : {}),
             harnesses: detected,
+            browserAvailable: canOpenDesktopBrowser(),
             tools,
           } satisfies HeartbeatPayload,
         });
@@ -612,7 +620,11 @@ const attach = (
       // Usage and workflow-run transitions originate at the hub, never at a
       // daemon; machine-scoped control replies do travel through this sink,
       // without an instanceId.
-      if (frame.kind === "usage" || frame.kind === "workflow") {
+      if (
+        frame.kind === "usage" ||
+        frame.kind === "workflow" ||
+        frame.kind === "fleet_mcp"
+      ) {
         return;
       }
       send(socket, {
@@ -887,6 +899,10 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     // is enough: each attempt calls `session` anew, in the same tick that
     // reads this.
     let hubUrl = url;
+    yield* Effect.acquireRelease(
+      Effect.sync(() => startMcpOAuthCallback(() => hubUrl)),
+      (listener) => Effect.sync(() => listener.stop(true))
+    );
     // The claude harness's auth is the machine's headline word — the original
     // rail still reads it — while `register` carries every harness's own.
     const claude = harnesses().find((adapter) => adapter.kind === "claude");
@@ -967,6 +983,10 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     );
     search.start();
     supervisor.registerDaemonFunction(CONTROL_RUN_COMMAND, runWorkflowCommand);
+    supervisor.registerDaemonFunction(
+      OPEN_MCP_AUTHORIZATION,
+      (authorizationUrl) => openMcpAuthorization(authorizationUrl as string)
+    );
     supervisor.registerDaemonFunction(
       CONTROL_WORKSPACE_CREATE,
       createWorkspace

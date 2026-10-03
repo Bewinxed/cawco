@@ -34,6 +34,12 @@ import type {
   WorkflowRunStatus,
   WorkflowStepStatus,
 } from "@cawco/core";
+import type {
+  AuthorizationServerMetadata,
+  OAuthClientInformationFull,
+  OAuthProtectedResourceMetadata,
+  OAuthTokens,
+} from "@modelcontextprotocol/sdk/shared/auth.js";
 import {
   index,
   integer,
@@ -184,6 +190,9 @@ export const workflowAttempts = sqliteTable("workflow_attempts", {
 
 /** Machines running an agent daemon, keyed by their stable hardware fingerprint. */
 export const agents = sqliteTable("agents", {
+  browserAvailable: integer("browser_available", { mode: "boolean" })
+    .notNull()
+    .default(false),
   machineId: text("machine_id").primaryKey(),
   hostname: text("hostname").notNull(),
   os: text("os").notNull(),
@@ -629,11 +638,40 @@ export const mcpServers = sqliteTable("mcp_servers", {
   /** The name sessions see, and the key the entry takes in `~/.claude.json`. */
   name: text("name").primaryKey(),
   config: text("config", { mode: "json" }).$type<FleetMcpConfig>().notNull(),
+  authMode: text("auth_mode")
+    .$type<"direct" | "oauth">()
+    .notNull()
+    .default("direct"),
+  authError: text("auth_error"),
   /** A disabled row stays here and is removed from the machines. */
   enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
   createdAt: timestamp("created_at")
     .notNull()
     .$defaultFn(() => new Date()),
+});
+
+/** Private OAuth material. Only the hub's OAuth manager reads these rows. */
+export const fleetMcpOauth = sqliteTable("fleet_mcp_oauth", {
+  name: text("name").primaryKey(),
+  generation: text("generation").notNull(),
+  upstream: text("upstream").notNull(),
+  resource: text("resource", { mode: "json" })
+    .$type<OAuthProtectedResourceMetadata>()
+    .notNull(),
+  issuer: text("issuer").notNull(),
+  metadata: text("metadata", { mode: "json" })
+    .$type<AuthorizationServerMetadata>()
+    .notNull(),
+  client: text("client", { mode: "json" }).$type<OAuthClientInformationFull>(),
+  tokens: text("tokens", { mode: "json" }).$type<OAuthTokens>(),
+  expiresAt: timestamp("expires_at"),
+  pending: text("pending", { mode: "json" }).$type<{
+    verifier: string;
+    state: string;
+    expiresAt: number;
+  }>(),
+  lastMachineId: text("last_machine_id"),
+  lastOpenedAt: timestamp("last_opened_at"),
 });
 
 /** The plugin marketplaces the fleet links, so their skills can be installed. */

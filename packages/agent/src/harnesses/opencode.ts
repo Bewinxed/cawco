@@ -67,6 +67,7 @@ import {
   IMAGE_GENERATION_TIMEOUT_MS,
   MESSAGES_READ,
   MESSAGES_STORED,
+  mcpFleetState,
   PROVIDER_RETRY,
 } from "@cawco/core";
 // The protocol subpath, never the `@cawco/core` barrel: `sessiond.ts` reaches
@@ -78,6 +79,8 @@ import {
   createOpencodeClient,
   type Event,
   type FilePart,
+  type McpLocalConfig,
+  type McpRemoteConfig,
   type McpStatus,
   type Message,
   type OpencodeClient,
@@ -764,22 +767,19 @@ function questionResultOf(part: {
 /** A fleet MCP definition, in opencode's `opencode.json` `mcp` shape. */
 const toOpencodeMcp = (
   config: FleetMcpConfig
-): {
-  type: "local" | "remote";
-  command?: string[];
-  url?: string;
-  environment?: Record<string, string>;
-  headers?: Record<string, string>;
-} => {
+): McpLocalConfig | McpRemoteConfig => {
   if ("url" in config) {
     return {
       type: "remote",
       url: config.url,
+      enabled: true,
+      oauth: false,
       ...(config.headers ? { headers: config.headers } : {}),
     };
   }
   return {
     type: "local",
+    enabled: true,
     command: [config.command, ...(config.args ?? [])],
     ...(config.env ? { environment: config.env } : {}),
   };
@@ -798,7 +798,6 @@ const syncOpencodeMcp = async (
 
   for (const server of wanted) {
     mcp[server.name] = toOpencodeMcp(server.config);
-    report[server.name] = { state: "applied" };
   }
   const names = wanted.map((server) => server.name);
   for (const name of managed) {
@@ -2926,7 +2925,12 @@ export class OpencodeSession implements HarnessSession {
         return Object.entries(statuses).map(
           ([name, status]): McpServerStatus => ({
             name,
-            status: typeof status === "string" ? status : "connected",
+            status:
+              status.status === "needs_auth" ||
+              status.status === "needs_client_registration"
+                ? "needs-auth"
+                : status.status,
+            ...("error" in status ? { error: status.error } : {}),
           })
         );
       }
@@ -3680,13 +3684,14 @@ export class OpencodeHarness implements Harness {
       );
       const mcpProblems: string[] = [];
       for (const name of expectedMcp) {
-        // After process restart, the server reads MCP config from disk.
-        // The server registers the MCP server entry — it may be "connected",
-        // "connecting", or "failed" (unreachable endpoint). All of these
-        // mean the config was applied. Only "missing" (not in statusMap)
-        // is a real problem.
-        if (!(name in statusMap)) {
-          mcpProblems.push(`${name}=missing`);
+        const expected = (
+          desiredRaw?.mcp as Record<string, { enabled?: boolean }> | undefined
+        )?.[name];
+        const actual = statuses[name];
+        const expectedStatus =
+          expected?.enabled === false ? "disabled" : "connected";
+        if (actual?.status !== expectedStatus) {
+          mcpProblems.push(`${name}=${actual?.status ?? "missing"}`);
         }
       }
       for (const name of Object.keys(statusMap)) {
@@ -4818,8 +4823,43 @@ export class OpencodeHarness implements Harness {
     // Poke the config watcher: syncFleet just wrote opencode.json, so the disk
     // hash will have changed. An immediate tick avoids the up-to-2s polling
     // delay before the convergence system notices.
-    // biome-ignore lint/complexity/noVoid: fire-and-forget; the tick manages its own errors
-    void this.#configTick();
+    await this.#configTick();
+    const client = await this.#ensure();
+    for (const server of config.mcp.filter(
+      (row) => row.proxied && row.enabled
+    )) {
+      const directories = new Set([
+        undefined,
+        ...this.#pumps.keys(),
+        ...[...this.#sessions.values()].map((session) => session.directory),
+      ]);
+      for (const directory of directories) {
+        // biome-ignore lint/performance/noAwaitInLoops: replace each directory's connection before reporting runtime state
+        const connected = await client.mcp.add({
+          name: server.name,
+          config: toOpencodeMcp(server.config),
+          directory,
+        });
+        if (connected.error) {
+          throw new Error(errorText(connected.error));
+        }
+        const removed = await client.mcp.auth.remove({
+          name: server.name,
+          directory,
+        });
+        if (removed.error) {
+          throw new Error(errorText(removed.error));
+        }
+        const reconnected = await client.mcp.connect({
+          name: server.name,
+          directory,
+        });
+        if (reconnected.error) {
+          throw new Error(errorText(reconnected.error));
+        }
+      }
+    }
+    Object.assign(report.mcp, await this.#readFleetMcp(mcp));
 
     return report;
   }
@@ -4834,15 +4874,30 @@ export class OpencodeHarness implements Harness {
       at: Date.now(),
     };
 
-    const stored =
-      (await readJson<{ mcp?: Record<string, unknown> }>(OPENCODE_CONFIG)) ??
-      {};
-    for (const name of sidecar.mcp ?? []) {
-      report.mcp[name] = stored.mcp?.[name]
-        ? { state: "applied" }
-        : { state: "failed", detail: "not in opencode.json" };
-    }
+    report.mcp = await this.#readFleetMcp(sidecar.mcp ?? []);
     return report;
+  }
+
+  async #readFleetMcp(names: string[]): Promise<FleetSyncReport["mcp"]> {
+    if (names.length === 0) {
+      return {};
+    }
+    try {
+      const client = await this.#ensure();
+      const result = await reached(
+        client.mcp.status({}, { signal: AbortSignal.timeout(10_000) })
+      );
+      if (result.error || !result.data) {
+        throw new Error(errorText(result.error));
+      }
+      return Object.fromEntries(
+        names.map((name) => [name, mcpFleetState(result.data[name])])
+      );
+    } catch (error) {
+      return Object.fromEntries(
+        names.map((name) => [name, { state: "failed", detail: String(error) }])
+      );
+    }
   }
 }
 

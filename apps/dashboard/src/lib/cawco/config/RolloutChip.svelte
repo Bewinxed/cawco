@@ -67,13 +67,21 @@
     machines.filter((machine) => stateOf(machine)?.state === "applied").length
   );
   const failed = $derived(
-    machines.filter((machine) => stateOf(machine)?.state === "failed").length
+    machines.filter((machine) =>
+      ["failed", "needs-auth", "unsupported"].includes(
+        stateOf(machine)?.state ?? ""
+      )
+    ).length
   );
 
   const SAID: Record<string, string> = {
     applied: "Has it",
     failed: "Refused it",
     removed: "Taken off",
+    "needs-auth": "Needs sign-in",
+    unsupported: "Not supported",
+    disabled: "Disabled",
+    pending: "Connecting",
   };
 
   const glyph = $derived.by((): "fail" | "done" | "busy" | "none" => {
@@ -178,6 +186,21 @@
             {/snippet}
           </MachineRow>
         </div>
+        {#if kind === "mcp"}
+          {#each Object.entries(
+            machine.fleet?.mcpByHarness ?? {}
+          ) as [harness, rows] (harness)}
+            {@const runtime = rows?.[name]}
+            {#if runtime}
+              <p class="note">
+                <span
+                  >{harness}: {SAID[runtime.state]}
+                  {runtime.detail ? ` · ${runtime.detail}` : ""}</span
+                >
+              </p>
+            {/if}
+          {/each}
+        {/if}
         {#if refused[machine.machineId]}
           <p class="note refused" role="alert" in:appear>
             <IconWarningTriangle />

@@ -270,6 +270,7 @@ export interface SendPayload {
  */
 export interface HeartbeatPayload {
   at: number;
+  browserAvailable?: boolean;
   /**
    * Where the machine's deployment clone stands (contract C8), on every beat
    * for the same reason `instances` is: it is a live fact that changes without
@@ -375,6 +376,7 @@ export interface FsEntry {
 export interface AgentRow {
   /** `unknown` until a daemon that probes has registered at least once. */
   auth: import("./harness").AuthState | "unknown";
+  browserAvailable?: boolean;
   /**
    * The cawco build this machine's daemon is running (NEW.md §12).
    */
@@ -786,6 +788,7 @@ export const RESTART_LOST =
  * event verbatim.
  */
 export type FramePayload =
+  | { kind: "fleet_mcp"; servers: import("./fleet").FleetMcpServer[] }
   | {
       kind: "preview";
       instanceId: string;
@@ -1035,6 +1038,8 @@ export const CAWCO_SCRATCH_TAG = "cawco-scratch";
  * the opencode child process).
  */
 export const CAWCO_ENV = {
+  /** Isolated OAuth proof only: follow the demo authorization redirect through the callback. */
+  mcpOauthProofFetch: "CAWCO_MCP_OAUTH_PROOF_FETCH",
   hubUrl: "CAWCO_HUB_URL",
   hubPort: "CAWCO_HUB_PORT",
   previewPort: "CAWCO_PREVIEW_PORT",

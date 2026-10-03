@@ -42,6 +42,9 @@
   );
 </script>
 
-{#each groups as group (group.origin + group.cause + (group.machineId ?? ""))}
+{#each groups as group (group.origin +
+  group.cause +
+  (group.machineId ?? "") +
+  (group.harness ?? ""))}
   <div data-flip><FleetFault compact {group} {machines} {onresolved} /></div>
 {/each}

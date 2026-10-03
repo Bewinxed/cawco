@@ -26,7 +26,11 @@ const HUB_URL = (() => {
 /**
  * Proxy all API requests to the hub server
  */
-async function proxyToHub(request: Request, path: string): Promise<Response> {
+async function proxyToHub(
+  request: Request,
+  path: string,
+  clientAddress?: string
+): Promise<Response> {
   const url = new URL(request.url);
   const targetUrl = `${HUB_URL}/api/${path}${url.search}`;
   const authorization = request.headers.get("authorization");
@@ -38,6 +42,7 @@ async function proxyToHub(request: Request, path: string): Promise<Response> {
         "Content-Type": "application/json",
         // Forward relevant headers
         ...(authorization && { Authorization: authorization }),
+        ...(clientAddress && { "X-Cawco-Client-Address": clientAddress }),
       },
       body:
         request.method !== "GET" && request.method !== "HEAD"
@@ -82,8 +87,11 @@ async function proxyToHub(request: Request, path: string): Promise<Response> {
   }
 }
 
-export const GET: RequestHandler = async ({ request, params }) =>
-  proxyToHub(request, params.path);
+export const GET: RequestHandler = async ({
+  request,
+  params,
+  getClientAddress,
+}) => proxyToHub(request, params.path, getClientAddress());
 
 export const POST: RequestHandler = async ({ request, params }) =>
   proxyToHub(request, params.path);

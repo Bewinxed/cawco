@@ -534,6 +534,7 @@ const staleInstances = $derived(instances.filter(isStale));
 const listedInstances = $derived(instances.filter(isListed));
 
 const state = $state({
+  fleetMcp: null as import("@cawco/core").FleetMcpServer[] | null,
   previews: {} as Record<
     string,
     Extract<FramePayload, { kind: "preview" }> & {
@@ -1956,6 +1957,10 @@ function clearTurnPhase(target: SessionState): void {
 
 // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches every FramePayload kind the socket can deliver; splitting it would scatter one state machine across files
 function handleFrame(frame: FramePayload): void {
+  if (frame.kind === "fleet_mcp") {
+    state.fleetMcp = frame.servers;
+    return;
+  }
   if (frame.kind === "permission_request" && "workflowRunId" in frame) {
     // A workflow question is represented once, by its waiting run, and is
     // answered through the run view — not as a session permission prompt.
@@ -4927,6 +4932,9 @@ const branchOrder = (a: SubagentState, b: SubagentState): number => {
 };
 
 export const cawco = {
+  get fleetMcp() {
+    return state.fleetMcp;
+  },
   /** The first REST read of machines, sessions and projects is in. */
   get fleetRead() {
     return state.fleetRead;

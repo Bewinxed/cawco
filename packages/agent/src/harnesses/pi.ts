@@ -929,6 +929,15 @@ export class PiHarness implements Harness {
 
     // pi has no MCP and no plugins: the fleet's skills and memory are all it
     // can converge, and its reports say so for the tables it cannot.
+    for (const row of config.mcp) {
+      report.mcp[row.name] = row.enabled
+        ? {
+            state: "unsupported",
+            detail:
+              "pi has no MCP support. Use Claude Code or OpenCode to call this server.",
+          }
+        : { state: "disabled" };
+    }
     const skills = await syncSkillFiles(
       PI_SKILLS,
       config.skills ?? [],
@@ -943,7 +952,11 @@ export class PiHarness implements Harness {
       report
     );
 
-    await writeJson(PI_SIDECAR, { skills, ...(memory ? { memory } : {}) });
+    await writeJson(PI_SIDECAR, {
+      skills,
+      mcp: config.mcp.filter((row) => row.enabled).map((row) => row.name),
+      ...(memory ? { memory } : {}),
+    });
     // pi keeps its OWN copy of the skills, so it has to make its own claim: the
     // hub leaves bytes out only when every harness that converges them says it
     // already has that hash, and a harness that stays silent is one the fleet
@@ -961,6 +974,14 @@ export class PiHarness implements Harness {
       skills: {},
       at: Date.now(),
     };
+
+    for (const name of sidecar.mcp ?? []) {
+      report.mcp[name] = {
+        state: "unsupported",
+        detail:
+          "pi has no MCP support. Use Claude Code or OpenCode to call this server.",
+      };
+    }
 
     for (const name of Object.keys(sidecar.skills)) {
       const file = Bun.file(join(PI_SKILLS, name, "SKILL.md"));

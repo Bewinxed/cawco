@@ -165,6 +165,35 @@ The pattern repeats: whoever can observe a fact first-hand is its sole authority
 other component is a renderer of that authority's most recent report — never a second opinion
 formed from its own stale copy.
 
+## Fleet MCP authorization
+
+The hub owns OAuth sign-in for remote fleet MCP servers. An unauthenticated
+`initialize` discovers a server's protected-resource metadata at save time and
+hub startup. The SDK handles registration, PKCE, code exchange and refresh.
+Client registration, access and refresh tokens, expiry and a ten-minute pending
+authorization live in the private `fleet_mcp_oauth` table. Credentials stay in
+the hub; fleet sync carries the proxy URL `/mcp/fleet/<name>`.
+
+Configure → MCP servers offers **Sign in**, then **Open on**. It lists online
+computers whose agent can open a desktop browser. The hub sends the selected
+agent the authorization URL, and the dashboard shows **Approve on <machine>**.
+The browser redirects to the same computer's loopback listener at
+`127.0.0.1:43879/mcp-oauth/callback`. That agent relays the code and state to the
+hub; completion updates the dashboard and reconnects the fleet's servers.
+
+The proxy streams MCP JSON and SSE with the upstream status and MCP headers.
+It adds the hub's bearer token, refreshes within sixty seconds of expiry through
+one in-flight exchange per server, and refreshes once on an upstream 401. A
+failed refresh signs the server out and makes the proxy answer 401. The proxy
+uses the same network trust boundary as `/mcp/cawco`.
+
+Direct servers retain their configured endpoints and static headers. OpenCode
+disables its own OAuth for fleet remote servers and clears its old credentials
+when the server moves behind the hub. MCP rollout reads each harness's runtime:
+Claude's SDK status, OpenCode's `mcp.status()`, and pi's explicit **Not supported**.
+The machine row carries the worst state; its popover names every harness and
+its connection result.
+
 ## The trust boundary: the tailnet is the perimeter
 
 CawCo is a single-operator fleet reachable only over a tailnet (or a trusted LAN), and
