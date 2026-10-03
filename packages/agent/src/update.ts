@@ -518,6 +518,20 @@ const pullAndRestart = async ({
   };
   const skipped: string[] = [];
 
+  // The dashboard on disk can be older than this pull's range. An update cut
+  // short after its pull (the agent restarted under the build it was running)
+  // leaves the checkout current and the build behind, and no later range
+  // names the commits in between, so the build it was stamped from decides.
+  const stamped = await builtCommit(root);
+  if (
+    stamped &&
+    stamped !== moved.said &&
+    !report.changed.includes("dashboard") &&
+    (await changedServices(root, stamped, moved.said)).includes("dashboard")
+  ) {
+    report.changed = [...report.changed, "dashboard"];
+  }
+
   // Every step below is decided by what is on disk, not by whether this pull
   // moved HEAD: a deploy that failed partway is retried with nothing left to
   // pull, and it has to finish the steps that did not happen then.
