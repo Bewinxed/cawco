@@ -5,26 +5,68 @@ import type { FleetMcpConfig } from "@cawco/core";
 import { chromium } from "playwright-core";
 import { resolveBin, toolEnv, toolPath } from "./tools";
 
+type McpLauncher =
+  | { config: FleetMcpConfig }
+  | { failure: string }
+  | { unavailable: string };
+
+const WINDOWS_SHIM = /\.(cmd|bat)$/i;
+
+/** Resolve ordinary runners once, before any harness writes its config. */
+const resolveCommandLauncher = (
+  config: Extract<FleetMcpConfig, { command: string }>
+): McpLauncher => {
+  const resolved = resolveBin(config.command);
+  if (!resolved) {
+    return {
+      unavailable: `Command '${config.command}' is not installed on this machine. It will be enabled on the next sync after installation.`,
+    };
+  }
+  if (platform() === "win32" && WINDOWS_SHIM.test(resolved)) {
+    const cmd = resolveBin("cmd");
+    if (!cmd) {
+      return {
+        unavailable: "Command 'cmd' is not installed on this machine.",
+      };
+    }
+    return {
+      config: {
+        ...config,
+        command: cmd,
+        args: ["/c", resolved, ...(config.args ?? [])],
+      },
+    };
+  }
+  return { config: { ...config, command: resolved } };
+};
+
 /** npx belongs to the Node installation, never a same-named PATH shim. */
-export const resolveMcpLauncher = (
-  config: FleetMcpConfig
-): { config: FleetMcpConfig } | { failure: string } => {
-  if (
-    "url" in config ||
-    !["npx", "npx.cmd"].includes(basename(config.command))
-  ) {
+export const resolveMcpLauncher = (config: FleetMcpConfig): McpLauncher => {
+  if ("url" in config) {
     return { config };
+  }
+  if (!["npx", "npx.cmd"].includes(basename(config.command))) {
+    return resolveCommandLauncher(config);
   }
   const node = resolveBin("node");
   const failure = {
     failure: `npm's npx is missing or invalid beside this machine's Node (${node ?? "not installed"}). Install npm with that Node; non-npm npx shims cannot run fleet MCP servers.`,
   };
   if (!node) {
-    return failure;
+    return {
+      unavailable:
+        "Node/npm is not installed on this machine. Waiting for installation before enabling this npx server on the next sync.",
+    };
   }
   const nodeDir = dirname(node);
   const windows = platform() === "win32";
   const npx = join(nodeDir, windows ? "npx.cmd" : "npx");
+  if (!resolveBin(npx)) {
+    return {
+      unavailable:
+        "npm's npx is not installed beside this machine's Node. Waiting for npm installation before enabling this server on the next sync.",
+    };
+  }
   try {
     accessSync(npx, constants.X_OK);
     const cli = windows
@@ -98,10 +140,11 @@ const installChromium = async (): Promise<void> => {
 export const prepareFleetMcp = async (
   name: string,
   config: FleetMcpConfig
-): Promise<{ config: FleetMcpConfig } | { failure: string }> => {
+): Promise<McpLauncher> => {
   const launcher = resolveMcpLauncher(config);
   if (
     "failure" in launcher ||
+    "unavailable" in launcher ||
     name !== "chrome-devtools" ||
     "url" in launcher.config
   ) {

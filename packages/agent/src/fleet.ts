@@ -18,7 +18,6 @@ import {
   rmdir,
   stat,
 } from "node:fs/promises";
-import { platform } from "node:os";
 import { basename, delimiter, isAbsolute, join } from "node:path";
 import type {
   CliInstall,
@@ -302,52 +301,6 @@ const mcpServersOf = (root: ClaudeJson): Record<string, unknown> => ({
 });
 
 /**
- * The entry as it goes into the file, and anything worth saying about it.
- *
- * A stdio server is written with its runner's absolute path: the CLI spawns it
- * without a shell, and the PATH of the terminal the user opens tomorrow is not
- * this daemon's — writing what this machine actually resolved is what makes the
- * two agree. A runner that is not here yet is written verbatim rather than
- * dropped, because the entry is still what the user asked for and it starts
- * working the moment the runner arrives.
- */
-/** A command that already names a path rather than something to resolve on PATH. */
-const PATH_LIKE = /[\\/]/;
-
-/** A `.cmd`/`.bat` shim: a script, and a spawn with no shell cannot run one. */
-const WINDOWS_SHIM = /\.(cmd|bat)$/i;
-
-const forThisMachine = (
-  config: FleetMcpConfig
-): { config: FleetMcpConfig; detail?: string } => {
-  if ("url" in config) {
-    return { config };
-  }
-  if (PATH_LIKE.test(config.command)) {
-    return { config };
-  }
-
-  const resolved = resolveBin(config.command);
-  if (!resolved) {
-    return {
-      config,
-      detail: `runner '${config.command}' not found on PATH yet`,
-    };
-  }
-  // A `.cmd` shim is a script, and a spawn with no shell cannot run one.
-  if (platform() === "win32" && WINDOWS_SHIM.test(resolved)) {
-    return {
-      config: {
-        ...config,
-        command: "cmd",
-        args: ["/c", resolved, ...(config.args ?? [])],
-      },
-    };
-  }
-  return { config: { ...config, command: resolved } };
-};
-
-/**
  * Merges the fleet's servers into `~/.claude.json` and answers with the names
  * cawco now manages. Every other key in the file, and every server the
  * sidecar does not name, comes back out exactly as it went in.
@@ -373,13 +326,9 @@ const syncMcp = async (
   }
 
   const servers = mcpServersOf(file.root);
-  const details = new Map<string, string>();
   for (const server of wanted) {
-    const { config, detail } = forThisMachine(server.config);
-    servers[server.name] = config;
-    if (detail) {
-      details.set(server.name, detail);
-    }
+    // The shared launcher preparation admits only runnable machine configs.
+    servers[server.name] = server.config;
   }
 
   const names = wanted.map((server) => server.name);
@@ -395,9 +344,6 @@ const syncMcp = async (
   }
 
   Object.assign(report, await readMcpRuntime(names));
-  for (const [name, detail] of details) {
-    report[name] = { state: "failed", detail };
-  }
   for (const name of gone) {
     report[name] = { state: "removed" };
   }

@@ -1895,7 +1895,10 @@ export class SessionSupervisor {
     return options.limit ? all.slice(0, options.limit) : all;
   }
 
-  readonly #mcpLauncherFailures = new Map<string, string>();
+  readonly #mcpLauncherStates = new Map<
+    string,
+    import("@cawco/core").FleetItemState
+  >();
 
   /** Converges the fleet across every harness that has a profile, merged into one report. */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: merges every FleetSyncReport field across harnesses field-by-field, on purpose (see the comments below on why nothing is dropped)
@@ -1905,7 +1908,7 @@ export class SessionSupervisor {
   ): Promise<FleetSyncReport> {
     // The daemon's connection names a hub reachable from this machine.
     if (incoming) {
-      this.#mcpLauncherFailures.clear();
+      this.#mcpLauncherStates.clear();
     }
     const config = incoming && {
       ...incoming,
@@ -1915,8 +1918,13 @@ export class SessionSupervisor {
             return row;
           }
           const launcher = await prepareFleetMcp(row.name, row.config);
-          if ("failure" in launcher) {
-            this.#mcpLauncherFailures.set(row.name, launcher.failure);
+          if ("failure" in launcher || "unavailable" in launcher) {
+            this.#mcpLauncherStates.set(
+              row.name,
+              "unavailable" in launcher
+                ? { state: "pending", detail: launcher.unavailable }
+                : { state: "failed", detail: launcher.failure }
+            );
             return { ...row, enabled: false };
           }
           const local = { ...row, config: launcher.config };
@@ -1937,6 +1945,11 @@ export class SessionSupervisor {
     type State = import("@cawco/core").FleetItemState;
     const mcp: FleetSyncReport["mcp"] = {};
     const mcpByHarness: NonNullable<FleetSyncReport["mcpByHarness"]> = {};
+    const mcpHarnesses = new Set(
+      harnesses()
+        .filter((adapter) => adapter.capabilities.mcpStatus)
+        .map((adapter) => adapter.kind)
+    );
     const mcpFailures = new Map<HarnessKind, string>();
     const marketplaces: FleetSyncReport["marketplaces"] = {};
     const plugins: FleetSyncReport["plugins"] = {};
@@ -1975,7 +1988,11 @@ export class SessionSupervisor {
           which === "syncFleet"
             ? // biome-ignore lint/performance/noAwaitInLoops: each harness's report is merged into the shared accumulators before the next runs
               // biome-ignore lint/style/noNonNullAssertion: `apply` was checked truthy above, and it is exactly `adapter.syncFleet` on this branch
-              await adapter.syncFleet!(config as FleetConfig)
+              await adapter.syncFleet!(
+                (adapter.capabilities.mcpStatus
+                  ? config
+                  : incoming) as FleetConfig
+              )
             : // biome-ignore lint/style/noNonNullAssertion: `apply` was checked truthy above, and it is exactly `adapter.fleetStatus` on this branch
               await adapter.fleetStatus!();
         mcpByHarness[adapter.kind] = report.mcp;
@@ -2011,7 +2028,7 @@ export class SessionSupervisor {
       }
     }
     const names = new Set([
-      ...this.#mcpLauncherFailures.keys(),
+      ...this.#mcpLauncherStates.keys(),
       ...Object.values(mcpByHarness).flatMap((rows) => Object.keys(rows ?? {})),
     ]);
     for (const [kind, detail] of mcpFailures) {
@@ -2019,16 +2036,23 @@ export class SessionSupervisor {
         [...names].map((name) => [name, { state: "failed", detail }])
       );
     }
-    for (const report of Object.values(mcpByHarness)) {
-      for (const [name, detail] of this.#mcpLauncherFailures) {
-        report[name] = { state: "failed", detail };
+    for (const [kind, report] of Object.entries(mcpByHarness)) {
+      if (!mcpHarnesses.has(kind as HarnessKind)) {
+        continue;
+      }
+      for (const [name, state] of this.#mcpLauncherStates) {
+        report[name] = state;
       }
     }
     for (const name of names) {
       const readings = Object.entries(mcpByHarness).flatMap(([kind, rows]) =>
         rows?.[name] ? [{ kind, item: rows[name] }] : []
       );
-      const worst = worstFleetState(readings.map((reading) => reading.item));
+      const worst = worstFleetState(
+        readings
+          .filter((reading) => mcpHarnesses.has(reading.kind as HarnessKind))
+          .map((reading) => reading.item)
+      );
       mcp[name] = {
         ...worst,
         detail: readings
