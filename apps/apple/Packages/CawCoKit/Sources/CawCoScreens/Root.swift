@@ -234,6 +234,7 @@ final class BoardSplitController: UISplitViewController, UISplitViewControllerDe
             self?.returnToFleet(from: controller)
         }
         controller.onQuestion = { [weak self] ask in self?.openQuestion(ask) }
+        controller.onOpenSession = { [weak self] id in self?.openSession(id) }
         showDetailViewController(UINavigationController(rootViewController: controller), sender: self)
     }
 

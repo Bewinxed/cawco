@@ -31,6 +31,8 @@ final class SessionViewController: ObservedViewController, UIDragInteractionDele
     var onClose: () -> Void = {}
     var onReturnToFleet: () -> Void = {}
     var onQuestion: (ParkedAsk) -> Void = { _ in }
+    /// Opens another session, or a run's board row (`BoardRun.prefix + runId`), as a board row opens.
+    var onOpenSession: (String) -> Void = { _ in }
 
     init(hub: HubConnection, id: String) {
         self.hub = hub
@@ -44,7 +46,8 @@ final class SessionViewController: ObservedViewController, UIDragInteractionDele
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = Palette.surfacePage
+        // The session pane's ground (SessionPane.svelte `.pane`), behind header, transcript and composer alike.
+        view.backgroundColor = Palette.surfaceRecess
         navigationItem.largeTitleDisplayMode = .never
         stop = UIBarButtonItem(title: "Stop", image: UIImage(systemName: "stop.fill"), primaryAction: UIAction { [weak self] _ in self?.stopTurn() })
         steer = UIBarButtonItem(title: "Steer", image: UIImage(systemName: "paperplane"), primaryAction: UIAction { [weak self] _ in self?.focusComposer() })
@@ -66,6 +69,9 @@ final class SessionViewController: ObservedViewController, UIDragInteractionDele
         head.axis = .vertical; head.spacing = Space.space2
         head.translatesAutoresizingMaskIntoConstraints = false
         transcriptView.translatesAutoresizingMaskIntoConstraints = false
+        transcriptView.hub = hub
+        transcriptView.onOpenSession = { [weak self] id in self?.onOpenSession(id) }
+        transcriptView.onOpenRun = { [weak self] runId in self?.onOpenSession(BoardRun.prefix + runId) }
         composer.font = TypeScale.typeBody.font
         composer.adjustsFontForContentSizeCategory = true
         composer.textColor = Palette.inkStrong
@@ -111,8 +117,7 @@ final class SessionViewController: ObservedViewController, UIDragInteractionDele
         let older = UIBarButtonItem(title: "Earlier", image: UIImage(systemName: "clock.arrow.circlepath"), primaryAction: UIAction { [weak self] _ in
             guard let self else { return }; hub.sessions.older(sessionId)
         })
-        let latest = UIBarButtonItem(title: "Latest", image: UIImage(systemName: "arrow.down"), primaryAction: UIAction { [weak self] _ in self?.transcriptView.latest() })
-        toolbarItems = [older, UIBarButtonItem(systemItem: .flexibleSpace), latest]
+        toolbarItems = [older, UIBarButtonItem(systemItem: .flexibleSpace)]
         navigationController?.setToolbarHidden(false, animated: false)
     }
 
@@ -170,7 +175,7 @@ final class SessionViewController: ObservedViewController, UIDragInteractionDele
         configureBar()
         if let id = sent, let command = hub.ledger.commands[id] {
             notice.text = command.reason ?? command.stage.rawValue.capitalized
-        } else { notice.text = transcript.error ?? (transcript.loading ? "Reading transcript…" : transcript.blocks.isEmpty ? "This session hasn't said anything yet." : "") }
+        } else { notice.text = transcript.error ?? "" }
         notice.isHidden = notice.text?.isEmpty != false
         transcriptView.configure(transcript)
         toolbarItems?.first?.isEnabled = transcript.cursor != nil && !transcript.loadingOlder
