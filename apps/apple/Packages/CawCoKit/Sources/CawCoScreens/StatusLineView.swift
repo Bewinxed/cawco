@@ -102,8 +102,10 @@ final class StatusLineView: UIView {
         case .reading:
             words.text = "Connected · reading the fleet…"
         case .connected:
-            words.text = spend.isEmpty ? "Connected" : "Connected · \(spend)"
+            // Live is the quiet default; only what it cost is news.
+            words.text = spend
         }
+        KitButton.setTitle(hub.socket == .connecting ? "Connecting…" : "Reconnect", of: reconnect, variant: .outline, height: .xs)
     }
 
     override func willMove(toWindow newWindow: UIWindow?) {
