@@ -2,7 +2,7 @@
 import { createInterface } from "node:readline";
 import { INSTALL_SESSION_CREDENTIAL } from "@cawco/core";
 import type { HarnessContext, HarnessSession } from "../harness";
-import { PiHarness } from "./pi";
+import { startPiHost } from "./pi-runtime";
 import type { PiHostCommand, PiHostEvent, PiHostState } from "./pi-sessiond";
 
 // SDK/extension diagnostics must never enter the sequenced protocol stream.
@@ -49,7 +49,7 @@ function start(
       throw new Error("pi host cannot emit hub envelopes");
     },
   };
-  const started = PiHarness.startHost(command.spec, ctx).then(
+  const started = startPiHost(command.spec, ctx).then(
     (created: HarnessSession) => {
       session = created;
     }
