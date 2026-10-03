@@ -1,5 +1,5 @@
 import { existsSync, readdirSync, readFileSync, realpathSync } from "node:fs";
-import { chmod } from "node:fs/promises";
+import { chmod, mkdir } from "node:fs/promises";
 import { homedir, platform, userInfo } from "node:os";
 import { dirname, join } from "node:path";
 import type { AgentRow } from "@cawco/core";
@@ -335,7 +335,8 @@ const dataDir = (): string =>
         "cawco"
       );
 
-const DEFAULT_DB_PATH = join(dataDir(), "cawco.db");
+const DEFAULT_DB_PATH =
+  readEnv(CAWCO_ENV.dbPath) ?? join(dataDir(), "cawco.db");
 
 /** How long a liveness probe is worth waiting for before it has said enough. */
 const PROBE_TIMEOUT_MS = 2000;
@@ -450,6 +451,80 @@ const probeSessiond = async (): Promise<string | undefined> => {
   return `${endpoint} accepts connections`;
 };
 
+/** The browser address corresponding to the socket we install. */
+const dashboardUrl = (): string => {
+  const host =
+    DASHBOARD_HOST === "0.0.0.0" || DASHBOARD_HOST === "::"
+      ? "localhost"
+      : DASHBOARD_HOST;
+  return `http://${host.includes(":") ? `[${host}]` : host}:${DASHBOARD_PORT}`;
+};
+
+const READY_TIMEOUT_MS = 90_000;
+
+/** A first machine is ready only when its complete local stack is usable. */
+export const awaitFirstMachineReady = async (
+  hub: string,
+  note: (line: string) => void
+): Promise<void> => {
+  const { machineId } = await import("@cawco/agent");
+  const id = await machineId();
+  const checks: readonly [ServiceId, () => Promise<boolean>][] = [
+    [
+      "hub",
+      async () =>
+        (await probeJson<{ ok: boolean }>(`${hub}/health`))?.ok === true,
+    ],
+    [
+      "sessiond",
+      async () =>
+        (await probeSessiond())?.endsWith("accepts connections") === true,
+    ],
+    [
+      "agent",
+      async () => {
+        const agents = await probeJson<AgentRow[]>(`${hub}/api/agents`);
+        return (
+          agents?.some(
+            (agent) => agent.machineId === id && agent.status === "online"
+          ) === true
+        );
+      },
+    ],
+    [
+      "dashboard",
+      async () => {
+        const response = await fetch(dashboardUrl(), {
+          signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+        }).catch(() => undefined);
+        await response?.body?.cancel();
+        return response?.ok === true;
+      },
+    ],
+  ];
+  note("waiting for hub, sessiond, this machine's agent and dashboard…");
+  const deadline = Date.now() + READY_TIMEOUT_MS;
+  for (;;) {
+    // biome-ignore lint/performance/noAwaitInLoops: a fresh snapshot of all four services on each readiness poll
+    const ready = await Promise.all(checks.map(([, check]) => check()));
+    const failed = checks.find((_, index) => !ready[index]);
+    if (!failed) {
+      return;
+    }
+    if (Date.now() >= deadline) {
+      const [serviceId] = failed;
+      const logs =
+        platform() === "darwin"
+          ? `tail -n 50 "${launchAgentLog(serviceId)}"`
+          : `journalctl --user -u cawco-${serviceId} -n 50`;
+      throw new ServiceError(
+        `${serviceId} did not become ready within ${READY_TIMEOUT_MS / 1000}s. Read why with: ${logs}`
+      );
+    }
+    await Bun.sleep(1000);
+  }
+};
+
 export interface ServiceSpec {
   /** systemd ordering only — launchd has none, see {@link plist}. */
   readonly after: readonly string[];
@@ -519,6 +594,9 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
       // the same process.
       command: layout.hub.command,
       environment: {
+        [CAWCO_ENV.hubPort]: String(
+          readEnv(CAWCO_ENV.hubPort) ?? CAWCO_HUB_PORT
+        ),
         // The hub's DB_PATH defaults to `./cawco.db` — relative to wherever it
         // was started. A unit that leaves this unset opens a second, empty
         // database in whatever directory the init system chose, and the fleet
@@ -547,6 +625,7 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
       description: "CawCo dashboard",
       command: layout.dashboard.command,
       environment: {
+        [CAWCO_ENV.hubUrl]: readEnv(CAWCO_ENV.hubUrl) ?? hubOrigin(),
         [CAWCO_ENV.previewPort]:
           readEnv(CAWCO_ENV.previewPort) ??
           String(Number(readEnv(CAWCO_ENV.hubPort) ?? CAWCO_HUB_PORT) + 1),
@@ -603,7 +682,7 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
       mode: "prod",
       description: "CawCo sessiond",
       command: layout.sessiond.command,
-      environment: {},
+      environment: { [CAWCO_ENV.sessiondEndpoint]: sessiondSocket() },
       // Not the checkout: sessiond spawns children with a cwd the agent hands it
       // per child, and nothing it does resolves against its own.
       workingDirectory: homedir(),
@@ -629,7 +708,12 @@ const servicesFor = (layout: Layout): Record<ServiceId, ServiceSpec> => {
        * what someone testing a branch means by it.
        */
       command: layout.agent.command,
-      environment: {},
+      environment: {
+        [CAWCO_ENV.sessiondEndpoint]: sessiondSocket(),
+        ...(readEnv(CAWCO_ENV.hubUrl)
+          ? { [CAWCO_ENV.hubUrl]: readEnv(CAWCO_ENV.hubUrl) as string }
+          : {}),
+      },
       workingDirectory: homedir(),
       // The hub is soft: the daemon reconnects with backoff and works through an
       // outage. sessiond is NOT — since the claude bridge became the only spawn
@@ -748,6 +832,9 @@ const specFor = (
 const environment = (spec: ServiceSpec): [string, string][] =>
   Object.entries({
     PATH: servicePath(),
+    XDG_CONFIG_HOME: process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config"),
+    XDG_DATA_HOME:
+      process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share"),
     ...spec.environment,
     ...(spec.mode === "dev" ? { [MODE_ENV]: spec.mode } : {}),
   });
@@ -889,7 +976,20 @@ NoDelay=true
 WantedBy=sockets.target
 `;
 
-const run = async (argv: string[]) => Bun.$`${argv}`.quiet().nothrow();
+const run = async (argv: string[]) =>
+  Bun.$`${argv}`
+    .env({
+      ...process.env,
+      // logind owns this directory; su shells need not inherit its location.
+      ...(platform() === "linux"
+        ? {
+            XDG_RUNTIME_DIR:
+              process.env.XDG_RUNTIME_DIR ?? `/run/user/${process.getuid?.()}`,
+          }
+        : {}),
+    })
+    .quiet()
+    .nothrow();
 
 const failed = (
   what: string,
@@ -988,6 +1088,8 @@ export const installLaunchAgents = async (
   note: (line: string) => void
 ): Promise<void> => {
   const bootstrap = await hasBootstrap();
+  // launchd opens stdout/stderr before any process can create its log folder.
+  await mkdir(dirname(launchAgentLog("hub")), { recursive: true });
 
   for (const [index, spec] of specs.entries()) {
     if (index > 0) {
@@ -1084,6 +1186,16 @@ const enableLinger = async (note: (line: string) => void): Promise<void> => {
     );
   }
   note("loginctl enable-linger…");
+  const current = await run([
+    "loginctl",
+    "show-user",
+    userInfo().username,
+    "--property=Linger",
+    "--value",
+  ]);
+  if (current.exitCode === 0 && current.stdout.toString().trim() === "yes") {
+    return;
+  }
   const enabled = await run(["loginctl", "enable-linger"]);
   if (enabled.exitCode !== 0) {
     throw new ServiceError(

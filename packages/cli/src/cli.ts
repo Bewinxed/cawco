@@ -12,6 +12,7 @@ import {
 import { discoverHub, type Hub } from "./discover";
 import { clearToken, LoginError, login, saveToken } from "./login";
 import {
+  awaitFirstMachineReady,
   CHECKOUT_ROOT,
   DEPLOY_BRANCH,
   DEPLOY_MARKER,
@@ -547,12 +548,18 @@ const runDeploy = async (args: Args): Promise<number> => {
     }
     // Save the first machine's own hub before its agent starts discovering.
     await discoverHub({ hub: args.hub });
+    process.env[CAWCO_ENV.hubUrl] = toHttpBase(args.hub) as string;
   }
   const result = await deployInit({
     ...(args.origin === undefined ? {} : { origin: args.origin }),
     force: args.force,
     note: (line) => console.log(line),
   });
+  if (args.hub) {
+    await awaitFirstMachineReady(toHttpBase(args.hub) as string, (line) =>
+      console.log(`${INSTALL_STEP_PREFIX}${line}`)
+    );
+  }
   console.log("");
   console.log(
     `clone    ${result.root} (${result.origin}, ${result.branch}) at ${result.head}`
@@ -628,6 +635,7 @@ const runJoin = async (args: Args): Promise<number> => {
   // Through discovery, so the hub is saved exactly as `up` saves one it was
   // told — the agent unit's `up` finds it there on every start.
   const hub = (await discoverHub({ hub: args.hub })) as Hub;
+  process.env[CAWCO_ENV.hubUrl] = hub.httpUrl;
   say(`saved hub ${hub.httpUrl}`);
 
   say(`setting up ${deployRoot()} as this machine's deployment clone`);

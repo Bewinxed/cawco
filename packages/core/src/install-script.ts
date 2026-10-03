@@ -113,9 +113,10 @@ ${
   # Fix the socket address explicitly so the printed URL names this install.
   PORT="\${PORT:-3000}"
   HOST="\${HOST:-0.0.0.0}"
-  export PORT HOST
+  ${CAWCO_ENV.hubPort}="\${${CAWCO_ENV.hubPort}:-${CAWCO_HUB_PORT}}"
+  export PORT HOST ${CAWCO_ENV.hubPort}
   say "running cawco deploy init"
-  bun packages/cli/src/cli.ts deploy init --origin "$ORIGIN" --hub "http://127.0.0.1:${CAWCO_HUB_PORT}"
+  bun packages/cli/src/cli.ts deploy init --origin "$ORIGIN" --hub "http://127.0.0.1:$${CAWCO_ENV.hubPort}"
 
   case "$HOST" in
     0.0.0.0|::) DASHBOARD_HOST=localhost ;;
@@ -123,8 +124,8 @@ ${
     *) DASHBOARD_HOST="$HOST" ;;
   esac
   DASHBOARD_URL="http://$DASHBOARD_HOST:$PORT"
-  say "waiting for the dashboard"
-  curl -fsSL --retry 30 --retry-delay 1 --retry-connrefused --max-time 5 "$DASHBOARD_URL/" -o /dev/null
+  # deploy init checked hub health, sessiond, this machine's online agent and
+  # the dashboard before returning. A dashboard redirect alone proves nothing.
   printf '\\nCawCo is ready. Open your dashboard:\\n  %s\\n' "$DASHBOARD_URL"`
 }
 }

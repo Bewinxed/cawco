@@ -1,3 +1,5 @@
+import { mkdirSync } from "node:fs";
+import { dirname } from "node:path";
 import type {
   AgentRow,
   BuildInfo,
@@ -1119,6 +1121,7 @@ export const hashHookMaterial = (hook: {
   );
 
 const make = (path: string): DbShape => {
+  mkdirSync(dirname(path), { recursive: true });
   const db = drizzle(path);
   migrate(db, { migrationsFolder: MIGRATIONS_DIR });
 
