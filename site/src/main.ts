@@ -22,7 +22,7 @@ function syncAppearance() {
 function syncMotion() {
   const property = mascot?.viewModelInstance?.boolean("reducedMotion");
   if (property) property.value = paused;
-  motionButton?.setAttribute("aria-label", `${paused ? "Play" : "Pause"} mascot animation`);
+  motionButton?.setAttribute("aria-label", `${paused ? "Play" : "Pause"} motion`);
   motionButton?.setAttribute("aria-pressed", String(paused));
   const label = motionButton?.querySelector("span");
   if (label) label.textContent = paused ? "Play motion" : "Pause motion";
