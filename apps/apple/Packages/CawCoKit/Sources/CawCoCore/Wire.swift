@@ -150,6 +150,7 @@ enum Frame {
     case controlResult(Components.Schemas.FramePayload.Value13Payload)
     case error(requestId: String?, message: String)
     case pulse(Components.Schemas.FramePayload.Value16Payload)
+    case supervisorEvent(Components.Schemas.SupervisorEvent)
     case workflow(Components.Schemas.WorkflowFrame)
     case ignored
 
@@ -174,6 +175,8 @@ enum Frame {
             self = .error(requestId: frame.requestId, message: frame.message)
         } else if let frame = payload.value16, frame.kind == .pulse {
             self = .pulse(frame)
+        } else if let frame = payload.value19, frame.kind == .supervisorEvent {
+            self = .supervisorEvent(frame.event)
         } else if let frame = payload.value21 {
             self = .workflow(frame)
         } else {

@@ -135,6 +135,7 @@ public final class HubConnection {
         fleet.pulses = [:]
         fleet.turnSince = [:]
         fleet.catalogs = [:]
+        fleet.supervisorEvents = []
         fleet.catalogsTried = []
         fleet.fleetRead = false
         fleet.liveRead = false
@@ -547,6 +548,8 @@ public final class HubConnection {
             workflowRuns.read(frame.runId)
         case let .pulse(pulse):
             fleet.adopt(pulse: pulse.pulse)
+        case let .supervisorEvent(event):
+            fleet.recordSupervisorEvent(event)
         case let .controlResult(result):
             guard let waiter = waiters.removeValue(forKey: result.requestId) else {
                 return
