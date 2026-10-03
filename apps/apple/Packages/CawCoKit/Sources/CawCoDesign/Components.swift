@@ -385,15 +385,17 @@ public final class FolderTabs: UIControl {
             super.init(frame: .zero)
             title.text = label
             row.axis = .horizontal
-            row.spacing = Space.space1
+            // TabItem.svelte: the trail stands right after the label's hit.
+            row.spacing = 0
             row.alignment = .center
             row.isUserInteractionEnabled = false
             row.translatesAutoresizingMaskIntoConstraints = false
             row.addArrangedSubview(title)
             addSubview(row)
+            end = row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -FolderTabs.padX)
             NSLayoutConstraint.activate([
                 row.leadingAnchor.constraint(equalTo: leadingAnchor, constant: FolderTabs.padX),
-                row.trailingAnchor.constraint(equalTo: trailingAnchor, constant: -FolderTabs.padX),
+                end,
                 row.centerYAnchor.constraint(equalTo: centerYAnchor),
             ])
             sheetMask.backgroundColor = UIColor.black.cgColor
@@ -413,8 +415,14 @@ public final class FolderTabs: UIControl {
             fatalError("FolderTabs.Cell is built in code")
         }
 
+        private var end: NSLayoutConstraint!
+
+        /// A trail ends the tab: the label's hit loses its end padding, the
+        /// box keeps `padX − 6` (TabItem.svelte), and the trail its own 2pt
+        /// (WorkTabs.svelte `.count`).
         func setTrail(_ view: UIView) {
             row.addArrangedSubview(view)
+            end.constant = -(FolderTabs.padX - 6) - 2
         }
 
         func set(chosen: Bool, forward: Bool) {
