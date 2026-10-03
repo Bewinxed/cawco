@@ -2729,7 +2729,9 @@ export const createServer = ({
     machineId: string,
     payload: SpawnPayload,
     fallback?: string | null
-  ): { payload: SpawnPayload } | { refusal: string } => {
+  ):
+    | { payload: SpawnPayload; permissionMode: string | null }
+    | { refusal: string } => {
     const harness = payload.harness ?? "claude";
     const { permissionMode: asked, ...rest } = payload;
     if (harnessModes(machineId, harness)?.length === 0) {
@@ -2737,7 +2739,7 @@ export const createServer = ({
         ? {
             refusal: `${modeRefusal(machineId, harness, asked)} Start it without one. Nothing was started.`,
           }
-        : { payload: rest };
+        : { payload: rest, permissionMode: null };
     }
     const mode = asked ?? fallback ?? undefined;
     if (!mode) {
@@ -2748,7 +2750,10 @@ export const createServer = ({
     const unfit = modeRefusal(machineId, harness, mode);
     return unfit
       ? { refusal: `${unfit} Nothing was started.` }
-      : { payload: { ...rest, permissionMode: mode as PermissionMode } };
+      : {
+          payload: { ...rest, permissionMode: mode as PermissionMode },
+          permissionMode: mode,
+        };
   };
 
   /** Why `harness` on `machineId` cannot run in `mode`, or nothing when it can (or has not said). */
@@ -2877,7 +2882,7 @@ export const createServer = ({
       sessionId: row.sessionId,
       harness: row.harness ?? undefined,
       kind: row.kind ?? undefined,
-      permissionMode: revive.permissionMode,
+      permissionMode: settled.permissionMode,
       model: row.model ?? undefined,
     });
     publishInstances(machineId);
@@ -3519,7 +3524,7 @@ export const createServer = ({
       projectId: payload.projectId,
       title: payload.title,
       kind: peekKind(payload),
-      permissionMode: payload.permissionMode,
+      permissionMode: settled.permissionMode,
       model: payload.model,
       canDelegate: payload.canDelegate,
       workflowRunId: payload.workflowRunId,
@@ -3599,7 +3604,7 @@ export const createServer = ({
       projectId: payload.projectId,
       title: payload.title,
       kind,
-      permissionMode: payload.permissionMode,
+      permissionMode: settled.permissionMode,
       model: payload.model,
     });
     publishInstances(machineId);
@@ -4458,6 +4463,12 @@ export const createServer = ({
     };
     const settled = settleMode(row.machineId, asked, row.permissionMode);
     if ("refusal" in settled) {
+      // Custody also inspects failed OpenCode handles. A recorded refusal
+      // stays failed until its settings change, rather than failing each boot.
+      if (row.status === "error" && row.lastError === settled.refusal) {
+        return;
+      }
+      db.failInstance(row.id, settled.refusal);
       console.warn(`[hub] not restoring ${row.id}: ${settled.refusal}`);
       return;
     }
@@ -4481,7 +4492,7 @@ export const createServer = ({
       harness: row.harness ?? undefined,
       projectId: row.projectId ?? undefined,
       kind: row.kind === "scratch" ? "scratch" : "mainline",
-      permissionMode: payload.permissionMode,
+      permissionMode: settled.permissionMode,
       model: row.model ?? undefined,
       canDelegate: row.canDelegate ?? undefined,
     });
@@ -9898,7 +9909,7 @@ export const createServer = ({
                   projectId: peek(message.payload, "projectId"),
                   title: peek(message.payload, "title"),
                   kind: peekKind(message.payload),
-                  permissionMode: settled.payload.permissionMode,
+                  permissionMode: settled.permissionMode,
                   model: peek(message.payload, "model"),
                   ...peekParent(message.payload),
                 });

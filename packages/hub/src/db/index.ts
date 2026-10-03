@@ -502,7 +502,8 @@ export interface DbShape {
     /** What the spawn said the session is for; a row without one keeps whatever it had. */
     title?: string;
     kind: InstanceKind;
-    permissionMode?: string;
+    /** The settled spawn mode; null only when the harness reports no modes. */
+    permissionMode: string | null;
     model?: string;
     /** `false` makes the row a leaf delegate; absent leaves the column alone. */
     canDelegate?: boolean;
@@ -1629,7 +1630,7 @@ const make = (path: string): DbShape => {
           set: {
             cwd,
             kind,
-            ...(permissionMode ? { permissionMode } : {}),
+            permissionMode,
             ...(model ? { model } : {}),
             // Presence, not truth: a leaf's `false` has to land.
             ...(canDelegate === undefined ? {} : { canDelegate }),
