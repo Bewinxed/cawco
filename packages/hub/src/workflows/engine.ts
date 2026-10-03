@@ -1,5 +1,5 @@
 /**
- * The workflow engine: Effect's durable workflows (`effect/unstable/workflow`)
+ * The workflow engine: Effect's durable workflows (`effect/workflow`)
  * on a single-process cluster runner (`SingleRunner` + `ClusterWorkflowEngine`)
  * whose message storage lives in the hub's own SQLite file.
  *
@@ -61,14 +61,14 @@ import {
   RunnerAddress,
   Sharding,
   SingleRunner,
-} from "effect/unstable/cluster";
+} from "effect/cluster";
 import {
   Activity,
   DurableClock,
   DurableDeferred,
   Workflow,
   WorkflowEngine,
-} from "effect/unstable/workflow";
+} from "effect/workflow";
 
 /** What a `w.*` call came back with, as the program is handed it. */
 export type Outcome = { result: unknown } | { failure: WorkflowFailure };
