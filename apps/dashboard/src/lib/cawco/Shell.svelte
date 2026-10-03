@@ -1069,6 +1069,11 @@
   .right :global(.jump svg) {
     width: 16px;
     height: 16px;
+  }
+  /* The cluster mutes a glyph only where its control carries no tone of its
+     own: a toned control (MachinesButton's `data-tone`) inks its glyph itself,
+     and this scoped rule would outrank it. */
+  .right :global(.jump:not([data-tone]) svg) {
     color: var(--ink-muted);
   }
 

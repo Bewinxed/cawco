@@ -50,8 +50,23 @@ async function proxyToHub(
           : undefined,
     });
 
-    // Forward the response
-    return new Response(response.body, {
+    // Forward the response. Node's fetch (undici) cancels a body once the
+    // Response that owns it is garbage-collected (nodejs/undici#3199), and
+    // handing on `response.body` alone left nothing holding that Response: a
+    // collection between this return and the reader's read cancelled the
+    // stream, and the read threw "Body is unusable: Body has already been
+    // read" — a direct load of /project/<id> failing its SSR load with a 500.
+    // The stream handed on holds the hub's Response until it is read through.
+    const body =
+      response.body?.pipeThrough(
+        new TransformStream({
+          flush() {
+            // biome-ignore lint/suspicious/noUnusedExpressions: the reference is the point — it keeps the hub's Response reachable from the stream until the stream is read through
+            response.bodyUsed;
+          },
+        })
+      ) ?? null;
+    return new Response(body, {
       status: response.status,
       statusText: response.statusText,
       headers: {
