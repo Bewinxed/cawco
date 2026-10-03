@@ -1,0 +1,8 @@
+{
+  "cawco-share.png": {
+    "tool": "cawco_generate_image",
+    "billing": "chatgpt_subscription",
+    "references": ["~/cawco-design-kit/05-mascot-pose-sheet.png", "~/cawco-design-kit/caw/caw-ready.png"],
+    "prompt": "Create one premium horizontal social sharing illustration for CawCo, a self-hosted control app for coding agents. Image 1 is the exact immutable mascot model sheet; image 2 is Caw's clean master reference. Preserve Caw's exact design: small round fluffy ink-black crow, scalloped feather edges, head tufts, large white eyes with tiny pupils, original long straight pointed black beak, thin legs, vermilion only on wing tips, butter-yellow tick marks. Do not redesign him, make 3D, alter his beak, add clothing or facial features. Layout: a bold butter-yellow #F2D36B flat canvas. Caw stands proudly in the right half with one wing lifted, a little earnest and dopey. Three simple small ink line drawings of generic computer terminals connected by fine ink lines sit behind him, no Apple products or logos, no invented UI text. On the left the exact text 'Your agents.\\nUnder your wing.' is set in very large chunky rounded Fredoka-like black lettering. Small 'CawCo' wordmark upper-left, 'Self-hosted. Open source.' lower-left. Warm flat vector-like illustration, exceptional graphic clarity, generous negative space, no gradients or drop shadows or beige canvas. No buttons. This is finished social artwork, not a webpage screenshot."
+  }
+}

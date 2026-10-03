@@ -715,7 +715,7 @@ Two scales, one token language. The plan reserves compact for the transcript and
 
 ## Marketing spine
 
-N/A. CawCo has no acquisition funnel — it is installed and used by its own operator, not marketed to a cold visitor. The persuasion spine, awareness-stage matching, and StoryBrand framing in the doctrine's `journey-stack.md` §Marketing persuasion spine do not apply to a self-hosted, single-operator control plane, and are omitted rather than filled with invented content.
+cawco.dev serves the landing and pricing pages from `site/`, introducing the free self-hosted fleet and the forthcoming paid native app to visitors without invented testimonials, usage figures, or undecided pricing claims.
 
 ---
 
