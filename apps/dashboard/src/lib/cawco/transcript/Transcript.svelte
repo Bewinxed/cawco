@@ -1544,7 +1544,7 @@
     // of the tail in the middle of a returning pane's catch-up and left it
     // 2,800px short for good. Anything
     // that moves what is on screen is the READER: wheel, scrollbar drag,
-    // keyboard, momentum, anything.
+    // keyboard, a finger, its momentum and its bounce.
     const clamped =
       shrank && scroller.scrollTop >= height - scroller.clientHeight - 1;
 
@@ -1561,12 +1561,46 @@
     // A row the reader scrolls to is not arriving, whenever it came in: what
     // is still waiting to mount is theirs to read, not ours to play.
     tickets.clear();
+    // The reader's scroll has the screen until it comes to rest: nothing
+    // writes the scroll offset under a finger, its momentum or its bounce,
+    // however near the tail it moves. The tail is taken back at rest, and
+    // only there (`onscrollend`).
+    atBottom = false;
     const distance = height - scroller.scrollTop - scroller.clientHeight;
-    atBottom = distance < 120;
+    restsAtTail = distance <= TAIL_SLACK;
     // Hysteresis: up past the far mark, and it stays until back at the tail.
     farFromLatest =
-      !atBottom &&
+      !restsAtTail &&
       (farFromLatest || distance > FAR_FROM_LATEST * scroller.clientHeight);
+  }
+
+  /**
+   * Where the reader's own scrolling last left the view, until it comes to
+   * rest: at the tail, or away from it. Null once a rest has read it, and
+   * while nothing of the reader's has moved the view since.
+   */
+  let restsAtTail: boolean | null = null;
+  /** How far off the bottom still counts as the tail: a pixel's rounding. */
+  const TAIL_SLACK = 1;
+
+  /**
+   * The scroll has come to rest. virtua says so 150ms after the last scroll
+   * event, and never while a finger is on the screen, so a drag, the
+   * momentum after it and the bounce at the end are one scroll. A reader
+   * who comes to rest at the tail is following it again; anywhere else,
+   * they stay where they are.
+   */
+  function onscrollend(): void {
+    if (restsAtTail === null || jumping) {
+      return;
+    }
+    const tail = restsAtTail;
+    restsAtTail = null;
+    if (tail) {
+      atBottom = true;
+      farFromLatest = false;
+      followBottom();
+    }
   }
 
   /**
@@ -2344,6 +2378,7 @@
       return;
     }
     stopFollow();
+    restsAtTail = null;
     jumping = true;
     node.addEventListener("wheel", yieldJump, { passive: true });
     node.addEventListener("touchstart", yieldJump, { passive: true });
@@ -2654,6 +2689,7 @@
       getKey={(r) => r.key}
       itemSize={ROW_ESTIMATE}
       {keepMounted}
+      {onscrollend}
       scrollRef={scroller}
       shift={built.shifted}
       {ssrCount}

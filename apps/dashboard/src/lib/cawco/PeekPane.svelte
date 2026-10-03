@@ -27,6 +27,7 @@
   import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
   import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
+  import { followTail } from "#lib/hooks/follow-tail.js";
   import {
     IconClose,
     IconExternal,
@@ -235,17 +236,6 @@
       result: permissionAnswer(request, kind),
     });
   }
-
-  let tailEl = $state<HTMLDivElement | null>(null);
-
-  // The tail grows by whole turns and by streamed characters, and follows
-  // either: what a peek is for is the last thing said, not the first.
-  $effect(() => {
-    if (!tailEl || tail.length + stream.text.length === 0) {
-      return;
-    }
-    tailEl.scrollTop = tailEl.scrollHeight;
-  });
 </script>
 
 <div class="peek flex min-h-0 flex-1 flex-col overflow-hidden">
@@ -426,60 +416,65 @@
     </div>
   {/if}
 
-  <div
-    class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto border-t border-border/50 px-4 py-3"
-    bind:this={tailEl}
-  >
-    {#if session?.loading && tail.length === 0}
-      <p class="text-meta">Reading…</p>
-    {:else if session?.readFault && tail.length === 0}
-      <!-- A read that failed is not a session with nothing to say. -->
-      <p class="text-meta text-error">
-        Couldn't read this session: {session.readFault.message}
-      </p>
-    {:else if tail.length === 0 && !session?.streaming}
-      <p class="text-meta">Nothing said yet.</p>
-    {:else}
-      {#each tail as message, index (message.id ?? index)}
-        {#if message.type === "tool.use" || message.type === "tool.handoff"}
-          <p
-            class="flex items-baseline gap-1.5 text-meta text-muted-foreground"
-          >
-            <span class="shrink-0"
-              >{message.metadata?.toolName ?? message.content}</span
+  <!-- The tail grows by whole turns and by streamed characters, and follows
+       either: what a peek is for is the last thing said. Each session
+       peeked opens at its own end. -->
+  {#key target.viewId}
+    <div
+      class="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto border-t border-border/50 px-4 py-3"
+      {@attach followTail()}
+    >
+      {#if session?.loading && tail.length === 0}
+        <p class="text-meta">Reading…</p>
+      {:else if session?.readFault && tail.length === 0}
+        <!-- A read that failed is not a session with nothing to say. -->
+        <p class="text-meta text-error">
+          Couldn't read this session: {session.readFault.message}
+        </p>
+      {:else if tail.length === 0 && !session?.streaming}
+        <p class="text-meta">Nothing said yet.</p>
+      {:else}
+        {#each tail as message, index (message.id ?? index)}
+          {#if message.type === "tool.use" || message.type === "tool.handoff"}
+            <p
+              class="flex items-baseline gap-1.5 text-meta text-muted-foreground"
             >
-            {#if glanceOf(message)}
-              <span class="shrink-0">·</span>
-              <span class="truncate font-mono">{glanceOf(message)}</span>
-            {/if}
-          </p>
-        {:else if message.type === "user" || message.type === "user.peer"}
-          <!-- The one voice worth tinting: what the session was asked. -->
-          <p
-            class="line-clamp-4 rounded-lg bg-action-solid/10 px-3 py-2 text-body break-words whitespace-pre-wrap"
-          >
-            {message.content}
-          </p>
-        {:else if message.type === "result.error"}
-          <!-- A failed turn's last words are the agent's too: flat. -->
-          <p class="line-clamp-3 text-body break-words text-error">
-            {plainMarkdown(message.content)}
-          </p>
-        {:else}
-          <!-- The agent's words read flat: its markdown, without the syntax. -->
-          <p class="line-clamp-6 text-body break-words whitespace-pre-wrap">
-            {plainMarkdown(message.content)}
+              <span class="shrink-0"
+                >{message.metadata?.toolName ?? message.content}</span
+              >
+              {#if glanceOf(message)}
+                <span class="shrink-0">·</span>
+                <span class="truncate font-mono">{glanceOf(message)}</span>
+              {/if}
+            </p>
+          {:else if message.type === "user" || message.type === "user.peer"}
+            <!-- The one voice worth tinting: what the session was asked. -->
+            <p
+              class="line-clamp-4 rounded-lg bg-action-solid/10 px-3 py-2 text-body break-words whitespace-pre-wrap"
+            >
+              {message.content}
+            </p>
+          {:else if message.type === "result.error"}
+            <!-- A failed turn's last words are the agent's too: flat. -->
+            <p class="line-clamp-3 text-body break-words text-error">
+              {plainMarkdown(message.content)}
+            </p>
+          {:else}
+            <!-- The agent's words read flat: its markdown, without the syntax. -->
+            <p class="line-clamp-6 text-body break-words whitespace-pre-wrap">
+              {plainMarkdown(message.content)}
+            </p>
+          {/if}
+        {/each}
+        {#if session?.streaming}
+          <p class="text-body break-words whitespace-pre-wrap">
+            {streamed}
+            <span
+              class="inline-block h-4 w-[3px] rounded-xs bg-action-solid/60 align-text-bottom"
+            ></span>
           </p>
         {/if}
-      {/each}
-      {#if session?.streaming}
-        <p class="text-body break-words whitespace-pre-wrap">
-          {streamed}
-          <span
-            class="inline-block h-4 w-[3px] rounded-xs bg-action-solid/60 align-text-bottom"
-          ></span>
-        </p>
       {/if}
-    {/if}
-  </div>
+    </div>
+  {/key}
 </div>

@@ -26,6 +26,7 @@
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
   import * as NativeSelect from "#lib/components/ui/native-select/index.js";
   import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import { followTail } from "#lib/hooks/follow-tail.js";
   import {
     IconChevronRight,
     IconError,
@@ -196,15 +197,6 @@
       keyOpen = true;
     }
   });
-
-  /** Keeps the newest output in view while it streams. */
-  const followTail = (node: HTMLElement) => {
-    $effect(() => {
-      if (job?.lines.length) {
-        node.scrollTop = node.scrollHeight;
-      }
-    });
-  };
 </script>
 
 <!-- The address the machine is told to reach this hub on, the same choice on
@@ -295,7 +287,7 @@
             <summary>
               <IconChevronRight aria-hidden="true" class="chev size-4" />Output
             </summary>
-            <pre {@attach followTail}>{job.lines.join("\n")}</pre>
+            <pre {@attach followTail()}>{job.lines.join("\n")}</pre>
           </details>
         </div>
       {:else if view === "done" && job}

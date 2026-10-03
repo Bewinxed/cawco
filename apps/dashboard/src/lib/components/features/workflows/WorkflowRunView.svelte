@@ -29,8 +29,8 @@
    * and its own session's tab; the question it waits on, and its log.
    * There is no graph here: a graph is for editing (/workflows/[id]).
    */
+  import { followTail } from "#lib/hooks/follow-tail.js";
   import { goto } from "$app/navigation";
-  import { followTail } from "./follow-tail";
   import { journalCheckpoints, journalLog } from "./journal-graph";
   import { duration } from "./workflow-ui";
   import "./workflows.css";
