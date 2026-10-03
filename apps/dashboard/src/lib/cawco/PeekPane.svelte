@@ -64,6 +64,7 @@
   import { conversationHref } from "./links";
   import OsMark from "./OsMark.svelte";
   import { permissionSummary } from "./permission-summary";
+  import { plainMarkdown, plainStreaming } from "./plain-markdown";
   import { questionsOf } from "./question";
   import SessionMark, { sessionStatus } from "./SessionMark.svelte";
   import TaskPanel from "./TaskPanel.svelte";
@@ -216,6 +217,8 @@
   );
 
   const stream = smoothText(() => session?.streaming ?? "");
+  /** The paced stream, flat, held to its last whole word. */
+  const streamed = $derived(plainStreaming(stream.text));
 
   const glanceOf = (message: Message): string =>
     getToolGlance(
@@ -460,14 +463,15 @@
             {message.content}
           </p>
         {:else}
+          <!-- The agent's words read flat: its markdown, without the syntax. -->
           <p class="line-clamp-6 text-body break-words whitespace-pre-wrap">
-            {message.content}
+            {plainMarkdown(message.content)}
           </p>
         {/if}
       {/each}
       {#if session?.streaming}
         <p class="text-body break-words whitespace-pre-wrap">
-          {stream.text}
+          {streamed}
           <span
             class="inline-block h-4 w-[3px] rounded-xs bg-action-solid/60 align-text-bottom"
           ></span>
