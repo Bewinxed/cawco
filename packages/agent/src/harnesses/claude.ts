@@ -52,7 +52,6 @@ import {
   EFFORT_READ,
   INSPECT_CONFIG,
   INSTALL_SESSION_CREDENTIAL,
-  LIVE_CREDENTIAL_ENROLLMENT_REFUSAL,
   MARKETPLACE_CATALOG,
   MESSAGES_HELD,
   MESSAGES_READ,
@@ -533,14 +532,6 @@ class Turn {
     this.#ended = Promise.withResolvers<void>();
   }
 
-  async waitForIdle(): Promise<void> {
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: start/end update busy as native turn frames arrive.
-    while (this.busy) {
-      // biome-ignore lint/performance/noAwaitInLoops: each wait belongs to a real turn ending; no polling or interruption.
-      await this.#ended.promise;
-    }
-  }
-
   async settle(ms: number): Promise<void> {
     // biome-ignore lint/suspicious/noUnnecessaryConditions: busy is set true by start() elsewhere in this class; the checker doesn't see that cross-method mutation
     if (!this.busy) {
@@ -585,7 +576,8 @@ class ClaudeSession implements HarnessSession {
   readonly harness = "claude" as const;
   sessionId: string | null = null;
   readonly #handle: Query;
-  readonly #mcpServers: Record<string, McpServerConfig>;
+  /** The supplied header is ACKable only when this handle launched the child. */
+  readonly #launchCredential: string | undefined;
   readonly #input: InputStream;
   readonly #turn: Turn;
   readonly #pump: Promise<void>;
@@ -620,7 +612,9 @@ class ClaudeSession implements HarnessSession {
    */
   readonly #hookFailures: NeutralMessage[] = [];
   /** The child's sessiond. */
-  readonly #sessiond: { client: SessiondClient; procId: string } | undefined;
+  readonly #sessiond:
+    | { client: SessiondClient; procId: string; attach?: BridgeRing["attach"] }
+    | undefined;
   /** The ring seq of each line the SDK was handed that carries a uuid. */
   readonly #seqs = new Map<string, number>();
   readonly instanceId: string;
@@ -656,7 +650,8 @@ class ClaudeSession implements HarnessSession {
   ) {
     this.instanceId = instanceId;
     this.#ctx = ctx;
-    this.#mcpServers = {
+    this.#launchCredential = ctx.sessionCredential;
+    const mcpServers: Record<string, McpServerConfig> = {
       ...((
         options as { mcpServers?: Record<string, McpServerConfig> } | undefined
       )?.mcpServers ?? {}),
@@ -695,7 +690,7 @@ class ClaudeSession implements HarnessSession {
         agentProgressSummaries: true,
         ...(options as Record<string, unknown> | undefined),
         extraArgs,
-        mcpServers: this.#mcpServers,
+        mcpServers,
         // Fleet baseline (from supervisor_config.denied_tools, cached in the
         // sidecar) + delegate-type denials + any the caller itself carried.
         // All three layers union: every layer can only add, never remove
@@ -1170,47 +1165,34 @@ class ClaudeSession implements HarnessSession {
   }
 
   async #installSessionCredential(credential: string, initial: boolean) {
-    if (!initial) {
-      await this.#turn.waitForIdle();
+    // A connected slot and a host-side HTTP probe do not prove that the
+    // child's static header changed. Never ACK a replacement for that child:
+    // the hub must keep accepting its launch credential for its lifetime.
+    if (
+      !initial ||
+      this.#sessiond?.attach ||
+      credential !== this.#launchCredential
+    ) {
+      throw new Error(
+        "Live Claude credential installation refused: it enrolls on its next fresh start."
+      );
     }
-    const before = await this.#handle.mcpServerStatus();
-    if (!initial) {
-      const dynamic = (server: McpServerStatus) =>
-        server.name !== MCP_SERVER_NAME &&
-        ["dynamic", "sdk"].includes(server.source ?? server.scope ?? "");
-      if (before.some(dynamic)) {
-        throw new Error(LIVE_CREDENTIAL_ENROLLMENT_REFUSAL);
-      }
-      // SDK 0.3.288 replaces the whole dynamic set. Never round-trip other
-      // slots through mcpServerStatus: their connections must remain untouched.
-      const configured: Record<string, McpServerConfig> = {
-        [MCP_SERVER_NAME]: delegationMcp(this.instanceId, credential),
-      };
-      const applied = await this.#handle.setMcpServers(configured);
-      if (applied.errors[MCP_SERVER_NAME]) {
-        throw new Error("Live CawCo MCP credential reconfiguration failed.");
-      }
-      this.#mcpServers[MCP_SERVER_NAME] = configured[MCP_SERVER_NAME];
+    const servers = await this.#connectedCawcoSnapshot();
+    const cawco = servers.find((server) => server.name === MCP_SERVER_NAME);
+    if (
+      cawco?.config?.type !== "http" ||
+      cawco.config.headers?.Authorization !== `Bearer ${credential}`
+    ) {
+      throw new Error("CawCo MCP launch credential could not be verified.");
     }
-    const after = await this.#connectedCawcoSnapshot();
     await callDelegationTool(this.instanceId, "list_sessions", {}, credential);
-    const changedServers = before.flatMap((server) => {
-      const status =
-        after.find((current) => current.name === server.name)?.status ??
-        "missing";
-      return server.name !== MCP_SERVER_NAME && status !== server.status
-        ? [{ name: server.name, before: server.status, after: status }]
-        : [];
-    });
     await acknowledgeSessionCredential(credential);
-    console.info(
-      `[claude] credential installed ${this.instanceId}; other MCP changes: ${JSON.stringify(changedServers)}`
-    );
+    console.info(`[claude] launch credential installed ${this.instanceId}`);
     return {
       installed: true,
       harness: "claude",
       instanceId: this.instanceId,
-      changedServers,
+      changedServers: [],
     };
   }
 
