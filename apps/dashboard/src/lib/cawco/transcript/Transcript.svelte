@@ -1567,7 +1567,19 @@
     // only there (`onscrollend`).
     atBottom = false;
     const distance = height - scroller.scrollTop - scroller.clientHeight;
-    restsAtTail = distance <= TAIL_SLACK;
+    // Reaching the end marks where it stood; the reader is at the tail for
+    // as long as they stay at or past that mark. Rows arriving while the
+    // scroll bounces off the end move the end on, and the bounce settles
+    // short of it, at the end the reader reached.
+    if (distance <= TAIL_SLACK) {
+      tailMark = height - scroller.clientHeight;
+    } else if (
+      tailMark !== null &&
+      scroller.scrollTop < tailMark - TAIL_SLACK
+    ) {
+      tailMark = null;
+    }
+    restsAtTail = tailMark !== null;
     // Hysteresis: up past the far mark, and it stays until back at the tail.
     farFromLatest =
       !restsAtTail &&
@@ -1580,6 +1592,8 @@
    * while nothing of the reader's has moved the view since.
    */
   let restsAtTail: boolean | null = null;
+  /** The offset of the end as it stood when the reader's scroll last reached it. */
+  let tailMark: number | null = null;
   /** How far off the bottom still counts as the tail: a pixel's rounding. */
   const TAIL_SLACK = 1;
 
@@ -1596,6 +1610,7 @@
     }
     const tail = restsAtTail;
     restsAtTail = null;
+    tailMark = null;
     if (tail) {
       atBottom = true;
       farFromLatest = false;
@@ -2379,6 +2394,7 @@
     }
     stopFollow();
     restsAtTail = null;
+    tailMark = null;
     jumping = true;
     node.addEventListener("wheel", yieldJump, { passive: true });
     node.addEventListener("touchstart", yieldJump, { passive: true });

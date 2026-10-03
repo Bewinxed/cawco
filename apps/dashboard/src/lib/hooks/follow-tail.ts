@@ -11,8 +11,10 @@
  * The reader's scroll has the box until it comes to rest: their first
  * scroll event lets go of the end, so nothing writes the offset under a
  * finger, its momentum or its bounce. At rest (`scrollend`: Safari 26.2 and
- * every current engine), a reader whose scroll last left the box at its end
- * is following it again.
+ * every current engine), a reader whose scroll reached the end and stayed at
+ * or past where it stood then is following it again: lines arriving while
+ * the scroll bounces off the end move the end on, and the bounce settles at
+ * the end the reader reached.
  *
  * Attach to the scrolling list: `{@attach followTail()}`.
  */
@@ -25,6 +27,8 @@ export function followTail() {
     let atEnd = true;
     /** Where the reader's scrolling last left the box, until it rests. */
     let restsAtEnd: boolean | null = null;
+    /** The offset of the end as it stood when the reader's scroll reached it. */
+    let endMark: number | null = null;
     let wrote: number | null = null;
     const toEnd = () => {
       if (atEnd) {
@@ -37,8 +41,13 @@ export function followTail() {
         return;
       }
       atEnd = false;
-      restsAtEnd =
-        list.scrollHeight - list.scrollTop - list.clientHeight <= SLACK;
+      const end = list.scrollHeight - list.clientHeight;
+      if (list.scrollTop >= end - SLACK) {
+        endMark = end;
+      } else if (endMark !== null && list.scrollTop < endMark - SLACK) {
+        endMark = null;
+      }
+      restsAtEnd = endMark !== null;
     };
     const onScrollEnd = () => {
       if (restsAtEnd === null) {
@@ -46,6 +55,7 @@ export function followTail() {
       }
       atEnd = restsAtEnd;
       restsAtEnd = null;
+      endMark = null;
       toEnd();
     };
     const sizes = new ResizeObserver(toEnd);
