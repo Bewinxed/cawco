@@ -357,11 +357,14 @@
 
   /* ---- recent and older ------------------------------------------------
    * A project lists what is recent — running, waiting on you, or moved in
-   * the last day — and folds the rest under one "N older" row. Opened, the
-   * older ones scroll in a box six rows tall, so they never push the
-   * projects under them down the rail.
+   * the last day — topped up from the newest of the rest until it lists
+   * OLDER_ROWS rows, and folds what remains under one "N older" row, unless
+   * only one remains. Opened, the older ones scroll in a box OLDER_ROWS rows
+   * tall, so they never push the projects under them down the rail.
    */
   const DAY_MS = 24 * 60 * 60 * 1000;
+  /** Rows the older box shows before it scrolls, and a project lists unfolded. */
+  const OLDER_ROWS = 6;
 
   interface Split {
     older: InstanceRow[];
@@ -453,10 +456,28 @@
       }
       return at;
     };
+    // A project with only a few sessions lists them all: the list is topped
+    // up to the older box's six rows from the newest older trees, and a fold
+    // that would hide one row lists it instead, at the same height.
+    const shownTops = new Set<string>();
+    const olderTops = new Map<string, InstanceRow>();
+    for (const row of all) {
+      const top = topOf(row);
+      if (recentIds.has(top.id)) {
+        shownTops.add(top.id);
+      } else {
+        olderTops.set(top.id, top);
+      }
+    }
+    const room = Math.max(0, OLDER_ROWS - shownTops.size);
+    const topUp = [...olderTops.values()].sort((a, b) => lastAt(b) - lastAt(a));
+    for (const top of topUp.length - room > 1 ? topUp.slice(0, room) : topUp) {
+      shownTops.add(top.id);
+    }
     const recent: InstanceRow[] = [];
     const older: InstanceRow[] = [];
     for (const row of all) {
-      (recentIds.has(topOf(row).id) ? recent : older).push(row);
+      (shownTops.has(topOf(row).id) ? recent : older).push(row);
     }
     return { recent, older };
   }

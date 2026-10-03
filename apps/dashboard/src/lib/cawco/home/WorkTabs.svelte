@@ -269,7 +269,7 @@
     group: Group,
     whole: ReadonlySet<string>
   ): Group {
-    if (whole.has(group.machineId)) {
+    if (whole.has(group.machineId) || beyondCap(tab, group).length === 0) {
       return group;
     }
     let room = MORE_AT;
@@ -290,13 +290,18 @@
   const listed = (tab: WorkTab, whole: ReadonlySet<string>): Group[] =>
     grouped(tab).map((group) => capped(tab, group, whole));
 
-  /** A machine's trees past its first MORE_AT. */
-  const beyondCap = (tab: WorkTab, group: Group): TreeLine<InstanceRow>[] =>
-    (
+  /**
+   * A machine's trees past its first MORE_AT; none when only one is, since
+   * a "Show 1 more" line costs the height of the row it hides.
+   */
+  function beyondCap(tab: WorkTab, group: Group): TreeLine<InstanceRow>[] {
+    const hidden = (
       group.rows
         .map((row) => shapeOf(tab, row.id))
         .filter((line) => line?.depth === 0) as TreeLine<InstanceRow>[]
     ).slice(MORE_AT);
+    return hidden.length > 1 ? hidden : [];
+  }
 
   /** A group's last line: its words, and the failures it keeps folded away. */
   interface More {

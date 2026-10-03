@@ -39,6 +39,10 @@
         )
       : home.recent;
   });
+  /** Rows listed: the pages shown, and a last lone row rather than "Show 1 more". */
+  const recentListed = $derived(
+    recentMatches.length - recentShown > 1 ? recentShown : recentMatches.length
+  );
   function toggleRecent() {
     recentOpen = !recentOpen;
     localStorage.setItem(RECENT_KEY, String(recentOpen));
@@ -80,7 +84,7 @@
             bind:value={search}
           >
         </label>
-        {#each recentMatches.slice(0, recentShown) as item (item.key)}
+        {#each recentMatches.slice(0, recentListed) as item (item.key)}
           <HomeRow
             active={current !== null &&
               (current === item.instance?.id ||
@@ -97,7 +101,7 @@
         {:else}
           <p class="none">No session matches “{search}”.</p>
         {/each}
-        {#if recentMatches.length > recentShown}
+        {#if recentMatches.length > recentListed}
           <Button
             class="self-start"
             label="Show {Math.min(
