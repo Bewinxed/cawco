@@ -170,37 +170,37 @@ public final class RootViewController: ObservedViewController {
 /// controller's `navigationItem`, so the bars stay the system's.
 final class BoardSplitController: UISplitViewController, UISplitViewControllerDelegate {
     private let hub: HubConnection
-    private let pager: BoardPagerController
+    private let board: HomeViewController
     private(set) var selected: SessionViewController?
     private(set) var currentId: String?
     var onSelection: (HomeModel.Tab) -> Void = { _ in }
 
     init(hub: HubConnection, home: HomeModel) {
         self.hub = hub
-        pager = BoardPagerController(hub: hub, home: home)
+        board = HomeViewController(hub: hub, home: home)
         super.init(style: .doubleColumn)
-        pager.onOpen = { [weak self] id in self?.openSession(id) }
-        pager.onSelection = { [weak self] tab in self?.onSelection(tab) }
-        pager.onQuestion = { [weak self] ask in self?.openQuestion(ask) }
-        pager.navigationItem.title = "Fleet"
-        pager.navigationItem.largeTitleDisplayMode = .never
+        board.onOpen = { [weak self] id in self?.openSession(id) }
+        board.onSelectTab = { [weak self] tab in self?.onSelection(tab) }
+        board.onQuestion = { [weak self] ask in self?.openQuestion(ask) }
+        board.navigationItem.title = "Fleet"
+        board.navigationItem.largeTitleDisplayMode = .never
         let change = UIBarButtonItem(title: "Hub", image: Glyph.server.image, primaryAction: UIAction { [weak self] _ in
             self?.changeHub()
         })
         change.accessibilityLabel = "Change hub"
-        NavigationItems.configure(pager.navigationItem, prominent: [change])
+        NavigationItems.configure(board.navigationItem, prominent: [change])
 
         let detail = UIViewController()
         detail.view.backgroundColor = Palette.surfacePage
 
-        setViewController(UINavigationController(rootViewController: pager), for: .primary)
+        setViewController(UINavigationController(rootViewController: board), for: .primary)
         setViewController(UINavigationController(rootViewController: detail), for: .secondary)
         preferredDisplayMode = .oneBesideSecondary
         preferredSplitBehavior = .tile
         delegate = self
     }
 
-    func selectTab(_ tab: HomeModel.Tab) { pager.select(tab, animated: false) }
+    func selectTab(_ tab: HomeModel.Tab) { board.show(tab) }
 
     @available(*, unavailable)
     required init?(coder _: NSCoder) {
@@ -303,7 +303,7 @@ private final class FleetTabsController: UITabBarController {
 
 /// Sidebar destinations share the existing split view, rather than creating
 /// private copies of a session, its draft or its scroll position. Containment
-/// moves the shell; the board pager and both of its panes remain mounted.
+/// moves the shell; the one board stays mounted.
 private final class BoardTabHostController: UIViewController {
     private let board: BoardSplitController
     private let destinationTab: HomeModel.Tab

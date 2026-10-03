@@ -49,7 +49,6 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
 
     private let hub: HubConnection
     private let home: HomeModel
-    private let displayedTab: HomeModel.Tab
     var onOpen: (String) -> Void = { _ in }
     var onSelectTab: (HomeModel.Tab) -> Void = { _ in }
     var onQuestion: (ParkedAsk) -> Void = { _ in }
@@ -76,10 +75,9 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     private let relay = RelayMotion()
     private let branch = BranchMotion()
 
-    init(hub: HubConnection, home: HomeModel, tab: HomeModel.Tab) {
+    init(hub: HubConnection, home: HomeModel) {
         self.hub = hub
         self.home = home
-        displayedTab = tab
         super.init(nibName: nil, bundle: nil)
     }
 
@@ -130,7 +128,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     /// A finished row's swipe: what a finger uncovers as it draws the row
     /// away, "Archive", taking the row and its tree off Finished.
     private func archiveSwipe(at indexPath: IndexPath) -> UISwipeActionsConfiguration? {
-        guard displayedTab == .finished, case let .row(id) = dataSource.itemIdentifier(for: indexPath),
+        guard home.tab == .finished, case let .row(id) = dataSource.itemIdentifier(for: indexPath),
               let row = rows[id], !row.line.line.context, home.archivable(row.line.line.row)
         else {
             return nil
@@ -212,7 +210,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         }
         let machine = UICollectionView.CellRegistration<MachineCell, Item> { [weak self] cell, _, item in
             guard let self, case let .machine(id) = item, let entry = groups[id] else { return }
-            let finished = displayedTab == .finished ? home.finishedOn(id) : []
+            let finished = home.tab == .finished ? home.finishedOn(id) : []
             cell.configure(entry.group, seam: entry.seam, archivable: finished.count)
             cell.onArchiveAll = { [weak self] in
                 guard let self else { return }
@@ -243,7 +241,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             cell.button.removeTarget(nil, action: nil, for: .allEvents)
             cell.button.addAction(UIAction { [weak self] _ in
                 guard let self else { return }
-                let tab = displayedTab
+                let tab = home.tab
                 // Showing the rest moves forward, back to the first few moves back.
                 let all = !(home.shownWhole[tab] ?? []).contains(id)
                 runRelay(all ? 1 : -1) { self.home.toggleWhole(id, in: tab) }
@@ -356,7 +354,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             snapshot.appendSections([.work])
             var items: [Item] = [.tabs]
             var filledBefore = false
-            for group in home.groups(displayedTab) {
+            for group in home.groups(home.tab) {
                 let filled = !group.lines.isEmpty
                 groups[group.machineId] = (group, filled && filledBefore)
                 filledBefore = filledBefore || filled
@@ -366,7 +364,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
                     let depth = line.line.depth
                     let through = depth > 1 ? (1 ..< depth).filter { lastAt[$0] == false } : []
                     lastAt[depth] = line.line.last
-                    rows[line.id] = RowLine(line: line, tab: displayedTab, group: group.machineId, through: through)
+                    rows[line.id] = RowLine(line: line, tab: home.tab, group: group.machineId, through: through)
                     items.append(.row(line.id))
                 }
                 if group.more != nil {
@@ -377,7 +375,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         }
 
         let recent = home.recent
-        if displayedTab == home.tab, live, needList.isEmpty, working.isEmpty, finished.isEmpty, recent.isEmpty {
+        if live, needList.isEmpty, working.isEmpty, finished.isEmpty, recent.isEmpty {
             // Caw only on a fleet with nothing in it yet, or while a machine has not answered.
             let waiting = home.waitingOn
             if let first = waiting.first {
@@ -442,22 +440,39 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
 
     // MARK: Actions
 
-    /// A tab switch: the relay (Relay.swift), old lines leaving toward the
-    /// side the choice moved away from and new ones arriving from the other.
+    /// A tab switch (WorkTabs.svelte `choose`): the folder sheet has already
+    /// wiped across (FolderTabs), and only the rows relay (Relay.swift), old
+    /// lines leaving toward the side the choice moved away from and new ones
+    /// arriving from the other. Everything above the rows stays where it is.
     private func choose(_ tab: HomeModel.Tab) {
         guard tab != home.tab else {
             return
         }
-        onSelectTab(tab)
+        runRelay(tab == .finished ? 1 : -1, { self.home.tab = tab }, landed: { [weak self] in
+            self?.onSelectTab(tab)
+        })
+    }
+
+    /// Shows `tab` at once, with no relay: a choice made elsewhere (the
+    /// sidebar, a restored window).
+    func show(_ tab: HomeModel.Tab) {
+        guard tab != home.tab else {
+            return
+        }
+        relay.end()
+        home.tab = tab
+        requestRefresh()
     }
 
     /// Changes what the work list shows as one relay; with Reduce Motion the
     /// new list fades in over the old.
-    private func runRelay(_ direction: Double, _ change: @escaping () -> Void) {
+    private func runRelay(_ direction: Double, _ change: @escaping () -> Void, landed: @escaping () -> Void = {}) {
         branch.end()
         relay.end()
         guard !UIAccessibility.isReduceMotionEnabled else {
             change()
+            requestRefresh()
+            landed()
             return
         }
         relay.run(on: self, direction: direction, change: {
@@ -465,6 +480,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             commit(build(), animated: false)
         }, done: { [weak self] in
             self?.requestRefresh()
+            landed()
         })
     }
 
