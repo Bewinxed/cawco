@@ -3238,6 +3238,7 @@ export class OpencodeHarness implements Harness {
   #configState: "idle" | "pending" | "applying" | "applied" | "error" = "idle";
   #configError: string | null = null;
   #configWatchTimer: ReturnType<typeof setInterval> | null = null;
+  #checkingIdle = false;
   /** Whether this agent keeps the server converged; see {@link #readsThisConfig}. */
   #converging = false;
 
@@ -3472,7 +3473,7 @@ export class OpencodeHarness implements Harness {
    */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: sequential idle-wait → SIGTERM → respawn → rebind → verify lifecycle with structured error recovery; splitting loses the gate/finally invariant
   async #attemptConfigApply(): Promise<void> {
-    if (this.#applyGate) {
+    if (this.#applyGate || this.#checkingIdle) {
       return;
     }
     if (!this.#client) {
@@ -3486,6 +3487,25 @@ export class OpencodeHarness implements Harness {
       return;
     }
 
+    // Pending convergence never holds dispatch or custody. Probe idle once and
+    // retry on the next watcher tick; a busy server keeps serving new work.
+    this.#checkingIdle = true;
+    try {
+      const preCheck = await readJson<Record<string, unknown>>(OPENCODE_CONFIG);
+      if (!preCheck) {
+        this.#configState = "error";
+        this.#configError = "malformed config — will not stop working server";
+        return;
+      }
+      if (await this.#isOpencodeBusy()) {
+        this.#configState = "pending";
+        this.#configError = null;
+        return;
+      }
+    } finally {
+      this.#checkingIdle = false;
+    }
+
     let gateResolve!: () => void;
     const gatePromise = new Promise<void>((resolve) => {
       gateResolve = resolve;
@@ -3493,35 +3513,6 @@ export class OpencodeHarness implements Harness {
     this.#applyGate = { promise: gatePromise, resolve: gateResolve };
 
     try {
-      // Take the gate before the first await, including validation: no second
-      // apply or ensure may attach to the server we are about to replace.
-      const preCheck = await readJson<Record<string, unknown>>(OPENCODE_CONFIG);
-      if (!preCheck) {
-        this.#configState = "error";
-        this.#configError = "malformed config — will not stop working server";
-        return;
-      }
-      // 1. Wait for idle: active turns finish, gate blocks new dispatches.
-      const maxWaitMs = 300_000;
-      const started = Date.now();
-      // biome-ignore lint/performance/noAwaitInLoops: sequential polling for busy→idle transition; must check and sleep in order
-      while (await this.#isOpencodeBusy()) {
-        if (Date.now() - started > maxWaitMs) {
-          this.#configState = "error";
-          this.#configError = "timed out waiting for idle sessions";
-          console.log(
-            JSON.stringify({
-              type: "config-convergence",
-              state: "error",
-              detail: "timed out waiting for idle sessions",
-              at: Date.now(),
-            })
-          );
-          return;
-        }
-        await Bun.sleep(500);
-      }
-
       if (
         this.#desiredHash === this.#appliedHash &&
         this.#desiredVersion === this.#appliedVersion
@@ -4924,10 +4915,16 @@ export class OpencodeHarness implements Harness {
     // hash will have changed. An immediate tick avoids the up-to-2s polling
     // delay before the convergence system notices.
     await this.#configTick();
-    // Recovery must still be able to attach while the apply waits for it to
-    // finish. Only fleet mutations wait here, so they cannot use the old client.
+    // A control RPC reports a restart, never waits on it. The watcher verifies
+    // the written config and the next status read uses the replacement server.
     if (this.#applyGate) {
-      await this.#applyGate.promise;
+      report.mcp = Object.fromEntries(
+        mcp.map((name) => [
+          name,
+          { state: "pending", detail: "OpenCode server restarting." },
+        ])
+      );
+      return report;
     }
     const client = await this.#ensure();
     for (const server of config.mcp.filter(
@@ -4986,6 +4983,14 @@ export class OpencodeHarness implements Harness {
   async #readFleetMcp(names: string[]): Promise<FleetSyncReport["mcp"]> {
     if (names.length === 0) {
       return {};
+    }
+    if (this.#applyGate) {
+      return Object.fromEntries(
+        names.map((name) => [
+          name,
+          { state: "pending", detail: "OpenCode server restarting." },
+        ])
+      );
     }
     try {
       const client = await this.#ensure();

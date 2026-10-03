@@ -504,6 +504,10 @@ export class SessionSupervisor {
       key = `image:${imageRequest}`;
     } else if (control?.method === CONTROL_RUN_COMMAND) {
       key = `command:${String(control.args?.[0])}`;
+    } else if (control && !envelope.instanceId) {
+      // Fleet convergence cannot serialize unrelated machine controls behind
+      // its HTTP probes. Mutations of the same kind still retain their order.
+      key = `machine:${control.method}`;
     }
     if (imageRequest) {
       this.#imageRequests.set(imageRequest, String(control?.args?.[0]));
