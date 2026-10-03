@@ -20,7 +20,7 @@
   import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import { IconPlus, IconServer } from "#lib/icons.js";
   import { cawco } from "./client.svelte";
-  import { home } from "./home/home.svelte";
+  import { home } from "./home/home-state.svelte";
   import { addMachine } from "./join/join.svelte";
   import MachineMenu from "./MachineMenu.svelte";
 

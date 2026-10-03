@@ -10,7 +10,7 @@
   import { cawco, reconnectNow } from "../client.svelte";
   import { crossIn, crossOut } from "../motion/curves.svelte";
   import { money } from "../usage";
-  import { home } from "./home.svelte";
+  import { home } from "./home-state.svelte";
 
   /** The retry countdown is a clock, not a frame: a quarter second is never seen stuck. */
   let now = $state(Date.now());

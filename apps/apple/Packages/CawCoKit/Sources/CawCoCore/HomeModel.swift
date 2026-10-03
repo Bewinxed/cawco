@@ -2,7 +2,7 @@ import Foundation
 import Observation
 
 /// What the home says, as the web's home model says it
-/// (apps/dashboard/src/lib/cawco/home/home.svelte.ts and WorkTabs.svelte):
+/// (apps/dashboard/src/lib/cawco/home/home-state.svelte.ts and WorkTabs.svelte):
 /// Needs you (longest wait first), Working, Finished, Recent, and the rows of
 /// each tab grouped by machine with delegates nested under their parent.
 @MainActor

@@ -14,7 +14,7 @@
   import { IconAsk, IconSuccess, IconWarningTriangle } from "#lib/icons.js";
   import { cawco, isFailed, readTranscript } from "./client.svelte";
   import HoverPanel from "./HoverPanel.svelte";
-  import { instanceTitle } from "./home/home.svelte";
+  import { instanceTitle } from "./home/home-state.svelte";
   import { markHue, sessionSprite } from "./mark";
   import RunSteps from "./RunSteps.svelte";
   import DelegateTail, {

@@ -10,7 +10,7 @@
  */
 import { machineLabel, type UsageSummaryRow } from "@cawco/core";
 import { cawco, isFailed } from "./client.svelte";
-import { instanceTitle, lastAt } from "./home/home.svelte";
+import { instanceTitle, lastAt } from "./home/home-state.svelte";
 import { catalogTitle } from "./links";
 
 const HARNESS: Record<string, string> = {

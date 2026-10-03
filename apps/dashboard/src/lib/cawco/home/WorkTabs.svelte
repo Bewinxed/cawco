@@ -88,7 +88,7 @@
     machineName,
     projectOf,
     span,
-  } from "./home.svelte";
+  } from "./home-state.svelte";
   import { type Arrival, planRelay, type RelayLine } from "./relay-plan";
   import { type WorkTab, workTab } from "./work-tab.svelte";
 

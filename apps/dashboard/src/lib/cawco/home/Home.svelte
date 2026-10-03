@@ -25,7 +25,7 @@
   import UsageMeter from "../UsageMeter.svelte";
   import Caw from "./Caw.svelte";
   import HomeRecent from "./HomeRecent.svelte";
-  import { home } from "./home.svelte";
+  import { home } from "./home-state.svelte";
   import NeedsCard from "./NeedsCard.svelte";
   import StatusLine from "./StatusLine.svelte";
   import WorkTabs from "./WorkTabs.svelte";

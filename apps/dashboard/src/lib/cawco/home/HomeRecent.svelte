@@ -12,7 +12,7 @@
   import { holdWhileInside } from "../motion/held-order.svelte";
   import { workspace } from "../workspace/workspace.svelte";
   import HomeRow, { ROW_PILL } from "./HomeRow.svelte";
-  import { clock, home, span } from "./home.svelte";
+  import { clock, home, span } from "./home-state.svelte";
 
   let { inset = false }: { inset?: boolean } = $props();
 

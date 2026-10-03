@@ -39,7 +39,7 @@
     endedUnseen,
     home as fleetHome,
     markOpened,
-  } from "#lib/cawco/home/home.svelte.js";
+  } from "#lib/cawco/home/home-state.svelte.js";
   import PeekSheet from "#lib/cawco/home/PeekSheet.svelte";
   import { instanceForSession } from "#lib/cawco/links.js";
   import {

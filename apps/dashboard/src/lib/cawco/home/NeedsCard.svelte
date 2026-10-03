@@ -24,7 +24,7 @@
   } from "../client.svelte";
   import { conversationHref } from "../links";
   import { choices } from "./choices.svelte";
-  import { clock, type NeedsItem, span } from "./home.svelte";
+  import { clock, type NeedsItem, span } from "./home-state.svelte";
   import { openPeek } from "./peek.svelte";
 
   let { item, stale }: { item: NeedsItem; stale: boolean } = $props();
