@@ -5,7 +5,7 @@ name: CawCo
 options:
   bundleIdPrefix: dev.cawco
   deploymentTarget:
-    iOS: "27.1"
+    iOS: "18.0"
   createIntermediateGroups: true
 packages:
   CawCoKit:
@@ -36,9 +36,7 @@ targets:
         TARGETED_DEVICE_FAMILY: "1,2,6"
         SUPPORTS_MACCATALYST: YES
         SUPPORTS_MAC_DESIGNED_FOR_IPHONE_IPAD: NO
-        # Catalyst runs on the Mac's iOS Support version: macOS 27.0 carries
-        # iOS 27.0. The 27.1 target is iPhone Duo's, which the Mac doesn't need.
-        "IPHONEOS_DEPLOYMENT_TARGET[sdk=macosx*]": "27.0"
+        "IPHONEOS_DEPLOYMENT_TARGET[sdk=macosx*]": "18.0"
         # CawCo/AppIcon.icon (Icon Composer): Ivory by default, Ink with the
         # cream-rim Caw in dark and tinted.
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

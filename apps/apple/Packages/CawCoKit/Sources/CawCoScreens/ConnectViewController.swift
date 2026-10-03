@@ -7,7 +7,7 @@ import UIKit
 /// and the connection's state. Caw stands in at first run and while a kept
 /// hub cannot be reached. Plain on purpose: onboarding brings the first-run
 /// design.
-final class ConnectViewController: UIViewController, UITextFieldDelegate {
+final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
     enum Mode {
         /// No hub yet.
         case firstRun
@@ -151,8 +151,7 @@ final class ConnectViewController: UIViewController, UITextFieldDelegate {
         discovery.stop()
     }
 
-    override func updateProperties() {
-        super.updateProperties()
+    override func refreshContent() {
         // A hub that was never entered has no state to say.
         status.isHidden = hub.address == nil
         status.configure(hub: hub, ready: false, spend: "")

@@ -13,7 +13,7 @@ import UIKit
 /// source keyed by stable ids. `updateProperties()` reads the stores, so
 /// UIKit's observation tracking runs it again whenever what it read changes;
 /// each run applies the new snapshot and reconfigures the items that stay.
-final class HomeViewController: UIViewController, UICollectionViewDelegate, RelayHost, BranchHost {
+final class HomeViewController: ObservedViewController, UICollectionViewDelegate, RelayHost, BranchHost {
     static let cawSide = 160.0
     static let recentPage = 30
 
@@ -249,7 +249,7 @@ final class HomeViewController: UIViewController, UICollectionViewDelegate, Rela
                 guard let self, let cell else { return }
                 search = cell.field.text ?? ""
                 recentShown = Self.recentPage
-                setNeedsUpdateProperties()
+                requestRefresh()
             }, for: .editingChanged)
         }
         let recentRow = UICollectionView.CellRegistration<RecentRowCell, Item> { [weak self] cell, _, item in
@@ -274,7 +274,7 @@ final class HomeViewController: UIViewController, UICollectionViewDelegate, Rela
             cell.onTap = { [weak self] in
                 guard let self else { return }
                 recentShown += Self.recentPage
-                setNeedsUpdateProperties()
+                requestRefresh()
             }
         }
 
@@ -300,8 +300,7 @@ final class HomeViewController: UIViewController, UICollectionViewDelegate, Rela
 
     // MARK: Updates
 
-    override func updateProperties() {
-        super.updateProperties()
+    override func refreshContent() {
         // A driven motion owns the list until it lands, and asks again then.
         guard dataSource != nil, !relay.running, !branch.running else {
             return
@@ -448,7 +447,7 @@ final class HomeViewController: UIViewController, UICollectionViewDelegate, Rela
             change()
             commit(build(), animated: false)
         }, done: { [weak self] in
-            self?.setNeedsUpdateProperties()
+            self?.requestRefresh()
         })
     }
 
@@ -533,7 +532,7 @@ final class HomeViewController: UIViewController, UICollectionViewDelegate, Rela
             let laid = layout.frames(in: collectionView)
             let tree = rows.keys.filter { isUnder(rows[$0]?.line.line, id, in: rows) }
             branch.run(on: self, parent: parentFrame, parentDepth: parent.line.line.depth, rows: branchRows(tree, in: rows, frames: laid), opening: true) { [weak self] in
-                self?.setNeedsUpdateProperties()
+                self?.requestRefresh()
             }
         } else {
             // The leaving rows stay drawn, and their lines read, until they have gone.
@@ -544,7 +543,7 @@ final class HomeViewController: UIViewController, UICollectionViewDelegate, Rela
             branch.run(on: self, parent: parentFrame, parentDepth: parent.line.line.depth, rows: branchRows(folding, in: held, frames: frames), opening: false) { [weak self] in
                 guard let self else { return }
                 commit(build(), animated: false)
-                setNeedsUpdateProperties()
+                requestRefresh()
             }
         }
     }

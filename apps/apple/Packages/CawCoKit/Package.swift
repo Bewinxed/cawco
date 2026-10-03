@@ -11,7 +11,7 @@ let concurrency: [SwiftSetting] = [
 let package = Package(
     name: "CawCoKit",
     // UIKit everywhere: the Mac is the same app through Mac Catalyst.
-    platforms: [.iOS("27.1"), .macCatalyst("27.0")],
+    platforms: [.iOS("18.0"), .macCatalyst("18.0")],
     products: [
         .library(name: "CawCoAPI", targets: ["CawCoAPI"]),
         .library(name: "CawCoCore", targets: ["CawCoCore"]),

@@ -7,7 +7,7 @@ import CawCoMascot
 /// board. The first read of the fleet is a real wait, so Caw stands in for
 /// it once it outlasts the grace; from then on a drop keeps the board,
 /// greyed, under its status line, as the web does.
-public final class RootViewController: UIViewController {
+public final class RootViewController: ObservedViewController {
     private let hub = HubConnection()
     private lazy var home = HomeModel(hub: hub)
     private lazy var board = BoardSplitController(hub: hub, home: home)
@@ -31,8 +31,7 @@ public final class RootViewController: UIViewController {
         view.backgroundColor = Palette.surfaceRecess
     }
 
-    override public func updateProperties() {
-        super.updateProperties()
+    override public func refreshContent() {
         guard let address = hub.address else {
             show(key: "first-run") { ConnectViewController(hub: hub, mode: .firstRun) }
             return
@@ -133,7 +132,7 @@ final class BoardSplitController: UISplitViewController, UISplitViewControllerDe
             self?.changeHub()
         })
         change.accessibilityLabel = "Change hub"
-        homeController.navigationItem.trailingItemGroups = [UIBarButtonItemGroup.fixedGroup(items: [change])]
+        homeController.navigationItem.trailingItemGroups = [UIBarButtonItemGroup(barButtonItems: [change], representativeItem: nil)]
 
         let detail = UIViewController()
         detail.view.backgroundColor = Palette.surfacePage
@@ -147,7 +146,7 @@ final class BoardSplitController: UISplitViewController, UISplitViewControllerDe
             self?.changeHub()
         })
         compactChange.accessibilityLabel = "Change hub"
-        compactHome.navigationItem.trailingItemGroups = [UIBarButtonItemGroup.fixedGroup(items: [compactChange])]
+        compactHome.navigationItem.trailingItemGroups = [UIBarButtonItemGroup(barButtonItems: [compactChange], representativeItem: nil)]
         setViewController(UINavigationController(rootViewController: compactHome), for: .compact)
         preferredDisplayMode = .oneBesideSecondary
         preferredSplitBehavior = .tile

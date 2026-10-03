@@ -103,7 +103,7 @@ final class UsageCell: HomeCell {
 }
 
 /// Every limit window, grouped by provider: the house bottom sheet the strip opens.
-final class UsageSheetController: UIViewController {
+final class UsageSheetController: ObservedViewController {
     private let home: HomeModel
     private let stack = UIStackView()
 
@@ -140,8 +140,7 @@ final class UsageSheetController: UIViewController {
         ])
     }
 
-    override func updateProperties() {
-        super.updateProperties()
+    override func refreshContent() {
         let usage = home.usage
         let now = home.now
         stack.arrangedSubviews.forEach { $0.removeFromSuperview() }
