@@ -3486,22 +3486,6 @@ export class OpencodeHarness implements Harness {
       return;
     }
 
-    // Validate config before killing a working server.
-    const preCheck = await readJson<Record<string, unknown>>(OPENCODE_CONFIG);
-    if (!preCheck) {
-      this.#configState = "error";
-      this.#configError = "malformed config — will not stop working server";
-      console.log(
-        JSON.stringify({
-          type: "config-convergence",
-          state: "error",
-          detail: "malformed or missing opencode.json — refusing restart",
-          at: Date.now(),
-        })
-      );
-      return;
-    }
-
     let gateResolve!: () => void;
     const gatePromise = new Promise<void>((resolve) => {
       gateResolve = resolve;
@@ -3509,6 +3493,14 @@ export class OpencodeHarness implements Harness {
     this.#applyGate = { promise: gatePromise, resolve: gateResolve };
 
     try {
+      // Take the gate before the first await, including validation: no second
+      // apply or ensure may attach to the server we are about to replace.
+      const preCheck = await readJson<Record<string, unknown>>(OPENCODE_CONFIG);
+      if (!preCheck) {
+        this.#configState = "error";
+        this.#configError = "malformed config — will not stop working server";
+        return;
+      }
       // 1. Wait for idle: active turns finish, gate blocks new dispatches.
       const maxWaitMs = 300_000;
       const started = Date.now();
@@ -3604,7 +3596,7 @@ export class OpencodeHarness implements Harness {
 
       // 6. Respawn via the existing attach helper. This reads global config
       //    at startup — the whole point of a process restart.
-      const config = this.#serverConfig;
+      const config = await this.#launchConfig();
       const { url: newUrl } = await attachOpencodeServer({
         sessiond,
         spec: {
@@ -3906,9 +3898,6 @@ export class OpencodeHarness implements Harness {
   }
 
   #ensure(): Promise<OpencodeClient> {
-    if (this.#applyGate) {
-      return this.#applyGate.promise.then(() => this.#ensure());
-    }
     if (this.#client) {
       return Promise.resolve(this.#client);
     }
@@ -3928,7 +3917,7 @@ export class OpencodeHarness implements Harness {
         // Fleet policy: search is the Exa MCP. `webfetch: 'deny'` above
         // removes the fetch built-in; `websearch` has no permission key,
         // so the tool itself is switched off.
-        const config = this.#serverConfig;
+        const config = await this.#launchConfig();
         // Not `createOpencode`: that spawns the server as THIS process's child,
         // so every agent restart took the machine's opencode sessions with it.
         // The server goes under sessiond instead and we attach as a client —
@@ -4054,6 +4043,24 @@ export class OpencodeHarness implements Harness {
    * policy, plus — for an agent that is not the machine's — its own hub.
    */
   #serverConfig: Record<string, unknown> = STATIC_POLICY;
+
+  /** Runtime precedence makes fleet-owned definitions win over user JSONC overlays. */
+  async #launchConfig(): Promise<Record<string, unknown>> {
+    if (!(await isMachineAgent())) {
+      return this.#serverConfig;
+    }
+    const sidecar = await readSidecar(OPENCODE_SIDECAR);
+    const managed = new Set(["cawco", ...(sidecar.mcp ?? [])]);
+    const disk = await readJson<{ mcp?: Record<string, unknown> }>(
+      OPENCODE_CONFIG
+    );
+    return {
+      ...this.#serverConfig,
+      mcp: Object.fromEntries(
+        Object.entries(disk?.mcp ?? {}).filter(([name]) => managed.has(name))
+      ),
+    };
+  }
 
   /** The bridge plugin file this agent wrote; a server that loaded another is stale. */
   #bridgePlugin: string | undefined;
@@ -4917,6 +4924,11 @@ export class OpencodeHarness implements Harness {
     // hash will have changed. An immediate tick avoids the up-to-2s polling
     // delay before the convergence system notices.
     await this.#configTick();
+    // Recovery must still be able to attach while the apply waits for it to
+    // finish. Only fleet mutations wait here, so they cannot use the old client.
+    if (this.#applyGate) {
+      await this.#applyGate.promise;
+    }
     const client = await this.#ensure();
     for (const server of config.mcp.filter(
       (row) => row.proxied && row.enabled
