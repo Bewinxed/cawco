@@ -103,6 +103,16 @@ export function conversationHref(
 }
 
 /**
+ * {@link conversationHref} for a row the instance index holds, by its id: a
+ * hub row, or a workflow run's row under its `run:` id, is found in the
+ * index under that id, so its address is always that id. It reads nothing:
+ * a link drawn from it changes only when the row does, where one drawn
+ * through the index was worked out again for every row on every
+ * `instances` frame.
+ */
+export const rowHref = (id: string): string => `/session/${id}`;
+
+/**
  * A session's first message as a title — the shared cleaning, so the name the
  * hub already derived for the row and the one the loaded transcript derives are
  * the same string and the label never changes under the reader.

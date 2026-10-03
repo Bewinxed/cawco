@@ -53,7 +53,7 @@
   import { folderPrefs } from "./folder-prefs.svelte";
   import Home from "./home/Home.svelte";
   import HomeRecent from "./home/HomeRecent.svelte";
-  import { conversationHref } from "./links";
+  import { rowHref } from "./links";
   import { markHue } from "./mark";
   import { type BranchOptions, branch, nestFrom } from "./motion/branch.svelte";
   import { CURVE, dur } from "./motion/curves.svelte";
@@ -719,7 +719,7 @@
       data-branch-item
       data-hover-session={row.id}
       data-share="session:{row.id}"
-      href={conversationHref(row.id, cawco.instanceIndex)}
+      href={rowHref(row.id)}
       isActive={activeSession === row.id}
     >
       <SessionMark
