@@ -51,7 +51,8 @@
     codespan: { base: "" },
     image: { base: "", image: "" },
     blockquote: { base: "" },
-    table: { base: "overflow-x-auto max-w-full", table: "" },
+    // `expanded` dresses the table toolbar's fullscreen, and the toolbar is off.
+    table: { base: "overflow-x-auto max-w-full", table: "", expanded: "" },
     thead: { base: "" },
     tbody: { base: "" },
     tfoot: { base: "" },
@@ -257,6 +258,16 @@
       >
         <OutputBlock language={token.lang} text={token.text} />
       </div>
+    {/snippet}
+    <!-- Agents write prices and shell variables, not formulas: `$…$` and
+         `\(…\)` read as the characters they are. Streamdown lexes them as math,
+         and its fallback would draw the formula without its delimiters. -->
+    {#snippet math({ token })}
+      {#if token.isInline}
+        {token.raw}
+      {:else}
+        <p>{token.raw}</p>
+      {/if}
     {/snippet}
   </Streamdown>
 </div>

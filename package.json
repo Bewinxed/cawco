@@ -41,7 +41,6 @@
     "ultracite": "7.10.7"
   },
   "patchedDependencies": {
-    "svelte-streamdown@3.1.2": "patches/svelte-streamdown@3.1.2.patch",
     "dialkit@2.0.0": "patches/dialkit@2.0.0.patch",
     "@opencode-ai/sdk@1.18.18": "patches/@opencode-ai%2Fsdk@1.18.18.patch"
   },
