@@ -15,16 +15,29 @@ final class UsageCell: HomeCell {
     private let percent = KitLabel(TypeScale.typeMeta, ink: Palette.inkStrong)
     private let detail = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
     private let bar = LimitBar(height: 4)
+    private let link = UIButton(type: .custom)
+    private let line = UIStackView()
     var onOpen: () -> Void = {}
+    /// The Usage page (`.usage-link`): the strip shows its corner link only
+    /// where a page can be opened from it.
+    var onPage: (() -> Void)? {
+        didSet {
+            link.isHidden = onPage == nil
+            // The first line leaves the link its corner (`.line` 2.5rem).
+            line.directionalLayoutMargins.trailing = onPage == nil ? 0 : 40
+        }
+    }
 
     override init(frame: CGRect) {
         super.init(frame: frame)
         percent.tabular = true
         detail.tabular = true
         detail.setContentCompressionResistancePriority(.defaultLow, for: .horizontal)
-        let line = UIStackView(arrangedSubviews: [glyph, name, percent, detail, UIView()])
+        for view in [glyph, name, percent, detail, UIView()] { line.addArrangedSubview(view) }
         line.spacing = Space.space1
         line.alignment = .center
+        line.isLayoutMarginsRelativeArrangement = true
+        line.directionalLayoutMargins = .zero
         line.isUserInteractionEnabled = false
         bar.isUserInteractionEnabled = false
         let column = UIStackView(arrangedSubviews: [line, bar])
@@ -40,11 +53,22 @@ final class UsageCell: HomeCell {
         strip.accessibilityTraits = .button
         // The strip's edges line up with the status line's text.
         pin(strip, insets: NSDirectionalEdgeInsets(top: 0, leading: -8, bottom: 0, trailing: -8))
+        // Plain meta text in the corner; on touch there is no hover, so a
+        // press shows the coral the web's hover does.
+        link.translatesAutoresizingMaskIntoConstraints = false
+        link.setAttributedTitle(NSAttributedString(string: "Usage", attributes: TypeScale.typeMeta.attributes(color: Palette.inkMuted)), for: .normal)
+        link.setAttributedTitle(NSAttributedString(string: "Usage", attributes: TypeScale.typeMeta.attributes(color: Palette.meterCalm)), for: .highlighted)
+        link.accessibilityTraits = .link
+        link.isHidden = true
+        link.addAction(UIAction { [weak self] _ in self?.onPage?() }, for: .touchUpInside)
+        strip.addSubview(link)
         NSLayoutConstraint.activate([
             column.leadingAnchor.constraint(equalTo: strip.leadingAnchor, constant: 8),
             column.trailingAnchor.constraint(equalTo: strip.trailingAnchor, constant: -8),
             column.centerYAnchor.constraint(equalTo: strip.centerYAnchor),
             strip.heightAnchor.constraint(equalToConstant: 44),
+            link.topAnchor.constraint(equalTo: strip.topAnchor, constant: 6),
+            link.trailingAnchor.constraint(equalTo: strip.trailingAnchor, constant: -8),
         ])
     }
 

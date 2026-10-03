@@ -51,6 +51,8 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     private let home: HomeModel
     var onOpen: (String) -> Void = { _ in }
     var onSelectTab: (HomeModel.Tab) -> Void = { _ in }
+    /// Opens the Usage page from the strip's corner link.
+    var onUsagePage: (() -> Void)?
     var collectionView: UICollectionView!
     private(set) lazy var layout = makeLayout()
     private var dataSource: UICollectionViewDiffableDataSource<Section, Item>!
@@ -177,6 +179,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             guard let self else { return }
             cell.configure(usageStrip ?? home.usage)
             cell.onOpen = { [weak self] in self?.openUsage() }
+            cell.onPage = onUsagePage
         }
         let status = UICollectionView.CellRegistration<StatusCell, Item> { [weak self] cell, _, _ in
             guard let self else { return }

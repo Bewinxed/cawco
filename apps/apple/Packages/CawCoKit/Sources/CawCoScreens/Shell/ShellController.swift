@@ -74,6 +74,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         rail.homeController = railHome
         for home in [railHome, board] {
             home.onOpen = { [weak self] id in self?.openSession(id) }
+            home.onUsagePage = { [weak self] in self?.go(.usage) }
         }
 
         let railNav = UINavigationController(rootViewController: rail)
