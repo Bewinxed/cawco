@@ -210,14 +210,8 @@ final class BoardSplitController: UISplitViewController, UISplitViewControllerDe
         let connect = ConnectViewController(hub: hub, mode: .change) { [weak self] in
             self?.dismiss(animated: true)
         }
-        let sheet = UINavigationController(rootViewController: connect)
-        connect.navigationItem.title = "Hub"
-        let close = UIBarButtonItem(title: "Close", image: Glyph.close.image, primaryAction: UIAction { [weak self] _ in
-            self?.dismiss(animated: true)
-        })
-        NavigationItems.configure(connect.navigationItem, leading: [close])
-        sheet.sheetPresentationController?.detents = [.medium(), .large()]
-        present(sheet, animated: true)
+        connect.loadViewIfNeeded()
+        present(HouseSheetController(connect, title: "Hub", scroller: connect.scroll), animated: true)
     }
 
     func openSession(_ id: String) {

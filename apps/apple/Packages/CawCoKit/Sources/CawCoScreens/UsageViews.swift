@@ -102,10 +102,12 @@ final class UsageCell: HomeCell {
     }
 }
 
-/// Every limit window, grouped by provider: the house bottom sheet the strip opens.
+/// Every limit window, grouped by provider (UsageMeter.svelte `limits`):
+/// the content of the house sheet the strip opens, titled "Usage limits".
 final class UsageSheetController: ObservedViewController {
     private let home: HomeModel
     private let stack = UIStackView()
+    let scroll = UIScrollView()
 
     init(home: HomeModel) {
         self.home = home
@@ -119,26 +121,25 @@ final class UsageSheetController: ObservedViewController {
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = Palette.surfaceRaised
-        navigationItem.title = "Usage limits"
-        let close = UIBarButtonItem(title: "Close", image: Glyph.close.image, primaryAction: UIAction { [weak self] _ in self?.dismiss(animated: true) })
-        NavigationItems.configure(navigationItem, leading: [close])
         stack.axis = .vertical
-        stack.spacing = 12
         stack.translatesAutoresizingMaskIntoConstraints = false
-        let scroll = UIScrollView()
         scroll.translatesAutoresizingMaskIntoConstraints = false
+        scroll.alwaysBounceVertical = false
         view.addSubview(scroll)
         scroll.addSubview(stack)
+        // As tall as the list, until the sheet's own ceiling makes it scroll.
+        let fit = scroll.heightAnchor.constraint(equalTo: stack.heightAnchor)
+        fit.priority = .defaultLow
         NSLayoutConstraint.activate([
             scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
             scroll.topAnchor.constraint(equalTo: view.topAnchor),
             scroll.bottomAnchor.constraint(equalTo: view.bottomAnchor),
-            stack.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor, constant: 12),
-            stack.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor, constant: -12),
-            stack.leadingAnchor.constraint(equalTo: scroll.frameLayoutGuide.leadingAnchor, constant: Space.space5),
-            stack.trailingAnchor.constraint(equalTo: scroll.frameLayoutGuide.trailingAnchor, constant: -Space.space5),
+            stack.topAnchor.constraint(equalTo: scroll.contentLayoutGuide.topAnchor),
+            stack.bottomAnchor.constraint(equalTo: scroll.contentLayoutGuide.bottomAnchor),
+            stack.leadingAnchor.constraint(equalTo: scroll.frameLayoutGuide.leadingAnchor),
+            stack.trailingAnchor.constraint(equalTo: scroll.frameLayoutGuide.trailingAnchor),
+            fit,
         ])
     }
 
@@ -149,17 +150,56 @@ final class UsageSheetController: ObservedViewController {
         if usage.groups.isEmpty {
             let empty = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted, lines: 0)
             empty.text = usage.reason
-            stack.addArrangedSubview(empty)
+            let box = UIView()
+            box.addSubview(empty)
+            NSLayoutConstraint.activate([
+                empty.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 12),
+                empty.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -12),
+                empty.topAnchor.constraint(equalTo: box.topAnchor, constant: 10),
+                empty.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -10),
+            ])
+            stack.addArrangedSubview(box)
         }
-        for group in usage.groups {
-            let provider = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
-            provider.text = group.name
-            provider.accessibilityTraits = .header
-            stack.addArrangedSubview(provider)
-            for row in group.rows {
-                stack.addArrangedSubview(Self.row(row, now: now))
-            }
+        for (index, group) in usage.groups.enumerated() {
+            stack.addArrangedSubview(Self.group(group, now: now, ruled: index > 0))
         }
+    }
+
+    /// One provider (`.pop-group`): 12pt in, its rows 10pt apart, a
+    /// hairline above every group after the first.
+    private static func group(_ group: (name: String, rows: [Usage.Row]), now: Double, ruled: Bool) -> UIView {
+        let column = UIStackView()
+        column.axis = .vertical
+        column.spacing = 10
+        column.translatesAutoresizingMaskIntoConstraints = false
+        let provider = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
+        provider.text = group.name
+        provider.accessibilityTraits = .header
+        column.addArrangedSubview(provider)
+        for row in group.rows {
+            column.addArrangedSubview(Self.row(row, now: now))
+        }
+        let box = UIView()
+        box.addSubview(column)
+        NSLayoutConstraint.activate([
+            column.leadingAnchor.constraint(equalTo: box.leadingAnchor, constant: 12),
+            column.trailingAnchor.constraint(equalTo: box.trailingAnchor, constant: -12),
+            column.topAnchor.constraint(equalTo: box.topAnchor, constant: 12),
+            column.bottomAnchor.constraint(equalTo: box.bottomAnchor, constant: -12),
+        ])
+        if ruled {
+            let rule = UIView()
+            rule.backgroundColor = Palette.borderHairline
+            rule.translatesAutoresizingMaskIntoConstraints = false
+            box.addSubview(rule)
+            NSLayoutConstraint.activate([
+                rule.leadingAnchor.constraint(equalTo: box.leadingAnchor),
+                rule.trailingAnchor.constraint(equalTo: box.trailingAnchor),
+                rule.topAnchor.constraint(equalTo: box.topAnchor),
+                rule.heightAnchor.constraint(equalToConstant: 1),
+            ])
+        }
+        return box
     }
 
     private static func row(_ row: Usage.Row, now: Double) -> UIView {
@@ -170,7 +210,18 @@ final class UsageSheetController: ObservedViewController {
         percent.tabular = true
         percent.text = "\(Int(meter.used.rounded()))%"
         percent.setContentHuggingPriority(.required, for: .horizontal)
-        let head = UIStackView(arrangedSubviews: [name, percent])
+        let named = UIStackView(arrangedSubviews: [name])
+        named.spacing = Space.space1
+        named.alignment = .center
+        if meter.state == .near || meter.state == .over || meter.state == .reached {
+            let near = meter.state == .near
+            let glyph = GlyphView(near ? .attention : .failed, size: 14, tint: near ? Palette.meterNear : Palette.meterOver)
+            glyph.isAccessibilityElement = true
+            glyph.accessibilityLabel = near ? "Near the limit" : meter.state == .reached ? "Limit reached" : "Nearly at the limit"
+            named.insertArrangedSubview(glyph, at: 0)
+        }
+        let head = UIStackView(arrangedSubviews: [named, percent])
+        head.alignment = .firstBaseline
         let bar = LimitBar(height: 4)
         bar.configure(used: meter.used, elapsed: meter.elapsed, tone: UsageCell.tone(meter.state), reached: meter.state == .reached, paint: Palette.surfaceRaised, label: row.label)
         let column = UIStackView(arrangedSubviews: [head, bar])

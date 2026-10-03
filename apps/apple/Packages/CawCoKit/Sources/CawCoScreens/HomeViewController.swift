@@ -648,10 +648,9 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
 
     /// Every window, in the house bottom sheet.
     private func openUsage() {
-        let sheet = UINavigationController(rootViewController: UsageSheetController(home: home))
-        sheet.sheetPresentationController?.detents = [.medium(), .large()]
-        sheet.sheetPresentationController?.prefersGrabberVisible = true
-        present(sheet, animated: true)
+        let limits = UsageSheetController(home: home)
+        limits.loadViewIfNeeded()
+        present(HouseSheetController(limits, title: "Usage limits", scroller: limits.scroll), animated: true)
     }
 
     // The finger on the list holds its order (holdWhileInside): no row moves from under it.

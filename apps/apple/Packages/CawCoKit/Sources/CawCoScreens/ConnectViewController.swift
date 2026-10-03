@@ -22,6 +22,7 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
     private let done: () -> Void
     private let discovery = HubDiscovery()
     private let field = UITextField()
+    let scroll = UIScrollView()
     private let problem = KitLabel(TypeScale.typeMeta, ink: Palette.statusFailInk, lines: 0)
     private let status = StatusLineView()
     private let found = UIStackView()
@@ -96,6 +97,8 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
         field.addAction(UIAction { [weak self] _ in self?.fieldChanged() }, for: .editingChanged)
         problem.isHidden = true
 
+        // In the house sheet the sheet's own title names it.
+        title.isHidden = mode == .change
         let entry = UIStackView(arrangedSubviews: [title, body, well, problem, status])
         entry.axis = .vertical
         entry.spacing = Space.space2
@@ -114,7 +117,6 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
         column.addArrangedSubview(connectButton)
         fieldChanged()
 
-        let scroll = UIScrollView()
         scroll.alwaysBounceVertical = false
         scroll.keyboardDismissMode = .interactive
         scroll.translatesAutoresizingMaskIntoConstraints = false
@@ -122,6 +124,24 @@ final class ConnectViewController: ObservedViewController, UITextFieldDelegate {
         scroll.addSubview(column)
         let content = scroll.contentLayoutGuide
         let frame = scroll.frameLayoutGuide
+        if mode == .change {
+            // The house sheet's content: its ground, padding and keyboard are the sheet's.
+            view.backgroundColor = .clear
+            let fit = scroll.heightAnchor.constraint(equalTo: column.heightAnchor, constant: Space.space3)
+            fit.priority = .defaultLow
+            NSLayoutConstraint.activate([
+                scroll.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+                scroll.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+                scroll.topAnchor.constraint(equalTo: view.topAnchor),
+                scroll.bottomAnchor.constraint(equalTo: view.bottomAnchor),
+                column.topAnchor.constraint(equalTo: content.topAnchor, constant: Space.space3),
+                column.bottomAnchor.constraint(equalTo: content.bottomAnchor),
+                column.leadingAnchor.constraint(equalTo: frame.leadingAnchor),
+                column.trailingAnchor.constraint(equalTo: frame.trailingAnchor),
+                fit,
+            ])
+            return
+        }
         NSLayoutConstraint.activate([
             scroll.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor),
             scroll.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor),
