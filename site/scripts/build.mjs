@@ -29,7 +29,7 @@ await build({ entryPoints: ["src/site.css"], bundle: true, minify: true, outfile
 const solar = JSON.parse(await readFile("node_modules/@iconify-json/solar/icons.json", "utf8"));
 const icon = (name, cls = "") => `<svg class="icon ${cls}" width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">${solar.icons[name].body}</svg>`;
 const arrow = icon("arrow-right-linear");
-const planPrice = IOS_PLAN.price === null ? IOS_PLAN.pricingState : `${IOS_PLAN.price}${IOS_PLAN.period ? ` / ${IOS_PLAN.period}` : ""}`;
+const planPrice = IOS_PLAN.price === null ? IOS_PLAN.pricingState : `${IOS_PLAN.price} ${IOS_PLAN.period === "once" ? "once" : "/ month"}`;
 const store = `<a data-store="app-store" href="${APP_STORE_URL}" aria-label="${IOS_PLAN.name}, ${IOS_PLAN.availability.toLowerCase()}" aria-disabled="${APP_STORE_URL === "#"}"><img src="/app-store.svg" width="120" height="40" alt="Download on the App Store"></a>`;
 const caw = (status) => `<div class="caw" data-caw="${status}" role="img" aria-label="Caw, a small fluffy crow with vermilion wing tips"><canvas width="592" height="592" aria-hidden="true"></canvas></div>`;
 const header = (pricing) => `<header class="masthead"><a class="wordmark" href="/" aria-label="CawCo home">Caw<span>Co</span><span class="brand-ticks" aria-hidden="true">${icon("stars-minimalistic-bold-duotone")}</span></a><nav aria-label="Main navigation"><a href="/pricing" ${pricing ? 'aria-current="page"' : ""}>Pricing</a><a class="github-nav" href="${GITHUB_URL}">Open GitHub ${icon("arrow-right-up-linear")}</a><button class="theme-control" aria-label="Change color scheme" title="Change color scheme">${icon("sun-2-bold-duotone")}</button></nav></header>`;

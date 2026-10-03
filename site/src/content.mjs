@@ -6,7 +6,8 @@ export const APP_STORE_URL = "#";
 export const IOS_PLAN = {
   name: "CawCo for iPhone",
   price: "$9.99",
-  period: "month",
+  /** @type {'once' | 'month'} */
+  period: "once",
   pricingState: "Pricing at launch",
   availability: "Coming soon",
   includes: ["Your fleet, wherever you are", "Live transcripts and session control", "Connects to your self-hosted hub"],
