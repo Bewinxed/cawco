@@ -4,7 +4,7 @@
  * transfer — anything bigger belongs in a session, not in this tunnel.
  */
 
-import { readdir } from "node:fs/promises";
+import { lstat, readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { extname, join, resolve } from "node:path";
 import type { FsEntry, FsImage, FsPayload } from "@cawco/core";
@@ -48,19 +48,23 @@ const safePath = (path: string): string => {
 };
 
 const list = async (path: string): Promise<FsEntry[]> => {
-  const dirents = await readdir(path, { withFileTypes: true });
-  return dirents
-    .map((dirent) => ({
-      name: dirent.name,
-      kind: dirent.isDirectory() ? ("dir" as const) : ("file" as const),
-      size: dirent.isDirectory() ? 0 : Bun.file(`${path}/${dirent.name}`).size,
-    }))
-    .sort((a, b) => {
-      if (a.kind !== b.kind) {
-        return a.kind === "dir" ? -1 : 1;
-      }
-      return a.name.localeCompare(b.name);
-    });
+  const names = await readdir(path);
+  const entries = await Promise.all(
+    names.map(async (name): Promise<FsEntry> => {
+      const stat = await lstat(join(path, name));
+      return {
+        name,
+        kind: stat.isDirectory() ? "dir" : "file",
+        size: stat.isDirectory() ? 0 : stat.size,
+      };
+    })
+  );
+  return entries.sort((a, b) => {
+    if (a.kind !== b.kind) {
+      return a.kind === "dir" ? -1 : 1;
+    }
+    return a.name.localeCompare(b.name);
+  });
 };
 
 const read = async (path: string): Promise<string> => {
