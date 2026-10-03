@@ -327,7 +327,6 @@ public final class HomeModel {
         public let id: String
         public let instance: InstanceRow?
         /// The session its mark's sprite is keyed by, and where it runs, for its hue.
-        public let markId: String
         public let markPlace: String
         public let machineId: String
         public let title: String
@@ -345,7 +344,7 @@ public final class HomeModel {
                 && (activity(row.id) == .idle || row.isResumable || row.isStale || row.isFailed)
         }.map { row in
             RecentItem(
-                id: row.id, instance: row, markId: row.id, markPlace: row.cwd.isEmpty ? row.machineId : row.cwd,
+                id: row.id, instance: row, markPlace: row.cwd.isEmpty ? row.machineId : row.cwd,
                 machineId: row.machineId, title: fleet.title(row), place: fleet.placeOf(row.machineId, row.cwd), at: fleet.lastAt(row)
             )
         }
@@ -353,9 +352,8 @@ public final class HomeModel {
         let stored = fleet.machines.flatMap { machine in
             fleet.catalog(machine.machineId).filter { !running.contains($0.sessionId) }.map { info in
                 RecentItem(
-                    id: "\(machine.machineId):\(info.sessionId)",
+                    id: fleet.conversationId(sessionKey: info.sessionId, machineId: machine.machineId, cwd: info.cwd),
                     instance: nil,
-                    markId: info.sessionId,
                     markPlace: info.cwd ?? machine.machineId,
                     machineId: machine.machineId,
                     title: storedTitle(info, machineId: machine.machineId),
@@ -364,7 +362,8 @@ public final class HomeModel {
                 )
             }
         }
-        let items = (live + stored).sorted { $0.at != $1.at ? $0.at > $1.at : $0.id < $1.id }
+        var unique = Set<String>()
+        let items = (live + stored).sorted { $0.at != $1.at ? $0.at > $1.at : $0.id < $1.id }.filter { unique.insert($0.id).inserted }
         return held.order("home:recent", items, id: \.id)
     }
 

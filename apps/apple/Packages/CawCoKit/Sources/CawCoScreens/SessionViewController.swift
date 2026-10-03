@@ -143,9 +143,13 @@ final class SessionViewController: ObservedViewController, UIDragInteractionDele
 
     override func refreshContent() {
         let row = hub.fleet.byId[sessionId]
-        navigationItem.title = row.map(hub.fleet.title) ?? "Session"
+        let location = transcript.location
+        let storedTitle = location.flatMap { hub.fleet.storedTitle(sessionKey: $0.sessionKey, machineId: $0.machineId) }
+        navigationItem.title = row.map(hub.fleet.title) ?? storedTitle
+            ?? Naming.sessionTitle(title: nil, firstMessage: transcript.blocks.first?.content, cwd: location?.cwd, id: sessionId)
         connection.configure(hub: hub, ready: !transcript.loading, spend: "")
-        place.text = row.map { hub.fleet.placeOf($0.machineId, $0.cwd) + " · " + ($0.harness ?? "claude") } ?? ""
+        place.text = row.map { hub.fleet.placeOf($0.machineId, $0.cwd) + " · " + ($0.harness ?? "claude") }
+            ?? location.map { hub.fleet.placeOf($0.machineId, $0.cwd) + " · " + $0.harness } ?? ""
         let status: SessionStatus
         if hub.state != .connected || row?.isStale == true { status = .unknown }
         else if hub.needs.blocked(sessionId) { status = .needsYou }

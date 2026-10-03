@@ -12,6 +12,7 @@ public final class SessionTranscript {
     public internal(set) var branches: [Components.Schemas.TranscriptPageBranch] = []
     public internal(set) var tail: Components.Schemas.TranscriptTail?
     public internal(set) var facts: Components.Schemas.TranscriptFacts?
+    public internal(set) var location: Components.Schemas.TranscriptWhere?
     public internal(set) var cursor: String?
     public internal(set) var loading = true
     public internal(set) var loadingOlder = false
@@ -80,6 +81,7 @@ public final class SessionsStore {
                 transcript.queued = page.queued ?? []
                 transcript.tail = page.tail
                 transcript.facts = page.facts
+                transcript.location = page._where
                 transcript.cursor = page.cursor
                 transcript.blockRevision += 1
                 transcript.loading = false

@@ -296,6 +296,20 @@ public final class FleetStore {
         Naming.sessionTitle(title: row.title, cwd: row.cwd, id: row.id)
     }
 
+    /// links.ts `conversationHref`: a known instance's id, otherwise the
+    /// stored transcript's bare session key. There is no machine-prefixed id.
+    public func conversationId(sessionKey: String, machineId: String, cwd: String?) -> String {
+        let candidates = rows.filter { $0.sessionId == sessionKey }
+        let located = candidates.filter { $0.machineId == machineId && $0.cwd == (cwd ?? "") }
+        let eligible = located.isEmpty ? candidates : located
+        return eligible.sorted { $0.updatedMs != $1.updatedMs ? $0.updatedMs > $1.updatedMs : $0.id < $1.id }.first?.id ?? sessionKey
+    }
+
+    public func storedTitle(sessionKey: String, machineId: String) -> String? {
+        guard let info = catalogs[machineId]?.first(where: { $0.sessionId == sessionKey }) else { return nil }
+        return Naming.sessionTitle(title: info.customTitle ?? info.summary, firstMessage: info.firstPrompt, cwd: info.cwd, id: info.sessionId)
+    }
+
     /// When a session last moved: its pulse, else the hub's own update time. A run's is when it last moved.
     public func lastAt(_ row: InstanceRow) -> Double {
         if let run = run(row.id) {

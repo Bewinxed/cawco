@@ -264,7 +264,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         let recentRow = UICollectionView.CellRegistration<RecentRowCell, Item> { [weak self] cell, _, item in
             guard let self, case let .recent(id) = item, let recent = recentItems[id] else { return }
             cell.row.configure(SessionRowView.Content(
-                id: recent.markId,
+                id: recent.id,
                 place: recent.markPlace,
                 status: Self.status(recent.instance, home: home),
                 title: recent.title,
