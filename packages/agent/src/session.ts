@@ -60,6 +60,7 @@ import type { Harness, HarnessContext, HarnessSession } from "./harness";
 import { harnesses, harness as harnessOf } from "./harnesses";
 import { generateImage } from "./image-generation";
 import { isMachineAgent } from "./machine-agent";
+import { prepareFleetMcp } from "./mcp-launcher";
 import { startPreview, stopPreview, stopPreviews } from "./preview";
 import { procEpoch } from "./sessiond-client";
 import { installTool, probeTools } from "./tools";
@@ -1640,6 +1641,8 @@ export class SessionSupervisor {
     return options.limit ? all.slice(0, options.limit) : all;
   }
 
+  readonly #mcpLauncherFailures = new Map<string, string>();
+
   /** Converges the fleet across every harness that has a profile, merged into one report. */
   // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: merges every FleetSyncReport field across harnesses field-by-field, on purpose (see the comments below on why nothing is dropped)
   async #syncFleet(
@@ -1647,20 +1650,34 @@ export class SessionSupervisor {
     which: "syncFleet" | "fleetStatus"
   ): Promise<FleetSyncReport> {
     // The daemon's connection names a hub reachable from this machine.
+    if (incoming) {
+      this.#mcpLauncherFailures.clear();
+    }
     const config = incoming && {
       ...incoming,
-      mcp: incoming.mcp.map((row) =>
-        row.proxied && "url" in row.config
-          ? {
-              ...row,
-              config: {
-                ...row.config,
-                url: harnessMcpUrl(
-                  `/mcp/fleet/${encodeURIComponent(row.name)}`
-                ),
-              },
-            }
-          : row
+      mcp: await Promise.all(
+        incoming.mcp.map(async (row) => {
+          if (!row.enabled) {
+            return row;
+          }
+          const launcher = await prepareFleetMcp(row.name, row.config);
+          if ("failure" in launcher) {
+            this.#mcpLauncherFailures.set(row.name, launcher.failure);
+            return { ...row, enabled: false };
+          }
+          const local = { ...row, config: launcher.config };
+          return local.proxied && "url" in local.config
+            ? {
+                ...local,
+                config: {
+                  ...local.config,
+                  url: harnessMcpUrl(
+                    `/mcp/fleet/${encodeURIComponent(row.name)}`
+                  ),
+                },
+              }
+            : local;
+        })
       ),
     };
     type State = import("@cawco/core").FleetItemState;
@@ -1739,13 +1756,19 @@ export class SessionSupervisor {
         );
       }
     }
-    const names = new Set(
-      Object.values(mcpByHarness).flatMap((rows) => Object.keys(rows ?? {}))
-    );
+    const names = new Set([
+      ...this.#mcpLauncherFailures.keys(),
+      ...Object.values(mcpByHarness).flatMap((rows) => Object.keys(rows ?? {})),
+    ]);
     for (const [kind, detail] of mcpFailures) {
       mcpByHarness[kind] = Object.fromEntries(
         [...names].map((name) => [name, { state: "failed", detail }])
       );
+    }
+    for (const report of Object.values(mcpByHarness)) {
+      for (const [name, detail] of this.#mcpLauncherFailures) {
+        report[name] = { state: "failed", detail };
+      }
     }
     for (const name of names) {
       const readings = Object.entries(mcpByHarness).flatMap(([kind, rows]) =>

@@ -20,7 +20,6 @@ import {
 } from "node:fs/promises";
 import { platform } from "node:os";
 import { basename, delimiter, isAbsolute, join } from "node:path";
-import { query } from "@anthropic-ai/claude-agent-sdk";
 import type {
   CliInstall,
   ConfigInspection,
@@ -46,9 +45,9 @@ import type {
   MarketplacePluginInfo,
   SkillFile,
 } from "@cawco/core";
-import { hookProblem, mcpFleetState, memoryDocProblem } from "@cawco/core";
-import { idle } from "./auth";
+import { hookProblem, memoryDocProblem } from "@cawco/core";
 import { expandHome } from "./fs";
+import { readMcpRuntime } from "./mcp-status";
 import { resolveBin, toolEnv, toolPath } from "./tools";
 import {
   guardWorkflowSkillRemoval,
@@ -403,33 +402,6 @@ const syncMcp = async (
     report[name] = { state: "removed" };
   }
   return names;
-};
-
-/** The SDK control channel answers without sending a model a turn. */
-const readMcpRuntime = async (
-  names: string[]
-): Promise<FleetSyncReport["mcp"]> => {
-  if (names.length === 0) {
-    return {};
-  }
-  const handle = query({ prompt: idle, options: { persistSession: false } });
-  const timer = setTimeout(() => handle.close(), 30_000);
-  try {
-    const statuses = await handle.mcpServerStatus();
-    return Object.fromEntries(
-      names.map((name) => [
-        name,
-        mcpFleetState(statuses.find((row) => row.name === name)),
-      ])
-    );
-  } catch (error) {
-    return Object.fromEntries(
-      names.map((name) => [name, { state: "failed", detail: said(error) }])
-    );
-  } finally {
-    clearTimeout(timer);
-    handle.close();
-  }
 };
 
 /** The CLI the skill half drives — on PATH, or where the local installer puts it. */
