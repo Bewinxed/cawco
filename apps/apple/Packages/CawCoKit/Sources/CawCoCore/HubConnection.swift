@@ -47,6 +47,7 @@ public final class HubConnection {
     public let fleet = FleetStore()
     public let needs: NeedsYouStore
     public private(set) var sessions: SessionsStore!
+    public private(set) var workflowRuns: WorkflowRunsStore!
 
     @ObservationIgnored private var run: Task<Void, Never>?
     @ObservationIgnored private var outageTimer: Task<Void, Never>?
@@ -67,6 +68,7 @@ public final class HubConnection {
             return nil
         }
         sessions = SessionsStore(hub: self)
+        workflowRuns = WorkflowRunsStore(hub: self)
         ledger.applyFrame = { [weak self] id, data in self?.sessions.apply(id, data: data) }
         ledger.rereadHistory = { [weak self] id in self?.sessions.read(id) }
         if address != nil {
@@ -119,6 +121,7 @@ public final class HubConnection {
         fleetRead?.cancel(); fleetRead = nil
         outageTimer?.cancel(); outageTimer = nil
         sessions.reset()
+        workflowRuns.reset()
         live = nil
         for waiter in waiters.values { waiter.resume(throwing: URLError(.cancelled)) }
         waiters = [:]
@@ -138,6 +141,7 @@ public final class HubConnection {
         fleet.spendFailed = false
         needs.parked = [:]
         sessions.reset()
+        workflowRuns.reset()
     }
 
     private func start() {
@@ -450,6 +454,7 @@ public final class HubConnection {
             }
         case let .workflow(frame):
             fleet.runs[frame.runId] = BoardRun(frame.run)
+            workflowRuns.read(frame.runId)
         case let .pulse(pulse):
             fleet.adopt(pulse: pulse.pulse)
         case let .controlResult(result):

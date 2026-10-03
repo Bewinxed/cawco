@@ -116,7 +116,9 @@ final class NeedsCardCell: HomeCell {
     private let actions = UIStackView()
     private var deny: UIButton!
     private var approve: UIButton!
+    private var open: UIButton!
     var onAnswer: (NeedsYouStore.Answer) -> Void = { _ in }
+    var onOpen: () -> Void = {}
 
     override init(frame: CGRect) {
         super.init(frame: frame)
@@ -126,6 +128,7 @@ final class NeedsCardCell: HomeCell {
         approve = KitButton.make("Approve", glyph: .tick, glyphTint: Palette.inkStrong, variant: .secondary, height: .sm) { [weak self] in
             self?.onAnswer(.allow)
         }
+        open = KitButton.make("Answer", variant: .secondary, height: .lg) { [weak self] in self?.onOpen() }
         waited.tabular = true
         waited.setContentHuggingPriority(.required, for: .horizontal)
         waited.setContentCompressionResistancePriority(.required, for: .horizontal)
@@ -135,6 +138,7 @@ final class NeedsCardCell: HomeCell {
         actions.addArrangedSubview(deny)
         actions.addArrangedSubview(UIView())
         actions.addArrangedSubview(approve)
+        actions.addArrangedSubview(open)
         actions.spacing = Space.space8
         actions.distribution = .equalSpacing
         let column = UIStackView(arrangedSubviews: [head, place, ask, actions, stage])
@@ -160,13 +164,18 @@ final class NeedsCardCell: HomeCell {
         case let .ask(parked):
             ask.text = parked.summary
             // A question is answered in its session; a permission here.
-            actions.isHidden = parked.isQuestion
+            actions.isHidden = false
+            open.isHidden = !parked.isQuestion
+            deny.isHidden = parked.isQuestion; approve.isHidden = parked.isQuestion
+            KitButton.setTitle("Answer", of: open, variant: .secondary, height: .lg)
             deny.accessibilityLabel = "Deny \(parked.summary) on \(item.title)"
             approve.accessibilityLabel = "Approve \(parked.summary) on \(item.title)"
         case .run:
             // A run's question is answered in its run.
             ask.text = "Waiting on your answer"
-            actions.isHidden = true
+            actions.isHidden = false
+            deny.isHidden = true; approve.isHidden = true; open.isHidden = false
+            KitButton.setTitle("Open", of: open, variant: .secondary, height: .lg)
         }
         let inFlight = sent.map { $0.stage != .failed } ?? false
         deny.isEnabled = !stale && !inFlight

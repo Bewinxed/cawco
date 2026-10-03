@@ -98,7 +98,7 @@ public final class RootViewController: ObservedViewController {
         hub.disconnect()
     }
     public var restorationActivity: NSUserActivity {
-        let activity = board.selected.map { SessionViewController.activity($0.sessionId) }
+        let activity = board.currentId.map { SessionViewController.activity($0) }
             ?? NSUserActivity(activityType: "dev.cawco.scene")
         var values = activity.userInfo ?? [:]
         values["boardTab"] = home.tab.rawValue
@@ -172,6 +172,7 @@ final class BoardSplitController: UISplitViewController, UISplitViewControllerDe
     private let hub: HubConnection
     private let pager: BoardPagerController
     private(set) var selected: SessionViewController?
+    private(set) var currentId: String?
     var onSelection: (HomeModel.Tab) -> Void = { _ in }
 
     init(hub: HubConnection, home: HomeModel) {
@@ -180,6 +181,7 @@ final class BoardSplitController: UISplitViewController, UISplitViewControllerDe
         super.init(style: .doubleColumn)
         pager.onOpen = { [weak self] id in self?.openSession(id) }
         pager.onSelection = { [weak self] tab in self?.onSelection(tab) }
+        pager.onQuestion = { [weak self] ask in self?.openQuestion(ask) }
         pager.navigationItem.title = "Fleet"
         pager.navigationItem.largeTitleDisplayMode = .never
         let change = UIBarButtonItem(title: "Hub", image: Glyph.server.image, primaryAction: UIAction { [weak self] _ in
@@ -220,7 +222,15 @@ final class BoardSplitController: UISplitViewController, UISplitViewControllerDe
     }
 
     func openSession(_ id: String) {
-        guard BoardRun.runId(of: id) == nil else { return }
+        currentId = id
+        if let runId = BoardRun.runId(of: id) {
+            selected?.close(); selected = nil
+            let controller = WorkflowRunViewController(hub: hub, runId: runId)
+            controller.onReturn = { [weak self, weak controller] in self?.returnToFleet(from: controller) }
+            controller.onOpen = { [weak self] id in self?.openSession(id) }
+            showDetailViewController(UINavigationController(rootViewController: controller), sender: self)
+            return
+        }
         selected?.close()
         let controller = SessionViewController(hub: hub, id: id)
         selected = controller
@@ -228,18 +238,29 @@ final class BoardSplitController: UISplitViewController, UISplitViewControllerDe
             if self?.selected === controller { self?.selected = nil }
         }
         controller.onReturnToFleet = { [weak self, weak controller] in
-            guard let self, let controller else { return }
-            if controller.traitCollection.horizontalSizeClass == .compact {
-                controller.close()
-                show(.primary)
-            } else {
-                controller.close()
-                let placeholder = UIViewController()
-                placeholder.view.backgroundColor = Palette.surfacePage
-                setViewController(UINavigationController(rootViewController: placeholder), for: .secondary)
-            }
+            self?.returnToFleet(from: controller)
         }
+        controller.onQuestion = { [weak self] ask in self?.openQuestion(ask) }
         showDetailViewController(UINavigationController(rootViewController: controller), sender: self)
+    }
+
+    private func openQuestion(_ ask: ParkedAsk) {
+        guard let row = hub.fleet.byId[ask.instanceId] else { return }
+        selected?.close(); selected = nil; currentId = ask.instanceId
+        let controller = QuestionAnswerViewController(hub: hub, ask: ask, machineId: row.machineId)
+        controller.onReturn = { [weak self, weak controller] in self?.returnToFleet(from: controller) }
+        showDetailViewController(UINavigationController(rootViewController: controller), sender: self)
+    }
+
+    private func returnToFleet(from controller: UIViewController?) {
+        guard let controller else { return }
+        currentId = nil
+        selected?.close(); selected = nil
+        if controller.traitCollection.horizontalSizeClass == .compact { show(.primary) }
+        else {
+            let empty = UIViewController(); empty.view.backgroundColor = Palette.surfacePage
+            setViewController(UINavigationController(rootViewController: empty), for: .secondary)
+        }
     }
 
     func splitViewController(_: UISplitViewController, topColumnForCollapsingToProposedTopColumn _: UISplitViewController.Column) -> UISplitViewController.Column {

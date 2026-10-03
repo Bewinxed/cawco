@@ -52,6 +52,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     private let displayedTab: HomeModel.Tab
     var onOpen: (String) -> Void = { _ in }
     var onSelectTab: (HomeModel.Tab) -> Void = { _ in }
+    var onQuestion: (ParkedAsk) -> Void = { _ in }
     var collectionView: UICollectionView!
     private(set) lazy var layout = makeLayout()
     private var dataSource: UICollectionViewDiffableDataSource<Section, Item>!
@@ -191,6 +192,13 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             cell.onAnswer = { [weak self] answer in
                 guard let self, home.live, case let .ask(parked) = need.kind else { return }
                 hub.needs.answer(parked, machineId: need.machineId, answer)
+            }
+            cell.onOpen = { [weak self] in
+                guard let self else { return }
+                switch need.kind {
+                case let .ask(ask): if ask.isQuestion { onQuestion(ask) } else { onOpen(ask.instanceId) }
+                case let .run(run): onOpen(run.rowId)
+                }
             }
         }
         let tabs = UICollectionView.CellRegistration<TabsCell, Item> { [weak self] cell, _, _ in
@@ -636,7 +644,12 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         case let .row(id): onOpen(id)
         case let .recent(id): onOpen(id)
         case let .need(id):
-            if let need = needs[id], case let .ask(ask) = need.kind { onOpen(ask.instanceId) }
+            if let need = needs[id] {
+                switch need.kind {
+                case let .ask(ask): if ask.isQuestion { onQuestion(ask) } else { onOpen(ask.instanceId) }
+                case let .run(run): onOpen(run.rowId)
+                }
+            }
         default: break
         }
     }

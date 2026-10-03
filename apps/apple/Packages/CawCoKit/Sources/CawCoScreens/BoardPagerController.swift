@@ -10,6 +10,7 @@ final class BoardPagerController: UIViewController, UIScrollViewDelegate {
     private let panes: [HomeViewController]
     var onOpen: (String) -> Void = { _ in }
     var onSelection: (HomeModel.Tab) -> Void = { _ in }
+    var onQuestion: (ParkedAsk) -> Void = { _ in }
     private var width = 0.0
     private var backPriority: BackGesturePriority?
 
@@ -20,6 +21,7 @@ final class BoardPagerController: UIViewController, UIScrollViewDelegate {
         for pane in panes {
             pane.onOpen = { [weak self] id in self?.onOpen(id) }
             pane.onSelectTab = { [weak self] tab in self?.select(tab, animated: true) }
+            pane.onQuestion = { [weak self] ask in self?.onQuestion(ask) }
         }
     }
 

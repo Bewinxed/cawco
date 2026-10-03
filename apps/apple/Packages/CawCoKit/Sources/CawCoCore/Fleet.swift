@@ -349,6 +349,7 @@ public struct ParkedAsk: Sendable {
     let routedTo: String?
 
     public var isQuestion: Bool { Naming.questions(toolName, input.value) != nil }
+    public var questions: [Components.Schemas.UserQuestion] { Naming.questions(toolName, input.value) ?? [] }
     public var summary: String { Naming.permissionSummary(toolName, input.value) }
 }
 
@@ -414,8 +415,26 @@ public final class NeedsYouStore {
     public func answer(_ ask: ParkedAsk, machineId: String, _ answer: Answer) {
         let result: [String: (any Sendable)?] = switch answer {
         case .allow: ["behavior": "allow", "updatedInput": ask.input.value]
-        case .deny: ["behavior": "deny", "message": "User denied permission"]
+        case .deny: ["behavior": "deny", "message": ask.isQuestion ? "The user dismissed the question without answering it." : "User denied permission"]
         }
+        submit(ask, machineId: machineId, result: result)
+    }
+
+    /// question.ts `questionAnswer`: the whole parked input survives, and
+    /// multi-select answers stay arrays even when just one option was picked.
+    public func answerQuestion(_ ask: ParkedAsk, machineId: String, answers: [String: [String]]) {
+        guard !ask.questions.isEmpty, ask.questions.allSatisfy({ !(answers[$0.question] ?? []).isEmpty }) else { return }
+        var shaped: [String: (any Sendable)?] = [:]
+        for question in ask.questions {
+            let labels = answers[question.question] ?? []
+            shaped[question.question] = question.multiSelect ? labels : labels.first
+        }
+        var updated = ask.input.value
+        updated["answers"] = shaped
+        submit(ask, machineId: machineId, result: ["behavior": "allow", "updatedInput": updated])
+    }
+
+    private func submit(_ ask: ParkedAsk, machineId: String, result: [String: (any Sendable)?]) {
         let key = "\(ask.instanceId):\(ask.requestId)"
         guard let payload = try? OpenAPIValueContainer(unvalidatedValue: [
             "instanceId": ask.instanceId,

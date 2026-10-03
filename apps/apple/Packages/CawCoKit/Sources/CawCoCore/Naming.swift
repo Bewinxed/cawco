@@ -1,4 +1,5 @@
 import Foundation
+import CawCoAPI
 import OpenAPIRuntime
 
 /// How the fleet names things out loud, as the web says them
@@ -68,27 +69,20 @@ public enum Naming {
     static let askUserQuestion = "AskUserQuestion"
 
     /// The questions an AskUserQuestion-shaped ask carries, or nil when it is a permission.
-    static func questions(_ toolName: String, _ input: [String: (any Sendable)?]) -> [String]? {
+    static func questions(_ toolName: String, _ input: [String: (any Sendable)?]) -> [Components.Schemas.UserQuestion]? {
         guard toolName == askUserQuestion, let list = input["questions"] as? [(any Sendable)?], !list.isEmpty else {
             return nil
         }
-        var asked: [String] = []
-        for item in list {
-            guard let question = item as? [String: (any Sendable)?],
-                  let text = question["question"] as? String,
-                  question["options"] is [(any Sendable)?]
-            else {
-                return nil
-            }
-            asked.append(text)
-        }
+        guard let value = try? OpenAPIValueContainer(unvalidatedValue: list),
+              let bytes = try? Wire.encoder().encode(value),
+              let asked = try? Wire.decoder().decode([Components.Schemas.UserQuestion].self, from: bytes) else { return nil }
         return asked
     }
 
     /// What a parked ask wants, in plain words.
     static func permissionSummary(_ toolName: String, _ input: [String: (any Sendable)?]) -> String {
         if let questions = questions(toolName, input) {
-            return questions.joined(separator: " · ")
+            return questions.map(\.question).joined(separator: " · ")
         }
         func field(_ key: String) -> String? {
             input[key].flatMap { $0 as? String }

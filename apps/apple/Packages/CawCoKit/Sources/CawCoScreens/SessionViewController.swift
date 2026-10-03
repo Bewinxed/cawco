@@ -20,6 +20,7 @@ final class SessionViewController: ObservedViewController, UIDragInteractionDele
     private var deny: UIBarButtonItem!
     private var back: UIBarButtonItem!
     private var windowAction: UIWindowScene.ActivationAction!
+    private var questionAction: UIBarButtonItem!
     private var barMode: String?
     private var entry: UIStackView!
     private var entryLeading: NSLayoutConstraint!
@@ -29,6 +30,7 @@ final class SessionViewController: ObservedViewController, UIDragInteractionDele
     private var opened = true
     var onClose: () -> Void = {}
     var onReturnToFleet: () -> Void = {}
+    var onQuestion: (ParkedAsk) -> Void = { _ in }
 
     init(hub: HubConnection, id: String) {
         self.hub = hub
@@ -49,6 +51,10 @@ final class SessionViewController: ObservedViewController, UIDragInteractionDele
         back = UIBarButtonItem(title: "Fleet", image: UIImage(systemName: "chevron.backward"), primaryAction: UIAction { [weak self] _ in self?.onReturnToFleet() })
         approve = UIBarButtonItem(title: "Approve", image: Glyph.tick.image, primaryAction: UIAction { [weak self] _ in self?.answer(.allow) })
         deny = UIBarButtonItem(title: "Deny", image: Glyph.close.image, primaryAction: UIAction { [weak self] _ in self?.answer(.deny) })
+        questionAction = UIBarButtonItem(title: "Answer", image: Glyph.tick.image, primaryAction: UIAction { [weak self] _ in
+            guard let self, let ask = hub.needs.parked[sessionId]?.first(where: \.isQuestion) else { return }
+            onQuestion(ask)
+        })
         NavigationItems.keepVisible([approve, deny])
         let activity = Self.activity(sessionId)
         windowAction = UIWindowScene.ActivationAction { _ in UIWindowScene.ActivationConfiguration(userActivity: activity) }
@@ -186,11 +192,12 @@ final class SessionViewController: ObservedViewController, UIDragInteractionDele
     private func configureBar() {
         approve.isEnabled = answerTarget != nil
         deny.isEnabled = answerTarget != nil
-        let mode = pendingAsk?.requestId ?? "session"
+        let question = hub.needs.parked[sessionId]?.first(where: \.isQuestion)
+        let mode = question?.requestId ?? pendingAsk?.requestId ?? "session"
         guard mode != barMode else { return }
         barMode = mode
         NavigationItems.configure(navigationItem, leading: [back],
-            prominent: pendingAsk == nil ? [steer] : [approve],
+            prominent: question != nil ? [questionAction] : pendingAsk == nil ? [steer] : [approve],
             trailing: pendingAsk == nil ? [stop] : [deny, steer, stop],
             overflow: [windowAction])
     }
