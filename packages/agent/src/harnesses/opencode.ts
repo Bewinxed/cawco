@@ -3440,6 +3440,7 @@ export class OpencodeHarness implements Harness {
   }
 
   /** No local turn maps participate in the server's idle decision. */
+  // biome-ignore lint/suspicious/useAwait: the Harness contract returns a promise; activity reporting itself is deliberately synchronous
   async busyInstances(): Promise<string[]> {
     const identity = this.#serverOwner.active;
     const client = this.#client;
@@ -3450,7 +3451,7 @@ export class OpencodeHarness implements Harness {
     if (!client) {
       return [...activity.snapshot().instances, "opencode:activity-unknown"];
     }
-    const snapshot = await activity.sample(client);
+    const snapshot = activity.report(client);
     const operations = this.#operationsPending()
       ? ["opencode:pending-operations"]
       : [];

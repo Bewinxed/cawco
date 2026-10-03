@@ -1,6 +1,86 @@
-import type { OpencodeClient } from "@opencode-ai/sdk/v2";
+import type { Message, OpencodeClient, Part } from "@opencode-ai/sdk/v2";
 
 type ActivityState = "busy" | "idle" | "unknown";
+const SAMPLE_BUDGET_MS = 3000;
+const SAMPLE_INTERVAL_MS = 5000;
+const MESSAGE_PAGE_SIZE = 64;
+const HISTORY_PAGES_PER_SAMPLE = 16;
+const MESSAGE_REQUESTS_PER_SAMPLE = 256;
+
+interface HistoryScan {
+  before?: string;
+  complete: boolean;
+  head?: string;
+  terminal: boolean;
+  updated: number;
+}
+
+type MessageRows = { info: Message; parts: Part[] }[];
+
+function toolActivity(rows: MessageRows): ActivityState {
+  for (const { parts } of rows) {
+    for (const part of parts) {
+      if (part.type !== "tool") {
+        continue;
+      }
+      if (part.state.status === "pending" || part.state.status === "running") {
+        return "busy";
+      }
+      if (part.state.status !== "completed" && part.state.status !== "error") {
+        return "unknown";
+      }
+    }
+  }
+  return "idle";
+}
+
+function terminalMessage(last: Message | undefined): boolean {
+  return (
+    !last ||
+    Boolean(
+      last.role === "assistant" &&
+        last.time.completed &&
+        (last.error || (last.finish && last.finish !== "tool-calls"))
+    )
+  );
+}
+
+async function forEachBounded<T>(
+  items: T[],
+  signal: AbortSignal,
+  read: (item: T) => Promise<void>
+): Promise<void> {
+  let position = 0;
+  await Promise.all(
+    Array.from({ length: Math.min(4, items.length) }, async () => {
+      while (position < items.length && !signal.aborted) {
+        const item = items[position];
+        position += 1;
+        // biome-ignore lint/performance/noAwaitInLoops: four workers bound server load across directories and history pages
+        await read(item);
+      }
+    })
+  );
+}
+
+function historyHead(rows: { info: Message; parts: Part[] }[]): string {
+  return JSON.stringify(
+    rows.slice(-2).map(({ info, parts }) => ({
+      id: info.id,
+      role: info.role,
+      ...(info.role === "assistant"
+        ? {
+            completed: info.time.completed,
+            finish: info.finish,
+            error: info.error,
+          }
+        : {}),
+      tools: parts
+        .filter((part) => part.type === "tool")
+        .map((part) => [part.id, part.state.status]),
+    }))
+  );
+}
 export interface ActivitySnapshot {
   generation: string;
   instances: string[];
@@ -18,6 +98,9 @@ export class OpencodeActivity {
   #sampledAt = 0;
   #revision = 0;
   #sampling: Promise<ActivitySnapshot> | null = null;
+  #nextSampleAt = 0;
+  #historyPosition = 0;
+  readonly #history = new Map<string, HistoryScan>();
 
   constructor(generation: string) {
     this.#generation = generation;
@@ -39,6 +122,7 @@ export class OpencodeActivity {
   observeBusy(sessionId: string): void {
     this.#revision += 1;
     this.#records.set(sessionId, "busy");
+    this.#history.delete(sessionId);
   }
 
   async sessionState(
@@ -48,16 +132,30 @@ export class OpencodeActivity {
   ): Promise<ActivityState> {
     this.#directories.set(sessionId, directory);
     const revision = this.#revision;
+    const signal = AbortSignal.timeout(SAMPLE_BUDGET_MS);
     const status = await client.session
-      .status({ directory }, { signal: AbortSignal.timeout(5000) })
+      .status({ directory }, { signal })
       .catch(() => null);
+    const type = status?.data?.[sessionId]?.type;
+    if (type === "busy" || type === "retry") {
+      this.observeBusy(sessionId);
+      return "busy";
+    }
+    const session =
+      status?.data && !status.error
+        ? await client.session
+            .get({ sessionID: sessionId, directory }, { signal })
+            .catch(() => null)
+        : null;
     const state =
       status?.data && !status.error
         ? await this.#readSession(
             client,
             sessionId,
             directory,
-            status.data[sessionId]?.type
+            status.data[sessionId]?.type,
+            signal,
+            session?.data?.time.updated
           )
         : "unknown";
     if (revision === this.#revision) {
@@ -70,8 +168,8 @@ export class OpencodeActivity {
     const instances = [...this.#records]
       .filter(([, state]) => state !== "idle")
       .flatMap(([id]) => [...(this.#bindings.get(id) ?? [id])]);
-    // biome-ignore lint/suspicious/noUnnecessaryConditions: a complete read sets #known true; failures and revision changes set it false
-    if (!this.#known) {
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: successful asynchronous sampling sets #known true; pending, failed or raced samples clear it
+    if (!this.#known || Date.now() >= this.#nextSampleAt) {
       instances.push("opencode:activity-unknown");
     }
     return {
@@ -89,7 +187,17 @@ export class OpencodeActivity {
     if (this.#sampling) {
       return this.#sampling;
     }
-    this.#sampling = this.#read(client)
+    if (fresh && Date.now() < this.#nextSampleAt) {
+      return Bun.sleep(this.#nextSampleAt - Date.now()).then(() =>
+        this.sample(client, true)
+      );
+    }
+    if (!fresh && Date.now() < this.#nextSampleAt) {
+      return Promise.resolve(this.snapshot());
+    }
+    this.#nextSampleAt = Date.now() + SAMPLE_INTERVAL_MS;
+    this.#known = false;
+    this.#sampling = this.#read(client, AbortSignal.timeout(SAMPLE_BUDGET_MS))
       .catch(() => {
         this.#known = false;
         return this.snapshot();
@@ -100,87 +208,132 @@ export class OpencodeActivity {
     return this.#sampling;
   }
 
+  /** A control reply never waits for storage or a server request. */
+  report(client: OpencodeClient): ActivitySnapshot {
+    // biome-ignore lint/complexity/noVoid: one throttled background sample refreshes the shared custody snapshot
+    void this.sample(client);
+    return this.snapshot();
+  }
+
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: bounded page validation retains cursor progress without ever treating partial history as idle
   async #readSession(
     client: OpencodeClient,
     sessionId: string,
     directory: string,
-    status: string | undefined
+    status: string | undefined,
+    signal: AbortSignal,
+    updated: number | undefined
   ): Promise<ActivityState> {
     if (status === "busy" || status === "retry") {
+      this.#history.delete(sessionId);
       return "busy";
     }
     if (status !== undefined && status !== "idle") {
       return "unknown";
     }
+    if (updated === undefined) {
+      return "unknown";
+    }
+    let scan = this.#history.get(sessionId);
+    if (!scan || scan.updated !== updated) {
+      scan = { updated, terminal: false, complete: false };
+      this.#history.set(sessionId, scan);
+    }
     try {
       const read = await client.session.messages(
-        { sessionID: sessionId, directory },
-        { signal: AbortSignal.timeout(5000) }
+        {
+          sessionID: sessionId,
+          directory,
+          limit: scan.complete ? 2 : MESSAGE_PAGE_SIZE,
+          ...(!scan.complete && scan.before ? { before: scan.before } : {}),
+        },
+        { signal }
       );
-      if (read.error || !read.data) {
+      if (
+        read.error ||
+        !read.data ||
+        signal.aborted ||
+        this.#history.get(sessionId) !== scan
+      ) {
         return "unknown";
       }
       const rows = [...read.data].sort(
         (a, b) => a.info.time.created - b.info.time.created
       );
+      if (scan.complete) {
+        if (rows.length > 2) {
+          return "unknown";
+        }
+        if (historyHead(rows) === scan.head) {
+          return scan.terminal ? "idle" : "unknown";
+        }
+        this.#history.set(sessionId, {
+          updated,
+          terminal: false,
+          complete: false,
+        });
+        return "unknown";
+      }
       // Tool parts are their latest persisted states. A newer queued user
       // message must not hide a tool still executing for an earlier prompt.
-      if (
-        rows.some((row) =>
-          row.parts.some(
-            (part) =>
-              part.type === "tool" &&
-              (part.state.status === "pending" ||
-                part.state.status === "running")
-          )
-        )
-      ) {
-        return "busy";
+      const tools = toolActivity(rows);
+      if (tools !== "idle") {
+        return tools;
       }
+      const last = rows.at(-1)?.info;
+      if (!scan.before) {
+        scan.terminal = terminalMessage(last);
+        scan.head = historyHead(rows);
+      }
+      const before = read.response.headers.get("x-next-cursor");
+      if (before === scan.before) {
+        return "unknown";
+      }
+      // A server ignoring pagination cannot provide bounded idle evidence.
       if (
-        rows.some((row) =>
-          row.parts.some(
-            (part) =>
-              part.type === "tool" &&
-              part.state.status !== "completed" &&
-              part.state.status !== "error"
-          )
-        )
+        rows.length > MESSAGE_PAGE_SIZE ||
+        (rows.length === MESSAGE_PAGE_SIZE && !before)
       ) {
         return "unknown";
       }
-      const last = rows.at(-1)?.info;
-      if (!last) {
-        return "idle";
-      }
-      if (
-        last.role === "assistant" &&
-        last.time.completed &&
-        (last.error || (last.finish && last.finish !== "tool-calls"))
-      ) {
-        return "idle";
-      }
-      return "unknown";
+      scan.before = before ?? undefined;
+      scan.complete = !before;
+      return scan.complete && scan.terminal ? "idle" : "unknown";
     } catch {
       return "unknown";
     }
   }
 
-  async #read(client: OpencodeClient): Promise<ActivitySnapshot> {
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: a single bounded pass owns inventory coverage, sparse status and rotating history work
+  async #read(
+    client: OpencodeClient,
+    signal: AbortSignal
+  ): Promise<ActivitySnapshot> {
     const revision = this.#revision;
-    const sessions = new Map(this.#directories);
+    const sessions = new Map(
+      [...this.#directories].map(([id, directory]) => [
+        id,
+        { directory, updated: undefined as number | undefined },
+      ])
+    );
     let cursor: number | undefined;
     do {
       // biome-ignore lint/performance/noAwaitInLoops: inventory pages depend on the preceding cursor
       const listed = await client.experimental.session.list(
         { limit: 200, ...(cursor === undefined ? {} : { cursor }) },
-        { signal: AbortSignal.timeout(5000) }
+        { signal }
       );
       if (listed.error || !listed.data) {
         throw new Error("OpenCode inventory unavailable.");
       }
       for (const session of listed.data) {
-        sessions.set(session.id, session.directory);
+        sessions.set(session.id, {
+          directory: session.directory,
+          updated: session.time.updated,
+        });
+        if (!this.#records.has(session.id)) {
+          this.#records.set(session.id, "unknown");
+        }
       }
       const nextText = listed.response?.headers.get("x-next-cursor");
       const next = nextText ? Number(nextText) : undefined;
@@ -198,41 +351,77 @@ export class OpencodeActivity {
       string,
       Record<string, { type?: string }> | null
     >();
-    await Promise.all(
-      [...new Set(sessions.values())].map(async (directory) => {
+    await forEachBounded(
+      [...new Set([...sessions.values()].map((session) => session.directory))],
+      signal,
+      async (directory) => {
         try {
-          const read = await client.session.status(
-            { directory },
-            { signal: AbortSignal.timeout(5000) }
-          );
+          const read = await client.session.status({ directory }, { signal });
           statuses.set(directory, read.error || !read.data ? null : read.data);
           for (const id of Object.keys(read.data ?? {})) {
-            sessions.set(id, directory);
+            if (!sessions.has(id)) {
+              sessions.set(id, { directory, updated: undefined });
+            }
           }
         } catch {
           statuses.set(directory, null);
         }
-      })
+      }
     );
     const entries = [...sessions];
-    let position = 0;
-    await Promise.all(
-      Array.from({ length: Math.min(16, entries.length) }, async () => {
-        while (position < entries.length) {
-          const [id, directory] = entries[position];
-          position += 1;
-          const status = statuses.get(directory);
-          records.set(
-            id,
-            status
-              ? // biome-ignore lint/performance/noAwaitInLoops: bounded workers avoid flooding storage with history reads
-                await this.#readSession(client, id, directory, status[id]?.type)
-              : "unknown"
-          );
-        }
-      })
+    // Rotate bounded history work so a long conversation cannot starve others.
+    const tails: typeof entries = [];
+    const pending = entries.filter(([id, session]) => {
+      const status = statuses.get(session.directory);
+      if (!status) {
+        records.set(id, "unknown");
+        return false;
+      }
+      if (status[id]?.type === "busy" || status[id]?.type === "retry") {
+        this.#history.delete(id);
+        records.set(id, "busy");
+        this.#records.set(id, "busy");
+        return false;
+      }
+      if (status[id]?.type !== undefined && status[id]?.type !== "idle") {
+        records.set(id, "unknown");
+        return false;
+      }
+      const scan = this.#history.get(id);
+      if (scan?.complete && scan.updated === session.updated) {
+        records.set(id, "unknown");
+        tails.push([id, session]);
+        return false;
+      }
+      records.set(id, "unknown");
+      return true;
+    });
+    const start = pending.length ? this.#historyPosition % pending.length : 0;
+    const history = [...pending.slice(start), ...pending.slice(0, start)].slice(
+      0,
+      HISTORY_PAGES_PER_SAMPLE
     );
-    if (revision !== this.#revision) {
+    this.#historyPosition = start + history.length;
+    const work = [...history, ...tails].slice(0, MESSAGE_REQUESTS_PER_SAMPLE);
+    await forEachBounded(work, signal, async ([id, session]) => {
+      const { directory, updated } = session;
+      const status = statuses.get(directory);
+      const state = status
+        ? await this.#readSession(
+            client,
+            id,
+            directory,
+            status[id]?.type,
+            signal,
+            updated
+          )
+        : "unknown";
+      records.set(id, state);
+      if (state === "busy") {
+        this.#records.set(id, state);
+      }
+    });
+    if (revision !== this.#revision || signal.aborted) {
       this.#known = false;
       return this.snapshot();
     }

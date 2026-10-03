@@ -575,9 +575,10 @@ export class SessionSupervisor {
    * custody has said which, `#busy` is empty because nothing has been read,
    * not because nothing is running: a cutover that asked then read `0` and
    * went ahead while two sessions were working (2026-10-01, obelisk, for the
-   * 23 s the agent took to attach 138 sessions). So the question waits for
-   * the answer to exist. Whoever takes custody holds it for as long as that
-   * takes, and lets go whether custody succeeded or not.
+   * 23 s the agent took to attach 138 sessions). Until decided, busyNow reports
+   * recovery as unknown/busy
+   * without delaying the control reply. Custody releases the hold on success
+   * or failure.
    */
   holdBusy(until: Promise<unknown>): void {
     const hold = until.then(
@@ -590,17 +591,16 @@ export class SessionSupervisor {
   }
 
   /**
-   * The sessions mid-turn right now, once every hold has let go. The answer
+   * The sessions mid-turn right now, with undecided custody counted busy. The answer
    * {@link AGENT_BUSY} gives over the wire, and the one the deploy poller
    * reads in-process: it runs in this same daemon, and asking its own
    * supervisor through the hub it is itself connected to would be a round
    * trip to learn a fact already held in memory.
    */
   async busyNow(): Promise<{ busy: number; instances: string[] }> {
-    while (this.#holds.size > 0) {
-      // biome-ignore lint/performance/noAwaitInLoops: a hold taken while the others settled is waited for too
-      await Promise.all(this.#holds);
-    }
+    // Recovery must defer retirement, not the machine control reply. A hold
+    // can outlast the hub's five-second RPC window; unknown is honestly busy.
+    const recovery = this.#holds.size > 0 ? ["agent:recovery-unknown"] : [];
     const opencode = (await this.#adapter("opencode").busyInstances?.()) ?? [];
     const instances = [
       ...new Set([
@@ -608,6 +608,7 @@ export class SessionSupervisor {
           (id) => this.#sessions.get(id)?.harness !== "opencode"
         ),
         ...opencode,
+        ...recovery,
         ...this.#imageRequests.values(),
       ]),
     ];
