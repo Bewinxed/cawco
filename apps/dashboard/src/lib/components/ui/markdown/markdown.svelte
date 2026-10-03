@@ -170,19 +170,26 @@
    * (--dur-menu, --ease-out), no stagger inside it, no blur, nothing that
    * moves. A word the chunk only EXTENDS ("wor" → "world") is not new, and
    * keeps its place.
+   *
+   * The chunk's words are the text past `mark`, so they are walked back
+   * from the end (`length` is the text's whole length) and the walk stops
+   * at the mark: a chunk costs its own words. Walked from the start, every
+   * chunk of a long reply visited all its 2,400 words (1.3ms each time).
    */
-  function fadeFrom(root: HTMLElement, mark: number): void {
+  function fadeFrom(root: HTMLElement, mark: number, length: number): void {
     const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     const fresh = new Set<Element>();
-    let offset = 0;
-    for (let node = walk.nextNode(); node; node = walk.nextNode()) {
-      const start = offset;
-      offset += node.nodeValue?.length ?? 0;
+    let offset = length;
+    for (let node = walk.lastChild(); node; node = walk.previousNode()) {
+      offset -= node.nodeValue?.length ?? 0;
+      if (offset < mark) {
+        break;
+      }
       // Only a word's own span fades. Text Streamdown writes straight into a
       // block has no span of its own, and fading its block would fade every
       // word already in it.
       const token = node.parentElement;
-      if (start >= mark && token?.matches(TOKEN)) {
+      if (token?.matches(TOKEN)) {
         fresh.add(token);
       }
     }
@@ -206,7 +213,7 @@
     }
     const length = root.textContent?.length ?? 0;
     if (shown >= 0 && length > shown && fades && motionOk.current) {
-      fadeFrom(root, shown);
+      fadeFrom(root, shown, length);
     }
     shown = length;
   });
