@@ -145,8 +145,9 @@ enum Frame {
     /// A workflow run's question: answered in its run, never parked as a session's ask.
     case runQuestion(runId: String, raisedAt: Double?)
     case usage(Components.Schemas.FramePayload.Value10Payload)
-    case controlResult(Components.Schemas.FramePayload.Value12Payload)
-    case pulse(Components.Schemas.FramePayload.Value15Payload)
+    case controlResult(Components.Schemas.FramePayload.Value13Payload)
+    case error(requestId: String?, message: String)
+    case pulse(Components.Schemas.FramePayload.Value16Payload)
     case workflow(Components.Schemas.WorkflowFrame)
     case ignored
 
@@ -165,11 +166,13 @@ enum Frame {
             self = .permissionSettled(frame)
         } else if let frame = payload.value10, frame.kind == .usage {
             self = .usage(frame)
-        } else if let frame = payload.value12, frame.kind == .controlResult {
+        } else if let frame = payload.value13, frame.kind == .controlResult {
             self = .controlResult(frame)
-        } else if let frame = payload.value15, frame.kind == .pulse {
+        } else if let frame = payload.value14, frame.kind == .error {
+            self = .error(requestId: frame.requestId, message: frame.message)
+        } else if let frame = payload.value16, frame.kind == .pulse {
             self = .pulse(frame)
-        } else if let frame = payload.value20 {
+        } else if let frame = payload.value21 {
             self = .workflow(frame)
         } else {
             self = .ignored

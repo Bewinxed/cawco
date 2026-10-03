@@ -29,6 +29,7 @@ public final class SessionsStore {
     @ObservationIgnored private unowned let hub: HubConnection
     @ObservationIgnored private var readers: [String: Task<Void, Never>] = [:]
     @ObservationIgnored private var watches: [String: Int] = [:]
+    @ObservationIgnored private var peeked: String?
     var watched: Set<String> { Set(watches.keys) }
     private let log = Logger(subsystem: "dev.cawco.app", category: "Transcript")
 
@@ -57,12 +58,24 @@ public final class SessionsStore {
         readers = [:]
         transcripts = [:]
         watches = [:]
+        peeked = nil
         hub.ledger.sync([])
     }
 
     func reconnected() {
         for id in watched where transcripts[id]?.error != nil { read(id) }
         hub.ledger.sync(watched)
+    }
+
+    /// Peek and delegate readers share the same counted transcript watches as
+    /// tabs, so one reader closing never drops another reader's stream.
+    public func watchDelegate(_ id: String) { if !id.hasPrefix("run:") { _ = open(id) } }
+    public func unwatchDelegate(_ id: String) { close(id) }
+    public func setPeeked(_ id: String?) {
+        guard peeked != id else { return }
+        if let peeked { close(peeked) }
+        peeked = id
+        if let id, !id.hasPrefix("run:") { _ = open(id) }
     }
 
     public func read(_ id: String) {

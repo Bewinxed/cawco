@@ -18,6 +18,7 @@ import type {
   FramePayload,
   FsImage,
   FsPayload,
+  GeneratedImage,
   GitChanges,
   HarnessKind,
   HarnessReport,
@@ -55,6 +56,7 @@ import type {
   ToolState,
   ToolStatus,
   TranscriptWhere,
+  UpdateReport,
   UsageBucket,
   UsageLimitsResponse,
   UsageSpend,
@@ -6566,7 +6568,22 @@ export const createServer = ({
       .get("/api/agents", () => withPresence(db.listAgents()))
       .post(
         "/api/instances/:id/generate-image",
-        { ...hidden, body: t.Any() },
+        {
+          body: t.Object({
+            prompt: t.String(),
+            output_path: t.String(),
+            reference_images: t.Optional(t.Array(t.String())),
+            size: t.Optional(t.String()),
+            quality: t.Optional(
+              t.Union([
+                t.Literal("auto"),
+                t.Literal("low"),
+                t.Literal("medium"),
+                t.Literal("high"),
+              ])
+            ),
+          }),
+        },
         async ({ params, body, status, request, server }) => {
           const row = db
             .listInstances()
@@ -6596,7 +6613,7 @@ export const createServer = ({
           if (!answer.ok) {
             return status(422, answer.error ?? "Image generation failed.");
           }
-          return answer.result;
+          return answer.result as GeneratedImage;
         }
       )
       // Claude models' context windows as their turns last reported them; the
@@ -6857,34 +6874,29 @@ export const createServer = ({
         publishInstances(row.machineId);
         return { ok: true };
       })
-      .get(
-        "/api/agents/:machineId/busy",
-        hidden,
-        async ({ params, status }) => {
-          const answer = await callAgent(
-            params.machineId,
-            AGENT_BUSY,
-            [],
-            BUSY_TIMEOUT_MS
-          );
-          if (answer === "offline") {
-            return status(404, `machine ${params.machineId} is not connected`);
-          }
-          if (answer === "timeout") {
-            return status(504, `machine ${params.machineId} did not answer`);
-          }
-          if (!answer.ok) {
-            return status(500, answer.error ?? "the busy probe failed");
-          }
-          return answer.result;
+      .get("/api/agents/:machineId/busy", async ({ params, status }) => {
+        const answer = await callAgent(
+          params.machineId,
+          AGENT_BUSY,
+          [],
+          BUSY_TIMEOUT_MS
+        );
+        if (answer === "offline") {
+          return status(404, `machine ${params.machineId} is not connected`);
         }
-      )
+        if (answer === "timeout") {
+          return status(504, `machine ${params.machineId} did not answer`);
+        }
+        if (!answer.ok) {
+          return status(500, answer.error ?? "the busy probe failed");
+        }
+        return answer.result as { busy: number; instances: string[] };
+      })
       // And the update itself: the machine pulls, installs, rebuilds and restarts
       // what it serves, then says what it actually did.
       .post(
         "/api/agents/:machineId/update",
         {
-          ...hidden,
           body: t.Object({
             restartAgent: t.Optional(t.Boolean()),
             force: t.Optional(t.Boolean()),
@@ -6912,7 +6924,7 @@ export const createServer = ({
           if (!answer.ok) {
             return status(500, answer.error ?? "the update failed");
           }
-          return answer.result;
+          return answer.result as UpdateReport;
         }
       )
       // What a machine really has, fleet or not (NEW.md §11) — and what a session
@@ -8927,22 +8939,18 @@ export const createServer = ({
       })
       // Archiving a workspace: its machine kills the boundary with every
       // process in it and deletes the clone. Refused while an item runs there.
-      .post(
-        "/api/workspaces/:id/archive",
-        hidden,
-        async ({ params, status }) => {
-          try {
-            return await workItems.archive(params.id);
-          } catch (error) {
-            const message =
-              error instanceof Error ? error.message : String(error);
-            return status(
-              error instanceof WorkItemRefusal ? error.status : 502,
-              message
-            );
-          }
+      .post("/api/workspaces/:id/archive", async ({ params, status }) => {
+        try {
+          return await workItems.archive(params.id);
+        } catch (error) {
+          const message =
+            error instanceof Error ? error.message : String(error);
+          return status(
+            error instanceof WorkItemRefusal ? error.status : 502,
+            message
+          );
         }
-      )
+      })
       // ── Usage (USAGE-SPEC.md §6) ─────────────────────────────────────────────
       // The heavy data lives behind these reads; the socket only carries the small
       // limits frame, so the dashboard pulls aggregates when it needs them.
@@ -8963,7 +8971,6 @@ export const createServer = ({
       .get(
         "/api/usage/limits/history",
         {
-          ...hidden,
           query: t.Object({
             machineId: t.String(),
             kind: t.Optional(t.String()),

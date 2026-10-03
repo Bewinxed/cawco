@@ -55,10 +55,24 @@ const FRAMES: Record<string, string[]> = {
     "StopPayload",
     "ControlPayload",
     "FsPayload",
+    "FsEntry",
+    "FsImage",
+    "SendPayload",
+    "ReposResult",
+    "UpdateReport",
   ],
   // `NeutralSessionInfo`: what a machine's `listSessions` control answers,
   // the stored transcripts the home's Recent lists.
-  "harness.ts": ["NeutralMessage", "NeutralSessionInfo"],
+  "harness.ts": [
+    "NeutralMessage",
+    "NeutralSessionInfo",
+    "ModelInfo",
+    "McpServerStatus",
+    "SupportedCommands",
+    "AuthState",
+    "NeutralTask",
+  ],
+  "tools.ts": ["ToolStatus"],
 };
 
 const scratch = mkdtempSync(join(tmpdir(), "cawco-openapi-"));

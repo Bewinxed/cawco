@@ -937,6 +937,118 @@
         }
       }
     },
+    "/api/instances/{id}/generate-image": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "prompt": {
+                    "type": "string"
+                  },
+                  "output_path": {
+                    "type": "string"
+                  },
+                  "reference_images": {
+                    "type": "array",
+                    "items": {
+                      "type": "string"
+                    }
+                  },
+                  "size": {
+                    "type": "string"
+                  },
+                  "quality": {
+                    "type": "string",
+                    "enum": [
+                      "auto",
+                      "low",
+                      "medium",
+                      "high"
+                    ]
+                  }
+                },
+                "required": [
+                  "prompt",
+                  "output_path"
+                ]
+              }
+            }
+          }
+        },
+        "operationId": "postApiInstancesByIdGenerateImage",
+        "responses": {
+          "200": {
+            "description": "postApiInstancesByIdGenerateImage 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GeneratedImage"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiInstancesByIdGenerateImage 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiInstancesByIdGenerateImage 422",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              },
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "postApiInstancesByIdGenerateImage 503",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "postApiInstancesByIdGenerateImage 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/model-windows": {
       "get": {
         "operationId": "getApiModelWindows",
@@ -1665,6 +1777,148 @@
               "application/problem+json": {
                 "schema": {
                   "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{machineId}/busy": {
+      "get": {
+        "parameters": [
+          {
+            "name": "machineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "getApiAgentsByMachineIdBusy",
+        "responses": {
+          "200": {
+            "description": "getApiAgentsByMachineIdBusy 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiAgentsByMachineIdBusy200"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "getApiAgentsByMachineIdBusy 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "getApiAgentsByMachineIdBusy 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "getApiAgentsByMachineIdBusy 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/agents/{machineId}/update": {
+      "post": {
+        "parameters": [
+          {
+            "name": "machineId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "restartAgent": {
+                    "type": "boolean"
+                  },
+                  "force": {
+                    "type": "boolean"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "operationId": "postApiAgentsByMachineIdUpdate",
+        "responses": {
+          "200": {
+            "description": "postApiAgentsByMachineIdUpdate 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UpdateReport"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiAgentsByMachineIdUpdate 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "postApiAgentsByMachineIdUpdate 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "postApiAgentsByMachineIdUpdate 500",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "504": {
+            "description": "postApiAgentsByMachineIdUpdate 504",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
                 }
               }
             }
@@ -5183,6 +5437,83 @@
         }
       }
     },
+    "/api/workspaces/{id}/archive": {
+      "post": {
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "operationId": "postApiWorkspacesByIdArchive",
+        "responses": {
+          "200": {
+            "description": "postApiWorkspacesByIdArchive 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/postApiWorkspacesByIdArchive200"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "postApiWorkspacesByIdArchive 400",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "postApiWorkspacesByIdArchive 403",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "postApiWorkspacesByIdArchive 404",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "postApiWorkspacesByIdArchive 409",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "postApiWorkspacesByIdArchive 502",
+            "content": {
+              "text/plain": {
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/api/usage/limits": {
       "get": {
         "operationId": "getApiUsageLimits",
@@ -5210,6 +5541,81 @@
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/UsageSpend"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/usage/limits/history": {
+      "get": {
+        "parameters": [
+          {
+            "name": "machineId",
+            "in": "query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "kind",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "since",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          {
+            "name": "until",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "number"
+                },
+                {
+                  "type": "string"
+                }
+              ]
+            }
+          }
+        ],
+        "operationId": "getApiUsageLimitsHistory",
+        "responses": {
+          "200": {
+            "description": "getApiUsageLimitsHistory 200",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/getApiUsageLimitsHistory200"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "getApiUsageLimitsHistory 422",
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationErrorResponse"
                 }
               }
             }
@@ -6499,6 +6905,24 @@
           "workItemId",
           "workflowRunId",
           "workflowStepId"
+        ]
+      },
+      "getApiAgentsByMachineIdBusy200": {
+        "type": "object",
+        "properties": {
+          "busy": {
+            "type": "number"
+          },
+          "instances": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          }
+        },
+        "required": [
+          "busy",
+          "instances"
         ]
       },
       "getApiInstances200": {
@@ -7936,6 +8360,120 @@
           "ok"
         ]
       },
+      "postApiWorkspacesByIdArchive200": {
+        "type": "object",
+        "properties": {
+          "machineId": {
+            "type": "string"
+          },
+          "path": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "state": {
+            "$ref": "#/components/schemas/WorkspaceState"
+          },
+          "branch": {
+            "type": "string"
+          },
+          "repoRoot": {
+            "type": "string"
+          },
+          "base": {
+            "type": "string"
+          },
+          "boundaryPid": {
+            "type": [
+              "null",
+              "number"
+            ]
+          },
+          "ports": {
+            "type": "array",
+            "items": {
+              "type": "number"
+            }
+          },
+          "scratchPaths": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "createdByInstanceId": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "base",
+          "boundaryPid",
+          "branch",
+          "createdAt",
+          "createdByInstanceId",
+          "id",
+          "machineId",
+          "path",
+          "ports",
+          "repoRoot",
+          "scratchPaths",
+          "state"
+        ]
+      },
+      "getApiUsageLimitsHistory200": {
+        "type": "array",
+        "items": {
+          "type": "object",
+          "properties": {
+            "machineId": {
+              "type": "string"
+            },
+            "id": {
+              "type": "number"
+            },
+            "kind": {
+              "type": "string"
+            },
+            "scopeLabel": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "percent": {
+              "type": "number"
+            },
+            "severity": {
+              "type": "string"
+            },
+            "resetsAt": {
+              "type": [
+                "null",
+                "string"
+              ]
+            },
+            "fetchedAt": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "fetchedAt",
+            "id",
+            "kind",
+            "machineId",
+            "percent",
+            "resetsAt",
+            "scopeLabel",
+            "severity"
+          ]
+        }
+      },
       "StreamServerMessage": {
         "description": "Everything the stream protocol can put on the dashboard socket.",
         "anyOf": [
@@ -9072,6 +9610,29 @@
             "type": "object",
             "properties": {
               "kind": {
+                "description": "Recovery found no live handle; stored conversations remain resumable.",
+                "type": "string",
+                "enum": [
+                  "recovery_unavailable"
+                ]
+              },
+              "instanceId": {
+                "type": "string"
+              },
+              "reason": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "instanceId",
+              "kind",
+              "reason"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
                 "description": "No `instanceId` when the call it answers was machine-scoped.",
                 "type": "string",
                 "enum": [
@@ -9430,6 +9991,10 @@
               }
             }
           },
+          "sessionCredential": {
+            "description": "Hub-minted session credential: delivery only, never transcript or instance metadata.",
+            "type": "string"
+          },
           "skills": {
             "description": "Skill names to load natively before the first prompt. Each harness loads\nthem via its own mechanism — opencode sends `/skill` commands, claude pushes\nthem into the input stream — so the delegate session sees the skill the same\nway it would if the user had typed the slash command.",
             "type": "array",
@@ -9559,13 +10124,196 @@
           "requestId"
         ]
       },
+      "FsEntry": {
+        "description": "One dirent of an `fs list`. `size` is 0 for a directory.",
+        "type": "object",
+        "properties": {
+          "kind": {
+            "enum": [
+              "dir",
+              "file"
+            ],
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "size": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "kind",
+          "name",
+          "size"
+        ]
+      },
+      "FsImage": {
+        "description": "What an `fs image` answers with: the file's bytes, base64, and what they are.",
+        "type": "object",
+        "properties": {
+          "base64": {
+            "type": "string"
+          },
+          "mediaType": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "base64",
+          "mediaType"
+        ]
+      },
+      "SendPayload": {
+        "description": "`send`: one turn of input for a live session's prompt stream.",
+        "type": "object",
+        "properties": {
+          "attachments": {
+            "description": "Text the user pasted rather than typed, kept out of `message` so the agent\ncan fold it into the turn as quoted material the model won't mistake for\nthe sentence around it.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kind": {
+                  "type": "string",
+                  "enum": [
+                    "text"
+                  ]
+                },
+                "name": {
+                  "type": "string"
+                },
+                "content": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "content",
+                "kind",
+                "name"
+              ]
+            }
+          },
+          "from": {
+            "description": "The instance a fleet-originated send claims as its caller.",
+            "type": "string"
+          },
+          "images": {
+            "description": "Images the turn carries: base64, with no `data:` URI prefix.",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "mediaType": {
+                  "type": "string"
+                },
+                "data": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "data",
+                "mediaType"
+              ]
+            }
+          },
+          "instanceId": {
+            "type": "string"
+          },
+          "message": {
+            "$ref": "#/components/schemas/SentMessage",
+            "description": "The user turn, under the uuid it keeps everywhere it is shown."
+          },
+          "urgent": {
+            "description": "Force delivery: a busy claude session reads it mid-turn via `streamInput`;\nopencode/pi interrupt the turn and deliver it as the immediate next one. The\nhub honours urgency only when the target is `from`'s own delegate; otherwise\nit downgrades to a normal queued send.",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "instanceId",
+          "message"
+        ]
+      },
+      "ReposResult": {
+        "description": "What the machine-scoped `listRepos` control answers with. The GitHub CLI is\nthe machine's own credential store — cawco never holds a token.",
+        "anyOf": [
+          {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/RepoInfo"
+            }
+          },
+          {
+            "type": "object",
+            "properties": {
+              "error": {
+                "enum": [
+                  "gh-missing",
+                  "gh-unauthenticated"
+                ],
+                "type": "string"
+              }
+            },
+            "required": [
+              "error"
+            ]
+          }
+        ]
+      },
+      "UpdateReport": {
+        "description": "What an {@link UPDATE_CAWCO} run did. Every field is what actually\nhappened, not what was asked for.",
+        "type": "object",
+        "properties": {
+          "built": {
+            "type": "boolean"
+          },
+          "changed": {
+            "description": "The services whose code the update changed: the only ones it rebuilt or\nrestarted, and the only way a deploy leaves the agent owing a restart.\nEvery service when nothing was pulled (an update asked of a current\ncheckout restarts the stack) and for a registry install.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "from": {
+            "type": "string"
+          },
+          "installed": {
+            "type": "boolean"
+          },
+          "pulled": {
+            "description": "The tail of what git said — 'Already up to date.' included.",
+            "type": "string"
+          },
+          "restarted": {
+            "description": "Service ids actually restarted.",
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "skipped": {
+            "description": "Why something asked for did not happen.",
+            "type": "string"
+          },
+          "to": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "built",
+          "changed",
+          "installed",
+          "pulled",
+          "restarted"
+        ]
+      },
       "NeutralMessage": {
         "anyOf": [
           {
-            "$ref": "#/components/schemas/NeutralUserMessage"
+            "$ref": "#/components/schemas/NeutralAssistantMessage"
           },
           {
-            "$ref": "#/components/schemas/NeutralAssistantMessage"
+            "$ref": "#/components/schemas/NeutralUserMessage"
           },
           {
             "$ref": "#/components/schemas/NeutralStreamMessage"
@@ -9623,6 +10371,203 @@
           "harness",
           "lastModified",
           "sessionId"
+        ]
+      },
+      "ModelInfo": {
+        "description": "One model a harness offers. `value` is the wire id; `resolvedModel` the alias.",
+        "type": "object",
+        "properties": {
+          "contextWindow": {
+            "description": "The model's context window in tokens, exactly as the harness reports it\n(opencode's provider `limit.context`, pi's `Model.contextWindow`, and for\nclaude the `modelUsage` window the hub last observed). Absent means\nunknown — never a guess.",
+            "type": "number"
+          },
+          "description": {
+            "type": "string"
+          },
+          "displayName": {
+            "type": "string"
+          },
+          "released": {
+            "description": "ISO date the model was released, when the catalog source says.",
+            "type": "string"
+          },
+          "resolvedModel": {
+            "type": "string"
+          },
+          "supportedEffortLevels": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/EffortLevel"
+            }
+          },
+          "supportsAdaptiveThinking": {
+            "type": "boolean"
+          },
+          "supportsAutoMode": {
+            "type": "boolean"
+          },
+          "supportsEffort": {
+            "description": "Whether this model has an effort scale, and which of its stops it reaches.\nThe pair is the *only* thing that decides what an effort control offers —\n`xhigh` and `max` are model-dependent, and a hardcoded list of which models\nhave them is a list that is wrong by the next release.",
+            "type": "boolean"
+          },
+          "supportsFastMode": {
+            "type": "boolean"
+          },
+          "value": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "displayName",
+          "value"
+        ]
+      },
+      "McpServerStatus": {
+        "type": "object",
+        "properties": {
+          "config": {
+            "type": "object"
+          },
+          "error": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "scope": {
+            "type": "string"
+          },
+          "serverInfo": {
+            "type": "object",
+            "properties": {
+              "name": {
+                "type": "string"
+              },
+              "version": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "name"
+            ]
+          },
+          "status": {
+            "type": "string"
+          },
+          "tools": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "name": {
+                  "type": "string"
+                },
+                "description": {
+                  "type": "string"
+                }
+              },
+              "required": [
+                "name"
+              ]
+            }
+          }
+        },
+        "required": [
+          "name",
+          "status"
+        ]
+      },
+      "SupportedCommands": {
+        "description": "What {@link CONTROL_SUPPORTED_COMMANDS} answers, on every harness: the\nsession's `/` menu. A harness with no slash commands (pi) answers an empty\nlist, never nothing, so the menu reads one shape whoever answered.",
+        "type": "array",
+        "items": {
+          "$ref": "#/components/schemas/SlashCommand"
+        }
+      },
+      "AuthState": {
+        "description": "Whether a machine's daemon can actually start sessions for a harness.\n`unreadable-credentials` is macOS's own failure: Claude Code keeps its\ncredentials in the login keychain, and a daemon outside the GUI session is\nrefused the secret (`errSecInteractionNotAllowed`). Generalized: every\nharness reports its own auth word through the same three states.",
+        "enum": [
+          "authenticated",
+          "unauthenticated",
+          "unreadable-credentials"
+        ],
+        "type": "string"
+      },
+      "NeutralTask": {
+        "description": "One task of a session's plan, as every harness can express. Claude Code keeps\na ledger file per task; opencode has a native `todo` list; pi has neither.\nThe dashboard renders this one shape regardless of which answered.",
+        "type": "object",
+        "properties": {
+          "blockedBy": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "blocks": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "description": {
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "owner": {
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "completed",
+              "in_progress",
+              "pending"
+            ],
+            "type": "string"
+          },
+          "subject": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "blockedBy",
+          "blocks",
+          "id",
+          "status",
+          "subject"
+        ]
+      },
+      "ToolStatus": {
+        "type": "object",
+        "properties": {
+          "at": {
+            "description": "When this was learnt, ms epoch.",
+            "type": "number"
+          },
+          "detail": {
+            "description": "`failed`: the tail of the installer's stderr. `unsupported`: what is\nmissing, named exactly — 'needs npm (Node 20+)' beats a grey chip.",
+            "type": "string"
+          },
+          "id": {
+            "type": "string"
+          },
+          "method": {
+            "description": "The {@link ToolInstallMethod.label} that installed it or failed trying.",
+            "type": "string"
+          },
+          "state": {
+            "$ref": "#/components/schemas/ToolState"
+          },
+          "version": {
+            "description": "Set when `installed`.",
+            "type": "string"
+          }
+        },
+        "required": [
+          "at",
+          "id",
+          "state"
         ]
       },
       "DelegateType": {
@@ -11228,6 +12173,10 @@
           "auth": {
             "$ref": "#/components/schemas/AuthState"
           },
+          "authReason": {
+            "description": "Why sign-in is unavailable or could not be checked, without credential data.",
+            "type": "string"
+          },
           "capabilities": {
             "$ref": "#/components/schemas/HarnessCapabilities"
           },
@@ -11255,15 +12204,6 @@
           "harness",
           "installed"
         ]
-      },
-      "AuthState": {
-        "description": "Whether a machine's daemon can actually start sessions for a harness.\n`unreadable-credentials` is macOS's own failure: Claude Code keeps its\ncredentials in the login keychain, and a daemon outside the GUI session is\nrefused the secret (`errSecInteractionNotAllowed`). Generalized: every\nharness reports its own auth word through the same three states.",
-        "enum": [
-          "authenticated",
-          "unauthenticated",
-          "unreadable-credentials"
-        ],
-        "type": "string"
       },
       "HarnessCapabilities": {
         "description": "What a harness can do, so the dashboard gates features instead of guessing.",
@@ -11416,55 +12356,6 @@
         ],
         "type": "string"
       },
-      "ModelInfo": {
-        "description": "One model a harness offers. `value` is the wire id; `resolvedModel` the alias.",
-        "type": "object",
-        "properties": {
-          "contextWindow": {
-            "description": "The model's context window in tokens, exactly as the harness reports it\n(opencode's provider `limit.context`, pi's `Model.contextWindow`, and for\nclaude the `modelUsage` window the hub last observed). Absent means\nunknown — never a guess.",
-            "type": "number"
-          },
-          "description": {
-            "type": "string"
-          },
-          "displayName": {
-            "type": "string"
-          },
-          "released": {
-            "description": "ISO date the model was released, when the catalog source says.",
-            "type": "string"
-          },
-          "resolvedModel": {
-            "type": "string"
-          },
-          "supportedEffortLevels": {
-            "type": "array",
-            "items": {
-              "$ref": "#/components/schemas/EffortLevel"
-            }
-          },
-          "supportsAdaptiveThinking": {
-            "type": "boolean"
-          },
-          "supportsAutoMode": {
-            "type": "boolean"
-          },
-          "supportsEffort": {
-            "description": "Whether this model has an effort scale, and which of its stops it reaches.\nThe pair is the *only* thing that decides what an effort control offers —\n`xhigh` and `max` are model-dependent, and a hardcoded list of which models\nhave them is a list that is wrong by the next release.",
-            "type": "boolean"
-          },
-          "supportsFastMode": {
-            "type": "boolean"
-          },
-          "value": {
-            "type": "string"
-          }
-        },
-        "required": [
-          "displayName",
-          "value"
-        ]
-      },
       "EffortLevel": {
         "description": "How hard the model thinks, and how much it spends doing it: Claude Code's\neffort scale, in its own order. Hand-written rather than tunnelled from the\nSDK — nothing in this file imports a harness SDK, and `@cawco/core` has no\ndependencies at all — but it is the SDK's `EffortLevel` verbatim, so the\nclaude adapter hands it straight on.\n\nEffort is not only thinking depth. A lower level also buys fewer and more\nconsolidated tool calls, less preamble and terser confirmations; a higher one\nspends tokens in all of those places. A harness with no such knob reports\n`effort: false` rather than mapping onto this.",
         "enum": [
@@ -11475,6 +12366,32 @@
           "xhigh"
         ],
         "type": "string"
+      },
+      "GeneratedImage": {
+        "type": "object",
+        "properties": {
+          "billing": {
+            "type": "string",
+            "enum": [
+              "chatgpt_subscription"
+            ]
+          },
+          "height": {
+            "type": "number"
+          },
+          "path": {
+            "type": "string"
+          },
+          "width": {
+            "type": "number"
+          }
+        },
+        "required": [
+          "billing",
+          "height",
+          "path",
+          "width"
+        ]
       },
       "ContinuationJob": {
         "description": "A \"continue in new session\" the hub is carrying, as every dashboard follows\nit: summarise the source, then start the target seeded with the summary.\nThe hub owns it from the POST that starts it to its end; only a Cancel\n(`DELETE /api/continuations/:id`) stops it.",
@@ -14027,6 +14944,14 @@
           "hash"
         ]
       },
+      "WorkspaceState": {
+        "description": "A workspace's life: `active` while its checkout is kept; `archived` once its boundary and clone are gone.",
+        "enum": [
+          "active",
+          "archived"
+        ],
+        "type": "string"
+      },
       "UsageLimitsResponse": {
         "description": "What `/api/usage/limits` returns: every machine's latest readings.",
         "type": "object",
@@ -16441,6 +17366,130 @@
           "id",
           "path"
         ]
+      },
+      "SentMessage": {
+        "description": "A message sent to a session, by the reader or by cawco. `uuid` is its one\nidentity from the press to a reload: the dashboard's command id for a\nreader's send, minted where the hub builds its own. The hub keeps one\n{@link SendRecord} under it, and every copy of the message on every screen\nis drawn from that record.",
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/NeutralUserMessage"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "origin": {
+                "$ref": "#/components/schemas/NeutralOrigin"
+              },
+              "uuid": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "origin",
+              "uuid"
+            ]
+          }
+        ]
+      },
+      "NeutralOrigin": {
+        "anyOf": [
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "human"
+                ]
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "peer"
+                ]
+              },
+              "from": {
+                "type": "string"
+              },
+              "name": {
+                "type": "string"
+              },
+              "fromSession": {
+                "type": "string"
+              },
+              "body": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          },
+          {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "system"
+                ]
+              },
+              "name": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind"
+            ]
+          }
+        ]
+      },
+      "RepoInfo": {
+        "description": "One repository a machine can {@link SpawnPayload.bootstrap} from.",
+        "type": "object",
+        "properties": {
+          "description": {
+            "type": "string"
+          },
+          "nameWithOwner": {
+            "type": "string"
+          },
+          "updatedAt": {
+            "type": "string"
+          },
+          "visibility": {
+            "enum": [
+              "INTERNAL",
+              "PRIVATE",
+              "PUBLIC"
+            ],
+            "type": "string"
+          }
+        },
+        "required": [
+          "description",
+          "nameWithOwner",
+          "updatedAt",
+          "visibility"
+        ]
+      },
+      "ToolState": {
+        "description": "What a probe or an install attempt found. The unit every surface renders.",
+        "enum": [
+          "failed",
+          "installed",
+          "installing",
+          "missing",
+          "unsupported"
+        ],
+        "type": "string"
       }
     }
   }

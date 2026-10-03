@@ -305,9 +305,10 @@ public final class Ledger {
         machineId: String,
         payload: OpenAPIValueContainer,
         settlesAt: SettleStage,
-        effects: Effects = Effects()
+        effects: Effects = Effects(),
+        commandId: String = UUID().uuidString.lowercased()
     ) -> String {
-        let id = UUID().uuidString.lowercased()
+        let id = commandId
         let now = clock.now
         commands[id] = Command(id: id, kind: kind, sessionId: sessionId, settlesAt: settlesAt, at: now, changedAt: now)
         self.effects[id] = effects
@@ -321,6 +322,25 @@ public final class Ledger {
         }
         sweepCommands()
         return id
+    }
+
+    /// Waits for the protocol's terminal acknowledgement, preserving the observable command record.
+    public func execute(kind: Components.Schemas.CommandKind, sessionId: String, machineId: String,
+                        payload: (String) throws -> OpenAPIValueContainer) async throws -> Command {
+        try Task.checkCancellation()
+        let id = UUID().uuidString.lowercased()
+        let body = try payload(id)
+        return try await withCheckedThrowingContinuation { continuation in
+            submit(kind: kind, sessionId: sessionId, machineId: machineId, payload: body,
+                   settlesAt: kind == .send ? .accepted : .applied,
+                   effects: Effects(settled: { [unowned self] stage, reason in
+                       if stage == .failed {
+                           continuation.resume(throwing: HubConnection.ControlError(message: reason ?? "The command failed."))
+                       } else if let command = commands[id] {
+                           continuation.resume(returning: command)
+                       }
+                   }), commandId: id)
+        }
     }
 
     /// Which stage may follow which. Terminal is terminal.

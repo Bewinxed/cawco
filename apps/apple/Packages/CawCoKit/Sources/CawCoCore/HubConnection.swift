@@ -239,6 +239,14 @@ public final class HubConnection {
         address.map { Client(hub: $0) }
     }
 
+    /// Typed REST operations, grouped by the feature that owns them.
+    public var api: HubAPI {
+        get throws {
+            guard let client else { throw URLError(.notConnectedToInternet) }
+            return HubAPI(client: client)
+        }
+    }
+
     /// Marks sessions and runs (`run:<id>`) seen on the hub: `look`, the owner
     /// had it in front after it ended; `archive`, taken off Finished without
     /// opening it, which the hub refuses for anything still doing something.
@@ -389,24 +397,41 @@ public final class HubConnection {
     }
 
     /// A machine-scoped control call, answered by its `control_result`.
-    private func control(_ machineId: String, method: String, args: [(any Sendable)?]) async throws -> OpenAPIValueContainer? {
+    func control(_ machineId: String, instanceId: String? = nil, harness: Components.Schemas.ControlPayload.HarnessPayload? = nil,
+                 method: String, args: [(any Sendable)?], timeout: Duration = controlTimeout) async throws -> OpenAPIValueContainer? {
+        let requestId = UUID().uuidString.lowercased()
+        let payload = Components.Schemas.ControlPayload(
+            args: try args.map { value in
+                if let value = value as? OpenAPIValueContainer { return value }
+                return try OpenAPIValueContainer(unvalidatedValue: value)
+            },
+            harness: harness, instanceId: instanceId, method: method, requestId: requestId)
+        return try await request(machineId: machineId, instanceId: instanceId, verb: .control,
+                                 requestId: requestId, payload: payload, timeout: timeout)
+    }
+
+    /// All correlated socket verbs share the same reply, disconnect and cancellation paths.
+    func request(machineId: String, instanceId: String? = nil, verb: Components.Schemas.Verb,
+                 requestId: String, payload: some Encodable, timeout: Duration = controlTimeout) async throws -> OpenAPIValueContainer? {
         guard socket == .connected, let live else {
             throw URLError(.notConnectedToInternet)
         }
-        let requestId = UUID().uuidString.lowercased()
-        let envelope: [String: (any Sendable)?] = [
-            "verb": "control",
-            "machineId": machineId,
-            "requestId": requestId,
-            "payload": ["requestId": requestId, "method": method, "args": args] as [String: (any Sendable)?],
-        ]
-        let data = try Wire.encoder().encode(OpenAPIValueContainer(unvalidatedValue: envelope))
-        return try await withCheckedThrowingContinuation { continuation in
-            waiters[requestId] = continuation
-            live.post(data)
-            Task { [weak self] in
-                try? await Task.sleep(for: Self.controlTimeout)
-                self?.waiters.removeValue(forKey: requestId)?.resume(throwing: URLError(.timedOut))
+        let envelope = Components.Schemas.Envelope(instanceId: instanceId, machineId: machineId,
+            payload: try Wire.transcode(payload, as: OpenAPIObjectContainer.self), requestId: requestId, verb: verb)
+        let data = try Wire.encoder().encode(envelope)
+        return try await withTaskCancellationHandler {
+            try Task.checkCancellation()
+            return try await withCheckedThrowingContinuation { continuation in
+                waiters[requestId] = continuation
+                live.post(data)
+                Task { [weak self] in
+                    try? await Task.sleep(for: timeout)
+                    self?.waiters.removeValue(forKey: requestId)?.resume(throwing: URLError(.timedOut))
+                }
+            }
+        } onCancel: {
+            Task { @MainActor [weak self] in
+                self?.waiters.removeValue(forKey: requestId)?.resume(throwing: CancellationError())
             }
         }
     }
@@ -466,6 +491,8 @@ public final class HubConnection {
             } else {
                 waiter.resume(throwing: ControlError(message: result.error ?? "The machine could not carry out that request."))
             }
+        case let .error(requestId, message):
+            if let requestId { waiters.removeValue(forKey: requestId)?.resume(throwing: ControlError(message: message)) }
         case let .usage(frame):
             // The small limits frame the hub pushes on each report (USAGE-SPEC.md §6.4).
             fleet.adopt(limits: frame.limits.map { ($0.machineId, $0.payload, $0.openCodeGo) })
