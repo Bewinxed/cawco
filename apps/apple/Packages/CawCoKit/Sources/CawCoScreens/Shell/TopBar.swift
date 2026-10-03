@@ -342,9 +342,17 @@ final class TopBarCluster: UIView {
     }
 
     /// The hub's word on the bar: what waits on the operator, which machines are up.
-    func configure(blocked: Int, online: Int, anyDown: Bool, assistantOpen: Bool) {
+    func configure(blocked: Int, online: Int, tone: MachineHealth.Tone?, assistantOpen: Bool) {
         machinesCount.text = "\(online)"
-        machinesGlyph.tintColor = anyDown ? Palette.statusFailGlyph : Palette.inkMuted
+        // The glyph alone carries a machine in trouble; it crosses over `durFade`, never pulses.
+        let ink: UIColor = switch tone {
+        case .fail: Palette.statusFailGlyph
+        case .attn: Palette.statusAttnGlyph
+        case nil: Palette.inkMuted
+        }
+        if machinesGlyph.tintColor != ink {
+            Motion.easeOut.animator(Motion.durFade) { self.machinesGlyph.tintColor = ink }.startAnimation()
+        }
         machines.accessibilityValue = "\(online) online"
         assistant.expanded = assistantOpen
         assistant.accessibilityLabel = assistantOpen ? "Close assistant" : "Open assistant"

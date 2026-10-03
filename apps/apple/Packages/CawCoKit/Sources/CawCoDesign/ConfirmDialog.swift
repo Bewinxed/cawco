@@ -233,7 +233,7 @@ public final class ScrimPresentation: UIPresentationController {
 }
 
 /// `kit-dialog-in` / `-out`: 6pt of rise and a fade.
-private final class DialogAnimator: NSObject, UIViewControllerAnimatedTransitioning {
+final class DialogAnimator: NSObject, UIViewControllerAnimatedTransitioning {
     private let presenting: Bool
 
     init(presenting: Bool) {

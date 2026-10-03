@@ -88,6 +88,9 @@ public enum Glyph: String, CaseIterable, Sendable {
     case trash = "trash-bin-minimalistic-bold-duotone"
     case download = "download-bold-duotone"
     case more = "menu-dots-bold-duotone"
+    case machineLaptop = "laptop-bold-duotone"
+    case machineServer = "server-square-bold-duotone"
+    case documents = "documents-bold-duotone"
     case close
     case tick
     case plus

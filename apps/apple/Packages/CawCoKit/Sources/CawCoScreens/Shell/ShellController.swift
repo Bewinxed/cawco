@@ -9,8 +9,8 @@ import UIKit
 /// grip) and its secondary column the place; on a compact width the split's
 /// compact column is one stack whose root is the place, the board pushing a
 /// conversation in over it, and the rail is a sheet the bar's burger opens.
-final class ShellController: UISplitViewController, UISplitViewControllerDelegate, SidebarHost {
-    private let hub: HubConnection
+final class ShellController: UISplitViewController, UISplitViewControllerDelegate, SidebarHost, MachinesHost {
+    let hub: HubConnection
     private let home: HomeModel
 
     private(set) var destination: ShellDestination = .fleet
@@ -358,16 +358,32 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
 
     private func openJump() {}
 
-    private func openMachines(from _: UIView) {}
+    /// MachinesButton's popover, hung from the button's end.
+    private func openMachines(from source: UIView) {
+        KitPopover.present(MachinesPopoverController(host: self), from: source, in: self, align: .end,
+                           entrance: MachinesPopoverController.entrance)
+    }
+
+    /// Connect a machine (AddMachineDialog), over whatever is up.
+    func addMachine() {
+        dialogPresenter.present(AddMachineController(hub: hub), animated: true)
+    }
+
+    /// The topmost controller this window shows: what a dialog opens over.
+    var dialogPresenter: UIViewController {
+        var top: UIViewController = self
+        while let next = top.presentedViewController, !next.isBeingDismissed { top = next }
+        return top
+    }
 
     /// The bar's facts, from the hub's word.
     private func refreshBars() {
         let fleet = hub.fleet
         let blocked = fleet.rows.filter { $0.isLive && home.activity($0.id) == .blocked }.count
         let online = fleet.machines.filter { $0.status == "online" }.count
-        let down = fleet.machines.contains { $0.status != "online" }
+        let tone = MachineHealth.tone(fleet.machines, hubBuild: fleet.hubBuild)
         for cluster in [mainCluster, compactCluster, sessionCluster] {
-            cluster.configure(blocked: blocked, online: online, anyDown: down, assistantOpen: assistantOpen)
+            cluster.configure(blocked: blocked, online: online, tone: tone, assistantOpen: assistantOpen)
         }
     }
 

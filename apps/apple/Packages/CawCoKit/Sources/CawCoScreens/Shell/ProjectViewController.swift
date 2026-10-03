@@ -18,6 +18,7 @@ final class ProjectViewController: ObservedViewController {
     private let sessions = UIStackView()
     private let missing = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted)
     private var showMore = false
+    private var inventory: MachineInventoryView!
     /// Stored sessions shown before "Show more".
     private static let storedFirst = 8
 
@@ -61,6 +62,10 @@ final class ProjectViewController: ObservedViewController {
         let machine = UIStackView(arrangedSubviews: [machineGlyph, machineName, presence])
         machine.spacing = 6
         machine.alignment = .center
+        // The folder truncates (`truncate`); the machine keeps its name.
+        folder.setContentCompressionResistancePriority(.defaultLow - 1, for: .horizontal)
+        machineName.setContentCompressionResistancePriority(.required, for: .horizontal)
+        machine.setContentCompressionResistancePriority(.required, for: .horizontal)
         let meta = UIStackView(arrangedSubviews: [folder, machine])
         meta.spacing = Space.space3
         meta.alignment = .center
@@ -86,6 +91,10 @@ final class ProjectViewController: ObservedViewController {
         head.spacing = Space.space4
         titles.setContentHuggingPriority(.defaultLow, for: .horizontal)
         page.addArrangedSubview(head)
+
+        // What its machine has (MachineInventory, MCP servers).
+        inventory = MachineInventoryView(hub: context.hub)
+        page.addArrangedSubview(inventory)
 
         // Sessions, in a card.
         let card = TileView(radius: Radius.radiusLg)
@@ -130,6 +139,8 @@ final class ProjectViewController: ObservedViewController {
         machineGlyph.glyph = Glyph.os(machine?.os ?? "")
         machineName.text = machine.map { Naming.machineLabel($0.hostname) } ?? project.machineId
         let online = machine?.status == "online"
+        inventory.isHidden = machine == nil
+        if let machine { inventory.configure(machines: [machine]) }
         presence.backgroundColor = online ? Palette.success : Palette.mutedForeground.withAlphaComponent(0.4)
 
         for row in sessions.arrangedSubviews {

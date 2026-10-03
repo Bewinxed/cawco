@@ -10,15 +10,37 @@ import UIKit
 public final class KitPopover: NSObject, UIViewControllerTransitioningDelegate {
     public enum Align: Sendable { case start, end }
 
+    /// How the card arrives: from `scale` and `rise` toward its trigger, to
+    /// rest over `duration` on `curve`. A popover may set its own
+    /// (`--pop-scale`, `--pop-rise`, its open duration and timing).
+    public struct Entrance: Sendable {
+        public var scale: Double
+        public var rise: Double
+        public var duration: Double
+        public var curve: TimingCurve
+
+        public init(scale: Double, rise: Double, duration: Double, curve: TimingCurve) {
+            self.scale = scale
+            self.rise = rise
+            self.duration = duration
+            self.curve = curve
+        }
+
+        /// `.kit-pop`'s own: the pop scale and rise over `durPop` on the drawer curve.
+        public static let standard = Entrance(scale: Motion.popScale, rise: Motion.popRise, duration: Motion.durPop, curve: Motion.easeDrawer)
+    }
+
     private weak var source: UIView?
     private let align: Align
     private let offset: Double
+    private let entrance: Entrance
 
     /// Presents `content` off `source`; keep the returned object for as long as it is up.
     @MainActor
     @discardableResult
-    public static func present(_ content: UIViewController, from source: UIView, in presenter: UIViewController, align: Align = .start, offset: Double = 6) -> KitPopover {
-        let popover = KitPopover(source: source, align: align, offset: offset)
+    public static func present(_ content: UIViewController, from source: UIView, in presenter: UIViewController, align: Align = .start, offset: Double = 6,
+                               entrance: Entrance = .standard) -> KitPopover {
+        let popover = KitPopover(source: source, align: align, offset: offset, entrance: entrance)
         content.modalPresentationStyle = .custom
         content.transitioningDelegate = popover
         objc_setAssociatedObject(content, &KitPopover.key, popover, .OBJC_ASSOCIATION_RETAIN_NONATOMIC)
@@ -28,10 +50,11 @@ public final class KitPopover: NSObject, UIViewControllerTransitioningDelegate {
 
     nonisolated(unsafe) private static var key = 0
 
-    private init(source: UIView, align: Align, offset: Double) {
+    private init(source: UIView, align: Align, offset: Double, entrance: Entrance) {
         self.source = source
         self.align = align
         self.offset = offset
+        self.entrance = entrance
     }
 
     public func presentationController(forPresented presented: UIViewController, presenting: UIViewController?, source _: UIViewController) -> UIPresentationController? {
@@ -39,11 +62,11 @@ public final class KitPopover: NSObject, UIViewControllerTransitioningDelegate {
     }
 
     public func animationController(forPresented _: UIViewController, presenting _: UIViewController, source _: UIViewController) -> (any UIViewControllerAnimatedTransitioning)? {
-        Animator(presenting: true)
+        Animator(presenting: true, entrance: entrance)
     }
 
     public func animationController(forDismissed _: UIViewController) -> (any UIViewControllerAnimatedTransitioning)? {
-        Animator(presenting: false)
+        Animator(presenting: false, entrance: entrance)
     }
 
     final class Presentation: UIPresentationController {
@@ -126,13 +149,15 @@ public final class KitPopover: NSObject, UIViewControllerTransitioningDelegate {
 
     private final class Animator: NSObject, UIViewControllerAnimatedTransitioning {
         private let presenting: Bool
+        private let entrance: Entrance
 
-        init(presenting: Bool) {
+        init(presenting: Bool, entrance: Entrance) {
             self.presenting = presenting
+            self.entrance = entrance
         }
 
         func transitionDuration(using _: (any UIViewControllerContextTransitioning)?) -> TimeInterval {
-            presenting ? Motion.durPop : Motion.durExit
+            presenting ? entrance.duration : Motion.durExit
         }
 
         func animateTransition(using context: any UIViewControllerContextTransitioning) {
@@ -143,8 +168,8 @@ public final class KitPopover: NSObject, UIViewControllerTransitioningDelegate {
             }
             let presentation = controller.presentationController as? Presentation
             let still = UIAccessibility.isReduceMotionEnabled
-            let rise = (presentation?.above ?? false) ? Motion.popRise : -Motion.popRise
-            let away = still ? .identity : CGAffineTransform(translationX: 0, y: rise).scaledBy(x: Motion.popScale, y: Motion.popScale)
+            let rise = (presentation?.above ?? false) ? entrance.rise : -entrance.rise
+            let away = still ? .identity : CGAffineTransform(translationX: 0, y: rise).scaledBy(x: entrance.scale, y: entrance.scale)
             if presenting {
                 context.containerView.addSubview(view)
                 view.frame = context.finalFrame(for: controller)
@@ -156,7 +181,7 @@ public final class KitPopover: NSObject, UIViewControllerTransitioningDelegate {
                 view.alpha = 0
                 view.transform = away
             }
-            let animator = Motion.easeDrawer.animator(transitionDuration(using: context)) { [presenting] in
+            let animator = entrance.curve.animator(transitionDuration(using: context)) { [presenting] in
                 view.alpha = presenting ? 1 : 0
                 view.transform = presenting ? .identity : away
             }

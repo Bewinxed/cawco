@@ -311,16 +311,9 @@ final class SidebarViewController: ObservedViewController {
         usage.backgroundConfiguration = ground
         usage.translatesAutoresizingMaskIntoConstraints = false
         usage.onOpen = { [weak self] in self?.host?.showLimits() }
-        let link = UIButton(type: .system)
-        link.translatesAutoresizingMaskIntoConstraints = false
-        link.setAttributedTitle(NSAttributedString(string: "Usage", attributes: TypeScale.typeMeta.attributes(color: Palette.inkMuted)), for: .normal)
-        link.addAction(UIAction { [weak self] _ in self?.host?.go(.usage) }, for: .primaryActionTriggered)
-        usage.addSubview(link)
-        NSLayoutConstraint.activate([
-            usage.heightAnchor.constraint(equalToConstant: 44),
-            link.topAnchor.constraint(equalTo: usage.topAnchor, constant: 0),
-            link.trailingAnchor.constraint(equalTo: usage.trailingAnchor, constant: 0),
-        ])
+        // The cell draws the web's `.usage-link` corner link itself.
+        usage.onPage = { [weak self] in self?.host?.go(.usage) }
+        usage.heightAnchor.constraint(equalToConstant: 44).isActive = true
 
         let user = RailRow(height: nil, leading: 10, trailing: 10, gap: 10)
         navConstraint(user)

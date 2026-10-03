@@ -105,6 +105,10 @@ const SOLAR_ICONS = [
   "trash-bin-minimalistic-bold-duotone", // IconTrash
   "download-bold-duotone", // IconDownload
   "menu-dots-bold-duotone", // IconMore
+  // A machine's tile (ui/machine-row machineIcon) and the join copy box.
+  "laptop-bold-duotone",
+  "server-square-bold-duotone",
+  "documents-bold-duotone", // CopyBox
 ];
 
 /** The dashboard's own glyphs, drawn where Solar has none. */
