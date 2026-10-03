@@ -385,8 +385,8 @@ const continueBody = t.Object({
       ])
     ),
     // The mode the new session is asked to run in, and the one it takes when
-    // none is asked (the caller's own). A harness with modes gets one of the
-    // two or the continuation is refused; one with none (pi) records none and
+    // none is asked (the caller's own, else bypassPermissions). A harness with
+    // modes gets an explicit mode; one with none (pi) records none and
     // refuses one asked of it. The hub's `settleMode` decides.
     permissionMode: t.Optional(permissionModeSchema),
     fallbackPermissionMode: t.Optional(permissionModeSchema),
@@ -2723,8 +2723,8 @@ export const createServer = ({
    * workflow, continuation, revive, restore). A harness that reports modes
    * runs in one it offers: the one asked for, else `fallback` — what the hub
    * picks when nobody asked (a work item's bypass, the caller's or the tree's
-   * own mode, the row's last) — and with neither nothing starts rather than
-   * fall to the machine's default. A harness that reports none (pi) records
+   * own mode, the row's last) — else explicit `bypassPermissions`, never the
+   * machine's default. A harness that reports none (pi) records
    * none: a fallback is dropped, and a mode asked of it is refused. A machine
    * that has not reported the harness is taken at its word.
    */
@@ -2744,12 +2744,7 @@ export const createServer = ({
           }
         : { payload: rest, permissionMode: null };
     }
-    const mode = asked ?? fallback ?? undefined;
-    if (!mode) {
-      return {
-        refusal: `A ${harness} session must name its permission mode; none was given, so it would have run on the machine's default. Nothing was started.`,
-      };
-    }
+    const mode = asked ?? fallback ?? "bypassPermissions";
     const unfit = modeRefusal(machineId, harness, mode);
     return unfit
       ? { refusal: `${unfit} Nothing was started.` }
@@ -10025,9 +10020,8 @@ export const createServer = ({
               // No session the fleet starts takes its model from a machine's
               // default: a dashboard spawn always names one, and one that does
               // not is a path that forgot to. Its permission mode is the one
-              // rule's (`settleMode`), with nothing to fall back on: the
-              // dashboard says it for a harness that has modes, and never for
-              // one that has none.
+              // rule's (`settleMode`): explicit bypass when omitted for a
+              // harness with modes, and none for one that has none.
               const settled = peek(message.payload, "model")
                 ? settleMode(message.machineId, message.payload as SpawnPayload)
                 : {
