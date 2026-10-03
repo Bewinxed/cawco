@@ -966,6 +966,35 @@ async function reached<T extends { response?: Response; error?: unknown }>(
   return result;
 }
 
+/**
+ * The SSE reader owns cancellation once headers arrive. Aborting fetch's body
+ * first makes the SDK's unobserved reader.cancel() reject (SDK 1.18.34).
+ * Until headers arrive the caller still cancels the actual connection.
+ */
+export async function fetchOpencode(
+  input: RequestInfo | URL,
+  init?: RequestInit
+): Promise<Response> {
+  const request = new Request(input, init);
+  if (new URL(request.url).pathname !== "/event") {
+    return await fetch(request);
+  }
+  const { signal } = request;
+  signal.throwIfAborted();
+  const connecting = new AbortController();
+  const stop = () => connecting.abort(signal.reason);
+  signal.addEventListener("abort", stop, { once: true });
+  try {
+    const response = await fetch(
+      new Request(request, { signal: connecting.signal })
+    );
+    signal.throwIfAborted();
+    return response;
+  } finally {
+    signal.removeEventListener("abort", stop);
+  }
+}
+
 /** `provider/model` or a bare model id, into opencode's two-part model reference. */
 const splitModel = (
   model: string
@@ -3764,7 +3793,7 @@ export class OpencodeHarness implements Harness {
       init?: RequestInit
     ): Promise<Response> => {
       try {
-        return await fetch(input, init);
+        return await fetchOpencode(input, init);
       } catch (error) {
         const signal = input instanceof Request ? input.signal : init?.signal;
         if (!signal?.aborted && this.#client === client) {
