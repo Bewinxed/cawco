@@ -23,6 +23,15 @@
 /** The harnesses cawco can spawn sessions on. Adding one is a new adapter. */
 export type HarnessKind = "claude" | "opencode" | "pi";
 
+/** Reconfigure a retained harness in place; never stop or restart its session. */
+export const INSTALL_SESSION_CREDENTIAL = "installSessionCredential";
+
+export interface SessionCredentialInstall {
+  harness: HarnessKind;
+  installed: true;
+  instanceId: string;
+}
+
 export const HARNESSES: readonly HarnessKind[] = ["claude", "opencode", "pi"];
 
 /** How a session answers tool permissions. The union is Claude Code's; others map onto it. */

@@ -40,6 +40,7 @@ import {
   FLEET_STATUS,
   FLEET_SYNC,
   GENERATE_IMAGE,
+  INSTALL_SESSION_CREDENTIAL,
   PREVIEW_START,
   PREVIEW_STOP,
   RESOLVE_PERMISSION,
@@ -62,6 +63,7 @@ import { generateImage } from "./image-generation";
 import { isMachineAgent } from "./machine-agent";
 import { prepareFleetMcp } from "./mcp-launcher";
 import { startPreview, stopPreview, stopPreviews } from "./preview";
+import { acknowledgeSessionCredential } from "./session-identity";
 import { procEpoch } from "./sessiond-client";
 import { installTool, probeTools } from "./tools";
 import { type UpdateOptions, updateCheckout } from "./update";
@@ -876,6 +878,25 @@ export class SessionSupervisor {
     }
   }
 
+  async #installCredential(
+    session: HarnessSession,
+    instanceId: string,
+    credential: string
+  ): Promise<void> {
+    try {
+      await session.control(INSTALL_SESSION_CREDENTIAL, [credential]);
+    } catch (problem) {
+      const message =
+        problem instanceof Error ? problem.message : String(problem);
+      warn(`session ${instanceId} credential installation waits: ${message}`);
+      await acknowledgeSessionCredential(credential, message).catch((error) => {
+        warn(
+          `session ${instanceId} credential failure could not be recorded: ${String(error)}`
+        );
+      });
+    }
+  }
+
   async #spawn(payload: SpawnPayload): Promise<void> {
     const { instanceId, cwd, harness: kind, scratch, requestId: ack } = payload;
     const adapter = this.#adapter(kind);
@@ -924,7 +945,14 @@ export class SessionSupervisor {
       // boundary, and does not start without one: the refusal is the spawn's.
       const boundary = await boundaryFor(payload.workspace);
       const holder: { session: HarnessSession | null } = { session: null };
-      const ctx = this.#context(instanceId, workdir, adapter, holder, boundary);
+      const ctx = this.#context(
+        instanceId,
+        workdir,
+        adapter,
+        holder,
+        boundary,
+        payload.sessionCredential
+      );
 
       if (payload.resume) {
         this.#resumable.set(instanceId, {
@@ -948,6 +976,13 @@ export class SessionSupervisor {
       holder.session = session;
       this.#sessions.set(instanceId, session);
       session.attached?.();
+      if (payload.sessionCredential) {
+        await this.#installCredential(
+          session,
+          instanceId,
+          payload.sessionCredential
+        );
+      }
       // A reattach that met a running turn said so before there was a session
       // to carry the pulse ({@link #emitPulse} drops it): said now.
       if (this.#busy.has(instanceId)) {
@@ -994,12 +1029,14 @@ export class SessionSupervisor {
     workdir: string,
     adapter: Harness,
     holder: { session: HarnessSession | null },
-    boundary?: Boundary
+    boundary?: Boundary,
+    sessionCredential?: string
   ): SessiondAwareContext {
     return {
       instanceId,
       cwd: workdir,
       ...(boundary ? { boundary } : {}),
+      ...(sessionCredential ? { sessionCredential } : {}),
       /**
        * The sessiond line the NEXT frame is derived from. Optional on purpose:
        * an adapter that does not read its frames off a ring never calls it,

@@ -80,6 +80,7 @@ import {
   ruleState,
   rules,
   sentMessages,
+  sessionIdentities,
   skills,
   supervisorConfig,
   supervisorEvents,
@@ -124,6 +125,7 @@ export type WorkflowLogRow = typeof workflowRunLog.$inferSelect;
 export type WorkflowNoticeRow = typeof workflowNotices.$inferSelect;
 export type WorkItemRow = typeof workItems.$inferSelect;
 export type WorkspaceRow = typeof workspaces.$inferSelect;
+export type SessionIdentityRow = typeof sessionIdentities.$inferSelect;
 
 /**
  * A session the returning daemon no longer carries. `resumes` is the whole
@@ -200,6 +202,10 @@ export type UsageLimitRow = typeof usageLimits.$inferSelect;
 export type UsageLimitHistoryRow = typeof usageLimitHistory.$inferSelect;
 
 export interface DbShape {
+  readonly acknowledgeSessionIdentity: (
+    instanceId: string,
+    hash: string
+  ) => boolean;
   /** A machine's workspaces that still have their checkout. */
   readonly activeWorkspacesOn: (machineId: string) => WorkspaceRow[];
   /** Adds counted capability uses, summing into any row already there. */
@@ -747,6 +753,13 @@ export interface DbShape {
     instanceId: string,
     states: SentMessageRow["state"][]
   ) => SentMessageRow[];
+  readonly sessionIdentity: (
+    instanceId: string
+  ) => SessionIdentityRow | undefined;
+  readonly sessionIdentityByHash: (
+    hash: string
+  ) => SessionIdentityRow | undefined;
+  readonly sessionIdentityError: (instanceId: string, error: string) => void;
   readonly setAgentBrowser: (machineId: string, available: boolean) => void;
   /** A machine's own account of what it came to, from the sync it just answered. */
   readonly setAgentFleet: (machineId: string, report: FleetSyncReport) => void;
@@ -812,6 +825,7 @@ export interface DbShape {
   readonly settleUnavailableRecovery: (id: string) => boolean;
   /** Names of fleet skills installed at or after `since`. */
   readonly skillsInstalledSince: (since: Date) => string[];
+  readonly stageSessionIdentity: (instanceId: string, hash: string) => void;
   readonly stopInstance: (id: string) => void;
   /**
    * The one-time reclassification a taxonomy change needs when the column is
@@ -1393,6 +1407,57 @@ const make = (path: string): DbShape => {
   };
 
   return {
+    sessionIdentity: (instanceId) =>
+      db
+        .select()
+        .from(sessionIdentities)
+        .where(eq(sessionIdentities.instanceId, instanceId))
+        .get(),
+    sessionIdentityByHash: (hash) =>
+      db
+        .select()
+        .from(sessionIdentities)
+        .where(
+          or(
+            eq(sessionIdentities.credentialHash, hash),
+            eq(sessionIdentities.pendingHash, hash)
+          )
+        )
+        .get(),
+    stageSessionIdentity: (instanceId, pendingHash) => {
+      db.insert(sessionIdentities)
+        .values({ instanceId, pendingHash })
+        .onConflictDoUpdate({
+          target: sessionIdentities.instanceId,
+          set: { pendingHash, error: null },
+        })
+        .run();
+    },
+    acknowledgeSessionIdentity: (instanceId, hash) => {
+      const changed = db
+        .update(sessionIdentities)
+        .set({
+          credentialHash: hash,
+          pendingHash: null,
+          installedAt: new Date(),
+          error: null,
+        })
+        .where(
+          and(
+            eq(sessionIdentities.instanceId, instanceId),
+            eq(sessionIdentities.pendingHash, hash)
+          )
+        )
+        .returning({ instanceId: sessionIdentities.instanceId })
+        .get();
+      return changed !== undefined;
+    },
+    sessionIdentityError: (instanceId, error) => {
+      db.update(sessionIdentities)
+        .set({ error })
+        .where(eq(sessionIdentities.instanceId, instanceId))
+        .run();
+    },
     getMcpServer: (name) =>
       db.select().from(mcpServers).where(eq(mcpServers.name, name)).get(),
     lastMcpSignInMachine: () =>

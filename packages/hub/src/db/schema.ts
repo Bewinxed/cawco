@@ -387,6 +387,15 @@ export const instances = sqliteTable("instances", {
   workItemId: text("work_item_id"),
 });
 
+/** Only hashes reach disk; installing a replacement does not revoke a live credential before ACK. */
+export const sessionIdentities = sqliteTable("session_identities", {
+  instanceId: text("instance_id").primaryKey(),
+  credentialHash: text("credential_hash").unique(),
+  pendingHash: text("pending_hash").unique(),
+  installedAt: timestamp("installed_at"),
+  error: text("error"),
+});
+
 /** A workspace's life: `active` while its checkout is kept; `archived` once its boundary and clone are gone. */
 export type WorkspaceState = "active" | "archived";
 

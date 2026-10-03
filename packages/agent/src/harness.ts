@@ -81,6 +81,8 @@ export interface HarnessContext {
   /** The harness's own session id, once the runtime names it. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   session(sessionId: string): void;
+  /** Delivered by the hub, held only by this session's MCP configuration/closures. */
+  readonly sessionCredential?: string;
 }
 
 /** One live session, owned by a harness. */

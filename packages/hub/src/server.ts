@@ -75,6 +75,7 @@ import {
   CONTROL_MODEL_CATALOG,
   CONTROL_RUN_COMMAND,
   CONTROL_SEARCH_TRANSCRIPTS,
+  CONTROL_WORKSPACE_BOUNDARY,
   contextFitRefusal,
   delegateAskText,
   deriveTitleFromFirstMessage,
@@ -89,6 +90,7 @@ import {
   hookProblem,
   IMAGE_GENERATION_TIMEOUT_MS,
   INSPECT_CONFIG,
+  INSTALL_SESSION_CREDENTIAL,
   isEffortLevel,
   MESSAGES_HELD,
   MESSAGES_READ,
@@ -159,6 +161,7 @@ import { resolveMarketplacePlugins } from "./plugins";
 import { previewFrame, previewTargets } from "./preview";
 import { type HubSocket, type RegistryShape, toDashboard } from "./registry";
 import { RuleEngine } from "./rules";
+import { createSessionIdentities } from "./session-identity";
 import { hashFiles, resolveSkill } from "./skills";
 import { createStreamHub } from "./stream";
 import { suggest } from "./suggest";
@@ -2691,10 +2694,20 @@ export const createServer = ({
    * relay — carries the workspace, so the machine runs its shell commands
    * inside the boundary or refuses to start it. Any other spawn passes as is.
    */
+  const identities = createSessionIdentities(db);
   const bounded = (payload: SpawnPayload): SpawnPayload => {
     const [row] = db.getInstancesByIds([payload.instanceId]);
     const workspace = row ? workItems.workspaceOf(row) : undefined;
-    return workspace ? { ...payload, workspace } : payload;
+    const harness = payload.harness ?? row?.harness ?? "claude";
+    const sessionCredential =
+      harness === "claude" || harness === "pi"
+        ? identities.mint(payload.instanceId)
+        : undefined;
+    return {
+      ...payload,
+      ...(workspace ? { workspace } : {}),
+      ...(sessionCredential ? { sessionCredential } : {}),
+    };
   };
 
   /** The permission modes a machine's harness reported, or undefined when it has not reported that harness. */
@@ -6071,8 +6084,15 @@ export const createServer = ({
   workflowRuntime.resume().catch(console.error);
   const delegationMcp = createDelegationMcp({
     instances: () => db.listInstances(),
+    instanceById: (id) => db.getInstancesByIds([id])[0],
     // finish_item is a tool of a session whose work item carries checks.
     checked: (row) => !!(row.workItemId && db.workItem(row.workItemId)?.checks),
+    credentialActor: (authorization) => {
+      const identity = identities.resolve(authorization);
+      return identity
+        ? db.getInstancesByIds([identity.instanceId])[0]
+        : undefined;
+    },
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: one in-process dispatcher replaces six relay routes, retaining their ordered ownership and settlement checks.
     forward: async (envelope, actor) => {
       // The MCP resolver supplies the caller separately, never from provenance
@@ -6213,6 +6233,75 @@ export const createServer = ({
     }
   };
 
+  const ensureIdentityWorkspace = async (row: InstanceRow): Promise<void> => {
+    const workspace = workItems.workspaceOf(row);
+    if (!workspace) {
+      return;
+    }
+    const masked = await callAgent(
+      row.machineId,
+      CONTROL_WORKSPACE_BOUNDARY,
+      [workspace],
+      30_000
+    );
+    if (typeof masked === "string") {
+      throw new Error(masked);
+    }
+    if (!masked.ok) {
+      throw new Error(
+        masked.error ?? "Workspace secret masking is still waiting"
+      );
+    }
+  };
+
+  /** Operator-selected delivery; the raw credential is never returned to the caller. */
+  const installSessionIdentity = async (instanceId: string) => {
+    try {
+      const [row] = db.getInstancesByIds([instanceId]);
+      if (!(row && (row.harness === "claude" || row.harness === "pi"))) {
+        throw new Error(
+          "Phase 2(a) installs known Claude and pi sessions only"
+        );
+      }
+      const agent = registry.agent(row.machineId);
+      if (!agent) {
+        throw new Error("Machine is not connected");
+      }
+      await ensureIdentityWorkspace(row);
+      const credential = identities.mint(instanceId);
+      const requestId = crypto.randomUUID();
+      const reply = await awaitReply(row.machineId, requestId, 120_000, () =>
+        agent.send({
+          verb: "control",
+          machineId: row.machineId,
+          instanceId,
+          requestId,
+          payload: {
+            instanceId,
+            requestId,
+            method: INSTALL_SESSION_CREDENTIAL,
+            args: [credential],
+          },
+        } satisfies Envelope<ControlPayload>)
+      );
+      if (reply === "timeout") {
+        throw new Error("Credential installation is still waiting");
+      }
+      if (!reply.ok) {
+        throw new Error(reply.error ?? "Credential installation failed");
+      }
+      if (db.sessionIdentity(instanceId)?.pendingHash) {
+        throw new Error("Harness returned without an installation ACK");
+      }
+      return { instanceId, installed: true };
+    } catch (problem) {
+      const error =
+        problem instanceof Error ? problem.message : String(problem);
+      db.sessionIdentityError(instanceId, error);
+      return { instanceId, installed: false, error };
+    }
+  };
+
   return (
     new Elysia()
       .use(websocket())
@@ -6317,10 +6406,71 @@ export const createServer = ({
           typeof query.instanceId === "string" ? query.instanceId : undefined
         )
       )
+      // Preparation only: enforcement is a separate cutover after every live row ACKs.
+      .get("/api/session-identities", hidden, ({ query }) => {
+        const rows =
+          typeof query.instanceId === "string"
+            ? db.getInstancesByIds([query.instanceId])
+            : db.listInstances();
+        return rows.map((row) => {
+          const identity = db.sessionIdentity(row.id);
+          return {
+            instanceId: row.id,
+            harness: row.harness,
+            status: row.status,
+            installedAt: identity?.installedAt ?? null,
+            pending: !!identity?.pendingHash,
+            error: identity?.error ?? null,
+          };
+        });
+      })
+      .post(
+        "/api/session-identities/ack",
+        { ...hidden, body: t.Object({ error: t.Optional(t.String()) }) },
+        ({ request, body, status }) => {
+          const authorization = request.headers.get("authorization");
+          const identity = identities.resolve(authorization);
+          if (!identity) {
+            return status(
+              401,
+              "A valid delivered session credential is required for installation ACK"
+            );
+          }
+          if (body.error !== undefined) {
+            db.sessionIdentityError(identity.instanceId, body.error);
+            return { ok: false };
+          }
+          return identities.acknowledge(authorization)
+            ? { ok: true }
+            : status(409, "This credential installation is no longer pending");
+        }
+      )
+      .post(
+        "/api/session-identities/install",
+        {
+          ...hidden,
+          body: t.Object({
+            instanceIds: t.Array(t.String({ minLength: 1 }), { minItems: 1 }),
+          }),
+        },
+        async ({ body }) =>
+          Promise.all(body.instanceIds.map(installSessionIdentity))
+      )
       .post(
         "/api/delegation/call/:instanceId",
         { ...hidden, body: t.Any() },
         ({ params, body, request, server, status }) => {
+          const authorization = request.headers.get("authorization");
+          const identity = identities.resolve(authorization);
+          if (authorization !== null && !identity) {
+            return status(401, "Invalid session credential");
+          }
+          if (identity && identity.instanceId !== params.instanceId) {
+            return status(
+              403,
+              "Session credential does not belong to the named instanceId"
+            );
+          }
           if (
             !(
               params.instanceId.trim() &&
@@ -6362,7 +6512,8 @@ export const createServer = ({
           return delegationMcp.call(
             params.instanceId,
             input.name,
-            input.arguments ?? {}
+            input.arguments ?? {},
+            authorization ?? undefined
           );
         }
       )
@@ -8598,7 +8749,18 @@ export const createServer = ({
             }
           },
         },
-        async ({ body, status }) => {
+        async ({ body, request, status }) => {
+          const authorization = request.headers.get("authorization");
+          const identity = identities.resolve(authorization);
+          if (authorization !== null && !identity) {
+            return status(401, "Invalid session credential");
+          }
+          if (identity && identity.instanceId !== body.parentInstanceId) {
+            return status(
+              403,
+              "Session credential does not belong to the work item's parent"
+            );
+          }
           if (
             !(
               body.parentInstanceId.trim() &&
@@ -8653,6 +8815,17 @@ export const createServer = ({
           }),
         },
         async ({ body, status, request, server }) => {
+          const authorization = request.headers.get("authorization");
+          const identity = identities.resolve(authorization);
+          if (authorization !== null && !identity) {
+            return status(401, "Invalid session credential");
+          }
+          if (identity && identity.instanceId !== body.instanceId) {
+            return status(
+              403,
+              "Session credential does not belong to the finishing instanceId"
+            );
+          }
           server?.timeout(request, 0);
           const { instanceId, ...finished } = body;
           try {
@@ -8678,7 +8851,18 @@ export const createServer = ({
             checks: checksSchema,
           }),
         },
-        ({ body, status }) => {
+        ({ body, request, status }) => {
+          const authorization = request.headers.get("authorization");
+          const identity = identities.resolve(authorization);
+          if (authorization !== null && !identity) {
+            return status(401, "Invalid session credential");
+          }
+          if (identity && identity.instanceId !== body.from) {
+            return status(
+              403,
+              "Session credential does not belong to the checks' requester"
+            );
+          }
           try {
             const text = workItems.setChecks(
               body.instanceId,

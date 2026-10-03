@@ -23,9 +23,10 @@ export const harnessMcpUrl = (path: string): string => {
 /** How long any call to the hub's tools may run: finish_item's checks set it. */
 const DELEGATION_CALL_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 
-export const delegationMcp = (instanceId: string) => ({
+export const delegationMcp = (instanceId: string, credential?: string) => ({
   type: "http" as const,
   url: harnessMcpUrl(`/mcp/cawco?instanceId=${encodeURIComponent(instanceId)}`),
+  ...(credential ? { headers: { Authorization: `Bearer ${credential}` } } : {}),
   // Exempt from tool-search deferral (Claude Code >= 2.1.121). Measured: across
   // 54 cawco-spawned sessions the delegate tool was one deferred NAME among
   // 133, uncallable until a ToolSearch round trip, while Bash sat loaded — a
@@ -66,13 +67,17 @@ export async function delegationTools(instanceId?: string) {
 export async function callDelegationTool(
   instanceId: string,
   name: string,
-  args: unknown
+  args: unknown,
+  credential?: string
 ) {
   const response = await fetch(
     harnessMcpUrl(`/api/delegation/call/${encodeURIComponent(instanceId)}`),
     {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        ...(credential ? { Authorization: `Bearer ${credential}` } : {}),
+      },
       body: JSON.stringify({ name, arguments: args }),
       // A continuation summarises a whole session, and finish_item runs a
       // work item's checks: neither has a bound to give, and neither writes

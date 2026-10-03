@@ -1,5 +1,6 @@
 import { homedir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
+import { sessiondEndpoint } from "./sessiond";
 
 /**
  * Node-only paths shared across packages. Kept out of the main entry, which
@@ -12,4 +13,11 @@ export const transcriptIndexPath = (): string =>
     process.env.XDG_DATA_HOME ?? join(homedir(), ".local", "share"),
     "cawco",
     "transcript-index.db"
+  );
+
+/** Private host-side material, beneath the directory Linux boundaries already mask. */
+export const sessionIdentityDir = (): string =>
+  join(
+    dirname(process.env.CAWCO_SESSIOND_ENDPOINT ?? sessiondEndpoint()),
+    "session-identity"
   );

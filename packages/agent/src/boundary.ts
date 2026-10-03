@@ -40,6 +40,7 @@ import {
 import { homedir } from "node:os";
 import { dirname, join } from "node:path";
 import type { WorkspaceRef } from "@cawco/core";
+import { sessionIdentityDir } from "@cawco/core/paths";
 import { type ProcSpec, sessiondEndpoint } from "@cawco/core/sessiond";
 import { cloneInPlace } from "./clone";
 import { ensureSessiond, SessiondClient } from "./sessiond-client";
@@ -59,6 +60,8 @@ interface Held extends Boundary {
   /** Linux: the anchor's user namespace, as `/proc/<pid>/ns/user` names it. macOS: `runner`. */
   readonly identity: string;
   readonly path: string;
+  /** macOS runners from before session credentials must be replaced while shell-idle. */
+  readonly secretsMasked?: boolean;
 }
 
 /** Where a workspace's boundary keeps its executor and state; read-only inside the boundary. */
@@ -275,7 +278,26 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
   const client = await sessiond();
   const held = await readHeld(ref.id);
   if (held && (await running(client, ref.id, held))) {
-    return held;
+    if (process.platform !== "darwin" || held.secretsMasked) {
+      return held;
+    }
+    const listing = await Bun.$`ps -axwwE -o pid=,command=`.quiet();
+    const active = listing
+      .text()
+      .split("\n")
+      .some(
+        (line) =>
+          line.includes(`CAWCO_WORKSPACE=${ref.id}`) &&
+          Number.parseInt(line.trim(), 10) !== held.pid
+      );
+    if (active) {
+      throw refusal(
+        ref.id,
+        "secret masking waits for every old shell command and background process to finish"
+      );
+    }
+    // Only the idle runner remains; retaining the harness does not retain a shell with old read access.
+    await client.signal(procIdOf(ref.id), "SIGKILL");
   }
   return start(client, ref);
 };
@@ -405,6 +427,7 @@ const profileOf = async (
   caches: string[]
 ): Promise<string> => {
   const scratchPath = await realpath(scratch);
+  const secretsPath = await realpath(sessionIdentityDir());
   const writable = await Promise.all(
     [ws, ...caches].map((path) => realpath(path))
   );
@@ -419,6 +442,7 @@ const profileOf = async (
     "(deny signal)",
     "(allow signal (target same-sandbox))",
     "(deny file-write*)",
+    `(deny file-read* (subpath ${sbString(secretsPath)}))`,
     "(allow file-write*",
     ...[...writable, scratchPath].map(
       (path) => `  (subpath ${sbString(path)})`
@@ -583,6 +607,7 @@ const start = async (
   const linux = process.platform === "linux";
   const run = runOf(ref.id);
   const caches = cachesOf();
+  await mkdir(sessionIdentityDir(), { recursive: true, mode: 0o700 });
   await Promise.all(
     [dir, scratch, ...(linux ? [run] : []), ...caches].map((path) =>
       mkdir(path, { recursive: true })
@@ -623,10 +648,24 @@ const start = async (
         `the anchor under ${proc.pid} is not in a namespace of its own`
       );
     }
-    held = { exec, pid, scratch, identity, path: ref.path };
+    held = {
+      exec,
+      pid,
+      scratch,
+      identity,
+      path: ref.path,
+      secretsMasked: true,
+    };
     await writeFile(exec, linuxExec(ref.id, pid, identity), { mode: 0o755 });
   } else {
-    held = { exec, pid: proc.pid, scratch, identity: "runner", path: ref.path };
+    held = {
+      exec,
+      pid: proc.pid,
+      scratch,
+      identity: "runner",
+      path: ref.path,
+      secretsMasked: true,
+    };
     await writeFile(
       exec,
       darwinExec(ref.id, proc.pid, join(dir, "runner.fifo"), scratch),

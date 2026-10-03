@@ -11,7 +11,7 @@ import {
   watchFile,
   writeFileSync,
 } from "node:fs";
-import { dirname, join } from "node:path";
+import { dirname } from "node:path";
 import type { Envelope, InstanceRow } from "@cawco/core";
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { WebStandardStreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/webStandardStreamableHttp.js";
@@ -22,8 +22,8 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { adminTools } from "./admin-tools";
-import { DB_PATH } from "./config";
 import { handoffInstructions, handoffTools } from "./delegation-tools";
+import { mcpSigningKeyPath } from "./session-identity";
 
 type ToolFactory = typeof handoffTools;
 
@@ -61,13 +61,15 @@ function sessionKey(path: string): Buffer {
 
 export function createDelegationMcp(options: {
   instances: () => InstanceRow[];
+  instanceById: (id: string) => InstanceRow | undefined;
   /** Whether the session runs a work item with acceptance checks: it gets finish_item. */
   checked: (row: InstanceRow) => boolean;
   forward: (envelope: Envelope, actor: InstanceRow) => Promise<void>;
+  credentialActor: (authorization: string | null) => InstanceRow | undefined;
   tools?: ToolFactory;
 }) {
   let tools = options.tools ?? handoffTools;
-  const secret = sessionKey(join(dirname(DB_PATH), "mcp-session.key"));
+  const secret = sessionKey(mcpSigningKeyPath());
   const sessions = new Map<
     string,
     {
@@ -86,6 +88,7 @@ export function createDelegationMcp(options: {
   ) => [
     ...tools({
       instanceId: "",
+      instanceById: options.instanceById,
       cwd: "",
       canDelegate,
       workItem,
@@ -101,6 +104,7 @@ export function createDelegationMcp(options: {
   const replaceTools = async (next: ToolFactory) => {
     const definitions = next({
       instanceId: "",
+      instanceById: options.instanceById,
       cwd: "",
       emit: () => {
         throw new Error("Discovery cannot execute tools");
@@ -168,7 +172,30 @@ export function createDelegationMcp(options: {
   // Temporary until Phase 2's per-session credentials replace this resolver.
   // PRODUCT.md trusts the network perimeter; here malformed/unknown identities
   // are refused, but deliberate same-UID impersonation is not yet prevented.
-  const actorOf = (binding: string | null, args: Record<string, unknown>) => {
+  const actorOf = (
+    binding: string | null,
+    args: Record<string, unknown>,
+    authorization?: string
+  ) => {
+    if (authorization !== undefined) {
+      const actor = options.credentialActor(authorization);
+      if (!actor) {
+        throw new Error("Invalid session credential");
+      }
+      if (binding !== null && actor.id !== binding) {
+        throw new Error(
+          "Session credential does not belong to the named instanceId"
+        );
+      }
+      return actor;
+    }
+    return legacyActorOf(binding, args);
+  };
+
+  const legacyActorOf = (
+    binding: string | null,
+    args: Record<string, unknown>
+  ) => {
     const rows = options.instances();
     if (binding !== null) {
       if (typeof binding !== "string" || !binding.trim()) {
@@ -215,7 +242,8 @@ export function createDelegationMcp(options: {
   const call = async (
     binding: string | null,
     name: string,
-    args: Record<string, unknown>
+    args: Record<string, unknown>,
+    authorization?: string
   ): Promise<CallToolResult> => {
     try {
       // Fleet-wide tools: no actor needed — they call the hub API directly.
@@ -226,10 +254,12 @@ export function createDelegationMcp(options: {
         }
         return (await entry.handler(args)) as CallToolResult;
       }
-      const actor = actorOf(binding, args);
+      const actor = actorOf(binding, args, authorization);
       const emitted: Envelope[] = [];
       const entry = tools({
         instanceId: actor.id,
+        instanceById: options.instanceById,
+        authorization,
         cwd: actor.cwd,
         harness: actor.harness as "claude" | "opencode" | "pi",
         canDelegate: actor.canDelegate ?? undefined,
@@ -309,6 +339,7 @@ export function createDelegationMcp(options: {
         capabilities: { tools: { listChanged: true } },
         instructions: handoffInstructions({
           instanceId: binding ?? "",
+          instanceById: options.instanceById,
           cwd: bound?.cwd ?? "",
           harness: bound?.harness as "claude" | "opencode" | "pi" | undefined,
           canDelegate,
@@ -376,7 +407,10 @@ export function createDelegationMcp(options: {
         return await call(
           binding,
           message.params.name,
-          message.params.arguments ?? {}
+          message.params.arguments ?? {},
+          typeof extra.requestInfo?.headers.authorization === "string"
+            ? extra.requestInfo.headers.authorization
+            : undefined
         );
       } finally {
         clearInterval(heartbeat);
@@ -468,17 +502,35 @@ export function createDelegationMcp(options: {
     return undefined;
   };
 
-  const handle = async (
-    request: Request,
-    parsedBody?: unknown
-  ): Promise<Response> => {
-    const id = request.headers.get("mcp-session-id");
+  const requestBinding = (request: Request): string | null | Response => {
+    const authorization = request.headers.get("authorization");
+    const actor = options.credentialActor(authorization);
+    if (authorization !== null && !actor) {
+      return new Response("Invalid session credential", { status: 401 });
+    }
     const bindings = new URL(request.url).searchParams.getAll("instanceId");
     const invalid = bindingProblem(bindings);
     if (invalid) {
       return invalid;
     }
-    const binding = bindings[0] ?? null;
+    if (actor && bindings[0] !== undefined && bindings[0] !== actor.id) {
+      return new Response(
+        "Session credential does not belong to the named instanceId",
+        { status: 403 }
+      );
+    }
+    return actor?.id ?? bindings[0] ?? null;
+  };
+
+  const handle = async (
+    request: Request,
+    parsedBody?: unknown
+  ): Promise<Response> => {
+    const id = request.headers.get("mcp-session-id");
+    const binding = requestBinding(request);
+    if (binding instanceof Response) {
+      return binding;
+    }
     const live = id ? sessions.get(id) : undefined;
     if (live) {
       // A connection answers only on the URL it was opened on: its id names

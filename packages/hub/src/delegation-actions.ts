@@ -416,6 +416,8 @@ export const SPAWNING_TOOLS: ReadonlySet<string> = new Set([
 ]);
 
 export interface HandoffDeps {
+  /** This invocation's session credential; never a tool argument or persisted metadata. */
+  readonly authorization?: string;
   /**
    * Whether THIS session may spawn sessions of its own. `false` on a leaf
    * delegate (spawned with `can_delegate: false`); absent means allowed.
@@ -433,6 +435,8 @@ export interface HandoffDeps {
   /** Puts an envelope on the daemon's hub socket. */
   readonly emit: (envelope: Envelope) => void;
   readonly harness?: "claude" | "opencode" | "pi";
+  /** Exact-id lookup includes ended/archived rows outside the live roster. */
+  readonly instanceById: (id: string) => InstanceRow | undefined;
   /** The session doing the handing over. */
   readonly instanceId: string;
   readonly workflowRunId?: string;
@@ -661,10 +665,12 @@ async function saveWorkflowProgram(
 
 export const handoffActions = ({
   instanceId,
+  instanceById,
   workflowRunId,
   workflowStepId,
   cwd,
   emit,
+  authorization,
 }: HandoffDeps): HandoffActions => ({
   async continueSession(input) {
     let source = instanceId;
@@ -1045,7 +1051,10 @@ export const handoffActions = ({
   async delegate(prompt, opts) {
     const response = await fetch(`${hubHttpUrl()}/api/work-items`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        ...(authorization ? { Authorization: authorization } : {}),
+      },
       body: JSON.stringify({ ...opts, parentInstanceId: instanceId, prompt }),
     });
     if (!response.ok) {
@@ -1070,7 +1079,10 @@ export const handoffActions = ({
   async finishItem(request) {
     const response = await fetch(`${hubHttpUrl()}/api/work-items/finish`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        ...(authorization ? { Authorization: authorization } : {}),
+      },
       body: JSON.stringify({ ...request, instanceId }),
       // The checks may run for hours between them; Bun's fetch would drop a
       // response silent for five minutes.
@@ -1087,7 +1099,10 @@ export const handoffActions = ({
     const peer = resolveDelegate(peers, target, instanceId);
     const response = await fetch(`${hubHttpUrl()}/api/work-items/checks`, {
       method: "POST",
-      headers: { "content-type": "application/json" },
+      headers: {
+        "content-type": "application/json",
+        ...(authorization ? { Authorization: authorization } : {}),
+      },
       body: JSON.stringify({
         from: instanceId,
         instanceId: peer.row.id,
@@ -1101,8 +1116,14 @@ export const handoffActions = ({
   },
 
   async stopDelegate(target: string): Promise<string> {
-    const { peers } = await roster(instanceId);
-    const peer = resolveDelegate(peers, target, instanceId);
+    const { peers, asleep } = await roster(instanceId);
+    const ended =
+      instanceById(needleOf(target)) ?? resolveById(asleep, target)?.row;
+    const peer = resolveDelegate(
+      ended ? [toPeer(ended, new Map())] : peers,
+      target,
+      instanceId
+    );
     emit({
       verb: "stop",
       machineId: peer.row.machineId,

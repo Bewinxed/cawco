@@ -1305,11 +1305,16 @@ export const createWorkItems = ({
         : undefined;
     },
 
-    /** Its session was stopped while the work was live. */
+    /** Its session was stopped or archived while the work was live. */
     cancelled(row: InstanceRow): void {
       const item = itemOf(row);
       if (item) {
-        finish(item, { state: "cancelled" });
+        quiet.delete(item.id);
+        finish(item, {
+          state: "cancelled",
+          checkingSince: null,
+          submission: null,
+        });
       }
     },
 

@@ -176,6 +176,8 @@ export interface SpawnPayload {
    * experiment cannot touch the checkout the mainline session is using.
    */
   scratch?: { worktree?: boolean; baseCwd?: string };
+  /** Hub-minted session credential: delivery only, never transcript or instance metadata. */
+  sessionCredential?: string;
   /**
    * Skill names to load natively before the first prompt. Each harness loads
    * them via its own mechanism — opencode sends `/skill` commands, claude pushes

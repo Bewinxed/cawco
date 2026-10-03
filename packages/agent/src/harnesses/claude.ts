@@ -18,6 +18,7 @@ import {
   deleteSession,
   getSessionInfo,
   listSessions,
+  type McpServerConfig,
   type PermissionResult,
   type Query,
   query,
@@ -49,6 +50,7 @@ import {
   CONTROL_SET_MODEL,
   EFFORT_READ,
   INSPECT_CONFIG,
+  INSTALL_SESSION_CREDENTIAL,
   MARKETPLACE_CATALOG,
   MESSAGES_HELD,
   MESSAGES_READ,
@@ -83,6 +85,7 @@ import {
 // Type-only, and deliberately so: `session.ts` imports the harness registry
 // this file is part of, so a value import here would close a module cycle.
 import type { SessiondAwareContext } from "../session";
+import { acknowledgeSessionCredential } from "../session-identity";
 import {
   type BridgeRing,
   ensureSessiond,
@@ -523,6 +526,14 @@ class Turn {
     this.#ended = Promise.withResolvers<void>();
   }
 
+  async waitForIdle(): Promise<void> {
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: start/end update busy as native turn frames arrive.
+    while (this.busy) {
+      // biome-ignore lint/performance/noAwaitInLoops: each wait belongs to a real turn ending; no polling or interruption.
+      await this.#ended.promise;
+    }
+  }
+
   async settle(ms: number): Promise<void> {
     // biome-ignore lint/suspicious/noUnnecessaryConditions: busy is set true by start() elsewhere in this class; the checker doesn't see that cross-method mutation
     if (!this.busy) {
@@ -567,6 +578,7 @@ class ClaudeSession implements HarnessSession {
   readonly harness = "claude" as const;
   sessionId: string | null = null;
   readonly #handle: Query;
+  #mcpServers: Record<string, McpServerConfig>;
   readonly #input: InputStream;
   readonly #turn: Turn;
   readonly #pump: Promise<void>;
@@ -637,6 +649,12 @@ class ClaudeSession implements HarnessSession {
   ) {
     this.instanceId = instanceId;
     this.#ctx = ctx;
+    this.#mcpServers = {
+      ...((
+        options as { mcpServers?: Record<string, McpServerConfig> } | undefined
+      )?.mcpServers ?? {}),
+      [MCP_SERVER_NAME]: delegationMcp(instanceId, ctx.sessionCredential),
+    };
     this.#sessiond = sessiond;
     const seqs = this.#seqs;
     const input = new InputStream();
@@ -670,11 +688,7 @@ class ClaudeSession implements HarnessSession {
         agentProgressSummaries: true,
         ...(options as Record<string, unknown> | undefined),
         extraArgs,
-        mcpServers: {
-          ...((options as { mcpServers?: Record<string, unknown> } | undefined)
-            ?.mcpServers ?? {}),
-          [MCP_SERVER_NAME]: delegationMcp(instanceId),
-        },
+        mcpServers: this.#mcpServers,
         // Fleet baseline (from supervisor_config.denied_tools, cached in the
         // sidecar) + delegate-type denials + any the caller itself carried.
         // All three layers union: every layer can only add, never remove
@@ -1090,6 +1104,50 @@ class ClaudeSession implements HarnessSession {
   }
 
   async control(method: string, args: unknown[]): Promise<unknown> {
+    if (method === INSTALL_SESSION_CREDENTIAL) {
+      const [credential] = args;
+      if (typeof credential !== "string" || !credential) {
+        throw new Error("Session credential is missing.");
+      }
+      // The SDK makes replaced tools available on the next turn; leave the current turn intact.
+      await this.#turn.waitForIdle();
+      // Preserve runtime-added remote servers and the SDK instances this query owns.
+      const current = await this.#handle.mcpServerStatus();
+      for (const server of current) {
+        if (
+          server.config &&
+          server.scope !== "plugin" &&
+          server.config.type !== "sdk"
+        ) {
+          this.#mcpServers[server.name] = server.config as McpServerConfig;
+        }
+      }
+      const configured = {
+        ...this.#mcpServers,
+        [MCP_SERVER_NAME]: delegationMcp(this.instanceId, credential),
+      };
+      const applied = await this.#handle.setMcpServers(configured);
+      if (Object.keys(applied.errors).length) {
+        throw new Error(
+          `Live MCP reconfiguration failed: ${Object.keys(applied.errors).join(", ")}`
+        );
+      }
+      const status = (await this.#handle.mcpServerStatus()).find(
+        (server) => server.name === MCP_SERVER_NAME
+      );
+      if (status?.status !== "connected") {
+        throw new Error(
+          `CawCo MCP is not connected after credential delivery (${status?.status ?? "missing"}).`
+        );
+      }
+      this.#mcpServers = configured;
+      await acknowledgeSessionCredential(credential);
+      return {
+        installed: true,
+        harness: "claude",
+        instanceId: this.instanceId,
+      };
+    }
     // Effort is the one neutral verb with no `Query` method behind it: it is a
     // flag setting, applied over user/project/local settings and never written
     // to any of them, which is exactly a session-scoped switch. `max` is only

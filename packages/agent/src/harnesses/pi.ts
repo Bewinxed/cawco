@@ -39,6 +39,7 @@ import {
   CONTROL_SET_MODEL,
   CONTROL_SUPPORTED_COMMANDS,
   CONTROL_SUPPORTED_MODELS,
+  INSTALL_SESSION_CREDENTIAL,
   MESSAGES_READ,
 } from "@cawco/core";
 import type {
@@ -62,6 +63,7 @@ import {
 import { type Boundary, boundaryCommand } from "../boundary";
 import { callDelegationTool, delegationTools } from "../delegation";
 import type { Harness, HarnessContext, HarnessSession } from "../harness";
+import { acknowledgeSessionCredential } from "../session-identity";
 import { resolveBin } from "../tools";
 import {
   hashText,
@@ -272,7 +274,10 @@ const boundedBash = (cwd: string, boundary: Boundary): ToolDefinition => {
   }) as unknown as ToolDefinition;
 };
 
-const piHandoffTools = async (instanceId: string): Promise<ToolDefinition[]> =>
+const piHandoffTools = async (
+  instanceId: string,
+  credential: { value?: string }
+): Promise<ToolDefinition[]> =>
   (await delegationTools(instanceId)).map((tool) =>
     defineTool({
       name: tool.name,
@@ -280,7 +285,7 @@ const piHandoffTools = async (instanceId: string): Promise<ToolDefinition[]> =>
       description: tool.description,
       parameters: tool.inputSchema as never,
       execute: async (_id, params) =>
-        callDelegationTool(instanceId, tool.name, params),
+        callDelegationTool(instanceId, tool.name, params, credential.value),
     })
   );
 
@@ -296,6 +301,7 @@ class PiSession implements HarnessSession {
   sessionId: string | null = null;
   readonly #ctx: HarnessContext;
   readonly #session: AgentSession;
+  readonly #credential: { value?: string };
   #busy = false;
   /**
    * The uuids of sends pi has not started on, oldest first. `prompt()` takes
@@ -329,9 +335,14 @@ class PiSession implements HarnessSession {
     }
   }
 
-  constructor(ctx: HarnessContext, session: AgentSession) {
+  constructor(
+    ctx: HarnessContext,
+    session: AgentSession,
+    credential: { value?: string }
+  ) {
     this.#ctx = ctx;
     this.#session = session;
+    this.#credential = credential;
     this.sessionId = session.sessionId;
     session.subscribe((event) => this.#handle(event));
     ctx.session(session.sessionId);
@@ -560,6 +571,27 @@ class PiSession implements HarnessSession {
   }
 
   async control(method: string, args: unknown[]): Promise<unknown> {
+    if (method === INSTALL_SESSION_CREDENTIAL) {
+      const [credential] = args;
+      if (typeof credential !== "string" || !credential) {
+        throw new Error("Session credential is missing.");
+      }
+      // A live pi turn keeps its existing closures until it has finished.
+      await this.#session.waitForIdle();
+      this.#credential.value = credential;
+      await callDelegationTool(
+        this.#ctx.instanceId,
+        "list_sessions",
+        {},
+        credential
+      );
+      await acknowledgeSessionCredential(credential);
+      return {
+        installed: true,
+        harness: "pi",
+        instanceId: this.#ctx.instanceId,
+      };
+    }
     switch (method) {
       case CONTROL_INTERRUPT:
         await this.#session.abort();
@@ -725,6 +757,7 @@ export class PiHarness implements Harness {
       sessionManager = SessionManager.open(source, undefined, ctx.cwd);
     }
 
+    const credential = { value: ctx.sessionCredential };
     const { session } = await createAgentSession({
       cwd: ctx.cwd,
       modelRuntime: runtime,
@@ -733,12 +766,12 @@ export class PiHarness implements Harness {
         ? { sessionManager }
         : { sessionManager: SessionManager.create(ctx.cwd) }),
       customTools: [
-        ...(await piHandoffTools(ctx.instanceId)),
+        ...(await piHandoffTools(ctx.instanceId, credential)),
         ...(ctx.boundary ? [boundedBash(ctx.cwd, ctx.boundary)] : []),
       ],
     });
 
-    return new PiSession(ctx, session);
+    return new PiSession(ctx, session, credential);
   }
 
   async #sessionPath(
