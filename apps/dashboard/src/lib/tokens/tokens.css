@@ -461,6 +461,26 @@
     --leading-kpi: 1;
     /* Tailwind preflight's root line height: what a row that sets no leading of its own inherits (the transcript's rail lines). */
     --leading-root: 1.5;
+    /* A rendered document's running text (@tailwindcss/typography prose-sm, the project page's docs card): 24/14. */
+    --leading-prose-sm: 1.7142857;
+    /* prose-sm: above an h2, in the heading's own ems. */
+    --prose-sm-title-before: 1.6;
+    /* prose-sm: below an h1 or h2, in the heading's own ems. */
+    --prose-sm-title-after: 0.8;
+    /* prose-sm: above an h3, in the heading's own ems. */
+    --prose-sm-h3-before: 1.5555556;
+    /* prose-sm: below an h3, in the heading's own ems. */
+    --prose-sm-h3-after: 0.4444444;
+    /* prose-sm: above an h4 to h6, in the heading's own ems. */
+    --prose-sm-h4-before: 1.4285714;
+    /* prose-sm: below an h4 to h6, in the heading's own ems. */
+    --prose-sm-h4-after: 0.5714286;
+    /* prose-sm: above and below a blockquote, in the body's ems. */
+    --prose-sm-quote: 1.3333333;
+    /* prose-sm: a blockquote's text inset from its rule, in the body's ems. */
+    --prose-sm-quote-inset: 1.1111111;
+    /* prose-sm: above and below a horizontal rule, in the body's ems. */
+    --prose-sm-rule: 2.8571429;
     --weight-body: 400;
     /* Nothing in product UI goes above 500. */
     --weight-strong: 500;
@@ -595,6 +615,22 @@
     --tx-field-cap: 300px;
     /* An image card's box (Shot), and a thumbnail's. */
     --tx-shot: 240px;
+    /* prose-sm: above and below a paragraph or a list (1.1428571em of 14px). */
+    --prose-sm-block: 16px;
+    /* prose-sm: above and below a table, inside its scrolling wrapper, so it never collapses into its neighbours' margins (2em of the table's 12px). */
+    --prose-sm-table: 24px;
+    /* prose-sm: a list's inset (1.5714286em of 14px). */
+    --prose-sm-list-inset: 22px;
+    /* prose-sm: an item's own inset past its list's (0.4285714em of 14px). */
+    --prose-sm-item-inset: 6px;
+    /* prose-sm: above and below a list inside an item (0.5714286em of 14px). */
+    --prose-sm-nested-list: 8px;
+    /* The browser's own gap between an outside disc marker and its item (WebKit RenderListMarker `markerPadding`): the disc's start stands this far, plus two thirds of the font's ascent and a pixel, out from where the item starts. */
+    --list-marker-padding: 7px;
+    /* Inline code's block padding where the shared prose classes set it (lib/prose.ts `[&_code]:py-0.5`): a document, a tool's markdown, a reasoning step. */
+    --prose-code-pad: 2px;
+    /* Inline code's block padding in a turn's words (MessageBody `code`). */
+    --tx-code-span-pad: 1px;
     --tx-shot-thumb: 48px;
     /* A question card's option, at its least. */
     --tx-option: 30px;

@@ -1740,6 +1740,56 @@
       "$value": "1.5",
       "$description": "Tailwind preflight's root line height: what a row that sets no leading of its own inherits (the transcript's rail lines)."
     },
+    "leading-prose-sm": {
+      "$type": "number",
+      "$value": "1.7142857",
+      "$description": "A rendered document's running text (@tailwindcss/typography prose-sm, the project page's docs card): 24/14."
+    },
+    "prose-sm-title-before": {
+      "$type": "number",
+      "$value": "1.6",
+      "$description": "prose-sm: above an h2, in the heading's own ems."
+    },
+    "prose-sm-title-after": {
+      "$type": "number",
+      "$value": "0.8",
+      "$description": "prose-sm: below an h1 or h2, in the heading's own ems."
+    },
+    "prose-sm-h3-before": {
+      "$type": "number",
+      "$value": "1.5555556",
+      "$description": "prose-sm: above an h3, in the heading's own ems."
+    },
+    "prose-sm-h3-after": {
+      "$type": "number",
+      "$value": "0.4444444",
+      "$description": "prose-sm: below an h3, in the heading's own ems."
+    },
+    "prose-sm-h4-before": {
+      "$type": "number",
+      "$value": "1.4285714",
+      "$description": "prose-sm: above an h4 to h6, in the heading's own ems."
+    },
+    "prose-sm-h4-after": {
+      "$type": "number",
+      "$value": "0.5714286",
+      "$description": "prose-sm: below an h4 to h6, in the heading's own ems."
+    },
+    "prose-sm-quote": {
+      "$type": "number",
+      "$value": "1.3333333",
+      "$description": "prose-sm: above and below a blockquote, in the body's ems."
+    },
+    "prose-sm-quote-inset": {
+      "$type": "number",
+      "$value": "1.1111111",
+      "$description": "prose-sm: a blockquote's text inset from its rule, in the body's ems."
+    },
+    "prose-sm-rule": {
+      "$type": "number",
+      "$value": "2.8571429",
+      "$description": "prose-sm: above and below a horizontal rule, in the body's ems."
+    },
     "weight-body": {
       "$type": "fontWeight",
       "$value": "400"
@@ -2154,6 +2204,46 @@
       "$type": "dimension",
       "$value": "240px",
       "$description": "An image card's box (Shot), and a thumbnail's."
+    },
+    "prose-sm-block": {
+      "$type": "dimension",
+      "$value": "16px",
+      "$description": "prose-sm: above and below a paragraph or a list (1.1428571em of 14px)."
+    },
+    "prose-sm-table": {
+      "$type": "dimension",
+      "$value": "24px",
+      "$description": "prose-sm: above and below a table, inside its scrolling wrapper, so it never collapses into its neighbours' margins (2em of the table's 12px)."
+    },
+    "prose-sm-list-inset": {
+      "$type": "dimension",
+      "$value": "22px",
+      "$description": "prose-sm: a list's inset (1.5714286em of 14px)."
+    },
+    "prose-sm-item-inset": {
+      "$type": "dimension",
+      "$value": "6px",
+      "$description": "prose-sm: an item's own inset past its list's (0.4285714em of 14px)."
+    },
+    "prose-sm-nested-list": {
+      "$type": "dimension",
+      "$value": "8px",
+      "$description": "prose-sm: above and below a list inside an item (0.5714286em of 14px)."
+    },
+    "list-marker-padding": {
+      "$type": "dimension",
+      "$value": "7px",
+      "$description": "The browser's own gap between an outside disc marker and its item (WebKit RenderListMarker `markerPadding`): the disc's start stands this far, plus two thirds of the font's ascent and a pixel, out from where the item starts."
+    },
+    "prose-code-pad": {
+      "$type": "dimension",
+      "$value": "2px",
+      "$description": "Inline code's block padding where the shared prose classes set it (lib/prose.ts `[&_code]:py-0.5`): a document, a tool's markdown, a reasoning step."
+    },
+    "tx-code-span-pad": {
+      "$type": "dimension",
+      "$value": "1px",
+      "$description": "Inline code's block padding in a turn's words (MessageBody `code`)."
     },
     "tx-shot-thumb": {
       "$type": "dimension",

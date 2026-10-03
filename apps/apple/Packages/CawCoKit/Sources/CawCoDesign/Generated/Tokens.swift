@@ -310,6 +310,26 @@ public enum TypeScale {
     public static let leadingKpi: Double = 1
     /// Tailwind preflight's root line height: what a row that sets no leading of its own inherits (the transcript's rail lines).
     public static let leadingRoot: Double = 1.5
+    /// A rendered document's running text (@tailwindcss/typography prose-sm, the project page's docs card): 24/14.
+    public static let leadingProseSm: Double = 1.714286
+    /// prose-sm: above an h2, in the heading's own ems.
+    public static let proseSmTitleBefore: Double = 1.6
+    /// prose-sm: below an h1 or h2, in the heading's own ems.
+    public static let proseSmTitleAfter: Double = 0.8
+    /// prose-sm: above an h3, in the heading's own ems.
+    public static let proseSmH3Before: Double = 1.555556
+    /// prose-sm: below an h3, in the heading's own ems.
+    public static let proseSmH3After: Double = 0.444444
+    /// prose-sm: above an h4 to h6, in the heading's own ems.
+    public static let proseSmH4Before: Double = 1.428571
+    /// prose-sm: below an h4 to h6, in the heading's own ems.
+    public static let proseSmH4After: Double = 0.571429
+    /// prose-sm: above and below a blockquote, in the body's ems.
+    public static let proseSmQuote: Double = 1.333333
+    /// prose-sm: a blockquote's text inset from its rule, in the body's ems.
+    public static let proseSmQuoteInset: Double = 1.111111
+    /// prose-sm: above and below a horizontal rule, in the body's ems.
+    public static let proseSmRule: Double = 2.857143
     public static let weightBody: UIFont.Weight = .regular
     /// Nothing in product UI goes above 500.
     public static let weightStrong: UIFont.Weight = .medium
@@ -325,8 +345,8 @@ public enum TypeScale {
     public static let typeBody = TypeRole(weight: .regular, size: 14...14, leading: 1.45, family: FontFamily.fontBody)
     public static let typeProse = TypeRole(weight: .regular, size: 14...14, leading: 1.55, family: FontFamily.fontBody)
     public static let typeButton = TypeRole(weight: .medium, size: 14...14, leading: 1, family: FontFamily.fontBody)
-    public static let typeTitle = TypeRole(weight: .medium, size: 18...20, leading: 1.25, family: FontFamily.fontBody)
-    public static let typeKpi = TypeRole(weight: .medium, size: 20...24, leading: 1, family: FontFamily.fontBody)
+    public static let typeTitle = TypeRole(weight: .medium, size: 18...20, leading: 1.25, family: FontFamily.fontBody, fluid: .init(base: 16.768, perViewport: 0.003155))
+    public static let typeKpi = TypeRole(weight: .medium, size: 20...24, leading: 1, family: FontFamily.fontBody, fluid: .init(base: 17.5392, perViewport: 0.006309))
     public static let typeCode = TypeRole(weight: .regular, size: 12...12, leading: 1.6, family: FontFamily.fontMono)
     public static let typeCaps = TypeRole(weight: .medium, size: 11...11, leading: 1, family: FontFamily.fontBody)
 }
@@ -452,6 +472,22 @@ public enum Size {
     public static let txFieldCap: Double = 300
     /// An image card's box (Shot), and a thumbnail's.
     public static let txShot: Double = 240
+    /// prose-sm: above and below a paragraph or a list (1.1428571em of 14px).
+    public static let proseSmBlock: Double = 16
+    /// prose-sm: above and below a table, inside its scrolling wrapper, so it never collapses into its neighbours' margins (2em of the table's 12px).
+    public static let proseSmTable: Double = 24
+    /// prose-sm: a list's inset (1.5714286em of 14px).
+    public static let proseSmListInset: Double = 22
+    /// prose-sm: an item's own inset past its list's (0.4285714em of 14px).
+    public static let proseSmItemInset: Double = 6
+    /// prose-sm: above and below a list inside an item (0.5714286em of 14px).
+    public static let proseSmNestedList: Double = 8
+    /// The browser's own gap between an outside disc marker and its item (WebKit RenderListMarker `markerPadding`): the disc's start stands this far, plus two thirds of the font's ascent and a pixel, out from where the item starts.
+    public static let listMarkerPadding: Double = 7
+    /// Inline code's block padding where the shared prose classes set it (lib/prose.ts `[&_code]:py-0.5`): a document, a tool's markdown, a reasoning step.
+    public static let proseCodePad: Double = 2
+    /// Inline code's block padding in a turn's words (MessageBody `code`).
+    public static let txCodeSpanPad: Double = 1
     public static let txShotThumb: Double = 48
     /// A question card's option, at its least.
     public static let txOption: Double = 30

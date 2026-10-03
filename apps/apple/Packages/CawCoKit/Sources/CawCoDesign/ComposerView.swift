@@ -91,14 +91,10 @@ public final class ComposerView: UIView, UITextViewDelegate {
     /// What the field types in: the role's face and line height, wrapping by word.
     static var typing: [NSAttributedString.Key: Any] {
         let font = fieldRole.font
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.minimumLineHeight = fieldRole.lineHeight
-        paragraph.maximumLineHeight = fieldRole.lineHeight
         return [
             .font: font,
             .foregroundColor: Palette.inkStrong,
-            .paragraphStyle: paragraph,
-            .baselineOffset: (fieldRole.lineHeight - font.lineHeight) / 4,
+            .paragraphStyle: LineBox.textView(font, height: fieldRole.lineHeight),
         ]
     }
     /// The folded line's end that "+N lines" stands on (`--more-room`, 4.5rem).
@@ -204,7 +200,9 @@ public final class ComposerView: UIView, UITextViewDelegate {
         field.tintColor = Palette.inkStrong
         field.textContainer.lineFragmentPadding = 0
         let pad = (Self.control - Self.fieldRole.lineHeight) / 2
-        field.textContainerInset = UIEdgeInsets(top: pad, left: 0, bottom: pad, right: 0)
+        // The last line's leading below it, which TextKit 2 leaves off (LineBox).
+        let below = LineBox.halfLeading(Self.fieldRole.font, height: Self.fieldRole.lineHeight)
+        field.textContainerInset = UIEdgeInsets(top: pad, left: 0, bottom: pad + below, right: 0)
         field.typingAttributes = Self.typing
         field.isScrollEnabled = false
         field.showsVerticalScrollIndicator = false

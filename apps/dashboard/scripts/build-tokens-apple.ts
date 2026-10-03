@@ -31,6 +31,7 @@ import type {
   PlatformConfig,
   TransformedToken,
 } from "style-dictionary/types";
+import { isProductToken } from "./token-groups";
 
 const EXT = "dev.cawco";
 const REM = 16;
@@ -71,6 +72,7 @@ const ARITH_TOKENS = /\d*\.?\d+(?:e[+-]?\d+)?[a-z%]*|[a-z]+|[-+*/()]/gi;
 const NUMBER = /^(\d*\.?\d+(?:e[+-]?\d+)?)([a-z%]*)$/i;
 const NAME = /^[a-z]+$/i;
 const REF = /^\{([^}]+)\}$/;
+const VIEWPORT_TERM = /^(-?\d*\.?\d+)(?:vi|vw)$/;
 const REFS = /\{([^}]+)\}/g;
 const MIX_SPACE = /^in\s+([a-z0-9-]+)$/;
 const KEBAB = /-([a-z0-9])/g;
@@ -411,6 +413,40 @@ class Tokens {
     const v = this.numeric(s, where);
     return [v, v];
   }
+
+  /**
+   * A clamp()'s preferred value, `<length> + <n>vi` (or `vw`), as points
+   * plus points per point of viewport width; null for a fixed size.
+   */
+  fluid(
+    raw: string,
+    where: string
+  ): { base: number; perViewport: number } | null {
+    const s = raw.trim();
+    const ref = REF.exec(s);
+    if (ref) {
+      return this.fluid(authored(this.lookup(ref[1], where)), where);
+    }
+    const fn = call(s);
+    if (fn?.name !== "clamp") {
+      return null;
+    }
+    const [, preferred] = splitTop(fn.args, ",");
+    let base = 0;
+    let perViewport = 0;
+    for (const term of (preferred ?? "")
+      .replace(/\s*-\s*/g, " + -")
+      .split("+")) {
+      const t = term.trim();
+      const viewport = VIEWPORT_TERM.exec(t);
+      if (viewport) {
+        perViewport += Number(viewport[1]) / 100;
+      } else if (t) {
+        base += this.numeric(t, where);
+      }
+    }
+    return { base, perViewport };
+  }
 }
 
 // MARK: - Colour sets
@@ -444,7 +480,9 @@ function json(value: object): string {
 }
 
 function colourTokens(dictionary: Dictionary): TransformedToken[] {
-  return dictionary.allTokens.filter((t) => t.$type === "color");
+  return dictionary.allTokens.filter(
+    (t) => t.$type === "color" && isProductToken(t)
+  );
 }
 
 /** Rewrites the asset catalog: one colour set per colour token, Any and Dark. */
@@ -525,7 +563,11 @@ function typeRole(raw: string, tokens: Tokens, where: string): string {
   }
   tokens.lookup(`font.${familyRef[1]}`, where);
   const [min, max] = tokens.range(size, where);
-  return `TypeRole(weight: ${WEIGHTS[weight]}, size: ${swiftNumber(min)}...${swiftNumber(max)}, leading: ${swiftNumber(tokens.numeric(leading, where))}, family: FontFamily.${swiftName(familyRef[1])})`;
+  const preferred = tokens.fluid(size, where);
+  const fluid = preferred
+    ? `, fluid: .init(base: ${swiftNumber(preferred.base)}, perViewport: ${swiftNumber(preferred.perViewport)})`
+    : "";
+  return `TypeRole(weight: ${WEIGHTS[weight]}, size: ${swiftNumber(min)}...${swiftNumber(max)}, leading: ${swiftNumber(tokens.numeric(leading, where))}, family: FontFamily.${swiftName(familyRef[1])}${fluid})`;
 }
 
 /** A colour as an `Ink`: its light and dark values in Display P3. */
@@ -728,10 +770,10 @@ export function swiftFormat({
   const tokens = new Tokens(dictionary);
   const groups = new Map<string, Declaration[]>();
   for (const token of dictionary.allTokens) {
-    if (NOT_APPLE.has(token.$type ?? "")) {
+    const [group] = token.path;
+    if (NOT_APPLE.has(token.$type ?? "") || !isProductToken(token)) {
       continue;
     }
-    const [group] = token.path;
     const namespace = NAMESPACES[group];
     if (!namespace) {
       throw new Error(`${token.name}: group "${group}" has no Swift namespace`);

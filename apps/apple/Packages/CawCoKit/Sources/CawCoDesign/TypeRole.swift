@@ -5,15 +5,39 @@ import UIKit
 /// height and font stack. `size` is a range because title and kpi are fluid
 /// on the web; every other role's range is one value.
 public struct TypeRole: Sendable {
+    /// A fluid size's preferred value, `clamp(min, base + perViewport·100vi, max)`.
+    public struct Fluid: Sendable {
+        public let base: Double
+        /// Points per point of viewport width.
+        public let perViewport: Double
+    }
+
     public let weight: UIFont.Weight
     public let size: ClosedRange<Double>
     /// Line height as a multiple of the size.
     public let leading: Double
     /// The CSS font stack, first choice first.
     public let family: [String]
+    /// How a fluid role (title, kpi) grows with the viewport between its bounds.
+    public let fluid: Fluid?
+
+    init(weight: UIFont.Weight, size: ClosedRange<Double>, leading: Double, family: [String], fluid: Fluid? = nil) {
+        self.weight = weight
+        self.size = size
+        self.leading = leading
+        self.family = family
+        self.fluid = fluid
+    }
 
     /// The role's size on a compact screen: a fluid role's smallest.
     public var points: Double { size.lowerBound }
+
+    /// The role's size in a viewport `width` points wide, as the browser
+    /// resolves the token's clamp() at that width.
+    public func points(viewport width: Double) -> Double {
+        guard let fluid else { return size.lowerBound }
+        return min(size.upperBound, max(size.lowerBound, fluid.base + fluid.perViewport * width))
+    }
 
     /// The role's font: Figtree (the stack's first choice) at the token's
     /// weight on its variable `wght` axis, scaled by Dynamic Type from the
@@ -37,17 +61,15 @@ public struct TypeRole: Sendable {
     /// Text attributes that set a string in this role, with `tracking` in em.
     public func attributes(color: UIColor, tracking: Double = 0, alignment: NSTextAlignment = .natural) -> [NSAttributedString.Key: Any] {
         let font = font
-        let paragraph = NSMutableParagraphStyle()
-        paragraph.minimumLineHeight = font.pointSize * leading
-        paragraph.maximumLineHeight = font.pointSize * leading
-        paragraph.alignment = alignment
-        paragraph.lineBreakMode = .byTruncatingTail
+        let line = LineBox.label(font, height: font.pointSize * leading)
+        line.paragraph.alignment = alignment
+        line.paragraph.lineBreakMode = .byTruncatingTail
         return [
             .font: font,
             .foregroundColor: color,
             .kern: tracking * font.pointSize,
-            .paragraphStyle: paragraph,
-            .baselineOffset: (font.pointSize * leading - font.lineHeight) / 4,
+            .paragraphStyle: line.paragraph,
+            .baselineOffset: line.baselineOffset,
         ]
     }
 
