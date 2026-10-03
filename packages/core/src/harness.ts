@@ -25,6 +25,8 @@ export type HarnessKind = "claude" | "opencode" | "pi";
 
 /** Reconfigure a retained harness in place; never stop or restart its session. */
 export const INSTALL_SESSION_CREDENTIAL = "installSessionCredential";
+export const LIVE_CREDENTIAL_ENROLLMENT_REFUSAL =
+  "Live enrollment refused: this session has other dynamic MCP servers, so installing would restart them. It enrolls on its next fresh start.";
 
 export interface SessionCredentialInstall {
   changedServers?: { name: string; before: string; after: string }[];

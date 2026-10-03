@@ -52,6 +52,7 @@ import {
   EFFORT_READ,
   INSPECT_CONFIG,
   INSTALL_SESSION_CREDENTIAL,
+  LIVE_CREDENTIAL_ENROLLMENT_REFUSAL,
   MARKETPLACE_CATALOG,
   MESSAGES_HELD,
   MESSAGES_READ,
@@ -1149,23 +1150,6 @@ class ClaudeSession implements HarnessSession {
     return answer;
   }
 
-  async #settledMcpSnapshot(): Promise<McpServerStatus[]> {
-    const deadline = Date.now() + 30_000;
-    for (;;) {
-      // biome-ignore lint/performance/noAwaitInLoops: observe the existing connects; do not replace any connecting slot.
-      const servers = await this.#handle.mcpServerStatus();
-      if (!servers.some((server) => server.status === "pending")) {
-        return servers;
-      }
-      if (Date.now() >= deadline) {
-        throw new Error(
-          "Credential installation waits for dynamic MCP connections to settle."
-        );
-      }
-      await Bun.sleep(250);
-    }
-  }
-
   async #connectedCawcoSnapshot(): Promise<McpServerStatus[]> {
     const deadline = Date.now() + 30_000;
     for (;;) {
@@ -1189,39 +1173,19 @@ class ClaudeSession implements HarnessSession {
     if (!initial) {
       await this.#turn.waitForIdle();
     }
-    let before = await this.#handle.mcpServerStatus();
+    const before = await this.#handle.mcpServerStatus();
     if (!initial) {
       const dynamic = (server: McpServerStatus) =>
         server.name !== MCP_SERVER_NAME &&
-        (server.source === "dynamic" ||
-          server.source === "sdk" ||
-          server.scope === "dynamic");
+        ["dynamic", "sdk"].includes(server.source ?? server.scope ?? "");
       if (before.some(dynamic)) {
-        before = await this.#settledMcpSnapshot();
+        throw new Error(LIVE_CREDENTIAL_ENROLLMENT_REFUSAL);
       }
-      // SDK 0.3.288 sdk.d.ts:3187/3194 replaces only the dynamic set; never
-      // resubmit startup user/project/plugin configs or normalize a live config.
+      // SDK 0.3.288 replaces the whole dynamic set. Never round-trip other
+      // slots through mcpServerStatus: their connections must remain untouched.
       const configured: Record<string, McpServerConfig> = {
         [MCP_SERVER_NAME]: delegationMcp(this.instanceId, credential),
       };
-      for (const server of before.filter(dynamic)) {
-        if (!server.config || server.config.type === "claudeai-proxy") {
-          throw new Error(
-            `Cannot preserve dynamic MCP config for ${server.name}.`
-          );
-        }
-        if (server.config.type === "sdk") {
-          const original = this.#mcpServers[server.name];
-          if (original?.type !== "sdk") {
-            throw new Error(
-              `Cannot preserve dynamic SDK instance for ${server.name}.`
-            );
-          }
-          configured[server.name] = original;
-        } else {
-          configured[server.name] = server.config as McpServerConfig;
-        }
-      }
       const applied = await this.#handle.setMcpServers(configured);
       if (applied.errors[MCP_SERVER_NAME]) {
         throw new Error("Live CawCo MCP credential reconfiguration failed.");

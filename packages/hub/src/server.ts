@@ -93,6 +93,7 @@ import {
   INSPECT_CONFIG,
   INSTALL_SESSION_CREDENTIAL,
   isEffortLevel,
+  LIVE_CREDENTIAL_ENROLLMENT_REFUSAL,
   MESSAGES_HELD,
   MESSAGES_READ,
   MESSAGES_STORED,
@@ -2697,15 +2698,21 @@ export const createServer = ({
    */
   const identities = createSessionIdentities(db);
   const bounded = (payload: SpawnPayload): SpawnPayload => {
+    const { sessionCredential: _callerCredential, ...asked } = payload;
     const [row] = db.getInstancesByIds([payload.instanceId]);
     const workspace = row ? workItems.workspaceOf(row) : undefined;
     const harness = payload.harness ?? row?.harness ?? "claude";
+    // Custody restores retain the process's live token; the hub deliberately
+    // keeps only its hash. Fresh/revive/relaunch processes still need delivery.
+    const acknowledgedRestore =
+      payload.reattachOnly &&
+      db.sessionIdentity(payload.instanceId)?.credentialHash;
     const sessionCredential =
-      harness === "claude" || harness === "pi"
+      !acknowledgedRestore && (harness === "claude" || harness === "pi")
         ? identities.mint(payload.instanceId)
         : undefined;
     return {
-      ...payload,
+      ...asked,
       ...(workspace ? { workspace } : {}),
       ...(sessionCredential ? { sessionCredential } : {}),
     };
@@ -6255,6 +6262,26 @@ export const createServer = ({
     }
   };
 
+  const healthySessionIdentity = (instanceId: string): boolean => {
+    const identity = db.sessionIdentity(instanceId);
+    return !!(
+      identity?.credentialHash &&
+      identity.installedAt &&
+      !identity.pendingHash &&
+      identity.error === null
+    );
+  };
+
+  const failedSessionIdentity = (instanceId: string, problem: unknown) => {
+    const error = problem instanceof Error ? problem.message : String(problem);
+    db.sessionIdentityError(
+      instanceId,
+      error,
+      error === LIVE_CREDENTIAL_ENROLLMENT_REFUSAL
+    );
+    return { instanceId, installed: false, error };
+  };
+
   /** Operator-selected delivery; the raw credential is never returned to the caller. */
   const installSessionIdentity = async (instanceId: string) => {
     try {
@@ -6263,6 +6290,9 @@ export const createServer = ({
         throw new Error(
           "Phase 2(a) installs known Claude and pi sessions only"
         );
+      }
+      if (healthySessionIdentity(instanceId)) {
+        return { instanceId, installed: true, changedServers: [] };
       }
       const agent = registry.agent(row.machineId);
       if (!agent) {
@@ -6303,10 +6333,7 @@ export const createServer = ({
           : {}),
       };
     } catch (problem) {
-      const error =
-        problem instanceof Error ? problem.message : String(problem);
-      db.sessionIdentityError(instanceId, error);
-      return { instanceId, installed: false, error };
+      return failedSessionIdentity(instanceId, problem);
     }
   };
 
@@ -6445,7 +6472,11 @@ export const createServer = ({
             );
           }
           if (body.error !== undefined) {
-            db.sessionIdentityError(identity.instanceId, body.error);
+            db.sessionIdentityError(
+              identity.instanceId,
+              body.error,
+              body.error === LIVE_CREDENTIAL_ENROLLMENT_REFUSAL
+            );
             return { ok: false };
           }
           return identities.acknowledge(authorization)

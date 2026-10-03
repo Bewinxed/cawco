@@ -760,7 +760,11 @@ export interface DbShape {
   readonly sessionIdentityByHash: (
     hash: string
   ) => SessionIdentityRow | undefined;
-  readonly sessionIdentityError: (instanceId: string, error: string) => void;
+  readonly sessionIdentityError: (
+    instanceId: string,
+    error: string | null,
+    rejectPending?: boolean
+  ) => void;
   readonly setAgentBrowser: (machineId: string, available: boolean) => void;
   /** A machine's own account of what it came to, from the sync it just answered. */
   readonly setAgentFleet: (machineId: string, report: FleetSyncReport) => void;
@@ -1473,9 +1477,9 @@ const make = (path: string): DbShape => {
         .get();
       return changed !== undefined;
     },
-    sessionIdentityError: (instanceId, error) => {
+    sessionIdentityError: (instanceId, error, rejectPending = false) => {
       db.update(sessionIdentities)
-        .set({ error })
+        .set({ error, ...(rejectPending ? { pendingHash: null } : {}) })
         .where(eq(sessionIdentities.instanceId, instanceId))
         .run();
     },
