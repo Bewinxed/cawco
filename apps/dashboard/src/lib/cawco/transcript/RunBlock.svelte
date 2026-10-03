@@ -97,25 +97,24 @@
 <!-- Its height moves with its steps as one opens or folds its result
      (`morph` on the rows' clock), so the chat under it never jumps. -->
 <div class="run-block rail-row" data-nest-host {@attach morph({ rows: true })}>
-  {#if runId && !here}
-    <a class="head rail-line press-tint" href={runHref(runId)}>
-      <span class="mark rail-cell"
-        ><SessionStatus compact sessionId={runTabId(runId)} /></span
-      >
-      <span class="name">{name}</span>
-      <span class="num progress">{progress}</span>
-    </a>
-  {:else}
-    <p class="head rail-line">
-      <span class="mark rail-cell"
-        >{#if runId}
-          <SessionStatus compact sessionId={runTabId(runId)} />
-        {/if}</span
-      >
-      <span class="name">{name}</span>
-      <span class="num progress">{progress}</span>
-    </p>
-  {/if}
+  {#snippet words()}
+    <span class="name">{name}</span>
+    <span class="num progress">{progress}</span>
+  {/snippet}
+  <!-- The glyph stands before the link, in its own cell: the steps' line
+       leaves its foot outside any control. -->
+  <div class="head rail-line">
+    <span class="mark rail-cell"
+      >{#if runId}
+        <SessionStatus compact sessionId={runTabId(runId)} />
+      {/if}</span
+    >
+    {#if runId && !here}
+      <a class="words press-tint" href={runHref(runId)}>{@render words()}</a>
+    {:else}
+      <p class="words">{@render words()}</p>
+    {/if}
+  </div>
   {#if failure}
     <p class="failure rail-hang">{failure}</p>
   {/if}
@@ -129,6 +128,13 @@
 <style>
   .head {
     min-block-size: 26px;
+    font-size: var(--text-label);
+    font-weight: var(--weight-strong);
+  }
+  .words {
+    flex: 1 1 auto;
+    min-inline-size: 0;
+    min-block-size: 26px;
     display: flex;
     align-items: center;
     gap: var(--space-2);
@@ -136,8 +142,6 @@
     border-radius: var(--radius-xs);
     color: inherit;
     text-decoration: none;
-    font-size: var(--text-label);
-    font-weight: var(--weight-strong);
   }
   .name {
     flex: 0 1 auto;
@@ -149,7 +153,7 @@
     transition: color var(--dur-control) var(--ease-out);
   }
   @media (hover: hover) and (pointer: fine) {
-    a.head:hover .name {
+    a.words:hover .name {
       color: var(--brand-ink);
     }
   }
@@ -170,7 +174,8 @@
     overflow-wrap: anywhere;
   }
   @media (pointer: coarse) {
-    .head {
+    .head,
+    .words {
       min-block-size: 44px;
     }
   }

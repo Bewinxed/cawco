@@ -168,7 +168,6 @@
 {#snippet line(
   step: WorkflowStep
 )}
-  <SessionStatus compact step={step.status} />
   <span class="title">{titleOf(step)}</span>
 {/snippet}
 
@@ -190,6 +189,10 @@
         <!-- Its words, the way into its own tab, its time, and last, at the
              trailing edge, the count of what it folds. -->
         <div class="step">
+          <!-- The glyph stands before the row's control, at the row's own
+               edge: the line ends on it and a child's line leaves its foot,
+               and neither ever runs inside a control. -->
+          <SessionStatus compact step={step.status} />
           {#if foldable}
             <button
               aria-expanded={opened.has(step.id)}
@@ -272,9 +275,9 @@
 {/if}
 
 <style>
-  /* The rail under the parent's glyph; each curved arm runs over its line's
-     inset to the step's status glyph, level with it (both measured,
-     `nestFrom`). */
+  /* The rail under the parent's glyph; each curved arm ends on the step's
+     status glyph, level with it (both measured, `nestFrom`). The glyph leads
+     the row outside its control, so no line runs inside one. */
   .run-steps {
     --nest-gap: var(--space-row);
     list-style: none;
@@ -297,8 +300,9 @@
     min-block-size: 26px;
     display: flex;
     align-items: center;
-    gap: var(--space-2);
-    padding: 0 var(--space-1);
+    /* The words stand at the text column: the glyph, then --space-2 to the
+       words, the row's gap included. */
+    padding: 0 var(--space-1) 0 calc(var(--space-2) - var(--space-1));
     border: 0;
     border-radius: var(--radius-xs);
     background: none;
@@ -351,16 +355,16 @@
       background: var(--surface-hover);
     }
   }
-  /* What a step folds open hangs at its text column (the line's inset, the
-     glyph, the gap to the words), clear of the line under its glyph; its
-     transcript's well reaches out past that column by its padding. */
+  /* What a step folds open hangs at its text column (the glyph, the gap to
+     the words), clear of the line under its glyph; its transcript's well
+     reaches out past that column by its padding. */
   .opened {
     --well-at: calc(-1 * var(--space-1));
     display: flex;
     flex-direction: column;
     align-items: start;
     gap: var(--space-2);
-    margin-inline-start: calc(var(--space-1) + var(--w-glyph) + var(--space-2));
+    margin-inline-start: calc(var(--w-glyph) + var(--space-2));
     padding-block: var(--space-1) var(--space-2);
   }
   .well {
