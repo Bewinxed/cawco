@@ -29,6 +29,7 @@
  */
 import {
   mkdir,
+  readdir,
   readFile,
   readlink,
   realpath,
@@ -75,6 +76,39 @@ const scratchOf = (id: string): string => join(stateDir(id), "tmp");
 
 /** The disk behind a Linux boundary's private user runtime dir. */
 const runOf = (id: string): string => join(stateDir(id), "run");
+
+const SSH_INCLUDES = "/etc/ssh/ssh_config.d";
+
+/**
+ * A Linux boundary's copy of the host's ssh includes, owned by the user, or
+ * "" on a host without them. Rewritten on every start, so it follows the host.
+ */
+const copySshIncludes = async (id: string): Promise<string> => {
+  const names = await readdir(SSH_INCLUDES).catch(
+    (error: NodeJS.ErrnoException) => {
+      if (error.code === "ENOENT") {
+        return undefined;
+      }
+      throw error;
+    }
+  );
+  if (!names) {
+    return "";
+  }
+  const copy = join(stateDir(id), "ssh_config.d");
+  await rm(copy, { recursive: true, force: true });
+  await mkdir(copy, { recursive: true });
+  await Promise.all(
+    names
+      .filter((name) => name.endsWith(".conf"))
+      .map(async (name) =>
+        writeFile(join(copy, name), await readFile(join(SSH_INCLUDES, name)), {
+          mode: 0o644,
+        })
+      )
+  );
+  return copy;
+};
 
 const procIdOf = (id: string): string => `boundary-${id}`;
 
@@ -257,7 +291,10 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
  * dirs are bound read-write onto themselves first and `/tmp` and the runtime
  * dir are binds of those, so they come up read-write: a remount aimed at
  * `/tmp` itself is refused, because libmount reads the flags of the host
- * mount beneath it and asks the kernel to change a locked atime flag. Then a nested
+ * mount beneath it and asks the kernel to change a locked atime flag. The
+ * host's ssh includes are replaced by the user's own copy of them, because
+ * host root shows up as nobody here and ssh refuses an included file no
+ * longer owned by root or the user. Then a nested
  * user namespace maps the user back to their own uid — tools see who they
  * always see, not root — and its own mount namespace locks every mount above.
  * The anchor is that namespace's PID 1: a bash loop, which reaps the orphans
@@ -265,8 +302,8 @@ const ensure = async (ref: WorkspaceRef): Promise<Boundary> => {
  */
 const ANCHOR = `exec 2>&1
 set -eu
-ws=$1 scratch=$2 run=$3 uid=$4 gid=$5 runtime=$6 hidden=$7
-shift 7
+ws=$1 scratch=$2 run=$3 uid=$4 gid=$5 runtime=$6 hidden=$7 ssh=$8
+shift 8
 mount -o remount,bind,ro=recursive /
 mount -o remount,rw /proc
 for path in "$ws" "$scratch" "$run" "$@"; do
@@ -276,6 +313,7 @@ done
 mount --bind "$scratch" /tmp
 if [ -n "$runtime" ] && [ -d "$runtime" ]; then mount --bind "$run" "$runtime"; fi
 if [ -n "$hidden" ] && [ -d "$hidden" ]; then mount -t tmpfs -o size=4k,mode=0555 hidden "$hidden"; fi
+if [ -n "$ssh" ]; then mount --bind "$ssh" ${SSH_INCLUDES}; fi
 mount -t tmpfs -o mode=1777,nosuid,nodev shm /dev/shm
 exec unshare --user --mount --map-user="$uid" --map-group="$gid" bash -c 'echo ${READY}; while :; do sleep 86400 & wait; done'`;
 
@@ -287,6 +325,7 @@ const linuxSpec = async (
   ref: WorkspaceRef,
   scratch: string,
   run: string,
+  ssh: string,
   caches: string[]
 ): Promise<ProcSpec> => {
   const runtime = process.env.XDG_RUNTIME_DIR ?? "";
@@ -325,6 +364,7 @@ const linuxSpec = async (
       String(process.getgid?.() ?? 0),
       hideable(runtime, kept),
       hideable(dirname(sessiondPath()), kept),
+      ssh,
       ...caches,
     ],
   };
@@ -540,10 +580,11 @@ const start = async (
 ): Promise<Boundary> => {
   const dir = stateDir(ref.id);
   const scratch = scratchOf(ref.id);
+  const linux = process.platform === "linux";
   const run = runOf(ref.id);
   const caches = cachesOf();
   await Promise.all(
-    [dir, scratch, run, ...caches].map((path) =>
+    [dir, scratch, ...(linux ? [run] : []), ...caches].map((path) =>
       mkdir(path, { recursive: true })
     )
   );
@@ -553,10 +594,9 @@ const start = async (
   if (await holding(client, procId)) {
     await client.signal(procId, "SIGKILL");
   }
-  const spec =
-    process.platform === "linux"
-      ? await linuxSpec(ref, scratch, run, caches)
-      : await darwinSpec(ref, dir, scratch, caches);
+  const spec = linux
+    ? await linuxSpec(ref, scratch, run, await copySshIncludes(ref.id), caches)
+    : await darwinSpec(ref, dir, scratch, caches);
   await client.spawnProc(procId, spec);
   await ready(client, procId).catch((error: Error) => {
     throw refusal(ref.id, error.message);
@@ -569,7 +609,7 @@ const start = async (
   }
   let held: Held;
   const exec = join(dir, "exec");
-  if (process.platform === "linux") {
+  if (linux) {
     // sessiond's child is the unshare process; the anchor is its one child.
     const children = await readFile(
       `/proc/${proc.pid}/task/${proc.pid}/children`,
