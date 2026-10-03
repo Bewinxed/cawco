@@ -93,7 +93,7 @@ import {
   type Todo,
 } from "@opencode-ai/sdk/v2";
 import { workspacesDir } from "../boundary";
-import { delegationHubUrl } from "../delegation";
+import { delegationHubUrl, harnessMcpUrl } from "../delegation";
 import type { Harness, HarnessContext, HarnessSession } from "../harness";
 import { isMachineAgent } from "../machine-agent";
 import { ensureSessiond, SessiondClient } from "../sessiond-client";
@@ -190,7 +190,7 @@ const STATIC_POLICY = {
 /** The hub's MCP server as opencode configures a remote server. */
 const cawcoMcp = () => ({
   type: "remote" as const,
-  url: `${delegationHubUrl()}/mcp/cawco`,
+  url: harnessMcpUrl("/mcp/cawco"),
   timeout: IMAGE_GENERATION_TIMEOUT_MS + 60_000,
   enabled: true,
   oauth: false as const,
@@ -199,7 +199,7 @@ const cawcoMcp = () => ({
 /**
  * The config keys the convergence system fingerprints and verifies against
  * the server's resolved state. Keyed by the opencode.json field name.
- * `mcp` is excluded — it's verified authoritatively via `mcp.status()`.
+ * MCP definitions are verified separately, scoped to CawCo's managed names.
  */
 const CONTROLLED_CONFIG_FIELDS = [
   "agent",
@@ -466,12 +466,42 @@ export const parseServerAnnouncement = (line: string): string | undefined => {
  * running process is the point, and a config change lands on the next machine
  * boot (or a deliberate `sessiond` stop), never by killing sessions.
  */
-export const attachOpencodeServer = async (options: {
+interface OpencodeServerAttach {
+  procId?: string;
   sessiond: SessiondClient;
   spec: ProcSpec;
-  procId?: string;
   timeoutMs?: number;
-}): Promise<{ url: string; freshlySpawned: boolean }> => {
+}
+
+const pendingServerAttachments = new WeakMap<
+  SessiondClient,
+  Map<string, Promise<{ url: string; freshlySpawned: boolean }>>
+>();
+
+/** One listener per client/procId: concurrent callers share its whole spawn and replay. */
+export const attachOpencodeServer = (
+  options: OpencodeServerAttach
+): Promise<{ url: string; freshlySpawned: boolean }> => {
+  let pending = pendingServerAttachments.get(options.sessiond);
+  if (!pending) {
+    pending = new Map();
+    pendingServerAttachments.set(options.sessiond, pending);
+  }
+  const procId = options.procId ?? OPENCODE_SERVER_PROC_ID;
+  const existing = pending.get(procId);
+  if (existing) {
+    return existing;
+  }
+  const attached = announceOpencodeServer(options).finally(() =>
+    pending.delete(procId)
+  );
+  pending.set(procId, attached);
+  return attached;
+};
+
+const announceOpencodeServer = async (
+  options: OpencodeServerAttach
+): Promise<{ url: string; freshlySpawned: boolean }> => {
   const procId = options.procId ?? OPENCODE_SERVER_PROC_ID;
   const timeoutMs = options.timeoutMs ?? SERVER_ANNOUNCE_TIMEOUT_MS;
   const client = options.sessiond;
@@ -561,7 +591,7 @@ export const buildHandoffPluginSource =
   (): string => `import { spawn } from "node:child_process";
 import { readdirSync, readFileSync } from "node:fs";
 import { tool } from "@opencode-ai/plugin";
-const cawcoBase = ${JSON.stringify(delegationHubUrl())};
+const cawcoBase = ${JSON.stringify(harnessMcpUrl(""))};
 const cawcoWorkspaces = ${JSON.stringify(workspacesDir())};
 const boundaryOf = (directory) => {
   let ids = [];
@@ -3659,17 +3689,12 @@ export class OpencodeHarness implements Harness {
   }
 
   /**
-   * Verify the server's resolved state for a specific directory matches
-   * the desired config after a dispose or fresh spawn. Two authoritative
-   * checks:
-   *
-   * 1. **Runtime leaf comparison** — read the server's resolved config via
-   *    `config.get()` for this directory, extract controlled fields, and
    * Verify the running server's config matches the desired global config.
    *
    * After a process restart, the new server reads global config at startup.
    * This method confirms that the runtime config.get() reflects the desired
-   * controlled fields, and that MCP servers match expected state.
+   * controlled fields and fleet-managed MCP definitions. Connection status is
+   * reported separately and never changes whether configuration was applied.
    *
    * Does NOT check per-directory project configs — project overlays are the
    * user's business. Only verifies controlled fields from global config.
@@ -3756,55 +3781,28 @@ export class OpencodeHarness implements Harness {
       );
     }
 
-    // ---- 3. MCP status (authoritative runtime check) -----------------------
-    const expectedMcp = new Set(
-      desiredRaw?.mcp
-        ? Object.keys(desiredRaw.mcp as Record<string, unknown>)
-        : []
+    // Connection health belongs to fleetStatus, not configuration convergence.
+    const sidecar = await readSidecar(OPENCODE_SIDECAR);
+    const managed = new Set(["cawco", ...(sidecar.mcp ?? [])]);
+    const desiredMcp = desiredRaw?.mcp as Record<string, unknown> | undefined;
+    const liveMcp = liveConfig.mcp as Record<string, unknown> | undefined;
+    const mismatched = [...managed].filter(
+      (name) =>
+        desiredMcp?.[name] === undefined ||
+        !containsJson(desiredMcp[name], liveMcp?.[name])
     );
-    const mcpStatus = await reached(
-      client.mcp.status({}, { signal: AbortSignal.timeout(10_000) })
+    console.log(
+      JSON.stringify({
+        type: "config-convergence",
+        event: "mcp-config",
+        managed: [...managed],
+        mismatched,
+        at: Date.now(),
+      })
     );
-    if (mcpStatus.data) {
-      const statuses = mcpStatus.data as Record<string, { status: string }>;
-      const statusMap = Object.fromEntries(
-        Object.entries(statuses).map(([n, s]) => [n, s.status])
-      );
-      const mcpProblems: string[] = [];
-      for (const name of expectedMcp) {
-        const expected = (
-          desiredRaw?.mcp as Record<string, { enabled?: boolean }> | undefined
-        )?.[name];
-        const actual = statuses[name];
-        const expectedStatus =
-          expected?.enabled === false ? "disabled" : "connected";
-        if (actual?.status !== expectedStatus) {
-          mcpProblems.push(`${name}=${actual?.status ?? "missing"}`);
-        }
-      }
-      for (const name of Object.keys(statusMap)) {
-        if (!expectedMcp.has(name)) {
-          mcpProblems.push(`${name}=unexpected`);
-        }
-      }
-      console.log(
-        JSON.stringify({
-          type: "config-convergence",
-          event: "mcp-status",
-          servers: statusMap,
-          expected: [...expectedMcp],
-          problems: mcpProblems,
-          at: Date.now(),
-        })
-      );
-      if (mcpProblems.length > 0) {
-        throw new Error(
-          `config verification failed: MCP state mismatch: ${mcpProblems.join(", ")}`
-        );
-      }
-    } else if (expectedMcp.size > 0) {
+    if (mismatched.length > 0) {
       throw new Error(
-        `config verification failed: MCP status returned no data; expected ${expectedMcp.size} server(s)`
+        `config verification failed: managed MCP definitions diverge on: ${mismatched.join(", ")}`
       );
     }
   }
@@ -3908,6 +3906,9 @@ export class OpencodeHarness implements Harness {
   }
 
   #ensure(): Promise<OpencodeClient> {
+    if (this.#applyGate) {
+      return this.#applyGate.promise.then(() => this.#ensure());
+    }
     if (this.#client) {
       return Promise.resolve(this.#client);
     }

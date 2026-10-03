@@ -53,7 +53,7 @@ import {
 import { Effect } from "effect";
 import { type Boundary, boundaryFor } from "./boundary";
 import { fetchDefaultBranch } from "./clone";
-import { delegationHubUrl } from "./delegation";
+import { harnessMcpUrl } from "./delegation";
 import { DEPLOY_BRANCH } from "./deploy";
 import { expandHome, runFs } from "./fs";
 import type { Harness, HarnessContext, HarnessSession } from "./harness";
@@ -1651,7 +1651,9 @@ export class SessionSupervisor {
               ...row,
               config: {
                 ...row.config,
-                url: `${delegationHubUrl()}/mcp/fleet/${encodeURIComponent(row.name)}`,
+                url: harnessMcpUrl(
+                  `/mcp/fleet/${encodeURIComponent(row.name)}`
+                ),
               },
             }
           : row

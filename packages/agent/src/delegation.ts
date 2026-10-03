@@ -1,6 +1,7 @@
 import {
   CAWCO_ENV,
   CAWCO_HUB_PORT,
+  CAWCO_MCP_CALLBACK_PORT,
   IMAGE_GENERATION_TIMEOUT_MS,
   readEnv,
 } from "@cawco/core";
@@ -12,12 +13,19 @@ export const delegationHubUrl = () =>
   (readEnv(CAWCO_ENV.hubUrl) ?? `ws://localhost:${CAWCO_HUB_PORT}/ws`)
     .replace(WS_SCHEME, "http")
     .replace(WS_PATH, "");
+
+/** Remote hubs are reached by the agent; every harness talks only to loopback. */
+export const harnessMcpUrl = (path: string): string => {
+  const hub = new URL(delegationHubUrl());
+  const local = ["localhost", "127.0.0.1", "[::1]"].includes(hub.hostname);
+  return `${local ? hub.origin : `http://127.0.0.1:${CAWCO_MCP_CALLBACK_PORT}`}${path}`;
+};
 /** How long any call to the hub's tools may run: finish_item's checks set it. */
 const DELEGATION_CALL_TIMEOUT_MS = 24 * 60 * 60 * 1000;
 
 export const delegationMcp = (instanceId: string) => ({
   type: "http" as const,
-  url: `${delegationHubUrl()}/mcp/cawco?instanceId=${encodeURIComponent(instanceId)}`,
+  url: harnessMcpUrl(`/mcp/cawco?instanceId=${encodeURIComponent(instanceId)}`),
   // Exempt from tool-search deferral (Claude Code >= 2.1.121). Measured: across
   // 54 cawco-spawned sessions the delegate tool was one deferred NAME among
   // 133, uncallable until a ToolSearch round trip, while Bash sat loaded — a
@@ -34,7 +42,9 @@ export const delegationMcp = (instanceId: string) => ({
 
 export async function delegationTools(instanceId?: string) {
   const response = await fetch(
-    `${delegationHubUrl()}/api/delegation/tools${instanceId ? `?instanceId=${encodeURIComponent(instanceId)}` : ""}`,
+    harnessMcpUrl(
+      `/api/delegation/tools${instanceId ? `?instanceId=${encodeURIComponent(instanceId)}` : ""}`
+    ),
     {
       signal: AbortSignal.timeout(5000),
     }
@@ -59,7 +69,7 @@ export async function callDelegationTool(
   args: unknown
 ) {
   const response = await fetch(
-    `${delegationHubUrl()}/api/delegation/call/${encodeURIComponent(instanceId)}`,
+    harnessMcpUrl(`/api/delegation/call/${encodeURIComponent(instanceId)}`),
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },

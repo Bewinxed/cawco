@@ -36,7 +36,7 @@ import { machineId } from "./machine-id";
 import {
   canOpenDesktopBrowser,
   openMcpAuthorization,
-  startMcpOAuthCallback,
+  startMcpGateway,
 } from "./mcp-oauth";
 import { servingPreviews } from "./preview";
 import { TranscriptSearchService } from "./search";
@@ -900,7 +900,7 @@ export const startDaemon = (auth?: AuthState, rediscover = false) =>
     // reads this.
     let hubUrl = url;
     yield* Effect.acquireRelease(
-      Effect.sync(() => startMcpOAuthCallback(() => hubUrl)),
+      Effect.sync(() => startMcpGateway(() => hubUrl)),
       (listener) => Effect.sync(() => listener.stop(true))
     );
     // The claude harness's auth is the machine's headline word — the original
