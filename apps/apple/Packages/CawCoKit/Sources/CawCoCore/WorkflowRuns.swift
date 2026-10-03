@@ -12,7 +12,16 @@ public final class WorkflowRunDetail {
     public internal(set) var error: String?
     public internal(set) var answerStage: AnswerStage = .pending
     public internal(set) var acting: String?
+    /// The program's own narration and its checkpoints, in the order they
+    /// happened (journal-graph.ts `journalLog` + `journalCheckpoints`).
+    public internal(set) var log: [LogLine] = []
     init(_ id: String) { self.id = id }
+
+    public struct LogLine: Sendable, Equatable {
+        public let seq: Double
+        public let at: Date
+        public let text: String
+    }
 }
 
 /// The same run-detail and answer endpoints as workflows.ts. No answer is
@@ -51,6 +60,19 @@ public final class WorkflowRunsStore {
                 if !Task.isCancelled { detail.error = error.localizedDescription }
             }
             if !Task.isCancelled { detail.loading = false }
+            // The log is re-read whenever the run is: a checkpoint or a log
+            // line arrives without a step row of its own.
+            if !Task.isCancelled, case let .ok(ok)? = try? await client.getApiWorkflowRunsByIdLog(path: .init(id: id)),
+               let entries = try? ok.body.json.log {
+                detail.log = entries.compactMap { entry -> WorkflowRunDetail.LogLine? in
+                    let args = entry.args?.value ?? [:]
+                    switch entry.kind {
+                    case .log, .notify: return .init(seq: entry.seq, at: entry.at, text: "\(args["text"].flatMap { $0 } ?? "")")
+                    case .checkpoint: return .init(seq: entry.seq, at: entry.at, text: "Checkpoint · \(args["label"].flatMap { $0 } ?? "")")
+                    default: return nil
+                    }
+                }.sorted { $0.seq < $1.seq }
+            }
         }
     }
 
@@ -90,19 +112,25 @@ public final class WorkflowRunsStore {
         }
     }
 
-    public func cancel(_ id: String) {
-        guard let detail = details[id], detail.acting == nil, let client = hub.client else { return }
-        detail.acting = "cancel"; detail.error = nil
+    /// `done` hears the refusal, or nil once the hub has cancelled it.
+    public func cancel(_ id: String, done: @escaping (String?) -> Void = { _ in }) {
+        guard let detail = details[id], detail.acting == nil, let client = hub.client else {
+            done("Can't cancel while the hub is unreachable.")
+            return
+        }
+        detail.acting = "cancel"
         Task {
             defer { detail.acting = nil }
+            var refusal: String?
             do {
                 let response = try await client.postApiWorkflowRunsByIdCancel(path: .init(id: id))
                 switch response {
                 case .ok: read(id)
-                case let .badRequest(bad): detail.error = try await String(collecting: bad.body.plainText, upTo: 64_000)
-                default: detail.error = "The hub refused to cancel the run."
+                case let .badRequest(bad): refusal = try await String(collecting: bad.body.plainText, upTo: 64_000)
+                default: refusal = "The hub refused to cancel the run."
                 }
-            } catch { detail.error = error.localizedDescription }
+            } catch { refusal = error.localizedDescription }
+            done(refusal)
         }
     }
 

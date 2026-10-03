@@ -403,7 +403,7 @@ public final class PromptCardView: UIView {
 
     /// A pressed button pends: its label morphs to what it is doing, a
     /// spinner turning in its glyph's place.
-    static func setPending(_ button: UIButton, _ pending: Bool, label: String) {
+    public static func setPending(_ button: UIButton, _ pending: Bool, label: String) {
         let key = "pending"
         let showing = button.layer.value(forKey: key) as? Bool ?? false
         guard showing != pending else { return }
@@ -530,13 +530,15 @@ final class OptionChip: UIControl {
     }
 }
 
-/// Chips that wrap: each as wide as its content, the next row 7pt down.
-final class WrapLayout: UIView {
+/// Chips that wrap: each as wide as its content, `gap` apart either way.
+public final class WrapLayout: UIView {
     private let items: [UIView]
+    private let gap: Double
     private var laidWidth = 0.0
 
-    init(_ items: [UIView]) {
+    public init(_ items: [UIView], gap: Double = Space.space2) {
         self.items = items
+        self.gap = gap
         super.init(frame: .zero)
         for item in items {
             item.translatesAutoresizingMaskIntoConstraints = true
@@ -549,11 +551,11 @@ final class WrapLayout: UIView {
         fatalError("WrapLayout is built in code")
     }
 
-    override var intrinsicContentSize: CGSize {
+    override public var intrinsicContentSize: CGSize {
         CGSize(width: UIView.noIntrinsicMetric, height: arrange(width: bounds.width, apply: false))
     }
 
-    override func layoutSubviews() {
+    override public func layoutSubviews() {
         super.layoutSubviews()
         _ = arrange(width: bounds.width, apply: true)
         if laidWidth != bounds.width {
@@ -571,11 +573,11 @@ final class WrapLayout: UIView {
             let h = item.systemLayoutSizeFitting(CGSize(width: w, height: 0), withHorizontalFittingPriority: .required, verticalFittingPriority: .fittingSizeLevel).height
             if x > 0, x + w > width {
                 x = 0
-                y += line + Space.space2
+                y += line + gap
                 line = 0
             }
             if apply { item.frame = CGRect(x: x, y: y, width: w, height: h) }
-            x += w + Space.space2
+            x += w + gap
             line = max(line, h)
         }
         return y + line

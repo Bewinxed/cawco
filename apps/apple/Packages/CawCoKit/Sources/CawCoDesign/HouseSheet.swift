@@ -48,6 +48,10 @@ public final class HouseSheetController: UIViewController, UIViewControllerTrans
         fatalError("HouseSheetController is built in code")
     }
 
+    override public func loadView() {
+        view = SheetGround()
+    }
+
     override public func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .clear
@@ -212,6 +216,15 @@ public final class HouseSheetController: UIViewController, UIViewControllerTrans
 
     public func animationController(forDismissed _: UIViewController) -> (any UIViewControllerAnimatedTransitioning)? {
         HouseSheetMotion(presenting: false)
+    }
+}
+
+/// The sheet's full-screen ground: a touch outside the card falls through
+/// to the scrim under it, which closes the sheet.
+final class SheetGround: UIView {
+    override func hitTest(_ point: CGPoint, with event: UIEvent?) -> UIView? {
+        let hit = super.hitTest(point, with: event)
+        return hit === self ? nil : hit
     }
 }
 
