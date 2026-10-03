@@ -29,6 +29,7 @@
  * is under the pointer now.
  */
 import { untrack } from "svelte";
+import { watchRendered } from "#lib/utils/rendered.js";
 
 type Axis = "x" | "y" | "xy";
 
@@ -252,6 +253,8 @@ export function highlight(options: HighlightOptions) {
           row.offsetParent !== null &&
           (!laidOut || laidOut().has(row))
       );
+    /** The list is not rendered (`watchRendered`): nothing measures it. */
+    let skipped = false;
     let ghostBox: Box | null = null;
     let ghostRow: HTMLElement | null = null;
     let pendingHide = 0;
@@ -262,7 +265,7 @@ export function highlight(options: HighlightOptions) {
       ghost.style.opacity = covered && ghostRow?.matches(covered) ? "0" : "1";
     };
     const showGhost = (row: HTMLElement | null) => {
-      if (!withGhost) {
+      if (!withGhost || skipped) {
         return;
       }
       // The row under the ghost says so, for a pill in a nested list (a
@@ -288,7 +291,7 @@ export function highlight(options: HighlightOptions) {
     };
 
     /** The pill onto the selected row: from the ghost, or gliding. */
-    const syncPill = (glide: boolean) => {
+    const placePill = (glide: boolean) => {
       if (!selected) {
         return;
       }
@@ -323,6 +326,11 @@ export function highlight(options: HighlightOptions) {
       pill.style.opacity = "1";
       pillBox = box;
       pillRow = row;
+    };
+    const syncPill = (glide: boolean) => {
+      if (!skipped) {
+        placePill(glide);
+      }
     };
 
     /** Whether `at` lies on the row at `box`, the gaps along the axis bridged. */
@@ -479,6 +487,9 @@ export function highlight(options: HighlightOptions) {
       pendingResize = requestAnimationFrame(onResize);
     });
     const onResize = () => {
+      if (skipped) {
+        return;
+      }
       pillRow = null;
       pillBox = null;
       setGlide(pill, false);
@@ -491,6 +502,15 @@ export function highlight(options: HighlightOptions) {
       }
     };
     sizes.observe(container);
+    // A list an ancestor skips (the home board put away under a
+    // conversation) has no layout to measure, and measuring it would lay it
+    // out: the layers wait, and are placed afresh, without a glide, the
+    // frame it is rendered again.
+    const watching = watchRendered(container, (on) => {
+      skipped = !on;
+      onResize();
+    });
+    skipped = !watching.rendered;
     syncPill(false);
 
     // A list that measures its rows moves the layers each time it does: the
@@ -520,6 +540,7 @@ export function highlight(options: HighlightOptions) {
       container.removeEventListener("scroll", onScroll, { capture: true });
       watch.disconnect();
       sizes.disconnect();
+      watching.stop();
       ghostRow?.removeAttribute("data-ghosted");
       ghost.remove();
       trail.remove();

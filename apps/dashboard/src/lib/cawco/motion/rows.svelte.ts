@@ -40,6 +40,7 @@
  * the first child of the table's box, which is the element that styles the
  * table and is `position: relative`.
  */
+import { watchRendered } from "#lib/utils/rendered.js";
 import {
   dur,
   ease,
@@ -1021,6 +1022,14 @@ class Reflow {
   #scroll: number;
   /** Where the content's top is in the viewport, read once a change. */
   #view: number | null = null;
+  /**
+   * The container is not being rendered: an ancestor skips its content
+   * (`content-visibility: hidden`, the home board put away under a
+   * conversation) or it has no box. It has no layout to read, and reading
+   * one lays it out, so nothing here measures it until it is rendered again
+   * (`rendered`), which takes one fresh reading.
+   */
+  #skipped: boolean;
 
   #viewTop(): number {
     this.#view ??=
@@ -1030,15 +1039,36 @@ class Reflow {
     return this.#view;
   }
 
-  constructor(node: HTMLElement) {
+  constructor(node: HTMLElement, rendered: boolean) {
     this.#node = node;
-    this.#placed = placesIn(node);
-    this.#scroll = node.scrollTop;
+    this.#skipped = !rendered;
+    this.#placed = rendered ? placesIn(node) : new Map();
+    this.#scroll = rendered ? node.scrollTop : 0;
+  }
+
+  get skipped(): boolean {
+    return this.#skipped;
+  }
+
+  /**
+   * Rendered again, or skipped (`watchRendered`). Rendered again, every
+   * place and the scroll are read as they stand: whatever changed while it
+   * was skipped is where it is, and none of it is a change to animate.
+   */
+  rendered(on: boolean) {
+    this.#skipped = !on;
+    if (on) {
+      this.#placed = placesIn(this.#node);
+      this.#scroll = this.#node.scrollTop;
+      this.#view = null;
+    }
   }
 
   /** Every place is new and none of it is a change to animate (the container resized). */
   reread() {
-    this.#placed = placesIn(this.#node);
+    if (!this.#skipped) {
+      this.#placed = placesIn(this.#node);
+    }
   }
 
   /**
@@ -1048,6 +1078,9 @@ class Reflow {
    * row's read, ten layouts in the update that opened a tree.
    */
   change() {
+    if (this.#skipped) {
+      return;
+    }
     const still = !motionOk.current;
     const drawn = this.#releaseEdges();
     const now = placesIn(this.#node);
@@ -1188,7 +1221,9 @@ class Reflow {
 
   /** The reader (or a page) scrolled: rows are drawn at this scroll now. */
   scrolled() {
-    this.#scroll = this.#node.scrollTop;
+    if (!this.#skipped) {
+      this.#scroll = this.#node.scrollTop;
+    }
   }
 
   /**
@@ -1419,6 +1454,9 @@ export function reread(containers: HTMLElement[]): void {
  */
 const changed = new Map<Reflow, number>();
 function heard(state: Reflow, depth: number): void {
+  if (state.skipped) {
+    return;
+  }
   if (changed.size === 0) {
     queueMicrotask(() => {
       const order = [...changed].sort((a, b) => b[1] - a[1]);
@@ -1469,7 +1507,8 @@ export function reflow() {
     // It anchors its own scroll (`#anchor`): the browser's would move every
     // row a second time.
     node.style.overflowAnchor = "none";
-    const state = new Reflow(node);
+    const watching = watchRendered(node, (on) => state.rendered(on));
+    const state = new Reflow(node, watching.rendered);
     const depth = depthOf(node);
     const watcher = new MutationObserver(() => heard(state, depth));
     watcher.observe(node, {
@@ -1502,6 +1541,7 @@ export function reflow() {
       node.removeEventListener("scroll", scrolled);
       watcher.disconnect();
       sizes.disconnect();
+      watching.stop();
     };
   };
 }

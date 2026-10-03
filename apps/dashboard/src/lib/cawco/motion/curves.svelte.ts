@@ -335,7 +335,15 @@ export function crossIn(_node: Element) {
   };
 }
 
+/**
+ * A view leaving where nothing is rendered (an ancestor skips its content:
+ * the home board put away under a conversation) goes at once: there is no
+ * fade to see, and reading where it stands would lay the skipped content out.
+ */
 export function crossOut(node: HTMLElement) {
+  if (!node.checkVisibility()) {
+    return { duration: 0 };
+  }
   const { offsetTop, offsetLeft, offsetWidth } = node;
   node.style.position = "absolute";
   node.style.top = `${offsetTop}px`;
