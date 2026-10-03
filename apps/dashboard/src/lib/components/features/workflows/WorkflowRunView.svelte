@@ -1,12 +1,22 @@
 <script lang="ts">
+  /**
+   * A workflow run's tab: what a session's tab is for a session, drawn on the
+   * transcript's columns (app.css `.tx-columns`). Its tab names it and says
+   * where it stands, so the page opens on what the tab cannot say — when it
+   * started, what it was given, and what can be done with it — and then the
+   * run as its chat block draws it (RunBlock): its line, and its steps hung
+   * under it on the nesting lines, each opening its transcript and its
+   * result, and its own session's tab. Then the question it waits on, and its
+   * log. There is no graph here: a graph is for editing (/workflows/[id]).
+   */
+  import type { WorkflowStep } from "@cawco/core";
   import { cawco } from "#lib/cawco/client.svelte.js";
   import { confirm } from "#lib/cawco/confirm.svelte.js";
   import { message } from "#lib/cawco/delegate-types.js";
   import { unfold } from "#lib/cawco/motion/fold.svelte.js";
-  import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import { reflow } from "#lib/cawco/motion/rows.svelte.js";
-  import RunSteps from "#lib/cawco/RunSteps.svelte";
-  import { runHref, runTabId } from "#lib/cawco/workflow-runs.js";
+  import RunBlock from "#lib/cawco/transcript/RunBlock.svelte";
+  import { runHref } from "#lib/cawco/workflow-runs.js";
   import {
     refreshWorkflowLog,
     refreshWorkflowRun,
@@ -17,23 +27,17 @@
     cancelWorkflowRun,
     rerunWorkflow,
   } from "#lib/cawco/workflows.js";
-  import SessionStatus from "#lib/cawco/workspace/SessionStatus.svelte";
-  import PendingContent, {
-    whileIdle,
-  } from "#lib/components/ui/button/pending-content.svelte";
+  import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
+  import * as Card from "#lib/components/ui/card/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
   import { Skeleton } from "#lib/components/ui/skeleton/index.js";
-  /**
-   * A workflow run's tab: what a session's tab is for a session. The run's
-   * name, where it stands, when it started and what it was given; its steps
-   * hung under it on the nesting rails (RunSteps), each opening its result
-   * and its own session's tab; the question it waits on, and its log.
-   * There is no graph here: a graph is for editing (/workflows/[id]).
-   */
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
   import { followTail } from "#lib/hooks/follow-tail.js";
   import { goto } from "$app/navigation";
   import { journalCheckpoints, journalLog } from "./journal-graph";
-  import { duration } from "./workflow-ui";
-  import "./workflows.css";
 
   let { runId }: { runId: string } = $props();
 
@@ -41,7 +45,6 @@
   /** The action whose request is out ("rerun", "rerun-step", "answer:<label>", "cancel"). */
   let acting = $state<string | null>(null);
   const busy = $derived(acting !== null);
-  let now = $state(Date.now());
   let other = $state("");
   let note = $state("");
   /** A typed answer, as JSON, for a question that declared an answer schema. */
@@ -104,16 +107,6 @@
       });
     }
   });
-  // The clock runs while the run does.
-  $effect(() => {
-    if (!going) {
-      return;
-    }
-    const timer = setInterval(() => {
-      now = Date.now();
-    }, 1000);
-    return () => clearInterval(timer);
-  });
 
   async function act(key: string, action: () => Promise<unknown>) {
     acting = key;
@@ -167,254 +160,217 @@
   /** An input's value in a line: text as itself, anything else as JSON. */
   const shown = (value: unknown): string =>
     typeof value === "string" ? value : JSON.stringify(value);
+  const offline = (doing: string): string | undefined =>
+    live ? undefined : `Can't ${doing} while the hub is unreachable`;
 </script>
 
-{#snippet rerunFrom(step: {
-  id: string;
-})}
+{#snippet rerunFrom(
+  step: WorkflowStep
+)}
   <!-- Everything this run did before the step is kept: the new run is
        handed those results and goes live from here. -->
-  <button
-    aria-busy={acting === "rerun-step" || undefined}
-    aria-disabled={acting === "rerun-step" || undefined}
-    class="wf-btn"
+  <Button
     disabled={(busy && acting !== "rerun-step") || !live || going}
-    onclick={whileIdle(
-      () => acting === "rerun-step",
-      () => rerun(step.id)
-    )}
-    title={live
-      ? "Run the workflow again from this step, keeping what came before it"
-      : "Can't re-run while the hub is unreachable"}
-    type="button"
-  >
-    <PendingContent
-      failed={errorMessage !== ""}
-      label="Re-run from this step"
-      pending={acting === "rerun-step"}
-      pendingLabel="Re-running…"
-    />
-  </button>
+    failed={errorMessage !== ""}
+    label="Re-run from this step"
+    onclick={() => rerun(step.id)}
+    pending={acting === "rerun-step"}
+    pendingLabel="Re-running…"
+    size="sm"
+    title={offline("re-run") ??
+      "Run the workflow again from this step, keeping what came before it"}
+    variant="outline"
+  />
 {/snippet}
 
-<div class="wf run-view">
+<div class="run-view tx-columns">
   {#if errorMessage}
-    <p class="wf-error" role="alert">{errorMessage}</p>
+    <Alert role="alert" variant="destructive">
+      <AlertDescription>{errorMessage}</AlertDescription>
+    </Alert>
   {/if}
   <!-- The name waits for the workflow list, so it never paints as
        "Workflow" and then widens into the real one. -->
   {#if !(run && (workflow || workflowState.loaded))}
     <div aria-label="Loading workflow run" class="loading" role="status">
-      <Skeleton class="h-6 w-56" />
-      <Skeleton class="h-4 w-40" />
-      <Skeleton class="h-24 w-full" />
+      <Skeleton class="h-4 w-56" />
+      <Skeleton class="h-[26px] w-full" />
+      <Skeleton class="h-[26px] w-full" />
     </div>
   {:else}
-    <!-- Its height moves with its steps as one opens or folds its result
-         (`morph` on the rows' clock), so what is under it never jumps. -->
-    <section class="run" data-nest-host {@attach morph({ rows: true })}>
-      <header class="head">
-        <h1>
-          <span class="run-mark"
-            ><SessionStatus sessionId={runTabId(runId)} /></span
-          >
-          <span class="name">{workflow?.name ?? "Workflow"}</span>
-        </h1>
-        <p class="meta">
-          <span>Started {startedAt}</span>
-          <span class="num">{duration(run.startedAt, run.endedAt, now)}</span>
-        </p>
+    <!-- What the tab cannot say, before the run: it stands at the page's
+         edge as a transcript's prose does, clear of the run's lines. -->
+    <header class="head">
+      <div class="facts">
+        <p class="started">Started {startedAt}</p>
         {#if inputs.length}
           <dl class="inputs">
             {#each inputs as [key, value] (key)}
               <div>
                 <dt>{key}</dt>
-                <dd>{shown(value)}</dd>
+                <dd class:code={typeof value !== "string"}>{shown(value)}</dd>
               </div>
             {/each}
           </dl>
         {/if}
-        <div class="wf-row actions">
-          {#if going}
-            <button
-              class="wf-btn"
-              disabled={busy || !live}
-              onclick={cancel}
-              title={live
-                ? undefined
-                : "Can't cancel while the hub is unreachable"}
-              type="button"
-            >
-              Cancel run
-            </button>
-          {:else}
-            <button
-              aria-busy={acting === "rerun" || undefined}
-              aria-disabled={acting === "rerun" || undefined}
-              class="wf-btn"
-              disabled={(busy && acting !== "rerun") || !live}
-              onclick={whileIdle(
-                () => acting === "rerun",
-                () => rerun()
-              )}
-              title={live
-                ? "Start this workflow again with the same inputs"
-                : "Can't re-run while the hub is unreachable"}
-              type="button"
-            >
-              <PendingContent
-                failed={errorMessage !== ""}
-                label="Re-run"
-                pending={acting === "rerun"}
-                pendingLabel="Re-running…"
-              />
-            </button>
-          {/if}
-          <a class="wf-btn" href="/workflows/{run.workflowId}?tab=program"
-            >Edit workflow</a
-          >
-        </div>
-      </header>
-      {#if run.failure}
-        <p class="wf-error failure">{run.failure}</p>
-      {/if}
-      <RunSteps glyph=".run-mark .glyph" more={rerunFrom} {runId} />
-    </section>
+      </div>
+      <div class="actions">
+        {#if going}
+          <Button
+            disabled={busy || !live}
+            label="Cancel run"
+            onclick={cancel}
+            size="sm"
+            title={offline("cancel")}
+            variant="outline"
+          />
+        {:else}
+          <Button
+            disabled={(busy && acting !== "rerun") || !live}
+            failed={errorMessage !== ""}
+            label="Re-run"
+            onclick={() => rerun()}
+            pending={acting === "rerun"}
+            pendingLabel="Re-running…"
+            size="sm"
+            title={offline("re-run") ??
+              "Start this workflow again with the same inputs"}
+            variant="outline"
+          />
+        {/if}
+        <Button
+          href="/workflows/{run.workflowId}?tab=program"
+          size="sm"
+          variant="outline"
+          >Edit workflow</Button
+        >
+      </div>
+    </header>
+
+    <RunBlock here more={rerunFrom} {runId} />
 
     {#if run.status === "waiting" && run.ask}
       {@const ask = run.ask}
       <!-- The question folds open; answered, the picked option pends until
            the hub moves the run on, and then the block folds away. -->
-      <section class="answer wf-stack" in:unfold out:unfold>
-        <h2>Answer · {ask.question}</h2>
-        <div class="options">
-          {#each ask.options as option (option.label)}
-            {@const key = `answer:${option.label}`}
-            <button
-              aria-busy={acting === key || undefined}
-              aria-disabled={acting === key || undefined}
-              class="wf-btn"
-              disabled={(busy && acting !== key) || !live}
-              onclick={whileIdle(
-                () => acting === key,
-                () =>
-                  act(key, () =>
-                    answerWorkflow(runId, ask.stepId, {
-                      choice: option.label,
-                      note,
-                      value: typedValue(),
-                    })
-                  )
-              )}
-              title={live
-                ? undefined
-                : "Can't answer while the hub is unreachable"}
-              type="button"
-            >
-              <span class="option-label"
-                ><PendingContent
-                  failed={errorMessage !== ""}
-                  label={option.label}
-                  pending={acting === key}
-                  pendingLabel="Answering…"
-                /></span
-              >
-              {#if option.description}
-                <small>{option.description}</small>
-              {/if}
-            </button>
-          {/each}
-        </div>
-        <label>Note (optional)<input bind:value={note}></label>
-        {#if ask.answerSchema}
-          <!-- A typed answer: its JSON is checked by the hub against the
-               schema the program declared, shown here as the placeholder. -->
-          <div class="wf-row">
-            <label class="typed"
-              >Answer value (JSON)<textarea
-                placeholder={JSON.stringify(ask.answerSchema)}
-                rows="3"
-                bind:value={valueText}
-              ></textarea></label
-            >
-            {#if !ask.options.length}
-              <button
-                aria-busy={acting === "value" || undefined}
-                aria-disabled={acting === "value" || undefined}
-                class="wf-btn"
-                disabled={!valueText.trim() ||
-                  (busy && acting !== "value") ||
-                  !live}
-                onclick={whileIdle(
-                  () => acting === "value",
-                  () =>
-                    act("value", () =>
-                      answerWorkflow(runId, ask.stepId, {
-                        note,
-                        value: typedValue(),
-                      })
-                    )
-                )}
-                title={live
-                  ? undefined
-                  : "Can't answer while the hub is unreachable"}
-                type="button"
-              >
-                <PendingContent
-                  failed={errorMessage !== ""}
-                  label="Send answer"
-                  pending={acting === "value"}
-                  pendingLabel="Sending…"
-                />
-              </button>
+      <div class="answer" in:unfold out:unfold>
+        <Card.Root size="sm">
+          <Card.Header>
+            <Card.Title>{ask.question}</Card.Title>
+          </Card.Header>
+          <Card.Content class="answer-body">
+            {#if ask.options.length}
+              <!-- Peers the workflow's author wrote, none of them the
+                   recommended action: each an outline button, its
+                   description beside it. -->
+              <ul class="options">
+                {#each ask.options as option (option.label)}
+                  {@const key = `answer:${option.label}`}
+                  <li>
+                    <Button
+                      disabled={(busy && acting !== key) || !live}
+                      failed={errorMessage !== ""}
+                      label={option.label}
+                      onclick={() =>
+                        act(key, () =>
+                          answerWorkflow(runId, ask.stepId, {
+                            choice: option.label,
+                            note,
+                            value: typedValue(),
+                          })
+                        )}
+                      pending={acting === key}
+                      pendingLabel="Answering…"
+                      size="sm"
+                      title={offline("answer")}
+                      variant="outline"
+                    />
+                    {#if option.description}
+                      <p class="hint">{option.description}</p>
+                    {/if}
+                  </li>
+                {/each}
+              </ul>
             {/if}
-          </div>
-        {/if}
-        {#if ask.allowOther}
-          <div class="wf-row">
-            <label>Other answer<input bind:value={other}></label
-            ><button
-              aria-busy={acting === "answer" || undefined}
-              aria-disabled={acting === "answer" || undefined}
-              class="wf-btn"
-              disabled={!other || (busy && acting !== "answer") || !live}
-              onclick={whileIdle(
-                () => acting === "answer",
-                () =>
-                  act("answer", () =>
-                    answerWorkflow(runId, ask.stepId, {
-                      choice: other,
-                      note,
-                      value: typedValue(),
-                    })
-                  )
-              )}
-              title={live
-                ? undefined
-                : "Can't answer while the hub is unreachable"}
-              type="button"
-            >
-              <PendingContent
-                failed={errorMessage !== ""}
-                label="Send answer"
-                pending={acting === "answer"}
-                pendingLabel="Sending…"
-              />
-            </button>
-          </div>
-        {/if}
-      </section>
+            <div class="field">
+              <Label for="run-note-{runId}">Note (optional)</Label>
+              <Input id="run-note-{runId}" bind:value={note} />
+            </div>
+            {#if ask.answerSchema}
+              <!-- A typed answer: its JSON is checked by the hub against the
+                   schema the program declared, shown here as the placeholder. -->
+              <div class="field">
+                <Label for="run-value-{runId}">Answer value (JSON)</Label>
+                <Textarea
+                  id="run-value-{runId}"
+                  placeholder={JSON.stringify(ask.answerSchema)}
+                  rows={3}
+                  bind:value={valueText}
+                />
+              </div>
+              {#if !ask.options.length}
+                <div class="send">
+                  <Button
+                    disabled={!valueText.trim() ||
+                      (busy && acting !== "value") ||
+                      !live}
+                    failed={errorMessage !== ""}
+                    label="Send answer"
+                    onclick={() =>
+                      act("value", () =>
+                        answerWorkflow(runId, ask.stepId, {
+                          note,
+                          value: typedValue(),
+                        })
+                      )}
+                    pending={acting === "value"}
+                    pendingLabel="Sending…"
+                    size="sm"
+                    title={offline("answer")}
+                  />
+                </div>
+              {/if}
+            {/if}
+            {#if ask.allowOther}
+              <div class="field">
+                <Label for="run-other-{runId}">Other answer</Label>
+                <div class="other">
+                  <Input id="run-other-{runId}" bind:value={other} />
+                  <Button
+                    disabled={!other || (busy && acting !== "answer") || !live}
+                    failed={errorMessage !== ""}
+                    label="Send answer"
+                    onclick={() =>
+                      act("answer", () =>
+                        answerWorkflow(runId, ask.stepId, {
+                          choice: other,
+                          note,
+                          value: typedValue(),
+                        })
+                      )}
+                    pending={acting === "answer"}
+                    pendingLabel="Sending…"
+                    size="sm"
+                    title={offline("answer")}
+                    variant="outline"
+                  />
+                </div>
+              </div>
+            {/if}
+          </Card.Content>
+        </Card.Root>
+      </div>
     {/if}
 
     {#if logLines.length}
       <details class="log" bind:open={logOpen} in:unfold out:unfold>
-        <summary>Log · {logLines.length}</summary>
+        <summary>Log · <span class="num">{logLines.length}</span></summary>
         <!-- A line arrives the house way (motion/rows), and the log keeps
              the newest in view only while the reader is at its end. -->
         <ol {@attach reflow()} {@attach followTail()}>
           {#each logLines as line (line.seq)}
             <li data-flip>
-              <time>{new Date(line.at).toLocaleTimeString()}</time
+              <time class="num">{new Date(line.at).toLocaleTimeString()}</time
               ><span>{line.text}</span>
             </li>
           {/each}
@@ -425,8 +381,8 @@
 </div>
 
 <style>
-  /* The tab's column: the transcript's own ledger padding, so a run reads
-     in the place a conversation would. */
+  /* The tab's column: the transcript's own ledger padding and field, so a
+     run reads in the place a conversation would. */
   .run-view {
     display: flex;
     flex-direction: column;
@@ -437,91 +393,121 @@
     overflow-y: auto;
     padding: var(--space-6) var(--space-6) var(--space-7) var(--space-7);
     background: var(--surface-recess);
+    color: var(--ink-strong);
+    font-size: var(--text-body);
+    font-weight: var(--weight-body);
+
+    @media (width <= 900px) {
+      padding-inline: var(--space-5);
+    }
+  }
+  /* The run's block draws its own rail-row gap; the column's gap stands for it. */
+  .run-view > :global(.run-block) {
+    --rail-gap: 0px;
   }
   .loading {
     display: flex;
     flex-direction: column;
     gap: var(--space-3);
   }
-  .run {
-    max-inline-size: 760px;
-  }
   .head {
     display: flex;
-    flex-direction: column;
-    gap: var(--space-2);
-  }
-  h1 {
-    display: flex;
-    align-items: center;
-    gap: var(--space-2);
-    margin: 0;
-    min-inline-size: 0;
-  }
-  /* The status's glyph leads the name and its word follows it: the status
-     is laid out in the heading's own row. */
-  .run-mark,
-  .run-mark :global(.session-status) {
-    display: contents;
-  }
-  .run-mark :global(.session-status > :not(.glyph)) {
-    order: 2;
-  }
-  .name {
-    order: 1;
-    min-inline-size: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-  }
-  .meta {
-    display: flex;
     flex-wrap: wrap;
-    align-items: center;
-    gap: var(--space-1) var(--space-3);
+    align-items: start;
+    justify-content: space-between;
+    gap: var(--space-3) var(--space-5);
+  }
+  .facts {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-1);
+    min-inline-size: 0;
+    font-size: var(--text-meta);
+    line-height: var(--leading-meta);
+  }
+  .started {
     margin: 0;
     color: var(--ink-muted);
-    font-size: var(--text-meta);
-    font-weight: var(--weight-body);
   }
   .inputs {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     gap: var(--space-1) var(--space-3);
     margin: 0;
-    font-size: var(--text-meta);
 
     & > div {
       display: contents;
     }
     & dt {
       color: var(--ink-muted);
-      font-weight: var(--weight-body);
     }
     & dd {
       margin: 0;
+      max-inline-size: 72ch;
       color: var(--ink-strong);
-      font-family: var(--font-mono);
       overflow-wrap: anywhere;
+    }
+    & dd.code {
+      font-family: var(--font-mono);
+      font-variant-ligatures: none;
     }
   }
   .actions {
-    margin-block-start: var(--space-1);
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--space-2);
   }
-  .failure {
-    margin-block-start: var(--space-3);
+  .answer {
+    max-inline-size: 72ch;
   }
-  .log {
-    max-inline-size: 760px;
+  .answer :global(.answer-body) {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-4);
+  }
+  .options {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+
+    & li {
+      display: flex;
+      align-items: baseline;
+      gap: var(--space-3);
+      min-inline-size: 0;
+    }
+  }
+  .hint {
+    margin: 0;
+    color: var(--ink-muted);
+    font-size: var(--text-meta);
+    line-height: var(--leading-meta);
+    overflow-wrap: anywhere;
+  }
+  .field {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-2);
+  }
+  .other {
+    display: flex;
+    align-items: center;
+    gap: var(--space-2);
+  }
+  .send {
+    display: flex;
   }
   /* Left as a list-item so the native disclosure marker survives: a flex
      summary silently loses the triangle, and then nothing says it opens. */
   .log summary {
     padding-block: var(--space-2);
     cursor: pointer;
+    color: var(--ink-muted);
     font-size: var(--text-label);
     font-weight: var(--weight-strong);
-    color: var(--ink-muted);
   }
   /* Open, the log is one fixed height: lines arriving fill and scroll it,
      and never push the run below it down. */
@@ -529,75 +515,26 @@
     display: grid;
     align-content: start;
     gap: var(--space-2);
-    padding-top: var(--space-2);
-    height: 30dvh;
+    margin: 0;
+    padding: var(--space-2) 0 0;
+    list-style: none;
+    block-size: 30dvh;
     overflow-y: auto;
   }
   .log li {
     display: grid;
     grid-template-columns: auto minmax(0, 1fr);
     gap: var(--space-3);
-    font-size: var(--text-body);
-    font-weight: var(--weight-body);
     overflow-wrap: anywhere;
   }
   .log time {
     color: var(--ink-muted);
-    font-variant-numeric: tabular-nums;
-  }
-  .answer {
-    max-inline-size: 760px;
-    padding: var(--space-4);
-    border-radius: var(--radius-sm);
-    background: var(--surface-raised);
-  }
-  /* The options are peers the workflow author wrote, not one recommended
-     action, so none of them takes the never-flat graphite. On a waiting run
-     the needs-you glyph is the only thing that should be loud. */
-  .options {
-    display: flex;
-    flex-wrap: wrap;
-    gap: var(--space-3);
-  }
-  .answer .options button {
-    flex-direction: column;
-    align-items: flex-start;
-    justify-content: center;
-    gap: var(--space-1);
-    min-height: 44px;
-    padding: var(--space-3);
-    max-width: 320px;
-    text-align: left;
-  }
-  .answer .options .option-label {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--btn-gap);
-  }
-  .answer .typed {
-    flex: 1;
-    min-width: 0;
-  }
-  .answer .typed textarea {
-    width: 100%;
-    resize: vertical;
-  }
-  .answer .options small {
-    color: var(--ink-muted);
     font-size: var(--text-meta);
-    font-weight: var(--weight-body);
-    line-height: 1.4;
-    overflow-wrap: anywhere;
   }
   /* DESIGN.md: every affordance reaches 44px under a coarse pointer. */
   @media (pointer: coarse) {
     .log summary {
       padding-block: var(--space-4);
-    }
-  }
-  @media (max-width: 640px) {
-    .run-view {
-      padding-inline: var(--space-4);
     }
   }
 </style>

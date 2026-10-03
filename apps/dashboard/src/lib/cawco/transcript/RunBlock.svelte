@@ -6,7 +6,13 @@
    * nesting rails (RunSteps), the way the rail nests a session's delegates.
    * The run's receipts are told here, not as rows of their own (rows.ts).
    * The line opens the run's tab; a step opens its own session's.
+   *
+   * The run's own tab draws the same block (`here`): its line is then where
+   * the reader already is, so it opens nothing, and its steps offer what
+   * the tab can do from them (`more`).
    */
+  import type { WorkflowStep } from "@cawco/core";
+  import type { Snippet } from "svelte";
   import { formatDuration } from "#lib/utils/time.js";
   import { cawco } from "../client.svelte";
   import { morph } from "../motion/morph.svelte";
@@ -20,16 +26,22 @@
   let {
     message,
     runId: anchored = null,
+    here = false,
+    more,
   }: {
-    /** The `run_workflow` call, or the run's first notice. */
-    message: Message;
+    /** The `run_workflow` call, or the run's first notice; absent in the run's own tab. */
+    message?: Message;
     /** The run, when the block stands at its notice rather than at a call. */
     runId?: string | null;
+    /** Drawn in the run's own tab. */
+    here?: boolean;
+    /** What an opened step offers under its result (the tab's re-run). */
+    more?: Snippet<[WorkflowStep]>;
   } = $props();
 
-  const meta = $derived(message.metadata ?? {});
+  const meta = $derived(message?.metadata ?? {});
   /** A call names its run once it has returned; absent while it is started. */
-  const runId = $derived(anchored ?? startedRunOf(message));
+  const runId = $derived(anchored ?? (message ? startedRunOf(message) : null));
   const run = $derived(runId ? workflowState.runs[runId] : undefined);
   const detail = $derived(runId ? workflowState.details[runId] : undefined);
   const refused = $derived(!runId && meta.toolStatus === "error");
@@ -85,7 +97,7 @@
 <!-- Its height moves with its steps as one opens or folds its result
      (`morph` on the rows' clock), so the chat under it never jumps. -->
 <div class="run-block rail-row" data-nest-host {@attach morph({ rows: true })}>
-  {#if runId}
+  {#if runId && !here}
     <a class="head rail-line press-tint" href={runHref(runId)}>
       <span class="mark rail-cell"
         ><SessionStatus compact sessionId={runTabId(runId)} /></span
@@ -95,7 +107,11 @@
     </a>
   {:else}
     <p class="head rail-line">
-      <span class="mark rail-cell"></span>
+      <span class="mark rail-cell"
+        >{#if runId}
+          <SessionStatus compact sessionId={runTabId(runId)} />
+        {/if}</span
+      >
       <span class="name">{name}</span>
       <span class="num progress">{progress}</span>
     </p>
@@ -103,8 +119,10 @@
   {#if failure}
     <p class="failure rail-hang">{failure}</p>
   {/if}
-  {#if runId && cawco.instanceIndex.byId.has(runTabId(runId))}
-    <RunSteps glyph=".mark" {runId} />
+  <!-- In a chat, steps are read for a run the board lists; the run's own tab
+       has read them already. -->
+  {#if runId && (here || cawco.instanceIndex.byId.has(runTabId(runId)))}
+    <RunSteps glyph=".mark" {more} {runId} />
   {/if}
 </div>
 

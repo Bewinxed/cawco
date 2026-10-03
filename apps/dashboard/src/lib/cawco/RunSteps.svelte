@@ -6,22 +6,33 @@
    * arriving as it starts (`reflow`).
    *
    * Where the reader can act on them (`interactive`: the run's tab, its block
-   * in the chat), a step with a result or a failure folds it under itself,
-   * the count of what is folded at the row's trailing edge and its time just
-   * before it, opening and folding as every tree in the app does
-   * (motion/branch); a step that ran as a session, or as a run of its own,
-   * opens that tab. On the rail's hover card they are only read.
+   * in the chat), a step folds open under itself what it did — the
+   * transcript of the session it ran as, in the well a delegate's card opens
+   * onto (InlineTranscript), then its result or failure — the count of what
+   * is folded at the row's trailing edge and its time just before it,
+   * opening and folding as every tree in the app does (motion/branch). A
+   * step that ran as a session, or as a run of its own, opens that tab; a
+   * step that started a run hangs that run's steps under it on lines of
+   * their own. On the rail's hover card they are only read.
    */
   import type { WorkflowStep } from "@cawco/core";
   import { onMount, type Snippet } from "svelte";
+  import type { Attachment } from "svelte/attachments";
   import { SvelteSet } from "svelte/reactivity";
   import { duration } from "#lib/components/features/workflows/workflow-ui.js";
   import { IconExternal } from "#lib/icons.js";
-  import { cawco } from "./client.svelte";
+  import {
+    cawco,
+    readTranscript,
+    unwatchDelegate,
+    watchDelegate,
+  } from "./client.svelte";
   import { conversationHref } from "./links";
   import { type BranchOptions, branch, nestFrom } from "./motion/branch.svelte";
   import { reflow } from "./motion/rows.svelte";
+  import Self from "./RunSteps.svelte";
   import TreeCount from "./TreeCount.svelte";
+  import InlineTranscript from "./transcript/InlineTranscript.svelte";
   import { runHref, stepTitle } from "./workflow-runs";
   import { refreshWorkflowRun, workflowState } from "./workflow-state.svelte";
   import SessionStatus from "./workspace/SessionStatus.svelte";
@@ -102,21 +113,52 @@
 
   /**
    * What a step folds, counted for its switch: the lines of its result, or
-   * with none, the actions under it.
+   * with none, its transcript, or the actions under it.
    */
-  const folded = (result: string | null): { count: number; noun: string } =>
-    result === null
-      ? { count: 1, noun: "action" }
-      : { count: result.split("\n").length, noun: "line" };
+  const folded = (
+    step: WorkflowStep,
+    result: string | null
+  ): { count: number; noun: string } => {
+    if (result !== null) {
+      return { count: result.split("\n").length, noun: "line" };
+    }
+    return { count: 1, noun: step.instanceId ? "transcript" : "action" };
+  };
 
   const opened = new SvelteSet<string>();
+  /**
+   * The steps whose transcript is drawn: a frame behind `opened` on the way
+   * in, so the well mounts closed and is drawn a unit at a time
+   * (CollapsibleLazy) rather than whole on the click; kept as a step folds,
+   * so the well holds its rows while the fold carries it shut.
+   */
+  const drawing = new SvelteSet<string>();
   const toggle = (id: string) => {
     if (opened.has(id)) {
       opened.delete(id);
     } else {
+      drawing.delete(id);
       opened.add(id);
     }
   };
+  $effect(() => {
+    for (const id of opened) {
+      drawing.add(id);
+    }
+  });
+
+  /**
+   * A step's session, while its transcript is open: its frames are wanted,
+   * and what was stored before this tab is read back.
+   */
+  const following =
+    (id: string): Attachment =>
+    () => {
+      watchDelegate(id);
+      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — nothing here awaits the backfill.
+      void readTranscript(id);
+      return () => unwatchDelegate(id);
+    };
 
   // A running step's time counts up; once nothing runs the clock stops.
   let now = $state(Date.now());
@@ -147,7 +189,8 @@
     {#each steps as step (step.id)}
       {@const result = interactive ? returned(step) : null}
       {@const tab = interactive ? tabOf(step) : null}
-      {@const foldable = interactive && (result !== null || !!more)}
+      {@const foldable =
+        interactive && (result !== null || !!step.instanceId || !!more)}
       <!-- The step's box (`data-flip="box"`): its result takes its room at
            once and the edge travels to it, the steps under it sliding with
            that edge. -->
@@ -186,12 +229,18 @@
           >
           {#if foldable}
             <TreeCount
-              {...folded(result)}
+              {...folded(step, result)}
               ontoggle={() => toggle(step.id)}
               open={opened.has(step.id)}
             />
           {/if}
         </div>
+        <!-- A run the step started: its steps hang under this one's glyph,
+             before anything the step folds open, so their line crosses
+             nothing. -->
+        {#if step.childRunId}
+          <Self glyph={STEP_GLYPH} {interactive} runId={step.childRunId} />
+        {/if}
         {#if foldable && opened.has(step.id)}
           <div
             class="opened"
@@ -199,6 +248,20 @@
             in:branch={RESULT}
             out:branch={RESULT}
           >
+            {#if step.instanceId}
+              {@const row = cawco.instanceIndex.byId.get(step.instanceId)}
+              <div
+                class="well"
+                data-branch-item
+                {@attach following(step.instanceId)}
+              >
+                <InlineTranscript
+                  agentName={row?.harness ?? "agent"}
+                  id={step.instanceId}
+                  open={drawing.has(step.id)}
+                />
+              </div>
+            {/if}
             {#if result}
               <pre
                 class="result"
@@ -296,12 +359,21 @@
       background: var(--surface-hover);
     }
   }
+  /* What a step folds open hangs at its text column (the line's inset, the
+     glyph, the gap to the words), clear of the line under its glyph; its
+     transcript's well reaches out past that column by its padding. */
   .opened {
+    --well-at: calc(-1 * var(--space-1));
     display: flex;
     flex-direction: column;
     align-items: start;
     gap: var(--space-2);
+    margin-inline-start: calc(var(--space-1) + var(--w-glyph) + var(--space-2));
     padding-block: var(--space-1) var(--space-2);
+  }
+  .well {
+    align-self: stretch;
+    min-inline-size: 0;
   }
   .result {
     align-self: stretch;
