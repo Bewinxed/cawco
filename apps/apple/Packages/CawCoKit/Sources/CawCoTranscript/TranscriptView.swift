@@ -23,6 +23,9 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     /// Opening another session or a run in its own view; the host routes it.
     public var onOpenSession: (String) -> Void = { _ in }
     public var onOpenRun: (String) -> Void = { _ in }
+    /// "Back to the fleet", from the state an unreachable id shows.
+    public var onReturnToFleet: () -> Void = {}
+    private let paneState = PaneState()
 
     private let collection: UICollectionView
     private var dataSource: UICollectionViewDiffableDataSource<Int, String>!
@@ -107,6 +110,13 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         makeDataSource()
         wireEnv()
         placeDock()
+        paneState.isHidden = true
+        pin(paneState)
+        paneState.onRetry = { [weak self] in
+            guard let self, let id = transcript?.id else { return }
+            hub?.sessions.read(id)
+        }
+        paneState.onReturn = { [weak self] in self?.onReturnToFleet() }
         registerForTraitChanges([UITraitUserInterfaceStyle.self, UITraitPreferredContentSizeCategory.self]) { (view: TranscriptView, _: UITraitCollection) in
             view.env.cache.clear()
             view.prints = [:]
@@ -466,6 +476,16 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         defer { signposter.endInterval("transcriptFrame", interval) }
         env.watched = landed && window != nil
         let built = build()
+        // A named state stands in the area instead of the transcript (SessionPane `namedState`).
+        if let transcript {
+            let blank = !transcript.loading && transcript.fault == nil && !transcript.missing && blocks.isEmpty
+                && queued.isEmpty && hub != nil && hub?.fleet.byId[transcript.id] == nil
+            let named: PaneState.State? = transcript.fault.map { .fault($0) }
+                ?? (transcript.missing ? .missing(transcript.id) : blank ? .blank : nil)
+            if let named { paneState.show(named) }
+            paneState.isHidden = named == nil
+            collection.isHidden = named != nil
+        }
         var next: [String: Item] = [:]
         for item in built { next[item.id] = item }
         let ids = built.map(\.id)
@@ -493,9 +513,20 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         let follow = following
         let grew = env.watched && ids.count > old.itemIdentifiers.count && follow && !UIAccessibility.isReduceMotionEnabled
         let from = collection.contentOffset
+        // Rows shifted in front (older history) never move the reader: the
+        // first row on screen keeps its place (Transcript `frontOnly`, `restore`).
+        let anchor: (id: String, into: CGFloat)? = follow || !landed ? nil : collection.indexPathsForVisibleItems.sorted().first.flatMap { index in
+            guard let id = dataSource.itemIdentifier(for: index), let frame = collection.layoutAttributesForItem(at: index)?.frame else { return nil }
+            return (id, collection.contentOffset.y - frame.minY)
+        }
         dataSource.apply(snapshot, animatingDifferences: false) { [weak self] in
             guard let self else { return }
             collection.layoutIfNeeded()
+            if let anchor, let index = dataSource.indexPath(for: anchor.id),
+               let frame = collection.layoutAttributesForItem(at: index)?.frame,
+               abs(collection.contentOffset.y - (frame.minY + anchor.into)) > 0.5 {
+                collection.contentOffset.y = frame.minY + anchor.into
+            }
             if let id = folding, let index = dataSource.indexPath(for: id),
                let cell = collection.cellForItem(at: index) as? HostCell<ThinkingView> {
                 folding = nil
@@ -627,7 +658,8 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         guard scrollView.isDragging || scrollView.isDecelerating else { return }
         pendingPosition = nil
         gliding = false
-        let distance = scrollView.contentSize.height - scrollView.contentOffset.y - scrollView.bounds.height
+        // From the tail as the reader can reach it: past the inset the composer stands in.
+        let distance = scrollView.contentSize.height + scrollView.adjustedContentInset.bottom - scrollView.contentOffset.y - scrollView.bounds.height
         following = distance <= Space.space8
         // Hysteresis: up past three quarters of a screen, and it stays until back at the tail.
         farFromLatest = !following && (farFromLatest || distance > 0.75 * scrollView.bounds.height)

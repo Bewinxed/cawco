@@ -16,9 +16,22 @@ public final class SessionTranscript {
     public internal(set) var cursor: String?
     public internal(set) var loading = true
     public internal(set) var loadingOlder = false
-    public internal(set) var error: String?
+    /// Why the read failed, when it did (client.svelte.ts `readFault`).
+    public internal(set) var fault: ReadFault?
+    /// The hub answered 404: nothing it or any machine holds goes by this id.
+    /// An answer, not a fault: retrying would ask the same question.
+    public internal(set) var missing = false
     public internal(set) var blockRevision = 0
     init(_ id: String) { self.id = id }
+}
+
+/// A transcript read that failed (client.svelte.ts `pageFault`): the machine
+/// holding it is offline (a 503 naming it), or the read failed.
+public struct ReadFault: Sendable, Equatable {
+    public enum Reason: Sendable { case offline, failed }
+    public let reason: Reason
+    public let machineId: String?
+    public let message: String
 }
 
 /// The hub builds the blocks. This store only adopts its page and applies its
@@ -63,7 +76,7 @@ public final class SessionsStore {
     }
 
     func reconnected() {
-        for id in watched where transcripts[id]?.error != nil { read(id) }
+        for id in watched where transcripts[id]?.fault != nil { read(id) }
         hub.ledger.sync(watched)
     }
 
@@ -82,12 +95,35 @@ public final class SessionsStore {
         guard let transcript = transcripts[id], let client = hub.client else { return }
         readers[id]?.cancel()
         transcript.loading = true
-        transcript.error = nil
+        transcript.fault = nil
+        transcript.missing = false
         hub.ledger.beginRead(id)
         readers[id] = Task { [weak self] in
             guard let self else { return }
             do {
-                let page = try await client.getApiInstancesByIdTranscript(path: .init(id: id)).ok.body.json
+                let page: Components.Schemas.TranscriptPage
+                switch try await client.getApiInstancesByIdTranscript(path: .init(id: id)) {
+                case let .ok(ok): page = try ok.body.json
+                case .notFound:
+                    guard !Task.isCancelled else { return }
+                    transcript.loading = false
+                    transcript.missing = true
+                    return
+                case let .undocumented(statusCode, payload):
+                    var detail = ""
+                    if let body = payload.body { detail = try await String(collecting: body, upTo: 64_000) }
+                    // A 503 naming a machine is the hub saying that machine is not connected.
+                    if statusCode == 503, let away = payload.headerFields.first(where: { $0.name.canonicalName == "x-cawco-machine" })?.value {
+                        let host = hub.fleet.machines.first { $0.machineId == away }?.hostname ?? away
+                        throw Fault(ReadFault(reason: .offline, machineId: away,
+                                              message: "\(host) is offline — its stored transcript can't be read right now."))
+                    }
+                    throw Fault(ReadFault(reason: .failed, machineId: nil, message: detail.isEmpty ? "The hub answered \(statusCode)" : detail))
+                case let .conflict(answer): throw Fault(try await Self.failed(answer.body.plainText))
+                case let .internalServerError(answer): throw Fault(try await Self.failed(answer.body.plainText))
+                case let .gatewayTimeout(answer): throw Fault(try await Self.failed(answer.body.plainText))
+                case .unprocessableContent: throw Fault(ReadFault(reason: .failed, machineId: nil, message: "The hub refused the read"))
+                }
                 guard !Task.isCancelled else { return }
                 transcript.blocks = page.blocks
                 transcript.branches = page.branches
@@ -102,29 +138,39 @@ public final class SessionsStore {
                 // Resume after it, including events that arrived during the read.
                 if let seq = page.seq { hub.ledger.adoptPage(id, seq: seq) }
                 log.info("page adopted for \(id, privacy: .public): \(page.blocks.count) blocks at seq \(page.seq ?? -1)")
+                // The older pages fill in behind the newest (client.svelte.ts `readOlder`).
+                await readOlder(transcript, client: client)
             } catch {
                 guard !Task.isCancelled else { return }
                 transcript.loading = false
-                transcript.error = error.localizedDescription
-                log.error("transcript read: \(error.localizedDescription, privacy: .public)")
+                transcript.fault = (error as? Fault)?.fault ?? ReadFault(reason: .failed, machineId: nil, message: error.localizedDescription)
+                log.error("transcript read: \(transcript.fault?.message ?? "", privacy: .public)")
             }
         }
     }
 
-    public func older(_ id: String) {
-        guard let transcript = transcripts[id], let before = transcript.cursor,
-              !transcript.loadingOlder, let client = hub.client else { return }
+    private struct Fault: Error { let fault: ReadFault; init(_ fault: ReadFault) { self.fault = fault } }
+
+    private static func failed(_ body: HTTPBody) async throws -> ReadFault {
+        ReadFault(reason: .failed, machineId: nil, message: try await String(collecting: body, upTo: 64_000))
+    }
+
+    /// Every page older than what the transcript holds, each prepended as it
+    /// lands, until the conversation's start or a read again under it.
+    private func readOlder(_ transcript: SessionTranscript, client: Client) async {
         transcript.loadingOlder = true
-        Task {
-            defer { transcript.loadingOlder = false }
-            do {
-                let page = try await client.getApiInstancesByIdTranscript(path: .init(id: id), query: .init(before: before)).ok.body.json
-                let held = Set(transcript.blocks.map(\.id))
-                transcript.blocks.insert(contentsOf: page.blocks.filter { !held.contains($0.id) }, at: 0)
-                transcript.branches.insert(contentsOf: page.branches, at: 0)
-                transcript.cursor = page.cursor
-                transcript.blockRevision += 1
-            } catch { transcript.error = error.localizedDescription }
+        defer { transcript.loadingOlder = false }
+        while let before = transcript.cursor, !Task.isCancelled {
+            await Task.yield()
+            // TRANSCRIPT_OLDER_PAGE (apps/dashboard/src/lib/config.ts): 250 rows a page behind the newest.
+            guard case let .ok(ok) = try? await client.getApiInstancesByIdTranscript(path: .init(id: transcript.id),
+                                                                                       query: .init(limit: "250", before: before)),
+                  let page = try? ok.body.json, transcript.cursor == before, !Task.isCancelled else { return }
+            let held = Set(transcript.blocks.map(\.id))
+            transcript.blocks.insert(contentsOf: page.blocks.filter { !held.contains($0.id) }, at: 0)
+            transcript.branches.insert(contentsOf: page.branches, at: 0)
+            transcript.cursor = page.cursor
+            transcript.blockRevision += 1
         }
     }
 
@@ -180,7 +226,7 @@ public final class SessionsStore {
                 }
             }
         } catch {
-            transcript.error = error.localizedDescription
+            transcript.fault = ReadFault(reason: .failed, machineId: nil, message: error.localizedDescription)
             log.error("transcript event unreadable: \(error.localizedDescription, privacy: .public)")
         }
     }

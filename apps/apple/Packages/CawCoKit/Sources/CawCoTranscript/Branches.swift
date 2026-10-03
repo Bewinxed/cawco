@@ -670,7 +670,8 @@ final class DelegateView: RailRow, RowContent, Disclosing {
             }
             inner.rows.configure(items)
             let said: String? = transcript.loading && blocks.isEmpty ? "Loading its transcript…"
-                : transcript.error.map { "Its transcript couldn't be read: \($0)" } ?? (blocks.isEmpty ? "Nothing in its transcript yet." : nil)
+                : transcript.fault.map { "\($0.reason == .offline ? "Its machine is offline" : "Its transcript couldn't be read"): \($0.message)" }
+                ?? (blocks.isEmpty ? "Nothing in its transcript yet." : nil)
             empty.attributedText = said.map { Styled.string($0, TypeScale.typeMeta, color: Palette.inkMuted, lineBreak: .byWordWrapping) }
             empty.isHidden = said == nil
         } else {
