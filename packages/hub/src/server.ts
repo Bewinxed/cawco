@@ -4501,7 +4501,7 @@ export const createServer = ({
     });
     // A probe of a previously lost handle is not a spawn. Leave its history
     // alone until the daemon confirms the server still has a turn in flight.
-    if (reattachOnly === "busy" || reattachOnly === "inspect") {
+    if (reattachOnly) {
       return;
     }
     db.openInstance({
@@ -9207,6 +9207,11 @@ export const createServer = ({
                 pulses.delete(message.instanceId);
                 touched.delete(message.instanceId);
                 escalateRoutedAsks(message.instanceId);
+                publishInstances(message.machineId);
+                break;
+              }
+              if (kind === "recovery_unavailable" && message.instanceId) {
+                db.settleUnavailableRecovery(message.instanceId);
                 publishInstances(message.machineId);
                 break;
               }

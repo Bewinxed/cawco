@@ -903,6 +903,12 @@ export type FramePayload =
       discard: boolean;
     }
   | {
+      /** Recovery found no live handle; stored conversations remain resumable. */
+      kind: "recovery_unavailable";
+      instanceId: string;
+      reason: string;
+    }
+  | {
       /** No `instanceId` when the call it answers was machine-scoped. */
       kind: "control_result";
       instanceId?: string;

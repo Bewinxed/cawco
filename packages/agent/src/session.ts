@@ -866,12 +866,26 @@ export class SessionSupervisor {
     throw new Error(`working directory does not exist: ${workdir}`);
   }
 
+  #recoveryUnavailable(payload: SpawnPayload, reason: string): void {
+    if (payload.reattachOnly) {
+      this.sink({
+        kind: "recovery_unavailable",
+        instanceId: payload.instanceId,
+        reason,
+      });
+    }
+  }
+
   async #spawn(payload: SpawnPayload): Promise<void> {
     const { instanceId, cwd, harness: kind, scratch, requestId: ack } = payload;
     const adapter = this.#adapter(kind);
     try {
       let workdir = await this.#workdir(payload);
       if (workdir === undefined) {
+        this.#recoveryUnavailable(
+          payload,
+          "The recovery directory is no longer available."
+        );
         return;
       }
       // A relaunch stays in the checkout the side quest has been working in.
@@ -925,6 +939,10 @@ export class SessionSupervisor {
         ? await adapter.reattach?.(payload, ctx)
         : await adapter.spawn(payload, ctx);
       if (!session) {
+        this.#recoveryUnavailable(
+          payload,
+          "The harness found no live session to reattach."
+        );
         return;
       }
       holder.session = session;

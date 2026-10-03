@@ -809,6 +809,7 @@ export interface DbShape {
      */
     resumableAt?: Record<string, number>
   ) => SettledInstance[];
+  readonly settleUnavailableRecovery: (id: string) => boolean;
   /** Names of fleet skills installed at or after `since`. */
   readonly skillsInstalledSince: (since: Date) => string[];
   readonly stopInstance: (id: string) => void;
@@ -2049,6 +2050,21 @@ const make = (path: string): DbShape => {
         )
         .returning({ id: instances.id })
         .all().length > 0,
+    settleUnavailableRecovery: (id) => {
+      const row = db.select().from(instances).where(eq(instances.id, id)).get();
+      if (!row || (row.status !== "starting" && row.status !== "unknown")) {
+        return false;
+      }
+      db.update(instances)
+        .set(
+          row.sessionId
+            ? { status: "sleeping", lastError: null }
+            : { status: "error", lastError: RESTART_LOST }
+        )
+        .where(eq(instances.id, id))
+        .run();
+      return true;
+    },
     // `updatedAt` is deliberately untouched by both halves: reclassifying a row
     // is the hub admitting what it does not know, not the session doing
     // anything, and `updatedAt` is what the restore horizon reads to tell a

@@ -318,6 +318,9 @@ export class OpencodeServerOwner {
     }
     const client = await this.#sessiond();
     if (await this.#matches(identity)) {
+      console.info(
+        `[opencode] retire ${identity.procId}/${identity.pid} start=${identity.startedAt}: SIGTERM`
+      );
       await client.signal(identity.procId, "SIGTERM");
       const deadline = Date.now() + 15_000;
       // biome-ignore lint/performance/noAwaitInLoops: observe this exact retired identity during its grace period
@@ -331,6 +334,9 @@ export class OpencodeServerOwner {
         (await this.#matches(identity))
       ) {
         await client.signal(identity.procId, "SIGKILL");
+        console.info(
+          `[opencode] retire ${identity.procId}/${identity.pid}: retired-only SIGKILL after grace`
+        );
         const killDeadline = Date.now() + 5000;
         // biome-ignore lint/performance/noAwaitInLoops: verify exit of only the retired identity
         while (Date.now() < killDeadline && (await this.#matches(identity))) {
@@ -349,6 +355,9 @@ export class OpencodeServerOwner {
         ),
       };
       await this.#save();
+      console.info(
+        `[opencode] retired ${identity.procId}/${identity.pid}: exit confirmed`
+      );
     }
   }
 }
