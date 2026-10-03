@@ -11,8 +11,7 @@ import OSLog
 public final class RootViewController: ObservedViewController {
     private let hub = HubConnection()
     private lazy var home = HomeModel(hub: hub)
-    private lazy var board = BoardSplitController(hub: hub, home: home)
-    private lazy var tabs = FleetTabsController(board: board, home: home)
+    private lazy var board = ShellController(hub: hub, home: home)
     private lazy var waiting = CawWaiting(waiting: true, status: .loading, side: HomeViewController.cawSide)
     /// The hub whose fleet has been read once on this launch.
     private var readFrom: URL?
@@ -37,6 +36,12 @@ public final class RootViewController: ObservedViewController {
         view.backgroundColor = Palette.surfaceRecess
     }
 
+    override public func viewIsAppearing(_ animated: Bool) {
+        super.viewIsAppearing(animated)
+        // The scheme the reader chose in the rail, on this window too.
+        Theme.apply(to: view.window)
+    }
+
     override public func refreshContent() {
         guard let address = hub.address else {
             show(key: "first-run") { ConnectViewController(hub: hub, mode: .firstRun) }
@@ -50,7 +55,7 @@ public final class RootViewController: ObservedViewController {
             show(key: "reconnecting") { ConnectViewController(hub: hub, mode: .reconnecting) }
             return
         }
-        waiting.content = tabs
+        waiting.content = board
         waiting.waiting = !read
         show(key: "board") { waiting }
         if read, let id = initialSession {
@@ -111,7 +116,7 @@ public final class RootViewController: ObservedViewController {
 
     public func restore(_ activity: NSUserActivity) {
         if let name = activity.userInfo?["boardTab"] as? String, let tab = HomeModel.Tab(rawValue: name) {
-            tabs.select(tab)
+            home.tab = tab
         }
         initialSession = activity.userInfo?["sessionId"] as? String
         initialValues = activity.userInfo
@@ -161,158 +166,5 @@ public final class RootViewController: ObservedViewController {
             previous.removeFromParent()
         }
         fade.startAnimation()
-    }
-}
-
-/// The board, then the session: a split view whose primary column is the
-/// home and whose secondary column waits for the session screen. On a
-/// compact width it collapses to the home. Bar items live on each view
-/// controller's `navigationItem`, so the bars stay the system's.
-final class BoardSplitController: UISplitViewController, UISplitViewControllerDelegate {
-    private let hub: HubConnection
-    private let board: HomeViewController
-    private(set) var selected: SessionViewController?
-    private(set) var currentId: String?
-    var onSelection: (HomeModel.Tab) -> Void = { _ in }
-
-    init(hub: HubConnection, home: HomeModel) {
-        self.hub = hub
-        board = HomeViewController(hub: hub, home: home)
-        super.init(style: .doubleColumn)
-        board.onOpen = { [weak self] id in self?.openSession(id) }
-        board.onSelectTab = { [weak self] tab in self?.onSelection(tab) }
-        board.navigationItem.title = "Fleet"
-        board.navigationItem.largeTitleDisplayMode = .never
-        let change = UIBarButtonItem(title: "Hub", image: Glyph.server.image, primaryAction: UIAction { [weak self] _ in
-            self?.changeHub()
-        })
-        change.accessibilityLabel = "Change hub"
-        NavigationItems.configure(board.navigationItem, prominent: [change])
-
-        let detail = UIViewController()
-        detail.view.backgroundColor = Palette.surfacePage
-
-        setViewController(UINavigationController(rootViewController: board), for: .primary)
-        setViewController(UINavigationController(rootViewController: detail), for: .secondary)
-        preferredDisplayMode = .oneBesideSecondary
-        preferredSplitBehavior = .tile
-        delegate = self
-    }
-
-    func selectTab(_ tab: HomeModel.Tab) { board.show(tab) }
-
-    @available(*, unavailable)
-    required init?(coder _: NSCoder) {
-        fatalError("BoardSplitController is built in code")
-    }
-
-    private func changeHub() {
-        let connect = ConnectViewController(hub: hub, mode: .change) { [weak self] in
-            self?.dismiss(animated: true)
-        }
-        connect.loadViewIfNeeded()
-        present(HouseSheetController(connect, title: "Hub", scroller: connect.scroll), animated: true)
-    }
-
-    func openSession(_ id: String) {
-        currentId = id
-        if let runId = BoardRun.runId(of: id) {
-            selected?.close(); selected = nil
-            let controller = WorkflowRunViewController(hub: hub, runId: runId)
-            controller.onReturn = { [weak self, weak controller] in self?.returnToFleet(from: controller) }
-            controller.onOpen = { [weak self] id in self?.openSession(id) }
-            showDetailViewController(UINavigationController(rootViewController: controller), sender: self)
-            return
-        }
-        selected?.close()
-        let controller = SessionViewController(hub: hub, id: id)
-        selected = controller
-        controller.onClose = { [weak self, weak controller] in
-            if self?.selected === controller { self?.selected = nil }
-        }
-        controller.onReturnToFleet = { [weak self, weak controller] in
-            self?.returnToFleet(from: controller)
-        }
-        controller.onOpenSession = { [weak self] id in self?.openSession(id) }
-        showDetailViewController(UINavigationController(rootViewController: controller), sender: self)
-    }
-
-    private func returnToFleet(from controller: UIViewController?) {
-        guard let controller else { return }
-        currentId = nil
-        selected?.close(); selected = nil
-        if controller.traitCollection.horizontalSizeClass == .compact { show(.primary) }
-        else {
-            let empty = UIViewController(); empty.view.backgroundColor = Palette.surfacePage
-            setViewController(UINavigationController(rootViewController: empty), for: .secondary)
-        }
-    }
-
-    func splitViewController(_: UISplitViewController, topColumnForCollapsingToProposedTopColumn _: UISplitViewController.Column) -> UISplitViewController.Column {
-        selected == nil ? .primary : .secondary
-    }
-}
-
-/// System-managed sidebar on regular widths, the same fleet split in every
-/// size class. The phone's board already contains its navigation controls.
-private final class FleetTabsController: UITabBarController {
-    private let board: BoardSplitController
-    init(board: BoardSplitController, home: HomeModel) {
-        self.board = board
-        super.init(nibName: nil, bundle: nil)
-        tabs = HomeModel.Tab.allCases.map { tab in
-            UITab(title: tab.label, image: (tab == .working ? Glyph.bolt : Glyph.tick).image, identifier: tab.rawValue) { _ in
-                BoardTabHostController(board: board, tab: tab)
-            }
-        }
-        selectedTab = tabs.first { $0.identifier == home.tab.rawValue }
-        board.onSelection = { [weak self] tab in self?.select(tab) }
-        mode = .tabSidebar
-        registerForTraitChanges([UITraitHorizontalSizeClass.self]) { (controller: FleetTabsController, _: UITraitCollection) in controller.adapt() }
-    }
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("FleetTabsController is built in code") }
-    override func viewWillAppear(_ animated: Bool) { super.viewWillAppear(animated); adapt() }
-    func select(_ tab: HomeModel.Tab) {
-        guard selectedTab?.identifier != tab.rawValue else { return }
-        selectedTab = tabs.first { $0.identifier == tab.rawValue }
-    }
-    private func adapt() {
-        // Hidden this way, the bar also gives back its height in the safe
-        // area: `tabBar.isHidden` kept 48pt reserved under the composer.
-        setTabBarHidden(traitCollection.horizontalSizeClass == .compact, animated: false)
-        sidebar.isHidden = traitCollection.horizontalSizeClass == .compact
-        #if !targetEnvironment(macCatalyst)
-        if #available(iOS 27.1, *) { sidebar.preferredPlacement = .sidebar }
-        #endif
-    }
-}
-
-/// Sidebar destinations share the existing split view, rather than creating
-/// private copies of a session, its draft or its scroll position. Containment
-/// moves the shell; the one board stays mounted.
-private final class BoardTabHostController: UIViewController {
-    private let board: BoardSplitController
-    private let destinationTab: HomeModel.Tab
-    init(board: BoardSplitController, tab: HomeModel.Tab) {
-        self.board = board
-        destinationTab = tab
-        super.init(nibName: nil, bundle: nil)
-    }
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("BoardTabHostController is built in code") }
-    override func viewWillAppear(_ animated: Bool) {
-        super.viewWillAppear(animated)
-        if board.parent !== self {
-            board.willMove(toParent: nil)
-            board.view.removeFromSuperview()
-            board.removeFromParent()
-            addChild(board)
-            board.view.frame = view.bounds
-            board.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-            view.addSubview(board.view)
-            board.didMove(toParent: self)
-        }
-        board.selectTab(destinationTab)
     }
 }

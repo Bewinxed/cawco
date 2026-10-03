@@ -81,10 +81,30 @@ const SOLAR_ICONS = [
   "alt-arrow-down-linear", // IconChevronDown
   "alt-arrow-left-linear", // IconChevronLeft
   // SessionStatus.svelte's glyphs not listed above.
-  "check-circle-bold-duotone", // Passed, Done
+  "check-circle-bold-duotone", // Passed, Done; IconSuccess
   "moon-sleep-bold-duotone", // Sleeping
   "pause-circle-bold-duotone", // Idle, Stopped, Stored
   "refresh-circle-bold-duotone", // Working
+  // The shell: bar, sidebar, projects, machines, jump, assistant, panes.
+  "alt-arrow-up-linear", // IconChevronUp
+  "arrow-right-linear", // IconArrowRight
+  "align-left-bold-duotone", // IconAlignLeft
+  "eye-scan-bold-duotone", // IconAssistant
+  "folder-bold-duotone", // IconFolder
+  "key-bold-duotone", // IconKey
+  "laptop-minimalistic-bold-duotone", // IconLaptop
+  "monitor-bold-duotone", // IconMonitor
+  "moon-bold-duotone", // IconMoon
+  "sun-bold-duotone", // IconSun
+  "pin-bold-duotone", // IconPin
+  "refresh-bold-duotone", // IconRefresh
+  "settings-bold-duotone", // IconSettings
+  "shield-bold-duotone", // IconShield
+  "sidebar-minimalistic-bold-duotone", // IconSidebar
+  "sort-bold-duotone", // IconSort
+  "trash-bin-minimalistic-bold-duotone", // IconTrash
+  "download-bold-duotone", // IconDownload
+  "menu-dots-bold-duotone", // IconMore
 ];
 
 /** The dashboard's own glyphs, drawn where Solar has none. */
@@ -102,15 +122,27 @@ const DRAWN: Record<string, string> = {
 };
 
 interface IconSet {
+  /** Names that draw another icon as it is (iconify's alias form). */
+  aliases?: Record<string, { parent: string; [transform: string]: unknown }>;
   height?: number;
   icons: Record<string, { body: string; height?: number; width?: number }>;
   width?: number;
 }
 
 const set = JSON.parse(readFileSync(SOLAR, "utf8")) as IconSet;
+
+/** The icon a name draws, through a plain alias; a transforming alias is refused. */
+function solar(name: string) {
+  const alias = set.aliases?.[name];
+  if (alias && Object.keys(alias).length > 1) {
+    throw new Error(`${name} is a transformed alias; draw it by hand`);
+  }
+  return set.icons[alias?.parent ?? name];
+}
+
 const svgs: Record<string, string> = { ...DRAWN };
 for (const name of SOLAR_ICONS) {
-  const icon = set.icons[name];
+  const icon = solar(name);
   if (!icon) {
     throw new Error(`Solar has no ${name}`);
   }

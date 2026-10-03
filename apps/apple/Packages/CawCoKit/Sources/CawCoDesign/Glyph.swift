@@ -68,6 +68,26 @@ public enum Glyph: String, CaseIterable, Sendable {
     case arrowUp = "arrow-up-linear"
     case chevronDown = "alt-arrow-down-linear"
     case chevronLeft = "alt-arrow-left-linear"
+    // The shell's (bar, sidebar, projects, machines, jump, assistant, panes).
+    case chevronUp = "alt-arrow-up-linear"
+    case arrowRight = "arrow-right-linear"
+    case alignLeft = "align-left-bold-duotone"
+    case assistant = "eye-scan-bold-duotone"
+    case folder = "folder-bold-duotone"
+    case key = "key-bold-duotone"
+    case laptop = "laptop-minimalistic-bold-duotone"
+    case monitor = "monitor-bold-duotone"
+    case moon = "moon-bold-duotone"
+    case sun = "sun-bold-duotone"
+    case pin = "pin-bold-duotone"
+    case refresh = "refresh-bold-duotone"
+    case settings = "settings-bold-duotone"
+    case shield = "shield-bold-duotone"
+    case sidebar = "sidebar-minimalistic-bold-duotone"
+    case sort = "sort-bold-duotone"
+    case trash = "trash-bin-minimalistic-bold-duotone"
+    case download = "download-bold-duotone"
+    case more = "menu-dots-bold-duotone"
     case close
     case tick
     case plus
