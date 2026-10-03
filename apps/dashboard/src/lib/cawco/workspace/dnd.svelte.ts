@@ -21,16 +21,11 @@
  */
 
 // biome-ignore lint/style/noExportedImports: export-from here would make this a single-export barrel file, flagged by noBarrelFile instead
-import { combine } from "@atlaskit/pragmatic-drag-and-drop/combine";
-import {
-  draggable,
-  dropTargetForElements,
-} from "@atlaskit/pragmatic-drag-and-drop/element/adapter";
-import {
-  attachClosestEdge,
-  type Edge,
-  extractClosestEdge,
-} from "@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge";
+import { combine } from "@atlaskit/pragmatic-drag-and-drop/utils/combine";
+import { draggable, dropTargetForElements } from "@atlaskit/pragmatic-drag-and-drop/adapter/element-adapter";
+import { attachClosestEdge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge/attach-closest-edge";
+import { extractClosestEdge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/closest-edge/extract-closest-edge";
+import type { Edge } from "@atlaskit/pragmatic-drag-and-drop-hitbox/types";
 import { getReorderDestinationIndex } from "@atlaskit/pragmatic-drag-and-drop-hitbox/util/get-reorder-destination-index";
 import { depart } from "../motion/share.svelte";
 import { workingSet } from "../working-set.svelte";

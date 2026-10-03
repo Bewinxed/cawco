@@ -21,8 +21,8 @@
       "name": "@cawco/dashboard",
       "version": "0.0.1",
       "dependencies": {
-        "@atlaskit/pragmatic-drag-and-drop": "^3.1.0",
-        "@atlaskit/pragmatic-drag-and-drop-hitbox": "^2.2.0",
+        "@atlaskit/pragmatic-drag-and-drop": "^4.0.0",
+        "@atlaskit/pragmatic-drag-and-drop-hitbox": "^3.0.0",
         "@cawco/core": "workspace:*",
         "@codemirror/commands": "^6",
         "@codemirror/lang-javascript": "^6",
@@ -241,9 +241,9 @@
 
     "@anthropic-ai/sdk": ["@anthropic-ai/sdk@0.115.0", "", { "dependencies": { "json-schema-to-ts": "^3.1.1", "standardwebhooks": "^1.0.0" }, "peerDependencies": { "zod": "^3.25.0 || ^4.0.0" }, "optionalPeers": ["zod"], "bin": { "anthropic-ai-sdk": "bin/cli" } }, "sha512-BJrFIVyjNuU8lfDyIJTvlRYzgQg+zEl78BxE7fq8esULsGz9IRQvGtW5spq3tydmtjQb/GFdooKGdGsetpx+lQ=="],
 
-    "@atlaskit/pragmatic-drag-and-drop": ["@atlaskit/pragmatic-drag-and-drop@3.1.0", "", { "dependencies": { "@babel/runtime": "^7.0.0", "bind-event-listener": "^3.0.0", "raf-schd": "^4.0.3" } }, "sha512-VU+2Oh6OgvC6D1xiX3lfm1gZJsaSPD+ZKjAHodOQ9IO6RfOvAyReLlK5ut9gIUpPmbD8d09wlCs7y4A6/I8c5Q=="],
+    "@atlaskit/pragmatic-drag-and-drop": ["@atlaskit/pragmatic-drag-and-drop@4.0.0", "", { "dependencies": { "@babel/runtime": "^7.0.0", "bind-event-listener": "^3.0.0", "raf-schd": "^4.0.3" } }, "sha512-pyDo2B5NiaExoKGmgeXKGNUL4aR4UzzSZm8QWWjYTEyBLVqSqKyKUwtVxMw2YEkakagOGFONUdHM32LAH2nPug=="],
 
-    "@atlaskit/pragmatic-drag-and-drop-hitbox": ["@atlaskit/pragmatic-drag-and-drop-hitbox@2.2.0", "", { "dependencies": { "@atlaskit/pragmatic-drag-and-drop": "^3.1.0", "@babel/runtime": "^7.0.0" } }, "sha512-L0Wq4EKc9Yx+iywci3NLhwjsaru+hyZ9C/H7mz5pvrSh7vpp9q2YabRr85OnCLaY6equ5pxGVyI4PF3HP69ZMw=="],
+    "@atlaskit/pragmatic-drag-and-drop-hitbox": ["@atlaskit/pragmatic-drag-and-drop-hitbox@3.0.0", "", { "dependencies": { "@atlaskit/pragmatic-drag-and-drop": "^4.0.0", "@babel/runtime": "^7.0.0" } }, "sha512-AGLp1ewjm07eRN2NL62awllSM19FrWVZMQYfZA/jugQlpaeoTr5ah2DE7zfiEt7yrg34htoKQVM+y6SGIQYs2A=="],
 
     "@aws-crypto/sha256-browser": ["@aws-crypto/sha256-browser@5.2.0", "", { "dependencies": { "@aws-crypto/sha256-js": "^5.2.0", "@aws-crypto/supports-web-crypto": "^5.2.0", "@aws-crypto/util": "^5.2.0", "@aws-sdk/types": "^3.222.0", "@aws-sdk/util-locate-window": "^3.0.0", "@smithy/util-utf8": "^2.0.0", "tslib": "^2.6.2" } }, "sha512-AXfN/lGotSQwu6HNcEsIASo7kWXZ5HYWvfOmSNKDsEqC4OashTp8alTmaz+F7TC2L083SFv5RdB+qU3Vs1kZqw=="],
 
@@ -299,7 +299,7 @@
 
     "@babel/parser": ["@babel/parser@7.29.8", "", { "dependencies": { "@babel/types": "^7.29.8" }, "bin": "./bin/babel-parser.js" }, "sha512-E8lTAYNB1KW+FH+VGJuZM1ioAx2E6oVlvQFRrf5P8ZZmsiJXYAD9vTFV7yyEURNzgh1dFqMZuO6tUwcARbqFCA=="],
 
-    "@babel/runtime": ["@babel/runtime@7.28.6", "", {}, "sha512-05WQkdpL9COIMz4LjTxGpPNCdlpyimKppYNoJ5Di5EUObifl8t4tuLuUBBZEpoLYOmfvIWrsp9fCl0HoPRVTdA=="],
+    "@babel/runtime": ["@babel/runtime@7.29.7", "", {}, "sha512-Nq8OhGWiZIZGV6hLHoyAKLLcJihP/xFeBMGJoUrxTX2psI8dCifzLhZISFb+VWS3wFMRDmCGw5R+dOySCqPLhw=="],
 
     "@babel/types": ["@babel/types@7.29.8", "", { "dependencies": { "@babel/helper-string-parser": "^7.29.7", "@babel/helper-validator-identifier": "^7.29.7" } }, "sha512-Vj1jF3cPfxg7OAfoI7QnVKLoILlm2JF9pnVHrX8qx7AHMiYWT+NDAA7jChlNgRS4WTLc/fD1lXLmPixluj+3Gg=="],
 
