@@ -1,7 +1,6 @@
 import { IMAGE_GENERATION_DESCRIPTION } from "@cawco/core";
 import type { ToolAnnotations } from "@modelcontextprotocol/sdk/types.js";
 import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
 import {
   type HandoffDeps,
   handoffActions,
@@ -57,7 +56,7 @@ function tool<T extends z.ZodRawShape>(
   return {
     name,
     description,
-    inputSchema: zodToJsonSchema(schema),
+    inputSchema: z.toJSONSchema(schema, { target: "draft-07", io: "input" }),
     ...(annotations ? { annotations } : {}),
     handler: (args: unknown) => handler(schema.parse(args)),
   };
@@ -158,7 +157,7 @@ export function handoffTools(deps: HandoffDeps) {
     tool(
       "submit_result",
       "Call exactly once with an object matching the schema in your instructions, then end your turn. The hub's validation message is returned verbatim on failure.",
-      { result: z.record(z.unknown()) },
+      { result: z.record(z.string(), z.unknown()) },
       async ({ result }) => ({
         content: [
           { type: "text" as const, text: await actions.submitResult(result) },
@@ -170,7 +169,7 @@ export function handoffTools(deps: HandoffDeps) {
       "Run a saved workflow by name or slug. You become its supervisor and receive a receipt, as a queued peer message, for each step, checkpoint and the run's end: status, attempt, time, a `ref`, the result's size and the names of its top-level keys, or the whole result when it is 1,000 characters or less. Read more of a result with workflow_read only when you need it. A step that runs out of attempts is held for your decision (steer_workflow retry or fail); a receipt sent while your session is not live is kept and sent when it next is.",
       {
         name: z.string(),
-        inputs: z.record(z.unknown()),
+        inputs: z.record(z.string(), z.unknown()),
         workspace: z
           .object({ path: z.string(), machineId: z.string() })
           .optional(),
@@ -765,7 +764,7 @@ export function handoffTools(deps: HandoffDeps) {
             'The requestId from the delegate\'s "[delegate-ask ...]" line.'
           ),
         answers: z
-          .record(z.string())
+          .record(z.string(), z.string())
           .optional()
           .describe(
             "Exact question text → chosen option label, for each question asked."

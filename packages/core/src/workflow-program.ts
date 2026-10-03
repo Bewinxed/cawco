@@ -6,7 +6,7 @@
  * the hub thread and runs there as a durable workflow-engine primitive, so a
  * replay after a restart or a resume answers it from the engine's storage.
  */
-import type { ZodTypeAny, z } from "zod";
+import type { ZodType, z } from "zod";
 import type { EffortLevel } from "./harness";
 import type { WorkflowFailure } from "./workflow";
 
@@ -14,7 +14,7 @@ import type { WorkflowFailure } from "./workflow";
 const Hasher = Bun.CryptoHasher;
 
 /** What `w.run` / `w.spawn` are given. Mirrors the `step` node's fields. */
-export interface StepSpec<Output extends ZodTypeAny = ZodTypeAny> {
+export interface StepSpec<Output extends ZodType = ZodType> {
   denyTools?: string[];
   effort?: EffortLevel;
   harness: "claude" | "opencode" | "pi";
@@ -55,7 +55,7 @@ export type StepSpecJson = Omit<StepSpec, "output"> & {
   outputSchema: Record<string, unknown>;
 };
 
-export interface StepHandle<Output extends ZodTypeAny = ZodTypeAny> {
+export interface StepHandle<Output extends ZodType = ZodType> {
   readonly id: string;
   readonly result: Promise<z.infer<Output>>;
 }
@@ -67,7 +67,7 @@ export interface AskSpec {
    * validated against it: how a supervisor fills in a decision rather than
    * picking a label. With one, `options` may be empty.
    */
-  answer?: ZodTypeAny;
+  answer?: ZodType;
   answeredBy?: "operator" | "supervisor";
   options: { description?: string; label: string }[];
   question: string;
@@ -176,7 +176,7 @@ export interface JevResult<
 }
 
 /** A named, zod-typed slot shared between the program and its step sessions. */
-export interface WorkflowState<Schema extends ZodTypeAny> {
+export interface WorkflowState<Schema extends ZodType> {
   get: () => Promise<z.infer<Schema> | undefined>;
   set: (value: z.infer<Schema>) => Promise<void>;
   update: (
@@ -184,16 +184,16 @@ export interface WorkflowState<Schema extends ZodTypeAny> {
   ) => Promise<void>;
 }
 
-export interface Workflow<Inputs extends ZodTypeAny = ZodTypeAny> {
+export interface Workflow<Inputs extends ZodType = ZodType> {
   /**
    * Human or supervisor choice: parks in the hub's pending ledger until
    * answered. With an `answer` schema the answer's `value` is typed by it.
    */
   ask: {
-    // `answer` is taken out of AskSpec first: `ZodTypeAny & ZodObject<…>` is
+    // `answer` is taken out of AskSpec first: `ZodType & ZodObject<…>` is
     // a type no real schema is assignable to, which would leave this overload
     // never chosen and every typed answer `unknown`.
-    <Answer extends ZodTypeAny>(
+    <Answer extends ZodType>(
       spec: Omit<AskSpec, "answer"> & { answer: Answer }
     ): Promise<AskAnswer<z.infer<Answer>> & { value: z.infer<Answer> }>;
     (spec: AskSpec): Promise<AskAnswer>;
@@ -230,17 +230,15 @@ export interface Workflow<Inputs extends ZodTypeAny = ZodTypeAny> {
   /** Recorded clock: the same value on replay. */
   now: () => Promise<number>;
   /** One step, blocking until it returns a validated result. */
-  run: <Output extends ZodTypeAny>(
+  run: <Output extends ZodType>(
     spec: StepSpec<Output>
   ) => Promise<z.infer<Output>>;
   /** Durable timer: survives a hub restart, resolves once. */
   sleep: (ms: number) => Promise<void>;
   /** One step, non-blocking. `Promise.all` over handles is the fan-out. */
-  spawn: <Output extends ZodTypeAny>(
-    spec: StepSpec<Output>
-  ) => StepHandle<Output>;
+  spawn: <Output extends ZodType>(spec: StepSpec<Output>) => StepHandle<Output>;
   /** A named slot, validated against `schema` on every read and write. */
-  state: <Schema extends ZodTypeAny>(
+  state: <Schema extends ZodType>(
     name: string,
     schema: Schema
   ) => WorkflowState<Schema>;

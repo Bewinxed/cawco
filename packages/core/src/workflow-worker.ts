@@ -15,7 +15,7 @@
  * answer only once the program has issued every call the last one led to.
  */
 
-import { zodToJsonSchema } from "zod-to-json-schema";
+import { z } from "zod";
 import type { WorkflowFailure } from "./workflow";
 import { errorOf, failureOf, stepIdFor } from "./workflow-program";
 
@@ -124,8 +124,10 @@ function makeBridge(runId: string, inputs: Record<string, unknown>) {
   /** A spec crosses the boundary as plain JSON: zod becomes JSON Schema. */
   const strip = ({ output, ...spec }: Record<string, unknown>) => ({
     ...spec,
-    // biome-ignore lint/suspicious/noExplicitAny: the program hands us its own zod schema, untyped at this boundary
-    outputSchema: zodToJsonSchema(output as any),
+    outputSchema: z.toJSONSchema(output as z.ZodType, {
+      target: "draft-07",
+      io: "input",
+    }),
   });
   return {
     inputs,
@@ -138,8 +140,10 @@ function makeBridge(runId: string, inputs: Record<string, unknown>) {
           ? spec
           : {
               ...spec,
-              // biome-ignore lint/suspicious/noExplicitAny: the program hands us its own zod schema, untyped at this boundary
-              answerSchema: zodToJsonSchema(answer as any),
+              answerSchema: z.toJSONSchema(answer as z.ZodType, {
+                target: "draft-07",
+                io: "input",
+              }),
             }
       ),
     exec: (cmd: string, options?: { timeoutMinutes?: number }) =>
@@ -149,8 +153,10 @@ function makeBridge(runId: string, inputs: Record<string, unknown>) {
     workflow: (slug: string, values: unknown) =>
       effect("workflow", { slug, inputs: values }),
     state: (name: string, schema: unknown) => {
-      // biome-ignore lint/suspicious/noExplicitAny: the program hands us its own zod schema, untyped at this boundary
-      const jsonSchema = zodToJsonSchema(schema as any);
+      const jsonSchema = z.toJSONSchema(schema as z.ZodType, {
+        target: "draft-07",
+        io: "input",
+      });
       return {
         get: () => effect("state-get", { name, schema: jsonSchema }),
         set: (value: unknown) =>
@@ -183,7 +189,7 @@ function makeBridge(runId: string, inputs: Record<string, unknown>) {
 /** Describes a zod object's fields without the hub having to hold zod types. */
 // biome-ignore lint/suspicious/noExplicitAny: the shape comes out of an untyped module the sandbox just evaluated
 function describeInputs(schema: any): unknown {
-  const shape = schema?._def?.shape?.() ?? schema?.shape;
+  const shape = schema?.shape;
   if (!shape) {
     throw new Error(
       "A program's `inputs` export must be a zod object, as in z.object({ … })."
@@ -195,17 +201,17 @@ function describeInputs(schema: any): unknown {
     let current = field;
     let optional = false;
     let defaultValue: string | undefined;
-    let description: string | undefined = current?._def?.description;
-    for (let depth = 0; depth < 8 && current?._def; depth += 1) {
-      description ??= current._def.description;
-      const kind = current._def.typeName;
-      if (kind === "ZodOptional" || kind === "ZodNullable") {
+    let description: string | undefined = current?.description;
+    for (let depth = 0; depth < 8 && current?._zod?.def; depth += 1) {
+      description ??= current.description;
+      const kind = current._zod.def.type;
+      if (kind === "optional" || kind === "nullable") {
         optional = true;
-        current = current._def.innerType;
-      } else if (kind === "ZodDefault") {
+        current = current.unwrap();
+      } else if (kind === "default") {
         optional = true;
-        defaultValue = String(current._def.defaultValue());
-        current = current._def.innerType;
+        defaultValue = String(current._zod.def.defaultValue);
+        current = current.unwrap();
       } else {
         break;
       }
@@ -214,8 +220,8 @@ function describeInputs(schema: any): unknown {
       optional,
       ...(defaultValue === undefined ? {} : { defaultValue }),
       ...(description ? { description } : {}),
-      ...(current?._def?.typeName === "ZodEnum"
-        ? { options: current._def.values as string[] }
+      ...(current?._zod?.def.type === "enum"
+        ? { options: current.options as string[] }
         : {}),
     };
   }

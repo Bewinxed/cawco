@@ -8,7 +8,6 @@
  * read/write over fleet config — not session-scoped, not delegation-scoped.
  */
 import { z } from "zod";
-import { zodToJsonSchema } from "zod-to-json-schema";
 import { hubHttpUrl } from "./delegation-actions";
 
 /** API timeout for admin calls — generous for skill installs that fetch from GitHub. */
@@ -24,7 +23,7 @@ function tool<T extends z.ZodRawShape>(
   return {
     name,
     description,
-    inputSchema: zodToJsonSchema(schema),
+    inputSchema: z.toJSONSchema(schema, { target: "draft-07", io: "input" }),
     handler: (args: unknown) => handler(schema.parse(args)),
   };
 }
@@ -340,7 +339,7 @@ export function adminTools() {
             "The MCP server name (as it appears in ~/.claude.json). Required for put and remove."
           ),
         config: z
-          .record(z.unknown())
+          .record(z.string(), z.unknown())
           .optional()
           .describe(
             "The server configuration object. Required for put. A stdio server needs " +
@@ -562,7 +561,7 @@ export function adminTools() {
           .optional()
           .describe("Filter which firings of the event this hook runs on."),
         handler: z
-          .record(z.unknown())
+          .record(z.string(), z.unknown())
           .optional()
           .describe(
             "The handler configuration. A command hook: { type: 'command', command: string, " +

@@ -4,7 +4,7 @@
  * import (proposal §13.1).
  */
 
-import type { ZodTypeAny } from "zod";
+import type { ZodType } from "zod";
 import type {
   AskAnswer,
   AskSpec,
@@ -31,11 +31,10 @@ declare global {
     >,
   > = JevResult<Questions>;
   type WorkflowJevAnswer = JevAnswer;
-  type Workflow<Inputs extends ZodTypeAny = ZodTypeAny> = Runtime<Inputs>;
-  type StepHandle<Output extends ZodTypeAny = ZodTypeAny> = Handle<Output>;
-  type WorkflowState<Schema extends ZodTypeAny> = State<Schema>;
-  type WorkflowStepSpec<Output extends ZodTypeAny = ZodTypeAny> =
-    StepSpec<Output>;
+  type Workflow<Inputs extends ZodType = ZodType> = Runtime<Inputs>;
+  type StepHandle<Output extends ZodType = ZodType> = Handle<Output>;
+  type WorkflowState<Schema extends ZodType> = State<Schema>;
+  type WorkflowStepSpec<Output extends ZodType = ZodType> = StepSpec<Output>;
   type WorkflowAskSpec = AskSpec;
   type WorkflowAskAnswer = AskAnswer;
 }

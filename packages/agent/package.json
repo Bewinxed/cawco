@@ -22,7 +22,7 @@
     "effect": "beta",
     "modern-screenshot": "4.7.0",
     "typebox": "1.3.7",
-    "zod": "3.25.76"
+    "zod": "4.6.5"
   },
   "devDependencies": {
     "@types/bun": "latest",
