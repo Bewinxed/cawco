@@ -308,6 +308,8 @@ public enum TypeScale {
     public static let leadingProse: Double = 1.55
     public static let leadingCode: Double = 1.6
     public static let leadingKpi: Double = 1
+    /// Tailwind preflight's root line height: what a row that sets no leading of its own inherits (the transcript's rail lines).
+    public static let leadingRoot: Double = 1.5
     public static let weightBody: UIFont.Weight = .regular
     /// Nothing in product UI goes above 500.
     public static let weightStrong: UIFont.Weight = .medium
@@ -425,6 +427,46 @@ public enum Size {
     public static let focusRingInset: Double = -2
     public static let materialBlur: Double = 20
     public static let scrimBlur: Double = 2
+    /// The transcript's rail edge from a row's inline start (app.css .tx-columns --x-rail); 0 at 900px wide and under (tx-x-rail-narrow).
+    public static let txXRail: Double = 7
+    public static let txXRailNarrow: Double = 0
+    /// The transcript's glyph cell (--w-glyph): the glyph column sits a space-3 past the rail, the text column a space-2 past the cell.
+    public static let txWGlyph: Double = 16
+    /// A transcript rail line's least height: a tool call, a note, a branch head.
+    public static let txLine: Double = 26
+    /// tx-line under a coarse pointer.
+    public static let txLineTouch: Double = 44
+    /// A code well's padding (OutputBlock).
+    public static let txCodePadBlock: Double = 10
+    public static let txCodePadInline: Double = 12
+    /// A fenced block's margin in a message (my-3).
+    public static let txCodeMargin: Double = 12
+    /// A diff's row (@pierre/diffs), its bar between hunks, its box's cap.
+    public static let txDiffRow: Double = 20
+    public static let txDiffBar: Double = 32
+    public static let txDiffCap: Double = 400
+    /// A diff's file header padding (py-2 px-3).
+    public static let txDiffHeadBlock: Double = 8
+    public static let txDiffHeadInline: Double = 12
+    /// A tool call's disclosed field, before it scrolls.
+    public static let txFieldCap: Double = 300
+    /// An image card's box (Shot), and a thumbnail's.
+    public static let txShot: Double = 240
+    public static let txShotThumb: Double = 48
+    /// A question card's option, at its least.
+    public static let txOption: Double = 30
+    /// A reasoning step's icon column (thinking-step).
+    public static let txStepCol: Double = 15
+    /// A branch's live beat; the compacting and catch-up beat is tx-beat-lg.
+    public static let txBeat: Double = 5
+    public static let txBeatLg: Double = 6
+    /// A branch head's chevron cell.
+    public static let txChevBox: Double = 13
+    /// A preview tool's card: widest, least tall, its thumbnail.
+    public static let txPreviewMax: Double = 440
+    public static let txPreviewMin: Double = 80
+    public static let txPreviewThumbW: Double = 90
+    public static let txPreviewThumbH: Double = 64
 }
 
 public enum Effect {
@@ -479,6 +521,9 @@ public enum Motion {
     public static let durPop: TimeInterval = 0.26
     /// In seconds.
     public static let durPanel: TimeInterval = 0.28
+    /// A disclosure growing open (collapsible-content); it folds shut over dur-exit.
+    /// In seconds.
+    public static let durReveal: TimeInterval = 0.24
     /// How long a done state stays up.
     /// In seconds.
     public static let durHold: TimeInterval = 1.2

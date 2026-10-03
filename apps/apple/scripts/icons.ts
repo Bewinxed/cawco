@@ -42,6 +42,44 @@ const SOLAR_ICONS = [
   "server-2-bold-duotone",
   "close-circle-bold-duotone",
   "archive-down-minimlistic-bold-duotone",
+  // The transcript (apps/dashboard/src/lib/icons.ts names, beside each).
+  "user-bold-duotone", // IconUser
+  "cpu-bold-duotone", // IconCpu
+  "code-square-bold-duotone", // IconToolTerminal, IconTerminal
+  "document-text-bold-duotone", // IconToolRead
+  "pen-2-bold-duotone", // IconToolEdit
+  "pen-new-square-bold-duotone", // IconToolWrite
+  "folder-with-files-bold-duotone", // IconToolFiles
+  "plain-2-bold-duotone", // IconToolMessage
+  "cursor-bold-duotone", // IconToolScreen
+  "compass-bold-duotone", // IconToolNavigate
+  "code-2-bold-duotone", // IconToolCode
+  "plug-circle-bold-duotone", // IconToolMcp
+  "users-group-rounded-bold-duotone", // IconToolTask
+  "checklist-bold-duotone", // IconToolTodo
+  "notebook-bold-duotone", // IconToolNotebook
+  "question-circle-bold-duotone", // IconToolQuestion, IconAsk
+  "sledgehammer-bold-duotone", // IconToolGeneric
+  "info-circle-bold-duotone", // IconInfo
+  "stop-bold-duotone", // IconStop
+  "window-frame-bold-duotone", // IconWindow
+  "shield-check-bold-duotone", // IconRules
+  "clipboard-check-bold-duotone", // IconReport
+  "clipboard-remove-bold-duotone", // IconReportFailed
+  "share-circle-bold-duotone", // IconWorkflow
+  "inbox-in-bold-duotone", // IconHandoff
+  "check-read-bold-duotone", // IconCheck
+  "arrow-down-bold-duotone", // Latest.svelte
+  "square-top-down-bold-duotone", // IconExternal
+  "maximize-bold-duotone", // IconMaximize
+  "danger-circle-bold-duotone", // IconAlert
+  "chat-square-bold-duotone", // IconChat
+  "file-text-bold-duotone", // IconDocument
+  "copy-bold-duotone", // IconCopy
+  // The session screen's chrome.
+  "arrow-up-linear", // IconArrowUp: the "needs you" pill
+  "alt-arrow-down-linear", // IconChevronDown
+  "alt-arrow-left-linear", // IconChevronLeft
 ];
 
 /** The dashboard's own glyphs, drawn where Solar has none. */

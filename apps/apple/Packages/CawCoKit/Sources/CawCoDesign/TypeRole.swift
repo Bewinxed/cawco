@@ -19,7 +19,15 @@ public struct TypeRole: Sendable {
     /// weight on its variable `wght` axis, scaled by Dynamic Type from the
     /// token's size at the default setting.
     public var font: UIFont {
-        let base = UIFont(descriptor: Self.descriptor(weight: weight), size: points)
+        font(points)
+    }
+
+    /// The role's face at another size, as a web rule that keeps a role's
+    /// family and weight but restates its size (`font-size: var(--text-label)`
+    /// on a mono run), scaled by Dynamic Type the same way.
+    public func font(_ size: Double, weight: UIFont.Weight? = nil) -> UIFont {
+        let mono = family.first?.hasPrefix("JetBrains Mono") == true
+        let base = UIFont(descriptor: Self.descriptor(weight: weight ?? self.weight, mono: mono), size: size)
         return UIFontMetrics(forTextStyle: textStyle).scaledFont(for: base)
     }
 
@@ -70,20 +78,31 @@ public struct TypeRole: Sendable {
     /// `wght`, the variation axis tag, as CoreText numbers it.
     private static let weightAxis = 0x7767_6874
 
-    private static let family: String = {
-        if let url = Bundle.module.url(forResource: "Figtree", withExtension: "ttf", subdirectory: "Fonts")
-            ?? Bundle.module.url(forResource: "Figtree", withExtension: "ttf")
+    private static func register(_ file: String, family: String) -> String {
+        if let url = Bundle.module.url(forResource: file, withExtension: "ttf", subdirectory: "Fonts")
+            ?? Bundle.module.url(forResource: file, withExtension: "ttf")
         {
             CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
         }
-        return "Figtree"
-    }()
+        return family
+    }
 
-    private static func descriptor(weight: UIFont.Weight) -> UIFontDescriptor {
-        UIFontDescriptor(fontAttributes: [
-            .family: family,
+    private static let sans = register("Figtree", family: "Figtree")
+    /// JetBrains Mono, the mono stack's first choice; its ligatures (`calt`) off.
+    private static let monoFamily = register("JetBrainsMono", family: "JetBrains Mono")
+
+    private static func descriptor(weight: UIFont.Weight, mono: Bool) -> UIFontDescriptor {
+        var attributes: [UIFontDescriptor.AttributeName: Any] = [
+            .family: mono ? monoFamily : sans,
             UIFontDescriptor.AttributeName(rawValue: kCTFontVariationAttribute as String): [weightAxis: axis(weight)],
-        ])
+        ]
+        if mono {
+            attributes[.featureSettings] = [[
+                UIFontDescriptor.FeatureKey.type: kContextualAlternatesType,
+                UIFontDescriptor.FeatureKey.selector: kContextualAlternatesOffSelector,
+            ]]
+        }
+        return UIFontDescriptor(fontAttributes: attributes)
     }
 }
 

@@ -109,12 +109,15 @@ public final class SessionMarkView: UIView {
         }
         switch status {
         case .attn, .fail, .live:
-            let ink = (status == .attn ? Palette.statusAttnGlyph : status == .fail ? Palette.statusFailGlyph : Palette.statusLiveGlyph)
-                .resolvedColor(with: traits).cgColor
+            let color = (status == .attn ? Palette.statusAttnGlyph : status == .fail ? Palette.statusFailGlyph : Palette.statusLiveGlyph)
+                .resolvedColor(with: traits)
+            let ink = color.cgColor
             rim.isHidden = false
             if sweeping {
-                // An arc of the live ink, fading along its tail, once a durLoop.
-                sweep.colors = [UIColor.clear.cgColor, ink, UIColor.clear.cgColor]
+                // An arc of the live ink, fading along its tail, once a durLoop:
+                // transparent live ink, not `clear` (black at alpha 0, which drew a grey tail).
+                let faded = color.withAlphaComponent(0).cgColor
+                sweep.colors = [faded, ink, faded]
                 sweep.locations = [0, 0.45, 0.45]
                 guard sweep.animation(forKey: "sweep") == nil else {
                     return
@@ -142,7 +145,7 @@ public final class SessionMarkView: UIView {
     }
 
     /// A stable sprite for a session, on another constant than its hue (mark.ts `sessionSprite`).
-    static func sprite(_ seed: String) -> Glyph {
+    public static func sprite(_ seed: String) -> Glyph {
         Glyph.sprites[Int(hash(seed, 37).magnitude % UInt32(Glyph.sprites.count))]
     }
 

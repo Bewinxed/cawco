@@ -459,6 +459,8 @@
     --leading-prose: 1.55;
     --leading-code: 1.6;
     --leading-kpi: 1;
+    /* Tailwind preflight's root line height: what a row that sets no leading of its own inherits (the transcript's rail lines). */
+    --leading-root: 1.5;
     --weight-body: 400;
     /* Nothing in product UI goes above 500. */
     --weight-strong: 500;
@@ -568,6 +570,46 @@
     --focus-ring-inset: -2px;
     --material-blur: 20px;
     --scrim-blur: 2px;
+    /* The transcript's rail edge from a row's inline start (app.css .tx-columns --x-rail); 0 at 900px wide and under (tx-x-rail-narrow). */
+    --tx-x-rail: var(--space-2);
+    --tx-x-rail-narrow: 0px;
+    /* The transcript's glyph cell (--w-glyph): the glyph column sits a space-3 past the rail, the text column a space-2 past the cell. */
+    --tx-w-glyph: 16px;
+    /* A transcript rail line's least height: a tool call, a note, a branch head. */
+    --tx-line: 26px;
+    /* tx-line under a coarse pointer. */
+    --tx-line-touch: var(--c-btn-h-lg);
+    /* A code well's padding (OutputBlock). */
+    --tx-code-pad-block: 10px;
+    --tx-code-pad-inline: 12px;
+    /* A fenced block's margin in a message (my-3). */
+    --tx-code-margin: 12px;
+    /* A diff's row (@pierre/diffs), its bar between hunks, its box's cap. */
+    --tx-diff-row: 20px;
+    --tx-diff-bar: 32px;
+    --tx-diff-cap: 400px;
+    /* A diff's file header padding (py-2 px-3). */
+    --tx-diff-head-block: 8px;
+    --tx-diff-head-inline: 12px;
+    /* A tool call's disclosed field, before it scrolls. */
+    --tx-field-cap: 300px;
+    /* An image card's box (Shot), and a thumbnail's. */
+    --tx-shot: 240px;
+    --tx-shot-thumb: 48px;
+    /* A question card's option, at its least. */
+    --tx-option: 30px;
+    /* A reasoning step's icon column (thinking-step). */
+    --tx-step-col: 15px;
+    /* A branch's live beat; the compacting and catch-up beat is tx-beat-lg. */
+    --tx-beat: 5px;
+    --tx-beat-lg: 6px;
+    /* A branch head's chevron cell. */
+    --tx-chev-box: 13px;
+    /* A preview tool's card: widest, least tall, its thumbnail. */
+    --tx-preview-max: 440px;
+    --tx-preview-min: 80px;
+    --tx-preview-thumb-w: 90px;
+    --tx-preview-thumb-h: 64px;
     /* A message not yet said in the conversation (sending, queued). */
     --ghost-presence: 0.7;
     --material-saturate: 1.6;
@@ -603,6 +645,8 @@
     --dur-wait-grace: 1000ms;
     --dur-pop: 260ms;
     --dur-panel: 280ms;
+    /* A disclosure growing open (collapsible-content); it folds shut over dur-exit. */
+    --dur-reveal: 240ms;
     /* How long a done state stays up. */
     --dur-hold: 1.2s;
     /* One turn of an ambient loop: spinner, pulse, ping. */

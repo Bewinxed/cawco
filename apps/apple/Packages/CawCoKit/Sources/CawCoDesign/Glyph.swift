@@ -26,12 +26,54 @@ public enum Glyph: String, CaseIterable, Sendable {
     case server = "server-2-bold-duotone"
     case failed = "close-circle-bold-duotone"
     case archive = "archive-down-minimlistic-bold-duotone"
+    // The transcript's (apps/dashboard/src/lib/icons.ts).
+    case user = "user-bold-duotone"
+    case cpu = "cpu-bold-duotone"
+    case terminal = "code-square-bold-duotone"
+    case toolRead = "document-text-bold-duotone"
+    case toolEdit = "pen-2-bold-duotone"
+    case toolWrite = "pen-new-square-bold-duotone"
+    case toolFiles = "folder-with-files-bold-duotone"
+    case toolMessage = "plain-2-bold-duotone"
+    case toolScreen = "cursor-bold-duotone"
+    case toolNavigate = "compass-bold-duotone"
+    case toolCode = "code-2-bold-duotone"
+    case toolMcp = "plug-circle-bold-duotone"
+    case toolTask = "users-group-rounded-bold-duotone"
+    case toolTodo = "checklist-bold-duotone"
+    case toolNotebook = "notebook-bold-duotone"
+    case ask = "question-circle-bold-duotone"
+    case toolGeneric = "sledgehammer-bold-duotone"
+    case info = "info-circle-bold-duotone"
+    case stop = "stop-bold-duotone"
+    case window = "window-frame-bold-duotone"
+    case rules = "shield-check-bold-duotone"
+    case report = "clipboard-check-bold-duotone"
+    case reportFailed = "clipboard-remove-bold-duotone"
+    case workflow = "share-circle-bold-duotone"
+    case handoff = "inbox-in-bold-duotone"
+    case check = "check-read-bold-duotone"
+    case arrowDown = "arrow-down-bold-duotone"
+    case external = "square-top-down-bold-duotone"
+    case maximize = "maximize-bold-duotone"
+    case alert = "danger-circle-bold-duotone"
+    case chat = "chat-square-bold-duotone"
+    case document = "file-text-bold-duotone"
+    case copy = "copy-bold-duotone"
+    // The session screen's chrome.
+    case arrowUp = "arrow-up-linear"
+    case chevronDown = "alt-arrow-down-linear"
+    case chevronLeft = "alt-arrow-left-linear"
     case close
     case tick
     case plus
     case osApple = "os-apple"
     case osTux = "os-tux"
     case osWindows = "os-windows"
+
+    /// The web's names for glyphs the transcript already carries under its own.
+    public static let send = Glyph.toolMessage // plain-2-bold-duotone (IconSend)
+    public static let answer = Glyph.check // check-read-bold-duotone (IconCheck)
 
     public var image: UIImage {
         guard let image = UIImage(named: rawValue, in: .module, with: nil) else {
