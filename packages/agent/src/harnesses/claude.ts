@@ -730,8 +730,9 @@ class ClaudeSession implements HarnessSession {
         // model's, and writing a level here would put cawco's guess in its
         // place on every model whose scale we cannot see.
         ...(effort && { effort }),
+        // Enables switching into bypass through the mode picker; does not select it.
+        allowDangerouslySkipPermissions: true,
         ...(permissionMode === "bypassPermissions" && {
-          allowDangerouslySkipPermissions: true,
           // Bypass mode must also let the model run commands outside the sandbox
           // via `dangerouslyDisableSandbox` — otherwise the SDK auto-denies such
           // Bash calls (`sandboxOverride`) without ever reaching `canUseTool`.
