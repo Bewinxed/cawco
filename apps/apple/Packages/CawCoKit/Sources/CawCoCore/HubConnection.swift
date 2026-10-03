@@ -129,6 +129,7 @@ public final class HubConnection {
 
     private func resetFleet() {
         fleet.machines = []
+        fleet.hubBuild = nil
         fleet.adopt(rows: [])
         fleet.projects = []
         fleet.pulses = [:]
@@ -437,19 +438,21 @@ public final class HubConnection {
         }
     }
 
-    /// A machine's stored sessions, by its `listSessions` control.
+    /// Replaces a machine's stored-session catalog with its current answer.
+    /// Failure remains an error for pending menu actions to show.
+    public func reloadCatalog(_ machineId: String) async throws {
+        defer { fleet.catalogsTried.insert(machineId) }
+        fleet.catalogs[machineId] = try await listSessions(machineId: machineId)
+    }
+
+    /// The background path reports a failed read without throwing out of its task.
     private func readCatalog(_ machineId: String) {
         Task { [weak self] in
             guard let self else {
                 return
             }
-            defer { fleet.catalogsTried.insert(machineId) }
             do {
-                let result = try await control(machineId, method: "listSessions", args: [[String: (any Sendable)?]()])
-                guard let result else {
-                    return
-                }
-                fleet.catalogs[machineId] = try Wire.decoder().decode([StoredSession].self, from: Wire.data(result))
+                try await reloadCatalog(machineId)
             } catch {
                 log.error("listSessions on \(machineId, privacy: .public) failed: \(String(describing: error), privacy: .public)")
             }
@@ -521,11 +524,13 @@ public final class HubConnection {
 
     private func apply(_ frame: Frame) {
         switch frame {
-        case let .instances(board):
+        case let .instances(board, hubBuild):
+            if let hubBuild { fleet.hubBuild = hubBuild }
             adopt(machines: board.agents)
             fleet.adopt(rows: board.instances)
             fleet.liveRead = true
-        case let .instancesDelta(delta):
+        case let .instancesDelta(delta, hubBuild):
+            if let hubBuild { fleet.hubBuild = hubBuild }
             adopt(machines: delta.agents)
             fleet.patch(upserts: delta.upserts, removed: delta.removed)
         case let .permissionRequest(ask, routedTo):

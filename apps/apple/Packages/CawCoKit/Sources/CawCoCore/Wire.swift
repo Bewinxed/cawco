@@ -85,6 +85,8 @@ enum Inbound {
         let routedTo: String?
         /// A workflow run's question, answered in its run.
         let workflowRunId: String?
+        /// Board metadata uses the generated build type, just as each agent row does.
+        let hubBuild: Components.Schemas.BuildInfo?
     }
 
     private struct Envelope<Payload: Decodable>: Decodable {
@@ -136,8 +138,8 @@ typealias AskFrame = Components.Schemas.FramePayload.Value8Payload
 /// variant; each case checks its own variant's `kind`, so a reordered
 /// document fails to compile rather than routing a frame to the wrong case.
 enum Frame {
-    case instances(Components.Schemas.FramePayload.Value6Payload)
-    case instancesDelta(Components.Schemas.FramePayload.Value7Payload)
+    case instances(Components.Schemas.FramePayload.Value6Payload, hubBuild: Components.Schemas.BuildInfo?)
+    case instancesDelta(Components.Schemas.FramePayload.Value7Payload, hubBuild: Components.Schemas.BuildInfo?)
     /// A session's ask, and where the hub routed it (`parent`: its delegate's parent answers).
     case permissionRequest(AskFrame, routedTo: String?)
     /// An ask is over, whoever settled it.
@@ -153,9 +155,9 @@ enum Frame {
 
     fileprivate init(_ payload: Components.Schemas.FramePayload, _ peek: Inbound.PayloadRoute) {
         if let frame = payload.value6, frame.kind == .instances {
-            self = .instances(frame)
+            self = .instances(frame, hubBuild: peek.hubBuild)
         } else if let frame = payload.value7, frame.kind == .instancesDelta {
-            self = .instancesDelta(frame)
+            self = .instancesDelta(frame, hubBuild: peek.hubBuild)
         } else if let frame = payload.value8, frame.kind == .permissionRequest {
             if let runId = peek.workflowRunId {
                 self = .runQuestion(runId: runId, raisedAt: frame.raisedAt)

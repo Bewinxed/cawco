@@ -8,6 +8,7 @@ public typealias InstanceRow = Components.Schemas.InstanceRow
 public typealias MachineRow = Components.Schemas.AgentRow
 public typealias StoredSession = Components.Schemas.NeutralSessionInfo
 public typealias SessionPulse = Components.Schemas.SessionPulse
+public typealias BuildInfo = Components.Schemas.BuildInfo
 
 extension Components.Schemas.InstanceRow: TreeRow {}
 
@@ -114,6 +115,8 @@ public struct BoardRun: Sendable {
 @Observable
 public final class FleetStore {
     public internal(set) var machines: [MachineRow] = []
+    /// The hub's build, carried by its board snapshots and deltas.
+    public internal(set) var hubBuild: BuildInfo?
     /// The hub's session rows as it sent them.
     private var hubRows: [InstanceRow] = []
     /// The sessions, each workflow step hung under its run (`stepUnderRun`).
