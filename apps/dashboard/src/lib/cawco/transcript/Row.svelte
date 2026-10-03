@@ -108,6 +108,37 @@
   /** The height tween running on the row, if any: a fold takes over from it. */
   let growing: Animation | null = null;
 
+  /**
+   * The list has drawn this row where it stands: virtua has measured it, so
+   * its item is no longer hidden. From then on the row is drawn whatever its
+   * item says (Transcript's `[data-drawn]`). virtua keeps sizes by index and
+   * hides an item at an index it has no size for, so a row drawn long ago
+   * that a row put in above moves down an index was hidden and shown again
+   * in the same frame, as virtua measured it there. Visibility inherits, so
+   * a streamed answer's 2,400 word spans were restyled twice for a change
+   * no frame ever painted: the first time inside the pane's layout (it is a
+   * size container), a 77ms frame each time a reply's reasoning landed
+   * above its answer. Only a row's first measuring is virtua's to hide.
+   */
+  let drawn = $state(false);
+  $effect(() => {
+    const row = node;
+    if (!(row && rowKey !== undefined)) {
+      return;
+    }
+    let frame = 0;
+    // Read in the frame's callbacks: an inline style, no layout.
+    const look = (): void => {
+      if (row.parentElement?.style.visibility === "hidden") {
+        frame = requestAnimationFrame(look);
+        return;
+      }
+      drawn = true;
+    };
+    frame = requestAnimationFrame(look);
+    return () => cancelAnimationFrame(frame);
+  });
+
   /** The entrance has run: the ticket is spent. */
   function spent(): void {
     if (ledgerId) {
@@ -390,7 +421,13 @@
   });
 </script>
 
-<div class="row" data-row={rowKey} bind:this={node} class:continues={continues}>
+<div
+  class="row"
+  data-drawn={drawn || undefined}
+  data-row={rowKey}
+  bind:this={node}
+  class:continues={continues}
+>
   {@render children(ticket)}
 </div>
 

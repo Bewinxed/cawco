@@ -2725,6 +2725,14 @@
   .listing:not(.shown) {
     visibility: hidden;
   }
+  /* A row the list has drawn stays drawn while virtua re-reads its size at
+     a new index (Row's `drawn`): virtua hides such an item for the moment
+     it takes to measure it, and the visibility it inherits restyled the
+     whole row twice. Once the list is shown; a row virtua has never
+     measured keeps virtua's hiding. */
+  .listing.shown :global([data-row][data-drawn]) {
+    visibility: visible;
+  }
   /* virtua writes `pointer-events: none` on its container while it scrolls
      and takes it off after. pointer-events is inherited, so each write
      restyled every row under it: the pin scrolls the list on every streamed
