@@ -74,6 +74,16 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     /// While one runs, the list waits for it before it takes the next change.
     private let relay = RelayMotion()
     private let branch = BranchMotion()
+    /// The swipe between Working and Finished, and what it has open.
+    private var swipe: TabSwipe!
+    private var swiping: (from: HomeModel.Tab, to: HomeModel.Tab)?
+    private var cover: UIView?
+    private var leavingPane: UIView?
+    private var arrivingPane: UIView?
+    /// Room added under a shorter list while it stands where a longer one was.
+    private var heldInset = 0.0
+    /// The landed list's rows flying in.
+    private let flight = Frames()
 
     init(hub: HubConnection, home: HomeModel) {
         self.hub = hub
@@ -89,13 +99,14 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = Palette.surfaceRecess
-        collectionView = UICollectionView(frame: view.bounds, collectionViewLayout: layout)
+        collectionView = BoardList(frame: view.bounds, collectionViewLayout: layout)
         collectionView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         collectionView.backgroundColor = Palette.surfaceRecess
         collectionView.delegate = self
         collectionView.keyboardDismissMode = .onDrag
         view.addSubview(collectionView)
         dataSource = makeDataSource()
+        swipe = TabSwipe(host: self, in: view)
     }
 
     override func viewWillAppear(_ animated: Bool) {
@@ -317,7 +328,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
 
     override func refreshContent() {
         // A driven motion owns the list until it lands, and asks again then.
-        guard dataSource != nil, !relay.running, !branch.running else {
+        guard dataSource != nil, !relay.running, !branch.running, swipe?.active != true, !flight.running else {
             return
         }
         commit(build(), animated: true)
@@ -445,6 +456,11 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     /// lines leaving toward the side the choice moved away from and new ones
     /// arriving from the other. Everything above the rows stays where it is.
     private func choose(_ tab: HomeModel.Tab) {
+        // A swipe in flight is retargeted from where it is, never restarted.
+        if swipe.active {
+            swipe.retarget(swiping.map { $0.to == tab ? swipe.side : 0 } ?? 0)
+            return
+        }
         guard tab != home.tab else {
             return
         }
@@ -469,9 +485,17 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     private func runRelay(_ direction: Double, _ change: @escaping () -> Void, landed: @escaping () -> Void = {}) {
         branch.end()
         relay.end()
+        flight.stop()
         guard !UIAccessibility.isReduceMotionEnabled else {
+            // Less motion: the new list cross-fades over the old, nothing travels.
+            let old = collectionView.snapshotView(afterScreenUpdates: false)
             change()
-            requestRefresh()
+            commit(build(), animated: false)
+            if let old {
+                old.frame = collectionView.frame
+                view.addSubview(old)
+                fadeAway(old)
+            }
             landed()
             return
         }
@@ -692,6 +716,260 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         case .working: return .live
         case .idle: return done ? .done : .idle
         }
+    }
+}
+
+// MARK: The swipe between Working and Finished
+
+/// The swipe moves the list region under the tab row (TabSwipe): the list
+/// there now drags off and the other tab's drags on beside it, in lockstep
+/// under the finger, while the status line, usage strip, needs cards and tab
+/// row stay where they are and the tab strip's sheet follows the finger.
+/// The neighbour comes on with its machines and what is under the list, its
+/// rows not yet there; once it lands they fly in, staggered, from the side
+/// it came from (list-swap's numbers, Relay.swift).
+extension HomeViewController: TabSwipeHost {
+    private func tab(on side: Int, of tab: HomeModel.Tab) -> HomeModel.Tab? {
+        switch (tab, side) {
+        case (.working, 1): .finished
+        case (.finished, -1): .working
+        default: nil
+        }
+    }
+
+    private var tabsCell: TabsCell? {
+        dataSource.indexPath(for: .tabs).flatMap { collectionView.cellForItem(at: $0) as? TabsCell }
+    }
+
+    func swipeHasTab(_ side: Int) -> Bool {
+        tab(on: side, of: swiping?.from ?? home.tab) != nil
+    }
+
+    func swipeMayBegin(at point: CGPoint, side: Int) -> Bool {
+        if swipe.active {
+            return true
+        }
+        guard !branch.running, let tabs = tabsCell else {
+            return false
+        }
+        // The region under the tab row: never the chrome above it.
+        guard point.y >= tabs.convert(tabs.bounds, to: view).maxY else {
+            return false
+        }
+        // A finished row's own swipe to archive goes the same way past the last tab.
+        let inList = view.convert(point, to: collectionView)
+        if tab(on: side, of: home.tab) == nil, let indexPath = collectionView.indexPathForItem(at: inList),
+           archiveSwipe(at: indexPath) != nil {
+            return false
+        }
+        return true
+    }
+
+    func swipeOpen(_ side: Int) {
+        relay.end()
+        flight.stop()
+        let from = home.tab
+        guard let to = tab(on: side, of: from), let tabs = tabsCell else {
+            return
+        }
+        swiping = (from, to)
+        let top = max(0, tabs.convert(tabs.bounds, to: view).maxY)
+        let region = CGRect(x: 0, y: top, width: view.bounds.width, height: max(0, view.bounds.height - top))
+        let leaving = view.resizableSnapshotView(from: region, afterScreenUpdates: false, withCapInsets: .zero) ?? UIView()
+
+        // The other tab's list, laid out where this one stands.
+        let resting = collectionView.contentOffset
+        home.tab = to
+        commit(build(), animated: false)
+        collectionView.layoutIfNeeded()
+        hold(resting)
+        let arriving = UIView(frame: CGRect(origin: .zero, size: region.size))
+        arriving.backgroundColor = Palette.surfaceRecess
+        for cell in collectionView.visibleCells {
+            guard let indexPath = collectionView.indexPath(for: cell), let item = dataSource.itemIdentifier(for: indexPath) else {
+                continue
+            }
+            let frame = cell.convert(cell.bounds, to: view)
+            guard frame.maxY > region.minY, frame.minY < region.maxY, underTabs(indexPath),
+                  !Self.flies(item), let shot = cell.snapshotView(afterScreenUpdates: true)
+            else {
+                continue
+            }
+            shot.frame = frame.offsetBy(dx: 0, dy: -region.minY)
+            arriving.addSubview(shot)
+        }
+        let cover = UIView(frame: region)
+        cover.clipsToBounds = true
+        cover.backgroundColor = Palette.surfaceRecess
+        cover.isUserInteractionEnabled = false
+        cover.addSubview(leaving)
+        cover.addSubview(arriving)
+        leaving.frame.origin = .zero
+        arriving.frame.origin.x = Double(side) * region.width
+        view.addSubview(cover)
+        self.cover = cover
+        leavingPane = leaving
+        arrivingPane = arriving
+        tabs.scrub(from: from, to: to, progress: 0)
+    }
+
+    func swipeDraw(offset: Double, side: Int, progress: Double) {
+        guard let cover, let swiping else {
+            // Past the edge with no tab there: the region under the tab row
+            // gives a little, banded, and nothing above it moves.
+            for cell in collectionView.visibleCells {
+                guard let indexPath = collectionView.indexPath(for: cell), underTabs(indexPath) else { continue }
+                cell.transform = offset == 0 ? .identity : CGAffineTransform(translationX: offset, y: 0)
+            }
+            return
+        }
+        leavingPane?.frame.origin.x = offset
+        arrivingPane?.frame.origin.x = Double(side) * cover.bounds.width + offset
+        tabsCell?.scrub(from: swiping.from, to: swiping.to, progress: progress)
+    }
+
+    func swipeLanded(_ side: Int) {
+        guard let swiping else {
+            return
+        }
+        tabsCell?.scrub(from: swiping.from, to: swiping.to, progress: 1)
+        if UIAccessibility.isReduceMotionEnabled, let cover {
+            // Less motion: the old list cross-fades into the new, nothing travels.
+            arrivingPane?.removeFromSuperview()
+            leavingPane?.frame.origin.x = 0
+            self.cover = nil
+            fadeAway(cover)
+            close()
+            requestRefresh()
+        } else {
+            close()
+            flyIn(from: side)
+        }
+        onSelectTab(swiping.to)
+    }
+
+    /// Whether a line stands under the tab row (the swipe's region).
+    private func underTabs(_ indexPath: IndexPath) -> Bool {
+        if case .none = place(at: indexPath) {
+            return false
+        }
+        return true
+    }
+
+    func swipeReturned(_: Int) {
+        guard let swiping else {
+            return
+        }
+        home.tab = swiping.from
+        commit(build(), animated: false)
+        collectionView.layoutIfNeeded()
+        tabsCell?.scrub(from: swiping.from, to: swiping.to, progress: 0)
+        close()
+        requestRefresh()
+    }
+
+    private func close() {
+        swiping = nil
+        cover?.removeFromSuperview()
+        cover = nil
+        leavingPane = nil
+        arrivingPane = nil
+        letGoOfOffset()
+    }
+
+    /// Keeps the list where it stood when a shorter one takes its place, so
+    /// the tab row does not jump while the panes are open.
+    private func hold(_ offset: CGPoint) {
+        let room = collectionView.contentSize.height + collectionView.adjustedContentInset.top
+            + collectionView.adjustedContentInset.bottom - collectionView.bounds.height
+        let short = offset.y - (room - collectionView.adjustedContentInset.top)
+        if short > 0 {
+            heldInset += short
+            collectionView.contentInset.bottom += short
+        }
+        collectionView.contentOffset = offset
+    }
+
+    /// Hands the held room back: a shorter list glides up into place.
+    private func letGoOfOffset() {
+        guard heldInset > 0 else {
+            return
+        }
+        let held = heldInset
+        heldInset = 0
+        Motion.easeDrawer.animator(Motion.durPanel) {
+            self.collectionView.contentInset.bottom -= held
+        }.startAnimation()
+    }
+
+    /// The lines that fly in once a swipe lands: the rows and their "N more".
+    private static func flies(_ item: Item) -> Bool {
+        switch item {
+        case .row, .more: true
+        default: false
+        }
+    }
+
+    /// The landed list's rows come in top down from the side the list came
+    /// from: 18pt and a fade over 300 ms on the out curve, 40 ms apart, the
+    /// stagger capped at 9 (RelayPlan, list-swap.svelte.ts).
+    private func flyIn(from side: Int) {
+        collectionView.layoutIfNeeded()
+        let frames = layout.frames(in: collectionView)
+        var order: [IndexPath: Int] = [:]
+        let lines = frames.filter { indexPath, _ in dataSource.itemIdentifier(for: indexPath).map(Self.flies) ?? false }
+        for (i, line) in lines.sorted(by: { $0.value.minY < $1.value.minY }).enumerated() {
+            order[line.key] = i
+        }
+        guard let last = order.values.max() else {
+            requestRefresh()
+            return
+        }
+        let travel = Double(side) * RelayPlan.travel
+        let total = Double(min(last, RelayPlan.staggerCap)) * RelayPlan.inStagger + RelayPlan.inMs
+        var now = 0.0
+        let adjust: (IndexPath) -> Adjust? = { indexPath in
+            guard let i = order[indexPath] else { return nil }
+            let p = Motion.easeOut.value(at: (now - Double(min(i, RelayPlan.staggerCap)) * RelayPlan.inStagger) / RelayPlan.inMs)
+            return Adjust(dx: travel * (1 - p), alpha: p)
+        }
+        layout.reach = RelayPlan.travel
+        layout.adjust = adjust
+        flight.run { [weak self] t in
+            guard let self else { return false }
+            now = t
+            guard t < total else {
+                layout.adjust = nil
+                collectionView.settleFrame()
+                requestRefresh()
+                return false
+            }
+            collectionView.drawFrame(adjust, frames: frames)
+            return true
+        }
+    }
+
+    /// A view laid over the list fades away over `durControl`, then goes.
+    func fadeAway(_ cover: UIView) {
+        cover.isUserInteractionEnabled = false
+        let fade = Motion.easeOut.animator(Motion.durControl) { cover.alpha = 0 }
+        fade.addCompletion { _ in cover.removeFromSuperview() }
+        fade.startAnimation()
+    }
+}
+
+/// The board's list. Its own scroll pan never starts on a mostly sideways
+/// drag: that drag is the tab swipe's (TabSwipe), so vertical scrolling
+/// stays immediate and a sideways one never nudges the page.
+final class BoardList: UICollectionView {
+    override func gestureRecognizerShouldBegin(_ recognizer: UIGestureRecognizer) -> Bool {
+        if recognizer === panGestureRecognizer {
+            let v = panGestureRecognizer.velocity(in: self)
+            if abs(v.y) <= abs(v.x) * TabSwipe.slope {
+                return false
+            }
+        }
+        return super.gestureRecognizerShouldBegin(recognizer)
     }
 }
 

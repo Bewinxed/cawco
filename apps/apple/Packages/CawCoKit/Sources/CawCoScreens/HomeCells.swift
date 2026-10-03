@@ -219,12 +219,9 @@ final class TabsCell: HomeCell {
         for (index, chip) in counts.enumerated() {
             tabs.setTrail(chip, at: index)
         }
-        tabs.addAction(UIAction { [weak self] _ in
-            guard let self else {
-                return
-            }
-            onTab(HomeModel.Tab.allCases[tabs.selectedIndex])
-        }, for: .valueChanged)
+        tabs.onChoose = { [weak self] index in
+            self?.onTab(HomeModel.Tab.allCases[index])
+        }
         delegates.translatesAutoresizingMaskIntoConstraints = false
         delegates.addSubview(delegatesGlyph)
         delegates.houseStyle()
@@ -267,6 +264,16 @@ final class TabsCell: HomeCell {
         delegatesGlyph.tintColor = delegatesOn ? Palette.inkStrong : Palette.inkMuted
         delegates.accessibilityValue = delegatesOn ? "Shown" : "Hidden"
     }
+
+    /// The strip where a swipe has it: the sheet `progress` of the way from
+    /// `from` to `to`, each count washed while its tab is the nearer.
+    func scrub(from: HomeModel.Tab, to: HomeModel.Tab, progress: Double) {
+        let a = from == .working ? 0 : 1
+        let b = to == .working ? 0 : 1
+        tabs.scrub(from: a, to: b, progress: progress)
+        counts[a].choose(progress < 0.5)
+        counts[b].choose(progress >= 0.5)
+    }
 }
 
 /// A tab's count, washed in its status ink on the chosen tab; it pops as it changes.
@@ -297,9 +304,15 @@ final class CountChip: UIView {
     }
 
     /// `wash`: its tab's `count-wash-*`, shown on the chosen tab only.
+    private var ink = Palette.inkMuted
+    private var wash = UIColor.clear
+    private var failed = false
+
     func configure(count: Int, ink: UIColor, wash: UIColor, chosen: Bool, failed: Bool) {
-        figure.ink = chosen || failed ? ink : Palette.inkMuted
-        backgroundColor = chosen ? wash : .clear
+        self.ink = ink
+        self.wash = wash
+        self.failed = failed
+        choose(chosen)
         guard count != self.count else {
             return
         }
@@ -309,6 +322,12 @@ final class CountChip: UIView {
         if popping {
             Reflow.pop(figure)
         }
+    }
+
+    /// Washed in its status ink while its tab is chosen.
+    func choose(_ chosen: Bool) {
+        figure.ink = chosen || failed ? ink : Palette.inkMuted
+        backgroundColor = chosen ? wash : .clear
     }
 }
 

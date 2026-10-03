@@ -326,12 +326,41 @@ public final class FolderTabs: UIControl {
         apply(animated: animated && !UIAccessibility.isReduceMotionEnabled, forward: forward)
     }
 
+    /// When set, a tap asks this instead of choosing the tab itself: the
+    /// host drives the sheet (`scrub`, `select`).
+    public var onChoose: ((Int) -> Void)?
+
     private func choose(_ index: Int) {
+        if let onChoose {
+            onChoose(index)
+            return
+        }
         guard index != selectedIndex else {
             return
         }
         select(index, animated: true)
         sendActions(for: .valueChanged)
+    }
+
+    /// Draws the sheet `progress` (0–1) of the way from tab `from` to tab
+    /// `to`, where a finger or a settle has it: the chosen sheet grows from
+    /// the side facing the old tab as the old one shrinks toward it. The
+    /// labels' ink goes to the nearer tab.
+    public func scrub(from: Int, to: Int, progress: Double) {
+        let forward = to > from
+        CATransaction.begin()
+        CATransaction.setDisableActions(true)
+        for (index, cell) in cells.enumerated() {
+            if index == to {
+                cell.drive(sheet: progress, chosen: progress >= 0.5, forward: forward)
+            } else if index == from {
+                cell.drive(sheet: 1 - progress, chosen: progress < 0.5, forward: !forward)
+            } else {
+                cell.drive(sheet: 0, chosen: false, forward: forward)
+            }
+        }
+        CATransaction.commit()
+        selectedIndex = progress >= 0.5 ? to : from
     }
 
     private func apply(animated: Bool, forward: Bool) {
@@ -398,6 +427,17 @@ public final class FolderTabs: UIControl {
             placeMask()
             CATransaction.commit()
             sheetMask.transform = CATransform3DMakeScale(chosen ? 1 : 0.0001, 1, 1)
+        }
+
+        /// The sheet shown `sheet` (0–1) wide, pinned at its growing side
+        /// (`growsForward`: from the leading edge), with no animation.
+        func drive(sheet: Double, chosen: Bool, forward growsForward: Bool) {
+            title.ink = chosen ? Palette.inkStrong : Palette.inkMuted
+            accessibilityTraits = chosen ? [.button, .selected] : .button
+            anchor = growsForward ? 0 : 1
+            sheetMask.removeAllAnimations()
+            placeMask()
+            sheetMask.transform = CATransform3DMakeScale(max(0.0001, sheet), 1, 1)
         }
 
         private var anchor = 0.0

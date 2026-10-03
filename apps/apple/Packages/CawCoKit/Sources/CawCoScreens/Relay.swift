@@ -172,23 +172,52 @@ protocol RelayHost: AnyObject {
     func place(at indexPath: IndexPath) -> RelayPlace
 }
 
-/// One relay, driven a frame at a time from the plan.
+/// One relay: a timeline laid out once from the plan, then drawn at any
+/// moment of it. Its own clock plays it through ("Show N more"); a tab
+/// switch hands it to a finger or an animator, which draw it where they are.
 @MainActor
 final class RelayMotion {
     private let clock = Frames()
     private var copies: [UIView] = []
+    private var drawAt: ((Double) -> Void)?
+    private var teardown: (() -> Void)?
     private var finish: (() -> Void)?
+    /// How long the laid-out relay runs, in ms.
+    private(set) var total = 0.0
 
-    var running: Bool { clock.running }
+    /// A relay is laid out: playing on its clock, or held where it was drawn.
+    var running: Bool { drawAt != nil }
 
     /// Runs `change` (which applies the new list at once, unanimated) as a
     /// relay toward `direction` (1: forward, rows arrive from the right).
     func run(on host: RelayHost, direction: Double, change: () -> Void, done: @escaping () -> Void) {
+        guard prepare(on: host, direction: direction, change: change, done: done) else {
+            return
+        }
+        clock.run { [weak self] t in
+            guard let self, t < total else {
+                self?.end()
+                return false
+            }
+            draw(t)
+            return true
+        }
+    }
+
+    /// Draws the laid-out relay `t` ms in.
+    func draw(_ t: Double) {
+        drawAt?(min(max(t, 0), total))
+    }
+
+    /// Lays the relay out and draws its first frame, without playing it.
+    /// False when there is no list to relay: `change` and `done` have run.
+    @discardableResult
+    func prepare(on host: RelayHost, direction: Double, change: () -> Void, done: @escaping () -> Void) -> Bool {
         end()
         guard let view = host.collectionView else {
             change()
             done()
-            return
+            return false
         }
         let before = host.workLines()
         var shots: [String: UIView] = [:]
@@ -321,18 +350,15 @@ final class RelayMotion {
         let frames = layout.frames(in: view)
         layout.reach = boxes.values.reduce(0) { $0 + abs($1.to - $1.from) } + RelayPlan.travel
         layout.adjust = adjust
-        finish = { [weak self] in
+        self.total = total
+        teardown = { [weak self] in
             layout.adjust = nil
             view.settleFrame()
             self?.copies.forEach { $0.removeFromSuperview() }
             self?.copies = []
-            done()
         }
-        clock.run { [weak self] t in
-            guard t < total else {
-                self?.end()
-                return false
-            }
+        finish = done
+        drawAt = { t in
             step(t)
             view.drawFrame(adjust, frames: frames)
             for line in leaving {
@@ -341,15 +367,31 @@ final class RelayMotion {
                 line.view.alpha = 1 - p
                 line.view.transform = CGAffineTransform(translationX: -direction * RelayPlan.travel * p, y: 0)
             }
-            return true
         }
+        draw(0)
+        return true
     }
 
     /// Lands a relay in flight where it ends.
     func end() {
-        clock.stop()
         let finish = finish
-        self.finish = nil
+        letGo()
         finish?()
+    }
+
+    /// Takes a relay off without landing it: its copies go and the layout is
+    /// let go. Drawn at its start, it looked as the old list did; the caller
+    /// puts that list back.
+    func abandon() {
+        letGo()
+    }
+
+    private func letGo() {
+        clock.stop()
+        drawAt = nil
+        finish = nil
+        let teardown = teardown
+        self.teardown = nil
+        teardown?()
     }
 }
