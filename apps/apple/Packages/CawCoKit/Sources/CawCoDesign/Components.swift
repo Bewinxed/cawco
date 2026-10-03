@@ -94,6 +94,7 @@ public enum KitButton {
         action: @escaping () -> Void
     ) -> UIButton {
         let button = UIButton(configuration: configuration(title, glyph: glyph, glyphTint: glyphTint, variant: variant, height: height), primaryAction: UIAction { _ in action() })
+        button.houseStyle()
         button.translatesAutoresizingMaskIntoConstraints = false
         button.heightAnchor.constraint(greaterThanOrEqualToConstant: height.points).isActive = true
         let compact = !stretch
@@ -161,6 +162,15 @@ public enum KitButton {
     }
 }
 
+public extension UIButton {
+    /// Draws the house recipe on every idiom. On the Mac a button's default
+    /// behaviour is AppKit's, which ignores a configuration's own background:
+    /// the action button lost its vermilion there.
+    func houseStyle() {
+        preferredBehavioralStyle = .pad
+    }
+}
+
 /// The action button's surface (`--action-surface`).
 private final class ActionSurface: UIView {
     override class var layerClass: AnyClass { CAGradientLayer.self }
@@ -208,6 +218,7 @@ public final class TreeCountButton: UIButton {
 
     public init() {
         super.init(frame: .zero)
+        houseStyle()
         translatesAutoresizingMaskIntoConstraints = false
         var config = UIButton.Configuration.plain()
         config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: Space.space1, bottom: 0, trailing: Space.space1)

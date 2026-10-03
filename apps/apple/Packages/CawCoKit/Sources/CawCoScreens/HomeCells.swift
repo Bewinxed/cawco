@@ -218,6 +218,7 @@ final class TabsCell: HomeCell {
         }, for: .valueChanged)
         delegates.translatesAutoresizingMaskIntoConstraints = false
         delegates.addSubview(delegatesGlyph)
+        delegates.houseStyle()
         delegates.addAction(UIAction { [weak self] _ in self?.onDelegates() }, for: .primaryActionTriggered)
         delegates.accessibilityLabel = "Delegates"
         let seam = UIView()
@@ -321,6 +322,7 @@ final class MachineCell: HomeCell {
         config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: Space.space1, bottom: 0, trailing: Space.space1)
         config.attributedTitle = AttributedString("Archive all", attributes: AttributeContainer(TypeScale.typeMeta.attributes(color: Palette.inkMuted)))
         archiveAll.configuration = config
+        archiveAll.houseStyle()
         archiveAll.addAction(UIAction { [weak self] _ in self?.onArchiveAll() }, for: .primaryActionTriggered)
         let row = UIStackView(arrangedSubviews: [glyph, name, UIView(), archiveAll])
         row.spacing = Space.space1
@@ -657,6 +659,7 @@ final class MoreCell: HomeCell {
         var config = UIButton.Configuration.plain()
         config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: Space.space3, bottom: 0, trailing: Space.space3)
         button.configuration = config
+        button.houseStyle()
         pin(button, insets: NSDirectionalEdgeInsets(top: 2, leading: 0, bottom: 0, trailing: 0))
         button.heightAnchor.constraint(greaterThanOrEqualToConstant: 28).isActive = true
     }
