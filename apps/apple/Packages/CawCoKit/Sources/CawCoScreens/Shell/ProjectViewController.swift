@@ -19,6 +19,8 @@ final class ProjectViewController: ObservedViewController {
     private let missing = KitLabel(TypeScale.typeBody, ink: Palette.inkMuted)
     private var showMore = false
     private var inventory: MachineInventoryView!
+    private var docsView: ProjectDocsView!
+    private var memory: ProjectMemoryCard!
     /// Stored sessions shown before "Show more".
     private static let storedFirst = 8
 
@@ -92,6 +94,14 @@ final class ProjectViewController: ObservedViewController {
         titles.setContentHuggingPriority(.defaultLow, for: .horizontal)
         page.addArrangedSubview(head)
 
+        // The repo's own markdown.
+        docsView = ProjectDocsView(hub: context.hub)
+        page.addArrangedSubview(docsView)
+
+        // Its CLAUDE.md, summarised: the docs card is where it is read.
+        memory = ProjectMemoryCard(hub: context.hub)
+        page.addArrangedSubview(memory)
+
         // What its machine has (MachineInventory, MCP servers).
         inventory = MachineInventoryView(hub: context.hub)
         page.addArrangedSubview(inventory)
@@ -139,6 +149,11 @@ final class ProjectViewController: ObservedViewController {
         machineGlyph.glyph = Glyph.os(machine?.os ?? "")
         machineName.text = machine.map { Naming.machineLabel($0.hostname) } ?? project.machineId
         let online = machine?.status == "online"
+        if context.hub.state == .connected { docsView.load(machineId: project.machineId, cwd: project.cwd, projectId: project.id) }
+        if context.hub.state == .connected {
+            memory.load(machineId: project.machineId, cwd: project.cwd, projectId: project.id, online: online,
+                        machineName: machine.map { Naming.machineLabel($0.hostname) } ?? project.machineId)
+        }
         inventory.isHidden = machine == nil
         if let machine { inventory.configure(machines: [machine]) }
         presence.backgroundColor = online ? Palette.success : Palette.mutedForeground.withAlphaComponent(0.4)
@@ -188,11 +203,23 @@ final class ProjectViewController: ObservedViewController {
             sessions.addArrangedSubview(empty)
         }
         if !showMore, stored.count > Self.storedFirst {
-            let more = KitButton.make("Show \(stored.count - Self.storedFirst) more", variant: .outline, height: .sm) { [weak self] in
+            // `variant="ghost" size="sm"` in muted ink, at the start.
+            var ghost = UIButton.Configuration.plain()
+            ghost.attributedTitle = AttributedString("Show \(stored.count - Self.storedFirst) more",
+                                                     attributes: AttributeContainer(TypeScale.typeLabel.attributes(color: Palette.mutedForeground)))
+            ghost.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: Space.space3, bottom: 0, trailing: Space.space3)
+            ghost.background.cornerRadius = Radius.radiusMd
+            let more = UIButton(configuration: ghost, primaryAction: UIAction { [weak self] _ in
                 self?.showMore = true
                 self?.requestRefresh()
+            })
+            more.configurationUpdateHandler = { button in
+                button.configuration?.background.backgroundColor = button.isHighlighted ? Palette.surfaceFill : (button.isHovered ? Palette.surfaceHover : .clear)
             }
-            sessions.addArrangedSubview(more)
+            more.houseStyle()
+            more.heightAnchor.constraint(equalToConstant: Size.cBtnHSm).isActive = true
+            let row = UIStackView(arrangedSubviews: [more, UIView()])
+            sessions.addArrangedSubview(row)
         }
     }
 
