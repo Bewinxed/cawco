@@ -53,6 +53,7 @@ open class KitDialogController: UIViewController, UIViewControllerTransitioningD
         frameView.backgroundColor = Palette.surfaceRecess
         frameView.layer.cornerRadius = Radius.radiusModal
         frameView.layer.cornerCurve = .continuous
+        frameView.boxShadow = Shadow.shadowOverlay
         frameView.translatesAutoresizingMaskIntoConstraints = false
         card.backgroundColor = Palette.surfaceRaised
         card.layer.cornerRadius = Radius.radiusLg
@@ -111,15 +112,6 @@ open class KitDialogController: UIViewController, UIViewControllerTransitioningD
                 close.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -12),
             ])
         }
-        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (dialog: KitDialogController, _: UITraitCollection) in dialog.paint() }
-        paint()
-    }
-
-    private func paint() {
-        frameView.layer.shadowColor = UIColor.black.cgColor
-        frameView.layer.shadowOpacity = 0.18
-        frameView.layer.shadowRadius = 24
-        frameView.layer.shadowOffset = CGSize(width: 0, height: 18)
     }
 
     /// Runs `change`, then moves the dialog to its new height (`morph()`:

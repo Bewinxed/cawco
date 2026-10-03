@@ -29,19 +29,12 @@ open class TileView: UIView {
         backgroundColor = Palette.surfaceRaised
         layer.cornerRadius = radius
         layer.cornerCurve = .continuous
-        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: TileView, _: UITraitCollection) in
-            view.paint()
-        }
-        paint()
+        boxShadow = Shadow.shadowTile
     }
 
     @available(*, unavailable)
     public required init?(coder _: NSCoder) {
         fatalError("TileView is built in code")
-    }
-
-    private func paint() {
-        layer.draw(Shadow.shadowTile, in: traitCollection)
     }
 }
 

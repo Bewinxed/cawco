@@ -141,6 +141,7 @@ private final class ToastView: UIView {
         layer.cornerRadius = Radius.radiusLg
         layer.cornerCurve = .continuous
         layer.borderWidth = 1
+        boxShadow = Shadow.shadowOverlay
         let label = KitLabel(TypeScale.typeBody, ink: Palette.inkStrong, lines: 0)
         label.text = message
         let row = UIStackView(arrangedSubviews: [label])
@@ -177,11 +178,6 @@ private final class ToastView: UIView {
 
     private func paint() {
         layer.borderColor = Palette.borderControl.resolvedColor(with: traitCollection).cgColor
-        // `--shadow-overlay`'s drop, as the kit's dialogs draw it.
-        layer.shadowColor = UIColor.black.cgColor
-        layer.shadowOpacity = 0.18
-        layer.shadowRadius = 24
-        layer.shadowOffset = CGSize(width: 0, height: 18)
     }
 
     /// Tracks the finger 1:1; past 45pt or on a flick faster than 0.11pt/ms it goes.

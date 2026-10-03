@@ -302,6 +302,7 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
         frameView.backgroundColor = Palette.surfaceRecess
         frameView.layer.cornerRadius = Radius.radiusModal
         frameView.layer.cornerCurve = .continuous
+        frameView.boxShadow = Shadow.shadowOverlay
         frameView.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(frameView)
         well.backgroundColor = Palette.surfaceRecess
@@ -387,11 +388,6 @@ final class JumpPaletteController: UIViewController, UIViewControllerTransitioni
 
     private func paint() {
         well.layer.borderColor = Palette.borderHairline.resolvedColor(with: traitCollection).cgColor
-        // `--shadow-overlay`'s drop, as the kit's dialogs draw it.
-        frameView.layer.shadowColor = UIColor.black.cgColor
-        frameView.layer.shadowOpacity = 0.18
-        frameView.layer.shadowRadius = 24
-        frameView.layer.shadowOffset = CGSize(width: 0, height: 18)
     }
 
     private func rule() -> UIView {

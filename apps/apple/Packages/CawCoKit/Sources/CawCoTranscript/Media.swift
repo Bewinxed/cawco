@@ -361,7 +361,7 @@ final class Lightbox: UIViewController, UIScrollViewDelegate {
         sheet.layer.cornerRadius = Radius.radiusSm
         sheet.layer.borderWidth = 1
         sheet.layer.borderColor = Palette.borderHairline.resolvedColor(with: traitCollection).cgColor
-        sheet.layer.draw(Shadow.shadowTile.filter { $0.spread == 0 }, in: traitCollection)
+        sheet.boxShadow = Shadow.shadowTile
         let title = LineLabel()
         title.attributedText = Styled.string(name, TypeScale.typeLabel, color: Palette.inkStrong)
         let copy = button(.copy, label: "Copy") {

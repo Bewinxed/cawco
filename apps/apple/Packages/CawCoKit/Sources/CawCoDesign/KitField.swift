@@ -16,6 +16,7 @@ public final class KitField: UITextField {
         layer.cornerRadius = Radius.radiusMd
         layer.cornerCurve = .continuous
         layer.borderWidth = 1
+        boxShadow = Shadow.shadowXs
         autocorrectionType = .no
         autocapitalizationType = .none
         spellCheckingType = .no
@@ -46,10 +47,6 @@ public final class KitField: UITextField {
     private func paint() {
         layer.borderColor = (isFirstResponder ? Palette.focusRing : Palette.borderControl).resolvedColor(with: traitCollection).cgColor
         layer.borderWidth = isFirstResponder ? Size.focusRingWidth : 1
-        layer.shadowColor = UIColor.black.cgColor
-        layer.shadowOpacity = 0.05
-        layer.shadowRadius = 1
-        layer.shadowOffset = CGSize(width: 0, height: 1)
     }
 }
 

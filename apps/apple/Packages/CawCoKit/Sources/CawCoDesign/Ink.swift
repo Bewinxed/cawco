@@ -69,28 +69,3 @@ public struct Gradient: Sendable {
     }
 }
 
-public extension CALayer {
-    /// Draws a shadow token on a layer: its drop (an outer layer with blur)
-    /// as the layer's shadow, its ring (an outer layer with only spread) as
-    /// the layer's border. A token with any other layer is refused loudly:
-    /// it needs a drawing of its own here before it is used.
-    func draw(_ shadow: [ShadowLayer], in traits: UITraitCollection) {
-        shadowOpacity = 0
-        borderWidth = 0
-        for layer in shadow {
-            let ink = layer.ink.color.resolvedColor(with: traits).cgColor
-            if !layer.inset, layer.spread == 0 {
-                shadowOffset = CGSize(width: layer.x, height: layer.y)
-                // CSS blur is twice Core Animation's radius.
-                shadowRadius = layer.blur / 2
-                shadowColor = ink
-                shadowOpacity = 1
-            } else if !layer.inset, layer.blur == 0, layer.x == 0, layer.y == 0 {
-                borderWidth = layer.spread
-                borderColor = ink
-            } else {
-                assertionFailure("A shadow layer with no Apple drawing yet: \(layer)")
-            }
-        }
-    }
-}

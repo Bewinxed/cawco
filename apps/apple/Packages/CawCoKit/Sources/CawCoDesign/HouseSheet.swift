@@ -63,6 +63,7 @@ public final class HouseSheetController: UIViewController, UIViewControllerTrans
         if style == .edge {
             card.layer.maskedCorners = [.layerMinXMinYCorner, .layerMaxXMinYCorner]
         }
+        card.boxShadow = Shadow.shadowDrawer
         view.addSubview(card)
         paint()
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (sheet: HouseSheetController, _: UITraitCollection) in
@@ -141,7 +142,6 @@ public final class HouseSheetController: UIViewController, UIViewControllerTrans
 
     private func paint() {
         card.layer.borderColor = (style == .card ? Palette.border : Palette.borderControl).resolvedColor(with: traitCollection).cgColor
-        card.layer.draw(Shadow.shadowDrawer, in: traitCollection)
         card.layer.borderWidth = 1
     }
 

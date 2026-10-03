@@ -231,10 +231,12 @@ open class KitPopoverController: UIViewController {
             card.insertSubview(effect, at: 0)
             blur = effect
         }
-        view.layer.shadowColor = UIColor.black.cgColor
-        view.layer.shadowOpacity = 0.16
-        view.layer.shadowRadius = 24
-        view.layer.shadowOffset = CGSize(width: 0, height: 18)
+        // `.kit-pop { box-shadow: var(--shadow-overlay) }`, cast by the card's
+        // rounded rect: the card clips its content, so the view, which is the
+        // card's frame, casts it.
+        view.layer.cornerRadius = Radius.radiusLg
+        view.layer.cornerCurve = .continuous
+        view.boxShadow = Shadow.shadowOverlay
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (controller: KitPopoverController, _: UITraitCollection) in controller.paint() }
         paint()
     }

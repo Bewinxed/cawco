@@ -40,6 +40,7 @@ public final class PromptCardView: UIView {
         layer.cornerRadius = Radius.radiusLg
         layer.cornerCurve = .continuous
         layer.borderWidth = 1
+        boxShadow = Shadow.shadowHairline
         isAccessibilityElement = false
         accessibilityLabel = ask.isQuestion ? "Question from the agent" : "Permission request"
         let column = UIStackView()
@@ -74,19 +75,6 @@ public final class PromptCardView: UIView {
 
     private func paint() {
         layer.borderColor = Palette.borderControl.resolvedColor(with: traitCollection).cgColor
-        // `--shadow-hairline`: 0 3 7 −2. The negative spread is the shadow's
-        // path drawn 2pt inside the card.
-        guard let drop = Shadow.shadowHairline.first else { return }
-        layer.shadowColor = drop.ink.color.resolvedColor(with: traitCollection).cgColor
-        layer.shadowOpacity = 1
-        layer.shadowOffset = CGSize(width: drop.x, height: drop.y)
-        layer.shadowRadius = drop.blur / 2
-    }
-
-    override public func layoutSubviews() {
-        super.layoutSubviews()
-        let spread = Shadow.shadowHairline.first?.spread ?? 0
-        layer.shadowPath = UIBezierPath(roundedRect: bounds.insetBy(dx: -spread, dy: -spread), cornerRadius: Radius.radiusLg + spread).cgPath
     }
 
     /// The one settle when it comes in while its session is watched: up 8pt

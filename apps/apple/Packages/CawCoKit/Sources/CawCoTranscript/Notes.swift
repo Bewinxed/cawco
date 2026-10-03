@@ -297,6 +297,7 @@ final class QuestionCardView: UIView, RowContent {
         card.layer.cornerRadius = Radius.radiusLg
         card.layer.cornerCurve = .continuous
         card.layer.borderWidth = 1
+        card.boxShadow = Shadow.shadowHairline
         addSubview(card)
         let title = LineLabel()
         title.attributedText = Styled.string("Question from the agent", TypeScale.typeLabel, color: Palette.inkStrong, leading: TypeScale.leadingRoot)
@@ -330,25 +331,7 @@ final class QuestionCardView: UIView, RowContent {
     @available(*, unavailable)
     required init?(coder _: NSCoder) { fatalError("built in code") }
 
-    private var spread = 0.0
-
-    override func layoutSubviews() {
-        super.layoutSubviews()
-        card.layer.shadowPath = UIBezierPath(roundedRect: card.bounds.insetBy(dx: -spread, dy: -spread),
-                                             cornerRadius: max(0, Radius.radiusLg + spread)).cgPath
-    }
-
     private func paint() {
-        card.layer.borderColor = Palette.borderControl.resolvedColor(with: traitCollection).cgColor
-        // --shadow-hairline (0 3px 7px -2px): a drop whose spread shrinks the shape it casts.
-        if let drop = Shadow.shadowHairline.first {
-            card.layer.shadowColor = drop.ink.color.resolvedColor(with: traitCollection).cgColor
-            card.layer.shadowOffset = CGSize(width: drop.x, height: drop.y)
-            card.layer.shadowRadius = drop.blur / 2
-            card.layer.shadowOpacity = 1
-            spread = drop.spread
-        }
-        card.layer.borderWidth = 1
         card.layer.borderColor = Palette.borderControl.resolvedColor(with: traitCollection).cgColor
         for case let option as OptionChip in content.arrangedSubviews.flatMap({ ($0 as? FlowView)?.subviews ?? [] }) { option.paint() }
     }

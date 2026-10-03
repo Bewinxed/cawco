@@ -216,10 +216,7 @@ final class ReportCard: UIView {
         column.axis = .vertical
         column.spacing = Space.space2
         pin(column, insets: UIEdgeInsets(top: Space.space3, left: Space.space3, bottom: Space.space3, right: Space.space3))
-        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (card: ReportCard, _: UITraitCollection) in
-            card.layer.draw(Shadow.shadowTile, in: card.traitCollection)
-        }
-        layer.draw(Shadow.shadowTile, in: traitCollection)
+        boxShadow = Shadow.shadowTile
     }
 
     @available(*, unavailable)

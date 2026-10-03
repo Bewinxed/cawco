@@ -252,8 +252,7 @@ final class RailSheetPresentation: UIPresentationController {
         container.insertSubview(scrim, at: 0)
         scrim.addGestureRecognizer(UITapGestureRecognizer(target: self, action: #selector(tapped)))
         if let view = presentedView {
-            view.layer.shadowColor = UIColor.black.cgColor
-            view.layer.draw(Shadow.shadowDrawer, in: view.traitCollection)
+            view.boxShadow = Shadow.shadowDrawer
             view.addGestureRecognizer(UIPanGestureRecognizer(target: self, action: #selector(dragged(_:))))
         }
         Motion.easeOut.animator(Motion.durPanel) { self.scrim.alpha = 1 }.startAnimation()

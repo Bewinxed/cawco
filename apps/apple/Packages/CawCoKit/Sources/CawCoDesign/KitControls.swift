@@ -35,6 +35,7 @@ public final class SegmentedTabs: UIControl {
         sheet.layer.cornerRadius = Radius.radiusSm - Self.pad
         sheet.layer.cornerCurve = .continuous
         sheet.isUserInteractionEnabled = false
+        sheet.boxShadow = Shadow.shadowTile
         addSubview(sheet)
         stack.axis = .horizontal
         stack.spacing = 2
@@ -56,8 +57,6 @@ public final class SegmentedTabs: UIControl {
         }
         isAccessibilityElement = false
         accessibilityTraits = .tabBar
-        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (tabs: SegmentedTabs, _: UITraitCollection) in tabs.paint() }
-        paint()
         mark()
     }
 
@@ -66,9 +65,6 @@ public final class SegmentedTabs: UIControl {
         fatalError("SegmentedTabs is built in code")
     }
 
-    private func paint() {
-        sheet.layer.draw(Shadow.shadowTile, in: traitCollection)
-    }
 
     override public func layoutSubviews() {
         super.layoutSubviews()

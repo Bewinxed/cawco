@@ -171,10 +171,13 @@ public final class ComposerView: UIView, UITextViewDelegate {
     // MARK: The pill
 
     private func buildPill() {
-        // The tile shadow's ring and drop stand outside the 1pt control border.
+        // The pill's border box, unclipped, so the tile shadow it casts
+        // (`.pill { box-shadow: var(--shadow-tile) }`) stands outside it while
+        // the pill clips its own content.
         ring.translatesAutoresizingMaskIntoConstraints = false
-        ring.layer.cornerRadius = Radius.radiusLg + 1
+        ring.layer.cornerRadius = Radius.radiusLg
         ring.layer.cornerCurve = .continuous
+        ring.boxShadow = Shadow.shadowTile
         pill.translatesAutoresizingMaskIntoConstraints = false
         pill.layer.cornerRadius = Radius.radiusLg
         pill.layer.cornerCurve = .continuous
@@ -237,10 +240,10 @@ public final class ComposerView: UIView, UITextViewDelegate {
         }
         fieldHeight = field.heightAnchor.constraint(equalToConstant: Self.control)
         NSLayoutConstraint.activate([
-            pill.leadingAnchor.constraint(equalTo: ring.leadingAnchor, constant: 1),
-            pill.trailingAnchor.constraint(equalTo: ring.trailingAnchor, constant: -1),
-            pill.topAnchor.constraint(equalTo: ring.topAnchor, constant: 1),
-            pill.bottomAnchor.constraint(equalTo: ring.bottomAnchor, constant: -1),
+            pill.leadingAnchor.constraint(equalTo: ring.leadingAnchor),
+            pill.trailingAnchor.constraint(equalTo: ring.trailingAnchor),
+            pill.topAnchor.constraint(equalTo: ring.topAnchor),
+            pill.bottomAnchor.constraint(equalTo: ring.bottomAnchor),
             field.leadingAnchor.constraint(equalTo: pill.leadingAnchor, constant: Space.space3),
             field.topAnchor.constraint(equalTo: pill.topAnchor, constant: Self.inset - 1),
             field.bottomAnchor.constraint(equalTo: pill.bottomAnchor, constant: -(Self.inset - 1)),
@@ -267,7 +270,6 @@ public final class ComposerView: UIView, UITextViewDelegate {
     private func paint() {
         let traits = traitCollection
         pill.layer.borderColor = Palette.borderControl.resolvedColor(with: traits).cgColor
-        ring.layer.draw(Shadow.shadowTile, in: traits)
         attach.layer.borderColor = Palette.borderControl.resolvedColor(with: traits).cgColor
         gradient.colors = Palette.actionSurface.colors(for: traits)
         let opaque = UIAccessibility.isReduceTransparencyEnabled
@@ -284,7 +286,6 @@ public final class ComposerView: UIView, UITextViewDelegate {
         CATransaction.begin()
         CATransaction.setDisableActions(true)
         gradient.frame = actionBox.bounds
-        ring.layer.shadowPath = UIBezierPath(roundedRect: ring.bounds, cornerRadius: ring.layer.cornerRadius).cgPath
         CATransaction.commit()
         fitHint()
         maskField()
@@ -996,6 +997,7 @@ final class AttachmentChip: UIView {
             row.bottomAnchor.constraint(equalTo: bottomAnchor, constant: -Space.space1),
             widthAnchor.constraint(lessThanOrEqualToConstant: 280),
         ])
+        boxShadow = Shadow.shadowTile
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (chip: AttachmentChip, _: UITraitCollection) in
             chip.paint()
         }
@@ -1008,7 +1010,6 @@ final class AttachmentChip: UIView {
     }
 
     private func paint() {
-        layer.draw(Shadow.shadowTile, in: traitCollection)
         layer.borderWidth = 1
         layer.borderColor = Palette.borderHairline.resolvedColor(with: traitCollection).cgColor
     }

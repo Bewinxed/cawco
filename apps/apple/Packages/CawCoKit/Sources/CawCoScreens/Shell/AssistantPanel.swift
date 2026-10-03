@@ -417,10 +417,11 @@ final class AssistantPane: UIView {
         self.panel = panel
         super.init(frame: .zero)
         translatesAutoresizingMaskIntoConstraints = false
-        layer.shadowColor = UIColor.black.cgColor
-        layer.shadowOpacity = 0.18
-        layer.shadowRadius = 24
-        layer.shadowOffset = CGSize(width: 0, height: 18)
+        // `.panel { box-shadow: var(--shadow-overlay) }`, cast by the panel's
+        // rounded rect: the panel clips, so its unclipped frame casts it.
+        layer.cornerRadius = Radius.radiusPanel
+        layer.cornerCurve = .continuous
+        boxShadow = Shadow.shadowOverlay
         panel.layer.cornerRadius = Radius.radiusPanel
         panel.layer.cornerCurve = .continuous
         panel.clipsToBounds = true

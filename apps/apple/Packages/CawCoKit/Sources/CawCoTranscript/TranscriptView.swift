@@ -745,6 +745,7 @@ final class DockPill: UIControl {
         layer.cornerRadius = pill ? Size.cBtnHLg : Radius.radiusMd
         layer.cornerCurve = .continuous
         layer.borderWidth = 1
+        boxShadow = Shadow.shadowOverlay
         var views: [UIView] = []
         if let glyph { views.append(GlyphView(glyph, size: Size.iconMd, tint: Palette.inkStrong)) } else { views.append(beat) }
         let label = LineLabel(hug: .required, resist: .required)
@@ -764,9 +765,6 @@ final class DockPill: UIControl {
     required init?(coder _: NSCoder) { fatalError("built in code") }
 
     private func paint() {
-        layer.borderColor = Palette.borderHairline.resolvedColor(with: traitCollection).cgColor
-        layer.draw(Shadow.shadowOverlay.filter { !$0.inset && $0.spread == 0 }.prefix(1).map { $0 }, in: traitCollection)
-        layer.borderWidth = 1
         layer.borderColor = Palette.borderHairline.resolvedColor(with: traitCollection).cgColor
     }
 

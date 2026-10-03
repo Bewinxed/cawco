@@ -497,15 +497,22 @@ final class DeckView: UIView, UIGestureRecognizerDelegate {
     /// A card: the translate is the deck's, the lift (scale, corners, shadow) its own.
     private final class Card: UIView {
         private let liftView = UIView()
+        /// `.lift::before`: the overlay shadow at the lifted corners, faded
+        /// in and out with the lift.
+        private let shade = UIView()
         private let clip = UIView()
 
         init(content: UIView) {
             super.init(frame: .zero)
-            liftView.layer.shadowColor = UIColor.black.cgColor
-            liftView.layer.shadowOpacity = 0
+            shade.isUserInteractionEnabled = false
+            shade.layer.cornerRadius = Radius.radiusLg
+            shade.layer.cornerCurve = .continuous
+            shade.boxShadow = Shadow.shadowOverlay
+            shade.alpha = 0
             clip.clipsToBounds = true
             clip.layer.cornerCurve = .continuous
             addSubview(liftView)
+            liftView.addSubview(shade)
             liftView.addSubview(clip)
             content.translatesAutoresizingMaskIntoConstraints = true
             content.autoresizingMask = [.flexibleWidth, .flexibleHeight]
@@ -521,22 +528,16 @@ final class DeckView: UIView, UIGestureRecognizerDelegate {
             super.layoutSubviews()
             liftView.bounds = bounds
             liftView.center = CGPoint(x: bounds.midX, y: bounds.midY)
+            shade.frame = liftView.bounds
             clip.frame = liftView.bounds
             clip.subviews.first?.frame = clip.bounds
-            liftView.layer.shadowPath = UIBezierPath(roundedRect: liftView.bounds, cornerRadius: Radius.radiusLg).cgPath
         }
 
-        /// `--shadow-overlay`'s main layer (0 18 48), faded in with the lift.
+        /// Scale, corners and the overlay shadow's opacity, in the caller's animation.
         func lift(_ up: Bool) {
             liftView.transform = up ? CGAffineTransform(scaleX: Motion.pressScale, y: Motion.pressScale) : .identity
             clip.layer.cornerRadius = up ? Radius.radiusLg : 0
-            let ink = Shadow.shadowOverlay.first
-            liftView.layer.shadowColor = ink.map { $0.ink.color.resolvedColor(with: traitCollection).withAlphaComponent(1).cgColor } ?? UIColor.black.cgColor
-            liftView.layer.shadowOffset = CGSize(width: ink?.x ?? 0, height: ink?.y ?? 18)
-            liftView.layer.shadowRadius = (ink?.blur ?? 48) / 2
-            var alpha: CGFloat = 0
-            ink?.ink.color.resolvedColor(with: traitCollection).getWhite(nil, alpha: &alpha)
-            liftView.layer.shadowOpacity = up ? Float(alpha) : 0
+            shade.alpha = up ? 1 : 0
         }
     }
 }

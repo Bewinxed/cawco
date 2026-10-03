@@ -50,6 +50,7 @@ public final class ConfirmDialog: UIViewController, UIViewControllerTransitionin
         frameView.backgroundColor = Palette.surfaceRecess
         frameView.layer.cornerRadius = Radius.radiusModal
         frameView.layer.cornerCurve = .continuous
+        frameView.boxShadow = Shadow.shadowOverlay
         frameView.translatesAutoresizingMaskIntoConstraints = false
         card.backgroundColor = Palette.surfaceRaised
         card.layer.cornerRadius = Radius.radiusLg
@@ -117,19 +118,10 @@ public final class ConfirmDialog: UIViewController, UIViewControllerTransitionin
             stack.leadingAnchor.constraint(equalTo: card.leadingAnchor, constant: 18),
             stack.trailingAnchor.constraint(equalTo: card.trailingAnchor, constant: -18),
         ])
-        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (dialog: ConfirmDialog, _: UITraitCollection) in dialog.paint() }
-        paint()
     }
 
     /// Decided once, from the screen it opens on.
     private lazy var wideLayout = UIScreen.main.bounds.width >= 640 || traitCollection.horizontalSizeClass == .regular
-
-    private func paint() {
-        frameView.layer.shadowColor = UIColor.black.cgColor
-        frameView.layer.shadowOpacity = 0.18
-        frameView.layer.shadowRadius = 24
-        frameView.layer.shadowOffset = CGSize(width: 0, height: 18)
-    }
 
     /// A destructive confirm: the error border and ink on no fill (button.svelte `destructive`).
     private static func destructiveStyle(_ title: String) -> UIButton.Configuration {

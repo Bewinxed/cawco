@@ -449,14 +449,12 @@ final class PreviewCard: UIView {
             card.heightAnchor.constraint(greaterThanOrEqualToConstant: Size.txPreviewMin),
         ])
         alpha = 0.5
+        card.boxShadow = Shadow.shadowTile
         registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (view: PreviewCard, _: UITraitCollection) in view.paint(card) }
         paint(card)
     }
 
     private func paint(_ card: UIView) {
-        card.layer.borderColor = Palette.borderHairline.resolvedColor(with: traitCollection).cgColor
-        card.layer.draw(Shadow.shadowTile.filter { $0.spread == 0 }, in: traitCollection)
-        card.layer.borderWidth = 1
         card.layer.borderColor = Palette.borderHairline.resolvedColor(with: traitCollection).cgColor
     }
 
