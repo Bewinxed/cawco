@@ -208,7 +208,7 @@ extension ChromeButton: UIPointerInteractionDelegate {
 final class TopBarCluster: UIView {
     var onAttention: () -> Void = {}
     var onMachines: (UIView) -> Void = { _ in }
-    var onJump: () -> Void = {}
+    var onJump: (UIView) -> Void = { _ in }
     var onAssistant: () -> Void = {}
     var onHub: () -> Void = {}
 
@@ -265,7 +265,10 @@ final class TopBarCluster: UIView {
         jump.row.addArrangedSubview(jumpKeys)
         jump.isAccessibilityElement = true
         jump.accessibilityLabel = "Jump to session"
-        jump.addAction(UIAction { [weak self] _ in self?.onJump() }, for: .primaryActionTriggered)
+        jump.addAction(UIAction { [weak self] _ in
+            guard let self else { return }
+            onJump(jump)
+        }, for: .primaryActionTriggered)
 
         assistant.row.addArrangedSubview(GlyphView(.assistant, tint: Palette.coral11))
         assistant.isAccessibilityElement = true

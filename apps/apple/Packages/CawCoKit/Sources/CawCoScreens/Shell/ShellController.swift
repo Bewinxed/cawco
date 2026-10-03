@@ -96,7 +96,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         for cluster in [mainCluster, compactCluster, sessionCluster] {
             cluster.onAttention = { [weak self] in self?.go(.fleet) }
             cluster.onAssistant = { [weak self] in self?.toggleAssistant() }
-            cluster.onJump = { [weak self] in self?.openJump() }
+            cluster.onJump = { [weak self] source in self?.openJump(.view(source)) }
             cluster.onMachines = { [weak self] source in self?.openMachines(from: source) }
             cluster.onHub = { [weak self] in self?.changeHub() }
         }
@@ -356,7 +356,26 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         present(sheet, animated: true)
     }
 
-    private func openJump() {}
+    /// Jump to (JumpPalette): ⌘K toggles it; the Jump button grows it out of itself.
+    func openJump(_ opener: JumpOpener) {
+        if let up = dialogPresenter as? JumpPaletteController {
+            up.dismiss(animated: true)
+            return
+        }
+        let palette = JumpPaletteController(hub: hub, home: home, opener: opener)
+        palette.onProject = { [weak self] id in self?.go(.project(id)) }
+        palette.onMachine = { [weak self] id in self?.startSession(machineId: id, cwd: nil, projectId: nil) }
+        palette.onConversation = { [weak self] id in self?.openSession(id) }
+        dialogPresenter.present(palette, animated: true)
+    }
+
+    @objc private func jumpKey() { openJump(.key) }
+
+    override var keyCommands: [UIKeyCommand]? {
+        let jump = UIKeyCommand(title: "Jump to…", action: #selector(jumpKey), input: "k", modifierFlags: .command)
+        jump.wantsPriorityOverSystemBehavior = true
+        return [jump]
+    }
 
     /// MachinesButton's popover, hung from the button's end.
     private func openMachines(from source: UIView) {
