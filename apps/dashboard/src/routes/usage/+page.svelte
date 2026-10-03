@@ -6,16 +6,16 @@
    * is said twice and no row is named by an id.
    */
   import { bucketStart, type LimitWindow } from "@cawco/core";
-  import { cawco, readSpend } from "$lib/cawco/client.svelte";
-  import { hubMidnight, speakingReading, windowStart } from "$lib/cawco/usage";
-  import History from "$lib/cawco/usage/History.svelte";
-  import LimitsBlock from "$lib/cawco/usage/LimitsBlock.svelte";
-  import WhereItGoes from "$lib/cawco/usage/WhereItGoes.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import { TabItem, Tabs, TabsList } from "$lib/components/ui/fluid-tabs";
+  import { cawco, readSpend } from "#lib/cawco/client.svelte.js";
+  import { hubMidnight, speakingReading, windowStart } from "#lib/cawco/usage.js";
+  import History from "#lib/cawco/usage/History.svelte";
+  import LimitsBlock from "#lib/cawco/usage/LimitsBlock.svelte";
+  import WhereItGoes from "#lib/cawco/usage/WhereItGoes.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { TabItem, Tabs, TabsList } from "#lib/components/ui/fluid-tabs/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as Tooltip from "$lib/components/ui/tooltip";
-  import { IconDownload, IconRefresh } from "$lib/icons";
+  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
+  import { IconDownload, IconRefresh } from "#lib/icons.js";
 
   type Range = "window" | "today" | "7d" | "30d";
   let range = $state<Range>("window");

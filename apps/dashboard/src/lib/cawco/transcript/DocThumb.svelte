@@ -37,7 +37,7 @@
     IconFileLog,
     IconFileMarkdown,
     IconFileTable,
-  } from "$lib/icons";
+  } from "#lib/icons.js";
   import { lightbox } from "./lightbox-state.svelte";
 
   let { name, content }: { name: string; content: string } = $props();

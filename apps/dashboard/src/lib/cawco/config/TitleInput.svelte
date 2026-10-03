@@ -6,7 +6,7 @@
    * (motion/share.svelte.ts, keyed on the editor's path).
    */
   import { page } from "$app/state";
-  import { land } from "$lib/cawco/motion/share.svelte";
+  import { land } from "#lib/cawco/motion/share.svelte.js";
 
   let {
     value = $bindable(""),

@@ -1,14 +1,14 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   import PendingContent, {
     whileIdle,
-  } from "$lib/components/ui/button/pending-content.svelte";
+  } from "#lib/components/ui/button/pending-content.svelte";
   import {
     IconClose,
     IconCursor,
     IconExternalLink,
     IconRefresh,
-  } from "$lib/icons";
+  } from "#lib/icons.js";
   import { cawco, closePreview } from "../client.svelte";
   import { appear, dur } from "../motion/curves.svelte";
   import { closeInto, depart } from "../motion/share.svelte";

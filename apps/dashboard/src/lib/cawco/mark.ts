@@ -17,7 +17,7 @@ import {
   IconPlanet,
   IconRocket,
   IconSparkles,
-} from "$lib/icons";
+} from "#lib/icons.js";
 
 export type MarkHue = 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8;
 

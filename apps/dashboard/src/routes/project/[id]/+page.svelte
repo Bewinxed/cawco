@@ -8,50 +8,50 @@
   import { flushSync, tick, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { goto } from "$app/navigation";
-  import type { InstanceRow, ProjectRow } from "$lib/cawco/client.svelte";
+  import type { InstanceRow, ProjectRow } from "#lib/cawco/client.svelte.js";
   import {
     cawco,
     deleteProject,
     machineFs,
     spawnSession,
-  } from "$lib/cawco/client.svelte";
-  import { type Doc, readDocs } from "$lib/cawco/docs";
-  import ErrorText from "$lib/cawco/ErrorText.svelte";
-  import LiveSessionRow from "$lib/cawco/LiveSessionRow.svelte";
-  import { conversationHref } from "$lib/cawco/links";
-  import MachineInventory from "$lib/cawco/MachineInventory.svelte";
+  } from "#lib/cawco/client.svelte.js";
+  import { type Doc, readDocs } from "#lib/cawco/docs.js";
+  import ErrorText from "#lib/cawco/ErrorText.svelte";
+  import LiveSessionRow from "#lib/cawco/LiveSessionRow.svelte";
+  import { conversationHref } from "#lib/cawco/links.js";
+  import MachineInventory from "#lib/cawco/MachineInventory.svelte";
   import {
     crossIn,
     crossOut,
     dur,
     ease,
-  } from "$lib/cawco/motion/curves.svelte";
-  import { fold } from "$lib/cawco/motion/fold.svelte";
-  import { route } from "$lib/cawco/motion/route.svelte";
-  import { reflow } from "$lib/cawco/motion/rows.svelte";
-  import { handOver, land } from "$lib/cawco/motion/share.svelte";
-  import OsMark from "$lib/cawco/OsMark.svelte";
-  import StoredSessionRow from "$lib/cawco/StoredSessionRow.svelte";
-  import { rememberSpawn, spawnPrefs } from "$lib/cawco/spawnPrefs.svelte";
-  import MemoryCard from "$lib/components/features/MemoryCard.svelte";
-  import { Alert, AlertDescription } from "$lib/components/ui/alert";
+  } from "#lib/cawco/motion/curves.svelte.js";
+  import { fold } from "#lib/cawco/motion/fold.svelte.js";
+  import { route } from "#lib/cawco/motion/route.svelte.js";
+  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
+  import { handOver, land } from "#lib/cawco/motion/share.svelte.js";
+  import OsMark from "#lib/cawco/OsMark.svelte";
+  import StoredSessionRow from "#lib/cawco/StoredSessionRow.svelte";
+  import { rememberSpawn, spawnPrefs } from "#lib/cawco/spawnPrefs.svelte.js";
+  import MemoryCard from "#lib/components/features/MemoryCard.svelte";
+  import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
-  import { Button } from "$lib/components/ui/button";
-  import { Card } from "$lib/components/ui/card";
-  import { EmptyState } from "$lib/components/ui/empty";
-  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
-  import { Input } from "$lib/components/ui/input";
-  import { Markdown } from "$lib/components/ui/markdown";
+  import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Card } from "#lib/components/ui/card/index.js";
+  import { EmptyState } from "#lib/components/ui/empty/index.js";
+  import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Markdown } from "#lib/components/ui/markdown/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as Popover from "$lib/components/ui/popover";
+  import * as Popover from "#lib/components/ui/popover/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as Select from "$lib/components/ui/select";
-  import { Skeleton } from "$lib/components/ui/skeleton";
+  import * as Select from "#lib/components/ui/select/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as Tabs from "$lib/components/ui/tabs";
-  import { Textarea } from "$lib/components/ui/textarea";
-  import { IconChat, IconDocument } from "$lib/icons";
+  import * as Tabs from "#lib/components/ui/tabs/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
+  import { IconChat, IconDocument } from "#lib/icons.js";
   import type { PageData } from "./$types";
 
   let { data }: { data: PageData } = $props();

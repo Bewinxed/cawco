@@ -4,7 +4,7 @@ import type {
   Workflow,
   WorkflowRun,
 } from "@cawco/core";
-import { runIdOf } from "$lib/cawco/workflow-runs";
+import { runIdOf } from "#lib/cawco/workflow-runs.js";
 import type { LayoutServerLoad } from "./$types";
 
 /**

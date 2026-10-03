@@ -5,13 +5,13 @@
    * mock's inline-code and measure.
    *
    * The type and rhythm rules below are `:global` on purpose. Streamdown puts
-   * the `prose prose-sm …` class (see `$lib/prose`) on its own root div, and
+   * the `prose prose-sm …` class (see `#lib/prose.js`) on its own root div, and
    * `prose-sm` declares its own font-size, line-height and per-element em
    * margins there — so anything set on `.msg` alone is inherited into that root
    * and then immediately overridden. The scale lives on the token sheet, not in
    * the typography plugin, so the root is restated here.
    */
-  import { Markdown } from "$lib/components/ui/markdown";
+  import { Markdown } from "#lib/components/ui/markdown/index.js";
 
   let {
     source,

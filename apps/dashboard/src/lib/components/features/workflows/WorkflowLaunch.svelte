@@ -2,17 +2,17 @@
   import type { DelegateType, Workflow } from "@cawco/core";
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
-  import { cawco } from "$lib/cawco/client.svelte";
-  import { loadDelegateTypes, message } from "$lib/cawco/delegate-types";
-  import { dur, ease, motionOk } from "$lib/cawco/motion/curves.svelte";
-  import { runHref } from "$lib/cawco/workflow-runs";
-  import { launchWorkflow } from "$lib/cawco/workflows";
-  import DirectoryPicker from "$lib/components/features/DirectoryPicker.svelte";
+  import { cawco } from "#lib/cawco/client.svelte.js";
+  import { loadDelegateTypes, message } from "#lib/cawco/delegate-types.js";
+  import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import { runHref } from "#lib/cawco/workflow-runs.js";
+  import { launchWorkflow } from "#lib/cawco/workflows.js";
+  import DirectoryPicker from "#lib/components/features/DirectoryPicker.svelte";
   import PendingContent, {
     whileIdle,
-  } from "$lib/components/ui/button/pending-content.svelte";
+  } from "#lib/components/ui/button/pending-content.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
-  import * as Dialog from "$lib/components/ui/dialog";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
 
   let {
     workflow,

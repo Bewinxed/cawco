@@ -5,15 +5,15 @@
     dur,
     easeOut,
     motionOk,
-  } from "$lib/cawco/motion/curves.svelte";
-  import { ThinkingIndicator } from "$lib/components/ui/thinking-indicator";
+  } from "#lib/cawco/motion/curves.svelte.js";
+  import { ThinkingIndicator } from "#lib/components/ui/thinking-indicator/index.js";
   import {
     ThinkingStep,
     ThinkingSteps,
     ThinkingStepsContent,
     ThinkingStepsHeader,
-  } from "$lib/components/ui/thinking-steps";
-  import { IconCpu } from "$lib/icons";
+  } from "#lib/components/ui/thinking-steps/index.js";
+  import { IconCpu } from "#lib/icons.js";
 
   let {
     text,

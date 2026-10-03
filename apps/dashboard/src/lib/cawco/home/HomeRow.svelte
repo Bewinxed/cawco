@@ -34,9 +34,9 @@
    */
   import type { NeutralSessionInfo } from "@cawco/core";
   import type { Attachment } from "svelte/attachments";
-  import Tip from "$lib/components/ui/tooltip/tip.svelte";
-  import { IconArchive, IconMaximize } from "$lib/icons";
-  import { cn } from "$lib/utils";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
+  import { IconArchive, IconMaximize } from "#lib/icons.js";
+  import { cn } from "#lib/utils.js";
   import type { InstanceRow } from "../client.svelte";
   import LiveSessionMenu from "../LiveSessionMenu.svelte";
   import SessionMark, {

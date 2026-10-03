@@ -3,7 +3,7 @@
    * Rows at the height a two-line row takes, while a section is read: three,
    * or with `fill`, as many as the room they are given holds.
    */
-  import { Skeleton } from "$lib/components/ui/skeleton";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
 
   let { fill = false }: { fill?: boolean } = $props();
   const rows = $derived(Array.from({ length: fill ? 40 : 3 }, (_, i) => i));

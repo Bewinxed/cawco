@@ -1,4 +1,4 @@
-import { CARDS_COOKIE, parseCards } from "$lib/cawco/config/cards";
+import { CARDS_COOKIE, parseCards } from "#lib/cawco/config/cards.js";
 import type { LayoutServerLoad } from "./$types";
 
 /**

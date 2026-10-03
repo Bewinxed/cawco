@@ -1,6 +1,6 @@
 import { redirect } from "@sveltejs/kit";
-import { browser } from "$app/environment";
-import { NARROW_QUERY } from "$lib/hooks/is-mobile.svelte";
+import { browser } from "$app/env";
+import { NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
 import type { PageLoad } from "./$types";
 
 /**

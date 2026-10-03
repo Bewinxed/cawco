@@ -1,14 +1,14 @@
 <script lang="ts">
   import type { WorkflowRunStatus, WorkflowStepStatus } from "@cawco/core";
   import { TextMorph } from "torph/svelte";
-  import { crossIn, morphMs } from "$lib/cawco/motion/curves.svelte";
+  import { crossIn, morphMs } from "#lib/cawco/motion/curves.svelte.js";
   import {
     IconCheck,
     IconChevronUp,
     IconDot,
     IconError,
     IconStop,
-  } from "$lib/icons";
+  } from "#lib/icons.js";
 
   let {
     status,

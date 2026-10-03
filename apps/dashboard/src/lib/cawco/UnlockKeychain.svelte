@@ -1,9 +1,9 @@
 <script lang="ts">
   import type { AuthState } from "@cawco/core";
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Input } from "$lib/components/ui/input";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
   /**
    * Unlocks a Mac's login keychain from here.
    *
@@ -17,7 +17,7 @@
    * The password is sent, used, and dropped. It is not stored here, not kept in
    * the store, and not written anywhere on the way.
    */
-  import { IconKey } from "$lib/icons";
+  import { IconKey } from "#lib/icons.js";
   import { type Machine, machineControl } from "./client.svelte";
   import MachineAuthStatus from "./MachineAuthStatus.svelte";
   import { crossIn, crossOut } from "./motion/curves.svelte";

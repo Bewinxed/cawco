@@ -3,7 +3,7 @@
     type FleetMemoryVersion,
     memoryHistory,
     memoryVersion,
-  } from "$lib/cawco/fleet";
+  } from "#lib/cawco/fleet.js";
   /**
    * What a `manage_memory` call read or wrote, as the document it is. The
    * sentence above already names the action and the path, so none of the raw
@@ -16,9 +16,9 @@
    * (`fleet_memory_history`, read through the Configure editor's own routes).
    */
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
-  import * as Collapsible from "$lib/components/ui/collapsible";
-  import { Skeleton } from "$lib/components/ui/skeleton";
-  import { IconChevronRight } from "$lib/icons";
+  import * as Collapsible from "#lib/components/ui/collapsible/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { IconChevronRight } from "#lib/icons.js";
   import DiffView from "../DiffView.svelte";
   import { memoryResult } from "./descriptors";
   import ToolProse from "./ToolProse.svelte";

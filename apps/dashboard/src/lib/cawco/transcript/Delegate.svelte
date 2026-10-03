@@ -9,12 +9,12 @@
    */
   import type { DelegateAskStatus } from "@cawco/core";
   import { TextMorph } from "torph/svelte";
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
-  import * as Collapsible from "$lib/components/ui/collapsible";
-  import CollapsibleLazy from "$lib/components/ui/collapsible/collapsible-lazy.svelte";
-  import { IconChevronRight, IconExternal } from "$lib/icons";
-  import { formatDuration } from "$lib/utils/time";
+  import * as Collapsible from "#lib/components/ui/collapsible/index.js";
+  import CollapsibleLazy from "#lib/components/ui/collapsible/collapsible-lazy.svelte";
+  import { IconChevronRight, IconExternal } from "#lib/icons.js";
+  import { formatDuration } from "#lib/utils/time.js";
   import {
     cawco,
     readTranscript,

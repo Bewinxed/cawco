@@ -11,7 +11,7 @@
    * pointer leaves both the row and the card, so crossing the 4px gap to
    * the card (bridged) keeps it. A fine pointer only; touch has no hover.
    */
-  import { IconAsk, IconSuccess, IconWarningTriangle } from "$lib/icons";
+  import { IconAsk, IconSuccess, IconWarningTriangle } from "#lib/icons.js";
   import { cawco, isFailed, readTranscript } from "./client.svelte";
   import HoverPanel from "./HoverPanel.svelte";
   import { instanceTitle } from "./home/home.svelte";

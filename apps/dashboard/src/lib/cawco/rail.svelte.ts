@@ -4,7 +4,7 @@
  * hostname are the fleet's opinion, this is theirs — so both are persisted
  * here, in one document, because they are the same kind of claim.
  */
-import { browser } from "$app/environment";
+import { browser } from "$app/env";
 import type { Machine } from "./client.svelte";
 
 export const RAIL_LAYOUT_KEY = "cawco-rail-layout";
@@ -57,10 +57,8 @@ function read(): RailLayout {
     return {
       pins: (stored.pins ?? []).filter(isPin),
       machines: (stored.machines ?? []).filter((id) => typeof id === "string"),
-      sort: SORTS.includes(stored.sort ?? "")
-        ? (stored.sort as RailSort)
-        : "recent",
-      delegates: stored.delegates === true,
+      sort: SORTS.includes(stored.sort ?? "") ? stored.sort as RailSort : "recent",
+      delegates: stored.delegates === true
     };
   } catch {
     return { pins: [], machines: [], sort: "recent", delegates: false };

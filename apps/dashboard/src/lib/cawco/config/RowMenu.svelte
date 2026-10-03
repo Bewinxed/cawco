@@ -12,10 +12,10 @@
 
 <script lang="ts">
   /** A row's ⋯ menu: every action a row has beyond opening it and its switch. */
-  import { buttonVariants } from "$lib/components/ui/button";
+  import { buttonVariants } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
-  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
-  import { IconMore } from "$lib/icons";
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
+  import { IconMore } from "#lib/icons.js";
 
   let { label, actions }: { label: string; actions: RowAction[] } = $props();
 </script>

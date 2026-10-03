@@ -1,7 +1,7 @@
 <script lang="ts">
   import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
-  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
-  import { cn } from "$lib/utils.js";
+  import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import { cn } from "#lib/utils.js";
 
   let {
     ref = $bindable(null),

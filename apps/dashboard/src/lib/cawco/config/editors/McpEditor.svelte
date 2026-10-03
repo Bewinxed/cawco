@@ -9,11 +9,11 @@
     crossIn,
     crossOut,
     dur,
-  } from "$lib/cawco/motion/curves.svelte";
-  import { unfold } from "$lib/cawco/motion/fold.svelte";
-  import { morph } from "$lib/cawco/motion/morph.svelte";
-  import { Input } from "$lib/components/ui/input";
-  import { IconKey, IconPlay } from "$lib/icons";
+  } from "#lib/cawco/motion/curves.svelte.js";
+  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
+  import { morph } from "#lib/cawco/motion/morph.svelte.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { IconKey, IconPlay } from "#lib/icons.js";
   import { confirm } from "../../confirm.svelte";
   import {
     isRemoteMcp,

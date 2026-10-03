@@ -1,15 +1,15 @@
 <script lang="ts">
   import { untrack } from "svelte";
-  import { CURVE, dur, motionOk } from "$lib/cawco/motion/curves.svelte";
+  import { CURVE, dur, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import {
     departBox,
     waiting as departed,
     land,
-  } from "$lib/cawco/motion/share.svelte";
-  import { Badge } from "$lib/components/ui/badge";
+  } from "#lib/cawco/motion/share.svelte.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import PendingContent, {
     whileIdle,
-  } from "$lib/components/ui/button/pending-content.svelte";
+  } from "#lib/components/ui/button/pending-content.svelte";
   import {
     canResend,
     restoreDraft,

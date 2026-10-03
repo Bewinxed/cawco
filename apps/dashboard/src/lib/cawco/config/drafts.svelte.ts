@@ -16,7 +16,7 @@
  */
 import { untrack } from "svelte";
 import { SvelteSet } from "svelte/reactivity";
-import { browser } from "$app/environment";
+import { browser } from "$app/env";
 import { keepsDrafts } from "../protocol-reload";
 import { MAIN } from "./memory";
 import type { SectionSlug } from "./sections";
@@ -82,26 +82,26 @@ class EditorDrafts {
         result<DraftRecord[]>(db.transaction(STORE).objectStore(STORE).getAll())
       )
       .then(
-        (records) => {
-          for (const record of records) {
-            // Forgotten while the read was in flight (a Cancel that quick).
-            if (this.#unwritten.get(record.path) !== null) {
-              this.#fields.set(record.path, record.fields);
-              this.paths.add(record.path);
-            }
+      (records) => {
+        for (const record of records) {
+          // Forgotten while the read was in flight (a Cancel that quick).
+          if (this.#unwritten.get(record.path) !== null) {
+            this.#fields.set(record.path, record.fields);
+            this.paths.add(record.path);
           }
-          this.ready = true;
-          this.flush();
-        },
-        (error: unknown) => {
-          // A browser that refuses the database (private mode) keeps no
-          // editor drafts: nothing is restored and nothing is written.
+        }
+        this.ready = true;
+        this.flush();
+      },
+      (error: unknown) => {
+        // A browser that refuses the database (private mode) keeps no
+        // editor drafts: nothing is restored and nothing is written.
           console.warn(
             "[drafts] IndexedDB refused to open; drafts are off",
             error
           );
-        }
-      );
+      }
+    );
     window.addEventListener("pagehide", () => this.flush());
     // A reload this tab does itself waits for every edit to be written.
     keepsDrafts(() => this.settled());
@@ -189,14 +189,9 @@ export const drafts = new EditorDrafts();
  * One field set in a canonical text: keys in order, an absent key the same
  * as an undefined one. Two sets with the same text hold the same values.
  */
-const canonical = (value: unknown): string =>
-  JSON.stringify(value, (_key, inner: unknown) =>
-    inner && typeof inner === "object" && !Array.isArray(inner)
-      ? Object.fromEntries(
-          Object.entries(inner).sort(([a], [b]) => (a < b ? -1 : 1))
-        )
-      : inner
-  );
+const canonical = (value: unknown): string => JSON.stringify(value, (_key, inner: unknown) => inner && typeof inner === "object" && !Array.isArray(inner)
+  ? Object.fromEntries(Object.entries(inner).sort(([a], [b]) => a < b ? -1 : 1))
+  : inner);
 
 /** The fields hold what is saved: nothing of them is a draft. */
 export const sameFields = (a: unknown, b: unknown): boolean =>
@@ -283,10 +278,8 @@ function live(store: ConfigStore, slug: string, key: string): boolean {
     case "subagents":
       return fleet?.agents.some((row) => row.name === key) ?? false;
     case "memory":
-      return (
-        key === MAIN ||
-        (fleet?.memoryDocs.some((doc) => doc.path === key) ?? false)
-      );
+      return key === MAIN || (fleet?.memoryDocs.some((doc) => doc.path === key) ?? false);
+
     default:
       return false;
   }

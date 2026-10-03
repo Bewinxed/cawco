@@ -6,8 +6,8 @@
    * neighbour Jump — hairline, raised surface — and only its glyph takes the
    * accent, so the bar reads as one row of controls, not a lone blue slab.
    */
-  import Tip from "$lib/components/ui/tooltip/tip.svelte";
-  import { IconAssistant } from "$lib/icons";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
+  import { IconAssistant } from "#lib/icons.js";
 
   let {
     onclick,

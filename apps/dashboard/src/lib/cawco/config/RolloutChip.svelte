@@ -12,21 +12,21 @@
   import { TextMorph } from "torph/svelte";
   import PendingContent, {
     whileIdle,
-  } from "$lib/components/ui/button/pending-content.svelte";
+  } from "#lib/components/ui/button/pending-content.svelte";
   import {
     MachineRow,
     machineHue,
     machineIcon,
-  } from "$lib/components/ui/machine-row";
+  } from "#lib/components/ui/machine-row/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
-  import * as Popover from "$lib/components/ui/popover";
-  import { Spinner } from "$lib/components/ui/spinner";
+  import * as Popover from "#lib/components/ui/popover/index.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
   import {
     IconCheck,
     IconInfo,
     IconRefresh,
     IconWarningTriangle,
-  } from "$lib/icons";
+  } from "#lib/icons.js";
   import type { Machine } from "../client.svelte";
   import FleetFault from "../FleetFault.svelte";
   import { syncFleet } from "../fleet";

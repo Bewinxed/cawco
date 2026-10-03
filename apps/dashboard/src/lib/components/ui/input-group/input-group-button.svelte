@@ -1,6 +1,6 @@
 <script lang="ts" module>
   import type { VariantProps } from "tailwind-variants";
-  import { tv } from "$lib/utils.js";
+  import { tv } from "#lib/utils.js";
 
   const inputGroupButtonVariants = tv({
     base: "flex items-center gap-2 rounded-[var(--radius-sm)] text-label shadow-none",
@@ -24,8 +24,8 @@
 
 <script lang="ts">
   import type { ComponentProps } from "svelte";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import { cn } from "$lib/utils.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { cn } from "#lib/utils.js";
 
   let {
     ref = $bindable(null),

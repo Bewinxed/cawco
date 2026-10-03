@@ -2,9 +2,9 @@
   import { Dialog as DialogPrimitive } from "bits-ui";
   import type PhotoSwipe from "photoswipe";
   import { type Component, mount, onDestroy, unmount } from "svelte";
-  import OutputBlock from "$lib/components/features/tool-cards/OutputBlock.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import { CopyButton } from "$lib/components/ui/copy-button";
+  import OutputBlock from "#lib/components/features/tool-cards/OutputBlock.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { CopyButton } from "#lib/components/ui/copy-button/index.js";
   /**
    * What a thumbnail opens into, one entry point (lightbox-state) for both
    * kinds of attachment.
@@ -22,13 +22,13 @@
    * turn does, JSON pretty-printed, anything else in the transcript's code
    * well.
    */
-  import Tip from "$lib/components/ui/tooltip/tip.svelte";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
     IconChevronLeft,
     IconChevronRight,
     IconClose,
     IconZoomIn,
-  } from "$lib/icons";
+  } from "#lib/icons.js";
   import { dur, ease, motionOk } from "../motion/curves.svelte";
   import { closeInto, land } from "../motion/share.svelte";
   import { extensionOf } from "./DocThumb.svelte";

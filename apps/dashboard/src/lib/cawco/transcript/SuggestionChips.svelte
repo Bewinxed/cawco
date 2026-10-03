@@ -7,10 +7,10 @@
     easeDrawer,
     easeOut,
     motionOk,
-  } from "$lib/cawco/motion/curves.svelte";
-  import { Kbd } from "$lib/components/ui/kbd";
-  import { Skeleton } from "$lib/components/ui/skeleton";
-  import { IconToolGeneric, IconToolMcp, IconToolSkill } from "$lib/icons";
+  } from "#lib/cawco/motion/curves.svelte.js";
+  import { Kbd } from "#lib/components/ui/kbd/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { IconToolGeneric, IconToolMcp, IconToolSkill } from "#lib/icons.js";
   import {
     askSuggestions,
     SUGGEST_PAUSE_MS,

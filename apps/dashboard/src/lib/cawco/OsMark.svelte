@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { IconServer } from "$lib/icons";
+  import { IconServer } from "#lib/icons.js";
   /**
    * The mark of the operating system itself, rather than the shape of a box —
    * a laptop glyph on a Mac and a monitor glyph on a Linux tower said which
@@ -10,7 +10,7 @@
    * on the same optical weight and fills with `currentColor`, so it takes the
    * ink of whatever row it lands in.
    */
-  import { cn } from "$lib/utils";
+  import { cn } from "#lib/utils.js";
 
   interface Props {
     class?: string;

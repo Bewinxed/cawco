@@ -11,10 +11,10 @@
     dur,
     easeOut,
     motionOk,
-  } from "$lib/cawco/motion/curves.svelte";
-  import { fold } from "$lib/cawco/motion/fold.svelte";
-  import { depart, land } from "$lib/cawco/motion/share.svelte";
-  import { IconAsk, IconCheck, IconClose } from "$lib/icons";
+  } from "#lib/cawco/motion/curves.svelte.js";
+  import { fold } from "#lib/cawco/motion/fold.svelte.js";
+  import { depart, land } from "#lib/cawco/motion/share.svelte.js";
+  import { IconAsk, IconCheck, IconClose } from "#lib/icons.js";
   import { questionsOf } from "../question";
   /**
    * An answered (or dismissed) `AskUserQuestion` as it settled in the transcript

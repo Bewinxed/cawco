@@ -1,6 +1,6 @@
 <script lang="ts" module>
   import type { VariantProps } from "tailwind-variants";
-  import { tv } from "$lib/utils.js";
+  import { tv } from "#lib/utils.js";
   export const inputGroupAddonVariants = tv({
     base: "flex h-auto cursor-text select-none items-center justify-center gap-2 py-2 font-medium text-label text-muted-foreground group-data-[disabled=true]/input-group:opacity-50 [&>svg:not([class*='size-'])]:size-4",
     variants: {
@@ -27,7 +27,7 @@
 
 <script lang="ts">
   import type { HTMLAttributes } from "svelte/elements";
-  import { cn, type WithElementRef } from "$lib/utils.js";
+  import { cn, type WithElementRef } from "#lib/utils.js";
 
   let {
     ref = $bindable(null),

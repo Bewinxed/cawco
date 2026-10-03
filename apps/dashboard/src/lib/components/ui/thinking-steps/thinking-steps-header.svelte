@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Collapsible } from "bits-ui";
   import type { Snippet } from "svelte";
-  import { IconChevronRight } from "$lib/icons";
+  import { IconChevronRight } from "#lib/icons.js";
 
   let {
     children,

@@ -1,6 +1,6 @@
 <script lang="ts" module>
   import type { VariantProps } from "tailwind-variants";
-  import { tv } from "$lib/utils.js";
+  import { tv } from "#lib/utils.js";
 
   export const sidebarMenuButtonVariants = tv({
     base: "peer/menu-button group/menu-button focus-inset press-tint flex w-full items-center gap-2 overflow-hidden rounded-[var(--radius-sm)] px-3 py-2 text-left text-label transition-[width,height,padding,color,background-color] duration-(--dur-toggle) ease-out hover:text-foreground active:text-foreground disabled:pointer-events-none disabled:opacity-50 group-has-data-[sidebar=menu-action]/menu-item:pr-8 aria-disabled:pointer-events-none aria-disabled:opacity-50 data-active:font-medium data-active:text-selected-ink data-open:hover:text-foreground group-data-[collapsible=icon]:size-8! group-data-[collapsible=icon]:p-2! [&>span:last-child]:truncate [&>svg]:size-4 [&>svg]:shrink-0 data-active:[&_svg]:text-selected-icon",
@@ -35,12 +35,12 @@
   import type { ComponentProps, Snippet } from "svelte";
   import type { HTMLAttributes } from "svelte/elements";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for importing a component group
-  import * as Tooltip from "$lib/components/ui/tooltip/index.js";
+  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import {
     cn,
     type WithElementRef,
     type WithoutChildrenOrChild,
-  } from "$lib/utils.js";
+  } from "#lib/utils.js";
   import { useSidebar } from "./context.svelte.js";
 
   let {

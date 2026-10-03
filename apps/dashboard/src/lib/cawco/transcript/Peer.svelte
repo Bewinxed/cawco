@@ -1,6 +1,6 @@
 <script lang="ts">
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
-  import * as Collapsible from "$lib/components/ui/collapsible";
+  import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import {
     IconAsk,
     IconChevronRight,
@@ -9,7 +9,7 @@
     IconReportFailed,
     IconRules,
     IconWorkflow,
-  } from "$lib/icons";
+  } from "#lib/icons.js";
   import { cawco } from "../client.svelte";
   import { conversationHref, resolveInstanceId } from "../links";
   /**

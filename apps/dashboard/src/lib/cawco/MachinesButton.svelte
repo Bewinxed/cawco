@@ -9,16 +9,16 @@
    * update, reload, log in, unlock, forget) and ends with Add machine.
    */
   import { mergeProps } from "bits-ui";
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   import {
     MachineRow,
     machineHue,
     machineIcon,
-  } from "$lib/components/ui/machine-row";
+  } from "#lib/components/ui/machine-row/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
-  import * as Popover from "$lib/components/ui/popover";
-  import Tip from "$lib/components/ui/tooltip/tip.svelte";
-  import { IconPlus, IconServer } from "$lib/icons";
+  import * as Popover from "#lib/components/ui/popover/index.js";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
+  import { IconPlus, IconServer } from "#lib/icons.js";
   import { cawco } from "./client.svelte";
   import { home } from "./home/home.svelte";
   import { addMachine } from "./join/join.svelte";

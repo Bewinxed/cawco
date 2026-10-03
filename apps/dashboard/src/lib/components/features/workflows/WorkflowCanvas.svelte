@@ -15,15 +15,15 @@
   } from "@xyflow/svelte";
   import "@xyflow/svelte/dist/style.css";
   import { onMount } from "svelte";
-  import { newId } from "$lib/cawco/id";
-  import { workflowState } from "$lib/cawco/workflow-state.svelte";
-  import FlowAutoFit from "$lib/components/features/flow/FlowAutoFit.svelte";
-  import FlowZoomTracker from "$lib/components/features/flow/FlowZoomTracker.svelte";
-  import { FIT } from "$lib/components/features/flow/fit";
+  import { newId } from "#lib/cawco/id.js";
+  import { workflowState } from "#lib/cawco/workflow-state.svelte.js";
+  import FlowAutoFit from "#lib/components/features/flow/FlowAutoFit.svelte";
+  import FlowZoomTracker from "#lib/components/features/flow/FlowZoomTracker.svelte";
+  import { FIT } from "#lib/components/features/flow/fit.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
-  import * as ContextMenu from "$lib/components/ui/context-menu";
-  import { IconChat } from "$lib/icons";
-  import { theme } from "$lib/theme.svelte";
+  import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
+  import { IconChat } from "#lib/icons.js";
+  import { theme } from "#lib/theme.svelte.js";
   import WorkflowCanvasTools from "./WorkflowCanvasTools.svelte";
   import WorkflowEdge from "./WorkflowEdge.svelte";
   import WorkflowNodeCard from "./WorkflowNodeCard.svelte";

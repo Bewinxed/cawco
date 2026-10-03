@@ -10,7 +10,7 @@ import type {
   SendState,
   TranscriptBlock,
 } from "@cawco/core";
-import type { SubagentState } from "$lib/utils/flow-types";
+import type { SubagentState } from "#lib/utils/flow-types.js";
 
 export type JsonPrimitive = string | number | boolean | null;
 export type JsonValue =

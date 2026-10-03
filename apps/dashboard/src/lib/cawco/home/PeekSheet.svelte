@@ -6,7 +6,7 @@
    */
   import { MediaQuery } from "svelte/reactivity";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as Drawer from "$lib/components/ui/drawer";
+  import * as Drawer from "#lib/components/ui/drawer/index.js";
   import PeekPane from "../PeekPane.svelte";
   import { closePeek, peek } from "./peek.svelte";
 

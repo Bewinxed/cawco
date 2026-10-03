@@ -21,9 +21,9 @@
   import {
     describeTool,
     type ToolCallStatus,
-  } from "$lib/components/features/tool-cards/descriptors";
-  import { Skeleton } from "$lib/components/ui/skeleton";
-  import { IconCpu, IconHandoff, IconReport, IconRules } from "$lib/icons";
+  } from "#lib/components/features/tool-cards/descriptors.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { IconCpu, IconHandoff, IconReport, IconRules } from "#lib/icons.js";
   import { cawco } from "../client.svelte";
   import { CURVE, dur, easeOut, motionOk } from "../motion/curves.svelte";
   import type { Message } from "../types";

@@ -2,8 +2,8 @@
   import { tick, untrack } from "svelte";
   import { Drawer } from "vaul-svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
-  import * as Popover from "$lib/components/ui/popover";
-  import { IconWindow } from "$lib/icons";
+  import * as Popover from "#lib/components/ui/popover/index.js";
+  import { IconWindow } from "#lib/icons.js";
   import { lightbox } from "../transcript/lightbox-state.svelte";
   import { NOTE_MAX, type PendingSelection, selectionLabel } from "./selection";
 

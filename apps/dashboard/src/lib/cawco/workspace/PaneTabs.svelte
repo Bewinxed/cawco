@@ -2,7 +2,7 @@
   import { Popover } from "bits-ui";
   /**
    * One group's tabs: a segmented control (the Fluid Functionalism tabs,
-   * `$lib/components/ui/fluid-tabs`) with one segment per open conversation.
+   * `#lib/components/ui/fluid-tabs/index.js`) with one segment per open conversation.
    *
    * The app used to have a single strip because there was a single place a
    * conversation could be. A group owns its own now, which is what makes a
@@ -24,19 +24,19 @@
     ease,
     easeOut,
     motionOk,
-  } from "$lib/cawco/motion/curves.svelte";
-  import { land } from "$lib/cawco/motion/share.svelte";
+  } from "#lib/cawco/motion/curves.svelte.js";
+  import { land } from "#lib/cawco/motion/share.svelte.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as ContextMenu from "$lib/components/ui/context-menu";
+  import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as Drawer from "$lib/components/ui/drawer";
+  import * as Drawer from "#lib/components/ui/drawer/index.js";
   import {
     TabItem,
     Tabs,
     TabsList,
     type TabsTravel,
-  } from "$lib/components/ui/fluid-tabs";
-  import { IconArrowRight, IconChevronDown, IconClose } from "$lib/icons";
+  } from "#lib/components/ui/fluid-tabs/index.js";
+  import { IconArrowRight, IconChevronDown, IconClose } from "#lib/icons.js";
   import {
     ACTIVITY_LABEL,
     type Activity,

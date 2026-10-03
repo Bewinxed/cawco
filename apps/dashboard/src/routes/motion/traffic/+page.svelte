@@ -24,9 +24,9 @@
    * row fold and the arrival decision. A fixture that stubbed either would have
    * rendered the bug invisible.
    */
-  import { blankSession, type SessionState } from "$lib/cawco/client.svelte";
-  import Transcript from "$lib/cawco/transcript/Transcript.svelte";
-  import type { Message } from "$lib/cawco/types";
+  import { blankSession, type SessionState } from "#lib/cawco/client.svelte.js";
+  import Transcript from "#lib/cawco/transcript/Transcript.svelte";
+  import type { Message } from "#lib/cawco/types.js";
 
   const INSTANCE = "traffic-bench";
 

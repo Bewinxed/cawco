@@ -1,20 +1,20 @@
 <script lang="ts">
   import { mergeProps } from "bits-ui";
   import { tick } from "svelte";
-  import DirectoryPicker from "$lib/components/features/DirectoryPicker.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
+  import DirectoryPicker from "#lib/components/features/DirectoryPicker.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as Popover from "$lib/components/ui/popover";
+  import * as Popover from "#lib/components/ui/popover/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as Select from "$lib/components/ui/select";
+  import * as Select from "#lib/components/ui/select/index.js";
   /**
    * Names a directory so the rail has a folder for it before anything has run
    * there. Every other folder in the rail is grown from live work, which leaves
    * no way at all to add the checkout you have not started yet — this is it.
    */
-  import Tip from "$lib/components/ui/tooltip/tip.svelte";
-  import { IconPlus } from "$lib/icons";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
+  import { IconPlus } from "#lib/icons.js";
   import { cawco, createProject } from "./client.svelte";
   import { appear } from "./motion/curves.svelte";
 

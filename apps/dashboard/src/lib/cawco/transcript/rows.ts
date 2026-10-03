@@ -7,7 +7,7 @@
  */
 
 import { ASK_USER_QUESTION, type ToolGlance } from "@cawco/core";
-import type { SubagentState } from "$lib/utils/flow-types";
+import type { SubagentState } from "#lib/utils/flow-types.js";
 import type { SessionState } from "../client.svelte";
 import type { Message } from "../types";
 import { parkedAsks } from "./present";

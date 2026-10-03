@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
-  import { UseClipboard } from "$lib/hooks/use-clipboard.svelte";
-  import { IconCheck, IconClose, IconCopy } from "$lib/icons";
-  import { cn } from "$lib/utils.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { UseClipboard } from "#lib/hooks/use-clipboard.svelte.js";
+  import { IconCheck, IconClose, IconCopy } from "#lib/icons.js";
+  import { cn } from "#lib/utils.js";
   import type { CopyButtonProps } from "./types";
 
   let {

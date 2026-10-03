@@ -1,4 +1,4 @@
-import { dur } from "$lib/cawco/motion/curves.svelte";
+import { dur } from "#lib/cawco/motion/curves.svelte.js";
 
 /** Use this hook to copy text to the clipboard and show a copied state. The
  * state holds for --dur-hold (app.css), then clears.
@@ -6,7 +6,7 @@ import { dur } from "$lib/cawco/motion/curves.svelte";
  * ## Usage
  * ```svelte
  * <script lang="ts">
- * 		import { UseClipboard } from "$lib/hooks/use-clipboard.svelte";
+ * 		import { UseClipboard } from "#lib/hooks/use-clipboard.svelte.js";
  *
  * 		const clipboard = new UseClipboard();
  * </script>

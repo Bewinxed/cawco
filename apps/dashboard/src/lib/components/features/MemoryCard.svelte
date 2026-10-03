@@ -11,12 +11,12 @@
    */
   import { onMount, type Snippet } from "svelte";
   import { toast } from "svelte-sonner";
-  import { crossIn, crossOut, dur } from "$lib/cawco/motion/curves.svelte";
-  import { morph } from "$lib/cawco/motion/morph.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import { Card } from "$lib/components/ui/card";
-  import { Markdown } from "$lib/components/ui/markdown";
-  import { Skeleton } from "$lib/components/ui/skeleton";
+  import { crossIn, crossOut, dur } from "#lib/cawco/motion/curves.svelte.js";
+  import { morph } from "#lib/cawco/motion/morph.svelte.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Card } from "#lib/components/ui/card/index.js";
+  import { Markdown } from "#lib/components/ui/markdown/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import MarkdownEditor from "./MarkdownEditor.svelte";
 
   interface Props {

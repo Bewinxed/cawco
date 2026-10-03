@@ -15,8 +15,8 @@
   import type { WorkflowStep } from "@cawco/core";
   import { onMount, type Snippet } from "svelte";
   import { SvelteSet } from "svelte/reactivity";
-  import { duration } from "$lib/components/features/workflows/workflow-ui";
-  import { IconExternal } from "$lib/icons";
+  import { duration } from "#lib/components/features/workflows/workflow-ui.js";
+  import { IconExternal } from "#lib/icons.js";
   import { cawco } from "./client.svelte";
   import { conversationHref } from "./links";
   import { type BranchOptions, branch, nestFrom } from "./motion/branch.svelte";

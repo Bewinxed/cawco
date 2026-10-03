@@ -15,9 +15,9 @@
   import { TextMorph } from "torph/svelte";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { Button } from "$lib/components/ui/button";
-  import { Skeleton } from "$lib/components/ui/skeleton";
-  import { IconPlus } from "$lib/icons";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { IconPlus } from "#lib/icons.js";
   import Attention from "~icons/solar/hand-shake-bold-duotone";
   import { crossIn, crossOut, morphMs } from "../motion/curves.svelte";
   import { reflow } from "../motion/rows.svelte";

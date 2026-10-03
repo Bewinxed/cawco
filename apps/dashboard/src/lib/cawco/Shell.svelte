@@ -10,7 +10,7 @@
   import { onMount, untrack } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { TextMorph } from "torph/svelte";
-  import { browser } from "$app/environment";
+  import { browser } from '$app/env';
   import { onNavigate } from "$app/navigation";
   import { page } from "$app/state";
   import {
@@ -21,24 +21,24 @@
     morphMs,
     motionOk,
     popScale,
-  } from "$lib/cawco/motion/curves.svelte";
-  import { pageIn, pageOut, route } from "$lib/cawco/motion/route.svelte";
-  import { reflow } from "$lib/cawco/motion/rows.svelte";
-  import { Button } from "$lib/components/ui/button";
+  } from "#lib/cawco/motion/curves.svelte.js";
+  import { pageIn, pageOut, route } from "#lib/cawco/motion/route.svelte.js";
+  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as Sheet from "$lib/components/ui/sheet";
-  import { setSidebar } from "$lib/components/ui/sidebar/context.svelte";
+  import * as Sheet from "#lib/components/ui/sheet/index.js";
+  import { setSidebar } from "#lib/components/ui/sidebar/context.svelte.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as Tooltip from "$lib/components/ui/tooltip";
-  import Tip from "$lib/components/ui/tooltip/tip.svelte";
-  import { NARROW_QUERY } from "$lib/hooks/is-mobile.svelte";
+  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
+  import { NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
   import {
     IconChevronLeft,
     IconSearch,
     IconShield,
     IconSidebar,
-  } from "$lib/icons";
-  import { isTyping } from "$lib/utils/typing";
+  } from "#lib/icons.js";
+  import { isTyping } from "#lib/utils/typing.js";
   import AddMachineDialog from "./AddMachineDialog.svelte";
   import AssistantOrb from "./assistant/AssistantOrb.svelte";
   import AssistantPanel from "./assistant/AssistantPanel.svelte";
@@ -255,7 +255,9 @@
   // The sheet is a place you go through, not one you stay in. It leaves as
   // the navigation it started swaps the page, in the same frame, rather than
   // after the new page has arrived.
-  onNavigate(() => {
+  onNavigate(({ shallow }) => {
+    if (shallow) return;
+
     railOpen = false;
   });
 
@@ -400,9 +402,8 @@
     );
   }
   const narrowQuery = new MediaQuery(NARROW_QUERY);
-  const narrow = $derived(
-    browser ? narrowQuery.current : (page.data.narrow as boolean)
-  );
+  const narrow = $derived(browser ? narrowQuery.current : page.data.narrow as boolean);
+
   $effect(() => {
     // The Cookie Store API is async and unsupported in Safari; this write must
     // land synchronously before the next SSR request reads it back. Written
@@ -600,7 +601,7 @@
   );
 </script>
 
-<svelte:window onkeydown={shortcut} />
+<svelte:window onkeydown={shortcut}></svelte:window>
 
 <a class="skip" href="#main-content">Skip to content</a>
 
@@ -613,8 +614,8 @@
   <div class="shell" style="--sidebar-width: var(--rail-w, {railWidth}px)">
     <aside class="rail hidden min-[900px]:flex">
       <Sidebar
-        {assistantOpen}
-        {narrow}
+        assistantOpen={assistantOpen}
+        narrow={narrow}
         onassistant={() => {
         assistantOpen = !assistantOpen;
       }}
@@ -642,8 +643,8 @@
           <Sheet.Title>Navigation</Sheet.Title>
         </Sheet.Header>
         <Sidebar
-          {assistantOpen}
-          {narrow}
+          assistantOpen={assistantOpen}
+          narrow={narrow}
           onassistant={() => {
           railOpen = false;
           assistantOpen = true;

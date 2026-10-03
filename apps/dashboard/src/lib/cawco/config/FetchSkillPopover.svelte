@@ -7,13 +7,13 @@
   import type { FleetSkillMeta } from "@cawco/core";
   import { tick } from "svelte";
   import { toast } from "svelte-sonner";
-  import { unfold } from "$lib/cawco/motion/fold.svelte";
-  import { closeInto } from "$lib/cawco/motion/share.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
+  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
+  import { closeInto } from "#lib/cawco/motion/share.svelte.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
-  import * as Popover from "$lib/components/ui/popover";
-  import { IconPlus } from "$lib/icons";
+  import * as Popover from "#lib/components/ui/popover/index.js";
+  import { IconPlus } from "#lib/icons.js";
   import {
     formatBytes,
     normalizeSkillSource,

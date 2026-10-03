@@ -4,7 +4,7 @@
    * onto a second line rather than running off a narrow screen.
    */
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
-  import * as ToggleGroup from "$lib/components/ui/toggle-group";
+  import * as ToggleGroup from "#lib/components/ui/toggle-group/index.js";
 
   let {
     label,

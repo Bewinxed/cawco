@@ -10,9 +10,9 @@
    * stale. Live: the readings are the client's, which the hub's `usage`
    * frame keeps current.
    */
-  import { Button } from "$lib/components/ui/button";
-  import { Skeleton } from "$lib/components/ui/skeleton";
-  import { IconKey } from "$lib/icons";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { IconKey } from "#lib/icons.js";
   import Failed from "~icons/solar/close-circle-bold-duotone";
   import Attention from "~icons/solar/hand-shake-bold-duotone";
   import { cawco, type Machine } from "../client.svelte";

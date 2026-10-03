@@ -5,9 +5,9 @@
    * No branch API exists, so the design's branch panel is not rendered.
    */
   import type { FsEntry } from "@cawco/core";
-  import { CURVE, dur } from "$lib/cawco/motion/curves.svelte";
-  import { folds } from "$lib/cawco/motion/fold.svelte";
-  import { SectionHeader } from "$lib/components/ui/section-header";
+  import { CURVE, dur } from "#lib/cawco/motion/curves.svelte.js";
+  import { folds } from "#lib/cawco/motion/fold.svelte.js";
+  import { SectionHeader } from "#lib/components/ui/section-header/index.js";
   import GitHub from "~icons/logos/github-icon";
   import Up from "~icons/solar/alt-arrow-up-linear";
   import Left from "~icons/solar/arrow-left-linear";

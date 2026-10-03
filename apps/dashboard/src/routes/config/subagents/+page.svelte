@@ -5,33 +5,33 @@
     parseAgentFrontMatter,
   } from "@cawco/core";
   import { toast } from "svelte-sonner";
-  import { cawco } from "$lib/cawco/client.svelte";
-  import RowList from "$lib/cawco/config/RowList.svelte";
-  import SectionFrame from "$lib/cawco/config/SectionFrame.svelte";
-  import SectionRow from "$lib/cawco/config/SectionRow.svelte";
-  import { sectionOf } from "$lib/cawco/config/sections";
-  import { configStore, upsert } from "$lib/cawco/config/store.svelte";
-  import { confirm } from "$lib/cawco/confirm.svelte";
+  import { cawco } from "#lib/cawco/client.svelte.js";
+  import RowList from "#lib/cawco/config/RowList.svelte";
+  import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
+  import SectionRow from "#lib/cawco/config/SectionRow.svelte";
+  import { sectionOf } from "#lib/cawco/config/sections.js";
+  import { configStore, upsert } from "#lib/cawco/config/store.svelte.js";
+  import { confirm } from "#lib/cawco/confirm.svelte.js";
   import {
     type DiscoveredAgent,
     discoverAgents,
     pushAgents,
     removeAgent,
     saveAgent,
-  } from "$lib/cawco/fleet";
-  import OsMark from "$lib/cawco/OsMark.svelte";
-  import { orderMachines } from "$lib/cawco/rail.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import { EmptyState } from "$lib/components/ui/empty";
-  import { SectionHeader } from "$lib/components/ui/section-header";
-  import { Spinner } from "$lib/components/ui/spinner";
+  } from "#lib/cawco/fleet.js";
+  import OsMark from "#lib/cawco/OsMark.svelte";
+  import { orderMachines } from "#lib/cawco/rail.svelte.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { EmptyState } from "#lib/components/ui/empty/index.js";
+  import { SectionHeader } from "#lib/components/ui/section-header/index.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
   import {
     IconDownload,
     IconLaptop,
     IconPlus,
     IconSubagent,
     IconTrash,
-  } from "$lib/icons";
+  } from "#lib/icons.js";
 
   /**
    * Subagents, fleet-wide: define one and it lands in every machine's

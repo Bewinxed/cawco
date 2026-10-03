@@ -33,9 +33,9 @@
   import type { Component } from "svelte";
   import type { SVGAttributes } from "svelte/elements";
   import { TextMorph } from "torph/svelte";
-  import { CURVE, dur } from "$lib/cawco/motion/curves.svelte";
-  import { Spinner } from "$lib/components/ui/spinner";
-  import { IconTick } from "$lib/icons";
+  import { CURVE, dur } from "#lib/cawco/motion/curves.svelte.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import { IconTick } from "#lib/icons.js";
 
   let {
     label,

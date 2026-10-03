@@ -6,9 +6,9 @@
    */
   import type { Component, Snippet } from "svelte";
   import type { SVGAttributes } from "svelte/elements";
-  import PendingContent from "$lib/components/ui/button/pending-content.svelte";
-  import { PendingSelect } from "$lib/components/ui/button/pending-select.svelte";
-  import { cn } from "$lib/utils.js";
+  import PendingContent from "#lib/components/ui/button/pending-content.svelte";
+  import { PendingSelect } from "#lib/components/ui/button/pending-select.svelte.js";
+  import { cn } from "#lib/utils.js";
   import Item from "./dropdown-menu-item.svelte";
 
   let {

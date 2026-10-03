@@ -1,6 +1,6 @@
 import type { TranscriptPage } from "@cawco/core";
-import { transcriptUrl } from "$lib/cawco/links";
-import { runIdOf } from "$lib/cawco/workflow-runs";
+import { transcriptUrl } from "#lib/cawco/links.js";
+import { runIdOf } from "#lib/cawco/workflow-runs.js";
 import type { PageServerLoad } from "./$types";
 
 /**

@@ -1,22 +1,22 @@
 <script lang="ts">
   import "../app.css";
-  import "$lib/theme.svelte";
+  import "#lib/theme.svelte.js";
   import type { Snippet } from "svelte";
   import { onMount } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import { onNavigate } from "$app/navigation";
-  import { ensureConnected } from "$lib/cawco/client.svelte";
-  import { GROUPS } from "$lib/cawco/config/sections";
-  import { PREFETCHES as CAW_PREFETCHES } from "$lib/cawco/home/Caw.svelte";
-  import { restWhenHidden } from "$lib/cawco/motion/rest";
-  import { leaving, plan, route } from "$lib/cawco/motion/route.svelte";
-  import { departAll } from "$lib/cawco/motion/share.svelte";
-  import Shell from "$lib/cawco/Shell.svelte";
-  import { tallestComposer } from "$lib/cawco/transcript/composer-presence.svelte";
-  import { workspace } from "$lib/cawco/workspace/workspace.svelte";
-  import { Toaster } from "$lib/components/ui/sonner";
-  import { NARROW_QUERY } from "$lib/hooks/is-mobile.svelte";
-  import { enableLongPressMenus } from "$lib/utils/longpress";
+  import { ensureConnected } from "#lib/cawco/client.svelte.js";
+  import { GROUPS } from "#lib/cawco/config/sections.js";
+  import { PREFETCHES as CAW_PREFETCHES } from "#lib/cawco/home/Caw.svelte";
+  import { restWhenHidden } from "#lib/cawco/motion/rest.js";
+  import { leaving, plan, route } from "#lib/cawco/motion/route.svelte.js";
+  import { departAll } from "#lib/cawco/motion/share.svelte.js";
+  import Shell from "#lib/cawco/Shell.svelte";
+  import { tallestComposer } from "#lib/cawco/transcript/composer-presence.svelte.js";
+  import { workspace } from "#lib/cawco/workspace/workspace.svelte.js";
+  import { Toaster } from "#lib/components/ui/sonner/index.js";
+  import { NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
+  import { enableLongPressMenus } from "#lib/utils/longpress.js";
   import type { LayoutServerData } from "./$types";
 
   let { children, data }: { children: Snippet; data: LayoutServerData } =
@@ -40,9 +40,9 @@
   );
   const toastOffset = $derived(
     composerLift > 0
-      ? {
+    ? {
           bottom: `calc(var(--space-4) + env(safe-area-inset-bottom) + ${composerLift}px + var(--space-3))`,
-        }
+    }
       : undefined
   );
 
@@ -70,6 +70,8 @@
   // instant: the workspace store shows a pane and writes the URL with
   // `pushState`, which runs no navigation at all.
   onNavigate((navigation) => {
+    if (navigation.shallow) return;
+
     if (!(navigation.from && navigation.to)) {
       return;
     }
@@ -92,7 +94,7 @@
   <!-- Caw's runtime and his waiting file go to the HTTP cache at idle
        priority, so a wait that outlasts its grace shows him without fetching. -->
   {#each CAW_PREFETCHES as href (href)}
-    <link crossorigin="anonymous" {href} rel="prefetch">
+    <link crossorigin="anonymous" href={href} rel="prefetch" />
   {/each}
 </svelte:head>
 

@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { HTMLTableAttributes } from "svelte/elements";
-  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
-  import { cn, type WithElementRef } from "$lib/utils.js";
+  import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
+  import { cn, type WithElementRef } from "#lib/utils.js";
 
   let {
     ref = $bindable(null),

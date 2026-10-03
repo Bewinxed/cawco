@@ -1,6 +1,6 @@
 <script lang="ts">
   import { PaneResizer, type PaneResizerProps } from "paneforge";
-  import { cn, type WithoutChildrenOrChild } from "$lib/utils.js";
+  import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
 
   let {
     ref = $bindable(null),

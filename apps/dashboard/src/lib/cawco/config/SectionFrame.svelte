@@ -13,11 +13,11 @@
   import { type Snippet, untrack } from "svelte";
   import { fade } from "svelte/transition";
   import { page } from "$app/state";
-  import { appear, dur, easeOut } from "$lib/cawco/motion/curves.svelte";
-  import { morph } from "$lib/cawco/motion/morph.svelte";
+  import { appear, dur, easeOut } from "#lib/cawco/motion/curves.svelte.js";
+  import { morph } from "#lib/cawco/motion/morph.svelte.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
-  import * as Alert from "$lib/components/ui/alert";
-  import { IconWarningTriangle } from "$lib/icons";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import { IconWarningTriangle } from "#lib/icons.js";
   import { cawco } from "../client.svelte";
   import { type Cards, rememberCard } from "./cards";
   import { hubDown } from "./hub.svelte";

@@ -25,15 +25,15 @@
    * `.hitl`.
    */
   import { onMount, untrack } from "svelte";
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   import {
     IconArrowUp,
     IconCheck,
     IconClose,
     IconShield,
     IconTick,
-  } from "$lib/icons";
-  import { isTyping } from "$lib/utils/typing";
+  } from "#lib/icons.js";
+  import { isTyping } from "#lib/utils/typing.js";
   import {
     cawco,
     commandRecord,

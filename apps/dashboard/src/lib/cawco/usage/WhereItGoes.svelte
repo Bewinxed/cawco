@@ -22,12 +22,12 @@
    */
   import type { UsageSummary, UsageSummaryRow } from "@cawco/core";
   import { flushSync } from "svelte";
-  import { Button } from "$lib/components/ui/button";
-  import { TabItem, Tabs, TabsList } from "$lib/components/ui/fluid-tabs";
-  import { Skeleton } from "$lib/components/ui/skeleton";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { TabItem, Tabs, TabsList } from "#lib/components/ui/fluid-tabs/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as Tooltip from "$lib/components/ui/tooltip";
-  import { IconRefresh } from "$lib/icons";
+  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
+  import { IconRefresh } from "#lib/icons.js";
   import { cawco } from "../client.svelte";
   import { type Arrival, planRelay, type RelayLine } from "../home/relay-plan";
   import { conversationHref } from "../links";

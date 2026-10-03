@@ -33,10 +33,10 @@
    */
   import { flushSync, onDestroy, setContext, tick, untrack } from "svelte";
   import { Virtualizer, type VirtualizerHandle } from "virtua/svelte";
-  import { browser } from "$app/environment";
-  import { describeTool } from "$lib/components/features/tool-cards/descriptors";
-  import { EmptyState } from "$lib/components/ui/empty";
-  import { IconChat } from "$lib/icons";
+  import { browser } from '$app/env';
+  import { describeTool } from "#lib/components/features/tool-cards/descriptors.js";
+  import { EmptyState } from "#lib/components/ui/empty/index.js";
+  import { IconChat } from "#lib/icons.js";
   import { cawco, type SessionState } from "../client.svelte";
   import {
     crossIn,
@@ -78,39 +78,34 @@
   import ToolGroup from "./ToolGroup.svelte";
   import { trayNews, trayReveal } from "./tray.svelte";
 
-  let {
-    session,
-    visible,
-    focused,
-    agentName,
-    onlanded,
-    onshown,
-  }: {
+  let { session, visible, focused, agentName, onlanded, onshown
+
+  /**
+   * Whether this transcript is on screen at all. Governs how OFTEN rows are
+   * built: a pane nobody can see reads its session only at the scheduler's
+   * slow tier, and never in the flush that brings it on screen.
+   */
+  /**
+   * Whether this is the transcript being worked in. Governs how EAGERLY
+   * rows are rebuilt, and who gets to ride the tail and announce.
+   *
+   * Defaults to `visible`, so the single-pane case — one transcript, on
+   * screen, being read — behaves exactly as it always has.
+   */
+  /** Optional callback when the transcript first renders content. */
+  /**
+   * Told whether this transcript's list is drawn (`shown`, below), and told
+   * false when this transcript goes: the pane's placeholder stands over it
+   * exactly while it is not.
+   */
+   }: { 
     session: SessionState;
-    /**
-     * Whether this transcript is on screen at all. Governs how OFTEN rows are
-     * built: a pane nobody can see reads its session only at the scheduler's
-     * slow tier, and never in the flush that brings it on screen.
-     */
     visible: boolean;
-    /**
-     * Whether this is the transcript being worked in. Governs how EAGERLY
-     * rows are rebuilt, and who gets to ride the tail and announce.
-     *
-     * Defaults to `visible`, so the single-pane case — one transcript, on
-     * screen, being read — behaves exactly as it always has.
-     */
     focused?: boolean;
     agentName: string;
-    /** Optional callback when the transcript first renders content. */
     onlanded?: () => void;
-    /**
-     * Told whether this transcript's list is drawn (`shown`, below), and told
-     * false when this transcript goes: the pane's placeholder stands over it
-     * exactly while it is not.
-     */
-    onshown?: (shown: boolean) => void;
-  } = $props();
+    onshown?: (shown: boolean) => void
+   } = $props();
 
   setContext("cawco:machine", () => session.machineId);
 
@@ -211,7 +206,7 @@
   let seenFocused = false;
   let rises = 0;
   const risen = $derived.by(() => {
-    if ((visible && !seenVisible) || (isFocused && !seenFocused)) {
+    if (visible && !seenVisible || isFocused && !seenFocused) {
       rises += 1;
     }
     seenVisible = visible;
@@ -349,12 +344,8 @@
   const printOf = (): string => {
     const settled = queuedFrom(session.messages);
     const last = session.messages[settled - 1];
-    return (
-      `${arrayOf(session.messages)}:${session.messages.length}:${settled}:${last?.id ?? ""}:${session.streaming.length}:` +
-      `${session.thinkingStream.length}:${session.busy ? 1 : 0}:${session.pending.map((ask) => `${ask.requestId}${ask.routedTo ?? ""}`).join(",")}:${session.permissionMode}:` +
-      `${session.openBlock}:${session.thinkingClosing}:${session.currentTool?.toolId ?? ""}:${session.sdkStatus}:` +
-      `${last?.metadata?.sendFailed ?? ""}`
-    );
+
+    return `${arrayOf(session.messages)}:${session.messages.length}:${settled}:${last?.id ?? ""}:${session.streaming.length}:` + `${session.thinkingStream.length}:${session.busy ? 1 : 0}:${session.pending.map((ask) => `${ask.requestId}${ask.routedTo ?? ""}`).join(",")}:${session.permissionMode}:` + `${session.openBlock}:${session.thinkingClosing}:${session.currentTool?.toolId ?? ""}:${session.sdkStatus}:` + `${last?.metadata?.sendFailed ?? ""}`;
   };
   /** Dev-only: the gate that catches an accidentally tracked session read. */
   const countBuild = (): void => {
@@ -814,10 +805,8 @@
       return false;
     }
     const to = index.get(prior[from].key) as number;
-    return (
-      next.length - to === prior.length - from &&
-      prior.slice(from).every((row, i) => next[to + i].key === row.key)
-    );
+
+    return next.length - to === prior.length - from && prior.slice(from).every((row, i) => next[to + i].key === row.key);
   }
 
   /**
@@ -940,9 +929,7 @@
   }
 
   /** Whether `row` can leave the list: a tail row, or a failed send its retry replaces. */
-  const canLeave = (row: Row): boolean =>
-    TAIL_KINDS.has(row.kind) ||
-    (row.kind === "single" && row.message.state === "failed");
+  const canLeave = (row: Row): boolean => TAIL_KINDS.has(row.kind) || row.kind === "single" && row.message.state === "failed";
 
   /**
    * Whether the row `key` has left the list, rather than become something
@@ -954,11 +941,8 @@
     if (row.kind === "single") {
       return untrack(() => session.records[key]?.state === "replaced");
     }
-    return !(
-      (ended?.key === key && ended.into !== null) ||
-      (row.kind === "livetool" &&
-        untrack(() => called(session, row.glance.toolId)))
-    );
+
+    return !(ended?.key === key && ended.into !== null || row.kind === "livetool" && untrack(() => called(session, row.glance.toolId)));
   }
 
   const presentation = $derived.by(() => {
@@ -1483,11 +1467,8 @@
   /** Whether that row still stands where it stood in the view, at `top`. */
   function stillAt(was: { key: string; at: number }, top: number): boolean {
     const index = renderedRows.findIndex((row) => row.key === was.key);
-    return (
-      !!list &&
-      index >= 0 &&
-      Math.abs(listStart + list.getItemOffset(index) - top - was.at) <= 1
-    );
+
+    return !!list && index >= 0 && Math.abs(listStart + list.getItemOffset(index) - top - was.at) <= 1;
   }
   function onscroll(): void {
     if (!(scroller && listing && landed)) {
@@ -1533,12 +1514,9 @@
     // 2,800px short for good. Anything
     // that moves what is on screen is the READER: wheel, scrollbar drag,
     // keyboard, momentum, anything.
-    const clamped =
-      shrank && scroller.scrollTop >= height - scroller.clientHeight - 1;
-    if (
-      (lastWrite !== null && Math.abs(scroller.scrollTop - lastWrite) <= 1) ||
-      clamped
-    ) {
+    const clamped = shrank && scroller.scrollTop >= height - scroller.clientHeight - 1;
+
+    if (lastWrite !== null && Math.abs(scroller.scrollTop - lastWrite) <= 1 || clamped) {
       return;
     }
     if (was && stillAt(was, lastTop)) {
@@ -1875,12 +1853,9 @@
     // (see `SessionPane`): the store's session replaces them the moment its
     // read is in, with the turn in flight on the end.
     const store = cawco.session(session.instanceId);
-    const reading =
-      session.loading ||
-      session.hydrating ||
-      (store !== null &&
-        store !== session &&
-        (store.loading || store.hydrating));
+
+    const reading = session.loading || session.hydrating || store !== null && store !== session && (store.loading || store.hydrating);
+
     if (shown || reading || !(landed && node && container)) {
       return;
     }
@@ -2070,7 +2045,7 @@
     if (!landed || atBottom) {
       // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — this effect does not await the land, it only arms it.
       void tick().then(() => {
-        if (!landed || (active && atBottom)) {
+        if (!landed || active && atBottom) {
           land();
         }
       });
@@ -2110,16 +2085,8 @@
     if (row.kind === "single") {
       return !NO_RAIL.has(row.message.type);
     }
-    return (
-      row.kind === "tools" ||
-      row.kind === "harness" ||
-      row.kind === "thinking" ||
-      (row.kind === "live" && !row.text) ||
-      row.kind === "livetool" ||
-      row.kind === "subagent" ||
-      row.kind === "delegate" ||
-      row.kind === "run"
-    );
+
+    return row.kind === "tools" || row.kind === "harness" || row.kind === "thinking" || row.kind === "live" && !row.text || row.kind === "livetool" || row.kind === "subagent" || row.kind === "delegate" || row.kind === "run";
   }
 
   /**
@@ -2138,9 +2105,8 @@
     if (m.type === "result.success") {
       return true;
     }
-    return (
-      (m.type === "assistant" || m.type === "thinking") && !m.content.trim()
-    );
+
+    return (m.type === "assistant" || m.type === "thinking") && !m.content.trim();
   }
 
   /**
@@ -2252,11 +2218,7 @@
     // The reader's own message, sent from the composer below, is its text
     // landing from the field in the one row the send drew, keyed by the
     // message's id: no entrance of the row's own.
-    if (
-      ((row.kind === "single" && row.message.type === "user") ||
-        row.kind === "queued") &&
-      waiting(`sent:${row.message.id}`)
-    ) {
+    if ((row.kind === "single" && row.message.type === "user" || row.kind === "queued") && waiting(`sent:${row.message.id}`)) {
       return "emerge";
     }
     return "draw";
@@ -2587,9 +2549,9 @@
 <div
   aria-label="Session transcript"
   class="tr tx-columns"
-  {onanimationend}
-  {onanimationstart}
-  {onscroll}
+  onanimationend={onanimationend}
+  onanimationstart={onanimationstart}
+  onscroll={onscroll}
   role="log"
   bind:this={scroller}
 >
@@ -2632,14 +2594,14 @@
     {@attach wholeHeight}
   >
     <Virtualizer
-      {cache}
+      cache={cache}
       data={renderedRows}
       getKey={(r) => r.key}
       itemSize={ROW_ESTIMATE}
-      {keepMounted}
+      keepMounted={keepMounted}
       scrollRef={scroller}
       shift={built.shifted}
-      {ssrCount}
+      ssrCount={ssrCount}
       startMargin={spare}
       bind:this={
         () => list,
@@ -2660,11 +2622,11 @@
             <!-- The live row, and the answer it streamed once that has
                  landed (rows.ts `keepLive`): one branch, so the settle is
                  the same LiveRow updating, not a MessageRow mounting. -->
-            {#if row.kind === 'live' || (row.kind === 'single' && row.streamed)}
-              <LiveRow {agentName} announce={active} {row} />
+            {#if row.kind === 'live' || row.kind === 'single' && row.streamed}
+              <LiveRow agentName={agentName} announce={active} row={row} />
             {:else if row.kind === 'single' || row.kind === 'queued'}
               <MessageRow
-                {agentName}
+                agentName={agentName}
                 folding={ticket?.kind === 'fold'}
                 grouped={row.grouped}
                 message={row.message}

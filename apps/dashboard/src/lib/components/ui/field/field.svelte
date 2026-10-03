@@ -1,6 +1,6 @@
 <script lang="ts" module>
   import type { VariantProps } from "tailwind-variants";
-  import { tv } from "$lib/utils.js";
+  import { tv } from "#lib/utils.js";
 
   export const fieldVariants = tv({
     base: "group/field flex w-full gap-3 data-[invalid=true]:text-destructive",
@@ -26,7 +26,7 @@
 
 <script lang="ts">
   import type { HTMLAttributes } from "svelte/elements";
-  import { cn, type WithElementRef } from "$lib/utils.js";
+  import { cn, type WithElementRef } from "#lib/utils.js";
 
   let {
     ref = $bindable(null),

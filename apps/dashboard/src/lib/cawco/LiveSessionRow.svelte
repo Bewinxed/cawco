@@ -27,8 +27,8 @@
 <script lang="ts">
   /** One live session, as the session index and a project home both list it. */
   import { TextMorph } from "torph/svelte";
-  import { Badge } from "$lib/components/ui/badge";
-  import { formatDuration } from "$lib/utils/time";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { formatDuration } from "#lib/utils/time.js";
   import { FAILED_HINT, SLEEPING_HINT, UNKNOWN_HINT } from "./activity";
   import {
     cawco,

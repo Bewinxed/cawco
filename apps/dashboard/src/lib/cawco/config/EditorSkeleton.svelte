@@ -8,9 +8,9 @@
    */
   import { goto } from "$app/navigation";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
-  import * as Alert from "$lib/components/ui/alert";
-  import { Skeleton } from "$lib/components/ui/skeleton";
-  import { IconWarningTriangle } from "$lib/icons";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { IconWarningTriangle } from "#lib/icons.js";
   import EditorFrame from "./EditorFrame.svelte";
   import type { ConfigSection } from "./sections";
 

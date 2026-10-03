@@ -6,8 +6,8 @@
    * (motion/rows.svelte.ts).
    */
   import type { Snippet } from "svelte";
-  import { reflow } from "$lib/cawco/motion/rows.svelte";
-  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
+  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
+  import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
 
   let { label, children }: { label: string; children: Snippet } = $props();
 </script>

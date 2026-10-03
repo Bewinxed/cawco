@@ -1,14 +1,14 @@
 <script lang="ts">
-  import { reflow } from "$lib/cawco/motion/rows.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
+  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
   /**
    * The env-vars and headers editor: a key and a value per line, with a blank
    * line always waiting at the bottom so adding one is typing, not clicking.
    * A line that arrives or is removed goes through reflow: it opens and
    * fades in, or closes and fades out, the lines after it sliding.
    */
-  import { IconClose } from "$lib/icons";
+  import { IconClose } from "#lib/icons.js";
 
   let {
     rows = $bindable(),

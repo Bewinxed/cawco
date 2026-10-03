@@ -1,6 +1,6 @@
 <script lang="ts">
-  import Tip from "$lib/components/ui/tooltip/tip.svelte";
-  import { IconClose, IconWindow } from "$lib/icons";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
+  import { IconClose, IconWindow } from "#lib/icons.js";
   import { dur } from "../motion/curves.svelte";
   import { land } from "../motion/share.svelte";
   import {

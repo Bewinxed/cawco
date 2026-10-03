@@ -6,9 +6,9 @@
    * going never moves the figure or the tile's height.
    */
   import { TextMorph } from "torph/svelte";
-  import { CURVE, morphMs } from "$lib/cawco/motion/curves.svelte";
+  import { CURVE, morphMs } from "#lib/cawco/motion/curves.svelte.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as Card from "$lib/components/ui/card";
+  import * as Card from "#lib/components/ui/card/index.js";
 
   interface Props {
     label: string;

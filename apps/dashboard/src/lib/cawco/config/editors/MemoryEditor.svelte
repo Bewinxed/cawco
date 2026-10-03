@@ -3,21 +3,21 @@
   import { untrack } from "svelte";
   import { toast } from "svelte-sonner";
   import { goto } from "$app/navigation";
-  import { crossIn, crossOut } from "$lib/cawco/motion/curves.svelte";
-  import { unfold } from "$lib/cawco/motion/fold.svelte";
-  import { morph } from "$lib/cawco/motion/morph.svelte";
-  import { reflow } from "$lib/cawco/motion/rows.svelte";
-  import DiffView from "$lib/components/features/DiffView.svelte";
-  import MarkdownEditor from "$lib/components/features/MarkdownEditor.svelte";
-  import { Button } from "$lib/components/ui/button";
+  import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
+  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
+  import { morph } from "#lib/cawco/motion/morph.svelte.js";
+  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
+  import DiffView from "#lib/components/features/DiffView.svelte";
+  import MarkdownEditor from "#lib/components/features/MarkdownEditor.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
   import {
     MachineRow,
     machineHue,
     machineIcon,
-  } from "$lib/components/ui/machine-row";
-  import { Spinner } from "$lib/components/ui/spinner";
-  import { IconDocument, IconHistory, IconLaptop } from "$lib/icons";
-  import { formatDistanceToNow } from "$lib/utils/time";
+  } from "#lib/components/ui/machine-row/index.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import { IconDocument, IconHistory, IconLaptop } from "#lib/icons.js";
+  import { formatDistanceToNow } from "#lib/utils/time.js";
   import { cawco, type Machine } from "../../client.svelte";
   import { confirm } from "../../confirm.svelte";
   import {

@@ -4,7 +4,7 @@
  * block was built by the hub (`TranscriptBuilder`, @cawco/core).
  */
 import { getToolGlance } from "@cawco/core";
-import type { SubagentState } from "$lib/utils/flow-types";
+import type { SubagentState } from "#lib/utils/flow-types.js";
 import type { JsonValue, Message } from "../types";
 
 export const SHOW_IMAGE_TOOLS = new Set([

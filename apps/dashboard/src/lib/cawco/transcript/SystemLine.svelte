@@ -1,13 +1,13 @@
 <script lang="ts">
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
-  import * as Collapsible from "$lib/components/ui/collapsible";
+  import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import {
     IconChevronRight,
     IconError,
     IconInfo,
     IconStop,
     IconTerminal,
-  } from "$lib/icons";
+  } from "#lib/icons.js";
   /**
    * The quiet ledger's non-turn lines: a command's output in a recessed well, a
    * system note folded on the rail, and a failure or refusal as a named card

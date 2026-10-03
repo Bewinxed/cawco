@@ -3,7 +3,7 @@
    * The project's mark: the folder on its hued tile, as the rail's projects
    * list draws it. A session's mark is its own (SessionMark).
    */
-  import { IconFolder } from "$lib/icons";
+  import { IconFolder } from "#lib/icons.js";
   import type { MarkHue } from "./mark";
 
   let { hue }: { hue: MarkHue } = $props();

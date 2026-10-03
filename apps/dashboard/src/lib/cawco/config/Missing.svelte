@@ -1,7 +1,7 @@
 <script lang="ts">
   /** What an editor URL shows when the row it names is not in the list. */
-  import { Button } from "$lib/components/ui/button";
-  import { EmptyState } from "$lib/components/ui/empty";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { EmptyState } from "#lib/components/ui/empty/index.js";
   import SectionFrame from "./SectionFrame.svelte";
   import type { ConfigSection } from "./sections";
 

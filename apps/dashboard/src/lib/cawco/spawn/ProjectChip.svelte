@@ -1,7 +1,7 @@
 <script lang="ts">
   import PendingContent, {
     whileIdle,
-  } from "$lib/components/ui/button/pending-content.svelte";
+  } from "#lib/components/ui/button/pending-content.svelte";
   /** Project chip + popover (§1.4, §2.7): pick, clear, or create a project. */
   import Add from "~icons/solar/add-circle-bold-duotone";
   import Down from "~icons/solar/alt-arrow-down-linear";

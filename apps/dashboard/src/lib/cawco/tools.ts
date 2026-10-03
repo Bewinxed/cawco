@@ -4,7 +4,7 @@
  * knows a tool by name — the catalog is data the hub hands over.
  */
 import type { ToolPolicy, ToolSpec, ToolStatus } from "@cawco/core";
-import { INSTALL_TIMEOUT_MS } from "$lib/config";
+import { INSTALL_TIMEOUT_MS } from "#lib/config.js";
 import { machineControl } from "./client.svelte";
 
 /** What `GET /api/tools` answers with. */

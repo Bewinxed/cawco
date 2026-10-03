@@ -1,7 +1,7 @@
 <script lang="ts">
   import { ContextMenu as ContextMenuPrimitive } from "bits-ui";
-  import { IconChevronRight } from "$lib/icons";
-  import { cn, type WithoutChild } from "$lib/utils.js";
+  import { IconChevronRight } from "#lib/icons.js";
+  import { cn, type WithoutChild } from "#lib/utils.js";
 
   let {
     ref = $bindable(null),

@@ -13,7 +13,7 @@
  * - `answer`   NeedsCard.svelte
  * - `finished` home.svelte.ts
  */
-import { browser, dev } from "$app/environment";
+import { browser, dev } from "$app/env";
 
 export interface Choices {
   /** One answer form on the needs-you cards: (a) Approve/Deny, (b) open only. */

@@ -1,6 +1,6 @@
 <script lang="ts" module>
   import type { VariantProps } from "tailwind-variants";
-  import { tv } from "$lib/utils.js";
+  import { tv } from "#lib/utils.js";
 
   export const toggleVariants = tv({
     base: "group/toggle touch-hit inline-flex items-center justify-center gap-1 whitespace-nowrap rounded-sm font-medium text-[var(--ink-strong)] text-label [transition:var(--transition-control),transform_var(--dur-toggle)_var(--ease-out)] hover:bg-[var(--surface-hover)] disabled:pointer-events-none disabled:opacity-50 aria-pressed:bg-[var(--surface-fill)] data-[state=on]:bg-[var(--surface-fill)] motion-safe:active:not-disabled:[transform:scale(var(--press-scale))] [&_svg:not([class*='size-'])]:size-4 [&_svg]:pointer-events-none [&_svg]:shrink-0",
@@ -30,7 +30,7 @@
 
 <script lang="ts">
   import { Toggle as TogglePrimitive } from "bits-ui";
-  import { cn } from "$lib/utils.js";
+  import { cn } from "#lib/utils.js";
 
   let {
     ref = $bindable(null),

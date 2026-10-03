@@ -2,7 +2,7 @@
   /** Footer (§1.9): Cancel and Start. Lifetime lives in the composer's chips. */
   import PendingContent, {
     whileIdle,
-  } from "$lib/components/ui/button/pending-content.svelte";
+  } from "#lib/components/ui/button/pending-content.svelte";
 
   let {
     oncancel,

@@ -8,9 +8,9 @@
   import { toast } from "svelte-sonner";
   import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { appear } from "$lib/cawco/motion/curves.svelte";
-  import { Textarea } from "$lib/components/ui/textarea";
-  import { IconDocument } from "$lib/icons";
+  import { appear } from "#lib/cawco/motion/curves.svelte.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
+  import { IconDocument } from "#lib/icons.js";
   import { confirm } from "../../confirm.svelte";
   import { removeAgent, saveAgent } from "../../fleet";
   import { keepDraft } from "../drafts.svelte";

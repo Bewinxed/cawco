@@ -1,7 +1,7 @@
 <script lang="ts">
   /** One stored session from `listSessions`, linking to its read-only transcript. */
   import type { NeutralSessionInfo } from "@cawco/core";
-  import { formatDistanceToNow } from "$lib/utils/time";
+  import { formatDistanceToNow } from "#lib/utils/time.js";
   import { cawco } from "./client.svelte";
   import { catalogTitle, conversationHref } from "./links";
   import { markHue, sessionSprite } from "./mark";

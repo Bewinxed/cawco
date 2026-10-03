@@ -23,12 +23,12 @@
     dur,
     easeOut,
     motionOk,
-  } from "$lib/cawco/motion/curves.svelte";
-  import { land } from "$lib/cawco/motion/share.svelte";
-  import { buttonVariants } from "$lib/components/ui/button";
+  } from "#lib/cawco/motion/curves.svelte.js";
+  import { land } from "#lib/cawco/motion/share.svelte.js";
+  import { buttonVariants } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
-  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
-  import { IconMore, IconTrash } from "$lib/icons";
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
+  import { IconMore, IconTrash } from "#lib/icons.js";
   import { cawco } from "../client.svelte";
   import { type Cards, rememberCard } from "./cards";
   import EditorFooter from "./EditorFooter.svelte";

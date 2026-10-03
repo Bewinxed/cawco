@@ -11,7 +11,7 @@
    */
   import type { Component, Snippet } from "svelte";
   import type { HTMLAttributes } from "svelte/elements";
-  import { cn } from "$lib/utils";
+  import { cn } from "#lib/utils.js";
   import { useList, useTabs } from "./context.svelte";
 
   let {

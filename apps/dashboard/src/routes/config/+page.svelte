@@ -1,5 +1,5 @@
 <script lang="ts">
-  import ConfigRail from "$lib/cawco/config/ConfigRail.svelte";
+  import ConfigRail from "#lib/cawco/config/ConfigRail.svelte";
 </script>
 
 <svelte:head><title>Configure · CawCo</title></svelte:head>

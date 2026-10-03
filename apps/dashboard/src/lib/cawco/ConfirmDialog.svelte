@@ -9,8 +9,8 @@
    * succeeds closes it.
    */
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
-  import { Button } from "$lib/components/ui/button";
+  import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import { confirmHost } from "./confirm.svelte";
   import { unfold } from "./motion/fold.svelte";
 

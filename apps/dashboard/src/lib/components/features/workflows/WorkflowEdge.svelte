@@ -5,7 +5,7 @@
     type EdgeProps,
     getSmoothStepPath,
   } from "@xyflow/svelte";
-  import { IconTrash } from "$lib/icons";
+  import { IconTrash } from "#lib/icons.js";
 
   let {
     id,

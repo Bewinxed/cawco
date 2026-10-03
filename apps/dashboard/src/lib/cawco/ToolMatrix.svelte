@@ -2,24 +2,24 @@
   import type { ToolPolicy, ToolSpec } from "@cawco/core";
   import { machineLabel } from "@cawco/core";
   import { toast } from "svelte-sonner";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Button } from "$lib/components/ui/button";
-  import { EmptyState } from "$lib/components/ui/empty";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { EmptyState } from "#lib/components/ui/empty/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
-  import * as Popover from "$lib/components/ui/popover";
-  import { Spinner } from "$lib/components/ui/spinner";
-  import { Switch } from "$lib/components/ui/switch";
+  import * as Popover from "#lib/components/ui/popover/index.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
-  import * as Table from "$lib/components/ui/table";
+  import * as Table from "#lib/components/ui/table/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
-  import * as Tooltip from "$lib/components/ui/tooltip";
+  import * as Tooltip from "#lib/components/ui/tooltip/index.js";
   import {
     IconCheck,
     IconExternal,
     IconLaptop,
     IconServer,
     IconTerminal,
-  } from "$lib/icons";
+  } from "#lib/icons.js";
   import type { Machine } from "./client.svelte";
   import { addMachine } from "./join/join.svelte";
   import { machineOs } from "./machine";

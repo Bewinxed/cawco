@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { HTMLTextareaAttributes } from "svelte/elements";
-  import { autosize } from "$lib/cawco/motion/autosize.svelte";
-  import { cn, type WithElementRef, type WithoutChildren } from "$lib/utils.js";
+  import { autosize } from "#lib/cawco/motion/autosize.svelte.js";
+  import { cn, type WithElementRef, type WithoutChildren } from "#lib/utils.js";
 
   let {
     ref = $bindable(null),

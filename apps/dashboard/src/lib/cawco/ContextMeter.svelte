@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { NeutralStatus } from "@cawco/core";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
-  import * as Popover from "$lib/components/ui/popover";
+  import * as Popover from "#lib/components/ui/popover/index.js";
   import IconWindow from "~icons/solar/layers-minimalistic-bold-duotone";
   import IconCompact from "~icons/solar/magic-stick-3-bold-duotone";
   /**

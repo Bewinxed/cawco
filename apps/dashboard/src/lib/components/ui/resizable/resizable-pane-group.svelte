@@ -1,6 +1,6 @@
 <script lang="ts">
   import { PaneGroup, type PaneGroupProps } from "paneforge";
-  import { cn } from "$lib/utils.js";
+  import { cn } from "#lib/utils.js";
 
   let {
     ref = $bindable(null),

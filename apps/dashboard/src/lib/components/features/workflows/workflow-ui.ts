@@ -1,6 +1,6 @@
 import type { WorkflowGraph, WorkflowNode } from "@cawco/core";
 import { JEV_ANSWER_FIELDS, outcomeOnEveryPath } from "@cawco/core";
-import { newId } from "$lib/cawco/id";
+import { newId } from "#lib/cawco/id.js";
 import {
   IconBox,
   IconCpu,
@@ -11,7 +11,7 @@ import {
   IconToolQuestion,
   IconToolTodo,
   IconWorkflow,
-} from "$lib/icons";
+} from "#lib/icons.js";
 
 export const kinds = [
   {

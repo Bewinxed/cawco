@@ -8,17 +8,17 @@
   import type { Snippet } from "svelte";
   import { goto } from "$app/navigation";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
-  import { Button } from "$lib/components/ui/button";
+  import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as ContextMenu from "$lib/components/ui/context-menu";
+  import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import {
     IconArrowRight,
     IconExternal,
     IconFork,
     IconPenLine,
     IconTrash,
-  } from "$lib/icons";
+  } from "#lib/icons.js";
   import {
     cawco,
     deleteTranscript,

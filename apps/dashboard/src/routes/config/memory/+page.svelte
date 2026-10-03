@@ -1,34 +1,34 @@
 <script lang="ts">
-  import { cawco } from "$lib/cawco/client.svelte";
-  import { drafts } from "$lib/cawco/config/drafts.svelte";
+  import { cawco } from "#lib/cawco/client.svelte.js";
+  import { drafts } from "#lib/cawco/config/drafts.svelte.js";
   import {
     byteLength,
     fileHref,
     fileLabel,
     MAIN,
-  } from "$lib/cawco/config/memory";
-  import NewMemoryPopover from "$lib/cawco/config/NewMemoryPopover.svelte";
-  import RolloutChip from "$lib/cawco/config/RolloutChip.svelte";
-  import RowFaults from "$lib/cawco/config/RowFaults.svelte";
-  import RowList from "$lib/cawco/config/RowList.svelte";
-  import SectionFrame from "$lib/cawco/config/SectionFrame.svelte";
-  import SectionRow from "$lib/cawco/config/SectionRow.svelte";
-  import { sectionOf } from "$lib/cawco/config/sections";
-  import { configStore, upsert } from "$lib/cawco/config/store.svelte";
-  import { confirm } from "$lib/cawco/confirm.svelte";
-  import FleetFault from "$lib/cawco/FleetFault.svelte";
+  } from "#lib/cawco/config/memory.js";
+  import NewMemoryPopover from "#lib/cawco/config/NewMemoryPopover.svelte";
+  import RolloutChip from "#lib/cawco/config/RolloutChip.svelte";
+  import RowFaults from "#lib/cawco/config/RowFaults.svelte";
+  import RowList from "#lib/cawco/config/RowList.svelte";
+  import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
+  import SectionRow from "#lib/cawco/config/SectionRow.svelte";
+  import { sectionOf } from "#lib/cawco/config/sections.js";
+  import { configStore, upsert } from "#lib/cawco/config/store.svelte.js";
+  import { confirm } from "#lib/cawco/confirm.svelte.js";
+  import FleetFault from "#lib/cawco/FleetFault.svelte";
   import {
     type FleetMemoryDocRow,
     formatBytes,
     removeMemory,
     removeMemoryDoc,
-  } from "$lib/cawco/fleet";
-  import { causeOf } from "$lib/cawco/fleet-faults";
-  import { orderMachines } from "$lib/cawco/rail.svelte";
-  import { Input } from "$lib/components/ui/input";
-  import { SectionHeader } from "$lib/components/ui/section-header";
-  import { IconBook, IconTrash, IconWarningTriangle } from "$lib/icons";
-  import { formatDistanceToNow } from "$lib/utils/time";
+  } from "#lib/cawco/fleet.js";
+  import { causeOf } from "#lib/cawco/fleet-faults.js";
+  import { orderMachines } from "#lib/cawco/rail.svelte.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { SectionHeader } from "#lib/components/ui/section-header/index.js";
+  import { IconBook, IconTrash, IconWarningTriangle } from "#lib/icons.js";
+  import { formatDistanceToNow } from "#lib/utils/time.js";
 
   /**
    * The fleet's memory: the user CLAUDE.md every session loads flat, and the

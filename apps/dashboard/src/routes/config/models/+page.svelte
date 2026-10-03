@@ -1,29 +1,29 @@
 <script lang="ts">
   import { onMount } from "svelte";
   import { blur } from "svelte/transition";
-  import { replaceState } from "$app/navigation";
+  import { goto } from "$app/navigation";
   import { page } from "$app/state";
-  import Field from "$lib/cawco/config/Field.svelte";
-  import SectionFrame from "$lib/cawco/config/SectionFrame.svelte";
-  import SwitchField from "$lib/cawco/config/SwitchField.svelte";
-  import { sectionOf } from "$lib/cawco/config/sections";
-  import { dur, easeOut } from "$lib/cawco/motion/curves.svelte";
-  import { unfold } from "$lib/cawco/motion/fold.svelte";
+  import Field from "#lib/cawco/config/Field.svelte";
+  import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
+  import SwitchField from "#lib/cawco/config/SwitchField.svelte";
+  import { sectionOf } from "#lib/cawco/config/sections.js";
+  import { dur, easeOut } from "#lib/cawco/motion/curves.svelte.js";
+  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import {
     type OpenRouterState,
     saveSuggestSetting,
     suggestions,
-  } from "$lib/cawco/suggest.svelte";
+  } from "#lib/cawco/suggest.svelte.js";
   import {
     loadSupervisor,
     type SupervisorStatus,
     saveSupervisorConfig,
-  } from "$lib/cawco/supervisor";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { SectionHeader } from "$lib/components/ui/section-header";
-  import { IconGlobe, IconRules } from "$lib/icons";
-  import { formatDistanceToNow } from "$lib/utils/time";
+  } from "#lib/cawco/supervisor.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { SectionHeader } from "#lib/components/ui/section-header/index.js";
+  import { IconGlobe, IconRules } from "#lib/icons.js";
+  import { formatDistanceToNow } from "#lib/utils/time.js";
 
   /**
    * The models the hub itself talks to. OpenRouter is connected by OAuth
@@ -47,10 +47,10 @@
       if (!response.ok) {
         throw new Error(`the hub answered ${response.status}`);
       }
-      openrouter = (await response.json()) as OpenRouterState;
-      suggestions.enabled =
-        openrouter.connected && openrouter.suggestWhileTyping;
-    } catch (error) {
+
+      openrouter = await response.json() as OpenRouterState;
+      suggestions.enabled = openrouter.connected && openrouter.suggestWhileTyping;
+    } catch(error) {
       openrouterError = `Could not read the OpenRouter connection — ${error instanceof Error ? error.message : String(error)}.`;
     }
   }
@@ -68,7 +68,7 @@
       connecting = false;
       return;
     }
-    const { authUrl } = (await response.json()) as { authUrl: string };
+    const { authUrl } = await response.json() as { authUrl: string };
     location.href = authUrl;
   }
 
@@ -146,7 +146,7 @@
         enabled,
         baseUrl: baseUrl.trim(),
         model: model.trim(),
-        ...(apiKey === "" ? {} : { apiKey }),
+        ...apiKey === "" ? {} : { apiKey }
       });
       apiKey = "";
       await readSupervisor();
@@ -183,25 +183,25 @@
 
   const reach = $derived.by(
     (): { tone: "off" | "bad" | "ok"; text: string } => {
-      if (!supervisor?.status.configured) {
-        return {
-          tone: "off",
-          text: "Not configured. Set a server URL and a model to turn it on.",
-        };
-      }
-      const { status } = supervisor;
-      if (!status.reachable) {
-        return {
-          tone: "bad",
-          text: `The server at ${supervisor.config.baseUrl} did not answer.`,
-        };
-      }
+    if (!supervisor?.status.configured) {
       return {
-        tone: "ok",
-        text: status.resolvedModel
-          ? `The server answers, and runs ${status.resolvedModel}.`
-          : "The server answers.",
+        tone: "off",
+          text: "Not configured. Set a server URL and a model to turn it on.",
       };
+    }
+    const { status } = supervisor;
+    if (!status.reachable) {
+      return {
+        tone: "bad",
+          text: `The server at ${supervisor.config.baseUrl} did not answer.`,
+      };
+    }
+    return {
+      tone: "ok",
+      text: status.resolvedModel
+        ? `The server answers, and runs ${status.resolvedModel}.`
+          : "The server answers.",
+    };
     }
   );
 
@@ -213,7 +213,7 @@
     await exchange(code);
     const url = new URL(page.url);
     url.searchParams.delete("code");
-    replaceState(url, page.state);
+    goto(url, { shallow: true, replace: true, state: page.state });
   }
 
   onMount(() => {
@@ -231,9 +231,9 @@
 </script>
 
 <SectionFrame
-  problem={ready ? null : (openrouterError ?? supervisorError)}
+  problem={ready ? null : openrouterError ?? supervisorError}
   purpose={section.purpose}
-  {ready}
+  ready={ready}
   title={section.label}
 >
   <div class="group">

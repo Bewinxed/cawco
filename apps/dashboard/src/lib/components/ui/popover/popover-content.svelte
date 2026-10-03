@@ -1,8 +1,8 @@
 <script lang="ts">
   import { Popover as PopoverPrimitive } from "bits-ui";
   import type { ComponentProps } from "svelte";
-  import { morph } from "$lib/cawco/motion/morph.svelte";
-  import { cn, type WithoutChildrenOrChild } from "$lib/utils.js";
+  import { morph } from "#lib/cawco/motion/morph.svelte.js";
+  import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
   import PopoverPortal from "./popover-portal.svelte";
 
   let {

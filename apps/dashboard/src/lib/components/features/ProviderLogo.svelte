@@ -7,7 +7,7 @@
    * whatever it had been showing instead.
    */
   import type { Component } from "svelte";
-  import { providerOf } from "$lib/cawco/models.svelte";
+  import { providerOf } from "#lib/cawco/models.svelte.js";
   /*
    * Every mark here is square, and that is a hard requirement rather than a
    * coincidence: the caller sizes this with one number, so a mark whose viewBox

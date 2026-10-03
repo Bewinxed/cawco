@@ -9,7 +9,7 @@
    * The line truncates to fit; what is copied is always the whole of it, and
    * the whole of it is the box's title.
    */
-  import { UseClipboard } from "$lib/hooks/use-clipboard.svelte";
+  import { UseClipboard } from "#lib/hooks/use-clipboard.svelte.js";
   import Documents from "~icons/solar/documents-bold-duotone";
 
   let { text, label }: { text: string; label: string } = $props();

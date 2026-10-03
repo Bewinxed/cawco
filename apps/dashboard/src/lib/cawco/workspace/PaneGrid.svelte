@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { dur, ease, motionOk } from "$lib/cawco/motion/curves.svelte";
+  import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   /**
    * The grid: a tree of splits, drawn recursively.
    *
@@ -15,8 +15,8 @@
    * which reshapes the group, and then apply the old numbers to new children.
    */
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as Resizable from "$lib/components/ui/resizable";
-  import { IsCoarsePointer } from "$lib/hooks/is-mobile.svelte";
+  import * as Resizable from "#lib/components/ui/resizable/index.js";
+  import { IsCoarsePointer } from "#lib/hooks/is-mobile.svelte.js";
   import Self from "./PaneGrid.svelte";
   import PaneLeaf from "./PaneLeaf.svelte";
   import { type PaneNode, workspace } from "./workspace.svelte";

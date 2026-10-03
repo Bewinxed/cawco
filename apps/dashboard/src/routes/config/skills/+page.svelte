@@ -5,18 +5,18 @@
     MarketplacePluginInfo,
   } from "@cawco/core";
   import { toast } from "svelte-sonner";
-  import { cawco } from "$lib/cawco/client.svelte";
-  import FetchSkillPopover from "$lib/cawco/config/FetchSkillPopover.svelte";
-  import { hubDown } from "$lib/cawco/config/hub.svelte";
-  import LinkMarketplacePopover from "$lib/cawco/config/LinkMarketplacePopover.svelte";
-  import RolloutChip from "$lib/cawco/config/RolloutChip.svelte";
-  import RowFaults from "$lib/cawco/config/RowFaults.svelte";
-  import RowList from "$lib/cawco/config/RowList.svelte";
-  import SectionFrame from "$lib/cawco/config/SectionFrame.svelte";
-  import SectionRow from "$lib/cawco/config/SectionRow.svelte";
-  import { sectionOf } from "$lib/cawco/config/sections";
-  import { configStore, upsert } from "$lib/cawco/config/store.svelte";
-  import { confirm } from "$lib/cawco/confirm.svelte";
+  import { cawco } from "#lib/cawco/client.svelte.js";
+  import FetchSkillPopover from "#lib/cawco/config/FetchSkillPopover.svelte";
+  import { hubDown } from "#lib/cawco/config/hub.svelte.js";
+  import LinkMarketplacePopover from "#lib/cawco/config/LinkMarketplacePopover.svelte";
+  import RolloutChip from "#lib/cawco/config/RolloutChip.svelte";
+  import RowFaults from "#lib/cawco/config/RowFaults.svelte";
+  import RowList from "#lib/cawco/config/RowList.svelte";
+  import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
+  import SectionRow from "#lib/cawco/config/SectionRow.svelte";
+  import { sectionOf } from "#lib/cawco/config/sections.js";
+  import { configStore, upsert } from "#lib/cawco/config/store.svelte.js";
+  import { confirm } from "#lib/cawco/confirm.svelte.js";
   import {
     catalogHost,
     formatBytes,
@@ -28,13 +28,13 @@
     removeSkill,
     savePlugin,
     saveSkill,
-  } from "$lib/cawco/fleet";
-  import { hubFaults } from "$lib/cawco/fleet-faults";
-  import MachineInventory from "$lib/cawco/MachineInventory.svelte";
-  import { orderMachines } from "$lib/cawco/rail.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import { SectionHeader } from "$lib/components/ui/section-header";
-  import { Skeleton } from "$lib/components/ui/skeleton";
+  } from "#lib/cawco/fleet.js";
+  import { hubFaults } from "#lib/cawco/fleet-faults.js";
+  import MachineInventory from "#lib/cawco/MachineInventory.svelte";
+  import { orderMachines } from "#lib/cawco/rail.svelte.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { SectionHeader } from "#lib/components/ui/section-header/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import {
     IconBolt,
     IconLayers,
@@ -42,7 +42,7 @@
     IconSearch,
     IconShop,
     IconTrash,
-  } from "$lib/icons";
+  } from "#lib/icons.js";
 
   /**
    * Two ways to the same thing: fetch a skill and the hub downloads its files

@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import { dur } from "$lib/cawco/motion/curves.svelte";
+  import { dur } from "#lib/cawco/motion/curves.svelte.js";
 
   /**
    * Resolves once a save that just ended well has been shown as saved: an
@@ -22,8 +22,8 @@
    * the save runs and draws a check for --dur-hold when it ends well, and
    * for that same hold the label says "Saved".
    */
-  import { Button } from "$lib/components/ui/button";
-  import { IconTrash } from "$lib/icons";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { IconTrash } from "#lib/icons.js";
 
   let {
     saving,

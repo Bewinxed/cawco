@@ -11,7 +11,7 @@
   turns it stood for slide in beneath it as it fades.
 -->
 <script lang="ts">
-  import { rise } from "$lib/cawco/motion/curves.svelte";
+  import { rise } from "#lib/cawco/motion/curves.svelte.js";
 </script>
 
 <!-- Comes and goes as "Jump to latest" does, which shares its dock. -->

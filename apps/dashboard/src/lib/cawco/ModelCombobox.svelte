@@ -5,14 +5,14 @@
    * through verbatim for models the catalog has not learned yet.
    */
   import { tick } from "svelte";
-  import { crossIn, crossOut } from "$lib/cawco/motion/curves.svelte";
-  import ProviderLogo from "$lib/components/features/ProviderLogo.svelte";
-  import { Button, type ButtonSize } from "$lib/components/ui/button";
+  import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
+  import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
+  import { Button, type ButtonSize } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as Command from "$lib/components/ui/command";
+  import * as Command from "#lib/components/ui/command/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as Popover from "$lib/components/ui/popover";
-  import { IconRefresh, IconUnfold } from "$lib/icons";
+  import * as Popover from "#lib/components/ui/popover/index.js";
+  import { IconRefresh, IconUnfold } from "#lib/icons.js";
   import {
     covers,
     ensureModels,

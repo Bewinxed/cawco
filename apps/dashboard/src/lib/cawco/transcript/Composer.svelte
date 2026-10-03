@@ -30,7 +30,7 @@
    */
   import { type Snippet, tick, untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
-  import { autosize } from "$lib/cawco/motion/autosize.svelte";
+  import { autosize } from "#lib/cawco/motion/autosize.svelte.js";
   import {
     CURVE,
     dur,
@@ -39,15 +39,15 @@
     easeOut,
     motionOk,
     popScale,
-  } from "$lib/cawco/motion/curves.svelte";
-  import { unfold } from "$lib/cawco/motion/fold.svelte";
-  import { reflow } from "$lib/cawco/motion/rows.svelte";
-  import { departBox } from "$lib/cawco/motion/share.svelte";
-  import { whileIdle } from "$lib/components/ui/button/pending-content.svelte";
+  } from "#lib/cawco/motion/curves.svelte.js";
+  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
+  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
+  import { departBox } from "#lib/cawco/motion/share.svelte.js";
+  import { whileIdle } from "#lib/components/ui/button/pending-content.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
-  import * as Command from "$lib/components/ui/command";
-  import { Spinner } from "$lib/components/ui/spinner";
-  import { IconClose, IconPlus, IconSend, IconStop } from "$lib/icons";
+  import * as Command from "#lib/components/ui/command/index.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import { IconClose, IconPlus, IconSend, IconStop } from "#lib/icons.js";
   import type { SendExtras } from "../client.svelte";
   import { cleanDetail } from "../command-detail";
   import { newId } from "../id";

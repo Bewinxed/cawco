@@ -7,8 +7,8 @@
    */
   import { Popover as PopoverPrimitive } from "bits-ui";
   import type { Snippet } from "svelte";
-  import { morph } from "$lib/cawco/motion/morph.svelte";
-  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
+  import { morph } from "#lib/cawco/motion/morph.svelte.js";
+  import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { popoverGroup } from "./popover-group.svelte";
 
   let {

@@ -11,35 +11,33 @@
   import { TextMorph } from "torph/svelte";
   import { beforeNavigate, goto } from "$app/navigation";
   import { page } from "$app/state";
-  import { cawco } from "$lib/cawco/client.svelte";
-  import { loadDelegateTypes, message } from "$lib/cawco/delegate-types";
-  import { newId } from "$lib/cawco/id";
-  import { crossIn, dur, morphMs } from "$lib/cawco/motion/curves.svelte";
-  import { reflow } from "$lib/cawco/motion/rows.svelte";
-  import { runHref } from "$lib/cawco/workflow-runs";
-  import {
-    refreshWorkflows,
-    workflowState,
-  } from "$lib/cawco/workflow-state.svelte";
+  import { cawco } from "#lib/cawco/client.svelte.js";
+  import { loadDelegateTypes, message } from "#lib/cawco/delegate-types.js";
+  import { newId } from "#lib/cawco/id.js";
+  import { crossIn, dur, morphMs } from "#lib/cawco/motion/curves.svelte.js";
+  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
+  import { runHref } from "#lib/cawco/workflow-runs.js";
+  import { refreshWorkflows, workflowState } from "#lib/cawco/workflow-state.svelte.js";
+
   import {
     loadWorkflow,
     saveWorkflow,
     type WorkflowDetail,
     WorkflowProblems,
-  } from "$lib/cawco/workflows";
+  } from "#lib/cawco/workflows.js";
   import PendingContent, {
     whileIdle,
-  } from "$lib/components/ui/button/pending-content.svelte";
+  } from "#lib/components/ui/button/pending-content.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
-  import * as Dialog from "$lib/components/ui/dialog";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
-  import * as Drawer from "$lib/components/ui/drawer";
-  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
+  import * as Drawer from "#lib/components/ui/drawer/index.js";
+  import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
-  import * as Resizable from "$lib/components/ui/resizable";
-  import { Skeleton } from "$lib/components/ui/skeleton";
+  import * as Resizable from "#lib/components/ui/resizable/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
-  import * as Tabs from "$lib/components/ui/tabs";
+  import * as Tabs from "#lib/components/ui/tabs/index.js";
   import { paneSlide, towards } from "./pane-slide";
   import WorkflowCanvas from "./WorkflowCanvas.svelte";
   import WorkflowInspector from "./WorkflowInspector.svelte";
@@ -79,9 +77,8 @@
    * precision the match never held, the palette folded once, never came
    * back, and never said it had folded.
    */
-  const railSize = $derived(
-    Number.parseFloat(((48 / panelWidth) * 100).toFixed(10))
-  );
+  const railSize = $derived(Number.parseFloat((48 / panelWidth * 100).toFixed(10)));
+
   let launch = $state(false);
   /** The button the launch dialog grows from. */
   let launchFrom = $state<HTMLElement>();
@@ -230,6 +227,8 @@
     return () => clearTimeout(timer);
   });
   beforeNavigate((navigation) => {
+    if (navigation.shallow) return;
+
     if (!dirty) {
       return;
     }
@@ -373,8 +372,8 @@
   }
   function add(kind: WorkflowNode["kind"], preset?: DelegateType) {
     let next = newNode(kind, {
-      x: 80 + (graph.nodes.length % 3) * 340,
-      y: 120 + Math.floor(graph.nodes.length / 3) * 320,
+      x: 80 + graph.nodes.length % 3 * 340,
+      y: 120 + Math.floor(graph.nodes.length / 3) * 320
     });
     if (preset && next.kind === "step") {
       next = {
@@ -444,7 +443,7 @@
     }
   }
 </script>
-<svelte:window onkeydown={keys} />
+<svelte:window onkeydown={keys}></svelte:window>
 {#snippet palette()}
   <div class="palette wf-stack" {@attach highlight({ rows: ".palette-item" })}>
     <div class="wf-row wf-spread">
@@ -506,16 +505,20 @@
 {/snippet}
 {#snippet inspector()}
   <WorkflowInspector
-    {description}
-    {edge}
-    editBody={(key) => { bodyPath = [...bodyPath, key]; selected = undefined; inspectorOpen = false; }}
-    {graph}
-    {node}
+    description={description}
+    edge={edge}
+    editBody={(key) => {
+      bodyPath = [...bodyPath, key];
+      selected = undefined;
+      inspectorOpen = false;
+    }}
+    graph={graph}
+    node={node}
     onchange={commit}
     ondescription={(value) => { description = value; }}
     onselect={select}
-    {problems}
-    {types}
+    problems={problems}
+    types={types}
     workflowId={id}
     workflows={workflowState.workflows}
   />
@@ -534,13 +537,13 @@
     <WorkflowCanvas
       canRedo={future.length > 0}
       canUndo={history.length > 0}
-      {graph}
+      graph={graph}
       onchange={commit}
       onselect={select}
-      {problems}
-      {redo}
+      problems={problems}
+      redo={redo}
       selection={selected}
-      {undo}
+      undo={undo}
     />
     {#if graph.nodes.length === 1 && graph.nodes[0].kind === 'start'}
       <p class="hint">
@@ -558,14 +561,14 @@
           aria-label="Workflow name"
           disabled={!workflow}
           bind:value={name}
-        >
+        />
       </div>
       <div class="wf-row">
         <button
           aria-busy={pressed === 'validate' || undefined}
           aria-disabled={pressed === 'validate' || undefined}
           class="wf-btn"
-          disabled={!(workflow && live) || (saving && pressed !== 'validate')}
+          disabled={!(workflow && live) || saving && pressed !== 'validate'}
           onclick={whileIdle(() => pressed === 'validate', validate)}
           title={live ? undefined : "Can't save while the hub is unreachable"}
           type="button"
@@ -654,11 +657,13 @@
         <div class="pane" in:paneSlide={{ dir }} out:paneSlide={{ dir }}>
           {#if tab === 'program'}
             <WorkflowProgram
-              {live}
-              onchange={(value) => { program = value; }}
-              {origin}
-              {problems}
-              {program}
+              live={live}
+              onchange={(value) => {
+                program = value;
+              }}
+              origin={origin}
+              problems={problems}
+              program={program}
             />
           {:else if tab === 'editor'}
             {#if narrow.current}
@@ -749,8 +754,10 @@
 {#if workflow && launch}
   <WorkflowLaunch
     from={launchFrom}
-    onclose={() => { launch = false; }}
-    {workflow}
+    onclose={() => {
+      launch = false;
+    }}
+    workflow={workflow}
   />
 {/if}
 {#if narrow.current}

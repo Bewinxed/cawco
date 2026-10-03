@@ -5,7 +5,7 @@
    * no word reveal. The rules are `:global` for the same reason MessageBody's
    * are: prose-sm restates its own size on streamdown's root.
    */
-  import { Markdown } from "$lib/components/ui/markdown";
+  import { Markdown } from "#lib/components/ui/markdown/index.js";
 
   let { source }: { source: string } = $props();
 </script>

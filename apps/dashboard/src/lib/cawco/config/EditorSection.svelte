@@ -4,7 +4,7 @@
    * optional control on the right, then the fields 8px apart.
    */
   import type { Component, Snippet } from "svelte";
-  import { SectionHeader } from "$lib/components/ui/section-header";
+  import { SectionHeader } from "#lib/components/ui/section-header/index.js";
 
   let {
     icon,

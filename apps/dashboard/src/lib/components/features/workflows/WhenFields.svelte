@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { WorkflowWhen } from "@cawco/core";
-  import { unfold } from "$lib/cawco/motion/fold.svelte";
+  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
   import JsonField from "./JsonField.svelte";
 
   let {

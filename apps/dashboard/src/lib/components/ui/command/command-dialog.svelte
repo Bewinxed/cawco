@@ -5,8 +5,8 @@
   } from "bits-ui";
   import type { Snippet } from "svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for importing a component group
-  import * as Dialog from "$lib/components/ui/dialog/index.js";
-  import { cn, type WithoutChildrenOrChild } from "$lib/utils.js";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
   import Command from "./command.svelte";
 
   let {

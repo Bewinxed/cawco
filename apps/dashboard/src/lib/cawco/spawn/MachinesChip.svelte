@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { MachineRow } from "$lib/components/ui/machine-row";
+  import { MachineRow } from "#lib/components/ui/machine-row/index.js";
   /**
    * Machines chip + popover (§1.4, §2.5): multi-select rows, then "Connect a
    * machine…", which swaps the list in place for the pairing panel — the

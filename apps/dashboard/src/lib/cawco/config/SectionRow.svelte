@@ -1,5 +1,5 @@
 <script lang="ts" module>
-  import { depart } from "$lib/cawco/motion/share.svelte";
+  import { depart } from "#lib/cawco/motion/share.svelte.js";
 
   /** What the row's last action came to: running, done, or why it failed. */
   export interface RowNote {
@@ -41,10 +41,10 @@
    * and so does a line arriving or leaving under it.
    */
   import type { Component, Snippet } from "svelte";
-  import { land } from "$lib/cawco/motion/share.svelte";
-  import { Spinner } from "$lib/components/ui/spinner";
-  import { Switch } from "$lib/components/ui/switch";
-  import { IconCheck, IconWarningTriangle } from "$lib/icons";
+  import { land } from "#lib/cawco/motion/share.svelte.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import { Switch } from "#lib/components/ui/switch/index.js";
+  import { IconCheck, IconWarningTriangle } from "#lib/icons.js";
   import RowMenu, { type RowAction } from "./RowMenu.svelte";
 
   let {

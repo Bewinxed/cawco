@@ -131,7 +131,7 @@ It reruns on `ResizeObserver` width changes (`PromptWell.svelte:35-48`) to preve
 <meta content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content" name="viewport">
 ```
 
-- On phones (`max-width: 640px`) the card is the kit Drawer (`$lib/components/ui/drawer`, vaul): a bottom sheet with safe-area bottom padding that follows the finger from its header and dismisses on vaul's distance (25%) or flick (0.4 px/ms) thresholds. vaul's `repositionInputs` keeps it above the keyboard; the dialog no longer measures `window.visualViewport` itself.
+- On phones (`max-width: 640px`) the card is the kit Drawer (`#lib/components/ui/drawer`, vaul): a bottom sheet with safe-area bottom padding that follows the finger from its header and dismisses on vaul's distance (25%) or flick (0.4 px/ms) thresholds. vaul's `repositionInputs` keeps it above the keyboard; the dialog no longer measures `window.visualViewport` itself.
 - The mobile prompt may scroll within `min-height: 0`, and textarea height is capped against the measured visible viewport minus 160px and safe area (`NewSessionDialog.svelte:735-750`).
 - Mobile popovers become full-viewport fixed panels in the same measured viewport. Their shell fixes top/left/right/width/height and their content has safe-area top/bottom padding and its own vertical scroll (`ComposerPopover.svelte:151-177`):
 

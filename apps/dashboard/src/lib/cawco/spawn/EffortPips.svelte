@@ -7,7 +7,7 @@
   import type { EffortLevel } from "@cawco/core";
   import { untrack } from "svelte";
   import { TextMorph } from "torph/svelte";
-  import { morphMs } from "$lib/cawco/motion/curves.svelte";
+  import { morphMs } from "#lib/cawco/motion/curves.svelte.js";
 
   let {
     efforts,

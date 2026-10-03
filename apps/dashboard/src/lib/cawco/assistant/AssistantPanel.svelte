@@ -12,11 +12,11 @@
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for importing a component group
-  import * as Drawer from "$lib/components/ui/drawer";
-  import { EmptyState } from "$lib/components/ui/empty";
-  import { Skeleton } from "$lib/components/ui/skeleton";
-  import Tip from "$lib/components/ui/tooltip/tip.svelte";
-  import { IconAssistant } from "$lib/icons";
+  import * as Drawer from "#lib/components/ui/drawer/index.js";
+  import { EmptyState } from "#lib/components/ui/empty/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
+  import { IconAssistant } from "#lib/icons.js";
   import { cawco } from "../client.svelte";
   import { conversationHref } from "../links";
   import {

@@ -9,7 +9,7 @@
    * 14 − 9 = 5 cannot split evenly, so the glyph landed 2px from one edge and
    * 3px from the other and read visibly off-centre. 18 − 12 = 6 splits 3/3.
    */
-  import { IconAgent, IconUser } from "$lib/icons";
+  import { IconAgent, IconUser } from "#lib/icons.js";
 
   let {
     you = false,

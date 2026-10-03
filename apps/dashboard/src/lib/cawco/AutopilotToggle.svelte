@@ -6,14 +6,14 @@
    * writes go through `PUT /api/autopilot/:id` via autopilot.ts.
    */
   import type { InstanceRow } from "@cawco/core";
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for importing a component group
-  import * as Drawer from "$lib/components/ui/drawer";
+  import * as Drawer from "#lib/components/ui/drawer/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for importing a component group
-  import * as Popover from "$lib/components/ui/popover";
-  import Switch from "$lib/components/ui/switch/switch.svelte";
-  import { IsMobile } from "$lib/hooks/is-mobile.svelte";
-  import { IconSkill } from "$lib/icons";
+  import * as Popover from "#lib/components/ui/popover/index.js";
+  import Switch from "#lib/components/ui/switch/switch.svelte";
+  import { IsMobile } from "#lib/hooks/is-mobile.svelte.js";
+  import { IconSkill } from "#lib/icons.js";
   import { setAutopilot } from "./autopilot";
   import { cawco } from "./client.svelte";
 

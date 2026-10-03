@@ -1,8 +1,8 @@
 <script lang="ts">
   import { useSvelteFlow } from "@xyflow/svelte";
-  import { dur, easeInOut, motionOk } from "$lib/cawco/motion/curves.svelte";
-  import Tip from "$lib/components/ui/tooltip/tip.svelte";
-  import { IconMaximize, IconPlus, IconReset } from "$lib/icons";
+  import { dur, easeInOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
+  import { IconMaximize, IconPlus, IconReset } from "#lib/icons.js";
 
   let {
     zoom,

@@ -5,7 +5,7 @@
    * below, out of sight — so this is what says there is more, and takes them
    * there in one glide.
    */
-  import { rise } from "$lib/cawco/motion/curves.svelte";
+  import { rise } from "#lib/cawco/motion/curves.svelte.js";
   import IconArrowDown from "~icons/solar/arrow-down-bold-duotone";
 
   let { onjump }: { onjump: () => void } = $props();

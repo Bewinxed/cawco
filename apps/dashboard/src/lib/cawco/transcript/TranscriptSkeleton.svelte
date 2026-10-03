@@ -12,7 +12,7 @@
   only places them.
 -->
 <script lang="ts">
-  import { Skeleton } from "$lib/components/ui/skeleton";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
 
   const ANSWER = [["94%", "81%", "88%"], ["43%"]];
   const TOOLS = ["46%", "31%", "58%"];

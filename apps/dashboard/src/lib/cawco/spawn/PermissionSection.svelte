@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { PermissionMode } from "@cawco/core";
-  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
+  import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   /** Permission-mode rows (§1.8, §2.11): sliding fill + mounted check. */
   import Check from "~icons/solar/check-circle-bold-duotone";
   import { permissionLook } from "./permission-look";

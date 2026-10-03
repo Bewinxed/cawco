@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Select as SelectPrimitive } from "bits-ui";
-  import { IconUnfold } from "$lib/icons";
-  import { cn, type WithoutChild } from "$lib/utils.js";
+  import { IconUnfold } from "#lib/icons.js";
+  import { cn, type WithoutChild } from "#lib/utils.js";
 
   let {
     ref = $bindable(null),

@@ -1,9 +1,9 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import EditorRoute from "$lib/cawco/config/EditorRoute.svelte";
-  import McpEditor from "$lib/cawco/config/editors/McpEditor.svelte";
-  import { sectionOf } from "$lib/cawco/config/sections";
-  import { configStore } from "$lib/cawco/config/store.svelte";
+  import EditorRoute from "#lib/cawco/config/EditorRoute.svelte";
+  import McpEditor from "#lib/cawco/config/editors/McpEditor.svelte";
+  import { sectionOf } from "#lib/cawco/config/sections.js";
+  import { configStore } from "#lib/cawco/config/store.svelte.js";
 
   const store = configStore();
   const section = sectionOf("mcp");

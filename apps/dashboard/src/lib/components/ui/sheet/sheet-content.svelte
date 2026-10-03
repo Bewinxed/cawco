@@ -5,10 +5,10 @@
 <script lang="ts">
   import { Dialog as SheetPrimitive } from "bits-ui";
   import type { ComponentProps, Snippet } from "svelte";
-  import { dragToDismiss } from "$lib/cawco/motion/drag.svelte";
-  import { Button } from "$lib/components/ui/button/index.js";
-  import { IconClose } from "$lib/icons";
-  import { cn, type WithoutChildrenOrChild } from "$lib/utils.js";
+  import { dragToDismiss } from "#lib/cawco/motion/drag.svelte.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { IconClose } from "#lib/icons.js";
+  import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
   import { closer } from "./sheet.svelte";
   import SheetOverlay from "./sheet-overlay.svelte";
   import SheetPortal from "./sheet-portal.svelte";

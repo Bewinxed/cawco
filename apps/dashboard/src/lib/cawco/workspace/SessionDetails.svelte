@@ -9,8 +9,8 @@
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
   import { TextMorph } from "torph/svelte";
-  import ProviderLogo from "$lib/components/features/ProviderLogo.svelte";
-  import { IconCheck } from "$lib/icons";
+  import ProviderLogo from "#lib/components/features/ProviderLogo.svelte";
+  import { IconCheck } from "#lib/icons.js";
   import Down from "~icons/solar/alt-arrow-down-linear";
   import Link from "~icons/solar/link-bold-duotone";
   import {

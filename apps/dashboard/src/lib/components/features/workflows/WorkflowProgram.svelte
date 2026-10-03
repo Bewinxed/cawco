@@ -1,7 +1,7 @@
 <script lang="ts">
   import type { Problem, WorkflowOrigin } from "@cawco/core";
-  import { crossIn } from "$lib/cawco/motion/curves.svelte";
-  import { reflow } from "$lib/cawco/motion/rows.svelte";
+  import { crossIn } from "#lib/cawco/motion/curves.svelte.js";
+  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   import CodeView from "./CodeView.svelte";
   import { withoutLine } from "./workflow-ui";
 

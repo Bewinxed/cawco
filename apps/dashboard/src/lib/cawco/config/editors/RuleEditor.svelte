@@ -20,12 +20,12 @@
     dur,
     ease,
     motionOk,
-  } from "$lib/cawco/motion/curves.svelte";
-  import { folds, unfold } from "$lib/cawco/motion/fold.svelte";
-  import { morph } from "$lib/cawco/motion/morph.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
-  import { Textarea } from "$lib/components/ui/textarea";
+  } from "#lib/cawco/motion/curves.svelte.js";
+  import { folds, unfold } from "#lib/cawco/motion/fold.svelte.js";
+  import { morph } from "#lib/cawco/motion/morph.svelte.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
   import {
     IconEye,
     IconHistory,
@@ -33,7 +33,7 @@
     IconPin,
     IconPlain,
     IconSparkles,
-  } from "$lib/icons";
+  } from "#lib/icons.js";
   import { cawco } from "../../client.svelte";
   import { confirm } from "../../confirm.svelte";
   import RuleActivity from "../../RuleActivity.svelte";

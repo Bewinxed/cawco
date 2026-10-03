@@ -3,7 +3,7 @@
   import { tick, untrack } from "svelte";
   import { Drawer as Vaul } from "vaul-svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
-  import * as Drawer from "$lib/components/ui/drawer";
+  import * as Drawer from "#lib/components/ui/drawer/index.js";
   import { cawco, hidePreview } from "../client.svelte";
   import { land, waiting } from "../motion/share.svelte";
   import { lightbox } from "../transcript/lightbox-state.svelte";

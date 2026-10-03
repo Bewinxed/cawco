@@ -7,7 +7,7 @@
    * opened with its rows already read (a drill from its list) shows at once.
    */
   import type { Snippet } from "svelte";
-  import { crossIn, dur, easeOut } from "$lib/cawco/motion/curves.svelte";
+  import { crossIn, dur, easeOut } from "#lib/cawco/motion/curves.svelte.js";
   import EditorSkeleton from "./EditorSkeleton.svelte";
   import Missing from "./Missing.svelte";
   import type { ConfigSection } from "./sections";

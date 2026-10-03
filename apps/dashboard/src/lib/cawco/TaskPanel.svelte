@@ -9,7 +9,7 @@
    */
   import { SvelteSet } from "svelte/reactivity";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
-  import * as Collapsible from "$lib/components/ui/collapsible";
+  import * as Collapsible from "#lib/components/ui/collapsible/index.js";
   import {
     blockerOf,
     type SessionTask,

@@ -3,15 +3,15 @@
     Toaster as Sonner,
     type ToasterProps as SonnerProps,
   } from "svelte-sonner";
-  import { dur } from "$lib/cawco/motion/curves.svelte";
-  import { Spinner } from "$lib/components/ui/spinner";
+  import { dur } from "#lib/cawco/motion/curves.svelte.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
   import {
     IconError,
     IconInfo,
     IconSuccess,
     IconWarningTriangle,
-  } from "$lib/icons";
-  import { theme } from "$lib/theme.svelte";
+  } from "#lib/icons.js";
+  import { theme } from "#lib/theme.svelte.js";
 
   let { ...restProps }: SonnerProps = $props();
 

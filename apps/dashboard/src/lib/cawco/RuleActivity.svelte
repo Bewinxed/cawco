@@ -1,6 +1,6 @@
 <script lang="ts">
-  import { reflow } from "$lib/cawco/motion/rows.svelte";
-  import { Button } from "$lib/components/ui/button";
+  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   import {
     loadRuleActivity,
     message,

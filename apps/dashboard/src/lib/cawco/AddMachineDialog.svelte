@@ -12,23 +12,23 @@
   import type { SshJoinJob } from "@cawco/core";
   import { INSTALL_STEP_PREFIX, machineLabel } from "@cawco/core";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
-  import * as Alert from "$lib/components/ui/alert";
-  import { Button } from "$lib/components/ui/button";
+  import * as Alert from "#lib/components/ui/alert/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { TabItem, Tabs, TabsList } from "$lib/components/ui/fluid-tabs";
-  import { Input } from "$lib/components/ui/input";
-  import { Label } from "$lib/components/ui/label";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { TabItem, Tabs, TabsList } from "#lib/components/ui/fluid-tabs/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
+  import { Label } from "#lib/components/ui/label/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
-  import * as NativeSelect from "$lib/components/ui/native-select";
-  import { Spinner } from "$lib/components/ui/spinner";
+  import * as NativeSelect from "#lib/components/ui/native-select/index.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
   import {
     IconChevronRight,
     IconError,
     IconServer,
     IconSuccess,
     IconTerminal,
-  } from "$lib/icons";
+  } from "#lib/icons.js";
   import { cawco } from "./client.svelte";
   import CheckInStatus from "./join/CheckInStatus.svelte";
   import CopyBox from "./join/CopyBox.svelte";

@@ -9,9 +9,9 @@
    * and returns focus. A failed copy closes it at once, the toast saying why.
    */
   import type { Snippet } from "svelte";
-  import { copyToClipboard } from "$lib/cawco/copy";
-  import { dur } from "$lib/cawco/motion/curves.svelte";
-  import { IconCheck, IconCopy } from "$lib/icons";
+  import { copyToClipboard } from "#lib/cawco/copy.js";
+  import { dur } from "#lib/cawco/motion/curves.svelte.js";
+  import { IconCheck, IconCopy } from "#lib/icons.js";
   import ContextMenuItem from "./context-menu-item.svelte";
 
   let {

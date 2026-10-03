@@ -43,7 +43,7 @@
    * in one frame at the end.
    */
   import { type Snippet, untrack } from "svelte";
-  import { dur, ease, motionOk } from "$lib/cawco/motion/curves.svelte";
+  import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import {
     type Handoff,
     type Motion,

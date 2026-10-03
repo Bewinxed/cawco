@@ -13,7 +13,7 @@
   import type { Snippet } from "svelte";
   import { goto } from "$app/navigation";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
-  import * as ContextMenu from "$lib/components/ui/context-menu";
+  import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import {
     IconArchive,
     IconArrowRight,
@@ -24,7 +24,7 @@
     IconPenLine,
     IconStop,
     IconTrash,
-  } from "$lib/icons";
+  } from "#lib/icons.js";
   import {
     cawco,
     deleteTranscript,

@@ -8,11 +8,11 @@
   import type { Snippet } from "svelte";
   import { goto } from "$app/navigation";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
-  import * as AlertDialog from "$lib/components/ui/alert-dialog";
-  import { Button } from "$lib/components/ui/button";
+  import * as AlertDialog from "#lib/components/ui/alert-dialog/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
-  import * as ContextMenu from "$lib/components/ui/context-menu";
-  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
+  import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
+  import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import {
     IconAlignLeft,
     IconChevronUp,
@@ -21,7 +21,7 @@
     IconPin,
     IconPlus,
     IconTrash,
-  } from "$lib/icons";
+  } from "#lib/icons.js";
   import { deleteProject, type ProjectRow } from "./client.svelte";
   import { folderPrefs } from "./folder-prefs.svelte";
   import { HUES } from "./identity";

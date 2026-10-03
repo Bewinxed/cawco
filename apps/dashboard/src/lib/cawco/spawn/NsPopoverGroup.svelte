@@ -9,8 +9,8 @@
   import type { Snippet } from "svelte";
   import { MediaQuery } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
-  import { dur, easeOut } from "$lib/cawco/motion/curves.svelte";
-  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
+  import { dur, easeOut } from "#lib/cawco/motion/curves.svelte.js";
+  import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import {
     type PopoverMember,
     providePopoverGroup,

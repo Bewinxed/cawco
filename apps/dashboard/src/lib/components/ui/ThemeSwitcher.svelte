@@ -1,8 +1,8 @@
 <script lang="ts">
-  import { Button } from "$lib/components/ui/button";
-  import Tip from "$lib/components/ui/tooltip/tip.svelte";
-  import { IconMoon, IconSun } from "$lib/icons";
-  import { theme, toggleTheme } from "$lib/theme.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
+  import { IconMoon, IconSun } from "#lib/icons.js";
+  import { theme, toggleTheme } from "#lib/theme.svelte.js";
 
   const themeLabels = {
     light: "Light mode",

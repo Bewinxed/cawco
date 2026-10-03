@@ -9,7 +9,7 @@ import {
   IconSubagents,
   IconTerminal,
   IconToolMcp,
-} from "$lib/icons";
+} from "#lib/icons.js";
 
 /** One entry of the Configure rail: where it lives and what it is for. */
 export interface ConfigSection {

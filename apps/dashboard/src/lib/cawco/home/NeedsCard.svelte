@@ -12,10 +12,10 @@
    * the session's own card sends, and the card leaves when the hub has taken
    * it — the request card above that pane's composer leaves with it.
    */
-  import { Button } from "$lib/components/ui/button";
-  import Tip from "$lib/components/ui/tooltip/tip.svelte";
-  import { IconClose, IconMaximize, IconTick } from "$lib/icons";
-  import { isTyping } from "$lib/utils/typing";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
+  import { IconClose, IconMaximize, IconTick } from "#lib/icons.js";
+  import { isTyping } from "#lib/utils/typing.js";
   import {
     cawco,
     type PermissionAnswer,

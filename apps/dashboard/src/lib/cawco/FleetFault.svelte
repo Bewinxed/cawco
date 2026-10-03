@@ -16,12 +16,12 @@
    * Its disclosures fold (240ms open, 160ms shut, motion/fold) and what its
    * remedy came to is said under the button, in place.
    */
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   import {
     IconChevronRight,
     IconRefresh,
     IconWarningTriangle,
-  } from "$lib/icons";
+  } from "#lib/icons.js";
   import type { Machine } from "./client.svelte";
   import { refreshPlugin, refreshSkill, syncFleet } from "./fleet";
   import {

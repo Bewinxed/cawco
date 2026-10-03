@@ -1,4 +1,4 @@
-import type { Machine, ProjectRow } from "$lib/cawco/client.svelte";
+import type { Machine, ProjectRow } from "#lib/cawco/client.svelte.js";
 import type { PageLoad } from "./$types";
 
 /**

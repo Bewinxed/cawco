@@ -3,7 +3,7 @@
  * each call went to but not its URL, and a stored session has no live list to
  * ask — the fleet's config is what says which site answers `firecrawl`.
  */
-import { browser } from "$app/environment";
+import { browser } from "$app/env";
 import type { FleetSnapshot } from "./fleet";
 import type { ConfiguredServer } from "./mcp";
 
@@ -13,7 +13,7 @@ let asked = false;
 async function load() {
   const response = await fetch("/api/fleet");
   if (response.ok) {
-    const snapshot = (await response.json()) as FleetSnapshot;
+    const snapshot = await response.json() as FleetSnapshot;
     servers = snapshot.config.mcp;
   }
 }

@@ -89,8 +89,8 @@
    * the canvases spill over the box unclipped and never take a pointer.
    */
   import { untrack } from "svelte";
-  import { dur, ease, motionOk } from "$lib/cawco/motion/curves.svelte";
-  import { theme } from "$lib/theme.svelte";
+  import { dur, ease, motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import { theme } from "#lib/theme.svelte.js";
 
   let {
     status,

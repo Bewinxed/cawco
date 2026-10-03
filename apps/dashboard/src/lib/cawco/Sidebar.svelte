@@ -20,15 +20,15 @@
   import { SvelteSet } from "svelte/reactivity";
   import { TextMorph } from "torph/svelte";
   import { page } from "$app/state";
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
-  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
-  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
+  import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
-  import * as Sidebar from "$lib/components/ui/sidebar";
-  import { Skeleton } from "$lib/components/ui/skeleton";
-  import ThemeSwitcher from "$lib/components/ui/ThemeSwitcher.svelte";
-  import Tip from "$lib/components/ui/tooltip/tip.svelte";
+  import * as Sidebar from "#lib/components/ui/sidebar/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import ThemeSwitcher from "#lib/components/ui/ThemeSwitcher.svelte";
+  import Tip from "#lib/components/ui/tooltip/tip.svelte";
   import {
     IconAssistant,
     IconBox,
@@ -36,8 +36,8 @@
     IconSettings,
     IconSort,
     IconWorkflow,
-  } from "$lib/icons";
-  import { formatAgeShort, formatDistanceToNow } from "$lib/utils/time";
+  } from "#lib/icons.js";
+  import { formatAgeShort, formatDistanceToNow } from "#lib/utils/time.js";
   import type { Activity } from "./activity";
   import {
     cawco,

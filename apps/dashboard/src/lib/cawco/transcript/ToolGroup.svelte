@@ -3,12 +3,12 @@
   import { getContext, untrack } from "svelte";
   import { SvelteSet } from "svelte/reactivity";
   import { toast } from "svelte-sonner";
-  import { cawco, openPreview, revealPreview } from "$lib/cawco/client.svelte";
-  import { fleetMcpServers } from "$lib/cawco/fleet-mcp.svelte";
-  import { mcpServerHost } from "$lib/cawco/mcp";
-  import { dur, easeOut, motionOk } from "$lib/cawco/motion/curves.svelte";
-  import { previewSourceKey } from "$lib/cawco/preview/source";
-  import DiffView from "$lib/components/features/DiffView.svelte";
+  import { cawco, openPreview, revealPreview } from "#lib/cawco/client.svelte.js";
+  import { fleetMcpServers } from "#lib/cawco/fleet-mcp.svelte.js";
+  import { mcpServerHost } from "#lib/cawco/mcp.js";
+  import { dur, easeOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import { previewSourceKey } from "#lib/cawco/preview/source.js";
+  import DiffView from "#lib/components/features/DiffView.svelte";
   import {
     describeTool,
     getDiffInfo,
@@ -16,17 +16,17 @@
     pathLeaf,
     type ToolCallStatus,
     type ToolDescriptor,
-  } from "$lib/components/features/tool-cards/descriptors";
-  import MemoryBody from "$lib/components/features/tool-cards/MemoryBody.svelte";
-  import ToolProse from "$lib/components/features/tool-cards/ToolProse.svelte";
-  import { Badge } from "$lib/components/ui/badge";
+  } from "#lib/components/features/tool-cards/descriptors.js";
+  import MemoryBody from "#lib/components/features/tool-cards/MemoryBody.svelte";
+  import ToolProse from "#lib/components/features/tool-cards/ToolProse.svelte";
+  import { Badge } from "#lib/components/ui/badge/index.js";
   import PendingContent, {
     whileIdle,
-  } from "$lib/components/ui/button/pending-content.svelte";
+  } from "#lib/components/ui/button/pending-content.svelte";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for a component group.
-  import * as Collapsible from "$lib/components/ui/collapsible";
-  import CollapsibleLazy from "$lib/components/ui/collapsible/collapsible-lazy.svelte";
-  import { IconChevronRight, IconWindow } from "$lib/icons";
+  import * as Collapsible from "#lib/components/ui/collapsible/index.js";
+  import CollapsibleLazy from "#lib/components/ui/collapsible/collapsible-lazy.svelte";
+  import { IconChevronRight, IconWindow } from "#lib/icons.js";
   /**
    * A run of tool calls as rail-led rows — never a nested card. The rail is a
    * 2px stripe; each row is a glyph, the verb, a mono argument, and whatever the

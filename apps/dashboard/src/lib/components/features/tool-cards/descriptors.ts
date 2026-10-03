@@ -5,7 +5,7 @@
  * everything else lands on the params table, which is the dignity floor.
  */
 import type { Component } from "svelte";
-import { rootDomain } from "$lib/cawco/mcp";
+import { rootDomain } from "#lib/cawco/mcp.js";
 import {
   IconBook,
   IconToolCode,
@@ -26,7 +26,7 @@ import {
   IconToolTodo,
   IconToolWeb,
   IconToolWrite,
-} from "$lib/icons";
+} from "#lib/icons.js";
 
 export type ToolCallStatus = "pending" | "success" | "error";
 

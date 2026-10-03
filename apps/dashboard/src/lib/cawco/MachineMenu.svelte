@@ -33,8 +33,8 @@
   import type { Snippet } from "svelte";
   import { goto } from "$app/navigation";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
-  import * as ContextMenu from "$lib/components/ui/context-menu";
-  import { UPDATE_TIMEOUT_MS } from "$lib/config";
+  import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
+  import { UPDATE_TIMEOUT_MS } from "#lib/config.js";
   import {
     IconAlert,
     IconDownload,
@@ -42,7 +42,7 @@
     IconPlus,
     IconRefresh,
     IconTrash,
-  } from "$lib/icons";
+  } from "#lib/icons.js";
   import {
     cawco,
     loadCatalog,

@@ -1,8 +1,8 @@
 <script lang="ts">
   import { DropdownMenu as DropdownMenuPrimitive } from "bits-ui";
   import type { Snippet } from "svelte";
-  import { IconMinus, IconTick } from "$lib/icons";
-  import { cn, type WithoutChildrenOrChild } from "$lib/utils.js";
+  import { IconMinus, IconTick } from "#lib/icons.js";
+  import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
 
   let {
     ref = $bindable(null),

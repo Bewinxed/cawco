@@ -6,7 +6,7 @@
    * fit until the nodes it frames are measured.
    */
   import { useSvelteFlow } from "@xyflow/svelte";
-  import { dur, easeInOut, motionOk } from "$lib/cawco/motion/curves.svelte";
+  import { dur, easeInOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
   import { FIT } from "./fit";
 
   let { nodeCount }: { nodeCount: number } = $props();

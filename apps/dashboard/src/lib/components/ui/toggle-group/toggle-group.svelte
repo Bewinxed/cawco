@@ -1,7 +1,7 @@
 <script lang="ts">
   import { ToggleGroup as ToggleGroupPrimitive } from "bits-ui";
-  import { slideThumb } from "$lib/components/ui/tabs/thumb.js";
-  import { cn } from "$lib/utils.js";
+  import { slideThumb } from "#lib/components/ui/tabs/thumb.js";
+  import { cn } from "#lib/utils.js";
 
   let {
     ref = $bindable(null),

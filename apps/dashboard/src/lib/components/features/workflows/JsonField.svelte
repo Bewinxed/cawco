@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { unfold } from "$lib/cawco/motion/fold.svelte";
+  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
 
   let {
     label,

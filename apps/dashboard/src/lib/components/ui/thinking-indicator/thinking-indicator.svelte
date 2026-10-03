@@ -1,7 +1,7 @@
 <script lang="ts" module>
   import type { HTMLAttributes } from "svelte/elements";
-  import { restOffscreen } from "$lib/cawco/motion/rest";
-  import type { WithElementRef } from "$lib/utils.js";
+  import { restOffscreen } from "#lib/cawco/motion/rest.js";
+  import type { WithElementRef } from "#lib/utils.js";
   import type { SizeVariant } from "./size-context";
 
   export type ThinkingIndicatorProps = WithElementRef<
@@ -26,7 +26,7 @@
 
 <script lang="ts">
   import { MediaQuery } from "svelte/reactivity";
-  import { cn } from "$lib/utils.js";
+  import { cn } from "#lib/utils.js";
   import { getSizeContext } from "./size-context";
 
   let {

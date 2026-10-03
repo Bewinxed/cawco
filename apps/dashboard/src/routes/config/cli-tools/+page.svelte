@@ -1,10 +1,10 @@
 <script lang="ts">
-  import { cawco } from "$lib/cawco/client.svelte";
-  import SectionFrame from "$lib/cawco/config/SectionFrame.svelte";
-  import { sectionOf } from "$lib/cawco/config/sections";
-  import { configStore } from "$lib/cawco/config/store.svelte";
-  import { orderMachines } from "$lib/cawco/rail.svelte";
-  import ToolMatrix from "$lib/cawco/ToolMatrix.svelte";
+  import { cawco } from "#lib/cawco/client.svelte.js";
+  import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
+  import { sectionOf } from "#lib/cawco/config/sections.js";
+  import { configStore } from "#lib/cawco/config/store.svelte.js";
+  import { orderMachines } from "#lib/cawco/rail.svelte.js";
+  import ToolMatrix from "#lib/cawco/ToolMatrix.svelte";
 
   /**
    * The CLIs each machine carries, machine by machine. Require one on every

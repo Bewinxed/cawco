@@ -8,12 +8,12 @@
   } from "@cawco/core";
   import { machineLabel } from "@cawco/core";
   import { toast } from "svelte-sonner";
-  import { Alert, AlertDescription } from "$lib/components/ui/alert";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Button } from "$lib/components/ui/button";
-  import { SectionHeader } from "$lib/components/ui/section-header";
-  import { Spinner } from "$lib/components/ui/spinner";
-  import { IconChevronDown, IconChevronRight, IconLaptop } from "$lib/icons";
+  import { Alert, AlertDescription } from "#lib/components/ui/alert/index.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { SectionHeader } from "#lib/components/ui/section-header/index.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import { IconChevronDown, IconChevronRight, IconLaptop } from "#lib/icons.js";
   import type { Machine } from "./client.svelte";
   import { adoptSkill, inspectMachine, saveMcpServer } from "./fleet";
   import OsMark from "./OsMark.svelte";

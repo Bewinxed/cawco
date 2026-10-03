@@ -1,6 +1,6 @@
 <script lang="ts">
   import { page } from "$app/state";
-  import NewSessionDialog from "$lib/cawco/spawn/NewSessionDialog.svelte";
+  import NewSessionDialog from "#lib/cawco/spawn/NewSessionDialog.svelte";
 
   let dialogOpen = $state(true);
 </script>

@@ -1,9 +1,9 @@
 <script lang="ts">
   import type { AuthState } from "@cawco/core";
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Input } from "$lib/components/ui/input";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
   /**
    * Logs a machine in from here.
    *
@@ -14,7 +14,7 @@
    * login keychain is locked stops being a problem rather than being worked
    * around.
    */
-  import { IconExternal, IconKey } from "$lib/icons";
+  import { IconExternal, IconKey } from "#lib/icons.js";
   import { type Machine, machineControl } from "./client.svelte";
   import MachineAuthStatus from "./MachineAuthStatus.svelte";
   import { crossIn, crossOut } from "./motion/curves.svelte";

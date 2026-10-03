@@ -5,10 +5,10 @@
    * the usual answer and the list can be long.
    */
   import { TextMorph } from "torph/svelte";
-  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
+  import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
-  import * as Popover from "$lib/components/ui/popover";
-  import { IconCheck, IconChevronDown } from "$lib/icons";
+  import * as Popover from "#lib/components/ui/popover/index.js";
+  import { IconCheck, IconChevronDown } from "#lib/icons.js";
 
   let {
     label,

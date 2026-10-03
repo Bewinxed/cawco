@@ -28,36 +28,36 @@
    */
   import { onMount, untrack } from "svelte";
   import { MediaQuery, SvelteSet } from "svelte/reactivity";
-  import { browser } from "$app/environment";
+  import { browser } from '$app/env';
   import { afterNavigate } from "$app/navigation";
   import { page } from "$app/state";
   import {
     cawco,
     readTranscript,
     syncSubscriptions,
-  } from "$lib/cawco/client.svelte";
-  import Caw from "$lib/cawco/home/Caw.svelte";
-  import Home from "$lib/cawco/home/Home.svelte";
+  } from "#lib/cawco/client.svelte.js";
+  import Caw from "#lib/cawco/home/Caw.svelte";
+  import Home from "#lib/cawco/home/Home.svelte";
   import {
     endedUnseen,
     home as fleetHome,
     markOpened,
-  } from "$lib/cawco/home/home.svelte";
-  import PeekSheet from "$lib/cawco/home/PeekSheet.svelte";
-  import { instanceForSession } from "$lib/cawco/links";
+  } from "#lib/cawco/home/home.svelte.js";
+  import PeekSheet from "#lib/cawco/home/PeekSheet.svelte";
+  import { instanceForSession } from "#lib/cawco/links.js";
   import {
     crossIn,
     crossOut,
     dur,
     ease,
     motionOk,
-  } from "$lib/cawco/motion/curves.svelte";
-  import { layoutPolicy } from "$lib/cawco/workspace/layout-policy.svelte";
-  import PaneDeck from "$lib/cawco/workspace/PaneDeck.svelte";
-  import PaneGrid from "$lib/cawco/workspace/PaneGrid.svelte";
-  import PaneHost from "$lib/cawco/workspace/PaneHost.svelte";
-  import { workspace } from "$lib/cawco/workspace/workspace.svelte";
-  import { NARROW_QUERY } from "$lib/hooks/is-mobile.svelte";
+  } from "#lib/cawco/motion/curves.svelte.js";
+  import { layoutPolicy } from "#lib/cawco/workspace/layout-policy.svelte.js";
+  import PaneDeck from "#lib/cawco/workspace/PaneDeck.svelte";
+  import PaneGrid from "#lib/cawco/workspace/PaneGrid.svelte";
+  import PaneHost from "#lib/cawco/workspace/PaneHost.svelte";
+  import { workspace } from "#lib/cawco/workspace/workspace.svelte.js";
+  import { NARROW_QUERY } from "#lib/hooks/is-mobile.svelte.js";
 
   /** Whether a `/session` page is showing, rather than another spoke over this one parked. */
   let { shown }: { shown: boolean } = $props();
@@ -75,16 +75,14 @@
    * synchronously, so hydration on a phone finds the page already painted.
    */
   const narrowQuery = new MediaQuery(NARROW_QUERY);
-  const homePage = $derived(
-    browser ? narrowQuery.current : (page.data.narrow as boolean)
-  );
+
+  const homePage = $derived(browser ? narrowQuery.current : page.data.narrow as boolean);
+
   /**
    * Whether the conversations are a deck (one group, paged) or a grid: the
    * phone always, a tablet held upright as the `ipad` choice says.
    */
-  const narrow = $derived(
-    browser ? layoutPolicy.deck : (page.data.narrow as boolean)
-  );
+  const narrow = $derived(browser ? layoutPolicy.deck : page.data.narrow as boolean);
 
   /** What a wide screen's detail area says while nothing is open. */
   const detailState = $derived.by(() => {
@@ -124,11 +122,8 @@
     }
   });
   const detailShown = $derived(detailEmpty || entering);
-  const cawShown = $derived(
-    entering ||
-      waitShown ||
-      (detailEmpty && detailState === "ready" && nothingToOpen)
-  );
+  const cawShown = $derived(entering || waitShown || detailEmpty && detailState === "ready" && nothingToOpen);
+
   /** His slot mounting starts the hold; his `onentered` ends it. */
   const holdWhileEntering = () => {
     entering = true;
@@ -247,7 +242,9 @@
   let entry = $state<EntryData>(captureEntry());
   // Only a `/session` page carries a conversation's server answer; a trip to
   // another spoke leaves the one this surface holds alone.
-  afterNavigate(({ to, type }) => {
+  afterNavigate(({ to, type, shallow }) => {
+    if (shallow) return;
+
     if (to?.url.pathname.startsWith("/session")) {
       entry = captureEntry();
     }
@@ -369,9 +366,8 @@
   $effect(() => {
     const active = workspace.activeSessionId;
     const held = active ? cawco.session(active) : null;
-    const ready =
-      active === null ||
-      (held !== null && (held.initialized || held.messages.length > 0));
+    const ready = active === null || held !== null && (held.initialized || held.messages.length > 0);
+
     if (!ready) {
       return;
     }

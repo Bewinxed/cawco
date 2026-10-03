@@ -20,11 +20,11 @@
     crossOut,
     dur,
     easeOut,
-  } from "$lib/cawco/motion/curves.svelte";
-  import { morph } from "$lib/cawco/motion/morph.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import { Skeleton } from "$lib/components/ui/skeleton";
-  import { IconAlert, IconMaximize } from "$lib/icons";
+  } from "#lib/cawco/motion/curves.svelte.js";
+  import { morph } from "#lib/cawco/motion/morph.svelte.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { IconAlert, IconMaximize } from "#lib/icons.js";
   import DiffModal from "./DiffModal.svelte";
   import { fileName, languageOf } from "./diff-language";
 

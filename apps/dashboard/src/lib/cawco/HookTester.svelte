@@ -1,10 +1,10 @@
 <script lang="ts">
   import type { HookEvent, HookMatcherKind } from "@cawco/core";
   import { hookEventInfo, hookMatcherKind, hookMatches } from "@cawco/core";
-  import { crossIn, crossOut } from "$lib/cawco/motion/curves.svelte";
-  import { unfold } from "$lib/cawco/motion/fold.svelte";
-  import { Badge } from "$lib/components/ui/badge";
-  import { Input } from "$lib/components/ui/input";
+  import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
+  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
+  import { Badge } from "#lib/components/ui/badge/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
 
   /**
    * The part of the editor that tells the truth about a matcher.

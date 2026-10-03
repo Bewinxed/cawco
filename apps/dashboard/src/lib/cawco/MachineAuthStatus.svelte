@@ -1,10 +1,10 @@
 <script lang="ts">
   import type { AuthState } from "@cawco/core";
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
-  import * as Dialog from "$lib/components/ui/dialog";
-  import { Spinner } from "$lib/components/ui/spinner";
-  import { IconSuccess, IconWarningTriangle } from "$lib/icons";
+  import * as Dialog from "#lib/components/ui/dialog/index.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import { IconSuccess, IconWarningTriangle } from "#lib/icons.js";
   import { crossIn, crossOut } from "./motion/curves.svelte";
 
   /**

@@ -25,7 +25,7 @@ import {
   type McpSSEServerConfig,
   parseAgentFrontMatter,
 } from "@cawco/core";
-import { CONTROL_TIMEOUT_MS } from "$lib/config";
+import { CONTROL_TIMEOUT_MS } from "#lib/config.js";
 import { type Machine, machineControl, machineFs } from "./client.svelte";
 import { homeOf } from "./tasks.svelte";
 

@@ -5,7 +5,7 @@
    * copyable, so nothing a failure said is lost to an ellipsis.
    */
   import type { Snippet } from "svelte";
-  import { cn } from "$lib/utils";
+  import { cn } from "#lib/utils.js";
   import ErrorDialog from "./ErrorDialog.svelte";
 
   let {

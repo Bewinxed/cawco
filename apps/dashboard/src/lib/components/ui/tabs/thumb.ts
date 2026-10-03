@@ -1,4 +1,4 @@
-import { dur, ease } from "$lib/cawco/motion/curves.svelte";
+import { dur, ease } from "#lib/cawco/motion/curves.svelte.js";
 
 /**
  * Slides the thumb of a segmented group (tabs, single toggle group) under

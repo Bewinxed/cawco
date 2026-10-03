@@ -13,15 +13,15 @@
   import { SvelteMap } from "svelte/reactivity";
   import type { TransitionConfig } from "svelte/transition";
   import { toast } from "svelte-sonner";
-  import { Button } from "$lib/components/ui/button";
-  import { Spinner } from "$lib/components/ui/spinner";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
   import {
     IconAsk,
     IconExternal,
     IconStop,
     IconSuccess,
     IconWarningTriangle,
-  } from "$lib/icons";
+  } from "#lib/icons.js";
   import { cawco, dismissWorkItem } from "../client.svelte";
   import HoverPanel from "../HoverPanel.svelte";
   import { conversationHref } from "../links";

@@ -1,7 +1,7 @@
 <script lang="ts">
   /** An on/off setting: the switch, its label, and what the current state means. */
   import type { Snippet } from "svelte";
-  import { Switch } from "$lib/components/ui/switch";
+  import { Switch } from "#lib/components/ui/switch/index.js";
 
   let {
     id,

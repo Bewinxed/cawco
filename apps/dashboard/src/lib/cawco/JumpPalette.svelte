@@ -17,12 +17,12 @@
     easeOut,
     motionOk,
     popScale,
-  } from "$lib/cawco/motion/curves.svelte";
-  import { reflow } from "$lib/cawco/motion/rows.svelte";
+  } from "#lib/cawco/motion/curves.svelte.js";
+  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component-group convention
-  import * as Command from "$lib/components/ui/command";
-  import { Kbd } from "$lib/components/ui/kbd";
-  import { Skeleton } from "$lib/components/ui/skeleton";
+  import * as Command from "#lib/components/ui/command/index.js";
+  import { Kbd } from "#lib/components/ui/kbd/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import {
     IconAgent,
     IconChat,
@@ -32,7 +32,7 @@
     IconMonitor,
     IconSearch,
     IconUser,
-  } from "$lib/icons";
+  } from "#lib/icons.js";
   import { ACTIVITY_LABEL } from "./activity";
   import { cawco } from "./client.svelte";
   import JumpMatch from "./JumpMatch.svelte";

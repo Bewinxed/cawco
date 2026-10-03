@@ -7,7 +7,7 @@
    * The run's receipts are told here, not as rows of their own (rows.ts).
    * The line opens the run's tab; a step opens its own session's.
    */
-  import { formatDuration } from "$lib/utils/time";
+  import { formatDuration } from "#lib/utils/time.js";
   import { cawco } from "../client.svelte";
   import { morph } from "../motion/morph.svelte";
   import RunSteps from "../RunSteps.svelte";

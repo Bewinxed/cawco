@@ -1,9 +1,9 @@
 <script lang="ts">
-  import EditorRoute from "$lib/cawco/config/EditorRoute.svelte";
-  import MemoryEditor from "$lib/cawco/config/editors/MemoryEditor.svelte";
-  import { MAIN } from "$lib/cawco/config/memory";
-  import { sectionOf } from "$lib/cawco/config/sections";
-  import { configStore } from "$lib/cawco/config/store.svelte";
+  import EditorRoute from "#lib/cawco/config/EditorRoute.svelte";
+  import MemoryEditor from "#lib/cawco/config/editors/MemoryEditor.svelte";
+  import { MAIN } from "#lib/cawco/config/memory.js";
+  import { sectionOf } from "#lib/cawco/config/sections.js";
+  import { configStore } from "#lib/cawco/config/store.svelte.js";
   import type { PageProps } from "./$types";
 
   let { params }: PageProps = $props();

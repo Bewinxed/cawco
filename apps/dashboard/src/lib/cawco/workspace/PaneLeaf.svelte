@@ -18,16 +18,16 @@
    */
   import { untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
-  import { browser } from "$app/environment";
+  import { browser } from '$app/env';
   import { page } from "$app/state";
   import {
     dur,
     ease,
     easeOut,
     motionOk,
-  } from "$lib/cawco/motion/curves.svelte";
-  import { land } from "$lib/cawco/motion/share.svelte";
-  import WorkflowRunView from "$lib/components/features/workflows/WorkflowRunView.svelte";
+  } from "#lib/cawco/motion/curves.svelte.js";
+  import { land } from "#lib/cawco/motion/share.svelte.js";
+  import WorkflowRunView from "#lib/components/features/workflows/WorkflowRunView.svelte";
   import SessionPane from "../SessionPane.svelte";
   import Composer from "../transcript/Composer.svelte";
   import { runIdOf } from "../workflow-runs";
@@ -38,17 +38,11 @@
   import PaneTabs from "./PaneTabs.svelte";
   import { contextOf, type LeafNode, workspace } from "./workspace.svelte";
 
-  let {
-    leaf,
-    swipeable = false,
-    hosted = false,
-  }: {
-    leaf: LeafNode;
-    /** Only the phone's single group takes the swipe. */
-    swipeable?: boolean;
-    /** The top bar is drawing this group's tabs; the group draws none of its own. */
-    hosted?: boolean;
-  } = $props();
+  let { leaf, swipeable = false, hosted = false
+
+  /** Only the phone's single group takes the swipe. */
+  /** The top bar is drawing this group's tabs; the group draws none of its own. */
+   }: { leaf: LeafNode; swipeable?: boolean; hosted?: boolean } = $props();
 
   const swipe = createSwipe(() => leaf.id);
 
@@ -98,9 +92,7 @@
 
   // Seeded with the showing tab so the server and the first client render
   // agree; later tabs are added by the effects below.
-  let mounted = $state<string[]>(
-    untrack(() => (leaf.active ? [leaf.active] : []))
-  );
+  let mounted = $state<string[]>(untrack(() => leaf.active ? [leaf.active] : []));
 
   $effect.pre(() => {
     const id = viewId;
@@ -226,7 +218,7 @@
         done: new Promise((resolve) => {
           landed = resolve;
         }),
-        ms: () => (settle ? swipe.settleMs : SWITCH_MS),
+        ms: () => settle ? swipe.settleMs : SWITCH_MS
       };
       if (settle) {
         swipe.prepare(from, id);
@@ -327,7 +319,7 @@
   <span aria-hidden="true" class="rail"></span>
 
   {#if !hosted}
-    <PaneTabs {leaf} travel={swipe.travel} />
+    <PaneTabs leaf={leaf} travel={swipe.travel} />
   {/if}
 
   <!-- Where a dropped conversation would go, shown as the shape it would
@@ -362,11 +354,7 @@
     {#each mounted as paneId (paneId)}
       {@const isActive = paneId === viewId}
       {@const delta = deltaOf(paneId)}
-      {@const shown =
-        isActive ||
-        (swipeable &&
-          ((Math.abs(delta) <= 1 && !swipe.veiled.includes(paneId)) ||
-            paneId === swipe.leaving))}
+      {@const shown = isActive || swipeable && (Math.abs(delta) <= 1 && !swipe.veiled.includes(paneId) || paneId === swipe.leaving)}
       {@const ctx = contextOf(paneId)}
       <div
         class="pane"
@@ -375,9 +363,7 @@
         inert={!isActive}
         class:pane-hidden={!shown}
         use:slot={{ id: paneId, shown }}
-        {@attach land(() => (isActive ? `pane:${paneId}` : undefined), {
-          mode: 'clip',
-        })}
+        {@attach land(() => isActive ? `pane:${paneId}` : undefined, { mode: 'clip' })}
       >
         <!-- The server paints the conversation here so a reload shows it
              before the bundle runs; on hydration this branch is dropped and
@@ -392,9 +378,7 @@
             browsingCwd={ctx?.cwd ?? ''}
             browsingHarness={ctx?.harness ?? 'claude'}
             focused={false}
-            serverTail={paneId === page.params.id
-              ? ((page.data as { tail?: unknown }).tail ?? null)
-              : null}
+            serverTail={paneId === page.params.id ? (page.data as { tail?: unknown }).tail ?? null : null}
             viewId={paneId}
             visible={shown}
           />
@@ -413,7 +397,7 @@
         delegatesOf={bound.delegatesOf}
         draft={bound.draft}
         held={swipe.moving}
-        {landing}
+        landing={landing}
         leading={bound.leading}
         mentions={bound.mentions}
         oninterruptsend={bound.oninterruptsend}
@@ -426,7 +410,7 @@
         sendError={bound.sendError}
         sending={bound.sending}
         suggest={bound.suggest}
-        {switchDir}
+        switchDir={switchDir}
       />
     </div>
   {/if}

@@ -25,9 +25,9 @@
    */
   import { untrack } from "svelte";
   import { goto } from "$app/navigation";
-  import { Button } from "$lib/components/ui/button";
+  import { Button } from "#lib/components/ui/button/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte convention for component groups
-  import * as ContextMenu from "$lib/components/ui/context-menu";
+  import * as ContextMenu from "#lib/components/ui/context-menu/index.js";
   import {
     IconClose,
     IconExternal,
@@ -35,8 +35,8 @@
     IconFork,
     IconStop,
     IconTick,
-  } from "$lib/icons";
-  import { smoothText } from "$lib/utils/smooth-text.svelte";
+  } from "#lib/icons.js";
+  import { smoothText } from "#lib/utils/smooth-text.svelte.js";
   import {
     ACTIVITY_LABEL,
     SLEEPING_LABEL,

@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Checkbox as CheckboxPrimitive } from "bits-ui";
-  import { IconMinus, IconTick } from "$lib/icons";
-  import { cn, type WithoutChildrenOrChild } from "$lib/utils.js";
+  import { IconMinus, IconTick } from "#lib/icons.js";
+  import { cn, type WithoutChildrenOrChild } from "#lib/utils.js";
 
   let {
     ref = $bindable(null),

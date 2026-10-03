@@ -17,20 +17,20 @@
     crossIn,
     crossOut,
     dur,
-  } from "$lib/cawco/motion/curves.svelte";
-  import { unfold } from "$lib/cawco/motion/fold.svelte";
-  import { morph } from "$lib/cawco/motion/morph.svelte";
-  import { reflow } from "$lib/cawco/motion/rows.svelte";
-  import DiffView from "$lib/components/features/DiffView.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import { Input } from "$lib/components/ui/input";
+  } from "#lib/cawco/motion/curves.svelte.js";
+  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
+  import { morph } from "#lib/cawco/motion/morph.svelte.js";
+  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
+  import DiffView from "#lib/components/features/DiffView.svelte";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { Input } from "#lib/components/ui/input/index.js";
   import {
     MachineRow,
     machineHue,
     machineIcon,
-  } from "$lib/components/ui/machine-row";
-  import { Spinner } from "$lib/components/ui/spinner";
-  import { Textarea } from "$lib/components/ui/textarea";
+  } from "#lib/components/ui/machine-row/index.js";
+  import { Spinner } from "#lib/components/ui/spinner/index.js";
+  import { Textarea } from "#lib/components/ui/textarea/index.js";
   import {
     IconClock,
     IconHistory,
@@ -38,7 +38,7 @@
     IconMapPoint,
     IconPlay,
     IconTuning,
-  } from "$lib/icons";
+  } from "#lib/icons.js";
   import { cawco, type Machine } from "../../client.svelte";
   import { confirm } from "../../confirm.svelte";
   import { adoptHook, peekHook, pushHook } from "../../fleet";

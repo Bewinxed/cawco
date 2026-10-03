@@ -1,33 +1,33 @@
 <script lang="ts">
   import type { FleetMcpServer } from "@cawco/core";
   import { toast } from "svelte-sonner";
-  import { cawco } from "$lib/cawco/client.svelte";
-  import RolloutChip from "$lib/cawco/config/RolloutChip.svelte";
-  import RowFaults from "$lib/cawco/config/RowFaults.svelte";
-  import RowList from "$lib/cawco/config/RowList.svelte";
-  import SectionFrame from "$lib/cawco/config/SectionFrame.svelte";
-  import SectionRow from "$lib/cawco/config/SectionRow.svelte";
-  import { sectionOf } from "$lib/cawco/config/sections";
-  import { configStore, upsert } from "$lib/cawco/config/store.svelte";
-  import { confirm } from "$lib/cawco/confirm.svelte";
+  import { cawco } from "#lib/cawco/client.svelte.js";
+  import RolloutChip from "#lib/cawco/config/RolloutChip.svelte";
+  import RowFaults from "#lib/cawco/config/RowFaults.svelte";
+  import RowList from "#lib/cawco/config/RowList.svelte";
+  import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
+  import SectionRow from "#lib/cawco/config/SectionRow.svelte";
+  import { sectionOf } from "#lib/cawco/config/sections.js";
+  import { configStore, upsert } from "#lib/cawco/config/store.svelte.js";
+  import { confirm } from "#lib/cawco/confirm.svelte.js";
   import {
     describeMcp,
     isRemoteMcp,
     removeMcpServer,
     saveMcpServer,
     syncFleet,
-  } from "$lib/cawco/fleet";
-  import MachineInventory from "$lib/cawco/MachineInventory.svelte";
-  import { orderMachines } from "$lib/cawco/rail.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import { EmptyState } from "$lib/components/ui/empty";
+  } from "#lib/cawco/fleet.js";
+  import MachineInventory from "#lib/cawco/MachineInventory.svelte";
+  import { orderMachines } from "#lib/cawco/rail.svelte.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { EmptyState } from "#lib/components/ui/empty/index.js";
   import {
     IconGlobe,
     IconPlus,
     IconRefresh,
     IconToolMcp,
     IconTrash,
-  } from "$lib/icons";
+  } from "#lib/icons.js";
 
   /**
    * The MCP servers every machine's Claude Code can reach. New sessions pick

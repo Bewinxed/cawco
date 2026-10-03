@@ -17,8 +17,8 @@
  * is open. `workingSet` only remembers what a conversation is called and
  * where a stored one lives.
  */
-import { browser } from "$app/environment";
-import { pushState, replaceState } from "$app/navigation";
+import { browser } from "$app/env";
+import { goto } from "$app/navigation";
 import { cawco } from "../client.svelte";
 import { conversationHref } from "../links";
 import { workingSet } from "../working-set.svelte";
@@ -139,13 +139,7 @@ function validate(node: unknown): node is PaneNode {
     return typeof n.id === "string" && Array.isArray(n.tabs);
   }
   if (n.t === "b") {
-    return (
-      typeof n.id === "string" &&
-      (n.dir === "h" || n.dir === "v") &&
-      Array.isArray(n.kids) &&
-      n.kids.length > 0 &&
-      n.kids.every(validate)
-    );
+    return typeof n.id === "string" && (n.dir === "h" || n.dir === "v") && Array.isArray(n.kids) && n.kids.length > 0 && n.kids.every(validate);
   }
   return false;
 }
@@ -247,9 +241,7 @@ function leafById(id: string): LeafNode | null {
 }
 
 function leafHolding(sessionId: string): LeafNode | null {
-  return (
-    leavesOf(held.root).find((leaf) => leaf.tabs.includes(sessionId)) ?? null
-  );
+  return leavesOf(held.root).find((leaf) => leaf.tabs.includes(sessionId)) ?? null;
 }
 
 /** The focused leaf, or the first one — `focusedLeaf` can name a closed leaf. */
@@ -445,9 +437,9 @@ function project(sessionId: string | null, mode: "push" | "replace"): void {
   });
   try {
     if (mode === "push") {
-      pushState(url, {});
+      goto(url, { shallow: true });
     } else {
-      replaceState(url, {});
+      goto(url, { shallow: true, replace: true });
     }
   } catch {
     // Before the router is ready the URL is already correct — this is a

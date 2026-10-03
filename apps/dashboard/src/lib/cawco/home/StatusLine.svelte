@@ -5,8 +5,8 @@
    * is down. A dead hub says so with its retry clock and Reconnect: a quiet
    * fleet and an unreachable hub must never read the same.
    */
-  import { Button } from "$lib/components/ui/button";
-  import { IconWarningTriangle } from "$lib/icons";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { IconWarningTriangle } from "#lib/icons.js";
   import { cawco, reconnectNow } from "../client.svelte";
   import { crossIn, crossOut } from "../motion/curves.svelte";
   import { money } from "../usage";

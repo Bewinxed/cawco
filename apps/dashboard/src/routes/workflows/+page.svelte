@@ -2,27 +2,27 @@
   import type { Workflow } from "@cawco/core";
   import { onMount } from "svelte";
   import { goto } from "$app/navigation";
-  import { cawco } from "$lib/cawco/client.svelte";
-  import { message } from "$lib/cawco/delegate-types";
-  import { crossIn, crossOut } from "$lib/cawco/motion/curves.svelte";
+  import { cawco } from "#lib/cawco/client.svelte.js";
+  import { message } from "#lib/cawco/delegate-types.js";
+  import { crossIn, crossOut } from "#lib/cawco/motion/curves.svelte.js";
   import {
     refreshWorkflows,
     workflowState,
-  } from "$lib/cawco/workflow-state.svelte";
-  import { createWorkflow } from "$lib/cawco/workflows";
-  import WorkflowLaunch from "$lib/components/features/workflows/WorkflowLaunch.svelte";
-  import WorkflowStatus from "$lib/components/features/workflows/WorkflowStatus.svelte";
+  } from "#lib/cawco/workflow-state.svelte.js";
+  import { createWorkflow } from "#lib/cawco/workflows.js";
+  import WorkflowLaunch from "#lib/components/features/workflows/WorkflowLaunch.svelte";
+  import WorkflowStatus from "#lib/components/features/workflows/WorkflowStatus.svelte";
   import {
     newNode,
     STARTER_PROGRAM,
-  } from "$lib/components/features/workflows/workflow-ui";
+  } from "#lib/components/features/workflows/workflow-ui.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group
-  import * as DropdownMenu from "$lib/components/ui/dropdown-menu";
-  import { EmptyState } from "$lib/components/ui/empty";
-  import { Skeleton } from "$lib/components/ui/skeleton";
-  import { IconWorkflow } from "$lib/icons";
-  import { formatDistanceToNow } from "$lib/utils/time";
-  import "$lib/components/features/workflows/workflows.css";
+  import * as DropdownMenu from "#lib/components/ui/dropdown-menu/index.js";
+  import { EmptyState } from "#lib/components/ui/empty/index.js";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
+  import { IconWorkflow } from "#lib/icons.js";
+  import { formatDistanceToNow } from "#lib/utils/time.js";
+  import "#lib/components/features/workflows/workflows.css";
 
   let busy = $state(false);
   let errorMessage = $state("");

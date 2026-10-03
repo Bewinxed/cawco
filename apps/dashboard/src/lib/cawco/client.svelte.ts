@@ -71,8 +71,8 @@ import {
   WS_RECONNECT_BASE_DELAY,
   WS_RECONNECT_MAX_ATTEMPTS,
   WS_RECONNECT_MAX_DELAY,
-} from "$lib/config";
-import type { SubagentState } from "$lib/utils/flow-types";
+} from "#lib/config.js";
+import type { SubagentState } from "#lib/utils/flow-types.js";
 import type { Activity } from "./activity";
 import { activityOf, runningSubagents } from "./activity";
 import { checkDeployToast } from "./deploy-toast";

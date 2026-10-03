@@ -10,7 +10,7 @@
    * measures a real viewport and not a zero one.
    */
   import { onMount, untrack } from "svelte";
-  import WorkflowRunView from "$lib/components/features/workflows/WorkflowRunView.svelte";
+  import WorkflowRunView from "#lib/components/features/workflows/WorkflowRunView.svelte";
   import SessionPane from "../SessionPane.svelte";
   import Lightbox from "../transcript/Lightbox.svelte";
   import { runIdOf } from "../workflow-runs";

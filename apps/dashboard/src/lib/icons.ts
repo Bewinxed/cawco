@@ -1,10 +1,10 @@
 // Not solar: the set has no bare plus or close (only circled/squared ones),
 // and an enclosed glyph double-encloses inside pill buttons. Local, set-matched.
 // biome-ignore lint/performance/noBarrelFile: central icon barrel — every consumer imports icons from this index
-export { default as IconClose } from "$lib/components/icons/Close.svelte";
-export { default as IconMinus } from "$lib/components/icons/Minus.svelte";
-export { default as IconPlus } from "$lib/components/icons/Plus.svelte";
-export { default as IconTick } from "$lib/components/icons/Tick.svelte";
+export { default as IconClose } from "#lib/components/icons/Close.svelte";
+export { default as IconMinus } from "#lib/components/icons/Minus.svelte";
+export { default as IconPlus } from "#lib/components/icons/Plus.svelte";
+export { default as IconTick } from "#lib/components/icons/Tick.svelte";
 export { default as IconAlignLeft } from "~icons/solar/align-left-bold-duotone";
 /*
  * Glyphs, not marks: the chevrons and arrows stay in Solar's linear cut, as

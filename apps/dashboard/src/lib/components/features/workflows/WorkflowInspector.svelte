@@ -11,10 +11,10 @@
     WorkflowNode,
   } from "@cawco/core";
   import { EFFORT_LEVELS, workflowPorts } from "@cawco/core";
-  import { cawco } from "$lib/cawco/client.svelte";
-  import { newId } from "$lib/cawco/id";
-  import { crossIn, crossOut, dur } from "$lib/cawco/motion/curves.svelte";
-  import { morph } from "$lib/cawco/motion/morph.svelte";
+  import { cawco } from "#lib/cawco/client.svelte.js";
+  import { newId } from "#lib/cawco/id.js";
+  import { crossIn, crossOut, dur } from "#lib/cawco/motion/curves.svelte.js";
+  import { morph } from "#lib/cawco/motion/morph.svelte.js";
   import JsonField from "./JsonField.svelte";
   import SchemaBuilder from "./SchemaBuilder.svelte";
   import TemplateInput from "./TemplateInput.svelte";

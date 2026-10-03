@@ -16,20 +16,14 @@
    */
   import { untrack } from "svelte";
   import type { TransitionConfig } from "svelte/transition";
-  import { browser } from "$app/environment";
-  import {
-    crossIn,
-    crossOut,
-    dur,
-    easeOut,
-    motionOk,
-  } from "$lib/cawco/motion/curves.svelte";
-  import { waiting as departing, land } from "$lib/cawco/motion/share.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import { EmptyState } from "$lib/components/ui/empty";
+  import { browser } from '$app/env';
+  import { crossIn, crossOut, dur, easeOut, motionOk } from "#lib/cawco/motion/curves.svelte.js";
+  import { waiting as departing, land } from "#lib/cawco/motion/share.svelte.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { EmptyState } from "#lib/components/ui/empty/index.js";
   // biome-ignore lint/performance/noNamespaceImport: shadcn-svelte component group.
-  import * as Resizable from "$lib/components/ui/resizable";
-  import { IconAlert, IconChat, IconLaptop } from "$lib/icons";
+  import * as Resizable from "#lib/components/ui/resizable/index.js";
+  import { IconAlert, IconChat, IconLaptop } from "#lib/icons.js";
   import AutopilotToggle from "./AutopilotToggle.svelte";
   import {
     cawco,
@@ -82,26 +76,27 @@
     browsingHarness,
     visible,
     focused,
-    serverTail = null,
-  }: {
-    viewId: string;
-    browsing: string | null;
-    browsingCwd: string;
-    browsingHarness: string;
+    serverTail = null
+
     /** Whether this pane is on screen at all — governs row building. */
-    visible: boolean;
     /**
      * Whether this pane is the one being worked in. Defaults to `visible`,
      * so a single-pane layout behaves exactly as it always has.
      */
-    focused?: boolean;
     /**
      * The newest transcript page the SERVER read, handed down by value. The
      * layout captures the page's data once per real navigation and gives it
      * to the one pane it was loaded for; every other pane reads its own.
      */
-    serverTail?: unknown;
-  } = $props();
+  }: { 
+    viewId: string;
+    browsing: string | null;
+    browsingCwd: string;
+    browsingHarness: string;
+    visible: boolean;
+    focused?: boolean;
+    serverTail?: unknown
+   } = $props();
 
   const previewVisible = $derived(cawco.previewVisible[viewId] === true);
   /** A named state stands in the middle of the transcript area. */
@@ -346,7 +341,7 @@
    * empty pane and the conversation only appeared once the bundle had hydrated
    * and the stream had answered. Claimed by the pane the URL names.
    */
-  const tail = $derived((serverTail as ServerTail | null) ?? null);
+  const tail = $derived(serverTail as ServerTail | null ?? null);
 
   /**
    * The conversation as a session, built from the page's own data.
@@ -999,8 +994,15 @@
      row (transcript/settle.ts). -->
 {#snippet parkedPrompts()}
   {#each parked as request (request.requestId)}
-    <div class="parked" data-flip out:settleInto={request.toolUseId}>
-      <Prompt onanswer={(result) => onanswer(request, result)} {request} />
+    <div
+      class="parked"
+      data-flip
+      out:settleInto={request.toolUseId}
+    >
+      <Prompt
+        onanswer={(result) => onanswer(request, result)}
+        request={request}
+      />
     </div>
   {/each}
 {/snippet}
@@ -1011,8 +1013,8 @@
       class="session-content"
       bind:this={content}
       class:preview-shown={desktopPreview}
-      class:resizing={resizing}
-      class:sliding={sliding}
+      class:resizing
+      class:sliding
     >
       <Resizable.PaneGroup class="preview-group" direction="horizontal">
         <Resizable.Pane class="transcript-pane" defaultSize={100} minSize={30}>
@@ -1075,13 +1077,13 @@
               {:else if mounted}
                 <div class="state">
                   <Transcript
-                    {agentName}
-                    {focused}
+                    agentName={agentName}
+                    focused={focused}
                     onshown={(drawn) => {
                       shown = drawn;
                     }}
-                    {session}
-                    {visible}
+                    session={session}
+                    visible={visible}
                   />
                 </div>
               {/if}
@@ -1102,21 +1104,21 @@
             {:else if writable && !browser}
               <Composer
                 busy={session.busy}
-                {commands}
+                commands={commands}
                 delegatesOf={viewId}
-                {draft}
+                draft={draft}
                 leading={autopilot}
-                {mentions}
-                {oninterruptsend}
+                mentions={mentions}
+                oninterruptsend={oninterruptsend}
                 onmenu={refreshMenu}
-                {onstop}
-                {onsubmit}
+                onstop={onstop}
+                onsubmit={onsubmit}
                 paneVisible={visible}
                 previewPhone={phone}
                 prompts={parkedPrompts}
                 sendError={sendFailure}
-                {sending}
-                {suggest}
+                sending={sending}
+                suggest={suggest}
               />
             {/if}
           </div>
@@ -1153,7 +1155,7 @@
       </Resizable.PaneGroup>
       {#if sheetMounted && phone && visible}
         <PreviewSheet
-          {content}
+          content={content}
           instanceId={viewId}
           onescape={() => draft.closeSelectionEditor()}
           onselect={(selection) => draft.attach(selection)}

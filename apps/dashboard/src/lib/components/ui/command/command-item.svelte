@@ -1,7 +1,7 @@
 <script lang="ts">
   import { Command as CommandPrimitive } from "bits-ui";
-  import { IconTick } from "$lib/icons";
-  import { cn } from "$lib/utils.js";
+  import { IconTick } from "#lib/icons.js";
+  import { cn } from "#lib/utils.js";
 
   let {
     ref = $bindable(null),

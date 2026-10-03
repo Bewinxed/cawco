@@ -11,8 +11,8 @@
     morphMs,
     motionOk,
     popScale,
-  } from "$lib/cawco/motion/curves.svelte";
-  import { highlight } from "$lib/components/ui/highlight/highlight.svelte";
+  } from "#lib/cawco/motion/curves.svelte.js";
+  import { highlight } from "#lib/components/ui/highlight/highlight.svelte.js";
   import { countOf, faultsIn } from "./counts.svelte";
   import { unsavedIn } from "./drafts.svelte";
   import { GROUPS, type SectionSlug } from "./sections";

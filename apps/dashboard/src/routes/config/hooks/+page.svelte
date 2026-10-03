@@ -1,15 +1,15 @@
 <script lang="ts">
   import { hookSentence } from "@cawco/core";
   import { toast } from "svelte-sonner";
-  import { cawco } from "$lib/cawco/client.svelte";
-  import RolloutChip from "$lib/cawco/config/RolloutChip.svelte";
-  import RowFaults from "$lib/cawco/config/RowFaults.svelte";
-  import RowList from "$lib/cawco/config/RowList.svelte";
-  import SectionFrame from "$lib/cawco/config/SectionFrame.svelte";
-  import SectionRow from "$lib/cawco/config/SectionRow.svelte";
-  import { sectionOf } from "$lib/cawco/config/sections";
-  import { configStore } from "$lib/cawco/config/store.svelte";
-  import { confirm } from "$lib/cawco/confirm.svelte";
+  import { cawco } from "#lib/cawco/client.svelte.js";
+  import RolloutChip from "#lib/cawco/config/RolloutChip.svelte";
+  import RowFaults from "#lib/cawco/config/RowFaults.svelte";
+  import RowList from "#lib/cawco/config/RowList.svelte";
+  import SectionFrame from "#lib/cawco/config/SectionFrame.svelte";
+  import SectionRow from "#lib/cawco/config/SectionRow.svelte";
+  import { sectionOf } from "#lib/cawco/config/sections.js";
+  import { configStore } from "#lib/cawco/config/store.svelte.js";
+  import { confirm } from "#lib/cawco/confirm.svelte.js";
   import {
     draftOf,
     type FleetHook,
@@ -17,12 +17,12 @@
     message,
     removeHook,
     saveHook,
-  } from "$lib/cawco/hooks";
-  import { newId } from "$lib/cawco/id";
-  import { orderMachines } from "$lib/cawco/rail.svelte";
-  import { Button } from "$lib/components/ui/button";
-  import { EmptyState } from "$lib/components/ui/empty";
-  import { IconHook, IconPlus, IconTrash } from "$lib/icons";
+  } from "#lib/cawco/hooks.js";
+  import { newId } from "#lib/cawco/id.js";
+  import { orderMachines } from "#lib/cawco/rail.svelte.js";
+  import { Button } from "#lib/components/ui/button/index.js";
+  import { EmptyState } from "#lib/components/ui/empty/index.js";
+  import { IconHook, IconPlus, IconTrash } from "#lib/icons.js";
 
   /**
    * The hooks, each read as the sentence it is — a matcher's meaning is easy

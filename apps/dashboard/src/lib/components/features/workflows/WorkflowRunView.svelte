@@ -7,29 +7,29 @@
    * There is no graph here: a graph is for editing (/workflows/[id]).
    */
   import { goto } from "$app/navigation";
-  import { cawco } from "$lib/cawco/client.svelte";
-  import { confirm } from "$lib/cawco/confirm.svelte";
-  import { message } from "$lib/cawco/delegate-types";
-  import { unfold } from "$lib/cawco/motion/fold.svelte";
-  import { morph } from "$lib/cawco/motion/morph.svelte";
-  import { reflow } from "$lib/cawco/motion/rows.svelte";
-  import RunSteps from "$lib/cawco/RunSteps.svelte";
-  import { runHref, runTabId } from "$lib/cawco/workflow-runs";
+  import { cawco } from "#lib/cawco/client.svelte.js";
+  import { confirm } from "#lib/cawco/confirm.svelte.js";
+  import { message } from "#lib/cawco/delegate-types.js";
+  import { unfold } from "#lib/cawco/motion/fold.svelte.js";
+  import { morph } from "#lib/cawco/motion/morph.svelte.js";
+  import { reflow } from "#lib/cawco/motion/rows.svelte.js";
+  import RunSteps from "#lib/cawco/RunSteps.svelte";
+  import { runHref, runTabId } from "#lib/cawco/workflow-runs.js";
   import {
     refreshWorkflowLog,
     refreshWorkflowRun,
     workflowState,
-  } from "$lib/cawco/workflow-state.svelte";
+  } from "#lib/cawco/workflow-state.svelte.js";
   import {
     answerWorkflow,
     cancelWorkflowRun,
     rerunWorkflow,
-  } from "$lib/cawco/workflows";
-  import SessionStatus from "$lib/cawco/workspace/SessionStatus.svelte";
+  } from "#lib/cawco/workflows.js";
+  import SessionStatus from "#lib/cawco/workspace/SessionStatus.svelte";
   import PendingContent, {
     whileIdle,
-  } from "$lib/components/ui/button/pending-content.svelte";
-  import { Skeleton } from "$lib/components/ui/skeleton";
+  } from "#lib/components/ui/button/pending-content.svelte";
+  import { Skeleton } from "#lib/components/ui/skeleton/index.js";
   import { followTail } from "./follow-tail";
   import { journalCheckpoints, journalLog } from "./journal-graph";
   import { duration } from "./workflow-ui";
