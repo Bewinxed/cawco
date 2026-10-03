@@ -1,7 +1,4 @@
-import CawCoDesign
-import Highlightr
 import Markdown
-import UIKit
 
 /// Candidate 3 from the device bake-off: parse only the open Markdown block,
 /// freeze earlier blocks, and chunk open fences every twenty completed lines.
@@ -9,7 +6,15 @@ struct MarkdownSplitter {
     private var offset = 0
     private var header = ""
 
+    /// The tail continues a fence whose earlier lines were frozen as chunks.
+    var tailContinues: Bool { !header.isEmpty }
+
+    /// For each piece the last `split` froze: whether the next piece continues
+    /// its fence (a chunk of an open fence, drawn as one well with the next).
+    private(set) var joins: [Bool] = []
+
     mutating func split(_ text: String) -> (settled: [String], tail: String) {
+        joins = []
         let bytes = Array(text.utf8)
         if offset > bytes.count { self = MarkdownSplitter() }
         let headerBytes = Array(header.utf8)
@@ -26,6 +31,7 @@ struct MarkdownSplitter {
             }
             for i in 0 ..< starts.count - 1 {
                 frozen.append(String(decoding: raw[starts[i] ..< starts[i + 1]], as: UTF8.self))
+                joins.append(false)
             }
             offset += starts.last! - headerBytes.count
             tail = String(decoding: raw[starts.last!...], as: UTF8.self)
@@ -39,6 +45,7 @@ struct MarkdownSplitter {
                 while lines.count > 21, !lines[1...20].contains(where: { $0.trimmingCharacters(in: .whitespaces).hasPrefix(marker) }) {
                     let body = lines[1...20].joined(separator: "\n") + "\n"
                     frozen.append(opening + "\n" + body + marker)
+                    joins.append(true)
                     offset += body.utf8.count + (header.isEmpty ? opening.utf8.count + 1 : 0)
                     header = opening + "\n"
                     lines.removeSubrange(1...20)
@@ -85,96 +92,5 @@ enum PartialSyntax {
         }
         text.replaceSubrange(start..., with: paragraph)
         return text
-    }
-}
-
-enum MarkdownText {
-    static func render(_ source: String, dark: Bool, highlight: Bool) -> NSAttributedString {
-        let out = NSMutableAttributedString(string: "")
-        let body = TypeScale.typeProse.font
-        let mono = UIFontMetrics(forTextStyle: .body).scaledFont(for: UIFont.monospacedSystemFont(ofSize: TypeScale.typeCode.points, weight: .regular))
-        let style = NSMutableParagraphStyle()
-        style.lineSpacing = max(0, TypeScale.typeProse.lineHeight - body.lineHeight)
-        style.paragraphSpacing = Space.space2
-        let base: [NSAttributedString.Key: Any] = [.font: body, .foregroundColor: Palette.inkStrong, .paragraphStyle: style]
-        func traits(_ attributes: [NSAttributedString.Key: Any], _ adding: UIFontDescriptor.SymbolicTraits) -> [NSAttributedString.Key: Any] {
-            var result = attributes
-            let font = attributes[.font] as? UIFont ?? body
-            if let descriptor = font.fontDescriptor.withSymbolicTraits(font.fontDescriptor.symbolicTraits.union(adding)) { result[.font] = UIFont(descriptor: descriptor, size: font.pointSize) }
-            return result
-        }
-        func inlines(_ node: Markup, _ attributes: [NSAttributedString.Key: Any]) {
-            for child in node.children {
-                switch child {
-                case let text as Text: out.append(NSAttributedString(string: text.string, attributes: attributes))
-                case is Strong: inlines(child, traits(attributes, .traitBold))
-                case is Emphasis: inlines(child, traits(attributes, .traitItalic))
-                case is Strikethrough:
-                    var struck = attributes; struck[.strikethroughStyle] = 1; inlines(child, struck)
-                case let code as InlineCode:
-                    var codeStyle = attributes; codeStyle[.font] = mono; codeStyle[.backgroundColor] = Palette.surfaceRecess
-                    out.append(NSAttributedString(string: code.code, attributes: codeStyle))
-                case let link as Link:
-                    var linked = attributes
-                    if let target = link.destination, let url = URL(string: target) { linked[.link] = url }
-                    inlines(child, linked)
-                case is SoftBreak: out.append(NSAttributedString(string: " ", attributes: attributes))
-                case is LineBreak: out.append(NSAttributedString(string: "\n", attributes: attributes))
-                case let image as Image: out.append(NSAttributedString(string: image.plainText, attributes: attributes))
-                default: inlines(child, attributes)
-                }
-            }
-        }
-        func block(_ node: Markup, indent: Double = 0) {
-            switch node {
-            case let heading as Heading:
-                inlines(heading, TypeScale.typeTitle.attributes(color: Palette.inkStrong))
-            case let paragraph as Paragraph: inlines(paragraph, base)
-            case let code as CodeBlock:
-                var attrs = base; attrs[.font] = mono; attrs[.backgroundColor] = Palette.surfaceRecess
-                let value = NSMutableAttributedString(string: code.code.trimmingCharacters(in: .newlines), attributes: attrs)
-                if highlight, let highlighter = Highlightr() {
-                    highlighter.setTheme(to: dark ? "atom-one-dark" : "github")
-                    if let lit = highlighter.highlight(value.string, as: code.language), lit.string == value.string {
-                        lit.enumerateAttribute(.foregroundColor, in: NSRange(location: 0, length: lit.length)) { color, range, _ in
-                            if let color { value.addAttribute(.foregroundColor, value: color, range: range) }
-                        }
-                    }
-                }
-                out.append(value)
-            case let list as UnorderedList:
-                for (i, item) in list.listItems.enumerated() {
-                    if i > 0 { out.append(NSAttributedString(string: "\n")) }
-                    out.append(NSAttributedString(string: String(repeating: "  ", count: Int(indent)) + "• ", attributes: base))
-                    for child in item.children { block(child, indent: indent + 1) }
-                }
-            case let list as OrderedList:
-                for (i, item) in list.listItems.enumerated() {
-                    if i > 0 { out.append(NSAttributedString(string: "\n")) }
-                    out.append(NSAttributedString(string: "\(Int(list.startIndex) + i). ", attributes: base))
-                    for child in item.children { block(child, indent: indent + 1) }
-                }
-            case let table as Table:
-                func row(_ cells: [Table.Cell], head: Bool) {
-                    for (i, cell) in cells.enumerated() {
-                        if i > 0 { out.append(NSAttributedString(string: "  │  ", attributes: base)) }
-                        inlines(cell, head ? traits(base, .traitBold) : base)
-                    }
-                }
-                row(Array(table.head.cells), head: true)
-                for line in table.body.rows { out.append(NSAttributedString(string: "\n")); row(Array(line.cells), head: false) }
-            case is ThematicBreak: out.append(NSAttributedString(string: "────────", attributes: base))
-            default:
-                for (i, child) in node.children.enumerated() {
-                    if i > 0 { out.append(NSAttributedString(string: "\n")) }
-                    block(child, indent: indent)
-                }
-            }
-        }
-        for (i, node) in Document(parsing: source).children.enumerated() {
-            if i > 0 { out.append(NSAttributedString(string: "\n")) }
-            block(node)
-        }
-        return out
     }
 }

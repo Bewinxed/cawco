@@ -525,6 +525,14 @@ public final class StatusGlyph: UIStackView {
         fatalError("StatusGlyph is built in code")
     }
 
+    /// The glyph alone (SessionStatus.svelte `compact`); the word stays its accessible name.
+    public var compact = false {
+        didSet {
+            word.isHidden = compact
+            arrangedSubviews.last?.isHidden = compact
+        }
+    }
+
     public func configure(_ status: SessionStatus) {
         glyph.image = UIImage(systemName: status.symbol)?.applyingSymbolConfiguration(.preferringMulticolor())
         glyph.tintColor = status.tint

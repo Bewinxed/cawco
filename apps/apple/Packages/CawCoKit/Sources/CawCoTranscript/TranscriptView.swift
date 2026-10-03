@@ -1,37 +1,49 @@
+import CawCoAPI
 import CawCoCore
 import CawCoDesign
 import OSLog
 public import UIKit
 
-/// Scene-local reading position, keyed by the stable block-piece id rather
-/// than by a scroll offset that changes as the conversation grows.
+/// Scene-local reading position, keyed by the stable item id rather than by
+/// a scroll offset that changes as the conversation grows.
 public struct TranscriptPosition: Codable, Sendable {
     public let following: Bool
     public let anchor: String?
     public let offset: Double
 }
 
-/// A virtualized native transcript. Hub blocks are stable list identities;
-/// settled Markdown pieces are cached and only the open tail is reconfigured.
+/// The native transcript (Transcript.svelte): the hub's blocks folded into
+/// the web's rows, each drawn by the native twin of its web component, in a
+/// self-sizing list keyed by stable ids. Settled items are configured once;
+/// the live tail is paced on the display link and only its cells update.
 public final class TranscriptView: UIView, UICollectionViewDelegate {
-    private struct Row {
-        let id: String
-        let source: String
-        let speaker: String
-        let streaming: Bool
-        let well: Bool
-        let code: Bool
-    }
+    /// The hub the session is on: the fleet for delegates and runs, the
+    /// pictures and memory history it serves, the asks parked on the reader.
+    public weak var hub: HubConnection? { didSet { env.hub = hub; dirty = true } }
+    /// Opening another session or a run in its own view; the host routes it.
+    public var onOpenSession: (String) -> Void = { _ in }
+    public var onOpenRun: (String) -> Void = { _ in }
+
     private let collection: UICollectionView
     private var dataSource: UICollectionViewDiffableDataSource<Int, String>!
-    private var rows: [String: Row] = [:]
-    private var cached: [String: NSAttributedString] = [:]
-    private var fingerprints: [String: String] = [:]
-    private var staticRows: [Row] = []
-    private var segments: [String: (signature: String, rows: [Row])] = [:]
-    private var blockRevision = -1
-    private var tailRows: [Row] = []
+    private let env = RowEnv()
+    private var items: [String: Item] = [:]
+    private var prints: [String: String] = [:]
+    private var order: [String] = []
+    private var open = Set<String>()
+    private var transcript: SessionTranscript?
+
+    // The hub's blocks, read once per revision.
+    private var revision = -1
+    private var blocks: [Block] = []
+    private var branches: [String: Branch] = [:]
+    private var queued: [Block] = []
+    private var rows: [Row] = []
+    private var voices = Voices()
+
+    // The live tail, paced (prompt-3: candidate 3, paced).
     private var splitter = MarkdownSplitter()
+    private var liveSources: [Builder.Source] = []
     private var received = ""
     private var characters: [Character] = []
     private var cursor = 0
@@ -41,29 +53,49 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     private var lastArrival = 0.0
     private var arrivals: [(end: Int, time: Double)] = []
     private var drainDeadline: Double?
-    private var busy = false
+    private var generation = 0
+    private var liveWasOn = false
+    private var lastAnswer = ""
+    private var reasoningEnded = false
+    private var keys: [String: String] = [:]
+    private var ahead: Set<String>?
+    private var folding: String?
+
     private var dirty = true
     private var following = true
+    private var landed = false
+    private var known = Set<String>()
+    private var arriving: [String: Double] = [:]
+    private var gliding = false
+    private var farFromLatest = false
     private var pendingPosition: TranscriptPosition?
     private var link: CADisplayLink?
     private var proxy: DisplayTarget?
+    private var watchedDelegates = Set<String>()
+    private let latestButton = DockPill(glyph: .arrowDown, title: "Jump to latest")
+    private let catchUp = DockPill(glyph: nil, title: "Catching up…")
+    private let compacting = DockPill(glyph: nil, title: "Compacting context…", pill: true)
     private let signposter = OSSignposter(subsystem: "dev.cawco.app", category: "Transcript")
 
     public override init(frame: CGRect) {
-        let layout = UICollectionViewCompositionalLayout { _, _ in
+        let layout = UICollectionViewCompositionalLayout { _, environment in
             let size = NSCollectionLayoutSize(widthDimension: .fractionalWidth(1), heightDimension: .estimated(44))
-            let item = NSCollectionLayoutItem(layoutSize: size)
-            let section = NSCollectionLayoutSection(group: .vertical(layoutSize: size, subitems: [item]))
-            section.interGroupSpacing = Space.space3
-            section.contentInsets = .init(top: Space.space5, leading: Space.space5, bottom: Space.space5, trailing: Space.space5)
+            let section = NSCollectionLayoutSection(group: .vertical(layoutSize: size, subitems: [NSCollectionLayoutItem(layoutSize: size)]))
+            // The ledger's asymmetric inset: 25 at the start, 21 at the end; 18 both 900pt wide and under.
+            let narrow = environment.container.contentSize.width <= 900
+            section.contentInsets = .init(top: 0, leading: narrow ? Space.space5 : Space.space7, bottom: Space.space5,
+                                          trailing: narrow ? Space.space5 : Space.space6)
             return section
         }
         collection = UICollectionView(frame: .zero, collectionViewLayout: layout)
         super.init(frame: frame)
-        backgroundColor = Palette.surfacePage
-        collection.backgroundColor = Palette.surfacePage
+        // The session pane's ground (SessionPane.svelte `.pane`): the recess, not the page.
+        backgroundColor = Palette.surfaceRecess
+        collection.backgroundColor = Palette.surfaceRecess
         collection.delegate = self
         collection.keyboardDismissMode = .interactive
+        collection.selfSizingInvalidation = .enabledIncludingConstraints
+        collection.accessibilityLabel = "Session transcript"
         collection.translatesAutoresizingMaskIntoConstraints = false
         addSubview(collection)
         NSLayoutConstraint.activate([
@@ -72,22 +104,100 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             collection.topAnchor.constraint(equalTo: topAnchor),
             collection.bottomAnchor.constraint(equalTo: bottomAnchor),
         ])
-        let registration = UICollectionView.CellRegistration<TranscriptCell, String> { [weak self] cell, _, id in
-            guard let self, let row = rows[id] else { return }
-            let attributed = cached[id] ?? render(row)
-            cached[id] = attributed
-            cell.configure(attributed, speaker: row.speaker, well: row.well, streaming: row.streaming, code: row.code)
-        }
-        dataSource = UICollectionViewDiffableDataSource(collectionView: collection) { view, index, id in
-            view.dequeueConfiguredReusableCell(using: registration, for: index, item: id)
-        }
+        makeDataSource()
+        wireEnv()
+        placeDock()
         registerForTraitChanges([UITraitUserInterfaceStyle.self, UITraitPreferredContentSizeCategory.self]) { (view: TranscriptView, _: UITraitCollection) in
-            view.cached = [:]; view.fingerprints = [:]; view.dirty = true
+            view.env.cache.clear()
+            view.prints = [:]
+            view.dirty = true
         }
     }
 
     @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("TranscriptView is built in code") }
+    required init?(coder _: NSCoder) { fatalError("TranscriptView is built in code") }
+
+    private func makeDataSource() {
+        func registration<V: RowContent>(_: V.Type) -> UICollectionView.CellRegistration<HostCell<V>, String> {
+            UICollectionView.CellRegistration<HostCell<V>, String> { [weak self] cell, _, id in
+                guard let self, let item = items[id] else { return }
+                cell.install(env: env)
+                cell.configure(item)
+            }
+        }
+        let piece = registration(PieceView.self), user = registration(UserTurnView.self), tool = registration(ToolLineView.self)
+        let thinking = registration(ThinkingView.self), system = registration(SystemLineView.self), peer = registration(PeerView.self)
+        let question = registration(QuestionCardView.self), subagent = registration(SubagentView.self)
+        let delegate = registration(DelegateView.self), run = registration(RunView.self), live = registration(LiveToolView.self)
+        let notice = registration(NoticeView.self)
+        dataSource = UICollectionViewDiffableDataSource(collectionView: collection) { [weak self] view, index, id in
+            guard let kind = self?.items[id]?.kind else { return view.dequeueConfiguredReusableCell(using: notice, for: index, item: id) }
+            switch kind {
+            case .piece: return view.dequeueConfiguredReusableCell(using: piece, for: index, item: id)
+            case .user: return view.dequeueConfiguredReusableCell(using: user, for: index, item: id)
+            case .tool: return view.dequeueConfiguredReusableCell(using: tool, for: index, item: id)
+            case .thinking: return view.dequeueConfiguredReusableCell(using: thinking, for: index, item: id)
+            case .system, .harness: return view.dequeueConfiguredReusableCell(using: system, for: index, item: id)
+            case .peer: return view.dequeueConfiguredReusableCell(using: peer, for: index, item: id)
+            case .question: return view.dequeueConfiguredReusableCell(using: question, for: index, item: id)
+            case .subagent: return view.dequeueConfiguredReusableCell(using: subagent, for: index, item: id)
+            case .delegate: return view.dequeueConfiguredReusableCell(using: delegate, for: index, item: id)
+            case .run: return view.dequeueConfiguredReusableCell(using: run, for: index, item: id)
+            case .livetool: return view.dequeueConfiguredReusableCell(using: live, for: index, item: id)
+            case .notice, .empty: return view.dequeueConfiguredReusableCell(using: notice, for: index, item: id)
+            }
+        }
+    }
+
+    private func wireEnv() {
+        env.isOpen = { [weak self] key in self?.open.contains(key) ?? false }
+        env.toggle = { [weak self] key, view in self?.toggle(key, from: view) }
+        env.openLightbox = { [weak self] item, _ in
+            guard let self, let host = window?.rootViewController else { return }
+            var top = host
+            while let shown = top.presentedViewController { top = shown }
+            top.present(Lightbox(item, env: env), animated: !UIAccessibility.isReduceMotionEnabled)
+        }
+        env.parentBlocks = { [weak self] in self?.blocks ?? [] }
+        env.delegateTranscript = { [weak self] id in self?.hub?.sessions.transcripts[id] }
+        env.watchDelegate = { [weak self] id, watch in
+            guard let self, let sessions = hub?.sessions else { return }
+            if watch, !watchedDelegates.contains(id) { watchedDelegates.insert(id); _ = sessions.open(id) }
+            if !watch, watchedDelegates.contains(id) { watchedDelegates.remove(id); sessions.close(id) }
+        }
+        env.runSteps = { [weak self] id in self.map { $0.steps(id) } ?? [] }
+        env.openSession = { [weak self] id in self?.onOpenSession(id) }
+        env.openRun = { [weak self] id in self?.onOpenRun(id) }
+    }
+
+    deinit {
+        MainActor.assumeIsolated {
+            for id in watchedDelegates { hub?.sessions.close(id) }
+        }
+    }
+
+    /// A run's steps off its detail (WorkflowRunsStore), schedule order.
+    private func steps(_ runId: String) -> [RunStep] {
+        guard let detail = hub?.workflowRuns.open(runId), let run = detail.run,
+              let data = try? JSONEncoder().encode(run),
+              let raw = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [] }
+        let nodes = ((raw["graph"] as? [String: Any])?["nodes"] as? [[String: Any]]) ?? []
+        let parse = ISO8601DateFormatter()
+        parse.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        func date(_ value: Any?) -> Date? {
+            if let seconds = value as? Double { return Date(timeIntervalSinceReferenceDate: seconds) }
+            return (value as? String).flatMap { parse.date(from: $0) ?? ISO8601DateFormatter().date(from: $0) }
+        }
+        return (raw["steps"] as? [[String: Any]] ?? []).map { step in
+            let node = step["nodeId"] as? String ?? ""
+            let session = (step["instanceId"] as? String).flatMap { hub?.fleet.byId[$0]?.title }
+            var title = nodes.first { $0["id"] as? String == node }?["title"] as? String
+                ?? session?.trimmingCharacters(in: .whitespaces).nonEmpty ?? node
+            if let index = step["mapIndex"] as? Int { title += " [\(index)]" }
+            return RunStep(id: step["id"] as? String ?? node, status: step["status"] as? String ?? "", title: title,
+                           started: date(step["startedAt"]), ended: date(step["endedAt"]))
+        }
+    }
 
     override public func didMoveToWindow() {
         super.didMoveToWindow()
@@ -102,40 +212,46 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
         }
     }
 
+    override public func layoutSubviews() {
+        super.layoutSubviews()
+        let columns = Columns.at(width: bounds.width)
+        if columns != env.columns {
+            env.columns = columns
+            prints = [:]
+            dirty = true
+        }
+    }
+
+    // MARK: Reading the transcript
+
     public func configure(_ transcript: SessionTranscript) {
-        if transcript.blockRevision != blockRevision {
-            blockRevision = transcript.blockRevision
-            let blocks = transcript.blocks + transcript.branches.flatMap { $0.value2.blocks } + transcript.queued
-            staticRows = blocks.flatMap { block -> [Row] in
-                let kind = block._type.value3?.rawValue ?? block._type.value1 ?? block._type.value2 ?? ""
-                if kind == "send.ref" || kind == "system.init" { return [] }
-                let signature = kind + block.content + (block.metadata?.toolResult ?? "") + (block.state?.rawValue ?? "")
-                if let held = segments[block.id], held.signature == signature { return held.rows }
-                let user = kind.hasPrefix("user")
-                let tool = kind.hasPrefix("tool")
-                let speaker = user ? (kind == "user.peer" ? block.metadata?.peerName ?? "Peer" : kind == "user.rule" ? "Rule" : "You") : tool ? block.metadata?.toolName ?? "Tool" : kind == "thinking" ? "Thinking" : kind == "assistant" ? "Assistant" : kind
-                var text = block.content
-                if tool, let result = block.metadata?.toolResult, !result.isEmpty { text += "\n\n" + result }
-                if let state = block.state, state != .read { text += "\n\n" + state.rawValue.capitalized }
-                var split = MarkdownSplitter()
-                let pieces = split.split(text)
-                let drawn = (pieces.settled + [pieces.tail]).enumerated().map { i, source in
-                    Row(id: "\(block.id):\(i)", source: source, speaker: i == 0 ? speaker : "", streaming: false, well: user || tool, code: tool)
-                }
-                segments[block.id] = (signature, drawn)
-                return drawn
+        self.transcript = transcript
+        env.sessionId = transcript.id
+        env.machineId = transcript.location?.machineId
+        if let harness = transcript.facts?.harness ?? transcript.location?.harness {
+            env.agentName = ["claude": "Claude Code", "opencode": "opencode", "code": "opencode", "pi": "pi"][harness] ?? harness
+        }
+        if transcript.blockRevision != revision {
+            revision = transcript.blockRevision
+            blocks = transcript.blocks.compactMap(Block.init)
+            var map: [String: Branch] = [:]
+            let streams = (try? JSONEncoder().encode(transcript.tail?.streams))
+                .flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] } ?? [:]
+            for page in transcript.branches {
+                let inner = page.value2.blocks.compactMap(Block.init)
+                let streaming = streams[page.value1.toolUseId] as? String ?? ""
+                if let branch = Branch(page, blocks: inner, streaming: streaming) { map[branch.toolUseId] = branch }
             }
-            let kept = Set(blocks.map(\.id))
-            segments = segments.filter { kept.contains($0.key) }
+            branches = map
+            queued = transcript.queued.compactMap(Block.init)
             dirty = true
         }
         let tail = transcript.tail
-        busy = tail?.busy == true
         let next = tail?.streaming ?? ""
         if next != received {
             let now = CACurrentMediaTime()
             if !next.hasPrefix(received) || next.isEmpty {
-                splitter = MarkdownSplitter(); tailRows = []; cursor = 0; shown = 0; rate = 0
+                splitter = MarkdownSplitter(); liveSources = []; cursor = 0; shown = 0; rate = 0
                 arrivals = []
             }
             received = next
@@ -143,22 +259,158 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
             arrivals.append((characters.count, now))
             lastArrival = now
             drainDeadline = nil
-            dirty = true
         }
-        var live: [Row] = []
-        if let thinking = tail?.thinkingStream, !thinking.isEmpty {
-            live.append(Row(id: "live-thinking", source: PartialSyntax.hide(thinking), speaker: "Thinking", streaming: true, well: false, code: false))
-        }
-        if let tool = tail?.currentTool {
-            live.append(Row(id: "live-tool", source: tool.glance, speaker: tool.name, streaming: false, well: true, code: false))
-        }
-        if busy, next.isEmpty, live.isEmpty {
-            live.append(Row(id: "live-status", source: "Working…", speaker: "", streaming: false, well: false, code: false))
-        }
-        if auxiliary.map(\.source) != live.map(\.source) || auxiliary.map(\.id) != live.map(\.id) { auxiliary = live; dirty = true }
+        dirty = true
     }
 
-    private var auxiliary: [Row] = []
+    /// The rows the reader sees: settled first (rows.ts `drawnOf` — an
+    /// unanswered question is the composer's while asks reach the reader).
+    private func settledRows() -> [Row] {
+        let bypass = factsValue("permissionMode") as? String == "bypassPermissions"
+        let drawn = blocks.filter { block in
+            !(Fold.isQuestion(block) && block.toolStatus == "pending" && !bypass)
+                && block.type != "send.ref" && block.type != "system.init"
+        }
+        var voices = Voices()
+        let rows = Fold.rows(drawn, branches: branches, voices: &voices)
+        self.voices = voices
+        return rows
+    }
+
+    private func factsValue(_ key: String) -> Any? {
+        guard let facts = transcript?.facts, let data = try? JSONEncoder().encode(facts),
+              let raw = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return raw[key]
+    }
+
+    // MARK: Building items
+
+    private func build() -> [Item] {
+        guard let transcript else { return [] }
+        rows = settledRows()
+        let tail = transcript.tail
+        let reasoning = (tail?.openBlock?.rawValue == "thinking" || tail?.thinkingClosing == true) && received.isEmpty
+        let last = blocks.last
+        let spoke = (last?.type == "assistant" || last?.type == "thinking") && !(last?.content.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true)
+        let parked = hub?.needs.parked[transcript.id]?.count ?? 0
+        isCompacting = factsValue("sdkStatus") as? String == "compacting"
+        let indicating = tail?.busy == true && !spoke
+            && !(last?.type == "tool.use" && last?.toolStatus == "pending")
+            && parked == 0
+            && !isCompacting
+            && last?.string("sendFailed") == nil
+            && received.isEmpty && tail?.currentTool == nil && tail?.openBlock?.rawValue != "tool" && tail?.thinkingClosing != true
+        let liveOn = reasoning || !received.isEmpty || indicating
+        // The live row's generation: a new one each time the tail opens again.
+        if liveOn, !liveWasOn { generation += 1 }
+        let liveKey = "live:\(generation)"
+        // A streamed answer that landed as its message keeps the live row's cells.
+        if liveWasOn, !liveOn, !lastAnswer.isEmpty,
+           let landed = blocks.last(where: { $0.type == "assistant" }),
+           landed.content.trimmingCharacters(in: .whitespacesAndNewlines).hasPrefix(lastAnswer.trimmingCharacters(in: .whitespacesAndNewlines).prefix(200)),
+           keys[landed.id] == nil {
+            keys[landed.id] = "live:\(generation)"
+        }
+        // Reasoning the reader watched lands as its own row and folds shut there.
+        if liveWasOn, reasoningEnded, !reasoning, let thought = blocks.last(where: { $0.type == "thinking" }), !known.contains(thought.id) {
+            folding = thought.id
+        }
+        reasoningEnded = reasoning
+        liveWasOn = liveOn
+        lastAnswer = liveOn ? received : lastAnswer
+
+        var builder = Builder(agentName: env.agentName, cache: env.cache)
+        builder.keys = keys
+        var (out, rail) = builder.items(rows)
+        for i in out.indices {
+            if case let .thinking(r) = out[i].kind, r.key == "think:\(folding ?? "")" {
+                out[i] = Item(id: out[i].id, top: out[i].top, kind: .thinking(.init(key: r.key, text: r.text, live: false, folding: true)),
+                              print: out[i].print + "folding")
+            }
+            out[i].print += fleetPrint(out[i])
+        }
+
+        // The tail: the sends drawn ahead of it, the live row, the call in flight, the rest.
+        let tool = tail?.currentTool.flatMap { glance -> (String, String)? in
+            Self.called(blocks, glance.toolId) ? nil : (glance.name, glance.glance)
+        }
+        let hasTail = liveOn || tool != nil
+        if hasTail, ahead == nil { ahead = Set(queued.map(\.id)) } else if !hasTail { ahead = nil }
+        var tailVoices = voices
+        func queuedItems(_ ahead: Bool) -> [Item] {
+            let rows = queued.filter { (self.ahead?.contains($0.id) ?? false) == ahead }.map { block -> Row in
+                .queued(key: block.id, block: block, grouped: tailVoices.advance(Fold.voice(of: block)))
+            }
+            let built = builder.items(rows, railAbove: rail)
+            rail = built.railBelow
+            return built.items
+        }
+        out += queuedItems(true)
+        if reasoning || (indicating && received.isEmpty) {
+            _ = tailVoices.advance(.acts)
+            out.append(Item(id: liveKey, top: rail ? 0 : Space.space4,
+                            kind: .thinking(.init(key: "think:\(liveKey)", text: reasoning ? (tail?.thinkingStream ?? "") : "", live: true, folding: false)),
+                            print: (tail?.thinkingStream ?? "") + "\(reasoning)"))
+            rail = true
+        } else if !received.isEmpty {
+            let grouped = tailVoices.advance(.says)
+            var sources = liveSources
+            let tailText = currentTail
+            if !tailText.isEmpty || sources.isEmpty {
+                sources.append(.init(text: tailText, joinsAbove: splitter.tailContinues))
+            }
+            out += builder.pieces(id: liveKey, sources: sources, grouped: grouped, date: nil, streaming: true)
+            rail = false
+        }
+        if let (name, glance) = tool {
+            _ = tailVoices.advance(.acts)
+            out.append(Item(id: "tool:\(tail?.currentTool?.toolId ?? name)", top: rail ? 0 : Space.space4,
+                            kind: .livetool(name: name, glance: glance), print: name + glance))
+            rail = true
+        }
+        out += queuedItems(false)
+
+        if out.isEmpty {
+            out = [transcript.loading ? Item(id: "notice:loading", top: 0, kind: .notice("Loading transcript…"), print: "loading")
+                : Item(id: "notice:empty", top: 0, kind: .empty, print: "empty")]
+        }
+        return out
+    }
+
+    /// What a delegate or run row reads off the fleet, so it redraws when that moves.
+    private func fleetPrint(_ item: Item) -> String {
+        guard let fleet = hub?.fleet else { return "" }
+        switch item.kind {
+        case let .delegate(block):
+            guard let id = block.string("delegateInstanceId") else { return "" }
+            let row = fleet.byId[id]
+            let pulse = fleet.pulses[id]
+            let open = env.isOpen(block.disclosureKey)
+            let inner = open ? (hub?.sessions.transcripts[id]).map { "\($0.blockRevision)\($0.loading)\($0.tail?.streaming.count ?? 0)" } ?? "" : ""
+            return "\(row?.status.rawValue ?? "")\(row?.lastError ?? "")\(pulse?.activity.rawValue ?? "")\(pulse?.currentTool?.glance ?? "")\(open)\(inner)\(blocks.count)"
+        case let .run(block, anchored):
+            guard let id = anchored ?? Fold.startedRun(block), let run = fleet.runs[id] else { return "" }
+            let steps = hub?.workflowRuns.details[id]?.run.map { "\($0.steps.count)" } ?? ""
+            return "\(run.status.rawValue)\(run.endedAt ?? 0)\(run.failure ?? "")\(steps)"
+        case let .peer(block) where block.string("reportKind") != nil:
+            return fleet.rows.contains { $0.id.hasPrefix(block.string("peerSession") ?? "-") } ? "linked" : ""
+        default:
+            return ""
+        }
+    }
+
+    /// rows.ts `called`: the call in flight already has its message.
+    private static func called(_ blocks: [Block], _ toolId: String) -> Bool {
+        for block in blocks.reversed() {
+            if block.type == "user" { return false }
+            if (block.toolId ?? block.toolCallId) == toolId { return true }
+        }
+        return false
+    }
+
+    private var currentTail = ""
+
+    // MARK: The frame
 
     fileprivate func frame(_ link: CADisplayLink) {
         let now = CACurrentMediaTime()
@@ -173,7 +425,7 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
                 rate += (pending / 0.18 - rate) * (1 - exp(-dt / 0.25))
                 rate = min(900, max(12, rate))
                 var step = rate * dt
-                if !busy || now - lastArrival >= 0.2 {
+                if transcript?.tail?.busy != true || now - lastArrival >= 0.2 {
                     let deadline = drainDeadline ?? now + 0.4
                     drainDeadline = deadline
                     step = max(step, pending * dt / max(dt, deadline - now))
@@ -189,64 +441,162 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
                 cursor = end
                 arrivals.removeAll { $0.end <= cursor }
                 let pieces = splitter.split(String(characters[..<end]))
-                if tailRows.last?.id == "live-tail" { tailRows.removeLast() }
-                for source in pieces.settled {
-                    tailRows.append(Row(id: "live-piece-\(tailRows.count)", source: source, speaker: tailRows.isEmpty ? "Assistant" : "", streaming: false, well: false, code: false))
+                let joins = splitter.joins
+                for (i, piece) in pieces.settled.enumerated() {
+                    let above = liveSources.last?.joinsBelow ?? false
+                    liveSources.append(.init(text: piece, joinsAbove: above, joinsBelow: i < joins.count ? joins[i] : false))
                 }
-                tailRows.append(Row(id: "live-tail", source: PartialSyntax.hide(pieces.tail), speaker: tailRows.isEmpty ? "Assistant" : "", streaming: true, well: false, code: false))
+                currentTail = pieces.tail
                 dirty = true
             }
         }
+        if received.isEmpty, !currentTail.isEmpty { currentTail = "" }
         if dirty { dirty = false; commit() }
         restoreIfReady()
-        // Self-sizing can refine an estimated height after a snapshot's completion.
-        // Follow that refinement too, rather than landing halfway through history.
-        if following { latest() }
-        for case let cell as TranscriptCell in collection.visibleCells { cell.fade(now) }
-    }
-
-    private func render(_ row: Row) -> NSAttributedString {
-        if row.code {
-            return DiffView.text(row.source)
+        if following, !gliding { latest() }
+        let visible = collection.visibleCells
+        for cell in visible {
+            (cell as? HostCell<PieceView>)?.row.fade(now)
+            (cell as? HostCell<ThinkingView>)?.row.fade(now)
         }
-        return MarkdownText.render(row.source, dark: traitCollection.userInterfaceStyle == .dark, highlight: !row.streaming)
+        updateDock()
     }
 
     private func commit() {
         let interval = signposter.beginInterval("transcriptFrame")
         defer { signposter.endInterval("transcriptFrame", interval) }
-        let ordered = staticRows + auxiliary + tailRows
-        let ids = ordered.map(\.id)
+        env.watched = landed && window != nil
+        let built = build()
+        var next: [String: Item] = [:]
+        for item in built { next[item.id] = item }
+        let ids = built.map(\.id)
         let old = dataSource.snapshot()
         let previous = Set(old.itemIdentifiers)
-        rows = Dictionary(uniqueKeysWithValues: ordered.map { ($0.id, $0) })
         var changed: [String] = []
-        for row in ordered {
-            let print = row.source + row.speaker
-            if fingerprints[row.id] != print {
-                fingerprints[row.id] = print
-                cached[row.id] = nil
-                if previous.contains(row.id) { changed.append(row.id) }
+        for item in built where prints[item.id] != item.print {
+            if previous.contains(item.id) { changed.append(item.id) }
+        }
+        items = next
+        prints = Dictionary(uniqueKeysWithValues: built.map { ($0.id, $0.print) })
+        // Rows that arrive while the reader watches are drawn arriving (Row.svelte).
+        if env.watched {
+            let now = CACurrentMediaTime()
+            for (slot, id) in ids.filter({ !known.contains($0) }).enumerated() {
+                arriving[id] = now + Double(min(slot, 3)) * Motion.durStagger
             }
         }
-        cached = cached.filter { rows[$0.key] != nil }
-        fingerprints = fingerprints.filter { rows[$0.key] != nil }
+        known.formUnion(ids)
         if old.itemIdentifiers == ids, changed.isEmpty { return }
         var snapshot = NSDiffableDataSourceSnapshot<Int, String>()
-        snapshot.appendSections([0]); snapshot.appendItems(ids); snapshot.reconfigureItems(changed)
+        snapshot.appendSections([0])
+        snapshot.appendItems(ids)
+        snapshot.reconfigureItems(changed)
         let follow = following
+        let grew = env.watched && ids.count > old.itemIdentifiers.count && follow && !UIAccessibility.isReduceMotionEnabled
+        let from = collection.contentOffset
         dataSource.apply(snapshot, animatingDifferences: false) { [weak self] in
             guard let self else { return }
             collection.layoutIfNeeded()
-            if follow { latest() }
+            if let id = folding, let index = dataSource.indexPath(for: id),
+               let cell = collection.cellForItem(at: index) as? HostCell<ThinkingView> {
+                folding = nil
+                animate(cell.row, open: false, in: cell)
+            }
+            if !landed, transcript?.loading == false { landed = true }
+            guard follow else { return }
+            if grew {
+                // The rows above make room on the place's clock rather than jumping.
+                collection.contentOffset = from
+                gliding = true
+                let animator = Motion.easeOut.animator(Motion.durRail) { self.scrollToBottom() }
+                animator.addCompletion { _ in self.gliding = false; self.latest() }
+                animator.startAnimation()
+            } else { latest() }
         }
+        announce(built)
+    }
+
+    public func collectionView(_: UICollectionView, willDisplay cell: UICollectionViewCell, forItemAt index: IndexPath) {
+        guard let id = dataSource.itemIdentifier(for: index), let start = arriving.removeValue(forKey: id) else { return }
+        let content = cell.contentView
+        let reduced = UIAccessibility.isReduceMotionEnabled
+        content.alpha = 0
+        content.transform = reduced ? .identity : CGAffineTransform(translationX: 0, y: 3)
+        // The place opens first (--dur-rail), then the content fades up into it (--dur-menu).
+        let delay = max(0, start - CACurrentMediaTime()) + (reduced ? 0 : Motion.durRail)
+        let animator = Motion.easeOut.animator(reduced ? Motion.durControl : Motion.durMenu) {
+            content.alpha = 1
+            content.transform = .identity
+        }
+        animator.startAnimation(afterDelay: delay)
+    }
+
+    public func collectionView(_: UICollectionView, didEndDisplaying cell: UICollectionViewCell, forItemAt _: IndexPath) {
+        cell.contentView.layer.removeAllAnimations()
+        cell.contentView.alpha = 1
+        cell.contentView.transform = .identity
+    }
+
+    // MARK: Disclosure
+
+    private func toggle(_ key: String, from view: UIView) {
+        guard let row = view as? Disclosing else { return }
+        if open.contains(key) { open.remove(key) } else { open.insert(key) }
+        let cell = sequence(first: view as UIView, next: { $0.superview }).first { $0 is UICollectionViewCell } as? UICollectionViewCell
+        animate(row, open: !row.disclosed, in: cell)
+        dirty = true
+    }
+
+    /// A body grows open (--dur-reveal) or folds shut (--dur-exit) on
+    /// --ease-out, its row's height on the same clock; at once under Reduce Motion.
+    private func animate(_ row: Disclosing, open: Bool, in cell: UICollectionViewCell?) {
+        // Main-actor closures from a main-actor view, run on the main actor by the animator.
+        nonisolated(unsafe) let (layout, done) = row.toggled(open: open)
+        let change: @MainActor () -> Void = {
+            layout()
+            cell?.contentView.layoutIfNeeded()
+            cell?.invalidateIntrinsicContentSize()
+            self.collection.layoutIfNeeded()
+        }
+        guard !UIAccessibility.isReduceMotionEnabled, window != nil else {
+            change(); done(); return
+        }
+        let animator = Motion.easeOut.animator(open ? Motion.durReveal : Motion.durExit, animations: change)
+        animator.addCompletion { _ in done() }
+        animator.startAnimation()
+    }
+
+    // MARK: Following and position
+
+    private var bottomOffset: CGFloat {
+        max(-collection.adjustedContentInset.top, collection.contentSize.height - collection.bounds.height + collection.adjustedContentInset.bottom)
+    }
+
+    private func scrollToBottom() {
+        collection.contentOffset = CGPoint(x: 0, y: bottomOffset)
     }
 
     public func latest() {
         pendingPosition = nil
         following = true
-        let bottom = max(-collection.adjustedContentInset.top, collection.contentSize.height - collection.bounds.height + collection.adjustedContentInset.bottom)
-        collection.setContentOffset(CGPoint(x: 0, y: bottom), animated: false)
+        farFromLatest = false
+        scrollToBottom()
+    }
+
+    /// Jump to latest (Transcript `jump`): within three screens one smooth
+    /// glide, past it — or under Reduce Motion — an instant landing.
+    private func jump() {
+        let distance = bottomOffset - collection.contentOffset.y
+        if UIAccessibility.isReduceMotionEnabled || distance > 3 * collection.bounds.height {
+            latest()
+            return
+        }
+        following = true
+        farFromLatest = false
+        gliding = true
+        let animator = Motion.easeOut.animator(Motion.durPanel) { self.scrollToBottom() }
+        animator.addCompletion { _ in self.gliding = false; self.latest() }
+        animator.startAnimation()
     }
 
     public var restorationPosition: TranscriptPosition {
@@ -275,10 +625,73 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     }
 
     public func scrollViewDidScroll(_ scrollView: UIScrollView) {
-        if scrollView.isDragging || scrollView.isDecelerating {
-            pendingPosition = nil
-            following = scrollView.contentSize.height - scrollView.contentOffset.y - scrollView.bounds.height <= Space.space8
+        guard scrollView.isDragging || scrollView.isDecelerating else { return }
+        pendingPosition = nil
+        gliding = false
+        let distance = scrollView.contentSize.height - scrollView.contentOffset.y - scrollView.bounds.height
+        following = distance <= Space.space8
+        // Hysteresis: up past three quarters of a screen, and it stays until back at the tail.
+        farFromLatest = !following && (farFromLatest || distance > 0.75 * scrollView.bounds.height)
+    }
+
+    // MARK: The docks
+
+    private func placeDock() {
+        for pill in [latestButton, catchUp, compacting] {
+            pill.translatesAutoresizingMaskIntoConstraints = false
+            pill.alpha = 0
+            pill.isHidden = true
+            addSubview(pill)
         }
+        latestButton.addAction(UIAction { [weak self] _ in self?.jump() }, for: .touchUpInside)
+        catchUp.isUserInteractionEnabled = false
+        compacting.isUserInteractionEnabled = false
+        NSLayoutConstraint.activate([
+            latestButton.centerXAnchor.constraint(equalTo: centerXAnchor),
+            latestButton.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor, constant: -Space.space4),
+            catchUp.centerXAnchor.constraint(equalTo: centerXAnchor),
+            catchUp.bottomAnchor.constraint(equalTo: safeAreaLayoutGuide.bottomAnchor, constant: -Space.space4),
+            compacting.centerXAnchor.constraint(equalTo: centerXAnchor),
+            compacting.topAnchor.constraint(equalTo: topAnchor, constant: Space.space3),
+        ])
+    }
+
+    private func updateDock() {
+        let rowsDrawn = !rows.isEmpty
+        latestButton.show(landed && farFromLatest && rowsDrawn)
+        catchUp.show(transcript?.loading == true && rowsDrawn)
+        compacting.show(isCompacting)
+    }
+
+    /// The session's own word: `compacting` (read as the items are built).
+    private var isCompacting = false
+
+    // MARK: Speaking
+
+    private var announced = Set<String>()
+    private var wasBusy = false
+
+    /// The live region (Transcript `announcement`): one coarse sentence for
+    /// what arrived, once landed; "Turn finished" when the turn ends.
+    private func announce(_ built: [Item]) {
+        guard landed, window != nil else {
+            announced.formUnion(built.map(\.id))
+            wasBusy = transcript?.tail?.busy == true
+            return
+        }
+        var phrase = ""
+        for item in built where !announced.contains(item.id) {
+            announced.insert(item.id)
+            switch item.kind {
+            case let .piece(piece) where !piece.streaming && piece.header != nil: phrase = "Agent replied"
+            case let .livetool(name, _): phrase = "\(name) running"
+            default: break
+            }
+        }
+        let busy = transcript?.tail?.busy == true
+        if wasBusy, !busy { phrase = "Turn finished" }
+        wasBusy = busy
+        if !phrase.isEmpty { UIAccessibility.post(notification: .announcement, argument: phrase) }
     }
 
     private final class DisplayTarget: NSObject {
@@ -288,113 +701,65 @@ public final class TranscriptView: UIView, UICollectionViewDelegate {
     }
 }
 
-private final class TranscriptCell: UICollectionViewCell {
-    private let speaker = KitLabel(TypeScale.typeMeta, ink: Palette.inkMuted)
-    private let text = UITextView(usingTextLayoutManager: true)
-    private let diff = DiffView()
-    private var fades: [(range: NSRange, at: Double, color: UIColor)] = []
+/// The floating surfaces over the list's foot (Latest.svelte, CatchUp.svelte)
+/// and top (the compacting pill): raised, hairline, --shadow-overlay; they
+/// rise in over --dur-panel and out over --dur-exit.
+final class DockPill: UIControl {
+    private let beat = Dot(Size.txBeatLg, color: Palette.statusLiveInk)
+    private var shown = false
 
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        text.isEditable = false; text.isSelectable = true; text.isScrollEnabled = false
-        text.backgroundColor = .clear; text.textContainerInset = .zero; text.textContainer.lineFragmentPadding = 0
-        text.adjustsFontForContentSizeCategory = true
-        let stack = UIStackView(arrangedSubviews: [speaker, text, diff])
-        stack.axis = .vertical; stack.spacing = Space.space2; stack.translatesAutoresizingMaskIntoConstraints = false
-        contentView.addSubview(stack)
-        contentView.layer.cornerRadius = Radius.radiusMd
-        NSLayoutConstraint.activate([
-            stack.leadingAnchor.constraint(equalTo: contentView.leadingAnchor, constant: Space.space3),
-            stack.trailingAnchor.constraint(equalTo: contentView.trailingAnchor, constant: -Space.space3),
-            stack.topAnchor.constraint(equalTo: contentView.topAnchor, constant: Space.space2),
-            stack.bottomAnchor.constraint(equalTo: contentView.bottomAnchor, constant: -Space.space2),
-        ])
+    init(glyph: Glyph?, title: String, pill: Bool = false) {
+        super.init(frame: .zero)
+        backgroundColor = Palette.surfaceRaised
+        layer.cornerRadius = pill ? Size.cBtnHLg : Radius.radiusMd
+        layer.cornerCurve = .continuous
+        layer.borderWidth = 1
+        var views: [UIView] = []
+        if let glyph { views.append(GlyphView(glyph, size: Size.iconMd, tint: Palette.inkStrong)) } else { views.append(beat) }
+        let label = LineLabel(hug: .required, resist: .required)
+        label.attributedText = Styled.string(title, TypeScale.typeLabel, color: Palette.inkStrong)
+        views.append(label)
+        let row = railLine(views)
+        row.isUserInteractionEnabled = false
+        pin(row, insets: UIEdgeInsets(top: Space.space2, left: pill ? Space.space4 : Space.space3, bottom: Space.space2, right: pill ? Space.space4 : Space.space3))
+        isAccessibilityElement = true
+        accessibilityLabel = title
+        accessibilityTraits = glyph == nil ? .updatesFrequently : .button
+        registerForTraitChanges([UITraitUserInterfaceStyle.self]) { (pill: DockPill, _: UITraitCollection) in pill.paint() }
+        paint()
     }
 
     @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("TranscriptCell is built in code") }
+    required init?(coder _: NSCoder) { fatalError("built in code") }
 
-    func configure(_ next: NSAttributedString, speaker: String, well: Bool, streaming: Bool, code: Bool) {
-        self.speaker.text = speaker; self.speaker.isHidden = speaker.isEmpty
-        contentView.backgroundColor = well ? Palette.surfaceRecess : .clear
-        diff.isHidden = !code
-        text.isHidden = code
-        if code { diff.configure(next); return }
-        let storage = text.textStorage
-        let old = storage.string as NSString
-        let new = next.string as NSString
-        let prefix = storage.string.commonPrefix(with: next.string) as NSString
-        var start = old.paragraphRange(for: NSRange(location: min(prefix.length, old.length), length: 0)).location
-        start = min(start, new.length)
-        if start > 0, !storage.attributedSubstring(from: NSRange(location: 0, length: start)).isEqual(to: next.attributedSubstring(from: NSRange(location: 0, length: start))) { start = 0 }
-        storage.beginEditing()
-        storage.replaceCharacters(in: NSRange(location: start, length: old.length - start), with: next.attributedSubstring(from: NSRange(location: start, length: new.length - start)))
-        storage.endEditing()
-        if streaming, !UIAccessibility.isReduceMotionEnabled, new.length > old.length {
-            new.enumerateSubstrings(in: NSRange(location: old.length, length: new.length - old.length), options: [.byWords, .substringNotRequired]) { _, word, _, _ in
-                let color = storage.attribute(.foregroundColor, at: word.location, effectiveRange: nil) as? UIColor ?? Palette.inkStrong
-                self.fades.append((word, CACurrentMediaTime(), color))
-            }
+    private func paint() {
+        layer.borderColor = Palette.borderHairline.resolvedColor(with: traitCollection).cgColor
+        layer.draw(Shadow.shadowOverlay.filter { !$0.inset && $0.spread == 0 }.prefix(1).map { $0 }, in: traitCollection)
+        layer.borderWidth = 1
+        layer.borderColor = Palette.borderHairline.resolvedColor(with: traitCollection).cgColor
+    }
+
+    override var isHighlighted: Bool {
+        didSet {
+            backgroundColor = isHighlighted ? Palette.surfaceHover : Palette.surfaceRaised
+            guard !UIAccessibility.isReduceMotionEnabled else { return }
+            Motion.easeOut.animator(Motion.durToggle) {
+                self.transform = self.isHighlighted ? CGAffineTransform(scaleX: Motion.pressScale, y: Motion.pressScale) : .identity
+            }.startAnimation()
         }
     }
 
-    func fade(_ now: Double) {
-        guard let manager = text.textLayoutManager, let content = manager.textContentManager else { return }
-        fades.removeAll { entry in
-            guard NSMaxRange(entry.range) <= text.textStorage.length,
-                  let start = content.location(content.documentRange.location, offsetBy: entry.range.location),
-                  let end = content.location(start, offsetBy: entry.range.length),
-                  let range = NSTextRange(location: start, end: end) else { return true }
-            let progress = UIAccessibility.isReduceMotionEnabled ? 1 : min(1, (now - entry.at) / Motion.durMenu)
-            if progress >= 1 { manager.removeRenderingAttribute(.foregroundColor, for: range); return true }
-            manager.addRenderingAttribute(.foregroundColor, value: entry.color.withAlphaComponent(Motion.easeOut.value(at: progress)), for: range)
-            return false
+    func show(_ visible: Bool) {
+        guard visible != shown else { return }
+        shown = visible
+        if visible { isHidden = false; beat.beat() }
+        let rise = UIAccessibility.isReduceMotionEnabled ? .identity : CGAffineTransform(translationX: 0, y: Motion.popRise)
+        if visible { transform = rise; alpha = 0 }
+        let animator = Motion.easeOut.animator(visible ? Motion.durPanel : Motion.durExit) {
+            self.alpha = visible ? 1 : 0
+            self.transform = visible ? .identity : rise
         }
-    }
-
-    override func prepareForReuse() {
-        super.prepareForReuse()
-        fades = []
-        text.text = ""
-    }
-}
-
-/// Unified diff lines keep their exact text, using the web's add/delete tokens.
-public final class DiffView: UIView {
-    private let textView = UITextView(usingTextLayoutManager: true)
-
-    public override init(frame: CGRect) {
-        super.init(frame: frame)
-        textView.isEditable = false
-        textView.isSelectable = true
-        textView.isScrollEnabled = false
-        textView.backgroundColor = .clear
-        textView.textContainerInset = .zero
-        textView.textContainer.lineFragmentPadding = 0
-        textView.translatesAutoresizingMaskIntoConstraints = false
-        addSubview(textView)
-        NSLayoutConstraint.activate([
-            textView.leadingAnchor.constraint(equalTo: leadingAnchor),
-            textView.trailingAnchor.constraint(equalTo: trailingAnchor),
-            textView.topAnchor.constraint(equalTo: topAnchor),
-            textView.bottomAnchor.constraint(equalTo: bottomAnchor),
-        ])
-    }
-
-    @available(*, unavailable)
-    required init?(coder: NSCoder) { fatalError("DiffView is built in code") }
-
-    func configure(_ value: NSAttributedString) { textView.attributedText = value }
-
-    static func text(_ source: String) -> NSAttributedString {
-        let value = NSMutableAttributedString(string: "")
-        let font = UIFontMetrics(forTextStyle: .body).scaledFont(for: UIFont.monospacedSystemFont(ofSize: TypeScale.typeCode.points, weight: .regular))
-        for line in source.components(separatedBy: "\n") {
-            var attributes: [NSAttributedString.Key: Any] = [.font: font, .foregroundColor: Palette.inkStrong]
-            if line.hasPrefix("+") { attributes[.backgroundColor] = Palette.diffAddBg }
-            if line.hasPrefix("-") { attributes[.backgroundColor] = Palette.diffDelBg }
-            value.append(NSAttributedString(string: line + "\n", attributes: attributes))
-        }
-        return value
+        animator.addCompletion { _ in if !self.shown { self.isHidden = true } }
+        animator.startAnimation()
     }
 }
