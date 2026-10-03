@@ -341,7 +341,9 @@ final class PaneGroupController: UIViewController, TabSwipeHost, UIDropInteracti
         var first: [UIMenuElement] = []
         if BoardRun.runId(of: id) == nil {
             first.append(UIAction(title: "Session details") { [weak self] _ in self?.panes.showDetails(id, from: self) })
-            first.append(UIAction(title: "Continue in new session…", image: Glyph.arrowRight.image) { [weak self] _ in self?.panes.continueInNewSession(id) })
+            if panes.continueHandler != nil {
+                first.append(UIAction(title: "Continue in new session…", image: Glyph.arrowRight.image) { [weak self] _ in self?.panes.continueInNewSession(id) })
+            }
         }
         let splits: [UIMenuElement] = [
             UIAction(title: "Split right") { [weak self] _ in self?.split(id, .right) },

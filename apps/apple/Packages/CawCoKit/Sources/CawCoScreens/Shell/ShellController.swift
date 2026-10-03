@@ -14,6 +14,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     private let home: HomeModel
 
     private(set) var destination: ShellDestination = .fleet
+    private var spoke: ShellDestination = .fleet
     private(set) var assistantOpen = false
 
     /// This window's open conversations and their groups.
@@ -52,7 +53,8 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     static let railDefault = 228.0
 
     var context: ShellContext {
-        ShellContext(hub: hub, home: home, openSession: { [weak self] id in self?.openSession(id) }, go: { [weak self] place in self?.go(place) })
+        ShellContext(hub: hub, home: home, openSession: { [weak self] id in self?.openSession(id) }, go: { [weak self] place in self?.go(place) },
+                     forgetProject: { [weak self] project in self?.forgetProject(project) })
     }
 
     var activeSessionId: String? { currentId }
@@ -149,6 +151,8 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             return
         }
         let travel = Travel.route(from: destination, to: next)
+        // The last place outside a project home, where forgetting one goes back to (route.svelte.ts `spoke`).
+        if case .project = destination {} else { spoke = destination }
         destination = next
         mainCrumb.set(next.crumb, animated: true)
         compactCrumb.set(next.crumb, animated: true)
@@ -306,9 +310,29 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         railSheet?.dismiss(animated: true)
     }
 
-    func newProject(from _: UIView) {}
+    /// NewProjectPopover: hung off the rail's plus, wherever the rail is.
+    func newProject(from source: UIView) {
+        KitPopover.present(NewProjectController(hub: hub), from: source, in: railSheet ?? self)
+    }
 
-    func forgetProject(_: ProjectRow) {}
+    /// FolderMenu's "Forget project…" and the project page's: the grouping
+    /// goes, the checkout and its sessions stay; a project page that was
+    /// showing it goes back to the place it was opened from.
+    func forgetProject(_ project: ProjectRow) {
+        let dialog = ConfirmDialog(
+            title: "Forget \(project.name)?",
+            body: "The grouping is removed. The checkout and its sessions stay on disk.",
+            confirmLabel: "Forget",
+            pendingLabel: "Forgetting…"
+        ) { [weak self] in
+            guard let self else { return }
+            try await hub.deleteProject(id: project.id)
+            if destination == .project(project.id) { go(spoke) }
+            pages[.project(project.id)] = nil
+            pages[Self.compactKey(.project(project.id))] = nil
+        }
+        (presentedViewController ?? self).present(dialog, animated: true)
+    }
 
     func showLimits() {
         let sheet = UINavigationController(rootViewController: UsageSheetController(home: home))

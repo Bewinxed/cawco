@@ -45,6 +45,8 @@ public struct ShellContext {
     public let openSession: (String) -> Void
     /// Goes to another place in the shell.
     public let go: (ShellDestination) -> Void
+    /// Asks to forget a project (the confirm, then the hub).
+    let forgetProject: (ProjectRow) -> Void
 }
 
 /// The routing hook each track fills: the screen a destination opens.

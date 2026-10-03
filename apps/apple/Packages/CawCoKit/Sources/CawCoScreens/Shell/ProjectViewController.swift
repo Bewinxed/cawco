@@ -64,9 +64,27 @@ final class ProjectViewController: ObservedViewController {
         let meta = UIStackView(arrangedSubviews: [folder, machine])
         meta.spacing = Space.space3
         meta.alignment = .center
-        let head = UIStackView(arrangedSubviews: [name, meta])
-        head.axis = .vertical
-        head.spacing = Space.space1
+        let titles = UIStackView(arrangedSubviews: [name, meta])
+        titles.axis = .vertical
+        titles.spacing = Space.space1
+        // The header's actions: Forget project… as the kit's ghost button in muted ink.
+        var forgetStyle = UIButton.Configuration.plain()
+        forgetStyle.attributedTitle = AttributedString("Forget project…", attributes: AttributeContainer(TypeScale.typeButton.attributes(color: Palette.mutedForeground, tracking: -0.01)))
+        forgetStyle.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: Space.space4, bottom: 0, trailing: Space.space4)
+        forgetStyle.background.cornerRadius = Radius.radiusMd
+        let forget = UIButton(configuration: forgetStyle, primaryAction: UIAction { [weak self] _ in
+            guard let self, let project = context.hub.fleet.projects.first(where: { $0.id == projectId }) else { return }
+            context.forgetProject(project)
+        })
+        forget.configurationUpdateHandler = { button in
+            button.configuration?.background.backgroundColor = button.isHighlighted ? Palette.surfaceFill : .clear
+        }
+        forget.houseStyle()
+        forget.heightAnchor.constraint(equalToConstant: Size.cBtnH).isActive = true
+        let head = UIStackView(arrangedSubviews: [titles, forget])
+        head.alignment = .center
+        head.spacing = Space.space4
+        titles.setContentHuggingPriority(.defaultLow, for: .horizontal)
         page.addArrangedSubview(head)
 
         // Sessions, in a card.
