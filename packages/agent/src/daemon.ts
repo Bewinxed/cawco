@@ -212,13 +212,12 @@ export const HEALTHY_CONNECTION = Duration.seconds(60);
 let activeSupervisor: SessionSupervisor | undefined;
 
 /**
- * How many sessions this daemon is carrying mid-turn, once it knows — `0`
- * before the supervisor exists (nothing has been asked yet, so nothing can be
- * busy). This is what lets the deploy poller (deploy.ts) hold a restart until
+ * How many sessions this daemon is carrying mid-turn, once it knows. Before
+ * the supervisor exists, unknown is held busy. The deploy poller holds a restart until
  * idle without asking the hub a question the daemon can answer about itself.
  */
 export const currentBusy = async (): Promise<number> =>
-  activeSupervisor ? (await activeSupervisor.busyNow()).busy : 0;
+  activeSupervisor ? (await activeSupervisor.busyNow()).busy : 1;
 
 /**
  * How many consecutive failures against the pinned URL, and how much wall
@@ -575,11 +574,55 @@ const attach = (
     // then an empty busy set means nothing has been read yet, and a restarted
     // agent read `0` for 23 s while two sessions worked (2026-10-01). Let go
     // when custody is handed over, or when the connection ends without it.
-    const custodyDecided = Promise.withResolvers<void>();
-    supervisor.holdBusy(custodyDecided.promise);
-    socket.addEventListener("close", () => custodyDecided.resolve(), {
-      once: true,
-    });
+    let custodyEpoch = supervisor.beginCustody(
+      payload.custody?.instances ?? []
+    );
+    let recoveryController: AbortController | undefined;
+    let registrationAttempt = 0;
+    let registrationDeadline: ReturnType<typeof setTimeout>;
+    const registrationExpired = () => {
+      if (awaitingRegisterAck && socket.readyState === WebSocket.OPEN) {
+        supervisor.failCustody(
+          custodyEpoch,
+          new Error(
+            "Registration did not provide a custody decision within 120 seconds"
+          )
+        );
+        registrationAttempt += 1;
+        const backoff = Math.min(
+          30_000,
+          1000 * 2 ** Math.min(registrationAttempt - 1, 5)
+        );
+        registrationDeadline = setTimeout(() => {
+          if (awaitingRegisterAck && socket.readyState === WebSocket.OPEN) {
+            custodyEpoch = supervisor.beginCustody(
+              payload.custody?.instances ?? []
+            );
+            send(socket, {
+              verb: "register",
+              machineId: identity.machineId,
+              payload,
+            });
+            registrationDeadline = setTimeout(registrationExpired, 120_000);
+          }
+        }, backoff);
+      }
+    };
+    registrationDeadline = setTimeout(registrationExpired, 120_000);
+    socket.addEventListener(
+      "close",
+      () => {
+        clearTimeout(registrationDeadline);
+        recoveryController?.abort(new Error("Custody connection was lost."));
+        supervisor.failCustody(
+          custodyEpoch,
+          new Error(
+            "Registration connection was lost; custody must be recovered after reconnect"
+          )
+        );
+      },
+      { once: true }
+    );
     send(socket, { verb: "register", machineId: identity.machineId, payload });
     yield* Effect.logInfo(`registered with ${url}`);
     markLive();
@@ -769,67 +812,94 @@ const attach = (
     const reattaching: Promise<void>[] = [];
 
     const takeCustody = (ackPayload: unknown, spawns: Envelope[]): void => {
+      clearTimeout(registrationDeadline);
       const named = spawns.map((envelope) =>
         custodyRow(envelope.payload as SpawnPayload)
       );
-      // Claude's part is handed over the moment `reattachFrom` is called: it
-      // holds busy answers itself until each of its rows is decided.
-      const handedOver = Promise.withResolvers<void>();
-      // biome-ignore lint/complexity/noVoid: the hold settles itself; nothing waits on it here
-      void Promise.all([handedOver.promise, ...reattaching.splice(0)]).then(
-        () => custodyDecided.resolve()
-      );
-      // biome-ignore lint/complexity/noVoid: fire-and-forget by intent — takeCustody doesn't await its own reattach
-      void supervisor
-        // Whatever sessiond is still holding that the hub did NOT name is still
-        // this machine's to carry. The hub decides what to restore from its own
-        // rows, and a session it has written off - nothing to resume, so not
-        // restorable - is exactly the one whose child is nonetheless alive and
-        // pumping into a ring nobody reads. Asking the machine first is the rule
-        // the board already follows: never serve stored liveness.
-        .survivors()
-        .catch(() => [] as Awaited<ReturnType<typeof supervisor.survivors>>)
-        .then((surviving) => {
-          const claimed = new Set(named.map((row) => row.instanceId));
-          const rows = [
-            ...named,
-            ...surviving.filter((row) => !claimed.has(row.instanceId)),
-          ];
-          const reattached =
-            rows.length === 0
-              ? Promise.resolve([] as string[])
-              : supervisor.reattachFrom(ackPayload, rows);
-          handedOver.resolve();
-          return reattached;
-        })
-        .catch((error: unknown) => {
-          handedOver.resolve();
-          // Fresh restores may still spawn; custody-only requests must not turn
-          // an unavailable sessiond into an unbounded spawn queue.
-          Effect.runFork(
-            Effect.logWarning(`reattach failed: ${String(error)}`)
-          );
-          return [] as string[];
-        })
-        .then((adopted) => {
-          if (adopted.length > 0) {
-            Effect.runFork(
-              Effect.logInfo(
-                `attached to ${adopted.length} surviving session(s): ${adopted.join(", ")}`
-              )
-            );
-          }
-          for (const envelope of spawns) {
-            const spawn = envelope.payload as SpawnPayload;
-            if (!(adopted.includes(spawn.instanceId) || spawn.reattachOnly)) {
-              supervisor.dispatch(envelope);
-            }
-          }
-          custodyIds.clear();
-          for (const envelope of custodyWaiting.splice(0)) {
-            supervisor.dispatch(envelope);
-          }
+      const otherRecoveries = reattaching.splice(0);
+      const recoverAttempt = async (signal: AbortSignal) => {
+        const surviving = await supervisor.survivors(signal);
+        signal.throwIfAborted();
+        const claimed = new Set(named.map((row) => row.instanceId));
+        const rows = [
+          ...named,
+          ...surviving.filter((row) => !claimed.has(row.instanceId)),
+        ];
+        const { attached, failed } = await supervisor.reattachFrom(
+          ackPayload,
+          rows,
+          signal
+        );
+        signal.throwIfAborted();
+        await Promise.all(otherRecoveries);
+        signal.throwIfAborted();
+        const outcomes = spawns.flatMap((envelope) => {
+          const spawn = envelope.payload as SpawnPayload;
+          return attached.includes(spawn.instanceId) ||
+            failed.has(spawn.instanceId) ||
+            spawn.reattachOnly
+            ? []
+            : [supervisor.dispatch(envelope)];
         });
+        await Promise.all(outcomes);
+        return attached;
+      };
+      const custodyRecovered = (epoch: number, adopted: string[]) => {
+        if (adopted.length > 0) {
+          Effect.runFork(
+            Effect.logInfo(
+              `attached to ${adopted.length} surviving session(s): ${adopted.join(", ")}`
+            )
+          );
+        }
+        supervisor.completeCustody(epoch);
+        custodyIds.clear();
+        for (const envelope of custodyWaiting.splice(0)) {
+          supervisor.dispatch(envelope);
+        }
+      };
+      // biome-ignore lint/complexity/noVoid: each bounded attempt publishes readiness; no control reply waits for recovery.
+      void (async () => {
+        let attempt = 0;
+        while (socket.readyState === WebSocket.OPEN) {
+          custodyEpoch = supervisor.beginCustody(
+            named.map((row) => row.instanceId)
+          );
+          const epoch = custodyEpoch;
+          recoveryController = new AbortController();
+          const controller = recoveryController;
+          let timer: ReturnType<typeof setTimeout> | undefined;
+          try {
+            // biome-ignore lint/performance/noAwaitInLoops: recovery attempts are serialized and back off; overlapping attempts may not publish readiness.
+            const adopted = await Promise.race([
+              recoverAttempt(controller.signal),
+              new Promise<never>((_, reject) => {
+                timer = setTimeout(() => {
+                  const problem = new Error(
+                    "Machine custody recovery did not complete within 120 seconds"
+                  );
+                  controller.abort(problem);
+                  reject(problem);
+                }, 120_000);
+              }),
+            ]);
+            if (socket.readyState !== WebSocket.OPEN) {
+              return;
+            }
+            custodyRecovered(epoch, adopted);
+            return;
+          } catch (problem) {
+            controller.abort(problem);
+            supervisor.failCustody(epoch, problem);
+          } finally {
+            clearTimeout(timer);
+          }
+          attempt += 1;
+          await Bun.sleep(
+            Math.min(30_000, 1000 * 2 ** Math.min(attempt - 1, 5))
+          );
+        }
+      })();
     };
 
     /** What arrives ahead of the register ack: custody, taken on the ack. Whether it was taken. */

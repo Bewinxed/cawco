@@ -171,6 +171,8 @@ export interface Harness {
   ): Promise<HarnessSession | undefined>;
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   renameSession(sessionKey: string, title: string, dir?: string): Promise<void>;
+  /** Lifecycle guards read the supervisor's one machine recovery barrier. */
+  readonly setCustodyReadiness?: (read: () => boolean) => void;
   /** Start a session; resolves once the runtime handle is in place. */
   // biome-ignore lint/style/useConsistentMethodSignatures: method-style kept so implementers (opencode.ts, pi.ts) keep contravariant parameter checking; property-style would change signature variance
   spawn(spec: SpawnPayload, ctx: HarnessContext): Promise<HarnessSession>;

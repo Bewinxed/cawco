@@ -23,6 +23,15 @@
 /** The harnesses cawco can spawn sessions on. Adding one is a new adapter. */
 export type HarnessKind = "claude" | "opencode" | "pi";
 
+/** Recovery is a decided-outcome barrier, never evidence that every session succeeded. */
+export interface AgentBusyReport {
+  busy: number;
+  error?: string;
+  instances: string[];
+  ready: boolean;
+  recovery: "recovering" | "ready" | "failed";
+}
+
 /** Reconfigure a retained harness in place; never stop or restart its session. */
 export const INSTALL_SESSION_CREDENTIAL = "installSessionCredential";
 export const LIVE_CREDENTIAL_ENROLLMENT_REFUSAL =

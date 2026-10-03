@@ -43,6 +43,7 @@ import {
   asc,
   desc,
   eq,
+  getTableColumns,
   gt,
   gte,
   inArray,
@@ -118,6 +119,7 @@ const MIGRATIONS_DIR = Bun.fileURLToPath(
 );
 
 export type InstanceKind = (typeof instances.$inferSelect)["kind"];
+export type BoardInstanceRow = Omit<typeof instances.$inferSelect, "tooling">;
 export type ContinuationRow = typeof continuations.$inferSelect;
 export type WorkflowRow = typeof workflows.$inferSelect;
 export type WorkflowRunRow = typeof workflowRuns.$inferSelect;
@@ -220,6 +222,7 @@ export interface DbShape {
     }[]
   ) => void;
   /** A machine's last-known tool status by id; empty for one that never reported. */
+  readonly agentHarnesses: (machineId: string) => HarnessReport[] | undefined;
   readonly agentTools: (machineId: string) => Record<string, ToolStatus>;
   /** Whether nothing has been counted yet — the backfill's cue. */
   readonly capabilityUsageEmpty: () => boolean;
@@ -358,6 +361,8 @@ export interface DbShape {
    * column is null until a machine has synced once, and `AgentRow` says absent.
    */
   readonly listAgents: () => AgentRow[];
+  /** Board rows never fetch/decode the per-session tooling document. */
+  readonly listBoardInstances: () => BoardInstanceRow[];
   /** Oldest first: what one delegate did, or what every delegate of one parent did. */
   readonly listDelegateEvents: (filter: {
     parent?: string;
@@ -1123,6 +1128,15 @@ export const hashHookMaterial = (hook: {
 const make = (path: string): DbShape => {
   mkdirSync(dirname(path), { recursive: true });
   const db = drizzle(path);
+  const { tooling: _tooling, ...boardColumns } = getTableColumns(instances);
+  const listedInstances = () =>
+    and(
+      ne(instances.status, "discarded"),
+      or(
+        inArray(instances.status, ["running", "sleeping"]),
+        gt(instances.updatedAt, new Date(Date.now() - STALE_AFTER_MS))
+      )
+    );
   migrate(db, { migrationsFolder: MIGRATIONS_DIR });
 
   type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -1415,6 +1429,22 @@ const make = (path: string): DbShape => {
   };
 
   return {
+    agentHarnesses: (machineId) =>
+      db
+        .select({ harnesses: agents.harnesses })
+        .from(agents)
+        .where(eq(agents.machineId, machineId))
+        .get()?.harnesses ?? undefined,
+    listBoardInstances: () =>
+      db
+        .select(boardColumns)
+        .from(instances)
+        .where(listedInstances())
+        .all()
+        .map((row) => ({
+          ...(row.title ? row : { ...row, title: row.derivedTitle }),
+          ...(row.autopilot ? { autopilot: row.autopilot } : {}),
+        })),
     expirePendingSessionIdentities: (machineId) => {
       db.update(sessionIdentities)
         .set({
@@ -2886,15 +2916,7 @@ const make = (path: string): DbShape => {
       db
         .select()
         .from(instances)
-        .where(
-          and(
-            ne(instances.status, "discarded"),
-            or(
-              inArray(instances.status, ["running", "sleeping"]),
-              gt(instances.updatedAt, new Date(Date.now() - STALE_AFTER_MS))
-            )
-          )
-        )
+        .where(listedInstances())
         .all()
         // A row nobody named answers with the name its first message gave it,
         // so every listing — the rail, the tab strip, the first server render —

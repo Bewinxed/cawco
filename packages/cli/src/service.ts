@@ -1347,6 +1347,7 @@ interface BusyReport {
   /** Sessions on this machine with a turn in flight. */
   busy: number;
   instances: string[];
+  ready: boolean;
 }
 
 /**
@@ -1364,7 +1365,9 @@ const agentBusy = async (): Promise<number | "unknown"> => {
   const report = await probeJson<BusyReport>(
     `${hub}/api/agents/${await machineId()}/busy`
   );
-  return typeof report?.busy === "number" ? report.busy : "unknown";
+  return report?.ready === true && typeof report.busy === "number"
+    ? report.busy
+    : "unknown";
 };
 
 export interface RestartRequest {

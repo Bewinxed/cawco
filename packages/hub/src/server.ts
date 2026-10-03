@@ -2727,9 +2727,12 @@ export const createServer = ({
    * inside the boundary or refuses to start it. Any other spawn passes as is.
    */
   const identities = createSessionIdentities(db);
-  const bounded = (payload: SpawnPayload): SpawnPayload => {
+  const bounded = (
+    payload: SpawnPayload,
+    knownRow?: InstanceRow
+  ): SpawnPayload => {
     const { sessionCredential: _callerCredential, ...asked } = payload;
-    const [row] = db.getInstancesByIds([payload.instanceId]);
+    const row = knownRow ?? db.getInstancesByIds([payload.instanceId])[0];
     const workspace = row ? workItems.workspaceOf(row) : undefined;
     const harness = payload.harness ?? row?.harness ?? "claude";
     // Custody restores retain the process's live token; the hub deliberately
@@ -2749,15 +2752,21 @@ export const createServer = ({
   };
 
   /** The permission modes a machine's harness reported, or undefined when it has not reported that harness. */
+  const capabilityReports = new Map<string, HarnessReport[]>();
   const harnessModes = (
     machineId: string,
     harness: string
-  ): readonly string[] | undefined =>
-    db
-      .listAgents()
-      .find((agent) => agent.machineId === machineId)
-      ?.harnesses?.find((report) => report.harness === harness)?.capabilities
+  ): readonly string[] | undefined => {
+    let reports = capabilityReports.get(machineId);
+    if (!reports) {
+      reports = db.agentHarnesses(machineId);
+      if (reports) {
+        capabilityReports.set(machineId, reports);
+      }
+    }
+    return reports?.find((report) => report.harness === harness)?.capabilities
       .permissionModes;
+  };
 
   /**
    * The one rule for the permission mode a spawn runs in and records, applied
@@ -4585,7 +4594,7 @@ export const createServer = ({
       verb: "spawn",
       machineId: row.machineId,
       instanceId: row.id,
-      payload: bounded(payload),
+      payload: bounded(payload, row),
     });
     // A probe of a previously lost handle is not a spawn. Leave its history
     // alone until the daemon confirms the server still has a turn in flight.
@@ -4719,8 +4728,8 @@ export const createServer = ({
    */
   const boardRows = () =>
     withSessionPresence(
-      db.listInstances().filter((row) => row.kind !== "summariser")
-    ).map(({ tooling: _tooling, ...row }) => row);
+      db.listBoardInstances().filter((row) => row.kind !== "summariser")
+    );
 
   /**
    * The whole board as one message: every row, every machine, and what each
@@ -4773,10 +4782,26 @@ export const createServer = ({
     boardRows().map((row) => [row.id, JSON.stringify(row)])
   );
 
+  const pendingInstancePublishes = new Set<string>();
+  let instancePublishScheduled = false;
   const publishInstances = (machineId: string): void => {
     // A session's model, project or harness can move under a live rule; every
     // move republishes, so this is the one place that has to drop the cache.
     ruleEngine.forgetFacts();
+    pendingInstancePublishes.add(machineId);
+    if (instancePublishScheduled) {
+      return;
+    }
+    instancePublishScheduled = true;
+    setImmediate(() => {
+      instancePublishScheduled = false;
+      const machines = [...pendingInstancePublishes];
+      pendingInstancePublishes.clear();
+      publishInstanceDelta(machines.length === 1 ? machines[0] : "");
+    });
+  };
+
+  const publishInstanceDelta = (machineId: string): void => {
     const rows = boardRows();
     const upserts: typeof rows = [];
     const present = new Set<string>();
@@ -9084,7 +9109,7 @@ export const createServer = ({
         // default the socket is closed under the reply and the machine drops.
         maxPayloadLength: AGENT_FRAME_LIMIT_BYTES,
         // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: dispatches every agent socket verb (register, frames, pulse, control_result, etc.) through one handler; splitting it would scatter the ordering guarantees across several functions.
-        message(ws, message) {
+        async message(ws, message) {
           if (!isEnvelope(message)) {
             console.warn("[hub] dropped malformed frame", message);
             return;
@@ -9248,8 +9273,14 @@ export const createServer = ({
                 ...held,
                 ...fresh.filter(({ row }) => !row.workflowStepId),
               ].filter(({ row }) => row.kind !== "summariser");
+              let restoreBatch = 0;
               for (const orphan of revivable) {
                 restore(ws, orphan.row, heldRows.has(orphan.row.id));
+                restoreBatch += 1;
+                if (restoreBatch % 8 === 0) {
+                  // biome-ignore lint/performance/noAwaitInLoops: bounded restore batches keep unrelated control requests serviceable.
+                  await new Promise<void>((resolve) => setImmediate(resolve));
+                }
               }
               const restoredIds = new Set(revivable.map(({ row }) => row.id));
               const named = new Set(
@@ -9284,6 +9315,13 @@ export const createServer = ({
                       row,
                       row.updatedAt.getTime() >= cutoff ? "busy" : "inspect"
                     );
+                    restoreBatch += 1;
+                    if (restoreBatch % 8 === 0) {
+                      // biome-ignore lint/performance/noAwaitInLoops: history inspection must not monopolize the hub event loop.
+                      await new Promise<void>((resolve) =>
+                        setImmediate(resolve)
+                      );
+                    }
                   }
                 }
               }
@@ -9401,6 +9439,7 @@ export const createServer = ({
               }
               if (reported) {
                 db.setAgentHarnesses(message.machineId, reported);
+                capabilityReports.delete(message.machineId);
                 db.mergeAgentTools(
                   message.machineId,
                   peekTools(message.payload)

@@ -10,6 +10,7 @@
 import { mkdir, stat } from "node:fs/promises";
 import { basename, join } from "node:path";
 import type {
+  AgentBusyReport,
   ControlPayload,
   Envelope,
   FleetConfig,
@@ -111,6 +112,7 @@ interface SessiondAdoption {
 
 /** A surviving child one reattach has claimed, and what it decided about it. */
 interface Claimed {
+  failed?: boolean;
   proc: { head: number; pid: number };
   row: {
     instanceId: string;
@@ -158,6 +160,25 @@ export type FrameSink = (
 
 const warn = (message: string): void => {
   Effect.runFork(Effect.logWarning(message));
+};
+
+/** Read-only custody probes can be abandoned; an adoption keeps its claim until it settles. */
+const custodyProbe = async <T>(
+  read: Promise<T>,
+  signal?: AbortSignal
+): Promise<T> => {
+  if (!signal) {
+    return await read;
+  }
+  signal.throwIfAborted();
+  const aborted = Promise.withResolvers<never>();
+  const cancel = () => aborted.reject(signal.reason);
+  signal.addEventListener("abort", cancel, { once: true });
+  try {
+    return await Promise.race([read, aborted.promise]);
+  } finally {
+    signal.removeEventListener("abort", cancel);
+  }
 };
 
 const isDirectory = async (path: string): Promise<boolean> => {
@@ -387,6 +408,14 @@ export const agreedHashes = (
 };
 
 export class SessionSupervisor {
+  #custodyState: AgentBusyReport["recovery"] = "recovering";
+  #custodyError: string | undefined;
+  #custodyEpoch = 0;
+  #custodyInstances = new Set<string>();
+
+  constructor() {
+    this.#adapter("opencode").setCustodyReadiness?.(() => this.custodyReady);
+  }
   readonly #sessions = new Map<string, HarnessSession>();
   /** Reattaches in flight, by instance id: see {@link reattach}. */
   readonly #adopting = new Map<string, Promise<void>>();
@@ -398,11 +427,6 @@ export class SessionSupervisor {
   readonly #queues = new Map<string, Promise<void>>();
   /** The sessions with a turn in flight — from the `send` that starts one until the turn ends. */
   readonly #busy = new Set<string>();
-  /**
-   * What every busy answer waits for: custody being taken of sessions whose
-   * turns are not known yet ({@link holdBusy}).
-   */
-  readonly #holds = new Set<Promise<void>>();
   readonly #imageRequests = new Map<string, string>();
 
   /**
@@ -573,27 +597,42 @@ export class SessionSupervisor {
     return [...this.#sessions.keys()];
   }
 
-  /**
-   * Holds every busy answer until `until` settles.
-   *
-   * An agent that has just restarted carries no session yet, while sessiond
-   * still holds every child the last one left — some of them mid-turn. Until
-   * custody has said which, `#busy` is empty because nothing has been read,
-   * not because nothing is running: a cutover that asked then read `0` and
-   * went ahead while two sessions were working (2026-10-01, obelisk, for the
-   * 23 s the agent took to attach 138 sessions). Until decided, busyNow reports
-   * recovery as unknown/busy
-   * without delaying the control reply. Custody releases the hold on success
-   * or failure.
-   */
-  holdBusy(until: Promise<unknown>): void {
-    const hold = until.then(
-      () => undefined,
-      () => undefined
-    );
-    this.#holds.add(hold);
-    // biome-ignore lint/complexity/noVoid: the hold removes itself; nothing waits on the removal
-    void hold.then(() => this.#holds.delete(hold));
+  get custodyReady(): boolean {
+    return this.#custodyState === "ready";
+  }
+
+  beginCustody(instanceIds: readonly string[]): number {
+    this.#custodyState = "recovering";
+    this.#custodyError = undefined;
+    this.#custodyInstances = new Set(instanceIds);
+    this.#custodyEpoch += 1;
+    return this.#custodyEpoch;
+  }
+
+  completeCustody(epoch: number): void {
+    if (epoch === this.#custodyEpoch) {
+      this.#custodyState = "ready";
+      this.#custodyError = undefined;
+      this.#custodyInstances.clear();
+    }
+  }
+
+  failCustody(epoch: number, problem: unknown): void {
+    if (epoch !== this.#custodyEpoch) {
+      return;
+    }
+    this.#custodyState = "failed";
+    this.#custodyError =
+      problem instanceof Error ? problem.message : String(problem);
+    const message = `Machine custody recovery failed: ${this.#custodyError}. Recovery retries while connected; idle-gated operations remain held.`;
+    const ids = [...this.#custodyInstances];
+    for (const instanceId of ids) {
+      this.sink({ kind: "error", instanceId, verb: "register", message });
+    }
+    if (ids.length === 0) {
+      this.sink({ kind: "error", verb: "register", message });
+    }
+    warn(message);
   }
 
   /**
@@ -603,11 +642,14 @@ export class SessionSupervisor {
    * supervisor through the hub it is itself connected to would be a round
    * trip to learn a fact already held in memory.
    */
-  async busyNow(): Promise<{ busy: number; instances: string[] }> {
+  async busyNow(): Promise<AgentBusyReport> {
     // Recovery must defer retirement, not the machine control reply. A hold
     // can outlast the hub's five-second RPC window; unknown is honestly busy.
-    const recovery = this.#holds.size > 0 ? ["agent:recovery-unknown"] : [];
     const opencode = (await this.#adapter("opencode").busyInstances?.()) ?? [];
+    const ready = this.custodyReady;
+    const recovery = ready
+      ? []
+      : [...this.#custodyInstances, `agent:recovery-${this.#custodyState}`];
     const instances = [
       ...new Set([
         ...[...this.#busy].filter(
@@ -618,7 +660,13 @@ export class SessionSupervisor {
         ...this.#imageRequests.values(),
       ]),
     ];
-    return { busy: instances.length, instances };
+    return {
+      busy: instances.length,
+      instances,
+      ready,
+      recovery: this.#custodyState,
+      ...(this.#custodyError ? { error: this.#custodyError } : {}),
+    };
   }
 
   /** The pulse as it stands, computed from the parts rather than stored. */
@@ -1183,16 +1231,20 @@ export class SessionSupervisor {
    * cannot be adopted — a reattach needs a directory — and is left alone
    * rather than adopted into the wrong place.
    */
-  async survivors(): Promise<
-    { instanceId: string; cwd: string; sessionId: null }[]
-  > {
-    const welcomes = await Promise.all(
-      SESSION_PROC_KINDS.map(async (kind) => {
-        const adapter = this.#adapter(kind) as Harness &
-          Partial<SessiondAdoption>;
-        return await adapter.custodyCandidates?.();
-      })
+  async survivors(
+    signal?: AbortSignal
+  ): Promise<{ instanceId: string; cwd: string; sessionId: null }[]> {
+    const welcomes = await custodyProbe(
+      Promise.all(
+        SESSION_PROC_KINDS.map(async (kind) => {
+          const adapter = this.#adapter(kind) as Harness &
+            Partial<SessiondAdoption>;
+          return await adapter.custodyCandidates?.();
+        })
+      ),
+      signal
     );
+    signal?.throwIfAborted();
     return welcomes
       .flatMap((welcome) => welcome?.procs ?? [])
       .flatMap((proc) => {
@@ -1220,8 +1272,8 @@ export class SessionSupervisor {
    * Three steps, and only the middle one decides what busy questions hear:
    *  1. CLAIM every row sessiond is holding, without yielding.
    *  2. DECIDE whether each claimed child is mid-turn, all at once, off the
-   *     runtime ({@link SessiondAdoption.turnRunning}). Busy answers
-   *     are held from this call until every row is decided ({@link holdBusy}),
+   *     runtime ({@link SessiondAdoption.turnRunning}). Machine readiness stays
+   *     held by the custody transaction until every recovery has an outcome,
    *     and a running turn is in `#busy` from then on — attached or not yet.
    *  3. ATTACH them one at a time. On obelisk this took 23 s for 138 rows
    *     (2026-10-01), and a busy answer that waited for it, or read `#busy`
@@ -1237,12 +1289,14 @@ export class SessionSupervisor {
      * The hub's ingest ledger off the register ack. Absent — a hub that has
      * nothing of this machine — means every row follows from head.
      */
-    ingested?: Record<string, IngestMark>
+    ingested?: Record<string, IngestMark>,
+    signal?: AbortSignal,
+    failed = new Set<string>()
   ): Promise<string[]> {
     return (
       await Promise.all(
         SESSION_PROC_KINDS.map((kind) =>
-          this.#reattachHarness(kind, rows, ingested)
+          this.#reattachHarness(kind, rows, ingested, signal, failed)
         )
       )
     ).flat();
@@ -1251,7 +1305,9 @@ export class SessionSupervisor {
   async #reattachHarness(
     kind: HarnessKind,
     rows: Claimed["row"][],
-    ingested?: Record<string, IngestMark>
+    ingested?: Record<string, IngestMark>,
+    signal?: AbortSignal,
+    failed = new Set<string>()
   ): Promise<string[]> {
     const adapter = this.#adapter(kind);
     const candidate = adapter as Harness & Partial<SessiondAdoption>;
@@ -1263,16 +1319,13 @@ export class SessionSupervisor {
       return [];
     }
     const claude = candidate as Harness & SessiondAdoption;
-    // Taken before the first `await`, so a caller that has started this
-    // reattach can let go of its own hold at once (see daemon.ts).
-    const decided = Promise.withResolvers<void>();
-    this.holdBusy(decided.promise);
     const claimed: Claimed[] = [];
     /** Rows another reattach is attaching right now: theirs to decide. */
     const elsewhere: (typeof rows)[number][] = [];
     const adopted: string[] = [];
     try {
-      const welcome = await claude.custodyCandidates();
+      const welcome = await custodyProbe(claude.custodyCandidates(), signal);
+      signal?.throwIfAborted();
       const held = new Map(
         welcome.procs
           .filter((proc) => proc.alive)
@@ -1319,10 +1372,18 @@ export class SessionSupervisor {
       // 2. DECIDE, every claimed row at once.
       await Promise.all(
         claimed.map(async (entry) => {
-          entry.running = await claude.turnRunning(
-            entry.row.instanceId,
-            entry.proc.head
-          );
+          try {
+            entry.running = await custodyProbe(
+              claude.turnRunning(entry.row.instanceId, entry.proc.head),
+              signal
+            );
+          } catch (problem) {
+            signal?.throwIfAborted();
+            entry.failed = true;
+            failed.add(entry.row.instanceId);
+            this.#sessionRecoveryFailed(entry.row.instanceId, problem);
+          }
+          signal?.throwIfAborted();
           if (entry.running) {
             this.#busy.add(entry.row.instanceId);
             // The hub forgot this session's pulse at the register: the rail's
@@ -1331,31 +1392,64 @@ export class SessionSupervisor {
           }
         })
       );
-      decided.resolve();
 
       // 3. ATTACH, one at a time.
       for (const entry of claimed) {
-        // biome-ignore lint/performance/noAwaitInLoops: rows are attached one at a time: each mutates the shared #ingested map
-        await this.#adoptClaimed(claude, welcome.epoch, entry, ingested);
-        adopted.push(entry.row.instanceId);
+        signal?.throwIfAborted();
+        if (entry.failed) {
+          continue;
+        }
+        try {
+          // biome-ignore lint/performance/noAwaitInLoops: rows are attached one at a time: each mutates the shared #ingested map
+          await this.#adoptClaimed(claude, welcome.epoch, entry, ingested);
+          adopted.push(entry.row.instanceId);
+        } catch (problem) {
+          failed.add(entry.row.instanceId);
+          this.#sessionRecoveryFailed(entry.row.instanceId, problem);
+          entry.settle();
+        }
       }
     } finally {
-      decided.resolve();
       this.#releaseClaims(claimed);
     }
     // Another reattach's rows, once it is done with them. One it failed to
     // attach is tried again here, as a reattach of its own.
     for (const row of elsewhere) {
+      signal?.throwIfAborted();
       // biome-ignore lint/performance/noAwaitInLoops: each row waits on whichever reattach holds it
-      await this.#adopting.get(row.instanceId);
+      await custodyProbe(
+        this.#adopting.get(row.instanceId) ?? Promise.resolve(),
+        signal
+      );
+      signal?.throwIfAborted();
       if (this.#sessions.has(row.instanceId)) {
         this.#installAdoptedCredential(row, this.#session(row.instanceId));
         adopted.push(row.instanceId);
       } else {
-        adopted.push(...(await this.#reattachHarness(kind, [row], ingested)));
+        adopted.push(
+          ...(await this.#reattachHarness(
+            kind,
+            [row],
+            ingested,
+            signal,
+            failed
+          ))
+        );
       }
     }
     return adopted;
+  }
+
+  #sessionRecoveryFailed(instanceId: string, problem: unknown): void {
+    const message =
+      problem instanceof Error ? problem.message : String(problem);
+    this.sink({
+      kind: "error",
+      instanceId,
+      verb: "register",
+      message: `Session custody recovery failed: ${message}`,
+    });
+    this.sink({ kind: "recovery_unavailable", instanceId, reason: message });
   }
 
   /**
@@ -1424,8 +1518,19 @@ export class SessionSupervisor {
    * The reattach as the register ack hands it over (design §7, step 4): the
    * ack's payload in, the instance ids attached out.
    */
-  reattachFrom(ackPayload: unknown, rows: Claimed["row"][]): Promise<string[]> {
-    return this.reattach(rows, readIngested(ackPayload));
+  async reattachFrom(
+    ackPayload: unknown,
+    rows: Claimed["row"][],
+    signal?: AbortSignal
+  ): Promise<{ attached: string[]; failed: Set<string> }> {
+    const failed = new Set<string>();
+    const attached = await this.reattach(
+      rows,
+      readIngested(ackPayload),
+      signal,
+      failed
+    );
+    return { attached, failed };
   }
 
   #installAdoptedCredential(

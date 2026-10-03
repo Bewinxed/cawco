@@ -3711,8 +3711,15 @@ export class OpencodeHarness implements Harness {
     }
   }
 
+  #custodyReadiness: () => boolean = () => false;
+
+  setCustodyReadiness(read: () => boolean): void {
+    this.#custodyReadiness = read;
+  }
+
   #operationsPending(): boolean {
     return (
+      !this.#custodyReadiness() ||
       this.#opening > 0 ||
       this.#mutatingMcp > 0 ||
       this.#migrations.size > 0 ||
