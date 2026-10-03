@@ -416,9 +416,11 @@
 </script>
 
 {#snippet modelChip()}
-  <ProviderLogo model={model ?? ''} size={15} />
+  <ProviderLogo model={model ?? ""} size={15} />
   <span class="chip-label"
-    >{model ? modelName(model, modelInfo?.displayName).name : 'Model not reported'}</span
+    >{model
+      ? modelName(model, modelInfo?.displayName).name
+      : "Model not reported"}</span
   >
 {/snippet}
 
@@ -426,7 +428,9 @@
      box, so the strip lays out and wraps by the text's final width while
      torph tweens its own width from the old size (it clips to that width:
      app.css). -->
-{#snippet figure(text: string)}
+{#snippet figure(
+  text: string
+)}
   <span class="figure">
     <span aria-hidden="true" class="figure-size">{text}</span>
     <TextMorph as="span" duration={morphMs} {text} />
@@ -436,7 +440,9 @@
 <!-- One line per field, whatever it is saying: the lines cross-fade at the
      control tier (crossIn / crossOut), the one leaving lifted out of the
      flow so the card only ever holds the one arriving. -->
-{#snippet feedback(slot: Slot)}
+{#snippet feedback(
+  slot: Slot
+)}
   {#if failure(slot)}
     <p class="failure" role="alert" in:crossIn out:crossOut>
       {failure(slot)}
@@ -463,7 +469,8 @@
         <button
           aria-label="Copy link"
           class="icon-action touch-hit"
-          onclick={() => copyToClipboard('Link', new URL(href, location.origin).href)}
+          onclick={() =>
+            copyToClipboard("Link", new URL(href, location.origin).href)}
           type="button"
         >
           <Link />
@@ -492,7 +499,7 @@
           ><TextMorph
             as="span"
             duration={morphMs}
-            text={machine?.hostname || machineId || ''}
+            text={machine?.hostname || machineId || ""}
           /></span
         >
       {/if}
@@ -501,7 +508,7 @@
         <button
           aria-label={`Copy working directory ${cwd}`}
           class="cwd"
-          onclick={() => copyToClipboard('Working directory', cwd)}
+          onclick={() => copyToClipboard("Working directory", cwd)}
           title={cwd}
           type="button"
         >
@@ -518,7 +525,9 @@
               aria-label="Models"
               haspopup="listbox"
               id="details-model"
-              onchange={(value) => { modelOpen = value; }}
+              onchange={(value) => {
+                modelOpen = value;
+              }}
               open={modelOpen}
               triggerClass="ns-chip-btn tool model-chip"
               width={360}
@@ -532,10 +541,15 @@
                   {harness}
                   installed={[harness]}
                   machineIds={machineId ? [machineId] : []}
-                  machineName={machine?.hostname ?? ''}
-                  model={model ?? ''}
-                  onharness={() => { /* Running sessions retain their harness. */ }}
-                  onmodel={(id) => { changeModel(id); modelOpen = false; }}
+                  machineName={machine?.hostname ?? ""}
+                  model={model ?? ""}
+                  onharness={() => {
+                    /* Running sessions retain their harness. */
+                  }}
+                  onmodel={(id) => {
+                    changeModel(id);
+                    modelOpen = false;
+                  }}
                   runtime
                 />
               </div>
@@ -550,22 +564,25 @@
             id="details"
             readonly={!editable}
             tools={{
-            efforts,
-            effort: isEffortLevel(session?.effort) ? session.effort : null,
-            effortOff,
-            oneffort: changeEffort,
-            modes: modes.map(mode => ({ value: mode.value, disabled: !editable || pending('permission') })),
-            permission: shownPermission,
-            onpermission: changePermission,
-          }}
+              efforts,
+              effort: isEffortLevel(session?.effort) ? session.effort : null,
+              effortOff,
+              oneffort: changeEffort,
+              modes: modes.map((mode) => ({
+                value: mode.value,
+                disabled: !editable || pending("permission"),
+              })),
+              permission: shownPermission,
+              onpermission: changePermission,
+            }}
           />
         </div>
         <!-- One line is always held for what a change says, so its pending,
              done and failed lines arriving or leaving never resize the card. -->
         <div class="feedback-slot">
-          {@render feedback('model')}
-          {@render feedback('effort')}
-          {@render feedback('permission')}
+          {@render feedback("model")}
+          {@render feedback("effort")}
+          {@render feedback("permission")}
           {#if !editable}
             <p class="feedback">
               Controls unlock while the session is running.
@@ -578,7 +595,9 @@
   <!-- A meter wrapping to a second line tweens the strip's height (morph). -->
   <div class="stats" bind:this={statsEl} {@attach morph()}>
     <div class="context">
-      {#if percent !== null && stats.totalTokens !== null && stats.maxTokens !== null}
+      {#if percent !== null &&
+        stats.totalTokens !== null &&
+        stats.maxTokens !== null}
         <span class="stat-label">Context</span>
         <span class="stat-bar" title={readAt ? `Read at ${readAt}` : undefined}>
           <LimitBar
@@ -589,7 +608,9 @@
             used={percent}
           />
         </span>
-        {@render figure(`${percent}% · ${tokens(stats.totalTokens)}/${tokens(stats.maxTokens)}`)}
+        {@render figure(
+          `${percent}% · ${tokens(stats.totalTokens)}/${tokens(stats.maxTokens)}`
+        )}
       {:else if reading}
         <span>Reading…</span>
       {:else if refusal}
@@ -626,7 +647,10 @@
   <div class="footer">
     <button
       class="ns-btn primary xs"
-      onclick={() => { onclose(); continueInNewSession(continueSourceOf(sessionId, title)); }}
+      onclick={() => {
+        onclose();
+        continueInNewSession(continueSourceOf(sessionId, title));
+      }}
       type="button"
     >
       Continue in new session…

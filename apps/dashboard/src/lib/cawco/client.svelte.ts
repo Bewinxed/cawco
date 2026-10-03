@@ -4357,9 +4357,7 @@ export async function refreshContext(
       percentage: usage.percentage,
       // "Free space" is the remainder, not a consumer: showing it as a slice
       // would make every session look mostly full of nothing.
-      categories: (usage.categories ?? []).filter(
-        (row) => row.name !== "Free space"
-      ),
+      categories: usage.categories.filter((row) => row.name !== "Free space"),
       readAt: Date.now(),
     };
     target.contextError = null;

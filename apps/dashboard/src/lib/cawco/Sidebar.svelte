@@ -673,7 +673,10 @@
   });
 </script>
 
-{#snippet pending(rows: number, height: string)}
+{#snippet pending(
+  rows: number,
+  height: string
+)}
   <!-- Rows where the next groups will stand, while their read is out, at the
        height of the rows that replace them. Each stage has its own, gone when
        that stage's groups arrive, so nothing drawn is ever pushed down. -->
@@ -700,10 +703,12 @@
      their own that leaves its mark (app.css .kit-nest): the same row at
      every depth, each parent folded until its count is clicked. The row
      opens the session; the count opens the rows under it. -->
-{#snippet subRow(node: Branch)}
+{#snippet subRow(
+  node: Branch
+)}
   {@const row = node.row}
   {@const state = sessionStatus(row)}
-  {@const unfolded = node.count > 0 && openTrees.has(row.id, 'rail')}
+  {@const unfolded = node.count > 0 && openTrees.has(row.id, "rail")}
   <!-- The row's box (`data-flip="box"`): when its delegates open, it takes
        their room at once and its edge travels down to it, the rows under
        it sliding with that edge (motion/rows). -->
@@ -729,9 +734,7 @@
       />
       <span class="min-w-0 flex-1 truncate"
         ><span class="sr-only">{STATUS_WORD[state]}: </span>
-        {sessionName(
-          row
-        )}</span
+        {sessionName(row)}</span
       >
       {@render age(row)}
       {#if node.count > 0}
@@ -739,7 +742,7 @@
           compact
           count={node.count}
           failed={node.failed}
-          ontoggle={() => openTrees.toggle(row.id, 'rail')}
+          ontoggle={() => openTrees.toggle(row.id, "rail")}
           open={unfolded}
         />
       {/if}
@@ -754,7 +757,7 @@
         data-flip-anchor
         in:branch={TREE}
         out:branch={TREE}
-        {@attach nestFrom('.session-mark')}
+        {@attach nestFrom(".session-mark")}
       >
         {#each node.children as child (child.row.id)}
           {@render subRow(child)}
@@ -764,7 +767,9 @@
   </li>
 {/snippet}
 
-{#snippet age(row: InstanceRow)}
+{#snippet age(
+  row: InstanceRow
+)}
   <!-- When it last moved: at the row's trailing edge, or just before its
        count where it has one, so the counts stand in one column at the
        edge. -->
@@ -790,7 +795,9 @@
       <Sidebar.Menu aria-label="Workspace" class="min-w-0 flex-1">
         <Sidebar.MenuItem>
           <Sidebar.MenuButton class={NAV_ROW} isActive={false}>
-            {#snippet child({ props })}
+            {#snippet child({
+              props,
+            })}
               <a href="/session" {...props} class="{props.class} no-underline">
                 <span
                   aria-hidden="true"
@@ -819,7 +826,9 @@
         </Sidebar.MenuItem>
       </Sidebar.Menu>
       <Tip keys="⌘J" label="Assistant">
-        {#snippet children(tip)}
+        {#snippet children(
+          tip
+        )}
           <button
             {...tip}
             aria-expanded={assistantOpen}
@@ -835,7 +844,9 @@
         {/snippet}
       </Tip>
       <Tip keys="⇧⌘N" label="Start session">
-        {#snippet children(tip)}
+        {#snippet children(
+          tip
+        )}
           <button
             {...tip}
             aria-label="Start session"
@@ -867,9 +878,11 @@
         <Sidebar.MenuItem>
           <Sidebar.MenuButton
             class={NAV_ROW}
-            isActive={path.startsWith('/session')}
+            isActive={path.startsWith("/session")}
           >
-            {#snippet child({ props })}
+            {#snippet child({
+              props,
+            })}
               <a href="/session" {...props}>
                 <span class={SLOT}><IconBox class={SLOT_GLYPH} /></span>
                 <span>Fleet</span>
@@ -879,8 +892,8 @@
           {#if fleetCount}
             <Sidebar.MenuBadge
               class={cawco.blockedCount > 0
-              ? 'bg-[var(--status-attn-bg)] text-[var(--status-attn-ink)]'
-              : 'bg-[var(--status-live-bg)] text-[var(--status-live-ink)]'}
+                ? "bg-[var(--status-attn-bg)] text-[var(--status-attn-ink)]"
+                : "bg-[var(--status-live-bg)] text-[var(--status-live-ink)]"}
               data-flip="pop box"
             >
               <TextMorph
@@ -896,9 +909,11 @@
         <Sidebar.MenuItem>
           <Sidebar.MenuButton
             class={NAV_ROW}
-            isActive={path.startsWith('/workflows')}
+            isActive={path.startsWith("/workflows")}
           >
-            {#snippet child({ props })}
+            {#snippet child({
+              props,
+            })}
               <a href="/workflows" {...props}
                 ><span class={SLOT}><IconWorkflow class={SLOT_GLYPH} /></span
                 ><span>Workflows</span></a
@@ -928,10 +943,14 @@
           <div class="-mr-1 ml-auto flex items-center gap-0.5">
             <DropdownMenu.Root>
               <DropdownMenu.Trigger>
-                {#snippet child({ props })}
+                {#snippet child({
+                  props,
+                })}
                   <Button
                     {...props}
-                    aria-label="Sort sessions — currently {SORT_LABEL[rail.sort]}"
+                    aria-label="Sort sessions — currently {SORT_LABEL[
+                      rail.sort
+                    ]}"
                     size="icon-sm"
                     title="Sort sessions — {SORT_LABEL[rail.sort]}"
                     variant="ghost"
@@ -982,7 +1001,7 @@
           <Sidebar.Menu
             class={MENU}
             {@attach highlight(PILL)}
-            {@attach holdWhileInside('rail:')}
+            {@attach holdWhileInside("rail:")}
           >
             {#each orderedProjects as project (project.id)}
               {@const sessions = sessionsOf(project)}
@@ -998,7 +1017,11 @@
                   name={project.name}
                   oncollapseothers={() => collapseOthers(project.id)}
                   onnew={() =>
-                newSession({ projectId: project.id, machineId: project.machineId, cwd: project.cwd })}
+                    newSession({
+                      projectId: project.id,
+                      machineId: project.machineId,
+                      cwd: project.cwd,
+                    })}
                   {project}
                 >
                   <Sidebar.MenuButton
@@ -1039,7 +1062,10 @@
                          project's row. -->
                     <Sidebar.MenuSub class="pl-(--space-4)">
                       {@const lists = splitOf(project)}
-                      {#each branches(lists.recent, `rail:${project.id}:recent`) as node (node.row.id)}
+                      {#each branches(
+                        lists.recent,
+                        `rail:${project.id}:recent`
+                      ) as node (node.row.id)}
                         {@render subRow(node)}
                       {/each}
                       {#if lists.older.length > 0}
@@ -1060,7 +1086,10 @@
                                the projects below or the footer. -->
                           <li class="older-wrap" data-flip>
                             <ul class="older" {@attach scrollEdges}>
-                              {#each branches(lists.older, `rail:${project.id}:older`) as node (node.row.id)}
+                              {#each branches(
+                                lists.older,
+                                `rail:${project.id}:older`
+                              ) as node (node.row.id)}
                                 {@render subRow(node)}
                               {/each}
                             </ul>
@@ -1072,11 +1101,11 @@
                             class="{SUB_ROW} text-muted-foreground"
                             data-branch-item
                             onclick={() =>
-                        newSession({
-                          projectId: project.id,
-                          machineId: project.machineId,
-                          cwd: project.cwd,
-                        })}
+                              newSession({
+                                projectId: project.id,
+                                machineId: project.machineId,
+                                cwd: project.cwd,
+                              })}
                           >
                             No sessions — start one
                           </Sidebar.MenuSubButton>
@@ -1120,10 +1149,12 @@
       </Sidebar.Menu>
       <!-- Configure and the theme: the pair of settings in the corner. -->
       <Tip label="Configure">
-        {#snippet children(tip)}
+        {#snippet children(
+          tip
+        )}
           <Button
             {...tip}
-            aria-current={configuring ? 'page' : undefined}
+            aria-current={configuring ? "page" : undefined}
             aria-label="Configure"
             class="configure"
             href={configureHref}

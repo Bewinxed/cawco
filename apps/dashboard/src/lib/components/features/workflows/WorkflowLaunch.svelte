@@ -127,12 +127,16 @@
   }
 </script>
 <Dialog.Root
-  onOpenChangeComplete={(next) => { if (!next) { onclose(); } }}
+  onOpenChangeComplete={(next) => {
+    if (!next) {
+      onclose();
+    }
+  }}
   bind:open={shown}
   ><Dialog.Content
     class="max-h-[90dvh] overflow-y-auto sm:max-w-xl"
-    escapeKeydownBehavior={busy ? 'ignore' : 'close'}
-    interactOutsideBehavior={busy ? 'ignore' : 'close'}
+    escapeKeydownBehavior={busy ? "ignore" : "close"}
+    interactOutsideBehavior={busy ? "ignore" : "close"}
     bind:ref={content}
     ><div class="wf wf-stack wf-launch">
       <Dialog.Header
@@ -147,8 +151,8 @@
           {#each fields as input (input.name)}
             <label for="launch-{input.name}"
               >{input.label}
-              {input.required ? ' (required)' : ''}
-              {#if input.type === 'select'}
+              {input.required ? " (required)" : ""}
+              {#if input.type === "select"}
                 <select
                   id="launch-{input.name}"
                   required={input.required}
@@ -159,7 +163,7 @@
                     <option>{option}</option>
                   {/each}
                 </select>
-              {:else if input.type === 'path'}
+              {:else if input.type === "path"}
                 <input
                   id="launch-{input.name}"
                   required={input.required}
@@ -180,7 +184,12 @@
           <h3>Workspace</h3>
           <label
             >Project<select
-              onchange={(event) => { const project = cawco.project(event.currentTarget.value); if (project) { ({ machineId, cwd: workspace } = project); } }}
+              onchange={(event) => {
+                const project = cawco.project(event.currentTarget.value);
+                if (project) {
+                  ({ machineId, cwd: workspace } = project);
+                }
+              }}
               value=""
             >
               <option value="">Choose a project or enter a directory</option>
@@ -194,11 +203,11 @@
               <option disabled value="">Choose a machine</option>
               {#each cawco.machines as machine (machine.machineId)}
                 <option
-                  disabled={machine.status !== 'online'}
+                  disabled={machine.status !== "online"}
                   value={machine.machineId}
                 >
                   {machine.hostname}
-                  {machine.status === 'online' ? '' : ' · offline'}
+                  {machine.status === "online" ? "" : " · offline"}
                 </option>
               {/each}
             </select></label
@@ -213,7 +222,9 @@
           {#if online}
             <DirectoryPicker
               {machineId}
-              onSelect={(path) => { workspace = path; }}
+              onSelect={(path) => {
+                workspace = path;
+              }}
               value={workspace}
             />
           {/if}
@@ -233,7 +244,9 @@
           <button
             class="wf-btn"
             disabled={busy}
-            onclick={() => { shown = false; }}
+            onclick={() => {
+              shown = false;
+            }}
             type="button"
           >
             Cancel
@@ -241,15 +254,15 @@
             aria-busy={busy || undefined}
             aria-disabled={busy || undefined}
             class="wf-btn wf-primary"
-            disabled={!(online && workspace && cawco.hub === 'connected')}
+            disabled={!(online && workspace && cawco.hub === "connected")}
             onclick={whileIdle(() => busy, undefined)}
-            title={cawco.hub === 'connected'
+            title={cawco.hub === "connected"
               ? undefined
               : "Can't start a run while the hub is unreachable"}
             type="submit"
           >
             <PendingContent
-              failed={errorMessage !== ''}
+              failed={errorMessage !== ""}
               label="Start run"
               pending={busy}
               pendingLabel="Starting workflow run…"

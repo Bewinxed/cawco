@@ -30,14 +30,28 @@
   const fit = () => fitView({ padding: 0.2, ...glide() });
 </script>
 <svelte:window
-  onkeydown={(event) => { if (event.key.toLowerCase() === 'f' && !(event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement || event.target instanceof HTMLSelectElement)) { event.preventDefault(); fit(); } }}
+  onkeydown={(event) => {
+    if (
+      event.key.toLowerCase() === "f" &&
+      !(
+        event.target instanceof HTMLInputElement ||
+        event.target instanceof HTMLTextAreaElement ||
+        event.target instanceof HTMLSelectElement
+      )
+    ) {
+      event.preventDefault();
+      fit();
+    }
+  }}
 />
 <div class="tools wf">
   <button aria-pressed={pan} class="wf-btn" onclick={onpan} type="button">
-    {pan ? 'Pan' : 'Select'}
+    {pan ? "Pan" : "Select"}
   </button>
   <Tip label="Zoom out">
-    {#snippet children(tip)}
+    {#snippet children(
+      tip
+    )}
       <button
         {...tip}
         aria-label="Zoom out"
@@ -50,7 +64,9 @@
     {/snippet}
   </Tip><span>{Math.round(zoom * 100)}%</span
   ><Tip label="Zoom in">
-    {#snippet children(tip)}
+    {#snippet children(
+      tip
+    )}
       <button
         {...tip}
         aria-label="Zoom in"
@@ -63,7 +79,9 @@
     {/snippet}
   </Tip>
   <Tip keys="F" label="Fit graph">
-    {#snippet children(tip)}
+    {#snippet children(
+      tip
+    )}
       <button
         {...tip}
         aria-label="Fit graph"
@@ -76,7 +94,9 @@
     {/snippet}
   </Tip>
   <Tip label="Undo">
-    {#snippet children(tip)}
+    {#snippet children(
+      tip
+    )}
       <button
         {...tip}
         aria-label="Undo"
@@ -89,7 +109,9 @@
       </button>
     {/snippet}
   </Tip><Tip label="Redo">
-    {#snippet children(tip)}
+    {#snippet children(
+      tip
+    )}
       <button
         {...tip}
         aria-label="Redo"

@@ -293,7 +293,9 @@
                it stands in for. -->
           <div
             aria-hidden="true"
-            class="flex flex-col gap-2 {summary ? SUMMARY_BOX : 'min-h-40 px-[var(--space-4)] py-[var(--space-3)]'}"
+            class="flex flex-col gap-2 {summary
+              ? SUMMARY_BOX
+              : "min-h-40 px-[var(--space-4)] py-[var(--space-3)]"}"
           >
             {#if summary}
               <Skeleton class="h-3 w-full" />
@@ -340,9 +342,11 @@
           <!-- biome-ignore lint/a11y/noStaticElementInteractions: same convenience shortcut, no interactive semantics intended -->
           <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: same convenience shortcut, no interactive semantics intended -->
           <div
-            class="max-h-[60vh] min-h-40 overflow-y-auto px-[var(--space-4)] py-[var(--space-3)] {save ? 'cursor-text' : ''}"
+            class="max-h-[60vh] min-h-40 overflow-y-auto px-[var(--space-4)] py-[var(--space-3)] {save
+              ? "cursor-text"
+              : ""}"
             onclick={bodyClick}
-            title={save ? 'Click to edit' : undefined}
+            title={save ? "Click to edit" : undefined}
           >
             <Markdown source={content} />
           </div>

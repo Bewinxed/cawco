@@ -359,7 +359,11 @@
     {#each mounted as paneId (paneId)}
       {@const isActive = paneId === viewId}
       {@const delta = deltaOf(paneId)}
-      {@const shown = isActive || swipeable && (Math.abs(delta) <= 1 && !swipe.veiled.includes(paneId) || paneId === swipe.leaving)}
+      {@const shown =
+        isActive ||
+        (swipeable &&
+          ((Math.abs(delta) <= 1 && !swipe.veiled.includes(paneId)) ||
+            paneId === swipe.leaving))}
       {@const ctx = contextOf(paneId)}
       <div
         class="pane"
@@ -368,7 +372,9 @@
         inert={!isActive}
         class:pane-hidden={!shown}
         use:slot={{ id: paneId, shown }}
-        {@attach land(() => isActive ? `pane:${paneId}` : undefined, { mode: 'clip' })}
+        {@attach land(() => (isActive ? `pane:${paneId}` : undefined), {
+          mode: "clip",
+        })}
       >
         <!-- The server paints the conversation here so a reload shows it
              before the bundle runs; on hydration this branch is dropped and
@@ -376,14 +382,16 @@
              group composer to lend a session to, so its pane paints its own
              in the same place. -->
         {#if !browser && runIdOf(paneId)}
-          <WorkflowRunView runId={runIdOf(paneId) ?? ''} />
+          <WorkflowRunView runId={runIdOf(paneId) ?? ""} />
         {:else if !browser}
           <SessionPane
             browsing={ctx?.machine ?? null}
-            browsingCwd={ctx?.cwd ?? ''}
-            browsingHarness={ctx?.harness ?? 'claude'}
+            browsingCwd={ctx?.cwd ?? ""}
+            browsingHarness={ctx?.harness ?? "claude"}
             focused={false}
-            serverTail={paneId === page.params.id ? (page.data as { tail?: unknown }).tail ?? null : null}
+            serverTail={paneId === page.params.id
+              ? ((page.data as { tail?: unknown }).tail ?? null)
+              : null}
             viewId={paneId}
             visible={shown}
           />

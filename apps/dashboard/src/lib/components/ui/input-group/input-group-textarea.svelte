@@ -12,7 +12,10 @@
 </script>
 
 <Textarea
-  class={cn("flex-1 resize-none rounded-none border-0 bg-transparent py-2 shadow-none dark:bg-transparent", className)}
+  class={cn(
+    "flex-1 resize-none rounded-none border-0 bg-transparent py-2 shadow-none dark:bg-transparent",
+    className
+  )}
   data-slot="input-group-control"
   bind:ref
   bind:value

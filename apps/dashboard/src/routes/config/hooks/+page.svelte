@@ -95,7 +95,9 @@
   ready={store.hooks.value !== null}
   title={section.label}
 >
-  {#snippet actions(down)}
+  {#snippet actions(
+    down
+  )}
     <Button
       disabled={down !== null}
       href="/config/hooks/new"
@@ -146,7 +148,7 @@
         <SectionRow
           actions={[
             {
-              label: 'Delete hook',
+              label: "Delete hook",
               icon: IconTrash,
               destructive: true,
               onselect: () => askRemove(row),

@@ -466,7 +466,7 @@
                 text={pillWords}
               />
               {#if elapsed}
-                {pillWords ? ' · ' : ''}
+                {pillWords ? " · " : ""}
                 <span class="elapsed" class:ticking={inFlight}
                   ><TextMorph
                     as="span"
@@ -478,12 +478,12 @@
               {/if}</span
             >
             <span class="sr-only"
-              >{[pillWords, elapsed].filter(Boolean).join(' · ')}</span
+              >{[pillWords, elapsed].filter(Boolean).join(" · ")}</span
             >
           {:else}
             {pillWords}
             {#if elapsed}
-              {pillWords ? ' · ' : ''}
+              {pillWords ? " · " : ""}
               <span class="elapsed" class:ticking={inFlight}>{elapsed}</span>
             {/if}
           {/if}
@@ -544,7 +544,9 @@
            same page as the last row, and drawn in that row's frame it
            doubled the heaviest frame of the card. -->
       <CollapsibleLazy count={shown.length + (report ? 1 : 0)} {open}>
-        {#snippet children(limit)}
+        {#snippet children(
+          limit
+        )}
           {@const drawn = shown.slice(0, limit)}
           {@const runs = wellRuns(drawn)}
           <div class="inner">
@@ -553,8 +555,8 @@
             {:else if shown.length === 0 && branch?.readFault}
               <!-- A read that failed is said, never shown as an empty transcript. -->
               <p class="empty">
-                {branch.readFault.reason === 'offline'
-                  ? 'Its machine is offline'
+                {branch.readFault.reason === "offline"
+                  ? "Its machine is offline"
                   : "Its transcript couldn't be read"}:
                 {branch.readFault.message}
               </p>
@@ -567,25 +569,27 @@
               </Button>
             {:else if shown.length === 0}
               <p class="empty">
-                {id ? 'Nothing in its transcript yet.' : 'Still starting — no transcript to show.'}
+                {id
+                  ? "Nothing in its transcript yet."
+                  : "Still starting — no transcript to show."}
               </p>
             {/if}
             {#each drawn as r (r.key)}
-              {#if r.kind === 'tools'}
+              {#if r.kind === "tools"}
                 <ToolGroup messages={r.messages} />
-              {:else if r.kind === 'question'}
+              {:else if r.kind === "question"}
                 <ToolGroup messages={[r.message]} />
-              {:else if r.kind === 'delegate'}
+              {:else if r.kind === "delegate"}
                 <Self message={r.message} />
-              {:else if r.kind === 'run'}
+              {:else if r.kind === "run"}
                 <RunBlock message={r.message} runId={r.runId} />
-              {:else if r.kind === 'subagent'}
+              {:else if r.kind === "subagent"}
                 <Subagent branch={r.branch} spawn={r.spawn} />
-              {:else if r.kind === 'thinking'}
+              {:else if r.kind === "thinking"}
                 <Thinking live={r.live} text={r.text} />
-              {:else if r.kind === 'stream'}
+              {:else if r.kind === "stream"}
                 <div class="say"><MessageBody source={r.text} streaming /></div>
-              {:else if r.kind === 'single'}
+              {:else if r.kind === "single"}
                 <MessageRow
                   {agentName}
                   grouped={r.grouped}
@@ -599,7 +603,7 @@
             {#if report && !loading && limit > shown.length}
               <section class="report" class:failed={report.failed}>
                 <h4>
-                  {report.failed ? 'Report — failed' : 'Report'}
+                  {report.failed ? "Report — failed" : "Report"}
                   {#if report.count > 1}
                     · latest of {report.count}
                   {/if}
@@ -709,7 +713,7 @@
     background-color: var(--mark-8);
   }
 
-  /* biome-ignore lint/style/noDescendingSpecificity: cascade order is load-bearing — .tk's base color must lose to the :hover rule above it. */
+  /* Cascade order is load-bearing — .tk's base color must lose to the :hover rule above it. */
   .tk {
     font-family: var(--font-mono);
     color: var(--ink-strong);

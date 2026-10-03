@@ -19,8 +19,8 @@
   aria-busy="true"
   class="catchup"
   role="status"
-  in:rise={'--dur-panel'}
-  out:rise={'--dur-exit'}
+  in:rise={"--dur-panel"}
+  out:rise={"--dur-exit"}
 >
   <span aria-hidden="true" class="beat"></span>Catching up…
 </div>

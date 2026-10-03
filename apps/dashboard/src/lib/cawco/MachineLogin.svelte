@@ -154,11 +154,11 @@
       {#key view}
         <div
           class="flex flex-col gap-6"
-          style:min-height={view === 'status' ? `${held}px` : undefined}
+          style:min-height={view === "status" ? `${held}px` : undefined}
           in:crossIn
           out:crossOut
         >
-          {#if phase.kind === 'working' || phase.kind === 'done'}
+          {#if phase.kind === "working" || phase.kind === "done"}
             <MachineAuthStatus
               onclose={close}
               outcome={phase}
@@ -166,7 +166,7 @@
               working={{
                 title: `Logging in ${machine.hostname}…`,
                 steps: [
-                  'Exchanging the code',
+                  "Exchanging the code",
                   `Checking ${machine.hostname} can use the new login`,
                 ],
               }}
@@ -195,15 +195,17 @@
                   <IconExternal class="size-4" />
                   Open the authorisation page
                 </a>
-              {:else if phase.kind === 'code'}
+              {:else if phase.kind === "code"}
                 <p class="text-label text-muted-foreground">
                   Asking {machine.hostname} for a login link…
                 </p>
               {/if}
 
               <Input
-                aria-describedby={phase.kind === 'error' ? 'login-error' : undefined}
-                aria-invalid={phase.kind === 'error' ? 'true' : undefined}
+                aria-describedby={phase.kind === "error"
+                  ? "login-error"
+                  : undefined}
+                aria-invalid={phase.kind === "error" ? "true" : undefined}
                 aria-label="Authorisation code"
                 autocomplete="off"
                 class="font-mono"
@@ -212,13 +214,13 @@
                 spellcheck="false"
                 bind:value={code}
                 {@attach (node) => {
-                  if (phase.kind === 'error' && url) {
+                  if (phase.kind === "error" && url) {
                     node.focus();
                   }
                 }}
               />
 
-              {#if phase.kind === 'error'}
+              {#if phase.kind === "error"}
                 <p class="text-meta text-destructive" id="login-error">
                   {phase.message}
                 </p>

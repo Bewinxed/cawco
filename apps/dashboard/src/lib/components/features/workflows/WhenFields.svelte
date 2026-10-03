@@ -13,8 +13,13 @@
 </script>
 <label
   >When<select
-    onchange={(event) => onchange(event.currentTarget.value === 'always' ? undefined : { path: 'result.pass', op: 'truthy' })}
-    value={value ? 'condition' : 'always'}
+    onchange={(event) =>
+      onchange(
+        event.currentTarget.value === "always"
+          ? undefined
+          : { path: "result.pass", op: "truthy" }
+      )}
+    value={value ? "condition" : "always"}
   >
     <option value="always">Always</option>
     <option value="condition">Condition</option>
@@ -25,25 +30,40 @@
   <div class="when" in:unfold out:unfold>
     <label
       >Path<input
-        oninput={(event) => value && onchange({ ...value, path: event.currentTarget.value })}
+        oninput={(event) =>
+          value && onchange({ ...value, path: event.currentTarget.value })}
         value={value.path}
       ></label
     ><label
       >Operator<select
-        onchange={(event) => value && onchange({ ...value, op: event.currentTarget.value as WorkflowWhen['op'] })}
+        onchange={(event) =>
+          value &&
+          onchange({
+            ...value,
+            op: event.currentTarget.value as WorkflowWhen["op"],
+          })}
         value={value.op}
       >
-        {#each ['eq','neq','gt','lt','contains','matches','truthy','falsy'] as op (op)}
+        {#each [
+          "eq",
+          "neq",
+          "gt",
+          "lt",
+          "contains",
+          "matches",
+          "truthy",
+          "falsy",
+        ] as op (op)}
           <option>{op}</option>
         {/each}
       </select></label
     >
-    {#if value.op !== 'truthy' && value.op !== 'falsy'}
+    {#if value.op !== "truthy" && value.op !== "falsy"}
       <div class="when" in:unfold out:unfold>
         <JsonField
           label="Compare with (JSON)"
           onchange={(next) => value && onchange({ ...value, value: next })}
-          value={value.value ?? ''}
+          value={value.value ?? ""}
         />
       </div>
     {/if}

@@ -36,13 +36,13 @@
 
 <Button
   {...rest}
-  class={cn('flex items-center gap-2', className)}
+  class={cn("flex items-center gap-2", className)}
   name="copy"
   onclick={async () => {
-		const status = await clipboard.copy(text);
+    const status = await clipboard.copy(text);
 
-		onCopy?.(status);
-	}}
+    onCopy?.(status);
+  }}
   {size}
   {tabindex}
   type="button"
@@ -52,10 +52,10 @@
   <!-- The icon cross-fades to the result over --dur-control, holds it for
        --dur-hold (the clipboard hook), then fades back. -->
   <span class="icon-swap" style="--icon-swap-dur: var(--dur-control)">
-    <span data-active={clipboard.status === 'success'}
+    <span data-active={clipboard.status === "success"}
       ><IconCheck tabindex={-1} /></span
     >
-    <span data-active={clipboard.status === 'failure'}
+    <span data-active={clipboard.status === "failure"}
       ><IconClose tabindex={-1} /></span
     >
     <span data-active={clipboard.status === undefined}>

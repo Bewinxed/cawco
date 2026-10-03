@@ -106,13 +106,13 @@
   <svelte:element
     aria-selected={selected}
     class="hit touch-hit"
-    draggable={href ? 'false' : undefined}
+    draggable={href ? "false" : undefined}
     {href}
     onclick={choose}
     role="tab"
     tabindex={selected ? 0 : -1}
-    this={href ? 'a' : 'button'}
-    type={href ? undefined : 'button'}
+    this={href ? "a" : "button"}
+    type={href ? undefined : "button"}
     {...rest}
   >
     {#if lead}
@@ -288,17 +288,6 @@
       mask-size: 100% 100%;
       mask-position: var(--wipe-in, left);
     }
-    /* Pressed: the tab's own shapes take the tint — the card, and the sheet
-       with its shoulders and flared foot — so it fills the whole tab and its
-       outside curve; the box itself stays clear behind them. */
-    &:has(.hit:active:not(:disabled, [aria-disabled="true"])) {
-      background-color: transparent;
-
-      &::before,
-      &::after {
-        background: var(--surface-fill);
-      }
-    }
     /* A switch past a neighbour: the sheets swap at once and TabsList
        slides the chosen one over from the tab it left. */
     :global([data-leap]) &::after {
@@ -318,6 +307,17 @@
     &.riding::after {
       mask-size: var(--ride) 100%;
       mask-position: var(--ride-at);
+    }
+    /* Pressed: the tab's own shapes take the tint — the card, and the sheet
+       with its shoulders and flared foot — so it fills the whole tab and its
+       outside curve; the box itself stays clear behind them. */
+    &:has(.hit:active:not(:disabled, [aria-disabled="true"])) {
+      background-color: transparent;
+
+      &::before,
+      &::after {
+        background: var(--surface-fill);
+      }
     }
   }
   /* The chosen folder sheet's flared foot is the tab's too: the area takes

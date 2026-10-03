@@ -11,7 +11,10 @@
 </script>
 
 <ul
-  class={cn("flex min-w-0 flex-col gap-1 py-0.5 group-data-[collapsible=icon]:hidden", className)}
+  class={cn(
+    "flex min-w-0 flex-col gap-1 py-0.5 group-data-[collapsible=icon]:hidden",
+    className
+  )}
   data-sidebar="menu-sub"
   data-slot="sidebar-menu-sub"
   bind:this={ref}

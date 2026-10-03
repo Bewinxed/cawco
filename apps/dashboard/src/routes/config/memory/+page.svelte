@@ -116,7 +116,9 @@
   ready={fleet !== null}
   title={section.label}
 >
-  {#snippet actions(down)}
+  {#snippet actions(
+    down
+  )}
     <NewMemoryPopover
       {down}
       onsaved={created}
@@ -138,7 +140,7 @@
         actions={memory
           ? [
               {
-                label: 'Delete everywhere',
+                label: "Delete everywhere",
                 icon: IconTrash,
                 destructive: true,
                 disabled: busy[MAIN] === true,
@@ -170,7 +172,7 @@
       <SectionRow
         actions={[
           {
-            label: 'Delete everywhere',
+            label: "Delete everywhere",
             icon: IconTrash,
             destructive: true,
             disabled: busy[doc.path] === true,
@@ -218,11 +220,20 @@
       {#each hookFailed as { machine, hook } (machine.machineId)}
         <FleetFault
           group={{
-            origin: 'machine',
+            origin: "machine",
             cause: causeOf(hook.detail),
-            scope: 'memoryHook',
+            scope: "memoryHook",
             machineId: machine.machineId,
-            faults: [{ origin: 'machine', scope: 'memoryHook', key: '', machineId: machine.machineId, detail: hook.detail, cause: causeOf(hook.detail) }],
+            faults: [
+              {
+                origin: "machine",
+                scope: "memoryHook",
+                key: "",
+                machineId: machine.machineId,
+                detail: hook.detail,
+                cause: causeOf(hook.detail),
+              },
+            ],
           }}
           {machines}
         />

@@ -145,21 +145,21 @@ You are a <role>, working in one repository at a time.
 
 <EditorFrame
   canSave={Boolean(target) && dirty}
-  deleteLabel={agent ? 'Remove from the fleet' : undefined}
+  deleteLabel={agent ? "Remove from the fleet" : undefined}
   {deleting}
   failed={refused !== undefined}
   oncancel={cancel}
   ondelete={agent ? askForget : undefined}
   onsubmit={save}
-  saveLabel={agent ? 'Save changes' : 'Create subagent'}
+  saveLabel={agent ? "Save changes" : "Create subagent"}
   {saving}
-  title={agent ? agent.name : 'New subagent'}
+  title={agent ? agent.name : "New subagent"}
 >
   {#snippet header()}
-    <h1 class="title">{agent ? agent.name : front.name || 'New subagent'}</h1>
+    <h1 class="title">{agent ? agent.name : front.name || "New subagent"}</h1>
     <p class="note">
       The file is the definition. It lands at
-      <span class="font-mono">~/.claude/agents/{target ?? 'name'}.md</span>
+      <span class="font-mono">~/.claude/agents/{target ?? "name"}.md</span>
       on every machine, and Claude Code picks it up within seconds.
     </p>
     {#if refused}
@@ -169,7 +169,7 @@ You are a <role>, working in one repository at a time.
 
   <EditorSection hue={HUE} icon={IconDocument} label="Definition">
     {#snippet right()}
-      <span class="claims num">{claims.join(' · ')}</span>
+      <span class="claims num">{claims.join(" · ")}</span>
     {/snippet}
     {#if problem}
       <p class="caution">Not storable yet — {problem}.</p>
@@ -177,7 +177,7 @@ You are a <role>, working in one repository at a time.
       <p class="note">{front.description}</p>
     {/if}
     <Textarea
-      aria-label="{target ?? 'New'} definition"
+      aria-label="{target ?? "New"} definition"
       class="min-h-80 resize-y font-mono"
       spellcheck="false"
       bind:value={draft}

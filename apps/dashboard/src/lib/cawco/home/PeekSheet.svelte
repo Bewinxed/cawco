@@ -16,7 +16,7 @@
 </script>
 
 <Drawer.Root
-  direction={touch.current ? 'bottom' : 'right'}
+  direction={touch.current ? "bottom" : "right"}
   onOpenChange={(open) => {
     peek.open = open;
   }}

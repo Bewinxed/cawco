@@ -142,7 +142,7 @@ async function fetchLedger(
         undefined,
         harness
       );
-      publish(viewId, tasks ?? []);
+      publish(viewId, tasks);
     } catch {
       publish(viewId, []);
     }

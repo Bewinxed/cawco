@@ -206,7 +206,9 @@
         onpick={(id: string) => onharness(id as HarnessKind)}
         value={harness}
       >
-        {#snippet item(tab: (typeof railItems)[number])}
+        {#snippet item(
+          tab: (typeof railItems)[number]
+        )}
           {#if tab.id === "codex"}
             <OpenAiMark aria-hidden="true" class="codex-mark" />
           {:else}
@@ -214,11 +216,15 @@
           {/if}
           {#if tab.disabled}
             <span class="sr-only"
-              >{tab.soon ? "Coming soon" : `Not installed on ${machineName}`}</span
+              >{tab.soon
+                ? "Coming soon"
+                : `Not installed on ${machineName}`}</span
             >
           {/if}
         {/snippet}
-        {#snippet tipExtra(tab: (typeof railItems)[number])}
+        {#snippet tipExtra(
+          tab: (typeof railItems)[number]
+        )}
           {#if tab.soon}
             <span class="soon">soon</span>
           {:else if tab.disabled}
@@ -236,8 +242,18 @@
           autocapitalize="off"
           autocorrect="off"
           id={`${uid}-search`}
-          oninput={(event) => { query = event.currentTarget.value; }}
-          onkeydown={(event) => { if (event.key === 'Enter' && showCustomRow) { event.preventDefault(); pickCustom(); } else if (event.key === 'Escape' && query) { event.stopPropagation(); query = ''; } }}
+          oninput={(event) => {
+            query = event.currentTarget.value;
+          }}
+          onkeydown={(event) => {
+            if (event.key === "Enter" && showCustomRow) {
+              event.preventDefault();
+              pickCustom();
+            } else if (event.key === "Escape" && query) {
+              event.stopPropagation();
+              query = "";
+            }
+          }}
           placeholder={`Search ${harnessName(listHarness)} models or paste a model id…`}
           spellcheck="false"
           value={query}
@@ -247,7 +263,9 @@
           <button
             aria-label="Clear"
             class="clear"
-            onclick={() => { query = ''; }}
+            onclick={() => {
+              query = "";
+            }}
             type="button"
           >
             <Clear />
@@ -341,7 +359,10 @@
   </div>
 </section>
 
-{#snippet rowBody(entry: ModelEntry, reason?: string)}
+{#snippet rowBody(
+  entry: ModelEntry,
+  reason?: string
+)}
   {@const provider = providerOf(entry.id)}
   {#if mixedMakers}
     <span class="ns-tile tile vendor">

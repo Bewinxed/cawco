@@ -17,7 +17,10 @@
 </script>
 
 <div
-  class={cn("relative -my-2 h-5 text-label group-data-[variant=outline]/field-group:-mb-2", className)}
+  class={cn(
+    "relative -my-2 h-5 text-label group-data-[variant=outline]/field-group:-mb-2",
+    className
+  )}
   data-content={hasContent}
   data-slot="field-separator"
   bind:this={ref}

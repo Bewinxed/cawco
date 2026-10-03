@@ -236,7 +236,7 @@ export interface HarnessNote {
 
 /** The inner text of the first `<tag>…</tag>`, or undefined. */
 const inner = (tag: string, text: string): string | undefined =>
-  // biome-ignore lint/suspicious/noUnnecessaryConditions: RegExp#exec returns RegExpExecArray | null — a tag absent from text hits the null case, which the optional chain is here for.
+  // RegExp#exec returns RegExpExecArray | null — a tag absent from text hits the null case.
   new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`).exec(text)?.[1];
 
 const isReminder = (trimmed: string): boolean =>

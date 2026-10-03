@@ -146,9 +146,17 @@
 </script>
 <!-- The kit menu, popping from the pointer. It opens on a node only: the
      pane and the edges keep the browser's own menu. -->
-<ContextMenu.Root onOpenChange={(open) => { if (!open) { menuNode = null; } }}>
+<ContextMenu.Root
+  onOpenChange={(open) => {
+    if (!open) {
+      menuNode = null;
+    }
+  }}
+>
   <ContextMenu.Trigger>
-    {#snippet child({ props })}
+    {#snippet child({
+      props,
+    })}
       <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: these are the kit menu trigger's own handlers (in `props`), narrowed to a node; the node's inspector is the keyboard path to the same actions -->
       <section
         {...props}
@@ -166,14 +174,23 @@
             fitView
             fitViewOptions={FIT}
             maxZoom={2}
-            minZoom={.15}
+            minZoom={0.15}
             nodesConnectable
             nodesDraggable={!pan}
             {nodeTypes}
             onconnect={connect}
             onedgeclick={({ edge }) => onselect(edge.id)}
             onnodeclick={({ node }) => onselect(node.id)}
-            onnodedragstop={() => onchange?.({ ...graph, nodes: graph.nodes.map((node) => ({ ...node, position: nodes.find((entry) => entry.id === node.id)?.position ?? node.position })) })}
+            onnodedragstop={() =>
+              onchange?.({
+                ...graph,
+                nodes: graph.nodes.map((node) => ({
+                  ...node,
+                  position:
+                    nodes.find((entry) => entry.id === node.id)?.position ??
+                    node.position,
+                })),
+              })}
             onpaneclick={() => onselect()}
             panOnDrag={pan ? true : [1, 2]}
             selectionOnDrag={!pan}
@@ -183,12 +200,18 @@
           >
             <Background gap={16} size={1} variant={BackgroundVariant.Dots} />
             <FlowAutoFit nodeCount={graph.nodes.length} />
-            <FlowZoomTracker onZoomChange={(value) => { zoom = value; }} />
+            <FlowZoomTracker
+              onZoomChange={(value) => {
+                zoom = value;
+              }}
+            />
             <Panel position="bottom-center"
               ><WorkflowCanvasTools
                 {canRedo}
                 {canUndo}
-                onpan={() => { pan = !pan; }}
+                onpan={() => {
+                  pan = !pan;
+                }}
                 {pan}
                 {redo}
                 {undo}
@@ -206,7 +229,12 @@
       what="Node"
       >Copy content</ContextMenu.CopyItem
     >
-    <ContextMenu.Item onSelect={() => { if (menuNode) { onselect(menuNode); } }}
+    <ContextMenu.Item
+      onSelect={() => {
+        if (menuNode) {
+          onselect(menuNode);
+        }
+      }}
       ><IconChat />Open inspector</ContextMenu.Item
     >
   </ContextMenu.Content>

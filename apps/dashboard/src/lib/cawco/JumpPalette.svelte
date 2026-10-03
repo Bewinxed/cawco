@@ -312,7 +312,9 @@
         <Command.Group
           class="jump-hits"
           data-flip
-          heading={scoped ? `Transcripts · from ${scoped.label}` : "Transcripts"}
+          heading={scoped
+            ? `Transcripts · from ${scoped.label}`
+            : "Transcripts"}
         >
           {#if search.pending && search.hits.length === 0}
             <!-- The shape of what is coming: rows drawn as the hit rows are,
@@ -344,7 +346,12 @@
               <Command.Item
                 class="jump-hit"
                 onSelect={() =>
-                jump(conversationHref(hit.instanceId ?? hit.sessionId, cawco.instanceIndex))}
+                  jump(
+                    conversationHref(
+                      hit.instanceId ?? hit.sessionId,
+                      cawco.instanceIndex
+                    )
+                  )}
                 value={`hit:${hit.docId}`}
               >
                 <!-- Which conversation this line came out of. Without it a list of
@@ -353,7 +360,7 @@
                   <IconDocument class="jump-mark" height={16} width={16} />
                   <span class="jump-name">
                     {index.sessionTitles.get(hit.sessionId) ??
-                    (hit.cwd ? leaf(hit.cwd) : hit.sessionId.slice(0, 8))}
+                      (hit.cwd ? leaf(hit.cwd) : hit.sessionId.slice(0, 8))}
                   </span>
                   <span class="jump-trail">
                     {hostOf.get(hit.machineId) ?? hit.machineId}

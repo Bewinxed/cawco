@@ -34,7 +34,7 @@
   {@attach land(() => `title:${page.url.pathname}`, { uniform: true })}
 >
   <input
-    aria-invalid={invalid ? 'true' : undefined}
+    aria-invalid={invalid ? "true" : undefined}
     aria-label={label}
     autocomplete="off"
     class={["title-input", mono && "mono"]}

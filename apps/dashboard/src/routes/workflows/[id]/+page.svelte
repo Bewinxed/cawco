@@ -5,5 +5,5 @@
 </script>
 <svelte:head><title>Workflow editor · CawCo</title></svelte:head>
 {#key page.params.id}
-  <WorkflowEditor id={page.params.id ?? ''} />
+  <WorkflowEditor id={page.params.id ?? ""} />
 {/key}

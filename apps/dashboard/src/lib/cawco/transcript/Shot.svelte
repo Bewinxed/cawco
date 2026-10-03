@@ -196,7 +196,7 @@
   }
 </script>
 
-<figure class:thumb={size === 'thumb'}>
+<figure class:thumb={size === "thumb"}>
   {#if failed === src}
     <div class="box missing">
       <span>Image not available</span>
@@ -227,8 +227,12 @@
           decoding="async"
           height={intrinsic?.height}
           loading="lazy"
-          onerror={() => { failed = src; }}
-          onload={() => { loaded = src; }}
+          onerror={() => {
+            failed = src;
+          }}
+          onload={() => {
+            loaded = src;
+          }}
           {src}
           width={intrinsic?.width}
           bind:this={image}

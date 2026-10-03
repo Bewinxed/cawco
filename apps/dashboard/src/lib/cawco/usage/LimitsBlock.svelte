@@ -210,9 +210,9 @@
                 icon={IconKey}
                 label="Log in to Claude"
                 onclick={() => {
-                loginFor = machine;
-                loginOpen = true;
-              }}
+                  loginFor = machine;
+                  loginOpen = true;
+                }}
                 size="sm"
                 variant="outline"
               />
@@ -232,11 +232,13 @@
                 />
               </span>
               <span class="amount num">
-                {#if extra.state === 'near'}
+                {#if extra.state === "near"}
                   <Attention aria-label="Near the cap" class="status" />
-                {:else if extra.state === 'over' || extra.state === 'reached'}
+                {:else if extra.state === "over" || extra.state === "reached"}
                   <Failed
-                    aria-label={extra.state === 'reached' ? 'Cap reached' : 'Nearly at the cap'}
+                    aria-label={extra.state === "reached"
+                      ? "Cap reached"
+                      : "Nearly at the cap"}
                     class="status"
                   />
                 {/if}
@@ -286,10 +288,12 @@
   <MachineLogin machine={loginFor} bind:open={loginOpen} />
 {/if}
 
-{#snippet windows(rows: Row[])}
+{#snippet windows(
+  rows: Row[]
+)}
   {#each rows as row (row.key)}
     {@const m = row.meter}
-    {@const note = row === lead ? '' : projectionNote(m)}
+    {@const note = row === lead ? "" : projectionNote(m)}
     <div class="row" data-state={m.state}>
       <span class="label">{row.label}</span>
       <span class="bar">
@@ -301,18 +305,20 @@
         />
       </span>
       <span class="used num">
-        {#if m.state === 'near'}
+        {#if m.state === "near"}
           <Attention aria-label="Near the limit" class="status" />
-        {:else if m.state === 'over' || m.state === 'reached'}
+        {:else if m.state === "over" || m.state === "reached"}
           <Failed
-            aria-label={m.state === 'reached' ? 'Limit reached' : 'Nearly at the limit'}
+            aria-label={m.state === "reached"
+              ? "Limit reached"
+              : "Nearly at the limit"}
             class="status"
           />
         {/if}
         {Math.round(m.used)}%
       </span>
       <span class="resets"
-        >{m.runsOutIn !== null && note ? `${note} · ` : ''}{resetText(m)}</span
+        >{m.runsOutIn !== null && note ? `${note} · ` : ""}{resetText(m)}</span
       >
     </div>
   {/each}

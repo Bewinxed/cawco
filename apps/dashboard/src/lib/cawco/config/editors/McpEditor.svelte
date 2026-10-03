@@ -240,30 +240,30 @@
 
 <EditorFrame
   canSave={filled && nameProblem === undefined}
-  deleteLabel={server ? 'Remove everywhere' : undefined}
+  deleteLabel={server ? "Remove everywhere" : undefined}
   {deleting}
   failed={failed !== undefined}
   oncancel={cancel}
   ondelete={server ? askRemove : undefined}
   onsubmit={save}
-  saveLabel={server ? 'Save changes' : 'Add server'}
+  saveLabel={server ? "Save changes" : "Add server"}
   saving={busy}
-  title={server ? server.name : 'New MCP server'}
+  title={server ? server.name : "New MCP server"}
 >
   {#snippet header()}
     <TitleInput
-      invalid={serverName !== '' && nameProblem !== undefined}
+      invalid={serverName !== "" && nameProblem !== undefined}
       label="Server name"
       mono
       placeholder="Name this server"
       bind:value={serverName}
     />
-    {#if serverName !== '' && nameProblem}
+    {#if serverName !== "" && nameProblem}
       <p class="problem" in:appear>{nameProblem}</p>
     {:else}
       <p class="note">
         What sessions call its tools —
-        <span class="font-mono">mcp__{serverName || 'name'}__…</span>. New
+        <span class="font-mono">mcp__{serverName || "name"}__…</span>. New
         sessions pick it up; a running session keeps the servers it started
         with.
       </p>
@@ -280,17 +280,17 @@
         mode = next as Mode;
       }}
       options={[
-        { value: 'bunx', label: 'bunx package' },
-        { value: 'command', label: 'Command' },
-        { value: 'remote', label: 'Remote' },
+        { value: "bunx", label: "bunx package" },
+        { value: "command", label: "Command" },
+        { value: "remote", label: "Remote" },
       ]}
       value={mode}
     />
     <!-- One kind's note and fields cross-fade into the next's
          (--dur-control) in one box, whose height follows over --dur-pop on
          --ease-drawer. -->
-    <div class="kind" {@attach morph({ ms: dur('--dur-pop') })}>
-      {#if mode === 'bunx'}
+    <div class="kind" {@attach morph({ ms: dur("--dur-pop") })}>
+      {#if mode === "bunx"}
         <div class="fold" in:crossIn out:crossOut>
           <p class="note">{HOW.bunx}</p>
           <Field id="mcp-package" label="Package">
@@ -299,10 +299,10 @@
               class="font-mono"
               id="mcp-package"
               oninput={() => {
-            if (!named) {
-              serverName = suggestMcpName(pkg);
-            }
-          }}
+                if (!named) {
+                  serverName = suggestMcpName(pkg);
+                }
+              }}
               placeholder="@modelcontextprotocol/server-filesystem"
               spellcheck="false"
               bind:value={pkg}
@@ -319,7 +319,7 @@
             />
           </Field>
         </div>
-      {:else if mode === 'command'}
+      {:else if mode === "command"}
         <div class="fold" in:crossIn out:crossOut>
           <p class="note">{HOW.command}</p>
           <Field id="mcp-command" label="Command">
@@ -363,12 +363,12 @@
           <Choice
             label="Transport"
             onchange={(next) => {
-          transport = next as 'http' | 'sse';
-        }}
+              transport = next as "http" | "sse";
+            }}
             options={[
-          { value: 'http', label: 'HTTP' },
-          { value: 'sse', label: 'SSE · deprecated' },
-        ]}
+              { value: "http", label: "HTTP" },
+              { value: "sse", label: "SSE · deprecated" },
+            ]}
             value={transport}
           />
         </div>
@@ -376,22 +376,22 @@
     </div>
   </EditorSection>
 
-  {#if mode !== 'bunx'}
+  {#if mode !== "bunx"}
     <!-- A bunx package takes neither: the section folds in and out (240 /
          160), and between headers and environment its lines cross-fade. -->
     <div in:unfold out:unfold>
       <EditorSection
         hue={HUE}
         icon={IconKey}
-        label={mode === 'remote' ? 'Headers' : 'Environment'}
+        label={mode === "remote" ? "Headers" : "Environment"}
       >
         <p class="note">
           <span class="font-mono">&#36;&#123;VAR&#125;</span>
           is expanded on each machine, from that machine's own environment —
           secrets never pass through the hub.
         </p>
-        <div class="kind" {@attach morph({ ms: dur('--dur-pop') })}>
-          {#if mode === 'remote'}
+        <div class="kind" {@attach morph({ ms: dur("--dur-pop") })}>
+          {#if mode === "remote"}
             <div in:crossIn out:crossOut>
               <KeyValueRows
                 keyPlaceholder="Authorization"

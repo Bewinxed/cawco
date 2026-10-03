@@ -94,7 +94,7 @@
         aria-label="Diff layout"
         onValueChange={(next) => {
           if (next) {
-            diffStyle = next as 'unified' | 'split';
+            diffStyle = next as "unified" | "split";
           }
         }}
         type="single"

@@ -59,18 +59,20 @@
     </AlertDialog.Header>
     <AlertDialog.Footer>
       <AlertDialog.Cancel
-        >{pending?.cancelLabel ?? 'Cancel'}</AlertDialog.Cancel
+        >{pending?.cancelLabel ?? "Cancel"}</AlertDialog.Cancel
       >
       <AlertDialog.Action>
-        {#snippet child({ props })}
+        {#snippet child({
+          props,
+        })}
           <Button
             {...props}
             failed={failure !== null}
-            label={pending?.confirmLabel ?? 'Confirm'}
+            label={pending?.confirmLabel ?? "Confirm"}
             onclick={accept}
             pending={running}
             pendingLabel={pending?.pendingLabel}
-            variant={pending?.destructive ? 'destructive' : 'default'}
+            variant={pending?.destructive ? "destructive" : "default"}
           />
         {/snippet}
       </AlertDialog.Action>

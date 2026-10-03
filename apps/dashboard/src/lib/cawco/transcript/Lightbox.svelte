@@ -206,17 +206,27 @@
 </script>
 
 <DialogPrimitive.Root
-  onOpenChange={(open) => { if (!open) { dismiss(); } }}
+  onOpenChange={(open) => {
+    if (!open) {
+      dismiss();
+    }
+  }}
   open={doc !== null}
 >
   <DialogPrimitive.Portal>
     <DialogPrimitive.Overlay
-      class="kit-scrim fixed inset-0 isolate z-50 {leaving ? 'leaving' : ''}"
+      class="kit-scrim fixed inset-0 isolate z-50 {leaving ? "leaving" : ""}"
     />
     <DialogPrimitive.Content
       class="doc-view"
-      onEscapeKeydown={(event) => { event.preventDefault(); dismiss(); }}
-      onInteractOutside={(event) => { event.preventDefault(); dismiss(); }}
+      onEscapeKeydown={(event) => {
+        event.preventDefault();
+        dismiss();
+      }}
+      onInteractOutside={(event) => {
+        event.preventDefault();
+        dismiss();
+      }}
     >
       {#if doc}
         {@const extension = extensionOf(doc.name)}
@@ -224,9 +234,9 @@
           class="doc-sheet"
           bind:this={sheet}
           {@attach land(() => doc.share, {
-            mode: 'grow',
-            anchor: '.doc-head',
-            ms: dur('--dur-panel'),
+            mode: "grow",
+            anchor: ".doc-head",
+            ms: dur("--dur-panel"),
           })}
         >
           <header class="doc-head">
@@ -240,7 +250,9 @@
               text={doc.content}
             />
             <Tip keys="Esc" label="Close document">
-              {#snippet children(tip)}
+              {#snippet children(
+                tip
+              )}
                 <Button
                   {...tip}
                   aria-label="Close document"
@@ -255,9 +267,9 @@
             </Tip>
           </header>
           <div class="doc-body">
-            {#if extension === 'md' || extension === 'markdown'}
+            {#if extension === "md" || extension === "markdown"}
               <MessageBody source={doc.content} />
-            {:else if extension === 'json'}
+            {:else if extension === "json"}
               <OutputBlock language="json" text={pretty(doc.content)} />
             {:else}
               <OutputBlock language={extension} text={doc.content} />

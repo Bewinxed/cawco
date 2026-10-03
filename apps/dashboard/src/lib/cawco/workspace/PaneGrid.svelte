@@ -82,7 +82,7 @@
   });
 </script>
 
-{#if node.t === 'l'}
+{#if node.t === "l"}
   <PaneLeaf
     hosted={workspace.root.id === node.id}
     leaf={node}
@@ -91,7 +91,7 @@
 {:else}
   <Resizable.PaneGroup
     class="grid-group"
-    direction={node.dir === 'h' ? 'horizontal' : 'vertical'}
+    direction={node.dir === "h" ? "horizontal" : "vertical"}
     onLayoutChange={(sizes) => workspace.resize(node.id, sizes)}
     bind:ref={group}
   >

@@ -193,7 +193,7 @@
     data-placed={placed || undefined}
     style:height={thumbBox ? `${thumbBox.h}px` : undefined}
     style:opacity={thumbBox ? 1 : 0}
-    style:transform={translate(thumbBox, 'both')}
+    style:transform={translate(thumbBox, "both")}
     style:width={thumbBox ? `${thumbBox.w}px` : undefined}
   ></span>
   {#each items as entry, i (entry.id)}
@@ -206,7 +206,7 @@
       disabled={entry.disabled}
       onclick={() => onpick(entry.id)}
       onfocus={(event) => {
-        if (event.currentTarget.matches(':focus-visible')) {
+        if (event.currentTarget.matches(":focus-visible")) {
           tip = i;
         }
       }}

@@ -101,7 +101,7 @@
       class="footer-btn save"
       disabled={down !== null || deleting || !canSave}
       {failed}
-      label={saved ? 'Saved' : saveLabel}
+      label={saved ? "Saved" : saveLabel}
       pending={saving}
       pendingLabel="Saving…"
       title={down ?? undefined}

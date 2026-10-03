@@ -94,29 +94,29 @@
 
 <span
   class="icon-swap kit-slot"
-  data-shown={Icon !== undefined || phase !== 'idle'}
+  data-shown={Icon !== undefined || phase !== "idle"}
 >
   {#if Icon}
-    <span data-active={phase === 'idle'}
+    <span data-active={phase === "idle"}
       ><Icon class="size-(--btn-icon)" /></span
     >
   {/if}
-  <span data-active={phase === 'pending'}
+  <span data-active={phase === "pending"}
     ><Spinner
       aria-hidden="true"
       class="size-(--btn-icon)"
       role="presentation"
     /></span
   >
-  <span data-active={phase === 'done'}
+  <span data-active={phase === "done"}
     ><IconTick
       class="kit-tick size-(--btn-icon)"
-      data-on={phase === 'done'}
+      data-on={phase === "done"}
     /></span
   >
 </span>
 {#if label === undefined}
-<!-- Icon only: nothing to morph. -->
+  <!-- Icon only: nothing to morph. -->
 {:else if morphMs}
   <!-- TextMorph hides its letters from screen readers and names itself with
        one plain copy of the words. -->

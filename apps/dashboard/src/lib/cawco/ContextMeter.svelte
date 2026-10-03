@@ -104,13 +104,13 @@
 >
   <Popover.Trigger
     aria-label={compacting
-      ? 'Compacting context'
+      ? "Compacting context"
       : `Context ${shown}% used. Show the breakdown.`}
     class="flex h-7 shrink-0 items-center gap-1.5 rounded-[var(--radius-sm)] px-1.5
            text-label tabular-nums
            hover:bg-muted
            transition-[background-color,color] duration-(--dur-control) ease-out
-           {compacting ? 'text-foreground' : TEXT[band]}"
+           {compacting ? "text-foreground" : TEXT[band]}"
     title={meterTitle}
   >
     {#if compacting}
@@ -122,8 +122,8 @@
            is the quantity, and the shape of the window belongs in the popover
            where it has room. -->
       <IconWindow
-        aria-hidden={usage ? 'true' : 'false'}
-        aria-label={usage ? undefined : 'Context usage unknown'}
+        aria-hidden={usage ? "true" : "false"}
+        aria-label={usage ? undefined : "Context usage unknown"}
         class="size-3.5 shrink-0"
         role="img"
       />
@@ -133,7 +133,7 @@
         aria-valuemin={0}
         aria-valuenow={shown}
         role="progressbar"
-        >{usage ? `${shown}%` : '—'}</span
+        >{usage ? `${shown}%` : "—"}</span
       >
       {#if recentlyCompacted}
         <IconCompact class="size-3 text-muted-foreground" />
@@ -167,7 +167,8 @@
           {#each usage.categories as category, index (category.name)}
             <span
               class="h-full"
-              style="width: {(category.tokens / usage.totalTokens) * 100}%; background-color: {swatch(index)}"
+              style="width: {(category.tokens / usage.totalTokens) *
+                100}%; background-color: {swatch(index)}"
             ></span>
           {/each}
         </div>
@@ -204,11 +205,13 @@
       <p
         class="border-t border-border px-3 py-2 text-label text-muted-foreground"
       >
-        {#if compaction.result === 'failed'}
-          Last compaction failed{compaction.error ? `: ${compaction.error}` : '.'}
+        {#if compaction.result === "failed"}
+          Last compaction failed{compaction.error
+            ? `: ${compaction.error}`
+            : "."}
         {:else}
           Compacted
-          {compaction.trigger === 'manual' ? 'on request' : 'automatically'}
+          {compaction.trigger === "manual" ? "on request" : "automatically"}
           from
           <span class="tabular-nums"
             >{compaction.preTokens.toLocaleString()}</span

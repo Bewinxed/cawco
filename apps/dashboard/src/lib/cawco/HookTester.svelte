@@ -79,11 +79,11 @@
 
   <!-- biome-ignore lint/a11y/noLabelWithoutControl: the `Input` component (shadcn-svelte) renders a native <input> as its only child -->
   <label class="flex flex-col gap-1.5 text-meta text-muted-foreground">
-    Try it — {info?.filters ?? 'the value this event carries'}
+    Try it — {info?.filters ?? "the value this event carries"}
     <Input
       autocomplete="off"
       class="font-mono text-label md:text-label"
-      placeholder={info?.suggests?.[0] ?? 'a sample value'}
+      placeholder={info?.suggests?.[0] ?? "a sample value"}
       spellcheck="false"
       bind:value={sample}
     />
@@ -101,10 +101,12 @@
     >
       {#key hit}
         <span
-          class={hit ? 'text-success' : 'text-muted-foreground'}
+          class={hit ? "text-success" : "text-muted-foreground"}
           in:crossIn
           out:crossOut
-          >{hit ? 'Matches — this hook would fire.' : 'No match — this hook would stay quiet for this value.'}</span
+          >{hit
+            ? "Matches — this hook would fire."
+            : "No match — this hook would stay quiet for this value."}</span
         >
       {/key}
     </p>

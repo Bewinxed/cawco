@@ -186,20 +186,20 @@
 </script>
 
 <EditorFrame
-  deleteLabel={name ? 'Delete delegate type' : undefined}
+  deleteLabel={name ? "Delete delegate type" : undefined}
   {deleting}
   failed={failed !== undefined}
   oncancel={cancel}
   ondelete={name ? askRemove : undefined}
   onsubmit={save}
-  saveLabel={name ? 'Save changes' : 'Create delegate type'}
+  saveLabel={name ? "Save changes" : "Create delegate type"}
   saving={busy}
-  title={name ? draft.name : 'New delegate type'}
+  title={name ? draft.name : "New delegate type"}
 >
   {#snippet header()}
     <TitleInput
       disabled={name !== null}
-      invalid={Boolean(problemFor('name') || duplicate)}
+      invalid={Boolean(problemFor("name") || duplicate)}
       label="Delegate type name"
       mono
       onblur={() => {
@@ -210,10 +210,10 @@
     />
     <p class="note">
       {name
-        ? 'The name is the key a running call already asks for by; renaming means creating a new type.'
+        ? "The name is the key a running call already asks for by; renaming means creating a new type."
         : "Lowercase letters, digits and hyphens — the exact string a delegate call's type param names."}
     </p>
-    {#if problemFor('name')}
+    {#if problemFor("name")}
       <p class="problem" in:appear>{problem}</p>
     {:else if duplicate}
       <p class="problem" in:appear>{duplicate}</p>
@@ -234,10 +234,10 @@
       hint="What the calling model reads to decide whether this is the type to route to — not a note for you, a routing signal for it."
       id="type-description"
       label="Description"
-      problem={problemFor('description')}
+      problem={problemFor("description")}
     >
       <Textarea
-        aria-invalid={problemFor('description') ? 'true' : undefined}
+        aria-invalid={problemFor("description") ? "true" : undefined}
         class="resize-y"
         id="type-description"
         onblur={() => {
@@ -258,12 +258,15 @@
     <Choice
       label="Harness"
       onchange={(next) => {
-        draft.harness = next as DelegateType['harness'];
+        draft.harness = next as DelegateType["harness"];
       }}
-      options={DELEGATE_HARNESSES.map((harness) => ({ value: harness, label: harness }))}
+      options={DELEGATE_HARNESSES.map((harness) => ({
+        value: harness,
+        label: harness,
+      }))}
       value={draft.harness}
     />
-    <Field id="type-model" label="Model" problem={problemFor('model')}>
+    <Field id="type-model" label="Model" problem={problemFor("model")}>
       <ModelCombobox
         class="w-full min-w-0 max-w-md"
         harness={draft.harness}
@@ -278,18 +281,18 @@
     <Choice
       label="Effort"
       onchange={(next) => {
-        if (next === 'unset') {
+        if (next === "unset") {
           // biome-ignore lint/performance/noDelete: an unset effort is omitted from the saved payload, not serialized as effort: undefined
           delete draft.effort;
         } else {
-          draft.effort = next as DelegateType['effort'];
+          draft.effort = next as DelegateType["effort"];
         }
       }}
       options={[
-        { value: 'unset', label: 'Unset' },
+        { value: "unset", label: "Unset" },
         ...EFFORT_LEVELS.map((effort) => ({ value: effort, label: effort })),
       ]}
-      value={draft.effort ?? 'unset'}
+      value={draft.effort ?? "unset"}
     />
   </EditorSection>
 
@@ -320,8 +323,8 @@
     </Field>
     <SwitchField
       hint={canDelegate
-        ? 'It can spawn delegates and sessions of its own.'
-        : 'Leaf — it does the work itself and cannot delegate further.'}
+        ? "It can spawn delegates and sessions of its own."
+        : "Leaf — it does the work itself and cannot delegate further."}
       id="type-delegate"
       label="May delegate"
       bind:checked={canDelegate}

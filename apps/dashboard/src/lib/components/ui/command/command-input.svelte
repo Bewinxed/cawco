@@ -17,14 +17,16 @@
   <InputGroup.Root>
     <CommandPrimitive.Input
       class={cn(
-				"w-full text-label disabled:cursor-not-allowed disabled:opacity-50",
-				className
-			)}
+        "w-full text-label disabled:cursor-not-allowed disabled:opacity-50",
+        className
+      )}
       data-slot="command-input"
       {value}
       {...restProps}
     >
-      {#snippet child({ props })}
+      {#snippet child({
+        props,
+      })}
         <InputGroup.Input {...props} bind:ref bind:value />
       {/snippet}
     </CommandPrimitive.Input>

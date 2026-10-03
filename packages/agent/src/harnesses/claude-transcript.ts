@@ -483,7 +483,7 @@ const isTaskNotification = (prompt: unknown): prompt is string =>
 
 /** The text of a notification's `<tag>…</tag>`, trimmed; undefined when absent. */
 const notificationField = (text: string, tag: string): string | undefined =>
-  // biome-ignore lint/suspicious/noUnnecessaryConditions: RegExp#exec returns null for a tag the block does not carry.
+  // RegExp#exec returns null for a tag the block does not carry.
   new RegExp(`<${tag}>([\\s\\S]*?)</${tag}>`).exec(text)?.[1]?.trim();
 
 const XML_ENTITIES: Record<string, string> = {

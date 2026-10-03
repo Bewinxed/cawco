@@ -11,7 +11,10 @@
 </script>
 
 <div
-  class={cn("group/field-content flex flex-1 flex-col gap-1 leading-snug", className)}
+  class={cn(
+    "group/field-content flex flex-1 flex-col gap-1 leading-snug",
+    className
+  )}
   data-slot="field-content"
   bind:this={ref}
   {...restProps}

@@ -171,7 +171,9 @@
   settling={Object.keys(reading).length > 0}
   title={section.label}
 >
-  {#snippet actions(down)}
+  {#snippet actions(
+    down
+  )}
     <Button
       disabled={down !== null || agents.length === 0}
       failed={pushFailed}
@@ -204,7 +206,7 @@
         <SectionRow
           actions={[
             {
-              label: 'Remove from the fleet',
+              label: "Remove from the fleet",
               icon: IconTrash,
               destructive: true,
               disabled: busy[row.name] === true,
@@ -256,7 +258,9 @@
           {@const key = `${machine.machineId}:${row.name}`}
           {@const same = stored !== undefined && stored.content === row.content}
           <SectionRow
-            meta="{machineLabel(machine.hostname)}{row.description ? ` · ${row.description}` : ''}"
+            meta="{machineLabel(machine.hostname)}{row.description
+              ? ` · ${row.description}`
+              : ""}"
             mono
             name={row.name}
           >
@@ -273,7 +277,7 @@
                 <Button
                   failed={adoptFailed[key] === true}
                   icon={IconDownload}
-                  label={stored ? 'Adopt this copy' : 'Adopt'}
+                  label={stored ? "Adopt this copy" : "Adopt"}
                   onclick={() => adopt(machine.machineId, row)}
                   pending={busy[key] === true}
                   pendingLabel="Adopting…"

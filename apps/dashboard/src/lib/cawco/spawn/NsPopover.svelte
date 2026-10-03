@@ -111,7 +111,7 @@
       aria-haspopup="dialog"
       aria-label={label}
       class="touch-hit {triggerClass}"
-      data-state={open ? 'open' : 'closed'}
+      data-state={open ? "open" : "closed"}
       {id}
       onclick={() => onchange(!open)}
       style={triggerStyle}
@@ -130,7 +130,9 @@
         {id}
         style={triggerStyle}
       >
-        {#snippet child({ props })}
+        {#snippet child({
+          props,
+        })}
           <!-- bits-ui marks every trigger as opening a dialog; a list says so. -->
           <button {...props} aria-haspopup={haspopup ?? "dialog"} type="button">
             {@render trigger()}
@@ -146,14 +148,25 @@
         collisionPadding={8}
         customAnchor={anchor}
         id={`${id}-popover`}
-        onCloseAutoFocus={(event) => { if (onclosefocus?.()) { event.preventDefault(); } }}
-        onOpenAutoFocus={(event) => { if (!trapFocus) { event.preventDefault(); } }}
+        onCloseAutoFocus={(event) => {
+          if (onclosefocus?.()) {
+            event.preventDefault();
+          }
+        }}
+        onOpenAutoFocus={(event) => {
+          if (!trapFocus) {
+            event.preventDefault();
+          }
+        }}
         side="bottom"
         sideOffset={6}
         style={`--ns-pop-width:${width}px;--ns-pop-gap:${gap}px`}
         {trapFocus}
       >
-        {#snippet child({ props, wrapperProps })}
+        {#snippet child({
+          props,
+          wrapperProps,
+        })}
           <div {...wrapperProps} class="ns-pop-shell">
             <div
               {...props}

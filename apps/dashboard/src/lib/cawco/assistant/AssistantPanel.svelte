@@ -271,7 +271,9 @@
       <span class="a-t"><b>CawCo</b> Assistant</span>
       <span class="a-role">Assistant</span>
       <Tip keys="⌘J" label="Close assistant">
-        {#snippet children(tip)}
+        {#snippet children(
+          tip
+        )}
           <button
             {...tip}
             aria-label="Close assistant"
@@ -305,7 +307,7 @@
          drawer curve). Loading is drawn as the status line it becomes. -->
     <section class="sect">
       <h3 class="sect-h">Supervisor</h3>
-      <div class="status" {@attach morph({ ms: dur('--dur-pop') })}>
+      <div class="status" {@attach morph({ ms: dur("--dur-pop") })}>
         {#if supError}
           <p class="sect-note fail" in:crossIn out:crossOut>
             Could not reach the supervisor. {supError}
@@ -339,7 +341,9 @@
           <div class="status-block" in:crossIn out:crossOut>
             <span class="dot on"></span>
             <span class="status-label"
-              >{sup.status.resolvedModel ?? sup.config.model ?? 'Connected'}</span
+              >{sup.status.resolvedModel ??
+                sup.config.model ??
+                "Connected"}</span
             >
           </div>
         {:else}
@@ -411,7 +415,7 @@
         <ul class="log" {@attach reflow()}>
           {#each events as ev (ev.id)}
             {@const session = cawco.instanceIndex.byId.get(ev.instanceId)}
-            {@const tone = VERDICT_TONE[ev.verdict] ?? 'muted'}
+            {@const tone = VERDICT_TONE[ev.verdict] ?? "muted"}
             <li class="log-row" data-flip>
               <span class="log-time">{ago(ev.createdAt)}</span>
               {#if session}
@@ -421,7 +425,9 @@
                   title={session.cwd}
                   type="button"
                 >
-                  {session.title ?? session.derivedTitle ?? cwdLeaf(session.cwd)}
+                  {session.title ??
+                    session.derivedTitle ??
+                    cwdLeaf(session.cwd)}
                 </button>
               {:else}
                 <span class="log-session-gone" title={ev.instanceId}>
@@ -432,7 +438,9 @@
               <span class="log-verdict {tone}">{ev.verdict}</span>
               {#if ev.message}
                 <span class="log-msg" title={ev.message}>
-                  {ev.message.length > 80 ? `${ev.message.slice(0, 77)}...` : ev.message}
+                  {ev.message.length > 80
+                    ? `${ev.message.slice(0, 77)}...`
+                    : ev.message}
                 </span>
               {/if}
             </li>

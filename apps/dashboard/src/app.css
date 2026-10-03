@@ -692,9 +692,6 @@
         inline-size var(--dur-morph) var(--ease-out),
         margin-inline-end var(--dur-morph) var(--ease-out);
     }
-    > [data-active="false"] * {
-      animation-play-state: paused;
-    }
   }
 
   /* A tick that draws itself: a checkbox's over 160ms, a menu item's over
@@ -921,6 +918,10 @@
       filter: blur(4px);
       pointer-events: none;
     }
+  }
+
+  .kit-slot > [data-active="false"] * {
+    animation-play-state: paused;
   }
 
   /* One hover ghost and one selection pill per list

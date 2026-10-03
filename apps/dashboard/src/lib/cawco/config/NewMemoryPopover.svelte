@@ -79,7 +79,7 @@
 <Popover.Root
   onOpenChange={(next) => {
     if (!next) {
-      path = '';
+      path = "";
       asked = false;
       failed = undefined;
     }
@@ -87,7 +87,9 @@
   bind:open={expanded}
 >
   <Popover.Trigger disabled={down !== null}>
-    {#snippet child({ props })}
+    {#snippet child({
+      props,
+    })}
       <Button {...props} disabled={down !== null} title={down ?? undefined}>
         <IconPlus />
         New document
@@ -105,7 +107,7 @@
           front of the session running that model.
         {/snippet}
         <Input
-          aria-invalid={problem ? 'true' : undefined}
+          aria-invalid={problem ? "true" : undefined}
           autocomplete="off"
           class="font-mono"
           id="memory-path"

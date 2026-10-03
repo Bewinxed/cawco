@@ -165,7 +165,7 @@
     <div class="ranged">
       <Tooltip.Provider>
         <WhereItGoes {since} bind:this={where} />
-        <History hourly={range === 'window' || range === 'today'} {since} />
+        <History hourly={range === "window" || range === "today"} {since} />
       </Tooltip.Provider>
     </div>
   </div>

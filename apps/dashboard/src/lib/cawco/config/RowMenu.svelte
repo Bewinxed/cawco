@@ -23,7 +23,7 @@
 <DropdownMenu.Root>
   <DropdownMenu.Trigger
     aria-label="More for {label}"
-    class={buttonVariants({ variant: 'ghost', size: 'icon-sm' })}
+    class={buttonVariants({ variant: "ghost", size: "icon-sm" })}
   >
     <IconMore />
   </DropdownMenu.Trigger>
@@ -32,7 +32,7 @@
       <DropdownMenu.Item
         disabled={action.disabled}
         onSelect={action.onselect}
-        variant={action.destructive ? 'destructive' : 'default'}
+        variant={action.destructive ? "destructive" : "default"}
       >
         {#if action.icon}
           <action.icon />

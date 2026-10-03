@@ -294,7 +294,7 @@
 {/snippet}
 
 <section
-  aria-label={questions ? 'Question from the agent' : 'Permission request'}
+  aria-label={questions ? "Question from the agent" : "Permission request"}
   class="hitl"
   class:arriving={arriving}
 >
@@ -325,21 +325,21 @@
     <div class="qact">
       <Button
         class={primary}
-        disabled={disabledOf('answer') || (pressed === null && !allAnswered)}
-        failed={failedOf('answer')}
+        disabled={disabledOf("answer") || (pressed === null && !allAnswered)}
+        failed={failedOf("answer")}
         icon={IconCheck}
         label="Answer"
         onclick={submitQuestion}
-        pending={pendingOf('answer')}
+        pending={pendingOf("answer")}
         pendingLabel="Answering…"
       />
       <Button
         class={dismiss}
-        disabled={disabledOf('deny')}
-        failed={failedOf('deny')}
+        disabled={disabledOf("deny")}
+        failed={failedOf("deny")}
         label="Dismiss"
-        onclick={() => answer('deny')}
-        pending={pendingOf('deny')}
+        onclick={() => answer("deny")}
+        pending={pendingOf("deny")}
         pendingLabel="Dismissing…"
         variant="outline"
       />
@@ -362,7 +362,8 @@
       <summary>What this touches</summary>
       <div class="fields">
         {#each Object.entries(input) as [key, value]}
-          {@const text = typeof value === 'string' ? value : JSON.stringify(value, null, 2)}
+          {@const text =
+            typeof value === "string" ? value : JSON.stringify(value, null, 2)}
           <div class="field">
             <span class="k">{key}</span>
             <pre class="v">{text}</pre>
@@ -373,23 +374,23 @@
     <div class="choice">
       <Button
         class={grant}
-        disabled={disabledOf('allow')}
-        failed={failedOf('allow')}
+        disabled={disabledOf("allow")}
+        failed={failedOf("allow")}
         icon={IconTick}
         label="Approve"
-        onclick={() => answer('allow')}
-        pending={pendingOf('allow')}
+        onclick={() => answer("allow")}
+        pending={pendingOf("allow")}
         pendingLabel="Approving…"
         variant="secondary"
       />
       <Button
         class={refuse}
-        disabled={disabledOf('deny')}
-        failed={failedOf('deny')}
+        disabled={disabledOf("deny")}
+        failed={failedOf("deny")}
         icon={IconClose}
         label="Deny"
-        onclick={() => answer('deny')}
-        pending={pendingOf('deny')}
+        onclick={() => answer("deny")}
+        pending={pendingOf("deny")}
         pendingLabel="Denying…"
         variant="secondary"
       />
@@ -404,12 +405,12 @@
         </p>
         <Button
           class={widen}
-          disabled={disabledOf('always')}
-          failed={failedOf('always')}
+          disabled={disabledOf("always")}
+          failed={failedOf("always")}
           icon={IconShield}
           label="Always allow {rule.short}"
-          onclick={() => answer('always')}
-          pending={pendingOf('always')}
+          onclick={() => answer("always")}
+          pending={pendingOf("always")}
           pendingLabel="Allowing…"
           variant="outline"
         />

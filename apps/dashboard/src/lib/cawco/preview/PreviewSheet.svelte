@@ -176,7 +176,7 @@
 <Portal
   ><div
     class="preview-sheet-host"
-    data-active-snap={typeof snap === 'string' && snap !== peek ? 0.6 : snap}
+    data-active-snap={typeof snap === "string" && snap !== peek ? 0.6 : snap}
     style={`bottom:${bottom}px`}
     bind:this={host}
   ></div></Portal
@@ -202,19 +202,35 @@
     <Drawer.Content
       class="preview-sheet"
       onCloseAutoFocus={(event) => event.preventDefault()}
-      onEscapeKeydown={(event) => { if (lightbox.current) { lightbox.close(); } else { previewPane?.parentEscape(event); } event.preventDefault(); }}
+      onEscapeKeydown={(event) => {
+        if (lightbox.current) {
+          lightbox.close();
+        } else {
+          previewPane?.parentEscape(event);
+        }
+        event.preventDefault();
+      }}
       onOpenAutoFocus={(event) => event.preventDefault()}
-      style="inset:0;width:100%;height:100%;{initial ? `--initial-transform:${initial}` : ''}"
+      style="inset:0;width:100%;height:100%;{initial
+        ? `--initial-transform:${initial}`
+        : ""}"
       trapFocus={false}
       bind:ref={drawer}
     >
       <Drawer.Title class="sr-only">Preview</Drawer.Title>
-      <div class="sheet" {@attach land(() => share, { mode: 'clip' })}>
+      <div class="sheet" {@attach land(() => share, { mode: "clip" })}>
         <Vaul.Handle
           class="preview-grab"
           onclick={cycleSnap}
-          onpointerdown={(event) => { handleStartY = event.clientY; handleDragged = false; }}
-          onpointermove={(event) => { if (Math.abs(event.clientY - handleStartY) > 8) { handleDragged = true; } }}
+          onpointerdown={(event) => {
+            handleStartY = event.clientY;
+            handleDragged = false;
+          }}
+          onpointermove={(event) => {
+            if (Math.abs(event.clientY - handleStartY) > 8) {
+              handleDragged = true;
+            }
+          }}
           preventCycle
         />
         <PreviewPane

@@ -222,7 +222,7 @@ interface TurnRecord {
 /** Stable JSON so the same call always hashes the same way. */
 const canonical = (value: unknown): string => {
   if (value === null || typeof value !== "object") {
-    return JSON.stringify(value) ?? "null";
+    return value === undefined ? "null" : JSON.stringify(value);
   }
   if (Array.isArray(value)) {
     return `[${value.map(canonical).join(",")}]`;

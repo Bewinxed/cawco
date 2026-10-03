@@ -133,7 +133,9 @@
       class="body"
       bind:this={body}
       style:min-height={card === null ? undefined : `${card}px`}
-      {@attach cawco.hub === 'connected' && !settling ? rememberCard(page.url.pathname) : undefined}
+      {@attach cawco.hub === "connected" && !settling
+        ? rememberCard(page.url.pathname)
+        : undefined}
     >
       <header class="head">
         {#if section}
@@ -152,7 +154,7 @@
             <DropdownMenu.Root>
               <DropdownMenu.Trigger
                 aria-label="More"
-                class={buttonVariants({ variant: 'ghost', size: 'icon' })}
+                class={buttonVariants({ variant: "ghost", size: "icon" })}
               >
                 <IconMore />
               </DropdownMenu.Trigger>
@@ -177,7 +179,7 @@
           <div
             aria-hidden="true"
             class="slot"
-            out:fade={{ duration: dur('--dur-control'), easing: easeOut }}
+            out:fade={{ duration: dur("--dur-control"), easing: easeOut }}
           >
             <SkeletonRows fill={card !== null} />
           </div>

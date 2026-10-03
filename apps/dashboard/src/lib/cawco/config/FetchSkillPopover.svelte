@@ -110,7 +110,9 @@
   bind:open={expanded}
 >
   <Popover.Trigger disabled={down !== null}>
-    {#snippet child({ props })}
+    {#snippet child({
+      props,
+    })}
       <Button {...props} disabled={down !== null} title={down ?? undefined}>
         <IconPlus />
         Fetch skill
@@ -134,7 +136,7 @@
     >
       <Field id="skill-source" label="Source">
         {#snippet hint()}
-          {#if source !== '' && source !== typed.trim()}
+          {#if source !== "" && source !== typed.trim()}
             Reads as <span class="font-mono">{source}</span>
           {:else}
             The install command, an <span class="font-mono">owner/repo</span>
@@ -163,14 +165,14 @@
       <Field
         id="skill-name"
         label="Name"
-        problem={skillName === '' ? undefined : nameProblem}
+        problem={skillName === "" ? undefined : nameProblem}
       >
         {#snippet hint()}
           The directory it lands in —
-          <span class="font-mono">~/.claude/skills/{skillName || 'name'}</span>
+          <span class="font-mono">~/.claude/skills/{skillName || "name"}</span>
         {/snippet}
         <Input
-          aria-invalid={skillName !== '' && nameProblem ? 'true' : undefined}
+          aria-invalid={skillName !== "" && nameProblem ? "true" : undefined}
           autocomplete="off"
           class="font-mono"
           id="skill-name"

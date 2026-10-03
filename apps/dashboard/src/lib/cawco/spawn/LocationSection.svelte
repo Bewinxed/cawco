@@ -163,12 +163,18 @@
   {/if}
   {#snippet source()}
     <Segmented
-      items={[{ value: "dir", label: "Existing files" }, { value: "repo", label: "Clone from GitHub" }]}
+      items={[
+        { value: "dir", label: "Existing files" },
+        { value: "repo", label: "Clone from GitHub" },
+      ]}
       label="Location source"
       onchange={onmode}
       value={mode}
     >
-      {#snippet icon(value, on)}
+      {#snippet icon(
+        value,
+        on
+      )}
         {#if value === "dir"}
           <Folder style="color:var(--hue-amber-500)" />
         {:else}
@@ -269,7 +275,7 @@
                   type="button"
                 >
                   <Folder
-                    style={`color:${folder.name.startsWith('.') ? 'var(--neutral-8)' : 'var(--hue-amber-500)'}`}
+                    style={`color:${folder.name.startsWith(".") ? "var(--neutral-8)" : "var(--hue-amber-500)"}`}
                   />
                   <span class="name">{folder.name}</span>
                   <Right class="go" />

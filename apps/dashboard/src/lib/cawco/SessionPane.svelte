@@ -1022,7 +1022,10 @@
         <Resizable.Pane class="transcript-pane" defaultSize={100} minSize={30}>
           <div
             class="body"
-            style="--composer-clearance: calc({composerRoom} + {phone && previewOpen ? 106 : 0}px + var(--space-4) + var(--space-4))"
+            style="--composer-clearance: calc({composerRoom} + {phone &&
+            previewOpen
+              ? 106
+              : 0}px + var(--space-4) + var(--space-4))"
           >
             <!-- The transcript area. Movement between conversations is owned by the
            pane above this one, so nothing here animates on a switch — this is
@@ -1034,11 +1037,11 @@
                 <div class="state" in:crossIn out:leave>
                   <EmptyState
                     class={STATEFUL}
-                    icon={fault.reason === 'offline' ? IconLaptop : IconAlert}
+                    icon={fault.reason === "offline" ? IconLaptop : IconAlert}
                     line={faultLine}
-                    title={fault.reason === 'offline'
-                ? 'This machine is offline'
-                : "This transcript couldn't be read"}
+                    title={fault.reason === "offline"
+                      ? "This machine is offline"
+                      : "This transcript couldn't be read"}
                   >
                     {#snippet action()}
                       <Button onclick={retry} variant="outline"
@@ -1126,8 +1129,10 @@
           </div>
         </Resizable.Pane>
         <Resizable.Handle
-          class={desktopPreview ? 'preview-divider' : 'preview-divider hidden'}
-          onDraggingChange={(dragging) => { resizing = dragging; }}
+          class={desktopPreview ? "preview-divider" : "preview-divider hidden"}
+          onDraggingChange={(dragging) => {
+            resizing = dragging;
+          }}
         />
         <Resizable.Pane
           class="artifact-pane"
@@ -1135,8 +1140,17 @@
           collapsible
           defaultSize={0}
           maxSize={70}
-          minSize={paneWidth ? Math.min(70, 320 / paneWidth * 100) : 30}
-          onResize={(size) => { previewShare = size; if (size > 0 && desktopPreview) { savedWidth = size; localStorage.setItem(`cawco.preview.width.${viewId}`, String(size)); } }}
+          minSize={paneWidth ? Math.min(70, (320 / paneWidth) * 100) : 30}
+          onResize={(size) => {
+            previewShare = size;
+            if (size > 0 && desktopPreview) {
+              savedWidth = size;
+              localStorage.setItem(
+                `cawco.preview.width.${viewId}`,
+                String(size)
+              );
+            }
+          }}
           bind:this={previewPane}
         >
           {#if previewMounted && !phone}
@@ -1144,7 +1158,10 @@
               class="artifact-surface"
               class:shown={desktopPreview}
               in:surfaceIn
-              {@attach land(() => `preview:${viewId}`, { mode: 'clip', ms: dur('--dur-panel') })}
+              {@attach land(() => `preview:${viewId}`, {
+                mode: "clip",
+                ms: dur("--dur-panel"),
+              })}
             >
               <PreviewPane
                 instanceId={viewId}

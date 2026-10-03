@@ -1257,10 +1257,15 @@
       <div class="atts" transition:unfold {@attach reflow()}>
         {#each draft.selections as selection (`${selection.element.url}:${selection.element.selector}`)}
           <SelectionChip
-            onedit={() => { draft.editing = selection; draft.editorOpen = true; }}
+            onedit={() => {
+              draft.editing = selection;
+              draft.editorOpen = true;
+            }}
             onremove={() => draft.removeSelection(selection)}
             {selection}
-            bind:anchor={draft.anchors[`${selection.element.url}:${selection.element.selector}`]}
+            bind:anchor={draft.anchors[
+              `${selection.element.url}:${selection.element.selector}`
+            ]}
           />
         {/each}
         {#each draft.images as img, i (img.name + i)}
@@ -1297,8 +1302,14 @@
 
     {#if draft.editing}
       <SelectionPopover
-        anchor={draft.anchors[`${draft.editing.element.url}:${draft.editing.element.selector}`]}
-        onremove={() => { if (draft.editing) { draft.removeSelection(draft.editing); } }}
+        anchor={draft.anchors[
+          `${draft.editing.element.url}:${draft.editing.element.selector}`
+        ]}
+        onremove={() => {
+          if (draft.editing) {
+            draft.removeSelection(draft.editing);
+          }
+        }}
         phone={previewPhone}
         selection={draft.editing}
         bind:open={draft.editorOpen}
@@ -1383,12 +1394,12 @@
           {onpaste}
           onselect={noteCaret}
           ontransitioncancel={(event) => {
-            if (event.propertyName === 'height') {
+            if (event.propertyName === "height") {
               folding = false;
             }
           }}
           ontransitionend={(event) => {
-            if (event.propertyName === 'height') {
+            if (event.propertyName === "height") {
               folding = false;
             }
           }}
@@ -1441,7 +1452,7 @@
                end: standing in the field, it takes none of the field's width,
                so the text wraps as it does unfolded. -->
           <span aria-hidden="true" class="more"
-            >+{lines - 1} {lines === 2 ? 'line' : 'lines'}</span
+            >+{lines - 1} {lines === 2 ? "line" : "lines"}</span
           >
         {/if}
       </label>
@@ -1461,7 +1472,7 @@
         <button
           aria-busy={sending || undefined}
           aria-disabled={sending || held || undefined}
-          aria-label={busy ? 'Stop the agent' : 'Send message'}
+          aria-label={busy ? "Stop the agent" : "Send message"}
           class="stop touch-hit pressable"
           disabled={!(busy || sending || draft.hasContent)}
           onclick={whileIdle(() => sending, onaction)}
@@ -1471,7 +1482,7 @@
              the glyph on every flip, so BOTH directions of the swap animate in;
              the box it sits in is untouched, so send↔stop never moves or
              resizes under a thumb already travelling toward it. -->
-          {#key sending ? 'wait' : busy}
+          {#key sending ? "wait" : busy}
             <span class="swap" out:glyphOut>
               {#if sending}
                 <Spinner aria-hidden="true" role="presentation" />
@@ -1942,12 +1953,6 @@
       filter: blur(0);
     }
   }
-  /* Optical centring: the send plane's mass sits low-left of its box, so the
-     glyph is nudged up and right to look centred rather than measure centred.
-     The stop square is symmetric and needs none of it. */
-  .stop:not(:disabled) :global(svg) {
-    transform: translate(0.5px, -0.5px);
-  }
   @media (prefers-reduced-motion: no-preference) {
     .att-btn:active,
     .stop:active:not(:disabled) {
@@ -2025,11 +2030,6 @@
     color: var(--ink-muted);
     cursor: pointer;
     flex: 0 0 auto;
-
-    & :global(svg) {
-      inline-size: 16px;
-      block-size: 16px;
-    }
   }
   .att button:hover {
     background: var(--surface-recess);
@@ -2063,6 +2063,18 @@
     &:hover {
       color: var(--ink-strong);
     }
+  }
+
+  .att button :global(svg) {
+    inline-size: 16px;
+    block-size: 16px;
+  }
+
+  /* Optical centring: the send plane's mass sits low-left of its box, so the
+     glyph is nudged up and right to look centred rather than measure centred.
+     The stop square is symmetric and needs none of it. */
+  .stop:not(:disabled) :global(svg) {
+    transform: translate(0.5px, -0.5px);
   }
 
   /* Mobile: the composer goes full-width, edge to edge. It stays absolute

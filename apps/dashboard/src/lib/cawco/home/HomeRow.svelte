@@ -121,7 +121,9 @@
   };
 </script>
 
-{#snippet body(trigger: Record<string, unknown>)}
+{#snippet body(
+  trigger: Record<string, unknown>
+)}
   <div
     class="item"
     data-active={active || undefined}
@@ -141,20 +143,27 @@
     {/if}
     <a
       {...trigger}
-      aria-current={active ? 'page' : undefined}
-      class={cn('row press-tint focus-inset', trigger.class as string | undefined)}
+      aria-current={active ? "page" : undefined}
+      class={cn(
+        "row press-tint focus-inset",
+        trigger.class as string | undefined
+      )}
       data-hover-session={instance?.id}
       data-rail-row
       data-share="session:{sessionId}"
       {href}
       use:dragSession={{
-      sessionId,
-      from: null,
-      ctx: () =>
-        info
-          ? { machine: machineId, cwd: info.cwd ?? '', harness: info.harness ?? 'claude' }
-          : null,
-    }}
+        sessionId,
+        from: null,
+        ctx: () =>
+          info
+            ? {
+                machine: machineId,
+                cwd: info.cwd ?? "",
+                harness: info.harness ?? "claude",
+              }
+            : null,
+      }}
     >
       <SessionMark id={sessionId} {place} {status} />
       <!-- Two lines: the title, its age and, on a parent, the count of the
@@ -179,7 +188,9 @@
     </a>
     {#if onarchive}
       <Tip label="Archive">
-        {#snippet children(tip)}
+        {#snippet children(
+          tip
+        )}
           <button
             {...tip}
             aria-label="Archive {title}"
@@ -197,7 +208,9 @@
       <!-- Glance → peek → dive: the tail of this one, without leaving home.
            A workflow run has no tail of its own: its card is its steps. -->
       <Tip label="Peek">
-        {#snippet children(tip)}
+        {#snippet children(
+          tip
+        )}
           <button
             {...tip}
             aria-label="Peek {title}"
@@ -218,7 +231,9 @@
   {@render body({})}
 {:else if instance}
   <LiveSessionMenu {instance} {onarchive}>
-    {#snippet children(trigger)}
+    {#snippet children(
+      trigger
+    )}
       {@render body(trigger)}
     {/snippet}
   </LiveSessionMenu>

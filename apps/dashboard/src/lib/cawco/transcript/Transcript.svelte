@@ -2653,52 +2653,63 @@
       startMargin={spare}
       bind:this={
         () => list,
-        (value) => { list = value as unknown as VirtualizerHandle; }
+        (value) => {
+    list = value as unknown as VirtualizerHandle;
+  }
       }
     >
-      {#snippet children(row)}
+      {#snippet children(
+        row
+      )}
         <TranscriptRow
           continues={continued.has(row.key)}
           handoff={presentation.handed.get(row.key)}
-          id={row.kind === 'tools' ? undefined : row.key}
+          id={row.kind === "tools" ? undefined : row.key}
           leaving={presentation.leaving.has(row.key)}
           motion={motionOf(row)}
           onleft={leaver(row.key)}
           rowKey={row.key}
         >
-          {#snippet children(ticket)}
+          {#snippet children(
+            ticket
+          )}
             <!-- The live row, and the answer it streamed once that has
                  landed (rows.ts `keepLive`): one branch, so the settle is
                  the same LiveRow updating, not a MessageRow mounting. -->
-            {#if row.kind === 'live' || row.kind === 'single' && row.streamed}
+            {#if row.kind === "live" || (row.kind === "single" && row.streamed)}
               <LiveRow {agentName} announce={active} {row} />
-            {:else if row.kind === 'single' || row.kind === 'queued'}
+            {:else if row.kind === "single" || row.kind === "queued"}
               <MessageRow
                 {agentName}
-                folding={ticket?.kind === 'fold'}
+                folding={ticket?.kind === "fold"}
                 grouped={row.grouped}
                 message={row.message}
                 runsOn={runsOn.has(row.key)}
               />
-            {:else if row.kind === 'tools'}
+            {:else if row.kind === "tools"}
               <ToolGroup messages={row.messages} />
-            {:else if row.kind === 'question'}
+            {:else if row.kind === "question"}
               <QuestionCard message={row.message} />
-            {:else if row.kind === 'harness'}
+            {:else if row.kind === "harness"}
               <SystemLine
                 disclosed={disclosureAt(session.instanceId, row.key)}
                 harness={row.note}
               />
-            {:else if row.kind === 'subagent'}
+            {:else if row.kind === "subagent"}
               <Subagent branch={row.branch} spawn={row.spawn} />
-            {:else if row.kind === 'delegate'}
+            {:else if row.kind === "delegate"}
               <Delegate message={row.message} />
-            {:else if row.kind === 'run'}
+            {:else if row.kind === "run"}
               <RunBlock message={row.message} runId={row.runId} />
-            {:else if row.kind === 'thinking'}
+            {:else if row.kind === "thinking"}
               <Thinking live={row.live} text={row.text} />
-            {:else if row.kind === 'livetool'}
-              {@const d = describeTool(row.glance.name, undefined, undefined, 'pending')}
+            {:else if row.kind === "livetool"}
+              {@const d = describeTool(
+                row.glance.name,
+                undefined,
+                undefined,
+                "pending"
+              )}
               {@const LiveIcon = d.icon}
               <div class="livetool rail-row rail-line">
                 <span class="ic rail-cell breathe {d.color}"><LiveIcon /></span>

@@ -169,22 +169,29 @@
     typeof value === "string" ? value : JSON.stringify(value);
 </script>
 
-{#snippet rerunFrom(step: { id: string })}
+{#snippet rerunFrom(step: {
+  id: string;
+})}
   <!-- Everything this run did before the step is kept: the new run is
        handed those results and goes live from here. -->
   <button
-    aria-busy={acting === 'rerun-step' || undefined}
-    aria-disabled={acting === 'rerun-step' || undefined}
+    aria-busy={acting === "rerun-step" || undefined}
+    aria-disabled={acting === "rerun-step" || undefined}
     class="wf-btn"
-    disabled={(busy && acting !== 'rerun-step') || !live || going}
-    onclick={whileIdle(() => acting === 'rerun-step', () => rerun(step.id))}
-    title={live ? 'Run the workflow again from this step, keeping what came before it' : "Can't re-run while the hub is unreachable"}
+    disabled={(busy && acting !== "rerun-step") || !live || going}
+    onclick={whileIdle(
+      () => acting === "rerun-step",
+      () => rerun(step.id)
+    )}
+    title={live
+      ? "Run the workflow again from this step, keeping what came before it"
+      : "Can't re-run while the hub is unreachable"}
     type="button"
   >
     <PendingContent
-      failed={errorMessage !== ''}
+      failed={errorMessage !== ""}
       label="Re-run from this step"
-      pending={acting === 'rerun-step'}
+      pending={acting === "rerun-step"}
       pendingLabel="Re-running…"
     />
   </button>
@@ -211,7 +218,7 @@
           <span class="run-mark"
             ><SessionStatus sessionId={runTabId(runId)} /></span
           >
-          <span class="name">{workflow?.name ?? 'Workflow'}</span>
+          <span class="name">{workflow?.name ?? "Workflow"}</span>
         </h1>
         <p class="meta">
           <span>Started {startedAt}</span>
@@ -233,25 +240,32 @@
               class="wf-btn"
               disabled={busy || !live}
               onclick={cancel}
-              title={live ? undefined : "Can't cancel while the hub is unreachable"}
+              title={live
+                ? undefined
+                : "Can't cancel while the hub is unreachable"}
               type="button"
             >
               Cancel run
             </button>
           {:else}
             <button
-              aria-busy={acting === 'rerun' || undefined}
-              aria-disabled={acting === 'rerun' || undefined}
+              aria-busy={acting === "rerun" || undefined}
+              aria-disabled={acting === "rerun" || undefined}
               class="wf-btn"
-              disabled={(busy && acting !== 'rerun') || !live}
-              onclick={whileIdle(() => acting === 'rerun', () => rerun())}
-              title={live ? 'Start this workflow again with the same inputs' : "Can't re-run while the hub is unreachable"}
+              disabled={(busy && acting !== "rerun") || !live}
+              onclick={whileIdle(
+                () => acting === "rerun",
+                () => rerun()
+              )}
+              title={live
+                ? "Start this workflow again with the same inputs"
+                : "Can't re-run while the hub is unreachable"}
               type="button"
             >
               <PendingContent
-                failed={errorMessage !== ''}
+                failed={errorMessage !== ""}
                 label="Re-run"
-                pending={acting === 'rerun'}
+                pending={acting === "rerun"}
                 pendingLabel="Re-running…"
               />
             </button>
@@ -267,7 +281,7 @@
       <RunSteps glyph=".run-mark .glyph" more={rerunFrom} {runId} />
     </section>
 
-    {#if run.status === 'waiting' && run.ask}
+    {#if run.status === "waiting" && run.ask}
       {@const ask = run.ask}
       <!-- The question folds open; answered, the picked option pends until
            the hub moves the run on, and then the block folds away. -->
@@ -281,13 +295,25 @@
               aria-disabled={acting === key || undefined}
               class="wf-btn"
               disabled={(busy && acting !== key) || !live}
-              onclick={whileIdle(() => acting === key, () => act(key, () => answerWorkflow(runId, ask.stepId, { choice: option.label, note, value: typedValue() })))}
-              title={live ? undefined : "Can't answer while the hub is unreachable"}
+              onclick={whileIdle(
+                () => acting === key,
+                () =>
+                  act(key, () =>
+                    answerWorkflow(runId, ask.stepId, {
+                      choice: option.label,
+                      note,
+                      value: typedValue(),
+                    })
+                  )
+              )}
+              title={live
+                ? undefined
+                : "Can't answer while the hub is unreachable"}
               type="button"
             >
               <span class="option-label"
                 ><PendingContent
-                  failed={errorMessage !== ''}
+                  failed={errorMessage !== ""}
                   label={option.label}
                   pending={acting === key}
                   pendingLabel="Answering…"
@@ -313,18 +339,31 @@
             >
             {#if !ask.options.length}
               <button
-                aria-busy={acting === 'value' || undefined}
-                aria-disabled={acting === 'value' || undefined}
+                aria-busy={acting === "value" || undefined}
+                aria-disabled={acting === "value" || undefined}
                 class="wf-btn"
-                disabled={!valueText.trim() || (busy && acting !== 'value') || !live}
-                onclick={whileIdle(() => acting === 'value', () => act('value', () => answerWorkflow(runId, ask.stepId, { note, value: typedValue() })))}
-                title={live ? undefined : "Can't answer while the hub is unreachable"}
+                disabled={!valueText.trim() ||
+                  (busy && acting !== "value") ||
+                  !live}
+                onclick={whileIdle(
+                  () => acting === "value",
+                  () =>
+                    act("value", () =>
+                      answerWorkflow(runId, ask.stepId, {
+                        note,
+                        value: typedValue(),
+                      })
+                    )
+                )}
+                title={live
+                  ? undefined
+                  : "Can't answer while the hub is unreachable"}
                 type="button"
               >
                 <PendingContent
-                  failed={errorMessage !== ''}
+                  failed={errorMessage !== ""}
                   label="Send answer"
-                  pending={acting === 'value'}
+                  pending={acting === "value"}
                   pendingLabel="Sending…"
                 />
               </button>
@@ -335,18 +374,30 @@
           <div class="wf-row">
             <label>Other answer<input bind:value={other}></label
             ><button
-              aria-busy={acting === 'answer' || undefined}
-              aria-disabled={acting === 'answer' || undefined}
+              aria-busy={acting === "answer" || undefined}
+              aria-disabled={acting === "answer" || undefined}
               class="wf-btn"
-              disabled={!other || (busy && acting !== 'answer') || !live}
-              onclick={whileIdle(() => acting === 'answer', () => act('answer', () => answerWorkflow(runId, ask.stepId, { choice: other, note, value: typedValue() })))}
-              title={live ? undefined : "Can't answer while the hub is unreachable"}
+              disabled={!other || (busy && acting !== "answer") || !live}
+              onclick={whileIdle(
+                () => acting === "answer",
+                () =>
+                  act("answer", () =>
+                    answerWorkflow(runId, ask.stepId, {
+                      choice: other,
+                      note,
+                      value: typedValue(),
+                    })
+                  )
+              )}
+              title={live
+                ? undefined
+                : "Can't answer while the hub is unreachable"}
               type="button"
             >
               <PendingContent
-                failed={errorMessage !== ''}
+                failed={errorMessage !== ""}
                 label="Send answer"
-                pending={acting === 'answer'}
+                pending={acting === "answer"}
                 pendingLabel="Sending…"
               />
             </button>

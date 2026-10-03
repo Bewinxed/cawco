@@ -55,9 +55,9 @@
     <pre><code
         >{#each lines as line}<span class="ln"
             >{#each line as token}<span
-                style="--l:{token.light ?? 'inherit'};--d:{token.dark ?? 'inherit'}"
+                style="--l:{token.light ?? "inherit"};--d:{token.dark ?? "inherit"}"
                 >{token.content}</span
-              >{/each}{'\n'}</span
+              >{/each}{"\n"}</span
           >{/each}</code
       ></pre>
   {:else}

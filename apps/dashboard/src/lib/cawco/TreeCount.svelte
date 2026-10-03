@@ -58,7 +58,7 @@
   <span {...rest} class="count num" data-open={open || undefined}>
     <span>{count}</span>
     {#if failed}
-      <span class="failed">· {failed}{compact ? '' : ' failed'}</span>
+      <span class="failed">· {failed}{compact ? "" : " failed"}</span>
     {/if}
   </span>
 {:else}
@@ -71,7 +71,7 @@
     data-open={open || undefined}
     onclick={toggle}
     onkeydown={(event) => {
-      if (event.key === 'Enter' || event.key === ' ') {
+      if (event.key === "Enter" || event.key === " ") {
         toggle(event);
       }
     }}
@@ -80,7 +80,7 @@
   >
     <span>{count}</span>
     {#if failed}
-      <span class="failed">· {failed}{compact ? '' : ' failed'}</span>
+      <span class="failed">· {failed}{compact ? "" : " failed"}</span>
     {/if}
   </span>
 {/if}

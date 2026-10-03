@@ -89,7 +89,7 @@
           <span class="rail-cell"><IconInfo /></span>
           <span class="ftitle">{harness.title}</span>
           {#if harness.status}
-            <span class="hstatus" class:bad={harness.status === 'failed'}
+            <span class="hstatus" class:bad={harness.status === "failed"}
               >{harness.status}</span
             >
           {/if}
@@ -108,20 +108,20 @@
         <span class="rail-cell"><IconInfo /></span>
         <span class="ftitle">{harness.title}</span>
         {#if harness.status}
-          <span class="hstatus" class:bad={harness.status === 'failed'}
+          <span class="hstatus" class:bad={harness.status === "failed"}
             >{harness.status}</span
           >
         {/if}
       </span>
     {/if}
   </div>
-{:else if type === 'system.task'}
+{:else if type === "system.task"}
   <!-- A plain task's completion: the verb AND the task it reports. A bare
        "task done" with no reference to which task is a line that says nothing. -->
   <div class="note rail-row">
     <span class="hline rail-line">
       <span class="rail-cell"><IconInfo /></span>
-      <span class="tverb" class:bad={message?.content === 'task failed'}
+      <span class="tverb" class:bad={message?.content === "task failed"}
         >{message?.content}</span
       >
       {#if message?.metadata?.result}
@@ -135,7 +135,7 @@
   <div class="note rail-row">
     <span class="hline rail-line">
       <span class="rail-cell"><IconTerminal /></span>
-      <span class="ftitle">{foldCommand ?? 'Output'}</span>
+      <span class="ftitle">{foldCommand ?? "Output"}</span>
     </span>
     <pre class="well">{message?.content}</pre>
   </div>

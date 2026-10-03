@@ -324,12 +324,12 @@
       status={sessionStatus(row)}
     />
     <span
-      class="shrink-0 {failed || activity === 'blocked'
-        ? 'font-medium text-error'
-        : 'text-muted-foreground'}"
+      class="shrink-0 {failed || activity === "blocked"
+        ? "font-medium text-error"
+        : "text-muted-foreground"}"
       >{stateLabel}</span
     >
-    {#if activity === 'working' && tool}
+    {#if activity === "working" && tool}
       <span class="flex min-w-0 items-baseline gap-1.5 text-muted-foreground">
         <span class="shrink-0">{tool.name}</span>
         <span class="shrink-0">·</span>
@@ -357,7 +357,9 @@
        tail scrolls, and this must not be somewhere in it. -->
   {#each answerable as request (request.requestId)}
     {@const question = Boolean(questionsOf(request.toolName, request.input))}
-    {@const summary = question ? 'asked a question' : permissionSummary(request.toolName, request.input)}
+    {@const summary = question
+      ? "asked a question"
+      : permissionSummary(request.toolName, request.input)}
     <div
       class="flex flex-col gap-2 border-t border-border/50 bg-[var(--status-attn-bg)] px-4 py-3"
     >
@@ -375,7 +377,7 @@
         <div class="flex items-center justify-between gap-8">
           <Button
             aria-label="Deny {summary}"
-            onclick={() => answer(request, 'deny')}
+            onclick={() => answer(request, "deny")}
             size="sm"
             variant="secondary"
           >
@@ -384,7 +386,7 @@
           </Button>
           <Button
             aria-label="Approve {summary}"
-            onclick={() => answer(request, 'allow')}
+            onclick={() => answer(request, "allow")}
             size="sm"
             variant="secondary"
           >
@@ -400,7 +402,7 @@
     <p
       class="border-t border-border/50 bg-error/10 px-4 py-3 text-meta text-error"
     >
-      {row?.lastError || 'Failed without saying why.'}
+      {row?.lastError || "Failed without saying why."}
     </p>
   {:else if stale}
     <p
@@ -439,7 +441,7 @@
       <p class="text-meta">Nothing said yet.</p>
     {:else}
       {#each tail as message, index (message.id ?? index)}
-        {#if message.type === 'tool.use' || message.type === 'tool.handoff'}
+        {#if message.type === "tool.use" || message.type === "tool.handoff"}
           <p
             class="flex items-baseline gap-1.5 text-meta text-muted-foreground"
           >
@@ -451,14 +453,14 @@
               <span class="truncate font-mono">{glanceOf(message)}</span>
             {/if}
           </p>
-        {:else if message.type === 'user' || message.type === 'user.peer'}
+        {:else if message.type === "user" || message.type === "user.peer"}
           <!-- The one voice worth tinting: what the session was asked. -->
           <p
             class="line-clamp-4 rounded-lg bg-action-solid/10 px-3 py-2 text-body break-words whitespace-pre-wrap"
           >
             {message.content}
           </p>
-        {:else if message.type === 'result.error'}
+        {:else if message.type === "result.error"}
           <!-- A failed turn's last words are the agent's too: flat. -->
           <p class="line-clamp-3 text-body break-words text-error">
             {plainMarkdown(message.content)}

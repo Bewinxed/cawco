@@ -123,12 +123,19 @@
       Open
     </ContextMenu.Item>
     <ContextMenu.Item
-      onSelect={() => continueInNewSession({ instanceId: info.sessionId, machineId, cwd: info.cwd ?? '', harness: info.harness, title })}
+      onSelect={() =>
+        continueInNewSession({
+          instanceId: info.sessionId,
+          machineId,
+          cwd: info.cwd ?? "",
+          harness: info.harness,
+          title,
+        })}
     >
       <IconArrowRight />
       Continue in new session…
     </ContextMenu.Item>
-    <ContextMenu.Item onSelect={() => window.open(href, '_blank', 'noopener')}>
+    <ContextMenu.Item onSelect={() => window.open(href, "_blank", "noopener")}>
       <IconExternal />
       Open in new tab
     </ContextMenu.Item>
@@ -150,7 +157,7 @@
     </ContextMenu.Item>
     <ContextMenu.CopyItem
       disabled={!info.cwd}
-      text={info.cwd ?? ''}
+      text={info.cwd ?? ""}
       what="Path"
     >
       Copy path
@@ -182,14 +189,16 @@
     <AlertDialog.Header>
       <AlertDialog.Title>Delete this transcript?</AlertDialog.Title>
       <AlertDialog.Description>
-        “{title}” is removed from {info.cwd || 'this machine'}, for good.
+        “{title}” is removed from {info.cwd || "this machine"}, for good.
         Nothing else on the machine is touched.
       </AlertDialog.Description>
     </AlertDialog.Header>
     <AlertDialog.Footer>
       <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
       <AlertDialog.Action variant="destructive">
-        {#snippet child({ props })}
+        {#snippet child({
+          props,
+        })}
           <Button
             {...props}
             failed={!removed}

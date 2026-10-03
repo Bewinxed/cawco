@@ -170,7 +170,11 @@
   >
     <div
       class="track"
-      onpointercancel={() => { draft = null; drag = false; hover = false; }}
+      onpointercancel={() => {
+        draft = null;
+        drag = false;
+        hover = false;
+      }}
       onpointerdown={down}
       onpointerleave={leave}
       onpointermove={move}

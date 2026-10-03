@@ -470,20 +470,20 @@
 </script>
 
 <EditorFrame
-  deleteLabel={id ? 'Delete hook' : undefined}
+  deleteLabel={id ? "Delete hook" : undefined}
   {deleting}
   failed={failed !== undefined}
   oncancel={cancel}
   ondelete={id ? askRemove : undefined}
   onsubmit={save}
-  saveLabel={id ? 'Save changes' : 'Create hook'}
+  saveLabel={id ? "Save changes" : "Create hook"}
   saving={busy}
   settling={versionsLoading}
-  title={id ? draft.name || 'Hook' : 'New hook'}
+  title={id ? draft.name || "Hook" : "New hook"}
 >
   {#snippet header()}
     <TitleInput
-      invalid={Boolean(shown('name') || duplicate)}
+      invalid={Boolean(shown("name") || duplicate)}
       label="Hook name"
       onblur={() => {
         touched.name = true;
@@ -491,14 +491,16 @@
       placeholder="Name this hook"
       bind:value={draft.name}
     />
-    {#if shown('name')}
+    {#if shown("name")}
       <p class="problem" in:appear>{wrong.name}</p>
     {:else if duplicate}
       <p class="problem" in:appear>{duplicate}</p>
     {/if}
     <ReadingWell>{hookSentence(draft)}</ReadingWell>
     <SwitchField
-      hint={draft.enabled ? 'Registered on every machine it applies to' : 'Off — nothing is registered'}
+      hint={draft.enabled
+        ? "Registered on every machine it applies to"
+        : "Off — nothing is registered"}
       id="hook-enabled"
       label="Enabled"
       bind:checked={draft.enabled}
@@ -520,11 +522,15 @@
           touched.event = true;
           setEvent(next as HookEvent);
         }}
-        options={HOOK_EVENTS.map((info) => ({ value: info.event, label: info.event, group: info.group }))}
+        options={HOOK_EVENTS.map((info) => ({
+          value: info.event,
+          label: info.event,
+          group: info.group,
+        }))}
         value={draft.event}
       />
     </div>
-    {#if shown('event')}
+    {#if shown("event")}
       <p class="problem" in:appear>{wrong.event}</p>
     {:else if eventInfo}
       <p class="note">Runs {eventInfo.blurb}.</p>
@@ -535,21 +541,21 @@
         <Field
           id="hook-matcher"
           label="Matcher — {eventInfo?.filters}"
-          problem={shown('matcher')}
+          problem={shown("matcher")}
         >
           {#snippet hint()}
             Empty or <span class="font-mono">*</span> matches every value. The
             tester below shows what this one actually does.
           {/snippet}
           <Input
-            aria-invalid={shown('matcher') ? 'true' : undefined}
+            aria-invalid={shown("matcher") ? "true" : undefined}
             autocomplete="off"
             class="font-mono"
             id="hook-matcher"
             onblur={() => {
-            touched.matcher = true;
-          }}
-            placeholder={eventInfo?.suggests?.[0] ?? '*'}
+              touched.matcher = true;
+            }}
+            placeholder={eventInfo?.suggests?.[0] ?? "*"}
             spellcheck="false"
             bind:value={draft.matcher}
           />
@@ -576,23 +582,23 @@
     />
     <!-- One handler's fields cross-fade into the next's (--dur-control) in
          one box, whose height follows over --dur-pop on --ease-drawer. -->
-    <div class="handler" {@attach morph({ ms: dur('--dur-pop') })}>
-      {#if draft.handler.type === 'command'}
+    <div class="handler" {@attach morph({ ms: dur("--dur-pop") })}>
+      {#if draft.handler.type === "command"}
         <div class="fold" in:crossIn out:crossOut>
           <Field
             hint="Written to every machine, at a path CawCo picks — the hook always points at that copy, never at one you keep locally."
             id="hook-script"
             label="Script"
-            problem={shown('script')}
+            problem={shown("script")}
           >
             <Textarea
-              aria-invalid={shown('script') ? 'true' : undefined}
+              aria-invalid={shown("script") ? "true" : undefined}
               class="resize-y font-mono"
               id="hook-script"
               onblur={() => {
-            touched.script = true;
-          }}
-              placeholder={'#!/bin/bash\nset -euo pipefail\n\n# The event JSON arrives on stdin.'}
+                touched.script = true;
+              }}
+              placeholder={"#!/bin/bash\nset -euo pipefail\n\n# The event JSON arrives on stdin."}
               rows={10}
               spellcheck="false"
               bind:value={draft.script}
@@ -614,76 +620,77 @@
             id="hook-async"
             label="Run in the background"
             onchange={(next) => {
-          if (draft.handler.type === 'command') {
-            draft.handler.async = next;
-          }
-        }}
+              if (draft.handler.type === "command") {
+                draft.handler.async = next;
+              }
+            }}
           />
           <Choice
             label="Shell"
             onchange={(next) => {
-          if (draft.handler.type === 'command') {
-            draft.handler.shell = next === 'bash' ? undefined : (next as 'powershell');
-          }
-        }}
+              if (draft.handler.type === "command") {
+                draft.handler.shell =
+                  next === "bash" ? undefined : (next as "powershell");
+              }
+            }}
             options={[
-          { value: 'bash', label: 'bash' },
-          { value: 'powershell', label: 'PowerShell' },
-        ]}
-            value={draft.handler.shell ?? 'bash'}
+              { value: "bash", label: "bash" },
+              { value: "powershell", label: "PowerShell" },
+            ]}
+            value={draft.handler.shell ?? "bash"}
           />
         </div>
-      {:else if draft.handler.type === 'http'}
+      {:else if draft.handler.type === "http"}
         <div class="fold" in:crossIn out:crossOut>
           <Field
             hint="Every machine posts the event's own JSON here — https, or localhost for something running on the same box."
             id="hook-url"
             label="URL"
-            problem={shown('url')}
+            problem={shown("url")}
           >
             <Input
-              aria-invalid={shown('url') ? 'true' : undefined}
+              aria-invalid={shown("url") ? "true" : undefined}
               autocomplete="off"
               class="font-mono"
               id="hook-url"
               onblur={() => {
-            touched.url = true;
-          }}
+                touched.url = true;
+              }}
               placeholder="https://example.com/hooks/cawco"
               spellcheck="false"
               bind:value={draft.handler.url}
             />
           </Field>
         </div>
-      {:else if draft.handler.type === 'mcp_tool'}
+      {:else if draft.handler.type === "mcp_tool"}
         <div class="pair" in:crossIn out:crossOut>
           <Field
             id="hook-server"
             label="MCP server"
-            problem={shown('mcp_server_name')}
+            problem={shown("mcp_server_name")}
           >
             <Input
-              aria-invalid={shown('mcp_server_name') ? 'true' : undefined}
+              aria-invalid={shown("mcp_server_name") ? "true" : undefined}
               autocomplete="off"
               class="font-mono"
               id="hook-server"
               onblur={() => {
-              touched.mcp_server_name = true;
-            }}
+                touched.mcp_server_name = true;
+              }}
               placeholder="filesystem"
               spellcheck="false"
               bind:value={draft.handler.mcp_server_name}
             />
           </Field>
-          <Field id="hook-tool" label="Tool" problem={shown('tool_name')}>
+          <Field id="hook-tool" label="Tool" problem={shown("tool_name")}>
             <Input
-              aria-invalid={shown('tool_name') ? 'true' : undefined}
+              aria-invalid={shown("tool_name") ? "true" : undefined}
               autocomplete="off"
               class="font-mono"
               id="hook-tool"
               onblur={() => {
-              touched.tool_name = true;
-            }}
+                touched.tool_name = true;
+              }}
               placeholder="read_file"
               spellcheck="false"
               bind:value={draft.handler.tool_name}
@@ -692,20 +699,20 @@
         </div>
       {:else}
         <div class="fold" in:crossIn out:crossOut>
-          <Field id="hook-prompt" label="Prompt" problem={shown('prompt')}>
+          <Field id="hook-prompt" label="Prompt" problem={shown("prompt")}>
             <Textarea
-              aria-invalid={shown('prompt') ? 'true' : undefined}
+              aria-invalid={shown("prompt") ? "true" : undefined}
               class="resize-y"
               id="hook-prompt"
               onblur={() => {
-            touched.prompt = true;
-          }}
+                touched.prompt = true;
+              }}
               placeholder="Decide whether this change needs a changelog entry, and say why."
               rows={4}
               bind:value={draft.handler.prompt}
             />
           </Field>
-          {#if draft.handler.type === 'agent'}
+          {#if draft.handler.type === "agent"}
             <div class="fold" in:unfold out:unfold>
               <Field id="hook-agent" label="Subagent (optional)">
                 <Input
@@ -729,10 +736,10 @@
       hint="A permission rule narrowing when this runs. Only read on tool events."
       id="hook-if"
       label="Condition (optional)"
-      problem={shown('if')}
+      problem={shown("if")}
     >
       <Input
-        aria-invalid={shown('if') ? 'true' : undefined}
+        aria-invalid={shown("if") ? "true" : undefined}
         autocomplete="off"
         class="font-mono"
         id="hook-if"
@@ -744,28 +751,28 @@
         }}
         placeholder="Bash(git *)"
         spellcheck="false"
-        value={draft.handler.if ?? ''}
+        value={draft.handler.if ?? ""}
       />
     </Field>
     <div class="pair">
       <Field
         id="hook-timeout"
         label="Timeout, seconds (optional)"
-        problem={shown('timeout')}
+        problem={shown("timeout")}
       >
         <Input
-          aria-invalid={shown('timeout') ? 'true' : undefined}
+          aria-invalid={shown("timeout") ? "true" : undefined}
           class="font-mono"
           id="hook-timeout"
           min="1"
           oninput={(event) => {
             const raw = event.currentTarget.value;
-            draft.handler.timeout = raw === '' ? undefined : Number(raw);
+            draft.handler.timeout = raw === "" ? undefined : Number(raw);
           }}
           placeholder="Claude Code's default"
           step="1"
           type="number"
-          value={draft.handler.timeout ?? ''}
+          value={draft.handler.timeout ?? ""}
         />
       </Field>
       <Field id="hook-status" label="Status message (optional)">
@@ -773,11 +780,12 @@
           autocomplete="off"
           id="hook-status"
           oninput={(event) => {
-            draft.handler.statusMessage = event.currentTarget.value || undefined;
+            draft.handler.statusMessage =
+              event.currentTarget.value || undefined;
           }}
           placeholder="Formatting…"
           spellcheck="false"
-          value={draft.handler.statusMessage ?? ''}
+          value={draft.handler.statusMessage ?? ""}
         />
       </Field>
     </div>
@@ -792,13 +800,16 @@
         label="Scope"
         onpick={setProject}
         options={[
-          { value: '', label: 'Every machine in the fleet' },
-          ...cawco.projects.map((project) => ({ value: project.id, label: project.name })),
+          { value: "", label: "Every machine in the fleet" },
+          ...cawco.projects.map((project) => ({
+            value: project.id,
+            label: project.name,
+          })),
         ]}
-        value={draft.projectId ?? ''}
+        value={draft.projectId ?? ""}
       />
     </div>
-    {#if shown('scope')}
+    {#if shown("scope")}
       <p class="problem" in:appear>{wrong.scope}</p>
     {/if}
   </EditorSection>
@@ -814,9 +825,9 @@
           <p class="note">
             In sync on
             {applied.length}
-            machine{applied.length === 1 ? '' : 's'}.
+            machine{applied.length === 1 ? "" : "s"}.
             {#if asleep.length > 0}
-              {asleep.map((row) => machineLabel(row.hostname)).join(', ')}
+              {asleep.map((row) => machineLabel(row.hostname)).join(", ")}
               offline — they sync when back.
             {/if}
           </p>
@@ -824,9 +835,9 @@
         <ul class="machines">
           {#each machines as machine, index (machine.machineId)}
             {@const item = stateOn(machine)}
-            {@const online = machine.status === 'online'}
-            {@const refused = item?.state === 'failed'}
-            {@const drifted = refused && causeOf(item?.detail) === 'drifted'}
+            {@const online = machine.status === "online"}
+            {@const refused = item?.state === "failed"}
+            {@const drifted = refused && causeOf(item?.detail) === "drifted"}
             {@const comparingThis = comparing === machine.machineId}
             {@const settle = settling[machine.machineId]}
             <li class="machine">
@@ -834,9 +845,13 @@
                 <MachineRow
                   hue={machineHue(index, online)}
                   icon={machineIcon(machine.os)}
-                  meta="{drifted ? 'Kept its own copy' : (SAID[item?.state ?? ''] ?? 'Not reported')} · {machineOs(machine.os).label}{online ? '' : ' · offline, it syncs when back'}"
+                  meta="{drifted
+                    ? "Kept its own copy"
+                    : (SAID[item?.state ?? ""] ?? "Not reported")} · {machineOs(
+                    machine.os
+                  ).label}{online ? "" : " · offline, it syncs when back"}"
                   name={machineLabel(machine.hostname)}
-                  presence={online ? 'online' : 'off'}
+                  presence={online ? "online" : "off"}
                 />
                 {#if drifted}
                   <span class="acts" in:crossIn out:crossOut>
@@ -844,26 +859,26 @@
                       disabled={!online}
                       onclick={() => compare(machine)}
                       size="sm"
-                      variant={comparingThis ? 'secondary' : 'outline'}
+                      variant={comparingThis ? "secondary" : "outline"}
                     >
-                      {comparingThis ? 'Hide' : 'Compare'}
+                      {comparingThis ? "Hide" : "Compare"}
                     </Button>
                     <Button
-                      disabled={!online || settle === 'push'}
+                      disabled={!online || settle === "push"}
                       failed={settleFailed[machine.machineId] === true}
                       label="Adopt this copy"
                       onclick={() => adopt(machine)}
-                      pending={settle === 'adopt'}
+                      pending={settle === "adopt"}
                       pendingLabel="Adopting…"
                       size="sm"
                       variant="outline"
                     />
                     <Button
-                      disabled={!online || settle === 'adopt'}
+                      disabled={!online || settle === "adopt"}
                       failed={settleFailed[machine.machineId] === true}
                       label="Send ours"
                       onclick={() => overwrite(machine)}
-                      pending={settle === 'push'}
+                      pending={settle === "push"}
                       pendingLabel="Sending…"
                       size="sm"
                       variant="outline"
@@ -899,11 +914,11 @@
                       </p>
                     {:else if copies[machine.machineId] !== undefined}
                       <div in:crossIn out:crossOut>
-                        {#key `${machine.machineId}:${hook?.hash ?? ''}`}
+                        {#key `${machine.machineId}:${hook?.hash ?? ""}`}
                           <DiffView
                             filePath="{id}.sh"
-                            newContent={copies[machine.machineId] ?? ''}
-                            oldContent={hook?.script ?? ''}
+                            newContent={copies[machine.machineId] ?? ""}
+                            oldContent={hook?.script ?? ""}
                           />
                         {/key}
                       </div>
@@ -959,12 +974,14 @@
             <div class="more" data-flip>
               <Button
                 onclick={() => {
-                allVersions = !allVersions;
-              }}
+                  allVersions = !allVersions;
+                }}
                 size="sm"
                 variant="ghost"
               >
-                {allVersions ? 'Show the latest 5' : `Show all ${versions.length}`}
+                {allVersions
+                  ? "Show the latest 5"
+                  : `Show all ${versions.length}`}
               </Button>
             </div>
           {/if}

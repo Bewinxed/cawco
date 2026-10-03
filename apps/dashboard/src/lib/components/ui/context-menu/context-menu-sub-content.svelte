@@ -20,7 +20,10 @@
 </script>
 
 <ContextMenuPrimitive.SubContent
-  class={cn("kit-pop relative min-w-32 origin-(--bits-context-menu-content-transform-origin)", className)}
+  class={cn(
+    "kit-pop relative min-w-32 origin-(--bits-context-menu-content-transform-origin)",
+    className
+  )}
   data-slot="context-menu-sub-content"
   bind:ref
   {...restProps}

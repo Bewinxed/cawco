@@ -23,9 +23,7 @@ const LEADING_ROOT = /^\$?\.*/;
 
 /** A value as the text a reader sees: a string as itself, the rest as JSON. */
 export const textOf = (value: unknown): string =>
-  typeof value === "string"
-    ? value
-    : (JSON.stringify(value, null, 2) ?? "null");
+  typeof value === "string" ? value : JSON.stringify(value ?? null, null, 2);
 
 /**
  * The value `path` names under `value` (`a.b[0].c`, with or without a

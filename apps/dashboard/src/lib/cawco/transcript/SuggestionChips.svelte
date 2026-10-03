@@ -211,23 +211,26 @@
   {#if shown.length > 0 || slow || failure}
     <fieldset
       class="track"
-      out:fade={{ duration: dur('--dur-control'), easing: easeOut }}
+      out:fade={{ duration: dur("--dur-control"), easing: easeOut }}
     >
       <legend class="sr-only">Suggested skills, tools and MCP servers</legend>
       {#each shown as { candidate, noul }, i (candidate.id)}
         <button
           class="chip touch-hit"
           onclick={() => choose(candidate)}
-          title={`Likely needed · ${Math.round(noul * 100)}%${candidate.description ? `\n${candidate.description}` : ''}`}
+          title={`Likely needed · ${Math.round(noul * 100)}%${candidate.description ? `\n${candidate.description}` : ""}`}
           type="button"
           style:--conf={confidence(noul)}
           in:arrive={{ i }}
           out:leave
-          animate:flip={{ duration: motionOk.current ? dur('--dur-panel') : 0, easing: easeDrawer }}
+          animate:flip={{
+            duration: motionOk.current ? dur("--dur-panel") : 0,
+            easing: easeDrawer,
+          }}
         >
-          {#if candidate.kind === 'skill'}
+          {#if candidate.kind === "skill"}
             <IconToolSkill aria-hidden="true" class="glyph" />
-          {:else if candidate.kind === 'tool'}
+          {:else if candidate.kind === "tool"}
             <IconToolGeneric aria-hidden="true" class="glyph" />
           {:else}
             <IconToolMcp aria-hidden="true" class="glyph" />
@@ -248,7 +251,7 @@
         <span
           aria-hidden="true"
           class="shimmer"
-          in:fade={{ duration: dur('--dur-panel'), easing: easeOut }}
+          in:fade={{ duration: dur("--dur-panel"), easing: easeOut }}
           ><Skeleton class="size-full" /></span
         >
       {/if}
@@ -256,7 +259,7 @@
         <p
           class="fail"
           role="status"
-          in:fade={{ duration: dur('--dur-panel'), easing: easeOut }}
+          in:fade={{ duration: dur("--dur-panel"), easing: easeOut }}
         >
           Suggestions failed: {failure}
         </p>

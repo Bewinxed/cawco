@@ -403,7 +403,7 @@
 
 <EditorFrame
   canSave={dirty}
-  deleteLabel={saved ? 'Delete everywhere' : undefined}
+  deleteLabel={saved ? "Delete everywhere" : undefined}
   {deleting}
   failed={saveFailed || deleteFailed}
   oncancel={cancel}
@@ -529,9 +529,9 @@
                   class="ml-auto"
                   onclick={() => openVersion(row)}
                   size="sm"
-                  variant={shown === row.id ? 'secondary' : 'outline'}
+                  variant={shown === row.id ? "secondary" : "outline"}
                 >
-                  {shown === row.id ? 'Hide' : 'Compare'}
+                  {shown === row.id ? "Hide" : "Compare"}
                 </Button>
               </div>
               {#if shown === row.id}
@@ -550,10 +550,10 @@
                       </p>
                     {:else if contents[row.id] !== undefined}
                       <div class="reveal" in:crossIn out:crossOut>
-                        {#key `${row.id}:${saved?.hash ?? ''}`}
+                        {#key `${row.id}:${saved?.hash ?? ""}`}
                           <DiffView
                             filePath={path}
-                            newContent={saved?.content ?? ''}
+                            newContent={saved?.content ?? ""}
                             oldContent={contents[row.id]}
                           />
                         {/key}
@@ -579,12 +579,14 @@
           <div class="more" data-flip>
             <Button
               onclick={() => {
-              allVersions = !allVersions;
-            }}
+                allVersions = !allVersions;
+              }}
               size="sm"
               variant="ghost"
             >
-              {allVersions ? 'Show the latest 5' : `Show all ${versions.length}`}
+              {allVersions
+                ? "Show the latest 5"
+                : `Show all ${versions.length}`}
             </Button>
           </div>
         {/if}
@@ -600,9 +602,9 @@
     {:else}
       {#if applied.length > 0}
         <p class="note">
-          In sync on {applied.length} machine{applied.length === 1 ? '' : 's'}.
+          In sync on {applied.length} machine{applied.length === 1 ? "" : "s"}.
           {#if asleep.length > 0}
-            {asleep.map((row) => machineLabel(row.hostname)).join(', ')}
+            {asleep.map((row) => machineLabel(row.hostname)).join(", ")}
             offline — they sync when back.
           {/if}
         </p>
@@ -610,17 +612,19 @@
       <ul class="list">
         {#each machines as machine, index (machine.machineId)}
           {@const item = memoryStateOf(machine, path)}
-          {@const online = machine.status === 'online'}
-          {@const drifted = item?.state === 'failed'}
+          {@const online = machine.status === "online"}
+          {@const drifted = item?.state === "failed"}
           {@const comparingThis = comparing === machine.machineId}
           <li class="entry">
             <div class="line">
               <MachineRow
                 hue={machineHue(index, online)}
                 icon={machineIcon(machine.os)}
-                meta="{SAID[item?.state ?? ''] ?? 'Not reported'} · {machineOs(machine.os).label}{online ? '' : ' · offline, it syncs when back'}"
+                meta="{SAID[item?.state ?? ""] ?? "Not reported"} · {machineOs(
+                  machine.os
+                ).label}{online ? "" : " · offline, it syncs when back"}"
                 name={machineLabel(machine.hostname)}
-                presence={online ? 'online' : 'off'}
+                presence={online ? "online" : "off"}
               />
               {#if drifted || !saved}
                 {@const settle = settling[machine.machineId]}
@@ -630,28 +634,28 @@
                       disabled={!online}
                       onclick={() => compare(machine)}
                       size="sm"
-                      variant={comparingThis ? 'secondary' : 'outline'}
+                      variant={comparingThis ? "secondary" : "outline"}
                     >
-                      {comparingThis ? 'Hide' : 'Compare'}
+                      {comparingThis ? "Hide" : "Compare"}
                     </Button>
                   {/if}
                   <Button
-                    disabled={!online || settle === 'push'}
+                    disabled={!online || settle === "push"}
                     failed={settleFailed[machine.machineId] === true}
                     label="Adopt this copy"
                     onclick={() => adopt(machine)}
-                    pending={settle === 'adopt'}
+                    pending={settle === "adopt"}
                     pendingLabel="Adopting…"
                     size="sm"
                     variant="outline"
                   />
                   {#if drifted}
                     <Button
-                      disabled={!online || settle === 'adopt'}
+                      disabled={!online || settle === "adopt"}
                       failed={settleFailed[machine.machineId] === true}
                       label="Send ours"
                       onclick={() => overwrite(machine)}
-                      pending={settle === 'push'}
+                      pending={settle === "push"}
                       pendingLabel="Sending…"
                       size="sm"
                       variant="outline"
@@ -683,11 +687,11 @@
                     </p>
                   {:else if copies[machine.machineId] !== undefined}
                     <div in:crossIn out:crossOut>
-                      {#key `${machine.machineId}:${saved?.hash ?? ''}`}
+                      {#key `${machine.machineId}:${saved?.hash ?? ""}`}
                         <DiffView
                           filePath={path}
-                          newContent={copies[machine.machineId] ?? ''}
-                          oldContent={saved?.content ?? ''}
+                          newContent={copies[machine.machineId] ?? ""}
+                          oldContent={saved?.content ?? ""}
                         />
                       {/key}
                     </div>

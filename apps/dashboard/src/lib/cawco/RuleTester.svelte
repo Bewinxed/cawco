@@ -69,8 +69,8 @@
     <span
       aria-live="polite"
       class="text-meta transition-colors duration-(--dur-pop) ease-out {firing
-        ? 'text-success'
-        : 'text-muted-foreground'}"
+        ? "text-success"
+        : "text-muted-foreground"}"
       role="status"
     >
       {verdict}

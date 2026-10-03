@@ -252,7 +252,7 @@
             charts
               .filter((c) => !c.missing)
               .map((c) => ({ harness: c.harness, view })),
-            to === 'table' ? 1 : -1
+            to === "table" ? 1 : -1
           );
         }
         view = to;
@@ -294,18 +294,20 @@
           {:else if !ready}
             <Skeleton class="h-24 w-full" />
           {:else}
-            {@const i = chart.harness === 'claude' ? 0 : 1}
+            {@const i = chart.harness === "claude" ? 0 : 1}
             <!-- One slot: the old view leaves over its top while the new one
                  waits for it, and the slot's height morphs to the new. -->
             <div class="body" {@attach morph()}>
-              {#each bodySwap.leaving.filter((l) => l.harness === chart.harness) as gone (gone.harness)}
+              {#each bodySwap.leaving.filter(
+                (l) => l.harness === chart.harness
+              ) as gone (gone.harness)}
                 <div
                   aria-hidden="true"
                   class="leaving"
                   inert
                   style="animation:{bodySwap.leaveAnim(i)}"
                 >
-                  {#if gone.view === 'chart'}
+                  {#if gone.view === "chart"}
                     {@render plot(chart, false)}
                   {:else}
                     {@render figures(chart)}
@@ -316,7 +318,7 @@
                 <div
                   style="animation:{bodySwap.rowAnim(i, ListSwap.leaveEnd(i))}"
                 >
-                  {#if view === 'chart'}
+                  {#if view === "chart"}
                     {@render plot(chart, true)}
                   {:else}
                     {@render figures(chart)}
@@ -331,7 +333,10 @@
   {/if}
 </section>
 
-{#snippet plot(chart: Chart, live: boolean)}
+{#snippet plot(
+  chart: Chart,
+  live: boolean
+)}
   <div class="plot">
     <div class="bars">
       {#each chart.points as point (point.at)}
@@ -345,10 +350,14 @@
         {:else}
           <Tooltip.Root>
             <Tooltip.Trigger>
-              {#snippet child({ props })}
+              {#snippet child({
+                props,
+              })}
                 <span
                   {...props}
-                  aria-label="{periodLabel(point.at)}: {chart.approx}{money(point.cost)}"
+                  aria-label="{periodLabel(point.at)}: {chart.approx}{money(
+                    point.cost
+                  )}"
                   class="slot"
                   role="img"
                 >
@@ -376,13 +385,15 @@
   </div>
 {/snippet}
 
-{#snippet figures(chart: Chart)}
+{#snippet figures(
+  chart: Chart
+)}
   <table class="figures">
     <thead>
       <tr>
-        <th scope="col">{byHour ? 'Hour' : 'Day'}</th>
+        <th scope="col">{byHour ? "Hour" : "Day"}</th>
         <th class="num" scope="col">
-          {chart.harness === 'claude' ? 'API price' : 'Spend'}
+          {chart.harness === "claude" ? "API price" : "Spend"}
         </th>
       </tr>
     </thead>

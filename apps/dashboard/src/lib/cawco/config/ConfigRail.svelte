@@ -70,7 +70,7 @@
           {@const faults = faultsIn(store, section.slug)}
           <li>
             <a
-              aria-current={current === section.slug ? 'page' : undefined}
+              aria-current={current === section.slug ? "page" : undefined}
               class="row focus-inset press-tint"
               href="/config/{section.slug}"
             >
@@ -96,7 +96,7 @@
                   <span class="sr-only"> failing</span></span
                 >
               {/if}
-              {#if section.slug !== 'models'}
+              {#if section.slug !== "models"}
                 <!-- The figure is its own element, not the dash's text
                      rewritten: it arrives in place rather than moving in. -->
                 {#if count === null}

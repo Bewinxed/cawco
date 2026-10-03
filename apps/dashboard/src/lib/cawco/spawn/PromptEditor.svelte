@@ -310,9 +310,14 @@
     class="editor fai-scroll"
     contenteditable="true"
     id="session-prompt"
-    onblur={() => { promptFocus = false; closeMenu(); }}
+    onblur={() => {
+      promptFocus = false;
+      closeMenu();
+    }}
     onclick={caret}
-    onfocus={() => { promptFocus = true; }}
+    onfocus={() => {
+      promptFocus = true;
+    }}
     oninput={input}
     {onkeydown}
     onkeyup={caret}
@@ -335,7 +340,11 @@
     id="trigger-menu"
     index={menuIdx}
     {items}
-    onchange={(open) => { if (!open) { closeMenu(); } }}
+    onchange={(open) => {
+      if (!open) {
+        closeMenu();
+      }
+    }}
     onpick={insertChip}
     open={menu !== null}
   />

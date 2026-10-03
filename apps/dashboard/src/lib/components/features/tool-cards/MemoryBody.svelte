@@ -178,37 +178,39 @@
   });
 </script>
 
-{#snippet well(source: string)}
+{#snippet well(
+  source: string
+)}
   <div class="well"><ToolProse {source} /></div>
 {/snippet}
 
 <div class="memory">
   {#if (writes && written !== undefined) || removes}
-    {#if before.kind === 'loading'}
+    {#if before.kind === "loading"}
       <Skeleton class="h-20 w-full" />
-    {:else if before.kind === 'missing'}
+    {:else if before.kind === "missing"}
       <p class="missing" role="alert">
-        The version this {removes ? 'removed' : 'replaced'} can't be shown:
+        The version this {removes ? "removed" : "replaced"} can't be shown:
         {before.why}.
       </p>
-    {:else if before.kind === 'unchanged'}
+    {:else if before.kind === "unchanged"}
       <p class="label">Saved unchanged: the content matched what was there.</p>
     {:else}
       <DiffView
         filePath={diffPath}
-        newContent={removes ? '' : (written ?? '')}
-        oldContent={before.kind === 'version' ? before.content : ''}
+        newContent={removes ? "" : (written ?? "")}
+        oldContent={before.kind === "version" ? before.content : ""}
       />
     {/if}
     {#if footer}
       <span class="foot">{footer}</span>
     {/if}
-  {:else if action === 'get' && parsed.kind === 'doc'}
+  {:else if action === "get" && parsed.kind === "doc"}
     {@render well(parsed.content)}
     {#if footer}
       <span class="foot">{footer}</span>
     {/if}
-  {:else if action === 'list_docs' && parsed.kind === 'docs'}
+  {:else if action === "list_docs" && parsed.kind === "docs"}
     <div class="docs">
       {#each parsed.docs as doc (doc.path)}
         <Collapsible.Root>

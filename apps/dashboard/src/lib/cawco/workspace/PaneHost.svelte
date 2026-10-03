@@ -96,8 +96,8 @@
       {:else}
         <SessionPane
           browsing={ctx?.machine ?? null}
-          browsingCwd={ctx?.cwd ?? ''}
-          browsingHarness={ctx?.harness ?? 'claude'}
+          browsingCwd={ctx?.cwd ?? ""}
+          browsingHarness={ctx?.harness ?? "claude"}
           focused={isActive && leaf?.id === workspace.focusedLeafId}
           serverTail={id === entryId ? entryTail : null}
           viewId={id}

@@ -243,8 +243,8 @@
 </script>
 
 {#if hidden}
-<!-- A successful result has no line; an empty assistant frame carried only a tool call. -->
-{:else if kind === 'user'}
+  <!-- A successful result has no line; an empty assistant frame carried only a tool call. -->
+{:else if kind === "user"}
   <!-- The reader's own turns are the one thing worth finding on a fast scroll,
        so they are the one thing that carries a surface: ONE well holding the
        whole run of them, a step below the pane, with a hairline between its
@@ -264,10 +264,10 @@
     class:ghost={ghost || waiting}
     class:grouped
     class:runs-on={runsOn}
-    {@attach land(
-      () => (grouped ? undefined : sent),
-      { ms: dur('--dur-pop'), uniform: true }
-    )}
+    {@attach land(() => (grouped ? undefined : sent), {
+      ms: dur("--dur-pop"),
+      uniform: true,
+    })}
   >
     {#if !grouped}
       <Who
@@ -281,28 +281,33 @@
       <div
         class="words"
         bind:this={words}
-        {@attach land(
-          () => (grouped ? sent : undefined),
-          { ms: dur('--dur-pop'), uniform: true }
-        )}
+        {@attach land(() => (grouped ? sent : undefined), {
+          ms: dur("--dur-pop"),
+          uniform: true,
+        })}
       >
         {#if grouped}
           <Who
             grouped
             name="You"
             note={whoNote}
-            timestamp={ghost || failed || waiting ? undefined : message.timestamp}
+            timestamp={ghost || failed || waiting
+              ? undefined
+              : message.timestamp}
             you
           />
         {/if}
         <MessageBody source={message.content} />
-        {#if message.metadata?.attachments?.length || message.metadata?.images?.length}
+        {#if message.metadata?.attachments?.length ||
+          message.metadata?.images?.length}
           <div class="chips" data-gallery>
-            {#each message.metadata.attachments ?? [] as att, i (`${att.name}-${i}`)}
+            {#each message.metadata.attachments ??
+              [] as att, i (`${att.name}-${i}`)}
               <DocThumb content={att.content} name={att.name} />
             {/each}
             <!-- Keyed by position: the same picture sent twice is two pictures. -->
-            {#each message.metadata.images ?? [] as img, i (`${i}:${img.src ?? img.mediaType}`)}
+            {#each message.metadata.images ??
+              [] as img, i (`${i}:${img.src ?? img.mediaType}`)}
               {#if img.src}
                 <Shot
                   alt="Attachment {i + 1} sent with this message"
@@ -364,16 +369,18 @@
       </div>
     </div>
   </section>
-{:else if kind === 'assistant'}
+{:else if kind === "assistant"}
   <section class="turn" class:grouped>
     <Who {grouped} name={agentName} timestamp={message.timestamp} />
     <MessageBody source={message.content} />
   </section>
-{:else if kind === 'thinking'}
+{:else if kind === "thinking"}
   {#if message.content.trim()}
     <Thinking {folding} text={message.content} />
   {/if}
-{:else if kind === 'user.peer' || kind === 'user.rule' || kind === 'user.delegate_ask'}
+{:else if kind === "user.peer" ||
+  kind === "user.rule" ||
+  kind === "user.delegate_ask"}
   <Peer {message} />
 {:else}
   <SystemLine disclosed={disclosure(message)} {message} />

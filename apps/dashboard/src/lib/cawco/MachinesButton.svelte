@@ -55,9 +55,13 @@
 
 <Popover.Root bind:open={shown}>
   <Tip label="Machines">
-    {#snippet children(tip)}
+    {#snippet children(
+      tip
+    )}
       <Popover.Trigger>
-        {#snippet child({ props })}
+        {#snippet child({
+          props,
+        })}
           <Button
             {...mergeProps(props, tip)}
             aria-label="Machines"
@@ -83,7 +87,7 @@
   >
     <ul class="list">
       {#each cawco.machines as machine, index (machine.machineId)}
-        {@const up = machine.status === 'online'}
+        {@const up = machine.status === "online"}
         {@const live = liveOn(machine.machineId)}
         {@const fault = faultOf(machine.machineId)}
         <li>
@@ -91,8 +95,8 @@
             <div class="row press-tint focus-inset" tabindex="-1">
               <MachineRow
                 hue={machineHue(index, up)}
-                icon={machineIcon(machine.os ?? '')}
-                meta={[`${live} live`, fault].filter(Boolean).join(' · ')}
+                icon={machineIcon(machine.os ?? "")}
+                meta={[`${live} live`, fault].filter(Boolean).join(" · ")}
                 name={machineLabel(machine.hostname)}
                 presence={presenceOf(up, fault)}
               />

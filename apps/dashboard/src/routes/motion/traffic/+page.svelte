@@ -257,10 +257,10 @@
       <button onclick={() => reset(14)} type="button">load history</button>
       <button onclick={() => run(6, 900)} type="button">6 tools @900ms</button>
       <button onclick={() => run(6, 120)} type="button">6 tools @120ms</button>
-      <button onclick={() => assistant('A settled turn.')} type="button">
+      <button onclick={() => assistant("A settled turn.")} type="button">
         assistant
       </button>
-      <button onclick={() => note('task done')} type="button">note</button>
+      <button onclick={() => note("task done")} type="button">note</button>
       <button onclick={() => reset(0)} type="button">reset</button>
       <span class="count">{session.messages.length} messages</span>
     </div>
@@ -272,8 +272,8 @@
         agentName="Traffic"
         focused
         onlanded={() => {
-        landed = true;
-      }}
+          landed = true;
+        }}
         {session}
         visible
       />

@@ -10,7 +10,10 @@
 </script>
 
 <AlertDialogPrimitive.Title
-  class={cn("font-medium text-title sm:group-data-[size=default]/alert-dialog-content:group-has-data-[slot=alert-dialog-media]/alert-dialog-content:col-start-2", className)}
+  class={cn(
+    "font-medium text-title sm:group-data-[size=default]/alert-dialog-content:group-has-data-[slot=alert-dialog-media]/alert-dialog-content:col-start-2",
+    className
+  )}
   data-slot="alert-dialog-title"
   bind:ref
   {...restProps}

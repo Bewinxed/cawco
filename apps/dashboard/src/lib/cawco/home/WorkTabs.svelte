@@ -592,8 +592,11 @@
   }
 </script>
 
-{#snippet header(group: Group, style: string)}
-  {@const finished = shown === 'finished' ? finishedOn(group.machineId) : []}
+{#snippet header(
+  group: Group,
+  style: string
+)}
+  {@const finished = shown === "finished" ? finishedOn(group.machineId) : []}
   <!-- Where these run, said once for the rows under it. -->
   <h3 class="machine" data-key="head:{group.machineId}" {style}>
     <OsMark class="size-3.5" os={group.os} />
@@ -613,36 +616,44 @@
   </h3>
 {/snippet}
 
-{#snippet sessionRow(row: InstanceRow, tab: WorkTab, group: string)}
+{#snippet sessionRow(
+  row: InstanceRow,
+  tab: WorkTab,
+  group: string
+)}
   {@const context = shapeOf(tab, row.id)?.context ?? false}
   <!-- A context line is the parent of delegates listed here, not one of
        the tab's own: its state and name, quietly, and nothing else. -->
   <HomeRow
     active={current === row.id}
     {context}
-    done={tab === 'finished'}
+    done={tab === "finished"}
     fold={foldOf(tab, row.id)}
     href={conversationHref(row.id, cawco.instanceIndex)}
     instance={row}
-    line={context ? '' : metaLine(row, tab, group)}
+    line={context ? "" : metaLine(row, tab, group)}
     machineId={row.machineId}
-    onarchive={tab === 'finished' && home.archivable(row)
+    onarchive={tab === "finished" && home.archivable(row)
       ? () => archiveTree(row.id)
       : undefined}
     {stale}
     title={instanceTitle(row)}
-    trail={context ? '' : age(row, tab)}
+    trail={context ? "" : age(row, tab)}
   />
 {/snippet}
 
-{#snippet treeNode(row: InstanceRow, rows: InstanceRow[], group: string)}
+{#snippet treeNode(
+  row: InstanceRow,
+  rows: InstanceRow[],
+  group: string
+)}
   {@const shape = shapeOf(shown, row.id)}
   {@const kids = under(shown, rows, row.id)}
   <!-- A row and, open, the rows under it: its box (`data-flip="box"`)
        takes their room at once and its edge travels to it, what is under
        it sliding with that edge (motion/rows); they open and fold on its
        rail (motion/branch). -->
-  <li class="node" data-flip={plan ? undefined : 'box'}>
+  <li class="node" data-flip={plan ? undefined : "box"}>
     <div class="line" data-key={row.id} style={enterAnim(row.id)}>
       {#if shape?.parent && shape.depth > 0}
         {@const above = shape.parent}
@@ -650,7 +661,7 @@
         <button
           aria-hidden="true"
           class="gutter"
-          onclick={() => openTrees.set(above, false, 'home')}
+          onclick={() => openTrees.set(above, false, "home")}
           tabindex="-1"
           type="button"
         ></button>
@@ -663,7 +674,7 @@
         data-flip-anchor
         in:branch={TREE}
         out:branch={TREE}
-        {@attach nestFrom('.session-mark')}
+        {@attach nestFrom(".session-mark")}
       >
         {#each kids as kid (kid.id)}
           {@render treeNode(kid, rows, group)}
@@ -673,7 +684,10 @@
   </li>
 {/snippet}
 
-{#snippet leavingTree(line: Line, lines: Line[])}
+{#snippet leavingTree(
+  line: Line,
+  lines: Line[]
+)}
   {@const kids = lines.filter(
     (other) => other.row && shapeOf(other.tab, other.key)?.parent === line.key
   )}
@@ -682,7 +696,7 @@
       {@render sessionRow(line.row as InstanceRow, line.tab, line.machineId)}
     </div>
     {#if kids.length > 0}
-      <ul class="kit-nest branch" {@attach nestFrom('.session-mark')}>
+      <ul class="kit-nest branch" {@attach nestFrom(".session-mark")}>
         {#each kids as kid (kid.key)}
           {@render leavingTree(kid, lines)}
         {/each}
@@ -691,7 +705,10 @@
   </li>
 {/snippet}
 
-{#snippet leaving(lines: Line[], layer: boolean)}
+{#snippet leaving(
+  lines: Line[],
+  layer: boolean
+)}
   {@const keys = new Set(lines.map((line) => line.key))}
   <div
     aria-hidden="true"
@@ -701,7 +718,10 @@
     inert
   >
     <ul class="tree">
-      {#each lines.filter((line) => line.row && !keys.has(shapeOf(line.tab, line.key)?.parent ?? '')) as line (line.key)}
+      {#each lines.filter(
+        (line) =>
+          line.row && !keys.has(shapeOf(line.tab, line.key)?.parent ?? "")
+      ) as line (line.key)}
         {@render leavingTree(line, lines)}
       {/each}
     </ul>
@@ -727,7 +747,7 @@
                 {#key count}
                   <span
                     class="num count"
-                    data-failed={(tab.id === 'finished' && finishedFailed) ||
+                    data-failed={(tab.id === "finished" && finishedFailed) ||
                       undefined}
                     data-flip="pop"
                     data-tab={tab.id}
@@ -739,8 +759,10 @@
           {/each}
         </TabsList>
       </Tabs>
-      <Tip label={rail.delegates ? 'Hide delegates' : 'Show delegates'}>
-        {#snippet children(tip)}
+      <Tip label={rail.delegates ? "Hide delegates" : "Show delegates"}>
+        {#snippet children(
+          tip
+        )}
           <!-- A switch with no count of its own, at a fixed size, so
                nothing in the header moves when it is pressed. On, its
                glyph turns solid in strong ink; off, the duotone, muted. -->
@@ -767,23 +789,20 @@
       bind:this={listEl}
       {@attach reflow()}
       {@attach highlight(ROW_PILL)}
-      {@attach holdWhileInside('home:')}
+      {@attach holdWhileInside("home:")}
       {@attach arrowKeys}
     >
       {#each drawn as entry (entry.group.machineId)}
         {@const id = entry.group.machineId}
         <div
           class="group"
-          data-flip={plan ? undefined : 'box'}
+          data-flip={plan ? undefined : "box"}
           data-kind={entry.kind}
           data-machine={id}
-          class:filled={entry.rows.length > 0 || entry.kind === 'gone'}
+          class:filled={entry.rows.length > 0 || entry.kind === "gone"}
         >
           <hr class="kit-seam">
-          {@render header(
-            entry.group,
-            headStyle(entry.kind, id)
-          )}
+          {@render header(entry.group, headStyle(entry.kind, id))}
           <div class="rows">
             {#if plan?.layered.has(id) && entry.gone.length}
               <!-- The rows this machine had, leaving in the places the new
@@ -791,7 +810,11 @@
               {@render leaving(entry.gone, true)}
             {/if}
             <ul class="tree">
-              {#each under(shown, entry.rows, null) as row (`${swap.gen}:${row.id}`)}
+              {#each under(
+                shown,
+                entry.rows,
+                null
+              ) as row (`${swap.gen}:${row.id}`)}
                 {@render treeNode(row, entry.rows, id)}
               {/each}
             </ul>
@@ -802,13 +825,13 @@
           <!-- The machine's last line: the rest of its trees, or back to
                its first few. It comes and goes in the relay like any other
                line, inside its machine's box. -->
-          {#if entry.kind !== 'gone' && more.get(id)}
+          {#if entry.kind !== "gone" && more.get(id)}
             {@const line = more.get(id) as More}
             <!-- A line of the list like the rows above it (`data-flip`): when
                  a tree over it opens or folds, it slides with them. -->
             <button
               class="more focus-inset touch-hit press-tint"
-              data-flip={plan ? undefined : ''}
+              data-flip={plan ? undefined : ""}
               data-key={moreKey(id)}
               data-rail-row
               onclick={() => fold(id)}

@@ -209,7 +209,9 @@
 
 <!-- The address the machine is told to reach this hub on, the same choice on
      both tabs: the script is downloaded from it and `join` saves it. -->
-{#snippet addressField(id: string)}
+{#snippet addressField(
+  id: string
+)}
   <div class="field">
     <Label for={id}>Hub address this machine should use</Label>
     <NativeSelect.Root
@@ -233,7 +235,12 @@
 {/snippet}
 
 <Dialog.Root
-  bind:open={() => addMachine.open, (value) => { addMachine.open = value; }}
+  bind:open={
+    () => addMachine.open,
+    (value) => {
+    addMachine.open = value;
+  }
+  }
 >
   <Dialog.Content class="sm:max-w-lg">
     <Dialog.Header>
@@ -244,7 +251,9 @@
     </Dialog.Header>
 
     <Tabs
-      onValueChange={(value) => { tab = value as 'ssh' | 'command'; }}
+      onValueChange={(value) => {
+        tab = value as "ssh" | "command";
+      }}
       value={tab}
     >
       <TabsList aria-label="How to connect the machine">
@@ -259,8 +268,8 @@
       </Alert.Root>
     {/if}
 
-    {#if tab === 'ssh'}
-      {#if view === 'running' && job}
+    {#if tab === "ssh"}
+      {#if view === "running" && job}
         {@const steps = stepsOf(job)}
         <div class="flex flex-col gap-[var(--space-3)]">
           <p class="text-body text-[var(--ink-muted)]">
@@ -286,10 +295,10 @@
             <summary>
               <IconChevronRight aria-hidden="true" class="chev size-4" />Output
             </summary>
-            <pre {@attach followTail}>{job.lines.join('\n')}</pre>
+            <pre {@attach followTail}>{job.lines.join("\n")}</pre>
           </details>
         </div>
-      {:else if view === 'done' && job}
+      {:else if view === "done" && job}
         <div class="joined">
           <IconSuccess aria-hidden="true" class="size-5" />
           <p class="text-body">{joinedName(job.machineId)} joined the fleet.</p>
@@ -315,7 +324,7 @@
             <div class="field">
               <Label for="join-port">Port</Label>
               <Input
-                aria-invalid={portValid ? undefined : 'true'}
+                aria-invalid={portValid ? undefined : "true"}
                 id="join-port"
                 inputmode="numeric"
                 placeholder="22"
@@ -332,7 +341,7 @@
                 <Alert.Description>{failure.text}</Alert.Description>
               </Alert.Root>
               {#if failure.tail.length > 0}
-                <pre class="tail">{failure.tail.join('\n')}</pre>
+                <pre class="tail">{failure.tail.join("\n")}</pre>
               {/if}
             </div>
           {:else if sshJoin.refused}
@@ -360,8 +369,7 @@
               {:else if joinInfo.value}
                 <p class="hint">
                   This hub has no SSH key yet. Create one on
-                  {joinInfo.value
-                    .hubHostname}
+                  {joinInfo.value.hubHostname}
                   with ssh-keygen -t ed25519, then reopen this.
                 </p>
               {/if}
@@ -386,23 +394,36 @@
     {/if}
 
     <Dialog.Footer>
-      {#if tab === 'ssh' && view === 'form'}
-        <Button onclick={() => { addMachine.open = false; }} variant="outline"
+      {#if tab === "ssh" && view === "form"}
+        <Button
+          onclick={() => {
+            addMachine.open = false;
+          }}
+          variant="outline"
           >Cancel</Button
         >
         <Button disabled={!canStart} form="ssh-join" type="submit">
           {#if starting}
             <Spinner class="size-4" />
           {/if}
-          {job?.state === 'failed' ? 'Retry' : 'Add machine'}
+          {job?.state === "failed" ? "Retry" : "Add machine"}
         </Button>
-      {:else if tab === 'ssh' && view === 'done'}
+      {:else if tab === "ssh" && view === "done"}
         <Button onclick={() => sshJoin.reset()} variant="outline"
           >Add another machine</Button
         >
-        <Button onclick={() => { addMachine.open = false; }}>Close</Button>
+        <Button
+          onclick={() => {
+            addMachine.open = false;
+          }}
+          >Close</Button
+        >
       {:else}
-        <Button onclick={() => { addMachine.open = false; }} variant="outline"
+        <Button
+          onclick={() => {
+            addMachine.open = false;
+          }}
+          variant="outline"
           >Close</Button
         >
       {/if}

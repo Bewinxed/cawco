@@ -537,7 +537,7 @@
         {#if cawShown}
           <div class="detail-state" {@attach holdWhileEntering}>
             <Caw
-              next={['loading', 'ready', 'reconnecting']}
+              next={["loading", "ready", "reconnecting"]}
               onentered={() => {
                 entering = false;
               }}
@@ -547,9 +547,9 @@
             <div class="detail-line">
               {#key detailState}
                 <p in:crossIn out:crossOut>
-                  {#if detailState === 'reconnecting'}
+                  {#if detailState === "reconnecting"}
                     Reaching the hub again…
-                  {:else if detailState === 'loading'}
+                  {:else if detailState === "loading"}
                     Reading the fleet…
                   {:else}
                     Open a session from the list, or start one.

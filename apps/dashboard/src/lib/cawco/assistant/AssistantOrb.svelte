@@ -18,12 +18,14 @@
   } = $props();
 </script>
 
-<Tip keys="⌘J" label={open ? 'Close assistant' : 'Open assistant'}>
-  {#snippet children(tip)}
+<Tip keys="⌘J" label={open ? "Close assistant" : "Open assistant"}>
+  {#snippet children(
+    tip
+  )}
     <button
       {...tip}
       aria-expanded={open}
-      aria-label={open ? 'Close assistant' : 'Open assistant'}
+      aria-label={open ? "Close assistant" : "Open assistant"}
       class="orb touch-hit"
       data-assistant-orb
       {onclick}

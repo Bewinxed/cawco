@@ -571,10 +571,10 @@
 <!-- `''` when the board is showing: a value no segment carries, so nothing
      is drawn as chosen. -->
 <Tabs
-  class="session-tabs {hosted ? 'hosted' : ''}"
+  class="session-tabs {hosted ? "hosted" : ""}"
   onValueChange={(id) => workspace.activate(id, leaf.id)}
   {travel}
-  value={leaf.active ?? ''}
+  value={leaf.active ?? ""}
   variant="folder"
 >
   <TabsList aria-label="Open sessions in this group" scrollable>
@@ -593,9 +593,10 @@
           hoverTab(tab.id, event);
         }}
         onpointerleave={leaveDetails}
-        class:drop-after={dropHint.tabIndexIn(leaf.id) === i + 1 && i === tabs.length - 1}
+        class:drop-after={dropHint.tabIndexIn(leaf.id) === i + 1 &&
+          i === tabs.length - 1}
         class:drop-before={dropHint.tabIndexIn(leaf.id) === i}
-        class:needs={tab.activity === 'blocked'}
+        class:needs={tab.activity === "blocked"}
         use:dragSession={{ sessionId: tab.id, from: leaf.id }}
         use:tabDropTarget={{ leafId: leaf.id, index: i, sessionId: tab.id }}
         out:leavingTab={tab.id}
@@ -607,13 +608,13 @@
             <TabItem
               aria-expanded={detailsOpen && detailId === tab.id}
               aria-haspopup="dialog"
-              aria-label={`${tab.label}${tab.status ? ` — ${tab.status}` : ''}${chosen ? ' — open session details' : ''}`}
+              aria-label={`${tab.label}${tab.status ? ` — ${tab.status}` : ""}${chosen ? " — open session details" : ""}`}
               data-session-tab={tab.id}
               href={tab.href}
               label={tab.label}
               onclick={(event) => clickTab(tab.id, event)}
               onkeydown={(event) => {
-                if (event.key === 'ArrowDown' || event.key === ' ') {
+                if (event.key === "ArrowDown" || event.key === " ") {
                   event.preventDefault();
                   event.stopPropagation();
                   showDetails(tab.id, event.currentTarget as HTMLElement, true);
@@ -633,18 +634,20 @@
                      has no details card, and so no slot. -->
                 {#if !runIdOf(tab.id)}
                   <button
-                    aria-expanded={chosen ? detailsOpen && detailId === tab.id : undefined}
-                    aria-haspopup={chosen ? 'dialog' : undefined}
-                    aria-hidden={chosen ? undefined : 'true'}
+                    aria-expanded={chosen
+                      ? detailsOpen && detailId === tab.id
+                      : undefined}
+                    aria-haspopup={chosen ? "dialog" : undefined}
+                    aria-hidden={chosen ? undefined : "true"}
                     aria-label="Session details for {tab.label}"
                     class="tdetails touch-hit pointer-hit pressable"
                     onclick={(event) => {
-                    if (chosen) {
-                      clickTab(tab.id, event);
-                    } else {
-                      workspace.activate(tab.id, leaf.id);
-                    }
-                  }}
+                      if (chosen) {
+                        clickTab(tab.id, event);
+                      } else {
+                        workspace.activate(tab.id, leaf.id);
+                      }
+                    }}
                     tabindex={chosen ? undefined : -1}
                     type="button"
                     class:idle={!chosen}
@@ -655,7 +658,10 @@
                 <button
                   aria-label="Close {tab.label}"
                   class="tclose touch-hit pointer-hit pressable"
-                  onclick={() => { closeDetails(); workspace.close(tab.id); }}
+                  onclick={() => {
+                    closeDetails();
+                    workspace.close(tab.id);
+                  }}
                   type="button"
                 >
                   <IconClose />
@@ -667,13 +673,18 @@
             {#if !runIdOf(tab.id)}
               <ContextMenu.Item
                 onSelect={() => {
-              const anchor = document.querySelector<HTMLElement>(`[data-session-tab="${tab.id}"]`);
-              if (anchor) { showDetails(tab.id, anchor, true); }
-            }}
+                  const anchor = document.querySelector<HTMLElement>(
+                    `[data-session-tab="${tab.id}"]`
+                  );
+                  if (anchor) {
+                    showDetails(tab.id, anchor, true);
+                  }
+                }}
                 >Session details</ContextMenu.Item
               >
               <ContextMenu.Item
-                onSelect={() => continueInNewSession(continueSourceOf(tab.id, tab.label))}
+                onSelect={() =>
+                  continueInNewSession(continueSourceOf(tab.id, tab.label))}
               >
                 <IconArrowRight />
                 Continue in new session…
@@ -683,12 +694,12 @@
                  and moving are reachable from here before drag-and-drop exists,
                  and stay reachable for anyone not using a pointer. -->
             <ContextMenu.Item
-              onSelect={() => workspace.split(leaf.id, 'right', tab.id)}
+              onSelect={() => workspace.split(leaf.id, "right", tab.id)}
             >
               Split right
             </ContextMenu.Item>
             <ContextMenu.Item
-              onSelect={() => workspace.split(leaf.id, 'bottom', tab.id)}
+              onSelect={() => workspace.split(leaf.id, "bottom", tab.id)}
             >
               Split down
             </ContextMenu.Item>
@@ -738,12 +749,19 @@
        (`lockAtTop`); vaul follows the finger 1:1 and lets go on velocity. -->
   <Drawer.Root
     handleOnly={false}
-    onOpenChange={(open) => { if (!open) { closeDetails(); } }}
+    onOpenChange={(open) => {
+      if (!open) {
+        closeDetails();
+      }
+    }}
     open={detailsOpen}
   >
     <Drawer.Content
       class="session-details-sheet"
-      onCloseAutoFocus={(event) => { event.preventDefault(); detailAnchor?.focus(); }}
+      onCloseAutoFocus={(event) => {
+        event.preventDefault();
+        detailAnchor?.focus();
+      }}
     >
       <Drawer.Title class="sr-only">Session details</Drawer.Title>
       <Drawer.Description class="sr-only"
@@ -764,7 +782,11 @@
   </Drawer.Root>
 {:else}
   <Popover.Root
-    onOpenChange={(open) => { if (!open) { closeDetails(); } }}
+    onOpenChange={(open) => {
+      if (!open) {
+        closeDetails();
+      }
+    }}
     open={detailsOpen}
   >
     <Popover.Portal>
@@ -774,16 +796,34 @@
         class="kit-pop session-details-popover"
         collisionPadding={12}
         customAnchor={detailAnchor}
-        data-morph={morphing ? '' : undefined}
-        onCloseAutoFocus={(event) => { event.preventDefault(); if (restoreFocus) { detailAnchor?.focus(); } }}
-        onfocusin={() => { clearTimeout(timer); pinned = true; }}
+        data-morph={morphing ? "" : undefined}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          if (restoreFocus) {
+            detailAnchor?.focus();
+          }
+        }}
+        onfocusin={() => {
+          clearTimeout(timer);
+          pinned = true;
+        }}
         onInteractOutside={(event) => {
-          if (event.target instanceof Element && event.target.closest('[data-session-tab]')) {
+          if (
+            event.target instanceof Element &&
+            event.target.closest("[data-session-tab]")
+          ) {
             event.preventDefault();
           }
         }}
-        onOpenAutoFocus={(event) => { if (!pinned) { event.preventDefault(); } }}
-        onpointerdowncapture={() => { clearTimeout(timer); pinned = true; }}
+        onOpenAutoFocus={(event) => {
+          if (!pinned) {
+            event.preventDefault();
+          }
+        }}
+        onpointerdowncapture={() => {
+          clearTimeout(timer);
+          pinned = true;
+        }}
         onpointerenter={() => clearTimeout(timer)}
         onpointerleave={leaveDetails}
         side="bottom"
@@ -903,9 +943,6 @@
       @media (prefers-reduced-motion: no-preference) {
         transition: transform var(--dur-control) var(--ease-out);
       }
-    }
-    &[aria-expanded="true"] :global(svg) {
-      transform: rotate(180deg);
     }
     @media (hover: hover) {
       &:hover {
@@ -1069,5 +1106,8 @@
         transform: scale(var(--press-scale));
       }
     }
+  }
+  .tdetails[aria-expanded="true"] :global(svg) {
+    transform: rotate(180deg);
   }
 </style>

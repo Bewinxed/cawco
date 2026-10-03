@@ -457,7 +457,7 @@
         <TextMorph
           as="span"
           duration={morphMs()}
-          text={paletteCollapsed ? 'Add' : 'Nodes'}
+          text={paletteCollapsed ? "Add" : "Nodes"}
         />
       </h2>
       {#if !narrow.current}
@@ -467,21 +467,23 @@
           onclick={togglePalette}
           type="button"
         >
-          {paletteCollapsed ? '›' : '‹'}
+          {paletteCollapsed ? "›" : "‹"}
         </button>
       {/if}
     </div>
-    {#each ['Flow', 'Work', 'People'] as group (group)}
+    {#each ["Flow", "Work", "People"] as group (group)}
       <section class="wf-stack">
         <h3>{group}</h3>
-        {#each kinds.filter((entry) => entry.group === group) as entry (entry.kind)}
+        {#each kinds.filter(
+          (entry) => entry.group === group
+        ) as entry (entry.kind)}
           <button
             class="palette-item press-tint"
             onclick={() => add(entry.kind)}
             title={entry.meaning}
             type="button"
           >
-            <span class="kind-mark" class:filled={entry.kind === 'step'}
+            <span class="kind-mark" class:filled={entry.kind === "step"}
               ><entry.icon class="size-4" /></span
             >
             {#if !paletteCollapsed || narrow.current}
@@ -499,7 +501,7 @@
         {#each types as type (type.name)}
           <button
             class="palette-item press-tint"
-            onclick={() => add('step', type)}
+            onclick={() => add("step", type)}
             type="button"
           >
             <span>{type.name}<small>{type.harness} · {type.model}</small></span>
@@ -521,7 +523,9 @@
     {graph}
     {node}
     onchange={commit}
-    ondescription={(value) => { description = value; }}
+    ondescription={(value) => {
+      description = value;
+    }}
     onselect={select}
     {problems}
     {types}
@@ -534,7 +538,10 @@
     {#if bodyPath.length}
       <button
         class="wf-btn back-body"
-        onclick={() => { bodyPath = bodyPath.slice(0, -1); selected = undefined; }}
+        onclick={() => {
+          bodyPath = bodyPath.slice(0, -1);
+          selected = undefined;
+        }}
         type="button"
       >
         Back to parent graph
@@ -551,7 +558,7 @@
       selection={selected}
       {undo}
     />
-    {#if graph.nodes.length === 1 && graph.nodes[0].kind === 'start'}
+    {#if graph.nodes.length === 1 && graph.nodes[0].kind === "start"}
       <p class="hint">
         Choose a step from the palette, or press <kbd>A</kbd> to add one.
       </p>
@@ -571,24 +578,33 @@
       </div>
       <div class="wf-row">
         <button
-          aria-busy={pressed === 'validate' || undefined}
-          aria-disabled={pressed === 'validate' || undefined}
+          aria-busy={pressed === "validate" || undefined}
+          aria-disabled={pressed === "validate" || undefined}
           class="wf-btn"
-          disabled={!(workflow && live) || saving && pressed !== 'validate'}
-          onclick={whileIdle(() => pressed === 'validate', validate)}
+          disabled={!(workflow && live) || (saving && pressed !== "validate")}
+          onclick={whileIdle(() => pressed === "validate", validate)}
           title={live ? undefined : "Can't save while the hub is unreachable"}
           type="button"
         >
           <PendingContent
-            failed={errorMessage !== ''}
+            failed={errorMessage !== ""}
             label="Validate"
-            pending={pressed === 'validate'}
+            pending={pressed === "validate"}
             pendingLabel="Validating…"
           />
         </button><button
           class="wf-btn wf-primary"
-          disabled={!(workflow && live) || !!errorMessage || dirty || saving || problems.length > 0}
-          onclick={(event) => { inspectorOpen = false; paletteOpen = false; launchFrom = event.currentTarget; launch = true; }}
+          disabled={!(workflow && live) ||
+            !!errorMessage ||
+            dirty ||
+            saving ||
+            problems.length > 0}
+          onclick={(event) => {
+            inspectorOpen = false;
+            paletteOpen = false;
+            launchFrom = event.currentTarget;
+            launch = true;
+          }}
           title={live ? undefined : "Can't run while the hub is unreachable"}
           type="button"
         >
@@ -600,7 +616,7 @@
       <div class="wf-row">
         <Tabs.Root onValueChange={show} value={tab}>
           <Tabs.List aria-label="Workflow views">
-            {#if origin === 'editor'}
+            {#if origin === "editor"}
               <Tabs.Trigger value="editor">Editor</Tabs.Trigger>
             {/if}
             <Tabs.Trigger value="program">Program</Tabs.Trigger>
@@ -610,10 +626,12 @@
         <!-- Narrow-only, by the stylesheet: the server renders this row
              before any media query can be asked, and a row that gained two
              buttons on hydration wrapped and pushed the page down. -->
-        {#if tab === 'editor'}
+        {#if tab === "editor"}
           <button
             class="wf-btn narrow-only"
-            onclick={() => { paletteOpen = true; }}
+            onclick={() => {
+              paletteOpen = true;
+            }}
             type="button"
           >
             + Add node
@@ -635,16 +653,19 @@
     <div class="wf-error" role="alert">
       {errorMessage}
       <button
-        aria-busy={pressed === 'retry' || undefined}
-        aria-disabled={pressed === 'retry' || undefined}
+        aria-busy={pressed === "retry" || undefined}
+        aria-disabled={pressed === "retry" || undefined}
         class="wf-btn"
-        onclick={whileIdle(() => pressed === 'retry', () => persistFrom('retry'))}
+        onclick={whileIdle(
+          () => pressed === "retry",
+          () => persistFrom("retry")
+        )}
         type="button"
       >
         <PendingContent
-          failed={errorMessage !== ''}
+          failed={errorMessage !== ""}
           label="Retry save"
-          pending={pressed === 'retry'}
+          pending={pressed === "retry"}
           pendingLabel="Saving…"
         />
       </button>
@@ -661,7 +682,7 @@
     <div class="panes">
       {#key tab}
         <div class="pane" in:paneSlide={{ dir }} out:paneSlide={{ dir }}>
-          {#if tab === 'program'}
+          {#if tab === "program"}
             <WorkflowProgram
               {live}
               onchange={(value) => {
@@ -671,7 +692,7 @@
               {problems}
               {program}
             />
-          {:else if tab === 'editor'}
+          {:else if tab === "editor"}
             {#if narrow.current}
               {@render canvas()}
             {:else}
@@ -679,21 +700,25 @@
                 ><Resizable.Pane
                   collapsedSize={railSize}
                   collapsible
-                  defaultSize={232 / panelWidth * 100}
+                  defaultSize={(232 / panelWidth) * 100}
                   maxSize={30}
                   minSize={15}
-                  onCollapse={() => { paletteCollapsed = true; }}
-                  onExpand={() => { paletteCollapsed = false; }}
+                  onCollapse={() => {
+                    paletteCollapsed = true;
+                  }}
+                  onExpand={() => {
+                    paletteCollapsed = false;
+                  }}
                   bind:this={palettePane}
                   >{@render palette()}</Resizable.Pane
                 ><Resizable.Handle />
                 <Resizable.Pane
-                  defaultSize={100 - 592 / panelWidth * 100}
+                  defaultSize={100 - (592 / panelWidth) * 100}
                   minSize={20}
                   >{@render canvas()}</Resizable.Pane
                 ><Resizable.Handle />
                 <Resizable.Pane
-                  defaultSize={360 / panelWidth * 100}
+                  defaultSize={(360 / panelWidth) * 100}
                   maxSize={50}
                   minSize={25}
                   ><div class="inspector-scroll">
@@ -712,13 +737,23 @@
                      here). -->
                 <div
                   class="wf-row filters"
-                  {@attach highlight({ rows: '.wf-btn', selected: '[aria-pressed="true"]', axis: 'x' })}
+                  {@attach highlight({
+                    rows: ".wf-btn",
+                    selected: '[aria-pressed="true"]',
+                    axis: "x",
+                  })}
                 >
-                  {#each [{ value: 'all', label: 'All' }, { value: 'waiting', label: 'Needs you' }, { value: 'failed', label: 'Failed' }] as item (item.value)}
+                  {#each [
+                    { value: "all", label: "All" },
+                    { value: "waiting", label: "Needs you" },
+                    { value: "failed", label: "Failed" },
+                  ] as item (item.value)}
                     <button
                       aria-pressed={filter === item.value}
                       class="wf-btn"
-                      onclick={() => { filter = item.value; }}
+                      onclick={() => {
+                        filter = item.value;
+                      }}
                       type="button"
                     >
                       {item.label}
@@ -733,7 +768,9 @@
                 <!-- A run opens in its own tab, as a session does: watching
                      a run is not editing its workflow. -->
                 {#each runs as run (run.id)}
-                  {@const supervisor = run.supervisorInstanceId ? cawco.instanceIndex.byId.get(run.supervisorInstanceId) : undefined}
+                  {@const supervisor = run.supervisorInstanceId
+                    ? cawco.instanceIndex.byId.get(run.supervisorInstanceId)
+                    : undefined}
                   <a
                     class="run-entry wf-stack"
                     data-flip
@@ -745,7 +782,9 @@
                     </div>
                     <span class="wf-muted"
                       >{duration(run.startedAt, run.endedAt, now)}
-                      {supervisor?.title ? ` · from ${supervisor.title}` : ''}</span
+                      {supervisor?.title
+                        ? ` · from ${supervisor.title}`
+                        : ""}</span
                     >
                   </a>
                 {/each}

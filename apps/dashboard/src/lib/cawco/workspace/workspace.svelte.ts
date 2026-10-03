@@ -118,7 +118,7 @@ const cookie = (key: string): string | null => {
     return null;
   }
   const match = new RegExp(`(?:^|;\\s*)${key}=([^;]*)`).exec(document.cookie);
-  // biome-ignore lint/suspicious/noUnnecessaryConditions: exec() can return null at runtime when the cookie is absent; Biome's inference here is narrower than the real type
+  // exec() returns null when the cookie is absent.
   if (!match) {
     return null;
   }

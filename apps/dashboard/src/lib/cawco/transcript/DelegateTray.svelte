@@ -672,7 +672,10 @@
   }
 </script>
 
-{#snippet mark(item: WorkItemSummary, flies: boolean)}
+{#snippet mark(
+  item: WorkItemSummary,
+  flies: boolean
+)}
   {@const Sprite = sessionSprite(item.instanceId)}
   <span
     aria-hidden="true"
@@ -701,7 +704,7 @@
         class="row"
         inert={held}
         {onkeydown}
-        role={keys.length >= 3 ? 'toolbar' : 'group'}
+        role={keys.length >= 3 ? "toolbar" : "group"}
         bind:this={row}
         {@attach reflow()}
       >
@@ -713,7 +716,7 @@
             aria-label="{item.title}, {stateWords(chip)}"
             class="chip touch-hit {tone}"
             data-flip="pop box"
-            data-flip-enter={entry === 'fade' ? undefined : 'own'}
+            data-flip-enter={entry === "fade" ? undefined : "own"}
             data-key={item.id}
             onblur={() => {
               focusedKey = null;
@@ -727,15 +730,15 @@
             onpointerenter={() => onchipenter(item.id)}
             tabindex={current === i ? 0 : -1}
             type="button"
-            class:finished={tone === 'done' && (item.endedAt ?? 0) > mountedAt}
-            class:fly={entry === 'fly'}
+            class:finished={tone === "done" && (item.endedAt ?? 0) > mountedAt}
+            class:fly={entry === "fly"}
           >
-            {@render mark(item, entry === 'fly')}
+            {@render mark(item, entry === "fly")}
             <span aria-hidden="true" class="words">
               <span class="title">{item.title}</span>
-              {#if tone === 'needs'}
+              {#if tone === "needs"}
                 <span class="note">{questionWords(chip.questions)}</span>
-              {:else if tone === 'failed' || tone === 'cancelled'}
+              {:else if tone === "failed" || tone === "cancelled"}
                 <span class="note">{tone}</span>
               {/if}
             </span>
@@ -743,21 +746,21 @@
               {#key slotOf(tone)}
                 <span
                   class="glyph"
-                  in:slotIn={tone === 'done' || tone === 'failed'}
+                  in:slotIn={tone === "done" || tone === "failed"}
                   out:slotOut
                 >
-                  {#if tone === 'starting'}
+                  {#if tone === "starting"}
                     <Spinner aria-hidden="true" role="presentation" />
-                  {:else if tone === 'running'}
+                  {:else if tone === "running"}
                     <span
                       class="dot"
                       style:animation-delay="-{Date.now() % 2000}ms"
                     ></span>
-                  {:else if tone === 'asked' || tone === 'needs'}
+                  {:else if tone === "asked" || tone === "needs"}
                     <IconAsk />
-                  {:else if tone === 'done'}
+                  {:else if tone === "done"}
                     <IconSuccess />
-                  {:else if tone === 'failed'}
+                  {:else if tone === "failed"}
                     <IconWarningTriangle />
                   {:else}
                     <IconStop />
@@ -770,20 +773,20 @@
         {#if hidden.length}
           <button
             aria-controls={panelId}
-            aria-expanded={openKey === 'more'}
+            aria-expanded={openKey === "more"}
             aria-label="{hidden.length} more delegates"
             class="chip more touch-hit"
             data-flip="pop"
             data-key="more"
-            onclick={() => onpress('more')}
+            onclick={() => onpress("more")}
             onfocus={() => {
               current = shown.length;
             }}
             onmousedown={(event) => event.preventDefault()}
-            onpointerenter={() => onchipenter('more')}
+            onpointerenter={() => onchipenter("more")}
             tabindex={current === shown.length ? 0 : -1}
             type="button"
-            class:needs={hidden.some((chip) => chip.tone === 'needs')}
+            class:needs={hidden.some((chip) => chip.tone === "needs")}
           >
             +{hidden.length}
           </button>
@@ -802,8 +805,10 @@
         style="--origin: {place.origin}px; --room: {place.room}px; --span: {place.span}px; --x: {place.x}px"
         watch={openInstance}
       >
-        {#snippet children(key)}
-          {#if key === 'more'}
+        {#snippet children(
+          key
+        )}
+          {#if key === "more"}
             <ul class="list">
               {#each hidden as chip (chip.item.id)}
                 <li>
@@ -825,18 +830,18 @@
                 class="pstate {tone}"
                 role="img"
               >
-                {#if tone === 'starting'}
+                {#if tone === "starting"}
                   <Spinner aria-hidden="true" role="presentation" />
-                {:else if tone === 'running'}
+                {:else if tone === "running"}
                   <span
                     class="dot"
                     style:animation-delay="-{Date.now() % 2000}ms"
                   ></span>
-                {:else if tone === 'asked' || tone === 'needs'}
+                {:else if tone === "asked" || tone === "needs"}
                   <IconAsk />
-                {:else if tone === 'done'}
+                {:else if tone === "done"}
                   <IconSuccess />
-                {:else if tone === 'failed'}
+                {:else if tone === "failed"}
                   <IconWarningTriangle />
                 {:else}
                   <IconStop />
@@ -858,13 +863,13 @@
               instanceId={item.instanceId}
               note={noteOf(openChip)}
             />
-            {#if tone === 'needs'}
+            {#if tone === "needs"}
               <div class="acts">
                 <Button href={hrefOf(item)} size="sm" variant="outline"
                   >Open question</Button
                 >
               </div>
-            {:else if tone === 'failed'}
+            {:else if tone === "failed"}
               <div class="acts">
                 <Button onclick={() => dismiss(item)} size="sm" variant="ghost"
                   >Dismiss</Button

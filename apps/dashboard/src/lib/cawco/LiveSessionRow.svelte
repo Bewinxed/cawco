@@ -164,12 +164,15 @@
 </script>
 
 <LiveSessionMenu {instance}>
-  {#snippet children(trigger)}
+  {#snippet children(
+    trigger
+  )}
     <a
       {...trigger}
       class="press-tint group flex min-h-9 flex-col justify-center gap-0.5 rounded-[var(--radius-sm)] px-4 py-1.5
       transition-colors duration-(--dur-control) ease-out hover:text-foreground
-      {failed || activity === 'blocked' ? 'bg-error/10' : ''} {trigger.class ?? ''}"
+      {failed || activity === "blocked" ? "bg-error/10" : ""} {trigger.class ??
+        ""}"
       href={conversationHref(instance.id, cawco.instanceIndex)}
       title={rowHint}
       use:dragSession={{ sessionId: instance.id, from: null }}
@@ -182,7 +185,9 @@
            so a card has a single title column rather than a header set in from
            the rows it heads. -->
         <span
-          class="flex shrink-0 items-center justify-center {sleeping || stale ? 'opacity-60' : ''}"
+          class="flex shrink-0 items-center justify-center {sleeping || stale
+            ? "opacity-60"
+            : ""}"
           style="--mark-size:20px"
         >
           <SessionMark
@@ -266,7 +271,7 @@
       </span>
       <!-- The tool it is running: the name morphs from one tool to the next,
          and the line fades in and out as the session starts and stops one. -->
-      {#if activity === 'working' && tool}
+      {#if activity === "working" && tool}
         <span
           class="flex max-w-3xl items-baseline gap-2 pl-8 text-label text-muted-foreground"
           transition:crossIn

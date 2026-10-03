@@ -84,7 +84,8 @@
     <g class="text-success" data-shown={finished}>
       <polyline
         fill="none"
-        points="{box * 0.28},{box * 0.53} {box * 0.43},{box * 0.69} {box * 0.72},{box * 0.34}"
+        points="{box * 0.28},{box * 0.53} {box * 0.43},{box * 0.69} {box *
+          0.72},{box * 0.34}"
         stroke="currentColor"
         stroke-linecap="round"
         stroke-linejoin="round"

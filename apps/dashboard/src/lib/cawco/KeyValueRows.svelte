@@ -56,7 +56,7 @@
         bind:value={row.value}
       />
       <Button
-        aria-label="Remove {row.key || 'this line'}"
+        aria-label="Remove {row.key || "this line"}"
         class="text-muted-foreground"
         disabled={index === rows.length - 1}
         onclick={() => rows.splice(index, 1)}

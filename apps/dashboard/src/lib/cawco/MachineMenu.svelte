@@ -216,7 +216,7 @@
     <ContextMenu.CopyItem text={machine.hostname} what="Hostname">
       Copy hostname
     </ContextMenu.CopyItem>
-    {#if machine.status !== 'online'}
+    {#if machine.status !== "online"}
       <ContextMenu.Separator />
       <ContextMenu.Item onSelect={askRemove} variant="destructive">
         <IconTrash />

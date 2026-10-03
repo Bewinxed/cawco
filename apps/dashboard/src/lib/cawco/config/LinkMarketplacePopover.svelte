@@ -79,7 +79,9 @@
   bind:open={expanded}
 >
   <Popover.Trigger disabled={down !== null}>
-    {#snippet child({ props })}
+    {#snippet child({
+      props,
+    })}
       <Button
         {...props}
         disabled={down !== null}
@@ -121,10 +123,10 @@
       >
         {#snippet hint()}
           What its plugins are installed as —
-          <span class="font-mono">plugin@{name.trim() || 'name'}</span>.
+          <span class="font-mono">plugin@{name.trim() || "name"}</span>.
         {/snippet}
         <Input
-          aria-invalid={clash ? 'true' : undefined}
+          aria-invalid={clash ? "true" : undefined}
           autocomplete="off"
           class="font-mono"
           id="market-name"

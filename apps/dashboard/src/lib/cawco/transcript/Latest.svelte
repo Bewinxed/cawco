@@ -15,8 +15,8 @@
   class="latest pressable"
   onclick={onjump}
   type="button"
-  in:rise={'--dur-panel'}
-  out:rise={'--dur-exit'}
+  in:rise={"--dur-panel"}
+  out:rise={"--dur-exit"}
 >
   <IconArrowDown />Jump to latest
 </button>

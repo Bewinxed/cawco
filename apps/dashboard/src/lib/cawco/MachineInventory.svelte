@@ -117,12 +117,13 @@
     <ul class="machines">
       {#each machines as machine (machine.machineId)}
         {@const inspection = found[machine.machineId]}
-        {@const rows = kind === 'mcp' ? (inspection?.mcp ?? []) : (inspection?.skills ?? [])}
+        {@const rows =
+          kind === "mcp" ? (inspection?.mcp ?? []) : (inspection?.skills ?? [])}
         <li class="machine">
           <button
             aria-expanded={open[machine.machineId] === true}
             class="head focus-inset press-tint"
-            disabled={machine.status !== 'online' && !open[machine.machineId]}
+            disabled={machine.status !== "online" && !open[machine.machineId]}
             onclick={() => expand(machine)}
             type="button"
           >
@@ -136,7 +137,7 @@
             <span class="note">
               {#if open[machine.machineId]}
                 Hide
-              {:else if machine.status === 'online'}
+              {:else if machine.status === "online"}
                 Show what it has
               {:else}
                 Offline
@@ -154,11 +155,15 @@
               </Alert>
             {:else if rows.length === 0}
               <p class="note">
-                {kind === 'mcp' ? 'This machine has no MCP servers at all.' : 'This machine has no skills at all.'}
+                {kind === "mcp"
+                  ? "This machine has no MCP servers at all."
+                  : "This machine has no skills at all."}
               </p>
             {:else}
               <ul class="found">
-                {#each rows as row ('path' in row ? row.path : `${row.scope}:${row.name}`)}
+                {#each rows as row ("path" in row
+                  ? row.path
+                  : `${row.scope}:${row.name}`)}
                   {@const key = keyOf(machine.machineId, row.scope, row.name)}
                   <li class="entry">
                     <span class="text">
@@ -168,13 +173,13 @@
                         {#if row.managed}
                           <Badge variant="secondary">fleet</Badge>
                         {/if}
-                        {#if 'shadowedBy' in row && row.shadowedBy}
+                        {#if "shadowedBy" in row && row.shadowedBy}
                           <Badge variant="attn"
                             >shadowed by {row.shadowedBy}</Badge
                           >
                         {/if}
                       </span>
-                      {#if 'description' in row && row.description}
+                      {#if "description" in row && row.description}
                         <span class="note clamp">{row.description}</span>
                       {/if}
                     </span>
@@ -182,7 +187,10 @@
                       <Button
                         failed={adoptFailed[key] === true}
                         label="Adopt"
-                        onclick={() => kind === 'mcp' ? adoptServer(machine, row as DiscoveredMcp) : adopt(machine, row as DiscoveredSkill)}
+                        onclick={() =>
+                          kind === "mcp"
+                            ? adoptServer(machine, row as DiscoveredMcp)
+                            : adopt(machine, row as DiscoveredSkill)}
                         pending={busy[key] === true}
                         pendingLabel="Adopting…"
                         size="sm"

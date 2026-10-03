@@ -164,13 +164,15 @@
 {#if narrow.current}
   <Drawer.Root {onOpenChange} bind:open>
     <Drawer.Trigger>
-      {#snippet child({ props })}
+      {#snippet child({
+        props,
+      })}
         <button
           {...props}
-          aria-label={active ? 'Autopilot enabled' : 'Autopilot'}
+          aria-label={active ? "Autopilot enabled" : "Autopilot"}
           aria-pressed={active}
           class="ap-trigger touch-hit"
-          title={presence ?? (active ? 'Autopilot enabled' : 'Autopilot')}
+          title={presence ?? (active ? "Autopilot enabled" : "Autopilot")}
           type="button"
           class:ap-active={active}
         >
@@ -201,13 +203,15 @@
 {:else}
   <Popover.Root {onOpenChange} bind:open>
     <Popover.Trigger>
-      {#snippet child({ props })}
+      {#snippet child({
+        props,
+      })}
         <button
           {...props}
-          aria-label={active ? 'Autopilot enabled' : 'Autopilot'}
+          aria-label={active ? "Autopilot enabled" : "Autopilot"}
           aria-pressed={active}
           class="ap-trigger touch-hit"
-          title={presence ?? (active ? 'Autopilot enabled' : 'Autopilot')}
+          title={presence ?? (active ? "Autopilot enabled" : "Autopilot")}
           type="button"
           class:ap-active={active}
         >

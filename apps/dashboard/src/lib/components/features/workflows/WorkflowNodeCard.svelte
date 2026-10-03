@@ -88,10 +88,10 @@
 </script>
 <article
   class="wf-node"
-  class:map={node.kind === 'map'}
+  class:map={node.kind === "map"}
   class:selected={selected}
 >
-  {#if node.kind !== 'start'}
+  {#if node.kind !== "start"}
     <Handle
       aria-label="Input for {title}"
       class="pointer-hit"
@@ -105,11 +105,11 @@
     ><strong>{title}</strong>
   </header>
   <div class="body">
-    {#if node.kind === 'step'}
-      <p class="meta">{node.harness} · {node.model || 'Choose a model'}</p>
+    {#if node.kind === "step"}
+      <p class="meta">{node.harness} · {node.model || "Choose a model"}</p>
     {/if}
     <p class="summary">{summary}</p>
-    {#if node.kind === 'map'}
+    {#if node.kind === "map"}
       <p class="group">{node.body.nodes.length} nodes in body</p>
     {/if}
     {#if data.problem}
@@ -136,7 +136,9 @@
         class="port-hit nodrag nopan"
         onclick={route}
         onmousedown={route}
-        onmouseleave={() => { near = null; }}
+        onmouseleave={() => {
+          near = null;
+        }}
         onmousemove={aim}
       ></div>
     </div>

@@ -331,8 +331,8 @@
 <div
   class={cn("ff-tabs-list", scrollable && "scrollable", className)}
   data-direction={direction}
-  data-leap={leap ? '' : undefined}
-  data-ride={ride ? '' : undefined}
+  data-leap={leap ? "" : undefined}
+  data-ride={ride ? "" : undefined}
   {onfocusin}
   {onfocusout}
   {onkeydown}
@@ -340,7 +340,12 @@
   bind:this={node}
   use:rects.container
   use:sideways
-  {@attach highlight({ rows: ".ff-tab", axis: "x", covered: ".ff-tab.selected", laidOut: () => rects.rects })}
+  {@attach highlight({
+    rows: ".ff-tab",
+    axis: "x",
+    covered: ".ff-tab.selected",
+    laidOut: () => rects.rects,
+  })}
   {...rest}
 >
   {#if selectedRect}

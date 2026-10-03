@@ -74,7 +74,7 @@
     {#if waiting > 0}
       <p class="caution num" data-flip>
         {waiting}
-        {waiting === 1 ? 'session is' : 'sessions are'}
+        {waiting === 1 ? "session is" : "sessions are"}
         still pending — it clears when their next turn ends without matching.
       </p>
     {/if}
@@ -93,7 +93,7 @@
             </span>
           </div>
 
-          {#if row.status === 'pending'}
+          {#if row.status === "pending"}
             <p class="caution">Fired {times(row.fireCount)} in a row.</p>
           {/if}
         </li>
@@ -103,12 +103,12 @@
       <div class="more" data-flip>
         <Button
           onclick={() => {
-          all = !all;
-        }}
+            all = !all;
+          }}
           size="sm"
           variant="ghost"
         >
-          {all ? 'Show the latest 5' : `Show all ${rows.length}`}
+          {all ? "Show the latest 5" : `Show all ${rows.length}`}
         </Button>
       </div>
     {/if}

@@ -79,24 +79,23 @@
 <article
   class="card"
   data-flip
-  data-share="pane:{item.kind === 'ask' ? item.instanceId : item.key}"
+  data-share="pane:{item.kind === "ask" ? item.instanceId : item.key}"
   data-stale={stale || undefined}
 >
   <!-- The whole card opens the session, at the request. -->
-  <a
-    aria-label="Open {item.title}"
-    class="cover focus-inset"
-    {href}
-    {onkeydown}
-  ></a>
+  <a aria-label="Open {item.title}" class="cover focus-inset" {href} {onkeydown}
+    ><span class="sr-only">Open {item.title}</span></a
+  >
   <div class="head">
     <span class="title">{item.title}</span>
     <span class="num wait">{waited}</span>
-    {#if item.kind === 'ask'}
+    {#if item.kind === "ask"}
       {@const ask = item}
       <!-- Glance → peek → dive: read what led here before answering. -->
       <Tip label="Peek">
-        {#snippet children(tip)}
+        {#snippet children(
+          tip
+        )}
           <button
             {...tip}
             aria-label="Peek {item.title}"
@@ -113,9 +112,9 @@
   </div>
   <span class="place">{item.place}</span>
   <p class="ask">
-    {item.kind === 'run' ? 'Waiting on your answer' : item.ask}
+    {item.kind === "run" ? "Waiting on your answer" : item.ask}
   </p>
-  {#if item.kind === 'run'}
+  {#if item.kind === "run"}
     <div class="actions">
       <Button {href} size="sm" variant="secondary">Open</Button>
     </div>
@@ -128,7 +127,7 @@
       <Button
         aria-label="Deny {item.ask} on {item.title}"
         disabled={stale}
-        onclick={() => answer('deny')}
+        onclick={() => answer("deny")}
         {onkeydown}
         size="sm"
         variant="secondary"
@@ -139,7 +138,7 @@
       <Button
         aria-label="Approve {item.ask} on {item.title}"
         disabled={stale}
-        onclick={() => answer('allow')}
+        onclick={() => answer("allow")}
         {onkeydown}
         size="sm"
         variant="secondary"

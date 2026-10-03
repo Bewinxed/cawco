@@ -178,7 +178,9 @@
 
 <div class="think rail-row">
   <ThinkingSteps
-    onOpenChange={(value) => { expanded = value; }}
+    onOpenChange={(value) => {
+      expanded = value;
+    }}
     open={expanded}
     size="default"
   >
@@ -192,7 +194,7 @@
         {#if liveLabel}
           <span class="face" in:faceIn out:faceOut
             ><ThinkingIndicator
-              aria-live={announce ? 'polite' : 'off'}
+              aria-live={announce ? "polite" : "off"}
               class="rail-indicator"
             /></span
           >

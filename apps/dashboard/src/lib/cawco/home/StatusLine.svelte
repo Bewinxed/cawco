@@ -49,25 +49,27 @@
 <div class="status" role="status">
   {#key phase}
     <div class="line" in:crossIn out:crossOut>
-      {#if phase === 'unreachable'}
+      {#if phase === "unreachable"}
         <span class="down">
           <IconWarningTriangle aria-hidden="true" />
           <span
             >Hub unreachable,
-            {cawco.status === 'connecting' ? 'retrying now' : `retrying in ${retryIn}s`}</span
+            {cawco.status === "connecting"
+              ? "retrying now"
+              : `retrying in ${retryIn}s`}</span
           >
         </span>
         <Button
           label="Reconnect"
           onclick={reconnectNow}
-          pending={cawco.status === 'connecting'}
+          pending={cawco.status === "connecting"}
           pendingLabel="Connecting…"
           size="xs"
           variant="outline"
         />
-      {:else if phase === 'connecting'}
+      {:else if phase === "connecting"}
         <span>Connecting…</span>
-      {:else if phase === 'reading'}
+      {:else if phase === "reading"}
         <!-- Connected, but spend is not counted until the fleet is read. -->
         <span>Connected · reading the fleet…</span>
       {:else}

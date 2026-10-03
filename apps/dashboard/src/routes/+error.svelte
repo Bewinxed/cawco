@@ -13,7 +13,7 @@
 
 <svelte:head
   ><title>
-    {missing ? 'Page not found' : 'Something went wrong'}
+    {missing ? "Page not found" : "Something went wrong"}
     · CawCo
   </title></svelte:head
 >
@@ -24,7 +24,7 @@
     line={missing
       ? `Nothing is at ${page.url.pathname}.`
       : `${page.error?.message}`}
-    title={missing ? 'Page not found' : 'Something went wrong'}
+    title={missing ? "Page not found" : "Something went wrong"}
   >
     {#snippet action()}
       <Button href="/session" label="Go to sessions" />

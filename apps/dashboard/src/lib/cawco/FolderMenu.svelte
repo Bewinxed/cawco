@@ -154,7 +154,9 @@
                      aria-pressed:outline-offset-[var(--focus-ring-inset)] aria-pressed:outline-[var(--ink-strong)]
                      aria-pressed:focus-visible:outline-[var(--focus-ring)]"
               onclick={() => folderPrefs.setHue(cwd, hue)}
-              title="Hue {hue}{pickedHue === undefined && on ? ' (automatic)' : ''}"
+              title="Hue {hue}{pickedHue === undefined && on
+                ? " (automatic)"
+                : ""}"
               type="button"
             >
               <!-- The chosen hue is ringed where the focus ring would be, in
@@ -202,7 +204,9 @@
     <AlertDialog.Footer>
       <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
       <AlertDialog.Action>
-        {#snippet child({ props })}
+        {#snippet child({
+          props,
+        })}
           <Button
             {...props}
             failed={!forgotten}

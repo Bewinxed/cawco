@@ -47,8 +47,14 @@
 <div class="wf-stack">
   <div class="wf-row wf-spread">
     <h3>Result schema</h3>
-    <button class="wf-btn" onclick={() => { json = !json; }} type="button">
-      {json ? 'Field builder' : 'Edit as JSON'}
+    <button
+      class="wf-btn"
+      onclick={() => {
+        json = !json;
+      }}
+      type="button"
+    >
+      {json ? "Field builder" : "Edit as JSON"}
     </button>
   </div>
   <!-- The two editors cross-fade in one place and the box tweens between
@@ -69,15 +75,34 @@
               <div class="wf-fields">
                 <label
                   >Field name<input
-                    onchange={(event) => update(name, event.currentTarget.value, schema.type ?? 'string', required.includes(name))}
+                    onchange={(event) =>
+                      update(
+                        name,
+                        event.currentTarget.value,
+                        schema.type ?? "string",
+                        required.includes(name)
+                      )}
                     value={name}
                   ></label
                 ><label
                   >Type<select
-                    onchange={(event) => update(name, name, event.currentTarget.value, required.includes(name))}
+                    onchange={(event) =>
+                      update(
+                        name,
+                        name,
+                        event.currentTarget.value,
+                        required.includes(name)
+                      )}
                     value={schema.type}
                   >
-                    {#each ['string', 'number', 'integer', 'boolean', 'array', 'object'] as type (type)}
+                    {#each [
+                      "string",
+                      "number",
+                      "integer",
+                      "boolean",
+                      "array",
+                      "object",
+                    ] as type (type)}
                       <option>{type}</option>
                     {/each}
                   </select></label
@@ -87,13 +112,26 @@
                 <label class="wf-check"
                   ><input
                     checked={required.includes(name)}
-                    onchange={(event) => update(name, name, schema.type ?? 'string', event.currentTarget.checked)}
+                    onchange={(event) =>
+                      update(
+                        name,
+                        name,
+                        schema.type ?? "string",
+                        event.currentTarget.checked
+                      )}
                     type="checkbox"
                   >Required</label
                 ><button
                   aria-label="Remove field {name}"
                   class="wf-btn"
-                  onclick={() => onchange({ ...value, properties: Object.fromEntries(fields.filter(([key]) => key !== name)), required: required.filter((key) => key !== name) })}
+                  onclick={() =>
+                    onchange({
+                      ...value,
+                      properties: Object.fromEntries(
+                        fields.filter(([key]) => key !== name)
+                      ),
+                      required: required.filter((key) => key !== name),
+                    })}
                   type="button"
                 >
                   Remove
@@ -103,7 +141,15 @@
           {/each}
           <button
             class="wf-btn"
-            onclick={() => onchange({ ...value, type: 'object', properties: { ...Object.fromEntries(fields), [`field${fields.length + 1}`]: { type: 'string' } } })}
+            onclick={() =>
+              onchange({
+                ...value,
+                type: "object",
+                properties: {
+                  ...Object.fromEntries(fields),
+                  [`field${fields.length + 1}`]: { type: "string" },
+                },
+              })}
             type="button"
           >
             Add field

@@ -117,12 +117,12 @@
   {#if lead}
     {@const m = lead.meter}
     <span class="line">
-      {#if m.state === 'near'}
+      {#if m.state === "near"}
         <Attention aria-hidden="true" class="glyph near" />
-      {:else if m.state === 'over' || m.state === 'reached'}
+      {:else if m.state === "over" || m.state === "reached"}
         <Failed aria-hidden="true" class="glyph over" />
       {/if}
-      {#if m.state === 'reached'}
+      {#if m.state === "reached"}
         <span class="name">{leadName(lead)} limit</span>
       {:else}
         <span class="name">{leadName(lead)}</span>
@@ -155,9 +155,9 @@
         {@const m = row.meter}
         <div class="pop-row" data-state={m.state}>
           <span class="pop-name">
-            {#if m.state === 'near'}
+            {#if m.state === "near"}
               <Attention aria-label={glyphLabel.near} class="glyph near" />
-            {:else if m.state === 'over' || m.state === 'reached'}
+            {:else if m.state === "over" || m.state === "reached"}
               <Failed aria-label={glyphLabel[m.state]} class="glyph over" />
             {/if}
             {row.label}
@@ -174,7 +174,7 @@
           </span>
           {#if m.window.resetsAt}
             <span class="pop-reset"
-              >{m.used >= 100 ? 'Limit reached · ' : ''}resets
+              >{m.used >= 100 ? "Limit reached · " : ""}resets
               {resetShort(m.window.resetsAt, now)}</span
             >
           {/if}
@@ -184,7 +184,7 @@
   {/each}
 {/snippet}
 
-<div class="strip" data-state={lead?.meter.state ?? 'unknown'}>
+<div class="strip" data-state={lead?.meter.state ?? "unknown"}>
   {#if touch.current}
     <!-- On touch every window rises in the house sheet, as a tab's details
          and a peek do; with a fine pointer it is a popover by the strip. -->

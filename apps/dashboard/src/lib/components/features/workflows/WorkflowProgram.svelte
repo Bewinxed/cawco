@@ -28,7 +28,7 @@
      instead of jumping. -->
 <div class="program" {@attach reflow()}>
   <p class="wf-muted note">
-    {#if origin === 'editor'}
+    {#if origin === "editor"}
       Compiled from this graph on save. Edit the graph to change it.
     {:else}
       The program is the workflow. It saves as you type.
@@ -43,7 +43,7 @@
       value={program}
     />
   </div>
-  {#if origin === 'code'}
+  {#if origin === "code"}
     <!-- The count and the all-clear cross-fade in one grid cell; problems
          come and go the house way (motion/rows). -->
     <section

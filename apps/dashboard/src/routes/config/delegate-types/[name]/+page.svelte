@@ -16,10 +16,10 @@
 </script>
 
 <EditorRoute
-  found={name === 'new' || type !== null}
+  found={name === "new" || type !== null}
   loaded={types !== null}
   problem={store.types.error}
-  saveLabel={name === 'new' ? 'Create delegate type' : 'Save changes'}
+  saveLabel={name === "new" ? "Create delegate type" : "Save changes"}
   {section}
   what="delegate type"
 >

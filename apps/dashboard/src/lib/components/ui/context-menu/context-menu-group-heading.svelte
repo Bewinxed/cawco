@@ -13,7 +13,10 @@
 </script>
 
 <ContextMenuPrimitive.GroupHeading
-  class={cn("px-2 py-1.5 font-medium text-foreground text-label data-inset:ps-8", className)}
+  class={cn(
+    "px-2 py-1.5 font-medium text-foreground text-label data-inset:ps-8",
+    className
+  )}
   data-inset={inset}
   data-slot="context-menu-group-heading"
   bind:ref

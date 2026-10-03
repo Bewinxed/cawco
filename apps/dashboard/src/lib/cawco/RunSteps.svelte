@@ -131,7 +131,9 @@
   });
 </script>
 
-{#snippet line(step: WorkflowStep)}
+{#snippet line(
+  step: WorkflowStep
+)}
   <SessionStatus compact step={step.status} />
   <span class="title">{titleOf(step)}</span>
 {/snippet}
@@ -159,12 +161,12 @@
               class="line press-tint focus-inset"
               onclick={() => toggle(step.id)}
               type="button"
-              class:err={step.status === 'failed'}
+              class:err={step.status === "failed"}
             >
               {@render line(step)}
             </button>
           {:else}
-            <div class="line" class:err={step.status === 'failed'}>
+            <div class="line" class:err={step.status === "failed"}>
               {@render line(step)}
             </div>
           {/if}
@@ -176,6 +178,7 @@
               title="Open {titleOf(step)}"
             >
               <IconExternal aria-hidden="true" />
+              <span class="sr-only">Open {titleOf(step)}</span>
             </a>
           {/if}
           <span class="num time"

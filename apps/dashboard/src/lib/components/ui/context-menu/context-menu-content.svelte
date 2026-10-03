@@ -30,9 +30,9 @@
 <ContextMenuPortal {...portalProps}>
   <ContextMenuPrimitive.Content
     class={cn(
-			"kit-pop relative z-50 min-w-48 origin-(--bits-context-menu-content-transform-origin) overflow-y-auto overflow-x-hidden outline-none",
-			className
-		)}
+      "kit-pop relative z-50 min-w-48 origin-(--bits-context-menu-content-transform-origin) overflow-y-auto overflow-x-hidden outline-none",
+      className
+    )}
     data-slot="context-menu-content"
     bind:ref
     {...restProps}

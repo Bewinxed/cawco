@@ -232,7 +232,7 @@
 </script>
 
 <SectionFrame
-  problem={ready ? null : openrouterError ?? supervisorError}
+  problem={ready ? null : (openrouterError ?? supervisorError)}
   purpose={section.purpose}
   {ready}
   title={section.label}
@@ -275,14 +275,22 @@
           <p
             aria-live="polite"
             class="status num"
-            data-tone={phase === 'connected' ? 'ok' : 'off'}
-            in:blur={{ duration: dur('--dur-panel'), easing: easeOut, amount: 2 }}
-            out:blur={{ duration: dur('--dur-exit'), easing: easeOut, amount: 2 }}
+            data-tone={phase === "connected" ? "ok" : "off"}
+            in:blur={{
+              duration: dur("--dur-panel"),
+              easing: easeOut,
+              amount: 2,
+            }}
+            out:blur={{
+              duration: dur("--dur-exit"),
+              easing: easeOut,
+              amount: 2,
+            }}
           >
-            {#if phase === 'exchanging'}
+            {#if phase === "exchanging"}
               <span aria-hidden="true" class="dot pulse"></span>
               Finishing the connection with OpenRouter…
-            {:else if phase === 'connected' && openrouter?.connectedAt}
+            {:else if phase === "connected" && openrouter?.connectedAt}
               <svg aria-hidden="true" class="check" viewBox="0 0 20 20">
                 <circle cx="10" cy="10" r="10"></circle>
                 <path d="M6.2 10.4l2.5 2.5 5.1-5.6"></path>
@@ -301,7 +309,7 @@
       disabled={!openrouter?.connected || savingSuggest}
       hint={openrouter?.connected
         ? "Jev reads the message as you write it and offers chips you can add to it. The session's tools are not changed."
-        : 'Needs OpenRouter — connect it above.'}
+        : "Needs OpenRouter — connect it above."}
       id="suggest-while-typing"
       label="Suggest skills and MCP servers while typing"
       onchange={setSuggest}
@@ -330,8 +338,8 @@
     </p>
     <SwitchField
       hint={enabled
-        ? 'LLM rules and autopilot are judged by this server.'
-        : 'Off — LLM rules and autopilot do nothing.'}
+        ? "LLM rules and autopilot are judged by this server."
+        : "Off — LLM rules and autopilot do nothing."}
       id="supervisor-enabled"
       label="Enabled"
       bind:checked={enabled}
@@ -377,8 +385,16 @@
             aria-live="polite"
             class="status num"
             data-tone={reach.tone}
-            in:blur={{ duration: dur('--dur-panel'), easing: easeOut, amount: 2 }}
-            out:blur={{ duration: dur('--dur-exit'), easing: easeOut, amount: 2 }}
+            in:blur={{
+              duration: dur("--dur-panel"),
+              easing: easeOut,
+              amount: 2,
+            }}
+            out:blur={{
+              duration: dur("--dur-exit"),
+              easing: easeOut,
+              amount: 2,
+            }}
           >
             <span aria-hidden="true" class="dot"></span>
             {reach.text}

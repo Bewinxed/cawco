@@ -139,7 +139,9 @@
             align="end"
             id={`${id}-effort`}
             label="Effort"
-            onchange={(value) => { pop = value ? 'effort' : null; }}
+            onchange={(value) => {
+              pop = value ? "effort" : null;
+            }}
             open={pop === "effort"}
             triggerClass="ns-chip-btn tool"
             width={300}
@@ -165,7 +167,9 @@
             align="end"
             id={`${id}-permission`}
             label="Permission mode"
-            onchange={(value) => { pop = value ? 'permission' : null; }}
+            onchange={(value) => {
+              pop = value ? "permission" : null;
+            }}
             open={pop === "permission"}
             triggerClass="ns-chip-btn tool"
             width={340}
@@ -177,7 +181,10 @@
             <PermissionSection
               embedded
               modes={tools.modes}
-              onchange={(mode) => { tools.onpermission(mode); pop = null; }}
+              onchange={(mode) => {
+                tools.onpermission(mode);
+                pop = null;
+              }}
               value={tools.permission}
             />
           </NsPopover>

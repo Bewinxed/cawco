@@ -22,9 +22,9 @@
 
 <div
   class={cn(
-		"cn-native-select-wrapper group/native-select relative w-fit has-[select:disabled]:opacity-50",
-		className
-	)}
+    "cn-native-select-wrapper group/native-select relative w-fit has-[select:disabled]:opacity-50",
+    className
+  )}
   data-size={size}
   data-slot="native-select-wrapper"
 >

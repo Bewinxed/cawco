@@ -149,7 +149,7 @@
         <!-- It shows what the row's `enabled` says: a switch whose save
              fails goes back to its old side when the page puts it back. -->
         <Switch
-          aria-label="{enabled ? 'Turn off' : 'Turn on'} {name}"
+          aria-label="{enabled ? "Turn off" : "Turn on"} {name}"
           disabled={toggling}
           bind:checked={() => enabled === true, (next) => ontoggle?.(next)}
         />
@@ -169,11 +169,11 @@
           class="note"
           data-flip
           data-tone={note.tone}
-          role={note.tone === 'fail' ? 'alert' : 'status'}
+          role={note.tone === "fail" ? "alert" : "status"}
         >
-          {#if note.tone === 'busy'}
+          {#if note.tone === "busy"}
             <Spinner aria-hidden="true" />
-          {:else if note.tone === 'fail'}
+          {:else if note.tone === "fail"}
             <IconWarningTriangle />
           {:else}
             <IconCheck />

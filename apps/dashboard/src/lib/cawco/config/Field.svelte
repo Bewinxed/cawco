@@ -39,7 +39,7 @@
         <span class="error" in:crossIn out:crossOut>{problem}</span>
       {:else if warn}
         <span class="warn" in:crossIn out:crossOut>{@render warn()}</span>
-      {:else if typeof hint === 'string'}
+      {:else if typeof hint === "string"}
         <span class="hint" in:crossIn out:crossOut>{hint}</span>
       {:else if hint}
         <span class="hint" in:crossIn out:crossOut>{@render hint()}</span>

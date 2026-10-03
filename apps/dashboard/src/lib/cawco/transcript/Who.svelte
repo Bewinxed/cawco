@@ -58,7 +58,7 @@
   {#if grouped}
     <span class="sr-only">{name}</span>
   {:else}
-    <span aria-hidden="true" class="dot {you ? 'u' : 'a'}">
+    <span aria-hidden="true" class="dot {you ? "u" : "a"}">
       {#if you}
         <IconUser />
       {:else}

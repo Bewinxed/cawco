@@ -507,7 +507,7 @@
   {#if start === null}
     <p class="note">
       No 5-hour window is running for
-      {harness === 'claude' ? 'Claude' : 'opencode'}.
+      {harness === "claude" ? "Claude" : "opencode"}.
     </p>
   {:else if failed && !view}
     <div class="failed" role="alert">
@@ -536,7 +536,7 @@
         {@const id = entry.group.machineId}
         <div
           class="group"
-          data-flip={plan ? undefined : 'box'}
+          data-flip={plan ? undefined : "box"}
           data-kind={entry.kind}
           data-machine={id}
         >
@@ -559,7 +559,7 @@
             {/if}
             {#each entry.rows as item (`${swap.gen}:${item.id}`)}
               <div
-                data-flip={plan ? undefined : ''}
+                data-flip={plan ? undefined : ""}
                 data-key={item.id}
                 style={enterAnim(item.id)}
               >
@@ -576,15 +576,15 @@
            the relay like any other line. -->
       <div
         class="more-slot"
-        data-kind={more ? 'stay' : 'gone'}
+        data-kind={more ? "stay" : "gone"}
         data-machine="more"
       >
         {#if more}
-          <span data-key="more" style={enterAnim('more')}>
+          <span data-key="more" style={enterAnim("more")}>
             <Button label={more} onclick={showAll} size="sm" variant="ghost" />
           </span>
         {:else if plan?.more}
-          <span aria-hidden="true" class="more-gone" style={leaveAnim('more')}
+          <span aria-hidden="true" class="more-gone" style={leaveAnim("more")}
             >{plan.more}</span
           >
         {/if}
@@ -592,12 +592,15 @@
     </div>
   {/if}
 
-  {#if harness === 'claude'}
+  {#if harness === "claude"}
     <p class="note">~ is the API price of work the plan already covers.</p>
   {/if}
 </section>
 
-{#snippet line(item: Item, live: boolean)}
+{#snippet line(
+  item: Item,
+  live: boolean
+)}
   <div class="row">
     {#if item.href && live}
       <a class="name" href={item.href} title={item.label}>{item.label}</a>
@@ -612,7 +615,9 @@
     {#if live}
       <Tooltip.Root>
         <Tooltip.Trigger>
-          {#snippet child({ props })}
+          {#snippet child({
+            props,
+          })}
             <span {...props} class="measure">
               <span class="fill" style:--share={item.share}></span>
               <span class="value num">{item.value}</span>
@@ -630,10 +635,13 @@
   </div>
 {/snippet}
 
-{#snippet leaving(lines: Line[], layer: boolean)}
+{#snippet leaving(
+  lines: Line[],
+  layer: boolean
+)}
   <div
     aria-hidden="true"
-    class={layer ? 'leaving layer' : 'leaving'}
+    class={layer ? "leaving layer" : "leaving"}
     data-leaving
     inert
   >

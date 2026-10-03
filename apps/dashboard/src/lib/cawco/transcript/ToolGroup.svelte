@@ -321,13 +321,27 @@
   {#each messages as m (m.id ?? m.toolCallId)}
     {@const d = describe(m)}
     {@const Icon = d.icon}
-    {@const failed = m.metadata?.toolStatus === 'error'}
+    {@const failed = m.metadata?.toolStatus === "error"}
     {@const fields = inputFields(m.metadata?.toolInput)}
     {@const result = resultText(m.metadata?.toolResult)}
-    {@const toolInput = (m.metadata?.toolInput ?? undefined) as Record<string, unknown> | undefined}
-    {@const changes = d.expanded === 'diff' ? getDiffInfo(toolInput, m.metadata?.toolName) : []}
-    {@const refusal = d.expanded === 'diff' && failed ? toolError(result) : undefined}
-    {@const hasBody = d.expanded === 'diff' ? changes.length > 0 || !!refusal : bodyFor(d.expanded, failed, toolInput, fields, result, m.metadata?.toolResult)}
+    {@const toolInput = (m.metadata?.toolInput ?? undefined) as
+      | Record<string, unknown>
+      | undefined}
+    {@const changes =
+      d.expanded === "diff" ? getDiffInfo(toolInput, m.metadata?.toolName) : []}
+    {@const refusal =
+      d.expanded === "diff" && failed ? toolError(result) : undefined}
+    {@const hasBody =
+      d.expanded === "diff"
+        ? changes.length > 0 || !!refusal
+        : bodyFor(
+            d.expanded,
+            failed,
+            toolInput,
+            fields,
+            result,
+            m.metadata?.toolResult
+          )}
     {#snippet line()}
       <span class="ic rail-cell">
         {#key m.metadata?.toolStatus}
@@ -354,7 +368,7 @@
       {/if}
       <span
         class="arg"
-        title={[d.object, d.detail].filter(Boolean).join(' ') || undefined}
+        title={[d.object, d.detail].filter(Boolean).join(" ") || undefined}
       >
         {#if d.object}
           {d.object}
@@ -368,14 +382,14 @@
       {/if}
       <!-- One chain, so a fact arriving with its result fades in (Svelte plays
            a local intro only when a block that already ran switches). -->
-      {#if d.fact && d.factTone === 'diff'}
+      {#if d.fact && d.factTone === "diff"}
         <span class="d" in:factIn
           >{#each factParts(d.fact) as part, i (i)}
             <span class:add={part.add} class:del={part.del}>{part.text}</span>
           {/each}</span
         >
       {:else if d.fact}
-        <span class="d" class:bad={d.factTone === 'error'} in:factIn
+        <span class="d" class:bad={d.factTone === "error"} in:factIn
           >{d.fact}</span
         >
       {/if}
@@ -384,11 +398,11 @@
     <TranscriptRow id={callId(m)}>
       {#snippet children()}
         <div class="row" data-call={m.toolCallId} class:err={failed}>
-          {#if SHOW_PREVIEW_TOOLS.has(m.metadata?.toolName ?? '')}
+          {#if SHOW_PREVIEW_TOOLS.has(m.metadata?.toolName ?? "")}
             {@const input = m.metadata?.toolInput as PreviewSource}
             {@const current = cawco.previews[m.instanceId]}
             {@const preview = sameSource(current, input) ? current : undefined}
-            {@const opened = preview?.state === 'open'}
+            {@const opened = preview?.state === "open"}
             {@const busy = opening.has(callId(m))}
             <!-- The row is what travels: pressing its button departs it
                  (motion/share's click capture), and the preview pane or
@@ -405,9 +419,18 @@
               <button
                 aria-busy={busy || undefined}
                 aria-disabled={busy || undefined}
-                aria-label={preview?.title || 'Preview'}
+                aria-label={preview?.title || "Preview"}
                 class="artifact-open"
-                onclick={whileIdle(() => busy, () => { if (opened) { revealPreview(m.instanceId); } else { openArtifact(m, input); } })}
+                onclick={whileIdle(
+                  () => busy,
+                  () => {
+                    if (opened) {
+                      revealPreview(m.instanceId);
+                    } else {
+                      openArtifact(m, input);
+                    }
+                  }
+                )}
                 type="button"
               >
                 <span class="mark"><IconWindow /></span>
@@ -415,12 +438,13 @@
                   ><span class="artifact-title"
                     ><PendingContent
                       failed={openFailed.has(callId(m))}
-                      label={preview?.title || 'Preview'}
+                      label={preview?.title || "Preview"}
                       pending={busy}
                       pendingLabel="Opening…"
                     /></span
                   ><span class="artifact-path"
-                    >{preview?.path || ('dir' in input ? pathLeaf(input.dir) : '')}</span
+                    >{preview?.path ||
+                      ("dir" in input ? pathLeaf(input.dir) : "")}</span
                   ></span
                 >
               </button>
@@ -451,7 +475,7 @@
                      so every tool row the list mounted built its diff, its
                      highlighting and its fields for a body nobody opened. -->
                   <CollapsibleLazy count={1} open={disclosed.get()}>
-                    {#if d.expanded === 'diff'}
+                    {#if d.expanded === "diff"}
                       <!-- What the call changed, as the file's own diff: one per
                        replacement a multi-edit made. A failed call is the diff
                        it attempted, under the harness's reason. -->
@@ -467,22 +491,22 @@
                           />
                         {/each}
                       </div>
-                    {:else if d.expanded === 'memory' && !failed}
+                    {:else if d.expanded === "memory" && !failed}
                       <MemoryBody
                         at={m.timestamp}
                         input={toolInput}
                         result={m.metadata?.toolResult}
                       />
-                    {:else if d.expanded === 'memory' && result}
+                    {:else if d.expanded === "memory" && result}
                       <div class="fields">
                         <div class="field">
                           <span class="k">result</span>
                           <pre class="v">{result.text}</pre>
                         </div>
                       </div>
-                    {:else if d.expanded === 'skill' && !failed}
+                    {:else if d.expanded === "skill" && !failed}
                       <div class="skill-args">
-                        <ToolProse source={skillArgs(toolInput) ?? ''} />
+                        <ToolProse source={skillArgs(toolInput) ?? ""} />
                       </div>
                     {:else}
                       <div class="fields">
@@ -513,8 +537,11 @@
           {:else}
             <div class="trow rail-line flat">{@render line()}</div>
           {/if}
-          {#if SHOW_IMAGE_TOOLS.has(m.metadata?.toolName ?? '') && machine}
-            {@const input = m.metadata?.toolInput as { path: string; caption?: string }}
+          {#if SHOW_IMAGE_TOOLS.has(m.metadata?.toolName ?? "") && machine}
+            {@const input = m.metadata?.toolInput as {
+              path: string;
+              caption?: string;
+            }}
             <div class="shots">
               <Shot
                 alt={input.caption ?? pathLeaf(input.path)}

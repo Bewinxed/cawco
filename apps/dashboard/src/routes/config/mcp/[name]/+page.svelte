@@ -20,10 +20,10 @@
 </script>
 
 <EditorRoute
-  found={name === 'new' || server !== null}
+  found={name === "new" || server !== null}
   loaded={fleet !== null}
   problem={store.fleet.error}
-  saveLabel={name === 'new' ? 'Add server' : 'Save changes'}
+  saveLabel={name === "new" ? "Add server" : "Save changes"}
   {section}
   what="MCP server"
 >

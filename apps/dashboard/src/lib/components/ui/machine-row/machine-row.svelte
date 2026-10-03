@@ -28,14 +28,14 @@
   } = $props();
 </script>
 
-<span class="tile" style={ink ? '' : `color:${hue}`} class:ink><Icon /></span>
+<span class="tile" style={ink ? "" : `color:${hue}`} class:ink><Icon /></span>
 <span class="text">
   <span class="name">{name}</span>
   <span class="meta"
     ><span
       class="dot"
-      class:away={presence === 'away'}
-      class:online={presence === 'online'}
+      class:away={presence === "away"}
+      class:online={presence === "online"}
     ></span>{meta}</span
   >
 </span>

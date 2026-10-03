@@ -27,7 +27,9 @@
 <span
   class="selection-chip"
   data-flip="pop"
-  {@attach land(() => selectionShare(selection.element), { ms: dur("--dur-pop") })}
+  {@attach land(() => selectionShare(selection.element), {
+    ms: dur("--dur-pop"),
+  })}
 >
   <button
     aria-label={`Edit selection… ${label}`}
@@ -44,12 +46,15 @@
     <span class="lines">
       <span class="name">{label}</span>
       <span class:source={!selection.note}
-        >{selection.note || (source?.file ? `${source.file}:${source.line ?? '?'}` : '')}</span
+        >{selection.note ||
+          (source?.file ? `${source.file}:${source.line ?? "?"}` : "")}</span
       >
     </span>
   </button>
   <Tip label="Remove selection">
-    {#snippet children(tip)}
+    {#snippet children(
+      tip
+    )}
       <button
         {...tip}
         aria-label="Remove selection"

@@ -107,9 +107,11 @@
 
 <Popover.Root>
   <Popover.Trigger
-    aria-label="{what}: on {applied} of {machines.length} machines{failed > 0 ? `, ${failed} refused` : ''}"
+    aria-label="{what}: on {applied} of {machines.length} machines{failed > 0
+      ? `, ${failed} refused`
+      : ""}"
     class="rollout"
-    data-fail={failed > 0 ? '' : undefined}
+    data-fail={failed > 0 ? "" : undefined}
   >
     <span aria-hidden="true" class="glyph" data-glyph={glyph}>
       <IconWarningTriangle data-for="fail" />
@@ -133,20 +135,22 @@
     {/if}
     {#each machines as machine, index (machine.machineId)}
       {@const item = stateOf(machine)}
-      {@const online = machine.status === 'online'}
+      {@const online = machine.status === "online"}
       <div class="machine">
         <div class="line">
           <MachineRow
             hue={machineHue(index, online)}
             icon={machineIcon(machine.os)}
-            meta="{SAID[item?.state ?? ''] ?? 'Not reported'} · {machineOs(machine.os).label}{online ? '' : ' · offline'}"
+            meta="{SAID[item?.state ?? ""] ?? "Not reported"} · {machineOs(
+              machine.os
+            ).label}{online ? "" : " · offline"}"
             name={machineLabel(machine.hostname)}
-            presence={online ? 'online' : 'off'}
+            presence={online ? "online" : "off"}
           >
             {#snippet trailing()}
-              {#if item?.state === 'failed'}
+              {#if item?.state === "failed"}
                 <span class="mark fail"><IconWarningTriangle /></span>
-              {:else if item?.state === 'applied'}
+              {:else if item?.state === "applied"}
                 <span class="mark"><IconCheck /></span>
               {:else}
                 {@const syncing = asked[machine.machineId] === true}
@@ -156,7 +160,10 @@
                   aria-label="Sync {machineLabel(machine.hostname)}"
                   class="sync"
                   disabled={!online}
-                  onclick={whileIdle(() => syncing, () => resync(machine))}
+                  onclick={whileIdle(
+                    () => syncing,
+                    () => resync(machine)
+                  )}
                   type="button"
                 >
                   <PendingContent
@@ -177,14 +184,23 @@
             <span>{refused[machine.machineId]}</span>
           </p>
         {/if}
-        {#if item?.state === 'failed'}
+        {#if item?.state === "failed"}
           <FleetFault
             group={{
-              origin: 'machine',
+              origin: "machine",
               cause: causeOf(item.detail),
               scope: kind,
               machineId: machine.machineId,
-              faults: [{ origin: 'machine', scope: kind, key: kind === 'memory' ? '' : name, machineId: machine.machineId, detail: item.detail, cause: causeOf(item.detail) }],
+              faults: [
+                {
+                  origin: "machine",
+                  scope: kind,
+                  key: kind === "memory" ? "" : name,
+                  machineId: machine.machineId,
+                  detail: item.detail,
+                  cause: causeOf(item.detail),
+                },
+              ],
             }}
             {machines}
           />

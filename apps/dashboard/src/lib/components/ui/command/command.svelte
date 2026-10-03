@@ -16,7 +16,10 @@
 </script>
 
 <CommandPrimitive.Root
-  class={cn("flex size-full flex-col overflow-hidden rounded-[var(--radius-sm)] bg-[var(--surface-raised)] p-1 text-foreground", className)}
+  class={cn(
+    "flex size-full flex-col overflow-hidden rounded-[var(--radius-sm)] bg-[var(--surface-raised)] p-1 text-foreground",
+    className
+  )}
   data-slot="command"
   bind:this={api}
   bind:ref

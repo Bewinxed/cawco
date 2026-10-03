@@ -36,9 +36,13 @@
       transition-colors duration-(--dur-control) ease-out hover:text-foreground"
     {href}
     use:dragSession={{
-      sessionId: href.slice('/session/'.length),
+      sessionId: href.slice("/session/".length),
       from: null,
-      ctx: () => ({ machine: machineId, cwd: info.cwd ?? '', harness: info.harness ?? 'claude' }),
+      ctx: () => ({
+        machine: machineId,
+        cwd: info.cwd ?? "",
+        harness: info.harness ?? "claude",
+      }),
     }}
   >
     <!-- Full-width band, measured content: the same bargain the live rows make. -->

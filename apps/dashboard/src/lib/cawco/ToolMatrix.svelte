@@ -86,17 +86,21 @@
   }
 </script>
 
-{#snippet cell(machine: Machine, spec: ToolSpec, online: boolean)}
+{#snippet cell(
+  machine: Machine,
+  spec: ToolSpec,
+  online: boolean
+)}
   {@const toolStatus = machine.tools?.[spec.id]}
   {@const pending = asked[cellKey(machine.machineId, spec.id)] === true}
-  {@const shown = toolStatus?.state ?? 'unknown'}
+  {@const shown = toolStatus?.state ?? "unknown"}
   {@const failed = refused[cellKey(machine.machineId, spec.id)] === true}
 
-  {#if shown === 'installed'}
+  {#if shown === "installed"}
     <span class="flex items-center gap-[var(--space-1)]">
       <Badge class="{CHIP} text-success" variant="ghost">
         <IconCheck class="size-4 shrink-0" />
-        <span class="num font-mono">{toolStatus?.version ?? '—'}</span>
+        <span class="num font-mono">{toolStatus?.version ?? "—"}</span>
       </Badge>
       <span
         class="transition-opacity group-focus-within/cell:opacity-100 group-hover/cell:opacity-100 md:opacity-0"
@@ -114,12 +118,12 @@
         />
       </span>
     </span>
-  {:else if shown === 'installing'}
+  {:else if shown === "installing"}
     <Badge class="{CHIP} text-muted-foreground" variant="ghost">
       <Spinner class="size-4 shrink-0" />
       Installing…
     </Badge>
-  {:else if shown === 'missing'}
+  {:else if shown === "missing"}
     <Button
       disabled={!online}
       {failed}
@@ -130,14 +134,18 @@
       size="xs"
       variant="outline"
     />
-  {:else if shown === 'failed'}
+  {:else if shown === "failed"}
     <span class="flex items-center gap-[var(--space-1)]">
       <Popover.Root>
         <Popover.Trigger>
-          {#snippet child({ props })}
+          {#snippet child({
+            props,
+          })}
             <Badge
               {...props}
-              aria-label="Why {spec.name} did not install on {machineLabel(machine.hostname)}"
+              aria-label="Why {spec.name} did not install on {machineLabel(
+                machine.hostname
+              )}"
               class="{CHIP} cursor-pointer"
               variant="destructive"
             >
@@ -166,7 +174,7 @@
           </header>
           <pre
             class="max-h-56 overflow-auto px-[var(--space-3)] py-[var(--space-2)] font-mono text-label whitespace-pre-wrap"
-          >{toolStatus?.detail ?? 'The machine did not say why.'}</pre>
+          >{toolStatus?.detail ?? "The machine did not say why."}</pre>
           <footer
             class="border-t border-border px-[var(--space-3)] py-[var(--space-2)]"
           >
@@ -195,13 +203,17 @@
         variant="ghost"
       />
     </span>
-  {:else if shown === 'unsupported'}
+  {:else if shown === "unsupported"}
     <Popover.Root>
       <Popover.Trigger>
-        {#snippet child({ props })}
+        {#snippet child({
+          props,
+        })}
           <Badge
             {...props}
-            aria-label="Why {spec.name} cannot run on {machineLabel(machine.hostname)}"
+            aria-label="Why {spec.name} cannot run on {machineLabel(
+              machine.hostname
+            )}"
             class="{CHIP} cursor-pointer text-muted-foreground"
             variant="ghost"
           >
@@ -214,7 +226,7 @@
         class="w-80 rounded-[var(--radius-lg)] shadow-xl"
       >
         <p class="font-mono text-label">
-          {toolStatus?.detail ?? 'no install method for this platform'}
+          {toolStatus?.detail ?? "no install method for this platform"}
         </p>
       </Popover.Content>
     </Popover.Root>
@@ -222,7 +234,9 @@
     <span class="flex items-center gap-[var(--space-1)]">
       <Tooltip.Root>
         <Tooltip.Trigger>
-          {#snippet child({ props })}
+          {#snippet child({
+            props,
+          })}
             <Badge
               {...props}
               class="{CHIP} text-[var(--ink-subtle)]"
@@ -325,8 +339,8 @@
       <Table.Body>
         {#each machines as machine (machine.machineId)}
           {@const os = machineOs(machine.os)}
-          {@const online = machine.status === 'online'}
-          <Table.Row class={online ? '' : 'opacity-50'}>
+          {@const online = machine.status === "online"}
+          <Table.Row class={online ? "" : "opacity-50"}>
             <!-- biome-ignore-start lint/a11y/noHeaderScope: Table.Head renders a real <th>; biome only sees the component tag -->
             <Table.Head
               class="sticky left-0 z-10 h-auto bg-[var(--surface-raised)] px-[var(--space-4)] py-[var(--space-2)]"
@@ -344,11 +358,13 @@
                       >{machineLabel(machine.hostname)}</span
                     >
                     <span
-                      class="size-2 shrink-0 rounded-full {online ? 'bg-success' : 'bg-muted-foreground/40'}"
+                      class="size-2 shrink-0 rounded-full {online
+                        ? "bg-success"
+                        : "bg-muted-foreground/40"}"
                     ></span>
                   </span>
                   <span class="text-label text-muted-foreground"
-                    >{os.label}{online ? '' : ' · offline'}</span
+                    >{os.label}{online ? "" : " · offline"}</span
                   >
                 </span>
               </span>

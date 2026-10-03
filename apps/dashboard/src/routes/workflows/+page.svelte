@@ -66,10 +66,14 @@
   }
 </script>
 <svelte:head><title>Workflows · CawCo</title></svelte:head>
-{#snippet newMenu(inEmptyState: boolean)}
+{#snippet newMenu(
+  inEmptyState: boolean
+)}
   <DropdownMenu.Root>
     <DropdownMenu.Trigger disabled={!live || busy}>
-      {#snippet child({ props })}
+      {#snippet child({
+        props,
+      })}
         <button
           {...props}
           class="wf-btn wf-primary"
@@ -82,7 +86,7 @@
         </button>
       {/snippet}
     </DropdownMenu.Trigger>
-    <DropdownMenu.Content align={inEmptyState ? 'start' : 'end'} class="w-64">
+    <DropdownMenu.Content align={inEmptyState ? "start" : "end"} class="w-64">
       <DropdownMenu.PendingItem
         class="new-item"
         label="New graph"
@@ -191,9 +195,9 @@
               {/if}
             </td>
             <td class="age wf-muted">
-              {last ? formatDistanceToNow(new Date(last.startedAt)) : '—'}
+              {last ? formatDistanceToNow(new Date(last.startedAt)) : "—"}
               <span class="mobile"
-                >{` · ${runs.length} ${runs.length === 1 ? 'run' : 'runs'}`}</span
+                >{` · ${runs.length} ${runs.length === 1 ? "run" : "runs"}`}</span
               >
             </td>
             <td class="count">{runs.length}</td>
@@ -201,8 +205,12 @@
               <button
                 class="wf-btn desktop"
                 disabled={!live}
-                onclick={(event) => { launch = { workflow, from: event.currentTarget }; }}
-                title={live ? undefined : "Can't run while the hub is unreachable"}
+                onclick={(event) => {
+                  launch = { workflow, from: event.currentTarget };
+                }}
+                title={live
+                  ? undefined
+                  : "Can't run while the hub is unreachable"}
                 type="button"
               >
                 Run
@@ -217,8 +225,12 @@
                 <button
                   class="wf-btn"
                   disabled={!live}
-                  onclick={(event) => { launch = { workflow, from: event.currentTarget }; }}
-                  title={live ? undefined : "Can't run while the hub is unreachable"}
+                  onclick={(event) => {
+                    launch = { workflow, from: event.currentTarget };
+                  }}
+                  title={live
+                    ? undefined
+                    : "Can't run while the hub is unreachable"}
                   type="button"
                 >
                   Run
@@ -234,7 +246,9 @@
 {#if launch}
   <WorkflowLaunch
     from={launch.from}
-    onclose={() => { launch = undefined; }}
+    onclose={() => {
+      launch = undefined;
+    }}
     workflow={launch.workflow}
   />
 {/if}

@@ -328,7 +328,10 @@
     <div class="identity">
       <span class="title">{title}</span
       ><span class="path"
-        >{displayPath || (source && 'dir' in source ? source.dir.split('/').filter(Boolean).at(-1) : '')}</span
+        >{displayPath ||
+          (source && "dir" in source
+            ? source.dir.split("/").filter(Boolean).at(-1)
+            : "")}</span
       >
     </div>
     <button
@@ -344,7 +347,9 @@
     <button
       aria-label="Reload"
       class="other touch-hit"
-      onclick={() => { reload += 1; }}
+      onclick={() => {
+        reload += 1;
+      }}
       title="Reload"
       type="button"
     >
@@ -369,7 +374,7 @@
       type="button"
     >
       <PendingContent
-        failed={failure?.again === 'close'}
+        failed={failure?.again === "close"}
         icon={IconClose}
         pending={closing}
       />
@@ -382,12 +387,20 @@
       <iframe
         allow="clipboard-write"
         inert={!current}
-        onload={() => { if (key === frameKey) { announce(); } }}
+        onload={() => {
+          if (key === frameKey) {
+            announce();
+          }
+        }}
         ontransitionend={landed}
         src={url}
         title="Preview"
         class:ready={!current || connected}
-        {@attach (node) => { if (key === frameKey) { iframe = node; } }}
+        {@attach (node) => {
+          if (key === frameKey) {
+            iframe = node;
+          }
+        }}
       ></iframe>
     {/each}
     <div
@@ -402,7 +415,7 @@
     {#if failure}
       <div class="error" role="alert" transition:appear>
         <p>{failure.message}</p>
-        {#if failure.again === 'reload'}
+        {#if failure.again === "reload"}
           <Button
             label="Try again"
             onclick={retry}

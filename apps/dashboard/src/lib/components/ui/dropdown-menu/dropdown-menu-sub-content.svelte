@@ -20,7 +20,10 @@
 </script>
 
 <DropdownMenuPrimitive.SubContent
-  class={cn("kit-pop relative w-auto min-w-36 origin-(--bits-dropdown-menu-content-transform-origin)", className)}
+  class={cn(
+    "kit-pop relative w-auto min-w-36 origin-(--bits-dropdown-menu-content-transform-origin)",
+    className
+  )}
   data-slot="dropdown-menu-sub-content"
   bind:ref
   {...restProps}

@@ -621,8 +621,8 @@
         {assistantOpen}
         {narrow}
         onassistant={() => {
-        assistantOpen = !assistantOpen;
-      }}
+          assistantOpen = !assistantOpen;
+        }}
       />
       <div
         aria-label="Resize sidebar"
@@ -650,9 +650,9 @@
           {assistantOpen}
           {narrow}
           onassistant={() => {
-          railOpen = false;
-          assistantOpen = true;
-        }}
+            railOpen = false;
+            assistantOpen = true;
+          }}
         />
       </Sheet.Content>
     </Sheet.Root>
@@ -663,8 +663,8 @@
           aria-label="Open navigation"
           class="burger min-[900px]:hidden"
           onclick={() => {
-          railOpen = true;
-        }}
+            railOpen = true;
+          }}
           type="button"
         >
           <IconSidebar />
@@ -679,8 +679,8 @@
             </div>
           {/if}
           {#if hostedLeaf}
-          <!-- The strip above has the slot. -->
-          {:else if narrow && page.url.pathname.startsWith('/config/')}
+            <!-- The strip above has the slot. -->
+          {:else if narrow && page.url.pathname.startsWith("/config/")}
             <!-- Inside a section on a phone the rail is its own page, so the bar
                leads back to it. -->
             <a
@@ -725,16 +725,18 @@
           <!-- The machines, one click away beside Jump. -->
           <MachinesButton />
           <Tip keys="⌘K" label="Jump to session">
-            {#snippet children(tip)}
+            {#snippet children(
+              tip
+            )}
               <Button
                 {...tip}
                 aria-label="Jump to session"
                 class="jump"
                 data-share="jump"
                 onclick={(event: MouseEvent) => {
-                jumpOpener = event.currentTarget as HTMLElement;
-                jumpOpen = true;
-              }}
+                  jumpOpener = event.currentTarget as HTMLElement;
+                  jumpOpen = true;
+                }}
                 size="sm"
                 variant="outline"
               >
@@ -751,8 +753,8 @@
           <span class="min-[900px]:hidden">
             <AssistantOrb
               onclick={() => {
-              assistantOpen = !assistantOpen;
-            }}
+                assistantOpen = !assistantOpen;
+              }}
               open={assistantOpen}
             />
           </span>
@@ -770,7 +772,7 @@
       <div class="banner-slot" {@attach reflow()}>
         {#if browser && showBanner}
           <div
-            class="banner {everConnected ? 'warn' : 'bad'}"
+            class="banner {everConnected ? "warn" : "bad"}"
             data-flip
             role="status"
           >
@@ -788,10 +790,10 @@
             {/if}
             <!-- Pending in place while an attempt is out, whoever started it. -->
             <Button
-              failed={cawco.status !== 'connecting'}
-              label={everConnected ? 'Reconnect' : 'Retry'}
+              failed={cawco.status !== "connecting"}
+              label={everConnected ? "Reconnect" : "Retry"}
               onclick={reconnectNow}
-              pending={cawco.status === 'connecting'}
+              pending={cawco.status === "connecting"}
               pendingLabel="Connecting…"
               size="sm"
               variant="outline"

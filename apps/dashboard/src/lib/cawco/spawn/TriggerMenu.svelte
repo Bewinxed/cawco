@@ -43,7 +43,10 @@
     <button
       class="row press-tint"
       data-fh="1"
-      onmousedown={(event) => { event.preventDefault(); onpick(item); }}
+      onmousedown={(event) => {
+        event.preventDefault();
+        onpick(item);
+      }}
       tabindex="-1"
       type="button"
       class:active={i === index}

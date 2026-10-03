@@ -39,7 +39,7 @@
   <span
     aria-hidden="true"
     class="fill"
-    style={`transform:translateY(calc(${index} * (var(--row-h) + 2px)));opacity:${rows.some(row => row.value === value) ? 1 : 0}`}
+    style={`transform:translateY(calc(${index} * (var(--row-h) + 2px)));opacity:${rows.some((row) => row.value === value) ? 1 : 0}`}
   ></span>
   {#each rows as row, i (row.value)}
     {@const Icon = row.icon}
@@ -47,7 +47,9 @@
     <!-- biome-ignore lint/a11y/useSemanticElements: the permission rows are designed tiles with a sliding fill; a native radio cannot render them -->
     <button
       aria-checked={on}
-      aria-describedby={row.reason ? `${uid}-perm-${row.value}-reason` : undefined}
+      aria-describedby={row.reason
+        ? `${uid}-perm-${row.value}-reason`
+        : undefined}
       class="row ns-in press-tint"
       data-fh="1"
       data-perm={row.value}

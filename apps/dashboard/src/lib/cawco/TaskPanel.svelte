@@ -50,9 +50,11 @@
   };
 </script>
 
-{#snippet glyph(task: SessionTask)}
+{#snippet glyph(
+  task: SessionTask
+)}
   <span class="flex w-3 shrink-0 items-center justify-center">
-    {#if task.status === 'completed'}
+    {#if task.status === "completed"}
       <svg
         aria-hidden="true"
         class="text-success"
@@ -69,7 +71,7 @@
           stroke-width="1.5"
         />
       </svg>
-    {:else if task.status === 'in_progress'}
+    {:else if task.status === "in_progress"}
       <span class="size-1.5 rounded-full bg-warning"></span>
     {:else}
       <span
@@ -81,7 +83,10 @@
 
 <!-- One row's contents, so the two rows below — the one that opens and the one
      that has nothing to open — say the same thing rather than nearly. -->
-{#snippet line(task: SessionTask, blocker: string | null)}
+{#snippet line(
+  task: SessionTask,
+  blocker: string | null
+)}
   {@render glyph(task)}
   <span class="min-w-0 truncate text-label {subjectClass(task)}"
     >{task.subject}</span
@@ -100,8 +105,8 @@
   {/if}
   <span
     class="shrink-0 font-mono text-meta text-muted-foreground tabular-nums {blocker
-      ? ''
-      : 'ml-auto'}"
+      ? ""
+      : "ml-auto"}"
     data-tabular
     >#{task.id}</span
   >
@@ -124,8 +129,8 @@
   {#each tasks as task (task.id)}
     {@const blocker = blockerOf(task, tasks)}
     {@const row = `flex w-full items-center gap-2 text-left ${
-      dense ? 'min-h-8 px-2' : 'min-h-9 px-3'
-    } ${blocker ? 'opacity-60' : ''}`}
+      dense ? "min-h-8 px-2" : "min-h-9 px-3"
+    } ${blocker ? "opacity-60" : ""}`}
     {#if task.description}
       <Collapsible.Root
         onOpenChange={() => toggle(task.id)}
@@ -141,8 +146,8 @@
         <Collapsible.Content>
           <p
             class="max-w-[60ch] pb-2 text-body whitespace-pre-line {dense
-              ? 'pr-2 pl-7'
-              : 'pr-3 pl-8'}"
+              ? "pr-2 pl-7"
+              : "pr-3 pl-8"}"
           >
             {task.description}
           </p>

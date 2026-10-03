@@ -83,7 +83,9 @@
 
 <svelte:head><title>{title} · Configure · CawCo</title></svelte:head>
 
-{#snippet fault(text: string)}
+{#snippet fault(
+  text: string
+)}
   <Alert.Root variant="destructive">
     <IconWarningTriangle />
     <Alert.Description>{text}</Alert.Description>
@@ -128,7 +130,7 @@
         {:else}
           <div
             class="slot"
-            out:fade={{ duration: dur('--dur-control'), easing: easeOut }}
+            out:fade={{ duration: dur("--dur-control"), easing: easeOut }}
           >
             <SkeletonRows fill={card !== null} />
           </div>

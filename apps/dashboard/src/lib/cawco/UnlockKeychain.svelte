@@ -128,11 +128,11 @@
       {#key view}
         <div
           class="flex flex-col gap-6"
-          style:min-height={view === 'status' ? `${held}px` : undefined}
+          style:min-height={view === "status" ? `${held}px` : undefined}
           in:crossIn
           out:crossOut
         >
-          {#if phase.kind === 'working' || phase.kind === 'done'}
+          {#if phase.kind === "working" || phase.kind === "done"}
             <MachineAuthStatus
               onclose={close}
               outcome={phase}
@@ -140,7 +140,7 @@
               working={{
                 title: `Unlocking ${machine.hostname}…`,
                 steps: [
-                  'Unlocking the login keychain',
+                  "Unlocking the login keychain",
                   `Checking ${machine.hostname} can read its credentials`,
                 ],
               }}
@@ -160,21 +160,23 @@
 
             <form class="flex flex-col gap-[var(--space-3)]" onsubmit={unlock}>
               <Input
-                aria-describedby={phase.kind === 'error' ? 'unlock-error' : 'unlock-note'}
-                aria-invalid={phase.kind === 'error' ? 'true' : undefined}
+                aria-describedby={phase.kind === "error"
+                  ? "unlock-error"
+                  : "unlock-note"}
+                aria-invalid={phase.kind === "error" ? "true" : undefined}
                 aria-label="Login password for {machine.hostname}"
                 autocomplete="current-password"
                 placeholder="Login password for {machine.hostname}"
                 type="password"
                 bind:value={password}
                 {@attach (node) => {
-                  if (phase.kind === 'error') {
+                  if (phase.kind === "error") {
                     node.focus();
                   }
                 }}
               />
 
-              {#if phase.kind === 'error'}
+              {#if phase.kind === "error"}
                 <p class="text-label text-destructive" id="unlock-error">
                   {phase.message}
                 </p>

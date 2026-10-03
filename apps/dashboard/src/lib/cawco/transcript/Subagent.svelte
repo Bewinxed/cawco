@@ -94,7 +94,7 @@
       <span class="pill {phase}">
         {phase}
         {#if view.steps}
-          · {view.steps} step{view.steps === 1 ? '' : 's'}
+          · {view.steps} step{view.steps === 1 ? "" : "s"}
         {/if}
         · {elapsed}
       </span>
@@ -121,15 +121,15 @@
       <CollapsibleLazy count={1} open={open.get()}>
         <div class="inner">
           {#each rows as row (row.key)}
-            {#if row.kind === 'tools'}
+            {#if row.kind === "tools"}
               <ToolGroup messages={row.messages} />
-            {:else if row.kind === 'question'}
+            {:else if row.kind === "question"}
               <ToolGroup messages={[row.message]} />
-            {:else if row.kind === 'thinking'}
+            {:else if row.kind === "thinking"}
               <Thinking live={row.live} text={row.text} />
-            {:else if row.kind === 'stream'}
+            {:else if row.kind === "stream"}
               <div class="say"><MessageBody source={row.text} streaming /></div>
-            {:else if row.kind === 'single'}
+            {:else if row.kind === "single"}
               <MessageRow
                 agentName={branch.subagentType}
                 grouped={row.grouped}
@@ -244,7 +244,7 @@
     background-color: var(--mark-8);
   }
 
-  /* biome-ignore lint/style/noDescendingSpecificity: cascade order is load-bearing — .tk's base color must lose to the :hover rule above it. */
+  /* Cascade order is load-bearing — .tk's base color must lose to the :hover rule above it. */
   .tk {
     font-family: var(--font-mono);
     color: var(--ink-strong);

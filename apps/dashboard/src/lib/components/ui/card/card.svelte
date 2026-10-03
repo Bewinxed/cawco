@@ -14,7 +14,10 @@
 </script>
 
 <div
-  class={cn("group/card flex flex-col gap-(--card-spacing) rounded-lg bg-[var(--surface-raised)] py-(--card-spacing) text-body text-card-foreground shadow-[var(--shadow-tile)] [--card-spacing:18px] data-[size=sm]:[--card-spacing:12px]", className)}
+  class={cn(
+    "group/card flex flex-col gap-(--card-spacing) rounded-lg bg-[var(--surface-raised)] py-(--card-spacing) text-body text-card-foreground shadow-[var(--shadow-tile)] [--card-spacing:18px] data-[size=sm]:[--card-spacing:12px]",
+    className
+  )}
   data-size={size}
   data-slot="card"
   bind:this={ref}

@@ -481,10 +481,12 @@
 </script>
 
 <svelte:head>
-  <title>{project?.name ?? 'Project'} &middot; CawCo</title>
+  <title>{project?.name ?? "Project"} &middot; CawCo</title>
 </svelte:head>
 
-{#snippet skeletonRows(rows: number)}
+{#snippet skeletonRows(
+  rows: number
+)}
   {#each count(rows) as i (i)}
     <div class="flex min-h-9 items-center gap-3 px-4 py-1.5">
       <Skeleton class="size-5 shrink-0 rounded-[var(--radius-xs)]" />
@@ -515,7 +517,10 @@
                 {machineLabel(machine.hostname)}
               </span>
               <span
-                class="size-2 shrink-0 rounded-full transition-[background-color] duration-(--dur-panel) ease-(--ease-out) {machine.status === 'online' ? 'bg-success' : 'bg-muted-foreground/40'}"
+                class="size-2 shrink-0 rounded-full transition-[background-color] duration-(--dur-panel) ease-(--ease-out) {machine.status ===
+                "online"
+                  ? "bg-success"
+                  : "bg-muted-foreground/40"}"
                 title={machine.status}
               ></span>
             </span>
@@ -527,14 +532,19 @@
       <div class="flex shrink-0 items-center gap-2">
         <Popover.Root bind:open={spawnOpen}>
           <Popover.Trigger>
-            {#snippet child({ props })}
+            {#snippet child({
+              props,
+            })}
               <Button {...props} class="pressable">New session</Button>
             {/snippet}
           </Popover.Trigger>
           <Popover.Content align="end" class="w-80 p-0">
             <form
               class="flex flex-col gap-3 p-4"
-              onsubmit={(e) => { e.preventDefault(); startSession(false); }}
+              onsubmit={(e) => {
+                e.preventDefault();
+                startSession(false);
+              }}
             >
               <!-- biome-ignore lint/a11y/noLabelWithoutControl: the <Input> component renders a native input as its only child; Biome can't see through the component boundary -->
               <label
@@ -584,7 +594,9 @@
         </Button>
         <AlertDialog.Root bind:open={forgetOpen}>
           <AlertDialog.Trigger>
-            {#snippet child({ props })}
+            {#snippet child({
+              props,
+            })}
               <Button
                 {...props}
                 class="text-muted-foreground"
@@ -609,7 +621,9 @@
             <AlertDialog.Footer>
               <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
               <AlertDialog.Action>
-                {#snippet child({ props })}
+                {#snippet child({
+                  props,
+                })}
                   <Button
                     {...props}
                     failed={!forgotten}
@@ -642,33 +656,33 @@
         <Tabs.Root
           class="min-h-0 flex-1 gap-4 xl:flex-row xl:data-[orientation=horizontal]:flex-row"
           onValueChange={(val) => {
-              const doc = docs?.find((d) => d.path === val);
-              if (doc) {
-                // biome-ignore lint/complexity/noVoid: fire-and-forget — openDoc manages its own loading state
-                void openDoc(doc);
-              }
-            }}
-          orientation={docsColumn.current ? 'vertical' : 'horizontal'}
-          value={open?.path ?? ''}
+            const doc = docs?.find((d) => d.path === val);
+            if (doc) {
+              // biome-ignore lint/complexity/noVoid: fire-and-forget — openDoc manages its own loading state
+              void openDoc(doc);
+            }
+          }}
+          orientation={docsColumn.current ? "vertical" : "horizontal"}
+          value={open?.path ?? ""}
         >
           <div class="block md:hidden">
             {#if docs?.length}
               <Select.Root
                 onValueChange={(val) => {
-                    const doc = docs?.find((d) => d.path === val);
-                    if (doc) {
-                      // biome-ignore lint/complexity/noVoid: fire-and-forget — openDoc manages its own loading state
-                      void openDoc(doc);
-                    }
-                  }}
+                  const doc = docs?.find((d) => d.path === val);
+                  if (doc) {
+                    // biome-ignore lint/complexity/noVoid: fire-and-forget — openDoc manages its own loading state
+                    void openDoc(doc);
+                  }
+                }}
                 type="single"
-                value={open?.path ?? ''}
+                value={open?.path ?? ""}
               >
                 <Select.Trigger
                   class="w-full font-mono text-label"
                   press="tint"
                 >
-                  {open?.name ?? 'Select a document'}
+                  {open?.name ?? "Select a document"}
                 </Select.Trigger>
                 <Select.Content>
                   {#each docs as doc (doc.path)}
@@ -751,19 +765,22 @@
                   <ErrorText
                     class="text-label text-error"
                     message={docError}
-                    title="Error with {open?.name ?? 'the document'}"
+                    title="Error with {open?.name ?? "the document"}"
                   />
                 {/if}
                 {#if docs === null && !docsError}
                   <Skeleton class="ml-auto h-[30px] w-[50px] shrink-0" />
                 {:else if !open}
-                <!-- No doc to edit. -->
+                  <!-- No doc to edit. -->
                 {:else if !docsRead}
                   <Skeleton class="ml-auto h-[30px] w-[50px] shrink-0" />
                 {:else if draft === null}
                   <Button
                     class="ml-auto shrink-0"
-                    onclick={() => reshape(() => { draft = content; })}
+                    onclick={() =>
+                      reshape(() => {
+                        draft = content;
+                      })}
                     size="sm"
                     variant="outline"
                   >
@@ -772,7 +789,10 @@
                 {:else}
                   <Button
                     class="ml-auto shrink-0"
-                    onclick={() => reshape(() => { draft = null; })}
+                    onclick={() =>
+                      reshape(() => {
+                        draft = null;
+                      })}
                     size="sm"
                     variant="ghost"
                   >
@@ -839,7 +859,7 @@
                         <div
                           class="overflow-y-auto px-[var(--space-6)] py-[var(--space-4)] md:px-[var(--space-7)]"
                           bind:this={docBody}
-                          style:max-height={expanded ? '70vh' : COLLAPSED_DOC}
+                          style:max-height={expanded ? "70vh" : COLLAPSED_DOC}
                           {@attach measureClip}
                         >
                           <div
@@ -861,7 +881,7 @@
                           onclick={toggleExpanded}
                           type="button"
                         >
-                          {expanded ? 'Show less' : 'Read more'}
+                          {expanded ? "Show less" : "Read more"}
                         </button>
                       {/if}
                     {:else}
@@ -898,8 +918,8 @@
         <MemoryCard
           content={claude}
           emptyText={claudeOnline
-        ? 'No CLAUDE.md in this project — click to create it.'
-        : `No machine online — ${machine ? machineLabel(machine.hostname) : project.machineId} has to be up to read this file.`}
+            ? "No CLAUDE.md in this project — click to create it."
+            : `No machine online — ${machine ? machineLabel(machine.hostname) : project.machineId} has to be up to read this file.`}
           loading={!claudeRead}
           path="CLAUDE.md"
           save={claudeOnline ? saveClaude : undefined}
@@ -945,7 +965,7 @@
           </header>
           <div
             class="flex flex-col gap-1.5 px-[var(--space-3)] pb-[var(--space-3)]"
-            {@attach highlight({ rows: 'a' })}
+            {@attach highlight({ rows: "a" })}
             {@attach rowsWatched && reflow()}
           >
             <!-- Each answer takes the place of the skeleton that stood for it:

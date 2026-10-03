@@ -365,19 +365,19 @@
 </script>
 
 <EditorFrame
-  deleteLabel={id ? 'Delete rule' : undefined}
+  deleteLabel={id ? "Delete rule" : undefined}
   {deleting}
   failed={failed !== undefined}
   oncancel={cancel}
   ondelete={id ? askRemove : undefined}
   onsubmit={save}
-  saveLabel={id ? 'Save changes' : 'Create rule'}
+  saveLabel={id ? "Save changes" : "Create rule"}
   saving={busy}
-  title={id ? draft.name || 'Rule' : 'New rule'}
+  title={id ? draft.name || "Rule" : "New rule"}
 >
   {#snippet header()}
     <TitleInput
-      invalid={Boolean(shown('name') || duplicate)}
+      invalid={Boolean(shown("name") || duplicate)}
       label="Rule name"
       onblur={() => {
         touched.name = true;
@@ -385,14 +385,16 @@
       placeholder="Name this rule"
       bind:value={draft.name}
     />
-    {#if shown('name')}
+    {#if shown("name")}
       <p class="problem" in:appear>{wrong.name}</p>
     {:else if duplicate}
       <p class="problem" in:appear>{duplicate}</p>
     {/if}
     <ReadingWell>{ruleSentence(draft)}</ReadingWell>
     <SwitchField
-      hint={draft.enabled ? 'Watching every session it applies to' : 'Off — it watches nothing'}
+      hint={draft.enabled
+        ? "Watching every session it applies to"
+        : "Off — it watches nothing"}
       id="rule-enabled"
       label="Enabled"
       bind:checked={draft.enabled}
@@ -439,16 +441,16 @@
       label="Trigger"
       onchange={(next) => setTrigger(next as RuleTrigger)}
       options={[
-        { value: 'pattern', label: 'A pattern match' },
-        { value: 'every-turn', label: 'Every turn' },
+        { value: "pattern", label: "A pattern match" },
+        { value: "every-turn", label: "Every turn" },
       ]}
       value={draft.trigger}
     />
-    {#if shown('trigger')}
+    {#if shown("trigger")}
       <p class="problem" in:appear>{wrong.trigger}</p>
     {/if}
     <!-- Each block the choices above open or close folds (240 / 160). -->
-    {#if draft.trigger === 'every-turn'}
+    {#if draft.trigger === "every-turn"}
       <div class="fold" in:unfold out:unfold>
         <p class="note">
           The rule fires at the end of every turn — no pattern needed. The
@@ -461,10 +463,10 @@
           label="Match"
           onchange={(next) => setMatchKind(next as RuleMatchKind)}
           options={[
-          { value: 'phrase', label: 'A phrase' },
-          { value: 'regex', label: 'A regular expression' },
-          { value: 'meaning', label: 'Meaning' },
-        ]}
+            { value: "phrase", label: "A phrase" },
+            { value: "regex", label: "A regular expression" },
+            { value: "meaning", label: "Meaning" },
+          ]}
           value={draft.matchKind}
         />
         {#snippet needsOpenrouter()}
@@ -476,40 +478,44 @@
         <Field
           id="rule-pattern"
           label={PATTERN_LABEL[draft.matchKind]}
-          problem={shown('pattern')}
-          warn={draft.matchKind === 'meaning' && !openrouterConnected ? needsOpenrouter : undefined}
+          problem={shown("pattern")}
+          warn={draft.matchKind === "meaning" && !openrouterConnected
+            ? needsOpenrouter
+            : undefined}
         >
           {#snippet hint()}
-            {#if draft.matchKind === 'meaning'}
+            {#if draft.matchKind === "meaning"}
               Jev answers it about each finished message or turn. The rule fires
               when the answer is yes.
-            {:else if draft.matchKind === 'regex'}
+            {:else if draft.matchKind === "regex"}
               JavaScript syntax. It is matched against the whole message, not
               line by line.
             {/if}
           {/snippet}
-          {#if draft.matchKind === 'meaning'}
+          {#if draft.matchKind === "meaning"}
             <Textarea
-              aria-invalid={shown('pattern') ? 'true' : undefined}
+              aria-invalid={shown("pattern") ? "true" : undefined}
               class="resize-y"
               id="rule-pattern"
               onblur={() => {
-              touched.pattern = true;
-            }}
+                touched.pattern = true;
+              }}
               placeholder="Is the agent proposing to keep old behaviour alongside the new, a compatibility shim, or a fallback path?"
               rows={3}
               bind:value={draft.pattern}
             />
           {:else}
             <Input
-              aria-invalid={shown('pattern') ? 'true' : undefined}
+              aria-invalid={shown("pattern") ? "true" : undefined}
               autocomplete="off"
               class="font-mono"
               id="rule-pattern"
               onblur={() => {
-              touched.pattern = true;
-            }}
-              placeholder={draft.matchKind === 'phrase' ? 'honest caveat' : 'should (work|be fine)|probably works'}
+                touched.pattern = true;
+              }}
+              placeholder={draft.matchKind === "phrase"
+                ? "honest caveat"
+                : "should (work|be fine)|probably works"}
               spellcheck="false"
               bind:value={draft.pattern}
             />
@@ -518,15 +524,15 @@
         <!-- Text-matching options fold away for a meaning rule rather than popping. -->
         <div
           class="fold"
-          inert={draft.matchKind === 'meaning'}
-          {@attach folds(() => draft.matchKind !== 'meaning', FOLD)}
+          inert={draft.matchKind === "meaning"}
+          {@attach folds(() => draft.matchKind !== "meaning", FOLD)}
         >
           <SwitchField
             id="rule-case"
             label="Case sensitive"
             bind:checked={draft.caseSensitive}
           />
-          {#if draft.matchKind === 'phrase'}
+          {#if draft.matchKind === "phrase"}
             <div in:unfold out:unfold>
               <SwitchField
                 id="rule-whole"
@@ -539,12 +545,12 @@
         <Choice
           label="Read"
           onchange={(next) => {
-          draft.watch = next as RuleWatch;
-        }}
+            draft.watch = next as RuleWatch;
+          }}
           options={WATCH}
           value={draft.watch}
         />
-        {#if draft.watch !== 'text' && draft.timing === 'turn'}
+        {#if draft.watch !== "text" && draft.timing === "turn"}
           <p class="caution" in:unfold out:unfold>
             Reasoning is not kept once a turn is over. To watch thinking, fire
             on the message or the moment instead.
@@ -552,8 +558,8 @@
         {/if}
         <div
           class="fold"
-          inert={draft.matchKind === 'meaning'}
-          {@attach folds(() => draft.matchKind !== 'meaning', FOLD)}
+          inert={draft.matchKind === "meaning"}
+          {@attach folds(() => draft.matchKind !== "meaning", FOLD)}
         >
           <RuleTester {draft} bind:sample />
         </div>
@@ -570,21 +576,25 @@
       label="Action"
       onchange={(next) => setAction(next as RuleAction)}
       options={[
-        { value: 'reply', label: 'Canned reply', disabled: draft.trigger === 'every-turn' },
-        { value: 'llm', label: 'LLM verdict' },
+        {
+          value: "reply",
+          label: "Canned reply",
+          disabled: draft.trigger === "every-turn",
+        },
+        { value: "llm", label: "LLM verdict" },
       ]}
       value={draft.action}
     />
-    {#if draft.action === 'reply'}
+    {#if draft.action === "reply"}
       <div class="fold" in:unfold out:unfold>
-        <Field id="rule-reply" label="Reply" problem={shown('reply')}>
+        <Field id="rule-reply" label="Reply" problem={shown("reply")}>
           <Textarea
-            aria-invalid={shown('reply') ? 'true' : undefined}
+            aria-invalid={shown("reply") ? "true" : undefined}
             class="resize-y"
             id="rule-reply"
             onblur={() => {
-            touched.reply = true;
-          }}
+              touched.reply = true;
+            }}
             placeholder="if there's an honest caveat that you are aware of and you're just reporting it to the user instead of fixing it, then your work is not done yet"
             rows={4}
             bind:value={draft.reply}
@@ -594,20 +604,21 @@
           hint={how}
           id="rule-timing"
           label="Send it"
-          problem={shown('timing')}
+          problem={shown("timing")}
         >
           <Choice
             label="Send it"
             onchange={(next) => setTiming(next as RuleTiming)}
             options={TIMING.map((option) => ({
-            value: option.value,
-            label: option.label,
-            disabled: option.value === 'immediate' && draft.matchKind === 'meaning',
-          }))}
+              value: option.value,
+              label: option.label,
+              disabled:
+                option.value === "immediate" && draft.matchKind === "meaning",
+            }))}
             value={draft.timing}
           />
         </Field>
-        {#if draft.timing === 'immediate'}
+        {#if draft.timing === "immediate"}
           <div in:unfold out:unfold>
             <SwitchField
               hint="A claude session reads it mid-turn without stopping. Other harnesses cut the turn short to deliver it, which loses whatever they were partway through."
@@ -627,21 +638,21 @@
         <Field
           id="rule-prompt"
           label="Supervisor instructions"
-          problem={shown('prompt')}
+          problem={shown("prompt")}
         >
           <Textarea
-            aria-invalid={shown('prompt') ? 'true' : undefined}
+            aria-invalid={shown("prompt") ? "true" : undefined}
             class="resize-y"
             id="rule-prompt"
             onblur={() => {
-            touched.prompt = true;
-          }}
+              touched.prompt = true;
+            }}
             placeholder="If the agent claims work is done without pasting test output, reject the claim. Tell it to run the tests and paste the full output."
             rows={4}
             bind:value={draft.prompt}
           />
         </Field>
-        {#if shown('timing')}
+        {#if shown("timing")}
           <p class="problem" in:appear>{wrong.timing}</p>
         {/if}
       </div>
@@ -657,47 +668,53 @@
     <div class="pickers">
       <PickerChip
         label="Machine"
-        onpick={(next) => narrow('machineId', next)}
+        onpick={(next) => narrow("machineId", next)}
         options={[
-          { value: '', label: 'Every machine' },
-          ...cawco.machines.map((machine) => ({ value: machine.machineId, label: machine.hostname })),
+          { value: "", label: "Every machine" },
+          ...cawco.machines.map((machine) => ({
+            value: machine.machineId,
+            label: machine.hostname,
+          })),
         ]}
-        value={draft.scope.machineId ?? ''}
+        value={draft.scope.machineId ?? ""}
       />
       <PickerChip
         label="Project"
-        onpick={(next) => narrow('projectId', next)}
+        onpick={(next) => narrow("projectId", next)}
         options={[
-          { value: '', label: 'Every project' },
-          ...cawco.projects.map((project) => ({ value: project.id, label: project.name })),
+          { value: "", label: "Every project" },
+          ...cawco.projects.map((project) => ({
+            value: project.id,
+            label: project.name,
+          })),
         ]}
-        value={draft.scope.projectId ?? ''}
+        value={draft.scope.projectId ?? ""}
       />
       <PickerChip
         label="Harness"
-        onpick={(next) => narrow('harness', next)}
+        onpick={(next) => narrow("harness", next)}
         options={[
-          { value: '', label: 'Every harness' },
+          { value: "", label: "Every harness" },
           ...HARNESSES.map((harness) => ({ value: harness, label: harness })),
         ]}
-        value={draft.scope.harness ?? ''}
+        value={draft.scope.harness ?? ""}
       />
       <PickerChip
         label="Model"
-        onpick={(next) => narrow('model', next)}
+        onpick={(next) => narrow("model", next)}
         options={[
-          { value: '', label: 'Every model' },
+          { value: "", label: "Every model" },
           ...models.map((model) => ({ value: model, label: model })),
           ...(draft.scope.model && !models.includes(draft.scope.model)
             ? [{ value: draft.scope.model, label: draft.scope.model }]
             : []),
         ]}
-        value={draft.scope.model ?? ''}
+        value={draft.scope.model ?? ""}
       />
     </div>
   </EditorSection>
 
-  {#if draft.action === 'reply'}
+  {#if draft.action === "reply"}
     <div class="fold" in:unfold out:unfold>
       <EditorSection hue={HUE} icon={IconPin} label="Making it stick">
         <SwitchField

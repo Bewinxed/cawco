@@ -916,7 +916,7 @@ export function validateWorkflow(
         add("A step needs a supported harness and a model.", node.id);
       }
       templates.push(node.prompt);
-      if (node.outputSchema?.type !== "object") {
+      if (node.outputSchema.type !== "object") {
         add("Result schema must have an object root.", node.id);
       }
       if (
@@ -996,7 +996,7 @@ export function validateWorkflow(
         if (rule.kind === "file-exists") {
           templates.push(rule.path);
         }
-        if (rule.kind === "schema" && rule.schema?.type !== "object") {
+        if (rule.kind === "schema" && rule.schema.type !== "object") {
           add("Check schema must have an object root.", node.id);
         }
       }

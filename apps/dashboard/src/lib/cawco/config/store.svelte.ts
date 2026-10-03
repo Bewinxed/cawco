@@ -79,15 +79,15 @@ const FLASH_MS = 700;
 export class ConfigStore {
   readonly rules = new Slot("the rules", async () => {
     const payload = await read<RulesPayload>("/api/rules");
-    return payload.rules ?? [];
+    return payload.rules;
   });
   readonly hooks = new Slot("the hooks", async () => {
     const payload = await read<HooksPayload>("/api/fleet/hooks");
-    return payload.hooks ?? [];
+    return payload.hooks;
   });
   readonly types = new Slot("the delegate types", async () => {
     const payload = await read<DelegateTypesPayload>("/api/delegate-types");
-    return payload.types ?? [];
+    return payload.types;
   });
   readonly fleet = new Slot(
     "the fleet's setup",
@@ -95,10 +95,10 @@ export class ConfigStore {
       const snapshot = await read<FleetSnapshot>("/api/fleet");
       return {
         config: snapshot.config,
-        skills: snapshot.skills ?? [],
-        agents: snapshot.agents ?? [],
+        skills: snapshot.skills,
+        agents: snapshot.agents,
         memory: snapshot.memory ?? null,
-        memoryDocs: snapshot.memoryDocs ?? [],
+        memoryDocs: snapshot.memoryDocs,
       };
     }
   );
@@ -107,8 +107,8 @@ export class ConfigStore {
     async (): Promise<ToolsState> => {
       const snapshot = await read<ToolsSnapshot>("/api/tools");
       return {
-        catalog: snapshot.catalog ?? [],
-        policies: snapshot.policies ?? [],
+        catalog: snapshot.catalog,
+        policies: snapshot.policies,
       };
     }
   );

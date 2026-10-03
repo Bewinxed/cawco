@@ -12,7 +12,10 @@
 </script>
 
 <ProgressPrimitive.Root
-  class={cn("relative flex h-1.5 w-full items-center overflow-x-hidden rounded-[var(--radius-pill)] bg-[var(--surface-recess-deep)]", className)}
+  class={cn(
+    "relative flex h-1.5 w-full items-center overflow-x-hidden rounded-[var(--radius-pill)] bg-[var(--surface-recess-deep)]",
+    className
+  )}
   data-slot="progress"
   {max}
   {value}

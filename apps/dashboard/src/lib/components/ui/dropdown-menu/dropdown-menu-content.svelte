@@ -32,9 +32,9 @@
   <DropdownMenuPrimitive.Content
     {align}
     class={cn(
-			"kit-pop relative z-50 w-(--bits-dropdown-menu-anchor-width) min-w-48 origin-(--bits-dropdown-menu-content-transform-origin) overflow-y-auto overflow-x-hidden outline-none",
-			className
-		)}
+      "kit-pop relative z-50 w-(--bits-dropdown-menu-anchor-width) min-w-48 origin-(--bits-dropdown-menu-content-transform-origin) overflow-y-auto overflow-x-hidden outline-none",
+      className
+    )}
     data-slot="dropdown-menu-content"
     {sideOffset}
     bind:ref

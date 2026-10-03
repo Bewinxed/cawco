@@ -182,7 +182,7 @@ const parseArgs = (argv: string[]): Args => {
     help: false,
     version: false,
   };
-  // biome-ignore lint/style/useForOf: the loop advances `index` an extra step inside the body to consume each flag's value argument
+  // The loop advances `index` an extra step inside the body to consume each flag's value argument.
   for (let index = 0; index < argv.length; index += 1) {
     const arg = argv[index] as string;
     switch (arg) {

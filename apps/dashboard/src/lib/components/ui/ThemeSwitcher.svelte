@@ -15,7 +15,9 @@
 </script>
 
 <Tip {label}>
-  {#snippet children(tip)}
+  {#snippet children(
+    tip
+  )}
     <Button
       {...tip}
       aria-label={label}

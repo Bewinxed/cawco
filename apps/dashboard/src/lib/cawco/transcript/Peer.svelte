@@ -105,20 +105,20 @@
   class="sysrow rail-row"
   data-message={message.id}
   class:err={row.failed}
-  class:waiting={message.state === 'pending'}
+  class:waiting={message.state === "pending"}
 >
   <Collapsible.Root bind:open={disclosed.get, disclosed.set}>
     <p class="label rail-line">
       <span class="glyph rail-cell">
-        {#if row.kind === 'rule'}
+        {#if row.kind === "rule"}
           <IconRules />
-        {:else if row.kind === 'ask'}
+        {:else if row.kind === "ask"}
           <IconAsk />
-        {:else if row.kind === 'report' && row.failed}
+        {:else if row.kind === "report" && row.failed}
           <IconReportFailed />
-        {:else if row.kind === 'report'}
+        {:else if row.kind === "report"}
           <IconReport />
-        {:else if row.kind === 'workflow'}
+        {:else if row.kind === "workflow"}
           <IconWorkflow />
         {:else}
           <IconHandoff />
@@ -134,11 +134,11 @@
           <span class="name">{row.name}</span>
         {/if}
       </span>
-      {#if message.state === 'failed'}
+      {#if message.state === "failed"}
         <span class="state">not sent</span>
-      {:else if row.kind === 'report' && row.failed}
+      {:else if row.kind === "report" && row.failed}
         <span class="state">failed</span>
-      {:else if message.state === 'pending'}
+      {:else if message.state === "pending"}
         <span class="pending">queued</span>
       {:else if meta.urgent}
         <span class="pending">urgent</span>
@@ -153,7 +153,7 @@
         <span aria-hidden="true" class="chev"><IconChevronRight /></span>
       </Collapsible.Trigger>
     </p>
-    {#if message.state === 'failed' && meta.sendFailed}
+    {#if message.state === "failed" && meta.sendFailed}
       <p class="reason rail-hang">{meta.sendFailed}</p>
     {/if}
     <Collapsible.Content reveal>

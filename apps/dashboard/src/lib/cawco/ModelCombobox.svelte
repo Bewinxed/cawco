@@ -137,21 +137,23 @@
 
 <Popover.Root onOpenChange={opened} bind:open>
   <Popover.Trigger bind:ref={triggerRef}>
-    {#snippet child({ props })}
+    {#snippet child({
+      props,
+    })}
       <Button
         {...props}
         aria-expanded={open}
-        aria-label={unreported ? 'Model, not reported yet' : 'Model'}
+        aria-label={unreported ? "Model, not reported yet" : "Model"}
         class="justify-between gap-2 {className}"
         role="combobox"
         {size}
         title={unreported
           ? "Read from this session's next turn — it has not said which model answers"
-           : value || 'The model the harness picks for itself'}
+          : value || "The model the harness picks for itself"}
         variant="outline"
       >
         <span class="num truncate"
-          >{unreported ? '—' : modelLabel(value, harness)}</span
+          >{unreported ? "—" : modelLabel(value, harness)}</span
         >
         <!-- 16px, the control size, so this unfold mark matches the one on
              the disclosure trigger. -->
@@ -210,7 +212,7 @@
           {#if showDefault}
             <Command.Item
               data-checked={value === MODEL_DEFAULT}
-              keywords={['default']}
+              keywords={["default"]}
               onSelect={selectDefault}
               value="default-model"
             >
@@ -248,8 +250,8 @@
             forceMount
             onSelect={refresh}
             title={askable
-              ? 'Ask a running session of this harness what models it offers'
-              : 'A session has to be running to ask what models it offers.'}
+              ? "Ask a running session of this harness what models it offers"
+              : "A session has to be running to ask what models it offers."}
             value="refresh-models"
           >
             <IconRefresh />
@@ -261,9 +263,9 @@
       {#if note}
         <p
           class="border-t border-foreground/5 px-3 py-2 text-meta {models.error
-            ? 'text-error'
-            : 'text-muted-foreground'}"
-          role={models.error ? 'alert' : undefined}
+            ? "text-error"
+            : "text-muted-foreground"}"
+          role={models.error ? "alert" : undefined}
         >
           {note}
         </p>

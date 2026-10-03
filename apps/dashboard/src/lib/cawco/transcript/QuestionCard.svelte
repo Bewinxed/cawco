@@ -231,10 +231,14 @@
         </span>
       {/each}
       {#if answered}
-        {#each q.options.filter((opt) => isSelected(q.question, opt.label)) as opt (opt.label)}
+        {#each q.options.filter((opt) =>
+          isSelected(q.question, opt.label)
+        ) as opt (opt.label)}
           <span
             class="opt sel"
-            {@attach land(() => shareKey(q.question, opt.label), { ms: dur('--dur-pop') })}
+            {@attach land(() => shareKey(q.question, opt.label), {
+              ms: dur("--dur-pop"),
+            })}
           >
             <span class="kc">{q.options.indexOf(opt) + 1}</span
             ><span>{opt.label}</span>

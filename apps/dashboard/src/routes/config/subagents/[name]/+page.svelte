@@ -15,10 +15,10 @@
 </script>
 
 <EditorRoute
-  found={name === 'new' || agent !== null}
+  found={name === "new" || agent !== null}
   loaded={fleet !== null}
   problem={store.fleet.error}
-  saveLabel={name === 'new' ? 'Create subagent' : 'Save changes'}
+  saveLabel={name === "new" ? "Create subagent" : "Save changes"}
   {section}
   what="subagent"
 >

@@ -51,8 +51,8 @@
   <SheetPrimitive.Content
     class={cn(
       "sheet fixed z-50 flex flex-col bg-[var(--surface-raised)] bg-clip-padding text-foreground text-label shadow-[var(--shadow-drawer)] data-[side=bottom]:inset-x-0 data-[side=top]:inset-x-0 data-[side=left]:inset-y-0 data-[side=right]:inset-y-0 data-[side=top]:top-0 data-[side=right]:right-0 data-[side=bottom]:bottom-0 data-[side=left]:left-0 data-[side=bottom]:h-auto data-[side=left]:h-full data-[side=right]:h-full data-[side=top]:h-auto data-[side=left]:w-3/4 data-[side=right]:w-3/4 data-[side=bottom]:border-t data-[side=left]:border-r data-[side=top]:border-b data-[side=right]:border-l data-[side=left]:sm:max-w-sm data-[side=right]:sm:max-w-sm",
-			className
-		)}
+      className
+    )}
     data-side={side}
     data-slot="sheet-content"
     {preventOverflowTextSelection}
@@ -62,7 +62,9 @@
     {@render children?.()}
     {#if showCloseButton}
       <SheetPrimitive.Close data-slot="sheet-close">
-        {#snippet child({ props })}
+        {#snippet child({
+          props,
+        })}
           <Button
             class="absolute top-4 right-4"
             size="icon-sm"

@@ -35,23 +35,23 @@
   });
 </script>
 
-{#if shape === 'unknown'}
-  <IconServer class={cn('size-4 shrink-0', className)} />
+{#if shape === "unknown"}
+  <IconServer class={cn("size-4 shrink-0", className)} />
 {:else}
   <svg
     aria-hidden="true"
-    class={cn('size-4 shrink-0', className)}
+    class={cn("size-4 shrink-0", className)}
     fill="currentColor"
     viewBox="0 0 16 16"
   >
-    {#if shape === 'apple'}
+    {#if shape === "apple"}
       <path
         d="M11.9 8.6c0-1.4.8-2.3 1.5-2.8-.6-.9-1.6-1.4-2.7-1.4-1.1-.1-2.2.7-2.8.7-.6 0-1.5-.7-2.4-.6C4
            4.5 2.9 5.2 2.3 6.3c-1.2 2.1-.3 5.3.9 7 .6.9 1.3 1.8 2.2 1.8.9 0 1.2-.6 2.3-.6s1.4.6 2.3.5c1-.1
            1.6-.9 2.2-1.7.4-.6.7-1.2.9-1.9-1.4-.5-2.2-1.6-2.2-2.8ZM10.2 3.3c.5-.6.8-1.4.7-2.3-.7.1-1.6.5-2.1
            1.1-.5.6-.9 1.4-.7 2.2.8.1 1.6-.4 2.1-1Z"
       />
-    {:else if shape === 'tux'}
+    {:else if shape === "tux"}
       <!-- Redrawn for 16px (user, 2026-08-08): the old mark's white belly inside
            a tall dark body rasterised as a padlock plate and its head as the
            shackle. The silhouette carries the bird instead — feet, flippers, a

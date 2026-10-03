@@ -111,7 +111,9 @@
       <textarea
         class="wf-mono"
         id={fieldId}
-        onclick={() => { cursor = field?.selectionStart ?? 0; }}
+        onclick={() => {
+          cursor = field?.selectionStart ?? 0;
+        }}
         oninput={changed}
         onkeydown={key}
         rows="7"
@@ -122,7 +124,9 @@
       <input
         class="wf-mono"
         id={fieldId}
-        onclick={() => { cursor = field?.selectionStart ?? 0; }}
+        onclick={() => {
+          cursor = field?.selectionStart ?? 0;
+        }}
         oninput={changed}
         onkeydown={key}
         {value}
@@ -144,8 +148,12 @@
         <button
           aria-selected={active === index}
           onclick={() => choose(path)}
-          onmousedown={(event) => { event.preventDefault(); }}
-          onmousemove={() => { active = index; }}
+          onmousedown={(event) => {
+            event.preventDefault();
+          }}
+          onmousemove={() => {
+            active = index;
+          }}
           role="option"
           type="button"
         >

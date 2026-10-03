@@ -63,7 +63,7 @@
   aria-label={`Open ${name}`}
   class="doc press-tint"
   data-share={share}
-  onclick={() => lightbox.open({ kind: 'text', name, content, share })}
+  onclick={() => lightbox.open({ kind: "text", name, content, share })}
   title={name}
   type="button"
 >

@@ -142,7 +142,7 @@
         <div
           aria-label="Loading diff"
           role="status"
-          out:fade={{ duration: dur('--dur-control'), easing: easeOut }}
+          out:fade={{ duration: dur("--dur-control"), easing: easeOut }}
         >
           <Skeleton class="w-full rounded-none" style="height: {expected}px" />
         </div>

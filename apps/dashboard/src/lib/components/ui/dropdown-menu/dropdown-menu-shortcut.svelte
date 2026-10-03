@@ -11,7 +11,10 @@
 </script>
 
 <span
-  class={cn("ml-auto text-meta text-muted-foreground tracking-widest group-focus/dropdown-menu-item:text-foreground", className)}
+  class={cn(
+    "ml-auto text-meta text-muted-foreground tracking-widest group-focus/dropdown-menu-item:text-foreground",
+    className
+  )}
   data-slot="dropdown-menu-shortcut"
   bind:this={ref}
   {...restProps}

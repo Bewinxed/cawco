@@ -276,12 +276,12 @@
     <div
       class="column"
       bind:this={column}
-      in:fade={{ duration: dur('--dur-control'), easing: easeOut }}
+      in:fade={{ duration: dur("--dur-control"), easing: easeOut }}
     >
       {#each shown as key (key)}
         {@const row = dataOf(key)}
-        <div class="row {row?.kind ?? ''}">
-          {#if row?.kind === 'tool'}
+        <div class="row {row?.kind ?? ""}">
+          {#if row?.kind === "tool"}
             {@const Icon = row.icon}
             <span class="ic {row.color}" class:breathe={row.live}
               ><Icon /></span
@@ -290,16 +290,16 @@
               <span class="verb">{row.verb}</span>
             {/if}
             <span class="arg">{row.arg}</span>
-          {:else if row?.kind === 'reason'}
+          {:else if row?.kind === "reason"}
             <span class="ic"><IconCpu /></span>
             <span class="verb">Reasoning</span>
-          {:else if row?.kind === 'say'}
+          {:else if row?.kind === "say"}
             <span class="text">{row.text}</span>
-          {:else if row?.kind === 'stream'}
+          {:else if row?.kind === "stream"}
             <span class="text"
               ><MessageBody source={row.text} streaming /></span
             >
-          {:else if row?.kind === 'peer'}
+          {:else if row?.kind === "peer"}
             {@const Icon = row.icon}
             <span class="ic"><Icon /></span>
             <span class="verb">{row.lead}</span>

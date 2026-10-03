@@ -13,14 +13,30 @@
 </script>
 
 <CheckboxPrimitive.Root
-  class={cn("peer relative flex size-4 shrink-0 items-center", "justify-center rounded-[var(--radius-xs)] border", "touch-hit border-input", "disabled:cursor-not-allowed disabled:opacity-50", "group-has-disabled/field:opacity-50", "aria-invalid:border-destructive", "aria-invalid:aria-checked:border-action-solid", "data-checked:border-action-solid data-checked:bg-action-solid", "data-checked:text-on-action dark:bg-input/30", "dark:data-checked:bg-action-solid", "dark:aria-invalid:border-destructive/50", className)}
+  class={cn(
+    "peer relative flex size-4 shrink-0 items-center",
+    "justify-center rounded-[var(--radius-xs)] border",
+    "touch-hit border-input",
+    "disabled:cursor-not-allowed disabled:opacity-50",
+    "group-has-disabled/field:opacity-50",
+    "aria-invalid:border-destructive",
+    "aria-invalid:aria-checked:border-action-solid",
+    "data-checked:border-action-solid data-checked:bg-action-solid",
+    "data-checked:text-on-action dark:bg-input/30",
+    "dark:data-checked:bg-action-solid",
+    "dark:aria-invalid:border-destructive/50",
+    className
+  )}
   data-slot="checkbox"
   bind:checked
   bind:indeterminate
   bind:ref
   {...restProps}
 >
-  {#snippet children({ checked, indeterminate })}
+  {#snippet children({
+    checked,
+    indeterminate,
+  })}
     <div
       class="[&>svg]:size-3 grid place-content-center text-current transition-none"
       data-slot="checkbox-indicator"

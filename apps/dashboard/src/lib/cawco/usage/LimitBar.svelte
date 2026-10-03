@@ -41,7 +41,7 @@
   style:--h="{size}px"
 >
   <span class="fill" style:--used={fill / 100}></span>
-  {#if elapsed !== null && state !== 'reached'}
+  {#if elapsed !== null && state !== "reached"}
     <span aria-hidden="true" class="tick" style:--at={elapsed}></span>
   {/if}
 </span>

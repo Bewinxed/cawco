@@ -69,7 +69,11 @@
 
 {@render children()}
 <Popover.Root
-  onOpenChange={(value) => { if (!value) { active?.onchange(false); } }}
+  onOpenChange={(value) => {
+    if (!value) {
+      active?.onchange(false);
+    }
+  }}
   {open}
 >
   <Popover.Portal>
@@ -80,36 +84,52 @@
         class="ns-theme ns-pop"
         collisionPadding={8}
         customAnchor={shown.trigger}
-        data-morph={morphing ? '' : undefined}
+        data-morph={morphing ? "" : undefined}
         onCloseAutoFocus={(event) => {
           event.preventDefault();
           if (shown?.onclosefocus?.()) {
             return;
           }
           const focused = document.activeElement;
-          if (!focused || focused === document.body || focused.closest('.ns-pop')) {
+          if (
+            !focused ||
+            focused === document.body ||
+            focused.closest(".ns-pop")
+          ) {
             shown?.trigger?.focus();
           }
         }}
         onInteractOutside={(event) => {
           const { target } = event;
-          if (target instanceof Node && group.members.some((member) => member.trigger?.contains(target))) {
+          if (
+            target instanceof Node &&
+            group.members.some((member) => member.trigger?.contains(target))
+          ) {
             event.preventDefault();
           }
         }}
-        onOpenAutoFocus={(event) => { if (!shown?.trapFocus) { event.preventDefault(); } }}
+        onOpenAutoFocus={(event) => {
+          if (!shown?.trapFocus) {
+            event.preventDefault();
+          }
+        }}
         side="bottom"
         sideOffset={6}
         style={`--ns-pop-width:${shown.width}px`}
         trapFocus={shown.trapFocus}
       >
-        {#snippet child({ props, wrapperProps })}
+        {#snippet child({
+          props,
+          wrapperProps,
+        })}
           <div {...wrapperProps}>
             <div
               {...props}
               id={`${shown?.id}-popover`}
               role="presentation"
-              {@attach shown?.rows ? highlight({ rows: shown.rows }) : undefined}
+              {@attach shown?.rows
+                ? highlight({ rows: shown.rows })
+                : undefined}
             >
               <div
                 class="ns-morph"

@@ -52,7 +52,7 @@
     class="recent"
     data-flip="box"
     class:inset={inset}
-    {@attach holdWhileInside('home:recent')}
+    {@attach holdWhileInside("home:recent")}
   >
     <button
       aria-expanded={recentOpen}
@@ -82,7 +82,9 @@
         </label>
         {#each recentMatches.slice(0, recentShown) as item (item.key)}
           <HomeRow
-            active={current !== null && (current === item.instance?.id || current === item.info?.sessionId)}
+            active={current !== null &&
+              (current === item.instance?.id ||
+                current === item.info?.sessionId)}
             href={item.href}
             info={item.info}
             instance={item.instance}
@@ -90,7 +92,7 @@
             machineId={item.machineId}
             {stale}
             title={item.title}
-            trail={item.at ? span(clock.now - item.at) : ''}
+            trail={item.at ? span(clock.now - item.at) : ""}
           />
         {:else}
           <p class="none">No session matches “{search}”.</p>
@@ -98,7 +100,10 @@
         {#if recentMatches.length > recentShown}
           <Button
             class="self-start"
-            label="Show {Math.min(RECENT_PAGE, recentMatches.length - recentShown)} more"
+            label="Show {Math.min(
+              RECENT_PAGE,
+              recentMatches.length - recentShown
+            )} more"
             onclick={() => {
               recentShown += RECENT_PAGE;
             }}

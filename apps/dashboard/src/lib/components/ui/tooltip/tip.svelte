@@ -27,7 +27,9 @@
 
 <Root>
   <Trigger>
-    {#snippet child({ props })}
+    {#snippet child({
+      props,
+    })}
       {@render children(props)}
     {/snippet}
   </Trigger>

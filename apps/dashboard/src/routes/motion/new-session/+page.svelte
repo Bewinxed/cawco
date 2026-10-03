@@ -8,14 +8,23 @@
 <svelte:head><title>New session | CawCo</title></svelte:head>
 <main>
   <h1>New session</h1>
-  <button onclick={() => { dialogOpen = true; }} type="button">
+  <button
+    onclick={() => {
+      dialogOpen = true;
+    }}
+    type="button"
+  >
     New session
   </button>
 </main>
 <NewSessionDialog
-  onclose={() => { dialogOpen = false; }}
+  onclose={() => {
+    dialogOpen = false;
+  }}
   open={dialogOpen}
-  prefill={page.url.searchParams.has("projectId") ? { projectId: page.url.searchParams.get("projectId") ?? undefined } : undefined}
+  prefill={page.url.searchParams.has("projectId")
+    ? { projectId: page.url.searchParams.get("projectId") ?? undefined }
+    : undefined}
 />
 
 <style>

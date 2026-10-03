@@ -74,7 +74,9 @@
   ready={store.types.value !== null}
   title={section.label}
 >
-  {#snippet actions(down)}
+  {#snippet actions(
+    down
+  )}
     <Button
       disabled={down !== null}
       href="/config/delegate-types/new"
@@ -97,7 +99,7 @@
         <SectionRow
           actions={[
             {
-              label: 'Delete delegate type',
+              label: "Delete delegate type",
               icon: IconTrash,
               destructive: true,
               disabled: busy[row.name] === true,

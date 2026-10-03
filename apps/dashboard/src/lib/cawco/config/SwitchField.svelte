@@ -24,7 +24,7 @@
   <Switch {disabled} {id} onCheckedChange={onchange} bind:checked />
   <span class="copy">
     <label class="label" for={id}>{label}</label>
-    {#if typeof hint === 'string'}
+    {#if typeof hint === "string"}
       <span class="hint">{hint}</span>
     {:else if hint}
       <span class="hint">{@render hint()}</span>

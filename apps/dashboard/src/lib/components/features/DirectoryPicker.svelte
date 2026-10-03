@@ -143,7 +143,7 @@
 
 <svelte:window
   onkeydown={(event: KeyboardEvent) => {
-    if (open && event.key === 'Escape') {
+    if (open && event.key === "Escape") {
       collapse();
     }
   }}

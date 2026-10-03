@@ -199,19 +199,19 @@
   });
 </script>
 
-<div class="fault" class:hub={group.origin === 'hub'}>
+<div class="fault" class:hub={group.origin === "hub"}>
   <div class="top">
     <IconWarningTriangle class="size-4 shrink-0" />
     <span class="title">{copy.title}</span>
     <!-- Where, never left implicit: the whole point of the investigation this
          came out of was that a badge named no machine. -->
     <span class="where">
-      {#if group.origin === 'hub'}
+      {#if group.origin === "hub"}
         <span class="tag">at the hub</span>
       {:else if machine}
         <span class="tag">
           <OsMark class="size-4 shrink-0" os={machine.os} />
-          {machineLabel(machine.hostname)}{online ? '' : ' · offline'}
+          {machineLabel(machine.hostname)}{online ? "" : " · offline"}
         </span>
       {:else}
         <span class="tag">{group.machineId}</span>
@@ -227,7 +227,7 @@
         type="button"
       >
         <IconChevronRight class="chevron size-4 shrink-0" />
-        {expanded ? 'Hide' : 'Details'}
+        {expanded ? "Hide" : "Details"}
       </button>
     {/if}
   </div>
@@ -237,7 +237,7 @@
       <p class="rows">
         <span class="noun"
           >{SCOPE_NOUN[group.scope]}
-          {group.faults.length === 1 ? '' : 's'}:</span
+          {group.faults.length === 1 ? "" : "s"}:</span
         >
         {#each shown as fault (fault.scope + fault.key)}
           <code>{faultLabel(fault)}</code>
@@ -258,7 +258,7 @@
             <span class="line used">
               <code>{toolchain.used.path}</code>
               <span class="v"
-                >{toolchain.used.version ?? 'version unknown'}</span
+                >{toolchain.used.version ?? "version unknown"}</span
               >
               <span class="badge">ran this sync</span>
             </span>
@@ -266,7 +266,7 @@
           {#each toolchain.others as other (other.path)}
             <span class="line">
               <code>{other.path}</code>
-              <span class="v">{other.version ?? 'version unknown'}</span>
+              <span class="v">{other.version ?? "version unknown"}</span>
             </span>
           {/each}
           {#if toolchain.shadowed}
@@ -280,13 +280,15 @@
       {/if}
 
       {#if group.faults[0]?.detail}
-        {#if group.cause === 'unknown'}
+        {#if group.cause === "unknown"}
           <pre class="said">{group.faults[0].detail}</pre>
         {:else}
           <button
             aria-expanded={disclosureOpen}
             class="disclose touch-hit"
-            onclick={() => { disclosureOpen = !disclosureOpen; }}
+            onclick={() => {
+              disclosureOpen = !disclosureOpen;
+            }}
             type="button"
           >
             <IconChevronRight class="chevron size-4 shrink-0" />
@@ -311,7 +313,7 @@
       <p class="fix">{copy.fix}</p>
 
       <div class="acts">
-        {#if copy.action === 'resync'}
+        {#if copy.action === "resync"}
           <Button
             disabled={!online}
             failed={actFailed}
@@ -324,9 +326,11 @@
             variant="outline"
           />
           <span class="hint"
-            >{online ? actionHint : 'It syncs on its own the moment it comes back.'}</span
+            >{online
+              ? actionHint
+              : "It syncs on its own the moment it comes back."}</span
           >
-        {:else if copy.action === 'refresh'}
+        {:else if copy.action === "refresh"}
           <Button
             class="num"
             failed={actFailed}
@@ -339,7 +343,7 @@
             variant="outline"
           />
           <span class="hint">{actionHint}</span>
-        {:else if copy.action === 'settle'}
+        {:else if copy.action === "settle"}
           <Button href={faultHref(group.faults[0])} size="xs" variant="outline"
             >Compare the two copies</Button
           >
@@ -358,7 +362,7 @@
           class="result"
           data-flip
           data-tone={result.tone}
-          role={result.tone === 'fail' ? 'alert' : 'status'}
+          role={result.tone === "fail" ? "alert" : "status"}
           in:appear
         >
           {result.text}
@@ -498,9 +502,6 @@
     align-items: baseline;
     gap: var(--space-2);
   }
-  .tool .line.used code {
-    font-weight: var(--weight-strong);
-  }
   .tool .v {
     font-size: var(--text-meta);
     font-weight: var(--weight-body);
@@ -526,6 +527,9 @@
   .tool code,
   .said {
     color: var(--ink-strong);
+  }
+  .tool .line.used code {
+    font-weight: var(--weight-strong);
   }
   /* min-height 24px: measured at 14.6px, below the 24px WCAG 2.5.8 (AA)
      minimum target size. The negative inline margin keeps the label optically

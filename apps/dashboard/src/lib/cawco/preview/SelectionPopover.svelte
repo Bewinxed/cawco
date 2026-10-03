@@ -115,10 +115,21 @@
       <!-- biome-ignore lint/a11y/noNoninteractiveElementInteractions: the PNG's decoded dimensions determine its natural CSS size. -->
       <img
         alt={label}
-        onload={(event) => { const { naturalWidth, naturalHeight } = event.currentTarget as HTMLImageElement; imageSize = { width: naturalWidth / selection.scale, height: naturalHeight / selection.scale }; }}
+        onload={(event) => {
+          const { naturalWidth, naturalHeight } =
+            event.currentTarget as HTMLImageElement;
+          imageSize = {
+            width: naturalWidth / selection.scale,
+            height: naturalHeight / selection.scale,
+          };
+        }}
         src={`data:image/png;base64,${selection.png}`}
-        style:height={imageSize.height ? `${imageSize.height * imageFit}px` : undefined}
-        style:width={imageSize.width ? `${imageSize.width * imageFit}px` : undefined}
+        style:height={imageSize.height
+          ? `${imageSize.height * imageFit}px`
+          : undefined}
+        style:width={imageSize.width
+          ? `${imageSize.width * imageFit}px`
+          : undefined}
       >
     </button>
   {:else}
@@ -127,7 +138,7 @@
   <span class="name">{label}</span>
   {#if source?.file}
     <span class="source"
-      >{source.file}:{source.line ?? '?'}:{source.column ?? '?'}
+      >{source.file}:{source.line ?? "?"}:{source.column ?? "?"}
       ({source.framework})</span
     >
   {/if}
@@ -174,7 +185,10 @@
       collisionPadding={11}
       customAnchor={anchor}
       onCloseAutoFocus={(event) => event.preventDefault()}
-      onEscapeKeydown={(event) => { event.preventDefault(); close(); }}
+      onEscapeKeydown={(event) => {
+        event.preventDefault();
+        close();
+      }}
       onOpenAutoFocus={focusNote}
       side="top"
       sideOffset={7}

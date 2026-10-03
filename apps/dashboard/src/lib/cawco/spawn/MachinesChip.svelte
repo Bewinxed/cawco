@@ -74,7 +74,9 @@
   {open}
   rows="[data-fh]"
   triggerClass="ns-chip-btn"
-  triggerStyle={picked.length ? "" : "color:var(--status-fail-ink);border-color:var(--status-fail-ink)"}
+  triggerStyle={picked.length
+    ? ""
+    : "color:var(--status-fail-ink);border-color:var(--status-fail-ink)"}
 >
   {#snippet trigger()}
     <Server style="color:var(--hue-cyan-500)" />
@@ -97,7 +99,9 @@
         {#snippet trail()}
           <button
             class="ns-btn sm touch-hit"
-            onclick={() => { pairing = null; }}
+            onclick={() => {
+              pairing = null;
+            }}
             type="button"
           >
             Back

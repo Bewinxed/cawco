@@ -43,7 +43,7 @@
       aria-label={label}
       class="options"
       role="listbox"
-      {@attach highlight({ rows: '.item', selected: '[aria-selected="true"]' })}
+      {@attach highlight({ rows: ".item", selected: '[aria-selected="true"]' })}
     >
       {#each options as option, index (option.value)}
         {#if option.group && option.group !== options[index - 1]?.group}
@@ -53,9 +53,9 @@
           aria-selected={option.value === value}
           class="kit-item item focus-inset"
           onclick={() => {
-          onpick(option.value);
-          expanded = false;
-        }}
+            onpick(option.value);
+            expanded = false;
+          }}
           role="option"
           type="button"
         >

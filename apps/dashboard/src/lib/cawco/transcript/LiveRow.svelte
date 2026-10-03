@@ -157,18 +157,21 @@
 <!-- MessageRow's assistant turn, drawn by this row while it streams and once
      it has landed: the same section, header and body, so landing adds the
      clock and the last words and nothing else. -->
-{#snippet body(live: Live | Said, phase: Phase)}
-  {#if phase === 'answer'}
+{#snippet body(
+  live: Live | Said,
+  phase: Phase
+)}
+  {#if phase === "answer"}
     <section class="turn" class:grouped={live.grouped}>
       <Who
         grouped={live.grouped}
         name={agentName}
-        timestamp={live.kind === 'single' ? live.message.timestamp : undefined}
+        timestamp={live.kind === "single" ? live.message.timestamp : undefined}
       />
       <MessageBody
         fades={ledger?.watched ?? false}
-        source={live.kind === 'single' ? live.message.content : live.text}
-        streaming={live.kind === 'live'}
+        source={live.kind === "single" ? live.message.content : live.text}
+        streaming={live.kind === "live"}
       />
     </section>
   {:else}
@@ -179,7 +182,7 @@
       {announce}
       fades={ledger?.watched ?? false}
       live
-      text={live.kind === 'live' ? (live.thinking ?? '') : ''}
+      text={live.kind === "live" ? (live.thinking ?? "") : ""}
     />
   {/if}
 {/snippet}

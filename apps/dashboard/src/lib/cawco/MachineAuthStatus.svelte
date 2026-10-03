@@ -65,7 +65,7 @@
       in:crossIn
       out:crossOut
     >
-      {#if outcome.kind === 'working'}
+      {#if outcome.kind === "working"}
         <div
           aria-live="polite"
           class="flex flex-col gap-[var(--space-2)] outline-none"
@@ -92,7 +92,7 @@
         </div>
       {:else if answer}
         <div class="flex flex-col gap-[var(--space-2)]" role="status">
-          <span class="mark enter {ok ? 'text-success' : 'text-warning'}">
+          <span class="mark enter {ok ? "text-success" : "text-warning"}">
             {#if ok}
               <IconSuccess class="size-9" />
             {:else}

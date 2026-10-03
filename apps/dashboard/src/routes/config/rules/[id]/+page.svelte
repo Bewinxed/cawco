@@ -16,10 +16,10 @@
 </script>
 
 <EditorRoute
-  found={id === 'new' || rule !== null}
+  found={id === "new" || rule !== null}
   loaded={rules !== null}
   problem={store.rules.error}
-  saveLabel={id === 'new' ? 'Create rule' : 'Save changes'}
+  saveLabel={id === "new" ? "Create rule" : "Save changes"}
   {section}
   what="rule"
 >

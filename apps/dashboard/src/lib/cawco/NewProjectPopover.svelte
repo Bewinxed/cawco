@@ -98,7 +98,9 @@
   }
 </script>
 
-{#snippet problemAt(at: 'machine' | 'dir' | 'hub')}
+{#snippet problemAt(
+  at: "machine" | "dir" | "hub"
+)}
   {#if problem?.at === at}
     <span class="text-label text-error" role="alert" in:appear
       >{problem.text}</span
@@ -108,9 +110,13 @@
 
 <Popover.Root onOpenChange={opened} {open}>
   <Tip label="New project">
-    {#snippet children(tip)}
+    {#snippet children(
+      tip
+    )}
       <Popover.Trigger>
-        {#snippet child({ props })}
+        {#snippet child({
+          props,
+        })}
           <Button
             {...mergeProps(props, tip)}
             aria-label="New project"
@@ -145,7 +151,7 @@
           oninput={() => {
             problem = null;
           }}
-          placeholder={dir ? leaf(dir) : 'What you call it'}
+          placeholder={dir ? leaf(dir) : "What you call it"}
           spellcheck="false"
           bind:ref={nameInput}
           bind:value={name}
@@ -164,7 +170,9 @@
             class="w-full text-foreground"
             size="sm"
           >
-            {machine ? `${machine.hostname} · ${machine.os}` : 'No machines online'}
+            {machine
+              ? `${machine.hostname} · ${machine.os}`
+              : "No machines online"}
           </Select.Trigger>
           <Select.Content>
             {#each cawco.onlineMachines as row (row.machineId)}
@@ -182,7 +190,7 @@
             {/each}
           </Select.Content>
         </Select.Root>
-        {@render problemAt('machine')}
+        {@render problemAt("machine")}
       </div>
 
       <div class="flex flex-col gap-1">
@@ -200,7 +208,7 @@
           spellcheck="false"
           bind:value={cwd}
         />
-        {@render problemAt('dir')}
+        {@render problemAt("dir")}
       </div>
 
       <DirectoryPicker
@@ -222,7 +230,7 @@
           size="sm"
           type="submit"
         />
-        {@render problemAt('hub')}
+        {@render problemAt("hub")}
       </div>
     </form>
   </Popover.Content>

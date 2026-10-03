@@ -88,8 +88,17 @@
       <!-- biome-ignore lint/a11y/useSemanticElements: the clear control sits inside the chip trigger, which is already a button; buttons cannot nest -->
       <span
         class="clear ns-check"
-        onclick={(event) => { event.stopPropagation(); onclear(); }}
-        onkeydown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); event.stopPropagation(); onclear(); } }}
+        onclick={(event) => {
+          event.stopPropagation();
+          onclear();
+        }}
+        onkeydown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            event.stopPropagation();
+            onclear();
+          }
+        }}
         role="button"
         tabindex="0"
         title="Clear project"
@@ -118,7 +127,11 @@
           aria-label="Project path"
           autocapitalize="off"
           class="mono"
-          oninput={(event) => { if (draft) { draft = { ...draft, path: event.currentTarget.value }; } }}
+          oninput={(event) => {
+            if (draft) {
+              draft = { ...draft, path: event.currentTarget.value };
+            }
+          }}
           placeholder="~/code/project"
           spellcheck="false"
           value={draft.path}
@@ -128,7 +141,9 @@
         <span class="error" role="alert">{createError}</span>
         <button
           class="ns-btn sm touch-hit"
-          onclick={() => { draft = null; }}
+          onclick={() => {
+            draft = null;
+          }}
           type="button"
         >
           Back
@@ -142,7 +157,7 @@
           type="button"
         >
           <PendingContent
-            failed={createError !== ''}
+            failed={createError !== ""}
             label="Create"
             pending={creating}
             pendingLabel="Creating…"
@@ -176,7 +191,9 @@
     <button
       class="row add ns-in press-tint"
       data-fh="1"
-      onclick={() => { draft = { name: '', path: '' }; }}
+      onclick={() => {
+        draft = { name: "", path: "" };
+      }}
       style="--delay:110ms"
       type="button"
     >

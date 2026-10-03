@@ -104,7 +104,9 @@
   ready={store.rules.value !== null}
   title={section.label}
 >
-  {#snippet actions(down)}
+  {#snippet actions(
+    down
+  )}
     <Button
       disabled={down !== null}
       href="/config/rules/new"
@@ -174,7 +176,7 @@
         <SectionRow
           actions={[
             {
-              label: 'Delete rule',
+              label: "Delete rule",
               icon: IconTrash,
               destructive: true,
               onselect: () => askRemove(row),

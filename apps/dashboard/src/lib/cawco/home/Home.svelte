@@ -114,13 +114,13 @@
 <section
   aria-label="Home"
   class="home {variant}"
-  data-flip={variant === 'rail' ? 'box' : undefined}
+  data-flip={variant === "rail" ? "box" : undefined}
   {@attach reflow()}
 >
   <div class="top">
     <!-- The line every other line on this screen is believed by. -->
     <StatusLine />
-    {#if variant === 'page'}
+    {#if variant === "page"}
       <!-- The phone has no rail: the rail's usage strip stands here, always
            (owner pick i), on the home's own ground. -->
       <div class="usage">
@@ -135,7 +135,7 @@
         <TextMorph
           as="span"
           duration={morphMs()}
-          text={`${home.needs.length} need${home.needs.length === 1 ? 's' : ''} you`}
+          text={`${home.needs.length} need${home.needs.length === 1 ? "s" : ""} you`}
         />
       </h1>
     {/if}
@@ -181,7 +181,7 @@
         <!-- Caw only on a fleet with nothing in it yet, or while a machine
              has not answered: an empty group is otherwise just absent. -->
         <figure class="caw" data-flip in:crossIn out:crossOut>
-          <Caw size={variant === 'rail' ? 112 : 160} status="ready" />
+          <Caw size={variant === "rail" ? 112 : 160} status="ready" />
           <!-- The line's states share one cell and cross-fade (§8). -->
           <figcaption>
             {#key cawLine}
@@ -191,13 +191,13 @@
         </figure>
       {/if}
 
-      {#if variant === 'page'}
+      {#if variant === "page"}
         <HomeRecent />
       {/if}
     </div>
   {/if}
 
-  {#if variant === 'page'}
+  {#if variant === "page"}
     <!-- The phone's thumb reaches the bottom; Start session lives there. -->
     <div class="dock">
       <Button class="w-full" onclick={start} size="lg">

@@ -110,7 +110,9 @@
   ready={store.fleet.value !== null}
   title={section.label}
 >
-  {#snippet actions(down)}
+  {#snippet actions(
+    down
+  )}
     <Button
       disabled={down !== null}
       href="/config/mcp/new"
@@ -145,7 +147,7 @@
         <SectionRow
           actions={[
             {
-              label: 'Remove everywhere',
+              label: "Remove everywhere",
               icon: IconTrash,
               destructive: true,
               onselect: () => askRemove(row),
@@ -156,7 +158,9 @@
           href="/config/mcp/{encodeURIComponent(row.name)}"
           hue={HUE}
           icon={isRemoteMcp(row.config) ? IconGlobe : IconToolMcp}
-          meta="{isRemoteMcp(row.config) ? `${row.config.type.toUpperCase()} · ` : ''}{describeMcp(row.config)}"
+          meta="{isRemoteMcp(row.config)
+            ? `${row.config.type.toUpperCase()} · `
+            : ""}{describeMcp(row.config)}"
           name={row.name}
           ontoggle={(next) => toggle(row, next)}
           toggling={busy[row.name] === true}

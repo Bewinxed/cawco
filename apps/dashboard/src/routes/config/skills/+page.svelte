@@ -312,7 +312,9 @@
   ready={fleet !== null}
   title={section.label}
 >
-  {#snippet actions(down)}
+  {#snippet actions(
+    down
+  )}
     <FetchSkillPopover
       {down}
       onsaved={landedSkill}
@@ -355,14 +357,25 @@
         {#each skills as row (row.name)}
           <SectionRow
             actions={[
-              { label: 'Fetch again', icon: IconRefresh, disabled: busy[row.name] === true, onselect: () => refetchSkill(row) },
-              { label: 'Remove everywhere', icon: IconTrash, destructive: true, disabled: busy[row.name] === true, onselect: () => askForget(row) },
+              {
+                label: "Fetch again",
+                icon: IconRefresh,
+                disabled: busy[row.name] === true,
+                onselect: () => refetchSkill(row),
+              },
+              {
+                label: "Remove everywhere",
+                icon: IconTrash,
+                destructive: true,
+                disabled: busy[row.name] === true,
+                onselect: () => askForget(row),
+              },
             ]}
             enabled={row.enabled}
             flash={store.flash === row.name}
             hue={HUE}
             icon={IconBolt}
-            meta={[row.source, ...sized(row)].join(' · ')}
+            meta={[row.source, ...sized(row)].join(" · ")}
             name={row.name}
             ontoggle={(next) => switchSkill(row, next)}
             toggling={busy[row.name] === true}
@@ -377,7 +390,9 @@
             {/snippet}
             {#snippet below()}
               <RowFaults
-                hub={hubBroken.filter((fault) => fault.scope === 'skills' && fault.key === row.name)}
+                hub={hubBroken.filter(
+                  (fault) => fault.scope === "skills" && fault.key === row.name
+                )}
                 key={row.name}
                 kind="skills"
                 {machines}
@@ -407,7 +422,13 @@
           {@const host = catalogHost(machines, row.name)}
           <SectionRow
             actions={[
-              { label: 'Unlink', icon: IconTrash, destructive: true, disabled: busy[row.name] === true, onselect: () => askUnlink(row.name) },
+              {
+                label: "Unlink",
+                icon: IconTrash,
+                destructive: true,
+                disabled: busy[row.name] === true,
+                onselect: () => askUnlink(row.name),
+              },
             ]}
             hue={HUE}
             icon={IconShop}
@@ -427,11 +448,13 @@
                 disabled={!host}
                 onclick={() => browse(row.name)}
                 size="sm"
-                title={host ? `Read from ${host.hostname}` : 'No machine that is online has this marketplace yet'}
+                title={host
+                  ? `Read from ${host.hostname}`
+                  : "No machine that is online has this marketplace yet"}
                 variant="ghost"
               >
                 <IconSearch />
-                {browsing === row.name ? 'Hide' : 'Browse'}
+                {browsing === row.name ? "Hide" : "Browse"}
               </Button>
             {/snippet}
             {#snippet below()}
@@ -513,13 +536,24 @@
         {#each plugins as row (row.id)}
           <SectionRow
             actions={[
-              { label: 'Fetch again', icon: IconRefresh, disabled: busy[row.id] === true, onselect: () => refetchPlugin(row) },
-              { label: 'Remove everywhere', icon: IconTrash, destructive: true, disabled: busy[row.id] === true, onselect: () => askUninstall(row.id) },
+              {
+                label: "Fetch again",
+                icon: IconRefresh,
+                disabled: busy[row.id] === true,
+                onselect: () => refetchPlugin(row),
+              },
+              {
+                label: "Remove everywhere",
+                icon: IconTrash,
+                destructive: true,
+                disabled: busy[row.id] === true,
+                onselect: () => askUninstall(row.id),
+              },
             ]}
             enabled={row.enabled}
             hue={HUE}
             icon={IconLayers}
-            meta={sized(row).join(' · ') || 'No bytes resolved yet'}
+            meta={sized(row).join(" · ") || "No bytes resolved yet"}
             mono
             name={row.id}
             ontoggle={(next) => togglePlugin(row.id, next)}
@@ -535,7 +569,9 @@
             {/snippet}
             {#snippet below()}
               <RowFaults
-                hub={hubBroken.filter((fault) => fault.scope === 'plugins' && fault.key === row.id)}
+                hub={hubBroken.filter(
+                  (fault) => fault.scope === "plugins" && fault.key === row.id
+                )}
                 key={row.id}
                 kind="plugins"
                 {machines}

@@ -33,9 +33,9 @@
 <SelectPortal {...portalProps}>
   <SelectPrimitive.Content
     class={cn(
-			"kit-pop relative isolate z-50 min-w-36 origin-(--bits-select-content-transform-origin) overflow-y-auto overflow-x-hidden",
-			className
-		)}
+      "kit-pop relative isolate z-50 min-w-36 origin-(--bits-select-content-transform-origin) overflow-y-auto overflow-x-hidden",
+      className
+    )}
     data-slot="select-content"
     {preventScroll}
     {sideOffset}
@@ -45,8 +45,8 @@
     <SelectScrollUpButton />
     <SelectPrimitive.Viewport
       class={cn(
-				"h-(--bits-select-anchor-height) w-full min-w-(--bits-select-anchor-width) scroll-my-1"
-			)}
+        "h-(--bits-select-anchor-height) w-full min-w-(--bits-select-anchor-width) scroll-my-1"
+      )}
     >
       {@render children?.()}
     </SelectPrimitive.Viewport>

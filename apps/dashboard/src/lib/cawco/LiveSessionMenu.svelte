@@ -160,7 +160,9 @@
 
 <ContextMenu.Root>
   <ContextMenu.Trigger>
-    {#snippet child({ props })}
+    {#snippet child({
+      props,
+    })}
       {@render children(props)}
     {/snippet}
   </ContextMenu.Trigger>
@@ -175,7 +177,15 @@
       Fork
     </ContextMenu.Item>
     <ContextMenu.Item
-      onSelect={() => continueInNewSession({ instanceId: instance.id, machineId: instance.machineId, cwd: instance.cwd, harness: (instance.harness ?? 'claude') as HarnessKind, model: instance.model ?? undefined, title: sessionName(instance.id, {}, instance.cwd).label })}
+      onSelect={() =>
+        continueInNewSession({
+          instanceId: instance.id,
+          machineId: instance.machineId,
+          cwd: instance.cwd,
+          harness: (instance.harness ?? "claude") as HarnessKind,
+          model: instance.model ?? undefined,
+          title: sessionName(instance.id, {}, instance.cwd).label,
+        })}
     >
       <IconArrowRight />
       Continue in new session…

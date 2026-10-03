@@ -30,9 +30,9 @@
   <PopoverPrimitive.Content
     {align}
     class={cn(
-			"kit-pop z-50 flex w-72 origin-(--bits-popover-content-transform-origin) flex-col gap-4 text-label outline-hidden",
-			className
-		)}
+      "kit-pop z-50 flex w-72 origin-(--bits-popover-content-transform-origin) flex-col gap-4 text-label outline-hidden",
+      className
+    )}
     data-slot="popover-content"
     {sideOffset}
     bind:ref

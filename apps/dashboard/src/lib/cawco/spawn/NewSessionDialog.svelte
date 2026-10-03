@@ -981,7 +981,11 @@
 {#if mobile.current}
   <Drawer
     noBodyStyles
-    onOpenChange={(value) => { if (!value) { close(); } }}
+    onOpenChange={(value) => {
+      if (!value) {
+        close();
+      }
+    }}
     {open}
     shouldScaleBackground={false}
   >
@@ -989,8 +993,14 @@
       aria-label="New Session"
       class="session-card ns-theme"
       data-ns-dialog
-      onCloseAutoFocus={(event) => { event.preventDefault(); opener?.focus({ preventScroll: true }); }}
-      onOpenAutoFocus={(event) => { event.preventDefault(); card?.focus({ preventScroll: true }); }}
+      onCloseAutoFocus={(event) => {
+        event.preventDefault();
+        opener?.focus({ preventScroll: true });
+      }}
+      onOpenAutoFocus={(event) => {
+        event.preventDefault();
+        card?.focus({ preventScroll: true });
+      }}
       bind:ref={card}
     >
       <DrawerTitle class="sr-only">New session</DrawerTitle>
@@ -998,15 +1008,28 @@
     </DrawerContent>
   </Drawer>
 {:else}
-  <Dialog onOpenChange={(value) => { if (!value) { close(); } }} {open}>
+  <Dialog
+    onOpenChange={(value) => {
+      if (!value) {
+        close();
+      }
+    }}
+    {open}
+  >
     <DialogPortal>
       <DialogPrimitive.Overlay class="session-scrim ns-theme" />
       <DialogPrimitive.Content
         aria-label="New Session"
         class="session-card ns-theme"
         data-ns-dialog
-        onCloseAutoFocus={(event) => { event.preventDefault(); opener?.focus({ preventScroll: true }); }}
-        onOpenAutoFocus={(event) => { event.preventDefault(); card?.focus({ preventScroll: true }); }}
+        onCloseAutoFocus={(event) => {
+          event.preventDefault();
+          opener?.focus({ preventScroll: true });
+        }}
+        onOpenAutoFocus={(event) => {
+          event.preventDefault();
+          card?.focus({ preventScroll: true });
+        }}
         bind:ref={card}
       >
         <DialogTitle class="sr-only">New session</DialogTitle>
@@ -1028,7 +1051,9 @@
       >
     </div>
     <Tip keys="Esc" label="Close">
-      {#snippet children(tip)}
+      {#snippet children(
+        tip
+      )}
         <button
           {...tip}
           aria-label="Close"
@@ -1069,13 +1094,17 @@
           <NsPopoverGroup>
             <MachinesChip
               machines={machineItems}
-              onchange={(value) => { popover = value ? "machines" : null; }}
+              onchange={(value) => {
+                popover = value ? "machines" : null;
+              }}
               ontoggle={toggleMachine}
               open={popover === "machines"}
               selected={machineIds}
             />
             <ProjectChip
-              onchange={(value) => { popover = value ? "project" : null; }}
+              onchange={(value) => {
+                popover = value ? "project" : null;
+              }}
               onclear={clearProject}
               oncreate={createFromChip}
               onpick={pickProject}
@@ -1090,21 +1119,42 @@
               {machineId}
               machineName={machine?.hostname ?? ""}
               mode={repo === undefined ? "dir" : "repo"}
-              onchange={(value) => { popover = value ? "location" : null; }}
+              onchange={(value) => {
+                popover = value ? "location" : null;
+              }}
               onclosefocus={promptAfterClose}
               oncommit={backToPrompt}
-              ondir={(value) => { cwd = value; editing = true; projectId = undefined; }}
-              onmode={(value) => { repo = value === "repo" ? (repo ?? "") : undefined; if (value === "repo") { projectId = undefined; editing = true; cwd ||= "~"; } }}
-              onoverride={() => { editing = true; }}
-              onrepo={(value) => { repo = value; }}
+              ondir={(value) => {
+                cwd = value;
+                editing = true;
+                projectId = undefined;
+              }}
+              onmode={(value) => {
+                repo = value === "repo" ? (repo ?? "") : undefined;
+                if (value === "repo") {
+                  projectId = undefined;
+                  editing = true;
+                  cwd ||= "~";
+                }
+              }}
+              onoverride={() => {
+                editing = true;
+              }}
+              onrepo={(value) => {
+                repo = value;
+              }}
               open={popover === "location"}
               {reading}
               repo={repo ?? ""}
             />
             <LifetimeChip
               ephemeral={sideQuest}
-              onchange={(value) => { popover = value ? "lifetime" : null; }}
-              onlifetime={(value) => { sideQuest = value; }}
+              onchange={(value) => {
+                popover = value ? "lifetime" : null;
+              }}
+              onlifetime={(value) => {
+                sideQuest = value;
+              }}
               open={popover === "lifetime"}
             />
           </NsPopoverGroup>
@@ -1138,8 +1188,13 @@
               {machineIds}
               machineName={machine?.hostname ?? machineId}
               model={summarizerModel}
-              onharness={(value) => { summarizerHarness = value; summarizerModel = ""; }}
-              onmodel={(id) => { summarizerModel = id; }}
+              onharness={(value) => {
+                summarizerHarness = value;
+                summarizerModel = "";
+              }}
+              onmodel={(id) => {
+                summarizerModel = id;
+              }}
               unavailable={summarizerRefusal}
             />
           </div>
@@ -1153,16 +1208,26 @@
             machineName={machine?.hostname ?? machineId}
             {model}
             onharness={chooseHarness}
-            onmodel={(id) => { model = id; effort = null; }}
+            onmodel={(id) => {
+              model = id;
+              effort = null;
+            }}
             tools={{
-            efforts,
-            effort: effortShown,
-            effortOff: report?.capabilities.effort === false ? effortNotExposed(harness) : null,
-            oneffort: (level) => { effort = level; },
-            modes,
-            permission: permissionMode,
-            onpermission: (value) => { permissionMode = value; },
-          }}
+              efforts,
+              effort: effortShown,
+              effortOff:
+                report?.capabilities.effort === false
+                  ? effortNotExposed(harness)
+                  : null,
+              oneffort: (level) => {
+                effort = level;
+              },
+              modes,
+              permission: permissionMode,
+              onpermission: (value) => {
+                permissionMode = value;
+              },
+            }}
             unavailable={continueFrom ? targetRefusal : undefined}
           />
         </div>
