@@ -543,6 +543,8 @@ struct RunModel {
     /// since the reference date), or an ISO string where one stayed a string.
     private static func date(_ value: Any?) -> Date? {
         if let seconds = value as? Double { return Date(timeIntervalSinceReferenceDate: seconds) }
+        // An `anyOf` (date or null string) encodes as its case's wrapper.
+        if let wrapped = value as? [String: Any] { return wrapped.values.lazy.compactMap { date($0) }.first }
         guard let text = value as? String else { return nil }
         let precise = ISO8601DateFormatter()
         precise.formatOptions = [.withInternetDateTime, .withFractionalSeconds]

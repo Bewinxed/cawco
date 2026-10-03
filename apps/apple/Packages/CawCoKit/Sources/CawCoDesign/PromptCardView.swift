@@ -119,7 +119,11 @@ public final class PromptCardView: UIView {
         pill.heightAnchor.constraint(equalToConstant: 20).isActive = true
         let title = KitLabel(TypeScale.typeLabel, ink: Palette.inkStrong)
         title.text = words
-        let row = UIStackView(arrangedSubviews: [pill, title])
+        // The pill and the title as wide as their words; the row's rest is empty.
+        pill.setContentHuggingPriority(.required, for: .horizontal)
+        pill.setContentCompressionResistancePriority(.required, for: .horizontal)
+        title.setContentHuggingPriority(.required, for: .horizontal)
+        let row = UIStackView(arrangedSubviews: [pill, title, UIView()])
         row.spacing = Space.space2
         row.alignment = .center
         row.isAccessibilityElement = true
@@ -148,7 +152,8 @@ public final class PromptCardView: UIView {
             var row: [OptionChip] = []
             for (i, option) in question.options.enumerated() {
                 let chip = OptionChip(key: i + 1, label: option.label)
-                chip.addAction(UIAction { [weak self] _ in self?.toggle(qi, option.label) }, for: .primaryActionTriggered)
+                // A plain UIControl sends touchUpInside, never primaryActionTriggered.
+                chip.addAction(UIAction { [weak self] _ in self?.toggle(qi, option.label) }, for: .touchUpInside)
                 row.append(chip)
             }
             chips.append(row)
@@ -301,6 +306,13 @@ public final class PromptCardView: UIView {
         // An answer already out from another surface (the board's card):
         // nothing here can be pressed until the hub settles it.
         outside = pressed == nil && sent.map { $0.stage != .failed } == true
+        render()
+    }
+
+    /// The answer never left this device: the card is answerable again,
+    /// with the reason under it.
+    public func refuse(_ reason: String) {
+        refused = reason
         render()
     }
 

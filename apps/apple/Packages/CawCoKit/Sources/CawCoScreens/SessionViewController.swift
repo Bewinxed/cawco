@@ -251,12 +251,16 @@ final class SessionViewController: ObservedViewController, UIDragInteractionDele
     }
 
     private func answer(_ ask: ParkedAsk, _ choice: PromptCardView.Choice, _ picks: [String: [String]]) {
-        guard hub.state == .connected, let row = hub.fleet.byId[sessionId] else { return }
-        switch choice {
+        guard hub.state == .connected, let row = hub.fleet.byId[sessionId] else {
+            cards[ask.requestId]?.refuse("Couldn't send that answer. The hub is unreachable.")
+            return
+        }
+        let sent = switch choice {
         case .allow: hub.needs.answer(ask, machineId: row.machineId, .allow)
         case .deny: hub.needs.answer(ask, machineId: row.machineId, .deny)
         case .answer: hub.needs.answerQuestion(ask, machineId: row.machineId, answers: picks)
         }
+        if !sent { cards[ask.requestId]?.refuse("Couldn't send that answer.") }
         requestRefresh()
     }
 

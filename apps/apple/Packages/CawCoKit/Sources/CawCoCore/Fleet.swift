@@ -430,37 +430,51 @@ public final class NeedsYouStore {
     /// card sends. The ask stays parked, its card showing the command's
     /// stage, until the daemon confirms (`applied`); a refusal leaves it
     /// parked to answer again.
-    public func answer(_ ask: ParkedAsk, machineId: String, _ answer: Answer) {
+    @discardableResult
+    public func answer(_ ask: ParkedAsk, machineId: String, _ answer: Answer) -> Bool {
         let result: [String: (any Sendable)?] = switch answer {
         case .allow: ["behavior": "allow", "updatedInput": ask.input.value]
         case .deny: ["behavior": "deny", "message": ask.isQuestion ? "The user dismissed the question without answering it." : "User denied permission"]
         }
-        submit(ask, machineId: machineId, result: result)
+        return submit(ask, machineId: machineId, result: result)
     }
 
     /// question.ts `questionAnswer`: the whole parked input survives, and
     /// multi-select answers stay arrays even when just one option was picked.
-    public func answerQuestion(_ ask: ParkedAsk, machineId: String, answers: [String: [String]]) {
-        guard !ask.questions.isEmpty, ask.questions.allSatisfy({ !(answers[$0.question] ?? []).isEmpty }) else { return }
+    /// Returns false when nothing could be sent, so the card stops pending.
+    @discardableResult
+    public func answerQuestion(_ ask: ParkedAsk, machineId: String, answers: [String: [String]]) -> Bool {
+        guard !ask.questions.isEmpty, ask.questions.allSatisfy({ !(answers[$0.question] ?? []).isEmpty }) else { return false }
         var shaped: [String: (any Sendable)?] = [:]
         for question in ask.questions {
             let labels = answers[question.question] ?? []
-            shaped[question.question] = question.multiSelect ? labels : labels.first
+            // Typed apart: a ternary would box `String?` as a non-optional
+            // `any Sendable`, which the value container refuses.
+            if question.multiSelect {
+                shaped[question.question] = labels.map { $0 as (any Sendable)? }
+            } else {
+                shaped[question.question] = labels[0]
+            }
         }
         var updated = ask.input.value
         updated["answers"] = shaped
-        submit(ask, machineId: machineId, result: ["behavior": "allow", "updatedInput": updated])
+        return submit(ask, machineId: machineId, result: ["behavior": "allow", "updatedInput": updated])
     }
 
-    private func submit(_ ask: ParkedAsk, machineId: String, result: [String: (any Sendable)?]) {
+    @discardableResult
+    private func submit(_ ask: ParkedAsk, machineId: String, result: [String: (any Sendable)?]) -> Bool {
         let key = "\(ask.instanceId):\(ask.requestId)"
-        guard let payload = try? OpenAPIValueContainer(unvalidatedValue: [
-            "instanceId": ask.instanceId,
-            "requestId": ask.requestId,
-            "method": "resolvePermission",
-            "args": [ask.requestId, result] as [(any Sendable)?],
-        ] as [String: (any Sendable)?]) else {
-            return
+        let payload: OpenAPIValueContainer
+        do {
+            payload = try OpenAPIValueContainer(unvalidatedValue: [
+                "instanceId": ask.instanceId,
+                "requestId": ask.requestId,
+                "method": "resolvePermission",
+                "args": [ask.requestId, result] as [(any Sendable)?],
+            ] as [String: (any Sendable)?])
+        } catch {
+            Logger(subsystem: "dev.cawco.app", category: "Permission").fault("request \(ask.requestId, privacy: .public) answer not encodable: \(String(describing: error), privacy: .public)")
+            return false
         }
         let instanceId = ask.instanceId
         let requestId = ask.requestId
@@ -478,6 +492,7 @@ public final class NeedsYouStore {
             })
         )
         Logger(subsystem: "dev.cawco.app", category: "Permission").notice("request \(requestId, privacy: .public) answered by Apple app command \(self.answers[key] ?? "", privacy: .public)")
+        return true
     }
 
     /// The answer this device sent for an ask, with the hub's word on it.
