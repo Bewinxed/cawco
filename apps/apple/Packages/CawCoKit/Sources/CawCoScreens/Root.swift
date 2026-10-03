@@ -181,7 +181,6 @@ final class BoardSplitController: UISplitViewController, UISplitViewControllerDe
         super.init(style: .doubleColumn)
         board.onOpen = { [weak self] id in self?.openSession(id) }
         board.onSelectTab = { [weak self] tab in self?.onSelection(tab) }
-        board.onQuestion = { [weak self] ask in self?.openQuestion(ask) }
         board.navigationItem.title = "Fleet"
         board.navigationItem.largeTitleDisplayMode = .never
         let change = UIBarButtonItem(title: "Hub", image: Glyph.server.image, primaryAction: UIAction { [weak self] _ in

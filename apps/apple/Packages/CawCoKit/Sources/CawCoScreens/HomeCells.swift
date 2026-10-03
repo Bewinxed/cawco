@@ -27,6 +27,20 @@ class HomeCell: UICollectionViewListCell {
         fatalError("Home cells are built in code")
     }
 
+    /// The pill a press tints (app.css `.press-tint`): it fills with
+    /// `surface-fill` while the finger is down, at once, as `:active` does.
+    var pressTarget: UIView? {
+        didSet {
+            pressTarget?.layer.cornerRadius = Radius.radiusSm
+            pressTarget?.layer.cornerCurve = .continuous
+        }
+    }
+
+    override func updateConfiguration(using state: UICellConfigurationState) {
+        super.updateConfiguration(using: state)
+        pressTarget?.backgroundColor = state.isHighlighted ? Palette.surfaceFill : nil
+    }
+
     func pin(_ view: UIView, insets: NSDirectionalEdgeInsets = .zero) {
         view.translatesAutoresizingMaskIntoConstraints = false
         contentView.addSubview(view)
@@ -38,6 +52,17 @@ class HomeCell: UICollectionViewListCell {
             view.topAnchor.constraint(equalTo: contentView.topAnchor, constant: insets.top),
             bottom,
         ])
+    }
+}
+
+extension UIButton {
+    /// app.css `.press-tint` on a plain button: its 8pt pill fills with
+    /// `surface-fill` while pressed, at once.
+    func pressTint() {
+        configuration?.background.cornerRadius = Radius.radiusSm
+        configurationUpdateHandler = { button in
+            button.configuration?.background.backgroundColor = button.isHighlighted ? Palette.surfaceFill : .clear
+        }
     }
 }
 
@@ -128,7 +153,7 @@ final class NeedsCardCell: HomeCell {
         approve = KitButton.make("Approve", glyph: .tick, glyphTint: Palette.inkStrong, variant: .secondary, height: .sm) { [weak self] in
             self?.onAnswer(.allow)
         }
-        open = KitButton.make("Answer", variant: .secondary, height: .lg) { [weak self] in self?.onOpen() }
+        open = KitButton.make("Answer", variant: .secondary, height: .sm) { [weak self] in self?.onOpen() }
         waited.tabular = true
         waited.setContentHuggingPriority(.required, for: .horizontal)
         waited.setContentCompressionResistancePriority(.required, for: .horizontal)
@@ -167,7 +192,7 @@ final class NeedsCardCell: HomeCell {
             actions.isHidden = false
             open.isHidden = !parked.isQuestion
             deny.isHidden = parked.isQuestion; approve.isHidden = parked.isQuestion
-            KitButton.setTitle("Answer", of: open, variant: .secondary, height: .lg)
+            KitButton.setTitle("Answer", of: open, variant: .secondary, height: .sm)
             deny.accessibilityLabel = "Deny \(parked.summary) on \(item.title)"
             approve.accessibilityLabel = "Approve \(parked.summary) on \(item.title)"
         case .run:
@@ -175,7 +200,7 @@ final class NeedsCardCell: HomeCell {
             ask.text = "Waiting on your answer"
             actions.isHidden = false
             deny.isHidden = true; approve.isHidden = true; open.isHidden = false
-            KitButton.setTitle("Open", of: open, variant: .secondary, height: .lg)
+            KitButton.setTitle("Open", of: open, variant: .secondary, height: .sm)
         }
         let inFlight = sent.map { $0.stage != .failed } ?? false
         deny.isEnabled = !stale && !inFlight
@@ -351,6 +376,7 @@ final class MachineCell: HomeCell {
         config.attributedTitle = AttributedString("Archive all", attributes: AttributeContainer(TypeScale.typeMeta.attributes(color: Palette.inkMuted)))
         archiveAll.configuration = config
         archiveAll.houseStyle()
+        archiveAll.pressTint()
         archiveAll.addAction(UIAction { [weak self] _ in self?.onArchiveAll() }, for: .primaryActionTriggered)
         let row = UIStackView(arrangedSubviews: [glyph, name, UIView(), archiveAll])
         row.spacing = Space.space1
@@ -419,6 +445,7 @@ final class RowCell: HomeCell {
             cell.paintNest()
         }
         paintNest()
+        pressTarget = row
     }
 
     func configure(depth: Int, first: Bool, last: Bool, through: [Int]) {
@@ -690,6 +717,7 @@ final class MoreCell: HomeCell {
         config.contentInsets = NSDirectionalEdgeInsets(top: 0, leading: Space.space3, bottom: 0, trailing: Space.space3)
         button.configuration = config
         button.houseStyle()
+        button.pressTint()
         pin(button, insets: NSDirectionalEdgeInsets(top: 2, leading: 0, bottom: 0, trailing: 0))
         button.heightAnchor.constraint(greaterThanOrEqualToConstant: 28).isActive = true
     }
@@ -765,6 +793,7 @@ final class RecentHeadCell: HomeCell {
         ])
         isAccessibilityElement = true
         accessibilityTraits = .button
+        pressTarget = contentView
     }
 
     func configure(count total: Int, open: Bool) {
@@ -820,6 +849,7 @@ final class RecentRowCell: HomeCell {
     override init(frame: CGRect) {
         super.init(frame: frame)
         pin(row, insets: NSDirectionalEdgeInsets(top: 2, leading: 0, bottom: 0, trailing: 0))
+        pressTarget = row
     }
 }
 

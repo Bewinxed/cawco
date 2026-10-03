@@ -51,7 +51,6 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     private let home: HomeModel
     var onOpen: (String) -> Void = { _ in }
     var onSelectTab: (HomeModel.Tab) -> Void = { _ in }
-    var onQuestion: (ParkedAsk) -> Void = { _ in }
     var collectionView: UICollectionView!
     private(set) lazy var layout = makeLayout()
     private var dataSource: UICollectionViewDiffableDataSource<Section, Item>!
@@ -205,7 +204,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
             cell.onOpen = { [weak self] in
                 guard let self else { return }
                 switch need.kind {
-                case let .ask(ask): if ask.isQuestion { onQuestion(ask) } else { onOpen(ask.instanceId) }
+                case let .ask(ask): onOpen(ask.instanceId)
                 case let .run(run): onOpen(run.rowId)
                 }
             }
@@ -686,7 +685,7 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
         case let .need(id):
             if let need = needs[id] {
                 switch need.kind {
-                case let .ask(ask): if ask.isQuestion { onQuestion(ask) } else { onOpen(ask.instanceId) }
+                case let .ask(ask): onOpen(ask.instanceId)
                 case let .run(run): onOpen(run.rowId)
                 }
             }
