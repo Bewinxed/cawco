@@ -14,9 +14,16 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
     private let home: HomeModel
 
     private(set) var destination: ShellDestination = .fleet
-    private(set) var selected: SessionViewController?
-    private(set) var currentId: String?
     private(set) var assistantOpen = false
+
+    /// This window's open conversations and their groups.
+    let workspace = Workspace()
+    private let panes: PaneHost
+    private lazy var workspaceController = WorkspaceController(workspace: workspace, panes: panes, context: context)
+    /// The phone's session page wears the same bar as the board: its own copy.
+    private let sessionCrumb = CrumbView("Fleet")
+    private let sessionCluster = TopBarCluster()
+    private let sessionBurger = BurgerButton()
 
     // Regular width.
     private let rail: SidebarViewController
@@ -57,7 +64,10 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         railHome = HomeViewController(hub: hub, home: home)
         board = HomeViewController(hub: hub, home: home)
         detail = FleetDetailController(hub: hub, home: home)
+        panes = PaneHost(hub: hub)
         super.init(style: .doubleColumn)
+        panes.onReturnToFleet = { [weak self] id in self?.returnToFleet(id) }
+        panes.onOpen = { [weak self] id in self?.openSession(id) }
         rail.host = self
         rail.homeController = railHome
         for home in [railHome, board] {
@@ -77,8 +87,10 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         setViewController(compactNav, for: .compact)
 
         mainCluster.compact = false
-        burger.addAction(UIAction { [weak self] _ in self?.showRailSheet() }, for: .primaryActionTriggered)
-        for cluster in [mainCluster, compactCluster] {
+        for button in [burger, sessionBurger] {
+            button.addAction(UIAction { [weak self] _ in self?.showRailSheet() }, for: .primaryActionTriggered)
+        }
+        for cluster in [mainCluster, compactCluster, sessionCluster] {
             cluster.onAttention = { [weak self] in self?.go(.fleet) }
             cluster.onAssistant = { [weak self] in self?.toggleAssistant() }
             cluster.onJump = { [weak self] in self?.openJump() }
@@ -87,6 +99,12 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         }
         TopBar.install(on: detail.navigationItem, crumb: mainCrumb, cluster: mainCluster, burger: nil)
         TopBar.install(on: board.navigationItem, crumb: compactCrumb, cluster: compactCluster, burger: burger)
+        TopBar.install(on: workspaceController.navigationItem, crumb: sessionCrumb, cluster: sessionCluster, burger: sessionBurger)
+        // Back on the board (a back swipe), the focused group shows nothing; its tabs stay.
+        compactMotion.didShow = { [weak self] shown in
+            guard let self, shown === compactNav.viewControllers.first, compact, workspace.activeSessionId != nil else { return }
+            workspace.showBoard()
+        }
 
         preferredDisplayMode = .oneBesideSecondary
         preferredSplitBehavior = .tile
@@ -100,7 +118,11 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
             // The rail is resized by its own grip, as the web's is.
             displayModeButtonVisibility = .never
         }
-        watcher = ShellWatcher(hub: hub, home: home) { [weak self] in self?.refreshBars() }
+        watcher = ShellWatcher(hub: hub, home: home) { [weak self] in
+            guard let self else { return }
+            refreshBars()
+            followWorkspace()
+        }
     }
 
     @available(*, unavailable)
@@ -165,79 +187,100 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
 
     // MARK: Sessions
 
+    /// The conversation in front, its screen if it is a session.
+    var selected: SessionViewController? { currentId.flatMap(panes.session) }
+    var currentId: String? { workspace.activeSessionId }
+
+    /// Opens a conversation in the workspace: its group's tab, the deck pushed
+    /// over the board on a compact width, the grid in the detail on a wide one.
     func openSession(_ id: String) {
         railSheet?.dismiss(animated: true)
-        let values = selected?.sessionId == id ? selected?.restorationValues : nil
-        currentId = id
         if destination != .fleet { go(.fleet) }
-        place(sessionId: id, restoring: values)
+        workspace.open(id)
+        showWorkspace(animated: true)
         rail.requestRefresh()
     }
 
-    /// Puts the conversation in front in whichever stack the width shows.
-    private func place(sessionId id: String, restoring values: [AnyHashable: Any]?) {
-        selected?.close()
-        selected = nil
-        if let runId = BoardRun.runId(of: id) {
-            let run = WorkflowRunViewController(hub: hub, runId: runId)
-            run.onReturn = { [weak self] in self?.returnToFleet() }
-            run.onOpen = { [weak self] id in self?.openSession(id) }
-            put(run)
-            return
-        }
-        let session = SessionViewController(hub: hub, id: id)
-        selected = session
-        session.onClose = { [weak self, weak session] in
-            if self?.selected === session { self?.selected = nil }
-        }
-        session.onReturnToFleet = { [weak self] in self?.returnToFleet() }
-        if let values { session.restoreValues(values) }
-        put(session)
-    }
-
-    private func put(_ controller: UIViewController) {
+    /// Puts the workspace where the width shows it.
+    private func showWorkspace(animated: Bool) {
         if compact {
-            compactNav.setViewControllers([compactNav.viewControllers.first ?? board, controller], animated: true)
+            guard compactNav.topViewController !== workspaceController else { return }
+            if workspaceController.parent != nil, workspaceController.parent !== compactNav { detail.show(nil) }
+            compactNav.setViewControllers([compactNav.viewControllers.first ?? board, workspaceController], animated: animated)
         } else {
-            detail.show(controller)
+            if workspace.openIds.isEmpty {
+                detail.show(nil)
+                return
+            }
+            workspace.fillGroups()
+            guard detail.shown !== workspaceController else { return }
+            if compactNav.viewControllers.contains(workspaceController) {
+                compactNav.setViewControllers([compactNav.viewControllers.first ?? board], animated: false)
+            }
+            detail.show(workspaceController)
         }
     }
 
-    func returnToFleet() {
-        currentId = nil
-        selected?.close()
-        selected = nil
-        if compact {
-            compactNav.popToRootViewController(animated: true)
-        } else {
-            detail.show(nil)
-        }
+    /// A conversation's own way back (its back or close): its tab closes; on a
+    /// phone, a group left showing nothing goes back to the board.
+    func returnToFleet(_ id: String) {
+        workspace.close(id)
         rail.requestRefresh()
+    }
+
+    /// Keeps the stacks with the workspace however it changed (a tab closed
+    /// from its strip, a drop): the phone leaves a group showing nothing for
+    /// the board, the wide screen lands when nothing is open.
+    private func followWorkspace() {
+        _ = workspace.version
+        guard isViewLoaded else { return }
+        if compact {
+            if workspace.activeSessionId == nil, compactNav.topViewController === workspaceController {
+                compactNav.popToRootViewController(animated: true)
+            }
+        } else if workspace.openIds.isEmpty {
+            if detail.shown != nil { detail.show(nil) }
+            landIfEmpty()
+        }
+    }
+
+    /// A wide screen never shows an empty detail if anything can be opened:
+    /// the longest-waiting ask's session, else the most recently active one
+    /// (home-state.svelte.ts `landing`), replacing rather than pushing.
+    private func landIfEmpty() {
+        guard !compact, workspace.openIds.isEmpty, home.ready else { return }
+        let ask = home.needs.lazy.compactMap { item -> String? in
+            if case let .ask(ask) = item.kind { return ask.instanceId }
+            return nil
+        }.first
+        let latest = hub.fleet.rows.filter { $0.isLive && (home.delegates || $0.parentInstanceId == nil) }.max { hub.fleet.lastAt($0) < hub.fleet.lastAt($1) }?.id
+        guard let landing = ask ?? latest else { return }
+        workspace.land(landing)
+        showWorkspace(animated: false)
     }
 
     // MARK: Width changes
 
-    /// The conversation in front moves to the stack the new width shows, its
-    /// draft and place in the transcript carried over.
+    /// The workspace moves to the stack the new width shows; its panes go
+    /// with it, drafts and places in the transcripts carried over.
     func splitViewControllerDidCollapse(_: UISplitViewController) {
-        moveSession()
+        moveWorkspace()
     }
 
     func splitViewControllerDidExpand(_: UISplitViewController) {
         railSheet?.dismiss(animated: false)
-        moveSession()
+        moveWorkspace()
     }
 
-    private func moveSession() {
-        let values = selected?.restorationValues
-        if compact {
-            detail.show(nil)
-            compactNav.setViewControllers([compactNav.viewControllers.first ?? board], animated: false)
-        } else {
-            compactNav.setViewControllers([compactNav.viewControllers.first ?? board], animated: false)
-        }
-        if let id = currentId {
-            UIView.performWithoutAnimation { place(sessionId: id, restoring: values) }
+    private func moveWorkspace() {
+        UIView.performWithoutAnimation {
+            if compact {
+                detail.show(nil)
+                if workspace.activeSessionId != nil { showWorkspace(animated: false) }
+            } else {
+                compactNav.setViewControllers([compactNav.viewControllers.first ?? board], animated: false)
+                showWorkspace(animated: false)
+            }
         }
     }
 
@@ -298,7 +341,7 @@ final class ShellController: UISplitViewController, UISplitViewControllerDelegat
         let blocked = fleet.rows.filter { $0.isLive && home.activity($0.id) == .blocked }.count
         let online = fleet.machines.filter { $0.status == "online" }.count
         let down = fleet.machines.contains { $0.status != "online" }
-        for cluster in [mainCluster, compactCluster] {
+        for cluster in [mainCluster, compactCluster, sessionCluster] {
             cluster.configure(blocked: blocked, online: online, anyDown: down, assistantOpen: assistantOpen)
         }
     }

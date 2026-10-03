@@ -110,6 +110,8 @@ final class TravelAnimator: NSObject, UIViewControllerAnimatedTransitioning {
 final class ShellNavigationMotion: NSObject, UINavigationControllerDelegate, UIGestureRecognizerDelegate {
     /// Set just before a root swap, read by the next transition.
     var route: Travel?
+    /// The controller a transition (or a back swipe) left on top.
+    var didShow: (UIViewController) -> Void = { _ in }
     private var interaction: UIPercentDrivenInteractiveTransition?
     private weak var navigation: UINavigationController?
     private var transitioning = false
@@ -129,7 +131,8 @@ final class ShellNavigationMotion: NSObject, UINavigationControllerDelegate, UIG
 
     func gestureRecognizerShouldBegin(_ pan: UIGestureRecognizer) -> Bool {
         guard let pan = pan as? UIPanGestureRecognizer, let navigation, !transitioning,
-              navigation.viewControllers.count > 1, let view = pan.view else { return false }
+              navigation.viewControllers.count > 1, let view = pan.view,
+              (navigation.topViewController as? BackSwipeGate)?.allowsBackSwipe ?? true else { return false }
         let v = pan.velocity(in: view)
         let rtl = view.effectiveUserInterfaceLayoutDirection == .rightToLeft ? -1.0 : 1
         // Mostly sideways, toward the trailing side: anything else is the page's own.
@@ -144,8 +147,9 @@ final class ShellNavigationMotion: NSObject, UINavigationControllerDelegate, UIG
         transitioning = true
     }
 
-    func navigationController(_: UINavigationController, didShow _: UIViewController, animated _: Bool) {
+    func navigationController(_: UINavigationController, didShow shown: UIViewController, animated _: Bool) {
         transitioning = false
+        didShow(shown)
     }
 
     func navigationController(_: UINavigationController, animationControllerFor operation: UINavigationController.Operation, from _: UIViewController, to _: UIViewController) -> (any UIViewControllerAnimatedTransitioning)? {
