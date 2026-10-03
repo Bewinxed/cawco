@@ -71,6 +71,7 @@ export class PiRemoteSession implements HarnessSession {
   readonly #client: SessiondClient;
   readonly #ctx: HarnessContext;
   readonly #epoch: string;
+  readonly #recoveryHead: number;
   #seq: number;
   #ready = false;
   #busy = false;
@@ -80,12 +81,14 @@ export class PiRemoteSession implements HarnessSession {
     client: SessiondClient,
     ctx: HarnessContext,
     pid: number,
-    afterSeq: number
+    afterSeq: number,
+    recoveryHead = 0
   ) {
     this.#client = client;
     this.#ctx = ctx;
     this.#epoch = procEpoch(client.epoch as string, pid);
     this.#seq = afterSeq;
+    this.#recoveryHead = recoveryHead;
     client.subscribe(
       procIdFor("pi", ctx.instanceId),
       {
@@ -152,6 +155,9 @@ export class PiRemoteSession implements HarnessSession {
   }
 
   #frame(seq: number, message: NeutralMessage): void {
+    if (message.type === "result" && seq <= this.#recoveryHead) {
+      message.recovered = true;
+    }
     (this.#ctx as Partial<SessiondAwareContext>).line?.(this.#epoch, seq);
     this.#ctx.frame(message);
   }
@@ -319,7 +325,8 @@ export async function adoptPi(
     client,
     ctx,
     proc.pid,
-    options.afterSeq ?? options.head
+    options.afterSeq ?? options.head,
+    options.head
   );
   const state = (await session.request({ type: "snapshot" })) as PiHostState;
   ctx.frame({

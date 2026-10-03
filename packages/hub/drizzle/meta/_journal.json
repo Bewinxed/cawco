@@ -463,6 +463,13 @@
       "when": 1791030547510,
       "tag": "0065_session_identities",
       "breakpoints": true
+    },
+    {
+      "idx": 66,
+      "version": "6",
+      "when": 1791060000000,
+      "tag": "0066_completed_turns",
+      "breakpoints": true
     }
   ]
 }

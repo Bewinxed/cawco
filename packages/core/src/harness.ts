@@ -657,6 +657,8 @@ export interface NeutralResultMessage {
   is_error: boolean;
   num_turns?: number;
   raw?: unknown;
+  /** Read from stored history during recovery, rather than a newly completed turn. */
+  recovered?: boolean;
   result?: string;
   session_id?: string;
   stop_reason?: string | null;

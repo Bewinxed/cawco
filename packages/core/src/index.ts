@@ -540,6 +540,10 @@ export type InstanceStatus =
   | "unknown"
   | "error";
 
+/** A missing Claude conversation is terminal; restarting cannot recreate its history. */
+export const CLAUDE_CONVERSATION_GONE =
+  "This Claude Code conversation is gone and cannot be resumed. Start a new session to continue working.";
+
 /**
  * A "continue in new session" the hub is carrying, as every dashboard follows
  * it: summarise the source, then start the target seeded with the summary.
@@ -706,7 +710,12 @@ export type DelegateEvent =
     })
   | (DelegateEventBase & {
       kind: "report";
-      payload: { body: string; failed: boolean };
+      payload: {
+        body: string;
+        failed: boolean;
+        resultId?: string;
+        completedAt?: string;
+      };
     });
 
 /** The three things a delegate and its parent ever say to each other. */

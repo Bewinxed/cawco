@@ -373,6 +373,8 @@ export const resumableSessions = async (): Promise<
       sawAny = true;
     } catch (error) {
       warn(`could not read ${adapter.kind}'s session catalog: ${error}`);
+      // A partial cross-harness catalog cannot prove that a conversation is gone.
+      return undefined;
     }
   }
   return sawAny ? found : undefined;
@@ -417,6 +419,7 @@ export class SessionSupervisor {
     this.#adapter("opencode").setCustodyReadiness?.(() => this.custodyReady);
   }
   readonly #sessions = new Map<string, HarnessSession>();
+  readonly #failures = new Map<string, string>();
   /** Reattaches in flight, by instance id: see {@link reattach}. */
   readonly #adopting = new Map<string, Promise<void>>();
   /** Outlives its session: a discard can arrive after the query already ended. */
@@ -1058,6 +1061,7 @@ export class SessionSupervisor {
       } else {
         this.#resumable.delete(instanceId);
       }
+      this.#failures.delete(instanceId);
       const session = payload.reattachOnly
         ? await adapter.reattach?.(payload, ctx)
         : await adapter.spawn(payload, ctx);
@@ -1595,11 +1599,13 @@ export class SessionSupervisor {
 
   /** A session that never started, or stopped without being asked to. */
   #fail(instanceId: string, error: unknown): void {
+    const message = error instanceof Error ? error.message : String(error);
+    this.#failures.set(instanceId, message);
     this.sink({
       kind: "error",
       instanceId,
       verb: "spawn",
-      message: error instanceof Error ? error.message : String(error),
+      message,
     });
   }
 
@@ -1641,7 +1647,14 @@ export class SessionSupervisor {
       };
       worktree.announce = undefined;
     }
-    this.#session(instanceId).send(message, { attachments, images, urgent });
+    const session = this.#sessions.get(instanceId);
+    if (!session) {
+      throw new Error(
+        this.#failures.get(instanceId) ??
+          "This session is not live. Resume it before sending a message."
+      );
+    }
+    session.send(message, { attachments, images, urgent });
   }
 
   async #stop({ instanceId, discard, requestId }: StopPayload): Promise<void> {

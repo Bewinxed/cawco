@@ -47,6 +47,7 @@ import type {
 } from "@cawco/core";
 import {
   ASK_USER_QUESTION,
+  CLAUDE_CONVERSATION_GONE,
   CONTROL_SET_EFFORT,
   CONTROL_SET_MODEL,
   EFFORT_READ,
@@ -896,6 +897,12 @@ class ClaudeSession implements HarnessSession {
         if (!neutral) {
           continue;
         }
+        if (neutral.type === "result" && this.#sessiond?.attach) {
+          const seq = message.uuid ? this.#seqs.get(message.uuid) : undefined;
+          if (seq !== undefined && seq <= this.#sessiond.attach.head) {
+            neutral.recovered = true;
+          }
+        }
         // The session-start hooks that failed go out as this run's first
         // prompt is taken up: where the CLI stores them, ahead of that
         // prompt's record, and keyed by it as a history read keys them.
@@ -970,7 +977,11 @@ class ClaudeSession implements HarnessSession {
       }
     } catch (error) {
       ctx.busy(false);
-      ctx.failed(error);
+      ctx.failed(
+        String(error).includes("No conversation found with session ID:")
+          ? new Error(CLAUDE_CONVERSATION_GONE)
+          : error
+      );
     } finally {
       ctx.closed?.();
     }
@@ -1723,6 +1734,12 @@ export class ClaudeHarness implements Harness {
     // across agent restarts, which is what lets the returning agent match a
     // surviving child to the row it belongs to.
     const client = await this.sessiond();
+    if (
+      spec.resume &&
+      !(await claudeSessionFile(spec.resume.sessionKey, ctx.cwd))
+    ) {
+      throw new Error(CLAUDE_CONVERSATION_GONE);
+    }
     const fleetDenyList = await resolvedDenyList();
     return new ClaudeSession(
       ctx.instanceId,

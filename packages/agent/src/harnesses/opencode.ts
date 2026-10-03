@@ -23,6 +23,7 @@
  */
 
 import { createHash } from "node:crypto";
+import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { readdir, rename } from "node:fs/promises";
 import { homedir } from "node:os";
 import { join } from "node:path";
@@ -941,45 +942,37 @@ const writeTag = async (
  * the server finished it meanwhile (see `watchResumedTurn`).
  */
 const OPEN_TURNS_PATH = join(OPENCODE_DIR, "cawco-open-turns.json");
-let openTurns: Promise<Set<string>> | undefined;
-let openTurnsWritten: Promise<void> = Promise.resolve();
+let openTurns: Set<string> | undefined;
 
-const loadOpenTurns = (): Promise<Set<string>> => {
-  openTurns ??= Bun.file(OPEN_TURNS_PATH)
-    .exists()
-    .then(async (exists) =>
-      exists
-        ? new Set((await Bun.file(OPEN_TURNS_PATH).json()) as string[])
-        : new Set<string>()
-    );
+const loadOpenTurns = (): Set<string> => {
+  openTurns ??= existsSync(OPEN_TURNS_PATH)
+    ? new Set(JSON.parse(readFileSync(OPEN_TURNS_PATH, "utf8")) as string[])
+    : new Set<string>();
   return openTurns;
 };
 
 /** Records that `sessionId`'s turn is open (the hub is owed its end) or closed. */
 const markTurn = (sessionId: string, open: boolean): void => {
-  openTurnsWritten = openTurnsWritten
-    .then(async () => {
-      const ids = await loadOpenTurns();
-      if (open === ids.has(sessionId)) {
-        return;
-      }
-      if (open) {
-        ids.add(sessionId);
-      } else {
-        ids.delete(sessionId);
-      }
-      await Bun.write(OPEN_TURNS_PATH, JSON.stringify([...ids]));
-    })
-    .catch((error: unknown) =>
-      console.warn(`[opencode] open-turn record for ${sessionId}: ${error}`)
-    );
+  const ids = loadOpenTurns();
+  if (open === ids.has(sessionId)) {
+    return;
+  }
+  const next = new Set(ids);
+  if (open) {
+    next.add(sessionId);
+  } else {
+    next.delete(sessionId);
+  }
+  // Commit before publishing the result: no deferred write can be lost at restart.
+  const pending = `${OPEN_TURNS_PATH}.${process.pid}.tmp`;
+  writeFileSync(pending, JSON.stringify([...next]));
+  renameSync(pending, OPEN_TURNS_PATH);
+  openTurns = next;
 };
 
 /** Whether an earlier process left `sessionId` with a turn it never ended. */
-const turnWasOpen = async (sessionId: string): Promise<boolean> => {
-  await openTurnsWritten;
-  return (await loadOpenTurns()).has(sessionId);
-};
+const turnWasOpen = (sessionId: string): boolean =>
+  loadOpenTurns().has(sessionId);
 
 const sessionToInfo = (session: Session, tag?: string): NeutralSessionInfo => ({
   sessionId: session.id,
@@ -1276,6 +1269,9 @@ export class OpencodeSession implements HarnessSession {
   #lastRetryNote = "";
   /** The message id of the prompt this process sent that the open turn answers. */
   #turnPrompt: string | undefined;
+  #completion: { uuid: string; timestamp?: string } | undefined;
+  #recoveringTurn = false;
+  #sleepAfterRecovery = false;
   #open = false;
   /**
    * A turn is open: the hub is owed its end (a `result` frame). Recorded on
@@ -1466,6 +1462,12 @@ export class OpencodeSession implements HarnessSession {
         this.#roles.set(info.id, info.role);
         this.#noteCreated(info);
         if (info.role === "assistant") {
+          this.#completion = {
+            uuid: info.id,
+            ...(info.time.completed
+              ? { timestamp: new Date(info.time.completed).toISOString() }
+              : {}),
+          };
           this.#costs.set(info.id, info.cost);
           this.#lastTokens = info.tokens;
           if (!info.time.completed) {
@@ -2238,8 +2240,19 @@ export class OpencodeSession implements HarnessSession {
       return;
     }
     const turnCost = [...this.#costs.values()].reduce((a, b) => a + b, 0);
+    const identity =
+      this.#completion ??
+      (this.#turnPrompt ? { uuid: this.#turnPrompt } : undefined);
+    this.#turnOpen = false;
+    // Clear even an inherited disk entry when the in-memory turn was already closed.
+    if (this.sessionId) {
+      markTurn(this.sessionId, false);
+    }
     this.#ctx.frame({
       type: "result",
+      ...identity,
+      // biome-ignore lint/suspicious/noUnnecessaryConditions: history recovery sets this across calls to handle().
+      ...(this.#recoveringTurn ? { recovered: true } : {}),
       subtype: result?.subtype ?? "success",
       is_error: result?.is_error ?? false,
       ...(result?.errors ? { errors: result.errors } : {}),
@@ -2259,7 +2272,7 @@ export class OpencodeSession implements HarnessSession {
         this.#toolsEmitted.delete(callID);
       }
     }
-    this.#turnOpen = false;
+    this.#completion = undefined;
     this.#clearStallTimer();
   }
 
@@ -2327,13 +2340,23 @@ export class OpencodeSession implements HarnessSession {
       if (!running) {
         // Idle on the server, yet the hub is still owed this turn's end: it
         // ended while nothing here was subscribed.
-        if (this.#turnOpen) {
+        if (this.#turnOpen || this.#sleepAfterRecovery) {
           await this.#endMissedTurn(revision);
           // A replay that closed the missed turn advanced the revision itself;
           // a newer live turn is likewise left to its own events.
-          if (revision !== this.#turnRevision) {
+          if (revision !== this.#turnRevision && !this.#sleepAfterRecovery) {
             return;
           }
+        }
+        if (
+          // biome-ignore lint/suspicious/noUnnecessaryConditions: sleepAfterRecovery() arms this before attachment.
+          this.#sleepAfterRecovery &&
+          !this.#busy &&
+          this.#queue.length === 0
+        ) {
+          await this.dispose();
+          this.#ctx.closed?.();
+          return;
         }
         // The turn the reattach found running ended before this session was
         // subscribed: no idle event is coming for it. A prompt this process
@@ -2428,6 +2451,8 @@ export class OpencodeSession implements HarnessSession {
     }
     const replay = (type: string, properties: object) =>
       this.handle({ type, properties } as unknown as Event);
+    this.#open = true;
+    this.#recoveringTurn = true;
     for (const { info, parts } of replies) {
       replay("message.updated", {
         info: { ...info, time: { ...info.time, completed: undefined } },
@@ -2453,6 +2478,7 @@ export class OpencodeSession implements HarnessSession {
       });
       this.#drainQueue();
     }
+    this.#recoveringTurn = false;
   }
 
   /**
@@ -2476,6 +2502,11 @@ export class OpencodeSession implements HarnessSession {
    */
   inheritOpenTurn(): void {
     this.#open = true;
+  }
+
+  /** A recovery handle ends normally once the server says its turn is idle. */
+  sleepAfterRecovery(): void {
+    this.#sleepAfterRecovery = true;
   }
 
   /**
@@ -2624,6 +2655,7 @@ export class OpencodeSession implements HarnessSession {
       urgent?: boolean;
     }
   ): void {
+    this.#sleepAfterRecovery = false;
     this.#turnRevision += 1;
     const { content } = message.message;
     let text =
@@ -5107,8 +5139,11 @@ export class OpencodeHarness implements Harness {
     this.#sessionOwners.set(ctx.instanceId, identity);
     // A session an earlier agent left mid-turn: the hub still waits on that
     // turn's end, which the reconcile after its subscription comes up pays.
-    if (spec.resume && !spec.resume.fork && (await turnWasOpen(sessionId))) {
+    if (spec.resume && !spec.resume.fork && turnWasOpen(sessionId)) {
       session.inheritOpenTurn();
+    }
+    if (spec.reattachOnly === true) {
+      session.sleepAfterRecovery();
     }
     session.attached = () => {
       // Publishing a handle retains its captured generation, even if a newer

@@ -37,7 +37,12 @@ import type {
   UsageSummaryRow,
   UsageTotals,
 } from "@cawco/core";
-import { REMOVED_MACHINE, RESTART_LOST, resolveRates } from "@cawco/core";
+import {
+  CLAUDE_CONVERSATION_GONE,
+  REMOVED_MACHINE,
+  RESTART_LOST,
+  resolveRates,
+} from "@cawco/core";
 import {
   and,
   asc,
@@ -64,6 +69,7 @@ import {
   agents,
   capabilityUsageDaily,
   claudeContextWindows,
+  completedTurns,
   continuations,
   credentials,
   delegateEvents,
@@ -230,6 +236,13 @@ export interface DbShape {
   readonly capabilityUsageSince: (
     day: string
   ) => (typeof capabilityUsageDaily.$inferSelect)[];
+  /** Claims one harness completion before any turn-end side effect. */
+  readonly claimCompletedTurn: (
+    instanceId: string,
+    resultId: string,
+    completedAt: string | undefined,
+    recovered: boolean
+  ) => boolean;
   /** Every claude model's last observed context window, by model id. */
   readonly claudeContextWindows: () => Record<string, number>;
   readonly clearFleetMemory: () => void;
@@ -2008,6 +2021,25 @@ const make = (path: string): DbShape => {
     // ghosting, and separated at the source into the ones that can come back
     // and the ones whose transcript went with the process.
     settleInstances: (machineId, liveIds, resumable, resumableAt) => {
+      if (resumable) {
+        // The authoritative catalog says which Claude conversations still exist.
+        // A previously failed resume is checked too, without launching it again.
+        db.update(instances)
+          .set({ status: "error", lastError: CLAUDE_CONVERSATION_GONE })
+          .where(
+            and(
+              eq(instances.machineId, machineId),
+              or(eq(instances.harness, "claude"), isNull(instances.harness)),
+              isNotNull(instances.sessionId),
+              notInArray(instances.status, ["stopped", "discarded"]),
+              liveIds.length ? notInArray(instances.id, liveIds) : undefined,
+              resumable.length
+                ? notInArray(instances.sessionId, resumable)
+                : undefined
+            )
+          )
+          .run();
+      }
       // First, the ones it *does* carry. A dropped socket marks every session on
       // the machine `unknown` (see `reconcileInstances`), because from the hub's
       // side a daemon that vanished tells you nothing about the processes it
@@ -3146,6 +3178,47 @@ const make = (path: string): DbShape => {
       delegateEventOf(
         db.insert(delegateEvents).values(event).returning().get()
       ),
+    claimCompletedTurn: (instanceId, resultId, completedAt, recovered) => {
+      const reports = db
+        .select()
+        .from(delegateEvents)
+        .where(
+          and(
+            eq(delegateEvents.instanceId, instanceId),
+            eq(delegateEvents.kind, "report")
+          )
+        )
+        .all();
+      const exact = reports.some(
+        ({ requestId, createdAt, payload }) =>
+          requestId === resultId ||
+          ("resultId" in payload && payload.resultId === resultId) ||
+          (completedAt !== undefined &&
+            (("completedAt" in payload &&
+              payload.completedAt === completedAt) ||
+              createdAt.toISOString() === completedAt))
+      );
+      // An old report without a harness identity cannot prove a fresh completion.
+      // Adopt that recovered identity silently, as directed; never guess by time proximity.
+      const unkeyed =
+        recovered &&
+        reports.length > 0 &&
+        reports.every(
+          ({ payload }) => !("resultId" in payload || "completedAt" in payload)
+        );
+      const inserted = db
+        .insert(completedTurns)
+        .values({
+          instanceId,
+          resultId,
+          completedAt,
+          adoptedWithoutReport: unkeyed && !exact,
+        })
+        .onConflictDoNothing()
+        .returning()
+        .all();
+      return inserted.length > 0 && !exact && !unkeyed;
+    },
     delegateAsk: (requestId) => {
       const row = db
         .select()

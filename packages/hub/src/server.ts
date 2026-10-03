@@ -69,6 +69,7 @@ import {
   agentProblem,
   archiveRefusal,
   BUCKET_MS,
+  CLAUDE_CONVERSATION_GONE,
   CONTROL_CONTEXT_USAGE,
   CONTROL_GET_SESSION_INFO,
   CONTROL_GET_SESSION_MESSAGES,
@@ -1720,6 +1721,9 @@ export const createServer = ({
     origin: NeutralOrigin
   ): string | undefined => {
     const [row] = db.getInstancesByIds([instanceId]);
+    if (row?.lastError === CLAUDE_CONVERSATION_GONE) {
+      return CLAUDE_CONVERSATION_GONE;
+    }
     return row ? workItems.refusal(row, origin) : undefined;
   };
   /**
@@ -1943,7 +1947,8 @@ export const createServer = ({
   const reportToParent = (
     delegate: InstanceRow,
     body: string,
-    failed: boolean
+    failed: boolean,
+    completion?: { resultId: string; completedAt?: string }
   ): void => {
     const parent = delegate.parentInstanceId
       ? db.getInstancesByIds([delegate.parentInstanceId])[0]
@@ -1982,7 +1987,7 @@ export const createServer = ({
         instanceId: delegate.id,
         parentInstanceId: parent.id,
         kind: "report",
-        payload: { body, failed },
+        payload: { body, failed, ...completion },
       })
     );
   };
@@ -2982,6 +2987,7 @@ export const createServer = ({
    * trying once more after its socket dropped): the machine is not handed it
    * twice, and the record it has is said again for whoever asked.
    */
+  // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: the single send transaction orders refusal, recovery, delivery and persistence.
   const deliverSend = (envelope: Envelope<SendPayload>): SentMessageRow => {
     const { instanceId, message } = envelope.payload;
     const known = db.sendRecord(message.uuid);
@@ -2990,6 +2996,9 @@ export const createServer = ({
       return known;
     }
     const refused = inputRefusal(instanceId, message.origin);
+    if (refused === CLAUDE_CONVERSATION_GONE) {
+      throw new WorkItemRefusal(409, refused);
+    }
     // A machine that closed its socket moments ago is restarting its agent:
     // the send waits for its register and goes then, through this same path
     // ({@link releaseAwaiting}). It is written down when it goes, not now: the
@@ -4555,6 +4564,9 @@ export const createServer = ({
     reattachOnly: SpawnPayload["reattachOnly"] = false
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: builds the restore payload from the stored row in one place
   ): void => {
+    if (row.lastError === CLAUDE_CONVERSATION_GONE) {
+      return;
+    }
     const asked: SpawnPayload = {
       instanceId: row.id,
       cwd: row.cwd,
@@ -9612,6 +9624,29 @@ export const createServer = ({
               // read before anything below can consume the frame, since a
               // `held` naming it is also a send signal.
               if (kind === "frame" && message.instanceId) {
+                const neutral = (
+                  message.payload as FramePayload & { kind: "frame" }
+                ).message;
+                if (neutral.type === "result") {
+                  if (!neutral.uuid) {
+                    console.error(
+                      `[hub] completion ${message.instanceId} has no harness result identity`
+                    );
+                    finalMessage.delete(message.instanceId);
+                    break;
+                  }
+                  if (
+                    !db.claimCompletedTurn(
+                      message.instanceId,
+                      neutral.uuid,
+                      neutral.timestamp,
+                      neutral.recovered === true
+                    )
+                  ) {
+                    finalMessage.delete(message.instanceId);
+                    break;
+                  }
+                }
                 const named = peekSessionKey(message.payload);
                 if (named) {
                   db.noteInstanceSession(
@@ -9932,7 +9967,12 @@ export const createServer = ({
                   const handBack = (from: InstanceRow): void => {
                     const handed = workItems.turnEnded(from, turn, endedAt);
                     if (handed) {
-                      reportToParent(from, handed.body, handed.failed);
+                      reportToParent(from, handed.body, handed.failed, {
+                        resultId: neutral.uuid as string,
+                        ...(neutral.timestamp
+                          ? { completedAt: neutral.timestamp }
+                          : {}),
+                      });
                     }
                   };
                   if (delegate?.workItemId && !failed) {

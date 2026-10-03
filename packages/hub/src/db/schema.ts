@@ -396,6 +396,20 @@ export const sessionIdentities = sqliteTable("session_identities", {
   error: text("error"),
 });
 
+/** Completion identity survives agent and hub restarts, independently of live custody. */
+export const completedTurns = sqliteTable(
+  "completed_turns",
+  {
+    instanceId: text("instance_id").notNull(),
+    resultId: text("result_id").notNull(),
+    completedAt: text("completed_at"),
+    adoptedWithoutReport: integer("adopted_without_report", {
+      mode: "boolean",
+    }).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.instanceId, table.resultId] })]
+);
+
 /** A workspace's life: `active` while its checkout is kept; `archived` once its boundary and clone are gone. */
 export type WorkspaceState = "active" | "archived";
 

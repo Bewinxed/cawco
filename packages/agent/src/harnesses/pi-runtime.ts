@@ -222,11 +222,11 @@ class PiSession implements HarnessSession {
         const leaf = this.#leaf();
         this.#ctx.frame({
           type: "result",
+          uuid: leaf.uuid,
+          timestamp: leaf.timestamp,
           subtype: failed ? "error_during_execution" : "success",
           is_error: failed,
-          ...(failed
-            ? { errors, uuid: `${leaf.uuid}:error`, timestamp: leaf.timestamp }
-            : {}),
+          ...(failed ? { errors } : {}),
         });
         break;
       }
