@@ -62,6 +62,9 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     private var rows: [String: RowLine] = [:]
     private var groups: [String: (group: HomeModel.MachineGroup, seam: Bool)] = [:]
     private var recentItems: [String: HomeModel.RecentItem] = [:]
+    /// A cell is under the finger; `pending` is the snapshot waiting for it to lift.
+    private var pressed = false
+    private var pending: (snapshot: NSDiffableDataSourceSnapshot<Section, Item>, animated: Bool)?
     private var counts = (working: 0, finished: 0, finishedFailed: false)
     private var cawLine = ""
     /// Read in `build()`, so a change to either alone runs the update again.
@@ -432,6 +435,15 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
     /// keep their identity). A live change that moves lines travels
     /// (`Reflow.travel`); a driven motion applies its own unanimated.
     private func commit(_ next: NSDiffableDataSourceSnapshot<Section, Item>, animated: Bool) {
+        // A row under the finger holds the board still: applying now would
+        // move or reconfigure the cell mid-touch, the collection view would
+        // cancel the touch, and the tap would never select. The latest
+        // snapshot waits and lands once the finger lifts (HeldOrder: "held
+        // still while they settle or are touched").
+        if pressed {
+            pending = (next, animated)
+            return
+        }
         var next = next
         let old = dataSource.snapshot()
         let before = Set(old.itemIdentifiers)
@@ -664,6 +676,23 @@ final class HomeViewController: ObservedViewController, UICollectionViewDelegate
 
     func scrollViewDidEndDecelerating(_: UIScrollView) {
         home.holding = false
+    }
+
+    func collectionView(_: UICollectionView, didHighlightItemAt _: IndexPath) {
+        pressed = true
+        home.holding = true
+    }
+
+    /// The finger lifted: the selection lands on the row it was on (UIKit
+    /// selects right after this), then the board catches up on the next turn.
+    func collectionView(_ collectionView: UICollectionView, didUnhighlightItemAt _: IndexPath) {
+        pressed = false
+        if !collectionView.isDragging, !collectionView.isDecelerating { home.holding = false }
+        DispatchQueue.main.async { [weak self] in
+            guard let self, !pressed, let waiting = pending else { return }
+            pending = nil
+            commit(waiting.snapshot, animated: waiting.animated)
+        }
     }
 
     func collectionView(_: UICollectionView, shouldSelectItemAt indexPath: IndexPath) -> Bool {
