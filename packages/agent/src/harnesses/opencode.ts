@@ -110,6 +110,17 @@ import { managedMcpMismatches } from "./managed-mcp";
 import { OpencodeActivity } from "./opencode-activity";
 import { OpencodeServerOwner, type ServerIdentity } from "./opencode-server";
 
+interface RecoveryRound {
+  attempt: number;
+  generations: Promise<ServerIdentity[]>;
+  token: object;
+}
+
+interface RecoveryWave {
+  pending: number;
+  round?: RecoveryRound;
+}
+
 function withImageAttachments(
   output: string,
   attachments: FilePart[] = []
@@ -3248,6 +3259,11 @@ export class OpencodeHarness implements Harness {
   readonly #generationClients = new Map<string, OpencodeClient>();
   readonly #sessionOwners = new Map<string, ServerIdentity>();
   readonly #migrations = new Map<string, Promise<void>>();
+  readonly #pendingRecoveries = new Map<
+    string,
+    Promise<OpencodeSession | undefined>
+  >();
+  #recoveryWave: RecoveryWave | null = null;
   #handoffTimer: ReturnType<typeof setTimeout> | null = null;
   #deferredRevision: string | null = null;
   // Keyed by instanceId, not opencode's own session id: a resume reuses the
@@ -3512,11 +3528,14 @@ export class OpencodeHarness implements Harness {
     const migrating = (async () => {
       const oldClient = this.#clientForGeneration(old);
       if (
-        (await this.#activity(old).sessionState(
-          oldClient,
-          sessionId,
-          session.directory
-        )) !== "idle"
+        (
+          await this.#activity(old).sessionState(
+            oldClient,
+            sessionId,
+            session.directory
+          )
+        ).kind !== "decided" ||
+        this.#activity(old).state(sessionId) !== "idle"
       ) {
         throw new Error("OpenCode turn remains in its incumbent generation.");
       }
@@ -3590,11 +3609,14 @@ export class OpencodeHarness implements Harness {
         );
       }
       if (
-        (await this.#activity(old).sessionState(
-          oldClient,
-          sessionId,
-          session.directory
-        )) !== "idle"
+        (
+          await this.#activity(old).sessionState(
+            oldClient,
+            sessionId,
+            session.directory
+          )
+        ).kind !== "decided" ||
+        this.#activity(old).state(sessionId) !== "idle"
       ) {
         throw new Error("OpenCode incumbent resumed during idle migration.");
       }
@@ -3646,7 +3668,7 @@ export class OpencodeHarness implements Harness {
     if (!(identity && session.sessionId)) {
       throw new Error("OpenCode dispatch has no generation custody.");
     }
-    this.#activity(identity).observeBusy(session.sessionId);
+    this.#activity(identity).observeBusy(session.sessionId, session.directory);
   }
 
   async #handoffIdle(): Promise<void> {
@@ -3694,6 +3716,7 @@ export class OpencodeHarness implements Harness {
       this.#opening > 0 ||
       this.#mutatingMcp > 0 ||
       this.#migrations.size > 0 ||
+      this.#pendingRecoveries.size > 0 ||
       this.#recovering > 0 ||
       this.#recoveryWaiters.length > 0
     );
@@ -3734,13 +3757,12 @@ export class OpencodeHarness implements Harness {
     if (!(identity && client)) {
       return true;
     }
-    return (
-      (await this.#activity(identity).sessionState(
-        client,
-        sessionId,
-        directory
-      )) !== "idle"
+    const observed = await this.#activity(identity).sessionState(
+      client,
+      sessionId,
+      directory
     );
+    return observed.kind !== "decided" || observed.state !== "idle";
   }
 
   /** Two complete reads of this exact generation, with a real sampling gap. */
@@ -4496,7 +4518,7 @@ export class OpencodeHarness implements Harness {
               (event.type === "session.status" &&
                 event.properties.status.type === "idle"))
           ) {
-            this.#activity(identity).observeIdle(sid);
+            this.#activity(identity).observeIdle(sid, directory);
           }
           if (
             sid &&
@@ -4506,7 +4528,11 @@ export class OpencodeHarness implements Harness {
               (event.type === "session.status" &&
                 event.properties.status.type !== "idle"))
           ) {
-            this.#activity(identity).observeBusy(sid);
+            if (event.type === "session.status") {
+              this.#activity(identity).observeBusy(sid, directory);
+            } else {
+              this.#activity(identity).observeProgress(sid, directory);
+            }
           }
           const session = sid ? this.#sessionForSid(sid, identity) : undefined;
           if (session) {
@@ -4689,9 +4715,66 @@ export class OpencodeHarness implements Harness {
   }
 
   /** A register may recover every held session, but must never spawn new work. */
-  async reattach(
+  reattach(
     spec: SpawnPayload,
     ctx: HarnessContext
+  ): Promise<OpencodeSession | undefined> {
+    const existing = this.#sessions.get(ctx.instanceId);
+    if (existing) {
+      return Promise.resolve(existing);
+    }
+    const pending = this.#pendingRecoveries.get(ctx.instanceId);
+    if (pending) {
+      return pending;
+    }
+    const wave: RecoveryWave = this.#recoveryWave ?? { pending: 0 };
+    this.#recoveryWave = wave;
+    wave.pending += 1;
+    const recovery = this.#recover(spec, ctx, wave).finally(() => {
+      this.#pendingRecoveries.delete(ctx.instanceId);
+      wave.pending -= 1;
+      if (wave.pending === 0 && this.#recoveryWave === wave) {
+        this.#recoveryWave = null;
+      }
+    });
+    this.#pendingRecoveries.set(ctx.instanceId, recovery);
+    return recovery;
+  }
+
+  async #recover(
+    spec: SpawnPayload,
+    ctx: HarnessContext,
+    wave: RecoveryWave
+  ): Promise<OpencodeSession | undefined> {
+    let attempt = 0;
+    // biome-ignore lint/suspicious/noUnnecessaryConditions: dispose() terminates retrying recoveries during agent teardown
+    while (!this.#disposed) {
+      if (!wave.round || wave.round.attempt < attempt) {
+        wave.round = {
+          attempt,
+          token: {},
+          generations: this.#serverOwner.liveGenerations(),
+        };
+      }
+      try {
+        // biome-ignore lint/performance/noAwaitInLoops: unresolved custody is retried, never converted to spawn failure
+        return await this.#reattachOnce(spec, ctx, wave.round);
+      } catch (error) {
+        const delay = Math.min(250 * 2 ** Math.min(attempt, 5), 5000);
+        console.warn(
+          `[opencode] recovery ${ctx.instanceId} waiting; retry in ${delay}ms: ${errorText(error)}`
+        );
+        attempt += 1;
+        await Bun.sleep(delay);
+      }
+    }
+    return undefined;
+  }
+
+  async #reattachOnce(
+    spec: SpawnPayload,
+    ctx: HarnessContext,
+    round: RecoveryRound
   ): Promise<OpencodeSession | undefined> {
     // Wait out publication before resolving custody across active and retained
     // generations. Recovery slots then prevent retirement during the lookup.
@@ -4701,124 +4784,113 @@ export class OpencodeHarness implements Harness {
     }
     // biome-ignore lint/complexity/noExcessiveCognitiveComplexity: custody check, inspection-only policy and cancellation belong to one recovery transaction
     return this.#withRecovery(async () => {
-      try {
-        const { resume } = spec;
-        if (!resume) {
-          return;
-        }
-        const generations = await this.#serverOwner.liveGenerations();
-        if (!generations.length) {
-          return;
-        }
-        // Storage is shared, but each live generation owns its own runners.
-        // Resolve the actual owner before opening the stored session at all.
-        const states = await Promise.all(
-          generations.map(async (generation) => {
-            const server = this.#clientForGeneration(generation);
-            const state = await this.#activity(generation).sessionState(
-              server,
-              resume.sessionKey,
-              ctx.cwd
-            );
-            return {
-              identity: generation,
-              state,
-              running: state === "busy",
-            };
-          })
-        );
-        const busy = states.filter((state) => state.running);
-        if (busy.length > 1) {
-          throw new Error(
-            "OpenCode session is running in multiple generations."
-          );
-        }
-        if (
-          busy.length === 0 &&
-          states.some((state) => state.state === "unknown")
-        ) {
-          throw new Error(
-            "OpenCode idle recovery cannot determine custody across retained generations."
-          );
-        }
-        const chosen =
-          busy[0] ??
-          states.find(
-            (state) =>
-              state.identity.procId === this.#serverOwner.active?.procId
-          );
-        if (!chosen) {
-          throw new Error(
-            "OpenCode has no live active generation for idle recovery."
-          );
-        }
-        const { identity, running } = chosen;
-        const server = this.#clientForGeneration(identity);
-        const session = await server.session.get(
-          { sessionID: resume.sessionKey, directory: ctx.cwd },
-          { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
-        );
-        if (session.response?.status === 404) {
-          return;
-        }
-        if (session.error || !session.data) {
-          throw new Error(
-            `Could not reattach OpenCode session ${resume.sessionKey}`
-          );
-        }
-        // Whether this session's turn is still running is the server's word,
-        // asked before the session is handed back: a reattached session is
-        // busy from that moment, not from the reconcile that follows its
-        // subscription (`watchResumedTurn`), which a busy question after an
-        // agent restart did not wait for.
-        const activity = this.#activity(identity);
-        activity.bind(resume.sessionKey, ctx.instanceId, ctx.cwd);
-        if (running) {
-          activity.observeBusy(resume.sessionKey);
-        }
-        if (spec.reattachOnly === "busy" || spec.reattachOnly === "inspect") {
-          if (!running) {
-            return;
-          }
-          if (spec.reattachOnly === "inspect") {
-            // Not a session frame through ctx.frame: that folds a pulse and would
-            // turn this safety inspection into fresh activity on the old row.
-            ctx.emit({
-              verb: "frames",
-              machineId: "",
-              instanceId: ctx.instanceId,
-              payload: {
-                kind: "frame",
-                harness: "opencode",
-                message: { type: "system", subtype: "custody_held" },
-              },
-            });
-            return;
-          }
-        }
-        // Not `spawn`: that queues behind an apply gate, and an apply that
-        // started while this recovery held its slot waits for the slot —
-        // queueing here would hold both. The apply stops nothing while a
-        // recovery is running, so the server this opens against stays up.
-        const opened = await this.#open(spec, ctx, {
-          client: server,
-          session: session.data as Session,
-          running,
-          identity,
-        });
-        if (running) {
-          opened.reattachedMidTurn();
-          console.info(
-            `[opencode] recovery ${ctx.instanceId}: reattached running turn ${resume.sessionKey} on ${identity.procId}/${identity.pid}`
-          );
-        }
-        return opened;
-      } catch (error) {
-        console.warn(
-          `[opencode] recovery ${ctx.instanceId} failed: ${errorText(error)}`
-        );
-        throw error;
+      const { resume } = spec;
+      if (!resume) {
+        return;
       }
+      const generations = await round.generations;
+      if (!generations.length) {
+        return;
+      }
+      // Storage is shared, but each live generation owns its own runners.
+      // Resolve the actual owner before opening the stored session at all.
+      const states = await Promise.all(
+        generations.map(async (generation) => {
+          const server = this.#clientForGeneration(generation);
+          const state = await this.#activity(generation).sessionState(
+            server,
+            resume.sessionKey,
+            ctx.cwd,
+            round.token
+          );
+          return {
+            identity: generation,
+            state,
+            running: state.kind === "decided" && state.state === "busy",
+          };
+        })
+      );
+      const busy = states.filter((state) => state.running);
+      if (busy.length > 1) {
+        throw new Error("OpenCode session is running in multiple generations.");
+      }
+      if (busy.length === 0) {
+        for (const generation of states) {
+          if (generation.state.kind === "unreachable") {
+            throw new Error(
+              `OpenCode generation ${generation.identity.procId} is temporarily unreachable: ${generation.state.reason}`
+            );
+          }
+        }
+      }
+      const chosen =
+        busy[0] ??
+        states.find(
+          (state) => state.identity.procId === this.#serverOwner.active?.procId
+        );
+      if (!chosen) {
+        throw new Error(
+          "OpenCode has no live active generation for idle recovery."
+        );
+      }
+      const { identity, running } = chosen;
+      const server = this.#clientForGeneration(identity);
+      const session = await server.session.get(
+        { sessionID: resume.sessionKey, directory: ctx.cwd },
+        { signal: AbortSignal.timeout(RECOVERY_TIMEOUT_MS) }
+      );
+      if (session.response?.status === 404) {
+        return;
+      }
+      if (session.error || !session.data) {
+        throw new Error(
+          `Could not reattach OpenCode session ${resume.sessionKey}`
+        );
+      }
+      // Whether this session's turn is still running is the server's word,
+      // asked before the session is handed back: a reattached session is
+      // busy from that moment, not from the reconcile that follows its
+      // subscription (`watchResumedTurn`), which a busy question after an
+      // agent restart did not wait for.
+      const activity = this.#activity(identity);
+      activity.bind(resume.sessionKey, ctx.instanceId, ctx.cwd);
+      if (spec.reattachOnly === "busy" || spec.reattachOnly === "inspect") {
+        if (!running) {
+          return;
+        }
+        if (spec.reattachOnly === "inspect") {
+          // Not a session frame through ctx.frame: that folds a pulse and would
+          // turn this safety inspection into fresh activity on the old row.
+          ctx.emit({
+            verb: "frames",
+            machineId: "",
+            instanceId: ctx.instanceId,
+            payload: {
+              kind: "frame",
+              harness: "opencode",
+              message: { type: "system", subtype: "custody_held" },
+            },
+          });
+          return;
+        }
+      }
+      // Not `spawn`: that queues behind an apply gate, and an apply that
+      // started while this recovery held its slot waits for the slot —
+      // queueing here would hold both. The apply stops nothing while a
+      // recovery is running, so the server this opens against stays up.
+      const opened = await this.#open(spec, ctx, {
+        client: server,
+        session: session.data as Session,
+        running,
+        identity,
+      });
+      if (running) {
+        opened.reattachedMidTurn();
+        console.info(
+          `[opencode] recovery ${ctx.instanceId}: reattached running turn ${resume.sessionKey} on ${identity.procId}/${identity.pid}`
+        );
+      }
+      return opened;
     });
   }
 
@@ -5440,7 +5512,6 @@ export class OpencodeHarness implements Harness {
     }
     const client = await this.#ensure();
     for (const server of config.mcp.filter(
-      // biome-ignore lint/suspicious/noUnnecessaryConditions: fleet rows arrive over the wire; only proxied, enabled entries may be connected
       (row) => row.proxied && row.enabled
     )) {
       const directories = new Set([
