@@ -232,12 +232,6 @@
     }
   }
 
-  const inProject = (row: InstanceRow, project: ProjectRow): boolean =>
-    row.projectId === project.id ||
-    (row.machineId === project.machineId &&
-      !!row.cwd &&
-      (row.cwd === project.cwd || row.cwd.startsWith(`${project.cwd}/`)));
-
   /** What is running now: sessions, and workflow runs still going. */
   const running = $derived([
     ...cawco.runningInstances,
@@ -255,35 +249,111 @@
     })
   );
 
-  /**
-   * A project's sessions, live and resting, as the rail lists them. A
-   * delegate is work the reader handed off — six of them under one session
-   * is six rows about one thing — so it hangs in its parent's tree, folded
-   * into the parent's count until opened. With the Delegates switch off, a
-   * delegate whose parent the project does not list is left out (tree.ts
-   * `rooted`): "Not running" is where those pile up by the hundred.
-   */
-  function listedIn(project: ProjectRow): {
-    live: InstanceRow[];
-    resting: InstanceRow[];
-  } {
-    const live = running.filter((row) => inProject(row, project));
-    const liveIds = new Set(live.map((row) => row.id));
-    const resting = notRunning.filter(
-      (row) => inProject(row, project) && !liveIds.has(row.id)
-    );
-    if (rail.delegates) {
-      return { live, resting };
+  /** A folder on a machine, as the lookups below key it. */
+  const folderKey = (machineId: string, cwd: string): string =>
+    `${machineId}\u0000${cwd}`;
+
+  /** The projects in each folder, by machine and folder. */
+  const projectsAt = $derived.by(() => {
+    const at = new Map<string, string[]>();
+    for (const project of cawco.projects) {
+      const key = folderKey(project.machineId, project.cwd);
+      at.set(key, [...(at.get(key) ?? []), project.id]);
     }
-    const kept = new Set(rooted([...live, ...resting]).map((row) => row.id));
-    return {
-      live: live.filter((row) => kept.has(row.id)),
-      resting: resting.filter((row) => kept.has(row.id)),
+    return at;
+  });
+  const projectIds = $derived(
+    new Set(cawco.projects.map((project) => project.id))
+  );
+
+  /**
+   * The projects a row belongs to: the one its `projectId` names, and every
+   * project on its machine whose folder is its folder or holds it — nested
+   * project folders both claim it. Found by walking the row's folder up its
+   * path, one lookup per level, rather than testing it against every
+   * project: a folder `p` holds `cwd` exactly when `cwd` is `p` or starts
+   * with `p/`, which is `p` being `cwd` or `cwd` cut at one of its slashes.
+   */
+  function projectsOf(row: InstanceRow): Set<string> {
+    const found = new Set<string>();
+    if (row.projectId && projectIds.has(row.projectId)) {
+      found.add(row.projectId);
+    }
+    const { cwd } = row;
+    if (!cwd) {
+      return found;
+    }
+    const claim = (folder: string) => {
+      for (const id of projectsAt.get(folderKey(row.machineId, folder)) ?? []) {
+        found.add(id);
+      }
     };
+    claim(cwd);
+    for (let at = cwd.indexOf("/"); at !== -1; at = cwd.indexOf("/", at + 1)) {
+      claim(cwd.slice(0, at));
+    }
+    return found;
   }
 
+  /**
+   * Every project's sessions, live and resting, as the rail lists them, in
+   * one pass over what runs and what rests: a turn ending re-reads each row
+   * once, where testing each project against every row read them all once
+   * per project. A delegate is work the reader handed off — six of them
+   * under one session is six rows about one thing — so it hangs in its
+   * parent's tree, folded into the parent's count until opened. With the
+   * Delegates switch off, a delegate whose parent the project does not list
+   * is left out (tree.ts `rooted`): "Not running" is where those pile up by
+   * the hundred.
+   */
+  const listed = $derived.by(() => {
+    const lists = new Map<
+      string,
+      { live: InstanceRow[]; resting: InstanceRow[] }
+    >();
+    const listOf = (id: string) => {
+      let list = lists.get(id);
+      if (!list) {
+        list = { live: [], resting: [] };
+        lists.set(id, list);
+      }
+      return list;
+    };
+    const liveIds = new Set<string>();
+    for (const row of running) {
+      liveIds.add(row.id);
+      for (const id of projectsOf(row)) {
+        listOf(id).live.push(row);
+      }
+    }
+    // A row both running and resting belongs to the same projects either
+    // way, so it is left out of every resting list it would join.
+    for (const row of notRunning) {
+      if (liveIds.has(row.id)) {
+        continue;
+      }
+      for (const id of projectsOf(row)) {
+        listOf(id).resting.push(row);
+      }
+    }
+    if (!rail.delegates) {
+      for (const [id, { live, resting }] of lists) {
+        const kept = new Set(
+          rooted([...live, ...resting]).map((row) => row.id)
+        );
+        lists.set(id, {
+          live: live.filter((row) => kept.has(row.id)),
+          resting: resting.filter((row) => kept.has(row.id)),
+        });
+      }
+    }
+    return lists;
+  });
+
+  const NOTHING: InstanceRow[] = [];
+
   const sessionsOf = (project: ProjectRow): InstanceRow[] =>
-    listedIn(project).live;
+    listed.get(project.id)?.live ?? NOTHING;
 
   /* ---- recent and older ------------------------------------------------
    * A project lists what is recent — running, waiting on you, or moved in
@@ -292,11 +362,68 @@
    * projects under them down the rail.
    */
   const DAY_MS = 24 * 60 * 60 * 1000;
-  function splitOf(project: ProjectRow): {
-    recent: InstanceRow[];
+
+  interface Split {
     older: InstanceRow[];
-  } {
-    const { live, resting } = listedIn(project);
+    recent: InstanceRow[];
+  }
+  const NO_SPLIT: Split = { recent: NOTHING, older: NOTHING };
+
+  /**
+   * Whether two rows draw the same: the same row, or one whose every field
+   * a session row shows is the same (its status, name, place, age when it
+   * has no pulse, and where it hangs). Activity and pulses are read by the
+   * rows themselves, per row.
+   */
+  const drawsAlike = (a: InstanceRow, b: InstanceRow): boolean =>
+    a === b ||
+    (a.id === b.id &&
+      a.status === b.status &&
+      a.title === b.title &&
+      a.cwd === b.cwd &&
+      a.machineId === b.machineId &&
+      a.parentInstanceId === b.parentInstanceId &&
+      a.updatedAt === b.updatedAt);
+
+  /** `next`, or `was` where it lists the same rows in the same order, drawn alike. */
+  const keep = (next: InstanceRow[], was: InstanceRow[] | undefined) =>
+    was !== undefined &&
+    next.length === was.length &&
+    next.every((row, i) => drawsAlike(row, was[i]))
+      ? was
+      : next;
+
+  /** The splits the last derivation handed out, by project. */
+  let lastSplits = new Map<string, Split>();
+
+  /**
+   * Every project's recent and older lists. A project whose rows did not
+   * change keeps the very arrays it had — and the split object holding them
+   * — so its lists' `{#each}` have nothing to do on a turn that ended
+   * somewhere else.
+   */
+  const splits = $derived.by(() => {
+    const next = new Map<string, Split>();
+    for (const [id, { live, resting }] of listed) {
+      const split = splitRows(live, resting);
+      const was = lastSplits.get(id);
+      const recent = keep(split.recent, was?.recent);
+      const older = keep(split.older, was?.older);
+      next.set(
+        id,
+        was && recent === was.recent && older === was.older
+          ? was
+          : { recent, older }
+      );
+    }
+    lastSplits = next;
+    return next;
+  });
+
+  const splitOf = (project: ProjectRow): Split =>
+    splits.get(project.id) ?? NO_SPLIT;
+
+  function splitRows(live: InstanceRow[], resting: InstanceRow[]): Split {
     const recentIds = new Set(live.map((row) => row.id));
     for (const row of resting) {
       if (
