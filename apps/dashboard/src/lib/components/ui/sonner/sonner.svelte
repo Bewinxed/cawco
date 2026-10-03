@@ -172,6 +172,26 @@
     box-shadow: var(--shadow-overlay);
     font: var(--type-body);
   }
+  /* A toast's free edges stay free. svelte-streamdown's expand overlay is a
+     global `[data-expanded='true'] { position: fixed; top: 16px; left: 16px;
+     … }` (Streamdown.svelte), loaded on every page that renders markdown,
+     and sonner marks each toast of an expanded stack `data-expanded="true"`.
+     Sonner restates position, width, height and z-index more specifically,
+     but sets `top` and `left` only on the edge a toast is pinned to, so the
+     overlay's 16px won on the other: a bottom toast was held between
+     `top: 16px` and `bottom: 0`, squeezed to the stack's height less 16px
+     with its text spilling past both edges, and `left: 16px` pushed it 16px
+     out past the stack's right edge. */
+  :global([data-sonner-toaster] [data-sonner-toast][data-y-position="bottom"]) {
+    top: auto;
+  }
+  :global([data-sonner-toaster] [data-sonner-toast][data-x-position="right"]) {
+    left: auto;
+  }
+  :global([data-sonner-toaster] [data-sonner-toast][data-x-position="center"]) {
+    left: 0;
+  }
+
   /* The toast's action and cancel buttons: the label role, an item's radius,
      and the press every control gives. */
   :global(
