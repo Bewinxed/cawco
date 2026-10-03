@@ -87,7 +87,7 @@ const copySshIncludes = async (id: string): Promise<string> => {
   const names = await readdir(SSH_INCLUDES).catch(
     (error: NodeJS.ErrnoException) => {
       if (error.code === "ENOENT") {
-        return undefined;
+        return;
       }
       throw error;
     }
