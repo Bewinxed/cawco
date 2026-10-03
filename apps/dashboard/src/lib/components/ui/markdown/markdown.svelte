@@ -9,34 +9,23 @@
   import OutputBlock from "$lib/components/features/tool-cards/OutputBlock.svelte";
   import { PROSE } from "$lib/prose";
   import { draw, stepping } from "../collapsible/draw";
-  import type { Trail } from "./trail";
 
   let {
     source,
     invert = false,
     streaming = false,
     fades = false,
-    trail,
-    carry = null,
   }: {
     source: string;
     invert?: boolean;
     streaming?: boolean;
     /**
-     * Fade in what each streamed chunk adds. Only ever the words a chunk ADDS:
-     * the text already on screen when this mounts — a conversation opened
-     * mid-answer, a row the virtualiser remounted — is never replayed.
+     * Fade in what each streamed chunk adds, and the last words a message
+     * draws as it settles. Only ever the words a chunk ADDS: the text already
+     * on screen when this mounts — a conversation opened mid-answer, a row
+     * the virtualiser remounted — is never replayed.
      */
     fades?: boolean;
-    /** While streaming: where each chunk's fade, and how much text is drawn, is recorded. */
-    trail?: Trail;
-    /**
-     * Settled from a stream that is still fading in its last words: those
-     * fades play on here from where they had got to, instead of being cut
-     * when the streaming render goes, and whatever the stream never drew
-     * fades in like one more chunk.
-     */
-    carry?: Trail | null;
   } = $props();
 
   // Streamdown's stock themes hardcode a Tailwind palette (bg-gray-100,
@@ -88,7 +77,7 @@
    * word of a line dropping a line on every other chunk — and fades only its
    * first half in. Held back until the whitespace after it lands, a word is
    * drawn once, whole, and never changes width; a word still held when the
-   * message settles is drawn then, faded in by the carry below.
+   * message settles is drawn then, faded in like one more chunk.
    */
   const drawn = $derived(
     streaming ? source.slice(0, source.search(/\S*$/)) : source
@@ -151,7 +140,20 @@
     });
   });
 
-  /** A word Streamdown renders as a span of its own while streaming. */
+  /**
+   * How Streamdown draws this message for as long as it is drawn: block by
+   * block with a span per word when it mounted streaming, whole and plain
+   * when it mounted settled. Fixed at mount, because switching is a rebuild:
+   * Streamdown swaps the two renders in an `{#if}`, so a streamed answer
+   * turning static as it settled threw every block away and drew the whole
+   * reply again — 2,600 elements styled and laid out inside the frame the
+   * answer finished in. A message that streamed keeps the render it
+   * streamed in, and settling is its last chunk; the two lay out the same
+   * (see the token spans' styles below).
+   */
+  const tokens = untrack(() => streaming);
+
+  /** A word Streamdown renders as a span of its own in the streamed render. */
   const TOKEN = 'span[style*="sd-"]';
   let host = $state<HTMLElement>();
   /**
@@ -169,7 +171,7 @@
    * moves. A word the chunk only EXTENDS ("wor" → "world") is not new, and
    * keeps its place.
    */
-  function fadeFrom(root: HTMLElement, mark: number): boolean {
+  function fadeFrom(root: HTMLElement, mark: number): void {
     const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
     const fresh = new Set<Element>();
     let offset = 0;
@@ -184,127 +186,40 @@
         fresh.add(token);
       }
     }
-    if (fresh.size === 0) {
-      return false;
-    }
-    const { duration, easing } = fadeTiming();
+    const duration = dur("--dur-menu");
+    const easing = ease("--ease-out");
     for (const element of fresh) {
       element.animate([{ opacity: 0 }, { opacity: 1 }], { duration, easing });
     }
-    return true;
   }
 
-  /**
-   * A chunk's fade: --dur-menu, --ease-out, both from the root's tokens as
-   * curves keeps them. Read off the message's own style, every chunk laid
-   * the words it had just put in out on the spot, inside the update that
-   * put them in.
-   */
-  function fadeTiming(): { duration: number; easing: string } {
-    return { duration: dur("--dur-menu"), easing: ease("--ease-out") };
-  }
-
+  // Every chunk, and the settle: the words a message held back while it
+  // streamed are drawn as it settles, and fade in like one more chunk. A
+  // fade already running when it settles plays on: its spans are the same
+  // elements.
   $effect(() => {
     // biome-ignore lint/complexity/noVoid: a new chunk is what re-runs this.
     void drawn;
     const root = host;
-    if (!(root && streaming)) {
-      shown = -1;
+    if (!(root && tokens)) {
       return;
     }
     const length = root.textContent?.length ?? 0;
-    if (
-      shown >= 0 &&
-      length > shown &&
-      fades &&
-      motionOk.current &&
-      fadeFrom(root, shown)
-    ) {
-      trail?.chunks.push({
-        from: shown,
-        start: document.timeline.currentTime as number,
-      });
+    if (shown >= 0 && length > shown && fades && motionOk.current) {
+      fadeFrom(root, shown);
     }
     shown = length;
-    if (trail) {
-      trail.drawn = length;
-    }
-  });
-
-  /**
-   * Held in word spans while fades carried over from the stream play out,
-   * then plain text like any settled message — the same layout either way.
-   */
-  let carrying = $state(untrack(() => carry !== null && motionOk.current));
-  const tokens = $derived(streaming || carrying);
-
-  $effect(() => {
-    const root = host;
-    const from = untrack(() => carry);
-    if (!(root && carrying && from)) {
-      return;
-    }
-    const { duration, easing } = fadeTiming();
-    const now = document.timeline.currentTime as number;
-    // The words the stream never drew arrive now, as one more chunk.
-    const chunks = [...from.chunks, { from: from.drawn, start: now }].filter(
-      (chunk) => chunk.start + duration > now
-    );
-    const running = new Set<Animation>();
-    const played = new WeakSet<Element>();
-    const finish = (animation: Animation) => {
-      running.delete(animation);
-      if (running.size === 0) {
-        carrying = false;
-      }
-    };
-    // Streamdown may draw a word's span again; a span drawn again takes the
-    // same chunk's fade at the same point in it, so this runs as often as the
-    // spans change and never restarts a fade.
-    const resume = () => {
-      const walk = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-      let offset = 0;
-      for (let node = walk.nextNode(); node; node = walk.nextNode()) {
-        const start = offset;
-        offset += node.nodeValue?.length ?? 0;
-        const token = node.parentElement;
-        const chunk = chunks.findLast((c) => c.from <= start);
-        if (!(chunk && token?.matches(TOKEN)) || played.has(token)) {
-          continue;
-        }
-        played.add(token);
-        const animation = token.animate([{ opacity: 0 }, { opacity: 1 }], {
-          duration,
-          easing,
-          delay: chunk.start - (document.timeline.currentTime as number),
-        });
-        running.add(animation);
-        animation.finished.then(
-          () => finish(animation),
-          () => finish(animation)
-        );
-      }
-    };
-    resume();
-    if (running.size === 0) {
-      carrying = false;
-      return;
-    }
-    const watch = new MutationObserver(resume);
-    watch.observe(root, { childList: true, subtree: true });
-    return () => watch.disconnect();
   });
 </script>
 
-<!-- While a message streams, Streamdown renders each word as a span of its
+<!-- A message that streams has Streamdown render each word as a span of its
      own — from the first render (`animateOnMount`), because the flag that
      would switch spans on after mount is not reactive and a paragraph that
      mounted as plain text stayed plain for good. That is what lets a chunk's
      words be told from the ones already on screen. Streamdown's own per-word
      animation is switched off below, so mounting with spans replays nothing;
-     the chunk fade above is the only motion text has. Settled text renders
-     static: plain text nodes, the same layout — once any fades it carried
-     over from the stream have played out. -->
+     the chunk fade above is the only motion text has. A message that mounts
+     settled renders static: plain text nodes, the same layout. -->
 <div class="md" bind:this={host}>
   <Streamdown
     animation={{

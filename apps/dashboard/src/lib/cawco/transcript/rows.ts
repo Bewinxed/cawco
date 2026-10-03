@@ -18,7 +18,19 @@ import { parkedAsks } from "./present";
  * Decided once, as the rows are folded (see {@link Voices}).
  */
 export type Row =
-  | { kind: "single"; key: string; message: Message; grouped: boolean }
+  /**
+   * `streamed`: an answer this view streamed, settled. It keeps the live
+   * row's key for as long as the view lives (see `keepLive`), and the live
+   * row's component goes on drawing it: the settle is an update of the rows
+   * already on screen, not a new row rendering the whole reply again.
+   */
+  | {
+      kind: "single";
+      key: string;
+      message: Message;
+      grouped: boolean;
+      streamed?: boolean;
+    }
   | { kind: "tools"; key: string; messages: Message[] }
   | { kind: "question"; key: string; message: Message }
   | { kind: "subagent"; key: string; branch: SubagentState; spawn: Message }
@@ -467,7 +479,7 @@ export function foldMessages(
   messages: Message[],
   subagents: Record<string, SubagentState>
 ): Row[] {
-  return foldRange(messages, subagents, 0, { ...NO_VOICE }).rows;
+  return foldRange(messages, subagents, 0, { ...NO_VOICE }, NO_SAID).rows;
 }
 
 /**
@@ -518,12 +530,15 @@ function ownRow(
  * begins at, kept beside the rows rather than on them: it is what lets a
  * later fold splice on at a row boundary, and no renderer needs it. `voices`
  * is where the speakers stood before `from`, and is advanced past these rows.
+ * `said` is the answers this view streamed, by message key, each with the
+ * live row's key it keeps.
  */
 function foldRange(
   messages: Message[],
   subagents: Record<string, SubagentState>,
   from: number,
-  voices: Voices
+  voices: Voices,
+  said: ReadonlyMap<string, string>
 ): { rows: Row[]; starts: number[] } {
   const rows: Row[] = [];
   const starts: number[] = [];
@@ -569,7 +584,18 @@ function foldRange(
       continue;
     }
 
-    rows.push({ kind: "single", key: keyOf(m, i), message: m, grouped: false });
+    const live = said.get(keyOf(m, i));
+    rows.push(
+      live
+        ? {
+            kind: "single",
+            key: live,
+            message: m,
+            grouped: false,
+            streamed: true,
+          }
+        : { kind: "single", key: keyOf(m, i), message: m, grouped: false }
+    );
     i += 1;
   }
 
@@ -617,6 +643,8 @@ export interface LiveMemo {
 
 const NO_LIVE: LiveMemo = { gen: 0, on: false, answer: "", reasoning: "" };
 
+const NO_SAID: ReadonlyMap<string, string> = new Map();
+
 /**
  * What the last fold was folded from, so the next one can tell whether it is
  * looking at the same transcript grown at the end or at a different one.
@@ -637,6 +665,8 @@ export interface FoldMemo {
   live: LiveMemo;
   /** The settled rows — everything before the live tail — and where each begins. */
   rows: Row[];
+  /** The answers this view streamed, by message key: the live row's key each keeps. */
+  said: ReadonlyMap<string, string>;
   starts: number[];
   /** Where the speakers stand after the settled rows. */
   voices: Voices;
@@ -647,17 +677,20 @@ export interface FoldMemo {
 /**
  * A fold, and what happened to the live row since the last one.
  *
- * `settled` is the one fact the transcript cannot read off the rows: a live
+ * `ended` is the one fact the transcript cannot read off the rows: a live
  * row that has just become a settled one. The streamed answer ends as an
- * assistant message and the streamed reasoning as a thinking message, each
- * under a key of its own — but on screen it is the same object, and the
- * transcript must treat it as one: no arrival, no replay, not a pixel moved.
+ * assistant message under the live row's own key, and the streamed reasoning
+ * as a thinking message under a key of its own — but on screen each is the
+ * same object, and the transcript must treat it as one: no arrival, no
+ * replay, not a pixel moved.
  */
 export interface Fold {
   appended: boolean;
   /**
    * The last fold's live row, when this fold ended it: its key, and the
    * settled row that continues it — or null when nothing does, and it leaves.
+   * An answer's settled row keeps the live row's key (`keepLive`): `into` is
+   * `key` then, and only reasoning settles under a key of its own.
    */
   ended: {
     key: string;
@@ -738,12 +771,14 @@ export function buildRowsFrom(
   const { rows, starts, voices } =
     memo && appended
       ? foldOnto(messages, session.subagents, memo, cut)
-      : foldAll(messages, session.subagents);
+      : foldAll(messages, session.subagents, memo?.said ?? NO_SAID);
 
   const prior = memo?.live ?? NO_LIVE;
   const content = liveContent(session) ?? answerLanding(prior, rows);
   const same = prior.on && content !== null && continues(prior, content);
   const gen = same ? prior.gen : prior.gen + 1;
+  const ended = prior.on && !same ? endOf(prior, rows, memo) : null;
+  const said = keepLive(ended, rows, memo?.said ?? NO_SAID);
   const tool =
     session.currentTool && !called(session, session.currentTool.toolId)
       ? session.currentTool
@@ -763,6 +798,7 @@ export function buildRowsFrom(
     memo: {
       rows,
       starts,
+      said,
       count: messages.length,
       first: messages[0],
       last: messages.at(-1),
@@ -780,8 +816,37 @@ export function buildRowsFrom(
         : { ...NO_LIVE, gen },
     },
     appended,
-    ended: prior.on && !same ? endOf(prior, rows, memo) : null,
+    ended,
   };
+}
+
+/**
+ * THE ANSWER SETTLES IN PLACE. A streamed answer that lands as its message
+ * keeps the live row's key, and every later fold keys that message the same
+ * way (`said`): to the list it is the row that was already there, so its
+ * component stays and only what changed — the clock, the last words — is
+ * drawn. Under its own key it was a new row: the live row went, and the
+ * reply's markdown was rendered again from nothing in the frame it ended
+ * (2,600 elements for 1,200 words, a 70–93ms frame). `ended.into` names the
+ * row it became, which is now the live row's own key.
+ */
+function keepLive(
+  ended: Fold["ended"],
+  rows: Row[],
+  said: ReadonlyMap<string, string>
+): ReadonlyMap<string, string> {
+  if (!(ended?.as === "answer" && ended.into)) {
+    return said;
+  }
+  const at = rows.findIndex((each) => each.key === ended.into);
+  const answer = rows[at];
+  if (answer?.kind !== "single") {
+    return said;
+  }
+  rows[at] = { ...answer, key: ended.key, streamed: true };
+  const kept = new Map(said).set(ended.into, ended.key);
+  ended.into = ended.key;
+  return kept;
 }
 
 interface Settled {
@@ -793,10 +858,11 @@ interface Settled {
 /** Every message, folded from the start. */
 function foldAll(
   messages: Message[],
-  subagents: Record<string, SubagentState>
+  subagents: Record<string, SubagentState>,
+  said: ReadonlyMap<string, string>
 ): Settled {
   const voices = { ...NO_VOICE };
-  return { ...foldRange(messages, subagents, 0, voices), voices };
+  return { ...foldRange(messages, subagents, 0, voices, said), voices };
 }
 
 /** The memo's rows, with only the turn at the cut and what follows it folded again. */
@@ -823,7 +889,7 @@ function foldOnto(
   // their grouping stands; the refolded turn picks up where they leave off.
   const kept = memo.rows.slice(0, keep);
   const voices = voicesAfter(kept);
-  const tail = foldRange(messages, subagents, cut, voices);
+  const tail = foldRange(messages, subagents, cut, voices, memo.said);
   return {
     rows: kept.concat(tail.rows),
     starts: memo.starts.slice(0, keep).concat(tail.starts),
@@ -871,9 +937,11 @@ function continues(prior: LiveMemo, now: LiveContent): boolean {
 
 /**
  * The settled row a finished live row became: the newest row of its kind
- * that the last fold did not have. An answer settles into an assistant
- * message, reasoning into a thinking one; both land in the same frame that
- * clears the live buffer.
+ * with words in it that the last fold did not have. An answer settles into
+ * an assistant message, reasoning into a thinking one; both land in the same
+ * frame that clears the live buffer. A frame that carried only a call lands
+ * as an assistant message with no words, and is never what the live row
+ * said.
  */
 function settledInto(
   rows: Row[],
@@ -887,7 +955,11 @@ function settledInto(
     if (had.has(row.key)) {
       return null;
     }
-    if (row.kind === "single" && row.message.type === type) {
+    if (
+      row.kind === "single" &&
+      row.message.type === type &&
+      row.message.content.trim() !== ""
+    ) {
       return row.key;
     }
   }

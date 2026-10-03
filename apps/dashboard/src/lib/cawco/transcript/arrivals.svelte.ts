@@ -1,5 +1,4 @@
 import { getContext, setContext } from "svelte";
-import type { Trail } from "$lib/components/ui/markdown/trail";
 
 /**
  * THE ARRIVAL RULE — one gate for every piece of transcript motion.
@@ -59,21 +58,15 @@ export type Ticket =
   /**
    * A reasoning block that has just settled into its row: the row is the same
    * object the live block was, so it arrives open and folds shut, rather than
-   * arriving at all.
+   * arriving at all. (A streamed answer needs no ticket: it settles under the
+   * live row's own key, the same row on screen — rows.ts `keepLive`.)
    */
-  | { kind: "fold" }
-  /**
-   * A streamed answer that has just settled into its row: the same object the
-   * live row was, so it does not arrive. The chunk fades the live row had
-   * running play on in it, from where they had got to, and whatever the live
-   * row never drew fades in like one more chunk.
-   */
-  | { kind: "carry"; trail: Trail };
+  | { kind: "fold" };
 
 /**
  * The height a row starts from because it took another row's place in the
  * update that drew it: the indicator's, for the tool it gave way to; the live
- * row's, for the row it settled into; a tool's glance and its run's, for the
+ * row's, for the reasoning it settled into; a tool's glance and its run's, for the
  * run that took the call in. The row tweens from there to its own height, so
  * nothing above it moves in a jump. Handed once per update, and taken once:
  * the same row drawn again later is not taking anyone's place.
@@ -94,11 +87,9 @@ export interface Ledger {
   done: (id: string) => void;
   /**
    * The ticket for `id` while its arrival is still playing, or null. A fold
-   * or a carry is spent as it is taken: neither has an entrance to resume.
+   * is spent as it is taken: it has no entrance to resume.
    */
   take: (id: string) => Ticket | null;
-  /** The trail the live row `key` keeps of its streamed chunks. */
-  trail: (key: string) => Trail;
   /**
    * Whether motion may run in this view right now: it has landed, it is the
    * one being worked in, it is on screen and the page is visible. What decides

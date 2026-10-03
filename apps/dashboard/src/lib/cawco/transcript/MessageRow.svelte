@@ -10,7 +10,6 @@
   import PendingContent, {
     whileIdle,
   } from "$lib/components/ui/button/pending-content.svelte";
-  import type { Trail } from "$lib/components/ui/markdown/trail";
   import {
     canResend,
     restoreDraft,
@@ -40,7 +39,6 @@
     message,
     agentName,
     folding = false,
-    carry = null,
     grouped = false,
     runsOn = false,
   }: {
@@ -55,8 +53,6 @@
     runsOn?: boolean;
     /** A thinking message that is the live reasoning, settled: it folds shut. */
     folding?: boolean;
-    /** An answer that is the live stream, settled: the chunk fades it carries on. */
-    carry?: Trail | null;
   } = $props();
 
   const kind = $derived(message.type);
@@ -371,7 +367,7 @@
 {:else if kind === 'assistant'}
   <section class="turn" class:grouped>
     <Who {grouped} name={agentName} timestamp={message.timestamp} />
-    <MessageBody {carry} source={message.content} />
+    <MessageBody source={message.content} />
   </section>
 {:else if kind === 'thinking'}
   {#if message.content.trim()}

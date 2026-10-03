@@ -10,14 +10,16 @@
    * screen, not an entrance). Measured before and after the change, never
    * from a ResizeObserver, so nothing here writes layout in an observer.
    *
-   * The row is ONE generation of the tail (see `rows.ts`). When the answer or
-   * the reasoning settles into a row of its own, that row is this one wearing
-   * its final key, and this component simply goes; the next generation, if
-   * the turn goes on, arrives as a row of its own.
+   * The row is ONE generation of the tail (see `rows.ts`). When the answer
+   * lands as its message, that message keeps this row's key (`keepLive`) and
+   * this component goes on drawing it: the same face, the same rendered
+   * markdown, now with its clock and its last words — so the settle changes
+   * only what changed, instead of rendering the whole reply again. Reasoning
+   * settles into a row of its own, and this component goes; the next
+   * generation, if the turn goes on, arrives as a row of its own.
    */
   import { untrack } from "svelte";
   import { dur, motionOk } from "$lib/cawco/motion/curves.svelte";
-  import type { Trail } from "$lib/components/ui/markdown/trail";
   import { useLedger } from "./arrivals.svelte";
   import MessageBody from "./MessageBody.svelte";
   import type { Row } from "./rows";
@@ -25,23 +27,26 @@
   import Who from "./Who.svelte";
 
   type Live = Extract<Row, { kind: "live" }>;
+  /** The answer this row streamed, landed as its message (rows.ts `streamed`). */
+  type Said = Extract<Row, { kind: "single" }>;
   type Phase = "answer" | "reasoning";
 
   let {
     row,
     agentName,
     announce,
-  }: { row: Live; agentName: string; announce: boolean } = $props();
+  }: { row: Live | Said; agentName: string; announce: boolean } = $props();
 
   const ledger = useLedger();
-  const phaseOf = (r: Live): Phase => (r.text ? "answer" : "reasoning");
+  const phaseOf = (r: Live | Said): Phase =>
+    r.kind === "single" || r.text ? "answer" : "reasoning";
 
   interface Face {
     /** Entering: fading in over the face that is leaving. */
     entering: boolean;
     id: number;
     /** Leaving: held on top, fading out, with the row as it last was. */
-    leaving: Live | null;
+    leaving: Live | Said | null;
     phase: Phase;
     /**
      * The rail a leaving face keeps: the gap and head it was drawn with. The
@@ -96,14 +101,6 @@
             },
             { id: serial, phase, leaving: null, entering: true, rail: null },
           ];
-          if (phase === "answer" && ledger) {
-            // The face fading in is the fade of the words it opens with: if
-            // the answer settles before it ends, its row plays it on.
-            ledger.trail(next.key).chunks.push({
-              from: 0,
-              start: document.timeline.currentTime as number,
-            });
-          }
         } else {
           faces = [
             { id: serial, phase, leaving: null, entering: false, rail: null },
@@ -157,15 +154,21 @@
   }
 </script>
 
-{#snippet body(live: Live, phase: Phase, trail: Trail | undefined)}
+<!-- MessageRow's assistant turn, drawn by this row while it streams and once
+     it has landed: the same section, header and body, so landing adds the
+     clock and the last words and nothing else. -->
+{#snippet body(live: Live | Said, phase: Phase)}
   {#if phase === 'answer'}
     <section class="turn" class:grouped={live.grouped}>
-      <Who grouped={live.grouped} name={agentName} />
+      <Who
+        grouped={live.grouped}
+        name={agentName}
+        timestamp={live.kind === 'single' ? live.message.timestamp : undefined}
+      />
       <MessageBody
         fades={ledger?.watched ?? false}
-        source={live.text}
-        streaming
-        {trail}
+        source={live.kind === 'single' ? live.message.content : live.text}
+        streaming={live.kind === 'live'}
       />
     </section>
   {:else}
@@ -176,7 +179,7 @@
       {announce}
       fades={ledger?.watched ?? false}
       live
-      text={live.thinking ?? ''}
+      text={live.kind === 'live' ? (live.thinking ?? '') : ''}
     />
   {/if}
 {/snippet}
@@ -192,8 +195,7 @@
       class:entering={face.entering}
       class:leaving={face.leaving !== null}
     >
-      <!-- Only the answer on screen to stay records its chunks. -->
-      {@render body(face.leaving ?? row, face.phase, face.leaving || face.phase !== 'answer' ? undefined : ledger?.trail(row.key))}
+      {@render body(face.leaving ?? row, face.phase)}
     </div>
   {/each}
 </div>

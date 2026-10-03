@@ -36,7 +36,6 @@
   import { browser } from "$app/environment";
   import { describeTool } from "$lib/components/features/tool-cards/descriptors";
   import { EmptyState } from "$lib/components/ui/empty";
-  import type { Trail } from "$lib/components/ui/markdown/trail";
   import { IconChat } from "$lib/icons";
   import { cawco, type SessionState } from "../client.svelte";
   import {
@@ -254,8 +253,6 @@
   const known = new Set<string>();
   /** Arrivals decided and not yet mounted. A row takes its own, once. */
   const tickets = new Map<string, Ticket>();
-  /** The live rows' streamed chunks, by live row: handed to the row each settles into. */
-  const trails = new Map<string, Trail>();
   /** The array the last build folded. Live frames push onto it; history replaces it. */
   let lastArray: unknown = null;
   /** Whether the ledger has seen a build: the first one is everything already there. */
@@ -297,6 +294,14 @@
 
   const idsOf = (row: Row): string[] =>
     row.kind === "tools" ? row.messages.map(callId) : [row.key];
+
+  /**
+   * A row's key as any later mount of this pane will fold it: a message's
+   * row by the message, since an answer streamed in this view goes by the
+   * live row's key (rows.ts `keepLive`) and a new fold never sees that one.
+   */
+  const placeOf = (row: Row): string =>
+    row.kind === "single" ? row.message.id : row.key;
 
   /** Rows whose data is the live tail's own — they exist only while the session is live. */
   const LIVE_KINDS = new Set<Row["kind"]>(["live", "livetool", "queued"]);
@@ -860,7 +865,8 @@
     // the first-row match, so the saved entry is checked on its own first.
     const saved = sizes.get(session.instanceId);
     return saved !== undefined &&
-      saved.first === built.rows[0]?.key &&
+      built.rows.length > 0 &&
+      saved.first === placeOf(built.rows[0]) &&
       built.rows.length >= saved.count
       ? saved.cache
       : undefined;
@@ -1380,7 +1386,7 @@
     }
     sizes.set(session.instanceId, {
       cache: list.getCache(),
-      first: renderedRows[0].key,
+      first: placeOf(renderedRows[0]),
       count: renderedRows.length,
     });
     let landing: Landing = { tail: true };
@@ -1388,7 +1394,7 @@
       const index = list.findItemIndex(lastTop);
       landing = {
         tail: false,
-        key: renderedRows[index].key,
+        key: placeOf(renderedRows[index]),
         into: lastTop - listStart - list.getItemOffset(index),
       };
     }
@@ -1416,7 +1422,7 @@
       return -1;
     }
     const { key } = resume;
-    return renderedRows.findIndex((row) => row.key === key);
+    return renderedRows.findIndex((row) => placeOf(row) === key);
   }
 
   /**
@@ -2170,12 +2176,6 @@
     const open = seeded && untrack(() => watched);
     seeded = true;
     const fresh = unheld(fold.rows);
-    // The live row that ended is gone: its trail goes to the row it settled
-    // into, or nowhere.
-    const trail = fold.ended ? trails.get(fold.ended.key) : undefined;
-    if (fold.ended) {
-      trails.delete(fold.ended.key);
-    }
     if (!open) {
       tickets.clear();
       return;
@@ -2194,11 +2194,9 @@
       if (row.kind === "tools" && wasGlanced(row, id, glanced)) {
         continue;
       }
-      const ticket = ticketFor(row, fold.ended, trail, slot);
-      if (ticket) {
-        tickets.set(id, ticket);
-        slot += ticket.kind === "arrive" ? 1 : 0;
-      }
+      const ticket = ticketFor(row, fold.ended, slot);
+      tickets.set(id, ticket);
+      slot += ticket.kind === "arrive" ? 1 : 0;
     }
   }
 
@@ -2233,28 +2231,20 @@
   }
 
   /**
-   * What a new row gets. The live row settling into its own row is the same
-   * object, so it does not arrive: reasoning that settles folds shut from
-   * where it was open, and an answer carries on the chunk fades it had
-   * running. Everything else arrives in its place in the burst.
+   * What a new row gets. Reasoning settling into its own row is the same
+   * object, so it does not arrive: it folds shut from where it was open. An
+   * answer settles under the live row's own key, so it is never new.
+   * Everything else arrives in its place in the burst.
    */
-  function ticketFor(
-    row: Row,
-    ended: Fold["ended"],
-    trail: Trail | undefined,
-    slot: number
-  ): Ticket | null {
-    if (row.key !== ended?.into) {
-      return {
-        kind: "arrive",
-        lead: Math.min(slot, STAGGER_ROWS - 1) * STAGGER_MS,
-        start: null,
-      };
-    }
-    if (ended.as === "reasoning") {
+  function ticketFor(row: Row, ended: Fold["ended"], slot: number): Ticket {
+    if (row.key === ended?.into) {
       return { kind: "fold" };
     }
-    return trail ? { kind: "carry", trail } : null;
+    return {
+      kind: "arrive",
+      lead: Math.min(slot, STAGGER_ROWS - 1) * STAGGER_MS,
+      start: null,
+    };
   }
 
   /** How a row arrives, by what it is. */
@@ -2284,14 +2274,6 @@
     },
     done(id) {
       tickets.delete(id);
-    },
-    trail(key) {
-      let trail = trails.get(key);
-      if (!trail) {
-        trail = { chunks: [], drawn: 0 };
-        trails.set(key, trail);
-      }
-      return trail;
     },
     get watched() {
       return watched;
@@ -2675,10 +2657,14 @@
           rowKey={row.key}
         >
           {#snippet children(ticket)}
-            {#if row.kind === 'single' || row.kind === 'queued'}
+            <!-- The live row, and the answer it streamed once that has
+                 landed (rows.ts `keepLive`): one branch, so the settle is
+                 the same LiveRow updating, not a MessageRow mounting. -->
+            {#if row.kind === 'live' || (row.kind === 'single' && row.streamed)}
+              <LiveRow {agentName} announce={active} {row} />
+            {:else if row.kind === 'single' || row.kind === 'queued'}
               <MessageRow
                 {agentName}
-                carry={ticket?.kind === 'carry' ? ticket.trail : null}
                 folding={ticket?.kind === 'fold'}
                 grouped={row.grouped}
                 message={row.message}
@@ -2701,8 +2687,6 @@
               <RunBlock message={row.message} runId={row.runId} />
             {:else if row.kind === 'thinking'}
               <Thinking live={row.live} text={row.text} />
-            {:else if row.kind === 'live'}
-              <LiveRow {agentName} announce={active} {row} />
             {:else if row.kind === 'livetool'}
               {@const d = describeTool(row.glance.name, undefined, undefined, 'pending')}
               {@const LiveIcon = d.icon}

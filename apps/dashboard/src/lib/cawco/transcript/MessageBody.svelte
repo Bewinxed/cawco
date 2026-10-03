@@ -12,28 +12,21 @@
    * the typography plugin, so the root is restated here.
    */
   import { Markdown } from "$lib/components/ui/markdown";
-  import type { Trail } from "$lib/components/ui/markdown/trail";
 
   let {
     source,
     streaming = false,
     fades = false,
-    trail,
-    carry = null,
   }: {
     source: string;
     streaming?: boolean;
-    /** While streaming: each chunk's words fade in as they land. */
+    /** Mounted streaming: each chunk's words fade in as they land. */
     fades?: boolean;
-    /** While streaming: where each chunk's fade is recorded. */
-    trail?: Trail;
-    /** Settled from a stream: the chunk fades to carry on with. */
-    carry?: Trail | null;
   } = $props();
 </script>
 
 <div class="msg">
-  <Markdown {carry} {fades} {source} {streaming} {trail} />
+  <Markdown {fades} {source} {streaming} />
 </div>
 
 <style>
